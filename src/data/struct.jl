@@ -19,7 +19,10 @@ possible internal constructors. `T` should be a concrete type.
 """
 @generated function bypass_constructor(::Type{T}, args) where {T}
     vars = ntuple(_ -> gensym(), fieldcount(T))
-    assign = [:($var::$(fieldtype(T, i)) = getfield(args, $i)) for (i, var) in enumerate(vars)]
+    assign = [
+        :($var::$(fieldtype(T, i)) = getfield(args, $i)) for
+        (i, var) in enumerate(vars)
+    ]
     construct = Expr(:new, :T, vars...)
     Expr(:block, assign..., construct)
 end
@@ -29,14 +32,15 @@ end
 
 Similar to `fieldoffset(S,i)`, but gives result in multiples of `sizeof(T)` instead of bytes.
 """
-fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T,S} = div(fieldoffset(S, i), sizeof(T))
+fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
+    div(fieldoffset(S, i), sizeof(T))
 
 """
     typesize(T,S)
 
 Similar to `sizeof(S)`, but gives the result in multiples of `sizeof(T)`.
 """
-typesize(::Type{T}, ::Type{S}) where {T,S} = div(sizeof(S), sizeof(T))
+typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
 
 """
@@ -44,27 +48,40 @@ typesize(::Type{T}, ::Type{S}) where {T,S} = div(sizeof(S), sizeof(T))
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-@propagate_inbounds function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T,S}
+@propagate_inbounds function get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+    offset,
+) where {T, S}
     args = ntuple(fieldcount(S)) do i
-      get_struct(array, fieldtype(S,i), offset + fieldtypeoffset(T, S, i))
+        get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
     end
     return bypass_constructor(S, args)
 end
-@propagate_inbounds function get_struct(array::AbstractArray{S}, ::Type{S}, offset) where {S}
-  return array[offset + 1]
+@propagate_inbounds function get_struct(
+    array::AbstractArray{S},
+    ::Type{S},
+    offset,
+) where {S}
+    return array[offset + 1]
 end
 
-get_struct(array::AbstractArray{T}, ::Type{S}) where {T,S} = get_struct(array, S, 0)
+get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S} =
+    get_struct(array, S, 0)
 
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T,S}
-  for i in 1:fieldcount(S)
-    set_struct!(array, getfield(val, i), offset + fieldtypeoffset(T,S,i))
-  end
+function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
+    for i in 1:fieldcount(S)
+        set_struct!(array, getfield(val, i), offset + fieldtypeoffset(T, S, i))
+    end
 end
-@propagate_inbounds function set_struct!(array::AbstractArray{S}, val::S, offset) where {S}
-  array[offset+1] = val
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{S},
+    val::S,
+    offset,
+) where {S}
+    array[offset + 1] = val
 end
 function set_struct!(array, val)
-  set_struct!(array, val, 0)
+    set_struct!(array, val, 0)
 end

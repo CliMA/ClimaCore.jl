@@ -45,45 +45,45 @@ abstract type Data3D{S} <: AbstractData{S} end
 
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-  i = findfirst(fieldnames(S), name)
-  i === nothing && error("Invalid field name")
-  return getproperty(data, i)
+    i = findfirst(fieldnames(S), name)
+    i === nothing && error("Invalid field name")
+    return getproperty(data, i)
 end
 
 
 
 
-struct IJKFVH{S,A} <: Data3D{S}
-  array::A
+struct IJKFVH{S, A} <: Data3D{S}
+    array::A
 end
 
-function IJKFVH{S}(array::AbstractArray{T,6}) where {S,T}
-  IJKFVH{S,typeof(array)}(array)
+function IJKFVH{S}(array::AbstractArray{T, 6}) where {S, T}
+    IJKFVH{S, typeof(array)}(array)
 end
 function Base.getproperty(data::IJKFVH{S}, i::Integer) where {S}
-  array = getfield(data, :array)
-  T = eltype(array)
-  SS = fieldtype(S,i)
-  offset = fieldtypeoffset(T,S,i)
-  len = typesize(T,SS)
-  IJKFVH{SS}(view(array, :,:,:,offset+1:offset+len,:,:))
+    array = getfield(data, :array)
+    T = eltype(array)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    len = typesize(T, SS)
+    IJKFVH{SS}(view(array, :, :, :, (offset + 1):(offset + len), :, :))
 end
 
 
-struct IJFH{S,A} <: Data2D{S}
-  array::A
+struct IJFH{S, A} <: Data2D{S}
+    array::A
 end
 
-function IJFH{S}(array::AbstractArray{T,4}) where {S,T}
-  IJFH{S,typeof(array)}(array)
+function IJFH{S}(array::AbstractArray{T, 4}) where {S, T}
+    IJFH{S, typeof(array)}(array)
 end
 function Base.getproperty(data::IJFH{S}, i::Integer) where {S}
-  array = getfield(data, :array)
-  T = eltype(array)
-  SS = fieldtype(S,i)
-  offset = fieldtypeoffset(T,S,i)
-  len = typesize(T,SS)
-  IJFH{SS}(view(array,:,:,offset+1:offset+len,:))
+    array = getfield(data, :array)
+    T = eltype(array)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    len = typesize(T, SS)
+    IJFH{SS}(view(array, :, :, (offset + 1):(offset + len), :))
 end
 
 
@@ -97,39 +97,39 @@ function KFV{S}(array::AbstractArray{T,3}) where {S,T}
 end
 =#
 
-struct IJF{S,A} <: DataPancake{S}
-  array::A
+struct IJF{S, A} <: DataPancake{S}
+    array::A
 end
-function IJF{S}(array::AbstractArray{T,3}) where {S,T}
-  IJF{S,typeof(array)}(array)
+function IJF{S}(array::AbstractArray{T, 3}) where {S, T}
+    IJF{S, typeof(array)}(array)
 end
 
 function Base.getproperty(data::IJF{S}, i::Integer) where {S}
-  array = getfield(data, :array)
-  T = eltype(array)
-  SS = fieldtype(S,i)
-  offset = fieldtypeoffset(T,S,i)
-  len = typesize(T,SS)
-  IJF{SS}(view(array,:,:,offset+1:offset+len))
+    array = getfield(data, :array)
+    T = eltype(array)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    len = typesize(T, SS)
+    IJF{SS}(view(array, :, :, (offset + 1):(offset + len)))
 end
 
 
 # TODO: should this return a S or a 0-d box containing S?
 #  - perhaps the latter, as then it is mutable?
 function column(ijfh::IJFH{S}, i, j, h) where {S}
-  get_struct(view(getfield(ijfh,:array), i, j, :, h), S)
+    get_struct(view(getfield(ijfh, :array), i, j, :, h), S)
 end
 
 function pancake(ijfh::IJFH{S}, k, v, h) where {S} # k,v are unused
-  IJF{S}(view(getfield(ijfh, :array), :, :, :, h))
+    IJF{S}(view(getfield(ijfh, :array), :, :, :, h))
 end
 
 
 function Base.getindex(ijf::IJF{S}, i, j) where {S}
-  get_struct(view(getfield(ijf, :array), i, j, :), S)
+    get_struct(view(getfield(ijf, :array), i, j, :), S)
 end
 function Base.setindex!(ijf::IJF{S}, val, i, j) where {S}
-  set_struct!(view(getfield(ijf, :array), i, j, :), val)
+    set_struct!(view(getfield(ijf, :array), i, j, :), val)
 end
 
 end # module
