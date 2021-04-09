@@ -2,6 +2,7 @@ status = [
   "test-os (ubuntu-latest)",
   "test-os (windows-latest)",
   "test-os (macos-latest)",
+  "buildkite/climatemachinecore-ci",
   "format"
 ]
 delete_merged_branches = true
