@@ -13,6 +13,8 @@ Data layout is specified by the order in which they appear, e.g. `IJKFVH` indexe
 """
 module DataLayouts
 
+import Adapt
+
 # TODO:
 #  - doc strings for each type
 #  - printing
@@ -56,6 +58,7 @@ end
 struct IJKFVH{S, A} <: Data3D{S}
     array::A
 end
+Adapt.@adapt_structure IJKFVH
 
 function IJKFVH{S}(array::AbstractArray{T, 6}) where {S, T}
     IJKFVH{S, typeof(array)}(array)
@@ -74,6 +77,7 @@ struct IJFH{S, A} <: Data2D{S}
     array::A
 end
 
+Adapt.@adapt_structure IJFH
 function IJFH{S}(array::AbstractArray{T, 4}) where {S, T}
     IJFH{S, typeof(array)}(array)
 end
@@ -100,6 +104,7 @@ end
 struct IJF{S, A} <: DataPancake{S}
     array::A
 end
+Adapt.@adapt_structure IJF
 function IJF{S}(array::AbstractArray{T, 3}) where {S, T}
     IJF{S, typeof(array)}(array)
 end
