@@ -14,7 +14,7 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 """
 module DataLayouts
 
-import Adapt
+using Adapt
 
 # TODO:
 #  - doc strings for each type
@@ -60,7 +60,7 @@ struct IJKFVH{S, A} <: Data3D{S}
     array::A
 end
 Adapt.adapt_structure(to, obj::IJKFVH{S}) where {S} =
-    IJKFVH{S}(getfield(obj, :array))
+    IJKFVH{S}(adapt(to, getfield(obj, :array)))
 
 function IJKFVH{S}(array::AbstractArray{T, 6}) where {S, T}
     IJKFVH{S, typeof(array)}(array)
@@ -79,7 +79,7 @@ struct IJFH{S, A} <: Data2D{S}
     array::A
 end
 Adapt.adapt_structure(to, obj::IJFH{S}) where {S} =
-    IJFH{S}(getfield(obj, :array))
+    IJFH{S}(adapt(to, getfield(obj, :array)))
 
 function IJFH{S}(array::AbstractArray{T, 4}) where {S, T}
     IJFH{S, typeof(array)}(array)
@@ -107,7 +107,8 @@ end
 struct IJF{S, A} <: DataPancake{S}
     array::A
 end
-Adapt.adapt_structure(to, obj::IJF{S}) where {S} = IJF{S}(getfield(obj, :array))
+Adapt.adapt_structure(to, obj::IJF{S}) where {S} =
+    IJF{S}(adapt(to, getfield(obj, :array)))
 
 function IJF{S}(array::AbstractArray{T, 3}) where {S, T}
     IJF{S, typeof(array)}(array)
