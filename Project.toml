@@ -9,6 +9,9 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 
+[compat]
+CUDA = "2"
+
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
