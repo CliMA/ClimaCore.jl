@@ -66,11 +66,17 @@ end
     return array[offset + 1]
 end
 
-get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S} =
-    get_struct(array, S, 0)
+@propagate_inbounds get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+) where {T, S} = get_struct(array, S, 0)
 
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{T},
+    val::S,
+    offset,
+) where {T, S}
     for i in 1:fieldcount(S)
         set_struct!(array, getfield(val, i), offset + fieldtypeoffset(T, S, i))
     end
@@ -82,6 +88,6 @@ end
 ) where {S}
     array[offset + 1] = val
 end
-function set_struct!(array, val)
+@propagate_inbounds function set_struct!(array, val)
     set_struct!(array, val, 0)
 end
