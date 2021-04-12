@@ -8,7 +8,8 @@ Notation:
 - `h` is the element stack index
 - `f` is the field index
 
-Data layout is specified by the order in which they appear, e.g. `IJKFVH` indexes the underlying array as `[i,j,k,f,v,h]`
+Data layout is specified by the order in which they appear, e.g. `IJKFVH`
+indexes the underlying array as `[i,j,k,f,v,h]`
 
 """
 module DataLayouts

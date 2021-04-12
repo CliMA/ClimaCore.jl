@@ -12,6 +12,7 @@ function knl_copy!(dst, src)
     p_src = pancake(src, 1, 1, h)
 
     @inbounds p_dst[i, j] = p_src[i, j]
+    return nothing
 end
 
 S = Tuple{Complex{Float64}, Float64}
