@@ -8,10 +8,13 @@ Notation:
 - `h` is the element stack index
 - `f` is the field index
 
-Data layout is specified by the order in which they appear, e.g. `IJKFVH` indexes the underlying array as `[i,j,k,f,v,h]`
+Data layout is specified by the order in which they appear, e.g. `IJKFVH`
+indexes the underlying array as `[i,j,k,f,v,h]`
 
 """
 module DataLayouts
+
+using Adapt
 
 # TODO:
 #  - doc strings for each type
@@ -56,6 +59,8 @@ end
 struct IJKFVH{S, A} <: Data3D{S}
     array::A
 end
+Adapt.adapt_structure(to, obj::IJKFVH{S}) where {S} =
+    IJKFVH{S}(adapt(to, getfield(obj, :array)))
 
 function IJKFVH{S}(array::AbstractArray{T, 6}) where {S, T}
     IJKFVH{S, typeof(array)}(array)
@@ -73,6 +78,8 @@ end
 struct IJFH{S, A} <: Data2D{S}
     array::A
 end
+Adapt.adapt_structure(to, obj::IJFH{S}) where {S} =
+    IJFH{S}(adapt(to, getfield(obj, :array)))
 
 function IJFH{S}(array::AbstractArray{T, 4}) where {S, T}
     IJFH{S, typeof(array)}(array)
@@ -100,6 +107,9 @@ end
 struct IJF{S, A} <: DataPancake{S}
     array::A
 end
+Adapt.adapt_structure(to, obj::IJF{S}) where {S} =
+    IJF{S}(adapt(to, getfield(obj, :array)))
+
 function IJF{S}(array::AbstractArray{T, 3}) where {S, T}
     IJF{S, typeof(array)}(array)
 end

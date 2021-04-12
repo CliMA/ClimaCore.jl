@@ -53,10 +53,25 @@ Construct an object of type `S` from the values of `array`, optionally offset by
     ::Type{S},
     offset,
 ) where {T, S}
-    args = ntuple(fieldcount(S)) do i
-        get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
+    if @generated
+        tup = :(())
+        for i in 1:fieldcount(S)
+            push!(
+                tup.args,
+                :(get_struct(
+                    array,
+                    fieldtype(S, $i),
+                    offset + fieldtypeoffset(T, S, $i),
+                )),
+            )
+        end
+        :(bypass_constructor(S, $tup))
+    else
+        args = ntuple(fieldcount(S)) do i
+            get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
+        end
+        return bypass_constructor(S, args)
     end
-    return bypass_constructor(S, args)
 end
 @propagate_inbounds function get_struct(
     array::AbstractArray{S},
@@ -66,13 +81,38 @@ end
     return array[offset + 1]
 end
 
-get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S} =
-    get_struct(array, S, 0)
+@propagate_inbounds get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+) where {T, S} = get_struct(array, S, 0)
 
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
-    for i in 1:fieldcount(S)
-        set_struct!(array, getfield(val, i), offset + fieldtypeoffset(T, S, i))
+@propagate_inbounds function set_struct!(
+    array::AbstractArray{T},
+    val::S,
+    offset,
+) where {T, S}
+    if @generated
+        ex = quote end
+        for i in 1:fieldcount(S)
+            push!(
+                ex.args,
+                :(set_struct!(
+                    array,
+                    getfield(val, $i),
+                    offset + fieldtypeoffset(T, S, $i),
+                )),
+            )
+        end
+        ex
+    else
+        for i in 1:fieldcount(S)
+            set_struct!(
+                array,
+                getfield(val, i),
+                offset + fieldtypeoffset(T, S, i),
+            )
+        end
     end
 end
 @propagate_inbounds function set_struct!(
@@ -82,6 +122,6 @@ end
 ) where {S}
     array[offset + 1] = val
 end
-function set_struct!(array, val)
+@propagate_inbounds function set_struct!(array, val)
     set_struct!(array, val, 0)
 end
