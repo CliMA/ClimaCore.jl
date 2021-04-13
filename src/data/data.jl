@@ -22,7 +22,7 @@ using Adapt
 #  - should some of these be subtypes of AbstractArray?
 
 
-export pancake, column, IJFH, IJF
+export slab, column, IJFH, IJF
 
 include("struct.jl")
 
@@ -37,12 +37,12 @@ Abstract type for data storage for a column. Objects `data` should define a
 abstract type DataColumn{S} <: AbstractData{S} end
 
 """
-    DataPancake{S}
+    DataSlab{S}
 
-Abstract type for data storage for a pancake. Objects `data` should define a
+Abstract type for data storage for a slab. Objects `data` should define a
 `data[i,j]`, returning a value of type `S`.
 """
-abstract type DataPancake{S} <: AbstractData{S} end
+abstract type DataSlab{S} <: AbstractData{S} end
 abstract type Data2D{S} <: AbstractData{S} end
 abstract type Data3D{S} <: AbstractData{S} end
 
@@ -104,7 +104,7 @@ function KFV{S}(array::AbstractArray{T,3}) where {S,T}
 end
 =#
 
-struct IJF{S, A} <: DataPancake{S}
+struct IJF{S, A} <: DataSlab{S}
     array::A
 end
 Adapt.adapt_structure(to, obj::IJF{S}) where {S} =
@@ -130,7 +130,7 @@ function column(ijfh::IJFH{S}, i, j, h) where {S}
     get_struct(view(getfield(ijfh, :array), i, j, :, h), S)
 end
 
-function pancake(ijfh::IJFH{S}, k, v, h) where {S} # k,v are unused
+function slab(ijfh::IJFH{S}, k, v, h) where {S} # k,v are unused
     IJF{S}(view(getfield(ijfh, :array), :, :, :, h))
 end
 

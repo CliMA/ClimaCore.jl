@@ -8,8 +8,8 @@ function knl_copy!(dst, src)
 
     h = blockIdx().x
 
-    p_dst = pancake(dst, 1, 1, h)
-    p_src = pancake(src, 1, 1, h)
+    p_dst = slab(dst, 1, 1, h)
+    p_src = slab(src, 1, 1, h)
 
     @inbounds p_dst[i, j] = p_src[i, j]
     return nothing

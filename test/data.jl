@@ -18,16 +18,16 @@ end
     S = Tuple{Complex{Float64}, Float64}
     data = IJFH{S}(array)
     @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
-    data_pancake = pancake(data, 1, 1, 1)
-    @test data_pancake[2, 1] ==
+    data_slab = slab(data, 1, 1, 1)
+    @test data_slab[2, 1] ==
           (Complex(array[2, 1, 1, 1], array[2, 1, 2, 1]), array[2, 1, 3, 1])
-    data_pancake[2, 1] = (Complex(-1.0, -2.0), -3.0)
+    data_slab[2, 1] = (Complex(-1.0, -2.0), -3.0)
     @test array[2, 1, 1, 1] == -1.0
     @test array[2, 1, 2, 1] == -2.0
     @test array[2, 1, 3, 1] == -3.0
 
-    subdata_pancake = data_pancake.:2
-    @test subdata_pancake[2, 1] == -3.0
-    subdata_pancake[2, 1] = -5.0
+    subdata_slab = data_slab.:2
+    @test subdata_slab[2, 1] == -3.0
+    subdata_slab[2, 1] = -5.0
     @test array[2, 1, 3, 1] == -5.0
 end
