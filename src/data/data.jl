@@ -21,7 +21,7 @@ using Adapt
 #  - printing
 #  - should some of these be subtypes of AbstractArray?
 
-
+import ..slab, ..column
 export slab, column, IJFH, IJF
 
 include("struct.jl")
