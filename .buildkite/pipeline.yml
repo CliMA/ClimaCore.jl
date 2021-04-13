@@ -1,7 +1,7 @@
 env:
   JULIA_VERSION: "1.6.0"
   OPENMPI_VERSION: "4.0.4"
-  CUDA_VERSION: "10.2"
+  CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
   CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
 
@@ -19,6 +19,7 @@ steps:
   - label: "init gpu env"
     key: "init_gpu_env"
     command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
@@ -44,6 +45,7 @@ steps:
   - label: "gpu_unittests"
     key: "gpu_unittests"
     command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
       - "julia --color=yes --project -e 'using Pkg; Pkg.test(test_args=[\"CUDA\"])'"
     agents:
       config: gpu
