@@ -1,8 +1,11 @@
 
 module Quadratures
-using GaussQuadrature
 
-export QuadratureStyle, GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
+import GaussQuadrature
+import StaticArrays: SVector
+
+export QuadratureStyle,
+    GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
 
 """
    QuadratureStyle
@@ -32,6 +35,7 @@ The points and weights of the quadrature rule in floating point type `FT`.
 """
 function quadrature_points end
 
+
 """
     GLL{Nq}()
 
@@ -42,8 +46,9 @@ struct GLL{Nq} <: QuadratureStyle end
 polynomial_degree(::GLL{Nq}) where {Nq} = Nq - 1
 degrees_of_freedom(::GLL{Nq}) where {Nq} = Nq
 
+
 function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
-  GaussQuadrature.legendre(T, Nq, GaussQuadrature.both)
+    return GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
 end
 
 
@@ -59,7 +64,7 @@ polynomial_degree(::GL{Nq}) where {Nq} = Nq - 1
 degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
 
 function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
-    GaussQuadrature.legendre(T, Nq, GaussQuadrature.neither)
+    return GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
 end
 
 

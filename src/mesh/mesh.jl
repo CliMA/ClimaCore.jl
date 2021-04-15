@@ -2,7 +2,7 @@
     Meshes
 
 - domain
-- topologyc
+- topology
 - coordinates
 - metric terms (inverse partial derivatives)
 - quadrature rules and weights
@@ -13,6 +13,8 @@ QA: https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGM
 
 """
 module Meshes
+
+import StaticArrays: SVector, SMatrix
 
 include("quadrature.jl")
 import .Quadratures
@@ -26,10 +28,10 @@ abstract type AbstractMesh end
 # - bilinear
 
 
-struct Mesh2D{T,Q} <: AbstractMesh
+struct Mesh2D{T, Q} <: AbstractMesh
     topology::T
     quadrature_style::Q
-    coordinates
+    coordinates::Any
 end
 
 #=
@@ -46,9 +48,9 @@ end
 
 
 struct LocalGeometry{FT}
-  x::SVector{3,FT}
-  ∂ξ∂x::SMatrix{3,3,FT,9}
-  J::FT
+    x::SVector{3, FT}
+    ∂ξ∂x::SMatrix{3, 3, FT, 9}
+    J::FT
 end
 
 end # module

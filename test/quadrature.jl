@@ -1,19 +1,24 @@
-using Tests
-import ClimatemachineCore.Mesh.Quadrature
+using Test
+import ClimateMachineCore.Meshes.Quadratures
 
 @testset "test LGL quadrature" begin
-    quad = Quadrature.LGL{4}
-    @test quad isa Quadrature.QuadratureStyle
-    @test Quadrature.polynomial_degree(quad) == 3
-    @test Quadrature.degrees_of_freedom(quad) == 4
-    @test length(Quadrature.quadrature_points(quad)) == 4
+    quad = Quadratures.GLL{3}()
+    @test quad isa Quadratures.QuadratureStyle
+    @test Quadratures.polynomial_degree(quad) == 2
+    @test Quadratures.degrees_of_freedom(quad) == 3
+    points, weights = Quadratures.quadrature_points(Float64, quad)
+
+    @test eltype(points) === eltype(weights) === Float64
+    @test length(points) == length(weights) == 3
 end
 
 @testset "test GL quadrature" begin
-    quad = Quadrature.GL{4}
-    @test quad isa Quadrature.QuadratureStyle
-    @test Quadrature.polynomial_degree(quad) == 3
-    @test Quadrature.degrees_of_freedom(quad) == 4
-    @test length(Quadrature.quadrature_points(quad)) == 4
-end
+    quad = Quadratures.GL{4}()
+    @test quad isa Quadratures.QuadratureStyle
+    @test Quadratures.polynomial_degree(quad) == 3
+    @test Quadratures.degrees_of_freedom(quad) == 4
 
+    points, weights = Quadratures.quadrature_points(Float32, quad)
+    @test eltype(points) === eltype(weights) === Float32
+    @test length(points) == length(weights) == 4
+end
