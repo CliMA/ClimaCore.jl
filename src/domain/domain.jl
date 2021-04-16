@@ -92,9 +92,6 @@ struct EquiangularCubedSphereDiscretization{FT} <: Discretization
     # 6*n^2 elements
 end
 
-abstract type QuadratureStyle end
-struct LGL{N} <: QuadratureStyle end
-
 # PetSC
 # https://www.mcs.anl.gov/petsc/petsc-current/docs/manualpages/DT/index.html
 
