@@ -18,7 +18,9 @@ x2    |       |
 """
 module Topologies
 
-import ..Domains: EquispacedRectangleDiscretization
+import StaticArrays: SVector
+
+import ..Domains: EquispacedRectangleDiscretization, coordinate_type
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
@@ -29,6 +31,14 @@ discretized domain elements in the horizontal domain.
 """
 abstract type AbstractTopology end
 
+"""
+    domain(topology)
+
+The `domain` underlying the topology.
+"""
+function domain end
+
+coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
 
 """
     nlocalelems(topology)
@@ -36,6 +46,14 @@ abstract type AbstractTopology end
 The number of local elements in `topology`.
 """
 function nlocalelems end
+
+
+"""
+    (c1,c2,c3,c4) = vertex_coordinates(topology, elem)
+
+The coordinates of the 4 vertices of element `elem`.
+"""
+function vertex_coordinates end
 
 """
     (opelem, opface, reversed) = opposing_face(topology, elem, face)

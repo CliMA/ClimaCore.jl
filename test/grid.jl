@@ -1,13 +1,23 @@
 using Test
 import ClimateMachineCore.Domains
 import ClimateMachineCore.Topologies
+using StaticArrays
 
-function rectangular_grid(n1, n2, x1periodic, x2periodic)
+function rectangular_grid(
+    n1,
+    n2,
+    x1periodic,
+    x2periodic;
+    x1min = 0.0,
+    x1max = 1.0,
+    x2min = 0.0,
+    x2max = 1.0,
+)
     domain = Domains.RectangleDomain(
-        x1min = 0.0,
-        x1max = 1.0,
-        x2min = 0.0,
-        x2max = 1.0,
+        x1min = x1min,
+        x1max = x1max,
+        x2min = x2min,
+        x2max = x2max,
         x1periodic = x1periodic,
         x2periodic = x2periodic,
     )
@@ -206,5 +216,66 @@ end
         V = collect(Topologies.vertices(grid_topology))
         @test length(V[1]) == 1
         @test collect(V[1]) == [(1, 1)]
+    end
+end
+
+@testset "simple rectangular grid coordinates" begin
+    @testset "1×1 element quad mesh with all periodic boundries" begin
+        _, _, grid_topology = rectangular_grid(1, 1, true, true)
+        c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
+        @test c1 == SVector(0.0, 0.0)
+        @test c2 == SVector(1.0, 0.0)
+        @test c3 == SVector(0.0, 1.0)
+        @test c4 == SVector(1.0, 1.0)
+
+        _, _, grid_topology = rectangular_grid(
+            1,
+            1,
+            false,
+            false;
+            x1min = -1.0,
+            x1max = 1.0,
+            x2min = -1.0,
+            x2max = 1.0,
+        )
+        c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
+        @test c1 == SVector(-1.0, -1.0)
+        @test c2 == SVector(1.0, -1.0)
+        @test c3 == SVector(-1.0, 1.0)
+        @test c4 == SVector(1.0, 1.0)
+    end
+
+    @testset "2×4 element quad mesh with non-periodic boundaries" begin
+        _, _, grid_topology = rectangular_grid(2, 4, false, false)
+        c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
+        @test c1 == SVector(0.0, 0.0)
+        @test c2 == SVector(0.5, 0.0)
+        @test c3 == SVector(0.0, 0.25)
+        @test c4 == SVector(0.5, 0.25)
+
+        c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 8)
+        @test c1 == SVector(0.5, 0.75)
+        @test c2 == SVector(1.0, 0.75)
+        @test c3 == SVector(0.5, 1.0)
+        @test c4 == SVector(1.0, 1.0)
+
+
+
+    end
+
+    @testset "check coordinate type accuracy" begin
+        _, _, grid_topology = rectangular_grid(
+            3,
+            1,
+            false,
+            false,
+            x1min = big(0.0),
+            x1max = big(1.0),
+            x2min = big(0.0),
+            x2max = big(1.0),
+        )
+        c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
+        @test eltype(c2) == BigFloat
+        @test c2 ≈ SVector(big(1.0) / big(3.0), big(0.0)) rtol = eps(BigFloat)
     end
 end
