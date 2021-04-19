@@ -3,7 +3,8 @@ status = [
   "test-os (windows-latest)",
   "test-os (macos-latest)",
   "buildkite/climatemachinecore-ci",
-  "format"
+  "format",
+  "docbuild"
 ]
 delete_merged_branches = true
 timeout_sec = 12600
