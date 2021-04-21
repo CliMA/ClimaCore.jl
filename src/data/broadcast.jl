@@ -49,9 +49,9 @@ function Base.similar(
 end
 
 function Base.copyto!(
-    dest::IJFH,
+    dest::IJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
-) where {Nij, A}
+) where {S, Nij, A}
     nh = length(dest)
     for h in 1:nh
         slab_dest = slab(dest, h)
@@ -61,4 +61,18 @@ function Base.copyto!(
         end
     end
     return dest
+end
+
+# broadcasting scalar assignment
+@inline function Base.Broadcast.materialize!(
+    ::DS,
+    dest,
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {DS <: DataStyle, Style}
+    return copyto!(
+        dest,
+        Base.Broadcast.instantiate(
+            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
+        ),
+    )
 end
