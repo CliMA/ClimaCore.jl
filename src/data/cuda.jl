@@ -34,15 +34,15 @@ end
 
 
 function Base.copyto!(
-    dest::IJFH,
+    dest::IJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
-) where {Nij, A <: CUDA.CuArray}
-    _, nh = size(dest)
+) where {S, Nij, A <: CUDA.CuArray}
+    Nh = length(dest)
     #=
     nthreads = 512
     nblocks = cld(nij*nij*nh, nthreads)
     CUDA.@cuda threads = (nthreads,) blocks = (nblocks,) knl_copyto!(dest, bc)
     =#
-    CUDA.@cuda threads = (Nij, Nij) blocks = (nh,) knl_copyto!(dest, bc)
+    CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copyto!(dest, bc)
     return dest
 end
