@@ -128,11 +128,8 @@ end
 Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
     IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
 
-
-function Base.size(data::IJFH)
-    array = parent(data)
-    size(array, 1), size(array, 4)
-end
+Base.length(data::IJFH) = size(parent(data), 4)
+Base.size(data::Data2D) = (length(data),)
 
 function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
@@ -188,7 +185,7 @@ function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
 end
 
 @inline function slab(ijfh::IJFH{S, Nij}, h) where {S, Nij} # k,v are unused
-    @boundscheck (1 <= h <= size(ijfh)[2]) || throw(BoundsError(ijfh, (h,)))
+    @boundscheck (1 <= h <= length(ijfh)) || throw(BoundsError(ijfh, (h,)))
     IJF{S, Nij}(view(parent(ijfh), :, :, :, h))
 end
 

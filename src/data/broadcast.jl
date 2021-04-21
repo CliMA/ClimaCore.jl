@@ -39,21 +39,12 @@ function slab(
     Base.Broadcast.Broadcasted{DataSlabStyle{DS}}(bc.f, args, axes)
 end
 
-
-# What should axes return?
-# The Broadcast / Base machinery specializes on Tuple types and doesn't support NamedTuple
-Base.axes(data::IJFH{S}) where {S} =
-    (axes(parent(data), 1), axes(parent(data), 4))
-
 function Base.similar(
     bc::Broadcast.Broadcasted{IJFHStyle{Nij, A}},
     ::Type{Eltype},
 ) where {Nij, A, Eltype}
-    axes_ij, axes_h = axes(bc)
-    array = similar(
-        A,
-        (axes_ij, axes_ij, Base.OneTo(typesize(eltype(A), Eltype)), axes_h),
-    )
+    Nh = length(bc)
+    array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
 
@@ -61,7 +52,7 @@ function Base.copyto!(
     dest::IJFH,
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
 ) where {Nij, A}
-    _, nh = size(dest)
+    nh = length(dest)
     for h in 1:nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
