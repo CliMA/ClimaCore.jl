@@ -64,16 +64,15 @@ function Base.copyto!(
 end
 
 # broadcasting scalar assignment
-function Base.copyto!(
-    dest::AbstractData,
-    bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
-) where {S, Nij}
-    copyto!(
+@inline function Base.Broadcast.materialize!(
+    ::DS,
+    dest,
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {DS <: DataStyle, Style}
+    return copyto!(
         dest,
-        Base.Broadcast.Broadcasted{typeof(DataStyle(typeof(dest)))}(
-            bc.f,
-            bc.args,
-            axes(dest),
+        Base.Broadcast.instantiate(
+            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
         ),
     )
 end
