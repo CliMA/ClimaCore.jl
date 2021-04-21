@@ -24,7 +24,6 @@ function knl_copyto!(dest, src)
 
     h = CUDA.blockIdx().x
 
-
     p_dest = slab(dest, h)
     p_src = slab(src, h)
 

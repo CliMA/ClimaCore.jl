@@ -44,6 +44,16 @@ end
           FT[f == 1 ? 2 : 1 for i in 1:2, j in 1:2, f in 1:2, h in 1:2]
 end
 
+@testset "broadcasting assignment from scalar" begin
+    FT = Float64
+    S = Complex{FT}
+    data = IJFH{S, 2}(Array{FT}, 3)
+    data .= Complex(1.0, 2.0)
+    @test parent(data) ==
+          FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
+end
+
+
 @testset "broadcasting between data objects" begin
     FT = Float64
     data1 = ones(FT, 2, 2, 2, 2)
