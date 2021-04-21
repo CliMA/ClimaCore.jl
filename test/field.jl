@@ -22,4 +22,8 @@ import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes
 
     field = Fields.Field(IJFH{ComplexF64, 4}(ones(4, 4, 2, 1)), mesh)
     real_field = field.re
+
+    res = field .+ 1
+    @test parent(Fields.field_values(res)) ==
+          Float64[f == 1 ? 2 : 1 for i in 1:4, j in 1:4, f in 1:2, h in 1:1]
 end

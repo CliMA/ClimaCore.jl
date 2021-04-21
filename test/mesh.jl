@@ -1,6 +1,7 @@
 using Test
 using StaticArrays
 import ClimateMachineCore: slab, Domains, Topologies, Meshes
+import ClimateMachineCore.Geometry: Cartesian2DPoint
 
 @testset "1×1 domain mesh" begin
     domain = Domains.RectangleDomain(
@@ -22,10 +23,10 @@ import ClimateMachineCore: slab, Domains, Topologies, Meshes
     array = getfield(mesh.coordinates, :array)
     @test size(array) == (4, 4, 2, 1)
     coord_slab = slab(mesh.coordinates, 1)
-    @test coord_slab[1, 1] ≈ SVector(-3.0, -2.0)
-    @test coord_slab[4, 1] ≈ SVector(5.0, -2.0)
-    @test coord_slab[1, 4] ≈ SVector(-3.0, 8.0)
-    @test coord_slab[4, 4] ≈ SVector(5.0, 8.0)
+    @test coord_slab[1, 1] ≈ Cartesian2DPoint(-3.0, -2.0)
+    @test coord_slab[4, 1] ≈ Cartesian2DPoint(5.0, -2.0)
+    @test coord_slab[1, 4] ≈ Cartesian2DPoint(-3.0, 8.0)
+    @test coord_slab[4, 4] ≈ Cartesian2DPoint(5.0, 8.0)
 
     local_geometry_slab = slab(mesh.local_geometry, 1)
     for i in 1:4, j in 1:4

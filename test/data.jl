@@ -51,6 +51,10 @@ end
     data .= Complex(1.0, 2.0)
     @test parent(data) ==
           FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
+
+    data .= 1
+    @test parent(data) ==
+          FT[f == 1 ? 1 : 0 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
 end
 
 

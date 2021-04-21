@@ -18,8 +18,7 @@ x2    |       |
 """
 module Topologies
 
-import StaticArrays: SVector
-
+import ..Geometry
 import ..Domains: EquispacedRectangleDiscretization, coordinate_type
 
 # TODO: seperate types for MPI/non-MPI topologies
@@ -66,6 +65,45 @@ The opposing face of face number `face` of element `elem` in `topology`.
 """
 function opposing_face end
 
+"""
+    i,j = face_node_index(face, Nq, q, reversed=false)
+
+The node indices of the `q`th node on face `face`, where `Nq` is the number of
+face nodes in each direction.
+"""
+function face_node_index(face, Nq, q, reversed = false)
+    if reversed
+        q = Nq - q + 1
+    end
+    if face == 1
+        return 1, q
+    elseif face == 2
+        return Nq, q
+    elseif face == 3
+        return q, 1
+    else
+        return q, Nq
+    end
+end
+
+"""
+    i,j = vertex_node_index(vertex_num, Nq)
+
+The node indices of `vertex_num`, where `Nq` is the number of face nodes in
+each direction.
+"""
+function vertex_node_index(vertex_num, Nq)
+    if vertex_num == 1
+        return 1, 1
+    elseif vertex_num == 2
+        return Nq, 1
+    elseif vertex_num == 3
+        return 1, Nq
+    else
+        return Nq, Nq
+    end
+end
+
 
 """
     interior_faces(topology::AbstractTopology)
@@ -107,7 +145,7 @@ end
     vertices(topology)
 
 An iterator over the unique (shared) vertices of the topology `topology`.
-Each vertex is an iterator over `(element, vertexnumber)` pairs.
+Each vertex is an iterator over `(element, vertex_number)` pairs.
 """
 function vertices(topology)
     VertexIterator(topology)
@@ -117,7 +155,7 @@ struct VertexIterator{T <: AbstractTopology}
 end
 struct Vertex{T <: AbstractTopology, V}
     topology::T
-    id::V
+    num::V
 end
 
 # implementations

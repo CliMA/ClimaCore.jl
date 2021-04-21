@@ -33,7 +33,7 @@ end
 Similar to `fieldoffset(S,i)`, but gives result in multiples of `sizeof(T)` instead of bytes.
 """
 fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
-    div(fieldoffset(S, i), sizeof(T))
+    Int(div(fieldoffset(S, i), sizeof(T)))
 
 """
     typesize(T,S)
@@ -48,11 +48,7 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-@propagate_inbounds function get_struct(
-    array::AbstractArray{T},
-    ::Type{S},
-    offset,
-) where {T, S}
+function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
     if @generated
         tup = :(())
         for i in 1:fieldcount(S)
@@ -86,14 +82,21 @@ end
     ::Type{S},
 ) where {T, S} = get_struct(array, S, 0)
 
-
-@propagate_inbounds function set_struct!(
-    array::AbstractArray{T},
-    val::S,
-    offset,
-) where {T, S}
+function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     if @generated
-        ex = quote end
+        errorstring = "Expected type $T, got type $S"
+        ex = quote
+            # TODO: need to figure out a better way to handle the case where we require conversion
+            # e.g. if T = Dual or Double64
+            if isprimitivetype(S)
+                error($errorstring)
+            end
+            # TODO: we get a segfault here when trying to pass propogate_inbounds
+            # with a generated function ctx (in the quote block or attached to the generated function)
+            # passing it in the quoted expr for args seems to work :( @propagate_inbounds set_struct! ...)
+            # https://github.com/JuliaArrays/StaticArrays.jl/blob/52fc10278667dd5fa82ded1edcfd5f7fedfae1c4/src/indexing.jl#L16-L38
+            # Base.@_propagate_inbounds_meta
+        end
         for i in 1:fieldcount(S)
             push!(
                 ex.args,
@@ -106,6 +109,9 @@ end
         end
         ex
     else
+        if isprimitivetype(S)
+            return error("Expected type $T, got type $S")
+        end
         for i in 1:fieldcount(S)
             set_struct!(
                 array,
