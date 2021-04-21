@@ -8,6 +8,12 @@ CurrentModule = ClimateMachineCore
 
 ```@docs
 DataLayouts
+DataLayouts.IJFH
+```
+
+## Domains
+```@docs
+Domains.EquispacedRectangleDiscretization
 ```
 
 ## Topologies
