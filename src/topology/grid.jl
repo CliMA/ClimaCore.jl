@@ -8,12 +8,32 @@ struct GridTopology{D <: EquispacedRectangleDiscretization} <: AbstractTopology
     discretization::D
 end
 
+domain(topology::GridTopology) = topology.discretization.domain
+
 function nlocalelems(topology::GridTopology)
     n1 = topology.discretization.n1
     n2 = topology.discretization.n2
     return n1 * n2
 end
 
+function vertex_coordinates(topology::GridTopology, elem::Integer)
+    @assert 1 <= elem <= nlocalelems(topology)
+
+    # convert to 0-based indices
+    discretization = topology.discretization
+    n1 = discretization.n1
+    n2 = discretization.n2
+    range1 = discretization.range1
+    range2 = discretization.range2
+
+    z2, z1 = fldmod(elem - 1, n1)
+
+    c1 = SVector(range1[z1 + 1], range2[z2 + 1])
+    c2 = SVector(range1[z1 + 2], range2[z2 + 1])
+    c3 = SVector(range1[z1 + 1], range2[z2 + 2])
+    c4 = SVector(range1[z1 + 2], range2[z2 + 2])
+    return (c1, c2, c3, c4)
+end
 
 function opposing_face(topology::GridTopology, elem::Integer, face::Integer)
     @assert 1 <= elem <= nlocalelems(topology)

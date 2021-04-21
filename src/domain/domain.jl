@@ -1,6 +1,10 @@
 module Domains
 
 export RectangleDomain, EquispacedRectangleDiscretization
+
+using StaticArrays
+include("coordinates.jl")
+
 # QA:
 # https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/shared_source/domains.jl
 
@@ -60,6 +64,8 @@ Base.@kwdef struct RectangleDomain{FT} <: HorizontalDomain
     x2periodic::Bool
 end
 
+coordinate_type(::RectangleDomain{FT}) where {FT} = SVector{2, FT}
+
 # coordinates (-pi/2 < lat < pi/2, -pi < lon < pi)
 struct SphereDomain{FT} <: HorizontalDomain
     radius::FT
@@ -79,12 +85,26 @@ lightweight(i.e. exists on all MPI ranks)
 """
 abstract type Discretization end
 
-struct EquispacedRectangleDiscretization{FT} <: Discretization
+
+"""
+    EquispacedRectangleDiscretization(domain::RectangleDomain, n1::Integer, n2::Integer)
+
+A regular discretization of `domain` with `n1` elements in dimension 1, and `n2`
+in dimension 2.
+"""
+struct EquispacedRectangleDiscretization{FT, R} <: Discretization
     domain::RectangleDomain{FT}
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # number of elements in x2 direction
-    # n1*n2 elements
+    range1::R
+    range2::R
 end
+function EquispacedRectangleDiscretization(domain::RectangleDomain, n1, n2)
+    range1 = range(domain.x1min, domain.x1max; length = n1 + 1)
+    range2 = range(domain.x2min, domain.x2max; length = n2 + 1)
+    EquispacedRectangleDiscretization(domain, n1, n2, range1, range2)
+end
+Base.eltype(::EquispacedRectangleDiscretization{FT}) where {FT} = FT
 
 struct EquiangularCubedSphereDiscretization{FT} <: Discretization
     domain::SphereDomain{FT}
@@ -103,38 +123,6 @@ end
 # opposing_face(topology, localelem, face) => (opelement, opface, reversed)
 
 ### interfaces
-
-# for element in 1:nelements(...)
-#   for face = 1:4
-#     ijk = ...
-#     opposing_face(elem,face)
-#
-#     X[ijk,f,e] +=
-#
-#     if face % 2 == 0
-#        @synchronize
-#     end
-#   end
-# end
-
-
-# for unique_face in unique_interior_face
-#   (elem1, face1, elem2, face2, reversed) = unique_face
-#
-#      # potential for race conditions (since a node can belong in multiple face)
-
-# for mesh_vertex in mesh_vertices(...)
-#    for (elem, vert) in mesh_vertex
-
-# for face in boundary_faces(topology, 1)
-
-
-
-# for face_partition in unique_interior_face_partition(...)
-#    for face in face_partition(...)
-#
-
-# periodicity / boundary labelling?
 
 # global horz element id -> some sort of numbering
 
