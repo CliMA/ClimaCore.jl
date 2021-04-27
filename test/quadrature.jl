@@ -1,16 +1,19 @@
 using Test
-using LinearAlgebra
+using LinearAlgebra, StaticArrays
 import ClimateMachineCore.Meshes.Quadratures
 
 
 f(x) = x^3 + 2x^2 + 3x + 4
+fd(x) = 3x^2 + 4x + 3
 
 @testset "test LGL quadrature" begin
     quad = Quadratures.GLL{3}()
     @test quad isa Quadratures.QuadratureStyle
     @test Quadratures.polynomial_degree(quad) == 2
     @test Quadratures.degrees_of_freedom(quad) == 3
+
     points, weights = Quadratures.quadrature_points(Float64, quad)
+
     @test eltype(points) === eltype(weights) === Float64
     @test length(points) == length(weights) == 3
     @test dot(f.(points), weights) ≈ 28 / 3
@@ -27,4 +30,24 @@ end
     @test eltype(points) === eltype(weights) === Float32
     @test length(points) == length(weights) == 4
     @test dot(f.(points), weights) ≈ 28 / 3
+end
+
+@testset "differentiation_matrix" begin
+    quad = Quadratures.GL{4}()
+    points, weights = Quadratures.quadrature_points(Float64, quad)
+
+    D = Quadratures.differentiation_matrix(Float64, quad)
+    @test D isa SMatrix
+    @test size(D) == (4, 4)
+
+    @test D * f.(points) ≈ fd.(points)
+
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(Float64, quad)
+
+    D = Quadratures.differentiation_matrix(Float64, quad)
+    @test D isa SMatrix
+    @test size(D) == (4, 4)
+
+    @test D * f.(points) ≈ fd.(points)
 end

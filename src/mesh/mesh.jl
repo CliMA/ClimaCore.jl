@@ -16,6 +16,7 @@ module Meshes
 
 include("quadrature.jl")
 
+import ..Geometry
 import ..DataLayouts, ..Domains, ..Topologies
 import ..slab
 import .Quadratures
@@ -30,24 +31,6 @@ abstract type AbstractMesh end
 #   - bilinear for flat, equiangular for spherical
 #      - domain establishes the coordinate system used (cartesian of spherical)
 
-"""
-    LocalGeometry
-
-The necessary local metric information defined at each node.
-"""
-struct LocalGeometry{FT, M}
-    "Jacobian determinant of the transformation `ξ` to `x`"
-    J::FT
-    "Metric: `J` multiplied by the quadrature weights"
-    M::FT
-    "inverse Metric terms: `1/M`"
-    invM::FT
-    "Partial derivatives of the map from `x` to `ξ`"
-    ∂ξ∂x::M
-end
-
-
-
 struct Mesh2D{T, Q, C, G} <: AbstractMesh
     topology::T
     quadrature_style::Q
@@ -55,6 +38,14 @@ struct Mesh2D{T, Q, C, G} <: AbstractMesh
     local_geometry::G
 end
 
+undertype(::Type{Geometry.LocalGeometry{FT, M}}) where {FT, M} = FT
+undertype(mesh::Mesh2D) = undertype(eltype(mesh.local_geometry))
+
+function Base.show(io::IO, mesh::Mesh2D)
+    println(io, "Mesh2D:")
+    println(io, "  topology: ", mesh.topology)
+    println(io, "  quadrature: ", mesh.quadrature_style)
+end
 
 """
     Mesh2D(topology, quadrature_style)
@@ -67,8 +58,7 @@ function Mesh2D(topology, quadrature_style)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     coordinates = DataLayouts.IJFH{CT, Nq}(Array{FT}, nelements)
-
-    LG = LocalGeometry{FT, SMatrix{2, 2, FT, 4}}
+    LG = Geometry.LocalGeometry{FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
@@ -82,17 +72,19 @@ function Mesh2D(topology, quadrature_style)
             # alternatively: move local_geometry to a different object entirely, to support overintegration
             # (where the integration is of different order)
             ξ = SVector(quad_points[i], quad_points[j])
-            x = Domains.interpolate(
+            x = Geometry.interpolate(
                 Topologies.vertex_coordinates(topology, elem),
                 ξ[1],
                 ξ[2],
             )
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
-                Domains.interpolate(
+                local x
+                x = Geometry.interpolate(
                     Topologies.vertex_coordinates(topology, elem),
                     ξ[1],
                     ξ[2],
                 )
+                SVector(x.x1, x.x2)
             end
             J = det(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
@@ -100,7 +92,7 @@ function Mesh2D(topology, quadrature_style)
             invM = 1 / M
 
             coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] = LocalGeometry(J, M, invM, ∂ξ∂x)
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, M, invM, ∂ξ∂x)
         end
     end
     return Mesh2D(topology, quadrature_style, coordinates, local_geometry)

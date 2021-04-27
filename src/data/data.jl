@@ -111,6 +111,15 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     IJFH{S, Nij, typeof(array)}(array)
 end
+function Base.similar(
+    data::IJFH{S, Nij, A},
+    ::Type{Eltype},
+) where {S, Nij, A, Eltype}
+    Nh = length(data)
+    array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
+    return IJFH{Eltype, Nij}(array)
+end
+Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 
 """
@@ -184,7 +193,7 @@ function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
     get_struct(view(parent(ijfh), i, j, :, h), S)
 end
 
-@inline function slab(ijfh::IJFH{S, Nij}, h) where {S, Nij} # k,v are unused
+@inline function slab(ijfh::IJFH{S, Nij}, h::Integer) where {S, Nij} # k,v are unused
     @boundscheck (1 <= h <= length(ijfh)) || throw(BoundsError(ijfh, (h,)))
     IJF{S, Nij}(view(parent(ijfh), :, :, :, h))
 end

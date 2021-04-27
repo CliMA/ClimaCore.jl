@@ -1,9 +1,9 @@
 module Domains
 
+import ..Geometry
+
 export RectangleDomain, EquispacedRectangleDiscretization
 
-using StaticArrays
-include("coordinates.jl")
 
 # QA:
 # https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/shared_source/domains.jl
@@ -64,7 +64,8 @@ Base.@kwdef struct RectangleDomain{FT} <: HorizontalDomain
     x2periodic::Bool
 end
 
-coordinate_type(::RectangleDomain{FT}) where {FT} = SVector{2, FT}
+coordinate_type(::RectangleDomain{FT}) where {FT} =
+    Geometry.Cartesian2DPoint{FT}
 
 # coordinates (-pi/2 < lat < pi/2, -pi < lon < pi)
 struct SphereDomain{FT} <: HorizontalDomain

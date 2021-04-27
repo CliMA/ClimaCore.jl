@@ -28,10 +28,10 @@ function vertex_coordinates(topology::GridTopology, elem::Integer)
 
     z2, z1 = fldmod(elem - 1, n1)
 
-    c1 = SVector(range1[z1 + 1], range2[z2 + 1])
-    c2 = SVector(range1[z1 + 2], range2[z2 + 1])
-    c3 = SVector(range1[z1 + 1], range2[z2 + 2])
-    c4 = SVector(range1[z1 + 2], range2[z2 + 2])
+    c1 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 1])
+    c2 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 1])
+    c3 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 2])
+    c4 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 2])
     return (c1, c2, c3, c4)
 end
 
@@ -271,7 +271,7 @@ function Base.length(vertex::Vertex{T}) where {T <: GridTopology}
     x1periodic = discretization.domain.x1periodic
     x2periodic = discretization.domain.x2periodic
 
-    z1, z2 = vertex.id
+    z1, z2 = vertex.num
 
     k1 = !x1periodic && (z1 == 0 || z1 == n1) ? 1 : 2
     k2 = !x2periodic && (z2 == 0 || z2 == n2) ? 1 : 2
@@ -288,7 +288,7 @@ function Base.iterate(vertex::Vertex{T}, vert = 0) where {T <: GridTopology}
     x2periodic = discretization.domain.x2periodic
     nv1 = x1periodic ? n1 : n1 + 1
     nv2 = x2periodic ? n2 : n2 + 1
-    z1, z2 = vertex.id
+    z1, z2 = vertex.num
 
     vert += 1
     if !x1periodic
