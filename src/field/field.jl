@@ -86,6 +86,7 @@ function Base.copyto!(
     return dest
 end
 
+
 """
     coordinate_field(mesh::AbstractMesh)
 
@@ -93,6 +94,66 @@ Construct a `Field` of the coordinates of the mesh.
 """
 coordinate_field(mesh::AbstractMesh) = Field(mesh.coordinates, mesh)
 coordinate_field(field::Field) = coordinates(mesh(field))
+
+
+
+
+function interpcoord(elemrange, x::Real)
+    n = length(elemrange)-1
+    z = x == elemrange[end] ? n : searchsortedlast(elemrange,x) # element index
+    @assert 1 <= z <= n
+    lo = elemrange[z]
+    hi = elemrange[z+1]
+    # Find ξ ∈ [-1,1] such that
+    # x = (1-ξ)/2 * lo + (1+ξ)/2 * hi
+    #   = (lo + hi) / 2 + ξ * (hi - lo) / 2
+    ξ = (2x - (lo + hi)) / (hi - lo)
+    return z, ξ
+end
+
+
+import UnicodePlots: heatmap
+import ..Meshes
+
+function interpolate(field::Field, r1, r2)
+    fieldmesh = mesh(field)
+    topology = fieldmesh.topology
+    discretization = topology.discretization
+    elemrange1 = discretization.range1
+    elemrange2 = discretization.range2
+    n1 = discretization.n1
+    data = field_values(field)
+
+    quadrature_style = fieldmesh.quadrature_style
+    Nq = Meshes.Quadratures.degrees_of_freedom(quadrature_style)
+    points, _ = Meshes.Quadratures.quadrature_points(Float64, quadrature_style)
+    bw = Meshes.Quadratures.barycentric_weights(Float64, quadrature_style)
+
+    FT = eltype(field)
+    out = Array{FT}(undef, length(r1), length(r2))
+    # assumes regular grid
+    for (l2,x2) in enumerate(r2)
+        z2, ξ2 = interpcoord(elemrange2, x2)
+
+        for (l1,x1) in enumerate(r1)
+            z1, ξ1 = interpcoord(elemrange1, x1)
+            h = (z2-1) * n1 + z1
+            data_slab = slab(data, h)
+            # barycentric interpolation
+            # Berrut2004 equation 4.2
+            s = zero(FT)
+            d = zero(FT)
+            for j = 1:Nq, i = 1:Nq
+                a1 = bw[i] / (ξ1 - points[i])
+                a2 = bw[j] / (ξ2 - points[j])
+                s += a1 * a2 * data_slab[i,j]
+                d += a1 * a2
+            end
+            out[l1,l2] = s / d
+        end
+    end
+    return out
+end
 
 
 end # module

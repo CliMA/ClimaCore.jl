@@ -61,11 +61,25 @@ struct GL{Nq} <: QuadratureStyle end
 polynomial_degree(::GL{Nq}) where {Nq} = Nq - 1
 degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
 
-
 @generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
     :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
 end
+
+"""
+    Uniform{Nq}()
+
+Uniformly-spaced quadrature.
+"""
+struct Uniform{Nq} <: QuadratureStyle end
+
+@generated function quadrature_points(::Type{FT}, ::Uniform{Nq}()) where {FT, Nq}
+    points = SVector{Nq}(range(-1+1/Nq,step=2/Nq,length=Nq))
+    weights = SVector{Nq}(ntuple(i -> 2/Nq, Nq))
+    points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
+    :($points, $weights)
+end
+
 
 """
     barycentric_weights(x::AbstractVector)
@@ -96,6 +110,24 @@ end
     barycentric_weights(quadrature_points(FT, quadstyle())[1])
 end
 
+function interpolation_matrix(points_to::SVector{Nto}, points_from::SVector{Nfrom}) where {Nto, Nfrom}
+    T = eltype(points_to)
+    bw = barycentric_weights(points_from)
+    M = zeros(MMatrix{Nto, Nfrom, T, Nto * Nfrom})
+    for i = 1:Nto
+        x_to = points_to
+        for j = 1:Nj
+            if x_to == points_from[j]
+                M[i,j] = one(T)
+                @goto next_i
+            end
+        end
+        w = bw ./ (x_to .- points_from)
+        M[i,:] .= w ./ sum(w)
+        @label next_i
+    end
+    SMatrix(M)
+end
 
 """
     differentiation_matrix(r::SVector{Nq, T},
@@ -140,7 +172,6 @@ end
 ) where {FT}
     differentiation_matrix(quadrature_points(FT, quadstyle())[1])
 end
-
 
 
 

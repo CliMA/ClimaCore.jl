@@ -21,6 +21,11 @@ import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes
     mesh = Meshes.Mesh2D(grid_topology, quad)
 
     field = Fields.Field(IJFH{ComplexF64, 4}(ones(4, 4, 2, 1)), mesh)
+    Fields.interpolate(field, 0:3, 0:3)
+
+    f(x) = sin(x.x1, y.x1)
+    f.(Fields.coordinate_field(mesh))
+
     real_field = field.re
 
     res = field .+ 1
