@@ -27,7 +27,7 @@ using LinearAlgebra
     field = f.(Fields.coordinate_field(mesh))
 
     data = Fields.field_values(field)
-    ∇data = Operators.volume_gradient!(
+    ∇data = Operators.slab_gradient!(
         similar(data, NTuple{2, Geometry.Cartesian2DVector{Float64}}),
         data,
         Fields.mesh(field),
@@ -56,7 +56,7 @@ end
     field = sin.(Fields.coordinate_field(mesh).x1)
 
     data = Fields.field_values(field)
-    ∇data = Operators.volume_gradient!(
+    ∇data = Operators.slab_gradient!(
         similar(data, Geometry.Cartesian2DVector{Float64}),
         data,
         Fields.mesh(field),
@@ -104,7 +104,7 @@ end
     field = f.(Fields.coordinate_field(mesh))
 
     data = Fields.field_values(field)
-    div_data = Operators.volume_divergence!(
+    div_data = Operators.slab_divergence!(
         similar(data, Float64),
         data,
         Fields.mesh(field),

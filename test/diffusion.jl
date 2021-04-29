@@ -8,52 +8,78 @@ using LinearAlgebra
 
 using DifferentialEquations
 
-FT = Float64
+@testset "2D field dx/dt = ∇⋅∇  ODE solve" begin
+    FT = Float64
 
-domain = Domains.RectangleDomain(
-    x1min = FT(-π),
-    x1max = FT(π),
-    x2min = FT(-π),
-    x2max = FT(π),
-    x1periodic = true,
-    x2periodic = true,
-)
-discretiation = Domains.EquispacedRectangleDiscretization(domain, 5, 5)
-grid_topology = Topologies.GridTopology(discretiation)
-
-Nq = 6
-quad = Meshes.Quadratures.GLL{Nq}()
-points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
-mesh = Meshes.Mesh2D(grid_topology, quad)
-
-f0(x) = exp(-x.x1^2 / 2)
-y0 = f0.(Fields.coordinate_field(mesh))
-
-# https://github.com/sandreza/NodalDiscontinuousGalerkin/blob/b971af24d1f6cc63016a76e2063547de5022e867/DG1D/solveHeat.jl
-
-function rhs!(rawdydt, rawdata, mesh, t)
-    data = IJFH{Float64, Nq}(rawdata)
-    dydt = IJFH{Float64, Nq}(rawdydt)
-
-    ∇data = Operators.volume_gradient!(
-        similar(data, Geometry.Cartesian2DVector{Float64}),
-        data,
-        mesh,
+    domain = Domains.RectangleDomain(
+        x1min = FT(-π),
+        x1max = FT(π),
+        x2min = FT(-π),
+        x2max = FT(π),
+        x1periodic = true,
+        x2periodic = true,
     )
-    Operators.volume_weak_divergence!(dydt, ∇data, mesh)
+    discretization = Domains.EquispacedRectangleDiscretization(domain, 5, 5)
+    grid_topology = Topologies.GridTopology(discretization)
 
-    WJ = copy(mesh.local_geometry.WJ)
-    Operators.horizontal_dss!(WJ, mesh)
-    Operators.horizontal_dss!(dydt .* mesh.local_geometry.WJ, mesh)
-    dydt .= dydt ./ WJ
-    dydt
-    #K = stiffness matrix
-    #and the mass matrix M
-    #. ∇φi(x)∇φj(x)dx
-    #M du/dt = Kuˆ+ ...
+    Nq = 6
+    quad = Meshes.Quadratures.GLL{Nq}()
+    points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
+    mesh = Meshes.Mesh2D(grid_topology, quad)
+
+    # 2D field
+    # dx/dt = ∇⋅∇ x
+
+    # Standard heat equation:
+    # ∂_t f(x1,x2) =  ∇⋅( α ∇ f(x1,x2) ) + g(x1,x2), α > 0
+
+    # Advection Equation
+    # ∂_t f + c ∂_x f  = 0
+    # the solution translates to the right at speed c,
+    # so if you you have a periodic domain of size [0, 1]
+    # at time t, the solution is f(x - c * t, y)
+
+
+    f0(x) = sin(x.x1)
+    y0 = f0.(Fields.coordinate_field(mesh))
+
+    function reconstruct(rawdata, field)
+        D = typeof(Fields.field_values(field))
+        Fields.Field(D(rawdata), Fields.mesh(field))
+    end
+
+    function rhs!(rawdydt, rawdata, field, t)
+        # reconstuct Field objects
+        y = reconstruct(rawdata, field)
+        dydt = reconstruct(rawdydt, field)
+
+        ∇y = Operators.slab_gradient(y)
+        dydt .= Operators.slab_weak_divergence(∇y)
+
+        # apply DSS
+        dydt_data = Fields.field_values(dydt)
+        WJ = copy(mesh.local_geometry.WJ) # quadrature weights * jacobian
+        Operators.horizontal_dss!(WJ, mesh)
+        dydt_data .*= mesh.local_geometry.WJ
+        Operators.horizontal_dss!(dydt_data, mesh)
+        dydt_data ./= WJ
+
+        return rawdydt
+    end
+
+    # 1. make DifferentialEquations work on Fields: i think we need to extend RecursiveArrayTools
+    #    - this doesn't seem like it will work directly: ideally we want a way to unwrap and wrap as required
+    #
+    # 2. Define isapprox on Fields
+    # 3. weighted DSS
+
+    # Solve the ODE operator
+    prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 1.0), y0)
+    sol = solve(prob, Tsit5(), reltol = 1e-8, abstol = 1e-8)
+
+    # Reconstruct the result Field at the last timestep
+    y1 = reconstruct(sol.u[end], y0)
+
+    @test parent(Fields.field_values(y0)) .* exp(-1) ≈
+          parent(Fields.field_values(y1)) rtol = 1e-6
 end
-
-prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 1.0), mesh)
-
-
-sol = solve(prob, Tsit5(), reltol = 1e-8, abstol = 1e-8)

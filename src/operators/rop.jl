@@ -10,6 +10,13 @@ rmap(fn, X::Tuple, Y::Tuple) = map((x, y) -> rmap(fn, x, y), X, Y)
 rmap(fn, X::NamedTuple) = map(x -> rmap(fn, x), X)
 rmap(fn, X::NamedTuple, Y::NamedTuple) = map((x, y) -> rmap(fn, x, y), X, Y)
 
+rmaptype(fn, ::Type{T}) where {T} = fn(T)
+rmaptype(fn, ::Type{T}) where {T <: Tuple} =
+    Tuple{map(fn, tuple(T.parameters...))...}
+rmaptype(fn, ::Type{T}) where {T <: NamedTuple{names, tup}} where {names, tup} =
+    NamedTuple{names, rmaptype(fn, tup)}
+
+
 """
     rscale(w, X)
     w ⊠ X
@@ -27,6 +34,8 @@ Recursively add elements of `X` and `Y`.
 """
 radd(X, Y) = rmap(+, X, Y)
 const ⊞ = radd
+
+
 
 """
     rmuladd(w, X, Y)

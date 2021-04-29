@@ -74,3 +74,4 @@ Base.:(*)(w::Number, u::Cartesian2DVector) =
     Cartesian2DVector(w * u.u1, w * u.u2)
 
 Base.eltype(::Cartesian2DVector{FT}) where {FT} = FT
+Base.eltype(::Type{Cartesian2DVector{FT}}) where {FT} = FT

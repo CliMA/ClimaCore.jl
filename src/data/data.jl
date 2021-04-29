@@ -68,6 +68,9 @@ abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 Base.propertynames(data::AbstractData{S}) where {S} = fieldnames(S)
 Base.parent(data::AbstractData) = getfield(data, :array)
 
+Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
+
+
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     i = findfirst(isequal(name), fieldnames(S))
@@ -119,6 +122,8 @@ function Base.similar(
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
+
+
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 
@@ -154,6 +159,7 @@ end
     IH1JH2{S, Nij}(data::AbstractMatrix{S})
 
 Stores a 2D field in a matrix using a column-major format.
+The primary use is for interpolation to a regular grid.
 """
 struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
     array::A

@@ -11,6 +11,13 @@ using StaticArrays
 
 include("rop.jl")
 
+
+# function stubs: definitions are in Fields
+function slab_gradient end
+function slab_divergence end
+function slab_weak_divergence end
+
+
 # TODO:
 #  - convenience operations for fields
 #  - determine output element type
@@ -48,13 +55,13 @@ end
 
 
 """
-    volume_gradient!(∇data, data, mesh)
+    slab_gradient!(∇data, data, mesh)
 
 Compute the gradient on each element via the chain rule:
 
     ∂f/∂xⁱ = ∂f/∂ξʲ * ∂ξʲ/∂xⁱ
 """
-function volume_gradient!(∇data, data, mesh)
+function slab_gradient!(∇data, data, mesh)
     # all derivatives calculated in the reference local geometry FT precision
     FT = Meshes.undertype(mesh)
     D = Quadratures.differentiation_matrix(FT, mesh.quadrature_style)
@@ -88,7 +95,7 @@ end
 
 
 """
-    volume_divergence!(divflux, flux, mesh)
+    slab_divergence!(divflux, flux, mesh)
 
 Compute the divergence of `flux`, storing the result in `divflux`.
 
@@ -107,7 +114,7 @@ where `I{x}` is the interpolation operator applied to a field `x`.
 ## References
  - Taylor and Fournier (2010), equation 15
 """
-function volume_divergence!(divflux, flux, mesh)
+function slab_divergence!(divflux, flux, mesh)
     # all derivatives calculated in the reference local geometry with FT precision
     FT = Meshes.undertype(mesh)
     D = Quadratures.differentiation_matrix(FT, mesh.quadrature_style)
@@ -154,7 +161,7 @@ end
 
 
 """
-    volume_weak_divergence!(divflux, flux, mesh)
+    slab_weak_divergence!(divflux, flux, mesh)
 
 Compute the divergence of `flux` weakly, storing the result in `divflux`.
 
@@ -173,7 +180,7 @@ where
  - `W` is the diagonal matrix of quadrature weights
  - `D₁` and `D₂` are the discrete derivative matrices along the first and second dimensions.
 """
-function volume_weak_divergence!(divflux, flux, mesh)
+function slab_weak_divergence!(divflux, flux, mesh)
     # all derivatives calculated in the reference local geometry with FT precision
     FT = Meshes.undertype(mesh)
     D = Quadratures.differentiation_matrix(FT, mesh.quadrature_style)
