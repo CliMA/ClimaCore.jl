@@ -2,7 +2,7 @@
 module Quadratures
 
 import GaussQuadrature
-import StaticArrays: SVector, SMatrix
+import StaticArrays: SVector, SMatrix, MMatrix
 
 export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
@@ -73,7 +73,7 @@ Uniformly-spaced quadrature.
 """
 struct Uniform{Nq} <: QuadratureStyle end
 
-@generated function quadrature_points(::Type{FT}, ::Uniform{Nq}()) where {FT, Nq}
+@generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
     points = SVector{Nq}(range(-1+1/Nq,step=2/Nq,length=Nq))
     weights = SVector{Nq}(ntuple(i -> 2/Nq, Nq))
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
@@ -115,19 +115,32 @@ function interpolation_matrix(points_to::SVector{Nto}, points_from::SVector{Nfro
     bw = barycentric_weights(points_from)
     M = zeros(MMatrix{Nto, Nfrom, T, Nto * Nfrom})
     for i = 1:Nto
-        x_to = points_to
-        for j = 1:Nj
+        x_to = points_to[i]
+        skip_row = false
+        for j = 1:Nfrom
             if x_to == points_from[j]
+                # assign to one to avoid singularity condition
                 M[i,j] = one(T)
-                @goto next_i
+                # skip over the equal boundry condition
+                skip_row = true
             end
+            skip_row && break
         end
+        skip_row && continue
         w = bw ./ (x_to .- points_from)
         M[i,:] .= w ./ sum(w)
-        @label next_i
     end
     SMatrix(M)
 end
+
+@generated function interpolation_matrix(
+    ::Type{FT},
+    quadto::QuadratureStyle,
+    quadfrom::QuadratureStyle
+) where {FT}
+    interpolation_matrix(quadrature_points(FT, quadto())[1], quadrature_points(FT, quadfrom())[1])
+end
+
 
 """
     differentiation_matrix(r::SVector{Nq, T},

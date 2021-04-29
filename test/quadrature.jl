@@ -51,3 +51,15 @@ end
 
     @test D * f.(points) ≈ fd.(points)
 end
+
+@testset "interpolation matrix" begin
+    quad1 = Quadratures.GL{4}()
+    quad2 = Quadratures.GLL{5}()
+    points1, weights1 = Quadratures.quadrature_points(Float64, quad1)
+    points2, weights2 = Quadratures.quadrature_points(Float64, quad2)
+    I = Quadratures.interpolation_matrix(Float64, quad2, quad1)
+    @test size(I) == (5,4)
+
+    @test I * f.(points1) ≈ f.(points2)
+
+end
