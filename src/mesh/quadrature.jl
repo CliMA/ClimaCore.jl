@@ -74,9 +74,8 @@ Uniformly-spaced quadrature.
 struct Uniform{Nq} <: QuadratureStyle end
 
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
-    points = SVector{Nq}(range(-1+1/Nq,step=2/Nq,length=Nq))
-    weights = SVector{Nq}(ntuple(i -> 2/Nq, Nq))
-    points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
+    points = SVector{Nq}(range(-1 + 1 / Nq, step = 2 / Nq, length = Nq))
+    weights = SVector{Nq}(ntuple(i -> 2 / Nq, Nq))
     :($points, $weights)
 end
 
@@ -110,17 +109,20 @@ end
     barycentric_weights(quadrature_points(FT, quadstyle())[1])
 end
 
-function interpolation_matrix(points_to::SVector{Nto}, points_from::SVector{Nfrom}) where {Nto, Nfrom}
+function interpolation_matrix(
+    points_to::SVector{Nto},
+    points_from::SVector{Nfrom},
+) where {Nto, Nfrom}
     T = eltype(points_to)
     bw = barycentric_weights(points_from)
     M = zeros(MMatrix{Nto, Nfrom, T, Nto * Nfrom})
-    for i = 1:Nto
+    for i in 1:Nto
         x_to = points_to[i]
         skip_row = false
-        for j = 1:Nfrom
+        for j in 1:Nfrom
             if x_to == points_from[j]
                 # assign to one to avoid singularity condition
-                M[i,j] = one(T)
+                M[i, j] = one(T)
                 # skip over the equal boundry condition
                 skip_row = true
             end
@@ -128,7 +130,7 @@ function interpolation_matrix(points_to::SVector{Nto}, points_from::SVector{Nfro
         end
         skip_row && continue
         w = bw ./ (x_to .- points_from)
-        M[i,:] .= w ./ sum(w)
+        M[i, :] .= w ./ sum(w)
     end
     SMatrix(M)
 end
@@ -136,9 +138,12 @@ end
 @generated function interpolation_matrix(
     ::Type{FT},
     quadto::QuadratureStyle,
-    quadfrom::QuadratureStyle
+    quadfrom::QuadratureStyle,
 ) where {FT}
-    interpolation_matrix(quadrature_points(FT, quadto())[1], quadrature_points(FT, quadfrom())[1])
+    interpolation_matrix(
+        quadrature_points(FT, quadto())[1],
+        quadrature_points(FT, quadfrom())[1],
+    )
 end
 
 

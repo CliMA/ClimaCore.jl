@@ -31,20 +31,16 @@ y0 = f0.(Fields.coordinate_field(mesh))
 
 # https://github.com/sandreza/NodalDiscontinuousGalerkin/blob/b971af24d1f6cc63016a76e2063547de5022e867/DG1D/solveHeat.jl
 
-function rhs!(rawdydt,rawdata,mesh,t)
-    data = IJFH{Float64,Nq}(rawdata)
-    dydt = IJFH{Float64,Nq}(rawdydt)
+function rhs!(rawdydt, rawdata, mesh, t)
+    data = IJFH{Float64, Nq}(rawdata)
+    dydt = IJFH{Float64, Nq}(rawdydt)
 
     ∇data = Operators.volume_gradient!(
         similar(data, Geometry.Cartesian2DVector{Float64}),
         data,
         mesh,
     )
-    Operators.volume_weak_divergence!(
-        dydt,
-        ∇data,
-        mesh,
-    )
+    Operators.volume_weak_divergence!(dydt, ∇data, mesh)
 
     WJ = copy(mesh.local_geometry.WJ)
     Operators.horizontal_dss!(WJ, mesh)
@@ -52,14 +48,12 @@ function rhs!(rawdydt,rawdata,mesh,t)
     dydt .= dydt ./ WJ
     dydt
     #K = stiffness matrix
-#and the mass matrix M
-#. ∇φi(x)∇φj(x)dx
+    #and the mass matrix M
+    #. ∇φi(x)∇φj(x)dx
     #M du/dt = Kuˆ+ ...
 end
 
-prob = ODEProblem(rhs!, parent(Fields.field_values(y0)),(0.0,1.0),mesh)
+prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 1.0), mesh)
 
 
-sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-8)
-
-
+sol = solve(prob, Tsit5(), reltol = 1e-8, abstol = 1e-8)

@@ -1,8 +1,8 @@
 module Operators
 
 import ..slab
+import ..DataLayouts: Data2D
 import ..Geometry: Cartesian2DVector, Covariant12Vector, Contravariant12Vector
-import ..Fields
 import ..Meshes
 import ..Meshes.Quadratures
 import ..Topologies
@@ -16,6 +16,35 @@ include("rop.jl")
 #  - determine output element type
 #  - let inputs be Broadcasted objects
 #    - make sure that
+"""
+    tensor_product!(out, in, M)
+
+Computes the tensor product `out = (M ⊗ M) * in` on each element.
+"""
+function tensor_product!(
+    out::Data2D{S, Nij_out},
+    in::Data2D{S, Nij_in},
+    M::SMatrix{Nij_out, Nij_in},
+) where {S, Nij_out, Nij_in}
+
+    Nh = length(in)
+    @assert Nh == length(out)
+
+    # temporary storage
+    temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
+
+    for h in 1:Nh
+        in_slab = slab(in, h)
+        out_slab = slab(out, h)
+        for j in 1:Nij_in, i in 1:Nij_out
+            temp[i, j] = rmatmul1(M, in_slab, i, j)
+        end
+        for j in 1:Nij_out, i in 1:Nij_out
+            out_slab[i, j] = rmatmul2(M, temp, i, j)
+        end
+    end
+    return out
+end
 
 
 """

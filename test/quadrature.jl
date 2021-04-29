@@ -58,7 +58,7 @@ end
     points1, weights1 = Quadratures.quadrature_points(Float64, quad1)
     points2, weights2 = Quadratures.quadrature_points(Float64, quad2)
     I = Quadratures.interpolation_matrix(Float64, quad2, quad1)
-    @test size(I) == (5,4)
+    @test size(I) == (5, 4)
 
     @test I * f.(points1) ≈ f.(points2)
 

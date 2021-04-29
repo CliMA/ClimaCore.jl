@@ -150,6 +150,48 @@ function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
 end
 
 
+"""
+    IH1JH2{S, Nij}(data::AbstractMatrix{S})
+
+Stores a 2D field in a matrix using a column-major format.
+"""
+struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
+    array::A
+end
+
+function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
+    @assert size(array, 1) % Nij == 0
+    @assert size(array, 2) % Nij == 0
+    IH1JH2{S, Nij, typeof(array)}(array)
+end
+
+Base.length(data::IH1JH2{S, Nij}) where {S, Nij} =
+    div(length(parent(data)), Nij * Nij)
+
+function Base.similar(
+    data::IH1JH2{S, Nij, A},
+    ::Type{Eltype},
+) where {S, Nij, A, Eltype}
+    Nh = length(data)
+    array = similar(A, Eltype)
+    return IH1JH2{Eltype, Nij}(array)
+end
+Base.copy(data::IH1JH2{S, Nij}) where {S, Nij} =
+    IH1JH2{S, Nij}(copy(parent(data)))
+
+
+@inline function slab(data::IH1JH2{S, Nij}, h::Integer) where {S, Nij}
+    N1, N2 = size(parent(data))
+    n1 = div(N1, Nij)
+    n2 = div(N2, Nij)
+    z2, z1 = fldmod(h - 1, n1)
+
+    @boundscheck (1 <= h <= n1 * n2) || throw(BoundsError(data, (h,)))
+
+    return view(parent(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
+end
+
+
 
 #=
 struct KFV{S,A} <: DataColumn{S}

@@ -1,8 +1,9 @@
 module Fields
 
 import ..slab, ..column
+import ..DataLayouts
 import ..DataLayouts: AbstractData, DataStyle
-import ..Meshes: AbstractMesh
+import ..Meshes: AbstractMesh, Quadratures
 
 
 """
@@ -97,13 +98,12 @@ coordinate_field(field::Field) = coordinates(mesh(field))
 
 
 
-
 function interpcoord(elemrange, x::Real)
-    n = length(elemrange)-1
-    z = x == elemrange[end] ? n : searchsortedlast(elemrange,x) # element index
+    n = length(elemrange) - 1
+    z = x == elemrange[end] ? n : searchsortedlast(elemrange, x) # element index
     @assert 1 <= z <= n
     lo = elemrange[z]
-    hi = elemrange[z+1]
+    hi = elemrange[z + 1]
     # Find ξ ∈ [-1,1] such that
     # x = (1-ξ)/2 * lo + (1+ξ)/2 * hi
     #   = (lo + hi) / 2 + ξ * (hi - lo) / 2
@@ -111,49 +111,35 @@ function interpcoord(elemrange, x::Real)
     return z, ξ
 end
 
+import ..Operators
 
-import UnicodePlots: heatmap
 import ..Meshes
 
-function interpolate(field::Field, r1, r2)
+function matrix_interpolate(
+    field::Field,
+    Q_interp::Quadratures.Uniform{Nu},
+) where {Nu}
+    S = eltype(field)
     fieldmesh = mesh(field)
-    topology = fieldmesh.topology
-    discretization = topology.discretization
-    elemrange1 = discretization.range1
-    elemrange2 = discretization.range2
+    discretization = fieldmesh.topology.discretization
     n1 = discretization.n1
-    data = field_values(field)
+    n2 = discretization.n2
 
-    quadrature_style = fieldmesh.quadrature_style
-    Nq = Meshes.Quadratures.degrees_of_freedom(quadrature_style)
-    points, _ = Meshes.Quadratures.quadrature_points(Float64, quadrature_style)
-    bw = Meshes.Quadratures.barycentric_weights(Float64, quadrature_style)
+    interp_data =
+        DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
 
-    FT = eltype(field)
-    out = Array{FT}(undef, length(r1), length(r2))
-    # assumes regular grid
-    for (l2,x2) in enumerate(r2)
-        z2, ξ2 = interpcoord(elemrange2, x2)
-
-        for (l1,x1) in enumerate(r1)
-            z1, ξ1 = interpcoord(elemrange1, x1)
-            h = (z2-1) * n1 + z1
-            data_slab = slab(data, h)
-            # barycentric interpolation
-            # Berrut2004 equation 4.2
-            s = zero(FT)
-            d = zero(FT)
-            for j = 1:Nq, i = 1:Nq
-                a1 = bw[i] / (ξ1 - points[i])
-                a2 = bw[j] / (ξ2 - points[j])
-                s += a1 * a2 * data_slab[i,j]
-                d += a1 * a2
-            end
-            out[l1,l2] = s / d
-        end
-    end
-    return out
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        Q_interp,
+        fieldmesh.quadrature_style,
+    )
+    Operators.tensor_product!(interp_data, field_values(field), M)
+    return parent(interp_data)
 end
+matrix_interpolate(field::Field, Nu::Integer) =
+    matrix_interpolate(field, Quadratures.Uniform{Nu}())
+
+include("plots.jl")
 
 
 end # module

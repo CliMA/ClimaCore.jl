@@ -92,7 +92,8 @@ function Mesh2D(topology, quadrature_style)
             invWJ = inv(WJ)
 
             coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, WJ, invWJ, ∂ξ∂x)
+            local_geometry_slab[i, j] =
+                Geometry.LocalGeometry(J, WJ, invWJ, ∂ξ∂x)
         end
     end
     return Mesh2D(topology, quadrature_style, coordinates, local_geometry)
