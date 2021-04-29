@@ -24,75 +24,66 @@ end
 Field(values::V, mesh::M) where {V <: AbstractData, M <: AbstractMesh} =
     Field{V, M}(values, mesh)
 
-Base.propertynames(field::Field) = getfield(field, :values)
+function Field(array::AbstractArray{T,6}, mesh::AbstractMesh) where {T} 
+    @assert size(array, 1) == size(array, 2)
+    Nij, Nk = size(array, 1), size(array, 3)
+    S = eltype(array)
+    return Field(DataLayouts.IJKFVH{S, Nij, Nk}(array), mesh)
+end
+
+function Field(array::AbstractArray{T,4}, mesh::AbstractMesh) where {T}
+    @assert size(array, 1) == size(array, 2)
+    Nij = size(array, 1)
+    S = eltype(array)
+    return Field(DataLayouts.IJFH{S, Nij}(array), mesh)
+end
+
+"""
+    field_values(field::Field) -> AbstractData
+
+Return a reference to the `AbstractData` data object of a `field`
+"""
 field_values(field::Field) = getfield(field, :values)
-mesh(field::Field) = getfield(field, :mesh)
+
+"""
+    field_values(field::Field) -> AbstractMesh
+
+Return a reference to the `AbstractMesh` mesh object of a `field`
+"""
+field_mesh(field::Field) = getfield(field, :mesh)
+
+"""
+   field_like(field::Field, values) -> Field
+
+Return a `Field` object with `values` on the same mesh structure as `field`
+"""
+function field_like(field::Field, values)
+    return Field(values, field_mesh(field))
+end
+
+# Accessor methods
+Base.propertynames(field::Field) = getfield(field, :values)
 
 Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), mesh(field))
+    Field(getproperty(field_values(field), name), field_mesh(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))
 
-
-# https://github.com/gridap/Gridap.jl/blob/master/src/Fields/DiffOperators.jl#L5
-# https://github.com/gridap/Gridap.jl/blob/master/src/Fields/FieldsInterfaces.jl#L70
-
-# TODO: nice printing
-# follow x-array like printing?
-# repl: #https://earth-env-data-science.github.io/lectures/xarray/xarray.html
-# html: https://unidata.github.io/MetPy/latest/tutorials/xarray_tutorial.html
-
-# TODO: broadcasting
-
-struct FieldStyle{DS <: DataStyle} <: Base.BroadcastStyle
-    datastyle::DS
-end
-Base.Broadcast.BroadcastStyle(::Type{Field{V, M}}) where {V, M} =
-    FieldStyle(DataStyle(V))
-Base.Broadcast.BroadcastStyle(
-    a::Base.Broadcast.AbstractArrayStyle{0},
-    b::FieldStyle,
-) = b
-
-Base.Broadcast.broadcastable(field::Field{V, M}) where {V, M} = field
-
-Base.axes(field::Field) = (mesh(field),)
-
-todata(obj) = obj
-todata(field::Field) = field_values(field)
-function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    Base.Broadcast.Broadcasted{DS}(bc.f, map(todata, bc.args))
-end
-
-function mesh(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    if bc.axes isa Nothing
-        error("Call instantiate to access mesh of Broadcasted")
-    end
-    return bc.axes[1]
-end
-
-function Base.similar(
-    bc::Base.Broadcast.Broadcasted{FieldStyle{DS}},
-    ::Type{Eltype},
-) where {DS, Eltype}
-    return Field(similar(todata(bc), Eltype), mesh(bc))
-end
-
-function Base.copyto!(
-    dest::Field{V, M},
-    bc::Base.Broadcast.Broadcasted{FieldStyle{DS}},
-) where {V, M, DS}
-    copyto!(field_values(dest), todata(bc))
-    return dest
-end
-
 """
-    coordinate_field(mesh::AbstractMesh)
+    coordinate_field(mesh::AbstractMesh) -> Field
 
-Construct a `Field` of the coordinates of the mesh.
+Construct a `Field` of the coordinates of the `mesh`.
 """
 coordinate_field(mesh::AbstractMesh) = Field(mesh.coordinates, mesh)
-coordinate_field(field::Field) = coordinates(mesh(field))
 
+"""
+    coordinate_field(field::Field) -> Field
+
+Construct a `Field` of the coordinates of the `field` mesh.
+"""
+coordinate_field(field::Field) = coordinates(field_mesh(field))
+
+# Broadcasting
+include("broadcast.jl")
 
 end # module

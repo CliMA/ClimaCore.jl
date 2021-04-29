@@ -1,4 +1,18 @@
 import CUDA
+import Adapt
+
+# Adapt datastructures for backing CuArray
+Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
+    IJKFVH{S, Nij, Nk}(Adapt.adapt(to, getfield(data, :array)))
+
+Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
+    IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
+    IJF{S, Nij}(Adapt.adapt(to, parent(data)))
+
+
+# copyto! kernels for GPU broadcasting
 
 function knl_copyto!(dest, src)
 

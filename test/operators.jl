@@ -30,7 +30,7 @@ using LinearAlgebra
     ∇data = Operators.volume_gradient!(
         similar(data, NTuple{2, Geometry.Cartesian2DVector{Float64}}),
         data,
-        Fields.mesh(field),
+        Fields.field_mesh(field),
     )
     @test parent(∇data) ≈
           Float64[f == 1 || f == 4 for i in 1:Nq, j in 1:Nq, f in 1:4, h in 1:1]
@@ -59,7 +59,7 @@ end
     ∇data = Operators.volume_gradient!(
         similar(data, Geometry.Cartesian2DVector{Float64}),
         data,
-        Fields.mesh(field),
+        Fields.field_mesh(field),
     )
     @test parent(∇data.u1) ≈
           parent(Fields.field_values(cos.(Fields.coordinate_field(mesh).x1))) rtol =
@@ -77,7 +77,6 @@ end
           parent(Fields.field_values(cos.(Fields.coordinate_field(mesh).x1))) rtol =
         1e-3
 end
-# https://en.wikipedia.org/wiki/Vector_calculus_identities#Divergence_of_curl_is_zero
 
 @testset "divergence of a constant vector field is zero" begin
     FT = Float64
@@ -107,7 +106,7 @@ end
     div_data = Operators.volume_divergence!(
         similar(data, Float64),
         data,
-        Fields.mesh(field),
+        Fields.field_mesh(field),
     )
     divf(x) = sin(x.x1 + x.x2)
     @test parent(div_data) ≈

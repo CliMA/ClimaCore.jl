@@ -14,7 +14,6 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 """
 module DataLayouts
 
-import Adapt
 import StaticArrays: SOneTo
 
 # TODO:
@@ -86,9 +85,6 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
-Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
-    IJKFVH{S, Nij, Nk}(Adapt.adapt(to, getfield(data, :array)))
-
 function Base.getproperty(
     data::IJKFVH{S, Nij, Nk},
     i::Integer,
@@ -134,9 +130,6 @@ function IJFH{S, Nij}(ArrayType, nelements) where {S, Nij}
     IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(FT, S), nelements))
 end
 
-Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
-    IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
-
 Base.length(data::IJFH) = size(parent(data), 4)
 Base.size(data::Data2D) = (length(data),)
 
@@ -148,8 +141,6 @@ function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     len = typesize(T, SS)
     IJFH{SS, Nij}(view(array, :, :, (offset + 1):(offset + len), :))
 end
-
-
 
 #=
 struct KFV{S,A} <: DataColumn{S}
@@ -169,8 +160,6 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     IJF{S, Nij, typeof(array)}(array)
 end
 
-Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
-    IJF{S, Nij}(Adapt.adapt(to, parent(data)))
 
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
@@ -225,12 +214,13 @@ end
 ) where {S}
     slab[I[1], I[2]]
 end
-Base.size(slab::DataSlab{S, Nij}) where {S, Nij} = (Nij, Nij)
-Base.axes(slab::DataSlab{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
+Base.size(::DataSlab{S, Nij}) where {S, Nij} = (Nij, Nij)
+Base.axes(::DataSlab{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
-
-
+# Broadcasting
 include("broadcast.jl")
+
+# CUDA specific method overloads
 include("cuda.jl")
 
 end # module
