@@ -16,7 +16,7 @@ using UnicodePlots
         x1periodic = false,
         x2periodic = false,
     )
-    n1, n2 = 5, 5
+    n1, n2 = 1, 1
     Nij = 4
     discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
     grid_topology = Topologies.GridTopology(discretization)
@@ -27,9 +27,10 @@ using UnicodePlots
     mesh = Meshes.Mesh2D(grid_topology, quad)
 
     field =
-        Fields.Field(IJFH{ComplexF64, Nij}(zeros(Nij, Nij, 2, n1 * n2)), mesh)
-    Fields.matrix_interpolate(field, 4)
+        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), mesh)
 
+    @test Fields.matrix_interpolate(field, 4) ≈
+          [Complex(1.0, 1.0) for i in 1:(4 * n1), j in 1:(4 * n2)]
 
     f(x) = sin((x.x1) / 2)
     field_sin = f.(Fields.coordinate_field(mesh))
@@ -39,7 +40,13 @@ using UnicodePlots
     Fields.matrix_interpolate(field_sin, 20)
     real_field = field.re
 
+    # test broadcasting
     res = field .+ 1
+    @test parent(Fields.field_values(res)) == Float64[
+        f == 1 ? 2 : 1 for i in 1:Nij, j in 1:Nij, f in 1:2, h in 1:(n1 * n2)
+    ]
+
+    res = field.re .+ 1
     @test parent(Fields.field_values(res)) ==
-          Float64[f == 1 ? 2 : 1 for i in 1:4, j in 1:4, f in 1:2, h in 1:1]
+          Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
 end
