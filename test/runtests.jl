@@ -1,3 +1,5 @@
+include("diffusion.jl")
+
 include("data.jl")
 include("grid.jl")
 include("quadrature.jl")

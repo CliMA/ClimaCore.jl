@@ -68,6 +68,9 @@ abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 Base.propertynames(data::AbstractData{S}) where {S} = fieldnames(S)
 Base.parent(data::AbstractData) = getfield(data, :array)
 
+Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
+
+
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     i = findfirst(isequal(name), fieldnames(S))
@@ -119,6 +122,8 @@ function Base.similar(
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
+
+
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 
@@ -147,6 +152,49 @@ function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     offset = fieldtypeoffset(T, S, i)
     len = typesize(T, SS)
     IJFH{SS, Nij}(view(array, :, :, (offset + 1):(offset + len), :))
+end
+
+
+"""
+    IH1JH2{S, Nij}(data::AbstractMatrix{S})
+
+Stores a 2D field in a matrix using a column-major format.
+The primary use is for interpolation to a regular grid.
+"""
+struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
+    array::A
+end
+
+function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
+    @assert size(array, 1) % Nij == 0
+    @assert size(array, 2) % Nij == 0
+    IH1JH2{S, Nij, typeof(array)}(array)
+end
+
+Base.length(data::IH1JH2{S, Nij}) where {S, Nij} =
+    div(length(parent(data)), Nij * Nij)
+
+function Base.similar(
+    data::IH1JH2{S, Nij, A},
+    ::Type{Eltype},
+) where {S, Nij, A, Eltype}
+    Nh = length(data)
+    array = similar(A, Eltype)
+    return IH1JH2{Eltype, Nij}(array)
+end
+Base.copy(data::IH1JH2{S, Nij}) where {S, Nij} =
+    IH1JH2{S, Nij}(copy(parent(data)))
+
+
+@inline function slab(data::IH1JH2{S, Nij}, h::Integer) where {S, Nij}
+    N1, N2 = size(parent(data))
+    n1 = div(N1, Nij)
+    n2 = div(N2, Nij)
+    z2, z1 = fldmod(h - 1, n1)
+
+    @boundscheck (1 <= h <= n1 * n2) || throw(BoundsError(data, (h,)))
+
+    return view(parent(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
 end
 
 

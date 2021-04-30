@@ -88,11 +88,12 @@ function Mesh2D(topology, quadrature_style)
             end
             J = det(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
-            M = J * quad_weights[i] * quad_weights[j]
-            invM = 1 / M
+            WJ = J * quad_weights[i] * quad_weights[j]
+            invWJ = inv(WJ)
 
             coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, M, invM, ∂ξ∂x)
+            local_geometry_slab[i, j] =
+                Geometry.LocalGeometry(J, WJ, invWJ, ∂ξ∂x)
         end
     end
     return Mesh2D(topology, quadrature_style, coordinates, local_geometry)

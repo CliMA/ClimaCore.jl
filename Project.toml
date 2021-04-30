@@ -12,12 +12,14 @@ IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
 julia = "1.6"
 
 [extras]
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "DifferentialEquations"]
