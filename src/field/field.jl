@@ -5,7 +5,7 @@ import ..DataLayouts
 import ..DataLayouts: AbstractData, DataStyle
 import ..Meshes: AbstractMesh, Quadratures
 import ..Operators
-import ..Geometry: Cartesian2DVector
+import ..Geometry: Cartesian12Vector
 
 
 """
@@ -195,7 +195,7 @@ end
 
 function Operators.slab_gradient(field::Field)
     S = eltype(field)
-    ∇S = Operators.rmaptype(T -> Cartesian2DVector{T}, S)
+    ∇S = Operators.rmaptype(T -> Cartesian12Vector{T}, S)
     Operators.slab_gradient!(similar(field, ∇S), field)
 end
 

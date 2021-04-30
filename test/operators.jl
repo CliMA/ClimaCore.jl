@@ -28,7 +28,7 @@ using LinearAlgebra
 
     data = Fields.field_values(field)
     ∇data = Operators.slab_gradient!(
-        similar(data, NTuple{2, Geometry.Cartesian2DVector{Float64}}),
+        similar(data, NTuple{2, Geometry.Cartesian12Vector{Float64}}),
         data,
         Fields.mesh(field),
     )
@@ -57,7 +57,7 @@ end
 
     data = Fields.field_values(field)
     ∇data = Operators.slab_gradient!(
-        similar(data, Geometry.Cartesian2DVector{Float64}),
+        similar(data, Geometry.Cartesian12Vector{Float64}),
         data,
         Fields.mesh(field),
     )
@@ -96,7 +96,7 @@ end
     quad = Meshes.Quadratures.GLL{Nq}()
     points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
     mesh = Meshes.Mesh2D(grid_topology, quad)
-    f(x) = Geometry.Cartesian2DVector{Float64}(
+    f(x) = Geometry.Cartesian12Vector{Float64}(
         sin(x.x1) * sin(x.x2),
         sin(x.x1) * sin(x.x2),
     )

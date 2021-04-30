@@ -2,7 +2,7 @@ module Operators
 
 import ..slab
 import ..DataLayouts: Data2D
-import ..Geometry: Cartesian2DVector, Covariant12Vector, Contravariant12Vector
+import ..Geometry: Cartesian12Vector, Covariant12Vector, Contravariant12Vector
 import ..Meshes
 import ..Meshes.Quadratures
 import ..Topologies
@@ -87,7 +87,7 @@ function slab_gradient!(∇data, data, mesh)
 
             # convert to desired basis
             ∇data_slab[i, j] =
-                rmap(x -> Cartesian2DVector(x, local_geometry), ∂f∂ξ)
+                rmap(x -> Cartesian12Vector(x, local_geometry), ∂f∂ξ)
         end
     end
     return ∇data
