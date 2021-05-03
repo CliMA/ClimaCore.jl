@@ -38,11 +38,15 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
+# TODO: this could cause problems when it fails...
+slab(x, inds...) = x
+
+
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Nij, DS <: Data2DStyle{Nij}}
-    args = map(arg -> arg isa AbstractData ? slab(arg, inds...) : arg, bc.args)
+    args = map(arg -> slab(arg, inds...), bc.args)
     axes = (SOneTo(Nij), SOneTo(Nij))
     Base.Broadcast.Broadcasted{DataSlabStyle{DS}}(bc.f, args, axes)
 end

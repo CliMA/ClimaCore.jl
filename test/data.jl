@@ -1,6 +1,6 @@
 using Test
 using ClimateMachineCore.DataLayouts
-
+using StaticArrays
 using ClimateMachineCore.DataLayouts: get_struct, set_struct!
 
 @testset "get_struct / set_struct!" begin

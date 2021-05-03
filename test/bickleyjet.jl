@@ -3,8 +3,10 @@ import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
 using LinearAlgebra
+using DifferentialEquations: ODEProblem, solve, Tsit5
+using ClimateMachineCore.Operators: ⊠
 
-parameters = (
+const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
     l = 0.5, # Gaussian width
     k = 0.5, # Sinusoidal wavenumber
@@ -20,11 +22,11 @@ domain = Domains.RectangleDomain(
     x2min = -2π,
     x2max = 2π,
     x1periodic = true,
-    x2periodic = false,
+    x2periodic = true,
 )
 
-n1, n2 = 5, 5
-Nq = 6
+n1, n2 = 16, 16
+Nq = 4
 discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
 grid_topology = Topologies.GridTopology(discretization)
 mesh = Meshes.Mesh2D(grid_topology, Meshes.Quadratures.GLL{Nq}())
@@ -43,7 +45,7 @@ function init_state(x, p)
     u₂′ = -Ψ′ * (p.k * tan(p.k * x1))
 
     u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
-
+    u = Cartesian12Vector(0.0, 1.0)
     # set initial tracer
     θ = sin(p.k * x2)
 
@@ -60,10 +62,59 @@ function flux(state, p)
     @unpack ρ, ρu, ρθ = state
     u = ρu ./ ρ
     return (
-        ρ  = ρu,
-        ρu = (ρu ⊗ u) + (p.g * ρ^2 / 2) * I,
+        ρ  = 0*ρu,
+        #ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I),
+        ρu = (0*ρu) ⊗ u,
         ρθ = ρθ .* u,
     )
 end
 
-flux.(y0, Ref(parameters))
+F = flux.(y0, Ref(parameters))
+divF = Operators.slab_divergence(F)
+
+
+function reconstruct(rawdata, field)
+    D = typeof(Fields.field_values(field))
+    Fields.Field(D(rawdata), Fields.mesh(field))
+end
+
+function rhs!(rawdydt, rawdata, field, t)
+    # reconstuct Field objects
+    y = reconstruct(rawdata, field)
+    dydt = reconstruct(rawdydt, field)
+
+    F = flux.(y0, Ref(parameters))
+    dydt .= Operators.slab_weak_divergence(F)
+
+    # apply DSS
+    dydt_data = Fields.field_values(dydt)
+    WJ = copy(mesh.local_geometry.WJ) # quadrature weights * jacobian
+    Operators.horizontal_dss!(WJ, mesh)
+    dydt_data .= mesh.local_geometry.WJ .⊠ dydt_data
+    Operators.horizontal_dss!(dydt_data, mesh)
+    dydt_data .= inv.(WJ) .⊠ dydt_data
+
+    return rawdydt
+end
+
+# 1. make DifferentialEquations work on Fields: i think we need to extend RecursiveArrayTools
+#    - this doesn't seem like it will work directly: ideally we want a way to unwrap and wrap as required
+#    - scalar multiplication and vector addition
+#
+# 2. Define isapprox on Fields
+# 3. weighted DSS
+
+
+
+# Solve the ODE operator
+prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 7.0), y0)
+sol = solve(prob, Tsit5(), reltol = 1e-5, abstol = 1e-5, saveat=1.0)
+
+using Plots
+heatmap(y0.ρθ)
+
+#=
+for u in sol.u
+    println(heatmap(reconstruct(u, y0).ρθ))
+end
+=#

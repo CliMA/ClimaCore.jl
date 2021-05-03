@@ -2,6 +2,7 @@ module Operators
 
 import ..slab
 import ..DataLayouts: Data2D
+import ..Geometry
 import ..Geometry: Cartesian12Vector, Covariant12Vector, Contravariant12Vector
 import ..Meshes
 import ..Meshes.Quadratures
@@ -136,13 +137,10 @@ function slab_divergence!(divflux, flux, mesh)
             # compute flux in contravariant coordinates (v¹,v²)
             # alternatively we could do this conversion _after_ taking the derivatives
             # may have an effect on the accuracy
-            vⁱ = rmap(
-                v -> Contravariant12Vector(v, local_geometry),
-                flux_slab[i, j],
-            ) # materialize if lazy
-            # extract each coordinate and multiply by J (Jv¹,Jv²)
-            Jv¹[i, j] = rmap(x -> local_geometry.J * x.u¹, vⁱ)
-            Jv²[i, j] = rmap(x -> local_geometry.J * x.u², vⁱ)
+            # materialize if lazy
+            F = flux_slab[i, j]
+            Jv¹[i, j] = rmap(x -> local_geometry.J * Geometry.contravariant1(x, local_geometry), F)
+            Jv²[i, j] = rmap(x -> local_geometry.J * Geometry.contravariant2(x, local_geometry), F)
         end
         # GPU synchronize
 
@@ -202,13 +200,10 @@ function slab_weak_divergence!(divflux, flux, mesh)
             # compute flux in contravariant coordinates (v¹,v²)
             # alternatively we could do this conversion _after_ taking the derivatives
             # may have an effect on the accuracy
-            vⁱ = rmap(
-                v -> Contravariant12Vector(v, local_geometry),
-                flux_slab[i, j],
-            ) # materialize if lazy
-            # extract each coordinate and multiply by J (Jv¹,Jv²)
-            WJv¹[i, j] = rmap(x -> local_geometry.WJ * x.u¹, vⁱ)
-            WJv²[i, j] = rmap(x -> local_geometry.WJ * x.u², vⁱ)
+            # materialize if lazy
+            F = flux_slab[i, j]
+            WJv¹[i, j] = rmap(x -> local_geometry.WJ * Geometry.contravariant1(x, local_geometry), F)
+            WJv²[i, j] = rmap(x -> local_geometry.WJ * Geometry.contravariant2(x, local_geometry), F)
         end
         # GPU synchronize
 

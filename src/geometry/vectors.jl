@@ -1,5 +1,6 @@
 import StaticArrays
-import LinearAlgebra
+using LinearAlgebra
+
 
 
 """
@@ -125,6 +126,12 @@ struct Cartesian12Vector{FT} <: AbstractCartesianVector{2,FT}
 end
 Base.axes(::Type{Cartesian12Vector{FT}}) where {FT} = (CartesianAxis(StaticArrays.SOneTo(2)),)
 
+function contravariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    LinearAlgebra.dot(local_geometry.∂ξ∂x[1,:], x)
+end
+function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    LinearAlgebra.dot(local_geometry.∂ξ∂x[2,:], x)
+end
 
 # conversions
 
@@ -141,6 +148,15 @@ function Contravariant12Vector(
     # uⁱ = ∂ξ∂x[i,j] * u[j]
     Contravariant12Vector((local_geometry.∂ξ∂x * components(u))...)
 end
+
+"""
+    divergence_result_type(V)
+
+The return type when taking the divergence of a field of type `V`.
+
+Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
+"""
+divergence_result_type(::Type{V}) where {V<:CustomAxisFieldVector} = eltype(V)
 
 
 # tensors
@@ -186,4 +202,19 @@ end
 function Base.:(-)(b::LinearAlgebra.UniformScaling, A::Tensor{U,V}) where {U,V}
     check_iscontractible(axes(A)...)
     Tensor{U,V}(b - A.matrix)
+end
+
+divergence_result_type(::Type{T}) where {T<:Tensor{U,V}} where {U,V} = V
+
+function contravariant1(A::Tensor{Contravariant12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
+    V(A.matrix[1,:]...)
+end
+function contravariant2(A::Tensor{Contravariant12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
+    V(A.matrix[2,:]...)
+end
+function contravariant1(A::Tensor{Cartesian12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
+    V((local_geometry.∂ξ∂x[1,:]' * A.matrix)...)
+end
+function contravariant2(A::Tensor{Cartesian12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
+    V((local_geometry.∂ξ∂x[2,:]' * A.matrix)...)
 end

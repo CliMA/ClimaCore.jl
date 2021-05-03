@@ -5,6 +5,7 @@ import ..DataLayouts
 import ..DataLayouts: AbstractData, DataStyle
 import ..Meshes: AbstractMesh, Quadratures
 import ..Operators
+import ..Geometry
 import ..Geometry: Cartesian12Vector
 
 
@@ -201,12 +202,12 @@ end
 
 function Operators.slab_divergence(field::Field)
     S = eltype(field)
-    divS = Operators.rmaptype(eltype, S)
+    divS = Operators.rmaptype(Geometry.divergence_result_type, S)
     Operators.slab_divergence!(similar(field, divS), field)
 end
 function Operators.slab_weak_divergence(field::Field)
     S = eltype(field)
-    divS = Operators.rmaptype(eltype, S)
+    divS = Operators.rmaptype(Geometry.divergence_result_type, S)
     Operators.slab_weak_divergence!(similar(field, divS), field)
 end
 

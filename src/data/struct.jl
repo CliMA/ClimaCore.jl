@@ -118,6 +118,7 @@ function set_struct!(
                 )),
             )
         end
+        push!(ex.args, :(return nothing))
         ex
     else
         if isprimitivetype(S)
@@ -130,6 +131,7 @@ function set_struct!(
                 offset + fieldtypeoffset(T, S, i),
             )
         end
+        return nothing
     end
 end
 @propagate_inbounds function set_struct!(
