@@ -1,6 +1,6 @@
 module Geometry
 
-export ⊗
+export ⊗, Cartesian12Vector, Tensor
 
 import StaticArrays: SVector
 

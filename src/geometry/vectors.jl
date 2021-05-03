@@ -1,4 +1,5 @@
 import StaticArrays
+import LinearAlgebra
 
 
 """
@@ -16,11 +17,15 @@ Base.iterate(ax::AbstractAxis, i) = iterate(ax.range, i)
 Base.getindex(ax::AbstractAxis, i) = getindex(ax.range, i)
 Base.unitrange(ax::AbstractAxis) = Base.unitrange(ax.range)
 Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) = Base.checkindex(Bool, ax.range, i)
+Base.lastindex(ax::AbstractAxis) = Base.lastindex(ax.range)
 
 function Base.Broadcast.broadcast_shape(ax1::A, ax2::A) where {A<:AbstractAxis}
     @assert ax1 == ax2
     return ax1
 end
+
+Base.LinearIndices(axs::NTuple{N,AbstractAxis}) where {N} =
+    LinearIndices(map(ax->ax.range, axs))
 
 struct CovariantAxis{R} <: AbstractAxis
     range::R
@@ -28,9 +33,14 @@ end
 struct ContravariantAxis{R} <: AbstractAxis
     range::R
 end
+dual(cov::CovariantAxis) = ContravariantAxis(cov.range)
+dual(con::ContravariantAxis) = CovariantAxis(con.range)
+
 struct CartesianAxis{R} <: AbstractAxis
     range::R
 end
+dual(cart::CartesianAxis) = cart
+
 
 iscontractible(::AbstractAxis, ::AbstractAxis) = false
 iscontractible(axcov::CovariantAxis, axcon::ContravariantAxis) = axcov.range ==  axcon.range
@@ -159,4 +169,21 @@ end
 function Base.:(*)(A::Tensor{U,V}, v::CustomAxisFieldVector) where {U,V}
     check_iscontractible(axes(A,2), axes(v,1))
     U(A.matrix * components(v))
+end
+
+function Base.:(+)(A::Tensor{U,V}, b::LinearAlgebra.UniformScaling) where {U,V}
+    check_iscontractible(axes(A)...)
+    Tensor{U,V}(A.matrix + b)
+end
+function Base.:(+)(b::LinearAlgebra.UniformScaling, A::Tensor{U,V}) where {U,V}
+    check_iscontractible(axes(A)...)
+    Tensor{U,V}(b + A.matrix)
+end
+function Base.:(-)(A::Tensor{U,V}, b::LinearAlgebra.UniformScaling) where {U,V}
+    check_iscontractible(axes(A)...)
+    Tensor{U,V}(A.matrix - b)
+end
+function Base.:(-)(b::LinearAlgebra.UniformScaling, A::Tensor{U,V}) where {U,V}
+    check_iscontractible(axes(A)...)
+    Tensor{U,V}(b - A.matrix)
 end

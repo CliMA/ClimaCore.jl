@@ -1,5 +1,6 @@
 using Test
 using ClimateMachineCore.Geometry
+using LinearAlgebra, UnPack, StaticArrays
 
 @testset "Vectors" begin
     wᵢ = Geometry.Covariant12Vector(1.0,2.0)
@@ -24,4 +25,28 @@ using ClimateMachineCore.Geometry
     @test_throws DimensionMismatch T * uᵏ
 
 
+end
+
+@testset "Sample flux calculation" begin
+    state = (ρ=2.0, ρu=Cartesian12Vector(1.0,2.0), ρθ=0.5)
+
+    function flux(state, g)
+        @unpack ρ, ρu, ρθ = state
+
+        u = ρu ./ ρ
+
+        return (
+            ρ  = ρu,
+            ρu = (ρu ⊗ u) + (g * ρ^2 / 2) * I,
+            ρθ = ρθ .* u,
+        )
+    end
+
+    @test flux(state, 10.0) === (
+        ρ  = Cartesian12Vector(1.0,2.0),
+        ρu = Tensor{Cartesian12Vector{Float64},Cartesian12Vector{Float64}}(
+            SMatrix{2,2}(0.5 + 20.0, 1.0, 1.0, 2.0 + 20.0)
+        ),
+        ρθ = Cartesian12Vector(0.25,0.5),
+    )
 end
