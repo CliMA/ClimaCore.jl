@@ -48,7 +48,11 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
+function get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+    offset,
+) where {T, S}
     if @generated
         tup = :(())
         for i in 1:fieldcount(S)
@@ -82,13 +86,20 @@ end
     ::Type{S},
 ) where {T, S} = get_struct(array, S, 0)
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
+function set_struct!(
+    array::AbstractArray{T},
+    val::S,
+    offset,
+) where {T, S}
     if @generated
         errorstring = "Expected type $T, got type $S"
         ex = quote
             # TODO: need to figure out a better way to handle the case where we require conversion
             # e.g. if T = Dual or Double64
+
             if isprimitivetype(S)
+                # error if we dont hit triangular dispatch method (defined below):
+                # set_struct!(::AbstractArray{S}, ::S) where {S}
                 error($errorstring)
             end
             # TODO: we get a segfault here when trying to pass propogate_inbounds
