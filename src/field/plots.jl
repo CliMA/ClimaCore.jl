@@ -47,7 +47,7 @@ function Plots.heatmap(field::Field; kwargs...)
     Plots.heatmap(
         r1,
         r2,
-        M',
+        M';
         xlabel = "x1",
         ylabel = "x2",
         kwargs...)

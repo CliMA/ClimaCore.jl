@@ -122,8 +122,7 @@ function Base.similar(
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
-
-
+rebuild(data::IJFH{S, Nij}, array) where {S,Nij} = IJFH{S, Nij}(array)
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 

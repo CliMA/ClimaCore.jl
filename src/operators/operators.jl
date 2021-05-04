@@ -26,6 +26,7 @@ function slab_weak_divergence end
 #    - make sure that
 """
     tensor_product!(out, in, M)
+    tensor_product!(inout, M)
 
 Computes the tensor product `out = (M ⊗ M) * in` on each element.
 """
@@ -52,6 +53,13 @@ function tensor_product!(
         end
     end
     return out
+end
+
+function tensor_product!(
+    inout::Data2D{S, Nij},
+    M::SMatrix{Nij, Nij},
+) where {S, Nij}
+    tensor_product!(inout, inout, M)
 end
 
 
