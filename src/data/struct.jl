@@ -48,11 +48,7 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-function get_struct(
-    array::AbstractArray{T},
-    ::Type{S},
-    offset,
-) where {T, S}
+function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
     if @generated
         tup = :(())
         for i in 1:fieldcount(S)
@@ -86,11 +82,7 @@ end
     ::Type{S},
 ) where {T, S} = get_struct(array, S, 0)
 
-function set_struct!(
-    array::AbstractArray{T},
-    val::S,
-    offset,
-) where {T, S}
+function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     if @generated
         errorstring = "Expected type $T, got type $S"
         ex = quote

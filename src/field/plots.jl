@@ -1,6 +1,10 @@
 import UnicodePlots, Plots
 
 function UnicodePlots.heatmap(field::Field; width = 80, height = 40, kwargs...)
+    if !(eltype(field) <: Real)
+        error("Can only plot heatmaps of scalar fields")
+    end
+
     fieldmesh = mesh(field)
     discretization = fieldmesh.topology.discretization
     n1 = discretization.n1
@@ -39,16 +43,10 @@ function Plots.heatmap(field::Field; kwargs...)
     m1, m2 = size(M)
 
 
-    r1 = range(domain.x1min, domain.x1max, length=n1*Nu+1)
-    r1 = r1[1:end-1] .+ step(r1)./2
-    r2 = range(domain.x2min, domain.x2max, length=n2*Nu+1)
-    r2 = r2[1:end-1] .+ step(r2)./2
+    r1 = range(domain.x1min, domain.x1max, length = n1 * Nu + 1)
+    r1 = r1[1:(end - 1)] .+ step(r1) ./ 2
+    r2 = range(domain.x2min, domain.x2max, length = n2 * Nu + 1)
+    r2 = r2[1:(end - 1)] .+ step(r2) ./ 2
 
-    Plots.heatmap(
-        r1,
-        r2,
-        M';
-        xlabel = "x1",
-        ylabel = "x2",
-        kwargs...)
+    Plots.heatmap(r1, r2, M'; xlabel = "x1", ylabel = "x2", kwargs...)
 end

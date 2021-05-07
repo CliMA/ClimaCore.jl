@@ -2,7 +2,7 @@ using Test
 using StaticArrays
 import ClimateMachineCore.DataLayouts: IJFH
 import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes
-
+using LinearAlgebra: norm
 
 using UnicodePlots
 
@@ -29,11 +29,31 @@ using UnicodePlots
     field =
         Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), mesh)
 
+    @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
+    @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
+    @test norm(field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+
+
     @test Fields.matrix_interpolate(field, 4) ≈
           [Complex(1.0, 1.0) for i in 1:(4 * n1), j in 1:(4 * n2)]
 
-    f(x) = sin((x.x1) / 2)
-    field_sin = f.(Fields.coordinate_field(mesh))
+
+    nt_field = Fields.Field(
+        IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
+            ones(Nij, Nij, 2, n1 * n2),
+        ),
+        mesh,
+    )
+    nt_sum = sum(nt_field)
+    @test nt_sum isa NamedTuple{(:a, :b), Tuple{Float64, Float64}}
+    @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()
+    @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
+    @test norm(nt_field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+
+
+    #@test parent(Fields.field_values(3 .* nt_field)) ==
+
+    field_sin = map(x -> sin((x.x1) / 2), Fields.coordinate_field(mesh))
 
     heatmap(field_sin)
 

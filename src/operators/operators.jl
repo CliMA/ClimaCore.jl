@@ -147,8 +147,18 @@ function slab_divergence!(divflux, flux, mesh)
             # may have an effect on the accuracy
             # materialize if lazy
             F = flux_slab[i, j]
-            Jv¹[i, j] = rmap(x -> local_geometry.J * Geometry.contravariant1(x, local_geometry), F)
-            Jv²[i, j] = rmap(x -> local_geometry.J * Geometry.contravariant2(x, local_geometry), F)
+            Jv¹[i, j] = rmap(
+                x ->
+                    local_geometry.J *
+                    Geometry.contravariant1(x, local_geometry),
+                F,
+            )
+            Jv²[i, j] = rmap(
+                x ->
+                    local_geometry.J *
+                    Geometry.contravariant2(x, local_geometry),
+                F,
+            )
         end
         # GPU synchronize
 
@@ -210,8 +220,18 @@ function slab_weak_divergence!(divflux, flux, mesh)
             # may have an effect on the accuracy
             # materialize if lazy
             F = flux_slab[i, j]
-            WJv¹[i, j] = rmap(x -> local_geometry.WJ * Geometry.contravariant1(x, local_geometry), F)
-            WJv²[i, j] = rmap(x -> local_geometry.WJ * Geometry.contravariant2(x, local_geometry), F)
+            WJv¹[i, j] = rmap(
+                x ->
+                    local_geometry.WJ *
+                    Geometry.contravariant1(x, local_geometry),
+                F,
+            )
+            WJv²[i, j] = rmap(
+                x ->
+                    local_geometry.WJ *
+                    Geometry.contravariant2(x, local_geometry),
+                F,
+            )
         end
         # GPU synchronize
 

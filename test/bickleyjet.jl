@@ -32,8 +32,8 @@ domain = Domains.RectangleDomain(
 )
 
 n1, n2 = 16, 16
-Nq = 7
-Nqh = 10
+Nq = 10
+Nqh = 14
 discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
 grid_topology = Topologies.GridTopology(discretization)
 quad = Meshes.Quadratures.GLL{Nq}()
@@ -43,27 +43,23 @@ Iquad = Meshes.Quadratures.GLL{Nqh}()
 Imesh = Meshes.Mesh2D(grid_topology, Iquad)
 
 function init_state(x, p)
-    @unpack x1,x2 = x
+    @unpack x1, x2 = x
     # set initial state
     ρ = p.ρ₀
 
     # set initial velocity
     U₁ = cosh(x2)^(-2)
-    Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2 ) * cos(p.k * x1) * cos(p.k * x2)
+    Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x1) * cos(p.k * x2)
 
     ## Vortical velocity fields
-    u₁′ =  Ψ′ * (p.k * tan(p.k * x2) + x2 / p.l^2)
+    u₁′ = Ψ′ * (p.k * tan(p.k * x2) + x2 / p.l^2)
     u₂′ = -Ψ′ * (p.k * tan(p.k * x1))
 
     u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * x2)
 
-    return (
-        ρ  = ρ,
-        ρu = ρ * u,
-        ρθ = ρ * θ,
-    )
+    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
 y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
@@ -71,11 +67,18 @@ y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
     u = ρu ./ ρ
-    return (
-        ρ  = ρu,
-        ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I),
-        ρθ = ρθ .* u,
-    )
+    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ .* u)
+end
+
+function energy(state, p)
+    @unpack ρ, ρu = state
+    u = ρu ./ ρ
+    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+end
+
+function total_energy(y, parameters)
+    E = energy.(y, Ref(parameters))
+    sum(parent(Fields.field_values(E) .* Fields.mesh(E).local_geometry.WJ))
 end
 
 F = flux.(y0, Ref(parameters))
@@ -105,16 +108,16 @@ function rhs!(rawdydt, rawdata, field, t)
     dydt = reconstruct(rawdydt, field)
     dydt_data = Fields.field_values(dydt)
 
-    I = Meshes.Quadratures.interpolation_matrix(Float64, Iquad, quad)
+    Imat = Meshes.Quadratures.interpolation_matrix(Float64, Iquad, quad)
 
     Iy_data = similar(Imesh.local_geometry, eltype(dydt_data))
-    Operators.tensor_product!(Iy_data, y_data, I)
+    Operators.tensor_product!(Iy_data, y_data, Imat)
     Iy = Fields.Field(Iy_data, Imesh)
     IF = flux.(Iy, Ref(parameters))
-    IdivF = -Operators.slab_weak_divergence(IF)
+    IdivF = Operators.slab_weak_divergence(IF)
     IdivF_data = Fields.field_values(IdivF)
-    IdivF_data .= Imesh.local_geometry.WJ .⊠ IdivF_data
-    Operators.tensor_product!(dydt_data, IdivF_data, I')
+    IdivF_data .= (.-Imesh.local_geometry.WJ) .⊠ IdivF_data
+    Operators.tensor_product!(dydt_data, IdivF_data, Imat')
 
     Operators.horizontal_dss!(dydt_data, mesh)
 
@@ -151,7 +154,12 @@ end
 
 
 dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
-rhs!(parent(Fields.field_values(dydt)), parent(Fields.field_values(y0)), y0, 0.0);
+rhs!(
+    parent(Fields.field_values(dydt)),
+    parent(Fields.field_values(y0)),
+    y0,
+    0.0,
+);
 
 # 1. make DifferentialEquations work on Fields: i think we need to extend RecursiveArrayTools
 #    - this doesn't seem like it will work directly: ideally we want a way to unwrap and wrap as required
@@ -163,13 +171,16 @@ rhs!(parent(Fields.field_values(dydt)), parent(Fields.field_values(y0)), y0, 0.0
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 80.0), y0)
-sol = solve(prob, SSPRK33(), dt=0.01, saveat=1.0, progress = true)
+prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 200.0), y0)
+sol = solve(prob, SSPRK33(), dt = 0.005, saveat = 1.0, progress = true)
 
 using Plots
 ENV["GKSwstype"] = "nul"
 
 anim = @animate for u in sol.u
-    heatmap(reconstruct(u, y0).ρθ, clim=(-2,2))
+    heatmap(reconstruct(u, y0).ρθ, clim = (-2, 2))
 end
-gif(anim, "bickleyjet.gif", fps=5)
+mp4(anim, "bickleyjet.mp4", fps = 10)
+
+Es = [total_energy(reconstruct(u, y0), parameters) for u in sol.u]
+png(plot(Es), "energy.png")

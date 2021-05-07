@@ -17,16 +17,20 @@ Base.iterate(ax::AbstractAxis) = iterate(ax.range)
 Base.iterate(ax::AbstractAxis, i) = iterate(ax.range, i)
 Base.getindex(ax::AbstractAxis, i) = getindex(ax.range, i)
 Base.unitrange(ax::AbstractAxis) = Base.unitrange(ax.range)
-Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) = Base.checkindex(Bool, ax.range, i)
+Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) =
+    Base.checkindex(Bool, ax.range, i)
 Base.lastindex(ax::AbstractAxis) = Base.lastindex(ax.range)
 
-function Base.Broadcast.broadcast_shape(ax1::A, ax2::A) where {A<:AbstractAxis}
+function Base.Broadcast.broadcast_shape(
+    ax1::A,
+    ax2::A,
+) where {A <: AbstractAxis}
     @assert ax1 == ax2
     return ax1
 end
 
-Base.LinearIndices(axs::NTuple{N,AbstractAxis}) where {N} =
-    LinearIndices(map(ax->ax.range, axs))
+Base.LinearIndices(axs::NTuple{N, AbstractAxis}) where {N} =
+    LinearIndices(map(ax -> ax.range, axs))
 
 struct CovariantAxis{R} <: AbstractAxis
     range::R
@@ -44,20 +48,22 @@ dual(cart::CartesianAxis) = cart
 
 
 iscontractible(::AbstractAxis, ::AbstractAxis) = false
-iscontractible(axcov::CovariantAxis, axcon::ContravariantAxis) = axcov.range ==  axcon.range
-iscontractible(axcov::ContravariantAxis, axcon::CovariantAxis) = axcov.range ==  axcon.range
+iscontractible(axcov::CovariantAxis, axcon::ContravariantAxis) =
+    axcov.range == axcon.range
+iscontractible(axcov::ContravariantAxis, axcon::CovariantAxis) =
+    axcov.range == axcon.range
 iscontractible(ax1::CartesianAxis, ax2::CartesianAxis) = ax1.range == ax2.range
 
-function check_iscontractible(ax1::AbstractAxis,ax2::AbstractAxis)
-    iscontractible(ax1,ax2) || throw(DimensionMismatch("incompatible axis"))
+function check_iscontractible(ax1::AbstractAxis, ax2::AbstractAxis)
+    iscontractible(ax1, ax2) || throw(DimensionMismatch("incompatible axis"))
     true
 end
 
 # Vectors
 
-abstract type CustomAxisFieldVector{N,FT} <: StaticArrays.FieldVector{N,FT} end
+abstract type CustomAxisFieldVector{N, FT} <: StaticArrays.FieldVector{N, FT} end
 
-Base.axes(::CV) where {CV<:CustomAxisFieldVector} = Base.axes(CV)
+Base.axes(::CV) where {CV <: CustomAxisFieldVector} = Base.axes(CV)
 
 
 # TODO: figure out which linear algebra operations make sense here:
@@ -76,7 +82,7 @@ components(u::CustomAxisFieldVector) =
 
 
 
-abstract type AbstractCovariantVector{N,FT} <: CustomAxisFieldVector{N,FT} end
+abstract type AbstractCovariantVector{N, FT} <: CustomAxisFieldVector{N, FT} end
 
 
 """
@@ -84,27 +90,29 @@ abstract type AbstractCovariantVector{N,FT} <: CustomAxisFieldVector{N,FT} end
 
 A vector point value represented as the first two covariant coordinates.
 """
-struct Covariant12Vector{FT} <: AbstractCovariantVector{2,FT}
+struct Covariant12Vector{FT} <: AbstractCovariantVector{2, FT}
     u₁::FT
     u₂::FT
 end
 # Axes wrappers
-Base.axes(::Type{Covariant12Vector{FT}}) where {FT} = (CovariantAxis(StaticArrays.SOneTo(2)),)
+Base.axes(::Type{Covariant12Vector{FT}}) where {FT} =
+    (CovariantAxis(StaticArrays.SOneTo(2)),)
 
 
 
-abstract type AbstractContravariantVector{N,FT} <: CustomAxisFieldVector{N,FT} end
+abstract type AbstractContravariantVector{N, FT} <: CustomAxisFieldVector{N, FT} end
 
 """
     Contravariant12Vector
 
 A vector point value represented as the first two contavariant coordinates.
 """
-struct Contravariant12Vector{FT} <: AbstractContravariantVector{2,FT}
+struct Contravariant12Vector{FT} <: AbstractContravariantVector{2, FT}
     u¹::FT
     u²::FT
 end
-Base.axes(::Type{Contravariant12Vector{FT}}) where {FT} = (ContravariantAxis(StaticArrays.SOneTo(2)),)
+Base.axes(::Type{Contravariant12Vector{FT}}) where {FT} =
+    (ContravariantAxis(StaticArrays.SOneTo(2)),)
 
 
 #Base.:(*)(u::Contravariant12Vector,)
@@ -113,24 +121,25 @@ Base.axes(::Type{Contravariant12Vector{FT}}) where {FT} = (ContravariantAxis(Sta
 #  Spherical as unit 3 vector
 #  Spherical as local on a cubed-sphere face
 
-abstract type AbstractCartesianVector{N,FT} <: CustomAxisFieldVector{N,FT} end
+abstract type AbstractCartesianVector{N, FT} <: CustomAxisFieldVector{N, FT} end
 
 """
     Cartesian12Vector
 
 A vector point value represented by its first 2 cartesian coordinates.
 """
-struct Cartesian12Vector{FT} <: AbstractCartesianVector{2,FT}
+struct Cartesian12Vector{FT} <: AbstractCartesianVector{2, FT}
     u1::FT
     u2::FT
 end
-Base.axes(::Type{Cartesian12Vector{FT}}) where {FT} = (CartesianAxis(StaticArrays.SOneTo(2)),)
+Base.axes(::Type{Cartesian12Vector{FT}}) where {FT} =
+    (CartesianAxis(StaticArrays.SOneTo(2)),)
 
 function contravariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)
-    LinearAlgebra.dot(local_geometry.∂ξ∂x[1,:], x)
+    LinearAlgebra.dot(local_geometry.∂ξ∂x[1, :], x)
 end
 function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
-    LinearAlgebra.dot(local_geometry.∂ξ∂x[2,:], x)
+    LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
 end
 
 # conversions
@@ -156,65 +165,95 @@ The return type when taking the divergence of a field of type `V`.
 
 Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
 """
-divergence_result_type(::Type{V}) where {V<:CustomAxisFieldVector} = eltype(V)
+divergence_result_type(::Type{V}) where {V <: CustomAxisFieldVector} = eltype(V)
 
 
 # tensors
 
-struct Tensor{U,V,N,M,FT,A} <: StaticArrays.StaticMatrix{N,M,FT}
+struct Tensor{U, V, N, M, FT, A} <: StaticArrays.StaticMatrix{N, M, FT}
     matrix::A
 
-    function Tensor{U,V}(matrix::A) where {U,V,A<:StaticArrays.StaticMatrix}
+    function Tensor{U, V}(
+        matrix::A,
+    ) where {U, V, A <: StaticArrays.StaticMatrix}
         N = length(U)
         M = length(V)
         FT = eltype(matrix)
-        @assert size(matrix) == (N,M)
-        new{U,V,N,M,FT,A}(matrix)
+        @assert size(matrix) == (N, M)
+        new{U, V, N, M, FT, A}(matrix)
     end
 end
 
-Base.axes(::Type{T}) where {T<:Tensor{U,V}} where {U,V} = (axes(U)[1], axes(V)[1])
-Base.axes(::T) where {T<:Tensor} = Base.axes(T)
+Base.axes(::Type{T}) where {T <: Tensor{U, V}} where {U, V} =
+    (axes(U)[1], axes(V)[1])
+Base.axes(::T) where {T <: Tensor} = Base.axes(T)
 
 Base.getindex(r::Tensor, i::Int...) = Base.getindex(r.matrix, i...)
 
-function ⊗(u::U, v::V) where {U<:CustomAxisFieldVector, V<:CustomAxisFieldVector}
-    Tensor{U,V}(components(u) * components(v)')
+function ⊗(
+    u::U,
+    v::V,
+) where {U <: CustomAxisFieldVector, V <: CustomAxisFieldVector}
+    Tensor{U, V}(components(u) * components(v)')
 end
 
-function Base.:(*)(A::Tensor{U,V}, v::CustomAxisFieldVector) where {U,V}
-    check_iscontractible(axes(A,2), axes(v,1))
+function Base.:(*)(A::Tensor{U, V}, v::CustomAxisFieldVector) where {U, V}
+    check_iscontractible(axes(A, 2), axes(v, 1))
     U(A.matrix * components(v))
 end
 
-function Base.:(+)(A::Tensor{U,V}, b::LinearAlgebra.UniformScaling) where {U,V}
+function Base.:(+)(
+    A::Tensor{U, V},
+    b::LinearAlgebra.UniformScaling,
+) where {U, V}
     check_iscontractible(axes(A)...)
-    Tensor{U,V}(A.matrix + b)
+    Tensor{U, V}(A.matrix + b)
 end
-function Base.:(+)(b::LinearAlgebra.UniformScaling, A::Tensor{U,V}) where {U,V}
+function Base.:(+)(
+    b::LinearAlgebra.UniformScaling,
+    A::Tensor{U, V},
+) where {U, V}
     check_iscontractible(axes(A)...)
-    Tensor{U,V}(b + A.matrix)
+    Tensor{U, V}(b + A.matrix)
 end
-function Base.:(-)(A::Tensor{U,V}, b::LinearAlgebra.UniformScaling) where {U,V}
+function Base.:(-)(
+    A::Tensor{U, V},
+    b::LinearAlgebra.UniformScaling,
+) where {U, V}
     check_iscontractible(axes(A)...)
-    Tensor{U,V}(A.matrix - b)
+    Tensor{U, V}(A.matrix - b)
 end
-function Base.:(-)(b::LinearAlgebra.UniformScaling, A::Tensor{U,V}) where {U,V}
+function Base.:(-)(
+    b::LinearAlgebra.UniformScaling,
+    A::Tensor{U, V},
+) where {U, V}
     check_iscontractible(axes(A)...)
-    Tensor{U,V}(b - A.matrix)
+    Tensor{U, V}(b - A.matrix)
 end
 
-divergence_result_type(::Type{T}) where {T<:Tensor{U,V}} where {U,V} = V
+divergence_result_type(::Type{T}) where {T <: Tensor{U, V}} where {U, V} = V
 
-function contravariant1(A::Tensor{Contravariant12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
-    V(A.matrix[1,:]...)
+function contravariant1(
+    A::Tensor{Contravariant12Vector{FT}, V},
+    local_geometry::LocalGeometry,
+) where {FT, V}
+    V(A.matrix[1, :]...)
 end
-function contravariant2(A::Tensor{Contravariant12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
-    V(A.matrix[2,:]...)
+function contravariant2(
+    A::Tensor{Contravariant12Vector{FT}, V},
+    local_geometry::LocalGeometry,
+) where {FT, V}
+    V(A.matrix[2, :]...)
 end
-function contravariant1(A::Tensor{Cartesian12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
-    V((local_geometry.∂ξ∂x[1,:]' * A.matrix)...)
+function contravariant1(
+    A::Tensor{Cartesian12Vector{FT}, V},
+    local_geometry::LocalGeometry,
+) where {FT, V}
+    V((local_geometry.∂ξ∂x[1, :]' * A.matrix)...)
 end
-function contravariant2(A::Tensor{Cartesian12Vector{FT},V}, local_geometry::LocalGeometry) where {FT,V}
-    V((local_geometry.∂ξ∂x[2,:]' * A.matrix)...)
+function contravariant2(
+    A::Tensor{Cartesian12Vector{FT}, V},
+    local_geometry::LocalGeometry,
+) where {FT, V}
+    V((local_geometry.∂ξ∂x[2, :]' * A.matrix)...)
 end

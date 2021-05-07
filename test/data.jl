@@ -31,6 +31,10 @@ end
     @test subdata_slab[2, 1] == -3.0
     subdata_slab[2, 1] = -5.0
     @test array[2, 1, 3, 1] == -5.0
+
+    @test sum(data.:1) ≈ Complex(sum(array[:, :, 1, :]), sum(array[:, :, 2, :])) atol =
+        10eps()
+    @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :]) atol = 10eps()
 end
 
 @testset "broadcasting between data object + scalars" begin
@@ -42,6 +46,9 @@ end
     @test res isa IJFH{S}
     @test parent(res) ==
           FT[f == 1 ? 2 : 1 for i in 1:2, j in 1:2, f in 1:2, h in 1:2]
+
+    @test sum(res) == Complex(16.0, 8.0)
+    @test sum(Base.Broadcast.broadcasted(+, data1, 1)) == Complex(16.0, 8.0)
 end
 
 @testset "broadcasting assignment from scalar" begin
@@ -55,19 +62,25 @@ end
     data .= 1
     @test parent(data) ==
           FT[f == 1 ? 1 : 0 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
+
 end
 
 
 @testset "broadcasting between data objects" begin
     FT = Float64
     data1 = ones(FT, 2, 2, 2, 2)
-    data2 = ones(FT, 2, 2, 2, 2)
-    S = Complex{Float64}
-    data1 = IJFH{S, 2}(data1)
-    data2 = IJFH{S, 2}(data2)
+    data2 = ones(FT, 2, 2, 1, 2)
+    S1 = Complex{Float64}
+    S2 = Float64
+    data1 = IJFH{S1, 2}(data1)
+    data2 = IJFH{S2, 2}(data2)
     res = data1 .+ data2
-    @test res isa IJFH{S}
-    @test parent(res) == FT[2 for i in 1:2, j in 1:2, f in 1:2, h in 1:2]
+    @test res isa IJFH{S1}
+    @test parent(res) ==
+          FT[f == 1 ? 2 : 1 for i in 1:2, j in 1:2, f in 1:2, h in 1:2]
+
+    @test sum(res) == Complex(16.0, 8.0)
+    @test sum(Base.Broadcast.broadcasted(+, data1, data2)) == Complex(16.0, 8.0)
 end
 
 @testset "broadcasting complicated function" begin

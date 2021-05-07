@@ -5,8 +5,11 @@ import ..DataLayouts
 import ..DataLayouts: AbstractData, DataStyle
 import ..Meshes: AbstractMesh, Quadratures
 import ..Operators
+import ..Operators: ⊞, ⊠
 import ..Geometry
 import ..Geometry: Cartesian12Vector
+
+import LinearAlgebra
 
 
 """
@@ -28,7 +31,7 @@ end
 Field(values::V, mesh::M) where {V <: AbstractData, M <: AbstractMesh} =
     Field{V, M}(values, mesh)
 
-Base.propertynames(field::Field) = getfield(field, :values)
+Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 field_values(field::Field) = getfield(field, :values)
 mesh(field::Field) = getfield(field, :mesh)
 
@@ -37,10 +40,34 @@ Base.getproperty(field::Field, name::Symbol) =
 
 Base.eltype(field::Field) = eltype(field_values(field))
 
-#function Base.show(io::IO, field::Field)
-#    S = eltype(field)
-#    Base.print(io, "Field: $S-valued on ")
-# end
+Base.parent(field::Field) = parent(field_values(field))
+
+function _show_compact_field(io, field, prefix, isfirst = false)
+    #print(io, prefix1)
+    if eltype(field) <: Number
+        if isfirst
+            print(io, "\n", prefix)
+        end
+        print(
+            IOContext(io, :compact => true, :limit => true),
+            vec(parent(field)),
+        )
+    else
+        names = propertynames(field)
+        for name in names
+            print(io, "\n", prefix)
+            print(io, name, ": ")
+            _show_compact_field(io, getproperty(field, name), prefix * "  ")
+        end
+    end
+end
+
+function Base.show(io::IO, field::Field)
+    print(io, eltype(field), "-valued Field:")
+    _show_compact_field(io, field, "  ", true)
+    print(io, "\non ", mesh(field))
+end
+
 
 # https://github.com/gridap/Gridap.jl/blob/master/src/Fields/DiffOperators.jl#L5
 # https://github.com/gridap/Gridap.jl/blob/master/src/Fields/FieldsInterfaces.jl#L70
@@ -50,8 +77,8 @@ Base.eltype(field::Field) = eltype(field_values(field))
 # repl: #https://earth-env-data-science.github.io/lectures/xarray/xarray.html
 # html: https://unidata.github.io/MetPy/latest/tutorials/xarray_tutorial.html
 
-# TODO: broadcasting
 
+# Broadcasting
 struct FieldStyle{DS <: DataStyle} <: Base.BroadcastStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 
@@ -68,21 +95,56 @@ Base.Broadcast.broadcastable(field::Field{V, M}) where {V, M} = field
 
 Base.axes(field::Field) = (mesh(field),)
 
+# TODO: we may want to rethink how we handle this to allow for more lazy operations
 todata(obj) = obj
 todata(field::Field) = field_values(field)
 function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     Base.Broadcast.Broadcasted{DS}(bc.f, map(todata, bc.args))
 end
 
+# we specialize handling of + and * so that we can support broadcasting over NamedTuple element types
+# TODO: it may be more efficient to handle this at the array level?
+Base.Broadcast.broadcasted(
+    fs::FieldStyle,
+    ::typeof(+),
+    field1::Field,
+    field2::Field,
+) = Base.Broadcast.broadcasted(fs, ⊞, field1, field2)
+Base.Broadcast.broadcasted(
+    fs::FieldStyle,
+    ::typeof(*),
+    w::Number,
+    field::Field,
+) = Base.Broadcast.broadcasted(fs, ⊠, w, field)
+
+
 function mesh(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    if bc.axes isa Nothing
-        error("Call instantiate to access mesh of Broadcasted")
-    end
-    return bc.axes[1]
+    return axes(bc)[1]
 end
 
 function Base.similar(field::Field, ::Type{Eltype}) where {Eltype}
     return Field(similar(field_values(field), Eltype), mesh(field))
+end
+function Base.similar(field::Field)
+    return similar(field, eltype(field))
+end
+
+function Base.copy(field::Field)
+    Field(copy(field_values(field)), mesh(field))
+end
+
+function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
+    #@assert mesh(dest) == mesh(src)
+    copyto!(field_values(dest), field_values(src))
+    return dest
+end
+
+
+function Base.zero(field::Field)
+    zfield = similar(field::Field)
+    zarray = parent(Fields.field_values(zfield))
+    fill!(zarray, zero(eltype(zarray)))
+    return zfield
 end
 
 function Base.similar(
@@ -99,20 +161,65 @@ function Base.copyto!(
     copyto!(field_values(dest), todata(bc))
     return dest
 end
-#=
-function Base.Broadcast.materialize!(
-    ::FieldStyle{DS},
-    dest::Field,
-    bc::Base.Broadcast.Broadcasted{FieldStyle{DS}},
-) where {DS}
-    return copyto!(
-        dest,
-        Base.Broadcast.instantiate(
-            Base.Broadcast.Broadcasted{FieldStyle{DS}}(bc.f, bc.args, axes(dest)),
+
+
+# useful operations
+Base.map(fn, field::Field) = Base.broadcast(fn, field)
+
+function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
+    Base.reduce(
+        ⊞,
+        Base.Broadcast.broadcasted(
+            ⊠,
+            mesh(field).local_geometry.WJ,
+            todata(field),
         ),
     )
 end
-=#
+function Base.sum(fn, field::Field)
+    # Can't just call mapreduce as we need to weight _after_ applying the function
+    Base.sum(Base.Broadcast.broadcasted(fn, field))
+end
+
+function LinearAlgebra.norm(field::Field, p::Real = 2)
+    if p == 2
+        # currently only one which supports structured types
+        sqrt(sum(LinearAlgebra.norm_sqr, field))
+    elseif p == 1
+        sum(abs, field)
+    elseif p == Inf
+        error("Inf norm not yet supported")
+    else
+        sum(x -> x^p, field)^(1 / p)
+    end
+end
+
+# for compatibility with OrdinaryDiffEq
+# still not quite there...
+#===
+import RecursiveArrayTools
+
+Base.size(field::Field) = (1,)
+Base.length(field::Field) = 1
+Base.length(mesh::AbstractMesh) = 1
+
+function RecursiveArrayTools.recursive_bottom_eltype(field::Field)
+    eltype(parent(field_values(field)))
+end
+function RecursiveArrayTools.recursive_unitless_bottom_eltype(field::Field)
+    eltype(parent(field_values(field)))
+end
+function RecursiveArrayTools.recursive_unitless_eltype(field::Field)
+    eltype(parent(field_values(field)))
+end
+function RecursiveArrayTools.recursivecopy!(dest::Field, src::Field)
+    copyto!(dest, src)
+end
+
+Base.any(fn, field::Field) = Base.any(fn, parent(field_values(field)))
+====#
+
+
 """
     coordinate_field(mesh::AbstractMesh)
 

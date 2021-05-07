@@ -60,6 +60,32 @@ function Base.similar(
     return IJFH{Eltype, Nij}(array)
 end
 
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
+) where {F, Op, Nij, A}
+    mapreduce(op, 1:length(bc)) do h
+        mapreduce(fn, op, slab(bc, h))
+    end
+end
+function Base.mapreduce(fn::F, op::Op, bc::IJFH) where {F, Op}
+    mapreduce(op, 1:length(bc)) do h
+        mapreduce(fn, op, slab(bc, h))
+    end
+end
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    slab_bc::IJF{S, Nij},
+) where {F, Op, S, Nij}
+    mapreduce(op, Iterators.product(1:Nij, 1:Nij)) do (i, j)
+        fn(slab_bc[i, j])
+    end
+end
+
+
+
 function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},

@@ -8,7 +8,8 @@ rmap(fn, X, Y) = fn(X, Y)
 rmap(fn, X::Tuple) = map(x -> rmap(fn, x), X)
 rmap(fn, X::Tuple, Y::Tuple) = map((x, y) -> rmap(fn, x, y), X, Y)
 rmap(fn, X::NamedTuple) = map(x -> rmap(fn, x), X)
-rmap(fn, X::NamedTuple, Y::NamedTuple) = map((x, y) -> rmap(fn, x, y), X, Y)
+rmap(fn, X::NamedTuple{names}, Y::NamedTuple{names}) where {names} =
+    map((x, y) -> rmap(fn, x, y), X, Y)
 
 rmaptype(fn, ::Type{T}) where {T} = fn(T)
 rmaptype(fn, ::Type{T}) where {T <: Tuple} =

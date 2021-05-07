@@ -69,7 +69,10 @@ Base.propertynames(data::AbstractData{S}) where {S} = fieldnames(S)
 Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
-
+function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
+    copyto!(parent(dest), parent(src))
+    return dest
+end
 
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
@@ -122,7 +125,7 @@ function Base.similar(
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
-rebuild(data::IJFH{S, Nij}, array) where {S,Nij} = IJFH{S, Nij}(array)
+rebuild(data::IJFH{S, Nij}, array) where {S, Nij} = IJFH{S, Nij}(array)
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 
