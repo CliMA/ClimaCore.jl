@@ -109,7 +109,6 @@ function rhs!(rawdydt, rawdata, field, t)
     dydt_data = Fields.field_values(dydt)
 
     Imat = Meshes.Quadratures.interpolation_matrix(Float64, Iquad, quad)
-
     Iy_data = similar(Imesh.local_geometry, eltype(dydt_data))
     Operators.tensor_product!(Iy_data, y_data, Imat)
     Iy = Fields.Field(Iy_data, Imesh)

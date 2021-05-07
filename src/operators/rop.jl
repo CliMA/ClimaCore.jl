@@ -19,13 +19,15 @@ rmaptype(fn, ::Type{T}) where {T <: NamedTuple{names, tup}} where {names, tup} =
 
 
 """
-    rscale(w, X)
+rmul(w, X)
     w ⊠ X
 
 Recursively scale each element of `X` by `w`.
 """
-rscale(w, X) = rmap(x -> w * x, X)
-const ⊠ = rscale
+rmul(w::Number, X) = rmap(x -> w * x, X)
+rmul(X, w::Number) = rmap(x -> x * w, X)
+rmul(w1::Number, w2::Number) = w1 * w2
+const ⊠ = rmul
 
 """
     radd(X, Y)
@@ -36,6 +38,16 @@ Recursively add elements of `X` and `Y`.
 radd(X, Y) = rmap(+, X, Y)
 const ⊞ = radd
 
+"""
+    rsub(X, Y)
+    X ⊟ Y
+
+Recursively subtract elements of `Y` from `X`.
+"""
+rsub(X, Y) = rmap(-, X, Y)
+const ⊟ = rsub
+
+rdiv(X, w::Number) = rmap(x -> x / w, X)
 
 
 """
@@ -44,6 +56,7 @@ const ⊞ = radd
 Recursively add elements of `w * X + Y`.
 """
 rmuladd(w, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
+
 
 """
     rmatmul1(W, S, i, j)

@@ -52,7 +52,8 @@ end
         )
         @test_throws AssertionError Topologies.opposing_face(
             grid_topology,
-            1,
+
+         1,
             0,
         )
     end
