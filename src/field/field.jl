@@ -10,6 +10,34 @@ import ..Geometry: Cartesian12Vector
 
 import LinearAlgebra
 
+using Requires
+
+function __init__()
+    @require OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed" begin
+        function OrdinaryDiffEq.calculate_residuals!(
+            out::Fields.Field,
+            ũ::Fields.Field,
+            u₀::Fields.Field,
+            u₁::Fields.Field,
+            α,
+            ρ,
+            internalnorm,
+            t,
+        )
+            OrdinaryDiffEq.calculate_residuals!(
+                parent(out),
+                parent(ũ),
+                parent(u₀),
+                parent(u₁),
+                α,
+                ρ,
+                internalnorm,
+                t,
+            )
+        end
+    end
+end
+
 
 """
     Field(values, mesh)
@@ -106,37 +134,22 @@ end
 
 # we specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # TODO: it may be more efficient to handle this at the array level?
-Base.Broadcast.broadcasted(
-    fs::FieldStyle,
-    ::typeof(+),
-    args...
-) = Base.Broadcast.broadcasted(fs, Operators.:⊞, args...)
+Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(+), args...) =
+    Base.Broadcast.broadcasted(fs, Operators.:⊞, args...)
 
-Base.Broadcast.broadcasted(
-    fs::FieldStyle,
-    ::typeof(-),
-    args...
-) = Base.Broadcast.broadcasted(fs, Operators.:⊟, args...)
+Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(-), args...) =
+    Base.Broadcast.broadcasted(fs, Operators.:⊟, args...)
 
-Base.Broadcast.broadcasted(
-    fs::FieldStyle,
-    ::typeof(*),
-    args...
-) = Base.Broadcast.broadcasted(fs, Operators.:⊠, args...)
+Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(*), args...) =
+    Base.Broadcast.broadcasted(fs, Operators.:⊠, args...)
 
 # required for adaptive timestepping
-Base.Broadcast.broadcasted(
-    fs::FieldStyle,
-    ::typeof(/),
-    args...
-) = Base.Broadcast.broadcasted(fs, Operators.rdiv, args...)
+Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(/), args...) =
+    Base.Broadcast.broadcasted(fs, Operators.rdiv, args...)
 
 
-Base.Broadcast.broadcasted(
-    fs::FieldStyle,
-    ::typeof(muladd),
-    args...
-) = Base.Broadcast.broadcasted(fs, Operators.rmuladd, args...)
+Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(muladd), args...) =
+    Base.Broadcast.broadcasted(fs, Operators.rmuladd, args...)
 
 
 function mesh(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
@@ -149,7 +162,7 @@ end
 function Base.similar(field::Field)
     return similar(field, eltype(field))
 end
-function Base.similar(field::F, ::Type{F}) where {F<:Field}
+function Base.similar(field::F, ::Type{F}) where {F <: Field}
     return similar(field)
 end
 
@@ -157,7 +170,9 @@ function Base.copy(field::Field)
     Field(copy(field_values(field)), mesh(field))
 end
 # we implement our own to avoid the type-widening code, and throw a more useful error
-@inline function Base.copy(bc::Base.Broadcast.Broadcasted{Style}) where {Style<:FieldStyle}
+@inline function Base.copy(
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style <: FieldStyle}
     ElType = Base.Broadcast.combine_eltypes(bc.f, bc.args)
     if Base.isconcretetype(ElType)
         # We can trust it and defer to the simpler `copyto!`
@@ -195,6 +210,33 @@ function Base.copyto!(
     return dest
 end
 
+function Base.deepcopy(::Field)
+    error("oh no")
+end
+
+
+function Base.Broadcast.check_broadcast_shape(
+    (mesh1,)::Tuple{AbstractMesh},
+    (mesh2,)::Tuple{AbstractMesh},
+)
+    if mesh1 !== mesh2
+        error("Mismatched meshes\n$mesh1\n$mesh2")
+    end
+    return nothing
+end
+function Base.Broadcast.check_broadcast_shape(
+    ax1::Tuple{AbstractMesh},
+    ax2::Tuple{},
+)
+    return nothing
+end
+function Base.Broadcast.check_broadcast_shape(
+    ax1::Tuple{AbstractMesh},
+    ax2::Tuple,
+)
+    error("$ax2 is not a Mesh")
+end
+
 
 # useful operations
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
@@ -228,12 +270,16 @@ function LinearAlgebra.norm(field::Field, p::Real = 2)
     end
 end
 
-function Base.isapprox(x::Field, y::Field;
-    atol::Real=0,
-    rtol::Real=Base.rtoldefault(eltype(parent(x)),eltype(parent(y)),atol),
-    nans::Bool=false, norm::Function=LinearAlgebra.norm)
+function Base.isapprox(
+    x::Field,
+    y::Field;
+    atol::Real = 0,
+    rtol::Real = Base.rtoldefault(eltype(parent(x)), eltype(parent(y)), atol),
+    nans::Bool = false,
+    norm::Function = LinearAlgebra.norm,
+)
     d = norm(x .- y)
-    return isfinite(d) && d <= max(atol, rtol*max(norm(x), norm(y)))
+    return isfinite(d) && d <= max(atol, rtol * max(norm(x), norm(y)))
 end
 
 
@@ -243,23 +289,24 @@ end
 #  https://github.com/SciML/RecursiveArrayTools.jl/blob/6e779acb321560c75e27739a89ae553cd0f332f1/src/init.jl#L8-L12
 Base.isnan(field::Field) = any(isnan, parent(field))
 Base.any(f, field::Field) = any(f, parent(field))
-
+# https://github.com/SciML/OrdinaryDiffEq.jl/blob/181dcf265351ed3c02437c89a8d2af3f6967fa85/src/initdt.jl#L80
 
 import RecursiveArrayTools
 
-RecursiveArrayTools.recursive_unitless_eltype(field::Field) =
-    typeof(field)
+RecursiveArrayTools.recursive_unitless_eltype(field::Field) = typeof(field)
 RecursiveArrayTools.recursive_unitless_bottom_eltype(field::Field) =
     RecursiveArrayTools.recursive_unitless_bottom_eltype(parent(field))
 RecursiveArrayTools.recursive_bottom_eltype(field::Field) =
     RecursiveArrayTools.recursive_bottom_eltype(parent(field))
 
-function RecursiveArrayTools.recursivecopy!(dest::F, src::F) where {F<:Field}
+function RecursiveArrayTools.recursivecopy!(dest::F, src::F) where {F <: Field}
     copy!(parent(dest), parent(src))
     return dest
 end
 RecursiveArrayTools.recursivecopy(field::Field) = copy(field)
-
+RecursiveArrayTools.recursivecopy(
+    a::AbstractArray{F, N},
+) where {F <: Field, N} = map(RecursiveArrayTools.recursivecopy, a)
 
 """
     coordinate_field(mesh::AbstractMesh)
