@@ -28,6 +28,7 @@ Topologies
 Meshes
 Meshes.Quadratures.degrees_of_freedom
 Meshes.Quadratures.GL
+Meshes.Quadratures.Uniform
 Meshes.Quadratures.quadrature_points
 Meshes.Quadratures.GLL
 Meshes.Quadratures.polynomial_degree
