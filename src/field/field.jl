@@ -287,9 +287,12 @@ end
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions
 #  https://github.com/SciML/RecursiveArrayTools.jl/blob/6e779acb321560c75e27739a89ae553cd0f332f1/src/init.jl#L8-L12
-Base.isnan(field::Field) = any(isnan, parent(field))
+# and
+#  https://discourse.julialang.org/t/shallow-water-equations-with-differentialequations-jl/2691/16?u=simonbyrne
+
+# This one is annoying
+#  https://github.com/SciML/OrdinaryDiffEq.jl/blob/181dcf265351ed3c02437c89a8d2af3f6967fa85/src/initdt.jl#L80
 Base.any(f, field::Field) = any(f, parent(field))
-# https://github.com/SciML/OrdinaryDiffEq.jl/blob/181dcf265351ed3c02437c89a8d2af3f6967fa85/src/initdt.jl#L80
 
 import RecursiveArrayTools
 
@@ -304,6 +307,8 @@ function RecursiveArrayTools.recursivecopy!(dest::F, src::F) where {F <: Field}
     return dest
 end
 RecursiveArrayTools.recursivecopy(field::Field) = copy(field)
+
+# avoid call to deepcopy
 RecursiveArrayTools.recursivecopy(
     a::AbstractArray{F, N},
 ) where {F <: Field, N} = map(RecursiveArrayTools.recursivecopy, a)
