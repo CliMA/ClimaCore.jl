@@ -167,7 +167,7 @@ ENV["GKSwstype"] = "nul"
 anim = @animate for u in sol.u
     heatmap(u.ρθ, clim = (-2, 2))
 end
-mp4(anim, "bickleyjet.mp4", fps = 10)
+mp4(anim, joinpath(@__DIR__, "bickleyjet.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), "energy.png")
+png(plot(Es), joinpath(@__DIR__, "energy.png"))
