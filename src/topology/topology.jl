@@ -158,6 +158,9 @@ struct Vertex{T <: AbstractTopology, V}
     num::V
 end
 
+
+
+
 # implementations
 include("grid.jl")
 

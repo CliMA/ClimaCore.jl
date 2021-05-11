@@ -39,47 +39,24 @@ using DifferentialEquations
     # so if you you have a periodic domain of size [0, 1]
     # at time t, the solution is f(x - c * t, y)
 
+    f(x, t) = sin(x.x1) * exp(-t)
+    y0 = f.(Fields.coordinate_field(mesh), 0.0)
 
-    f0(x) = sin(x.x1)
-    y0 = f0.(Fields.coordinate_field(mesh))
-
-    function reconstruct(rawdata, field)
-        D = typeof(Fields.field_values(field))
-        Fields.Field(D(rawdata), Fields.mesh(field))
-    end
-
-    function rhs!(rawdydt, rawdata, field, t)
-        # reconstuct Field objects
-        y = reconstruct(rawdata, field)
-        dydt = reconstruct(rawdydt, field)
+    function rhs!(dydt, y, _, t)
 
         ∇y = Operators.slab_gradient(y)
-        dydt .= Operators.slab_weak_divergence(∇y)
+        dydt .= .-Operators.slab_weak_divergence(∇y)
 
-        # apply DSS
-        dydt_data = Fields.field_values(dydt)
-        WJ = copy(mesh.local_geometry.WJ) # quadrature weights * jacobian
-        Operators.horizontal_dss!(WJ, mesh)
-        dydt_data .*= mesh.local_geometry.WJ
-        Operators.horizontal_dss!(dydt_data, mesh)
-        dydt_data ./= WJ
-
-        return rawdydt
+        Meshes.horizontal_dss!(dydt)
+        Meshes.variational_solve!(dydt)
     end
 
-    # 1. make DifferentialEquations work on Fields: i think we need to extend RecursiveArrayTools
-    #    - this doesn't seem like it will work directly: ideally we want a way to unwrap and wrap as required
-    #
-    # 2. Define isapprox on Fields
-    # 3. weighted DSS
-
     # Solve the ODE operator
-    prob = ODEProblem(rhs!, parent(Fields.field_values(y0)), (0.0, 1.0), y0)
+    prob = ODEProblem(rhs!, y0, (0.0, 1.0))
     sol = solve(prob, Tsit5(), reltol = 1e-8, abstol = 1e-8)
 
     # Reconstruct the result Field at the last timestep
-    y1 = reconstruct(sol.u[end], y0)
+    y1 = sol(1.0)
 
-    @test parent(Fields.field_values(y0)) .* exp(-1) ≈
-          parent(Fields.field_values(y1)) rtol = 1e-6
+    @test y1 ≈ f.(Fields.coordinate_field(mesh), 1.0) rtol = 1e-6
 end

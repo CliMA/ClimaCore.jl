@@ -64,11 +64,11 @@ end
     @test parent(∇data.u1) ≈
           parent(Fields.field_values(cos.(Fields.coordinate_field(mesh).x1))) rtol =
         1e-3
-    Operators.horizontal_dss!(∇data, mesh)
+    Meshes.horizontal_dss!(∇data, mesh)
 
     S = similar(data, Float64)
     S .= 1.0
-    Operators.horizontal_dss!(S, mesh)
+    Meshes.horizontal_dss!(S, mesh)
     S .= inv.(S)
 
     ∇data .= S .* ∇data
@@ -116,9 +116,9 @@ end
 
     # Jacobian-weighted DSS
     SJ = copy(mesh.local_geometry.J)
-    Operators.horizontal_dss!(SJ, mesh)
+    Meshes.horizontal_dss!(SJ, mesh)
     dss_div_data =
-        Operators.horizontal_dss!(mesh.local_geometry.J .* div_data, mesh) ./ SJ
+        Meshes.horizontal_dss!(mesh.local_geometry.J .* div_data, mesh) ./ SJ
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(mesh)))) rtol =
         1e-3

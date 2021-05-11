@@ -15,7 +15,7 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 module DataLayouts
 
 import Adapt
-import StaticArrays: SOneTo
+import StaticArrays: SOneTo, MArray
 
 # TODO:
 #  - doc strings for each type
@@ -117,14 +117,7 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     IJFH{S, Nij, typeof(array)}(array)
 end
-function Base.similar(
-    data::IJFH{S, Nij, A},
-    ::Type{Eltype},
-) where {S, Nij, A, Eltype}
-    Nh = length(data)
-    array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return IJFH{Eltype, Nij}(array)
-end
+
 rebuild(data::IJFH{S, Nij}, array) where {S, Nij} = IJFH{S, Nij}(array)
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
@@ -225,6 +218,7 @@ Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
+
 
 function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)

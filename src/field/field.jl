@@ -7,6 +7,9 @@ import ..Meshes: AbstractMesh, Quadratures
 import ..Operators
 import ..Geometry
 import ..Geometry: Cartesian12Vector
+import ..RecursiveOperators
+import ..Topologies
+
 
 import LinearAlgebra
 
@@ -72,6 +75,20 @@ Base.eltype(field::Field) = eltype(field_values(field))
 Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = () # to play nice with DifferentialEquations; may want to revisit this
 
+function slab(field::Field, h)
+    Field(slab(field_values(field), h), slab(mesh(field), h))
+end
+
+
+Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(mesh(field))
+
+
+# printing
+function Base.show(io::IO, field::Field)
+    print(io, eltype(field), "-valued Field:")
+    _show_compact_field(io, field, "  ", true)
+    print(io, "\non ", mesh(field))
+end
 function _show_compact_field(io, field, prefix, isfirst = false)
     #print(io, prefix1)
     if eltype(field) <: Number
@@ -90,12 +107,6 @@ function _show_compact_field(io, field, prefix, isfirst = false)
             _show_compact_field(io, getproperty(field, name), prefix * "  ")
         end
     end
-end
-
-function Base.show(io::IO, field::Field)
-    print(io, eltype(field), "-valued Field:")
-    _show_compact_field(io, field, "  ", true)
-    print(io, "\non ", mesh(field))
 end
 
 
@@ -133,42 +144,44 @@ function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
 end
 
 # we specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
+# these are required for ODE solvers
 # TODO: it may be more efficient to handle this at the array level?
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(+), args...) =
-    Base.Broadcast.broadcasted(fs, Operators.:⊞, args...)
-
+    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊞, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(-), args...) =
-    Base.Broadcast.broadcasted(fs, Operators.:⊟, args...)
-
+    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊟, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(*), args...) =
-    Base.Broadcast.broadcasted(fs, Operators.:⊠, args...)
-
-# required for adaptive timestepping
+    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊠, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(/), args...) =
-    Base.Broadcast.broadcasted(fs, Operators.rdiv, args...)
-
-
+    Base.Broadcast.broadcasted(fs, RecursiveOperators.rdiv, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(muladd), args...) =
-    Base.Broadcast.broadcasted(fs, Operators.rmuladd, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveOperators.rmuladd, args...)
 
 
 function mesh(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     return axes(bc)[1]
 end
 
-function Base.similar(field::Field, ::Type{Eltype}) where {Eltype}
-    return Field(similar(field_values(field), Eltype), mesh(field))
+Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
+    Field(similar(field_values(field), Eltype), mesh(field))
+Base.similar(field::Field) = similar(field, eltype(field))
+Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+
+
+# fields on different meshes
+function Base.similar(field::Field, (mesh_to,)::Tuple{AbstractMesh})
+    similar(field, (mesh_to,), eltype(field))
 end
-function Base.similar(field::Field)
-    return similar(field, eltype(field))
-end
-function Base.similar(field::F, ::Type{F}) where {F <: Field}
-    return similar(field)
+function Base.similar(
+    field::Field,
+    (mesh_to,)::Tuple{AbstractMesh},
+    ::Type{Eltype},
+) where {Eltype}
+    Field(similar(mesh_to.coordinates, Eltype), mesh_to)
 end
 
-function Base.copy(field::Field)
-    Field(copy(field_values(field)), mesh(field))
-end
+Base.copy(field::Field) = Field(copy(field_values(field)), mesh(field))
+
 # we implement our own to avoid the type-widening code, and throw a more useful error
 @inline function Base.copy(
     bc::Base.Broadcast.Broadcasted{Style},
@@ -182,7 +195,7 @@ end
 end
 
 function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
-    #@assert mesh(dest) == mesh(src)
+    @assert mesh(dest) == mesh(src)
     copyto!(field_values(dest), field_values(src))
     return dest
 end
@@ -190,7 +203,7 @@ end
 
 function Base.zero(field::Field)
     zfield = similar(field::Field)
-    zarray = parent(Fields.field_values(zfield))
+    zarray = parent(zfield)
     fill!(zarray, zero(eltype(zarray)))
     return zfield
 end
@@ -209,11 +222,6 @@ function Base.copyto!(
     copyto!(field_values(dest), todata(bc))
     return dest
 end
-
-function Base.deepcopy(::Field)
-    error("oh no")
-end
-
 
 function Base.Broadcast.check_broadcast_shape(
     (mesh1,)::Tuple{AbstractMesh},
@@ -244,9 +252,9 @@ Base.map(fn, field::Field) = Base.broadcast(fn, field)
 # sum will give the integral over the field
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
     Base.reduce(
-        Operators.:⊞,
+        RecursiveOperators.radd,
         Base.Broadcast.broadcasted(
-            Operators.:⊠,
+            RecursiveOperators.rmul,
             mesh(field).local_geometry.WJ,
             todata(field),
         ),
@@ -306,12 +314,11 @@ function RecursiveArrayTools.recursivecopy!(dest::F, src::F) where {F <: Field}
     copy!(parent(dest), parent(src))
     return dest
 end
-RecursiveArrayTools.recursivecopy(field::Field) = copy(field)
 
+RecursiveArrayTools.recursivecopy(field::Field) = copy(field)
 # avoid call to deepcopy
-RecursiveArrayTools.recursivecopy(
-    a::AbstractArray{F, N},
-) where {F <: Field, N} = map(RecursiveArrayTools.recursivecopy, a)
+RecursiveArrayTools.recursivecopy(a::AbstractArray{<:Field}) =
+    map(RecursiveArrayTools.recursivecopy, a)
 
 """
     coordinate_field(mesh::AbstractMesh)
@@ -338,6 +345,46 @@ import ..Operators
 
 import ..Meshes
 
+function interpolate(mesh_to::AbstractMesh, field_from::Field)
+    field_to = similar(field_from, (mesh_to,), eltype(field_from))
+    interpolate!(field_to, field_from)
+end
+function interpolate!(field_to::Field, field_from::Field)
+    mesh_to = mesh(field_to)
+    mesh_from = mesh(field_from)
+    # @assert mesh_from.topology == mesh_to.topology
+
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        mesh_to.quadrature_style,
+        mesh_from.quadrature_style,
+    )
+    Operators.tensor_product!(
+        field_values(field_to),
+        field_values(field_from),
+        M,
+    )
+    return field_to
+end
+
+function restrict!(field_to::Field, field_from::Field)
+    mesh_to = mesh(field_to)
+    mesh_from = mesh(field_from)
+    # @assert mesh_from.topology == mesh_to.topology
+
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        mesh_from.quadrature_style,
+        mesh_to.quadrature_style,
+    )
+    Operators.tensor_product!(
+        field_values(field_to),
+        field_values(field_from),
+        M',
+    )
+    return field_to
+end
+
 function matrix_interpolate(
     field::Field,
     Q_interp::Quadratures.Uniform{Nu},
@@ -361,8 +408,6 @@ function matrix_interpolate(
 end
 matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())
-
-
 
 function Operators.slab_gradient!(∇field::Field, field::Field)
     @assert mesh(∇field) === mesh(field)
@@ -394,20 +439,36 @@ end
 
 function Operators.slab_gradient(field::Field)
     S = eltype(field)
-    ∇S = Operators.rmaptype(T -> Cartesian12Vector{T}, S)
+    ∇S = RecursiveOperators.rmaptype(T -> Cartesian12Vector{T}, S)
     Operators.slab_gradient!(similar(field, ∇S), field)
 end
 
 function Operators.slab_divergence(field::Field)
     S = eltype(field)
-    divS = Operators.rmaptype(Geometry.divergence_result_type, S)
+    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
     Operators.slab_divergence!(similar(field, divS), field)
 end
 function Operators.slab_weak_divergence(field::Field)
     S = eltype(field)
-    divS = Operators.rmaptype(Geometry.divergence_result_type, S)
+    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
     Operators.slab_weak_divergence!(similar(field, divS), field)
 end
+
+function Meshes.horizontal_dss!(field::Field)
+    Meshes.horizontal_dss!(field_values(field), mesh(field))
+    return field
+end
+
+"""
+    Meshes.variational_solve!(field)
+
+Divide `field` by the mass matrix.
+"""
+function Meshes.variational_solve!(field::Field)
+    Meshes.variational_solve!(field_values(field), mesh(field))
+    return field
+end
+
 
 include("plots.jl")
 

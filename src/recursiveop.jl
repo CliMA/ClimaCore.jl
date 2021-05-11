@@ -1,5 +1,16 @@
 """
-    rmap(fn, X)
+    RecursiveOperators
+
+This module contains operators to recurse over nested `Tuple`s or `NamedTuple`s.
+
+To extend to another type `T`, define `RecursiveOperators.rmap(fn, args::T...)`
+"""
+module RecursiveOperators
+
+export ⊞, ⊠
+
+"""
+    rmap(fn, X...)
 
 Recursively apply `fn` to each element of `X`
 """
@@ -11,6 +22,11 @@ rmap(fn, X::NamedTuple) = map(x -> rmap(fn, x), X)
 rmap(fn, X::NamedTuple{names}, Y::NamedTuple{names}) where {names} =
     map((x, y) -> rmap(fn, x, y), X, Y)
 
+"""
+    rmaptype(fn, T)
+
+The return type of `rmap(fn, X::T)`.
+"""
 rmaptype(fn, ::Type{T}) where {T} = fn(T)
 rmaptype(fn, ::Type{T}) where {T <: Tuple} =
     Tuple{map(fn, tuple(T.parameters...))...}
@@ -19,7 +35,7 @@ rmaptype(fn, ::Type{T}) where {T <: NamedTuple{names, tup}} where {names, tup} =
 
 
 """
-rmul(w, X)
+    rmul(w, X)
     w ⊠ X
 
 Recursively scale each element of `X` by `w`.
@@ -44,6 +60,7 @@ const ⊞ = radd
 
 Recursively subtract elements of `Y` from `X`.
 """
+rsub(X) = rmap(-, X)
 rsub(X, Y) = rmap(-, X, Y)
 const ⊟ = rsub
 
@@ -93,3 +110,5 @@ function rmatmul2(W, S, i, j)
     end
     return r
 end
+
+end # module

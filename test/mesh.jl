@@ -34,6 +34,6 @@ import ClimateMachineCore.Geometry: Cartesian2DPoint
         @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
         @test local_geometry_slab[i, j].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]
-        @test local_geometry_slab[i, j].invWJ * local_geometry_slab[i, j].WJ ≈ 1
+        @test local_geometry_slab[i, j].invM * local_geometry_slab[i, j].WJ ≈ 1
     end
 end
