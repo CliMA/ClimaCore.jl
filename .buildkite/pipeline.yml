@@ -56,7 +56,7 @@ steps:
   - label: "cpu_bickleyjet"
     key: "cpu_bickleyjet"
     command:
-      - "julia --color=yes --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate()'"
+      - "julia --color=yes --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet.jl"
     artifact_paths:
       - "examples/bickleyjet/*.mp4"
