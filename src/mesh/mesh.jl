@@ -7,9 +7,9 @@
 - metric terms (inverse partial derivatives)
 - quadrature rules and weights
 
-https://ceed.exascaleproject.org/ceed-code/
-
-QA: https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl
+## References / notes
+ - [ceed](https://ceed.exascaleproject.org/ceed-code/)
+ - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
 
 """
 module Meshes

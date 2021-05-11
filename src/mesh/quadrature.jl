@@ -11,6 +11,10 @@ export QuadratureStyle,
 """
    QuadratureStyle
 
+Quadrature style supertype. See sub-types:
+ - [`GLL`](@ref)
+ - [`GL`](@ref)
+ - [`Uniform`](@ref)
 """
 abstract type QuadratureStyle end
 
