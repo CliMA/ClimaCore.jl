@@ -84,6 +84,12 @@ components(u::CustomAxisFieldVector) =
 
 abstract type AbstractCovariantVector{N, FT} <: CustomAxisFieldVector{N, FT} end
 
+function LinearAlgebra.dot(u::CustomAxisFieldVector, v::CustomAxisFieldVector)
+    check_iscontractible(axes(u, 1), axes(v, 1))
+    LinearAlgebra.dot(components(u), components(v))
+end
+
+
 
 """
     Covariant12Vector
@@ -201,6 +207,9 @@ function Base.:(*)(A::Tensor{U, V}, v::CustomAxisFieldVector) where {U, V}
     check_iscontractible(axes(A, 2), axes(v, 1))
     U(A.matrix * components(v))
 end
+function Base.adjoint(A::Tensor{U,V}) where {U,V}
+    Tensor{V,U}(adjoint(A.matrix))
+end
 
 function Base.:(+)(
     A::Tensor{U, V},
@@ -230,6 +239,7 @@ function Base.:(-)(
     check_iscontractible(axes(A)...)
     Tensor{U, V}(b - A.matrix)
 end
+
 
 divergence_result_type(::Type{T}) where {T <: Tensor{U, V}} where {U, V} = V
 
