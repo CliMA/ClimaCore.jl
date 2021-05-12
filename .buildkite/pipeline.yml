@@ -10,6 +10,8 @@ steps:
     key: "init_cpu_env"
     command:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -21,6 +23,7 @@ steps:
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
       - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
@@ -56,7 +59,6 @@ steps:
   - label: "cpu_bickleyjet"
     key: "cpu_bickleyjet"
     command:
-      - "julia --color=yes --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet.jl"
     artifact_paths:
       - "examples/bickleyjet/*.mp4"

@@ -6,7 +6,7 @@ import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
 using LinearAlgebra
 
-using DifferentialEquations
+using OrdinaryDiffEq
 
 @testset "2D field dx/dt = ∇⋅∇  ODE solve" begin
     FT = Float64
