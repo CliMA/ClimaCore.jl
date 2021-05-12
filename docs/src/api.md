@@ -16,6 +16,11 @@ DataLayouts.IJFH
 Domains.EquispacedRectangleDiscretization
 ```
 
+## Geometry
+```@docs
+Geometry.Cartesian12Vector
+```
+
 ## Topologies
 
 ```@docs
@@ -34,3 +39,10 @@ Meshes.Quadratures.GLL
 Meshes.Quadratures.polynomial_degree
 Meshes.Quadratures.QuadratureStyle
 ```
+
+## RecursiveOperators
+
+```@docs
+RecursiveOperators
+```
+

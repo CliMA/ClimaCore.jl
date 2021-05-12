@@ -1,6 +1,7 @@
 module ClimateMachineCore
 
 include("interface.jl")
+include("recursiveop.jl")
 include("data/data.jl")
 include("geometry/geometry.jl")
 include("domain/domain.jl")

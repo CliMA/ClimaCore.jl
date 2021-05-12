@@ -7,7 +7,9 @@ the first dimension, then the second dimension.
 struct GridTopology{D <: EquispacedRectangleDiscretization} <: AbstractTopology
     discretization::D
 end
-
+function Base.show(io::IO, topology::GridTopology)
+    print(io, "GridTopology on ", topology.discretization)
+end
 domain(topology::GridTopology) = topology.discretization.domain
 
 function nlocalelems(topology::GridTopology)

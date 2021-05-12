@@ -5,6 +5,7 @@ include("grid.jl")
 include("quadrature.jl")
 include("mesh.jl")
 include("field.jl")
+include("fielddiffeq.jl")
 include("operators.jl")
 
 if "CUDA" in ARGS

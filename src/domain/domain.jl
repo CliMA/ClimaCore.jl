@@ -1,7 +1,7 @@
 module Domains
 
 import ..Geometry
-
+using IntervalSets
 export RectangleDomain, EquispacedRectangleDiscretization
 
 
@@ -60,10 +60,38 @@ Base.@kwdef struct RectangleDomain{FT} <: HorizontalDomain
     x1max::FT
     x2min::FT
     x2max::FT
-    x1periodic::Bool
-    x2periodic::Bool
+    x1periodic::Bool = false
+    x2periodic::Bool = false
 end
 
+
+RectangleDomain(
+    x1::ClosedInterval,
+    x2::ClosedInterval;
+    x1periodic = false,
+    x2periodic = false,
+) = RectangleDomain(
+    float(x1.left),
+    float(x1.right),
+    float(x2.left),
+    float(x2.right),
+    x1periodic,
+    x2periodic,
+)
+
+function Base.show(io::IO, domain::RectangleDomain)
+    print(
+        io,
+        "RectangleDomain($(domain.x1min)..$(domain.x1max), $(domain.x2min)..$(domain.x2max)",
+    )
+    if domain.x1periodic
+        print(io, ", x1periodic=true")
+    end
+    if domain.x1periodic
+        print(io, ", x2periodic=true")
+    end
+    print(io, ")")
+end
 coordinate_type(::RectangleDomain{FT}) where {FT} =
     Geometry.Cartesian2DPoint{FT}
 
@@ -100,12 +128,18 @@ struct EquispacedRectangleDiscretization{FT, R} <: Discretization
     range1::R
     range2::R
 end
+
 function EquispacedRectangleDiscretization(domain::RectangleDomain, n1, n2)
     range1 = range(domain.x1min, domain.x1max; length = n1 + 1)
     range2 = range(domain.x2min, domain.x2max; length = n2 + 1)
     EquispacedRectangleDiscretization(domain, n1, n2, range1, range2)
 end
 Base.eltype(::EquispacedRectangleDiscretization{FT}) where {FT} = FT
+function Base.show(io::IO, disc::EquispacedRectangleDiscretization)
+    print(io, disc.n1, "×", disc.n2, " EquispacedRectangleDiscretization of ")
+    print(io, disc.domain)
+end
+
 
 struct EquiangularCubedSphereDiscretization{FT} <: Discretization
     domain::SphereDomain{FT}

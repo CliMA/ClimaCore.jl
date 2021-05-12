@@ -15,7 +15,7 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 module DataLayouts
 
 import Adapt
-import StaticArrays: SOneTo
+import StaticArrays: SOneTo, MArray
 
 # TODO:
 #  - doc strings for each type
@@ -69,7 +69,10 @@ Base.propertynames(data::AbstractData{S}) where {S} = fieldnames(S)
 Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
-
+function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
+    copyto!(parent(dest), parent(src))
+    return dest
+end
 
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
@@ -114,16 +117,8 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     IJFH{S, Nij, typeof(array)}(array)
 end
-function Base.similar(
-    data::IJFH{S, Nij, A},
-    ::Type{Eltype},
-) where {S, Nij, A, Eltype}
-    Nh = length(data)
-    array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return IJFH{Eltype, Nij}(array)
-end
 
-
+rebuild(data::IJFH{S, Nij}, array) where {S, Nij} = IJFH{S, Nij}(array)
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
 
@@ -224,6 +219,7 @@ function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
 
+
 function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
@@ -279,6 +275,6 @@ Base.axes(slab::DataSlab{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
 
 include("broadcast.jl")
-include("cuda.jl")
+#include("cuda.jl")
 
 end # module

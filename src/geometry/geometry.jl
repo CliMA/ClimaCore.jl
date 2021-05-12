@@ -1,5 +1,7 @@
 module Geometry
 
+export ⊗, Cartesian12Vector, Tensor
+
 import StaticArrays: SVector
 
 include("coordinates.jl")

@@ -2,7 +2,7 @@
     Meshes
 
 - domain
-- topologyc
+- topology
 - coordinates
 - metric terms (inverse partial derivatives)
 - quadrature rules and weights
@@ -14,15 +14,18 @@
 """
 module Meshes
 
-include("quadrature.jl")
 
 import ..Geometry
 import ..DataLayouts, ..Domains, ..Topologies
 import ..slab
-import .Quadratures
 using StaticArrays, ForwardDiff, LinearAlgebra
 
 abstract type AbstractMesh end
+
+include("quadrature.jl")
+import .Quadratures
+
+include("dss.jl")
 
 # we need to be able figure out the coordinate of each node
 # - element vertex location (come from the topology)
@@ -38,8 +41,11 @@ struct Mesh2D{T, Q, C, G} <: AbstractMesh
     local_geometry::G
 end
 
+Topologies.nlocalelems(mesh::AbstractMesh) =
+    Topologies.nlocalelems(mesh.topology)
+
 undertype(::Type{Geometry.LocalGeometry{FT, M}}) where {FT, M} = FT
-undertype(mesh::Mesh2D) = undertype(eltype(mesh.local_geometry))
+undertype(mesh::AbstractMesh) = undertype(eltype(mesh.local_geometry))
 
 function Base.show(io::IO, mesh::Mesh2D)
     println(io, "Mesh2D:")
@@ -63,6 +69,7 @@ function Mesh2D(topology, quadrature_style)
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
+
     for elem in 1:nelements
         coordinate_slab = slab(coordinates, elem)
         local_geometry_slab = slab(local_geometry, elem)
@@ -89,15 +96,39 @@ function Mesh2D(topology, quadrature_style)
             J = det(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
-            invWJ = inv(WJ)
 
             coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] =
-                Geometry.LocalGeometry(J, WJ, invWJ, ∂ξ∂x)
+            # store WJ in invM slot
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, WJ, WJ, ∂ξ∂x)
         end
     end
+    # compute invM from WJ:
+    # M = dss(WJ)
+    horizontal_dss!(local_geometry.invM, topology, Nq)
+    # invM = inv.(M)
+    local_geometry.invM .= inv.(local_geometry.invM)
     return Mesh2D(topology, quadrature_style, coordinates, local_geometry)
 end
+
+function variational_solve!(data, mesh::AbstractMesh)
+    data .= mesh.local_geometry.invM .⊠ data
+end
+
+
+
+struct MeshSlab{Q, C, G} <: AbstractMesh
+    quadrature_style::Q
+    coordinates::C
+    local_geometry::G
+end
+function slab(mesh::Mesh2D, h)
+    MeshSlab(
+        mesh.quadrature_style,
+        slab(mesh.coordinates, h),
+        slab(mesh.local_geometry, h),
+    )
+end
+
 
 #=
 struct Mesh3D{T,C} <: AbstractMesh

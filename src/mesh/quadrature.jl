@@ -3,6 +3,7 @@ module Quadratures
 
 import GaussQuadrature
 import StaticArrays: SVector, SMatrix, MMatrix
+import LinearAlgebra: Diagonal
 
 export QuadratureStyle,
     GLL, GL, polynomial_degree, degrees_of_freedom, quadrature_points
@@ -136,7 +137,7 @@ function interpolation_matrix(
         w = bw ./ (x_to .- points_from)
         M[i, :] .= w ./ sum(w)
     end
-    SMatrix(M)
+    return SMatrix(M)
 end
 
 @generated function interpolation_matrix(
@@ -150,6 +151,41 @@ end
     )
 end
 
+"""
+    V = orthonormal_poly(points, quad)
+
+`V[i,j]` contains the `j-1`th Legendre polynomial evaluated at `points[i]`.
+i.e. it is the mapping from the modal to the nodal representation.
+"""
+function orthonormal_poly(
+    points::SVector{Np, FT},
+    quad::GLL{Nq},
+) where {FT, Np, Nq}
+    N = Nq - 1
+    a, b = GaussQuadrature.legendre_coefs(FT, N)
+    if N == 0
+        return SMatrix{Np, 1}(ntuple(x -> b[1], Np))
+    end
+    return SMatrix{Np, Nq}(GaussQuadrature.orthonormal_poly(points, a, b))
+end
+
+function spectral_filter_matrix(
+    quad::GLL{Nq},
+    Σ::SVector{Nq, FT},
+) where {Nq, FT}
+    points, _ = quadrature_points(FT, quad)
+    V = orthonormal_poly(points, quad)
+    return V * Diagonal(Σ) / V
+end
+
+function cutoff_filter_matrix(
+    ::Type{FT},
+    quad::GLL{Nq},
+    Nc::Integer,
+) where {FT, Nq}
+    Σ = SVector(ntuple(i -> i <= Nc ? FT(1) : FT(0), Nq))
+    return spectral_filter_matrix(quad, Σ)
+end
 
 """
     differentiation_matrix(r::SVector{Nq, T},

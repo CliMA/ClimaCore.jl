@@ -6,21 +6,24 @@ env:
   CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
 
 steps:
-  - label: "init cpu env"
+  - label: "init :computer:"
     key: "init_cpu_env"
     command:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: "init gpu env"
+  - label: "init :flower_playing_cards:"
     key: "init_gpu_env"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
       - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
@@ -33,22 +36,34 @@ steps:
 
   - wait
 
-  - label: "cpu_unittests"
+  - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
-      - "julia --color=yes --project -e 'using Pkg; Pkg.test()'"
+      - "julia --color=yes --project=test test/runtests.jl"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: "gpu_unittests"
+  - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --project -e 'using Pkg; Pkg.test(test_args=[\"CUDA\"])'"
+      - "julia --color=yes --project=test test/runtests.jl CUDA"
     agents:
       config: gpu
       queue: central
       slurm_ntasks: 1
       slurm_gres: "gpu:1"
+
+  - label: ":computer: Bickley jet"
+    key: "cpu_bickleyjet"
+    command:
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet.jl"
+    artifact_paths:
+      - "examples/bickleyjet/*.mp4"
+      - "examples/bickleyjet/*.png"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1

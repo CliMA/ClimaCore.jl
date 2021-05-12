@@ -88,7 +88,10 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
         ex = quote
             # TODO: need to figure out a better way to handle the case where we require conversion
             # e.g. if T = Dual or Double64
+
             if isprimitivetype(S)
+                # error if we dont hit triangular dispatch method (defined below):
+                # set_struct!(::AbstractArray{S}, ::S) where {S}
                 error($errorstring)
             end
             # TODO: we get a segfault here when trying to pass propogate_inbounds
@@ -107,6 +110,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 )),
             )
         end
+        push!(ex.args, :(return nothing))
         ex
     else
         if isprimitivetype(S)
@@ -119,6 +123,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 offset + fieldtypeoffset(T, S, i),
             )
         end
+        return nothing
     end
 end
 @propagate_inbounds function set_struct!(
