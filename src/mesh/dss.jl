@@ -16,9 +16,9 @@ function horizontal_dss!(
     for (elem1, face1, elem2, face2, reversed) in
         Topologies.interior_faces(topology)
         # iterate over non-vertex nodes
+        slab1 = slab(data, elem1)
+        slab2 = slab(data, elem2)
         for q in 2:(Nq - 1)
-            slab1 = slab(data, elem1)
-            slab2 = slab(data, elem2)
             i1, j1 = Topologies.face_node_index(face1, Nq, q, false)
             i2, j2 = Topologies.face_node_index(face2, Nq, q, reversed)
             value = slab1[i1, j1] ⊞ slab2[i2, j2]

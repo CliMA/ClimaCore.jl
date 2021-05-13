@@ -40,9 +40,6 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
-# TODO: this could cause problems when it fails...
-slab(x, inds...) = x
-
 
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
