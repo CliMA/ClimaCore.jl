@@ -121,15 +121,16 @@ end
 
 function surface_metrics(mesh_slab, face, i, j)
     ∂ξ∂x = mesh_slab.local_geometry.∂ξ∂x[i, j]
-    WJ = mesh_slab.local_geometry.WJ[i, j]
+    J = mesh_slab.local_geometry.J[i, j]
+    _,w= Meshes.Quadratures.quadrature_points(typeof(J), mesh_slab.quadrature_style)
     n = if face == 1
-        -WJ*∂ξ∂x[1,:]
+        -J*∂ξ∂x[1,:]*w[j]
     elseif face == 2
-        WJ*∂ξ∂x[1,:]
+        J*∂ξ∂x[1,:]*w[j]
     elseif face == 3
-        -WJ*∂ξ∂x[2,:]
+        -J*∂ξ∂x[2,:]*w[i]
     elseif face == 4
-        WJ*∂ξ∂x[2,:]
+        J*∂ξ∂x[2,:]*w[i]
     end
     sWJ = norm(n)
     n = n/sWJ
@@ -157,14 +158,20 @@ function rhs!(dydt, y, _, t)
     F = flux.(y, Ref(parameters))
     dydt .= Operators.slab_weak_divergence(F)
 
+    # [i/j,  field, face, elem]
     add_numerical_flux!(dydt,y) do n, (y⁻,), (y⁺,)
         Favg = rdiv(flux(y⁻,parameters) ⊞ flux(y⁺,parameters), 2)
-        rmap(f -> f' * n, Favg)
+        λ = sqrt(parameters.g)
+        rmap(f -> f' * n, Favg) ⊞ (λ/2) ⊠ (y⁻ ⊟ y⁺)
     end
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
     dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
+
+    M = Meshes.Quadratures.cutoff_filter_matrix(Float64, mesh.quadrature_style, 3)
+    Operators.tensor_product!(dydt_data, M)
+
     return dydt
 end
 
@@ -180,11 +187,11 @@ rhs!(dydt, y0, nothing, 0.0);
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 1.0))
+prob = ODEProblem(rhs!, y0, (0.0, 80.0))
 sol = solve(
     prob,
     SSPRK33(),
-    dt = 0.005,
+    dt = 0.02,
     saveat = 1.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
