@@ -110,11 +110,11 @@ function add_numerical_flux!(fn, dydt, args...)
             nf⁻ = fn(
                 n⁻,
                 map(slab -> slab[i⁻, j⁻], arg_slabs⁻),
-                map(slab -> slab[i⁺, j⁺], arg_slabs⁺)
+                map(slab -> slab[i⁺, j⁺], arg_slabs⁺),
             )
 
-            dydt_slab⁻[i⁻,j⁻] = dydt_slab⁻[i⁻,j⁻] ⊟ (sWJ⁻ ⊠ nf⁻)
-            dydt_slab⁺[i⁺,j⁺] = dydt_slab⁺[i⁺,j⁺] ⊞ (sWJ⁺ ⊠ nf⁻)
+            dydt_slab⁻[i⁻, j⁻] = dydt_slab⁻[i⁻, j⁻] ⊟ (sWJ⁻ ⊠ nf⁻)
+            dydt_slab⁺[i⁺, j⁺] = dydt_slab⁺[i⁺, j⁺] ⊞ (sWJ⁺ ⊠ nf⁻)
         end
     end
 end
@@ -122,18 +122,21 @@ end
 function surface_metrics(mesh_slab, face, i, j)
     ∂ξ∂x = mesh_slab.local_geometry.∂ξ∂x[i, j]
     J = mesh_slab.local_geometry.J[i, j]
-    _,w= Meshes.Quadratures.quadrature_points(typeof(J), mesh_slab.quadrature_style)
+    _, w = Meshes.Quadratures.quadrature_points(
+        typeof(J),
+        mesh_slab.quadrature_style,
+    )
     n = if face == 1
-        -J*∂ξ∂x[1,:]*w[j]
+        -J * ∂ξ∂x[1, :] * w[j]
     elseif face == 2
-        J*∂ξ∂x[1,:]*w[j]
+        J * ∂ξ∂x[1, :] * w[j]
     elseif face == 3
-        -J*∂ξ∂x[2,:]*w[i]
+        -J * ∂ξ∂x[2, :] * w[i]
     elseif face == 4
-        J*∂ξ∂x[2,:]*w[i]
+        J * ∂ξ∂x[2, :] * w[i]
     end
     sWJ = norm(n)
-    n = n/sWJ
+    n = n / sWJ
     return sWJ, Cartesian12Vector(n...)
 end
 
@@ -159,17 +162,21 @@ function rhs!(dydt, y, _, t)
     dydt .= Operators.slab_weak_divergence(F)
 
     # [i/j,  field, face, elem]
-    add_numerical_flux!(dydt,y) do n, (y⁻,), (y⁺,)
-        Favg = rdiv(flux(y⁻,parameters) ⊞ flux(y⁺,parameters), 2)
+    add_numerical_flux!(dydt, y) do n, (y⁻,), (y⁺,)
+        Favg = rdiv(flux(y⁻, parameters) ⊞ flux(y⁺, parameters), 2)
         λ = sqrt(parameters.g)
-        rmap(f -> f' * n, Favg) ⊞ (λ/2) ⊠ (y⁻ ⊟ y⁺)
+        rmap(f -> f' * n, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
     end
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
     dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
 
-    M = Meshes.Quadratures.cutoff_filter_matrix(Float64, mesh.quadrature_style, 3)
+    M = Meshes.Quadratures.cutoff_filter_matrix(
+        Float64,
+        mesh.quadrature_style,
+        3,
+    )
     Operators.tensor_product!(dydt_data, M)
 
     return dydt
@@ -214,7 +221,8 @@ png(plot(Es), joinpath(@__DIR__, "energy_dg.png"))
 function linkfig(figpath)
     # link figure in logs if we are running on CI
     if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://" * join(split(figpath, '/')[end-3:end], '/')
+        artifact_url =
+            "artifact://" * join(split(figpath, '/')[(end - 3):end], '/')
         alt = split(splitdir(figpath)[2], '.')[1]
         @info "Linking Figure: $artifact_url"
         print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")

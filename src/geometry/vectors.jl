@@ -207,8 +207,8 @@ function Base.:(*)(A::Tensor{U, V}, v::CustomAxisFieldVector) where {U, V}
     check_iscontractible(axes(A, 2), axes(v, 1))
     U(A.matrix * components(v))
 end
-function Base.adjoint(A::Tensor{U,V}) where {U,V}
-    Tensor{V,U}(adjoint(A.matrix))
+function Base.adjoint(A::Tensor{U, V}) where {U, V}
+    Tensor{V, U}(adjoint(A.matrix))
 end
 
 function Base.:(+)(
