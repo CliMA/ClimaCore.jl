@@ -3,7 +3,7 @@ name: JuliaFormatter
 on:
   push:
     branches:
-      - master
+      - main
       - trying
       - staging
     tags: '*'
