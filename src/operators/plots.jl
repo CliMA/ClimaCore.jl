@@ -29,6 +29,19 @@ function UnicodePlots.heatmap(field::Field; width = 80, height = 40, kwargs...)
     )
 end
 
+function UnicodePlots.lineplot(field::Field; width = 80, height = 40, kwargs...)
+    fieldmesh = mesh(field)
+    x = parent(field)[Meshes.interior_face_range(fieldmesh), 1]
+    # TODO: use scaled domains using coordinates
+    UnicodePlots.lineplot(
+        x;
+        xlabel = "column h",
+        ylabel = "column y",
+        width = width,
+        height = height,
+        kwargs...,
+    )
+end
 
 
 function Plots.heatmap(field::Field; kwargs...)

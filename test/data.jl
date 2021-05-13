@@ -12,7 +12,6 @@ using ClimateMachineCore.DataLayouts: get_struct, set_struct!
     @test get_struct(array, S) == (4.0 + 2.0im, 6.0)
 end
 
-
 @testset "IJFH" begin
     Nij = 2
     S = Tuple{Complex{Float64}, Float64}

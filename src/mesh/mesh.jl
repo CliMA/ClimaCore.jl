@@ -249,4 +249,8 @@ struct LocalGeometry{FT}
     J::FT
 end
 =#
+
+include("column_mesh.jl")
+include("hybrid_mesh.jl")
+
 end # module

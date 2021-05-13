@@ -4,8 +4,6 @@
 abstract type DataStyle <: Base.BroadcastStyle end
 
 abstract type DataColumnStyle <: DataStyle end
-
-
 abstract type DataSlab2DStyle{Nij} <: DataStyle end
 
 # determine the parent type underlying any SubArrays
@@ -13,6 +11,12 @@ parent_array_type(::Type{A}) where {A <: AbstractArray} = A
 parent_array_type(::Type{S}) where {S <: SubArray{T, N, A}} where {T, N, A} =
     parent_array_type(A)
 
+
+abstract type DataColumnStyle <: DataStyle end
+struct VFStyle{A} <: DataColumnStyle end
+DataStyle(::Type{VF{S, A}}) where {S, A} = VFStyle{parent_array_type(A)}()
+
+abstract type DataSlab2DStyle{Nij} <: DataStyle end
 struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
     IJFStyle{Nij, parent_array_type(A)}()
@@ -22,7 +26,6 @@ struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
 DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
     IJFHStyle{Nij, parent_array_type(A)}()
 DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
-
 
 abstract type Data3DStyle <: DataStyle end
 
@@ -37,9 +40,7 @@ Base.Broadcast.BroadcastStyle(
     b::DataStyle,
 ) = b
 
-
 Base.Broadcast.broadcastable(data::AbstractData) = data
-
 
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
@@ -58,6 +59,7 @@ function Base.similar(
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
+
 function Base.similar(
     data::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},
     ::Type{Eltype},
@@ -66,6 +68,15 @@ function Base.similar(
     #array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype)))
     array = MArray{Tuple{Nij, Nij, Nf}, eltype(A), 3, Nij * Nij * Nf}(undef)
     return IJF{Eltype, Nij}(array)
+end
+
+function Base.similar(
+    bc::Union{VF{<:Any, A}, Broadcast.Broadcasted{VFStyle{A}}},
+    ::Type{Eltype},
+) where {A, Eltype}
+    Nh = length(bc)
+    array = similar(A, (Nh, typesize(eltype(A), Eltype)))
+    return VF{Eltype, A}(array)
 end
 
 function Base.mapreduce(
@@ -77,11 +88,13 @@ function Base.mapreduce(
         mapreduce(fn, op, slab(bc, h))
     end
 end
+
 function Base.mapreduce(fn::F, op::Op, bc::IJFH) where {F, Op}
     mapreduce(op, 1:length(bc)) do h
         mapreduce(fn, op, slab(bc, h))
     end
 end
+
 function Base.mapreduce(
     fn::F,
     op::Op,
@@ -92,7 +105,11 @@ function Base.mapreduce(
     end
 end
 
-
+function Base.mapreduce(fn::F, op::Op, column_bc::VF{S}) where {F, Op, S}
+    mapreduce(op, axes(parent(column_bc), 1)) do i
+        fn(column_bc[i])
+    end
+end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
@@ -117,6 +134,15 @@ function Base.copyto!(
     return dest
 end
 
+function Base.copyto!(
+    dest::VF{S, A},
+    bc::Base.Broadcast.Broadcasted{VFStyle{A}},
+) where {S, A}
+    @inbounds for i in 1:length(bc)
+        dest[i] = convert(S, bc[i])
+    end
+    return dest
+end
 
 
 # broadcasting scalar assignment

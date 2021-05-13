@@ -23,7 +23,7 @@ import StaticArrays: SOneTo, MArray
 #  - should some of these be subtypes of AbstractArray?
 
 import ..slab, ..column
-export slab, column, IJFH, IJF
+export slab, column, IJFH, IJF, VF
 
 include("struct.jl")
 
@@ -289,6 +289,14 @@ function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     IJF{SS, Nij}(view(array, :, :, (offset + 1):(offset + len)))
 end
 
+
+# TODO: should this return a S or a 0-d box containing S?
+#  - perhaps the latter, as then it is mutable?
+
+# function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
+#     get_struct(view(parent(ijfh), i, j, :, h), S)
+# end
+
 @inline function Base.getindex(
     ijf::IJF{S, Nij},
     i::Integer,
@@ -372,7 +380,47 @@ end
 Base.size(slab::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij)
 Base.axes(slab::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
+# Data column
+struct VF{S, A} <: DataColumn{S}
+    array::A
+end
 
+function VF{S}(array::AbstractArray{T, 2}) where {S, T}
+    VF{S, typeof(array)}(array)
+end
+
+function VF{S}(ArrayType, nelements) where {S}
+    FT = eltype(ArrayType)
+    VF{S}(ArrayType(undef, nelements, typesize(FT, S)))
+end
+
+Adapt.adapt_structure(to, data::VF{S}) where {S} =
+    VF{S}(Adapt.adapt(to, parent(data)))
+
+Base.length(data::VF) = size(parent(data), 1)
+Base.size(data::VF) = (length(data),)
+Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
+
+function Base.getproperty(data::VF{S}, i::Integer) where {S}
+    array = parent(data)
+    T = eltype(array)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    len = typesize(T, SS)
+    VF{SS}(view(array, :, (offset + 1):(offset + len)))
+end
+
+function Base.getindex(data::VF{S}, i::Integer) where {S}
+    get_struct(view(parent(data), i, :), S)
+end
+
+function Base.getindex(data::VF{S}, I::CartesianIndex{1}) where {S}
+    getindex(data, I[1])
+end
+
+function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
+    set_struct!(view(parent(data), v, :), val)
+end
 
 include("broadcast.jl")
 #include("cuda.jl")

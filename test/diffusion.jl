@@ -58,3 +58,32 @@ using OrdinaryDiffEq
 
     @test y1 ≈ f.(Fields.coordinate_field(mesh), 1.0) rtol = 1e-6
 end
+
+
+# Single column heat diffusion
+# https://github.com/CliMA/SingleColumnModels.jl/blob/master/test/PDEs/HeatEquation.jl
+@testset "Diffusion equation" begin
+    #=
+    a = FT(0.0)
+    b = FT(1.0)
+    n = 10
+    cm = Meshes.ColumnMesh(a, b, n)
+    T = Field(cm, ...; boundary_conditions = (
+            VertMin(Neumann(1)), # ∇T = q = 1
+            VertMax(Dirichlet(0))), # T = 0
+        )
+
+    # ∂ T + ∇ ⋅ (-α ∇T) = 0, α > 0
+    # ∂ T = α∇²T = 0
+    function rhs!(dydt, y, u, t)
+        apply_bcs!(cm, y)
+        dydt .= ∇²(cm, y)
+        dydt .*= α*dydt
+    end
+
+    # dydt = ....
+    # rhs!(dydt, y0, nothing, 0.0)
+    # prob = ODEProblem()
+    # solve!()
+    =#
+end

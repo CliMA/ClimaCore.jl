@@ -1,3 +1,11 @@
+abstract type Abstract1DPoint end
+
+struct Cartesian3Point{FT} <: Abstract1DPoint
+    x3::FT
+end
+
+
+
 abstract type Abstract2DPoint end
 
 components(p::Abstract2DPoint) =

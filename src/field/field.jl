@@ -2,9 +2,17 @@ module Fields
 
 import ..slab, ..column
 import ..DataLayouts
-import ..DataLayouts: AbstractData, DataStyle
-import ..Meshes
-import ..Meshes: AbstractMesh, Quadratures
+import ..DataLayouts: DataLayouts, AbstractData, DataStyle
+import ..Meshes:
+    Meshes,
+    AbstractMesh,
+    Quadratures,
+    Mesh2D,
+    ColumnMesh,
+    CellCent,
+    CellCent,
+    CellFace
+import ..Operators
 import ..Geometry
 import ..Geometry: Cartesian12Vector
 import ..RecursiveOperators
@@ -54,12 +62,16 @@ struct Field{V <: AbstractData, M <: AbstractMesh}
     function Field{V, M}(values::V, mesh::M) where {V, M}
         # need to enforce that the data size matches the mesh
         # @assert support(values) === support(mesh.coordinates)
-        @assert size(values) == size(mesh.coordinates)
+        # @assert size(values) == size(mesh.coordinates)
         return new{V, M}(values, mesh)
     end
 end
 Field(values::V, mesh::M) where {V <: AbstractData, M <: AbstractMesh} =
     Field{V, M}(values, mesh)
+
+const Field2D{V} = Field{V, <:Mesh2D}
+const FieldColumn{V} = Field{V, <:ColumnMesh}
+
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 field_values(field::Field) = getfield(field, :values)
@@ -249,13 +261,18 @@ end
 # useful operations
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
 
+weighted_jacobian(cm::ColumnMesh{CellFace}) = cm.face.Δh
+weighted_jacobian(cm::ColumnMesh{CellCent}) = cm.cent.Δh
+weighted_jacobian(m::Mesh2D) = m.local_geometry.WJ
+weighted_jacobian(field) = weighted_jacobian(mesh(field))
+
 # sum will give the integral over the field
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
     Base.reduce(
         RecursiveOperators.radd,
         Base.Broadcast.broadcasted(
             RecursiveOperators.rmul,
-            mesh(field).local_geometry.WJ,
+            weighted_jacobian(field),
             todata(field),
         ),
     )
