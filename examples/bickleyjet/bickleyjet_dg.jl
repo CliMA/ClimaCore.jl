@@ -126,6 +126,7 @@ function surface_metrics(mesh_slab, face, i, j)
         typeof(J),
         mesh_slab.quadrature_style,
     )
+    # surface mass matrix
     n = if face == 1
         -J * ∂ξ∂x[1, :] * w[j]
     elseif face == 2
@@ -194,7 +195,7 @@ rhs!(dydt, y0, nothing, 0.0);
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -217,8 +218,10 @@ png(plot(Es), joinpath(@__DIR__, "energy_dg.png"))
 
 
 
-#
+# # figpath = joinpath(figure_save_directory, "posterior_$(param)_T_$(T)_w_$(ω_true).png")
+# linkfig(figpath)
 function linkfig(figpath)
+    # buildkite-agent upload figpath
     # link figure in logs if we are running on CI
     if get(ENV, "BUILDKITE", "") == "true"
         artifact_url =
@@ -228,9 +231,3 @@ function linkfig(figpath)
         print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
     end
 end
-
-
-#
-# figpath = joinpath(figure_save_directory, "posterior_$(param)_T_$(T)_w_$(ω_true).png")
-# savefig(figpath)
-# linkfig(figpath)
