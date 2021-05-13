@@ -203,7 +203,26 @@ ENV["GKSwstype"] = "nul"
 anim = @animate for u in sol.u
     heatmap(u.ρθ, clim = (-2, 2))
 end
-mp4(anim, joinpath(@__DIR__, "bickleyjet.mp4"), fps = 10)
+mp4(anim, joinpath(@__DIR__, "bickleyjet_dg.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(@__DIR__, "energy.png"))
+png(plot(Es), joinpath(@__DIR__, "energy_dg.png"))
+
+
+
+#
+function linkfig(figpath)
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://" * join(split(figpath, '/')[end-3:end], '/')
+        alt = split(splitdir(figpath)[2], '.')[1]
+        @info "Linking Figure: $artifact_url"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+
+#
+# figpath = joinpath(figure_save_directory, "posterior_$(param)_T_$(T)_w_$(ω_true).png")
+# savefig(figpath)
+# linkfig(figpath)

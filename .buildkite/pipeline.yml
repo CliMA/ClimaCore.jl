@@ -56,13 +56,25 @@ steps:
       slurm_ntasks: 1
       slurm_gres: "gpu:1"
 
-  - label: ":computer: Bickley jet"
-    key: "cpu_bickleyjet"
+  - label: ":computer: Bickley jet CG"
+    key: "cpu_bickleyjet_cg"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet.jl"
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg.jl"
     artifact_paths:
-      - "examples/bickleyjet/*.mp4"
-      - "examples/bickleyjet/*.png"
+      - "examples/bickleyjet/bickleyjet_cg.mp4"
+      - "examples/bickleyjet/energy_cg.png"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Bickley jet DG"
+    key: "cpu_bickleyjet_dg"
+    command:
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl"
+    artifact_paths:
+      - "examples/bickleyjet/bickleyjet_dg.mp4"
+      - "examples/bickleyjet/energy_dg.png"
     agents:
       config: cpu
       queue: central
