@@ -1,6 +1,6 @@
 using Test
 using StaticArrays
-import ClimateMachineCore.DataLayouts: IJFH
+import ClimateMachineCore.DataLayouts: IJFH, VF
 import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
@@ -106,4 +106,115 @@ end
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(mesh)))) rtol =
         1e-3
+end
+#
+
+function boundary_value(
+    f::Fields.Field,
+    cm::Meshes.ColumnMesh,
+    boundary::Meshes.ColumnMinMax,
+)
+    FT = Meshes.undertype(cm)
+    column_array = parent(f)
+    if length(column_array) == Meshes.n_cells(cm)
+        column_array = parent(f)
+        ghost_index = Meshes.ghost_index(cm, Meshes.CellCent(), boundary)
+        ghost_value = column_array[ghost_index]
+        first_interior_index =
+            Meshes.interior_index(cm, Meshes.CellCent(), boundary)
+        interior_value = column_array[first_interior_index]
+        return FT((ghost_value + interior_value) / 2)
+    elseif length(column_array) == Meshes.n_faces(cm)
+        boundary_index = Meshes.boundary_index(cm, Meshes.CellFace(), boundary)
+        return column_array[boundary_index]
+    else
+        error("Bad field")
+    end
+end
+
+function ∇boundary_value(
+    f::Fields.Field,
+    cm::Meshes.ColumnMesh,
+    boundary::Meshes.ColumnMinMax,
+)
+    FT = Meshes.undertype(cm)
+    column_array = parent(f)
+    n_cells = Meshes.n_cells(cm)
+    n_faces = Meshes.n_faces(cm)
+    if length(column_array) == n_cells
+        j = boundary isa Meshes.ColumnMin ? 2 : n_faces - 1
+        i = j - 1
+        local_operator = parent(cm.∇_cent_to_face)[j]
+        local_stencil = column_array[i:(i + 1)] # TODO: remove hard-coded stencil size 2
+        return convert(
+            FT,
+            LinearAlgebra.dot(parent(local_operator), local_stencil),
+        )
+    elseif length(column_array) == n_faces
+        i = boundary isa Meshes.ColumnMin ? 2 : n_faces - 1
+        local_operator = parent(cm.∇_face_to_face)[i]
+        local_stencil = column_array[(i - 1):(i + 1)] # TODO: remove hard-coded stencil size 2
+        return convert(
+            FT,
+            LinearAlgebra.dot(parent(local_operator), local_stencil),
+        )
+    else
+        error("Bad field")
+    end
+end
+
+@testset "Test vertical column dirchlet boundry conditions" begin
+    FT = Float32
+    a = FT(0.0)
+    b = FT(1.0)
+    n = 10
+    cm = Meshes.FaceColumnMesh(a, b, n)
+
+    vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
+    vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+
+    cent_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+    face_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+
+    value = one(FT)
+    Operators.apply_dirichlet!(face_field, value, cm, Meshes.ColumnMax())
+    Operators.apply_dirichlet!(face_field, value, cm, Meshes.ColumnMin())
+
+    @test boundary_value(face_field, cm, Meshes.ColumnMin()) ≈ value
+    @test boundary_value(face_field, cm, Meshes.ColumnMax()) ≈ value
+
+    value = one(FT)
+    Operators.apply_dirichlet!(cent_field, value, cm, Meshes.ColumnMax())
+    Operators.apply_dirichlet!(cent_field, value, cm, Meshes.ColumnMin())
+
+    @test boundary_value(cent_field, cm, Meshes.ColumnMin()) ≈ value
+    @test boundary_value(cent_field, cm, Meshes.ColumnMax()) ≈ value
+end
+
+@testset "Test vertical column neumann boundry conditions" begin
+    FT = Float64
+    a = FT(0.0)
+    b = FT(1.0)
+    n = 10
+    cm = Meshes.FaceColumnMesh(a, b, n)
+
+    vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
+    vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+
+    cent_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+    face_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+
+    value = one(FT)
+    Operators.apply_neumann!(face_field, value, cm, Meshes.ColumnMin())
+    Operators.apply_neumann!(face_field, value, cm, Meshes.ColumnMax())
+
+    @test ∇boundary_value(face_field, cm, Meshes.ColumnMin()) ≈ value
+    @test ∇boundary_value(face_field, cm, Meshes.ColumnMax()) ≈ value
+
+    value = one(FT)
+    Operators.apply_neumann!(cent_field, value, cm, Meshes.ColumnMin())
+    Operators.apply_neumann!(cent_field, value, cm, Meshes.ColumnMax())
+
+    @test ∇boundary_value(cent_field, cm, Meshes.ColumnMin()) ≈ value
+    @test ∇boundary_value(cent_field, cm, Meshes.ColumnMax()) ≈ value
 end

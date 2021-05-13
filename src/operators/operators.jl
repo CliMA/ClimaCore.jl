@@ -12,6 +12,7 @@ import ..Fields
 import ..Fields: Field
 using ..RecursiveOperators
 
+import LinearAlgebra
 using StaticArrays
 
 
@@ -325,6 +326,49 @@ function slab_weak_divergence!(
 end
 
 
+# TODO: Next steps
+# be able to lookup or dispatch on column mesh,center / faces when doing operations easily
+# reformat this as a map across vertical levels with fields (so we don't have to call parent()
+# everywhere, get rid of direct indexing)
+# CellFace -> CellCenter method for easily getting local operator (could just return a contant)
+# we need to make it more generic so that 2nd order is not hard coded (check at lest 1 different order of stencil)
+# clean up the interface in general (rmatrixmultiply?), get rid of LinearAlgebra.dot()
+# vertical only fields? (split h and v)
+# make local_operators static vectors
+function vertical_interp!(field_to, field_from, cm::Meshes.ColumnMesh)
+    len_to = length(parent(field_to))
+    len_from = length(parent(field_from))
+    FT = Meshes.undertype(cm)
+    if len_from == Meshes.n_cells(cm) && len_to == Meshes.n_faces(cm) # CellCent -> CellFace
+        # TODO: should we extrapolate?
+        n_faces = Meshes.n_faces(cm)
+        for j in Meshes.column(cm, Meshes.CellCent())
+            if j > 1 && j < n_faces
+                i = j - 1
+                local_operator = parent(cm.interp_cent_to_face)[i]
+                local_stencil = parent(field_from)[i:(i + 1)] # TODO: remove hard-coded stencil size 2
+                parent(field_to)[j] = convert(
+                    FT,
+                    LinearAlgebra.dot(parent(local_operator), local_stencil),
+                )
+            end
+        end
+    elseif len_from == Meshes.n_faces(cm) && len_to == Meshes.n_cells(cm) # CellFace -> CellCent
+        local_operator = SVector{2, FT}(0.5, 0.5)
+        for i in Meshes.column(cm, Meshes.CellCent())
+            local_stencil = parent(field_from)[i:(i + 1)] # TODO: remove hard-coded stencil size 2
+            parent(field_to)[i] =
+                convert(FT, LinearAlgebra.dot(local_operator, local_stencil))
+            # field_to[i] = local_operator * local_stencil
+        end
+        # No extrapolation needed
+    elseif len_to == len_from # no interp needed
+        return copyto!(field_to, field_from)
+    else
+        error("Cannot interpolate colocated fields")
+    end
+end
+
 function slab_gradient!(∇field::Field, field::Field)
     @assert Fields.mesh(∇field) === Fields.mesh(field)
     Operators.slab_gradient!(
@@ -437,7 +481,126 @@ matrix_interpolate(field::Field, Nu::Integer) =
 
 
 
-include("plots.jl")
+function vertical_gradient!(field_to, field_from, cm::Meshes.ColumnMesh)
+    len_to = length(parent(field_to))
+    len_from = length(parent(field_from))
+    FT = Meshes.undertype(cm)
+    if len_from == Meshes.n_cells(cm) && len_to == Meshes.n_faces(cm) # CellCent -> CellFace
+        # TODO: should we extrapolate?
+        n_faces = Meshes.n_faces(cm)
+        for j in Meshes.column(cm, Meshes.CellCent())
+            if j > 1 && j < n_faces
+                i = j - 1
+                local_operator = parent(cm.∇_cent_to_face)[j]
+                local_stencil = parent(field_from)[i:(i + 1)] # TODO: remove hard-coded stencil size 2
+                parent(field_to)[j] = convert(
+                    FT,
+                    LinearAlgebra.dot(parent(local_operator), local_stencil),
+                )
+            end
+        end
+    elseif len_from == Meshes.n_faces(cm) && len_to == Meshes.n_cells(cm) # CellFace -> CellCent
+        for i in Meshes.column(cm, Meshes.CellCent())
+            local_operator = parent(cm.∇_face_to_cent)[i + 1]
+            local_stencil = parent(field_from)[i:(i + 1)] # TODO: remove hard-coded stencil size 2
+            parent(field_to)[i] = convert(
+                FT,
+                LinearAlgebra.dot(parent(local_operator), local_stencil),
+            )
+            # field_to[i] = local_operator * local_stencil
+        end
+        # No extrapolation needed
+    elseif len_to == len_from # collocated derivative
+        if len_from == Meshes.n_faces(cm) # face->face gradient
+            # TODO: should we extrapolate?
+            n_faces = Meshes.n_faces(cm)
+            for i in Meshes.column(cm, Meshes.CellFace())
+                if i > 1 && i < n_faces
+                    local_operator = parent(cm.∇_face_to_face)[i]
+                    local_stencil = parent(field_from)[(i - 1):(i + 1)] # TODO: remove hard-coded stencil size 2
+                    parent(field_to)[i] = convert(
+                        FT,
+                        LinearAlgebra.dot(
+                            parent(local_operator),
+                            local_stencil,
+                        ),
+                    )
+                end
+            end
+        elseif len_from == Meshes.n_cells(cm) # cent->cent gradient
+            # TODO: should we extrapolate?
+            n_cells = Meshes.n_cells(cm)
+            for i in Meshes.column(cm, Meshes.CellCent())
+                if i > 1 && i < n_cells
+                    local_operator = parent(cm.∇_cent_to_cent)[i]
+                    local_stencil = parent(field_from)[(i - 1):(i + 1)] # TODO: remove hard-coded stencil size 2
+                    parent(field_to)[i] = convert(
+                        FT,
+                        LinearAlgebra.dot(
+                            parent(local_operator),
+                            local_stencil,
+                        ),
+                    )
+                end
+            end
+        else
+            error("Bad field") # need to implement collocated operators
+        end
+    end
+    return field_to
+end
+
+function apply_dirichlet!(
+    field,
+    value,
+    cm::Meshes.ColumnMesh,
+    boundary::Meshes.ColumnMinMax,
+)
+    arr = parent(field)
+    len = length(arr)
+    if len == Meshes.n_faces(cm)
+        boundary_index = Meshes.boundary_index(cm, Meshes.CellFace(), boundary)
+        arr[boundary_index] = value
+    elseif len == Meshes.n_cells(cm)
+        ghost_index = Meshes.ghost_index(cm, Meshes.CellCent(), boundary)
+        interior_index = Meshes.interior_index(cm, Meshes.CellCent(), boundary)
+        arr[ghost_index] = 2 * value - arr[interior_index]
+    else
+        error("Bad field")
+    end
+    return field
+end
+
+function apply_neumann!(
+    field,
+    value,
+    cm::Meshes.ColumnMesh,
+    boundary::Meshes.ColumnMinMax,
+)
+    arr = parent(field)
+    len = length(arr)
+    if len == Meshes.n_faces(cm)
+        # ∂_x ϕ = n̂ * (ϕ_g - ϕ_i) / (2Δx) # second order accurate Neumann for CellFace data
+        # boundry_index = Meshes.boundary_index(cm, Meshes.CellFace(), boundary)
+        n̂ = Meshes.n_hat(boundary)
+        ghost_index = Meshes.ghost_index(cm, Meshes.CellFace(), boundary)
+        interior_index = Meshes.interior_index(cm, Meshes.CellFace(), boundary)
+        Δvert = Meshes.Δcoordinates(cm, Meshes.CellFace(), boundary)
+        arr[ghost_index] = arr[interior_index] + n̂ * 2 * Δvert * value
+    elseif len == Meshes.n_cells(cm)
+        # ∂_x ϕ = n̂ * (ϕ_g - ϕ_i) / Δx # second order accurate Neumann for CellCent data
+        n̂ = Meshes.n_hat(boundary)
+        ghost_index = Meshes.ghost_index(cm, Meshes.CellCent(), boundary)
+        interior_index = Meshes.interior_index(cm, Meshes.CellCent(), boundary)
+        Δvert = Meshes.Δcoordinates(cm, Meshes.CellCent(), boundary)
+        arr[ghost_index] = arr[interior_index] + n̂ * Δvert * value
+    else
+        error("Bad field")
+    end
+    return field
+end
+
 include("numericalflux.jl")
+include("plots.jl")
 
 end # module

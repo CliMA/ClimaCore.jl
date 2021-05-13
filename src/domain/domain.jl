@@ -51,6 +51,16 @@ export RectangleDomain, EquispacedRectangleDiscretization
 #  - initial conditions
 
 abstract type HorizontalDomain end
+abstract type VerticalDomain end
+
+Base.@kwdef struct IntervalDomain{FT} <: VerticalDomain
+    x3min::FT
+    x3max::FT
+end
+
+coordinate_type(::IntervalDomain{FT}) where {FT} = Geometry.Cartesian3Point{FT}
+
+
 
 # coordinates (x1,x2)
 # TODO: should we have boundary tags?
@@ -207,6 +217,18 @@ struct HorizontalMesh{D, Q} <: AbstractHorizontalMesh
     coordinates::Any
     metrics::Any
 end
+
+
+
+"""
+"""
+abstract type AbstractVerticalMesh end
+
+
+# struct VerticalMesh{D} <: AbstractVerticalMesh
+# end
+
+
 
 #=
 struct MPIHorizontalMesh <: AbstractHorizontalMesh
