@@ -1,7 +1,7 @@
 using Test
 using StaticArrays
 import ClimateMachineCore.DataLayouts: IJFH
-import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes
+import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes, Operators
 using LinearAlgebra: norm
 
 using UnicodePlots
@@ -35,7 +35,7 @@ mesh = Meshes.Mesh2D(grid_topology, quad)
     @test norm(field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
 
 
-    @test Fields.matrix_interpolate(field, 4) ≈
+    @test Operators.matrix_interpolate(field, 4) ≈
           [Complex(1.0, 1.0) for i in 1:(4 * n1), j in 1:(4 * n2)]
 
 
@@ -46,7 +46,7 @@ mesh = Meshes.Mesh2D(grid_topology, quad)
 
     heatmap(field_sin)
 
-    Fields.matrix_interpolate(field_sin, 20)
+    Operators.matrix_interpolate(field_sin, 20)
     real_field = field.re
 
     # test broadcasting
