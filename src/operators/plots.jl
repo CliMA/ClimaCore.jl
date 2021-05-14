@@ -5,7 +5,7 @@ function UnicodePlots.heatmap(field::Field; width = 80, height = 40, kwargs...)
         error("Can only plot heatmaps of scalar fields")
     end
 
-    fieldmesh = mesh(field)
+    fieldmesh = Fields.mesh(field)
     discretization = fieldmesh.topology.discretization
     n1 = discretization.n1
     n2 = discretization.n2
@@ -32,7 +32,7 @@ end
 
 
 function Plots.heatmap(field::Field; kwargs...)
-    fieldmesh = mesh(field)
+    fieldmesh = Fields.mesh(field)
     discretization = fieldmesh.topology.discretization
     n1 = discretization.n1
     n2 = discretization.n2

@@ -14,3 +14,15 @@ struct LocalGeometry{FT, M}
     "Partial derivatives of the map from `x` to `ξ`: `∂ξ∂x[i,j]` is ∂ξⁱ/∂xʲ"
     ∂ξ∂x::M
 end
+
+"""
+    SurfaceGeometry
+
+The necessary local metric information defined at each node on each surface.
+"""
+struct SurfaceGeometry{FT, N}
+    "surface Jacobian determinant, multiplied by the surface quadrature weight"
+    sWJ::FT
+    "surface outward pointing normal vector"
+    normal::N
+end

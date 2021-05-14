@@ -6,14 +6,14 @@ abstract type DataStyle <: Base.BroadcastStyle end
 abstract type DataColumnStyle <: DataStyle end
 
 
-abstract type DataSlabStyle{Nij} <: DataStyle end
+abstract type DataSlab2DStyle{Nij} <: DataStyle end
 
 # determine the parent type underlying any SubArrays
 parent_array_type(::Type{A}) where {A <: AbstractArray} = A
 parent_array_type(::Type{S}) where {S <: SubArray{T, N, A}} where {T, N, A} =
     parent_array_type(A)
 
-struct IJFStyle{Nij, A} <: DataSlabStyle{Nij} end
+struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
     IJFStyle{Nij, parent_array_type(A)}()
 
@@ -21,7 +21,7 @@ abstract type Data2DStyle{Nij} <: DataStyle end
 struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
 DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
     IJFHStyle{Nij, parent_array_type(A)}()
-DataSlabStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
+DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
 
 
 abstract type Data3DStyle <: DataStyle end
@@ -47,7 +47,7 @@ function slab(
 ) where {Nij, DS <: Data2DStyle{Nij}}
     args = map(arg -> slab(arg, inds...), bc.args)
     axes = (SOneTo(Nij), SOneTo(Nij))
-    Base.Broadcast.Broadcasted{DataSlabStyle(DS)}(bc.f, args, axes)
+    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, args, axes)
 end
 
 function Base.similar(

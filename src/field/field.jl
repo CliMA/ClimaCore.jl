@@ -3,8 +3,8 @@ module Fields
 import ..slab, ..column
 import ..DataLayouts
 import ..DataLayouts: AbstractData, DataStyle
+import ..Meshes
 import ..Meshes: AbstractMesh, Quadratures
-import ..Operators
 import ..Geometry
 import ..Geometry: Cartesian12Vector
 import ..RecursiveOperators
@@ -341,124 +341,6 @@ function interpcoord(elemrange, x::Real)
     return z, ξ
 end
 
-import ..Operators
-
-import ..Meshes
-
-function interpolate(mesh_to::AbstractMesh, field_from::Field)
-    field_to = similar(field_from, (mesh_to,), eltype(field_from))
-    interpolate!(field_to, field_from)
-end
-function interpolate!(field_to::Field, field_from::Field)
-    mesh_to = mesh(field_to)
-    mesh_from = mesh(field_from)
-    # @assert mesh_from.topology == mesh_to.topology
-
-    M = Quadratures.interpolation_matrix(
-        Float64,
-        mesh_to.quadrature_style,
-        mesh_from.quadrature_style,
-    )
-    Operators.tensor_product!(
-        field_values(field_to),
-        field_values(field_from),
-        M,
-    )
-    return field_to
-end
-
-function restrict!(field_to::Field, field_from::Field)
-    mesh_to = mesh(field_to)
-    mesh_from = mesh(field_from)
-    # @assert mesh_from.topology == mesh_to.topology
-
-    M = Quadratures.interpolation_matrix(
-        Float64,
-        mesh_from.quadrature_style,
-        mesh_to.quadrature_style,
-    )
-    Operators.tensor_product!(
-        field_values(field_to),
-        field_values(field_from),
-        M',
-    )
-    return field_to
-end
-
-function matrix_interpolate(
-    field::Field,
-    Q_interp::Quadratures.Uniform{Nu},
-) where {Nu}
-    S = eltype(field)
-    fieldmesh = mesh(field)
-    discretization = fieldmesh.topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-
-    interp_data =
-        DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
-
-    M = Quadratures.interpolation_matrix(
-        Float64,
-        Q_interp,
-        fieldmesh.quadrature_style,
-    )
-    Operators.tensor_product!(interp_data, field_values(field), M)
-    return parent(interp_data)
-end
-matrix_interpolate(field::Field, Nu::Integer) =
-    matrix_interpolate(field, Quadratures.Uniform{Nu}())
-
-function Operators.slab_gradient!(∇field::Field, field::Field)
-    @assert mesh(∇field) === mesh(field)
-    Operators.slab_gradient!(
-        field_values(∇field),
-        field_values(field),
-        mesh(field),
-    )
-    return ∇field
-end
-function Operators.slab_divergence!(divflux::Field, flux::Field)
-    @assert mesh(divflux) === mesh(flux)
-    Operators.slab_divergence!(
-        field_values(divflux),
-        field_values(flux),
-        mesh(flux),
-    )
-    return divflux
-end
-function Operators.slab_weak_divergence!(divflux::Field, flux::Field)
-    @assert mesh(divflux) === mesh(flux)
-    Operators.slab_weak_divergence!(
-        field_values(divflux),
-        field_values(flux),
-        mesh(flux),
-    )
-    return divflux
-end
-
-function Operators.slab_gradient(field::Field)
-    S = eltype(field)
-    ∇S = RecursiveOperators.rmaptype(T -> Cartesian12Vector{T}, S)
-    Operators.slab_gradient!(similar(field, ∇S), field)
-end
-
-function Operators.slab_divergence(field::Field)
-    S = eltype(field)
-    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
-    Operators.slab_divergence!(similar(field, divS), field)
-end
-function Operators.slab_weak_divergence(field::Field)
-    S = eltype(field)
-    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
-    Operators.slab_weak_divergence!(similar(field, divS), field)
-end
-
-function Meshes.horizontal_dss!(field::Field)
-    Meshes.horizontal_dss!(field_values(field), mesh(field))
-    return field
-end
-
 """
     Meshes.variational_solve!(field)
 
@@ -469,8 +351,10 @@ function Meshes.variational_solve!(field::Field)
     return field
 end
 
-
-include("plots.jl")
+function Meshes.horizontal_dss!(field::Field)
+    Meshes.horizontal_dss!(field_values(field), mesh(field))
+    return field
+end
 
 
 end # module

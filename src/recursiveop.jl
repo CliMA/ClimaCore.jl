@@ -7,7 +7,7 @@ To extend to another type `T`, define `RecursiveOperators.rmap(fn, args::T...)`
 """
 module RecursiveOperators
 
-export ⊞, ⊠
+export ⊞, ⊠, ⊟
 
 """
     rmap(fn, X...)

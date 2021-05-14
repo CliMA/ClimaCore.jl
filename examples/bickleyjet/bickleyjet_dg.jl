@@ -8,6 +8,9 @@ import ClimateMachineCore.Geometry
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
+import ClimateMachineCore.RecursiveOperators: rdiv
+
+
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
@@ -81,68 +84,9 @@ function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
-import ClimateMachineCore.RecursiveOperators: ⊠, ⊞, ⊟, rdiv, rmap
-
-function add_numerical_flux!(fn, dydt, args...)
-    Nq = Meshes.Quadratures.degrees_of_freedom(mesh.quadrature_style)
-    topology = mesh.topology
-
-    for (elem⁻, face⁻, elem⁺, face⁺, reversed) in
-        Topologies.interior_faces(topology)
-        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
-
-        dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
-
-        mesh_slab⁻ = slab(mesh, elem⁻)
-        mesh_slab⁺ = slab(mesh, elem⁺)
-
-        for q in 1:Nq
-            i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
-            i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
-            # compute the normals
-            #  TODO: we should cache these
-            sWJ⁻, n⁻ = surface_metrics(mesh_slab⁻, face⁻, i⁻, j⁻)
-            sWJ⁺, n⁺ = surface_metrics(mesh_slab⁺, face⁺, i⁺, j⁺)
-            @assert n⁻ ≈ -n⁺
-
-            nf⁻ = fn(
-                n⁻,
-                map(slab -> slab[i⁻, j⁻], arg_slabs⁻),
-                map(slab -> slab[i⁺, j⁺], arg_slabs⁺),
-            )
-
-            dydt_slab⁻[i⁻, j⁻] = dydt_slab⁻[i⁻, j⁻] ⊟ (sWJ⁻ ⊠ nf⁻)
-            dydt_slab⁺[i⁺, j⁺] = dydt_slab⁺[i⁺, j⁺] ⊞ (sWJ⁺ ⊠ nf⁻)
-        end
-    end
-end
-
-function surface_metrics(mesh_slab, face, i, j)
-    ∂ξ∂x = mesh_slab.local_geometry.∂ξ∂x[i, j]
-    J = mesh_slab.local_geometry.J[i, j]
-    _, w = Meshes.Quadratures.quadrature_points(
-        typeof(J),
-        mesh_slab.quadrature_style,
-    )
-    # surface mass matrix
-    n = if face == 1
-        -J * ∂ξ∂x[1, :] * w[j]
-    elseif face == 2
-        J * ∂ξ∂x[1, :] * w[j]
-    elseif face == 3
-        -J * ∂ξ∂x[2, :] * w[i]
-    elseif face == 4
-        J * ∂ξ∂x[2, :] * w[i]
-    end
-    sWJ = norm(n)
-    n = n / sWJ
-    return sWJ, Cartesian12Vector(n...)
-end
 
 
-function rhs!(dydt, y, _, t)
+function rhs!(dydt, y, parameters, t)
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
     #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
@@ -162,12 +106,13 @@ function rhs!(dydt, y, _, t)
     F = flux.(y, Ref(parameters))
     dydt .= Operators.slab_weak_divergence(F)
 
-    # [i/j,  field, face, elem]
-    add_numerical_flux!(dydt, y) do n, (y⁻,), (y⁺,)
-        Favg = rdiv(flux(y⁻, parameters) ⊞ flux(y⁺, parameters), 2)
-        λ = sqrt(parameters.g)
-        rmap(f -> f' * n, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
-    end
+    wavespeed(y, p) = sqrt(p.g)
+    Operators.add_numerical_flux_internal!(
+        Operators.RusanovNumericalFlux(flux, wavespeed),
+        dydt,
+        y,
+        parameters,
+    )
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
@@ -185,17 +130,12 @@ end
 
 
 
-
-# Next steps:
-# 1. add the above to the design docs (divergence + over-integration + DSS)
-# 2. add boundary conditions
-
 dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
-rhs!(dydt, y0, nothing, 0.0);
+rhs!(dydt, y0, parameters, 0.0);
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0), parameters)
 sol = solve(
     prob,
     SSPRK33(),
