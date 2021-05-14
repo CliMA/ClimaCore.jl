@@ -22,7 +22,6 @@ const parameters = (
     g = 10,
 )
 
-
 domain = Domains.RectangleDomain(
     x1min = -2π,
     x1max = 2π,
@@ -144,6 +143,8 @@ function surface_metrics(mesh_slab, face, i, j)
     return sWJ, Cartesian12Vector(n...)
 end
 
+roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
+    (sqrt(ρ⁻) * var⁻ + sqrt(ρ⁺) * var⁺) / (sqrt(ρ⁻) + sqrt(ρ⁺))
 
 function rhs!(dydt, y, _, t)
 
@@ -169,7 +170,62 @@ function rhs!(dydt, y, _, t)
     add_numerical_flux!(dydt, y) do n, (y⁻,), (y⁺,)
         Favg = rdiv(flux(y⁻, parameters) ⊞ flux(y⁺, parameters), 2)
         λ = sqrt(parameters.g)
-        rmap(f -> f' * n, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+        ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
+        ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
+
+        u⁻ = ρu⁻ / ρ⁻
+        θ⁻ = ρθ⁻ / ρ⁻
+        uₙ⁻ = u⁻' * n
+
+        u⁺ = ρu⁺ / ρ⁺
+        θ⁺ = ρθ⁺ / ρ⁺
+        uₙ⁺ = u⁺' * n
+
+        # in general thermodynamics, (pressure, soundspeed)
+        p⁻ = (λ * ρ⁻)^2 * 0.5
+        c⁻ = λ * sqrt(ρ⁻)
+
+        p⁺ = (λ * ρ⁺)^2 * 0.5
+        c⁺ = λ * sqrt(ρ⁺)
+
+        # construct roe averges
+        ρ = sqrt(ρ⁻ * ρ⁺)
+        u = roe_average(ρ⁻, ρ⁺, u⁻, u⁺)
+        θ = roe_average(ρ⁻, ρ⁺, θ⁻, θ⁺)
+        c = roe_average(ρ⁻, ρ⁺, c⁻, c⁺)
+
+        # construct normal velocity
+        uₙ = u' * n
+
+        # differences
+        Δρ = ρ⁺ - ρ⁻
+        Δp = p⁺ - p⁻
+        Δu = u⁺ - u⁻
+        Δρθ = ρθ⁺ - ρθ⁻
+        Δuₙ = Δu' * n
+
+        # constructed values
+        c⁻² = 1 / c^2
+        w1 = abs(uₙ - c) * (Δp - ρ * c * Δuₙ) * 0.5 * c⁻²
+        w2 = abs(uₙ + c) * (Δp + ρ * c * Δuₙ) * 0.5 * c⁻²
+        w3 = abs(uₙ) * (Δρ - Δp * c⁻²)
+        w4 = abs(uₙ) * ρ
+        w5 = abs(uₙ) * (Δρθ - θ * Δp * c⁻²)
+
+        # fluxes!!!
+
+        fluxᵀn_ρ = (w1 + w2 + w3) * 0.5
+        fluxᵀn_ρu =
+            (
+                w1 * (u - c * n) +
+                w2 * (u + c * n) +
+                w3 * u +
+                w4 * (Δu - Δuₙ * n)
+            ) * 0.5
+        fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
+
+        Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
+        rmap(f -> f' * n, Favg) ⊞ Δf
     end
 
     # 6. Solve for final result
@@ -214,10 +270,10 @@ ENV["GKSwstype"] = "nul"
 anim = @animate for u in sol.u
     heatmap(u.ρθ, clim = (-1, 1), color = :balance)
 end
-mp4(anim, joinpath(@__DIR__, "bickleyjet_dg.mp4"), fps = 10)
+mp4(anim, joinpath(@__DIR__, "bickleyjet_dg_roe.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(@__DIR__, "energy_dg.png"))
+png(plot(Es), joinpath(@__DIR__, "energy_dg_roe.png"))
 
 
 

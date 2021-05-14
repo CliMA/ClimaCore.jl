@@ -50,11 +50,13 @@ function init_state(x, p)
 
     # set initial velocity
     U₁ = cosh(x2)^(-2)
-    Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x1) * cos(p.k * x2)
 
-    ## Vortical velocity fields
-    u₁′ = Ψ′ * (p.k * tan(p.k * x2) + x2 / p.l^2)
-    u₂′ = -Ψ′ * (p.k * tan(p.k * x1))
+    ## Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x1) * cos(p.k * x2)
+    ## Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
+    gaussian = exp(-(x2 + p.l / 10)^2 / 2p.l^2)
+    u₁′ = gaussian * (x2 + p.l / 10) / p.l^2 * cos(p.k * x1) * cos(p.k * x2)
+    u₁′ += p.k * gaussian * cos(p.k * x1) * sin(p.k * x2)
+    u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
 
     u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
@@ -165,7 +167,7 @@ using Plots
 ENV["GKSwstype"] = "nul"
 
 anim = @animate for u in sol.u
-    heatmap(u.ρθ, clim = (-2, 2))
+    heatmap(u.ρθ, clim = (-1, 1), color = :balance)
 end
 mp4(anim, joinpath(@__DIR__, "bickleyjet_cg.mp4"), fps = 10)
 
