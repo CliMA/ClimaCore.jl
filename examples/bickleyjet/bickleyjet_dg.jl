@@ -8,7 +8,8 @@ import ClimateMachineCore.Geometry
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-import ClimateMachineCore.RecursiveOperators: rdiv
+using ClimateMachineCore.RecursiveOperators
+using ClimateMachineCore.RecursiveOperators: rdiv, rmap
 
 
 using Logging: global_logger
@@ -152,9 +153,9 @@ end
 numflux_name = get(ARGS, 1, "rusanov")
 
 numflux = if numflux_name == "central"
-    CentralNumericalFlux(flux)
+    Operators.CentralNumericalFlux(flux)
 elseif numflux_name == "rusanov"
-    RusanovNumericalFlux(flux, wavespeed)
+    Operators.RusanovNumericalFlux(flux, wavespeed)
 elseif numflux_name == "roe"
     roeflux
 end

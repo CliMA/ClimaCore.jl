@@ -118,7 +118,7 @@ function rhs!(dydt, y, _, t)
         Imesh_slab = slab(Imesh, h)
 
         # 1. Interpolate to higher-order mesh
-        Iy_slab = Fields.interpolate(Imesh_slab, y_slab)
+        Iy_slab = Operators.interpolate(Imesh_slab, y_slab)
 
         # 2. compute fluxes
         #  flux.(I K y)
@@ -130,7 +130,7 @@ function rhs!(dydt, y, _, t)
 
         # 4. "back" interpolate to regular mesh
         #  I' [DH' WH JH flux.(I K y)]
-        Fields.restrict!(dydt_slab, WdivF_slab)
+        Operators.restrict!(dydt_slab, WdivF_slab)
     end
 
     # 5. Apply DSS gather operator
