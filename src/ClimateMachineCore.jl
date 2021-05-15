@@ -7,8 +7,8 @@ include("geometry/geometry.jl")
 include("domain/domain.jl")
 include("topology/topology.jl")
 include("mesh/mesh.jl")
-include("operators/operators.jl")
 include("field/field.jl")
+include("operators/operators.jl")
 
 
 end # module

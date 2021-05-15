@@ -68,13 +68,25 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Bickley jet DG"
-    key: "cpu_bickleyjet_dg"
+  - label: ":computer: Bickley jet DG rusanov"
+    key: "cpu_bickleyjet_dg_rusanov"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl"
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl rusanov"
     artifact_paths:
-      - "examples/bickleyjet/bickleyjet_dg.mp4"
-      - "examples/bickleyjet/energy_dg.png"
+      - "examples/bickleyjet/bickleyjet_dg_rusanov.mp4"
+      - "examples/bickleyjet/energy_dg_rusanov.png"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Bickley jet DG roe"
+    key: "cpu_bickleyjet_dg_roe"
+    command:
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe"
+    artifact_paths:
+      - "examples/bickleyjet/bickleyjet_dg_roe.mp4"
+      - "examples/bickleyjet/energy_dg_roe.png"
     agents:
       config: cpu
       queue: central

@@ -8,6 +8,10 @@ import ClimateMachineCore.Geometry
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
+using ClimateMachineCore.RecursiveOperators
+using ClimateMachineCore.RecursiveOperators: rdiv, rmap
+
+
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
@@ -81,68 +85,83 @@ function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
-import ClimateMachineCore.RecursiveOperators: ⊠, ⊞, ⊟, rdiv, rmap
+# numerical fluxes
+wavespeed(y, parameters) = sqrt(parameters.g)
 
-function add_numerical_flux!(fn, dydt, args...)
-    Nq = Meshes.Quadratures.degrees_of_freedom(mesh.quadrature_style)
-    topology = mesh.topology
+roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
+    (sqrt(ρ⁻) * var⁻ + sqrt(ρ⁺) * var⁺) / (sqrt(ρ⁻) + sqrt(ρ⁺))
 
-    for (elem⁻, face⁻, elem⁺, face⁺, reversed) in
-        Topologies.interior_faces(topology)
-        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
+function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
+    Favg = rdiv(flux(y⁻, parameters⁻) ⊞ flux(y⁺, parameters⁺), 2)
 
-        dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
+    λ = sqrt(parameters⁻.g)
 
-        mesh_slab⁻ = slab(mesh, elem⁻)
-        mesh_slab⁺ = slab(mesh, elem⁺)
+    ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
+    ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
 
-        for q in 1:Nq
-            i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
-            i⁺, j⁺ = Topologies.face_node_index(face⁺, Nq, q, reversed)
-            # compute the normals
-            #  TODO: we should cache these
-            sWJ⁻, n⁻ = surface_metrics(mesh_slab⁻, face⁻, i⁻, j⁻)
-            sWJ⁺, n⁺ = surface_metrics(mesh_slab⁺, face⁺, i⁺, j⁺)
-            @assert n⁻ ≈ -n⁺
+    u⁻ = ρu⁻ / ρ⁻
+    θ⁻ = ρθ⁻ / ρ⁻
+    uₙ⁻ = u⁻' * n
 
-            nf⁻ = fn(
-                n⁻,
-                map(slab -> slab[i⁻, j⁻], arg_slabs⁻),
-                map(slab -> slab[i⁺, j⁺], arg_slabs⁺),
-            )
+    u⁺ = ρu⁺ / ρ⁺
+    θ⁺ = ρθ⁺ / ρ⁺
+    uₙ⁺ = u⁺' * n
 
-            dydt_slab⁻[i⁻, j⁻] = dydt_slab⁻[i⁻, j⁻] ⊟ (sWJ⁻ ⊠ nf⁻)
-            dydt_slab⁺[i⁺, j⁺] = dydt_slab⁺[i⁺, j⁺] ⊞ (sWJ⁺ ⊠ nf⁻)
-        end
-    end
+    # in general thermodynamics, (pressure, soundspeed)
+    p⁻ = (λ * ρ⁻)^2 * 0.5
+    c⁻ = λ * sqrt(ρ⁻)
+
+    p⁺ = (λ * ρ⁺)^2 * 0.5
+    c⁺ = λ * sqrt(ρ⁺)
+
+    # construct roe averges
+    ρ = sqrt(ρ⁻ * ρ⁺)
+    u = roe_average(ρ⁻, ρ⁺, u⁻, u⁺)
+    θ = roe_average(ρ⁻, ρ⁺, θ⁻, θ⁺)
+    c = roe_average(ρ⁻, ρ⁺, c⁻, c⁺)
+
+    # construct normal velocity
+    uₙ = u' * n
+
+    # differences
+    Δρ = ρ⁺ - ρ⁻
+    Δp = p⁺ - p⁻
+    Δu = u⁺ - u⁻
+    Δρθ = ρθ⁺ - ρθ⁻
+    Δuₙ = Δu' * n
+
+    # constructed values
+    c⁻² = 1 / c^2
+    w1 = abs(uₙ - c) * (Δp - ρ * c * Δuₙ) * 0.5 * c⁻²
+    w2 = abs(uₙ + c) * (Δp + ρ * c * Δuₙ) * 0.5 * c⁻²
+    w3 = abs(uₙ) * (Δρ - Δp * c⁻²)
+    w4 = abs(uₙ) * ρ
+    w5 = abs(uₙ) * (Δρθ - θ * Δp * c⁻²)
+
+    # fluxes!!!
+
+    fluxᵀn_ρ = (w1 + w2 + w3) * 0.5
+    fluxᵀn_ρu =
+        (w1 * (u - c * n) + w2 * (u + c * n) + w3 * u + w4 * (Δu - Δuₙ * n)) *
+        0.5
+    fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
+
+    Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
+    rmap(f -> f' * n, Favg) ⊞ Δf
 end
 
-function surface_metrics(mesh_slab, face, i, j)
-    ∂ξ∂x = mesh_slab.local_geometry.∂ξ∂x[i, j]
-    J = mesh_slab.local_geometry.J[i, j]
-    _, w = Meshes.Quadratures.quadrature_points(
-        typeof(J),
-        mesh_slab.quadrature_style,
-    )
-    # surface mass matrix
-    n = if face == 1
-        -J * ∂ξ∂x[1, :] * w[j]
-    elseif face == 2
-        J * ∂ξ∂x[1, :] * w[j]
-    elseif face == 3
-        -J * ∂ξ∂x[2, :] * w[i]
-    elseif face == 4
-        J * ∂ξ∂x[2, :] * w[i]
-    end
-    sWJ = norm(n)
-    n = n / sWJ
-    return sWJ, Cartesian12Vector(n...)
+numflux_name = get(ARGS, 1, "rusanov")
+
+numflux = if numflux_name == "central"
+    Operators.CentralNumericalFlux(flux)
+elseif numflux_name == "rusanov"
+    Operators.RusanovNumericalFlux(flux, wavespeed)
+elseif numflux_name == "roe"
+    roeflux
 end
 
 
-function rhs!(dydt, y, _, t)
+function rhs!(dydt, y, (parameters, numflux), t)
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
     #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
@@ -162,12 +181,7 @@ function rhs!(dydt, y, _, t)
     F = flux.(y, Ref(parameters))
     dydt .= Operators.slab_weak_divergence(F)
 
-    # [i/j,  field, face, elem]
-    add_numerical_flux!(dydt, y) do n, (y⁻,), (y⁺,)
-        Favg = rdiv(flux(y⁻, parameters) ⊞ flux(y⁺, parameters), 2)
-        λ = sqrt(parameters.g)
-        rmap(f -> f' * n, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
-    end
+    Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
@@ -183,19 +197,11 @@ function rhs!(dydt, y, _, t)
     return dydt
 end
 
-
-
-
-# Next steps:
-# 1. add the above to the design docs (divergence + over-integration + DSS)
-# 2. add boundary conditions
-
 dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
-rhs!(dydt, y0, nothing, 0.0);
-
+rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
 sol = solve(
     prob,
     SSPRK33(),
@@ -209,12 +215,12 @@ using Plots
 ENV["GKSwstype"] = "nul"
 
 anim = @animate for u in sol.u
-    heatmap(u.ρθ, clim = (-2, 2))
+    heatmap(u.ρθ, clim = (-2, 2), color = :balance)
 end
-mp4(anim, joinpath(@__DIR__, "bickleyjet_dg.mp4"), fps = 10)
+mp4(anim, joinpath(@__DIR__, "bickleyjet_dg_$numflux_name.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(@__DIR__, "energy_dg.png"))
+png(plot(Es), joinpath(@__DIR__, "energy_dg_$numflux_name.png"))
 
 
 

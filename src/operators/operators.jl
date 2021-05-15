@@ -1,13 +1,15 @@
 module Operators
 
 import ..slab
-import ..DataLayouts: Data2D, DataSlab
+import ..DataLayouts: Data2D, DataSlab2D
 import ..DataLayouts
 import ..Geometry
 import ..Geometry: Cartesian12Vector, Covariant12Vector, Contravariant12Vector
 import ..Meshes
-import ..Meshes.Quadratures
+import ..Meshes: Quadratures, AbstractMesh
 import ..Topologies
+import ..Fields
+import ..Fields: Field
 using ..RecursiveOperators
 
 using StaticArrays
@@ -61,8 +63,8 @@ end
 Computes the tensor product `out = (M ⊗ M) * in` on each element.
 """
 function tensor_product!(
-    out_slab::DataLayouts.DataSlab{S, Nij_out},
-    in_slab::DataLayouts.DataSlab{S, Nij_in},
+    out_slab::DataLayouts.DataSlab2D{S, Nij_out},
+    in_slab::DataLayouts.DataSlab2D{S, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
 
@@ -276,8 +278,8 @@ function slab_weak_divergence!(divflux, flux, mesh)
 end
 
 function slab_weak_divergence!(
-    divflux_slab::DataLayouts.DataSlab,
-    flux_slab::DataLayouts.DataSlab,
+    divflux_slab::DataLayouts.DataSlab2D,
+    flux_slab::DataLayouts.DataSlab2D,
     mesh_slab::Meshes.MeshSlab,
 )
     # all derivatives calculated in the reference local geometry with FT precision
@@ -322,5 +324,120 @@ function slab_weak_divergence!(
     return divflux_slab
 end
 
+
+function slab_gradient!(∇field::Field, field::Field)
+    @assert Fields.mesh(∇field) === Fields.mesh(field)
+    Operators.slab_gradient!(
+        Fields.field_values(∇field),
+        Fields.field_values(field),
+        Fields.mesh(field),
+    )
+    return ∇field
+end
+function slab_divergence!(divflux::Field, flux::Field)
+    @assert Fields.mesh(divflux) === Fields.mesh(flux)
+    Operators.slab_divergence!(
+        Fields.field_values(divflux),
+        Fields.field_values(flux),
+        Fields.mesh(flux),
+    )
+    return divflux
+end
+function slab_weak_divergence!(divflux::Field, flux::Field)
+    @assert Fields.mesh(divflux) === Fields.mesh(flux)
+    Operators.slab_weak_divergence!(
+        Fields.field_values(divflux),
+        Fields.field_values(flux),
+        Fields.mesh(flux),
+    )
+    return divflux
+end
+
+function slab_gradient(field::Field)
+    S = eltype(field)
+    ∇S = RecursiveOperators.rmaptype(T -> Cartesian12Vector{T}, S)
+    Operators.slab_gradient!(similar(field, ∇S), field)
+end
+
+function slab_divergence(field::Field)
+    S = eltype(field)
+    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
+    Operators.slab_divergence!(similar(field, divS), field)
+end
+function slab_weak_divergence(field::Field)
+    S = eltype(field)
+    divS = RecursiveOperators.rmaptype(Geometry.divergence_result_type, S)
+    Operators.slab_weak_divergence!(similar(field, divS), field)
+end
+
+
+function interpolate(mesh_to::AbstractMesh, field_from::Field)
+    field_to = similar(field_from, (mesh_to,), eltype(field_from))
+    interpolate!(field_to, field_from)
+end
+function interpolate!(field_to::Field, field_from::Field)
+    mesh_to = Fields.mesh(field_to)
+    mesh_from = Fields.mesh(field_from)
+    # @assert mesh_from.topology == mesh_to.topology
+
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        mesh_to.quadrature_style,
+        mesh_from.quadrature_style,
+    )
+    Operators.tensor_product!(
+        Fields.field_values(field_to),
+        Fields.field_values(field_from),
+        M,
+    )
+    return field_to
+end
+
+function restrict!(field_to::Field, field_from::Field)
+    mesh_to = Fields.mesh(field_to)
+    mesh_from = Fields.mesh(field_from)
+    # @assert mesh_from.topology == mesh_to.topology
+
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        mesh_from.quadrature_style,
+        mesh_to.quadrature_style,
+    )
+    Operators.tensor_product!(
+        Fields.field_values(field_to),
+        Fields.field_values(field_from),
+        M',
+    )
+    return field_to
+end
+
+function matrix_interpolate(
+    field::Field,
+    Q_interp::Quadratures.Uniform{Nu},
+) where {Nu}
+    S = eltype(field)
+    fieldmesh = Fields.mesh(field)
+    discretization = fieldmesh.topology.discretization
+    n1 = discretization.n1
+    n2 = discretization.n2
+
+    interp_data =
+        DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
+
+    M = Quadratures.interpolation_matrix(
+        Float64,
+        Q_interp,
+        fieldmesh.quadrature_style,
+    )
+    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    return parent(interp_data)
+end
+matrix_interpolate(field::Field, Nu::Integer) =
+    matrix_interpolate(field, Quadratures.Uniform{Nu}())
+
+
+
+include("plots.jl")
+include("numericalflux.jl")
 
 end # module
