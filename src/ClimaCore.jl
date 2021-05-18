@@ -1,5 +1,6 @@
 module ClimaCore
 
+include("utilities/tictoc/tictoc.jl")
 include("interface.jl")
 include("RecursiveApply/RecursiveApply.jl")
 include("DataLayouts/DataLayouts.jl")
