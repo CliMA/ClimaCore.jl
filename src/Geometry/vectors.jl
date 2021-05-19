@@ -111,7 +111,7 @@ abstract type AbstractContravariantVector{N, FT} <: CustomAxisFieldVector{N, FT}
 """
     Contravariant12Vector
 
-A vector point value represented as the first two contavariant coordinates.
+A vector point value represented as the first two contravariant coordinates.
 """
 struct Contravariant12Vector{FT} <: AbstractContravariantVector{2, FT}
     u¹::FT
@@ -120,6 +120,17 @@ end
 Base.axes(::Type{Contravariant12Vector{FT}}) where {FT} =
     (ContravariantAxis(StaticArrays.SOneTo(2)),)
 
+
+"""
+    Contravariant3Vector
+
+A vector point value represented as the third contravariant coordinates.
+"""
+struct Contravariant3Vector{FT} <: AbstractContravariantVector{1, FT}
+    u³::FT
+end
+Base.axes(::Type{Contravariant3Vector{FT}}) where {FT} =
+    (ContravariantAxis(StaticArrays.SUnitRange(3,3)),)
 
 #Base.:(*)(u::Contravariant12Vector,)
 # Sphere:
@@ -173,6 +184,16 @@ Required for statically infering the result type of the divergence operation for
 """
 divergence_result_type(::Type{V}) where {V <: CustomAxisFieldVector} = eltype(V)
 
+function norm²(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
+    u = Cartesian12Vector(uᵢ, local_geometry)
+    abs2(u.u1) + abs2(u.u2)
+end
+LinearAlgebra.norm(u::CustomAxisFieldVector, local_geometry::LocalGeometry) = sqrt(norm²(u, local_geometry))
+
+
+function LinearAlgebra.cross(u::Contravariant12Vector, v::Contravariant3Vector)
+    Covariant12Vector(u.u²*v.u³,  -u.u¹*v.u³)
+end
 
 # tensors
 
@@ -267,7 +288,6 @@ function contravariant2(
 ) where {FT, V}
     V((local_geometry.∂ξ∂x[2, :]' * A.matrix)...)
 end
-
 
 #=
 
