@@ -75,7 +75,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
     end
     # compute invM from WJ:
     # M = dss(WJ)
-    horizontal_dss!(local_geometry.invM, topology, Nq)
+    horizontal_dss!(local_geometry.invM, local_geometry.invM, topology, Nq)
     # invM = inv.(M)
     local_geometry.invM .= inv.(local_geometry.invM)
 

@@ -152,7 +152,7 @@ rhs!(dydt, y0, nothing, 0.0);
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0))
+prob = ODEProblem(rhs!, y0, (0.0, 80.0))
 sol = solve(
     prob,
     SSPRK33(),
