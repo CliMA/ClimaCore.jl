@@ -182,6 +182,55 @@ function slab_divergence!(divflux, flux, space)
     return divflux
 end
 
+function slab_curl!(curlvec, vec, mesh)
+    # all derivatives calculated in the reference local geometry with FT precision
+    FT = Meshes.undertype(mesh)
+    D = Quadratures.differentiation_matrix(FT, mesh.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(mesh.quadrature_style)
+
+    # for each element in the element stack
+    Nh = length(flux)
+    for h in 1:Nh
+        curlvec = slab(curlvec, h)
+        vec_slab = slab(vec, h)
+        local_geometry_slab = slab(mesh.local_geometry, h)
+
+        ST = eltype(divflux)
+        # Shared on GPU
+        v₁ = MArray{Tuple{Nq, Nq}, ST, 2, Nq * Nq}(undef)
+        v₂ = MArray{Tuple{Nq, Nq}, ST, 2, Nq * Nq}(undef)
+        for i in 1:Nq, j in 1:Nq
+            local_geometry = local_geometry_slab[i, j]
+            # compute flux in contravariant coordinates (v¹,v²)
+            # alternatively we could do this conversion _after_ taking the derivatives
+            # may have an effect on the accuracy
+            # materialize if lazy
+            F = flux_slab[i, j]
+            v₁[i, j] = RecursiveOperators.rmap(
+                x ->
+                    Geometry.covariant1(x, local_geometry),
+                F,
+            )
+            v₂[i, j] = RecursiveOperators.rmap(
+                x ->
+                    Geometry.covariant2(x, local_geometry),
+                F,
+            )
+        end
+        # GPU synchronize
+
+        for i in 1:Nq, j in 1:Nq
+            local_geometry = local_geometry_slab[i, j]
+            # compute spectral deriv along first dimension
+            ∂₁v₂ = RecursiveOperators.rmatmul1(D, v₂, i, j)
+            # compute spectral deriv along second dimension
+            ∂₂v₁ = RecursiveOperators.rmatmul2(D, v₁, i, j)
+            curlvec_slab[i, j] = Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
+        end
+    end
+    return curlvec
+end
+
 
 
 """
