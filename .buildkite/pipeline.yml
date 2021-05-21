@@ -12,6 +12,7 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -87,6 +88,17 @@ steps:
     artifact_paths:
       - "examples/bickleyjet/bickleyjet_dg_roe.mp4"
       - "examples/bickleyjet/energy_dg_roe.png"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: :fast_forward: Bickley jet DG roe"
+    key: "cpu_benchmark_bickleyjet_dg_roe"
+    command:
+      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/bickleyjet_dg_reference.jl"
+    artifact_paths:
+      - "benchmarks/bickleyjet/times.png"
     agents:
       config: cpu
       queue: central
