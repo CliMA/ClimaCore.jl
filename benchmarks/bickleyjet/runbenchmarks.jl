@@ -38,7 +38,9 @@ for Nq in Nqs
     @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
     # run benchmarks
+    @info("Benchmark volume!", Nq)
     push!(volTs, @belapsed volume!($dydt, $y0, ($parameters,), 0.0))
+    @info("Benchmark volume_ref!", Nq)
     push!(
         volRs,
         @belapsed volume_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
@@ -56,7 +58,9 @@ for Nq in Nqs
 
     @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
+    @info("Benchmark face!", Nq)
     push!(faceTs, @belapsed add_face!($dydt, $y0, ($parameters,), 0.0))
+    @info("Benchmark face_ref!", Nq)
     push!(
         faceRs,
         @belapsed add_face_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
@@ -96,5 +100,5 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("benchmarks/bickleyjet/volume.png", alt = "Volume benchmarks")
-linkfig("benchmarks/bickleyjet/face.png", alt = "Face benchmarks")
+linkfig("benchmarks/bickleyjet/volume.png", "Volume benchmarks")
+linkfig("benchmarks/bickleyjet/face.png", "Face benchmarks")
