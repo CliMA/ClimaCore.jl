@@ -93,12 +93,12 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: :fast_forward: Bickley jet DG roe"
-    key: "cpu_benchmark_bickleyjet_dg_roe"
+  - label: ":computer: :fast_forward: Bickley jet DG"
+    key: "cpu_benchmark_bickleyjet_dg"
     command:
       - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/bickleyjet_dg_reference.jl"
     artifact_paths:
-      - "benchmarks/bickleyjet/times.png"
+      - "benchmarks/bickleyjet/*.png"
     agents:
       config: cpu
       queue: central
