@@ -85,3 +85,16 @@ plot!(plt, Nqs, 1e3 .* faceTs, label = "ClimateMachineCore")
 plot!(plt, Nqs, 1e3 .* faceRs, label = "Reference")
 
 png(plt, joinpath(@__DIR__, "face.png"))
+
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig("benchmarks/bickleyjet/volume.png", alt = "Volume benchmarks")
+linkfig("benchmarks/bickleyjet/face.png", alt = "Face benchmarks")
