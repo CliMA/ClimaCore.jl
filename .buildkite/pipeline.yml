@@ -96,7 +96,7 @@ steps:
   - label: ":computer: :fast_forward: Bickley jet DG"
     key: "cpu_benchmark_bickleyjet_dg"
     command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/bickleyjet_dg_reference.jl"
+      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/runbenchmarks.jl"
     artifact_paths:
       - "benchmarks/bickleyjet/*.png"
     agents:
