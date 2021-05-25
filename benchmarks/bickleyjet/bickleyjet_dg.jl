@@ -1,5 +1,5 @@
 using LinearAlgebra
-using UnPack, StaticArrays
+using UnPack, StaticArrays, IntervalSets
 
 import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore: slab
