@@ -5,7 +5,7 @@ import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
-using LinearAlgebra
+using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using ClimateMachineCore.RecursiveOperators
@@ -26,14 +26,11 @@ const parameters = (
     g = 10,
 )
 
-
 domain = Domains.RectangleDomain(
-    x1min = -2π,
-    x1max = 2π,
-    x2min = -2π,
-    x2max = 2π,
+    -2π..2π,
+    -2π..2π,
     x1periodic = true,
-    x2periodic = true,
+    x2periodic = get(ARGS, 2, "") == "noslip",
 )
 
 n1, n2 = 16, 16
@@ -163,7 +160,6 @@ elseif numflux_name == "roe"
     roeflux
 end
 
-
 function rhs!(dydt, y, (parameters, numflux), t)
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
@@ -185,6 +181,15 @@ function rhs!(dydt, y, (parameters, numflux), t)
     dydt .= Operators.slab_weak_divergence(F)
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
+
+    Operators.add_numerical_flux_boundary!(
+        dydt,
+        y,
+        parameters,
+    ) do normal, (y⁻, parameters)
+        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu .- dot(y⁻.ρu, normal) .* normal, ρθ = y⁻.ρθ)
+        numflux(normal, (y⁻, parameters), (y⁺, parameters))
+    end
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)

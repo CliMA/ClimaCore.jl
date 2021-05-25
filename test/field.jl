@@ -1,5 +1,5 @@
 using Test
-using StaticArrays
+using StaticArrays, IntervalSets
 import ClimateMachineCore.DataLayouts: IJFH
 import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes, Operators
 using LinearAlgebra: norm
@@ -7,10 +7,8 @@ using LinearAlgebra: norm
 using UnicodePlots
 
 domain = Domains.RectangleDomain(
-    x1min = -3.0,
-    x1max = 5.0,
-    x2min = -2.0,
-    x2max = 8.0,
+    -3..5,
+    -2..8,
     x1periodic = false,
     x2periodic = false,
 )

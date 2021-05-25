@@ -124,15 +124,22 @@ struct InteriorFaceIterator{T <: AbstractTopology}
     topology::T
 end
 
+"""
+    boundaries(topology)
+
+A `Tuple` or `NamedTuple` of the boundary tags of the topology. A boundary tag
+is an integer that uniquely identifies a boundary.
+"""
+function boundaries end
 
 """
-    boundary_faces(topology, boundary)
+    boundary_faces(topology, boundarytag)
 
-An iterator over the faces of `topology` which face boundary `boundary`.
-Each element of the iterator is an `(elem, face)` pair.
+An iterator over the faces of `topology` which face the boundary with tag
+`boundarytag`. Each element of the iterator is an `(elem, face)` pair.
 """
-function boundary_faces(topology, boundary)
-    BoundaryFaceIterator(topology, boundary)
+function boundary_faces(topology, boundarytag::Integer)
+    BoundaryFaceIterator(topology, boundarytag)
 end
 
 struct BoundaryFaceIterator{T}
