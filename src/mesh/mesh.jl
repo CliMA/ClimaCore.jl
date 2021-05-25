@@ -40,7 +40,7 @@ struct Mesh2D{T, Q, C, G, IS, BS} <: AbstractMesh
     coordinates::C
     local_geometry::G
     internal_surface_geometry::IS
-    boundary_surface_geometry::BS
+    boundary_surface_geometries::BS
 end
 
 Topologies.nlocalelems(mesh::AbstractMesh) =
@@ -145,7 +145,28 @@ function Mesh2D(topology, quadrature_style)
         end
     end
 
-    boundary_surface_geometry = ()
+    boundary_surface_geometries =
+        map(Topologies.boundaries(topology)) do boundarytag
+            boundary_faces = Topologies.boundary_faces(topology, boundarytag)
+            boundary_surface_geometry =
+                DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
+            for (iface, (elem, face)) in enumerate(boundary_faces)
+                boundary_surface_geometry_slab =
+                    slab(boundary_surface_geometry, iface)
+                local_geometry_slab = slab(local_geometry, elem)
+                for q in 1:Nq
+                    boundary_surface_geometry_slab[q] =
+                        compute_surface_geometry(
+                            local_geometry_slab,
+                            quad_weights,
+                            face,
+                            q,
+                            false,
+                        )
+                end
+            end
+            boundary_surface_geometry
+        end
 
     return Mesh2D(
         topology,
@@ -153,7 +174,7 @@ function Mesh2D(topology, quadrature_style)
         coordinates,
         local_geometry,
         internal_surface_geometry,
-        boundary_surface_geometry,
+        boundary_surface_geometries,
     )
 end
 

@@ -55,13 +55,13 @@ abstract type HorizontalDomain end
 # coordinates (x1,x2)
 # TODO: should we have boundary tags?
 # or just specify using the same numbering we use for faces?
-struct RectangleDomain{FT} <: HorizontalDomain
+struct RectangleDomain{FT, B1, B2} <: HorizontalDomain
     x1min::FT
     x1max::FT
     x2min::FT
     x2max::FT
-    x1boundary::Union{Nothing,NTuple{2,Symbol}}
-    x2boundary::Union{Nothing,NTuple{2,Symbol}}
+    x1boundary::B1
+    x2boundary::B2
 end
 
 
@@ -127,8 +127,9 @@ abstract type Discretization end
 A regular discretization of `domain` with `n1` elements in dimension 1, and `n2`
 in dimension 2.
 """
-struct EquispacedRectangleDiscretization{FT, R} <: Discretization
-    domain::RectangleDomain{FT}
+struct EquispacedRectangleDiscretization{FT, RD <: RectangleDomain{FT}, R} <:
+       Discretization
+    domain::RD
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # number of elements in x2 direction
     range1::R

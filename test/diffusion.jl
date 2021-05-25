@@ -1,5 +1,5 @@
 using Test
-using StaticArrays
+using StaticArrays, IntervalSets
 import ClimateMachineCore.DataLayouts: IJFH
 import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore.Operators
@@ -12,10 +12,8 @@ using OrdinaryDiffEq
     FT = Float64
 
     domain = Domains.RectangleDomain(
-        x1min = FT(-π),
-        x1max = FT(π),
-        x2min = FT(-π),
-        x2max = FT(π),
+        FT(-π)..FT(π),
+        FT(-π)..FT(π),
         x1periodic = true,
         x2periodic = true,
     )

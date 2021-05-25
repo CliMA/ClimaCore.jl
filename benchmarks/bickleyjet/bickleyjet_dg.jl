@@ -21,10 +21,8 @@ const parameters = (
 
 
 domain = Domains.RectangleDomain(
-    x1min = -2π,
-    x1max = 2π,
-    x2min = -2π,
-    x2max = 2π,
+    -2π..2π,
+    -2π..2π,
     x1periodic = true,
     x2periodic = true,
 )
