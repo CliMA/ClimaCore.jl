@@ -7,14 +7,7 @@ import ClimateMachineCore.Geometry
 using LinearAlgebra
 
 @testset "gradient on 1×1 domain mesh" begin
-    domain = Domains.RectangleDomain(
-        x1min = -3.0,
-        x1max = 5.0,
-        x2min = -2.0,
-        x2max = 8.0,
-        x1periodic = false,
-        x2periodic = false,
-    )
+    domain = Domains.RectangleDomain(-3..5, -2..8)
     discretiation = Domains.EquispacedRectangleDiscretization(domain, 1, 1)
     grid_topology = Topologies.GridTopology(discretiation)
 
@@ -38,14 +31,7 @@ end
 
 @testset "gradient on -π : π domain mesh" begin
     FT = Float64
-    domain = Domains.RectangleDomain(
-        x1min = FT(-π),
-        x1max = FT(π),
-        x2min = FT(-π),
-        x2max = FT(π),
-        x1periodic = false,
-        x2periodic = false,
-    )
+    domain = Domains.RectangleDomain(FT(-π)..FT(π), FT(-π)..FT(π))
     discretiation = Domains.EquispacedRectangleDiscretization(domain, 5, 5)
     grid_topology = Topologies.GridTopology(discretiation)
 
@@ -82,10 +68,8 @@ end
 @testset "divergence of a constant vector field is zero" begin
     FT = Float64
     domain = Domains.RectangleDomain(
-        x1min = FT(-π),
-        x1max = FT(π),
-        x2min = FT(-π),
-        x2max = FT(π),
+        -3..5,
+        -2..8,
         x1periodic = true,
         x2periodic = true,
     )

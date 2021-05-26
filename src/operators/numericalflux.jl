@@ -100,3 +100,36 @@ function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
     λ = max(fn.wavespeedfn(argvals⁻...), fn.wavespeedfn(argvals⁺...))
     return RecursiveOperators.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
 end
+
+
+function add_numerical_flux_boundary!(fn, dydt, args...)
+    mesh = Fields.mesh(dydt)
+    Nq = Meshes.Quadratures.degrees_of_freedom(mesh.quadrature_style)
+    topology = mesh.topology
+
+    for (iboundary, boundarytag) in enumerate(Topologies.boundaries(topology))
+        for (iface, (elem⁻, face⁻)) in
+            enumerate(Topologies.boundary_faces(topology, boundarytag))
+            boundary_surface_geometry_slab =
+                surface_geometry_slab =
+                    slab(mesh.boundary_surface_geometries[iboundary], iface)
+
+            arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
+            dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
+            for q in 1:Nq
+                sgeom⁻ = boundary_surface_geometry_slab[q]
+                i⁻, j⁻ = Topologies.face_node_index(face⁻, Nq, q, false)
+                numflux⁻ = fn(
+                    sgeom⁻.normal,
+                    map(
+                        slab -> slab isa DataSlab2D ? slab[i⁻, j⁻] : slab,
+                        arg_slabs⁻,
+                    ),
+                )
+                dydt_slab⁻[i⁻, j⁻] =
+                    dydt_slab⁻[i⁻, j⁻] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+            end
+        end
+    end
+    return dydt
+end

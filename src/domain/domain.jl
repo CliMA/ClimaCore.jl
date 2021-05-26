@@ -55,19 +55,21 @@ abstract type HorizontalDomain end
 # coordinates (x1,x2)
 # TODO: should we have boundary tags?
 # or just specify using the same numbering we use for faces?
-Base.@kwdef struct RectangleDomain{FT} <: HorizontalDomain
+struct RectangleDomain{FT, B1, B2} <: HorizontalDomain
     x1min::FT
     x1max::FT
     x2min::FT
     x2max::FT
-    x1periodic::Bool = false
-    x2periodic::Bool = false
+    x1boundary::B1
+    x2boundary::B2
 end
 
 
 RectangleDomain(
     x1::ClosedInterval,
     x2::ClosedInterval;
+    x1boundary = (:west, :east),
+    x2boundary = (:south, :north),
     x1periodic = false,
     x2periodic = false,
 ) = RectangleDomain(
@@ -75,8 +77,8 @@ RectangleDomain(
     float(x1.right),
     float(x2.left),
     float(x2.right),
-    x1periodic,
-    x2periodic,
+    x1periodic ? nothing : x1boundary,
+    x2periodic ? nothing : x2boundary,
 )
 
 function Base.show(io::IO, domain::RectangleDomain)
@@ -84,11 +86,15 @@ function Base.show(io::IO, domain::RectangleDomain)
         io,
         "RectangleDomain($(domain.x1min)..$(domain.x1max), $(domain.x2min)..$(domain.x2max)",
     )
-    if domain.x1periodic
+    if domain.x1boundary == nothing
         print(io, ", x1periodic=true")
+    else
+        print(io, ", x1boundary=$(domain.x1boundary)")
     end
-    if domain.x1periodic
+    if domain.x2boundary == nothing
         print(io, ", x2periodic=true")
+    else
+        print(io, ", x2boundary=$(domain.x2boundary)")
     end
     print(io, ")")
 end
@@ -121,8 +127,9 @@ abstract type Discretization end
 A regular discretization of `domain` with `n1` elements in dimension 1, and `n2`
 in dimension 2.
 """
-struct EquispacedRectangleDiscretization{FT, R} <: Discretization
-    domain::RectangleDomain{FT}
+struct EquispacedRectangleDiscretization{FT, RD <: RectangleDomain{FT}, R} <:
+       Discretization
+    domain::RD
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # number of elements in x2 direction
     range1::R

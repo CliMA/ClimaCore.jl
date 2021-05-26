@@ -5,7 +5,7 @@ import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
-using LinearAlgebra
+using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using ClimateMachineCore.RecursiveOperators
@@ -26,14 +26,14 @@ const parameters = (
     g = 10,
 )
 
+numflux_name = get(ARGS, 1, "rusanov")
+boundary_name = get(ARGS, 2, "")
 
 domain = Domains.RectangleDomain(
-    x1min = -2π,
-    x1max = 2π,
-    x2min = -2π,
-    x2max = 2π,
+    -2π..2π,
+    -2π..2π,
     x1periodic = true,
-    x2periodic = true,
+    x2periodic = boundary_name != "noslip",
 )
 
 n1, n2 = 16, 16
@@ -153,7 +153,6 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     rmap(f -> f' * n, Favg) ⊞ Δf
 end
 
-numflux_name = get(ARGS, 1, "rusanov")
 
 numflux = if numflux_name == "central"
     Operators.CentralNumericalFlux(flux)
@@ -162,7 +161,6 @@ elseif numflux_name == "rusanov"
 elseif numflux_name == "roe"
     roeflux
 end
-
 
 function rhs!(dydt, y, (parameters, numflux), t)
 
@@ -185,6 +183,15 @@ function rhs!(dydt, y, (parameters, numflux), t)
     dydt .= Operators.slab_weak_divergence(F)
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
+
+    Operators.add_numerical_flux_boundary!(
+        dydt,
+        y,
+        parameters,
+    ) do normal, (y⁻, parameters)
+        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu .- dot(y⁻.ρu, normal) .* normal, ρθ = y⁻.ρθ)
+        numflux(normal, (y⁻, parameters), (y⁺, parameters))
+    end
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
@@ -217,13 +224,20 @@ sol = solve(
 using Plots
 ENV["GKSwstype"] = "nul"
 
+dirname = "dg_$(numflux_name)"
+if boundary_name != ""
+    dirname = "$(dirname)_$(boundary_name)"
+end
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
+
 anim = @animate for u in sol.u
     heatmap(u.ρθ, clim = (-1, 1), color = :balance)
 end
-mp4(anim, joinpath(@__DIR__, "bickleyjet_dg_$numflux_name.mp4"), fps = 10)
+mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(@__DIR__, "energy_dg_$numflux_name.png"))
+png(plot(Es), joinpath(path, "energy.png"))
 
 
 

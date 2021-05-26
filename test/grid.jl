@@ -15,10 +15,8 @@ function rectangular_grid(
     x2max = 1.0,
 )
     domain = Domains.RectangleDomain(
-        x1min = x1min,
-        x1max = x1max,
-        x2min = x2min,
-        x2max = x2max,
+        x1min..x1max,
+        x2min..x2max,
         x1periodic = x1periodic,
         x2periodic = x2periodic,
     )

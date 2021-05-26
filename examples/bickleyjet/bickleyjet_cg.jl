@@ -5,7 +5,7 @@ import ClimateMachineCore: Fields, Domains, Topologies, Meshes
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
-using LinearAlgebra
+using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging: global_logger
@@ -24,10 +24,8 @@ const parameters = (
 
 
 domain = Domains.RectangleDomain(
-    x1min = -2π,
-    x1max = 2π,
-    x2min = -2π,
-    x2max = 2π,
+    -2π..2π,
+    -2π..2π,
     x1periodic = true,
     x2periodic = true,
 )
@@ -167,10 +165,14 @@ sol = solve(
 using Plots
 ENV["GKSwstype"] = "nul"
 
+dirname = "cg"
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
+
 anim = @animate for u in sol.u
     heatmap(u.ρθ, clim = (-1, 1), color = :balance)
 end
-mp4(anim, joinpath(@__DIR__, "bickleyjet_cg.mp4"), fps = 10)
+mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(@__DIR__, "energy_cg.png"))
+png(plot(Es), joinpath(path, "energy.png"))
