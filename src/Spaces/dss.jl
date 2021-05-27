@@ -1,5 +1,5 @@
 import ..Topologies
-using ..RecursiveOperators
+using ..RecursiveApply
 
 """
     horizontal_dss!(data, topology, Nq)
@@ -45,7 +45,7 @@ function horizontal_dss!(
     return data
 end
 
-function horizontal_dss!(data, mesh::AbstractMesh)
+function horizontal_dss!(data, mesh::AbstractSpace)
     Nq = Quadratures.degrees_of_freedom(mesh.quadrature_style)
     horizontal_dss!(data, mesh.topology, Nq)
 end

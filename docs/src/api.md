@@ -11,9 +11,9 @@ DataLayouts
 DataLayouts.IJFH
 ```
 
-## Domains
+## Meshes
 ```@docs
-Domains.EquispacedRectangleDiscretization
+Meshes.EquispacedRectangleMesh
 ```
 
 ## Geometry
@@ -27,22 +27,22 @@ Geometry.Cartesian12Vector
 Topologies
 ```
 
-## Meshes
+## Spaces
 
 ```@docs
-Meshes
-Meshes.Quadratures.degrees_of_freedom
-Meshes.Quadratures.GL
-Meshes.Quadratures.Uniform
-Meshes.Quadratures.quadrature_points
-Meshes.Quadratures.GLL
-Meshes.Quadratures.polynomial_degree
-Meshes.Quadratures.QuadratureStyle
+Spaces
+Spaces.Quadratures.degrees_of_freedom
+Spaces.Quadratures.GL
+Spaces.Quadratures.Uniform
+Spaces.Quadratures.quadrature_points
+Spaces.Quadratures.GLL
+Spaces.Quadratures.polynomial_degree
+Spaces.Quadratures.QuadratureStyle
 ```
 
-## RecursiveOperators
+## RecursiveApply
 
 ```@docs
-RecursiveOperators
+RecursiveApply
 ```
 

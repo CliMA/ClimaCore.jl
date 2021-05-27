@@ -19,14 +19,15 @@ x2    |       |
 module Topologies
 
 import ..Geometry
-import ..Domains: EquispacedRectangleDiscretization, coordinate_type
+import ..Domains: coordinate_type
+import ..Meshes: EquispacedRectangleMesh
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
    AbstractTopology
 
-Subtypes of `AbstractHorizontalTopology` define connectiveness of
-discretized domain elements in the horizontal domain.
+Subtypes of `AbstractHorizontalTopology` define connectiveness of a
+mesh in the horizontal domain.
 """
 abstract type AbstractTopology end
 

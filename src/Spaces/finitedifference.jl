@@ -3,7 +3,7 @@
 #####
 
 export n_cells, n_faces
-export ColumnMesh, coords
+export FiniteDifferenceSpace, coords
 export AbstractDataLocation, CellCent, CellFace
 export All, Ghost, Boundary, Interior
 export ColumnMinMax, ColumnMin, ColumnMax
@@ -122,7 +122,7 @@ cent_stencil = ∇_z(cent_stencil, grid)
 T = Field(CellCent())
 # For any prognostic field (e.g., T ∈ CellCent, rhs[:T] ∈ CellCent)
 # all other fields are temporary
-for (i,point) in enumerate(ColumMesh())
+for (i,point) in enumerate(ColumSpace())
     T_stencil_CO2 = local_stencil(T, i, SecondOrder())
     T_stencil_up = local_stencil(T, i, Upwind())    
 
@@ -209,7 +209,7 @@ end
 
 #=
 TODO: 
-struct FaceFiniteDifferenceMesh{T,C} <: AbstractMesh
+struct FaceFiniteDifferenceSpace{T,C} <: AbstractSpace
     topology::T
     internal_coordinates::IC
     ghost_coordinates_min::GC
@@ -220,12 +220,12 @@ struct FaceFiniteDifferenceMesh{T,C} <: AbstractMesh
     # -
 
 end
-function FaceFiniteDifferenceMesh(topology, nghost=1)
+function FaceFiniteDifferenceSpace(topology, nghost=1)
     all_coordinates = ...
     ghost_coordinates_min = view(all_coordinates, 1:nghost)
     internal_coordinates = view(all_coordinates, nghost+1:n+nghost)
     ghost_coordinates_max = view(all_coordinates, n+nghost+1:n+2nghost)
-    FaceFiniteDifferenceMesh(topology,
+    FaceFiniteDifferenceSpace(topology,
         internal_coordinates,
         ghost_coordinates_min,
         ghost_coordinates_max,
@@ -234,7 +234,7 @@ end
 
 
 
-struct CenterFiniteDifferenceMesh{T,C} <: AbstractMesh
+struct CenterFiniteDifferenceSpace{T,C} <: AbstractSpace
     topology::T
     coordinates::C
 end
@@ -242,18 +242,18 @@ end
 
 # TODO:
 # - add interval domain
-# - move order out of Mesh?
+# - move order out of Space?
 # - 
 # 
 
 """
-    ColumnMesh
+    FiniteDifferenceSpace
 
 Column coordinates containing a collocated
 grid at cell centers (`cent`) and cell faces
 (`face`).
 """
-struct ColumnMesh{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O} <: AbstractMesh
+struct FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O} <: AbstractSpace
     face::F
     cent::C
     interp_cent_to_face::ICF
@@ -266,7 +266,7 @@ struct ColumnMesh{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O} <: AbstractMesh
 end
 
 
-function ColumnMesh{S}(
+function FiniteDifferenceSpace{S}(
     face::F,
     cent::C,
     interp_cent_to_face::ICF,
@@ -276,7 +276,7 @@ function ColumnMesh{S}(
     n_cells_ghost::Integer,
     order::O,
 ) where {S, F, C, ICF, ∇CF, ∇FC, ∇FF, O}
-    ColumnMesh{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O}(
+    FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O}(
         face,
         cent,
         interp_cent_to_face,
@@ -288,11 +288,11 @@ function ColumnMesh{S}(
     )
 end
 
-const CenterColumnMesh = ColumnMesh{CellCent}
-const FaceColumnMesh = ColumnMesh{CellFace}
+const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCent}
+const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
 
 #=
-function Base.show(io::IO, col_mesh::ColumnMesh)
+function Base.show(io::IO, col_mesh::FiniteDifferenceSpace)
     println(io, col_mesh)
     #=
     println(io, "----- face")
@@ -311,21 +311,21 @@ function Base.show(io::IO, col_mesh::ColumnMesh)
 end
 =#
 
-coords(c::ColumnMesh, ::CellCent) = c.cent
-coords(c::ColumnMesh, ::CellFace) = c.face
+coords(c::FiniteDifferenceSpace, ::CellCent) = c.cent
+coords(c::FiniteDifferenceSpace, ::CellFace) = c.face
 
-coordinates(c::ColumnMesh, ::CellCent) = c.cent.h
-coordinates(c::ColumnMesh, ::CellFace) = c.face.h
-Δcoordinates(c::ColumnMesh, ::CellCent) = c.cent.Δh
-Δcoordinates(c::ColumnMesh, ::CellFace) = c.face.Δh
+coordinates(c::FiniteDifferenceSpace, ::CellCent) = c.cent.h
+coordinates(c::FiniteDifferenceSpace, ::CellFace) = c.face.h
+Δcoordinates(c::FiniteDifferenceSpace, ::CellCent) = c.cent.Δh
+Δcoordinates(c::FiniteDifferenceSpace, ::CellFace) = c.face.Δh
 
-Base.length(c::ColumnMesh, ::CellCent) = length(c.cent)
-Base.length(c::ColumnMesh, ::CellFace) = length(c.face)
+Base.length(c::FiniteDifferenceSpace, ::CellCent) = length(c.cent)
+Base.length(c::FiniteDifferenceSpace, ::CellFace) = length(c.face)
 
-Meshes.undertype(mesh::ColumnMesh) = eltype(mesh.cent.h)
-n_cells(col_mesh::ColumnMesh) = length(col_mesh.cent)
-n_faces(col_mesh::ColumnMesh) = length(col_mesh.face)
-n_cells_ghost(cm::ColumnMesh) = cm.n_cells_ghost
+undertype(mesh::FiniteDifferenceSpace) = eltype(mesh.cent.h)
+n_cells(col_mesh::FiniteDifferenceSpace) = length(col_mesh.cent)
+n_faces(col_mesh::FiniteDifferenceSpace) = length(col_mesh.face)
+n_cells_ghost(cm::FiniteDifferenceSpace) = cm.n_cells_ghost
 
 abstract type ColumnMinMax end
 
@@ -359,34 +359,41 @@ Returns 0 for `ColumnMin` and 1 for `ColumnMax`
 binary(::ColumnMin) = 0
 binary(::ColumnMax) = 1
 
-function interior_face_range(cm::ColumnMesh)
+function interior_face_range(cm::FiniteDifferenceSpace)
     nfaces = n_faces(cm)
     nghost = cm.n_cells_ghost
     return range(nghost + 1, nfaces - nghost, step = 1)
 end
 
-boundary_index(cm::ColumnMesh, ::CellFace, ::ColumnMin) = n_cells_ghost(cm)
-boundary_index(cm::ColumnMesh, ::CellFace, ::ColumnMax) =
+boundary_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMin) =
+    n_cells_ghost(cm)
+boundary_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMax) =
     n_cells(cm) - n_cells_ghost(cm)
 
 # TODO: this assumes stencils of order 2
-ghost_index(cm::ColumnMesh, ::CellCent, ::ColumnMin) = 1
-ghost_index(cm::ColumnMesh, ::CellCent, ::ColumnMax) = n_cells(cm)
-ghost_index(cm::ColumnMesh, ::CellFace, ::ColumnMin) = 1
-ghost_index(cm::ColumnMesh, ::CellFace, ::ColumnMax) = n_faces(cm)
+ghost_index(cm::FiniteDifferenceSpace, ::CellCent, ::ColumnMin) = 1
+ghost_index(cm::FiniteDifferenceSpace, ::CellCent, ::ColumnMax) = n_cells(cm)
+ghost_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMin) = 1
+ghost_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMax) = n_faces(cm)
 
 # TODO: return range for higher order stencil
-interior_index(cm::ColumnMesh, ::CellCent, ::ColumnMin) = 1 + n_cells_ghost(cm)
-interior_index(cm::ColumnMesh, ::CellCent, ::ColumnMax) =
+interior_index(cm::FiniteDifferenceSpace, ::CellCent, ::ColumnMin) =
+    1 + n_cells_ghost(cm)
+interior_index(cm::FiniteDifferenceSpace, ::CellCent, ::ColumnMax) =
     n_cells(cm) - n_cells_ghost(cm)
-interior_index(cm::ColumnMesh, ::CellFace, ::ColumnMin) = 2 + n_cells_ghost(cm)
-interior_index(cm::ColumnMesh, ::CellFace, ::ColumnMax) =
+interior_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMin) =
+    2 + n_cells_ghost(cm)
+interior_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMax) =
     n_cells(cm) - n_cells_ghost(cm)
 
-Δcoordinates(c::ColumnMesh, ::CellCent, ::ColumnMin) = first(c.cent.Δh)
-Δcoordinates(c::ColumnMesh, ::CellCent, ::ColumnMax) = last(c.cent.Δh)
-Δcoordinates(c::ColumnMesh, ::CellFace, ::ColumnMin) = first(c.face.Δh)
-Δcoordinates(c::ColumnMesh, ::CellFace, ::ColumnMax) = last(c.face.Δh)
+Δcoordinates(c::FiniteDifferenceSpace, ::CellCent, ::ColumnMin) =
+    first(c.cent.Δh)
+Δcoordinates(c::FiniteDifferenceSpace, ::CellCent, ::ColumnMax) =
+    last(c.cent.Δh)
+Δcoordinates(c::FiniteDifferenceSpace, ::CellFace, ::ColumnMin) =
+    first(c.face.Δh)
+Δcoordinates(c::FiniteDifferenceSpace, ::CellFace, ::ColumnMax) =
+    last(c.face.Δh)
 
 """ A super-type for dispatching on parts of the domain """
 abstract type DomainDecomp end
@@ -401,7 +408,7 @@ function pad!(h, n_cells_ghost::Int) # TODO: use ghost cells
 end
 
 
-function ColumnMesh{S}(
+function FiniteDifferenceSpace{S}(
     h_min::FT,
     h_max::FT,
     n_cells_real::Int;
@@ -413,10 +420,14 @@ function ColumnMesh{S}(
     end
     h_face = collect(h_face) # TODO: use ArrayType
     pad!(h_face, n_cells_ghost)
-    return ColumnMesh{S}(h_face; n_cells_ghost = n_cells_ghost, kwargs...)
+    return FiniteDifferenceSpace{S}(
+        h_face;
+        n_cells_ghost = n_cells_ghost,
+        kwargs...,
+    )
 end
 
-function ColumnMesh{S}(
+function FiniteDifferenceSpace{S}(
     h_face;
     order = OrderOfAccuracy{2}(),
     n_cells_ghost::Int = 1,
@@ -440,7 +451,7 @@ function ColumnMesh{S}(
         CollocatedCoordinates{CellCent, typeof(h_cent)}(h_cent, Δh_cent)
 
     if !(all(isfinite.(h_face)) && all(isfinite.(h_cent)))
-        error("ColumnMesh is not finite.")
+        error("FiniteDifferenceSpace is not finite.")
     end
 
     # Construct interpolation and derivative operators:
@@ -453,7 +464,7 @@ function ColumnMesh{S}(
     ∇²_cent_to_cent = ∇²_cent_to_cent_operator(order, Δh_cent, n_cells_ghost)
     ∇²_face_to_face = ∇²_face_to_face_operator(order, Δh_face, n_cells_ghost)
 
-    return ColumnMesh{S}(
+    return FiniteDifferenceSpace{S}(
         coords_face,
         coords_cent,
         interp_cent_to_face,
@@ -467,12 +478,15 @@ function ColumnMesh{S}(
 end
 
 
-warp_mesh(cm::ColumnMesh) = cm
+warp_mesh(cm::FiniteDifferenceSpace) = cm
 
-function warp_mesh(warp_fn::Function, cm::ColumnMesh{S}) where {S <: Staggering}
+function warp_mesh(
+    warp_fn::Function,
+    cm::FiniteDifferenceSpace{S},
+) where {S <: Staggering}
     cell_face_coords = getproperty(coords(cm, CellFace()), :h)
     warped_cell_face_coords = warp_fn.(cell_face_coords)
-    return ColumnMesh{S}(
+    return FiniteDifferenceSpace{S}(
         warped_cell_face_coords;
         n_cells_ghost = cm.n_cells_ghost,
         order = cm.order,
@@ -641,7 +655,7 @@ TODO: start sketching out ideas for fusing operations
 Face(A) # interpolate to face mesh with halo 0
 v*Face(A) # elementwise multiplication (face mesh halo 0)
 Gradient(v*Face(A)) # center mesh with halo 0
-map(Gradient(v*Face(A)), column) # gradient on to CenterColumnMesh
+map(Gradient(v*Face(A)), column) # gradient on to CenterFiniteDifferenceSpace
 
 
 #         center  face
@@ -767,7 +781,7 @@ function ∇²_face_to_face_operator(
 end
 
 #####
-##### Mesh iterator
+##### Space iterator
 #####
 
 # Ideally these iteration might return ranges of
@@ -779,7 +793,8 @@ end
 struct CellCenterIterator{CM}
     col_mesh::CM
 end
-column(col_mesh::ColumnMesh, ::CellCent) = CellCenterIterator(col_mesh)
+column(col_mesh::FiniteDifferenceSpace, ::CellCent) =
+    CellCenterIterator(col_mesh)
 Base.length(cciter::CellCenterIterator) = n_cells(cciter.col_mesh)
 Base.eltype(::Type{CellCenterIterator}) = Int
 
@@ -793,7 +808,7 @@ end
 struct CellFaceIterator{CM}
     col_mesh::CM
 end
-column(col_mesh::ColumnMesh, ::CellFace) = CellFaceIterator(col_mesh)
+column(col_mesh::FiniteDifferenceSpace, ::CellFace) = CellFaceIterator(col_mesh)
 Base.length(cfiter::CellFaceIterator) = n_faces(cfiter.col_mesh)
 Base.eltype(::Type{CellFaceIterator}) = Int
 

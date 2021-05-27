@@ -17,22 +17,22 @@ b = FT(1.0)
 n = 10
 α = FT(0.1)
 
-cm = Meshes.FaceColumnMesh(a, b, n)
+cs = Spaces.FaceFiniteDifferenceSpace(a, b, n)
 
-T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
-∇²T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
-∇T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+∇²T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+∇T = Fields.Field(DataLayouts.VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
 # Solve Heat Equation: ∂_t T = α ∇²T
 function ∑tendencies!(dT, T, _, t)
 
     # apply boundry conditions 
-    Operators.apply_dirichlet!(T, 0, cm, Meshes.ColumnMin())
-    Operators.apply_neumann!(T, 1, cm, Meshes.ColumnMax())
+    Operators.apply_dirichlet!(T, 0, cs, Meshes.ColumnMin())
+    Operators.apply_neumann!(T, 1, cs, Meshes.ColumnMax())
 
     # compute laplacian
-    Operators.vertical_gradient!(∇T, T, cm)
-    Operators.vertical_gradient!(∇²T, ∇T, cm)
+    Operators.vertical_gradient!(∇T, T, cs)
+    Operators.vertical_gradient!(∇²T, ∇T, cs)
 
     # update
     dT .= α .* ∇²T

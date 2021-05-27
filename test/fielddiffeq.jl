@@ -1,8 +1,8 @@
 using Test
 using OrdinaryDiffEq
 using ClimateMachineCore
-import ClimateMachineCore: Domains, Topologies, Meshes, Fields
-using LinearAlgebra
+import ClimateMachineCore: Domains, Topologies, Meshes, Fields, Spaces
+using LinearAlgebra, IntervalSets
 
 
 domain = Domains.RectangleDomain(
@@ -14,10 +14,10 @@ domain = Domains.RectangleDomain(
 
 n1, n2 = 3, 4
 Nq = 4
-discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-grid_topology = Topologies.GridTopology(discretization)
-quad = Meshes.Quadratures.GLL{Nq}()
-mesh = Meshes.Mesh2D(grid_topology, quad)
+mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+grid_topology = Topologies.GridTopology(mesh)
+quad = Spaces.Quadratures.GLL{Nq}()
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 # y = [cos(x1+x2+t), sin(x1+x2+t)]
 # dy/dt = [-y[2], y[1]]
@@ -30,8 +30,8 @@ function dfdt!(dydt, y, _, t)
     broadcast!(y -> (c = -y.s, s = y.c), dydt, y)
 end
 
-y0 = f.(Fields.coordinate_field(mesh), 0.0)
-y1 = f.(Fields.coordinate_field(mesh), 1.0)
+y0 = f.(Fields.coordinate_field(space), 0.0)
+y1 = f.(Fields.coordinate_field(space), 1.0)
 
 # Solve the ODE operator
 prob = ODEProblem(dfdt!, y0, (0.0, 1.0))

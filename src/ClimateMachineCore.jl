@@ -1,14 +1,15 @@
 module ClimateMachineCore
 
 include("interface.jl")
-include("recursiveop.jl")
-include("data/data.jl")
-include("geometry/geometry.jl")
-include("domain/domain.jl")
-include("topology/topology.jl")
-include("mesh/mesh.jl")
-include("field/field.jl")
-include("operators/operators.jl")
-
+include("RecursiveApply/RecursiveApply.jl")
+include("DataLayouts/DataLayouts.jl")
+include("Geometry/Geometry.jl")
+include("Domains/Domains.jl")
+include("Meshes/Meshes.jl")
+include("Topologies/Topologies.jl")
+include("Spaces/Spaces.jl")
+include("Fields/Fields.jl")
+include("Operators/Operators.jl")
+include("Plots/plots.jl")
 
 end # module

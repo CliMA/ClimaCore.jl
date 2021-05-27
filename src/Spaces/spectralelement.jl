@@ -1,40 +1,9 @@
 """
-    Meshes
+    SpectralElementSpace2D <: AbstractSpace
 
-- domain
-- topology
-- coordinates
-- metric terms (inverse partial derivatives)
-- quadrature rules and weights
-
-## References / notes
- - [ceed](https://ceed.exascaleproject.org/ceed-code/)
- - [QA](https://github.com/CliMA/ClimateMachine.jl/blob/ans/sphere/test/Numerics/DGMethods/compressible_navier_stokes_equations/sphere/sphere_helper_functions.jl)
-
+A two-dimensional space: within each element the space is represented as a polynomial.
 """
-module Meshes
-
-
-import ..Geometry
-import ..DataLayouts, ..Domains, ..Topologies
-import ..slab
-using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
-
-abstract type AbstractMesh end
-
-include("quadrature.jl")
-import .Quadratures
-
-include("dss.jl")
-
-# we need to be able figure out the coordinate of each node
-# - element vertex location (come from the topology)
-# - curvature: i.e. how do we interpolate within an element
-#   - e.g. flat, spherical, "warp" function
-#   - bilinear for flat, equiangular for spherical
-#      - domain establishes the coordinate system used (cartesian of spherical)
-
-struct Mesh2D{T, Q, C, G, IS, BS} <: AbstractMesh
+struct SpectralElementSpace2D{T, Q, C, G, IS, BS} <: AbstractSpace
     topology::T
     quadrature_style::Q
     coordinates::C
@@ -43,24 +12,24 @@ struct Mesh2D{T, Q, C, G, IS, BS} <: AbstractMesh
     boundary_surface_geometries::BS
 end
 
-Topologies.nlocalelems(mesh::AbstractMesh) =
-    Topologies.nlocalelems(mesh.topology)
+Topologies.nlocalelems(Space::AbstractSpace) =
+    Topologies.nlocalelems(Space.topology)
 
 undertype(::Type{Geometry.LocalGeometry{FT, M}}) where {FT, M} = FT
-undertype(mesh::AbstractMesh) = undertype(eltype(mesh.local_geometry))
+undertype(Space::AbstractSpace) = undertype(eltype(Space.local_geometry))
 
-function Base.show(io::IO, mesh::Mesh2D)
-    println(io, "Mesh2D:")
-    println(io, "  topology: ", mesh.topology)
-    println(io, "  quadrature: ", mesh.quadrature_style)
+function Base.show(io::IO, Space::SpectralElementSpace2D)
+    println(io, "SpectralElementSpace2D:")
+    println(io, "  topology: ", Space.topology)
+    println(io, "  quadrature: ", Space.quadrature_style)
 end
 
 """
-    Mesh2D(topology, quadrature_style)
+    SpectralElementSpace2D(topology, quadrature_style)
 
-Construct a `Mesh2D` instance given a `topology` and `quadrature`.
+Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
-function Mesh2D(topology, quadrature_style)
+function SpectralElementSpace2D(topology, quadrature_style)
     CT = Domains.coordinate_type(topology)
     FT = eltype(CT)
     nelements = Topologies.nlocalelems(topology)
@@ -168,7 +137,7 @@ function Mesh2D(topology, quadrature_style)
             boundary_surface_geometry
         end
 
-    return Mesh2D(
+    return SpectralElementSpace2D(
         topology,
         quadrature_style,
         coordinates,
@@ -210,47 +179,25 @@ end
 
 
 
-function variational_solve!(data, mesh::AbstractMesh)
-    data .= mesh.local_geometry.invM .⊠ data
+function variational_solve!(data, Space::AbstractSpace)
+    data .= Space.local_geometry.invM .⊠ data
 end
 
 
+"""
+    SpectralElementSpaceSlab <: AbstractSpace
 
-struct MeshSlab{Q, C, G} <: AbstractMesh
+A view into a `SpectralElementSpace2D` for a single slab.
+"""
+struct SpectralElementSpaceSlab{Q, C, G} <: AbstractSpace
     quadrature_style::Q
     coordinates::C
     local_geometry::G
 end
-function slab(mesh::Mesh2D, h)
-    MeshSlab(
-        mesh.quadrature_style,
-        slab(mesh.coordinates, h),
-        slab(mesh.local_geometry, h),
+function slab(Space::SpectralElementSpace2D, h)
+    SpaceSlab(
+        Space.quadrature_style,
+        slab(Space.coordinates, h),
+        slab(Space.local_geometry, h),
     )
 end
-
-
-#=
-struct Mesh3D{T,C} <: AbstractMesh
-    topology::T
-    vertical_discretization::C
-end
-=#
-# some notion of a local geometry at each node, we need
-#  - coordinates
-#  - mechanism to convert vectors to contravariant (for divergences) and from covariant (for gradients)
-#  - Jacobian determinant + inverse (Riemannian volume form on reference element)
-
-#=
-
-struct LocalGeometry{FT}
-    x::SVector{3, FT}
-    ∂ξ∂x::SMatrix{3, 3, FT, 9}
-    J::FT
-end
-=#
-
-include("column_mesh.jl")
-include("hybrid_mesh.jl")
-
-end # module

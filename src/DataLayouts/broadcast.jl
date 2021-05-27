@@ -1,16 +1,12 @@
 # Broadcasting of AbstractData objects
 # https://docs.julialang.org/en/v1/manual/interfaces/#Broadcast-Styles
 
-abstract type DataStyle <: Base.BroadcastStyle end
-
-abstract type DataColumnStyle <: DataStyle end
-abstract type DataSlab2DStyle{Nij} <: DataStyle end
-
 # determine the parent type underlying any SubArrays
 parent_array_type(::Type{A}) where {A <: AbstractArray} = A
 parent_array_type(::Type{S}) where {S <: SubArray{T, N, A}} where {T, N, A} =
     parent_array_type(A)
 
+abstract type DataStyle <: Base.BroadcastStyle end
 
 abstract type DataColumnStyle <: DataStyle end
 struct VFStyle{A} <: DataColumnStyle end
@@ -28,7 +24,6 @@ DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
 DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
 
 abstract type Data3DStyle <: DataStyle end
-
 
 Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
     DataStyle(D)
@@ -61,7 +56,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    data::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},
+    ::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},
     ::Type{Eltype},
 ) where {S, Nij, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
@@ -143,7 +138,6 @@ function Base.copyto!(
     end
     return dest
 end
-
 
 # broadcasting scalar assignment
 @inline function Base.Broadcast.materialize!(

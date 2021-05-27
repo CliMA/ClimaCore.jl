@@ -1,15 +1,15 @@
-import ClimateMachineCore.Meshes
+import ClimateMachineCore.Spaces
 
-function meshconfig(::Val{Nq}) where {Nq}
-    quad = Meshes.Quadratures.GLL{Nq}()
-    ξ, W = Meshes.Quadratures.quadrature_points(Float64, quad)
-    D = Meshes.Quadratures.differentiation_matrix(Float64, quad)
+function spaceconfig(::Val{Nq}) where {Nq}
+    quad = Spaces.Quadratures.GLL{Nq}()
+    ξ, W = Spaces.Quadratures.quadrature_points(Float64, quad)
+    D = Spaces.Quadratures.differentiation_matrix(Float64, quad)
     return (ξ, W, D)
 end
 
 # construct the coordinate array
 function coordinates(::Val{Nq}, n1, n2) where {Nq}
-    (ξ, W, D) = meshconfig(Val(Nq))
+    (ξ, W, D) = spaceconfig(Val(Nq))
     X = Array{Float64}(undef, (Nq, Nq, 2, n1, n2))
     for h2 in 1:n2, h1 in 1:n1
         x1_lo = 2pi * (2h1 - 2 - n1) / n1
@@ -58,7 +58,7 @@ getval(::Val{V}) where {V} = V
 function volume_ref!(dYdt, Y, (parameters, valNq), t)
     # specialize on Nq
     Nq = getval(valNq)
-    (ξ, W, D) = meshconfig(Val(Nq))
+    (ξ, W, D) = spaceconfig(Val(Nq))
     # allocate per thread?
     Nstate = 4
     WJv¹ = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
@@ -118,7 +118,7 @@ end
 
 function add_face_ref!(dYdt, Y, (parameters, valNq), t)
     Nq = getval(valNq)
-    (ξ, W, D) = meshconfig(Val(Nq))
+    (ξ, W, D) = spaceconfig(Val(Nq))
     n1 = size(Y, 4)
     n2 = size(Y, 5)
 

@@ -1,69 +1,68 @@
 using Test
 using StaticArrays
 import ClimateMachineCore.DataLayouts: IJFH, VF
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes
+import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
-using LinearAlgebra
+using LinearAlgebra, IntervalSets
 
-@testset "gradient on 1×1 domain mesh" begin
+@testset "gradient on 1×1 domain SE space" begin
     domain = Domains.RectangleDomain(-3..5, -2..8)
-    discretiation = Domains.EquispacedRectangleDiscretization(domain, 1, 1)
-    grid_topology = Topologies.GridTopology(discretiation)
+    mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
+    grid_topology = Topologies.GridTopology(mesh)
 
     Nq = 3
-    quad = Meshes.Quadratures.GLL{Nq}()
-    points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
 
-    mesh = Meshes.Mesh2D(grid_topology, quad)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     f(x) = (x.x1, x.x2)
-    field = f.(Fields.coordinate_field(mesh))
+    field = f.(Fields.coordinate_field(space))
 
     data = Fields.field_values(field)
     ∇data = Operators.slab_gradient!(
         similar(data, NTuple{2, Geometry.Cartesian12Vector{Float64}}),
         data,
-        Fields.mesh(field),
+        Fields.space(field),
     )
     @test parent(∇data) ≈
           Float64[f == 1 || f == 4 for i in 1:Nq, j in 1:Nq, f in 1:4, h in 1:1]
 end
 
-@testset "gradient on -π : π domain mesh" begin
+@testset "gradient on -π : π domain SE space" begin
     FT = Float64
     domain = Domains.RectangleDomain(FT(-π)..FT(π), FT(-π)..FT(π))
-    discretiation = Domains.EquispacedRectangleDiscretization(domain, 5, 5)
-    grid_topology = Topologies.GridTopology(discretiation)
+    mesh = Meshes.EquispacedRectangleMesh(domain, 5, 5)
+    grid_topology = Topologies.GridTopology(mesh)
 
     Nq = 6
-    quad = Meshes.Quadratures.GLL{Nq}()
-    points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
-    mesh = Meshes.Mesh2D(grid_topology, quad)
-    field = sin.(Fields.coordinate_field(mesh).x1)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    field = sin.(Fields.coordinate_field(space).x1)
 
     data = Fields.field_values(field)
     ∇data = Operators.slab_gradient!(
         similar(data, Geometry.Cartesian12Vector{Float64}),
         data,
-        Fields.mesh(field),
+        Fields.space(field),
     )
     @test parent(∇data.u1) ≈
-          parent(Fields.field_values(cos.(Fields.coordinate_field(mesh).x1))) rtol =
+          parent(Fields.field_values(cos.(Fields.coordinate_field(space).x1))) rtol =
         1e-3
-    Meshes.horizontal_dss!(∇data, mesh)
+    Spaces.horizontal_dss!(∇data, space)
 
     S = similar(data, Float64)
     S .= 1.0
-    Meshes.horizontal_dss!(S, mesh)
+    Spaces.horizontal_dss!(S, space)
     S .= inv.(S)
 
     ∇data .= S .* ∇data
 
     @test parent(∇data.u1) ≈
-          parent(Fields.field_values(cos.(Fields.coordinate_field(mesh).x1))) rtol =
+          parent(Fields.field_values(cos.(Fields.coordinate_field(space).x1))) rtol =
         1e-3
 end
-# https://en.wikipedia.org/wiki/Vector_calculus_identities#Divergence_of_curl_is_zero
 
 @testset "divergence of a constant vector field is zero" begin
     FT = Float64
@@ -73,59 +72,59 @@ end
         x1periodic = true,
         x2periodic = true,
     )
-    discretiation = Domains.EquispacedRectangleDiscretization(domain, 5, 5)
-    grid_topology = Topologies.GridTopology(discretiation)
+    mesh = Meshes.EquispacedRectangleMesh(domain, 5, 5)
+    grid_topology = Topologies.GridTopology(mesh)
 
     Nq = 6
-    quad = Meshes.Quadratures.GLL{Nq}()
-    points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
-    mesh = Meshes.Mesh2D(grid_topology, quad)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     f(x) = Geometry.Cartesian12Vector{Float64}(
         sin(x.x1) * sin(x.x2),
         sin(x.x1) * sin(x.x2),
     )
     # ∂_x1 f + ∂_x2 f = cos(x1)*sin(x2) x̂ + sin(x1)*cos(x2) ŷ
-    field = f.(Fields.coordinate_field(mesh))
+    field = f.(Fields.coordinate_field(space))
 
     data = Fields.field_values(field)
     div_data = Operators.slab_divergence!(
         similar(data, Float64),
         data,
-        Fields.mesh(field),
+        Fields.space(field),
     )
     divf(x) = sin(x.x1 + x.x2)
     @test parent(div_data) ≈
-          parent(Fields.field_values(divf.(Fields.coordinate_field(mesh)))) rtol =
+          parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =
         1e-3
 
     # Jacobian-weighted DSS
-    SJ = copy(mesh.local_geometry.J)
-    Meshes.horizontal_dss!(SJ, mesh)
+    SJ = copy(space.local_geometry.J)
+    Spaces.horizontal_dss!(SJ, space)
     dss_div_data =
-        Meshes.horizontal_dss!(mesh.local_geometry.J .* div_data, mesh) ./ SJ
+        Spaces.horizontal_dss!(space.local_geometry.J .* div_data, space) ./ SJ
     @test parent(div_data) ≈
-          parent(Fields.field_values(divf.(Fields.coordinate_field(mesh)))) rtol =
+          parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =
         1e-3
 end
 #
 
 function boundary_value(
     f::Fields.Field,
-    cm::Meshes.ColumnMesh,
-    boundary::Meshes.ColumnMinMax,
+    cs::Spaces.FaceFiniteDifferenceSpace,
+    boundary::Spaces.ColumnMinMax,
 )
-    FT = Meshes.undertype(cm)
+    FT = Spaces.undertype(cs)
     column_array = parent(f)
-    if length(column_array) == Meshes.n_cells(cm)
+    if length(column_array) == Spaces.n_cells(cs)
         column_array = parent(f)
-        ghost_index = Meshes.ghost_index(cm, Meshes.CellCent(), boundary)
+        ghost_index = Spaces.ghost_index(cs, Spaces.CellCent(), boundary)
         ghost_value = column_array[ghost_index]
         first_interior_index =
-            Meshes.interior_index(cm, Meshes.CellCent(), boundary)
+            Spaces.interior_index(cs, Spaces.CellCent(), boundary)
         interior_value = column_array[first_interior_index]
         return FT((ghost_value + interior_value) / 2)
-    elseif length(column_array) == Meshes.n_faces(cm)
-        boundary_index = Meshes.boundary_index(cm, Meshes.CellFace(), boundary)
+    elseif length(column_array) == Spaces.n_faces(cs)
+        boundary_index = Spaces.boundary_index(cs, Spaces.CellFace(), boundary)
         return column_array[boundary_index]
     else
         error("Bad field")
@@ -134,25 +133,25 @@ end
 
 function ∇boundary_value(
     f::Fields.Field,
-    cm::Meshes.ColumnMesh,
-    boundary::Meshes.ColumnMinMax,
+    cs::Spaces.FaceFiniteDifferenceSpace,
+    boundary::Spaces.ColumnMinMax,
 )
-    FT = Meshes.undertype(cm)
+    FT = Spaces.undertype(cs)
     column_array = parent(f)
-    n_cells = Meshes.n_cells(cm)
-    n_faces = Meshes.n_faces(cm)
+    n_cells = Spaces.n_cells(cs)
+    n_faces = Spaces.n_faces(cs)
     if length(column_array) == n_cells
-        j = boundary isa Meshes.ColumnMin ? 2 : n_faces - 1
+        j = boundary isa Spaces.ColumnMin ? 2 : n_faces - 1
         i = j - 1
-        local_operator = parent(cm.∇_cent_to_face)[j]
+        local_operator = parent(cs.∇_cent_to_face)[j]
         local_stencil = column_array[i:(i + 1)] # TODO: remove hard-coded stencil size 2
         return convert(
             FT,
             LinearAlgebra.dot(parent(local_operator), local_stencil),
         )
     elseif length(column_array) == n_faces
-        i = boundary isa Meshes.ColumnMin ? 2 : n_faces - 1
-        local_operator = parent(cm.∇_face_to_face)[i]
+        i = boundary isa Spaces.ColumnMin ? 2 : n_faces - 1
+        local_operator = parent(cs.∇_face_to_face)[i]
         local_stencil = column_array[(i - 1):(i + 1)] # TODO: remove hard-coded stencil size 2
         return convert(
             FT,
@@ -168,27 +167,27 @@ end
     a = FT(0.0)
     b = FT(1.0)
     n = 10
-    cm = Meshes.FaceColumnMesh(a, b, n)
+    cs = Spaces.FaceFiniteDifferenceSpace(a, b, n)
 
-    vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-    vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+    vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+    vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-    cent_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
-    face_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
-
-    value = one(FT)
-    Operators.apply_dirichlet!(face_field, value, cm, Meshes.ColumnMax())
-    Operators.apply_dirichlet!(face_field, value, cm, Meshes.ColumnMin())
-
-    @test boundary_value(face_field, cm, Meshes.ColumnMin()) ≈ value
-    @test boundary_value(face_field, cm, Meshes.ColumnMax()) ≈ value
+    cent_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+    face_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
     value = one(FT)
-    Operators.apply_dirichlet!(cent_field, value, cm, Meshes.ColumnMax())
-    Operators.apply_dirichlet!(cent_field, value, cm, Meshes.ColumnMin())
+    Operators.apply_dirichlet!(face_field, value, cs, Spaces.ColumnMax())
+    Operators.apply_dirichlet!(face_field, value, cs, Spaces.ColumnMin())
 
-    @test boundary_value(cent_field, cm, Meshes.ColumnMin()) ≈ value
-    @test boundary_value(cent_field, cm, Meshes.ColumnMax()) ≈ value
+    @test boundary_value(face_field, cs, Spaces.ColumnMin()) ≈ value
+    @test boundary_value(face_field, cs, Spaces.ColumnMax()) ≈ value
+
+    value = one(FT)
+    Operators.apply_dirichlet!(cent_field, value, cs, Spaces.ColumnMax())
+    Operators.apply_dirichlet!(cent_field, value, cs, Spaces.ColumnMin())
+
+    @test boundary_value(cent_field, cs, Spaces.ColumnMin()) ≈ value
+    @test boundary_value(cent_field, cs, Spaces.ColumnMax()) ≈ value
 end
 
 @testset "Test vertical column neumann boundry conditions" begin
@@ -196,25 +195,25 @@ end
     a = FT(0.0)
     b = FT(1.0)
     n = 10
-    cm = Meshes.FaceColumnMesh(a, b, n)
+    cs = Spaces.FaceFiniteDifferenceSpace(a, b, n)
 
-    vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-    vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+    vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+    vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-    cent_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
-    face_field = Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
-
-    value = one(FT)
-    Operators.apply_neumann!(face_field, value, cm, Meshes.ColumnMin())
-    Operators.apply_neumann!(face_field, value, cm, Meshes.ColumnMax())
-
-    @test ∇boundary_value(face_field, cm, Meshes.ColumnMin()) ≈ value
-    @test ∇boundary_value(face_field, cm, Meshes.ColumnMax()) ≈ value
+    cent_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+    face_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
     value = one(FT)
-    Operators.apply_neumann!(cent_field, value, cm, Meshes.ColumnMin())
-    Operators.apply_neumann!(cent_field, value, cm, Meshes.ColumnMax())
+    Operators.apply_neumann!(face_field, value, cs, Spaces.ColumnMin())
+    Operators.apply_neumann!(face_field, value, cs, Spaces.ColumnMax())
 
-    @test ∇boundary_value(cent_field, cm, Meshes.ColumnMin()) ≈ value
-    @test ∇boundary_value(cent_field, cm, Meshes.ColumnMax()) ≈ value
+    @test ∇boundary_value(face_field, cs, Spaces.ColumnMin()) ≈ value
+    @test ∇boundary_value(face_field, cs, Spaces.ColumnMax()) ≈ value
+
+    value = one(FT)
+    Operators.apply_neumann!(cent_field, value, cs, Spaces.ColumnMin())
+    Operators.apply_neumann!(cent_field, value, cs, Spaces.ColumnMax())
+
+    @test ∇boundary_value(cent_field, cs, Spaces.ColumnMin()) ≈ value
+    @test ∇boundary_value(cent_field, cs, Spaces.ColumnMax()) ≈ value
 end

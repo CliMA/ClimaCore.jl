@@ -1,7 +1,7 @@
 """
     add_numerical_flux_internal!(fn, dydt, args...)
 
-Add the numerical flux at the internal faces of the mesh.
+Add the numerical flux at the internal faces of the spectral space mesh.
 
 The numerical flux is determined by evaluating
 
@@ -23,15 +23,15 @@ See also:
 - [`RusanovNumericalFlux`](@ref)
 """
 function add_numerical_flux_internal!(fn, dydt, args...)
-    mesh = Fields.mesh(dydt)
-    Nq = Meshes.Quadratures.degrees_of_freedom(mesh.quadrature_style)
-    topology = mesh.topology
+    space = Fields.space(dydt)
+    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
+    topology = space.topology
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
         internal_surface_geometry_slab =
-            slab(mesh.internal_surface_geometry, iface)
+            slab(space.internal_surface_geometry, iface)
 
         arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
         arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
@@ -73,11 +73,9 @@ struct CentralNumericalFlux{F}
 end
 
 function (fn::CentralNumericalFlux)(normal, argvals⁻, argvals⁺)
-    Favg = RecursiveOperators.rdiv(
-        fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...),
-        2,
-    )
-    return RecursiveOperators.rmap(f -> f' * normal, Favg)
+    Favg =
+        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
+    return RecursiveApply.rmap(f -> f' * normal, Favg)
 end
 
 """
@@ -93,26 +91,24 @@ end
 function (fn::RusanovNumericalFlux)(normal, argvals⁻, argvals⁺)
     y⁻ = argvals⁻[1]
     y⁺ = argvals⁺[1]
-    Favg = RecursiveOperators.rdiv(
-        fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...),
-        2,
-    )
+    Favg =
+        RecursiveApply.rdiv(fn.fluxfn(argvals⁻...) ⊞ fn.fluxfn(argvals⁺...), 2)
     λ = max(fn.wavespeedfn(argvals⁻...), fn.wavespeedfn(argvals⁺...))
-    return RecursiveOperators.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
+    return RecursiveApply.rmap(f -> f' * normal, Favg) ⊞ (λ / 2) ⊠ (y⁻ ⊟ y⁺)
 end
 
 
 function add_numerical_flux_boundary!(fn, dydt, args...)
-    mesh = Fields.mesh(dydt)
-    Nq = Meshes.Quadratures.degrees_of_freedom(mesh.quadrature_style)
-    topology = mesh.topology
+    space = Fields.space(dydt)
+    Nq = Spaces.Quadratures.degrees_of_freedom(spaces.quadrature_style)
+    topology = spaces.topology
 
     for (iboundary, boundarytag) in enumerate(Topologies.boundaries(topology))
         for (iface, (elem⁻, face⁻)) in
             enumerate(Topologies.boundary_faces(topology, boundarytag))
             boundary_surface_geometry_slab =
                 surface_geometry_slab =
-                    slab(mesh.boundary_surface_geometries[iboundary], iface)
+                    slab(spaces).(boundary_surface_geometries[iboundary], iface)
 
             arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
             dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)

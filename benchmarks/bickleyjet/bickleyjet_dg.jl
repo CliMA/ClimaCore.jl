@@ -1,13 +1,13 @@
 using LinearAlgebra
 using UnPack, StaticArrays, IntervalSets
 
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes
+import ClimateMachineCore: Fields, Domains, Meshes, Topologies, Spaces
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 using ClimateMachineCore.Geometry
 import ClimateMachineCore.Geometry: Abstract2DPoint
-using ClimateMachineCore.RecursiveOperators
-using ClimateMachineCore.RecursiveOperators: rdiv, rmap
+
+using ClimateMachineCore.RecursiveApply
 
 
 const parameters = (
@@ -61,7 +61,7 @@ roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
     (sqrt(ρ⁻) * var⁻ + sqrt(ρ⁺) * var⁺) / (sqrt(ρ⁻) + sqrt(ρ⁺))
 
 function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
-    Favg = rdiv(flux(y⁻, parameters⁻) ⊞ flux(y⁺, parameters⁺), 2)
+    Favg = RecursiveApply.rdiv(flux(y⁻, parameters⁻) ⊞ flux(y⁺, parameters⁺), 2)
 
     λ = sqrt(parameters⁻.g)
 
@@ -116,7 +116,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
 
     Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
-    rmap(f -> f' * n, Favg) ⊞ Δf
+    RecursiveApply.rmap(f -> f' * n, Favg) ⊞ Δf
 end
 
 function volume!(dydt, y, (parameters,), t)

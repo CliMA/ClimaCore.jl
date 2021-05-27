@@ -1,7 +1,7 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using ClimateMachineCore.Geometry, LinearAlgebra, UnPack
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes
+import ClimateMachineCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
@@ -33,13 +33,13 @@ domain = Domains.RectangleDomain(
 n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
-discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-grid_topology = Topologies.GridTopology(discretization)
-quad = Meshes.Quadratures.GLL{Nq}()
-mesh = Meshes.Mesh2D(grid_topology, quad)
+mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+grid_topology = Topologies.GridTopology(mesh)
+quad = Spaces.Quadratures.GLL{Nq}()
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-Iquad = Meshes.Quadratures.GLL{Nqh}()
-Imesh = Meshes.Mesh2D(grid_topology, Iquad)
+Iquad = Spaces.Quadratures.GLL{Nqh}()
+Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -64,7 +64,7 @@ function init_state(x, p)
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
+y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
@@ -104,22 +104,22 @@ function rhs!(dydt, y, _, t)
     #  ϕ = test function
     #  K = DSS scatter (i.e. duplicates points at element boundaries)
     #  K y = stored input vector (with duplicated values)
-    #  I = interpolation to higher-order mesh
+    #  I = interpolation to higher-order space
     #  D = derivative operator
-    #  H = suffix for higher-order mesh operations
+    #  H = suffix for higher-order space operations
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
     Nh = Topologies.nlocalelems(y)
 
-    # for all slab elements in mesh
+    # for all slab elements in space
     for h in 1:Nh
         y_slab = slab(y, h)
         dydt_slab = slab(dydt, h)
-        Imesh_slab = slab(Imesh, h)
+        Ispace_slab = slab(Ispace, h)
 
-        # 1. Interpolate to higher-order mesh
-        Iy_slab = Operators.interpolate(Imesh_slab, y_slab)
+        # 1. Interpolate to higher-order space
+        Iy_slab = Operators.interpolate(Ispace_slab, y_slab)
 
         # 2. compute fluxes
         #  flux.(I K y)
@@ -129,25 +129,25 @@ function rhs!(dydt, y, _, t)
         #  DH' WH JH flux.(I K y)
         WdivF_slab = Operators.slab_weak_divergence(IF_slab)
 
-        # 4. "back" interpolate to regular mesh
+        # 4. "back" interpolate to regular space
         #  I' [DH' WH JH flux.(I K y)]
         Operators.restrict!(dydt_slab, WdivF_slab)
     end
 
     # 5. Apply DSS gather operator
     #  K' I' [DH' WH JH flux.(I K y)]
-    Meshes.horizontal_dss!(dydt)
+    Spaces.horizontal_dss!(dydt)
 
     # 6. Solve for final result
     #  K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
-    Meshes.variational_solve!(dydt)
+    Spaces.variational_solve!(dydt)
 end
 
 # Next steps:
 # 1. add the above to the design docs (divergence + over-integration + DSS)
 # 2. add boundary conditions
 
-dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
+dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, nothing, 0.0);
 
 

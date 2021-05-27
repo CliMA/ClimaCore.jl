@@ -1,7 +1,7 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using ClimateMachineCore.Geometry, LinearAlgebra, UnPack
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes
+import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
@@ -39,13 +39,13 @@ domain = Domains.RectangleDomain(
 n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
-discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-grid_topology = Topologies.GridTopology(discretization)
-quad = Meshes.Quadratures.GLL{Nq}()
-mesh = Meshes.Mesh2D(grid_topology, quad)
+mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+grid_topology = Topologies.GridTopology(mesh)
+quad = Spaces.Quadratures.GLL{Nq}()
+space = Spaces.Mesh2D(grid_topology, quad)
 
-Iquad = Meshes.Quadratures.GLL{Nqh}()
-Imesh = Meshes.Mesh2D(grid_topology, Iquad)
+Iquad = Spaces.Quadratures.GLL{Nqh}()
+Ispace = Spaces.Mesh2D(grid_topology, Iquad)
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -70,7 +70,7 @@ function init_state(x, p)
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
+y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
@@ -171,9 +171,9 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #  ϕ = test function
     #  K = DSS scatter (i.e. duplicates points at element boundaries)
     #  K y = stored input vector (with duplicated values)
-    #  I = interpolation to higher-order mesh
+    #  I = interpolation to higher-order space
     #  D = derivative operator
-    #  H = suffix for higher-order mesh operations
+    #  H = suffix for higher-order space operations
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
@@ -195,11 +195,11 @@ function rhs!(dydt, y, (parameters, numflux), t)
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
-    dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
+    dydt_data .= rdiv.(dydt_data, space.local_geometry.WJ)
 
-    M = Meshes.Quadratures.cutoff_filter_matrix(
+    M = Spaces.Quadratures.cutoff_filter_matrix(
         Float64,
-        mesh.quadrature_style,
+        space.quadrature_style,
         3,
     )
     Operators.tensor_product!(dydt_data, M)
@@ -207,7 +207,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
     return dydt
 end
 
-dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
+dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator

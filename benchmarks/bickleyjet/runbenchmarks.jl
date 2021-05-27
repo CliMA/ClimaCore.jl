@@ -15,17 +15,17 @@ faceRs = Float64[]
 
 for Nq in Nqs
     # setup core
-    discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(discretization)
-    quad = Meshes.Quadratures.GLL{Nq}()
-    mesh = Meshes.Mesh2D(grid_topology, quad)
+    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+    grid_topology = Topologies.GridTopology(mesh)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
-    dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
+    y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
+    dydt = Fields.Field(similar(Fields.field_values(y0)), space)
     volume!(dydt, y0, (parameters,), 0.0)
     # TODO: move this to volume!
     dydt_data = Fields.field_values(dydt)
-    dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
+    dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
 
     # setup reference
     X = coordinates(Val(Nq), n1, n2)
@@ -51,7 +51,7 @@ for Nq in Nqs
     add_face!(dydt, y0, (parameters,), 0.0)
     # TODO: move this to volume!
     dydt_data = Fields.field_values(dydt)
-    dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
+    dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
 
     fill!(dYdt, 0.0)
     add_face_ref!(dYdt, Y0, (parameters, Val(Nq)), 0.0)
