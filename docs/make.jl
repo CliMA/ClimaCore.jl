@@ -8,7 +8,7 @@ format = Documenter.HTML(
 
 makedocs(
     sitename = "ClimateMachineCore.jl",
-    strict = true,
+    strict = false,
     format = format,
     checkdocs = :exports,
     clean = true,
