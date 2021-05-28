@@ -1,7 +1,6 @@
 using Test
-import ClimateMachineCore.Domains
+import ClimateMachineCore: Domains, Meshes, Topologies
 import ClimateMachineCore.Geometry: Cartesian2DPoint
-import ClimateMachineCore.Topologies
 using StaticArrays
 
 function rectangular_grid(
@@ -20,9 +19,9 @@ function rectangular_grid(
         x1periodic = x1periodic,
         x2periodic = x2periodic,
     )
-    discretiation = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(discretiation)
-    return (domain, discretiation, grid_topology)
+    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+    grid_topology = Topologies.GridTopology(mesh)
+    return (domain, mesh, grid_topology)
 end
 
 @testset "simple rectangular grid opposing face" begin

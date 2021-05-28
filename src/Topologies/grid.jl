@@ -4,14 +4,13 @@
 A periodic `n1` × `n2` topology of elements. Elements are stored sequentially in
 the first dimension, then the second dimension.
 """
-struct GridTopology{D <: EquispacedRectangleDiscretization, B} <:
-       AbstractTopology
-    discretization::D
+struct GridTopology{M <: EquispacedRectangleMesh, B} <: AbstractTopology
+    mesh::M
     boundaries::B
 end
-function GridTopology(discretization::EquispacedRectangleDiscretization)
-    x1boundary = discretization.domain.x1boundary
-    x2boundary = discretization.domain.x2boundary
+function GridTopology(mesh::EquispacedRectangleMesh)
+    x1boundary = mesh.domain.x1boundary
+    x2boundary = mesh.domain.x2boundary
     boundaries = if isnothing(x1boundary)
         if isnothing(x2boundary)
             NamedTuple()
@@ -25,17 +24,17 @@ function GridTopology(discretization::EquispacedRectangleDiscretization)
             NamedTuple{(x1boundary..., x2boundary...)}((1, 2, 3, 4))
         end
     end
-    GridTopology(discretization, boundaries)
+    GridTopology(mesh, boundaries)
 end
 
 function Base.show(io::IO, topology::GridTopology)
-    print(io, "GridTopology on ", topology.discretization)
+    print(io, "GridTopology on ", topology.mesh)
 end
-domain(topology::GridTopology) = topology.discretization.domain
+domain(topology::GridTopology) = topology.mesh.domain
 
 function nlocalelems(topology::GridTopology)
-    n1 = topology.discretization.n1
-    n2 = topology.discretization.n2
+    n1 = topology.mesh.n1
+    n2 = topology.mesh.n2
     return n1 * n2
 end
 
@@ -43,11 +42,11 @@ function vertex_coordinates(topology::GridTopology, elem::Integer)
     @assert 1 <= elem <= nlocalelems(topology)
 
     # convert to 0-based indices
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    range1 = discretization.range1
-    range2 = discretization.range2
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    range1 = mesh.range1
+    range2 = mesh.range2
 
     z2, z1 = fldmod(elem - 1, n1)
 
@@ -63,11 +62,11 @@ function opposing_face(topology::GridTopology, elem::Integer, face::Integer)
     @assert 1 <= face <= 4
 
     # convert to 0-based indices
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
 
     z2, z1 = fldmod(elem - 1, n1)
     if face == 1
@@ -116,11 +115,11 @@ end
 
 function Base.length(fiter::InteriorFaceIterator{T}) where {T <: GridTopology}
     topology = fiter.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
     return (x1periodic ? n1 : n1 - 1) * n2 + n1 * (x2periodic ? n2 : n2 - 1)
 end
 
@@ -134,11 +133,11 @@ function Base.iterate(
     #  - z2 ∈ 0:n2-1: 0-based face index in direction 2
 
     topology = fiter.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
 
     # skip boundary faces
     if d == 1 && z1 == 0 && !x1periodic
@@ -189,8 +188,8 @@ end
 
 # BoundaryFaceIterator
 function boundary_names(topology::GridTopology)
-    x1boundary = topology.discretization.domain.x1boundary
-    x2boundary = topology.discretization.domain.x2boundary
+    x1boundary = topology.mesh.domain.x1boundary
+    x2boundary = topology.mesh.domain.x2boundary
     if isnothing(x1boundary)
         isnothing(x2boundary) ? () : x2boundary
     else
@@ -198,8 +197,8 @@ function boundary_names(topology::GridTopology)
     end
 end
 function boundary_tag(topology::GridTopology, name::Symbol)
-    x1boundary = topology.discretization.domain.x1boundary
-    x2boundary = topology.discretization.domain.x2boundary
+    x1boundary = topology.mesh.domain.x1boundary
+    x2boundary = topology.mesh.domain.x2boundary
     if !isnothing(x1boundary)
         x1boundary[1] == name && return 1
         x1boundary[2] == name && return 2
@@ -219,17 +218,17 @@ function Base.length(bfiter::BoundaryFaceIterator{T}) where {T <: GridTopology}
     boundary = bfiter.boundary
     topology = bfiter.topology
     if boundary in (1, 2)
-        if isnothing(topology.discretization.domain.x1boundary)
+        if isnothing(topology.mesh.domain.x1boundary)
             return 0
         else
-            return topology.discretization.n2
+            return topology.mesh.n2
         end
     end
     if boundary in (3, 4)
-        if isnothing(topology.discretization.domain.x2boundary)
+        if isnothing(topology.mesh.domain.x2boundary)
             return 0
         else
-            return topology.discretization.n1
+            return topology.mesh.n1
         end
     end
 end
@@ -237,12 +236,10 @@ end
 function Base.iterate(bfiter::BoundaryFaceIterator{T}) where {T <: GridTopology}
     boundary = bfiter.boundary
     topology = bfiter.topology
-    if boundary in (1, 2) &&
-       isnothing(topology.discretization.domain.x1boundary)
+    if boundary in (1, 2) && isnothing(topology.mesh.domain.x1boundary)
         return nothing
     end
-    if boundary in (3, 4) &&
-       isnothing(topology.discretization.domain.x2boundary)
+    if boundary in (3, 4) && isnothing(topology.mesh.domain.x2boundary)
         return nothing
     end
     Base.iterate(bfiter, 0)
@@ -254,9 +251,9 @@ function Base.iterate(
 ) where {T <: GridTopology}
     boundary = bfiter.boundary
     topology = bfiter.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
     if boundary == 1
         z >= n2 && return nothing
         elem = z * n1 + 1
@@ -276,11 +273,11 @@ end
 # VertexIterator
 function Base.length(viter::VertexIterator{T}) where {T <: GridTopology}
     topology = viter.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
     nv1 = x1periodic ? n1 : n1 + 1
     nv2 = x2periodic ? n2 : n2 + 1
     return nv1 * nv2
@@ -291,11 +288,11 @@ function Base.iterate(
     (z1, z2) = (0, 0),
 ) where {T <: GridTopology}
     topology = viter.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
     nv1 = x1periodic ? n1 : n1 + 1
     nv2 = x2periodic ? n2 : n2 + 1
 
@@ -315,11 +312,11 @@ end
 # Vertex
 function Base.length(vertex::Vertex{T}) where {T <: GridTopology}
     topology = vertex.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
 
     z1, z2 = vertex.num
 
@@ -331,11 +328,11 @@ end
 
 function Base.iterate(vertex::Vertex{T}, vert = 0) where {T <: GridTopology}
     topology = vertex.topology
-    discretization = topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    x1periodic = isnothing(discretization.domain.x1boundary)
-    x2periodic = isnothing(discretization.domain.x2boundary)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
     nv1 = x1periodic ? n1 : n1 + 1
     nv2 = x2periodic ? n2 : n2 + 1
     z1, z2 = vertex.num

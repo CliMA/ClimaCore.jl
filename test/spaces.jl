@@ -1,32 +1,33 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
-import ClimateMachineCore: slab, Domains, Topologies, Meshes
+
+import ClimateMachineCore: slab, Domains, Meshes, Topologies, Spaces
 import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
 
-@testset "1×1 domain mesh" begin
+@testset "1×1 domain space" begin
     domain = Domains.RectangleDomain(
         -3..5,
         -2..8,
         x1periodic = true,
         x2periodic = false,
     )
-    discretization = Domains.EquispacedRectangleDiscretization(domain, 1, 1)
-    grid_topology = Topologies.GridTopology(discretization)
+    mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
+    grid_topology = Topologies.GridTopology(mesh)
 
-    quad = Meshes.Quadratures.GLL{4}()
-    points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
+    quad = Spaces.Quadratures.GLL{4}()
+    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
 
-    mesh = Meshes.Mesh2D(grid_topology, quad)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    array = getfield(mesh.coordinates, :array)
+    array = getfield(space.coordinates, :array)
     @test size(array) == (4, 4, 2, 1)
-    coord_slab = slab(mesh.coordinates, 1)
+    coord_slab = slab(space.coordinates, 1)
     @test coord_slab[1, 1] ≈ Cartesian2DPoint(-3.0, -2.0)
     @test coord_slab[4, 1] ≈ Cartesian2DPoint(5.0, -2.0)
     @test coord_slab[1, 4] ≈ Cartesian2DPoint(-3.0, 8.0)
     @test coord_slab[4, 4] ≈ Cartesian2DPoint(5.0, 8.0)
 
-    local_geometry_slab = slab(mesh.local_geometry, 1)
+    local_geometry_slab = slab(space.local_geometry, 1)
     for i in 1:4, j in 1:4
         @test local_geometry_slab[i, j].∂ξ∂x ≈ @SMatrix [2/8 0; 0 2/10]
         @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
@@ -42,41 +43,29 @@ import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
         end
     end
 
-    @test length(mesh.boundary_surface_geometries) == 2
-    @test keys(mesh.boundary_surface_geometries) == (:south, :north)
-    @test sum(parent(mesh.boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(mesh.boundary_surface_geometries.north.normal)[1, :, 1] ≈
+    @test length(space.boundary_surface_geometries) == 2
+    @test keys(space.boundary_surface_geometries) == (:south, :north)
+    @test sum(parent(space.boundary_surface_geometries.north.sWJ)) ≈ 8
+    @test parent(space.boundary_surface_geometries.north.normal)[1, :, 1] ≈
           [0.0, 1.0]
 end
 
-@testset "ColumnMesh" begin
+@testset "Column FiniteDifferenceSpace" begin
     for FT in (Float32, Float64)
         a = FT(0.0)
         b = FT(1.0)
         n = 10
-        cm = Meshes.FaceColumnMesh(a, b, n)
-        @test cm.cent.Δh[1] ≈ FT(1 / 10)
-        @test cm.face.Δh[1] ≈ FT(1 / 10)
-        sprint(show, cm)
-        @test cm.cent == Meshes.coords(cm, Meshes.CellCent())
-        @test cm.face == Meshes.coords(cm, Meshes.CellFace())
+        cs = Spaces.FaceFiniteDifferenceSpace(a, b, n)
+        @test cs.cent.Δh[1] ≈ FT(1 / 10)
+        @test cs.face.Δh[1] ≈ FT(1 / 10)
+        @test cs.cent == Spaces.coords(cs, Spaces.CellCent())
+        @test cs.face == Spaces.coords(cs, Spaces.CellFace())
     end
-    @test Meshes.n_hat(Meshes.ColumnMin()) == -1
-    @test Meshes.binary(Meshes.ColumnMin()) == 0
+    @test Spaces.n_hat(Spaces.ColumnMin()) == -1
+    @test Spaces.binary(Spaces.ColumnMin()) == 0
 
-    @test Meshes.n_hat(Meshes.ColumnMax()) == 1
-    @test Meshes.binary(Meshes.ColumnMax()) == 1
-
-    # @show collect(Meshes.column(cm, Meshes.CellCent()))
-    # @show collect(Meshes.column(cm, Meshes.CellFace()))
-
-    # https://github.com/charleskawczynski/MOONS.jl/blob/main/test/Fields/interpolations_convergence.jl#L21-L50
-    # for i_cent in column(cm, Meshes.CellCent())
-    #     cent_stencil = i_cent-1:i_cent+1
-    #     cent_view = @view cent_data[cent_stencil]
-    #     face_view = @view face_data[face_stencil]
-    #     face_data[face_stencil] = cm.interp_cent_to_face
-    # end
+    @test Spaces.n_hat(Spaces.ColumnMax()) == 1
+    @test Spaces.binary(Spaces.ColumnMax()) == 1
 end
 
 
@@ -111,25 +100,28 @@ convergence_rate(err, Δh) =
     for (i, warp_fn) in enumerate(warp_fns)
         err, Δh = zeros(length(nr)), zeros(length(nr))
         for (k, n) in enumerate(nr)
-            cm = Meshes.warp_mesh(warp_fn, Meshes.FaceColumnMesh(a, b, n))
+            cs = Spaces.warp_mesh(
+                warp_fn,
+                Spaces.FaceFiniteDifferenceSpace(a, b, n),
+            )
 
-            vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-            vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+            vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+            vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
             cent_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
             cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
 
             face_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
             parent(face_field) .= sin.(3 * π * vert_face)
             parent(cent_field_exact) .= sin.(3 * π * vert_cent)
 
-            Operators.vertical_interp!(cent_field, face_field, cm)
+            Operators.vertical_interp!(cent_field, face_field, cs)
 
-            Δh[k] = first(Meshes.Δcoordinates(cm, Meshes.CellCent()))
+            Δh[k] = first(Spaces.Δcoordinates(cs, Spaces.CellCent()))
             err[k] =
                 norm(parent(cent_field) .- parent(cent_field_exact)) /
                 length(parent(cent_field_exact))
@@ -155,26 +147,29 @@ end
     for warp_fn in warp_fns
         err, Δh = zeros(length(nr)), zeros(length(nr))
         for (k, n) in enumerate(nr)
-            cm = Meshes.warp_mesh(warp_fn, Meshes.FaceColumnMesh(a, b, n))
+            cs = Spaces.warp_mesh(
+                warp_fn,
+                Spaces.FaceFiniteDifferenceSpace(a, b, n),
+            )
 
-            vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-            vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+            vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+            vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
             face_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
             face_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
             cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
 
             parent(cent_field) .= sin.(3 * π * vert_cent)
             parent(face_field_exact) .= sin.(3 * π * vert_face)
 
-            Operators.vertical_interp!(face_field, cent_field, cm)
+            Operators.vertical_interp!(face_field, cent_field, cs)
 
-            idx_interior = Meshes.interior_face_range(cm)
-            Δh[k] = first(Meshes.Δcoordinates(cm, Meshes.CellFace()))
+            idx_interior = Spaces.interior_face_range(cs)
+            Δh[k] = first(Spaces.Δcoordinates(cs, Spaces.CellFace()))
             err_field =
                 parent(face_field)[idx_interior] .-
                 parent(face_field_exact)[idx_interior]
@@ -206,25 +201,28 @@ end
     for (warp_name, warp_fn) in warp_fns
         err, Δh = zeros(length(nr)), zeros(length(nr))
         for (k, n) in enumerate(nr)
-            cm = Meshes.warp_mesh(warp_fn, Meshes.FaceColumnMesh(a, b, n))
+            cs = Spaces.warp_mesh(
+                warp_fn,
+                Spaces.FaceFiniteDifferenceSpace(a, b, n),
+            )
 
-            vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-            vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+            vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+            vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
             cent_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
             cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
 
             face_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
             parent(face_field) .= sin.(3 * π * vert_face)
             parent(cent_field_exact) .= 3 * π * cos.(3 * π * vert_cent)
 
-            Operators.vertical_gradient!(cent_field, face_field, cm)
+            Operators.vertical_gradient!(cent_field, face_field, cs)
 
-            Δh[k] = first(Meshes.Δcoordinates(cm, Meshes.CellCent()))
+            Δh[k] = first(Spaces.Δcoordinates(cs, Spaces.CellCent()))
             err[k] =
                 norm(parent(cent_field) .- parent(cent_field_exact)) /
                 length(parent(cent_field_exact))
@@ -252,26 +250,29 @@ end
     for (warp_name, warp_fn) in warp_fns
         err, Δh = zeros(length(nr)), zeros(length(nr))
         for (k, n) in enumerate(nr)
-            cm = Meshes.warp_mesh(warp_fn, Meshes.FaceColumnMesh(a, b, n))
+            cs = Spaces.warp_mesh(
+                warp_fn,
+                Spaces.FaceFiniteDifferenceSpace(a, b, n),
+            )
 
-            vert_cent = Meshes.coordinates(cm, Meshes.CellCent())
-            vert_face = Meshes.coordinates(cm, Meshes.CellFace())
+            vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
+            vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
             face_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
             face_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_faces(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
 
             cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Meshes.n_cells(cm), 1)), cm)
+                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
 
             parent(cent_field) .= sin.(3 * π * vert_cent)
             parent(face_field_exact) .= 3 * π * cos.(3 * π * vert_face)
 
-            Operators.vertical_gradient!(face_field, cent_field, cm)
+            Operators.vertical_gradient!(face_field, cent_field, cs)
 
-            idx_interior = Meshes.interior_face_range(cm)
-            Δh[k] = first(Meshes.Δcoordinates(cm, Meshes.CellFace()))
+            idx_interior = Spaces.interior_face_range(cs)
+            Δh[k] = first(Spaces.Δcoordinates(cs, Spaces.CellFace()))
             err_field =
                 parent(face_field)[idx_interior] .-
                 parent(face_field_exact)[idx_interior]

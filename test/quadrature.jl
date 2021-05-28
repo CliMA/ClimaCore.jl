@@ -1,6 +1,6 @@
 using Test
 using LinearAlgebra, StaticArrays
-import ClimateMachineCore.Meshes.Quadratures
+import ClimateMachineCore.Spaces: Quadratures
 
 
 f(x) = x^3 + 2x^2 + 3x + 4

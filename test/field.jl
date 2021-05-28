@@ -2,7 +2,8 @@
 using Test
 using StaticArrays, IntervalSets
 import ClimateMachineCore.DataLayouts: IJFH
-import ClimateMachineCore: Fields, slab, Domains, Topologies, Meshes, Operators
+import ClimateMachineCore:
+    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces
 using LinearAlgebra: norm
 
 using UnicodePlots
@@ -15,19 +16,19 @@ domain = Domains.RectangleDomain(
 )
 n1, n2 = 1, 1
 Nij = 4
-discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-grid_topology = Topologies.GridTopology(discretization)
+mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+grid_topology = Topologies.GridTopology(mesh)
 
-quad = Meshes.Quadratures.GLL{Nij}()
-points, weights = Meshes.Quadratures.quadrature_points(Float64, quad)
+quad = Spaces.Quadratures.GLL{Nij}()
+points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
 
-mesh = Meshes.Mesh2D(grid_topology, quad)
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 
-@testset "1×1 domain mesh" begin
+@testset "1×1 domain space" begin
 
     field =
-        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), mesh)
+        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
@@ -41,7 +42,7 @@ mesh = Meshes.Mesh2D(grid_topology, quad)
 
     #@test parent(Fields.field_values(3 .* nt_field)) ==
 
-    field_sin = map(x -> sin((x.x1) / 2), Fields.coordinate_field(mesh))
+    field_sin = map(x -> sin((x.x1) / 2), Fields.coordinate_field(space))
 
     heatmap(field_sin)
 
@@ -67,7 +68,7 @@ end
         IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
             ones(Nij, Nij, 2, n1 * n2),
         ),
-        mesh,
+        space,
     )
     nt_sum = sum(nt_field)
     @test nt_sum isa NamedTuple{(:a, :b), Tuple{Float64, Float64}}

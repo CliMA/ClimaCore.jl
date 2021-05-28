@@ -1,21 +1,10 @@
 module Fields
 
 import ..slab, ..column
-import ..DataLayouts
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
-import ..Meshes:
-    Meshes,
-    AbstractMesh,
-    Quadratures,
-    Mesh2D,
-    ColumnMesh,
-    CellCent,
-    CellCent,
-    CellFace
-import ..Operators
-import ..Geometry
-import ..Geometry: Cartesian12Vector
-import ..RecursiveOperators
+import ..Spaces: Spaces, AbstractSpace
+import ..Geometry: Geometry, Cartesian12Vector
+import ..RecursiveApply
 import ..Topologies
 
 
@@ -51,55 +40,55 @@ end
 
 
 """
-    Field(values, mesh)
+    Field(values, space)
 
-A set of `values` defined at each point of a `mesh`.
+A set of `values` defined at each point of a `space`.
 """
-struct Field{V <: AbstractData, M <: AbstractMesh}
+struct Field{V <: AbstractData, S <: AbstractSpace}
     values::V
-    mesh::M
+    space::S
     # add metadata/attributes?
-    function Field{V, M}(values::V, mesh::M) where {V, M}
-        # need to enforce that the data size matches the mesh
-        # @assert support(values) === support(mesh.coordinates)
-        # @assert size(values) == size(mesh.coordinates)
-        return new{V, M}(values, mesh)
+    function Field{V, S}(values::V, space::S) where {V, S}
+        # need to enforce that the data size matches the space
+        # @assert support(values) === support(space.coordinates)
+        # @assert size(values) == size(space.coordinates)
+        return new{V, S}(values, space)
     end
 end
-Field(values::V, mesh::M) where {V <: AbstractData, M <: AbstractMesh} =
-    Field{V, M}(values, mesh)
+Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
+    Field{V, S}(values, space)
 
-const Field2D{V} = Field{V, <:Mesh2D}
-const FieldColumn{V} = Field{V, <:ColumnMesh}
+const SpectralElementField2D{V} = Field{V, <:Spaces.SpectralElementSpace2D}
+const FiniteDifferenceField{V} = Field{V, <:Spaces.FiniteDifferenceSpace}
 
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 field_values(field::Field) = getfield(field, :values)
-mesh(field::Field) = getfield(field, :mesh)
+space(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
 Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), mesh(field))
+    Field(getproperty(field_values(field), name), space(field))
 Base.getproperty(field::Field, name::Integer) =
-    Field(getproperty(field_values(field), name), mesh(field))
+    Field(getproperty(field_values(field), name), space(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))
 Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = () # to play nice with DifferentialEquations; may want to revisit this
 
 function slab(field::Field, h)
-    Field(slab(field_values(field), h), slab(mesh(field), h))
+    Field(slab(field_values(field), h), slab(space(field), h))
 end
 
 
-Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(mesh(field))
+Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(space(field))
 
 
 # printing
 function Base.show(io::IO, field::Field)
     print(io, eltype(field), "-valued Field:")
     _show_compact_field(io, field, "  ", true)
-    print(io, "\non ", mesh(field))
+    print(io, "\non ", space(field))
 end
 function _show_compact_field(io, field, prefix, isfirst = false)
     #print(io, prefix1)
@@ -146,7 +135,7 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(field::Field{V, M}) where {V, M} = field
 
-Base.axes(field::Field) = (mesh(field),)
+Base.axes(field::Field) = (space(field),)
 
 # TODO: we may want to rethink how we handle this to allow for more lazy operations
 todata(obj) = obj
@@ -159,40 +148,40 @@ end
 # these are required for ODE solvers
 # TODO: it may be more efficient to handle this at the array level?
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(+), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊞, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(-), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊟, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊟, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(*), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveOperators.:⊠, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊠, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(/), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveOperators.rdiv, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveApply.rdiv, args...)
 Base.Broadcast.broadcasted(fs::FieldStyle, ::typeof(muladd), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveOperators.rmuladd, args...)
+    Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
 
 
-function mesh(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
+function space(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     return axes(bc)[1]
 end
 
 Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
-    Field(similar(field_values(field), Eltype), mesh(field))
+    Field(similar(field_values(field), Eltype), space(field))
 Base.similar(field::Field) = similar(field, eltype(field))
 Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
 
 
-# fields on different meshes
-function Base.similar(field::Field, (mesh_to,)::Tuple{AbstractMesh})
-    similar(field, (mesh_to,), eltype(field))
+# fields on different spaces
+function Base.similar(field::Field, (space_to,)::Tuple{AbstractSpace})
+    similar(field, (space_to,), eltype(field))
 end
 function Base.similar(
     field::Field,
-    (mesh_to,)::Tuple{AbstractMesh},
+    (space_to,)::Tuple{AbstractSpace},
     ::Type{Eltype},
 ) where {Eltype}
-    Field(similar(mesh_to.coordinates, Eltype), mesh_to)
+    Field(similar(space_to.coordinates, Eltype), space_to)
 end
 
-Base.copy(field::Field) = Field(copy(field_values(field)), mesh(field))
+Base.copy(field::Field) = Field(copy(field_values(field)), space(field))
 
 # we implement our own to avoid the type-widening code, and throw a more useful error
 @inline function Base.copy(
@@ -207,7 +196,7 @@ Base.copy(field::Field) = Field(copy(field_values(field)), mesh(field))
 end
 
 function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
-    @assert mesh(dest) == mesh(src)
+    @assert space(dest) == space(src)
     copyto!(field_values(dest), field_values(src))
     return dest
 end
@@ -224,7 +213,7 @@ function Base.similar(
     bc::Base.Broadcast.Broadcasted{FieldStyle{DS}},
     ::Type{Eltype},
 ) where {DS, Eltype}
-    return Field(similar(todata(bc), Eltype), mesh(bc))
+    return Field(similar(todata(bc), Eltype), space(bc))
 end
 
 function Base.copyto!(
@@ -236,42 +225,42 @@ function Base.copyto!(
 end
 
 function Base.Broadcast.check_broadcast_shape(
-    (mesh1,)::Tuple{AbstractMesh},
-    (mesh2,)::Tuple{AbstractMesh},
+    (space1,)::Tuple{AbstractSpace},
+    (space2,)::Tuple{AbstractSpace},
 )
-    if mesh1 !== mesh2
-        error("Mismatched meshes\n$mesh1\n$mesh2")
+    if space1 !== space2
+        error("Mismatched spaces\n$space1\n$space2")
     end
     return nothing
 end
 function Base.Broadcast.check_broadcast_shape(
-    ax1::Tuple{AbstractMesh},
+    ax1::Tuple{AbstractSpace},
     ax2::Tuple{},
 )
     return nothing
 end
 function Base.Broadcast.check_broadcast_shape(
-    ax1::Tuple{AbstractMesh},
+    ax1::Tuple{AbstractSpace},
     ax2::Tuple,
 )
-    error("$ax2 is not a Mesh")
+    error("$ax2 is not a AbstractSpace")
 end
 
 
 # useful operations
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
 
-weighted_jacobian(cm::ColumnMesh{CellFace}) = cm.face.Δh
-weighted_jacobian(cm::ColumnMesh{CellCent}) = cm.cent.Δh
-weighted_jacobian(m::Mesh2D) = m.local_geometry.WJ
-weighted_jacobian(field) = weighted_jacobian(mesh(field))
+weighted_jacobian(cm::Spaces.FaceFiniteDifferenceSpace) = cm.face.Δh
+weighted_jacobian(cm::Spaces.CenterFiniteDifferenceSpace) = cm.cent.Δh
+weighted_jacobian(m::Spaces.SpectralElementSpace2D) = m.local_geometry.WJ
+weighted_jacobian(field) = weighted_jacobian(space(field))
 
 # sum will give the integral over the field
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
     Base.reduce(
-        RecursiveOperators.radd,
+        RecursiveApply.radd,
         Base.Broadcast.broadcasted(
-            RecursiveOperators.rmul,
+            RecursiveApply.rmul,
             weighted_jacobian(field),
             todata(field),
         ),
@@ -338,12 +327,12 @@ RecursiveArrayTools.recursivecopy(a::AbstractArray{<:Field}) =
     map(RecursiveArrayTools.recursivecopy, a)
 
 """
-    coordinate_field(mesh::AbstractMesh)
+    coordinate_field(space::AbstractSpace)
 
-Construct a `Field` of the coordinates of the mesh.
+Construct a `Field` of the coordinates of the space.
 """
-coordinate_field(mesh::AbstractMesh) = Field(mesh.coordinates, mesh)
-coordinate_field(field::Field) = coordinates(mesh(field))
+coordinate_field(space::AbstractSpace) = Field(space.coordinates, space)
+coordinate_field(field::Field) = coordinates(space(field))
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1
@@ -359,17 +348,17 @@ function interpcoord(elemrange, x::Real)
 end
 
 """
-    Meshes.variational_solve!(field)
+    Spaces.variational_solve!(field)
 
 Divide `field` by the mass matrix.
 """
-function Meshes.variational_solve!(field::Field)
-    Meshes.variational_solve!(field_values(field), mesh(field))
+function Spaces.variational_solve!(field::Field)
+    Spaces.variational_solve!(field_values(field), space(field))
     return field
 end
 
-function Meshes.horizontal_dss!(field::Field)
-    Meshes.horizontal_dss!(field_values(field), mesh(field))
+function Spaces.horizontal_dss!(field::Field)
+    Spaces.horizontal_dss!(field_values(field), space(field))
     return field
 end
 

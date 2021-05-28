@@ -1,11 +1,11 @@
 """
-    RecursiveOperators
+    RecursiveApply
 
 This module contains operators to recurse over nested `Tuple`s or `NamedTuple`s.
 
-To extend to another type `T`, define `RecursiveOperators.rmap(fn, args::T...)`
+To extend to another type `T`, define `RecursiveApply.rmap(fn, args::T...)`
 """
-module RecursiveOperators
+module RecursiveApply
 
 export ⊞, ⊠, ⊟
 

@@ -1,18 +1,23 @@
 import UnicodePlots, Plots
 
-function UnicodePlots.heatmap(field::Field; width = 80, height = 40, kwargs...)
+function UnicodePlots.heatmap(
+    field::Fields.SpectralElementField2D;
+    width = 80,
+    height = 40,
+    kwargs...,
+)
     if !(eltype(field) <: Real)
         error("Can only plot heatmaps of scalar fields")
     end
 
-    fieldmesh = Fields.mesh(field)
-    discretization = fieldmesh.topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    domain = discretization.domain
+    space = Fields.space(field)
+    mesh = space.topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    domain = mesh.domain
 
     Nu = max(div(width, n1), div(height, n2))
-    M = matrix_interpolate(field, Nu)
+    M = Operators.matrix_interpolate(field, Nu)
     m1, m2 = size(M)
 
     UnicodePlots.heatmap(
@@ -29,9 +34,14 @@ function UnicodePlots.heatmap(field::Field; width = 80, height = 40, kwargs...)
     )
 end
 
-function UnicodePlots.lineplot(field::Field; width = 80, height = 40, kwargs...)
-    fieldmesh = mesh(field)
-    x = parent(field)[Meshes.interior_face_range(fieldmesh), 1]
+function UnicodePlots.lineplot(
+    field::Fields.FiniteDifferenceField;
+    width = 80,
+    height = 40,
+    kwargs...,
+)
+    space = Fields.space(field)
+    x = parent(field)[Spaces.interior_face_range(space), 1]
     # TODO: use scaled domains using coordinates
     UnicodePlots.lineplot(
         x;
@@ -44,15 +54,15 @@ function UnicodePlots.lineplot(field::Field; width = 80, height = 40, kwargs...)
 end
 
 
-function Plots.heatmap(field::Field; kwargs...)
-    fieldmesh = Fields.mesh(field)
-    discretization = fieldmesh.topology.discretization
-    n1 = discretization.n1
-    n2 = discretization.n2
-    domain = discretization.domain
+function Plots.heatmap(field::Fields.SpectralElementField2D; kwargs...)
+    space = Fields.space(field)
+    mesh = space.topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    domain = mesh.domain
 
     Nu = 10
-    M = matrix_interpolate(field, Nu)
+    M = Operators.matrix_interpolate(field, Nu)
     m1, m2 = size(M)
 
 
