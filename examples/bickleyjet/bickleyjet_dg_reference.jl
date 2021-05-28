@@ -1,3 +1,6 @@
+include("../../../perf/IntelITT.jl/src/IntelITT.jl")
+using Main.IntelITT
+
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using LinearAlgebra
@@ -14,7 +17,6 @@ using ClimateMachineCore.Geometry
 import ClimateMachineCore.Geometry: Abstract2DPoint
 using ClimateMachineCore.RecursiveOperators
 using ClimateMachineCore.RecursiveOperators: rdiv, rmap
-using ClimateMachineCore.TicToc
 
 global_logger(TerminalLogger())
 
@@ -68,7 +70,7 @@ function init_state(x, p)
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-y0 = @time init_state.(Fields.coordinate_field(mesh), Ref(parameters))
+y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
@@ -163,7 +165,6 @@ end
 
 
 function rhs!(dydt, y, (parameters, numflux), t)
-    #@tic rhs
 
     # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
     #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
@@ -198,15 +199,15 @@ function rhs!(dydt, y, (parameters, numflux), t)
         3,
     )
     Operators.tensor_product!(dydt_data, M)
-    #@toc rhs
 
     return dydt
 end
 
-# tictoc()
-
 dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
-@time rhs!(dydt, y0, (parameters, roeflux), 0.0);
+rhs!(dydt, y0, (parameters, roeflux), 0.0);
+@time for i in 1:1000
+    rhs!(dydt, y0, (parameters, roeflux), 0.0);
+end
 
 # data layout: i, j, k, n1, n2
 #  n1,n2 topology
@@ -258,7 +259,7 @@ function tendency_ref!(dYdt, Y, (parameters, W, D, M, valNq), t)
     g = parameters.g
 
     # "Volume" part
-    for h2 = 1:n2, h1 = 1:n1
+    @inbounds for h2 = 1:n2, h1 = 1:n1
         # compute volume flux
         for j = 1:Nq, i = 1:Nq
             # 1. evaluate flux function at the point
@@ -304,7 +305,7 @@ function tendency_ref!(dYdt, Y, (parameters, W, D, M, valNq), t)
     # "Face" part
     sJ1 = 2pi/n1
     sJ2 = 2pi/n2
-    for h2 = 1:n2, h1 = 1:n1
+    @inbounds for h2 = 1:n2, h1 = 1:n1
         # direction 1
         g1 = mod1(h1-1,n1)
         g2 = h2
@@ -353,16 +354,14 @@ function tendency_ref!(dYdt, Y, (parameters, W, D, M, valNq), t)
         end
     end
 
-
     # apply filter
-    # temporary storage: match the layout of dYdt?
-    scratch = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
-    for h2 = 1:n2, h1 = 1:n1
+    scratch = MArray{Tuple{Nq, Nq, Nstate}, Float64, 3, Nq * Nq * Nstate}(undef)
+    @inbounds for h2 = 1:n2, h1 = 1:n1
         for j in 1:Nq, i in 1:Nq
             for s = 1:Nstate
-                scratch[s,i,j] = 0.0
+                scratch[i,j,s] = 0.0
                 for k = 1:Nq
-                    scratch[s,i,j] += M[i,k] * dYdt[k,j,s,h1,h2]
+                    scratch[i,j,s] += M[i,k] * dYdt[k,j,s,h1,h2]
                 end
             end
         end
@@ -370,7 +369,7 @@ function tendency_ref!(dYdt, Y, (parameters, W, D, M, valNq), t)
             for s = 1:Nstate
                 dYdt[i,j,s,h1,h2] = 0.0
                 for k = 1:Nq
-                    dYdt[i,j,s,h1,h2] += M[j,k] * scratch[s,i,k]
+                    dYdt[i,j,s,h1,h2] += M[j,k] * scratch[i,k,s]
                 end
             end
         end
@@ -379,12 +378,13 @@ function tendency_ref!(dYdt, Y, (parameters, W, D, M, valNq), t)
     return dYdt
 end
 
-@time tendency_ref!(dYdt, Y, (parameters, W, D, M, Val(Nq)), 0.0);
+tendency_ref!(dYdt, Y, (parameters, W, D, M, Val(Nq)), 0.0);
+@time for i in 1:1000
+    tendency_ref!(dYdt, Y, (parameters, W, D, M, Val(Nq)), 0.0);
+end
 
 dYdt_ref = reshape(parent(dydt),(Nq,Nq,4,n1,n2))
 dYdt ≈ dYdt_ref
-
-
 
 
 #=
@@ -412,7 +412,7 @@ Es = [total_energy(u, parameters) for u in sol.u]
 png(plot(Es), joinpath(@__DIR__, "energy_dg_$numflux_name.png"))
 =#
 
-
+#=
 # # figpath = joinpath(figure_save_directory, "posterior_$(param)_T_$(T)_w_$(ω_true).png")
 # linkfig(figpath)
 function linkfig(figpath)
@@ -426,3 +426,5 @@ function linkfig(figpath)
         print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
     end
 end
+=#
+
