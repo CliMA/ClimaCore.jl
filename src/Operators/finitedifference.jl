@@ -11,12 +11,12 @@ struct CenteredDerivative <: FiniteDifferenceOperator end
 
 # should CenterFiniteDifferenceSpace store the c2c Δh, or the f2f?
 
-function result_space(::CenteredDerivative, field::CenterFiniteDifferenceField)
-    Fields.space(field).facefield
+function result_space(::CenteredDerivative, space::CenterFiniteDifferenceSpace)
+    space.facefield
 end
 
-function result_space(::CenteredDerivative, field::FaceFiniteDifferenceField)
-    Fields.space(field).centerfield
+function result_space(::CenteredDerivative, space::FaceFiniteDifferenceSpace)
+    space.centerfield
 end
 
 function stencil(::CenteredDerivative, field::CenterFiniteDifferenceField, idx)
@@ -42,8 +42,8 @@ Returns a field stored at cell faces
 """
 abstract type AdvectionOperator <: FiniteDifferenceOperator end
 
-function result_space(::AdvectionOperator, scalar_field::CenterFiniteDifferenceField, vector_field::FaceFiniteDifferenceField)
-    Fields.space(vector_field).facefield
+function result_space(::AdvectionOperator, scalar_space::CenterFiniteDifferenceSpace, vector_space::FaceFiniteDifferenceSpace)
+    vector_space.facefield
 end
 
 struct LeftAdvectionOperator <: FiniteDifferenceOperator end
@@ -56,23 +56,89 @@ function stencil(::LeftAdvectionOperator, scalar_field::CenterFiniteDifferenceFi
     return scalar_data[idx-1] * vector_data[idx]
 end
 
+# FiniteDifferenceSpace
+#  full indices (what we store) 1:N
+#  valid indices ()
+#  real indices  (non-halo k:n+k)
+
+#=
+#  n-element mesh + h halo on each scalar_field
+#   - n + 2h center values
+#   - n + 2h + 1 face values
+#  apply upwind advection operator (defines values at faces)   
+#   - face values 2:n+2h are valid
+#  apply centered FiniteDifferenceSpace (gives values at center)
+#   - center values 2:n+2h-1 are valid
+
+# CenterFiniteDifferenceSpace
+# Halo{CenterFiniteDifferenceSpace}
+
+=#
+mutable struct CenterFiniteDifferenceSpace{FT,C,H,FS}
+    domain::IntervalDomain{FT}
+    coordinates::C
+    Δh::H
+    facespace::FS
+end
+
+mutable struct FaceFiniteDifferenceSpace{FT,C,H,CS}
+    domain::IntervalDomain{FT}
+    coordinates::C
+    Δh::H
+    centerspace::CS
+end
+
+function CenterFiniteDifferenceSpace(domain::IntervalDomain, n::Integer)
+    
+
+
+#=
+
+struct CenterFiniteDifferenceSpace <: FiniteDifferenceSpace
+    fullspace::CenterFiniteDifferenceSpace
+    validrange::UnitRange
+end
+
+function tendency!(dθdt, θ, v, t)
+    # θ = scalar # centers 1:n+2
+    # v = vector # faces 1:n+3
+    # 1. fill in ghost values θ[1], θ[n+2]
+    # 2. apply upwind operator faces at face indices 2:n+2
+    #    U = Upwind(θ,v)
+    # 3. apply difference operator at centere indices 2:n+1 
+    #    dθdt = CenteredDerivative(U)   
+
+    # Prescribed flux form
+    # θ = scalar # centers 1:n
+    # v = vector # faces 1:n+1
+    # 1. apply upwind operator faces at face indices 2:n
+    #    F = Upwind(θ,v)
+    # 2. Set the F[1] and F[n+1] to the desired fluxes
+    # 3. apply difference operator at centere indices 1:n
+    #    dθdt = CenteredDerivative(F)
+end
+
+=#
+
+
+
+
 function stencil(::RightAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
     scalar_data = Fields.field_values(scalar_field)
     vector_data = Fields.field_values(vector_field)
-    return scalar_data[i] * vector_data[i]
+    return scalar_data[idx] * vector_data[idx]
 end
 
 function stencil(::UpwindAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
-    (v + abs(v))/2 * stencil(LeftOperator(), scalar_field, vector_field, i) + # v > 0
-    (v - abs(v))/2 * stencil(RightOperator(), scalar_field, vector_field, i)  # v < 0
+    (v + abs(v))/2 * stencil(LeftOperator(), scalar_field, vector_field, idx) + # v > 0
+    (v - abs(v))/2 * stencil(RightOperator(), scalar_field, vector_field, idx)  # v < 0
 end
 
+struct StencilStyle <: Base.BroadcastStyle end
 
-struct StencilStyle <: Base.BroadcastStyle
+function Base.BroadcastStyle(::Type{<:FiniteDifferenceOperator})
+    return StencilStyle()
 end
-
-Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
-    DataStyle(D)
 
 function Base.getindex(bc::Broadcasted{StencilStyle}, I::Integer)
     stencil(bc.fn, bc.args..., I)
@@ -80,6 +146,18 @@ end
 
 (op::AdvectionOperator)(fields) = Base.Broadcast.broadcasted(StencilStyle(), op, fields)
 (op::CenteredDerivative)(fields) = Base.Broadcast.broadcasted(StencilStyle(), op, fields)
+
+function Base.Broadcast.instantiate(bc::Broadcasted{StencilStyle})
+    spaces = map(arg -> axes(arg)[1], bc.args)
+    axes = (result_space(bc.fn, spaces...),)            
+    if !isnothing(bc.axes)
+        @assert axes == bc.axes
+    end
+    return Broadcasted{Style}(bc.f, bc.args, axes)
+end
+
+
+
 
 function apply_stencil!(field_to, operator, field_from)
     space_from = Fields.space(field_from)
@@ -90,6 +168,7 @@ function apply_stencil!(field_to, operator, field_from)
     end
     return field_to
 end
+
 
 function apply_stencil!(field_to, operator, field_from1, field_from2)
     data_from1 = Fields.field_values(field_from1)

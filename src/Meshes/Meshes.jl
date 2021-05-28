@@ -14,6 +14,11 @@ in a file, it would contain the filename.
 """
 abstract type AbstractMesh end
 
+struct IntervalMesh{FT, I<:FT, V<:AbstractVector}
+    domain::I
+    faces::V
+end
+
 
 """
     EquispacedRectangleMesh(domain::RectangleDomain, n1::Integer, n2::Integer)
