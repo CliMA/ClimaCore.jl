@@ -1,4 +1,142 @@
 
+# face  center
+#   i
+#         i
+#  i+1
+
+abstract type FiniteDifferenceOperator end
+
+struct CenteredDerivative <: FiniteDifferenceOperator end
+
+
+# should CenterFiniteDifferenceSpace store the c2c Δh, or the f2f?
+
+function result_space(::CenteredDerivative, field::CenterFiniteDifferenceField)
+    Fields.space(field).facefield
+end
+
+function result_space(::CenteredDerivative, field::FaceFiniteDifferenceField)
+    Fields.space(field).centerfield
+end
+
+function stencil(::CenteredDerivative, field::CenterFiniteDifferenceField, idx)
+    data = Fields.field_values(field)
+    space = Fields.space(field)
+    return (data[idx] ⊟ data[idx-1]) / space.Δh_c2c[idx]
+end
+
+function stencil(::CenteredDerivative, field::FaceFiniteDifferenceField, idx)
+    data = Fields.field_values(field)
+    space = Fields.space(field)
+    return (data[idx+1] ⊟ data[idx]) / space.Δh_f2f[idx]
+end
+
+"""
+    AdvectionOperator
+
+Computes an advection of `A` by `v`, where
+- `A` is a field stored at cell centers 
+- `v` is a vector field stored at cell faces
+
+Returns a field stored at cell faces
+"""
+abstract type AdvectionOperator <: FiniteDifferenceOperator end
+
+function result_space(::AdvectionOperator, scalar_field::CenterFiniteDifferenceField, vector_field::FaceFiniteDifferenceField)
+    Fields.space(vector_field).facefield
+end
+
+struct LeftAdvectionOperator <: FiniteDifferenceOperator end
+struct RightAdvectionOperator <: FiniteDifferenceOperator end
+struct UpwindAdvectionOperator <: FiniteDifferenceOperator end
+
+function stencil(::LeftAdvectionOperator, scalar_field::CenterFiniteDifferenceField, vector_field::FaceFiniteDifferenceField, idx)
+    scalar_data = Fields.field_values(scalar_field)
+    vector_data = Fields.field_values(vector_field)
+    return scalar_data[idx-1] * vector_data[idx]
+end
+
+function stencil(::RightAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
+    scalar_data = Fields.field_values(scalar_field)
+    vector_data = Fields.field_values(vector_field)
+    return scalar_data[i] * vector_data[i]
+end
+
+function stencil(::UpwindAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
+    (v + abs(v))/2 * stencil(LeftOperator(), scalar_field, vector_field, i) + # v > 0
+    (v - abs(v))/2 * stencil(RightOperator(), scalar_field, vector_field, i)  # v < 0
+end
+
+
+struct StencilStyle <: Base.BroadcastStyle
+end
+
+Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
+    DataStyle(D)
+
+function Base.getindex(bc::Broadcasted{StencilStyle}, I::Integer)
+    stencil(bc.fn, bc.args..., I)
+end
+
+(op::AdvectionOperator)(fields) = Base.Broadcast.broadcasted(StencilStyle(), op, fields)
+(op::CenteredDerivative)(fields) = Base.Broadcast.broadcasted(StencilStyle(), op, fields)
+
+function apply_stencil!(field_to, operator, field_from)
+    space_from = Fields.space(field_from)
+    space_to = Fields.space(field_to)
+    data_to = Fields.field_values(field_to)
+    for i in eachrealindex(space_to)
+        data_to[i] = stencil(operator, space_to, space_from, i)
+    end
+    return field_to
+end
+
+function apply_stencil!(field_to, operator, field_from1, field_from2)
+    data_from1 = Fields.field_values(field_from1)
+    space_from1  = Fields.space(field_from1)
+    data_from2 = Fields.field_values(field_from2)
+    space_from2  = Fields.space(field_from2)
+
+    data_to = Fields.field_values(field_to)
+    space_to = Fields.space(field_to)
+
+    for i in eachrealindex(space_to)
+        data_to[i] = stencil(operator, space_to, data_from1, space_from1, data_from2, space_from2, i)
+    end
+    return field_to
+end
+
+#=
+centered.(upwind.(a, v) 
+
+a :: CenterFiniteDifferenceField
+axes(a) = CenterFiniteDifferenceMesh(..., nghost=1)
+v :: FaceFiniteDifferenceField
+axes(v) = FaceFiniteDifferenceField(..., nghost=1)
+
+F = Upwind(a,v) :: ?
+axes(F) = FaceFiniteDifferenceField(..., nghost=0)
+
+D = CenteredDerivative(F)
+axes(D) = CenterFiniteDifferenceField(..., nghost=0)
+
+# A on centers, v on faces ∂(Av)/∂z
+# CenteredDerivative(Upwind(A,v))
+
+
+function stencil(::UpwindOperator, data, v,
+    space_from::FaceFiniteDifferenceSpace, space_to::CenterFiniteifferenceSpace, i)
+    (data[i+1] ⊟ data[i]) / space_from.Δh_f2f
+end
+
+
+# stencil function
+# stencil to compute ith center value
+δf2c(data, space, i) = (data[i+1] ⊟ data[i])
+# stencil to compute ith face value
+δc2f(data, space, i) = (data[i] ⊟ data[i-1])
+
+
 # TODO: Next steps
 # be able to lookup or dispatch on column mesh,center / faces when doing operations easily
 # reformat this as a map across vertical levels with fields (so we don't have to call parent()
@@ -8,6 +146,8 @@
 # clean up the interface in general (rmatrixmultiply?), get rid of LinearAlgebra.dot()
 # vertical only fields? (split h and v)
 # make local_operators static vectors
+=#
+
 function vertical_interp!(
     field_to,
     field_from,
