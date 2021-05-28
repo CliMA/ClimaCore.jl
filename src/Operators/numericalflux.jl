@@ -100,15 +100,15 @@ end
 
 function add_numerical_flux_boundary!(fn, dydt, args...)
     space = Fields.space(dydt)
-    Nq = Spaces.Quadratures.degrees_of_freedom(spaces.quadrature_style)
-    topology = spaces.topology
+    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
+    topology = space.topology
 
     for (iboundary, boundarytag) in enumerate(Topologies.boundaries(topology))
         for (iface, (elem⁻, face⁻)) in
             enumerate(Topologies.boundary_faces(topology, boundarytag))
             boundary_surface_geometry_slab =
                 surface_geometry_slab =
-                    slab(spaces).(boundary_surface_geometries[iboundary], iface)
+                    slab(space.boundary_surface_geometries[iboundary], iface)
 
             arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
             dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)

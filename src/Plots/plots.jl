@@ -56,7 +56,7 @@ end
 
 function Plots.heatmap(field::Fields.SpectralElementField2D; kwargs...)
     space = Fields.space(field)
-    mesh = fieldmesh.topology.mesh
+    mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
     domain = mesh.domain

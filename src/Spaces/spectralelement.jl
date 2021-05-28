@@ -195,7 +195,7 @@ struct SpectralElementSpaceSlab{Q, C, G} <: AbstractSpace
     local_geometry::G
 end
 function slab(Space::SpectralElementSpace2D, h)
-    SpaceSlab(
+    SpectralElementSpaceSlab(
         Space.quadrature_style,
         slab(Space.coordinates, h),
         slab(Space.local_geometry, h),

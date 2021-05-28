@@ -8,8 +8,8 @@ import ClimateMachineCore.Geometry
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using ClimateMachineCore.RecursiveOperators
-using ClimateMachineCore.RecursiveOperators: rdiv, rmap
+using ClimateMachineCore.RecursiveApply
+using ClimateMachineCore.RecursiveApply: rdiv, rmap
 
 
 using Logging: global_logger
@@ -42,10 +42,10 @@ Nqh = 7
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
-space = Spaces.Mesh2D(grid_topology, quad)
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Spaces.Quadratures.GLL{Nqh}()
-Ispace = Spaces.Mesh2D(grid_topology, Iquad)
+Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(x, p)
     @unpack x1, x2 = x
