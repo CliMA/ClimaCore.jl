@@ -16,7 +16,9 @@ Base.length(ax::AbstractAxis) = length(ax.range)
 Base.iterate(ax::AbstractAxis) = iterate(ax.range)
 Base.iterate(ax::AbstractAxis, i) = iterate(ax.range, i)
 Base.getindex(ax::AbstractAxis, i) = getindex(ax.range, i)
-Base.unitrange(ax::AbstractAxis) = Base.unitrange(ax.range)
+if VERSION >= v"1.6"
+    Base.unitrange(ax::AbstractAxis) = Base.UnitRange(ax.range)
+end
 Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) =
     Base.checkindex(Bool, ax.range, i)
 Base.lastindex(ax::AbstractAxis) = Base.lastindex(ax.range)

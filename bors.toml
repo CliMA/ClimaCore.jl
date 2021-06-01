@@ -1,7 +1,13 @@
 status = [
-  "test-os (ubuntu-latest)",
-  "test-os (windows-latest)",
-  "test-os (macos-latest)",
+  "test-os 1.4 - (ubuntu-latest)",
+  "test-os 1.4 - (windows-latest)",
+  "test-os 1.4 - (macos-latest)",
+  "test-os 1.5 - (ubuntu-latest)",
+  "test-os 1.5 - (windows-latest)",
+  "test-os 1.5 - (macos-latest)",
+  "test-os 1.6 - (ubuntu-latest)",
+  "test-os 1.6 - (windows-latest)",
+  "test-os 1.6 - (macos-latest)",
   "buildkite/climatemachinecore-ci",
   "format",
   "docbuild"
