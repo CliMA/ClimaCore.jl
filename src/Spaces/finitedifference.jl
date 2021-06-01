@@ -42,10 +42,10 @@ coordinates(space::CenterFiniteDifferenceSpace) = space.center_coordinates
 coordinates(space::FaceFiniteDifferenceSpace) = space.face_coordinates
 
 real_indices(space::CenterFiniteDifferenceSpace) = 
-    space.nhalo+1:length(space.center_coordinates)-space.nhalo
+    range(space.nhalo+1, length(space.center_coordinates)-space.nhalo, step=1)
 
 real_indices(space::FaceFiniteDifferenceSpace) = 
-    space.nhalo+1:length(space.face_coordinates)-space.nhalo
+    range(space.nhalo+1, length(space.face_coordinates)-space.nhalo, step=1)
 
 interior_indices(space::CenterFiniteDifferenceSpace) = 
     real_indices(space)
