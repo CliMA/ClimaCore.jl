@@ -58,6 +58,16 @@ end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
 
+function CentField(cs::Spaces.FiniteDifferenceSpace)
+    FT = Spaces.undertype(cs)
+    return Field(DataLayouts.VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+end
+
+function FaceField(cs::Spaces.FiniteDifferenceSpace)
+    FT = Spaces.undertype(cs)
+    return Field(DataLayouts.VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
+end
+
 const SpectralElementField2D{V} = Field{V, <:Spaces.SpectralElementSpace2D}
 const FiniteDifferenceField{V} = Field{V, <:Spaces.FiniteDifferenceSpace}
 

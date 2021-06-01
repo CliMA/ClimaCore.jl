@@ -172,8 +172,8 @@ end
     vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
     vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-    cent_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-    face_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
+    cent_field = Fields.CentField(cs)
+    face_field = Fields.FaceField(cs)
 
     value = one(FT)
     Operators.apply_dirichlet!(face_field, value, cs, Spaces.ColumnMax())
@@ -200,8 +200,8 @@ end
     vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
     vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-    cent_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-    face_field = Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
+    cent_field = Fields.CentField(cs)
+    face_field = Fields.FaceField(cs)
 
     value = one(FT)
     Operators.apply_neumann!(face_field, value, cs, Spaces.ColumnMin())

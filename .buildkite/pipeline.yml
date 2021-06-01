@@ -101,6 +101,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column FDM heat equation"
+    key: "cpu_column_fdm_heat_equation"
+    command:
+      - "julia --color=yes --project=examples/column_heateq examples/column_heateq/heateq.jl column heat equation"
+    artifact_paths:
+      - "examples/column_heateq/output/temperature/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: :fast_forward: Bickley jet DG"
     key: "cpu_benchmark_bickleyjet_dg"
     command:

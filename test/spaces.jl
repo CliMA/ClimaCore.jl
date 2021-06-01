@@ -108,13 +108,9 @@ convergence_rate(err, Δh) =
             vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
             vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-            cent_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-            cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-
-            face_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
+            cent_field_exact = Fields.CentField(cs)
+            cent_field = Fields.CentField(cs)
+            face_field = Fields.FaceField(cs)
 
             parent(face_field) .= sin.(3 * π * vert_face)
             parent(cent_field_exact) .= sin.(3 * π * vert_cent)
@@ -155,13 +151,9 @@ end
             vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
             vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-            face_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
-            face_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
-
-            cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+            face_field_exact = Fields.FaceField(cs)
+            face_field = Fields.FaceField(cs)
+            cent_field = Fields.CentField(cs)
 
             parent(cent_field) .= sin.(3 * π * vert_cent)
             parent(face_field_exact) .= sin.(3 * π * vert_face)
@@ -209,13 +201,9 @@ end
             vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
             vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-            cent_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-            cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
-
-            face_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
+            cent_field_exact = Fields.CentField(cs)
+            cent_field = Fields.CentField(cs)
+            face_field = Fields.FaceField(cs)
 
             parent(face_field) .= sin.(3 * π * vert_face)
             parent(cent_field_exact) .= 3 * π * cos.(3 * π * vert_cent)
@@ -258,13 +246,9 @@ end
             vert_cent = Spaces.coordinates(cs, Spaces.CellCent())
             vert_face = Spaces.coordinates(cs, Spaces.CellFace())
 
-            face_field_exact =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
-            face_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_faces(cs), 1)), cs)
-
-            cent_field =
-                Fields.Field(VF{FT}(zeros(FT, Spaces.n_cells(cs), 1)), cs)
+            face_field_exact = Fields.FaceField(cs)
+            face_field = Fields.FaceField(cs)
+            cent_field = Fields.CentField(cs)
 
             parent(cent_field) .= sin.(3 * π * vert_cent)
             parent(face_field_exact) .= 3 * π * cos.(3 * π * vert_face)
