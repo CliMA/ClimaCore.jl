@@ -14,7 +14,7 @@ ClimateMachineCore.jl
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimateMachineCore.jl/dev/
 
-[gha-ci-img]: https://github.com/CliMA/ClimateMachineCore.jl/actions/workflows/OS-UnitTests.yml/badge.svg?branch=main
+[gha-ci-img]: https://github.com/CliMA/ClimateMachineCore.jl/actions/workflows/OS-UnitTests.yml/badge.svg
 [gha-ci-url]: https://github.com/CliMA/ClimateMachineCore.jl/actions/workflows/OS-UnitTests.yml
 
 [codecov-img]: https://codecov.io/gh/CliMA/ClimateMachineCore.jl/branch/main/graph/badge.svg
