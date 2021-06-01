@@ -253,14 +253,15 @@ Column coordinates containing a collocated
 grid at cell centers (`cent`) and cell faces
 (`face`).
 """
-struct FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O} <: AbstractSpace
+struct FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, ∇CC, O} <:
+       AbstractSpace
     face::F
     cent::C
     interp_cent_to_face::ICF
     ∇_cent_to_face::∇CF
     ∇_face_to_cent::∇FC
     ∇_face_to_face::∇FF
-    # ∇_cent_to_cent::∇CC
+    ∇_cent_to_cent::∇CC
     n_cells_ghost::Int
     order::O
 end
@@ -273,16 +274,18 @@ function FiniteDifferenceSpace{S}(
     ∇_cent_to_face::∇CF,
     ∇_face_to_cent::∇FC,
     ∇_face_to_face::∇FF,
+    ∇_cent_to_cent::∇CC,
     n_cells_ghost::Integer,
     order::O,
-) where {S, F, C, ICF, ∇CF, ∇FC, ∇FF, O}
-    FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, O}(
+) where {S, F, C, ICF, ∇CF, ∇FC, ∇FF, ∇CC, O}
+    FiniteDifferenceSpace{S, F, C, ICF, ∇CF, ∇FC, ∇FF, ∇CC, O}(
         face,
         cent,
         interp_cent_to_face,
         ∇_cent_to_face,
         ∇_face_to_cent,
         ∇_face_to_face,
+        ∇_cent_to_cent,
         n_cells_ghost,
         order,
     )
@@ -363,6 +366,12 @@ function interior_face_range(cm::FiniteDifferenceSpace)
     nfaces = n_faces(cm)
     nghost = cm.n_cells_ghost
     return range(nghost + 1, nfaces - nghost, step = 1)
+end
+
+function interior_cent_range(cm::FiniteDifferenceSpace)
+    ncells = n_cells(cm)
+    nghost = cm.n_cells_ghost
+    return range(nghost + 1, ncells - nghost, step = 1)
 end
 
 boundary_index(cm::FiniteDifferenceSpace, ::CellFace, ::ColumnMin) =
@@ -460,7 +469,7 @@ function FiniteDifferenceSpace{S}(
     ∇_cent_to_face = ∇_cent_to_face_operator(order, Δh_cent, n_cells_ghost)
     ∇_face_to_cent = ∇_face_to_cent_operator(order, Δh_face, n_cells_ghost)
     ∇_face_to_face = ∇_face_to_face_operator(order, Δh_face, n_cells_ghost)
-    # ∇_cent_to_cent = ∇_cent_to_cent_operator(order, Δh_cent, n_cells_ghost)
+    ∇_cent_to_cent = ∇_cent_to_cent_operator(order, Δh_cent, n_cells_ghost)
     ∇²_cent_to_cent = ∇²_cent_to_cent_operator(order, Δh_cent, n_cells_ghost)
     ∇²_face_to_face = ∇²_face_to_face_operator(order, Δh_face, n_cells_ghost)
 
@@ -471,7 +480,7 @@ function FiniteDifferenceSpace{S}(
         ∇_cent_to_face,
         ∇_face_to_cent,
         ∇_face_to_face,
-        # ∇_cent_to_cent,
+        ∇_cent_to_cent,
         n_cells_ghost,
         order,
     )
@@ -636,6 +645,43 @@ function ∇_face_to_face_operator(
                 (-Δh_face[i - 1] + Δh_face[i]) / (Δh_face[i - 1] * Δh_face[i])
             upper_diag =
                 Δh_face[i - 1] / (Δh_face[i] * (Δh_face[i - 1] + Δh_face[i]))
+        end
+        hi, lo = 1, 1
+        local_operator = SVector(lower_diag, diag, upper_diag)
+        LocalOperator{FaceToFace, hi, lo, typeof(local_operator)}(
+            local_operator,
+        )
+    end
+    return SparseMatrix{n_rows, n_rows}(sparse_mat)
+end
+
+"""
+    ∇_cent_to_cent_operator(::OrderOfAccuracy{2}, Δh_cent::AbstractVector)
+
+The first derivative, using a second order-accurate
+finite difference operator. Operates on fields that
+live on cell centers. The gradient of these fields live
+on cell centers.
+"""
+function ∇_cent_to_cent_operator(
+    ::OrderOfAccuracy{2},
+    Δh_cent::AbstractVector,
+    n_cells_ghost::Int,
+)
+    n_cells = length(Δh_cent) + 1
+    FT = eltype(Δh_cent)
+    n_rows = n_cells
+    sparse_mat = map(1:n_rows) do j
+        i = j - n_cells_ghost + 1
+        if j == 1 || j == n_rows # padded ghost rows
+            lower_diag, diag, upper_diag = FT(0), FT(0), FT(0)
+        else
+            lower_diag =
+                -Δh_cent[i] / (Δh_cent[i - 1] * (Δh_cent[i - 1] + Δh_cent[i]))
+            diag =
+                (-Δh_cent[i - 1] + Δh_cent[i]) / (Δh_cent[i - 1] * Δh_cent[i])
+            upper_diag =
+                Δh_cent[i - 1] / (Δh_cent[i] * (Δh_cent[i - 1] + Δh_cent[i]))
         end
         hi, lo = 1, 1
         local_operator = SVector(lower_diag, diag, upper_diag)
