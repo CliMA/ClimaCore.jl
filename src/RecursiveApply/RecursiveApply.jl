@@ -65,8 +65,7 @@ rsub(X, Y) = rmap(-, X, Y)
 const ⊟ = rsub
 
 rdiv(X, w::Number) = rmap(x -> x / w, X)
-
-
+ 
 """
     rmuladd(w, X, Y)
 

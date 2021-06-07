@@ -1,51 +1,62 @@
 
-abstract type Staggering end
+abstract type MeshStaggering end
 
 """ Cell center location """
-struct CellCenter <: Staggering end
+struct CellCenter <: MeshStaggering end
 
 """ Cell face location """
-struct CellFace <: Staggering end
+struct CellFace <: MeshStaggering end
 
-struct FiniteDifferenceSpace{S,M<:IntervalMesh,C,H}
+struct FiniteDifferenceSpace{S<:MeshStaggering,M<:Meshes.IntervalMesh,C,H}
     staggering::S
     mesh::M
-    nhalo::Int
+    nghost::Int
     center_coordinates::C
     face_coordinates::C
     center_Δh::H
     face_Δh::H
 end
 
-function FiniteDifferenceSpace{S}(mesh::IntervalMesh, nhalo::Integer=1)
+function FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh, nghost::Integer=0)
+    if nhalo < 0
+        throw(ArgumentError("nghost must be ≥ 0"))
+    end
     face_coordinates = copy(mesh.faces)    
     face_Δh_left = face_coordinates[2] - face_coordinates[1]
     face_Δh_right = face_coordinates[end] - v[end-1]
-    for _ = 1:nhalo
+    for _ = 1:nghost
         pushfirst!(face_coordinates,face_coordinates[1] - face_Δh_left)
         push!(face_coordinates,face_coordinates[end] - face_Δh_right)
     end    
     face_Δh = diff(face_coordinates)
-    center_coordinates = [(face_coordinates[i] + face_coordinates[i+1])/2 for i in eachindex(face_Δh)]
+    center_coordinates = [(face_coordinates[i] + face_coordinates[i+1]) / 2 for i in eachindex(face_Δh)]
     center_Δh = diff(center_coordinates)
-    return FiniteDifferenceSpace(S(), mesh, nhalo, center_coordinates, face_coordinates, center_Δh, face_Δh)
+    return FiniteDifferenceSpace(S(), mesh, nghost, center_coordinates, face_coordinates, center_Δh, face_Δh)
 end
 
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
 
-FiniteDifferenceSpace{S}(space::FiniteDifferenceSpace) where {S}=
-    FiniteDifferenceSpace(S(), space.mesh, space.nhalo, 
-    space.center_coordinates, space.face_coordinates, space.center_Δh, space.face_Δh)
+function FiniteDifferenceSpace{S}(space::FiniteDifferenceSpace) where {S<:MeshStaggering}
+    FiniteDifferenceSpace(S(), 
+        space.mesh, space.nghost, space.center_coordinates, 
+        space.face_coordinates, space.center_Δh, space.face_Δh)
+end
 
 coordinates(space::CenterFiniteDifferenceSpace) = space.center_coordinates
 coordinates(space::FaceFiniteDifferenceSpace) = space.face_coordinates
 
+coordinate(space::CenterFiniteDifferenceSpace, idx) = space.center_coordinates[idx]
+coordinate(space::FaceFiniteDifferenceSpace, idx) = space.face_coordinates[idx]
+
+Δcoordinate(space::CenterFiniteDifferenceSpace, idx) = space.center_Δh[idx]
+Δcoordinate(space::FaceFiniteDifferenceSpace, idx) = space.face_Δh[idx]
+
 real_indices(space::CenterFiniteDifferenceSpace) = 
-    range(space.nhalo+1, length(space.center_coordinates)-space.nhalo, step=1)
+    range(space.nghost + 1, length(space.center_coordinates) - space.nghost, step=1)
 
 real_indices(space::FaceFiniteDifferenceSpace) = 
-    range(space.nhalo+1, length(space.face_coordinates)-space.nhalo, step=1)
+    range(space.nghost + 1, length(space.face_coordinates) - space.nghost, step=1)
 
 interior_indices(space::CenterFiniteDifferenceSpace) = 
     real_indices(space)
@@ -53,42 +64,7 @@ interior_indices(space::CenterFiniteDifferenceSpace) =
 interior_indices(space::FaceFiniteDifferenceSpace) = 
     real_indices(space)[2:end-1]
 
-
-
-
-
-
-# Iterate over cell centers
-struct CellCenterIterator{CM}
-    col_mesh::CM
-end
-column(space::FiniteDifferenceSpace, ::CellCent) =
-    CellCenterIterator(col_mesh)
-
-Base.length(cciter::CellCenterIterator) = n_cells(cciter.col_mesh)
-Base.eltype(::Type{CellCenterIterator}) = Int
-
-function Base.iterate(cciter::CellCenterIterator, state::Int = 1)
-    state > length(cciter) && return nothing
-    i_cent = state
-    (i_cent, state + 1)
-end
-
-# Iterate over interior cell faces
-struct CellFaceIterator{CM}
-    col_mesh::CM
-end
-column(col_mesh::FiniteDifferenceSpace, ::CellFace) = CellFaceIterator(col_mesh)
-Base.length(cfiter::CellFaceIterator) = n_faces(cfiter.col_mesh)
-Base.eltype(::Type{CellFaceIterator}) = Int
-
-function Base.iterate(cciter::CellFaceIterator, state::Int = 1)
-    state > length(cciter) && return nothing
-    i_face = state
-    (i_face, state + 1)
-end
-
-
+#=
 #####
 ##### Column mesh
 #####
@@ -181,9 +157,6 @@ Base.:(*)(
 function Base.:*(stencil::LocalOperator{FaceToCent}, v::SVector) # v ∈ face 
     return LocalOperator{dual_type()}(dot(array(stencil), v))
 end
-
-
- 
 
 (∇ α ∇).(T[1:3])
 
@@ -566,9 +539,6 @@ function FiniteDifferenceSpace{S}(
     )
 end
 
-
-warp_mesh(cm::FiniteDifferenceSpace) = cm
-
 function warp_mesh(
     warp_fn::Function,
     cm::FiniteDifferenceSpace{S},
@@ -581,6 +551,8 @@ function warp_mesh(
         order = cm.order,
     )
 end
+
+warp_mesh(cm::FiniteDifferenceSpace) = warp_mesh(identity, cm)
 
 #####
 ##### Order of accuracy type
@@ -906,3 +878,4 @@ function Base.iterate(cciter::CellFaceIterator, state::Int = 1)
     i_face = state
     (i_face, state + 1)
 end
+=#

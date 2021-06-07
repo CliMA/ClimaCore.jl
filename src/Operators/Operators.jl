@@ -4,7 +4,7 @@ import ..slab
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..Geometry:
     Geometry, Cartesian12Vector, Covariant12Vector, Contravariant12Vector
-import ..Spaces: Spaces, Quadratures, AbstractSpace
+import ..Spaces: Spaces, AbstractSpace, Quadratures
 import ..Topologies
 import ..Fields: Fields, Field
 using ..RecursiveApply

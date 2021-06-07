@@ -1,104 +1,46 @@
-
-# face  center
-#   i
-#         i
-#  i+1
-
-abstract type FiniteDifferenceOperator end
-
-struct CenteredDerivative <: FiniteDifferenceOperator end
-
-
-# should CenterFiniteDifferenceSpace store the c2c Δh, or the f2f?
-
-function result_space(::CenteredDerivative, space::CenterFiniteDifferenceSpace)
-    space.facefield
-end
-
-function result_space(::CenteredDerivative, space::FaceFiniteDifferenceSpace)
-    space.centerfield
-end
-
-function stencil(::CenteredDerivative, field::CenterFiniteDifferenceField, idx)
-    data = Fields.field_values(field)
-    space = Fields.space(field)
-    return (data[idx] ⊟ data[idx-1]) / space.Δh_c2c[idx]
-end
-
-function stencil(::CenteredDerivative, field::FaceFiniteDifferenceField, idx)
-    data = Fields.field_values(field)
-    space = Fields.space(field)
-    return (data[idx+1] ⊟ data[idx]) / space.Δh_f2f[idx]
-end
-
-"""
-    AdvectionOperator
-
-Computes an advection of `A` by `v`, where
-- `A` is a field stored at cell centers 
-- `v` is a vector field stored at cell faces
-
-Returns a field stored at cell faces
-"""
-abstract type AdvectionOperator <: FiniteDifferenceOperator end
-
-function result_space(::AdvectionOperator, scalar_space::CenterFiniteDifferenceSpace, vector_space::FaceFiniteDifferenceSpace)
-    vector_space.facefield
-end
-
-struct LeftAdvectionOperator <: FiniteDifferenceOperator end
-struct RightAdvectionOperator <: FiniteDifferenceOperator end
-struct UpwindAdvectionOperator <: FiniteDifferenceOperator end
-
-function stencil(::LeftAdvectionOperator, scalar_field::CenterFiniteDifferenceField, vector_field::FaceFiniteDifferenceField, idx)
-    scalar_data = Fields.field_values(scalar_field)
-    vector_data = Fields.field_values(vector_field)
-    return scalar_data[idx-1] * vector_data[idx]
-end
-
-# FiniteDifferenceSpace
-#  full indices (what we store) 1:N
-#  valid indices ()
-#  real indices  (non-halo k:n+k)
-
 #=
-#  n-element mesh + h halo on each scalar_field
-#   - n + 2h center values
-#   - n + 2h + 1 face values
-#  apply upwind advection operator (defines values at faces)   
-#   - face values 2:n+2h are valid
-#  apply centered FiniteDifferenceSpace (gives values at center)
-#   - center values 2:n+2h-1 are valid
+1) face -> center
+ - Dirichlet: overriding the current face value, continue as usual
+ - Neumann: does this actually do anything?
+ 
+2) center -> face
+ - Dirichlet: 2 point stencil (prescribed boundary + center)
+ - Neumann: set the value of the result
 
-# CenterFiniteDifferenceSpace
-# Halo{CenterFiniteDifferenceSpace}
+1) Face data `f`
+ - Dirichlet bcs: set the value directly
+ - Neumann bcs: one-sided stencil, set value of gradient
 
+2) Center data `f`
+ - Dirichlet bcs: invert interpolation stencil, such that `f_boundary = f_bvalue`
+ - Neumann bcs: one-sided (modified) stencil
+
+ A) Have field `f`, `∇f`
+ B) Solving A(x_interior) = b - Ax_bc
+ - Dirichlet BCS: Ax = b
+ - A(x_interior) = b - Ax_bc
+
+ e.g. c2c laplacian, n centers, n+1 faces
+
+1) take gradient to faces
+  - apply stencil to interior (i = 2:n)
+  - Dirichlet: 2 point (center - boundary stencil)
+  - Neumann: setting the value at the face 
+
+ [ x          ;   + something on the RHS if inhomogeneous Dirichlet
+   x x .      ;
+   . x x      ;
+          x x ;
+            . ]   + something on the RHS if inhomogeneous Neumann
+
+2) gradient back to center (no boundary adjustment required)
+[ x x      ;
+    x x    ;
+           ;
+       x x ]
 =#
-mutable struct CenterFiniteDifferenceSpace{FT,C,H,FS}
-    domain::IntervalDomain{FT}
-    coordinates::C
-    Δh::H
-    facespace::FS
-end
-
-mutable struct FaceFiniteDifferenceSpace{FT,C,H,CS}
-    domain::IntervalDomain{FT}
-    coordinates::C
-    Δh::H
-    centerspace::CS
-end
-
-function CenterFiniteDifferenceSpace(domain::IntervalDomain, n::Integer)
-    
-
 
 #=
-
-struct CenterFiniteDifferenceSpace <: FiniteDifferenceSpace
-    fullspace::CenterFiniteDifferenceSpace
-    validrange::UnitRange
-end
-
 function tendency!(dθdt, θ, v, t)
     # θ = scalar # centers 1:n+2
     # v = vector # faces 1:n+3
@@ -117,23 +59,113 @@ function tendency!(dθdt, θ, v, t)
     # 3. apply difference operator at centere indices 1:n
     #    dθdt = CenteredDerivative(F)
 end
-
 =#
 
+# face  center
+#   i
+#         i
+#  i+1
 
+abstract type FiniteDifferenceOperator end
 
+abstract type InterpolationOperator <: FiniteDifferenceOperator end
 
-function stencil(::RightAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
+# unweighted interpolation operators
+struct FaceToCenterInterpolation <: InterpolationOperator end
+struct CenterToFaceInterpolation <: InterpolationOperator end
+
+# TODO: type stability of return type based on data undertype
+function stencil(::FaceToCenterInterpolation, data, space::Spaces.FaceFiniteDifferenceSpace, idx)
+    return (data[idx] + data[idx-1]) / 2
+end
+
+function stencil(::CenterToFaceInterpolation, data, space::Spaces.CenterFiniteDifferenceSpace, idx)
+    return (data[idx] + data[idx+1]) / 2
+end
+
+# weighted interpolation operators
+struct WeightedInterpolationOperator <: FiniteDifferenceOperator end
+
+struct WeightedFaceToCenterInterpolation <: InterpolationOperator end
+struct WeightedCenterToFaceInterpolation <: InterpolationOperator end
+
+function stencil(::Weighted 
+end
+
+function stencil(op::WeightedInterpolationOperator, field, weight, idx)
+    field_data= Fields.field_values(field)
+    field_space = Fields.space(field)
+    weight_data = Fields.field_values(weight)
+    weight_space = Fields.space(weight)
+    return stencil(op, field_data, field_space, weight_data, weight_space, idx)
+end
+
+# derivitive operators
+struct CenteredDerivative <: FiniteDifferenceOperator end
+
+function stencil(::CenteredDerivative, data, space::Spaces.CenterFiniteDifferenceSpace, idx)
+    return RecursiveApply.rdiv(data[idx] ⊟ data[idx-1], Spaces.Δcoordinate(space, idx))
+end
+
+function stencil(::CenteredDerivative, data, space::Spaces.FaceFiniteDifferenceSpace, idx)
+    return RecursiveApply.rdiv(data[idx+1] ⊟ data[idx], Spaces.Δcoordinate(space, idx))
+end
+
+function stencil(op::FiniteDifferenceOperator, field, idx)
+    data = Fields.field_values(field)
+    space = Fields.space(field)
+    return stencil(op, data, space, idx)
+end
+
+"""
+    AdvectionOperator
+
+Computes an advection of `A` by `v`, where
+- `A` is a field stored at cell centers 
+- `v` is a vector field stored at cell faces
+
+Returns a field stored at cell faces
+"""
+abstract type AdvectionOperator <: FiniteDifferenceOperator end
+
+struct LeftAdvectionOperator <: AdvectionOperator end
+struct RightAdvectionOperator <: AdvectionOperator end
+struct UpwindAdvectionOperator <: AdvectionOperator end
+
+function stencil(::LeftAdvectionOperator, 
+                scalar_data, scalar_space::Spaces.CenterFiniteDifferenceSpace, 
+                vector_data, vector_space::Spaces.FaceFiniteDifferenceSpace, 
+                idx)
+    return scalar_data[idx-1] ⊠ vector_data[idx]
+end
+
+function stencil(::RightAdvectionOperator,
+                 scalar_data, scalar_space::Spaces.CenterFiniteDifferenceSpace,
+                 vector_data, vector_space::Spaces.FaceFiniteDifferenceSpace,
+                 idx)
+    return scalar_data[idx] ⊠ vector_data[idx]
+end
+
+function stencil(::UpwindAdvectionOperator, 
+                 scalar_data, scalar_space::Spaces.CenterFiniteDifferenceSpace,
+                 vector_field, vector_space::Spaces.FaceFiniteDifferenceSpace,
+                 idx)
+    # v > 0
+    l = ((v ⊞ abs.(v)) ⊠ 0.5) ⊠ stencil(LeftOperator(), scalar_data, scalar_space, vector_data, vector_space, idx)
+    # v < 0
+    r = ((v ⊟ abs.(v)) ⊠ 0.5) ⊠ stencil(RightOperator(), scalar_data, scalar_space, vector_data, vector_space, idx)
+    return l ⊞ r
+end
+
+function stencil(op::AdvectionOperator, scalar_field, vector_field, idx)
     scalar_data = Fields.field_values(scalar_field)
+    scalar_space = Fields.space(scalar_field) 
     vector_data = Fields.field_values(vector_field)
-    return scalar_data[idx] * vector_data[idx]
+    vector_space = Fields.space(vector_field)
+    return stencil(op, scalar_data, scalar_space, vector_data, vector_space, idx)
 end
 
-function stencil(::UpwindAdvectionOperator, scalar_field::CenterFiniteDifferenceSpace, vector_field::FaceFiniteDifferenceSpace, idx)
-    (v + abs(v))/2 * stencil(LeftOperator(), scalar_field, vector_field, idx) + # v > 0
-    (v - abs(v))/2 * stencil(RightOperator(), scalar_field, vector_field, idx)  # v < 0
-end
-
+#=
 struct StencilStyle <: Base.BroadcastStyle end
 
 function Base.BroadcastStyle(::Type{<:FiniteDifferenceOperator})
@@ -156,9 +188,6 @@ function Base.Broadcast.instantiate(bc::Broadcasted{StencilStyle})
     return Broadcasted{Style}(bc.f, bc.args, axes)
 end
 
-
-
-
 function apply_stencil!(field_to, operator, field_from)
     space_from = Fields.space(field_from)
     space_to = Fields.space(field_to)
@@ -172,7 +201,8 @@ end
 
 function apply_stencil!(field_to, operator, field_from1, field_from2)
     data_from1 = Fields.field_values(field_from1)
-    space_from1  = Fields.space(field_from1)
+    space_from1 = Fields.space(field_from1)
+
     data_from2 = Fields.field_values(field_from2)
     space_from2  = Fields.space(field_from2)
 
@@ -180,10 +210,11 @@ function apply_stencil!(field_to, operator, field_from1, field_from2)
     space_to = Fields.space(field_to)
 
     for i in eachrealindex(space_to)
-        data_to[i] = stencil(operator, space_to, data_from1, space_from1, data_from2, space_from2, i)
+        data_to[i] = stencil(operator, space_to, space_from1, space_from2, i)
     end
     return field_to
 end
+=#
 
 #=
 centered.(upwind.(a, v) 
