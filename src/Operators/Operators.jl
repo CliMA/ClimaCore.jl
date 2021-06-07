@@ -1,5 +1,6 @@
 module Operators
 
+using StaticArrays: maximum
 import ..slab
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..Geometry:

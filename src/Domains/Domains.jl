@@ -5,18 +5,26 @@ using IntervalSets
 export RectangleDomain
 
 
-abstract type HorizontalDomain end
-abstract type VerticalDomain end
+abstract type AbstractDomain end
 
-Base.@kwdef struct IntervalDomain{FT} <: VerticalDomain
+abstract type HorizontalDomain <: AbstractDomain end
+abstract type VerticalDomain <: AbstractDomain end
+
+struct IntervalDomain{FT, B} <: VerticalDomain
     x3min::FT
     x3max::FT
+    x3boundary::B
 end
+IntervalDomain(x3min, x3max; x3boundary = (:left, :right)) =
+    IntervalDomain(x3min, x3max, x3boundary)
 
+
+Base.eltype(::IntervalDomain{FT}) where {FT} = FT
 coordinate_type(::IntervalDomain{FT}) where {FT} = Geometry.Cartesian3Point{FT}
 
-
-
+function Base.show(io::IO, domain::IntervalDomain)
+    print(io, "IntervalDomain($(domain.x3min) .. $(domain.x3max))")
+end
 # coordinates (x1,x2)
 
 struct RectangleDomain{FT, B1, B2} <: HorizontalDomain

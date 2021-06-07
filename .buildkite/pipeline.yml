@@ -10,9 +10,20 @@ steps:
     key: "init_cpu_env"
     command:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      
+      - "julia --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -23,11 +34,17 @@ steps:
     key: "init_gpu_env"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       # force the initialization of the CUDA runtime as it is lazily loaded by default
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
       - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: gpu
@@ -56,6 +73,46 @@ steps:
       queue: central
       slurm_ntasks: 1
       slurm_gres: "gpu:1"
+
+  - label: ":computer: Column Heat Diffusion Eq"
+    key: "cpu_column_heat"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/heat.jl"
+    artifact_paths:
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Column Advection Eq"
+    key: "cpu_column_advect"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/advect.jl"
+    artifact_paths:
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Wave Eq"
+    key: "cpu_column_wave"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/wave.jl"
+    artifact_paths:
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Hydrostatic Balance Eq"
+    key: "cpu_column_hydrostatic"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/hydrostatic.jl"
+    artifact_paths:
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: Bickley jet CG"
     key: "cpu_bickleyjet_cg"

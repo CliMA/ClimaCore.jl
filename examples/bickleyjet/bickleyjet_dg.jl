@@ -221,8 +221,9 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-using Plots
 ENV["GKSwstype"] = "nul"
+import Plots
+Plots.GRBackend()
 
 dirname = "dg_$(numflux_name)"
 if boundary_name != ""
@@ -231,26 +232,21 @@ end
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-anim = @animate for u in sol.u
-    heatmap(u.ρθ, clim = (-1, 1), color = :balance)
+anim = Plots.@animate for u in sol.u
+    Plots.plot(u.ρθ, clim = (-1, 1))
 end
-mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(path, "energy.png"))
+Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-
-
-# # figpath = joinpath(figure_save_directory, "posterior_$(param)_T_$(T)_w_$(ω_true).png")
-# linkfig(figpath)
-function linkfig(figpath)
+function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath
     # link figure in logs if we are running on CI
     if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url =
-            "artifact://" * join(split(figpath, '/')[(end - 3):end], '/')
-        alt = split(splitdir(figpath)[2], '.')[1]
-        @info "Linking Figure: $artifact_url"
+        artifact_url = "artifact://$figpath"
         print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
     end
 end
+
+linkfig("output/$(dirname)/energy.png", "Total Energy")

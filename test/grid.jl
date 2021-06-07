@@ -2,6 +2,7 @@ using Test
 import ClimateMachineCore: Domains, Meshes, Topologies
 import ClimateMachineCore.Geometry: Cartesian2DPoint
 using StaticArrays
+using IntervalSets
 
 function rectangular_grid(
     n1,
