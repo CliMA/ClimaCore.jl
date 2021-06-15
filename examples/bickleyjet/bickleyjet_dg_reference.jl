@@ -15,13 +15,12 @@ using StaticArrays
 using TerminalLoggers: TerminalLogger
 using UnPack
 
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes
+import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
 import ClimateMachineCore: slab
 import ClimateMachineCore.Operators
 using ClimateMachineCore.Geometry
-import ClimateMachineCore.Geometry: Abstract2DPoint
-using ClimateMachineCore.RecursiveOperators
-using ClimateMachineCore.RecursiveOperators: rdiv, rmap
+using ClimateMachineCore.RecursiveApply
+using ClimateMachineCore.RecursiveApply: rdiv, rmap
 
 global_logger(TerminalLogger())
 
@@ -47,10 +46,10 @@ domain = Domains.RectangleDomain(
 n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
-discretization = Domains.EquispacedRectangleDiscretization(domain, n1, n2)
-grid_topology = Topologies.GridTopology(discretization)
-quad = Meshes.Quadratures.GLL{Nq}()
-mesh = Meshes.Mesh2D(grid_topology, quad)
+mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+grid_topology = Topologies.GridTopology(mesh)
+quad = Spaces.Quadratures.GLL{Nq}()
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -74,7 +73,7 @@ function init_state(x, p)
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(mesh), Ref(parameters))
+y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
@@ -174,9 +173,9 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #  ϕ = test function
     #  K = DSS scatter (i.e. duplicates points at element boundaries)
     #  K y = stored input vector (with duplicated values)
-    #  I = interpolation to higher-order mesh
+    #  I = interpolation to higher-order space
     #  D = derivative operator
-    #  H = suffix for higher-order mesh operations
+    #  H = suffix for higher-order space operations
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
@@ -189,14 +188,23 @@ function rhs!(dydt, y, (parameters, numflux), t)
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
 
+    Operators.add_numerical_flux_boundary!(
+        dydt,
+        y,
+        parameters,
+    ) do normal, (y⁻, parameters)
+        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu .- dot(y⁻.ρu, normal) .* normal, ρθ = y⁻.ρθ)
+        numflux(normal, (y⁻, parameters), (y⁺, parameters))
+    end
+
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
-    dydt_data .= rdiv.(dydt_data, mesh.local_geometry.WJ)
+    dydt_data .= rdiv.(dydt_data, space.local_geometry.WJ)
 
     # 7. cutoff filter
-    M = Meshes.Quadratures.cutoff_filter_matrix(
+    M = Spaces.Quadratures.cutoff_filter_matrix(
         Float64,
-        mesh.quadrature_style,
+        space.quadrature_style,
         3,
     )
     Operators.tensor_product!(dydt_data, M)
@@ -204,7 +212,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
     return dydt
 end
 
-dydt = Fields.Field(similar(Fields.field_values(y0)), mesh)
+dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # reference implementation
@@ -213,7 +221,7 @@ rhs!(dydt, y0, (parameters, numflux), 0.0);
 # data layout: i, j, k, n1, n2
 #  n1,n2 topology
 #  i,j,k datalayouts
-X = reshape(parent(Fields.coordinate_field(mesh)), (Nq,Nq,2,n1,n2))
+X = reshape(parent(Fields.coordinate_field(space)), (Nq,Nq,2,n1,n2))
 y0_ref = Array{Float64}(undef, (Nq,Nq,4,n1,n2))
 
 function init_y0_ref!(y0_ref, X, parameters)
@@ -233,9 +241,9 @@ end
 init_y0_ref!(y0_ref,X,parameters)
 
 Nqf = 3
-_,W = Meshes.Quadratures.quadrature_points(Float64, quad)
-D = Meshes.Quadratures.differentiation_matrix(Float64, quad)
-M = Meshes.Quadratures.cutoff_filter_matrix(
+_,W = Spaces.Quadratures.quadrature_points(Float64, quad)
+D = Spaces.Quadratures.differentiation_matrix(Float64, quad)
+M = Spaces.Quadratures.cutoff_filter_matrix(
     Float64, quad, Nqf)
 
 dydt_ref = similar(y0_ref)
@@ -386,7 +394,7 @@ prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
 #__sde_start()
 #__itt_resume()
 
-sol = @time solve(prob, SSPRK33(), dt = 0.02, threading = true)
+sol = @time solve(prob, SSPRK33(), dt = 0.02)
     #saveat = 1.0,
     #progress = true,
     #progress_message = (dt, u, p, t) -> t,
@@ -399,7 +407,7 @@ prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux,
 #__sde_start()
 #__itt_resume()
 
-sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02, threading = true)
+sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02)
 
 #__itt_pause()
 #__sde_stop()
