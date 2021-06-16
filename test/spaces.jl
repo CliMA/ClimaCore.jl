@@ -50,6 +50,7 @@ import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
           [0.0, 1.0]
 end
 
+#=
 @testset "Column FiniteDifferenceSpace" begin
     for FT in (Float32, Float64)
         a = FT(0.0)
@@ -288,3 +289,4 @@ end
         @test err[3] ≤ err[2] ≤ err[1] ≤ 4 * 1e-2
     end
 end
+=#

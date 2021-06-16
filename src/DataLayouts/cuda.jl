@@ -1,4 +1,24 @@
+import Adapt
 import CUDA
+
+Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
+    IJKFVH{S, Nij, Nk}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
+    IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
+    IFH{S, Ni}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
+    IJF{S, Nij}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
+    IF{S, Ni}(Adapt.adapt(to, parent(data)))
+
+Adapt.adapt_structure(to, data::VF{S}) where {S} =
+    VF{S}(Adapt.adapt(to, parent(data)))
+
 
 function knl_copyto!(dest, src)
 
@@ -31,7 +51,6 @@ function knl_copyto!(dest, src)
     return nothing
 end
 
-
 function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
@@ -45,4 +64,3 @@ function Base.copyto!(
     CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copyto!(dest, bc)
     return dest
 end
-S

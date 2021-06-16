@@ -162,17 +162,29 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-using Plots
 ENV["GKSwstype"] = "nul"
+import Plots
+Plots.GRBackend()
 
 dirname = "cg"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-anim = @animate for u in sol.u
-    heatmap(u.ρθ, clim = (-1, 1), color = :balance)
+anim = Plots.@animate for u in sol.u
+    Plots.plot(u.ρθ, clim = (-1, 1))
 end
-mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-png(plot(Es), joinpath(path, "energy.png"))
+Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig("output/$(dirname)/energy.png", "Total Energy")

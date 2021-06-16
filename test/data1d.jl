@@ -27,7 +27,7 @@ TestFloatTypes = (Float32, Float64)
     end
 end
 
-@testset "broadcasting between column data objects and scalars" begin
+@testset "broadcasting between 1D data objects and scalars" begin
     for FT in TestFloatTypes
         data1 = ones(FT, 2, 2)
         S = Complex{FT}
@@ -41,8 +41,7 @@ end
     end
 end
 
-
-@testset "broadcasting column assignment from scalar" begin
+@testset "broadcasting 1D assignment from scalar" begin
     for FT in TestFloatTypes
         S = Complex{FT}
         data = VF{S}(Array{FT}, 3)
@@ -53,7 +52,7 @@ end
     end
 end
 
-@testset "broadcasting between column objects" begin
+@testset "broadcasting between 1D data objects" begin
     for FT in TestFloatTypes
         data1 = ones(FT, 2, 2)
         data2 = ones(FT, 2, 1)
@@ -68,8 +67,8 @@ end
     end
 end
 
-#=
-@testset "broadcasting column complicated function" begin
+#= TODO
+@testset "broadcasting 1D data complicated function" begin
     for FT in TestFloatTypes
         S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
         data1 = ones(FT, 2, 2)

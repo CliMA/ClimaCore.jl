@@ -14,7 +14,7 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 """
 module DataLayouts
 
-import Adapt
+import Requires
 import StaticArrays: SOneTo, MArray
 
 # TODO:
@@ -28,8 +28,6 @@ export slab, column, IJFH, IJF, VF
 include("struct.jl")
 
 abstract type AbstractData{S} end
-
-Base.eltype(::AbstractData{S}) where {S} = S
 
 """
     DataColumn{S}
@@ -81,11 +79,12 @@ Abstract type for data storage for a 3D field made up of `Nij × Nij × Nk` valu
 """
 abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 
-
-Base.propertynames(data::AbstractData{S}) where {S} = fieldnames(S)
+Base.eltype(::AbstractData{S}) where {S} = S
+Base.propertynames(::AbstractData{S}) where {S} = fieldnames(S)
 Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
+
 function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
     copyto!(parent(dest), parent(src))
     return dest
@@ -102,6 +101,7 @@ end
 struct IJKFVH{S, Nij, Nk, A} <: Data3D{S, Nij, Nk}
     array::A
 end
+
 function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
@@ -109,8 +109,6 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
-Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
-    IJKFVH{S, Nij, Nk}(Adapt.adapt(to, getfield(data, :array)))
 
 function Base.getproperty(
     data::IJKFVH{S, Nij, Nk},
@@ -151,9 +149,6 @@ function IJFH{S, Nij}(ArrayType, nelements) where {S, Nij}
     IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(FT, S), nelements))
 end
 
-Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
-    IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
-
 Base.length(data::IJFH) = size(parent(data), 4)
 Base.size(data::Data2D) = (length(data),)
 
@@ -166,7 +161,6 @@ function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     IJFH{SS, Nij}(view(array, :, :, (offset + 1):(offset + len), :))
 end
 
-
 struct IFH{S, Ni, A} <: Data1D{S, Ni}
     array::A
 end
@@ -175,8 +169,10 @@ function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     IFH{S, Ni, typeof(array)}(array)
 end
+
 rebuild(data::IFH{S, Ni}, array::AbstractArray{T, 3}) where {S, Ni, T} =
     IFH{S, Ni}(array)
+
 Base.copy(data::IFH{S, Ni}) where {S, Ni} = IFH{S, Ni}(copy(parent(data)))
 
 function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
@@ -184,17 +180,12 @@ function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
     IFH{S, Ni}(ArrayType(undef, Ni, typesize(FT, S), nelements))
 end
 
-Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
-    IFH{S, Ni}(Adapt.adapt(to, parent(data)))
 Base.length(data::IFH) = size(parent(data), 3)
 
 @inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
     @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
     IF{S, Ni}(view(parent(data), :, :, h))
 end
-
-
-
 
 function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
@@ -204,10 +195,6 @@ function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     len = typesize(T, SS)
     IFH{SS, Ni}(view(array, :, (offset + 1):(offset + len), :))
 end
-
-
-
-
 
 
 """
@@ -233,13 +220,12 @@ function Base.similar(
     data::IH1JH2{S, Nij, A},
     ::Type{Eltype},
 ) where {S, Nij, A, Eltype}
-    Nh = length(data)
     array = similar(A, Eltype)
     return IH1JH2{Eltype, Nij}(array)
 end
+
 Base.copy(data::IH1JH2{S, Nij}) where {S, Nij} =
     IH1JH2{S, Nij}(copy(parent(data)))
-
 
 @inline function slab(data::IH1JH2{S, Nij}, h::Integer) where {S, Nij}
     N1, N2 = size(parent(data))
@@ -266,19 +252,16 @@ end
 struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
     array::A
 end
+
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     IJF{S, Nij, typeof(array)}(array)
 end
 
-Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
-    IJF{S, Nij}(Adapt.adapt(to, parent(data)))
-
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
-
 
 function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
@@ -318,24 +301,18 @@ end
     set_struct!(view(parent(ijf), i, j, :), val)
 end
 
-
-
-
 struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
 end
+
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     IF{S, Ni, typeof(array)}(array)
 end
 
-Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
-    IF{S, Ni}(Adapt.adapt(to, parent(data)))
-
 function Base.size(::IF{S, Ni}) where {S, Ni}
     return (Ni,)
 end
-
 
 function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
@@ -356,8 +333,6 @@ end
     set_struct!(view(parent(data), i, :), val)
 end
 
-
-
 # TODO: should this return a S or a 0-d box containing S?
 #  - perhaps the latter, as then it is mutable?
 
@@ -370,15 +345,15 @@ end
     IJF{S, Nij}(view(parent(ijfh), :, :, :, h))
 end
 
-
 @propagate_inbounds function Base.getindex(
     slab::DataSlab2D{S},
     I::CartesianIndex{2},
 ) where {S}
     slab[I[1], I[2]]
 end
-Base.size(slab::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij)
-Base.axes(slab::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
+
+Base.size(::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij)
+Base.axes(::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
 # Data column
 struct VF{S, A} <: DataColumn{S}
@@ -389,13 +364,15 @@ function VF{S}(array::AbstractArray{T, 2}) where {S, T}
     VF{S, typeof(array)}(array)
 end
 
+function VF{S}(array::AbstractVector{T}) where {S, T}
+    @assert typesize(T, S) == 1
+    VF{S}(reshape(array, (:, 1)))
+end
+
 function VF{S}(ArrayType, nelements) where {S}
     FT = eltype(ArrayType)
     VF{S}(ArrayType(undef, nelements, typesize(FT, S)))
 end
-
-Adapt.adapt_structure(to, data::VF{S}) where {S} =
-    VF{S}(Adapt.adapt(to, parent(data)))
 
 Base.length(data::VF) = size(parent(data), 1)
 Base.size(data::VF) = (length(data),)
@@ -422,7 +399,10 @@ function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
     set_struct!(view(parent(data), v, :), val)
 end
 
+# broadcast machinery
 include("broadcast.jl")
-#include("cuda.jl")
+
+# GPU method specializations
+include("cuda.jl")
 
 end # module

@@ -147,7 +147,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
     )
 end
 
-
 function compute_surface_geometry(
     local_geometry_slab,
     quad_weights,
@@ -177,7 +176,7 @@ function compute_surface_geometry(
     return Geometry.SurfaceGeometry(sWJ, Geometry.Cartesian12Vector(n...))
 end
 
-
+coordinates(space::SpectralElementSpace2D) = space.coordinates
 
 function variational_solve!(data, Space::AbstractSpace)
     data .= Space.local_geometry.invM .⊠ data
