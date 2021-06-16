@@ -79,6 +79,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/column examples/column/heat.jl"
     artifact_paths:
+      - "examples/column/output/heat/*"
     agents:
       config: cpu
       queue: central
@@ -89,6 +90,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/column examples/column/advect.jl"
     artifact_paths:
+      - "examples/column/output/advect/*"
     agents:
       config: cpu
       queue: central
@@ -99,6 +101,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/column examples/column/wave.jl"
     artifact_paths:
+      - "examples/column/output/wave/*"
     agents:
       config: cpu
       queue: central
@@ -109,6 +112,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/column examples/column/hydrostatic.jl"
     artifact_paths:
+      - "examples/column/output/hydrostatic/*"
     agents:
       config: cpu
       queue: central
