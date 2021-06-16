@@ -180,8 +180,15 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #
     Nh = Topologies.nlocalelems(y)
 
-    F = flux.(y, Ref(parameters))
-    dydt .= Operators.slab_weak_divergence(F)
+    space = Fields.space(y)
+    for h = 1:Nh
+        dydt_slab = slab(Fields.field_values(dydt), h)
+        y_slab = slab(Fields.field_values(y), h)
+        space_slab = slab(space, h)
+
+        F = flux.(y_slab, Ref(parameters))
+        Operators.slab_weak_divergence!(dydt_slab, F, space_slab)
+    end
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
 
@@ -209,7 +216,8 @@ function rhs!(dydt, y, (parameters, numflux), t)
 end
 
 dydt = Fields.Field(similar(Fields.field_values(y0)), space)
-rhs!(dydt, y0, (parameters, numflux), 0.0);
+rhs!(dydt, y0, (parameters, numflux), 0.0)
+@show dydt
 
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))

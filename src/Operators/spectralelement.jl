@@ -1144,40 +1144,7 @@ function slab_weak_divergence!(divflux, flux, space)
         flux_slab = slab(flux, h)
         local_geometry_slab = slab(space.local_geometry, h)
 
-        ST = eltype(divflux)
-        # Shared on GPU
-        WJv¹ = MArray{Tuple{Nq, Nq}, ST, 2, Nq * Nq}(undef)
-        WJv² = MArray{Tuple{Nq, Nq}, ST, 2, Nq * Nq}(undef)
-        for i in 1:Nq, j in 1:Nq
-            local_geometry = local_geometry_slab[i, j]
-            # compute flux in contravariant coordinates (v¹,v²)
-            # alternatively we could do this conversion _after_ taking the derivatives
-            # may have an effect on the accuracy
-            # materialize if lazy
-            F = flux_slab[i, j]
-            WJv¹[i, j] = RecursiveApply.rmap(
-                x ->
-                    local_geometry.WJ *
-                    Geometry.contravariant1(x, local_geometry),
-                F,
-            )
-            WJv²[i, j] = RecursiveApply.rmap(
-                x ->
-                    local_geometry.WJ *
-                    Geometry.contravariant2(x, local_geometry),
-                F,
-            )
-        end
-        # GPU synchronize
-
-        for i in 1:Nq, j in 1:Nq
-            local_geometry = local_geometry_slab[i, j]
-            # compute spectral deriv along first dimension
-            Dᵀ₁WJv¹ = RecursiveApply.rmatmul1(D', WJv¹, i, j) # D'WJv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
-            # compute spectral deriv along second dimension
-            Dᵀ₂WJv² = RecursiveApply.rmatmul2(D', WJv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
-            divflux_slab[i, j] = Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²
-        end
+        slab_weak_divergence!(divflux_slab, flux_slab, local_geometry_slab)
     end
     return divflux
 end
