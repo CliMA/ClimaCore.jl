@@ -377,6 +377,7 @@ end
 Base.length(data::VF) = size(parent(data), 1)
 Base.size(data::VF) = (length(data),)
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
+Base.lastindex(data::VF) = length(data)
 
 function Base.getproperty(data::VF{S}, i::Integer) where {S}
     array = parent(data)

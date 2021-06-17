@@ -120,6 +120,54 @@ interior_indices1 = 1:n
 interior_indices2 = 2:n-1
 ===#
 
+struct PlusHalf{I <: Integer} <: Real
+    i::I
+end
+PlusHalf{I}(h::PlusHalf{I}) where {I <: Integer} = h
+
+const half = PlusHalf(0)
+
+Base.:-(h::PlusHalf) = PlusHalf(-h.i - one(h.i))
+Base.:+(i::Integer, h::PlusHalf) = PlusHalf(i + h.i)
+Base.:+(h::PlusHalf, i::Integer) = PlusHalf(h.i + i)
+Base.:+(h1::PlusHalf, h2::PlusHalf) = h1.i + h2.i + one(h1.i)
+Base.:-(i::Integer, h::PlusHalf) = PlusHalf(i - h.i - one(h.i))
+Base.:-(h::PlusHalf, i::Integer) = PlusHalf(h.i - i)
+Base.:-(h1::PlusHalf, h2::PlusHalf) = h1.i - h2.i
+
+
+
+Base.:<=(h1::PlusHalf, h2::PlusHalf) = h1.i <= h2.i
+Base.:<(h1::PlusHalf, h2::PlusHalf) = h1.i < h2.i
+Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
+Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
+
+left_idx(space::Spaces.CenterFiniteDifferenceSpace) = 1
+right_idx(space::Spaces.CenterFiniteDifferenceSpace) = length(space.Δh_f2f)
+left_idx(space::Spaces.FaceFiniteDifferenceSpace) = half
+right_idx(space::Spaces.FaceFiniteDifferenceSpace) =
+    PlusHalf(length(space.Δh_f2f))
+
+left_face_boundary_idx(space::Spaces.FiniteDifferenceSpace) =
+    left_idx(Spaces.FaceFiniteDifferenceSpace(space))
+right_face_boundary_idx(space::Spaces.FiniteDifferenceSpace) =
+    right_idx(Spaces.FaceFiniteDifferenceSpace(space))
+left_center_boundary_idx(space::Spaces.FiniteDifferenceSpace) =
+    left_idx(Spaces.CenterFiniteDifferenceSpace(space))
+right_center_boundary_idx(space::Spaces.FiniteDifferenceSpace) =
+    right_idx(Spaces.CenterFiniteDifferenceSpace(space))
+
+left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))
+right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
+left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
+right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
+
+Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) = space.Δh_f2f[idx]
+Δh_c2c(space::Spaces.FiniteDifferenceSpace, idx::PlusHalf) =
+    space.Δh_c2c[idx.i + 1]
+
+Δh_left_bf2c(space::Spaces.FiniteDifferenceSpace) = space.Δh_c2c[1]
+Δh_right_c2bf(space::Spaces.FiniteDifferenceSpace) = space.Δh_c2c[end]
 
 abstract type BoundaryCondition end
 """
@@ -206,10 +254,13 @@ InterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
 return_space(::InterpolateF2C, space::Spaces.FaceFiniteDifferenceSpace) =
     Spaces.CenterFiniteDifferenceSpace(space)
 
-stencil_interior_width(::InterpolateF2C) = ((0, 1),)
+stencil_interior_width(::InterpolateF2C) = ((-half, half),)
 
 function stencil_interior(::InterpolateF2C, loc, idx, arg)
-    RecursiveApply.rdiv((getidx(arg, loc, idx + 1) ⊞ getidx(arg, loc, idx)), 2)
+    RecursiveApply.rdiv(
+        (getidx(arg, loc, idx + half) ⊞ getidx(arg, loc, idx - half)),
+        2,
+    )
 end
 
 """
@@ -229,31 +280,34 @@ InterpolateC2F(; kwargs...) = InterpolateC2F(NamedTuple(kwargs))
 return_space(::InterpolateC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
 
-stencil_interior_width(::InterpolateC2F) = ((-1, 0),)
+stencil_interior_width(::InterpolateC2F) = ((-half, half),)
 
 function stencil_interior(::InterpolateC2F, loc, idx, arg)
     space = axes(arg)
     #RecursiveApply.rdiv(((getidx(arg, loc, idx) ⊠ space.Δh_f2f[idx]) ⊞ (getidx(arg, loc, idx - 1) ⊠ space.Δh_f2f[idx-1])), 2 ⊠ space.Δh_c2c[idx])
-    RecursiveApply.rdiv(getidx(arg, loc, idx) ⊞ getidx(arg, loc, idx - 1), 2)
+    RecursiveApply.rdiv(
+        getidx(arg, loc, idx + half) ⊞ getidx(arg, loc, idx - half),
+        2,
+    )
 end
 
 boundary_width(op::InterpolateC2F, ::SetValue) = 1
 function stencil_left_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     bc.val
 end
 function stencil_right_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
     space = axes(arg)
-    @assert idx == length(space.Δh_c2c)
+    @assert idx == right_face_boundary_idx(arg)
     bc.val
 end
 
 boundary_width(op::InterpolateC2F, ::SetGradient) = 1
 function stencil_left_boundary(::InterpolateC2F, bc::SetGradient, loc, idx, arg)
     space = axes(arg)
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     # Δh_c2c[1] is f1 to c1 distance
-    getidx(arg, loc, idx) ⊟ (space.Δh_c2c[idx] ⊠ bc.val)
+    getidx(arg, loc, idx + half) ⊟ (Δh_left_bf2c(space) ⊠ bc.val)
 end
 function stencil_right_boundary(
     ::InterpolateC2F,
@@ -263,16 +317,15 @@ function stencil_right_boundary(
     arg,
 )
     space = axes(arg)
-    @assert idx == length(space.Δh_c2c) # n+1
-    getidx(arg, loc, idx - 1) ⊞ (space.Δh_c2c[idx] ⊠ bc.val)
+    @assert idx == right_face_boundary_idx(arg)
+    getidx(arg, loc, idx - half) ⊞ (Δh_right_c2bf(space) ⊠ bc.val)
 end
 
 boundary_width(op::InterpolateC2F, ::Extrapolate) = 1
 function stencil_left_boundary(::InterpolateC2F, bc::Extrapolate, loc, idx, arg)
     space = axes(arg)
-    @assert idx == 1
-    # Δh_c2c[1] is f1 to c1 distance
-    getidx(arg, loc, idx)
+    @assert idx == left_face_boundary_idx(arg)
+    getidx(arg, loc, idx + half)
 end
 function stencil_right_boundary(
     ::InterpolateC2F,
@@ -282,8 +335,8 @@ function stencil_right_boundary(
     arg,
 )
     space = axes(arg)
-    @assert idx == length(space.Δh_c2c) # n+1
-    getidx(arg, loc, idx - 1)
+    @assert idx == right_face_boundary_idx(arg)
+    getidx(arg, loc, idx - half)
 end
 
 """
@@ -300,14 +353,14 @@ UpwindLeftC2F(; kwargs...) = UpwindLeftC2F(NamedTuple(kwargs))
 return_space(::UpwindLeftC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
 
-stencil_interior_width(::UpwindLeftC2F) = ((-1, -1),)
+stencil_interior_width(::UpwindLeftC2F) = ((-half, -half),)
 
-stencil_interior(::UpwindLeftC2F, loc, idx, arg) = getidx(arg, loc, idx - 1)
+stencil_interior(::UpwindLeftC2F, loc, idx, arg) = getidx(arg, loc, idx - half)
 
 boundary_width(op::UpwindLeftC2F, ::SetValue) = 1
 
 function stencil_left_boundary(::UpwindLeftC2F, bc::SetValue, loc, idx, arg)
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     bc.val
 end
 
@@ -342,7 +395,7 @@ function stencil_left_boundary(
     idx,
     arg,
 )
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     bc.val
 end
 function stencil_right_boundary(
@@ -352,6 +405,7 @@ function stencil_right_boundary(
     idx,
     arg,
 )
+    @assert idx == right_face_boundary_idx(arg)
     bc.val
 end
 
@@ -377,41 +431,46 @@ GradientF2C(; kwargs...) = GradientF2C(NamedTuple(kwargs))
 return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
     Spaces.CenterFiniteDifferenceSpace(space)
 
-stencil_interior_width(::GradientF2C) = ((0, 1),)
+stencil_interior_width(::GradientF2C) = ((-half, half),)
 
 function stencil_interior(::GradientF2C, loc, idx, arg)
     space = axes(arg)
     RecursiveApply.rdiv(
-        (getidx(arg, loc, idx + 1) ⊟ getidx(arg, loc, idx)),
-        space.Δh_f2f[idx],
+        (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half)),
+        Δh_f2f(space, idx),
     )
 end
 
 boundary_width(op::GradientF2C, ::SetValue) = 1
 function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
     space = axes(arg)
-    @assert idx == 1
-    RecursiveApply.rdiv((getidx(arg, loc, idx + 1) ⊟ bc.val), space.Δh_f2f[idx])
+    @assert idx == left_center_boundary_idx(arg)
+    RecursiveApply.rdiv(
+        (getidx(arg, loc, idx + half) ⊟ bc.val),
+        Δh_f2f(space, idx),
+    )
 end
 
 function stencil_right_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
     space = axes(arg)
     # Δh_f2f = [f[2] - f[1], f[3] - f[2], ..., f[n] - f[n-1], f[n+1] - f[n]]
-    @assert idx == length(space.Δh_f2f) # n
-    RecursiveApply.rdiv((bc.val ⊟ getidx(arg, loc, idx)), space.Δh_f2f[idx])
+    @assert idx == right_center_boundary_idx(arg)
+    RecursiveApply.rdiv(
+        (bc.val ⊟ getidx(arg, loc, idx - half)),
+        Δh_f2f(space, idx),
+    )
 end
 
 
 boundary_width(op::GradientF2C, ::Extrapolate) = 1
 function stencil_left_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
     space = axes(arg)
-    @assert idx == 1
+    @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, arg)
 end
 function stencil_right_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
     space = axes(arg)
-    # Δh_f2f = [f[2] - f[1], f[3] - f[2], ..., f[n] - f[n-1], f[n+1] - f[n]]
-    @assert idx == length(space.Δh_f2f) # n
+    @assert idx == right_center_boundary_idx(arg)
     stencil_interior(op, loc, idx - 1, arg)
 end
 
@@ -432,13 +491,13 @@ GradientC2F(; kwargs...) = GradientC2F(NamedTuple(kwargs))
 return_space(::GradientC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
 
-stencil_interior_width(::GradientC2F) = ((-1, 0),)
+stencil_interior_width(::GradientC2F) = ((-half, half),)
 
 function stencil_interior(::GradientC2F, loc, idx, arg)
     space = axes(arg)
     RecursiveApply.rdiv(
-        (getidx(arg, loc, idx) ⊟ getidx(arg, loc, idx - 1)),
-        space.Δh_c2c[idx],
+        (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half)),
+        Δh_c2c(space, idx),
     )
 end
 
@@ -447,138 +506,137 @@ boundary_width(op::GradientC2F, ::SetGradient) = 1
 
 function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
     space = axes(arg)
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     # Δh_c2c[1] is f1 to c1 distance
-    RecursiveApply.rdiv((getidx(arg, loc, idx) ⊟ bc.val), space.Δh_c2c[idx])
+    RecursiveApply.rdiv(
+        (getidx(arg, loc, idx + half) ⊟ bc.val),
+        Δh_c2c(space, idx),
+    )
 end
 
 function stencil_right_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
     space = axes(arg)
     # Δh_c2c = [c[1] - f[1], c[2] - c[1], ..., c[n] - c[n-1], f[n+1] - c[n]]
-    @assert idx == length(space.Δh_c2c) # n+1
+    @assert idx == right_face_boundary_idx(arg)
     # Δh_c2c[end] is c[n] to f[n+1] distance
-    RecursiveApply.rdiv((bc.val ⊟ getidx(arg, loc, idx - 1)), space.Δh_c2c[idx])
+    RecursiveApply.rdiv(
+        (bc.val ⊟ getidx(arg, loc, idx - half)),
+        Δh_c2c(space, idx),
+    )
 end
 
 # left / right SetGradient boundary conditions
 function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
-    @assert idx == 1
+    @assert idx == left_face_boundary_idx(arg)
     # imposed flux boundary condition at left most face
     bc.val
 end
 
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     space = axes(arg)
-    @assert idx == length(space.Δh_c2c)  # n+1
+    @assert idx == right_face_boundary_idx(arg)
     # imposed flux boundary condition at right most face
     bc.val
 end
 
-left_boundary_width(obj, loc) = 0
-right_boundary_width(obj, loc) = 0
 
-left_boundary_width(
+boundary_width(obj, loc) = 0
+boundary_width(bc::Base.Broadcast.Broadcasted{StencilStyle}, loc) =
+    has_boundary(bc.f, loc) ? boundary_width(bc.f, get_boundary(bc.f, loc)) : 0
+
+function left_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
+    _,
     loc::LeftBoundaryWindow,
-) = has_boundary(bc.f, loc) ? boundary_width(bc.f, get_boundary(bc.f, loc)) : 0
-
-right_boundary_width(
+)
+    space = axes(bc)
+    arg_idxs = map(bc.args, stencil_interior_width(bc.f)) do arg, width
+        left_interor_window_idx(arg, space, loc) - width[1]
+    end
+    return max(maximum(arg_idxs), left_idx(space) + boundary_width(bc, loc))
+end
+function right_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
+    _,
     loc::RightBoundaryWindow,
-) = has_boundary(bc.f, loc) ? boundary_width(bc.f, get_boundary(bc.f, loc)) : 0
+)
+    space = axes(bc)
+    arg_idxs = map(bc.args, stencil_interior_width(bc.f)) do arg, width
+        right_interor_window_idx(arg, space, loc) - width[2]
+    end
+    return min(minimum(arg_idxs), right_idx(space) - boundary_width(bc, loc))
+end
 
-left_boundary_window_width(obj, loc) = 0
-right_boundary_window_width(obj, loc) = 0
 
-function left_boundary_window_width(
+
+
+function left_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
-    loc,
+    _,
+    loc::LeftBoundaryWindow,
 )
-    maximum(arg -> left_boundary_window_width(arg, loc), bc.args)
+    space = axes(bc)
+    maximum(arg -> left_interor_window_idx(arg, space, loc), bc.args)
 end
-
-function right_boundary_window_width(
+function right_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
-    loc,
+    _,
+    loc::RightBoundaryWindow,
 )
-    maximum(arg -> right_boundary_window_width(arg, loc), bc.args)
+    space = axes(bc)
+    minimum(arg -> right_interor_window_idx(arg, space, loc), bc.args)
 end
 
-function left_boundary_window_width(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
-    loc,
-)
-    op = bc.f
-    args = bc.args
-    l = maximum(
-        map(
-            (a, w) -> left_boundary_window_width(a, loc) - w[1],
-            args,
-            stencil_interior_width(op),
-        ),
-    )
-    max(l, left_boundary_width(bc, loc))
+
+function left_interor_window_idx(field::Field, _, loc::LeftBoundaryWindow)
+    left_idx(axes(field))
+end
+function right_interor_window_idx(field::Field, _, loc::RightBoundaryWindow)
+    right_idx(axes(field))
 end
 
-function right_boundary_window_width(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
-    loc,
-)
-    op = bc.f
-    args = bc.args
-    l = maximum(
-        map(
-            (a, w) ->
-                right_boundary_window_width(a, loc) +
-                w[2] +
-                stagger_correct(axes(bc), axes(a)),
-            args,
-            stencil_interior_width(op),
-        ),
-    )
-    max(l, right_boundary_width(bc, loc))
+function left_interor_window_idx(
+    bc::Base.Broadcast.Broadcasted{Style},
+    _,
+    loc::LeftBoundaryWindow,
+) where {Style <: Fields.AbstractFieldStyle}
+    left_idx(axes(bc))
+end
+function right_interor_window_idx(
+    bc::Base.Broadcast.Broadcasted{Style},
+    _,
+    loc::RightBoundaryWindow,
+) where {Style <: Fields.AbstractFieldStyle}
+    right_idx(axes(bc))
 end
 
-# when we go from a center to face, we get an extra point
-stagger_correct(
-    to::Spaces.FaceFiniteDifferenceSpace,
-    from::Spaces.CenterFiniteDifferenceSpace,
-) = 1
-
-# when we go from a face to center, we lose an extra point
-stagger_correct(
-    to::Spaces.CenterFiniteDifferenceSpace,
-    from::Spaces.FaceFiniteDifferenceSpace,
-) = -1
-
-stagger_correct(to::S, from::S) where {S <: Spaces.FiniteDifferenceSpace} = 0
-
-# left / right dirchlet boundry conditions
-
-# Gradient Face-> Center
-# interior stencil
-
-# left / right SetGradient boundary conditions
+function left_interor_window_idx(_, space, loc::LeftBoundaryWindow)
+    left_idx(space)
+end
+function right_interor_window_idx(_, space, loc::RightBoundaryWindow)
+    right_idx(space)
+end
 
 function getidx(
-    bd::Base.Broadcast.Broadcasted{StencilStyle},
+    bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::Interior,
     idx,
 )
-    stencil_interior(bd.f, loc, idx, bd.args...)
+    stencil_interior(bc.f, loc, idx, bc.args...)
 end
 
 function getidx(
-    bd::Base.Broadcast.Broadcasted{StencilStyle},
+    bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::LeftBoundaryWindow,
     idx,
 )
-    op = bd.f
-    if idx <= left_boundary_width(bd, loc)
-        stencil_left_boundary(op, get_boundary(op, loc), loc, idx, bd.args...)
+    space = axes(bc)
+    op = bc.f
+    if idx < left_idx(space) + boundary_width(bc, loc)
+        stencil_left_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
-        stencil_interior(op, loc, idx, bd.args...)
+        stencil_interior(op, loc, idx, bc.args...)
     end
 end
 
@@ -590,9 +648,10 @@ function getidx(
     loc::RightBoundaryWindow,
     idx,
 )
+    space = axes(bc)
     op = bc.f
     n = length(axes(bc))
-    if idx > (n - right_boundary_width(bc, loc))
+    if idx > right_idx(space) - boundary_width(bc, loc)
         stencil_right_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
@@ -614,9 +673,25 @@ Base.Broadcast.BroadcastStyle(
 Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     return_eltype(bc.f, bc.args...)
 
-function getidx(bc::Field, ::Location, idx)
+function getidx(
+    bc::Fields.CenterFiniteDifferenceField,
+    ::Location,
+    idx::Integer,
+)
     Fields.field_values(bc)[idx]
 end
+function getidx(bc::Fields.FaceFiniteDifferenceField, ::Location, idx::PlusHalf)
+    Fields.field_values(bc)[idx.i + 1]
+end
+function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
+    Fields.field_values(bc)[idx] = val
+end
+function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
+    Fields.field_values(bc)[idx.i + 1] = val
+end
+
+
+
 getidx(scalar, ::Location, idx) = scalar
 
 function getidx(
@@ -657,8 +732,7 @@ function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
 ) where {S <: AbstractStencilStyle}
-    data_out = Fields.field_values(field_out)
-    apply_stencil!(data_out, bc)
+    apply_stencil!(field_out, bc)
     return field_out
 end
 
@@ -677,21 +751,25 @@ function Spaces.interior_indices(bc::Base.Broadcast.Broadcasted{StencilStyle})
     return lo:hi
 end
 
-function apply_stencil!(data_out, bc)
+function apply_stencil!(field_out, bc)
     space = axes(bc)
     n = length(space)
-    lb = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    rb = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    l = left_boundary_window_width(bc, lb) + 1
-    r = n - right_boundary_window_width(bc, rb)
-    for idx in 1:(l - 1)
-        data_out[idx] = getidx(bc, lb, idx)
+    lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+
+    li = left_idx(space)
+    lw = left_interor_window_idx(bc, space, lbw)
+    ri = right_idx(space)
+    rw = right_interor_window_idx(bc, space, rbw)
+    @assert li <= lw <= rw <= ri
+    for idx in li:(lw - 1)
+        setidx!(field_out, idx, getidx(bc, lbw, idx))
     end
-    for idx in l:r
-        data_out[idx] = getidx(bc, Interior(), idx)
+    for idx in lw:rw
+        setidx!(field_out, idx, getidx(bc, Interior(), idx))
     end
-    for idx in (r + 1):n
-        data_out[idx] = getidx(bc, rb, idx)
+    for idx in (rw + 1):ri
+        setidx!(field_out, idx, getidx(bc, rbw, idx))
     end
-    return data_out
+    return field_out
 end
