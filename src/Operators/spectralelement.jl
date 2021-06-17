@@ -263,9 +263,9 @@ function slab_weak_curl!(curlvec, vec, mesh)
         for i in 1:Nq, j in 1:Nq
             local_geometry = local_geometry_slab[i, j]
             # compute spectral deriv along first dimension
-            ∂₁v₂ = RecursiveOperators.rmatmul1(D, v₂, i, j)
+            ∂₁v₂ = RecursiveOperators.rmatmul1(D', v₂, i, j)
             # compute spectral deriv along second dimension
-            ∂₂v₁ = RecursiveOperators.rmatmul2(D, v₁, i, j)
+            ∂₂v₁ = RecursiveOperators.rmatmul2(D', v₁, i, j)
             curlvec_slab[i, j] = Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
         end
     end

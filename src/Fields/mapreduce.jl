@@ -20,7 +20,6 @@ function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
     )
 end
 
-
 function Base.sum(fn, field::Field)
     # Can't just call mapreduce as we need to weight _after_ applying the function
     Base.sum(Base.Broadcast.broadcasted(fn, field))
