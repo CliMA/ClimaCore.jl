@@ -25,7 +25,7 @@ ca  fa  fb  cb
 2           2    Interior indices
   \       /
     3 - 3
-  /       \
+  /       \l
 3           3
 
 gradient with dirichlet
@@ -208,6 +208,7 @@ struct RightBoundaryWindow{name} <: BoundaryWindow end
 abstract type FiniteDifferenceOperator end
 
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
+
 boundary_width(op::FiniteDifferenceOperator, bc) =
     error("Boundary $(typeof(bc)) is not supported for operator $(typeof(op))")
 

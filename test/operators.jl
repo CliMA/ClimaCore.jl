@@ -6,7 +6,9 @@ import ClimateMachineCore.Operators
 import ClimateMachineCore.Geometry
 using LinearAlgebra, IntervalSets
 
-@testset "gradient on 1×1 domain SE space" begin
+
+#@testset "gradient on 1×1 domain SE space" begin
+    FT = Float64
     domain = Domains.RectangleDomain(-3..5, -2..8)
     mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
     grid_topology = Topologies.GridTopology(mesh)
@@ -16,6 +18,15 @@ using LinearAlgebra, IntervalSets
     points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+    ∇ = Operators.Gradient()
+    x1 = map(x -> x.x1, Fields.coordinate_field(space))
+    ∇x1 = @. ∇(x1)
+
+    @test ∇x1.u1 ≈ ones(FT, space)
+    @test ∇x1.u2 ≈ zeros(FT, space)
+
+    #=    
     f(x) = (x.x1, x.x2)
     field = f.(Fields.coordinate_field(space))
 
@@ -27,8 +38,10 @@ using LinearAlgebra, IntervalSets
     )
     @test parent(∇data) ≈
           Float64[f == 1 || f == 4 for i in 1:Nq, j in 1:Nq, f in 1:4, h in 1:1]
-end
+          =#
+#end
 
+#=
 @testset "gradient on -π : π domain SE space" begin
     FT = Float64
     domain = Domains.RectangleDomain(FT(-π)..FT(π), FT(-π)..FT(π))
@@ -63,8 +76,8 @@ end
           parent(Fields.field_values(cos.(Fields.coordinate_field(space).x1))) rtol =
         1e-3
 end
-
-@testset "divergence of a constant vector field is zero" begin
+=#
+#@testset "divergence of a constant vector field is zero" begin
     FT = Float64
     domain = Domains.RectangleDomain(
         -3..5,
@@ -83,13 +96,33 @@ end
         sin(x.x1) * sin(x.x2),
         sin(x.x1) * sin(x.x2),
     )
+    
     # ∂_x1 f + ∂_x2 f = cos(x1)*sin(x2) x̂ + sin(x1)*cos(x2) ŷ
-    field = f.(Fields.coordinate_field(space))
+    X = Fields.coordinate_field(space)
+    F = f.(X)
 
+    div = Operators.StrongDivergence()
+
+    divF = @. div(F)
+    divF_ref = sin.(X.x1 .+ X.x2)
+
+    @test divF ≈ divF_ref rtol=1e-3
+     
+    div.(∇.(x1))
+
+    #=
     data = Fields.field_values(field)
+<<<<<<< HEAD
     div_data =
         Operators.slab_divergence!(similar(data, Float64), data, axes(field))
     divf(x) = sin(x.x1 + x.x2)
+=======
+    div_data = Operators.slab_divergence!(
+        similar(data, Float64),
+        data,
+        Fields.space(field),
+    )
+>>>>>>> 7ea92b1... wip SE broadcasting operators
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =
         1e-3
@@ -102,7 +135,8 @@ end
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =
         1e-3
-end
+        =#
+#end
 
 #=
 function boundary_value(

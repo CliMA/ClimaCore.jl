@@ -3,7 +3,7 @@ using Test
 using StaticArrays, IntervalSets
 import ClimateMachineCore.DataLayouts: IJFH
 import ClimateMachineCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces
+    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
 using LinearAlgebra: norm
 
 using UnicodePlots
@@ -75,7 +75,9 @@ end
     @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()
     @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
     @test norm(nt_field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+end
 
-
-
+@testset "Special case handling for broadcased norm to pass through space local geometry" begin
+    u = Geometry.Covariant12Vector.(ones(space), ones(space))
+    @test norm.(u) ≈ hypot(4/8/2,4/10/2) .* ones(space)
 end

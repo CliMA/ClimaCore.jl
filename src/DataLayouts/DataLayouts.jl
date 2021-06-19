@@ -93,7 +93,7 @@ end
 # TODO: if this gets used inside kernels, move to a generated function?
 function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     i = findfirst(isequal(name), fieldnames(S))
-    i === nothing && error("Invalid field name")
+    i === nothing && error("Invalid field name $(name)")
     return getproperty(data, i)
 end
 
