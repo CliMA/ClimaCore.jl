@@ -25,7 +25,7 @@ ca  fa  fb  cb
 2           2    Interior indices
   \       /
     3 - 3
-  /       \
+  /       \l
 3           3
 
 gradient with dirichlet

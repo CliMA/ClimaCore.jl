@@ -48,10 +48,10 @@ function horizontal_dss!(
     return dest
 end
 
-function horizontal_dss!(dest, src, mesh::AbstractMesh)
-    Nq = Quadratures.degrees_of_freedom(mesh.quadrature_style)
-    horizontal_dss!(dest, src, mesh.topology, Nq)
+function horizontal_dss!(dest, src, space::AbstractSpace)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    horizontal_dss!(dest, src, space.topology, Nq)
 end
 
-horizontal_dss!(data, mesh::AbstractMesh) =
-    horizontal_dss!(data, data, mesh::AbstractMesh)
+horizontal_dss!(data, space::AbstractSpace) =
+    horizontal_dss!(data, data, space::AbstractSpace)
