@@ -43,6 +43,7 @@ space(field::Field) = getfield(field, :space)
 # need to define twice to avoid ambiguities
 Base.getproperty(field::Field, name::Symbol) =
     Field(getproperty(field_values(field), name), space(field))
+
 Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), space(field))
 
@@ -54,15 +55,15 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-
 function slab(field::Field, h)
     Field(slab(field_values(field), h), slab(space(field), h))
 end
 
+const SlabField{V} = Field{V,<:Spaces.SpectralElementSpaceSlab}
+Base.getindex(field::SlabField, i, j) = getindex(field_values(field), i,j)
+Base.setindex!(field::SlabField, val, i, j) = setindex!(field_values(field), val, i,j)
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(space(field))
-
-
 
 # nice printing
 # follow x-array like printing?
@@ -130,6 +131,7 @@ function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     fill!(data, zero(eltype(data)))
     return field
 end
+Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space))
 
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(similar(Spaces.coordinates(space), FT), space)
@@ -137,6 +139,7 @@ function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     fill!(data, one(eltype(data)))
     return field
 end
+Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space))
 
 function Base.zero(field::Field)
     zfield = similar(field)

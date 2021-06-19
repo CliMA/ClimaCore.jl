@@ -98,7 +98,8 @@ interior_indices(space::CenterFiniteDifferenceSpace) = real_indices(space)
 interior_indices(space::FaceFiniteDifferenceSpace) =
     real_indices(space)[2:(end - 1)]
 
-@inline left_boundary_name(space::FiniteDifferenceSpace) =
+left_boundary_name(space::FiniteDifferenceSpace) =
     propertynames(space.mesh.boundaries)[1]
-@inline right_boundary_name(space::FiniteDifferenceSpace) =
+
+right_boundary_name(space::FiniteDifferenceSpace) =
     propertynames(space.mesh.boundaries)[2]

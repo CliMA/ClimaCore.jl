@@ -182,7 +182,6 @@ function variational_solve!(data, Space::AbstractSpace)
     data .= Space.local_geometry.invM .⊠ data
 end
 
-
 """
     SpectralElementSpaceSlab <: AbstractSpace
 
@@ -193,6 +192,7 @@ struct SpectralElementSpaceSlab{Q, C, G} <: AbstractSpace
     coordinates::C
     local_geometry::G
 end
+
 function slab(Space::SpectralElementSpace2D, h)
     SpectralElementSpaceSlab(
         Space.quadrature_style,
