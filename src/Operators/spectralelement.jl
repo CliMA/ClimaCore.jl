@@ -64,9 +64,9 @@ Base.eltype(sbc::SpectralBroadcasted) =
     operator_return_eltype(sbc.op, map(eltype, sbc.args)...)
 
 function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Style}
+    op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
     args = map(Base.Broadcast.instantiate, sbc.args)
-
     # axes: same logic as Broadcasted
     if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
         axes = Base.Broadcast.combine_axes(args...)
@@ -74,10 +74,9 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Styl
         axes = sbc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-
     # allocate intermediate work space
-    work = allocate_work(sbc.op, sbc.args...)
-    return SpectralBroadcasted{Style}(sbc.op, sbc.args, axes, work)
+    work = allocate_work(op, args...)
+    return SpectralBroadcasted{Style}(op, args, axes, work)
 end
 
 # @. divergence(A *  gradient(rhou / rho))
@@ -91,13 +90,13 @@ function Base.similar(
     return Field(similar(Spaces.coordinates(sp), Eltype), sp)
 end
 
-
 function Base.copy(sbc::SpectralBroadcasted)
     # figure out return type
     dest = similar(sbc, eltype(sbc))
     # allocate dest
     copyto!(dest, sbc)
 end
+
 function Base.Broadcast.materialize(sbc::SpectralBroadcasted)
     copy(Base.Broadcast.instantiate(sbc))
 end
@@ -130,7 +129,6 @@ function slab(sbc::SpectralBroadcasted{Style}, h) where {Style<:SpectralStyle}
     _axes = map(a -> slab(a, h), axes(sbc))
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.work)
 end
-
 
 abstract type OperatorSlabResult{S,Nq} <: DataLayouts.DataSlab2D{S,Nq}
 end
@@ -252,7 +250,7 @@ function Base.getindex(field::Fields.SlabField{<:StrongDivergenceResult}, i ,j)
 
     # compute spectral deriv along first dimension
     ∂₁Jv¹ = RecursiveApply.rmatmul1(D, res.Jv¹, i, j) # ∂(Jv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
-    # compute spectral deriv along second dimension
+    # compute spectral deriv along second dimension 
     ∂₂Jv² = RecursiveApply.rmatmul2(D, res.Jv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
     return inv(slab_space.local_geometry[i, j].J) ⊠ (∂₁Jv¹ ⊞ ∂₂Jv²)
 end
@@ -276,10 +274,8 @@ end
 GradientResult{S,Nq}(M::JM) where {S,Nq,JM} = GradientResult{S,Nq,JM}(M)
 
 function allocate_work(op::Gradient, arg)
-    space = Fields.space(arg)
-    FT = Spaces.undertype(space)
+    space = Fields.space(arg) 
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    
     S = eltype(arg)
     # TODO: switch memory order?
     return MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
@@ -314,7 +310,7 @@ end
 
 # unwrap one level
 function apply_slab(op::SpectralElementOperator, work, sbc::SpectralBroadcasted)
-    return apply_slab(op, work, apply_slab(sbc.op, allocate_work(sbc.op, sbc.args...), sbc.args...))
+    return apply_slab(op, work, apply_slab(sbc.op, sbc.work, sbc.args...))
 end
 
 function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted} 
