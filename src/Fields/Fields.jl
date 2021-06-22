@@ -9,10 +9,6 @@ import ..Topologies
 
 import LinearAlgebra
 
-function __init__()
-    init_diffeq()
-end
-
 """
     Field(values, space)
 
