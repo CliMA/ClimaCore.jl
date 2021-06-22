@@ -636,7 +636,7 @@ function Base.Broadcast.broadcasted(
     op::FiniteDifferenceOperator,
     args...,
 )
-    axes = (return_space(op, map(Fields.space, args)...),)
+    axes = return_space(op, map(Fields.space, args)...)
     Base.Broadcast.Broadcasted{StencilStyle}(op, args, axes)
 end
 
@@ -645,7 +645,7 @@ Base.Broadcast._broadcast_getindex_eltype(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
 ) = eltype(bc)
 
-Fields.space(bc::Base.Broadcast.Broadcasted{StencilStyle}) = axes(bc)[1]
+Fields.space(bc::Base.Broadcast.Broadcasted{StencilStyle}) = axes(bc)
 
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{S},
