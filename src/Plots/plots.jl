@@ -11,7 +11,7 @@ function UnicodePlots.heatmap(
         error("Can only plot heatmaps of scalar fields")
     end
 
-    space = Fields.space(field)
+    space = axes(field)
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
@@ -47,7 +47,7 @@ function UnicodePlots.lineplot(
     else
         name = :x
     end
-    space = Fields.space(field)
+    space = axes(field)
 
     xlabel = repr(name) * " value"
     xdata = Array(parent(field))[:, 1]
@@ -75,7 +75,7 @@ end
 
 RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     # unwrap the data to plot
-    space = Fields.space(field)
+    space = axes(field)
     xdata = parent(field)[:, 1]
     ydata = parent(Spaces.coordinates(space))[:, 1]
 
@@ -99,8 +99,8 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
 end
 
 RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
-    # compute the interpolated data to plot 
-    space = Fields.space(field)
+    # compute the interpolated data to plot
+    space = axes(field)
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2

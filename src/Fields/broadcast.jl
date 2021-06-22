@@ -64,13 +64,17 @@ function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     Base.Broadcast.Broadcasted{DS}(bc.f, map(todata, bc.args))
 end
 
-Fields.space(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) = axes(bc)[1]
+# same logic as Base.Broadcasted (which only defines it for Tuples)
+Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
+    _axes(bc, bc.axes)
+_axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
+_axes(bc, axes) = axes
 
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     ::Type{Eltype},
 ) where {Eltype}
-    return Field(similar(todata(bc), Eltype), Fields.space(bc))
+    return Field(similar(todata(bc), Eltype), axes(bc))
 end
 
 function Base.copyto!(
@@ -81,14 +85,24 @@ function Base.copyto!(
     return dest
 end
 
-# Define the axes field to be a 1-tuple containing the space of the return field
-# for checking Base.Broadcast.Broadcasted axes shapes
-Base.axes(field::Field) = (Fields.space(field),)
+
+function Base.Broadcast.broadcast_shape(
+    space1::AbstractSpace,
+    space2::AbstractSpace,
+)
+    if space1 !== space2
+        error("Mismatched spaces\n$space1\n$space2")
+    end
+    return space1
+end
+Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple{}) = space
+Base.Broadcast.broadcast_shape(::Tuple{}, space::AbstractSpace) = space
+
 
 # Overload broadcast axes shape checking for more useful error message for Field Spaces
 function Base.Broadcast.check_broadcast_shape(
-    (space1,)::Tuple{AbstractSpace},
-    (space2,)::Tuple{AbstractSpace},
+    space1::AbstractSpace,
+    space2::AbstractSpace,
 )
     if space1 !== space2
         error("Mismatched spaces\n$space1\n$space2")
@@ -96,13 +110,10 @@ function Base.Broadcast.check_broadcast_shape(
     return nothing
 end
 
-function Base.Broadcast.check_broadcast_shape(::Tuple{AbstractSpace}, ::Tuple{})
+function Base.Broadcast.check_broadcast_shape(::AbstractSpace, ::Tuple{})
     return nothing
 end
 
-function Base.Broadcast.check_broadcast_shape(
-    ::Tuple{AbstractSpace},
-    ax2::Tuple,
-)
+function Base.Broadcast.check_broadcast_shape(::AbstractSpace, ax2::Tuple)
     error("$ax2 is not a AbstractSpace")
 end

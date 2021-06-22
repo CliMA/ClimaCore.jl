@@ -307,29 +307,29 @@ end
 
 
 function slab_gradient!(∇field::Field, field::Field)
-    @assert Fields.space(∇field) === Fields.space(field)
+    @assert axes(∇field) === axes(field)
     Operators.slab_gradient!(
         Fields.field_values(∇field),
         Fields.field_values(field),
-        Fields.space(field),
+        axes(field),
     )
     return ∇field
 end
 function slab_divergence!(divflux::Field, flux::Field)
-    @assert Fields.space(divflux) === Fields.space(flux)
+    @assert axes(divflux) === axes(flux)
     Operators.slab_divergence!(
         Fields.field_values(divflux),
         Fields.field_values(flux),
-        Fields.space(flux),
+        axes(flux),
     )
     return divflux
 end
 function slab_weak_divergence!(divflux::Field, flux::Field)
-    @assert Fields.space(divflux) === Fields.space(flux)
+    @assert axes(divflux) === axes(flux)
     Operators.slab_weak_divergence!(
         Fields.field_values(divflux),
         Fields.field_values(flux),
-        Fields.space(flux),
+        axes(flux),
     )
     return divflux
 end
@@ -358,8 +358,8 @@ function interpolate(space_to::AbstractSpace, field_from::Field)
     interpolate!(field_to, field_from)
 end
 function interpolate!(field_to::Field, field_from::Field)
-    space_to = Fields.space(field_to)
-    space_from = Fields.space(field_from)
+    space_to = axes(field_to)
+    space_from = axes(field_from)
     # @assert space_from.topology == space_to.topology
 
     M = Quadratures.interpolation_matrix(
@@ -376,8 +376,8 @@ function interpolate!(field_to::Field, field_from::Field)
 end
 
 function restrict!(field_to::Field, field_from::Field)
-    space_to = Fields.space(field_to)
-    space_from = Fields.space(field_from)
+    space_to = axes(field_to)
+    space_from = axes(field_from)
     # @assert space_from.topology == space_to.topology
 
     M = Quadratures.interpolation_matrix(
@@ -398,7 +398,7 @@ function matrix_interpolate(
     Q_interp::Quadratures.Uniform{Nu},
 ) where {Nu}
     S = eltype(field)
-    space = Fields.space(field)
+    space = axes(field)
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
