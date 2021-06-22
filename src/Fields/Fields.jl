@@ -38,13 +38,15 @@ const FiniteDifferenceField{V} = Field{V, <:Spaces.FiniteDifferenceSpace}
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 field_values(field::Field) = getfield(field, :values)
-space(field::Field) = getfield(field, :space)
+
+# Define the axes field to be the space of the return field
+Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
 Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), space(field))
+    Field(getproperty(field_values(field), name), axes(field))
 Base.getproperty(field::Field, name::Integer) =
-    Field(getproperty(field_values(field), name), space(field))
+    Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))
 Base.parent(field::Field) = parent(field_values(field))
@@ -56,11 +58,11 @@ Base.length(field::Fields.Field) = 1
 
 
 function slab(field::Field, h)
-    Field(slab(field_values(field), h), slab(space(field), h))
+    Field(slab(field_values(field), h), slab(axes(field), h))
 end
 
 
-Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(space(field))
+Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
 
 
@@ -71,7 +73,7 @@ Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(space(field))
 function Base.show(io::IO, field::Field)
     print(io, eltype(field), "-valued Field:")
     _show_compact_field(io, field, "  ", true)
-    # print(io, "\non ", space(field)) # TODO: write a better space print
+    # print(io, "\non ", axes(field)) # TODO: write a better space print
 end
 function _show_compact_field(io, field, prefix, isfirst = false)
     #print(io, prefix1)
@@ -99,7 +101,7 @@ end
 
 
 Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
-    Field(similar(field_values(field), Eltype), space(field))
+    Field(similar(field_values(field), Eltype), axes(field))
 Base.similar(field::Field) = similar(field, eltype(field))
 Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
 
@@ -116,10 +118,10 @@ function Base.similar(
     Field(similar(space_to.coordinates, Eltype), space_to)
 end
 
-Base.copy(field::Field) = Field(copy(field_values(field)), space(field))
+Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 
 function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
-    @assert space(dest) == space(src)
+    @assert axes(dest) == axes(src)
     copyto!(field_values(dest), field_values(src))
     return dest
 end
@@ -152,7 +154,7 @@ end
 Construct a `Field` of the coordinates of the space.
 """
 coordinate_field(space::AbstractSpace) = Field(Spaces.coordinates(space), space)
-coordinate_field(field::Field) = coordinate_field(space(field))
+coordinate_field(field::Field) = coordinate_field(axes(field))
 
 include("broadcast.jl")
 include("mapreduce.jl")
@@ -177,12 +179,12 @@ end
 Divide `field` by the mass matrix.
 """
 function Spaces.variational_solve!(field::Field)
-    Spaces.variational_solve!(field_values(field), space(field))
+    Spaces.variational_solve!(field_values(field), axes(field))
     return field
 end
 
 function Spaces.horizontal_dss!(field::Field)
-    Spaces.horizontal_dss!(field_values(field), space(field))
+    Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
 

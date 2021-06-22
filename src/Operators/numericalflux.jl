@@ -23,7 +23,7 @@ See also:
 - [`RusanovNumericalFlux`](@ref)
 """
 function add_numerical_flux_internal!(fn, dydt, args...)
-    space = Fields.space(dydt)
+    space = axes(dydt)
     Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
     topology = space.topology
 
@@ -99,7 +99,7 @@ end
 
 
 function add_numerical_flux_boundary!(fn, dydt, args...)
-    space = Fields.space(dydt)
+    space = axes(dydt)
     Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
     topology = space.topology
 

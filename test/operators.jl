@@ -23,7 +23,7 @@ using LinearAlgebra, IntervalSets
     ∇data = Operators.slab_gradient!(
         similar(data, NTuple{2, Geometry.Cartesian12Vector{Float64}}),
         data,
-        Fields.space(field),
+        axes(field),
     )
     @test parent(∇data) ≈
           Float64[f == 1 || f == 4 for i in 1:Nq, j in 1:Nq, f in 1:4, h in 1:1]
@@ -45,7 +45,7 @@ end
     ∇data = Operators.slab_gradient!(
         similar(data, Geometry.Cartesian12Vector{Float64}),
         data,
-        Fields.space(field),
+        axes(field),
     )
     @test parent(∇data.u1) ≈
           parent(Fields.field_values(cos.(Fields.coordinate_field(space).x1))) rtol =
@@ -87,11 +87,8 @@ end
     field = f.(Fields.coordinate_field(space))
 
     data = Fields.field_values(field)
-    div_data = Operators.slab_divergence!(
-        similar(data, Float64),
-        data,
-        Fields.space(field),
-    )
+    div_data =
+        Operators.slab_divergence!(similar(data, Float64), data, axes(field))
     divf(x) = sin(x.x1 + x.x2)
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =

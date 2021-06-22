@@ -232,7 +232,7 @@ return_space(::InterpolateC2F, space::Spaces.CenterFiniteDifferenceSpace) =
 stencil_interior_width(::InterpolateC2F) = ((-1, 0),)
 
 function stencil_interior(::InterpolateC2F, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     #RecursiveApply.rdiv(((getidx(arg, loc, idx) ⊠ space.Δh_f2f[idx]) ⊞ (getidx(arg, loc, idx - 1) ⊠ space.Δh_f2f[idx-1])), 2 ⊠ space.Δh_c2c[idx])
     RecursiveApply.rdiv(getidx(arg, loc, idx) ⊞ getidx(arg, loc, idx - 1), 2)
 end
@@ -243,14 +243,14 @@ function stencil_left_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
     bc.val
 end
 function stencil_right_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == length(space.Δh_c2c)
     bc.val
 end
 
 boundary_width(op::InterpolateC2F, ::SetGradient) = 1
 function stencil_left_boundary(::InterpolateC2F, bc::SetGradient, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == 1
     # Δh_c2c[1] is f1 to c1 distance
     getidx(arg, loc, idx) ⊟ (space.Δh_c2c[idx] ⊠ bc.val)
@@ -262,14 +262,14 @@ function stencil_right_boundary(
     idx,
     arg,
 )
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == length(space.Δh_c2c) # n+1
     getidx(arg, loc, idx - 1) ⊞ (space.Δh_c2c[idx] ⊠ bc.val)
 end
 
 boundary_width(op::InterpolateC2F, ::Extrapolate) = 1
 function stencil_left_boundary(::InterpolateC2F, bc::Extrapolate, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == 1
     # Δh_c2c[1] is f1 to c1 distance
     getidx(arg, loc, idx)
@@ -281,7 +281,7 @@ function stencil_right_boundary(
     idx,
     arg,
 )
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == length(space.Δh_c2c) # n+1
     getidx(arg, loc, idx - 1)
 end
@@ -380,7 +380,7 @@ return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
 stencil_interior_width(::GradientF2C) = ((0, 1),)
 
 function stencil_interior(::GradientF2C, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     RecursiveApply.rdiv(
         (getidx(arg, loc, idx + 1) ⊟ getidx(arg, loc, idx)),
         space.Δh_f2f[idx],
@@ -389,13 +389,13 @@ end
 
 boundary_width(op::GradientF2C, ::SetValue) = 1
 function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == 1
     RecursiveApply.rdiv((getidx(arg, loc, idx + 1) ⊟ bc.val), space.Δh_f2f[idx])
 end
 
 function stencil_right_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     # Δh_f2f = [f[2] - f[1], f[3] - f[2], ..., f[n] - f[n-1], f[n+1] - f[n]]
     @assert idx == length(space.Δh_f2f) # n
     RecursiveApply.rdiv((bc.val ⊟ getidx(arg, loc, idx)), space.Δh_f2f[idx])
@@ -404,12 +404,12 @@ end
 
 boundary_width(op::GradientF2C, ::Extrapolate) = 1
 function stencil_left_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == 1
     stencil_interior(op, loc, idx + 1, arg)
 end
 function stencil_right_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     # Δh_f2f = [f[2] - f[1], f[3] - f[2], ..., f[n] - f[n-1], f[n+1] - f[n]]
     @assert idx == length(space.Δh_f2f) # n
     stencil_interior(op, loc, idx - 1, arg)
@@ -435,7 +435,7 @@ return_space(::GradientC2F, space::Spaces.CenterFiniteDifferenceSpace) =
 stencil_interior_width(::GradientC2F) = ((-1, 0),)
 
 function stencil_interior(::GradientC2F, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     RecursiveApply.rdiv(
         (getidx(arg, loc, idx) ⊟ getidx(arg, loc, idx - 1)),
         space.Δh_c2c[idx],
@@ -446,14 +446,14 @@ boundary_width(op::GradientC2F, ::SetValue) = 1
 boundary_width(op::GradientC2F, ::SetGradient) = 1
 
 function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == 1
     # Δh_c2c[1] is f1 to c1 distance
     RecursiveApply.rdiv((getidx(arg, loc, idx) ⊟ bc.val), space.Δh_c2c[idx])
 end
 
 function stencil_right_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     # Δh_c2c = [c[1] - f[1], c[2] - c[1], ..., c[n] - c[n-1], f[n+1] - c[n]]
     @assert idx == length(space.Δh_c2c) # n+1
     # Δh_c2c[end] is c[n] to f[n+1] distance
@@ -468,7 +468,7 @@ function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
 end
 
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
     @assert idx == length(space.Δh_c2c)  # n+1
     # imposed flux boundary condition at right most face
     bc.val
@@ -531,7 +531,7 @@ function right_boundary_window_width(
             (a, w) ->
                 right_boundary_window_width(a, loc) +
                 w[2] +
-                stagger_correct(Fields.space(bc), Fields.space(a)),
+                stagger_correct(axes(bc), axes(a)),
             args,
             stencil_interior_width(op),
         ),
@@ -591,7 +591,7 @@ function getidx(
     idx,
 )
     op = bc.f
-    n = length(Fields.space(bc))
+    n = length(axes(bc))
     if idx > (n - right_boundary_width(bc, loc))
         stencil_right_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
@@ -636,8 +636,8 @@ function Base.Broadcast.broadcasted(
     op::FiniteDifferenceOperator,
     args...,
 )
-    axes = return_space(op, map(Fields.space, args)...)
-    Base.Broadcast.Broadcasted{StencilStyle}(op, args, axes)
+    ax = return_space(op, map(axes, args)...)
+    Base.Broadcast.Broadcasted{StencilStyle}(op, args, ax)
 end
 
 Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{StencilStyle}) = bc
@@ -645,13 +645,11 @@ Base.Broadcast._broadcast_getindex_eltype(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
 ) = eltype(bc)
 
-Fields.space(bc::Base.Broadcast.Broadcasted{StencilStyle}) = axes(bc)
-
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{S},
     ::Type{Eltype},
 ) where {Eltype, S <: AbstractStencilStyle}
-    sp = Fields.space(bc)
+    sp = axes(bc)
     return Field(similar(Spaces.coordinates(sp), Eltype), sp)
 end
 
@@ -664,12 +662,11 @@ function Base.copyto!(
     return field_out
 end
 
-Spaces.interior_indices(field::Field) = Spaces.real_indices(Fields.space(field))
+Spaces.interior_indices(field::Field) = Spaces.real_indices(axes(field))
 
 Spaces.interior_indices(
     field::Base.Broadcast.Broadcasted{FS},
-) where {FS <: Fields.AbstractFieldStyle} =
-    Spaces.real_indices(Fields.space(field))
+) where {FS <: Fields.AbstractFieldStyle} = Spaces.real_indices(axes(field))
 
 function Spaces.interior_indices(bc::Base.Broadcast.Broadcasted{StencilStyle})
     width_op = stencil_interior_width(bc.f)   # tuple of 2-tuples
@@ -681,7 +678,7 @@ function Spaces.interior_indices(bc::Base.Broadcast.Broadcasted{StencilStyle})
 end
 
 function apply_stencil!(data_out, bc)
-    space = Fields.space(bc)
+    space = axes(bc)
     n = length(space)
     lb = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
     rb = RightBoundaryWindow{Spaces.right_boundary_name(space)}()

@@ -70,10 +70,6 @@ Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
 _axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
 _axes(bc, axes) = axes
 
-
-
-Fields.space(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) = axes(bc)
-
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
     ::Type{Eltype},
@@ -88,10 +84,6 @@ function Base.copyto!(
     copyto!(field_values(dest), todata(bc))
     return dest
 end
-
-# Define the axes field to be the space of the return field
-# for checking Base.Broadcast.Broadcasted axes shapes
-Base.axes(field::Field) = Fields.space(field)
 
 
 function Base.Broadcast.broadcast_shape(
