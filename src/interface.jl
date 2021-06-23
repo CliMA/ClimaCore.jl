@@ -10,7 +10,7 @@ function slab end
 
 
 # TODO: this could cause problems when it fails...
-#slab(x, inds...) = x
-#slab(tup::Tuple, inds...) = map(x -> slab(x, inds...), tup)
+slab(x, inds...) = x
+slab(tup::Tuple, inds...) = map(x -> slab(x, inds...), tup)
 
 function column end
