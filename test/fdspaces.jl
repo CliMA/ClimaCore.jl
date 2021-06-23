@@ -41,8 +41,8 @@ import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
         # Center -> Face operator
         # first order convergence at boundaries
         ∇ᶠ = Operators.GradientC2F(
-            left = Operators.SetValue(FT(1)),
-            right = Operators.SetValue(FT(-1)),
+            left = Operators.SetInput(FT(1)),
+            right = Operators.SetInput(FT(-1)),
         )
         ∂cos = ∇ᶠ.(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-1
@@ -75,8 +75,8 @@ end
         # 1) we set boundaries on the 2nd operator
         I = Operators.InterpolateC2F()
         ∂ = Operators.GradientF2C(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(0)),
+            left = Operators.SetInput(FT(0)),
+            right = Operators.SetInput(FT(0)),
         )
 
         ∂sin = ∂.(w .* I.(θ))
@@ -92,8 +92,8 @@ end
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(0)),
+            left = Operators.SetInput(FT(0)),
+            right = Operators.SetInput(FT(0)),
         )
         ∂ = Operators.GradientF2C()
 
@@ -111,12 +111,12 @@ end
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
-            left = Operators.SetValue(FT(NaN)),
-            right = Operators.SetValue(FT(NaN)),
+            left = Operators.SetInput(FT(NaN)),
+            right = Operators.SetInput(FT(NaN)),
         )
         ∂ = Operators.GradientF2C(
-            left = Operators.SetValue(FT(0)),
-            right = Operators.SetValue(FT(0)),
+            left = Operators.SetInput(FT(0)),
+            right = Operators.SetInput(FT(0)),
         )
 
         ∂sin = ∂.(w .* I.(θ))
@@ -244,8 +244,8 @@ end
             face_field_exact .= sin.(3π .* faces)
 
             operator = Operators.InterpolateC2F(
-                left = Operators.SetValue(0.0),
-                right = Operators.SetValue(0.0),
+                left = Operators.SetInput(0.0),
+                right = Operators.SetInput(0.0),
             )
             face_field .= operator.(cent_field)
 

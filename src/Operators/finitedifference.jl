@@ -173,12 +173,12 @@ right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
 abstract type BoundaryCondition end
 """
-    SetValue(val)
+    SetInput(val)
 
 Set the value at the boundary to be `val`. In the case of gradient operators,
 this will set the input value from which the gradient is computed.
 """
-struct SetValue{S} <: BoundaryCondition
+struct SetInput{S} <: BoundaryCondition
     val::S
 end
 
@@ -282,7 +282,7 @@ end
 
 Interpolate from center to face. Supported boundary conditions are:
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+- [`SetInput(val)`](@ref): set the value at the boundary face to be `val`.
 - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 """
@@ -303,14 +303,14 @@ function stencil_interior(::InterpolateC2F, loc, idx, arg)
     RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
 end
 
-boundary_width(op::InterpolateC2F, ::SetValue) = 1
+boundary_width(op::InterpolateC2F, ::SetInput) = 1
 
-function stencil_left_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
+function stencil_left_boundary(::InterpolateC2F, bc::SetInput, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     bc.val
 end
 
-function stencil_right_boundary(::InterpolateC2F, bc::SetValue, loc, idx, arg)
+function stencil_right_boundary(::InterpolateC2F, bc::SetInput, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     bc.val
 end
@@ -406,7 +406,7 @@ Interpolate from center to face weighted by weight field `ω`.
 
 Supported boundary conditions are:
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+- [`SetInput(val)`](@ref): set the value at the boundary face to be `val`.
 - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 
@@ -440,11 +440,11 @@ function stencil_interior(
     RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (2 ⊠ (w⁺ ⊞ w⁻)))
 end
 
-boundary_width(op::WeightedInterpolateC2F, ::SetValue) = 1
+boundary_width(op::WeightedInterpolateC2F, ::SetInput) = 1
 
 function stencil_left_boundary(
     ::WeightedInterpolateC2F,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     weight_field,
@@ -457,7 +457,7 @@ end
 
 function stencil_right_boundary(
     ::WeightedInterpolateC2F,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     weight_field,
@@ -531,7 +531,7 @@ end
     LeftBiasedC2F(;boundaries)
 
 Interpolate from the left. Only the left boundary condition should be set:
-- [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+- [`SetInput(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct LeftBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -545,9 +545,9 @@ stencil_interior_width(::LeftBiasedC2F) = ((-half, -half),)
 
 stencil_interior(::LeftBiasedC2F, loc, idx, arg) = getidx(arg, loc, idx - half)
 
-boundary_width(op::LeftBiasedC2F, ::SetValue) = 1
+boundary_width(op::LeftBiasedC2F, ::SetInput) = 1
 
-function stencil_left_boundary(::LeftBiasedC2F, bc::SetValue, loc, idx, arg)
+function stencil_left_boundary(::LeftBiasedC2F, bc::SetInput, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     bc.val
 end
@@ -556,7 +556,7 @@ end
     RightBiasedC2F(;boundaries)
 
 Interpolate from the right. Only the right boundary condition should be set:
-- [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+- [`SetInput(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct RightBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -570,9 +570,9 @@ stencil_interior_width(::RightBiasedC2F) = ((half, half),)
 
 stencil_interior(::RightBiasedC2F, loc, idx, arg) = getidx(arg, loc, idx + half)
 
-boundary_width(op::RightBiasedC2F, ::SetValue) = 1
+boundary_width(op::RightBiasedC2F, ::SetInput) = 1
 
-function stencil_right_boundary(::RightBiasedC2F, bc::SetValue, loc, idx, arg)
+function stencil_right_boundary(::RightBiasedC2F, bc::SetInput, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     bc.val
 end
@@ -624,11 +624,11 @@ function stencil_interior(
     return upwind_biased_product(vᶠ, a⁻, a⁺)
 end
 
-boundary_width(op::UpwindBiasedProductC2F, ::SetValue) = 1
+boundary_width(op::UpwindBiasedProductC2F, ::SetInput) = 1
 
 function stencil_left_boundary(
     ::UpwindBiasedProductC2F,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     velocity_field,
@@ -644,7 +644,7 @@ end
 
 function stencil_right_boundary(
     ::UpwindBiasedProductC2F,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     velocity_field,
@@ -694,7 +694,7 @@ Advection operator at cell centers, for cell face velocity field `v` cell center
     op = Advection(...)
     center_field .= op(v, θ)
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+- [`SetInput(val)`](@ref): set the value at the boundary face to be `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 """
 struct AdvectionC2C{BCS} <: AdvectionOperator
@@ -724,11 +724,11 @@ function stencil_interior(::AdvectionC2C, loc, idx, velocity_field, value_field)
     return RecursiveApply.rdiv((w⁺ ⊠ (a⁺ⁱ - aⁱ)) ⊞ (w⁻ ⊠ (aⁱ ⊟ a⁻ⁱ)), (2 ⊠ Δh))
 end
 
-boundary_width(op::AdvectionC2C, ::SetValue) = 1
+boundary_width(op::AdvectionC2C, ::SetInput) = 1
 
 function stencil_left_boundary(
     ::AdvectionC2C,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     velocity_field,
@@ -750,7 +750,7 @@ end
 
 function stencil_right_boundary(
     ::AdvectionC2C,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     velocity_field,
@@ -813,7 +813,7 @@ abstract type BoundaryOperator <: FiniteDifferenceOperator end
     SetBoundaryOperator(;boundaries...)
 
 This operator only modifies the values at the boundary:
- - [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+ - [`SetInput(val)`](@ref): set the value to be `val` on the boundary.
 """
 struct SetBoundaryOperator{BCS} <: BoundaryOperator
     bcs::BCS
@@ -829,11 +829,11 @@ function stencil_interior(::SetBoundaryOperator, loc, idx, arg)
     getidx(arg, loc, idx)
 end
 
-boundary_width(op::SetBoundaryOperator, ::SetValue) = 1
+boundary_width(op::SetBoundaryOperator, ::SetInput) = 1
 
 function stencil_left_boundary(
     ::SetBoundaryOperator,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     arg,
@@ -844,7 +844,7 @@ end
 
 function stencil_right_boundary(
     ::SetBoundaryOperator,
-    bc::SetValue,
+    bc::SetInput,
     loc,
     idx,
     arg,
@@ -863,7 +863,7 @@ Centered-difference gradient operator from a `FaceFiniteDifferenceSpace` to a
 `CenterFiniteDifferenceSpace`, applying the relevant boundary conditions. These
 can be:
  - by default, the current value at the boundary face will be used.
- - [`SetValue(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
+ - [`SetInput(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
  - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
    to be the same as the neighbouring interior value.
 """
@@ -885,9 +885,9 @@ function stencil_interior(::GradientF2C, loc, idx, arg)
     )
 end
 
-boundary_width(op::GradientF2C, ::SetValue) = 1
+boundary_width(op::GradientF2C, ::SetInput) = 1
 
-function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
+function stencil_left_boundary(::GradientF2C, bc::SetInput, loc, idx, arg)
     space = axes(arg)
     @assert idx == left_center_boundary_idx(arg)
     RecursiveApply.rdiv(
@@ -896,7 +896,7 @@ function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
     )
 end
 
-function stencil_right_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
+function stencil_right_boundary(::GradientF2C, bc::SetInput, loc, idx, arg)
     space = axes(arg)
     @assert idx == right_center_boundary_idx(arg)
     RecursiveApply.rdiv(
@@ -923,7 +923,7 @@ end
 Centered-difference gradient operator from a `CenterFiniteDifferenceSpace` to a
 `FaceFiniteDifferenceSpace`, applying the relevant boundary conditions. These
 can be:
- - [`SetValue(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
+ - [`SetInput(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
  - [`SetGradient(val)`](@ref): set the value of the gradient at the boundary to be `val`.
 """
 struct GradientC2F{BC} <: GradientOperator
@@ -946,7 +946,7 @@ end
 
 boundary_width(op::GradientC2F, ::SetGradient) = 1
 
-function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
+function stencil_left_boundary(::GradientC2F, bc::SetInput, loc, idx, arg)
     space = axes(arg)
     @assert idx == left_face_boundary_idx(arg)
     RecursiveApply.rdiv(
@@ -955,9 +955,9 @@ function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
     )
 end
 
-boundary_width(op::GradientC2F, ::SetValue) = 1
+boundary_width(op::GradientC2F, ::SetInput) = 1
 
-function stencil_right_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
+function stencil_right_boundary(::GradientC2F, bc::SetInput, loc, idx, arg)
     space = axes(arg)
     @assert idx == right_face_boundary_idx(arg)
     RecursiveApply.rdiv(

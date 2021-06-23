@@ -107,15 +107,15 @@ function tendency!(dY, Y, _, t)
     If = Operators.InterpolateC2F()
 
     ∂c = Operators.GradientF2C(
-        left = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
-        right = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
+        left = Operators.SetInput((ρ = 0.0, ρθ = 0.0)),
+        right = Operators.SetInput((ρ = 0.0, ρθ = 0.0)),
     )
 
     ∂f = Operators.GradientC2F()
 
     B = Operators.SetBoundaryOperator(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
+        left = Operators.SetInput(0.0),
+        right = Operators.SetInput(0.0),
     )
 
     # S 4.4.1: potential temperature density

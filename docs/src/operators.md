@@ -25,7 +25,7 @@ GradientC2F
 ### Boundary conditions
 
 ```@docs
-SetValue
+SetInput
 SetGradient
 Extrapolate
 ```

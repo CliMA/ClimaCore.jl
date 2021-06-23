@@ -38,8 +38,8 @@ V = ones(FT, fs)
 # upwinding
 function tendency1!(dθ, θ, _, t)
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(sin(a - t)),
-        right = Operators.SetValue(sin(b - t)),
+        left = Operators.SetInput(sin(a - t)),
+        right = Operators.SetInput(sin(b - t)),
     )
     ∂ = Operators.GradientF2C()
 
@@ -49,7 +49,7 @@ end
 # use the advection operator
 function tendency2!(dθ, θ, _, t)
     A = Operators.AdvectionC2C(
-        left = Operators.SetValue(sin(-t)),
+        left = Operators.SetInput(sin(-t)),
         right = Operators.Extrapolate(),
     )
     return @. dθ = -A(V, θ)

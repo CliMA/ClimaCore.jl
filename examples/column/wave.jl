@@ -49,8 +49,8 @@ function tendency!(dY, Y, _, t)
     (du, dp) = dY.x
 
     ∂f = Operators.GradientC2F(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
+        left = Operators.SetInput(0.0),
+        right = Operators.SetInput(0.0),
     )
     ∂c = Operators.GradientF2C()
 

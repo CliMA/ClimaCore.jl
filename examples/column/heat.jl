@@ -35,7 +35,7 @@ T = Fields.zeros(FT, cs)
 # Solve Heat Equation: ∂_t T = α ∇²T
 function ∑tendencies!(dT, T, _, t)
 
-    bcs_bottom = Operators.SetValue(FT(0.0))
+    bcs_bottom = Operators.SetInput(FT(0.0))
     bcs_top = Operators.SetGradient(FT(1.0))
 
     gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
