@@ -1,4 +1,4 @@
-import RecursiveArrayTools, Requires
+import RecursiveArrayTools, Requires, DiffEqBase
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions
@@ -42,36 +42,30 @@ RecursiveArrayTools.recursivecopy(a::AbstractArray{<:Field}) =
 )
 
 
-function init_diffeq()
-    Requires.@require OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed" begin
-        function OrdinaryDiffEq.calculate_residuals!(
-            out::Fields.Field,
-            ũ::Fields.Field,
-            u₀::Fields.Field,
-            u₁::Fields.Field,
-            α,
-            ρ,
-            internalnorm,
-            t,
-        )
-            OrdinaryDiffEq.calculate_residuals!(
-                parent(out),
-                parent(ũ),
-                parent(u₀),
-                parent(u₁),
-                α,
-                ρ,
-                internalnorm,
-                t,
-            )
-        end
-    end
-
-    # Play nice with DiffEq ArrayPartition
-    Requires.@require DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e" begin
-        DiffEqBase.UNITLESS_ABS2(field::Field) =
-            sum(OrdinaryDiffEq.DiffEqBase.UNITLESS_ABS2, parent(field))
-        DiffEqBase.recursive_length(field::Field) = 1
-        DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))
-    end
+function DiffEqBase.calculate_residuals!(
+    out::Fields.Field,
+    ũ::Fields.Field,
+    u₀::Fields.Field,
+    u₁::Fields.Field,
+    α,
+    ρ,
+    internalnorm,
+    t,
+)
+    DiffEqBase.calculate_residuals!(
+        parent(out),
+        parent(ũ),
+        parent(u₀),
+        parent(u₁),
+        α,
+        ρ,
+        internalnorm,
+        t,
+    )
 end
+
+# Play nice with DiffEq ArrayPartition
+DiffEqBase.UNITLESS_ABS2(field::Field) =
+    sum(DiffEqBase.UNITLESS_ABS2, parent(field))
+DiffEqBase.recursive_length(field::Field) = 1
+DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))
