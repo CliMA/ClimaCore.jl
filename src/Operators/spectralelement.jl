@@ -48,19 +48,16 @@ end
 SpectralBroadcasted{Style}(op::Op, args::Args, axes::Axes=nothing, work::Work=nothing) where {Style, Op, Args, Axes, Work} =
     SpectralBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
-Base.axes(sbc::SpectralBroadcasted) = 
+Base.axes(sbc::SpectralBroadcasted) =
     isnothing(sbc.axes) ? Base.Broadcast.combine_axes(sbc.args...) : sbc.axes
 
-Fields.space(sbc::SpectralBroadcasted) = 
-    axes(sbc)[1]
-
-Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) = 
+Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
     Base.Broadcast.broadcasted(SpectralStyle(), op, args...)
 
-Base.Broadcast.broadcasted(::SpectralStyle, op::SpectralElementOperator, args...) = 
+Base.Broadcast.broadcasted(::SpectralStyle, op::SpectralElementOperator, args...) =
     SpectralBroadcasted{SpectralStyle}(op, args)
 
-Base.eltype(sbc::SpectralBroadcasted) = 
+Base.eltype(sbc::SpectralBroadcasted) =
     operator_return_eltype(sbc.op, map(eltype, sbc.args)...)
 
 function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Style}
@@ -86,8 +83,8 @@ function Base.similar(
     sbc::SpectralBroadcasted,
     ::Type{Eltype},
 ) where {Eltype}
-    sp = Fields.space(sbc)
-    return Field(similar(Spaces.coordinates(sp), Eltype), sp)
+    space = axes(sbc)
+    return Field(similar(Spaces.coordinates(space), Eltype), space)
 end
 
 function Base.copy(sbc::SpectralBroadcasted)
@@ -126,7 +123,7 @@ end
 
 function slab(sbc::SpectralBroadcasted{Style}, h) where {Style<:SpectralStyle}
     _args = map(a -> slab(a, h), sbc.args)
-    _axes = map(a -> slab(a, h), axes(sbc))
+    _axes = slab(axes(sbc), h)
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.work)
 end
 
@@ -136,7 +133,7 @@ end
 Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) = getfield(slab_res, name)
 
 function Base.copyto!(slab_out::Fields.SlabField, res::Fields.SlabField)
-    space = Fields.space(slab_out)
+    space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
         slab_out[i, j] = res[i, j]
@@ -195,7 +192,7 @@ operator_return_eltype(op::Union{WeakDivergence, StrongDivergence}, S) =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
 function allocate_work(op::Union{WeakDivergence, StrongDivergence}, arg)
-    space = Fields.space(arg)
+    space = axes(arg)
 
     FT = Spaces.undertype(space)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
@@ -215,7 +212,7 @@ StrongDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
     StrongDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
 
 function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabField)
-    slab_space = Fields.space(slab_flux)
+    slab_space = axes(slab_flux)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
     for j in 1:Nq, i in 1:Nq
@@ -224,7 +221,7 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabFi
         # alternatively we could do this conversion _after_ taking the derivatives
         # may have an effect on the accuracy
         # materialize if lazy
-        F = slab_flux[i, j]  # materialize the flux 
+        F = slab_flux[i, j]  # materialize the flux
         Jv¹[i, j] = RecursiveApply.rmap(
             x ->
                 local_geometry.J *
@@ -243,17 +240,68 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabFi
 end
 
 function Base.getindex(field::Fields.SlabField{<:StrongDivergenceResult}, i ,j)
-    slab_space = Fields.space(field)
+    slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     res = Fields.field_values(field)
 
     # compute spectral deriv along first dimension
     ∂₁Jv¹ = RecursiveApply.rmatmul1(D, res.Jv¹, i, j) # ∂(Jv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
-    # compute spectral deriv along second dimension 
+    # compute spectral deriv along second dimension
     ∂₂Jv² = RecursiveApply.rmatmul2(D, res.Jv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
     return inv(slab_space.local_geometry[i, j].J) ⊠ (∂₁Jv¹ ⊞ ∂₂Jv²)
 end
+
+
+
+struct WeakDivergenceResult{S,Nq,JM} <: OperatorSlabResult{S,Nq}
+    WJv¹::JM
+    WJv²::JM
+end
+WeakDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
+    WeakDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
+
+function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux::Fields.SlabField)
+    slab_space = axes(slab_flux)
+    Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
+    local_geometry_slab = slab_space.local_geometry
+    for j in 1:Nq, i in 1:Nq
+        local_geometry = local_geometry_slab[i, j]
+        # compute flux in contravariant coordinates (v¹,v²)
+        # alternatively we could do this conversion _after_ taking the derivatives
+        # may have an effect on the accuracy
+        # materialize if lazy
+        F = slab_flux[i, j]  # materialize the flux
+        WJv¹[i, j] = RecursiveApply.rmap(
+            x ->
+                local_geometry.WJ *
+                Geometry.contravariant1(x, local_geometry),
+            F,
+        )
+        WJv²[i, j] = RecursiveApply.rmap(
+            x ->
+                local_geometry.WJ *
+                Geometry.contravariant2(x, local_geometry),
+            F,
+        )
+    end
+    S = eltype(WJv¹)
+    return Field(WeakDivergenceResult{S, Nq}(WJv¹, WJv²), slab_space)
+end
+
+function Base.getindex(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
+    slab_space = axes(field)
+    FT = Spaces.undertype(slab_space)
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    res = Fields.field_values(field)
+
+    # compute spectral deriv along first dimension
+    Dᵀ₁WJv¹ = RecursiveApply.rmatmul1(D', res.WJv¹, i, j) # D'WJv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
+    # compute spectral deriv along second dimension
+    Dᵀ₂WJv² = RecursiveApply.rmatmul2(D', res.WJv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
+    return (-inv(slab_space.local_geometry[i, j].WJ)) ⊠ (Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
+end
+
 
 # Strong gradient
 """
@@ -274,7 +322,7 @@ end
 GradientResult{S,Nq}(M::JM) where {S,Nq,JM} = GradientResult{S,Nq,JM}(M)
 
 function allocate_work(op::Gradient, arg)
-    space = Fields.space(arg) 
+    space = axes(arg)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
     S = eltype(arg)
     # TODO: switch memory order?
@@ -282,7 +330,7 @@ function allocate_work(op::Gradient, arg)
 end
 
 function apply_slab(op::Gradient, M, slab_field::Fields.SlabField)
-    slab_space = Fields.space(slab_field)
+    slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
         M[i,j] = slab_field[i,j]
@@ -292,7 +340,7 @@ function apply_slab(op::Gradient, M, slab_field::Fields.SlabField)
 end
 
 function Base.getindex(field::Fields.SlabField{<:GradientResult}, i, j)
-    slab_space = Fields.space(field)
+    slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     res = Fields.field_values(field)
@@ -300,7 +348,7 @@ function Base.getindex(field::Fields.SlabField{<:GradientResult}, i, j)
     ∂f∂ξ₁ = RecursiveApply.rmatmul1(D, res.M, i, j)
     ∂f∂ξ₂ = RecursiveApply.rmatmul2(D, res.M, i, j)
     ∂f∂ξ = RecursiveApply.rmap(Covariant12Vector, ∂f∂ξ₁, ∂f∂ξ₂)
-    # TODO: return a CovariantVector by default; 
+    # TODO: return a CovariantVector by default;
     #       use subsequent broadcasting to convert to desired basis
     return RecursiveApply.rmap(
         x -> Cartesian12Vector(x, slab_space.local_geometry[i,j]),
@@ -308,12 +356,17 @@ function Base.getindex(field::Fields.SlabField{<:GradientResult}, i, j)
     )
 end
 
+
+
+
+
+
 # unwrap one level
 function apply_slab(op::SpectralElementOperator, work, sbc::SpectralBroadcasted)
     return apply_slab(op, work, apply_slab(sbc.op, sbc.work, sbc.args...))
 end
 
-function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted} 
+function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted}
     CompositeSpectralStyle()
 end
 
@@ -334,6 +387,20 @@ function Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{Style}) where
     # recursively call instantiate to allocate work arrays
     return Base.Broadcasted{Style}(bc.f, bc.args, axes)
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # TODO:
@@ -489,7 +556,7 @@ function slab_divergence!(divflux, flux, space)
             # alternatively we could do this conversion _after_ taking the derivatives
             # may have an effect on the accuracy
             # materialize if lazy
-            F = flux_slab[i, j]  # materialize the flux 
+            F = flux_slab[i, j]  # materialize the flux
             Jv¹[i, j] = RecursiveApply.rmap(
                 x ->
                     local_geometry.J *
@@ -504,7 +571,7 @@ function slab_divergence!(divflux, flux, space)
             )
         end
         # GPU synchronize
-        for i in 1:Nq, j in 1:Nq 
+        for i in 1:Nq, j in 1:Nq
             local_geometry = local_geometry_slab[i, j]
             # compute spectral deriv along first dimension
             ∂₁v₂ = RecursiveOperators.rmatmul1(D, Jv¹, i, j) # ∂(Jv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
