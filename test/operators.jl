@@ -26,7 +26,7 @@ using LinearAlgebra, IntervalSets
     @test ∇x1.u1 ≈ ones(FT, space)
     @test ∇x1.u2 ≈ zeros(FT, space)
 
-    #=    
+    #=
     f(x) = (x.x1, x.x2)
     field = f.(Fields.coordinate_field(space))
 
@@ -96,7 +96,7 @@ end
         sin(x.x1) * sin(x.x2),
         sin(x.x1) * sin(x.x2),
     )
-    
+
     # ∂_x1 f + ∂_x2 f = cos(x1)*sin(x2) x̂ + sin(x1)*cos(x2) ŷ
     X = Fields.coordinate_field(space)
     F = f.(X)
@@ -107,16 +107,14 @@ end
     divF_ref = sin.(X.x1 .+ X.x2)
 
     @test divF ≈ divF_ref rtol=1e-3
-     
+
     div.(∇.(x1))
 
     #=
     data = Fields.field_values(field)
-    div_data = Operators.slab_divergence!(
-        similar(data, Float64),
-        data,
-        Fields.space(field),
-    )
+    div_data =
+        Operators.slab_divergence!(similar(data, Float64), data, axes(field))
+    divf(x) = sin(x.x1 + x.x2)
     @test parent(div_data) ≈
           parent(Fields.field_values(divf.(Fields.coordinate_field(space)))) rtol =
         1e-3
