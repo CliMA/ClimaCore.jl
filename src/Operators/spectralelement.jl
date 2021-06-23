@@ -446,14 +446,13 @@ struct WeakCurl <: SpectralElementOperator end
 struct StrongCurl <: SpectralElementOperator end
 
 
-abstract type TensorOperator <: SpectralElementOperator
+abstract type TensorOperator <: SpectralElementOperator end
 struct Interpolate{S} <: TensorOperator
     space::S
 end
 struct Restrict{S} <: TensorOperator
     space::S
 end
-
 
 operator_return_eltype(op::TensorOperator, S) = S
 
@@ -471,19 +470,32 @@ function allocate_work(op::Interpolate, arg)
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
     mat = Quadratures.interpolation_matrix(
         Float64,
-        space_in.quadrature_style,
         space_out.quadrature_style,
+        space_in.quadrature_style,
     )
 
     S = eltype(arg)
     # TODO: switch memory order?
-    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq * Nq}(undef)
-    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq * Nq}(undef)
+    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
+    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
     return (mat, temp1, temp2)
 end
 
 function allocate_work(op::Restrict, arg)
-    (mat, temp1, temp2) = allocate_work(Interpolate(op.space), arg)
+    space_in = axes(arg)
+    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
+    space_out = op.space
+    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
+    mat = Quadratures.interpolation_matrix(
+        Float64,
+        space_in.quadrature_style,
+        space_out.quadrature_style,
+        )
+
+    S = eltype(arg)
+    # TODO: switch memory order?
+    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
+    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
     return (mat', temp1, temp2)
 end
 
@@ -498,8 +510,8 @@ function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field)
     for j in 1:Nq_in, i in 1:Nq_out
         temp2[i, j] = RecursiveApply.rmatmul1(mat, temp1, i, j)
     end
-    S = eltype(arg)
-    return Field(InterpolateResult{S,Nq_out}(mat, temp2), slab_space)
+    S = eltype(slab_field)
+    return Field(TensorResult{S,Nq_out}(mat, temp2), space_out)
 end
 
 function get_node(field::Fields.SlabField{<:TensorResult}, i, j)

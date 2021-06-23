@@ -83,7 +83,8 @@ function total_energy(y, parameters)
 end
 
 F = flux.(y0, Ref(parameters))
-divF = Operators.slab_divergence(F)
+div = Operators.WeakDivergence()
+divF = div.(F)
 #=
 wdivF = Operators.slab_weak_divergence(F)
 wdivF_data = Fields.field_values(wdivF)
@@ -112,6 +113,15 @@ function rhs!(dydt, y, _, t)
     #
     Nh = Topologies.nlocalelems(y)
 
+
+    I = Operators.Interpolate(Ispace)
+    div = Operators.WeakDivergence()
+    R = Operators.Restrict(space)
+
+    dydt = R.(-div.(flux.(I.(y), Ref(parameters))))
+
+    dss!(dydt)
+    #=
     # for all slab elements in space
     for h in 1:Nh
         y_slab = slab(y, h)
@@ -141,6 +151,7 @@ function rhs!(dydt, y, _, t)
     # 6. Solve for final result
     #  K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
     Spaces.variational_solve!(dydt)
+    =#
 end
 
 # Next steps:
