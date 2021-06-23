@@ -66,6 +66,6 @@ end
 
 # Play nice with DiffEq ArrayPartition
 DiffEqBase.UNITLESS_ABS2(field::Field) =
-    sum(OrdinaryDiffEq.DiffEqBase.UNITLESS_ABS2, parent(field))
+    sum(DiffEqBase.UNITLESS_ABS2, parent(field))
 DiffEqBase.recursive_length(field::Field) = 1
 DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))
