@@ -26,11 +26,9 @@ Subtypes `Op` of this should define the following:
 - [`allocate_work(::Op, args...)`](@ref)
 - [`apply_slab(::Op, work, args...)`](@ref)
 
-Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_slab` should define `Base.getindex(::OpResult, i, j)`.
+Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_slab` should define `get_node(::OpResult, i, j)`.
 """
 abstract type SpectralElementOperator end
-struct WeakCurl <: SpectralElementOperator end
-struct StrongCurl <: SpectralElementOperator end
 
 """
     SpectralBroadcasted{Style}(op, args[,axes[, work]])
@@ -76,6 +74,19 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Styl
     return SpectralBroadcasted{Style}(op, args, axes, work)
 end
 
+function Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{Style}) where {Style<:AbstractSpectralStyle}
+    # recursively instantiate the arguments to allocate intermediate work arrays
+    args = map(Base.Broadcast.instantiate, bc.args)
+    # axes: same logic as Broadcasted
+    if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
+        axes = Base.Broadcast.combine_axes(args...)
+    else
+        axes = bc.axes
+        Base.Broadcast.check_broadcast_axes(axes, args...)
+    end
+    return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
+end
+
 # @. divergence(A *  gradient(rhou / rho))
                       # slab_size(space)
 
@@ -87,12 +98,21 @@ function Base.similar(
     return Field(similar(Spaces.coordinates(space), Eltype), space)
 end
 
+function Base.similar(
+    bc::Base.Broadcast.Broadcasted{<:AbstractSpectralStyle},
+    ::Type{Eltype},
+) where {Eltype}
+    space = axes(bc)
+    return Field(similar(Spaces.coordinates(space), Eltype), space)
+end
+
 function Base.copy(sbc::SpectralBroadcasted)
     # figure out return type
     dest = similar(sbc, eltype(sbc))
     # allocate dest
     copyto!(dest, sbc)
 end
+Base.Broadcast.broadcastable(sbc::SpectralBroadcasted) = sbc
 
 function Base.Broadcast.materialize(sbc::SpectralBroadcasted)
     copy(Base.Broadcast.instantiate(sbc))
@@ -109,10 +129,10 @@ function Base.copyto!(
     Nh = length(data_out)
     for h in 1:Nh
         slab_out = slab(field_out, h)
-        slab_args = map(arg -> slab(arg, h), sbc.args)
+        slab_args = map(arg -> _apply_slab(slab(arg, h)), sbc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copyto!(slab_out, apply_slab(sbc.op, sbc.work, slab_args...))
+        copy_slab!(slab_out, apply_slab(sbc.op, sbc.work, slab_args...))
     end
     return field_out
 end
@@ -127,12 +147,57 @@ function slab(sbc::SpectralBroadcasted{Style}, h) where {Style<:SpectralStyle}
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.work)
 end
 
+function slab(bc::Base.Broadcast.Broadcasted{Style}, h) where {Style<:AbstractSpectralStyle}
+    _args = map(a -> slab(a, h), bc.args)
+    _axes = slab(axes(bc), h)
+    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+end
 abstract type OperatorSlabResult{S,Nq} <: DataLayouts.DataSlab2D{S,Nq}
 end
 
 Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) = getfield(slab_res, name)
 
-function Base.copyto!(slab_out::Fields.SlabField, res::Fields.SlabField)
+function Base.copyto!(
+    field_out::Field,
+    bc::Base.Broadcast.Broadcasted{Style}
+) where {Style <: AbstractSpectralStyle}
+    data_out = Fields.field_values(field_out)
+    Nh = length(data_out)
+    for h in 1:Nh
+        slab_out = slab(field_out, h)
+        slab_args = map(arg -> _apply_slab(slab(arg, h)), bc.args)
+        # TODO have a slab field type with local geometry
+        #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
+        copy_slab!(slab_out, Base.Broadcast.Broadcasted{Style}(bc.f, slab_args, axes(slab_out)))
+    end
+    return field_out
+end
+
+function copy_slab!(slab_out, res)
+    space = axes(slab_out)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    for i in 1:Nq, j in 1:Nq
+        # slab_out[i, j] = res[i, j]
+        set_node!(slab_out, i, j, get_node(res, i, j))
+    end
+    return slab_out
+end
+
+
+@inline get_node(field::Fields.SlabField, i, j) = getindex(Fields.field_values(field), i,j)
+@inline get_node(bc::Base.Broadcast.Broadcasted, i, j) = bc.f(map(arg -> get_node(arg, i, j), bc.args)...)
+@inline get_node(scalar, i, j) = scalar
+
+set_node!(field::Fields.SlabField, i, j, val) = setindex!(Fields.field_values(field), val, i,j)
+
+
+
+
+
+#res = Broadcasted{CompositeSpectralStyle}(-, Field(StrongDivergenceResult{S, Nq}(Jv¹, Jv²), slab_space))
+
+#=
+function Base.copyto!(slab_out::Fields.SlabField, res::Base.Broadcast.Broadcasted{<:AbstractSpectralStyle})
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
@@ -140,6 +205,26 @@ function Base.copyto!(slab_out::Fields.SlabField, res::Fields.SlabField)
     end
     return slab_out
 end
+
+=#
+
+_apply_slab(x) = x
+_apply_slab(sbc::SpectralBroadcasted) = apply_slab(sbc.op, sbc.work, map(_apply_slab, sbc.args)...)
+_apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}) =
+    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, map(_apply_slab, bc.args), bc.axes)
+
+
+function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted}
+    CompositeSpectralStyle()
+end
+
+function Base.Broadcast.BroadcastStyle(
+    ::CompositeSpectralStyle,
+    ::Fields.AbstractFieldStyle,
+)
+    CompositeSpectralStyle()
+end
+
 
 """
     StrongDivergence()
@@ -211,7 +296,7 @@ end
 StrongDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
     StrongDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
 
-function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabField)
+function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux)
     slab_space = axes(slab_flux)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -221,7 +306,7 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabFi
         # alternatively we could do this conversion _after_ taking the derivatives
         # may have an effect on the accuracy
         # materialize if lazy
-        F = slab_flux[i, j]  # materialize the flux
+        F = get_node(slab_flux, i, j)  # materialize the flux
         Jv¹[i, j] = RecursiveApply.rmap(
             x ->
                 local_geometry.J *
@@ -239,7 +324,7 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux::Fields.SlabFi
     return Field(StrongDivergenceResult{S, Nq}(Jv¹, Jv²), slab_space)
 end
 
-function Base.getindex(field::Fields.SlabField{<:StrongDivergenceResult}, i ,j)
+function get_node(field::Fields.SlabField{<:StrongDivergenceResult}, i ,j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -261,7 +346,7 @@ end
 WeakDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
     WeakDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
 
-function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux::Fields.SlabField)
+function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux)
     slab_space = axes(slab_flux)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -271,7 +356,7 @@ function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux::Fields.SlabFi
         # alternatively we could do this conversion _after_ taking the derivatives
         # may have an effect on the accuracy
         # materialize if lazy
-        F = slab_flux[i, j]  # materialize the flux
+        F = get_node(slab_flux, i, j)  # materialize the flux
         WJv¹[i, j] = RecursiveApply.rmap(
             x ->
                 local_geometry.WJ *
@@ -289,7 +374,7 @@ function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux::Fields.SlabFi
     return Field(WeakDivergenceResult{S, Nq}(WJv¹, WJv²), slab_space)
 end
 
-function Base.getindex(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
+function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -329,17 +414,17 @@ function allocate_work(op::Gradient, arg)
     return MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
 end
 
-function apply_slab(op::Gradient, M, slab_field::Fields.SlabField)
+function apply_slab(op::Gradient, M, slab_field)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
-        M[i,j] = slab_field[i,j]
+        M[i,j] = get_node(slab_field, i, j)
     end
     S = operator_return_eltype(op::Gradient, eltype(M))
     return Field(GradientResult{S,Nq}(M), slab_space)
 end
 
-function Base.getindex(field::Fields.SlabField{<:GradientResult}, i, j)
+function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -357,39 +442,70 @@ function Base.getindex(field::Fields.SlabField{<:GradientResult}, i, j)
 end
 
 
+struct WeakCurl <: SpectralElementOperator end
+struct StrongCurl <: SpectralElementOperator end
 
 
-
-
-# unwrap one level
-function apply_slab(op::SpectralElementOperator, work, sbc::SpectralBroadcasted)
-    return apply_slab(op, work, apply_slab(sbc.op, sbc.work, sbc.args...))
+abstract type TensorOperator <: SpectralElementOperator
+struct Interpolate{S} <: TensorOperator
+    space::S
+end
+struct Restrict{S} <: TensorOperator
+    space::S
 end
 
-function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted}
-    CompositeSpectralStyle()
+
+operator_return_eltype(op::TensorOperator, S) = S
+
+struct TensorResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
+    mat::M
+    temp2::TM
+end
+TensorResult{S,Nq}(mat::M,temp2::TM) where {S,Nq,M,TM} = TensorResult{S,Nq,M,TM}(mat, temp2)
+
+
+function allocate_work(op::Interpolate, arg)
+    space_in = axes(arg)
+    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
+    space_out = op.space
+    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
+    mat = Quadratures.interpolation_matrix(
+        Float64,
+        space_in.quadrature_style,
+        space_out.quadrature_style,
+    )
+
+    S = eltype(arg)
+    # TODO: switch memory order?
+    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq * Nq}(undef)
+    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq * Nq}(undef)
+    return (mat, temp1, temp2)
 end
 
-function Base.Broadcast.BroadcastStyle(
-    ::CompositeSpectralStyle,
-    ::Fields.AbstractFieldStyle,
-)
-    CompositeSpectralStyle()
+function allocate_work(op::Restrict, arg)
+    (mat, temp1, temp2) = allocate_work(Interpolate(op.space), arg)
+    return (mat', temp1, temp2)
 end
 
-function Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{Style}) where {Style<:CompositeSpectralStyle}
-    if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
-        axes = Base.Broadcast.combine_axes(bc.args...)
-    else
-        axes = bc.axes
-        Base.Broadcast.check_broadcast_axes(axes, bc.args...)
+function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field)
+    space_in = axes(slab_field)
+    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
+    space_out = op.space
+    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
+    for i in 1:Nq_in, j in 1:Nq_in
+        temp1[i,j] = get_node(slab_field, i, j)
     end
-    # recursively call instantiate to allocate work arrays
-    return Base.Broadcasted{Style}(bc.f, bc.args, axes)
+    for j in 1:Nq_in, i in 1:Nq_out
+        temp2[i, j] = RecursiveApply.rmatmul1(mat, temp1, i, j)
+    end
+    S = eltype(arg)
+    return Field(InterpolateResult{S,Nq_out}(mat, temp2), slab_space)
 end
 
-
-
+function get_node(field::Fields.SlabField{<:TensorResult}, i, j)
+    res = Fields.field_values(field)
+    return RecursiveApply.rmatmul2(res.mat, res.temp2, i, j)
+end
 
 
 

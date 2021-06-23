@@ -101,6 +101,8 @@ end
     X = Fields.coordinate_field(space)
     F = f.(X)
 
+    x1 = X.x1
+
     div = Operators.StrongDivergence()
 
     divF = @. div(F)
@@ -108,8 +110,12 @@ end
 
     @test divF ≈ divF_ref rtol=1e-3
 
-    div.(∇.(x1))
+    divgradF = @. div(∇(x1))
+    @test divgradF ≈ zeros(FT, space) atol=1e-10
 
+    V = ones(FT, space)
+    ndivgradF = @. -div(∇(x1))
+    ndivgradF = @. -div(V*∇(x1))
     #=
     data = Fields.field_values(field)
     div_data =

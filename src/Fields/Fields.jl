@@ -28,7 +28,7 @@ end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
 
-const SpectralElementField2D{V} = Field{V, <:Spaces.SpectralElementSpace2D}
+const SpectralElementField2D{V,S} = Field{V,S} where {V<:AbstractData, S<:Spaces.SpectralElementSpace2D}
 const FiniteDifferenceField{V} = Field{V, <:Spaces.FiniteDifferenceSpace}
 const FaceFiniteDifferenceField{V} =
     Field{V, <:Spaces.FaceFiniteDifferenceSpace}
@@ -39,7 +39,7 @@ const CenterFiniteDifferenceField{V} =
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 field_values(field::Field) = getfield(field, :values)
 
-# Define the axes field to be the space of the return field
+# Define the axes field to be the todata(bc) of the return field
 Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
@@ -60,9 +60,7 @@ function slab(field::Field, h)
     Field(slab(field_values(field), h), slab(axes(field), h))
 end
 
-const SlabField{V} = Field{V,<:Spaces.SpectralElementSpaceSlab}
-Base.getindex(field::SlabField, i, j) = getindex(field_values(field), i,j)
-Base.setindex!(field::SlabField, val, i, j) = setindex!(field_values(field), val, i,j)
+const SlabField{V,S} = Field{V,S} where {V<:AbstractData, S<:Spaces.SpectralElementSpaceSlab}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
