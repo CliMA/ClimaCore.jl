@@ -218,11 +218,13 @@ rhs!(dydt, y0, (parameters, numflux), 0.0);
 # reference implementation
 # ========
 
+const Nstate = 4
+
 # data layout: i, j, k, n1, n2
 #  n1,n2 topology
 #  i,j,k datalayouts
 X = reshape(parent(Fields.coordinate_field(space)), (Nq,Nq,2,n1,n2))
-y0_ref = Array{Float64}(undef, (Nq,Nq,4,n1,n2))
+y0_ref = Array{Float64}(undef, (Nq,Nq,Nstate,n1,n2))
 
 function init_y0_ref!(y0_ref, X, parameters)
     for h2 = 1:n2, h1 = 1:n1
@@ -252,20 +254,36 @@ Geometry.:⊗(u::SVector, v::SVector) = u*v'
 
 getval(::Val{V}) where {V} = V
 
-function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq), t)
-    # specialize on Nq
-    # allocate per thread?
+struct TendencyState{DT, WJT, ST}
+    ∂ξ∂x::DT
+    WJv¹::WJT
+    WJv²::WJT
+    scratch::ST
+
+    function TendencyState(n1, n2, Nstate, Nq)
+        ∂ξ∂x = @SMatrix [n1/(2pi) 0; 0 n2/(2pi)]
+        WJv¹ = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
+        WJv² = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
+        scratch = MArray{Tuple{Nq, Nq, Nstate}, Float64, 3, Nq * Nq * Nstate}(undef)
+        return new{typeof(∂ξ∂x), typeof(WJv¹), typeof(scratch)}(∂ξ∂x, WJv¹, WJv², scratch)
+    end
+end
+
+const tendency_state = TendencyState(n1, n2, Nstate, Nq)
+
+function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, state), t)
+    global Nstate
     Nq = getval(valNq)
-    Nstate = 4
-    WJv¹ = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
-    WJv² = MArray{Tuple{Nstate, Nq, Nq}, Float64, 3, Nstate * Nq * Nq}(undef)
     n1 = size(y0_ref,4)
     n2 = size(y0_ref,5)
 
     J = 2pi/n1*2pi/n2
-    ∂ξ∂x = @SMatrix [n1/(2pi) 0; 0 n2/(2pi)]
+    ∂ξ∂x = state.∂ξ∂x
 
     g = parameters.g
+
+    WJv¹ = state.WJv¹
+    WJv² = state.WJv²
 
     # "Volume" part
     @inbounds for h2 = 1:n2, h1 = 1:n1
@@ -363,7 +381,7 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq), 
     end
 
     # apply filter
-    scratch = MArray{Tuple{Nq, Nq, Nstate}, Float64, 3, Nq * Nq * Nstate}(undef)
+    scratch = state.scratch
     @inbounds for h2 = 1:n2, h1 = 1:n1
         for j in 1:Nq, i in 1:Nq
             for s = 1:Nstate
@@ -386,7 +404,7 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq), 
     return dydt_ref
 end
 
-tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq)), 0.0);
+tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
 
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
@@ -402,7 +420,7 @@ sol = @time solve(prob, SSPRK33(), dt = 0.02)
 #__itt_pause()
 #__sde_stop()
 
-prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux, W, D, M, Val(Nq)))
+prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
 
 #__sde_start()
 #__itt_resume()
@@ -412,8 +430,8 @@ sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02)
 #__itt_pause()
 #__sde_stop()
 
-dydt_reshaped = reshape(parent(dydt),(Nq,Nq,4,n1,n2))
-dydt_ref ≈ dydt_reshaped
+#dydt_reshaped = reshape(parent(dydt),(Nq,Nq,4,n1,n2))
+#dydt_ref ≈ dydt_reshaped
 
 #=
 using Plots
