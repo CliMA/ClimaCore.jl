@@ -46,8 +46,12 @@ end
 SpectralBroadcasted{Style}(op::Op, args::Args, axes::Axes=nothing, work::Work=nothing) where {Style, Op, Args, Axes, Work} =
     SpectralBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
+
+
+return_space(::SpectralElementOperator, space) = space
+
 Base.axes(sbc::SpectralBroadcasted) =
-    isnothing(sbc.axes) ? Base.Broadcast.combine_axes(sbc.args...) : sbc.axes
+    isnothing(sbc.axes) ? return_space(sbc.op, map(axes, sbc.args)...) : sbc.axes
 
 Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
     Base.Broadcast.broadcasted(SpectralStyle(), op, args...)
@@ -64,7 +68,7 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Styl
     args = map(Base.Broadcast.instantiate, sbc.args)
     # axes: same logic as Broadcasted
     if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
-        axes = Base.Broadcast.combine_axes(args...)
+        axes = Base.axes(sbc)
     else
         axes = sbc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
@@ -451,6 +455,8 @@ struct StrongCurl <: SpectralElementOperator end
 
 
 abstract type TensorOperator <: SpectralElementOperator end
+return_space(op::TensorOperator, inspace) = op.space
+
 struct Interpolate{S} <: TensorOperator
     space::S
 end
