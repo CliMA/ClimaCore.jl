@@ -118,7 +118,6 @@ function tendency!(dY, Y, _, t)
         right = Operators.SetValue(0.0),
     )
 
-    # S 4.4.1: potential temperature density
     @. dYc = -(∂c(w * If(Yc)))
     @. dw = B(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - grav)
 
