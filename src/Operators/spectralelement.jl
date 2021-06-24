@@ -129,10 +129,10 @@ function Base.copyto!(
     Nh = length(data_out)
     for h in 1:Nh
         slab_out = slab(field_out, h)
-        slab_args = map(arg -> _apply_slab(slab(arg, h)), sbc.args)
+        slab_args = map(arg -> _apply_slab(slab(arg, h), h), sbc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copy_slab!(slab_out, apply_slab(sbc.op, sbc.work, slab_args...))
+        copy_slab!(slab_out, apply_slab(sbc.op, sbc.work, slab_args..., h))
     end
     return field_out
 end
@@ -165,7 +165,7 @@ function Base.copyto!(
     Nh = length(data_out)
     for h in 1:Nh
         slab_out = slab(field_out, h)
-        slab_args = map(arg -> _apply_slab(slab(arg, h)), bc.args)
+        slab_args = map(arg -> _apply_slab(slab(arg, h), h), bc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
         copy_slab!(slab_out, Base.Broadcast.Broadcasted{Style}(bc.f, slab_args, axes(slab_out)))
@@ -185,8 +185,11 @@ end
 
 
 @inline get_node(field::Fields.SlabField, i, j) = getindex(Fields.field_values(field), i,j)
-@inline get_node(bc::Base.Broadcast.Broadcasted, i, j) = bc.f(map(arg -> get_node(arg, i, j), bc.args)...)
-@inline get_node(scalar, i, j) = scalar
+function get_node(bc::Base.Broadcast.Broadcasted, i, j)
+    args = map(arg -> get_node(arg, i, j), bc.args)
+    bc.f(args...)
+end
+@inline get_node(scalar, i, j) = scalar[]
 
 set_node!(field::Fields.SlabField, i, j, val) = setindex!(Fields.field_values(field), val, i,j)
 
@@ -208,10 +211,10 @@ end
 
 =#
 
-_apply_slab(x) = x
-_apply_slab(sbc::SpectralBroadcasted) = apply_slab(sbc.op, sbc.work, map(_apply_slab, sbc.args)...)
-_apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}) =
-    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, map(_apply_slab, bc.args), bc.axes)
+_apply_slab(x, h) = x
+_apply_slab(sbc::SpectralBroadcasted, h) = apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
+_apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
+    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, map(a -> _apply_slab(a, h), bc.args), bc.axes)
 
 
 function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted}
@@ -296,7 +299,7 @@ end
 StrongDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
     StrongDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
 
-function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux)
+function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux, h)
     slab_space = axes(slab_flux)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -346,7 +349,7 @@ end
 WeakDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
     WeakDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
 
-function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux)
+function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux, h)
     slab_space = axes(slab_flux)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -384,7 +387,8 @@ function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
     Dᵀ₁WJv¹ = RecursiveApply.rmatmul1(D', res.WJv¹, i, j) # D'WJv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
     # compute spectral deriv along second dimension
     Dᵀ₂WJv² = RecursiveApply.rmatmul2(D', res.WJv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
-    return (-inv(slab_space.local_geometry[i, j].WJ)) ⊠ (Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
+#    return (-inv(slab_space.local_geometry[i, j].WJ)) ⊠ (Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
+    return ⊟(Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
 end
 
 
@@ -414,7 +418,7 @@ function allocate_work(op::Gradient, arg)
     return MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
 end
 
-function apply_slab(op::Gradient, M, slab_field)
+function apply_slab(op::Gradient, M, slab_field, h)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
@@ -499,10 +503,10 @@ function allocate_work(op::Restrict, arg)
     return (mat', temp1, temp2)
 end
 
-function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field)
+function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field, h)
     space_in = axes(slab_field)
     Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
-    space_out = op.space
+    space_out = slab(op.space, h)
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
     for i in 1:Nq_in, j in 1:Nq_in
         temp1[i,j] = get_node(slab_field, i, j)
