@@ -85,6 +85,15 @@ end
 F = flux.(y0, Ref(parameters))
 div = Operators.WeakDivergence()
 divF = div.(F)
+
+
+curl = Operators.StrongCurl()
+
+v(state) = state.ρu ./ state.ρ
+
+curl.(v.(y0))
+exit()
+
 #=
 wdivF = Operators.slab_weak_divergence(F)
 wdivF_data = Fields.field_values(wdivF)
@@ -114,15 +123,35 @@ function rhs!(dydt, y, _, t)
     I = Operators.Interpolate(Ispace)
     div = Operators.WeakDivergence()
     R = Operators.Restrict(space)
+
+    WJ = Fields.weight_field(space)
     rparameters = Ref(parameters)
 
-    @. dydt = -R((div(flux(I(y), rparameters))))
+    @. dydt = -inv(WJ) * R( div(flux(I(y), rparameters)) + hyperdiffusion)
+    Spaces.weighted_dss!(dydt)
 
+    # τ = [v1 0; 0 v2] where v1 = c0(Δx)ˢ, v2 = c0(Δ)ˢ,
+
+    grad = Operators.Gradient()
+    div = Operators.WeakDivergence()
+
+    @. -div(τ * grad(Y.ρu / Y.u))
+
+
+    # K inv(K' WJ K) K' (I' [DH' WH JH flux.(I K y)])
+
+    # [K inv(K' WJ K) K' WJ] (inv(WJ))
+
+
+    # wdiv(F) = DH' WH JH F
+
+    # X = inv(WJ) (I' [DH' WH JH flux.(I K y)])
+    # weighted_dss(X) = [K inv(K' WJ K) K' WJ] X
 
     # 5. Apply DSS gather operator
     #  K' I' [DH' WH JH flux.(I K y)]
-    Spaces.horizontal_dss!(dydt)
-    Spaces.variational_solve!(dydt)
+    #Spaces.horizontal_dss!(dydt)
+    #Spaces.variational_solve!(dydt)
     return dydt
 
 

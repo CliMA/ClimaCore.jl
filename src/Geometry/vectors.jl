@@ -159,6 +159,15 @@ function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
     LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
 end
 
+
+function covariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    local_geometry.∂ξ∂x \ components(x)
+end
+function covariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
+end
+
+
 # conversions
 
 # uⁱ(∂ξ∂x, u, i) = sum(j->∂ξ∂x[i,j] * u[j], 1:size(∂ξ∂x,2))
@@ -183,6 +192,10 @@ The return type when taking the divergence of a field of type `V`.
 Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
 """
 divergence_result_type(::Type{V}) where {V <: CustomAxisFieldVector} = eltype(V)
+
+curl_result_type(::Type{V}) where {V <: Covariant12Vector{FT}} where {FT} = Contravariant3Vector{FT}
+curl_result_type(::Type{V}) where {V <: Cartesian12Vector{FT}} where {FT} = Contravariant3Vector{FT}
+
 
 function norm²(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
     u = Cartesian12Vector(uᵢ, local_geometry)

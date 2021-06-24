@@ -39,6 +39,14 @@ function Base.copy(
     error("cannot infer concrete eltype of $(bc.f) on $(map(eltype, bc.args))")
 end
 
+
+function slab(bc::Base.Broadcast.Broadcasted{Style}, h) where {Style<:AbstractFieldStyle}
+    _args = map(a -> slab(a, h), bc.args)
+    _axes = slab(axes(bc), h)
+    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+end
+
+
 # Return underlying DataLayout object, DataStyle of broadcasted
 # for `Base.similar` of a Field
 todata(obj) = obj
