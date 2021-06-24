@@ -3,12 +3,11 @@
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace2D{T, Q, C, G, D, IS, BS} <: AbstractSpace
+struct SpectralElementSpace2D{T, Q, C, G, IS, BS} <: AbstractSpace
     topology::T
     quadrature_style::Q
     coordinates::C
     local_geometry::G
-    dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
 end
@@ -71,14 +70,14 @@ function SpectralElementSpace2D(topology, quadrature_style)
 
             coordinate_slab[i, j] = x
             # store WJ in invM slot
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, WJ, ∂ξ∂x)
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, WJ, WJ, ∂ξ∂x)
         end
     end
-
-    # dss_weights = J ./ dss(J)
-    dss_weights = similar(local_geometry.J)
-    horizontal_dss!(dss_weights, local_geometry.J, topology, Nq)
-    dss_weights .= local_geometry.J ./ dss_weights
+    # compute invM from WJ:
+    # M = dss(WJ)
+    horizontal_dss!(local_geometry.invM, local_geometry.invM, topology, Nq)
+    # invM = inv.(M)
+    local_geometry.invM .= inv.(local_geometry.invM)
 
     SG = Geometry.SurfaceGeometry{FT, Geometry.Cartesian12Vector{FT}}
     interior_faces = Topologies.interior_faces(topology)
@@ -143,7 +142,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
         quadrature_style,
         coordinates,
         local_geometry,
-        dss_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
     )
@@ -180,8 +178,8 @@ end
 
 coordinates(space::SpectralElementSpace2D) = space.coordinates
 
-function variational_solve!(data, space::AbstractSpace)
-    data .= RecursiveApply.rdiv.(data, space.local_geometry.WJ)
+function variational_solve!(data, Space::AbstractSpace)
+    data .= Space.local_geometry.invM .⊠ data
 end
 
 """
