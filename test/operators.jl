@@ -115,7 +115,7 @@ end
 
     V = ones(FT, space)
     ndivgradF = @. -div(∇(x1))
-    ndivgradF = @. -div(V*∇(x1))
+    ndivVgradF = @. -div(V*∇(x1))
     #=
     data = Fields.field_values(field)
     div_data =

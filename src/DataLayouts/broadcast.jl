@@ -47,13 +47,23 @@ function slab(
 end
 
 function Base.similar(
-    bc::Union{IJFH{<:Any, Nij, A}, Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
+    data::IJFH{<:Any, Nij, A},
+    ::Type{Eltype},
+) where {Nij, A, Eltype}
+    Nh = length(data)
+    array = similar(parent(data), (Nij, Nij, typesize(eltype(A), Eltype), Nh))
+    return IJFH{Eltype, Nij}(array)
+end
+function Base.similar(
+    bc::Broadcast.Broadcasted{IJFHStyle{Nij, A}},
     ::Type{Eltype},
 ) where {Nij, A, Eltype}
     Nh = length(bc)
+    # this won't work for A <: SubArray
     array = similar(A, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
+
 
 function Base.similar(
     ::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},

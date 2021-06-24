@@ -111,59 +111,31 @@ function rhs!(dydt, y, _, t)
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
-    Nh = Topologies.nlocalelems(y)
-
-
     I = Operators.Interpolate(Ispace)
     div = Operators.WeakDivergence()
     R = Operators.Restrict(space)
+    rparameters = Ref(parameters)
 
-    dydt = R.(-div.(flux.(I.(y), Ref(parameters))))
+    @. dydt = -R((div(flux(I(y), rparameters))))
 
-    dss!(dydt)
-    #=
-    # for all slab elements in space
-    for h in 1:Nh
-        y_slab = slab(y, h)
-        dydt_slab = slab(dydt, h)
-        Ispace_slab = slab(Ispace, h)
-
-        # 1. Interpolate to higher-order space
-        Iy_slab = Operators.interpolate(Ispace_slab, y_slab)
-
-        # 2. compute fluxes
-        #  flux.(I K y)
-        IF_slab = flux.(Iy_slab, Ref(parameters))
-
-        # 3. "weak" divergence
-        #  DH' WH JH flux.(I K y)
-        WdivF_slab = Operators.slab_weak_divergence(IF_slab)
-
-        # 4. "back" interpolate to regular space
-        #  I' [DH' WH JH flux.(I K y)]
-        Operators.restrict!(dydt_slab, WdivF_slab)
-    end
+    Spaces.variational_solve!(dydt)
 
     # 5. Apply DSS gather operator
     #  K' I' [DH' WH JH flux.(I K y)]
-    Spaces.horizontal_dss!(dydt)
-
-    # 6. Solve for final result
-    #  K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
-    Spaces.variational_solve!(dydt)
-    =#
+    #Spaces.weighted_dss!(dydt)
+    return dydt
 end
 
 # Next steps:
 # 1. add the above to the design docs (divergence + over-integration + DSS)
 # 2. add boundary conditions
 
-dydt = Fields.Field(similar(Fields.field_values(y0)), space)
-rhs!(dydt, y0, nothing, 0.0);
+dydt = similar(y0)
+rhs!(dydt, y0, nothing, 0.0)
 
-
+#=
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 8.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -199,3 +171,4 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
+=#
