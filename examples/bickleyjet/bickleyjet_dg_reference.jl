@@ -1,12 +1,13 @@
 #=
 # For analysis
 include("../../../perf/IntelITT.jl/src/IntelITT.jl")
-include("../../../perf/SDE.jl/sde.jl")
 using Main.IntelITT
+include("../../../perf/SDE.jl/sde.jl")
 =#
 
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
+using Base.Threads
 using IntervalSets
 using LinearAlgebra
 using Logging: global_logger
@@ -43,9 +44,9 @@ domain = Domains.RectangleDomain(
     x2periodic = boundary_name != "noslip",
 )
 
-n1, n2 = 16, 16
+#n1, n2 = 16, 16
+n1, n2 = 768, 768
 Nq = 4
-Nqh = 7
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
@@ -73,7 +74,7 @@ function init_state(x, p)
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
+#y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
@@ -212,8 +213,8 @@ function rhs!(dydt, y, (parameters, numflux), t)
     return dydt
 end
 
-dydt = Fields.Field(similar(Fields.field_values(y0)), space)
-rhs!(dydt, y0, (parameters, numflux), 0.0);
+#dydt = Fields.Field(similar(Fields.field_values(y0)), space)
+#rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # reference implementation
 # ========
@@ -286,7 +287,8 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
     WJv² = state.WJv²
 
     # "Volume" part
-    @inbounds for h2 = 1:n2, h1 = 1:n1
+    @inbounds @threads for h2 = 1:n2
+    for h1 = 1:n1
         # compute volume flux
         for j = 1:Nq, i = 1:Nq
             # 1. evaluate flux function at the point
@@ -327,11 +329,13 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
             end
         end
     end
+    end
 
     # "Face" part
     sJ1 = 2pi/n1
     sJ2 = 2pi/n2
-    @inbounds for h2 = 1:n2, h1 = 1:n1
+    @inbounds @threads for h2 = 1:n2
+    for h1 = 1:n1
         # direction 1
         g1 = mod1(h1-1,n1)
         g2 = h2
@@ -379,10 +383,12 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
             dydt_ref[i,Nq,4,g1,g2] += sWJ/WJ⁺ * nf.ρθ
         end
     end
+    end
 
     # apply filter
     scratch = state.scratch
-    @inbounds for h2 = 1:n2, h1 = 1:n1
+    @inbounds @threads for h2 = 1:n2
+    for h1 = 1:n1
         for j in 1:Nq, i in 1:Nq
             for s = 1:Nstate
                 scratch[i,j,s] = 0.0
@@ -400,19 +406,20 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
             end
         end
     end
+    end
 
     return dydt_ref
 end
 
-tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
+#tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+#prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
 
 #__sde_start()
 #__itt_resume()
 
-sol = @time solve(prob, SSPRK33(), dt = 0.02)
+#sol = @time solve(prob, SSPRK33(), dt = 0.02)
     #saveat = 1.0,
     #progress = true,
     #progress_message = (dt, u, p, t) -> t,
@@ -420,7 +427,7 @@ sol = @time solve(prob, SSPRK33(), dt = 0.02)
 #__itt_pause()
 #__sde_stop()
 
-prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
+prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 10.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
 
 #__sde_start()
 #__itt_resume()
