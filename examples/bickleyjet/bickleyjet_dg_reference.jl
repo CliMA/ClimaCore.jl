@@ -45,7 +45,7 @@ domain = Domains.RectangleDomain(
 )
 
 #n1, n2 = 16, 16
-n1, n2 = 768, 768
+n1, n2 = 1024, 1024
 Nq = 4
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
@@ -411,7 +411,11 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
     return dydt_ref
 end
 
-#tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
+tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
+
+@time for n = 1:1
+    tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0)
+end
 
 # Solve the ODE operator
 #prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
@@ -427,12 +431,12 @@ end
 #__itt_pause()
 #__sde_stop()
 
-prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 10.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
+#prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 10.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
 
 #__sde_start()
 #__itt_resume()
 
-sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02)
+#sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02)
 
 #__itt_pause()
 #__sde_stop()
