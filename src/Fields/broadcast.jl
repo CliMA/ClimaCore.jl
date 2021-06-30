@@ -105,7 +105,7 @@ function Base.Broadcast.check_broadcast_shape(
     space2::AbstractSpace,
 )
     if space1 !== space2
-        error("Mismatched spaces\n$space1\n$space2")
+        error("Mismatched spaces\n$(summary(space1))\n$(summary(space2))")
     end
     return nothing
 end

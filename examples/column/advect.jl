@@ -34,24 +34,32 @@ V = ones(FT, fs)
 θ = sin.(Fields.coordinate_field(cs))
 
 # Solve advection Equation: ∂θ/dt = -∂(vθ)
-function tendency!(dθ, θ, _, t)
-    I = Operators.InterpolateC2F()
 
-    ∂ = Operators.GradientF2C(
-        # left has an inflow: set to value
-        left = Operators.SetValue(sin(-t)),
-        # Set Outflow condition C->F value
-        right = Operators.Extrapolate(),
+# upwinding
+function tendency1!(dθ, θ, _, t)
+    UB = Operators.UpwindBiasedProductC2F(
+        left = Operators.SetValue(sin(a - t)),
+        right = Operators.SetValue(sin(b - t)),
     )
+    ∂ = Operators.GradientF2C()
 
-    return @. dθ = -∂(V * I(θ))
+    return @. dθ = -∂(UB(V, θ))
 end
 
-@show tendency!(similar(θ), θ, nothing, 0.0)
+# use the advection operator
+function tendency2!(dθ, θ, _, t)
+    A = Operators.AdvectionC2C(
+        left = Operators.SetValue(sin(-t)),
+        right = Operators.Extrapolate(),
+    )
+    return @. dθ = -A(V, θ)
+end
+
+@show tendency2!(similar(θ), θ, nothing, 0.0)
 
 # Solve the ODE operator
 Δt = 0.01
-prob = ODEProblem(tendency!, θ, (0.0, 10.0))
+prob = ODEProblem(tendency2!, θ, (0.0, 10.0))
 sol = solve(
     prob,
     SSPRK33(),
