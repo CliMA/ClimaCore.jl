@@ -209,10 +209,14 @@ struct RightBoundaryWindow{name} <: BoundaryWindow end
 
 abstract type FiniteDifferenceOperator end
 
+# FiniteDifferenceOperators are Callable
+(op::FiniteDifferenceOperator)(args...) = Base.Broadcast.broadcast(op, args...)
+
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
 
 boundary_width(op::FiniteDifferenceOperator, bc) =
     error("Boundary $(typeof(bc)) is not supported for operator $(typeof(op))")
+
 
 get_boundary(
     op::FiniteDifferenceOperator,
@@ -579,6 +583,8 @@ end
 
 abstract type AdvectionOperator <: FiniteDifferenceOperator end
 
+return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
+
 """
     UpwindBiasedProductC2F(;boundaries)
 
@@ -588,8 +594,6 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
 UpwindBiasedProductC2F(; kwargs...) = UpwindBiasedProductC2F(NamedTuple(kwargs))
-
-return_eltype(::UpwindBiasedProductC2F, velocity, arg) = eltype(arg)
 
 function return_space(
     ::UpwindBiasedProductC2F,
