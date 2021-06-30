@@ -25,18 +25,13 @@ import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
         faces = Fields.coordinate_field(face_space)
         @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
-        #=
-        interp = Operators.InterpolateF2C()
-        isin = interp.(sin.(faces))
-        @test isin ≈ sin.(centers) atol=1e-2
-        =#
-
         ∇ᶜ = Operators.GradientF2C()
         ∂sin = ∇ᶜ.(sin.(faces))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
-        #sin_∇ = sin.(∇ᶜ.(faces))
-        #@show sin_∇
+        # check that operator is callable as well
+        ∂sin = ∇ᶜ(sin.(faces))
+        @test ∂sin ≈ cos.(centers) atol = 1e-2
 
         # Center -> Face operator
         # first order convergence at boundaries
@@ -47,14 +42,16 @@ import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
         ∂cos = ∇ᶠ.(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-1
 
+        # check that operator is callable as well
+        ∂cos = ∇ᶠ(cos.(centers))
+        @test ∂cos ≈ .-sin.(faces) atol = 1e-1
+
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(FT(0)),
             right = Operators.SetGradient(FT(0)),
         )
         ∂cos = ∇ᶠ.(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-2
-
-
     end
 end
 
@@ -131,6 +128,43 @@ end
 
     end
 
+end
+
+@testset "Test that FD Operators are callable" begin
+    for FT in (Float32, Float64)
+        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+
+        @test eltype(domain) === FT
+        mesh = Meshes.IntervalMesh(domain; nelems = 16)
+
+        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+
+        ones_centers = ones(FT, center_space)
+        ones_faces = ones(FT, face_space)
+
+        If = Operators.InterpolateC2F(
+            left = Operators.SetValue(one(FT)),
+            right = Operators.SetValue(one(FT)),
+        )
+        Ic = Operators.InterpolateF2C()
+        Ic(If(ones_centers))
+
+        ∂ = Operators.GradientF2C()
+        ∂(ones_faces)
+
+        A = Operators.AdvectionC2C(
+            left = Operators.SetValue(one(FT)),
+            right = Operators.SetValue(one(FT)),
+        )
+        A(ones_faces, ones_centers)
+
+        U = Operators.UpwindBiasedProductC2F(
+            left = Operators.SetValue(one(FT)),
+            right = Operators.SetValue(one(FT)),
+        )
+        U(ones_faces, ones_centers)
+    end
 end
 
 @testset "Composite Field FiniteDifferenceSpaces" begin
