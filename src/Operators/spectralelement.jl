@@ -267,7 +267,7 @@ for all `ϕ` (which arises by integration by parts).
 
 Discretely it is equivalent to
 
-    - J / (D₁' * W * J * v¹ + D₂' * W * J * v²)
+    - J \\ (D₁' * W * J * v¹ + D₂' * W * J * v²)
 
 where
 
@@ -389,8 +389,7 @@ function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
     Dᵀ₁WJv¹ = RecursiveApply.rmatmul1(D', res.WJv¹, i, j) # D'WJv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
     # compute spectral deriv along second dimension
     Dᵀ₂WJv² = RecursiveApply.rmatmul2(D', res.WJv², i, j) # ∂(Jv²)/∂ξ² = D[j,:]*Jv²[i,:]
-#    return (-inv(slab_space.local_geometry[i, j].WJ)) ⊠ (Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
-    return ⊟(Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
+    return (⊟(inv(slab_space.local_geometry[i, j].WJ))) ⊠ (Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv²)
 end
 
 
@@ -552,21 +551,35 @@ end
 abstract type TensorOperator <: SpectralElementOperator end
 
 return_space(op::TensorOperator, inspace) = op.space
+operator_return_eltype(op::TensorOperator, S) = S
 
+"""
+    Interpolate(space)
+
+Computes the projection of a field to a higher degree polynomial space. `space`
+must be on the same element mesh as the field, but have equal or higher
+polynomial degree.
+
+    ⟨ϕ, J θ⟩ = ⟨ϕ, J σ⟩
+
+where `ϕ` and `θ` are on the higher degree space.
+
+Discretely it is equivalent to
+
+    I σ
+
+where `I` is the interpolation matrix.
+"""
 struct Interpolate{S} <: TensorOperator
     space::S
 end
-struct Restrict{S} <: TensorOperator
-    space::S
-end
 
-operator_return_eltype(op::TensorOperator, S) = S
 
-struct TensorResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
-    mat::M
+struct InterpolateResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
+    Imat::M
     temp2::TM
 end
-TensorResult{S,Nq}(mat::M,temp2::TM) where {S,Nq,M,TM} = TensorResult{S,Nq,M,TM}(mat, temp2)
+InterpolateResult{S,Nq}(Imat::M,temp2::TM) where {S,Nq,M,TM} = InterpolateResult{S,Nq,M,TM}(Imat, temp2)
 
 
 function allocate_work(op::Interpolate, arg)
@@ -574,7 +587,7 @@ function allocate_work(op::Interpolate, arg)
     Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
     space_out = op.space
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
-    mat = Quadratures.interpolation_matrix(
+    Imat = Quadratures.interpolation_matrix(
         Float64,
         space_out.quadrature_style,
         space_in.quadrature_style,
@@ -584,28 +597,11 @@ function allocate_work(op::Interpolate, arg)
     # TODO: switch memory order?
     temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
     temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
-    return (mat, temp1, temp2)
+    return (Imat, temp1, temp2)
 end
 
-function allocate_work(op::Restrict, arg)
-    space_in = axes(arg)
-    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
-    space_out = op.space
-    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
-    mat = Quadratures.interpolation_matrix(
-        Float64,
-        space_in.quadrature_style,
-        space_out.quadrature_style,
-        )
 
-    S = eltype(arg)
-    # TODO: switch memory order?
-    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
-    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
-    return (mat', temp1, temp2)
-end
-
-function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field, h)
+function apply_slab(op::Interpolate, (mat, temp1, temp2), slab_field, h)
     space_in = axes(slab_field)
     Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
     space_out = slab(op.space, h)
@@ -617,12 +613,83 @@ function apply_slab(op::TensorOperator, (mat, temp1, temp2), slab_field, h)
         temp2[i, j] = RecursiveApply.rmatmul1(mat, temp1, i, j)
     end
     S = eltype(slab_field)
-    return Field(TensorResult{S,Nq_out}(mat, temp2), space_out)
+    return Field(InterpolateResult{S,Nq_out}(mat, temp2), space_out)
 end
 
-function get_node(field::Fields.SlabField{<:TensorResult}, i, j)
+function get_node(field::Fields.SlabField{<:InterpolateResult}, i, j)
     res = Fields.field_values(field)
-    return RecursiveApply.rmatmul2(res.mat, res.temp2, i, j)
+    return RecursiveApply.rmatmul2(res.Imat, res.temp2, i, j)
+end
+
+
+
+"""
+    Restrict(space)
+
+Computes the projection of a field to a lower degree polynomial space. `space`
+must be on the same element mesh as the field, but have lower polynomial degree.
+
+    ⟨ϕ, J θ⟩ = ⟨ϕ, J σ⟩
+
+where `ϕ` and `θ` are on the lower degree space.
+
+Discretely it is equivalent to
+
+    (JWr) \\  I' (JW) σ
+
+where `I` is the interpolation matrix, and `JWr` is the Jacobian multiplied by
+quadrature weights on the lower-degree space.
+"""
+struct Restrict{S} <: TensorOperator
+    space::S
+end
+
+struct RestrictResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
+    ImatT::M
+    temp2::TM
+end
+
+RestrictResult{S,Nq}(ImatT::M,temp2::TM) where {S,Nq,M,TM} = RestrictResult{S,Nq,M,TM}(ImatT, temp2)
+
+function allocate_work(op::Restrict, arg)
+    space_in = axes(arg)
+    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
+    space_out = op.space
+    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
+    Imat = Quadratures.interpolation_matrix(
+        Float64,
+        space_in.quadrature_style,
+        space_out.quadrature_style,
+        )
+
+    S = eltype(arg)
+    # TODO: switch memory order?
+    temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
+    temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
+    return (Imat', temp1, temp2)
+end
+
+function apply_slab(op::Restrict, (ImatT, temp1, temp2), slab_field, h)
+    space_in = axes(slab_field)
+    Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
+    space_out = slab(op.space, h)
+    Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
+    local_geometry_slab = space_in.local_geometry
+    for i in 1:Nq_in, j in 1:Nq_in
+        temp1[i,j] = local_geometry_slab.WJ[i,j] ⊠ get_node(slab_field, i, j)
+    end
+    for j in 1:Nq_in, i in 1:Nq_out
+        temp2[i, j] = RecursiveApply.rmatmul1(ImatT, temp1, i, j)
+    end
+    S = eltype(slab_field)
+    return Field(RestrictResult{S,Nq_out}(ImatT, temp2), space_out)
+end
+
+function get_node(field::Fields.SlabField{<:RestrictResult}, i, j)
+    res = Fields.field_values(field)
+    space_out = axes(field)
+    local_geometry_slab = space_out.local_geometry
+    return RecursiveApply.rdiv(RecursiveApply.rmatmul2(res.ImatT, res.temp2, i, j), local_geometry_slab.WJ[i,j])
 end
 
 

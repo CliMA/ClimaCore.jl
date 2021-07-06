@@ -81,7 +81,7 @@ end
 function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
-
+#=
 F = flux.(y0, Ref(parameters))
 div = Operators.WeakDivergence()
 divF = div.(F)
@@ -93,7 +93,7 @@ v(state) = state.ρu ./ state.ρ
 
 curl.(v.(y0))
 exit()
-
+=#
 #=
 wdivF = Operators.slab_weak_divergence(F)
 wdivF_data = Fields.field_values(wdivF)
@@ -124,19 +124,13 @@ function rhs!(dydt, y, _, t)
     div = Operators.WeakDivergence()
     R = Operators.Restrict(space)
 
-    WJ = Fields.weight_field(space)
     rparameters = Ref(parameters)
 
-    @. dydt = -inv(WJ) * R( div(flux(I(y), rparameters)) + hyperdiffusion)
-    Spaces.weighted_dss!(dydt)
+    @. dydt = -R( div(flux(I(y), rparameters)) )
+    Spaces.horizontal_dss!(dydt)
+
 
     # τ = [v1 0; 0 v2] where v1 = c0(Δx)ˢ, v2 = c0(Δ)ˢ,
-
-    grad = Operators.Gradient()
-    div = Operators.WeakDivergence()
-
-    @. -div(τ * grad(Y.ρu / Y.u))
-
 
     # K inv(K' WJ K) K' (I' [DH' WH JH flux.(I K y)])
 
