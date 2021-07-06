@@ -1,7 +1,7 @@
 # Operators
 
 ```@meta
-CurrentModule = ClimateMachineCore.Operators
+CurrentModule = ClimaCore.Operators
 ```
 
 ## Finite difference operators

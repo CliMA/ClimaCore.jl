@@ -1,4 +1,4 @@
-name = "ClimateMachineCore"
+name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 version = "0.1.0"

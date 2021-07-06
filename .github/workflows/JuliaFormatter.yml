@@ -36,7 +36,7 @@ jobs:
     - name: Apply JuliaFormatter
       if: steps.filter.outputs.julia_file_change == 'true'
       run: |
-        julia --color=yes --project=.dev .dev/climaformat.jl .
+        julia --color=yes --project=.dev .dev/climaformat.jl --verbose .
 
     - name: Check formatting diff
       if: steps.filter.outputs.julia_file_change == 'true'

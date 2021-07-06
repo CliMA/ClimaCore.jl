@@ -1,6 +1,6 @@
 using Test
-import ClimateMachineCore: Domains, Meshes, Topologies
-import ClimateMachineCore.Geometry: Cartesian2DPoint
+import ClimaCore: Domains, Meshes, Topologies
+import ClimaCore.Geometry: Cartesian2DPoint
 using StaticArrays
 using IntervalSets
 

@@ -1,5 +1,5 @@
 """
-    ClimateMachineCore.Topologies
+    ClimaCore.Topologies
 
 Objects describing the horizontal connections between elements.
 

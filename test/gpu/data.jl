@@ -1,6 +1,6 @@
 using Test
 using CUDA
-using ClimateMachineCore.DataLayouts
+using ClimaCore.DataLayouts
 
 function knl_copy!(dst, src)
     i = threadIdx().x

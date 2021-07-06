@@ -64,6 +64,7 @@ jobs:
       if: steps.filter.outputs.run_test == 'true'
       run: |
         julia --color=yes --project -e 'using Pkg; Pkg.instantiate()'
+        julia --color=yes --project -e 'using Pkg; Pkg.precompile(;strict=true)'
 
     - name: Run Unit Tests
       if: steps.filter.outputs.run_test == 'true'

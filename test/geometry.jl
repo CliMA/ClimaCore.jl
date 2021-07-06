@@ -1,5 +1,5 @@
 using Test
-using ClimateMachineCore.Geometry
+using ClimaCore.Geometry
 using LinearAlgebra, UnPack, StaticArrays
 
 @testset "Vectors" begin

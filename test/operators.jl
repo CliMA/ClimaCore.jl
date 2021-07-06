@@ -1,9 +1,9 @@
 using Test
 using StaticArrays
-import ClimateMachineCore.DataLayouts: IJFH, VF
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
-import ClimateMachineCore.Operators
-import ClimateMachineCore.Geometry
+import ClimaCore.DataLayouts: IJFH, VF
+import ClimaCore: Fields, Domains, Topologies, Meshes, Spaces
+import ClimaCore.Operators
+import ClimaCore.Geometry
 using LinearAlgebra, IntervalSets
 
 @testset "gradient on 1×1 domain SE space" begin

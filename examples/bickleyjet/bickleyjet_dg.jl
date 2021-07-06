@@ -1,15 +1,15 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-using ClimateMachineCore.Geometry, LinearAlgebra, UnPack
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
-import ClimateMachineCore: slab
-import ClimateMachineCore.Operators
-import ClimateMachineCore.Geometry
+using ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore: Fields, Domains, Topologies, Meshes, Spaces
+import ClimaCore: slab
+import ClimaCore.Operators
+import ClimaCore.Geometry
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using ClimateMachineCore.RecursiveApply
-using ClimateMachineCore.RecursiveApply: rdiv, rmap
+using ClimaCore.RecursiveApply
+using ClimaCore.RecursiveApply: rdiv, rmap
 
 
 using Logging: global_logger

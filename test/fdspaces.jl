@@ -1,9 +1,8 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimateMachineCore:
-    slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
-import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
+import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
