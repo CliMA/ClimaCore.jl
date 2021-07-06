@@ -55,3 +55,8 @@ end
 
 horizontal_dss!(data, space::AbstractSpace) =
     horizontal_dss!(data, data, space::AbstractSpace)
+
+weighted_dss!(dest, src, space::AbstractSpace) =
+    horizontal_dss!(dest, Base.Broadcast.broadcasted(⊠, src, space.dss_weights), space)
+
+weighted_dss!(data, space::AbstractSpace) = weighted_dss!(data, data, space)

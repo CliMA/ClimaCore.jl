@@ -190,6 +190,10 @@ function Spaces.horizontal_dss!(field::Field)
     Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
+function Spaces.weighted_dss!(field::Field)
+    Spaces.weighted_dss!(field_values(field), axes(field))
+    return field
+end
 
 
 end # module

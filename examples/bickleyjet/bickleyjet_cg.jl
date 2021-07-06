@@ -129,6 +129,7 @@ function rhs!(dydt, y, _, t)
     @. dydt = -R( div(flux(I(y), rparameters)) )
     Spaces.horizontal_dss!(dydt)
 
+    Spaces.variational_solve!(dydt)
 
     # τ = [v1 0; 0 v2] where v1 = c0(Δx)ˢ, v2 = c0(Δ)ˢ,
 
@@ -144,8 +145,7 @@ function rhs!(dydt, y, _, t)
 
     # 5. Apply DSS gather operator
     #  K' I' [DH' WH JH flux.(I K y)]
-    #Spaces.horizontal_dss!(dydt)
-    #Spaces.variational_solve!(dydt)
+    #Spaces.weighted_dss!(dydt)
     return dydt
 
 
