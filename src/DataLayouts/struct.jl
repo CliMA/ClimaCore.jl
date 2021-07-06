@@ -30,6 +30,19 @@ function basetype(::Type{S1}, Sx...) where {S1}
     return FT1
 end
 
+replace_basetype(::Type{S}, ::Type{FT}) where {S <: AbstractFloat, FT} = FT
+function replace_basetype(::Type{S}, ::Type{FT}) where {S <: Tuple, FT}
+    Tuple{ntuple(i -> replace_basetype(fieldtype(S, i), FT), fieldcount(S))...}
+end
+function replace_basetype(
+    ::Type{NamedTuple{names, T}},
+    ::Type{FT},
+) where {names, T, FT}
+    NamedTuple{names, replace_basetype(T, FT)}
+end
+
+
+
 """
     parent_array_type(::Type{<:AbstractArray})
 

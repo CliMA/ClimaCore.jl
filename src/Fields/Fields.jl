@@ -122,7 +122,7 @@ end
 
 Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
     Field(Eltype, axes(field))
-Base.similar(field::Field) = similar(field, eltype(field))
+Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 
 
 # fields on different spaces
@@ -192,6 +192,7 @@ local_geometry_field(field::Field) = local_geometry(axes(field))
 include("broadcast.jl")
 include("mapreduce.jl")
 include("compat_diffeq.jl")
+include("fieldvector.jl")
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1
