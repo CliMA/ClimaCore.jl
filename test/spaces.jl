@@ -1,8 +1,8 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimateMachineCore: slab, Domains, Meshes, Topologies, Spaces
-import ClimateMachineCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore: slab, Domains, Meshes, Topologies, Spaces
+import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 @testset "1×1 domain space" begin
     domain = Domains.RectangleDomain(
@@ -71,9 +71,9 @@ end
 
 
 #TODO:  move to operators
-import ClimateMachineCore.Operators
-import ClimateMachineCore.Fields: Fields
-import ClimateMachineCore.DataLayouts: VF
+import ClimaCore.Operators
+import ClimaCore.Fields: Fields
+import ClimaCore.DataLayouts: VF
 """
     convergence_rate(err, Δh)
 

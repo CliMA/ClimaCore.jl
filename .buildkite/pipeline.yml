@@ -3,7 +3,6 @@ env:
   OPENMPI_VERSION: "4.0.4"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
-  CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
 
 steps:
   - label: "init :computer:"

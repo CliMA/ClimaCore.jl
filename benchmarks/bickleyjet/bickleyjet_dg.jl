@@ -1,13 +1,13 @@
 using LinearAlgebra
 using UnPack, StaticArrays, IntervalSets
 
-import ClimateMachineCore: Fields, Domains, Meshes, Topologies, Spaces
-import ClimateMachineCore: slab
-import ClimateMachineCore.Operators
-using ClimateMachineCore.Geometry
-import ClimateMachineCore.Geometry: Abstract2DPoint
+import ClimaCore: Fields, Domains, Meshes, Topologies, Spaces
+import ClimaCore: slab
+import ClimaCore.Operators
+using ClimaCore.Geometry
+import ClimaCore.Geometry: Abstract2DPoint
 
-using ClimateMachineCore.RecursiveApply
+using ClimaCore.RecursiveApply
 
 
 const parameters = (

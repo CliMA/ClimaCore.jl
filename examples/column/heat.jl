@@ -1,7 +1,7 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-import ClimateMachineCore.Geometry, LinearAlgebra, UnPack
-import ClimateMachineCore:
+import ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore:
     Fields,
     Domains,
     Topologies,

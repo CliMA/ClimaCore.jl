@@ -1,5 +1,5 @@
 """
-    ClimateMachineCore.DataLayouts
+    ClimaCore.DataLayouts
 
 Notation:
 - `i,j` are horizontal node indices within an element

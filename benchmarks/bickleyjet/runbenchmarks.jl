@@ -77,7 +77,7 @@ plt = plot(
     ylabel = "Time (ms)",
     title = "Volume",
 )
-plot!(plt, Nqs, 1e3 .* volTs, label = "ClimateMachineCore")
+plot!(plt, Nqs, 1e3 .* volTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* volRs, label = "Reference")
 
 png(plt, joinpath(@__DIR__, "volume.png"))
@@ -85,7 +85,7 @@ png(plt, joinpath(@__DIR__, "volume.png"))
 
 plt =
     plot(ylims = (0, Inf), xlabel = "Nq", ylabel = "Time (ms)", title = "Face")
-plot!(plt, Nqs, 1e3 .* faceTs, label = "ClimateMachineCore")
+plot!(plt, Nqs, 1e3 .* faceTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* faceRs, label = "Reference")
 
 png(plt, joinpath(@__DIR__, "face.png"))

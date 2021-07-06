@@ -2,7 +2,7 @@ status = [
   "test-os (ubuntu-latest)",
   "test-os (windows-latest)",
   "test-os (macos-latest)",
-  "buildkite/climatemachinecore-ci",
+  "buildkite/climacore-ci",
   "format",
   "docbuild"
 ]

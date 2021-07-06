@@ -1,7 +1,7 @@
 using Test
-using ClimateMachineCore.DataLayouts
+using ClimaCore.DataLayouts
 using StaticArrays
-using ClimateMachineCore.DataLayouts: get_struct, set_struct!
+using ClimaCore.DataLayouts: get_struct, set_struct!
 
 TestFloatTypes = (Float32, Float64)
 

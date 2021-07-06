@@ -1,7 +1,7 @@
 using Test
 using StaticArrays, IntervalSets
-import ClimateMachineCore.DataLayouts: IJFH
-import ClimateMachineCore:
+import ClimaCore.DataLayouts: IJFH
+import ClimaCore:
     Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry
 using StaticArrays, IntervalSets, LinearAlgebra
 

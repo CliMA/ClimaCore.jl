@@ -1,7 +1,7 @@
 # API
 
 ```@meta
-CurrentModule = ClimateMachineCore
+CurrentModule = ClimaCore
 ```
 
 ## DataLayouts

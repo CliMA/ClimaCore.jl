@@ -1,4 +1,4 @@
-import ClimateMachineCore.Spaces
+import ClimaCore.Spaces
 
 function spaceconfig(::Val{Nq}) where {Nq}
     quad = Spaces.Quadratures.GLL{Nq}()

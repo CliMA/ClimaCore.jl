@@ -1,6 +1,6 @@
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-ClimateMachineCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 GaussQuadrature = "d54b0c1a-921d-58e0-8e36-89d8069c0969"
 IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"

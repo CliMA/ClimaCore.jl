@@ -1,1 +1,1 @@
-# ClimateMachineCore.jl
+# ClimaCore.jl

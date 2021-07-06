@@ -1,9 +1,8 @@
 
 using Test
 using StaticArrays, IntervalSets
-import ClimateMachineCore.DataLayouts: IJFH
-import ClimateMachineCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces
+import ClimaCore.DataLayouts: IJFH
+import ClimaCore: Fields, slab, Domains, Topologies, Meshes, Operators, Spaces
 using LinearAlgebra: norm
 
 using UnicodePlots

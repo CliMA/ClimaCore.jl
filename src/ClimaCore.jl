@@ -1,4 +1,4 @@
-module ClimateMachineCore
+module ClimaCore
 
 include("interface.jl")
 include("RecursiveApply/RecursiveApply.jl")
