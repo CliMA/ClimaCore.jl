@@ -95,6 +95,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column Advection Diffusion Eq"
+    key: "cpu_column_advect_diff"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/adv_diff.jl"
+    artifact_paths:
+      - "examples/column/output/adv_diff/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Column Wave Eq"
     key: "cpu_column_wave"
     command:
