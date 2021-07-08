@@ -1,7 +1,7 @@
-#=
 # For analysis
 include("../../../perf/IntelITT.jl/src/IntelITT.jl")
 using Main.IntelITT
+#=
 include("../../../perf/SDE.jl/sde.jl")
 =#
 
@@ -270,152 +270,155 @@ struct TendencyState{DT, WJT, ST}
     end
 end
 
-const tendency_state = TendencyState(n1, n2, Nstate, Nq)
+const tendency_states = [TendencyState(n1, n2, Nstate, Nq) for _ in 1:nthreads()]
 
-function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, state), t)
+function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, states), t)
     global Nstate
     Nq = getval(valNq)
     n1 = size(y0_ref,4)
     n2 = size(y0_ref,5)
 
     J = 2pi/n1*2pi/n2
-    ∂ξ∂x = state.∂ξ∂x
 
     g = parameters.g
 
+    state = states[threadid()]
     WJv¹ = state.WJv¹
     WJv² = state.WJv²
+    ∂ξ∂x = state.∂ξ∂x
 
     # "Volume" part
     @inbounds @threads for h2 = 1:n2
-    for h1 = 1:n1
-        # compute volume flux
-        for j = 1:Nq, i = 1:Nq
-            # 1. evaluate flux function at the point
-            ρ = y0_ref[i,j,1,h1,h2]
-            ρu1 = y0_ref[i,j,2,h1,h2]
-            ρu2 = y0_ref[i,j,3,h1,h2]
-            ρθ = y0_ref[i,j,4,h1,h2]
-            u1 = ρu1/ρ
-            u2 = ρu2/ρ
-            Fρ = SVector(ρu1, ρu2)
-            Fρu1 = SVector(ρu1*u1 + g * ρ^2 / 2, ρu1*u2)
-            Fρu2 = SVector(ρu2*u1,               ρu2*u2 + g * ρ^2 / 2)
-            Fρθ = SVector(ρθ*u1, ρθ*u2)
+        for h1 = 1:n1
+            # compute volume flux
+            for j = 1:Nq, i = 1:Nq
+                # 1. evaluate flux function at the point
+                ρ = y0_ref[i,j,1,h1,h2]
+                ρu1 = y0_ref[i,j,2,h1,h2]
+                ρu2 = y0_ref[i,j,3,h1,h2]
+                ρθ = y0_ref[i,j,4,h1,h2]
+                u1 = ρu1/ρ
+                u2 = ρu2/ρ
+                Fρ = SVector(ρu1, ρu2)
+                Fρu1 = SVector(ρu1*u1 + g * ρ^2 / 2, ρu1*u2)
+                Fρu2 = SVector(ρu2*u1,               ρu2*u2 + g * ρ^2 / 2)
+                Fρθ = SVector(ρθ*u1, ρθ*u2)
 
-            # 2. Convert to contravariant coordinates and store in work array
+                # 2. Convert to contravariant coordinates and store in work array
 
-            WJ = W[i]*W[j]*J
-            WJv¹[1,i,j], WJv²[1,i,j] = WJ * ∂ξ∂x * Fρ
-            WJv¹[2,i,j], WJv²[2,i,j] = WJ * ∂ξ∂x * Fρu1
-            WJv¹[3,i,j], WJv²[3,i,j] = WJ * ∂ξ∂x * Fρu2
-            WJv¹[4,i,j], WJv²[4,i,j] = WJ * ∂ξ∂x * Fρθ
-        end
+                WJ = W[i]*W[j]*J
+                WJv¹[1,i,j], WJv²[1,i,j] = WJ * ∂ξ∂x * Fρ
+                WJv¹[2,i,j], WJv²[2,i,j] = WJ * ∂ξ∂x * Fρu1
+                WJv¹[3,i,j], WJv²[3,i,j] = WJ * ∂ξ∂x * Fρu2
+                WJv¹[4,i,j], WJv²[4,i,j] = WJ * ∂ξ∂x * Fρθ
+            end
 
-        # weak derivatives
-        for j = 1:Nq, i = 1:Nq
-            WJ = W[i]*W[j]*J
-            for s = 1:Nstate
-                t = 0.0
-                for k = 1:Nq
-                    # D'[i,:]*WJv¹[:,j]
-                    t += D[k, i] * WJv¹[s, k, j]
+            # weak derivatives
+            for j = 1:Nq, i = 1:Nq
+                WJ = W[i]*W[j]*J
+                for s = 1:Nstate
+                    t = 0.0
+                    for k = 1:Nq
+                        # D'[i,:]*WJv¹[:,j]
+                        t += D[k, i] * WJv¹[s, k, j]
+                    end
+                    for k = 1:Nq
+                        # D'[j,:]*WJv²[i,:]
+                        t += D[k, j] * WJv²[s, i, k]
+                    end
+                    dydt_ref[i,j,s,h1,h2] = t/WJ
                 end
-                for k = 1:Nq
-                    # D'[j,:]*WJv²[i,:]
-                    t += D[k, j] * WJv²[s, i, k]
-                end
-                dydt_ref[i,j,s,h1,h2] = t/WJ
             end
         end
-    end
     end
 
     # "Face" part
     sJ1 = 2pi/n1
     sJ2 = 2pi/n2
     @inbounds @threads for h2 = 1:n2
-    for h1 = 1:n1
-        # direction 1
-        g1 = mod1(h1-1,n1)
-        g2 = h2
-        normal = SVector(-1.0,0.0)
-        for j = 1:Nq
-            sWJ = W[j]*sJ2
-            WJ⁻ = W[1]*W[j]*J
-            WJ⁺ = W[Nq]*W[j]*J
+        for h1 = 1:n1
+            # direction 1
+            g1 = mod1(h1-1,n1)
+            g2 = h2
+            normal = SVector(-1.0,0.0)
+            for j = 1:Nq
+                sWJ = W[j]*sJ2
+                WJ⁻ = W[1]*W[j]*J
+                WJ⁺ = W[Nq]*W[j]*J
 
-            y⁻ = (ρ=y0_ref[1 ,j,1,h1,h2], ρu=SVector(y0_ref[1 ,j,2,h1,h2], y0_ref[1 ,j,3,h1,h2]), ρθ=y0_ref[1 ,j,4,h1,h2])
-            y⁺ = (ρ=y0_ref[Nq,j,1,g1,g2], ρu=SVector(y0_ref[Nq,j,2,g1,g2], y0_ref[Nq,j,3,g1,g2]), ρθ=y0_ref[Nq,j,4,g1,g2])
-            nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
+                y⁻ = (ρ=y0_ref[1 ,j,1,h1,h2], ρu=SVector(y0_ref[1 ,j,2,h1,h2], y0_ref[1 ,j,3,h1,h2]), ρθ=y0_ref[1 ,j,4,h1,h2])
+                y⁺ = (ρ=y0_ref[Nq,j,1,g1,g2], ρu=SVector(y0_ref[Nq,j,2,g1,g2], y0_ref[Nq,j,3,g1,g2]), ρθ=y0_ref[Nq,j,4,g1,g2])
+                nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
 
-            dydt_ref[1,j,1,h1,h2] -= sWJ/WJ⁻ * nf.ρ
-            dydt_ref[1,j,2,h1,h2] -= sWJ/WJ⁻ * nf.ρu[1]
-            dydt_ref[1,j,3,h1,h2] -= sWJ/WJ⁻ * nf.ρu[2]
-            dydt_ref[1,j,4,h1,h2] -= sWJ/WJ⁻ * nf.ρθ
+                dydt_ref[1,j,1,h1,h2] -= sWJ/WJ⁻ * nf.ρ
+                dydt_ref[1,j,2,h1,h2] -= sWJ/WJ⁻ * nf.ρu[1]
+                dydt_ref[1,j,3,h1,h2] -= sWJ/WJ⁻ * nf.ρu[2]
+                dydt_ref[1,j,4,h1,h2] -= sWJ/WJ⁻ * nf.ρθ
 
-            dydt_ref[Nq,j,1,g1,g2] += sWJ/WJ⁺ * nf.ρ
-            dydt_ref[Nq,j,2,g1,g2] += sWJ/WJ⁺ * nf.ρu[1]
-            dydt_ref[Nq,j,3,g1,g2] += sWJ/WJ⁺ * nf.ρu[2]
-            dydt_ref[Nq,j,4,g1,g2] += sWJ/WJ⁺ * nf.ρθ
+                dydt_ref[Nq,j,1,g1,g2] += sWJ/WJ⁺ * nf.ρ
+                dydt_ref[Nq,j,2,g1,g2] += sWJ/WJ⁺ * nf.ρu[1]
+                dydt_ref[Nq,j,3,g1,g2] += sWJ/WJ⁺ * nf.ρu[2]
+                dydt_ref[Nq,j,4,g1,g2] += sWJ/WJ⁺ * nf.ρθ
+            end
+            # direction 2
+            g1 = h1
+            g2 = mod1(h2-1,n2)
+            normal = SVector(0.0,-1.0)
+            for i = 1:Nq
+                sWJ = W[i]*sJ1
+                WJ⁻ = W[i]*W[1]*J
+                WJ⁺ = W[i]*W[Nq]*J
+
+                y⁻ = (ρ=y0_ref[i,1 ,1,h1,h2], ρu=SVector(y0_ref[i,1 ,2,h1,h2], y0_ref[i,1 ,3,h1,h2]), ρθ=y0_ref[i,1 ,4,h1,h2])
+                y⁺ = (ρ=y0_ref[i,Nq,1,g1,g2], ρu=SVector(y0_ref[i,Nq,2,g1,g2], y0_ref[i,Nq,3,g1,g2]), ρθ=y0_ref[i,Nq,4,g1,g2])
+                nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
+
+                dydt_ref[i,1,1,h1,h2] -= sWJ/WJ⁻ * nf.ρ
+                dydt_ref[i,1,2,h1,h2] -= sWJ/WJ⁻ * nf.ρu[1]
+                dydt_ref[i,1,3,h1,h2] -= sWJ/WJ⁻ * nf.ρu[2]
+                dydt_ref[i,1,4,h1,h2] -= sWJ/WJ⁻ * nf.ρθ
+
+                dydt_ref[i,Nq,1,g1,g2] += sWJ/WJ⁺ * nf.ρ
+                dydt_ref[i,Nq,2,g1,g2] += sWJ/WJ⁺ * nf.ρu[1]
+                dydt_ref[i,Nq,3,g1,g2] += sWJ/WJ⁺ * nf.ρu[2]
+                dydt_ref[i,Nq,4,g1,g2] += sWJ/WJ⁺ * nf.ρθ
+            end
         end
-        # direction 2
-        g1 = h1
-        g2 = mod1(h2-1,n2)
-        normal = SVector(0.0,-1.0)
-        for i = 1:Nq
-            sWJ = W[i]*sJ1
-            WJ⁻ = W[i]*W[1]*J
-            WJ⁺ = W[i]*W[Nq]*J
-
-            y⁻ = (ρ=y0_ref[i,1 ,1,h1,h2], ρu=SVector(y0_ref[i,1 ,2,h1,h2], y0_ref[i,1 ,3,h1,h2]), ρθ=y0_ref[i,1 ,4,h1,h2])
-            y⁺ = (ρ=y0_ref[i,Nq,1,g1,g2], ρu=SVector(y0_ref[i,Nq,2,g1,g2], y0_ref[i,Nq,3,g1,g2]), ρθ=y0_ref[i,Nq,4,g1,g2])
-            nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
-
-            dydt_ref[i,1,1,h1,h2] -= sWJ/WJ⁻ * nf.ρ
-            dydt_ref[i,1,2,h1,h2] -= sWJ/WJ⁻ * nf.ρu[1]
-            dydt_ref[i,1,3,h1,h2] -= sWJ/WJ⁻ * nf.ρu[2]
-            dydt_ref[i,1,4,h1,h2] -= sWJ/WJ⁻ * nf.ρθ
-
-            dydt_ref[i,Nq,1,g1,g2] += sWJ/WJ⁺ * nf.ρ
-            dydt_ref[i,Nq,2,g1,g2] += sWJ/WJ⁺ * nf.ρu[1]
-            dydt_ref[i,Nq,3,g1,g2] += sWJ/WJ⁺ * nf.ρu[2]
-            dydt_ref[i,Nq,4,g1,g2] += sWJ/WJ⁺ * nf.ρθ
-        end
-    end
     end
 
     # apply filter
     scratch = state.scratch
     @inbounds @threads for h2 = 1:n2
-    for h1 = 1:n1
-        for j in 1:Nq, i in 1:Nq
-            for s = 1:Nstate
-                scratch[i,j,s] = 0.0
-                for k = 1:Nq
-                    scratch[i,j,s] += M[i,k] * dydt_ref[k,j,s,h1,h2]
+        for h1 = 1:n1
+            for j in 1:Nq, i in 1:Nq
+                for s = 1:Nstate
+                    scratch[i,j,s] = 0.0
+                    for k = 1:Nq
+                        scratch[i,j,s] += M[i,k] * dydt_ref[k,j,s,h1,h2]
+                    end
+                end
+            end
+            for j in 1:Nq, i in 1:Nq
+                for s = 1:Nstate
+                    dydt_ref[i,j,s,h1,h2] = 0.0
+                    for k = 1:Nq
+                        dydt_ref[i,j,s,h1,h2] += M[j,k] * scratch[i,k,s]
+                    end
                 end
             end
         end
-        for j in 1:Nq, i in 1:Nq
-            for s = 1:Nstate
-                dydt_ref[i,j,s,h1,h2] = 0.0
-                for k = 1:Nq
-                    dydt_ref[i,j,s,h1,h2] += M[j,k] * scratch[i,k,s]
-                end
-            end
-        end
-    end
     end
 
     return dydt_ref
 end
 
-tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0);
+tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
 
-@time for n = 1:1
-    tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_state), 0.0)
+__itt_resume()
+@time for n = 1:5
+    tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
 end
+__itt_pause()
 
 # Solve the ODE operator
 #prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
@@ -431,7 +434,7 @@ end
 #__itt_pause()
 #__sde_stop()
 
-#prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 10.0), (parameters, numflux, W, D, M, Val(Nq), tendency_state))
+#prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 10.0), (parameters, numflux, W, D, M, Val(Nq), tendency_states))
 
 #__sde_start()
 #__itt_resume()
