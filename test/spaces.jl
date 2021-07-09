@@ -10,6 +10,7 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         -2..8,
         x1periodic = true,
         x2periodic = false,
+        x2boundary = (:south, :north),
     )
     mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
     grid_topology = Topologies.GridTopology(mesh)

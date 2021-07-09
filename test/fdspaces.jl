@@ -7,7 +7,11 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
         @test eltype(domain) === FT
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -56,7 +60,11 @@ end
 
 @testset "Test composed stencils" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
         @test eltype(domain) === FT
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -131,7 +139,11 @@ end
 
 @testset "Test that FD Operators are callable" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
 
         @test eltype(domain) === FT
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -168,7 +180,11 @@ end
 
 @testset "Composite Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
 
         @test eltype(domain) === FT
         mesh = Meshes.IntervalMesh(domain; nelems = 16)

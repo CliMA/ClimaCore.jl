@@ -24,7 +24,7 @@ b = FT(4pi)
 n = 128
 α = FT(0.1)
 
-domain = Domains.IntervalDomain(a, b)
+domain = Domains.IntervalDomain(a, b, x3boundary = (:left, :right))
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)

@@ -34,6 +34,7 @@ domain = Domains.RectangleDomain(
     -2π..2π,
     x1periodic = true,
     x2periodic = boundary_name != "noslip",
+    x2boundary = boundary_name != "noslip" ? nothing : (:south, :north),
 )
 
 n1, n2 = 16, 16
