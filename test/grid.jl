@@ -19,6 +19,8 @@ function rectangular_grid(
         x2min..x2max,
         x1periodic = x1periodic,
         x2periodic = x2periodic,
+        x1boundary = x1periodic ? nothing : (:east, :west),
+        x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
     grid_topology = Topologies.GridTopology(mesh)

@@ -7,7 +7,12 @@ import ClimaCore.Geometry
 using LinearAlgebra, IntervalSets
 
 @testset "gradient on 1×1 domain SE space" begin
-    domain = Domains.RectangleDomain(-3..5, -2..8)
+    domain = Domains.RectangleDomain(
+        -3..5,
+        -2..8,
+        x1periodic = true,
+        x2periodic = true,
+    )
     mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
     grid_topology = Topologies.GridTopology(mesh)
 
@@ -31,7 +36,12 @@ end
 
 @testset "gradient on -π : π domain SE space" begin
     FT = Float64
-    domain = Domains.RectangleDomain(FT(-π)..FT(π), FT(-π)..FT(π))
+    domain = Domains.RectangleDomain(
+        FT(-π)..FT(π),
+        FT(-π)..FT(π),
+        x1periodic = true,
+        x2periodic = true,
+    )
     mesh = Meshes.EquispacedRectangleMesh(domain, 5, 5)
     grid_topology = Topologies.GridTopology(mesh)
 
