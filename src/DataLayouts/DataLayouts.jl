@@ -4,9 +4,9 @@
 Notation:
 - `i,j` are horizontal node indices within an element
 - `k` is the vertical node index within an element
+- `f` is the field index
 - `v` is the vertical element index in a stack
 - `h` is the element stack index
-- `f` is the field index
 
 Data layout is specified by the order in which they appear, e.g. `IJKFVH`
 indexes the underlying array as `[i,j,k,f,v,h]`
