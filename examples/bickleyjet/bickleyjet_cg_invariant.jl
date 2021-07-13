@@ -39,7 +39,7 @@ quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Spaces.Quadratures.GLL{Nqh}()
-Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+const Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -61,38 +61,38 @@ function init_state(x, p)
     # set initial tracer
     θ = sin(p.k * x2)
 
-    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
+    return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
-function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
-    u = ρu ./ ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ .* u)
-end
-
-function energy(state, p)
-    @unpack ρ, ρu = state
-    u = ρu ./ ρ
-    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
-end
 
 function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
-
 function rhs!(dydt, y, _, t)
+    space = Fields.axes(y)
 
     I = Operators.Interpolate(Ispace)
-    div = Operators.WeakDivergence()
     R = Operators.Restrict(space)
 
-    rparameters = Ref(parameters)
-    @. dydt = -R( div(flux(I(y), rparameters)) )
+
+    div = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    curl = Operators.StrongCurl()
+
+    @unpack g = parameters
+
+    J = Fields.Field(Ispace.local_geometry.J, Ispace)
+
+
+    @. dydt.ρ = - R(div(I(y.ρ) * I(y.u)))
+    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + J * (I(y.u) × (curl(I(y.u)))))
+    @. dydt.ρθ = - R(div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
+
     return dydt
 end
 
@@ -102,6 +102,8 @@ end
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
+
+#using Plots
 
 
 # Solve the ODE operator

@@ -473,7 +473,7 @@ operator_return_eltype(op::CurlSpectralElementOperator, S) =
 function allocate_work(op::CurlSpectralElementOperator, arg)
     space = axes(arg)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    S = eltype(arg)
+    S = eltype(eltype(arg))
     # TODO: switch memory order?
     v₁ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
     v₂ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
@@ -511,7 +511,7 @@ function get_node(field::Fields.SlabField{<:StrongCurlResult}, i, j)
 
     ∂v₁∂ξ₂ = RecursiveApply.rmatmul2(D, res.v₁, i, j)
     ∂v₂∂ξ₁ = RecursiveApply.rmatmul1(D, res.v₂, i, j)
-    return RecursiveApply.rmap(x -> Contravariant3Vector(x / J), ∂v₂∂ξ₁ ⊟ ∂v₁∂ξ₂)
+    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(x / J), ∂v₂∂ξ₁ ⊟ ∂v₁∂ξ₂)
 end
 
 function apply_slab(op::WeakCurl, (Wv₁, Wv₂), slab_field, h)
