@@ -101,7 +101,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "adv_diff"
+dirname = "advect_diffusion"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
@@ -132,10 +132,10 @@ anim = Plots.@animate for (nt, u) in enumerate(sol.u)
         m = :x,
     )
 end
-Plots.mp4(anim, joinpath(path, "adv_diff.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "advect_diffusion.mp4"), fps = 10)
 Plots.png(
     Plots.plot(sol.u[end], xlim = (0, 1)),
-    joinpath(path, "adv_diff_end.png"),
+    joinpath(path, "advect_diffusion_end.png"),
 )
 
 function linkfig(figpath, alt = "")
@@ -147,4 +147,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/adv_diff_end.png", "Adv-Diff End Simulation")
+linkfig(
+    "output/$(dirname)/advect_diffusion_end.png",
+    "Advection-Diffusion End Simulation",
+)

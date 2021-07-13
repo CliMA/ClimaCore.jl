@@ -188,7 +188,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "ekman"
+dirname = "hydrostatic_ekman"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
@@ -237,9 +237,9 @@ end
 anim = Plots.@animate for (i, u) in enumerate(sol.u)
     ekman_plot(u, title = "Hour $(i)")
 end
-Plots.mp4(anim, joinpath(path, "hydrostatic-ekman.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "hydrostatic_ekman.mp4"), fps = 10)
 
-Plots.png(ekman_plot(sol[end]), joinpath(path, "hydrostatic-ekman_end.png"))
+Plots.png(ekman_plot(sol[end]), joinpath(path, "hydrostatic_ekman_end.png"))
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath
@@ -250,4 +250,4 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/hydrostatic-ekman_end.png", "ekman End")
+linkfig("output/$(dirname)/hydrostatic_ekman_end.png", "ekman end")
