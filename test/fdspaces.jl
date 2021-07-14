@@ -55,6 +55,10 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         )
         ∂cos = ∇ᶠ.(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-2
+
+        # test that broadcasting into incorrect field space throws an error
+        empty_centers = zeros(FT, center_space)
+        @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
     end
 end
 
@@ -126,15 +130,17 @@ end
         ∂sin = ∂.(w .* I.(θ))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
-        # 4) we set boundaries on neither
+        # test that broadcasting into incorrect field space throws an error
+        empty_faces = zeros(FT, face_space)
+        @test_throws Exception empty_faces .= ∂.(w .* I.(θ))
+
+        # 5) we set boundaries on neither
         I = Operators.InterpolateC2F()
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
         @test_throws BoundsError ∂.(w .* I.(θ))
-
     end
-
 end
 
 @testset "Test that FD Operators are callable" begin
