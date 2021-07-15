@@ -138,3 +138,9 @@ function Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(LinearAlgeb
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, LinearAlgebra.cross, arg1, arg2, Field(space.local_geometry, space))
 end
+
+function Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::Type{Cartesian12Vector}, arg)
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(fs, Cartesian12Vector, arg, Field(space.local_geometry, space))
+end

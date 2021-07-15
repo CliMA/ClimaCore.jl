@@ -63,6 +63,8 @@ end
 
 abstract type CustomAxisFieldVector{N, FT} <: StaticArrays.FieldVector{N, FT} end
 
+(::Type{SA})(a::StaticArrays.StaticArray) where {SA<:CustomAxisFieldVector} = error("Cannot convert without local geometry information")
+
 Base.axes(::CV) where {CV <: CustomAxisFieldVector} = Base.axes(CV)
 
 
@@ -129,6 +131,8 @@ A vector point value represented as the third contravariant coordinates.
 struct Contravariant3Vector{FT} <: AbstractContravariantVector{1, FT}
     u³::FT
 end
+Contravariant3Vector{FT}(tup::Tuple{FT}) where {FT} = Contravariant3Vector{FT}(tup[1])
+
 Base.axes(::Type{Contravariant3Vector{FT}}) where {FT} =
     (ContravariantAxis(StaticArrays.SUnitRange(3,3)),)
 

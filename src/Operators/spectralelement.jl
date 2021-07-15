@@ -425,7 +425,7 @@ function apply_slab(op::Gradient, M, slab_field, h)
     for i in 1:Nq, j in 1:Nq
         M[i,j] = get_node(slab_field, i, j)
     end
-    S = operator_return_eltype(op::Gradient, eltype(M))
+    S = operator_return_eltype(op, eltype(M))
     return Field(GradientResult{S,Nq}(M), slab_space)
 end
 
@@ -445,6 +445,65 @@ function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
         ∂f∂ξ,
     )
 end
+
+
+"""
+    WeakGradient()
+
+Compute the (strong) gradient on each element via the chain rule:
+
+    ∂f/∂xⁱ = ∂f/∂ξʲ * ∂ξʲ/∂xⁱ
+"""
+struct WeakGradient <: SpectralElementOperator end
+
+operator_return_eltype(op::WeakGradient, S) =
+    RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
+
+struct WeakGradientResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
+    WM::M
+end
+WeakGradientResult{S,Nq}(WM::M) where {S,Nq,M} = WeakGradientResult{S,Nq,M}(WM)
+
+function allocate_work(op::WeakGradient, arg)
+    space = axes(arg)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    S = eltype(arg)
+    # TODO: switch memory order?
+    return MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
+end
+
+function apply_slab(op::WeakGradient, WM, slab_field, h)
+    slab_space = axes(slab_field)
+    Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
+    for i in 1:Nq, j in 1:Nq
+        local_geometry = slab_space.local_geometry[i, j]
+        v = get_node(slab_field, i, j)
+        WM[i, j] = RecursiveApply.rmul(local_geometry.WJ / local_geometry.J, v)
+    end
+
+    S = operator_return_eltype(op, eltype(WM))
+    return Field(WeakGradientResult{S,Nq}(WM), slab_space)
+end
+
+function get_node(field::Fields.SlabField{<:WeakGradientResult}, i, j)
+    slab_space = axes(field)
+    FT = Spaces.undertype(slab_space)
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    res = Fields.field_values(field)
+
+    Dᵀ₁Wf = RecursiveApply.rmatmul1(D', res.WM, i, j)
+    Dᵀ₂Wf = RecursiveApply.rmatmul2(D', res.WM, i, j)
+    local_geometry = slab_space.local_geometry[i, j]
+    W = local_geometry.WJ/local_geometry.J
+    ∂f∂ξ = RecursiveApply.rmap((Wu₁,Wu₂) -> Covariant12Vector(-Wu₁/W, -Wu₂/W), Dᵀ₁Wf, Dᵀ₂Wf)
+    # TODO: return a CovariantVector by default;
+    #       use subsequent broadcasting to convert to desired basis
+    return RecursiveApply.rmap(
+        x -> Cartesian12Vector(x, slab_space.local_geometry[i,j]),
+        ∂f∂ξ,
+    )
+end
+
 
 # inv(J) W
 
@@ -511,7 +570,7 @@ function get_node(field::Fields.SlabField{<:StrongCurlResult}, i, j)
 
     ∂v₁∂ξ₂ = RecursiveApply.rmatmul2(D, res.v₁, i, j)
     ∂v₂∂ξ₁ = RecursiveApply.rmatmul1(D, res.v₂, i, j)
-    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(x / J), ∂v₂∂ξ₁ ⊟ ∂v₁∂ξ₂)
+    return RecursiveApply.rmap(x ->  Geometry.Contravariant3Vector(x / J), ∂v₂∂ξ₁ ⊟ ∂v₁∂ξ₂)
 end
 
 function apply_slab(op::WeakCurl, (Wv₁, Wv₂), slab_field, h)
@@ -523,17 +582,17 @@ function apply_slab(op::WeakCurl, (Wv₁, Wv₂), slab_field, h)
         v = get_node(slab_field, i, j)
         Wv₁[i, j] = RecursiveApply.rmap(
             x ->
-                Geometry.covariant1(x, local_geometry) * local_geometry.W,
+                Geometry.covariant1(x, local_geometry) * local_geometry.WJ / local_geometry.J,
             v,
         )
         Wv₂[i, j] = RecursiveApply.rmap(
             x ->
-                Geometry.covariant2(x, local_geometry) * local_geometry.W,
+                Geometry.covariant2(x, local_geometry) * local_geometry.WJ / local_geometry.J,
             v,
         )
     end
     S = operator_return_eltype(op, eltype(slab_field))
-    return Field(StrongCurlResult{S,Nq}(Wv₁, Wv₂), slab_space)
+    return Field(WeakCurlResult{S,Nq}(Wv₁, Wv₂), slab_space)
 end
 
 function get_node(field::Fields.SlabField{<:WeakCurlResult}, i, j)
@@ -541,10 +600,11 @@ function get_node(field::Fields.SlabField{<:WeakCurlResult}, i, j)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     res = Fields.field_values(field)
+    WJ = slab_space.local_geometry[i, j].WJ
     Dᵀ = D'
     Dᵀ₂Wv₁ = RecursiveApply.rmatmul2(Dᵀ, res.Wv₁, i, j)
     Dᵀ₁Wv₂ = RecursiveApply.rmatmul1(Dᵀ, res.Wv₂, i, j)
-    return RecursiveApply.rmap(x -> Contravariant3Vector(x), Dᵀ₁Wv₂ ⊟ Dᵀ₂Wv₁)
+    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(-x / WJ), Dᵀ₁Wv₂ ⊟ Dᵀ₂Wv₁)
 end
 
 

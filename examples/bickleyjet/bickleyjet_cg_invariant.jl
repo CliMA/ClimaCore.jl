@@ -88,7 +88,7 @@ function rhs!(dydt, y, _, t)
 
 
     @. dydt.ρ = - R(div(I(y.ρ) * I(y.u)))
-    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + J * (I(y.u) × (curl(I(y.u)))))
+    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + Cartesian12Vector(J * (I(y.u) × (curl(I(y.u))))))
     @. dydt.ρθ = - R(div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
@@ -143,3 +143,5 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
+
+

@@ -115,6 +115,117 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
+using Plots
+
+t = 30.0
+y = sol.u[31]
+plot(y.ρθ, clim=(-1,1))
+
+dydt = rhs!(similar(y), y, nothing, t)
+plot(dydt.ρθ)
+
+
+function invariant_form(y)
+    @unpack ρ, ρu, ρθ = y
+    return (ρ=ρ, u=ρu/ρ, ρθ=ρθ)
+end
+
+z = invariant_form.(y)
+
+
+
+function invariant_rhs!(dydt, y, _, t)
+    space = Fields.axes(y)
+
+    I = Operators.Interpolate(Ispace)
+    R = Operators.Restrict(space)
+
+
+    div = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    curl = Operators.StrongCurl()
+
+    @unpack g = parameters
+
+    J = Fields.Field(Ispace.local_geometry.J, Ispace)
+
+
+    @. dydt.ρ = - R(div(I(y.ρ) * I(y.u)))
+    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + J * (I(y.u) × (curl(I(y.u)))))
+    @. dydt.ρθ = - R(div(I(y.ρθ) * I(y.u)))
+
+    Spaces.weighted_dss!(dydt)
+
+    return dydt
+end
+
+dzdt = invariant_rhs!(similar(z), z, nothing, t)
+
+function flux_form_dt(dzdt, z)
+    ρ = z.ρ
+    u = z.u
+    dρdt = dzdt.ρ
+    dudt = dzdt.u
+    dρθdt = dzdt.ρθ
+    return (ρ=dρdt, ρu=ρ*dudt+dρdt*u, ρθ=dρθdt)
+end
+
+dydt_z = flux_form_dt.(dzdt, z)
+
+function init_s(coord)
+    ρ = 1.0
+    θ = 1.0
+    #u = Cartesian12Vector(sin(coord.x1),cos(coord.x1))
+    u = Cartesian12Vector(sin(coord.x1),cos(coord.x2))
+
+    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
+end
+
+ys = init_s.(Fields.coordinate_field(space))
+dysdt = rhs!(similar(ys), ys, nothing, 0)
+zs = invariant_form.(ys)
+dzsdt = invariant_rhs!(similar(zs), zs, nothing, t)
+dysdt_z = flux_form_dt.(dzsdt, zs)
+
+
+coords = Fields.coordinate_field(space)
+
+function velfield(coord)
+    x = coord.x1
+    y = coord.x2
+    k1 = 0.1
+    k2 = 0.3
+    l1 = 0.5
+    l2 = 0.7
+    Cartesian12Vector(sin(k1*x+l1*y), cos(k2*x+l2*y))
+end
+
+v = velfield.(coords)
+curlv = curl.(v)
+
+function curlfield(coord)
+    x = coord.x1
+    y = coord.x2
+    k1 = 0.1
+    k2 = 0.3
+    l1 = 0.5
+    l2 = 0.7
+    return -k2*sin(k2*x+l2*y) - l1*cos(k1*x+l1*y)
+end
+refcurlv = curlfield.(coords)
+
+c = grad.(v.u2).u1 .- grad.(v.u1).u2
+
+vccv = @. v × curlv
+J = Fields.Field(space.local_geometry.J, space)
+Jvccv = @. J * (v × curlv)
+w = Cartesian12Vector.(Jvccv)
+
+uc1 = v.u2 .* c
+uc2 = .-v.u1 .* c
+
+
+#=
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
@@ -141,3 +252,4 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
+=#
