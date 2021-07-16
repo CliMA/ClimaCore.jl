@@ -169,6 +169,12 @@ end
 function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
     LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
 end
+function contravariant1(x::Contravariant12Vector, local_geometry::LocalGeometry)
+    x.u¹
+end
+function contravariant2(x::Contravariant12Vector, local_geometry::LocalGeometry)
+    x.u²
+end
 
 
 function covariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)

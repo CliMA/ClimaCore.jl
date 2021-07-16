@@ -132,3 +132,16 @@ end
     @test norm(curlgradf) < 1e-12
 end
 
+
+@testset "annhilator property: div-curl" begin
+  v = Geometry.Covariant3Vector.(sin.(coords.x1 .+ 2 .* coords.x2))
+  curl = Operators.StrongCurl()
+  curlv = curl.(v)
+  Spaces.weighted_dss!(curlv)
+
+  div = Operators.StrongDivergence()
+  divcurlv = div.(curlv)
+  Spaces.weighted_dss!(divcurlv)
+
+  @test norm(divcurlv) < 1e-12
+end
