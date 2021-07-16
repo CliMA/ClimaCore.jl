@@ -517,14 +517,16 @@ struct StrongCurl <: CurlSpectralElementOperator end
 struct StrongCurlResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
     v₁::M
     v₂::M
+    v₃::M
 end
-StrongCurlResult{S,Nq}(v₁::M, v₂::M) where {S,Nq,M} = StrongCurlResult{S,Nq,M}(v₁, v₂)
+StrongCurlResult{S,Nq}(v₁::M, v₂::M, v₃::M) where {S,Nq,M} = StrongCurlResult{S,Nq,M}(v₁, v₂, v₃)
 
 struct WeakCurlResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
     Wv₁::M
     Wv₂::M
+    Wv₃::M
 end
-WeakCurlResult{S,Nq}(Wv₁::M, Wv₂::M) where {S,Nq,M} = WeakCurlResult{S,Nq,M}(Wv₁, Wv₂)
+WeakCurlResult{S,Nq}(Wv₁::M, Wv₂::M, Wv₃::M) where {S,Nq,M} = WeakCurlResult{S,Nq,M}(Wv₁, Wv₂, Wv₃)
 
 operator_return_eltype(op::CurlSpectralElementOperator, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
@@ -532,14 +534,16 @@ operator_return_eltype(op::CurlSpectralElementOperator, S) =
 function allocate_work(op::CurlSpectralElementOperator, arg)
     space = axes(arg)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    S = eltype(eltype(arg))
+    V = eltype(arg) # e.g. Covariant12Vector{FT}
+    S = eltype(V)   # FT
     # TODO: switch memory order?
     v₁ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
     v₂ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
-    return (v₁,v₂)
+    v₃ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
+    return (v₁,v₂,v₃)
 end
 
-function apply_slab(op::StrongCurl, (v₁,v₂), slab_field, h)
+function apply_slab(op::StrongCurl, (v₁,v₂,v₃), slab_field, h)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -556,24 +560,45 @@ function apply_slab(op::StrongCurl, (v₁,v₂), slab_field, h)
                 Geometry.covariant2(x, local_geometry),
             v,
         )
+        v₃[i, j] = RecursiveApply.rmap(
+            x ->
+                Geometry.covariant3(x, local_geometry),
+            v,
+        )
     end
     S = operator_return_eltype(op, eltype(slab_field))
-    return Field(StrongCurlResult{S,Nq}(v₁,v₂), slab_space)
+    return Field(StrongCurlResult{S,Nq}(v₁,v₂,v₃), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:StrongCurlResult}, i, j)
+function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contravariant3Vector}}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     J = slab_space.local_geometry[i, j].J
     res = Fields.field_values(field)
 
-    ∂v₁∂ξ₂ = RecursiveApply.rmatmul2(D, res.v₁, i, j)
-    ∂v₂∂ξ₁ = RecursiveApply.rmatmul1(D, res.v₂, i, j)
-    return RecursiveApply.rmap(x ->  Geometry.Contravariant3Vector(x / J), ∂v₂∂ξ₁ ⊟ ∂v₁∂ξ₂)
+    D₂v₁ = RecursiveApply.rmatmul2(D, res.v₁, i, j)
+    D₁v₂ = RecursiveApply.rmatmul1(D, res.v₂, i, j)
+    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(x / J), D₁v₂ ⊟ D₂v₁)
 end
 
-function apply_slab(op::WeakCurl, (Wv₁, Wv₂), slab_field, h)
+
+function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contravariant12Vector}}, i, j)
+    slab_space = axes(field)
+    FT = Spaces.undertype(slab_space)
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    J = slab_space.local_geometry[i, j].J
+    res = Fields.field_values(field)
+
+    D₁v₃ = RecursiveApply.rmatmul1(D, res.v₃, i, j)
+    D₂v₃ = RecursiveApply.rmatmul2(D, res.v₃, i, j)
+
+    #(D₂v₃ - D₃v₂, D₃v₁ - D₁v₃, D₁v₂ - D₂v₁)
+    return RecursiveApply.rmap((x, y) ->  Geometry.Contravariant12Vector(x / J, -y / J), D₂v₃, D₁v₃)
+end
+
+
+function apply_slab(op::WeakCurl, (Wv₁, Wv₂, Wv₃), slab_field, h)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
@@ -590,12 +615,16 @@ function apply_slab(op::WeakCurl, (Wv₁, Wv₂), slab_field, h)
                 Geometry.covariant2(x, local_geometry) * local_geometry.WJ / local_geometry.J,
             v,
         )
+        Wv₃[i, j] = RecursiveApply.rmap(
+            x -> Geometry.covariant3(x, local_geometry) * local_geometry.WJ / local_geometry.J,
+            v,
+        )
     end
     S = operator_return_eltype(op, eltype(slab_field))
-    return Field(WeakCurlResult{S,Nq}(Wv₁, Wv₂), slab_space)
+    return Field(WeakCurlResult{S,Nq}(Wv₁, Wv₂, Wv₃), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:WeakCurlResult}, i, j)
+function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant3Vector}}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -607,6 +636,18 @@ function get_node(field::Fields.SlabField{<:WeakCurlResult}, i, j)
     return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(-x / WJ), Dᵀ₁Wv₂ ⊟ Dᵀ₂Wv₁)
 end
 
+function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant12Vector}}, i, j)
+    slab_space = axes(field)
+    FT = Spaces.undertype(slab_space)
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    res = Fields.field_values(field)
+    WJ = slab_space.local_geometry[i, j].WJ
+    Dᵀ = D'
+    Dᵀ₁Wv₃ = RecursiveApply.rmatmul1(Dᵀ, res.Wv₃, i, j)
+    Dᵀ₂Wv₃ = RecursiveApply.rmatmul2(Dᵀ, res.Wv₃, i, j)
+    #(D₂v₃ - D₃v₂, D₃v₁ - D₁v₃, D₁v₂ - D₂v₁)
+    return RecursiveApply.rmap((x, y) ->  Geometry.Contravariant12Vector(-x / WJ, y / WJ), Dᵀ₂Wv₃, Dᵀ₁Wv₃)
+end
 
 abstract type TensorOperator <: SpectralElementOperator end
 

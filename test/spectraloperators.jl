@@ -50,6 +50,39 @@ end
     @test curlv.u³ ≈ curlv_ref rtol=1e-2
 end
 
+
+
+@testset "curl-curl" begin
+  v = Geometry.Cartesian12Vector.(sin.(coords.x1 .+ 2 .* coords.x2), cos.(3 .* coords.x1 .+ 2 .* coords.x2))
+  curlv_ref = .- 3 .* sin.(3 .* coords.x1 .+ 2 .* coords.x2) .- 2 .* cos.(coords.x1 .+ 2 .* coords.x2)
+  curlcurlv_ref1 = .- 6 .* cos.(3 .* coords.x1 .+ 2 .* coords.x2) .+ 4 .* sin.(coords.x1 .+ 2 .* coords.x2)
+  curlcurlv_ref2 = 9 .* cos.(3 .* coords.x1 .+ 2 .* coords.x2) .- 2 .* sin.(coords.x1 .+ 2 .* coords.x2)
+
+  curl = Operators.StrongCurl()
+  curlcurlv = Geometry.Cartesian12Vector.(curl.(Geometry.Covariant3Vector.(curl.(v).u³)))
+  Spaces.weighted_dss!(curlcurlv)
+
+  @test curlcurlv.u1 ≈ curlcurlv_ref1 rtol=1e-2
+  @test curlcurlv.u2 ≈ curlcurlv_ref2 rtol=4e-2
+end
+
+@testset "weak curl-strong curl" begin
+  v = Geometry.Cartesian12Vector.(sin.(coords.x1 .+ 2 .* coords.x2), cos.(3 .* coords.x1 .+ 2 .* coords.x2))
+  curlv_ref = .- 3 .* sin.(3 .* coords.x1 .+ 2 .* coords.x2) .- 2 .* cos.(coords.x1 .+ 2 .* coords.x2)
+  curlcurlv_ref1 = .- 6 .* cos.(3 .* coords.x1 .+ 2 .* coords.x2) .+ 4 .* sin.(coords.x1 .+ 2 .* coords.x2)
+  curlcurlv_ref2 = 9 .* cos.(3 .* coords.x1 .+ 2 .* coords.x2) .- 2 .* sin.(coords.x1 .+ 2 .* coords.x2)
+
+  curl = Operators.StrongCurl()
+  wcurl = Operators.WeakCurl()
+  curlcurlv = Geometry.Cartesian12Vector.(wcurl.(Geometry.Covariant3Vector.(curl.(v).u³)))
+  Spaces.weighted_dss!(curlcurlv)
+
+  @test curlcurlv.u1 ≈ curlcurlv_ref1 rtol=1e-2
+  @test curlcurlv.u2 ≈ curlcurlv_ref2 rtol=4e-2
+end
+
+
+
 @testset "weak curl" begin
     v = Geometry.Cartesian12Vector.(sin.(coords.x1 .+ 2 .* coords.x2), cos.(3 .* coords.x1 .+ 4 .* coords.x2))
 
@@ -85,7 +118,7 @@ end
 end
 
 
-@test "annhilator property: curl-grad" begin
+@testset "annhilator property: curl-grad" begin
     f = sin.(coords.x1 .+ 2 .* coords.x2)
 
     grad = Operators.Gradient()
