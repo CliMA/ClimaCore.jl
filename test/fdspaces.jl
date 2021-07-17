@@ -7,7 +7,11 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
         @test eltype(domain) === FT
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -51,12 +55,20 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         )
         ∂cos = ∇ᶠ.(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-2
+
+        # test that broadcasting into incorrect field space throws an error
+        empty_centers = zeros(FT, center_space)
+        @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
     end
 end
 
 @testset "Test composed stencils" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
         @test eltype(domain) === FT
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -118,20 +130,26 @@ end
         ∂sin = ∂.(w .* I.(θ))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
-        # 4) we set boundaries on neither
+        # test that broadcasting into incorrect field space throws an error
+        empty_faces = zeros(FT, face_space)
+        @test_throws Exception empty_faces .= ∂.(w .* I.(θ))
+
+        # 5) we set boundaries on neither
         I = Operators.InterpolateC2F()
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
         @test_throws BoundsError ∂.(w .* I.(θ))
-
     end
-
 end
 
 @testset "Test that FD Operators are callable" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
 
         @test eltype(domain) === FT
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
@@ -168,7 +186,11 @@ end
 
 @testset "Composite Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(FT(0.0), FT(pi))
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
 
         @test eltype(domain) === FT
         mesh = Meshes.IntervalMesh(domain; nelems = 16)

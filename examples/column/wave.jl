@@ -29,7 +29,7 @@ const C_v = R_d / (γ - 1) # heat capacit at constant volume
 const R_m = R_d # moist R, assumed to be dry
 
 
-domain = Domains.IntervalDomain(0.0, 4pi)
+domain = Domains.IntervalDomain(0.0, 4pi, x3boundary = (:left, :right))
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 

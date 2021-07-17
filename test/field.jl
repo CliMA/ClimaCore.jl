@@ -13,6 +13,8 @@ domain = Domains.RectangleDomain(
     -2..8,
     x1periodic = false,
     x2periodic = false,
+    x1boundary = (:east, :west),
+    x2boundary = (:south, :north),
 )
 n1, n2 = 1, 1
 Nij = 4

@@ -4,7 +4,6 @@ import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore: Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
 using LinearAlgebra, IntervalSets
 
-
 function boundary_value(
     f::Fields.Field,
     cs::Spaces.FaceFiniteDifferenceSpace,

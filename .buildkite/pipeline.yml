@@ -95,6 +95,39 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column Advection Diffusion Eq"
+    key: "cpu_column_advect_diff"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/advect_diffusion.jl"
+    artifact_paths:
+      - "examples/column/output/advect_diffusion/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Ekman Eq"
+    key: "cpu_column_ekman"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/ekman.jl"
+    artifact_paths:
+      - "examples/column/output/ekman/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Hydrostatic Ekman Eq"
+    key: "cpu_column_hydrostatic_ekman"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/hydrostatic_ekman.jl"
+    artifact_paths:
+      - "examples/column/output/hydrostatic_ekman/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Column Wave Eq"
     key: "cpu_column_wave"
     command:

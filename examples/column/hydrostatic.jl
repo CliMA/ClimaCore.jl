@@ -29,7 +29,7 @@ const C_v = R_d / (γ - 1) # heat capacit at constant volume
 const R_m = R_d # moist R, assumed to be dry
 
 
-domain = Domains.IntervalDomain(0.0, 30e3)
+domain = Domains.IntervalDomain(0.0, 30e3, x3boundary = (:bottom, :top))
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -107,15 +107,15 @@ function tendency!(dY, Y, _, t)
     If = Operators.InterpolateC2F()
 
     ∂c = Operators.GradientF2C(
-        left = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
-        right = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
+        bottom = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
+        top = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
     )
 
     ∂f = Operators.GradientC2F()
 
     B = Operators.SetBoundaryOperator(
-        left = Operators.SetValue(0.0),
-        right = Operators.SetValue(0.0),
+        bottom = Operators.SetValue(0.0),
+        top = Operators.SetValue(0.0),
     )
 
     @. dYc = -(∂c(w * If(Yc)))
