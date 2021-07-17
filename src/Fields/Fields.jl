@@ -49,9 +49,9 @@ field_values(field::Field) = getfield(field, :values)
 Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
-Base.getproperty(field::Field, name::Symbol) =
+@inline Base.getproperty(field::Field, name::Symbol) =
     Field(getproperty(field_values(field), name), axes(field))
-Base.getproperty(field::Field, name::Integer) =
+@inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))

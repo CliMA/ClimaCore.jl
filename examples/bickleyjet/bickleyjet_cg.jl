@@ -69,7 +69,7 @@ y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
     u = ρu ./ ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ .* u)
+    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I), ρθ = ρθ .* u)
 end
 
 function energy(state, p)
@@ -132,6 +132,18 @@ end
 
 z = invariant_form.(y)
 
+function flux_rhs!(dydt, y, _, t)
+
+    I = Operators.Interpolate(Ispace)
+    div = Operators.WeakDivergence()
+    R = Operators.Restrict(space)
+
+    rparameters = Ref(parameters)
+    @. dydt = -R( div(flux(I(y), rparameters)) )
+
+    Spaces.weighted_dss!(dydt)
+    return dydt
+end
 
 
 function invariant_rhs!(dydt, y, _, t)
@@ -160,7 +172,6 @@ function invariant_rhs!(dydt, y, _, t)
 end
 
 dzdt = invariant_rhs!(similar(z), z, nothing, t)
-
 function flux_form_dt(dzdt, z)
     ρ = z.ρ
     u = z.u
@@ -170,21 +181,21 @@ function flux_form_dt(dzdt, z)
     return (ρ=dρdt, ρu=ρ*dudt+dρdt*u, ρθ=dρθdt)
 end
 
+
 dydt_z = flux_form_dt.(dzdt, z)
 
 function init_s(coord)
     ρ = 1.0
     θ = 1.0
-    #u = Cartesian12Vector(sin(coord.x1),cos(coord.x1))
     u = Cartesian12Vector(sin(coord.x1),cos(coord.x2))
 
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
 
 ys = init_s.(Fields.coordinate_field(space))
-dysdt = rhs!(similar(ys), ys, nothing, 0)
+dysdt = flux_rhs!(similar(ys), ys, nothing, 0)
 zs = invariant_form.(ys)
-dzsdt = invariant_rhs!(similar(zs), zs, nothing, t)
+dzsdt = invariant_rhs!(similar(zs), zs, nothing, 0)
 dysdt_z = flux_form_dt.(dzsdt, zs)
 
 

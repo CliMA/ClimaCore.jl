@@ -91,7 +91,7 @@ function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
 end
 
 # TODO: if this gets used inside kernels, move to a generated function?
-function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
+@inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     i = findfirst(isequal(name), fieldnames(S))
     i === nothing && error("Invalid field name $(name)")
     return getproperty(data, i)
@@ -152,7 +152,7 @@ end
 Base.length(data::IJFH) = size(parent(data), 4)
 Base.size(data::Data2D) = (length(data),)
 
-function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
+@inline function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)

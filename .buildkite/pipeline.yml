@@ -13,7 +13,7 @@ steps:
 
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
-      
+
       - "julia --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -33,10 +33,10 @@ steps:
     key: "init_gpu_env"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      
+
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
-      
+
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -83,7 +83,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-  
+
   - label: ":computer: Column Advection Eq"
     key: "cpu_column_advect"
     command:
@@ -123,6 +123,17 @@ steps:
       - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Bickley jet CG vector invariant"
+    key: "cpu_bickleyjet_cg_invariant"
+    command:
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant.jl"
+    artifact_paths:
+      - "examples/bickleyjet/output/cg_invariant/*"
     agents:
       config: cpu
       queue: central

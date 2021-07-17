@@ -40,6 +40,9 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Spaces.Quadratures.GLL{Nqh}()
 const Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+const IJ = Fields.Field(Ispace.local_geometry.J, Ispace)
+
+
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -66,6 +69,10 @@ end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
+function energy(state, p)
+  @unpack ρ, u = stateopen
+  return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+end
 
 function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
@@ -84,27 +91,19 @@ function rhs!(dydt, y, _, t)
 
     @unpack g = parameters
 
-    J = Fields.Field(Ispace.local_geometry.J, Ispace)
 
-
-    @. dydt.ρ = - R(div(I(y.ρ) * I(y.u)))
-    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + Cartesian12Vector(J * (I(y.u) × (curl(I(y.u))))))
-    @. dydt.ρθ = - R(div(I(y.ρθ) * I(y.u)))
+    @. dydt.ρ = R(- div(I(y.ρ) * I(y.u)))
+    @. dydt.u = R(- grad(g*I(y.ρ) + norm(I(y.u))^2/2) + Cartesian12Vector(IJ * (I(y.u) × (curl(I(y.u))))))
+    @. dydt.ρθ = R(- div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
 
     return dydt
 end
 
-# Next steps:
-# 1. add the above to the design docs (divergence + over-integration + DSS)
-# 2. add boundary conditions
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
-
-#using Plots
-
 
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
@@ -121,7 +120,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "cg"
+dirname = "cg_invariant"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
