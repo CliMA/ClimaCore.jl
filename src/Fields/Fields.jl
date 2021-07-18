@@ -62,8 +62,10 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-slab(field::Field, h) = Field(slab(field_values(field), h), slab(axes(field), h))
-const SlabField{V,S} = Field{V,S} where {V<:AbstractData, S<:Spaces.SpectralElementSpaceSlab}
+slab(field::Field, h) =
+    Field(slab(field_values(field), h), slab(axes(field), h))
+const SlabField{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 

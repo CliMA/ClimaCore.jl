@@ -37,30 +37,42 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <: Base.AbstractBroadcasted
+struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <:
+       Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
     work::Work
 end
-SpectralBroadcasted{Style}(op::Op, args::Args, axes::Axes=nothing, work::Work=nothing) where {Style, Op, Args, Axes, Work} =
+SpectralBroadcasted{Style}(
+    op::Op,
+    args::Args,
+    axes::Axes = nothing,
+    work::Work = nothing,
+) where {Style, Op, Args, Axes, Work} =
     SpectralBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
 return_space(::SpectralElementOperator, space) = space
 
 Base.axes(sbc::SpectralBroadcasted) =
-    isnothing(sbc.axes) ? return_space(sbc.op, map(axes, sbc.args)...) : sbc.axes
+    isnothing(sbc.axes) ? return_space(sbc.op, map(axes, sbc.args)...) :
+    sbc.axes
 
 Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
     Base.Broadcast.broadcasted(SpectralStyle(), op, args...)
 
-Base.Broadcast.broadcasted(::SpectralStyle, op::SpectralElementOperator, args...) =
-    SpectralBroadcasted{SpectralStyle}(op, args)
+Base.Broadcast.broadcasted(
+    ::SpectralStyle,
+    op::SpectralElementOperator,
+    args...,
+) = SpectralBroadcasted{SpectralStyle}(op, args)
 
 Base.eltype(sbc::SpectralBroadcasted) =
     operator_return_eltype(sbc.op, map(eltype, sbc.args)...)
 
-function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Style}
+function Base.Broadcast.instantiate(
+    sbc::SpectralBroadcasted{Style},
+) where {Style}
     op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
     args = map(Base.Broadcast.instantiate, sbc.args)
@@ -76,7 +88,9 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted{Style}) where {Styl
     return SpectralBroadcasted{Style}(op, args, axes, work)
 end
 
-function Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{Style}) where {Style<:AbstractSpectralStyle}
+function Base.Broadcast.instantiate(
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style <: AbstractSpectralStyle}
     # recursively instantiate the arguments to allocate intermediate work arrays
     args = map(Base.Broadcast.instantiate, bc.args)
     # axes: same logic as Broadcasted
@@ -90,12 +104,9 @@ function Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{Style}) where
 end
 
 # @. divergence(A *  gradient(rhou / rho))
-                      # slab_size(space)
+# slab_size(space)
 
-function Base.similar(
-    sbc::SpectralBroadcasted,
-    ::Type{Eltype},
-) where {Eltype}
+function Base.similar(sbc::SpectralBroadcasted, ::Type{Eltype}) where {Eltype}
     space = axes(sbc)
     return Field(similar(Spaces.coordinates(space), Eltype), space)
 end
@@ -123,10 +134,7 @@ end
 # TODO: Monday slab_flux is a broadcasted expression, we need to define the eqv of a
 # recursive getindex call on a broadcasted element expression for the next step
 # like apply_slab!(out_slab, in_expr)
-function Base.copyto!(
-    field_out::Field,
-    sbc::SpectralBroadcasted
-)
+function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     data_out = Fields.field_values(field_out)
     Nh = length(data_out)
     for h in 1:Nh
@@ -143,25 +151,28 @@ function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
 end
 
-function slab(sbc::SpectralBroadcasted{Style}, h) where {Style<:SpectralStyle}
+function slab(sbc::SpectralBroadcasted{Style}, h) where {Style <: SpectralStyle}
     _args = map(a -> slab(a, h), sbc.args)
     _axes = slab(axes(sbc), h)
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.work)
 end
 
-function slab(bc::Base.Broadcast.Broadcasted{Style}, h) where {Style<:AbstractSpectralStyle}
+function slab(
+    bc::Base.Broadcast.Broadcasted{Style},
+    h,
+) where {Style <: AbstractSpectralStyle}
     _args = map(a -> slab(a, h), bc.args)
     _axes = slab(axes(bc), h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
-abstract type OperatorSlabResult{S,Nq} <: DataLayouts.DataSlab2D{S,Nq}
-end
+abstract type OperatorSlabResult{S, Nq} <: DataLayouts.DataSlab2D{S, Nq} end
 
-Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) = getfield(slab_res, name)
+Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) =
+    getfield(slab_res, name)
 
 function Base.copyto!(
     field_out::Field,
-    bc::Base.Broadcast.Broadcasted{Style}
+    bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
     data_out = Fields.field_values(field_out)
     Nh = length(data_out)
@@ -170,7 +181,10 @@ function Base.copyto!(
         slab_args = map(arg -> _apply_slab(slab(arg, h), h), bc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copy_slab!(slab_out, Base.Broadcast.Broadcasted{Style}(bc.f, slab_args, axes(slab_out)))
+        copy_slab!(
+            slab_out,
+            Base.Broadcast.Broadcasted{Style}(bc.f, slab_args, axes(slab_out)),
+        )
     end
     return field_out
 end
@@ -186,14 +200,16 @@ function copy_slab!(slab_out, res)
 end
 
 
-@inline get_node(field::Fields.SlabField, i, j) = getindex(Fields.field_values(field), i,j)
+@inline get_node(field::Fields.SlabField, i, j) =
+    getindex(Fields.field_values(field), i, j)
 function get_node(bc::Base.Broadcast.Broadcasted, i, j)
     args = map(arg -> get_node(arg, i, j), bc.args)
     bc.f(args...)
 end
 @inline get_node(scalar, i, j) = scalar[]
 
-set_node!(field::Fields.SlabField, i, j, val) = setindex!(Fields.field_values(field), val, i,j)
+set_node!(field::Fields.SlabField, i, j, val) =
+    setindex!(Fields.field_values(field), val, i, j)
 
 
 
@@ -214,12 +230,19 @@ end
 =#
 
 _apply_slab(x, h) = x
-_apply_slab(sbc::SpectralBroadcasted, h) = apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
+_apply_slab(sbc::SpectralBroadcasted, h) =
+    apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
 _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
-    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, map(a -> _apply_slab(a, h), bc.args), bc.axes)
+    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
+        bc.f,
+        map(a -> _apply_slab(a, h), bc.args),
+        bc.axes,
+    )
 
 
-function Base.Broadcast.BroadcastStyle(::Type{SB}) where {SB<:SpectralBroadcasted}
+function Base.Broadcast.BroadcastStyle(
+    ::Type{SB},
+) where {SB <: SpectralBroadcasted}
     CompositeSpectralStyle()
 end
 
@@ -251,8 +274,7 @@ where `I{x}` is the interpolation operator applied to a field `x`.
 ## References
  - Taylor and Fournier (2010), equation 15
 """
-struct StrongDivergence <: SpectralElementOperator
-end
+struct StrongDivergence <: SpectralElementOperator end
 
 """
     WeakDivergence()
@@ -275,8 +297,7 @@ where
  - `W` is the diagonal matrix of quadrature weights
  - `D₁` and `D₂` are the discrete derivative matrices along the first and second dimensions.
 """
-struct WeakDivergence <: SpectralElementOperator
-end
+struct WeakDivergence <: SpectralElementOperator end
 
 operator_return_eltype(op::Union{WeakDivergence, StrongDivergence}, S) =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
@@ -294,12 +315,12 @@ function allocate_work(op::Union{WeakDivergence, StrongDivergence}, arg)
     return (a¹, a²)
 end
 
-struct StrongDivergenceResult{S,Nq,JM} <: OperatorSlabResult{S,Nq}
+struct StrongDivergenceResult{S, Nq, JM} <: OperatorSlabResult{S, Nq}
     Jv¹::JM
     Jv²::JM
 end
-StrongDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
-    StrongDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
+StrongDivergenceResult{S, Nq}(Jv¹::JM, Jv²::JM) where {S, Nq, JM} =
+    StrongDivergenceResult{S, Nq, JM}(Jv¹, Jv²)
 
 function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux, h)
     slab_space = axes(slab_flux)
@@ -314,14 +335,12 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux, h)
         F = get_node(slab_flux, i, j)  # materialize the flux
         Jv¹[i, j] = RecursiveApply.rmap(
             x ->
-                local_geometry.J *
-                Geometry.contravariant1(x, local_geometry),
+                local_geometry.J * Geometry.contravariant1(x, local_geometry),
             F,
         )
         Jv²[i, j] = RecursiveApply.rmap(
             x ->
-                local_geometry.J *
-                Geometry.contravariant2(x, local_geometry),
+                local_geometry.J * Geometry.contravariant2(x, local_geometry),
             F,
         )
     end
@@ -329,7 +348,7 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux, h)
     return Field(StrongDivergenceResult{S, Nq}(Jv¹, Jv²), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:StrongDivergenceResult}, i ,j)
+function get_node(field::Fields.SlabField{<:StrongDivergenceResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -344,12 +363,12 @@ end
 
 
 
-struct WeakDivergenceResult{S,Nq,JM} <: OperatorSlabResult{S,Nq}
+struct WeakDivergenceResult{S, Nq, JM} <: OperatorSlabResult{S, Nq}
     WJv¹::JM
     WJv²::JM
 end
-WeakDivergenceResult{S,Nq}(Jv¹::JM, Jv²::JM) where {S,Nq,JM} =
-    WeakDivergenceResult{S,Nq,JM}(Jv¹, Jv²)
+WeakDivergenceResult{S, Nq}(Jv¹::JM, Jv²::JM) where {S, Nq, JM} =
+    WeakDivergenceResult{S, Nq, JM}(Jv¹, Jv²)
 
 function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux, h)
     slab_space = axes(slab_flux)
@@ -364,14 +383,12 @@ function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux, h)
         F = get_node(slab_flux, i, j)  # materialize the flux
         WJv¹[i, j] = RecursiveApply.rmap(
             x ->
-                local_geometry.WJ *
-                Geometry.contravariant1(x, local_geometry),
+                local_geometry.WJ * Geometry.contravariant1(x, local_geometry),
             F,
         )
         WJv²[i, j] = RecursiveApply.rmap(
             x ->
-                local_geometry.WJ *
-                Geometry.contravariant2(x, local_geometry),
+                local_geometry.WJ * Geometry.contravariant2(x, local_geometry),
             F,
         )
     end
@@ -379,7 +396,7 @@ function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux, h)
     return Field(WeakDivergenceResult{S, Nq}(WJv¹, WJv²), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i ,j)
+function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -406,10 +423,10 @@ struct Gradient <: SpectralElementOperator end
 operator_return_eltype(op::Gradient, S) =
     RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
 
-struct GradientResult{S,Nq,JM}  <: OperatorSlabResult{S,Nq}
+struct GradientResult{S, Nq, JM} <: OperatorSlabResult{S, Nq}
     M::JM
 end
-GradientResult{S,Nq}(M::JM) where {S,Nq,JM} = GradientResult{S,Nq,JM}(M)
+GradientResult{S, Nq}(M::JM) where {S, Nq, JM} = GradientResult{S, Nq, JM}(M)
 
 function allocate_work(op::Gradient, arg)
     space = axes(arg)
@@ -423,10 +440,10 @@ function apply_slab(op::Gradient, M, slab_field, h)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
-        M[i,j] = get_node(slab_field, i, j)
+        M[i, j] = get_node(slab_field, i, j)
     end
     S = operator_return_eltype(op, eltype(M))
-    return Field(GradientResult{S,Nq}(M), slab_space)
+    return Field(GradientResult{S, Nq}(M), slab_space)
 end
 
 function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
@@ -441,7 +458,7 @@ function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
     # TODO: return a CovariantVector by default;
     #       use subsequent broadcasting to convert to desired basis
     return RecursiveApply.rmap(
-        x -> Cartesian12Vector(x, slab_space.local_geometry[i,j]),
+        x -> Cartesian12Vector(x, slab_space.local_geometry[i, j]),
         ∂f∂ξ,
     )
 end
@@ -459,10 +476,11 @@ struct WeakGradient <: SpectralElementOperator end
 operator_return_eltype(op::WeakGradient, S) =
     RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
 
-struct WeakGradientResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
+struct WeakGradientResult{S, Nq, M} <: OperatorSlabResult{S, Nq}
     WM::M
 end
-WeakGradientResult{S,Nq}(WM::M) where {S,Nq,M} = WeakGradientResult{S,Nq,M}(WM)
+WeakGradientResult{S, Nq}(WM::M) where {S, Nq, M} =
+    WeakGradientResult{S, Nq, M}(WM)
 
 function allocate_work(op::WeakGradient, arg)
     space = axes(arg)
@@ -482,7 +500,7 @@ function apply_slab(op::WeakGradient, WM, slab_field, h)
     end
 
     S = operator_return_eltype(op, eltype(WM))
-    return Field(WeakGradientResult{S,Nq}(WM), slab_space)
+    return Field(WeakGradientResult{S, Nq}(WM), slab_space)
 end
 
 function get_node(field::Fields.SlabField{<:WeakGradientResult}, i, j)
@@ -494,12 +512,16 @@ function get_node(field::Fields.SlabField{<:WeakGradientResult}, i, j)
     Dᵀ₁Wf = RecursiveApply.rmatmul1(D', res.WM, i, j)
     Dᵀ₂Wf = RecursiveApply.rmatmul2(D', res.WM, i, j)
     local_geometry = slab_space.local_geometry[i, j]
-    W = local_geometry.WJ/local_geometry.J
-    ∂f∂ξ = RecursiveApply.rmap((Wu₁,Wu₂) -> Covariant12Vector(-Wu₁/W, -Wu₂/W), Dᵀ₁Wf, Dᵀ₂Wf)
+    W = local_geometry.WJ / local_geometry.J
+    ∂f∂ξ = RecursiveApply.rmap(
+        (Wu₁, Wu₂) -> Covariant12Vector(-Wu₁ / W, -Wu₂ / W),
+        Dᵀ₁Wf,
+        Dᵀ₂Wf,
+    )
     # TODO: return a CovariantVector by default;
     #       use subsequent broadcasting to convert to desired basis
     return RecursiveApply.rmap(
-        x -> Cartesian12Vector(x, slab_space.local_geometry[i,j]),
+        x -> Cartesian12Vector(x, slab_space.local_geometry[i, j]),
         ∂f∂ξ,
     )
 end
@@ -514,19 +536,21 @@ abstract type CurlSpectralElementOperator <: SpectralElementOperator end
 struct WeakCurl <: CurlSpectralElementOperator end
 struct StrongCurl <: CurlSpectralElementOperator end
 
-struct StrongCurlResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
+struct StrongCurlResult{S, Nq, M} <: OperatorSlabResult{S, Nq}
     v₁::M
     v₂::M
     v₃::M
 end
-StrongCurlResult{S,Nq}(v₁::M, v₂::M, v₃::M) where {S,Nq,M} = StrongCurlResult{S,Nq,M}(v₁, v₂, v₃)
+StrongCurlResult{S, Nq}(v₁::M, v₂::M, v₃::M) where {S, Nq, M} =
+    StrongCurlResult{S, Nq, M}(v₁, v₂, v₃)
 
-struct WeakCurlResult{S,Nq,M}  <: OperatorSlabResult{S,Nq}
+struct WeakCurlResult{S, Nq, M} <: OperatorSlabResult{S, Nq}
     Wv₁::M
     Wv₂::M
     Wv₃::M
 end
-WeakCurlResult{S,Nq}(Wv₁::M, Wv₂::M, Wv₃::M) where {S,Nq,M} = WeakCurlResult{S,Nq,M}(Wv₁, Wv₂, Wv₃)
+WeakCurlResult{S, Nq}(Wv₁::M, Wv₂::M, Wv₃::M) where {S, Nq, M} =
+    WeakCurlResult{S, Nq, M}(Wv₁, Wv₂, Wv₃)
 
 operator_return_eltype(op::CurlSpectralElementOperator, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
@@ -540,37 +564,34 @@ function allocate_work(op::CurlSpectralElementOperator, arg)
     v₁ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
     v₂ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
     v₃ = MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
-    return (v₁,v₂,v₃)
+    return (v₁, v₂, v₃)
 end
 
-function apply_slab(op::StrongCurl, (v₁,v₂,v₃), slab_field, h)
+function apply_slab(op::StrongCurl, (v₁, v₂, v₃), slab_field, h)
     slab_space = axes(slab_field)
     Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
     local_geometry_slab = slab_space.local_geometry
     for j in 1:Nq, i in 1:Nq
         local_geometry = local_geometry_slab[i, j]
         v = get_node(slab_field, i, j)
-        v₁[i, j] = RecursiveApply.rmap(
-            x ->
-                Geometry.covariant1(x, local_geometry),
-            v,
-        )
-        v₂[i, j] = RecursiveApply.rmap(
-            x ->
-                Geometry.covariant2(x, local_geometry),
-            v,
-        )
-        v₃[i, j] = RecursiveApply.rmap(
-            x ->
-                Geometry.covariant3(x, local_geometry),
-            v,
-        )
+        v₁[i, j] =
+            RecursiveApply.rmap(x -> Geometry.covariant1(x, local_geometry), v)
+        v₂[i, j] =
+            RecursiveApply.rmap(x -> Geometry.covariant2(x, local_geometry), v)
+        v₃[i, j] =
+            RecursiveApply.rmap(x -> Geometry.covariant3(x, local_geometry), v)
     end
     S = operator_return_eltype(op, eltype(slab_field))
-    return Field(StrongCurlResult{S,Nq}(v₁,v₂,v₃), slab_space)
+    return Field(StrongCurlResult{S, Nq}(v₁, v₂, v₃), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contravariant3Vector}}, i, j)
+function get_node(
+    field::Fields.SlabField{
+        <:StrongCurlResult{<:Geometry.Contravariant3Vector},
+    },
+    i,
+    j,
+)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -579,11 +600,20 @@ function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contrava
 
     D₂v₁ = RecursiveApply.rmatmul2(D, res.v₁, i, j)
     D₁v₂ = RecursiveApply.rmatmul1(D, res.v₂, i, j)
-    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(x / J), D₁v₂ ⊟ D₂v₁)
+    return RecursiveApply.rmap(
+        x -> Geometry.Contravariant3Vector(x / J),
+        D₁v₂ ⊟ D₂v₁,
+    )
 end
 
 
-function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contravariant12Vector}}, i, j)
+function get_node(
+    field::Fields.SlabField{
+        <:StrongCurlResult{<:Geometry.Contravariant12Vector},
+    },
+    i,
+    j,
+)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -594,7 +624,11 @@ function get_node(field::Fields.SlabField{<:StrongCurlResult{<:Geometry.Contrava
     D₂v₃ = RecursiveApply.rmatmul2(D, res.v₃, i, j)
 
     #(D₂v₃ - D₃v₂, D₃v₁ - D₁v₃, D₁v₂ - D₂v₁)
-    return RecursiveApply.rmap((x, y) ->  Geometry.Contravariant12Vector(x / J, -y / J), D₂v₃, D₁v₃)
+    return RecursiveApply.rmap(
+        (x, y) -> Geometry.Contravariant12Vector(x / J, -y / J),
+        D₂v₃,
+        D₁v₃,
+    )
 end
 
 
@@ -607,24 +641,32 @@ function apply_slab(op::WeakCurl, (Wv₁, Wv₂, Wv₃), slab_field, h)
         v = get_node(slab_field, i, j)
         Wv₁[i, j] = RecursiveApply.rmap(
             x ->
-                Geometry.covariant1(x, local_geometry) * local_geometry.WJ / local_geometry.J,
+                Geometry.covariant1(x, local_geometry) * local_geometry.WJ /
+                local_geometry.J,
             v,
         )
         Wv₂[i, j] = RecursiveApply.rmap(
             x ->
-                Geometry.covariant2(x, local_geometry) * local_geometry.WJ / local_geometry.J,
+                Geometry.covariant2(x, local_geometry) * local_geometry.WJ /
+                local_geometry.J,
             v,
         )
         Wv₃[i, j] = RecursiveApply.rmap(
-            x -> Geometry.covariant3(x, local_geometry) * local_geometry.WJ / local_geometry.J,
+            x ->
+                Geometry.covariant3(x, local_geometry) * local_geometry.WJ /
+                local_geometry.J,
             v,
         )
     end
     S = operator_return_eltype(op, eltype(slab_field))
-    return Field(WeakCurlResult{S,Nq}(Wv₁, Wv₂, Wv₃), slab_space)
+    return Field(WeakCurlResult{S, Nq}(Wv₁, Wv₂, Wv₃), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant3Vector}}, i, j)
+function get_node(
+    field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant3Vector}},
+    i,
+    j,
+)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -633,10 +675,17 @@ function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravari
     Dᵀ = D'
     Dᵀ₂Wv₁ = RecursiveApply.rmatmul2(Dᵀ, res.Wv₁, i, j)
     Dᵀ₁Wv₂ = RecursiveApply.rmatmul1(Dᵀ, res.Wv₂, i, j)
-    return RecursiveApply.rmap(x -> Geometry.Contravariant3Vector(-x / WJ), Dᵀ₁Wv₂ ⊟ Dᵀ₂Wv₁)
+    return RecursiveApply.rmap(
+        x -> Geometry.Contravariant3Vector(-x / WJ),
+        Dᵀ₁Wv₂ ⊟ Dᵀ₂Wv₁,
+    )
 end
 
-function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant12Vector}}, i, j)
+function get_node(
+    field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant12Vector}},
+    i,
+    j,
+)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -646,7 +695,11 @@ function get_node(field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravari
     Dᵀ₁Wv₃ = RecursiveApply.rmatmul1(Dᵀ, res.Wv₃, i, j)
     Dᵀ₂Wv₃ = RecursiveApply.rmatmul2(Dᵀ, res.Wv₃, i, j)
     #(D₂v₃ - D₃v₂, D₃v₁ - D₁v₃, D₁v₂ - D₂v₁)
-    return RecursiveApply.rmap((x, y) ->  Geometry.Contravariant12Vector(-x / WJ, y / WJ), Dᵀ₂Wv₃, Dᵀ₁Wv₃)
+    return RecursiveApply.rmap(
+        (x, y) -> Geometry.Contravariant12Vector(-x / WJ, y / WJ),
+        Dᵀ₂Wv₃,
+        Dᵀ₁Wv₃,
+    )
 end
 
 abstract type TensorOperator <: SpectralElementOperator end
@@ -676,11 +729,12 @@ struct Interpolate{S} <: TensorOperator
 end
 
 
-struct InterpolateResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
+struct InterpolateResult{S, Nq, M, TM} <: OperatorSlabResult{S, Nq}
     Imat::M
     temp2::TM
 end
-InterpolateResult{S,Nq}(Imat::M,temp2::TM) where {S,Nq,M,TM} = InterpolateResult{S,Nq,M,TM}(Imat, temp2)
+InterpolateResult{S, Nq}(Imat::M, temp2::TM) where {S, Nq, M, TM} =
+    InterpolateResult{S, Nq, M, TM}(Imat, temp2)
 
 
 function allocate_work(op::Interpolate, arg)
@@ -708,13 +762,13 @@ function apply_slab(op::Interpolate, (mat, temp1, temp2), slab_field, h)
     space_out = slab(op.space, h)
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
     for i in 1:Nq_in, j in 1:Nq_in
-        temp1[i,j] = get_node(slab_field, i, j)
+        temp1[i, j] = get_node(slab_field, i, j)
     end
     for j in 1:Nq_in, i in 1:Nq_out
         temp2[i, j] = RecursiveApply.rmatmul1(mat, temp1, i, j)
     end
     S = eltype(slab_field)
-    return Field(InterpolateResult{S,Nq_out}(mat, temp2), space_out)
+    return Field(InterpolateResult{S, Nq_out}(mat, temp2), space_out)
 end
 
 function get_node(field::Fields.SlabField{<:InterpolateResult}, i, j)
@@ -745,12 +799,13 @@ struct Restrict{S} <: TensorOperator
     space::S
 end
 
-struct RestrictResult{S,Nq,M,TM}  <: OperatorSlabResult{S,Nq}
+struct RestrictResult{S, Nq, M, TM} <: OperatorSlabResult{S, Nq}
     ImatT::M
     temp2::TM
 end
 
-RestrictResult{S,Nq}(ImatT::M,temp2::TM) where {S,Nq,M,TM} = RestrictResult{S,Nq,M,TM}(ImatT, temp2)
+RestrictResult{S, Nq}(ImatT::M, temp2::TM) where {S, Nq, M, TM} =
+    RestrictResult{S, Nq, M, TM}(ImatT, temp2)
 
 function allocate_work(op::Restrict, arg)
     space_in = axes(arg)
@@ -761,7 +816,7 @@ function allocate_work(op::Restrict, arg)
         Float64,
         space_in.quadrature_style,
         space_out.quadrature_style,
-        )
+    )
 
     S = eltype(arg)
     # TODO: switch memory order?
@@ -777,20 +832,23 @@ function apply_slab(op::Restrict, (ImatT, temp1, temp2), slab_field, h)
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
     local_geometry_slab = space_in.local_geometry
     for i in 1:Nq_in, j in 1:Nq_in
-        temp1[i,j] = local_geometry_slab.WJ[i,j] ⊠ get_node(slab_field, i, j)
+        temp1[i, j] = local_geometry_slab.WJ[i, j] ⊠ get_node(slab_field, i, j)
     end
     for j in 1:Nq_in, i in 1:Nq_out
         temp2[i, j] = RecursiveApply.rmatmul1(ImatT, temp1, i, j)
     end
     S = eltype(slab_field)
-    return Field(RestrictResult{S,Nq_out}(ImatT, temp2), space_out)
+    return Field(RestrictResult{S, Nq_out}(ImatT, temp2), space_out)
 end
 
 function get_node(field::Fields.SlabField{<:RestrictResult}, i, j)
     res = Fields.field_values(field)
     space_out = axes(field)
     local_geometry_slab = space_out.local_geometry
-    return RecursiveApply.rdiv(RecursiveApply.rmatmul2(res.ImatT, res.temp2, i, j), local_geometry_slab.WJ[i,j])
+    return RecursiveApply.rdiv(
+        RecursiveApply.rmatmul2(res.ImatT, res.temp2, i, j),
+        local_geometry_slab.WJ[i, j],
+    )
 end
 
 
@@ -968,7 +1026,8 @@ function slab_divergence!(divflux, flux, space)
             ∂₁v₂ = RecursiveOperators.rmatmul1(D, Jv¹, i, j) # ∂(Jv¹)/∂ξ¹ = D[i,:]*Jv¹[:,j]
             # compute spectral deriv along second dimesion
             ∂₂v₁ = RecursiveOperators.rmatmul2(D, Jv², i, j)
-            divflux_slab[i, j] = Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
+            divflux_slab[i, j] =
+                Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
         end
     end
     return divflux
@@ -996,13 +1055,11 @@ function slab_strong_curl!(curlvec, vec, mesh)
             # we convert the vec to covariant coordinates (v₁, v₂),
             # and return an orthogonal vector in contravariant coordinates v³
             v₁[i, j] = RecursiveOperators.rmap(
-                x ->
-                    Geometry.covariant1(x, local_geometry),
+                x -> Geometry.covariant1(x, local_geometry),
                 vec_slab,
             )
             v₂[i, j] = RecursiveOperators.rmap(
-                x ->
-                    Geometry.covariant2(x, local_geometry),
+                x -> Geometry.covariant2(x, local_geometry),
                 vec_slab,
             )
         end
@@ -1013,7 +1070,8 @@ function slab_strong_curl!(curlvec, vec, mesh)
             ∂₁v₂ = RecursiveOperators.rmatmul1(D, v₂, i, j)
             # compute spectral deriv along second dimension
             ∂₂v₁ = RecursiveOperators.rmatmul2(D, v₁, i, j)
-            curlvec_slab[i, j] = Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
+            curlvec_slab[i, j] =
+                Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
         end
     end
     return curlvec
@@ -1041,13 +1099,11 @@ function slab_weak_curl!(curlvec, vec, mesh)
             # we convert the vec to covariant coordinates (v₁, v₂),
             # and return an orthogonal vector in contravariant coordinates v³
             v₁[i, j] = RecursiveOperators.rmap(
-                x ->
-                    Geometry.covariant1(x, local_geometry),
+                x -> Geometry.covariant1(x, local_geometry),
                 vec_slab,
             )
             v₂[i, j] = RecursiveOperators.rmap(
-                x ->
-                    Geometry.covariant2(x, local_geometry),
+                x -> Geometry.covariant2(x, local_geometry),
                 vec_slab,
             )
         end
@@ -1058,7 +1114,8 @@ function slab_weak_curl!(curlvec, vec, mesh)
             ∂₁v₂ = RecursiveOperators.rmatmul1(D, v₂, i, j)
             # compute spectral deriv along second dimension
             ∂₂v₁ = RecursiveOperators.rmatmul2(D, v₁, i, j)
-            curlvec_slab[i, j] = Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
+            curlvec_slab[i, j] =
+                Contravariant3Vector(inv(local_geometry.J) ⊠ (∂₁v₂ ⊟ ∂₂v₁))
         end
     end
     return curlvec

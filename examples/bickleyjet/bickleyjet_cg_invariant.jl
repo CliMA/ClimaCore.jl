@@ -70,8 +70,8 @@ end
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function energy(state, p)
-  @unpack ρ, u = stateopen
-  return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+    @unpack ρ, u = stateopen
+    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
@@ -92,9 +92,12 @@ function rhs!(dydt, y, _, t)
     @unpack g = parameters
 
 
-    @. dydt.ρ = R(- div(I(y.ρ) * I(y.u)))
-    @. dydt.u = R(- grad(g*I(y.ρ) + norm(I(y.u))^2/2) + Cartesian12Vector(IJ * (I(y.u) × (curl(I(y.u))))))
-    @. dydt.ρθ = R(- div(I(y.ρθ) * I(y.u)))
+    @. dydt.ρ = R(-div(I(y.ρ) * I(y.u)))
+    @. dydt.u = R(
+        -grad(g * I(y.ρ) + norm(I(y.u))^2 / 2) +
+        Cartesian12Vector(IJ * (I(y.u) × (curl(I(y.u))))),
+    )
+    @. dydt.ρθ = R(-div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
 
@@ -142,5 +145,3 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
-
-

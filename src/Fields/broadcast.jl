@@ -40,7 +40,10 @@ function Base.copy(
 end
 
 
-function slab(bc::Base.Broadcast.Broadcasted{Style}, h) where {Style<:AbstractFieldStyle}
+function slab(
+    bc::Base.Broadcast.Broadcasted{Style},
+    h,
+) where {Style <: AbstractFieldStyle}
     _args = map(a -> slab(a, h), bc.args)
     _axes = slab(axes(bc), h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
@@ -127,20 +130,49 @@ Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
     Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
 
 # Specialize handling of vector-based functions to automatically add LocalGeometry information
-function Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(LinearAlgebra.norm), arg)
-     space = Fields.axes(arg)
-     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-     Base.Broadcast.broadcasted(fs, LinearAlgebra.norm, arg, Field(space.local_geometry, space))
-end
-
-function Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(LinearAlgebra.cross), arg1, arg2)
-    space = Fields.axes(arg1)
-    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-    Base.Broadcast.broadcasted(fs, LinearAlgebra.cross, arg1, arg2, Field(space.local_geometry, space))
-end
-
-function Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::Type{Cartesian12Vector}, arg)
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(LinearAlgebra.norm),
+    arg,
+)
     space = Fields.axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-    Base.Broadcast.broadcasted(fs, Cartesian12Vector, arg, Field(space.local_geometry, space))
+    Base.Broadcast.broadcasted(
+        fs,
+        LinearAlgebra.norm,
+        arg,
+        Field(space.local_geometry, space),
+    )
+end
+
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(LinearAlgebra.cross),
+    arg1,
+    arg2,
+)
+    space = Fields.axes(arg1)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        LinearAlgebra.cross,
+        arg1,
+        arg2,
+        Field(space.local_geometry, space),
+    )
+end
+
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::Type{Cartesian12Vector},
+    arg,
+)
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        Cartesian12Vector,
+        arg,
+        Field(space.local_geometry, space),
+    )
 end

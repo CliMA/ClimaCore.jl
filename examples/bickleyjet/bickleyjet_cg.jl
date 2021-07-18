@@ -69,7 +69,11 @@ y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
     u = ρu ./ ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I), ρθ = ρθ .* u)
+    return (
+        ρ = ρu,
+        ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I),
+        ρθ = ρθ .* u,
+    )
 end
 
 function energy(state, p)
@@ -90,7 +94,7 @@ function rhs!(dydt, y, _, t)
     R = Operators.Restrict(space)
 
     rparameters = Ref(parameters)
-    @. dydt = -R( div(flux(I(y), rparameters)) )
+    @. dydt = -R(div(flux(I(y), rparameters)))
 
     Spaces.weighted_dss!(dydt)
     return dydt
@@ -119,7 +123,7 @@ using Plots
 
 t = 30.0
 y = sol.u[31]
-plot(y.ρθ, clim=(-1,1))
+plot(y.ρθ, clim = (-1, 1))
 
 dydt = rhs!(similar(y), y, nothing, t)
 plot(dydt.ρθ)
@@ -127,7 +131,7 @@ plot(dydt.ρθ)
 
 function invariant_form(y)
     @unpack ρ, ρu, ρθ = y
-    return (ρ=ρ, u=ρu/ρ, ρθ=ρθ)
+    return (ρ = ρ, u = ρu / ρ, ρθ = ρθ)
 end
 
 z = invariant_form.(y)
@@ -139,7 +143,7 @@ function flux_rhs!(dydt, y, _, t)
     R = Operators.Restrict(space)
 
     rparameters = Ref(parameters)
-    @. dydt = -R( div(flux(I(y), rparameters)) )
+    @. dydt = -R(div(flux(I(y), rparameters)))
 
     Spaces.weighted_dss!(dydt)
     return dydt
@@ -162,9 +166,13 @@ function invariant_rhs!(dydt, y, _, t)
     J = Fields.Field(Ispace.local_geometry.J, Ispace)
 
 
-    @. dydt.ρ = - R(div(I(y.ρ) * I(y.u)))
-    @. dydt.u = - R(grad(g*I(y.ρ) + norm(I(y.u))^2/2) + J * (I(y.u) × (curl(I(y.u)))))
-    @. dydt.ρθ = - R(div(I(y.ρθ) * I(y.u)))
+    @. dydt.ρ = -R(div(I(y.ρ) * I(y.u)))
+    @. dydt.u =
+        -R(
+            grad(g * I(y.ρ) + norm(I(y.u))^2 / 2) +
+            J * (I(y.u) × (curl(I(y.u)))),
+        )
+    @. dydt.ρθ = -R(div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
 
@@ -178,7 +186,7 @@ function flux_form_dt(dzdt, z)
     dρdt = dzdt.ρ
     dudt = dzdt.u
     dρθdt = dzdt.ρθ
-    return (ρ=dρdt, ρu=ρ*dudt+dρdt*u, ρθ=dρθdt)
+    return (ρ = dρdt, ρu = ρ * dudt + dρdt * u, ρθ = dρθdt)
 end
 
 
@@ -187,7 +195,7 @@ dydt_z = flux_form_dt.(dzdt, z)
 function init_s(coord)
     ρ = 1.0
     θ = 1.0
-    u = Cartesian12Vector(sin(coord.x1),cos(coord.x2))
+    u = Cartesian12Vector(sin(coord.x1), cos(coord.x2))
 
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
@@ -208,7 +216,7 @@ function velfield(coord)
     k2 = 0.3
     l1 = 0.5
     l2 = 0.7
-    Cartesian12Vector(sin(k1*x+l1*y), cos(k2*x+l2*y))
+    Cartesian12Vector(sin(k1 * x + l1 * y), cos(k2 * x + l2 * y))
 end
 
 v = velfield.(coords)
@@ -221,7 +229,7 @@ function curlfield(coord)
     k2 = 0.3
     l1 = 0.5
     l2 = 0.7
-    return -k2*sin(k2*x+l2*y) - l1*cos(k1*x+l1*y)
+    return -k2 * sin(k2 * x + l2 * y) - l1 * cos(k1 * x + l1 * y)
 end
 refcurlv = curlfield.(coords)
 

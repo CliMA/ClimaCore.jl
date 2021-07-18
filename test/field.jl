@@ -81,5 +81,5 @@ end
 
 @testset "Special case handling for broadcased norm to pass through space local geometry" begin
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
-    @test norm.(u) ≈ hypot(4/8/2,4/10/2) .* ones(space)
+    @test norm.(u) ≈ hypot(4 / 8 / 2, 4 / 10 / 2) .* ones(space)
 end
