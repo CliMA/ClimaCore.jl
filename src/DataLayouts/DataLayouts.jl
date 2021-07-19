@@ -92,33 +92,19 @@ end
 
 # TODO: if this gets used inside kernels, move to a generated function?
 
-@generated function _getproperty(data::AbstractData{S}, name::Val{Name}) where {S,Name}
-    errorstring = "Invalid foo field name $(Name)"
+@generated function _getproperty(data::AbstractData{S}, ::Val{Name}) where {S,Name}
+    errorstring = "Invalid field name $(Name) for type $(S)"
     i = findfirst(isequal(Name), fieldnames(S))
-    if i == nothing
+    if i === nothing
         return :(error($errorstring))
     end
-    return :(Base.@_inline_meta; getproperty(data, $i))
+    static_idx = Val{i}()
+    return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
 end
 
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-    #=
-    if @generated 
-    	errorstring = "Invalid field name $(name)"
-    	i = findfirst(isequal(name), fieldnames(S))
-	if i == nothing
-	    return :(error($errorstring))
-	else
-	    return :(Base.@_inline_meta; getproperty(data, $i)) 
-    	end
-    else
-    =#
-    	i = findfirst(isequal(name), fieldnames(S))
-    	i === nothing && error("Invalid field name $(name)")
-    	return getproperty(data, i)
-    #end
+    _getproperty(data, Val{name}())
 end
-
 
 struct IJKFVH{S, Nij, Nk, A} <: Data3D{S, Nij, Nk}
     array::A
@@ -131,6 +117,14 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
+@generated function _property_view(data::IJKFVH{S, Nij, Nk}, idx::Val{Idx}) where {S, Nij, Nk, Idx}
+    SS = fieldtype(S, Idx)
+    T = eltype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJKFVH{$SS, $Nij, $Nk}(view(parent(data), :, :, :, $field_byterange, :, :)))
+end
 
 @inline function Base.getproperty(
     data::IJKFVH{S, Nij, Nk},
@@ -174,6 +168,16 @@ end
 Base.length(data::IJFH) = size(parent(data), 4)
 Base.size(data::Data2D) = (length(data),)
 
+@generated function _property_view(data::IJFH{S, Nij}, idx::Val{Idx}) where {S, Nij, Idx}
+    SS = fieldtype(S, Idx)
+    T = eltype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJFH{$SS, $Nij}(view(parent(data), :, :, $field_byterange, :)))
+end
+
+
 @inline function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
@@ -208,6 +212,16 @@ Base.length(data::IFH) = size(parent(data), 3)
     @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
     IF{S, Ni}(view(parent(data), :, :, h))
 end
+
+@generated function _property_view(data::IFH{S, Ni}, i::Val{Idx}) where {S, Ni, Idx}
+    SS = fieldtype(S, Idx)
+    T = eltype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJFH{$SS, $Ni}(view(parent(data), :, $field_byterange, :)))
+end
+
 
 @inline function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
@@ -284,6 +298,16 @@ end
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
+
+@generated function _property_view(data::IJF{S, Nij}, i::Val{Idx}) where {S, Nij, Idx}
+    SS = fieldtype(S, Idx)
+    T = eltype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJF{$SS, $Nij}(view(parent(data), :, :, $field_byterange)))
+end
+
 
 @inline function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)

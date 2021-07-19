@@ -12,7 +12,6 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
     l = 0.5, # Gaussian width
@@ -21,7 +20,6 @@ const parameters = (
     c = 2,
     g = 10,
 )
-
 
 domain = Domains.RectangleDomain(
     -2π..2π,
@@ -106,10 +104,13 @@ end
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
-@code_typed rhs!(dydt, y0, nothing, 0.0)
+#=@profview for _ in 1:100
+    rhs!(dydt, y0, nothing, 0.0)
+end
+=#
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 10.0))
+prob = ODEProblem(rhs!, y0, (0.0, 80.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -119,6 +120,7 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
+#=
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
@@ -145,3 +147,4 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
+=#

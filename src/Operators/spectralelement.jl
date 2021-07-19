@@ -167,7 +167,7 @@ function slab(
 end
 abstract type OperatorSlabResult{S, Nq} <: DataLayouts.DataSlab2D{S, Nq} end
 
-Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) =
+@inline Base.getproperty(slab_res::OperatorSlabResult, name::Symbol) =
     getfield(slab_res, name)
 
 function Base.copyto!(
@@ -200,20 +200,18 @@ function copy_slab!(slab_out, res)
 end
 
 
+@inline get_node(scalar, i, j) = scalar[]
+
 @inline get_node(field::Fields.SlabField, i, j) =
     getindex(Fields.field_values(field), i, j)
-function get_node(bc::Base.Broadcast.Broadcasted, i, j)
+
+@inline function get_node(bc::Base.Broadcast.Broadcasted, i, j)
     args = map(arg -> get_node(arg, i, j), bc.args)
     bc.f(args...)
 end
-@inline get_node(scalar, i, j) = scalar[]
 
-set_node!(field::Fields.SlabField, i, j, val) =
+@inline set_node!(field::Fields.SlabField, i, j, val) =
     setindex!(Fields.field_values(field), val, i, j)
-
-
-
-
 
 #res = Broadcasted{CompositeSpectralStyle}(-, Field(StrongDivergenceResult{S, Nq}(Jv¹, Jv²), slab_space))
 
@@ -230,15 +228,16 @@ end
 =#
 
 _apply_slab(x, h) = x
+
 _apply_slab(sbc::SpectralBroadcasted, h) =
     apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
+
 _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
     Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
         bc.f,
         map(a -> _apply_slab(a, h), bc.args),
         bc.axes,
     )
-
 
 function Base.Broadcast.BroadcastStyle(
     ::Type{SB},
@@ -830,9 +829,9 @@ function apply_slab(op::Restrict, (ImatT, temp1, temp2), slab_field, h)
     Nq_in = Quadratures.degrees_of_freedom(space_in.quadrature_style)
     space_out = slab(op.space, h)
     Nq_out = Quadratures.degrees_of_freedom(space_out.quadrature_style)
-    local_geometry_slab = space_in.local_geometry
+    WJ = space_in.local_geometry.WJ
     for i in 1:Nq_in, j in 1:Nq_in
-        temp1[i, j] = local_geometry_slab.WJ[i, j] ⊠ get_node(slab_field, i, j)
+        temp1[i, j] = WJ[i, j] ⊠ get_node(slab_field, i, j)
     end
     for j in 1:Nq_in, i in 1:Nq_out
         temp2[i, j] = RecursiveApply.rmatmul1(ImatT, temp1, i, j)
@@ -841,13 +840,13 @@ function apply_slab(op::Restrict, (ImatT, temp1, temp2), slab_field, h)
     return Field(RestrictResult{S, Nq_out}(ImatT, temp2), space_out)
 end
 
-function get_node(field::Fields.SlabField{<:RestrictResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:RestrictResult}, i, j)
     res = Fields.field_values(field)
     space_out = axes(field)
-    local_geometry_slab = space_out.local_geometry
+    WJ = space_out.local_geometry.WJ
     return RecursiveApply.rdiv(
         RecursiveApply.rmatmul2(res.ImatT, res.temp2, i, j),
-        local_geometry_slab.WJ[i, j],
+        WJ[i, j],
     )
 end
 
@@ -1239,10 +1238,6 @@ function slab_weak_divergence!(
     end
     return divflux_slab
 end
-
-
-
-
 
 function slab_gradient!(∇field::Field, field::Field)
     @assert axes(∇field) === axes(field)
