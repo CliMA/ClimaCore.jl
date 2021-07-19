@@ -11,6 +11,28 @@
 # get_offset(array, S, offset) => S(...), next_offset
 import Base: @propagate_inbounds
 
+
+"""
+    basetype(S...)
+
+Compute the "base" floating point type of one or more types `S`. This will throw
+an error if there is no unique type.
+"""
+basetype(::Type{FT}) where {FT <: AbstractFloat} = FT
+basetype(::Type{NamedTuple{names, T}}) where {names, T} = basetype(T)
+function basetype(::Type{S}) where {S}
+    isprimitivetype(S) && error("$S is not a floating point type")
+    basetype(ntuple(i -> fieldtype(S, i), fieldcount(S))...)
+end
+function basetype(::Type{S1}, Sx...) where {S1}
+    FT1 = basetype(S1)
+    FT2 = basetype(Sx...)
+    error("Inconsistent basetypes $FT1 and $FT2")
+    return FT1
+end
+
+
+
 """
     StructArrays.bypass_constructor(T, args)
 
