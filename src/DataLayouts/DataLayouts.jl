@@ -91,10 +91,32 @@ function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
 end
 
 # TODO: if this gets used inside kernels, move to a generated function?
+
+@generated function _getproperty(data::AbstractData{S}, name::Val{Name}) where {S,Name}
+    errorstring = "Invalid foo field name $(Name)"
+    i = findfirst(isequal(Name), fieldnames(S))
+    if i == nothing
+        return :(error($errorstring))
+    end
+    return :(Base.@_inline_meta; getproperty(data, $i))
+end
+
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-    i = findfirst(isequal(name), fieldnames(S))
-    i === nothing && error("Invalid field name $(name)")
-    return getproperty(data, i)
+    #=
+    if @generated 
+    	errorstring = "Invalid field name $(name)"
+    	i = findfirst(isequal(name), fieldnames(S))
+	if i == nothing
+	    return :(error($errorstring))
+	else
+	    return :(Base.@_inline_meta; getproperty(data, $i)) 
+    	end
+    else
+    =#
+    	i = findfirst(isequal(name), fieldnames(S))
+    	i === nothing && error("Invalid field name $(name)")
+    	return getproperty(data, i)
+    #end
 end
 
 
@@ -110,7 +132,7 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
 end
 
 
-function Base.getproperty(
+@inline function Base.getproperty(
     data::IJKFVH{S, Nij, Nk},
     i::Integer,
 ) where {S, Nij, Nk}
@@ -187,7 +209,7 @@ Base.length(data::IFH) = size(parent(data), 3)
     IF{S, Ni}(view(parent(data), :, :, h))
 end
 
-function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
+@inline function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, f)
@@ -263,7 +285,7 @@ function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
 
-function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
+@inline function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
@@ -314,7 +336,7 @@ function Base.size(::IF{S, Ni}) where {S, Ni}
     return (Ni,)
 end
 
-function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
+@inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, f)
@@ -379,7 +401,7 @@ Base.size(data::VF) = (length(data),)
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
 Base.lastindex(data::VF) = length(data)
 
-function Base.getproperty(data::VF{S}, i::Integer) where {S}
+@inline function Base.getproperty(data::VF{S}, i::Integer) where {S}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
@@ -388,15 +410,15 @@ function Base.getproperty(data::VF{S}, i::Integer) where {S}
     VF{SS}(view(array, :, (offset + 1):(offset + len)))
 end
 
-function Base.getindex(data::VF{S}, i::Integer) where {S}
+@propagate_inbounds function Base.getindex(data::VF{S}, i::Integer) where {S}
     get_struct(view(parent(data), i, :), S)
 end
 
-function Base.getindex(data::VF{S}, I::CartesianIndex{1}) where {S}
+@propagate_inbounds function Base.getindex(data::VF{S}, I::CartesianIndex{1}) where {S}
     getindex(data, I[1])
 end
 
-function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
+@inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
     set_struct!(view(parent(data), v, :), val)
 end
 

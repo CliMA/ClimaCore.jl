@@ -43,14 +43,15 @@ const CenterFiniteDifferenceField{V, S} = Field{
 
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
-field_values(field::Field) = getfield(field, :values)
+@inline field_values(field::Field) = getfield(field, :values)
 
 # Define the axes field to be the todata(bc) of the return field
-Base.axes(field::Field) = getfield(field, :space)
+@inline Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
 @inline Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), axes(field))
+    Field(DataLayouts._getproperty(field_values(field), Val{name}()), axes(field))
+
 @inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 

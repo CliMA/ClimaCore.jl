@@ -100,16 +100,16 @@ function rhs!(dydt, y, _, t)
     @. dydt.ρθ = R(-div(I(y.ρθ) * I(y.u)))
 
     Spaces.weighted_dss!(dydt)
-
     return dydt
 end
 
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
+@code_typed rhs!(dydt, y0, nothing, 0.0)
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 10.0))
 sol = solve(
     prob,
     SSPRK33(),

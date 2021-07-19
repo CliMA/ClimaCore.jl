@@ -348,7 +348,7 @@ function apply_slab(op::StrongDivergence, (Jv¹, Jv²), slab_flux, h)
     return Field(StrongDivergenceResult{S, Nq}(Jv¹, Jv²), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:StrongDivergenceResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:StrongDivergenceResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -396,7 +396,7 @@ function apply_slab(op::WeakDivergence, (WJv¹, WJv²), slab_flux, h)
     return Field(WeakDivergenceResult{S, Nq}(WJv¹, WJv²), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:WeakDivergenceResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -446,7 +446,7 @@ function apply_slab(op::Gradient, M, slab_field, h)
     return Field(GradientResult{S, Nq}(M), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -503,7 +503,7 @@ function apply_slab(op::WeakGradient, WM, slab_field, h)
     return Field(WeakGradientResult{S, Nq}(WM), slab_space)
 end
 
-function get_node(field::Fields.SlabField{<:WeakGradientResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:WeakGradientResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -585,7 +585,7 @@ function apply_slab(op::StrongCurl, (v₁, v₂, v₃), slab_field, h)
     return Field(StrongCurlResult{S, Nq}(v₁, v₂, v₃), slab_space)
 end
 
-function get_node(
+@inline function get_node(
     field::Fields.SlabField{
         <:StrongCurlResult{<:Geometry.Contravariant3Vector},
     },
@@ -662,7 +662,7 @@ function apply_slab(op::WeakCurl, (Wv₁, Wv₂, Wv₃), slab_field, h)
     return Field(WeakCurlResult{S, Nq}(Wv₁, Wv₂, Wv₃), slab_space)
 end
 
-function get_node(
+@inline function get_node(
     field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant3Vector}},
     i,
     j,
@@ -681,7 +681,7 @@ function get_node(
     )
 end
 
-function get_node(
+@inline function get_node(
     field::Fields.SlabField{<:WeakCurlResult{<:Geometry.Contravariant12Vector}},
     i,
     j,
@@ -771,7 +771,7 @@ function apply_slab(op::Interpolate, (mat, temp1, temp2), slab_field, h)
     return Field(InterpolateResult{S, Nq_out}(mat, temp2), space_out)
 end
 
-function get_node(field::Fields.SlabField{<:InterpolateResult}, i, j)
+@inline function get_node(field::Fields.SlabField{<:InterpolateResult}, i, j)
     res = Fields.field_values(field)
     return RecursiveApply.rmatmul2(res.Imat, res.temp2, i, j)
 end
