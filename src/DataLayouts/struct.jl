@@ -27,7 +27,7 @@ end
 function basetype(::Type{S1}, Sx...) where {S1}
     FT1 = basetype(S1)
     FT2 = basetype(Sx...)
-    error("Inconsistent basetypes $FT1 and $FT2")
+    FT1 !== FT2 && error("Inconsistent basetypes $FT1 and $FT2")
     return FT1
 end
 
