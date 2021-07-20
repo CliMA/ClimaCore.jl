@@ -26,30 +26,30 @@ b = FT(1.0)
 n = 10
 α = FT(0.1)
 
-domain = Domains.IntervalDomain(a, b, x3boundary = (:bottom, :top))
-mesh = Meshes.IntervalMesh(domain, nelems = n)
+domain = Domains.IntervalDomain(a, b, x3boundary = (:bottom, :top)) # struct
+mesh = Meshes.IntervalMesh(domain, nelems = n) # struct, allocates face boundaries to 5,6
 
-cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-T = Fields.zeros(FT, cs)
+cs = Spaces.CenterFiniteDifferenceSpace(mesh) # collection of the above, discretises space into FD and provides coords
+T = Fields.zeros(FT, cs) # initiates progostic var
 
 # Solve Heat Equation: ∂_t T = α ∇²T
 function ∑tendencies!(dT, T, _, t)
 
-    bcs_bottom = Operators.SetValue(FT(0.0))
+    bcs_bottom = Operators.SetValue(FT(0.0)) # struct w bottom BCs
     bcs_top = Operators.SetGradient(FT(1.0))
 
-    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
+    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top) # gradient struct w BCs
     gradf2c = Operators.GradientF2C()
 
     return @. dT = α * gradf2c(gradc2f(T))
 end
 
-@show ∑tendencies!(similar(T), T, nothing, 0.0); # initialise dt(uninitialised mutable struct,)
+@show ∑tendencies!(similar(T), T, nothing, 0.0); 
 
 # Solve the ODE operator
 Δt = 0.02
 
-prob = ODEProblem(∑tendencies!, T, (0.0, 10.0))
+prob = ODEProblem(∑tendencies!, T, (0.0, 10.0)) #ODEProblem(f,u0,tspan; _..) https://diffeq.sciml.ai/release-2.1/types/ode_types.html
 sol = solve(
     prob,
     SSPRK33(),
@@ -57,7 +57,20 @@ sol = solve(
     saveat = 10 * Δt,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
-);
+);  
+# ~/.julia/packages/DiffEqBase/NarCz/src/solve.jl:66
+# for options for solve, see: https://diffeq.sciml.ai/stable/basics/common_solver_opts/
+
+prob = ODEProblem(∑tendencies!, sol.u[end], (10.0, 20.0)) #ODEProblem(f,u0,tspan; _..) https://diffeq.sciml.ai/release-2.1/types/ode_types.html
+sol = solve(
+    prob,
+    SSPRK33(),
+    dt = Δt,
+    saveat = 10 * Δt,
+    progress = true,
+    progress_message = (dt, u, p, t) -> t,
+);  
+
 
 ENV["GKSwstype"] = "nul"
 import Plots
