@@ -1,7 +1,24 @@
 using Test
 using ClimaCore.DataLayouts
 using StaticArrays
-using ClimaCore.DataLayouts: get_struct, set_struct!
+using ClimaCore.DataLayouts: get_struct, set_struct!, basetype
+
+
+@testset "basetype" begin
+    @test basetype(Float64) === Float64
+    @test basetype(Float32) === Float32
+    @test basetype(Complex{Float64}) === Float64
+    @test basetype(Complex{Float32}) === Float32
+
+    @test basetype(Float64, Complex{Float64}) === Float64
+    @test basetype(Tuple{Float64, Complex{Float64}}) === Float64
+    @test basetype(typeof((a = 1.0, b = (2.0, 3.0, 4.0)))) === Float64
+    @test basetype(typeof(SA[1.0 2.0; 3.0 4.0])) === Float64
+
+    @test_throws Exception basetype(Int)
+    @test_throws Exception basetype(Tuple{Float32, Float64})
+    @test_throws Exception basetype(typeof((a = 1, b = (2.0, 3.0))))
+end
 
 @testset "get_struct / set_struct!" begin
     array = [1.0, 2.0, 3.0]
