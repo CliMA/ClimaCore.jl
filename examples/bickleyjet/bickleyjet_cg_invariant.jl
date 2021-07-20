@@ -67,6 +67,10 @@ end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
+II = Operators.Interpolate(Ispace)
+const Iyp = @. II(y0.ρ)
+const Iyu = @. II(y0.u) 
+
 function energy(state, p)
     @unpack ρ, u = stateopen
     return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
@@ -88,15 +92,16 @@ function rhs!(dydt, y, _, t)
     curl = Operators.StrongCurl()
 
     @unpack g = parameters
-
-
-    @. dydt.ρ = R(-div(I(y.ρ) * I(y.u)))
-    @. dydt.u = R(
-        -grad(g * I(y.ρ) + norm(I(y.u))^2 / 2) +
-        Cartesian12Vector(IJ * (I(y.u) × (curl(I(y.u))))),
-    )
-    @. dydt.ρθ = R(-div(I(y.ρθ) * I(y.u)))
-
+    @. begin 
+        Iyp = I(y.ρ)
+        Iyu = I(y.u)
+        dydt.ρ = R(-div(Iyp * Iyu))
+        dydt.u = R(
+                -grad(g * Iyp + norm(Iyu)^2 / 2) +
+                Cartesian12Vector(IJ * (Iyu × curl(Iyu)))
+            )
+        dydt.ρθ = R(-div(I(y.ρθ) * Iyu))
+    end
     Spaces.weighted_dss!(dydt)
     return dydt
 end
@@ -104,10 +109,9 @@ end
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
-#=@profview for _ in 1:100
-    rhs!(dydt, y0, nothing, 0.0)
-end
-=#
+# @profview for _ in 1:100
+#    rhs!(dydt, y0, nothing, 0.0)
+#end
 
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
