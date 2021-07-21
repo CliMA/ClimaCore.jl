@@ -43,15 +43,18 @@ const CenterFiniteDifferenceField{V, S} = Field{
 
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
-field_values(field::Field) = getfield(field, :values)
+@inline field_values(field::Field) = getfield(field, :values)
 
-# Define the axes field to be the space of the return field
-Base.axes(field::Field) = getfield(field, :space)
+# Define the axes field to be the todata(bc) of the return field
+@inline Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
-Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), axes(field))
-Base.getproperty(field::Field, name::Integer) =
+@inline Base.getproperty(field::Field, name::Symbol) = Field(
+    DataLayouts._getproperty(field_values(field), Val{name}()),
+    axes(field),
+)
+
+@inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))
@@ -62,15 +65,12 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-
-function slab(field::Field, h)
+slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
-end
-
+const SlabField{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
-
-
 
 # nice printing
 # follow x-array like printing?
@@ -138,6 +138,7 @@ function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     fill!(data, zero(eltype(data)))
     return field
 end
+Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(similar(Spaces.coordinates(space), FT), space)
@@ -145,6 +146,7 @@ function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     fill!(data, one(eltype(data)))
     return field
 end
+Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space), space)
 
 function Base.zero(field::Field)
     zfield = similar(field)
@@ -193,5 +195,10 @@ function Spaces.horizontal_dss!(field::Field)
     Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
+function Spaces.weighted_dss!(field::Field)
+    Spaces.weighted_dss!(field_values(field), axes(field))
+    return field
+end
+
 
 end # module

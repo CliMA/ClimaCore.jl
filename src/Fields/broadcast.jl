@@ -24,28 +24,11 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(field::Field) = field
 
-# Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
-# Required for ODE solvers
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(+), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(-), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊟, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(*), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊠, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(/), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rdiv, args...)
-
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
-    Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
-
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
 # we implement our own to avoid the type-widening code, and throw a more useful error
-@inline function Base.copy(
+function Base.copy(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractFieldStyle}
     ElType = eltype(bc)
@@ -55,6 +38,17 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     end
     error("cannot infer concrete eltype of $(bc.f) on $(map(eltype, bc.args))")
 end
+
+
+function slab(
+    bc::Base.Broadcast.Broadcasted{Style},
+    h,
+) where {Style <: AbstractFieldStyle}
+    _args = map(a -> slab(a, h), bc.args)
+    _axes = slab(axes(bc), h)
+    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+end
+
 
 # Return underlying DataLayout object, DataStyle of broadcasted
 # for `Base.similar` of a Field
@@ -116,4 +110,64 @@ end
 
 function Base.Broadcast.check_broadcast_shape(::AbstractSpace, ax2::Tuple)
     error("$ax2 is not a AbstractSpace")
+end
+
+# Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
+# Required for ODE solvers
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(+), args...) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
+
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(-), args...) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊟, args...)
+
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(*), args...) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.:⊠, args...)
+
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(/), args...) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.rdiv, args...)
+
+Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(muladd), args...) =
+    Base.Broadcast.broadcasted(fs, RecursiveApply.rmuladd, args...)
+
+# Specialize handling of vector-based functions to automatically add LocalGeometry information
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(LinearAlgebra.norm),
+    arg,
+)
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        LinearAlgebra.norm,
+        arg,
+        Field(space.local_geometry, space),
+    )
+end
+
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(LinearAlgebra.cross),
+    arg1,
+    arg2,
+)
+    space = Fields.axes(arg1)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        LinearAlgebra.cross,
+        arg1,
+        arg2,
+        Field(space.local_geometry, space),
+    )
+end
+
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::Type{V},
+    arg,
+) where {V <: Geometry.CustomAxisFieldVector}
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(fs, V, arg, Field(space.local_geometry, space))
 end
