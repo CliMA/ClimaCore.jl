@@ -29,18 +29,18 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
     @test coord_slab[4, 4] ≈ Cartesian2DPoint(5.0, 8.0)
 
     local_geometry_slab = slab(space.local_geometry, 1)
+    dss_weights_slab = slab(space.dss_weights, 1)
+
+
     for i in 1:4, j in 1:4
         @test local_geometry_slab[i, j].∂ξ∂x ≈ @SMatrix [2/8 0; 0 2/10]
         @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
         @test local_geometry_slab[i, j].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]
         if i in (1, 4)
-            @test 2 *
-                  local_geometry_slab[i, j].invM *
-                  local_geometry_slab[i, j].WJ ≈ 1
+            @test dss_weights_slab[i, j] ≈ 1 / 2
         else
-            @test local_geometry_slab[i, j].invM *
-                  local_geometry_slab[i, j].WJ ≈ 1
+            @test dss_weights_slab[i, j] ≈ 1
         end
     end
 

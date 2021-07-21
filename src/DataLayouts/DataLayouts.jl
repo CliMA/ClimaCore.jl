@@ -91,12 +91,23 @@ function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
 end
 
 # TODO: if this gets used inside kernels, move to a generated function?
-function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-    i = findfirst(isequal(name), fieldnames(S))
-    i === nothing && error("Invalid field name")
-    return getproperty(data, i)
+
+@generated function _getproperty(
+    data::AbstractData{S},
+    ::Val{Name},
+) where {S, Name}
+    errorstring = "Invalid field name $(Name) for type $(S)"
+    i = findfirst(isequal(Name), fieldnames(S))
+    if i === nothing
+        return :(error($errorstring))
+    end
+    static_idx = Val{i}()
+    return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
 end
 
+@inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
+    _getproperty(data, Val{name}())
+end
 
 struct IJKFVH{S, Nij, Nk, A} <: Data3D{S, Nij, Nk}
     array::A
@@ -109,8 +120,21 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
+@generated function _property_view(
+    data::IJKFVH{S, Nij, Nk},
+    idx::Val{Idx},
+) where {S, Nij, Nk, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJKFVH{$SS, $Nij, $Nk}(
+        view(parent(data), :, :, :, $field_byterange, :, :),
+    ))
+end
 
-function Base.getproperty(
+@inline function Base.getproperty(
     data::IJKFVH{S, Nij, Nk},
     i::Integer,
 ) where {S, Nij, Nk}
@@ -152,7 +176,20 @@ end
 Base.length(data::IJFH) = size(parent(data), 4)
 Base.size(data::Data2D) = (length(data),)
 
-function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
+@generated function _property_view(
+    data::IJFH{S, Nij},
+    idx::Val{Idx},
+) where {S, Nij, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJFH{$SS, $Nij}(view(parent(data), :, :, $field_byterange, :)))
+end
+
+
+@inline function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
@@ -187,7 +224,20 @@ Base.length(data::IFH) = size(parent(data), 3)
     IF{S, Ni}(view(parent(data), :, :, h))
 end
 
-function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
+@generated function _property_view(
+    data::IFH{S, Ni},
+    i::Val{Idx},
+) where {S, Ni, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IFH{$SS, $Ni}(view(parent(data), :, $field_byterange, :)))
+end
+
+
+@inline function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, f)
@@ -263,7 +313,20 @@ function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij)
 end
 
-function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
+@generated function _property_view(
+    data::IJF{S, Nij},
+    i::Val{Idx},
+) where {S, Nij, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IJF{$SS, $Nij}(view(parent(data), :, :, $field_byterange)))
+end
+
+
+@inline function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
@@ -314,7 +377,7 @@ function Base.size(::IF{S, Ni}) where {S, Ni}
     return (Ni,)
 end
 
-function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
+@inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, f)
@@ -379,7 +442,16 @@ Base.size(data::VF) = (length(data),)
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
 Base.lastindex(data::VF) = length(data)
 
-function Base.getproperty(data::VF{S}, i::Integer) where {S}
+@generated function _property_view(data::VF{S}, idx::Val{Idx}) where {S, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(VF{$SS}(view(parent(data), :, $field_byterange)))
+end
+
+@inline function Base.getproperty(data::VF{S}, i::Integer) where {S}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
@@ -388,15 +460,18 @@ function Base.getproperty(data::VF{S}, i::Integer) where {S}
     VF{SS}(view(array, :, (offset + 1):(offset + len)))
 end
 
-function Base.getindex(data::VF{S}, i::Integer) where {S}
+@propagate_inbounds function Base.getindex(data::VF{S}, i::Integer) where {S}
     get_struct(view(parent(data), i, :), S)
 end
 
-function Base.getindex(data::VF{S}, I::CartesianIndex{1}) where {S}
+@propagate_inbounds function Base.getindex(
+    data::VF{S},
+    I::CartesianIndex{1},
+) where {S}
     getindex(data, I[1])
 end
 
-function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
+@inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
     set_struct!(view(parent(data), v, :), val)
 end
 

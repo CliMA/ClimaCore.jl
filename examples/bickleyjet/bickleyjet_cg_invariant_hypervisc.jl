@@ -12,7 +12,6 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
     l = 0.5, # Gaussian width
@@ -20,8 +19,8 @@ const parameters = (
     ρ₀ = 1.0, # reference density
     c = 2,
     g = 10,
+    D₄ = 1e-4, # hyperdiffusion coefficient
 )
-
 
 domain = Domains.RectangleDomain(
     -2π..2π,
@@ -32,14 +31,13 @@ domain = Domains.RectangleDomain(
 
 n1, n2 = 16, 16
 Nq = 4
-Nqh = 7
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-Iquad = Spaces.Quadratures.GLL{Nqh}()
-Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+const J = Fields.Field(space.local_geometry.J, space)
+
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -61,24 +59,13 @@ function init_state(x, p)
     # set initial tracer
     θ = sin(p.k * x2)
 
-    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
+    return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
-function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
-    u = ρu ./ ρ
-    return (
-        ρ = ρu,
-        ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I),
-        ρθ = ρθ .* u,
-    )
-end
-
 function energy(state, p)
-    @unpack ρ, ρu = state
-    u = ρu ./ ρ
+    @unpack ρ, u = state
     return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
 end
 
@@ -86,30 +73,50 @@ function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
-
 function rhs!(dydt, y, _, t)
 
-    I = Operators.Interpolate(Ispace)
-    div = Operators.WeakDivergence()
-    R = Operators.Restrict(space)
+    @unpack D₄, g = parameters
 
-    rparameters = Ref(parameters)
-    @. dydt = -R(div(flux(I(y), rparameters)))
+    sdiv = Operators.Divergence()
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    wgrad = Operators.WeakGradient()
+    curl = Operators.Curl()
+    wcurl = Operators.WeakCurl()
 
+    # compute hyperviscosity first
+    @. dydt.u =
+        wgrad(sdiv(y.u)) -
+        Cartesian12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+    @. dydt.ρθ = wdiv(grad(y.ρθ))
+
+    Spaces.weighted_dss!(dydt)
+
+    @. dydt.u =
+        -D₄ * (
+            wgrad(sdiv(dydt.u)) -
+            Cartesian12Vector(wcurl(Geometry.Covariant3Vector(curl(dydt.u))))
+        )
+    @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
+
+    # add in pieces
+    @. begin
+        dydt.ρ = -wdiv(y.ρ * y.u)
+        dydt.u +=
+            -grad(g * y.ρ + norm(y.u)^2 / 2) +
+            Cartesian12Vector(J * (y.u × curl(y.u)))
+        dydt.ρθ += -wdiv(y.ρθ * y.u)
+    end
     Spaces.weighted_dss!(dydt)
     return dydt
 end
 
-# Next steps:
-# 1. add the above to the design docs (divergence + over-integration + DSS)
-# 2. add boundary conditions
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 
-
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -123,7 +130,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "cg"
+dirname = "cg_invariant_hypervisc"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
