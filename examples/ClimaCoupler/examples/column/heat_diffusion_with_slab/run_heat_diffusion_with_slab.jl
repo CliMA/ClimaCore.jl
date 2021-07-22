@@ -1,4 +1,4 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+#push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 # add https://github.com/CliMA/ClimaCore.jl
 # import required modules
@@ -30,7 +30,7 @@ const FT = Float64
 
 # coupling parameters
 λ = FT(1e-5) # transfer coefficient
-calculate_flux(T_sfc, T1) = λ .* (T_sfc .- T1) 
+calculate_flux(T_sfc, T1) = λ .* (T_sfc .- T1)
 
 # domain parameters
 zmin_atm = FT(0.0)
@@ -38,27 +38,27 @@ zmax_atm = FT(1.0)
 zmin_lnd = FT(-1.0)
 zmax_lnd = FT(0.0)
 
-n = 10 
+n = 10
 
 # initiate model domain and grid
 domain_atm  = Domains.IntervalDomain(zmin_atm, zmax_atm, x3boundary = (:bottom, :top)) # struct
-domain_lnd  = Domains.IntervalDomain(zmin_lnd, zmax_lnd, x3boundary = (:bottom, :top)) # struct
+#domain_lnd  = Domains.IntervalDomain(zmin_lnd, zmax_lnd, x3boundary = (:bottom, :top)) # struct
 
 mesh_atm = Meshes.IntervalMesh(domain_atm, nelems = n) # struct, allocates face boundaries to 5,6: atmos
-mesh_lnd = Meshes.IntervalMesh(domain_lnd, nelems = 1) # struct, allocates face boundaries to 5,6: land
+#mesh_lnd = Meshes.IntervalMesh(domain_lnd, nelems = 1) # struct, allocates face boundaries to 5,6: land
 
 cs_atm = Spaces.CenterFiniteDifferenceSpace(mesh_atm) # collection of the above, discretises space into FD and provides coords
-cs_lnd = Spaces.CenterFiniteDifferenceSpace(mesh_lnd) 
+#cs_lnd = Spaces.CenterFiniteDifferenceSpace(mesh_lnd)
 
 # define model equations:
 function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
     # Heat diffusion:
-    # ∂_t T = α ∇²T 
-    # where 
+    # ∂_t T = α ∇²T
+    # where
     # ∂_t T = n \cdot F   at z = zmin_atm
     # ∂_t T = 0           at z = zmax_atm
-    # We also use this model to accumulate fluxes 
-    # ∂_t ϕ_bottom = n \cdot F 
+    # We also use this model to accumulate fluxes
+    # ∂_t ϕ_bottom = n \cdot F
 
     α = FT(0.1) # diffusion coefficient
 
@@ -66,7 +66,7 @@ function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
 
     @show du.x[1]
 
-    F_sfc = calculate_flux( coupler_T_sfc, parent(T)[1] )
+    F_sfc = calculate_flux(coupler_T_sfc[1], parent(T)[1] )
     #@show F_sfc
 
     # Set BCs
@@ -113,7 +113,7 @@ end
 # initialize all variables and display models
 parameters = nothing
 T_atm_0 = Fields.ones(FT, cs_atm) .* 280 # initiates atm progostic var
-T_sfc_0 = Fields.ones(FT, cs_lnd) .* 260 # initiates lnd progostic var
+T_sfc_0 = [260.0] # initiates lnd progostic var
 ics = (;
         atm = T_atm_0,
         lnd = T_sfc_0
@@ -122,7 +122,7 @@ ics = (;
 # specify timestepping info
 stepping = (;
         Δt = 0.02,
-        timerange = (0.0, 1.0), 
+        timerange = (0.0, 1.0),
         coupler_timestep = 1.0,
         odesolver = SSPRK33()
         )
@@ -134,12 +134,12 @@ coupler_put(x) = x
 # Solve the ODE operator
 function coupler_solve!(stepping, ics, parameters)
     Δt = stepping.Δt
-    
+
     # init coupler fields
     coupler_F_sfc = Fields.zeros(FT, cs_lnd)
     coupler_T_sfc = ics.lnd
     coupler_T_atm = ics.atm
-    
+
     sol_atm = nothing
     sol_lnd = nothing
 
@@ -151,13 +151,12 @@ function coupler_solve!(stepping, ics, parameters)
         F_sfc = [0.0] #Fields.zeros(FT, cs_lnd)
         T_atm = coupler_get(coupler_T_atm)
 
-        @show T_sfc
-        
+
         Yc = (T_atm, F_sfc)
         Y = ArrayPartition(Yc)
-        
+
         # run atmos
-        prob = ODEProblem(∑tendencies_atm!, Y, (t, t+1.0), (parameters, T_sfc) ) 
+        prob = ODEProblem(∑tendencies_atm!, Y, (t, t+1.0), (parameters, T_sfc) )
         sol_atm = solve(
             prob,
             stepping.odesolver,
@@ -165,11 +164,11 @@ function coupler_solve!(stepping, ics, parameters)
             saveat = 10 * Δt,
             progress = true,
             progress_message = (dt, u, p, t) -> t,
-        );  
+        );
 
         # post_atmos
-        coupler_T_atm = coupler_put(sol_atm.u.x[1])
-        coupler_F_sfc = coupler_put(sol_atm.u.x[2])  / Δt 
+        coupler_T_atm = coupler_put(sol_atm.u[end].x[1])
+        coupler_F_sfc = coupler_put(sol_atm.u[end].x[2])  / Δt
 
         # pre_land
         F_sfc = coupler_get(coupler_F_sfc)
@@ -184,13 +183,13 @@ function coupler_solve!(stepping, ics, parameters)
             saveat = 10 * Δt,
             progress = true,
             progress_message = (dt, u, p, t) -> t,
-        );      
+        );
 
         # post land
-        coupler_T_sfc = sol_lnd.u[end] # update T_sfc 
+        coupler_T_sfc = sol_lnd.u[end] # update T_sfc
         coupler_F_sfc = coupler_F_sfc .* 0.0 # reset flux
-        
-    end 
+
+    end
 
     return sol_atm, sol_lnd
 end
@@ -207,13 +206,13 @@ path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 anim = Plots.@animate for u in sol_atm.u
-    Plots.plot(u, xlim = (0, 1))
+    Plots.plot(u.x[1], xlim = (0, 1))
 end
 Plots.mp4(anim, joinpath(path, "heat.mp4"), fps = 10)
-Plots.png(Plots.plot(sol_atm.u[end] ), joinpath(path, "heat_end.png"))
+Plots.png(Plots.plot(sol_atm.u[end].x[1] ), joinpath(path, "heat_end.png"))
 
 
-u_t = copy(parent(sol_atm.u[1]))[:,1]
+u_t = copy(parent(sol_atm.u[1].x[1]))[:,1]
 
 Plots.png(Plots.plot(u_t ), joinpath(path, "heat_time.png"))
 
@@ -232,7 +231,7 @@ linkfig("output/$(dirname)/heat_end.png", "Heat End Simulation")
 # - add flux accumulation ()®ecursive array error
 
 # Questions / Comments
-# - ok to add bottom flux as prognostic variable again? 
+# - ok to add bottom flux as prognostic variable again?
 # - MPIStateArray overhead issue doesn't apply
 # - coupler src code can still be used, ust the do_step function needs to be rewritten
 # - quite hard to find original functions e.g. which solve etc
