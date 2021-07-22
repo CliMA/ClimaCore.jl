@@ -1,4 +1,4 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+#push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
@@ -11,11 +11,12 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33,Rosenbrock23, Tsit5
+using OrdinaryDiffEq: ODEProblem, solve, SSPRK33,Rosenbrock23, Tsit5,SSPRK432
+using Plots
 
 const FT = Float64
 
-n = 15
+n = 60
 z₀ = FT(-1.5)
 z₁ = FT(0)
 ksat = FT(34 / (3600 * 100))
@@ -26,8 +27,8 @@ vgm = FT(1)- FT(1)/vgn
 ν = FT(0.287)
 θl_0 = FT(0.1)
 θl_surf = FT(0.267)
-Δt = FT(0.05)
-time_end = FT(60 * 60 * 0.8)
+Δt = FT(0.5)
+tf = FT(60 * 60 * 0.8)
 t0 = FT(0)
 
 
@@ -87,11 +88,10 @@ end
 
 
 function ∑tendencies!(dθl, θl, z, t)
-    #the BC needs to be on the thing we take the gradient of.
-    # in climatemachine.jl, i think it was on the flux or the prognostic variable,
-    # and the flux could be a grad of a function of the prognostic variable. 
-
-    S_top = effective_saturation.(FT(0.1); ν = ν, θr = θr)
+    #the BC needs to be on the thing we take the gradient of? no, not per Jake.
+    # try putting a dirichlet BC on state variable at top and on grad(h) at bottom
+    θ_top = θl_surf
+    S_top = effective_saturation.(θ_top; ν = ν, θr = θr)
     h_top = matric_potential(S_top; vgn = vgn, vgα = vgα, vgm = vgm)#ztop = 0
     bc_t = Operators.SetValue(h_top)
     bc_b = Operators.SetGradient(FT(1))
@@ -103,76 +103,62 @@ function ∑tendencies!(dθl, θl, z, t)
     K = hydraulic_conductivity.(S; vgm = vgm, ksat = ksat)
     ψ = matric_potential.(S; vgn = vgn, vgα = vgα, vgm = vgm)
     h = ψ .+ zc
-    #mismatched spaces if K * grad*h
-    Kface = Operators.InterpolateC2F(K)
-    return @. dθl = gradf2c( Kface .* gradc2f(h))
+    #In this case, we have a dirichlet on h at the top -> known top value of
+    # θ. so we should have a known value of K at the top to agree with.
+    K_top = hydraulic_conductivity(S_top; vgm = vgm, ksat = ksat)
+    bc_ktop = Operators.SetValue(K_top)
+    # At the bottom, we have a BC on grad(h), or dh/dθ grad(θ). 
+    # does that mean bc_val = dh/θ_last center at bottom (θ_center - θ_bottom_face)/Δ/2?
+    # so we have constrained θ_bottom_face? then K_bottom_face should agree with this.
+    #probably shouldnt be an extrapolation
+    If = Operators.InterpolateC2F(;
+                                  bottom = Operators.Extrapolate(),
+                                  top = bc_ktop)
+    return @. dθl = gradf2c( If(K).* gradc2f(h))
     
 end
 #@show ∑tendencies!(similar(θl), θl, nothing, 0.0);
 
 # Solve the ODE operator
 
-prob = ODEProblem(∑tendencies!, θl, (t0, time_end))
+prob = ODEProblem(∑tendencies!, θl, (t0, tf))
 sol = solve(
     prob,
-    Tsit5(),
+    Rosenbrock23(),#Tsit5(),
     dt = Δt,
-    saveat = 100 * Δt,
+    saveat = 60 * Δt,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
 
+
+dirname = "richards"
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
-
-dirname = "advect_diffusion"
-path = joinpath(@__DIR__, "output", dirname)
-mkpath(path)
-
-anim = Plots.@animate for (nt, u) in enumerate(sol.u)
+datapath = joinpath(@__DIR__,"..","..","code")
+data = joinpath(datapath, "sand_bonan_sp801.csv")
+    ds_bonan = readdlm(data, ',')
+    bonan_moisture = reverse(ds_bonan[:, 1])
+    bonan_z = reverse(ds_bonan[:, 2]) ./ 100.0
+anim = @animate for (nt, u) in enumerate(sol.u)
     Plots.plot(
-        u,
-        xlim = (0, 1),
-        ylim = (-1, 10),
-        title = "$(nt-1) s",
+        parent(u),parent(zc),
+        xlim = (0, 0.287),
+        ylim = (-1.5, 0),
+        title = string(string(Int(round(((nt-1)*Δt*60-t0)/60)))," min"),
         lc = :black,
         lw = 2,
         ls = :dash,
-        label = "Approx Sol.",
+        label = "",
         legend = :outerright,
         m = :o,
-        xlabel = "T(z)",
+        xlabel = "θ(z)",
         ylabel = "z",
     )
-    Plots.plot!(
-        gaussian.(zp, nt - 1; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌),
-        zp,
-        xlim = (0, 1),
-        ylim = (-1, 10),
-        title = "$(nt) s",
-        lc = :red,
-        lw = 2,
-        label = "Analytical Sol.",
-        m = :x,
-    )
-end
-Plots.mp4(anim, joinpath(path, "advect_diffusion.mp4"), fps = 10)
-Plots.png(
-    Plots.plot(sol.u[end], xlim = (0, 1)),
-    joinpath(path, "advect_diffusion_end.png"),
-)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
+    Plots.plot!(bonan_moisture, bonan_z, label = "Bonan solution, 48min", lw = 2, lc = :red)
 end
-
-linkfig(
-    "output/$(dirname)/advect_diffusion_end.png",
-    "Advection-Diffusion End Simulation",
-)
+Plots.gif(anim, joinpath(path, "richards_sand.gif"), fps = 10)
