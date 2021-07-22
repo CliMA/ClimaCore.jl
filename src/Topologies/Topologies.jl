@@ -20,7 +20,7 @@ module Topologies
 
 import ..Geometry
 import ..Domains: Domains, coordinate_type
-import ..Meshes: Meshes, EquispacedRectangleMesh
+import ..Meshes: Meshes, EquispacedRectangleMesh, TensorProductMesh
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
@@ -148,7 +148,6 @@ struct BoundaryFaceIterator{T}
     boundary::Int
 end
 
-
 """
     vertices(topology)
 
@@ -166,10 +165,8 @@ struct Vertex{T <: AbstractTopology, V}
     num::V
 end
 
-
-
-
 # implementations
 include("grid.jl")
+include("tensorproductmesh.jl")
 
 end # module
