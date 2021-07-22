@@ -17,6 +17,10 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
+
+using RecursiveArrayTools
+
+
 global_logger(TerminalLogger())
 
 const CI = !isnothing(get(ENV, "CI", nothing))
@@ -26,7 +30,7 @@ const FT = Float64
 
 # coupling parameters
 λ = FT(1e-5) # transfer coefficient
-calculate_flux(T_sfc, T1) = λ * (T_sfc - T1) 
+calculate_flux(T_sfc, T1) = λ .* (T_sfc .- T1) 
 
 # domain parameters
 zmin_atm = FT(0.0)
@@ -46,7 +50,7 @@ mesh_lnd = Meshes.IntervalMesh(domain_lnd, nelems = 1) # struct, allocates face 
 cs_atm = Spaces.CenterFiniteDifferenceSpace(mesh_atm) # collection of the above, discretises space into FD and provides coords
 cs_lnd = Spaces.CenterFiniteDifferenceSpace(mesh_lnd) 
 
-# Define model equations:
+# define model equations:
 function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
     # Heat diffusion:
     # ∂_t T = α ∇²T 
@@ -58,20 +62,41 @@ function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
 
     α = FT(0.1) # diffusion coefficient
 
-    T = u
-    F_sfc = calculate_flux( copy(parent(coupler_T_sfc))[1], copy(parent(T))[1] )
+    T = u.x[1]
+
+    @show du.x[1]
+
+    F_sfc = calculate_flux( coupler_T_sfc, parent(T)[1] )
+    #@show F_sfc
 
     # Set BCs
     bcs_bottom = Operators.SetValue(F_sfc) # struct w bottom BCs
     bcs_top = Operators.SetValue(FT(230.0))
 
-    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top) # gradient struct w BCs
+    gradc2f = Operators.GradientC2F(top = bcs_top) # gradient struct w BCs
+    gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
+
+    @. du.x[1] = α * gradf2c(gradc2f(T)) #α * gradf2c(gradc2f(T))
+
+    #@. du.x[1] = T / 0.02
+
+    #@show F_sfc
+    #@show du.x[2]
+
+    du.x[2] .= F_sfc[1]
+    @show du
+    @show u
+end
+
+function ∑tendencies!(dT, T, _, t)
+
+    bcs_bottom = Operators.SetValue(FT(0.0))
+    bcs_top = Operators.SetGradient(FT(1.0))
+
+    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
     gradf2c = Operators.GradientF2C()
 
-    du = α .* gradf2c(gradc2f(T))
-    #du[2] = copy(parent(F_sfc))
-
-    return du
+    return @. dT = α * gradf2c(gradc2f(T))
 end
 
 function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, coupler_F_sfc), t)
@@ -85,7 +110,7 @@ function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, coupler_F_sfc), t)
     #return @. dT_sfc = coupler_F_sfc .+ G
 end
 
-# Initialize all variables and display models
+# initialize all variables and display models
 parameters = nothing
 T_atm_0 = Fields.ones(FT, cs_atm) .* 280 # initiates atm progostic var
 T_sfc_0 = Fields.ones(FT, cs_lnd) .* 260 # initiates lnd progostic var
@@ -94,10 +119,10 @@ ics = (;
         lnd = T_sfc_0
         )
 
-# Solve the ODE operator
+# specify timestepping info
 stepping = (;
         Δt = 0.02,
-        timerange = (0.0, 10.0), 
+        timerange = (0.0, 1.0), 
         coupler_timestep = 1.0,
         odesolver = SSPRK33()
         )
@@ -106,6 +131,7 @@ stepping = (;
 coupler_get(x) = x
 coupler_put(x) = x
 
+# Solve the ODE operator
 function coupler_solve!(stepping, ics, parameters)
     Δt = stepping.Δt
     
@@ -122,11 +148,16 @@ function coupler_solve!(stepping, ics, parameters)
 
         # pre_atmos
         T_sfc = coupler_get(coupler_T_sfc)
-        F_sfc = Fields.zeros(FT, cs_atm)
+        F_sfc = [0.0] #Fields.zeros(FT, cs_lnd)
         T_atm = coupler_get(coupler_T_atm)
+
+        @show T_sfc
+        
+        Yc = (T_atm, F_sfc)
+        Y = ArrayPartition(Yc)
         
         # run atmos
-        prob = ODEProblem(∑tendencies_atm!, T_atm, (t, t+1), (parameters, T_sfc) ) 
+        prob = ODEProblem(∑tendencies_atm!, Y, (t, t+1.0), (parameters, T_sfc) ) 
         sol_atm = solve(
             prob,
             stepping.odesolver,
@@ -137,8 +168,8 @@ function coupler_solve!(stepping, ics, parameters)
         );  
 
         # post_atmos
-        coupler_T_atm = sol_atm.u[end]
-        coupler_F_sfc = coupler_put(copy(parent(sol_atm.u[end]))[end] )  / Δt 
+        coupler_T_atm = coupler_put(sol_atm.u.x[1])
+        coupler_F_sfc = coupler_put(sol_atm.u.x[2])  / Δt 
 
         # pre_land
         F_sfc = coupler_get(coupler_F_sfc)
@@ -157,7 +188,7 @@ function coupler_solve!(stepping, ics, parameters)
 
         # post land
         coupler_T_sfc = sol_lnd.u[end] # update T_sfc 
-        coupler_F_sfc = coupler_F_sfc * 0.0 # reset flux
+        coupler_F_sfc = coupler_F_sfc .* 0.0 # reset flux
         
     end 
 
