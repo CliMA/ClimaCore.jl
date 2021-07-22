@@ -136,35 +136,45 @@ function coupler_solve!(stepping, ics, parameters)
     Δt = stepping.Δt
 
     # init coupler fields
-    coupler_F_sfc = Fields.zeros(FT, cs_lnd)
+    coupler_F_sfc = [0.0]
     coupler_T_sfc = ics.lnd
     coupler_T_atm = ics.atm
 
     sol_atm = nothing
     sol_lnd = nothing
 
+    T_atm =
+    T_sfc = coupler_T_sfc
+
+    Yc = (T_atm, F_sfc)
+    Y = ArrayPartition(Yc)
+
+    atmos_prob = ODEProblem(∑tendencies_atm!, Y, (stepping.timerange[1], stepping.timerange[1]), (parameters, T_sfc) )
+    atmos_integ = init(atmos_prob,  stepping.odesolver,
+      dt = Δt,
+        saveat = 10 * Δt,)
+
+    F_sfc = copy(coupler_F_sfc)
+    land_prob = ODEProblem(∑tendencies_lnd!, T_sfc, (t, t+1.0), (parameters, F_sfc))
+    land_integ = init(land_prob,  stepping.odesolver,
+      dt = Δt,
+        saveat = 10 * Δt,)
+
+
     for t in collect(stepping.timerange[1] : stepping.coupler_timestep : stepping.timerange[2])
         @show t
 
         # pre_atmos
-        T_sfc = coupler_get(coupler_T_sfc)
-        F_sfc = [0.0] #Fields.zeros(FT, cs_lnd)
-        T_atm = coupler_get(coupler_T_atm)
+        T_sfc .= coupler_get(coupler_T_sfc)
+        F_sfc .= [0.0] #Fields.zeros(FT, cs_lnd)
+        T_atm .= coupler_get(coupler_T_atm)
 
 
-        Yc = (T_atm, F_sfc)
-        Y = ArrayPartition(Yc)
 
         # run atmos
-        prob = ODEProblem(∑tendencies_atm!, Y, (t, t+1.0), (parameters, T_sfc) )
-        sol_atm = solve(
-            prob,
-            stepping.odesolver,
-            dt = Δt,
-            saveat = 10 * Δt,
-            progress = true,
-            progress_message = (dt, u, p, t) -> t,
-        );
+        add_tstop!(atmos_integ, t)
+        solve!(atmos_integ)
+
 
         # post_atmos
         coupler_T_atm = coupler_put(sol_atm.u[end].x[1])
@@ -175,15 +185,8 @@ function coupler_solve!(stepping, ics, parameters)
         T_sfc = coupler_get(coupler_T_sfc)
 
         # run land
-        prob = ODEProblem(∑tendencies_lnd!, T_sfc, (t, t+1.0), (parameters, F_sfc)) #ODEProblem(f,u0,tspan; _..) https://diffeq.sciml.ai/release-2.1/types/ode_types.html
-        sol_lnd = solve(
-            prob,
-            stepping.odesolver,
-            dt = Δt,
-            saveat = 10 * Δt,
-            progress = true,
-            progress_message = (dt, u, p, t) -> t,
-        );
+        add_tstop!(land_integ, t)
+        solve!(land_integ)
 
         # post land
         coupler_T_sfc = sol_lnd.u[end] # update T_sfc
@@ -191,7 +194,7 @@ function coupler_solve!(stepping, ics, parameters)
 
     end
 
-    return sol_atm, sol_lnd
+    return atmos_integ.sol, land_integ.sol
 end
 
 # run
