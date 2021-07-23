@@ -20,6 +20,9 @@ using TerminalLoggers: TerminalLogger
 
 using RecursiveArrayTools
 
+using OrdinaryDiffEq, Test, Random
+using DiffEqProblemLibrary.ODEProblemLibrary: importodeproblems; importodeproblems()
+import DiffEqProblemLibrary.ODEProblemLibrary: prob_ode_linear
 
 global_logger(TerminalLogger())
 
@@ -64,39 +67,18 @@ function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
 
     T = u.x[1]
 
-    @show du.x[1]
-
     F_sfc = calculate_flux(coupler_T_sfc[1], parent(T)[1] )
-    #@show F_sfc
 
-    # Set BCs
+    # set BCs
     bcs_bottom = Operators.SetValue(F_sfc) # struct w bottom BCs
     bcs_top = Operators.SetValue(FT(230.0))
 
     gradc2f = Operators.GradientC2F(top = bcs_top) # gradient struct w BCs
     gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
 
+    # tendency calculations
     @. du.x[1] = α * gradf2c(gradc2f(T)) #α * gradf2c(gradc2f(T))
-
-    #@. du.x[1] = T / 0.02
-
-    #@show F_sfc
-    #@show du.x[2]
-
     du.x[2] .= F_sfc[1]
-    @show du
-    @show u
-end
-
-function ∑tendencies!(dT, T, _, t)
-
-    bcs_bottom = Operators.SetValue(FT(0.0))
-    bcs_top = Operators.SetGradient(FT(1.0))
-
-    gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
-    gradf2c = Operators.GradientF2C()
-
-    return @. dT = α * gradf2c(gradc2f(T))
 end
 
 function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, coupler_F_sfc), t)
@@ -122,9 +104,11 @@ ics = (;
 # specify timestepping info
 stepping = (;
         Δt = 0.02,
-        timerange = (0.0, 1.0),
+        timerange = (0.0, 3.0),
         coupler_timestep = 1.0,
-        odesolver = SSPRK33()
+        odesolver = SSPRK33(),
+        nsteps_atm = 1,
+        nsteps_lnd = 3,
         )
 
 # coupler comm functions which export / import / transform variables
@@ -143,21 +127,22 @@ function coupler_solve!(stepping, ics, parameters)
     sol_atm = nothing
     sol_lnd = nothing
 
-    T_atm =
+    T_atm = coupler_T_atm
+    F_sfc = coupler_F_sfc
     T_sfc = coupler_T_sfc
 
     Yc = (T_atm, F_sfc)
     Y = ArrayPartition(Yc)
 
-    atmos_prob = ODEProblem(∑tendencies_atm!, Y, (stepping.timerange[1], stepping.timerange[1]), (parameters, T_sfc) )
+    atmos_prob = ODEProblem(∑tendencies_atm!, Y, (stepping.timerange[1], stepping.timerange[1] + stepping.coupler_timestep), (parameters, T_sfc) )
     atmos_integ = init(atmos_prob,  stepping.odesolver,
-      dt = Δt,
+      tstops = collect(stepping.timerange[1]:Δt:stepping.timerange[2]),
         saveat = 10 * Δt,)
 
     F_sfc = copy(coupler_F_sfc)
-    land_prob = ODEProblem(∑tendencies_lnd!, T_sfc, (t, t+1.0), (parameters, F_sfc))
+    land_prob = ODEProblem(∑tendencies_lnd!, T_sfc, (stepping.timerange[1], stepping.timerange[1] + stepping.coupler_timestep), (parameters, F_sfc))
     land_integ = init(land_prob,  stepping.odesolver,
-      dt = Δt,
+    tstops = collect(stepping.timerange[1]:Δt:stepping.timerange[2]),
         saveat = 10 * Δt,)
 
 
@@ -169,16 +154,13 @@ function coupler_solve!(stepping, ics, parameters)
         F_sfc .= [0.0] #Fields.zeros(FT, cs_lnd)
         T_atm .= coupler_get(coupler_T_atm)
 
-
-
         # run atmos
         add_tstop!(atmos_integ, t)
         solve!(atmos_integ)
 
-
         # post_atmos
-        coupler_T_atm = coupler_put(sol_atm.u[end].x[1])
-        coupler_F_sfc = coupler_put(sol_atm.u[end].x[2])  / Δt
+        coupler_T_atm = coupler_put(atmos_integ.sol.u[end].x[1])
+        coupler_F_sfc = coupler_put(atmos_integ.sol.u[end].x[2])  / Δt
 
         # pre_land
         F_sfc = coupler_get(coupler_F_sfc)
@@ -189,7 +171,7 @@ function coupler_solve!(stepping, ics, parameters)
         solve!(land_integ)
 
         # post land
-        coupler_T_sfc = sol_lnd.u[end] # update T_sfc
+        coupler_T_sfc = land_integ.sol.u[end] # update T_sfc
         coupler_F_sfc = coupler_F_sfc .* 0.0 # reset flux
 
     end
