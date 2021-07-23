@@ -77,8 +77,11 @@ function ∑tendencies_atm!(du, u, (parameters, coupler_T_sfc), t)
     gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
 
     # tendency calculations
-    @. du.x[1] = α * gradf2c(gradc2f(T)) #α * gradf2c(gradc2f(T))
+    @. du.x[1] = α * gradf2c(gradc2f(T)) 
     du.x[2] .= F_sfc[1]
+
+    @show "here :)"
+    @show t
 end
 
 function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, coupler_F_sfc), t)
@@ -103,9 +106,9 @@ ics = (;
 
 # specify timestepping info
 stepping = (;
-        Δt = 0.02,
+        Δt_min = 0.02,
         timerange = (0.0, 3.0),
-        coupler_timestep = 1.0,
+        Δt_cpl = 1.0,
         odesolver = SSPRK33(),
         nsteps_atm = 1,
         nsteps_lnd = 3,
@@ -117,66 +120,72 @@ coupler_put(x) = x
 
 # Solve the ODE operator
 function coupler_solve!(stepping, ics, parameters)
-    Δt = stepping.Δt
+    t = 0.0
+    Δt_min  = stepping.Δt_min
+    Δt_cpl  = stepping.Δt_cpl
+    t_start = stepping.timerange[1]
+    t_end   = stepping.timerange[2]
 
     # init coupler fields
     coupler_F_sfc = [0.0]
     coupler_T_sfc = ics.lnd
     coupler_T_atm = ics.atm
 
-    sol_atm = nothing
-    sol_lnd = nothing
-
     T_atm = coupler_T_atm
     F_sfc = coupler_F_sfc
     T_sfc = coupler_T_sfc
+    
+    # SETUP ATMOS
+    # put all prognostic variable arrays into a vector and ensure that solve can partition them 
+    Y = ArrayPartition((T_atm, F_sfc))
+    prob_atm = ODEProblem(∑tendencies_atm!, Y, (t, t + Δt_cpl), (parameters, T_sfc) )
+    integ_atm = init(
+                        prob_atm,  
+                        stepping.odesolver,
+                        tstops = collect(t : Δt_min : t + Δt_cpl),
+                        saveat = 10 * Δt_min,)
 
-    Yc = (T_atm, F_sfc)
-    Y = ArrayPartition(Yc)
-
-    atmos_prob = ODEProblem(∑tendencies_atm!, Y, (stepping.timerange[1], stepping.timerange[1] + stepping.coupler_timestep), (parameters, T_sfc) )
-    atmos_integ = init(atmos_prob,  stepping.odesolver,
-      tstops = collect(stepping.timerange[1]:Δt:stepping.timerange[2]),
-        saveat = 10 * Δt,)
-
+    # SETUP LAND
     F_sfc = copy(coupler_F_sfc)
-    land_prob = ODEProblem(∑tendencies_lnd!, T_sfc, (stepping.timerange[1], stepping.timerange[1] + stepping.coupler_timestep), (parameters, F_sfc))
-    land_integ = init(land_prob,  stepping.odesolver,
-    tstops = collect(stepping.timerange[1]:Δt:stepping.timerange[2]),
-        saveat = 10 * Δt,)
+    prob_lnd = ODEProblem(∑tendencies_lnd!, T_sfc, (t, t + Δt_cpl), (parameters, F_sfc))
+    integ_lnd = init(
+                        prob_lnd,  
+                        stepping.odesolver,
+                        tstops = collect(t : Δt_min : t + Δt_cpl),
+                        saveat = 10 * Δt_min,)
 
-
-    for t in collect(stepping.timerange[1] : stepping.coupler_timestep : stepping.timerange[2])
-        @show t
+    # coupler stepping
+    for t in collect(t_start : Δt_cpl : t_end)
+        #@show t
 
         # pre_atmos
         T_sfc .= coupler_get(coupler_T_sfc)
-        F_sfc .= [0.0] #Fields.zeros(FT, cs_lnd)
         T_atm .= coupler_get(coupler_T_atm)
+        F_sfc .= [0.0] # surfce flux to be accumulated 
 
         # run atmos
-        add_tstop!(atmos_integ, t)
-        solve!(atmos_integ)
+        add_tstop!(integ_atm, t)
+        solve!(integ_atm)
 
         # post_atmos
-        coupler_T_atm = coupler_put(atmos_integ.sol.u[end].x[1])
-        coupler_F_sfc = coupler_put(atmos_integ.sol.u[end].x[2])  / Δt
+        coupler_T_atm = coupler_put(integ_atm.sol.u[end].x[1])
+        coupler_F_sfc = coupler_put(integ_atm.sol.u[end].x[2])  / Δt_cpl
 
         # pre_land
         F_sfc = coupler_get(coupler_F_sfc)
         T_sfc = coupler_get(coupler_T_sfc)
 
         # run land
-        add_tstop!(land_integ, t)
-        solve!(land_integ)
+        add_tstop!(integ_lnd, t)
+        solve!(integ_lnd)
 
         # post land
-        coupler_T_sfc = land_integ.sol.u[end] # update T_sfc
-        coupler_F_sfc = coupler_F_sfc .* 0.0 # reset flux
+        coupler_T_sfc = coupler_put(integ_lnd.sol.u[end]) # update T_sfc
+        coupler_F_sfc = coupler_F_sfc .* 0.0 # reset accumulated surcafe flux at the end of coupling cycle
 
     end
 
-    return atmos_integ.sol, land_integ.sol
+    return integ_atm.sol, integ_lnd.sol
 end
 
 # run
