@@ -1,36 +1,28 @@
-# For analysis
-#=
-include("../../../perf/IntelITT.jl/src/IntelITT.jl")
-using Main.IntelITT
-include("../../../perf/SDE.jl/sde.jl")
-=#
-
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using Base.Threads
-using Profile
 using IntervalSets
 using LinearAlgebra
-using Logging: global_logger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 using StaticArrays
-using TerminalLoggers: TerminalLogger
 using UnPack
 
-import ClimateMachineCore: Fields, Domains, Topologies, Meshes, Spaces
-import ClimateMachineCore: slab
-import ClimateMachineCore.Operators
-using ClimateMachineCore.Geometry
-using ClimateMachineCore.RecursiveApply
-using ClimateMachineCore.RecursiveApply: rdiv, rmap
+import ClimaCore: Fields, Domains, Topologies, Meshes, Spaces
+import ClimaCore: slab
+import ClimaCore.Operators
+using ClimaCore.Geometry
+using ClimaCore.RecursiveApply
+using ClimaCore.RecursiveApply: rdiv, rmap
 
+using Logging: global_logger
+using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
 const parameters = (
-    ϵ = 0.1,  # perturbation size for initial condition
-    l = 0.5, # Gaussian width
-    k = 0.5, # Sinusoidal wavenumber
-    ρ₀ = 1.0, # reference density
+    ϵ = 0.1,    # perturbation size for initial condition
+    l = 0.5,    # Gaussian width
+    k = 0.5,    # Sinusoidal wavenumber
+    ρ₀ = 1.0,   # reference density
     c = 2,
     g = 10,
 )
@@ -38,7 +30,7 @@ const parameters = (
 numflux_name = get(ARGS, 1, "roe")
 boundary_name = get(ARGS, 2, "")
 
-# standard implementation
+# common setup
 # ========
 
 domain = Domains.RectangleDomain(
@@ -48,8 +40,7 @@ domain = Domains.RectangleDomain(
     x2periodic = boundary_name != "noslip",
 )
 
-#n1, n2 = 16, 16
-n1, n2 = 512, 512
+n1, n2 = 1024, 1024
 Nq = 4
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
@@ -107,8 +98,8 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
 
     λ = sqrt(parameters⁻.g)
 
-    ρ⁻, ρu⁻, ρθ⁻ = y⁻.ρ, y⁻.ρu, y⁻.ρθ
-    ρ⁺, ρu⁺, ρθ⁺ = y⁺.ρ, y⁺.ρu, y⁺.ρθ
+    ρ⁻, ρu⁻, ρθ⁻ = abs(y⁻.ρ), y⁻.ρu, y⁻.ρθ
+    ρ⁺, ρu⁺, ρθ⁺ = abs(y⁺.ρ), y⁺.ρu, y⁺.ρθ
 
     u⁻ = ρu⁻ / ρ⁻
     θ⁻ = ρθ⁻ / ρ⁻
@@ -187,9 +178,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
     Nh = Topologies.nlocalelems(y)
 
     F = flux.(y, Ref(parameters))
-    # TODO: get this to work
-    #   F = Base.Broadcast.broadcasted(flux, y, Ref(parameters))
-    Operators.slab_weak_divergence!(dydt, F)
+    dydt .= Operators.slab_weak_divergence!(dydt, F)
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
 
@@ -202,11 +191,9 @@ function rhs!(dydt, y, (parameters, numflux), t)
         numflux(normal, (y⁻, parameters), (y⁺, parameters))
     end
 
-    # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
     dydt_data .= rdiv.(dydt_data, space.local_geometry.WJ)
 
-    # 7. cutoff filter
     M = Spaces.Quadratures.cutoff_filter_matrix(
         Float64,
         space.quadrature_style,
@@ -217,56 +204,53 @@ function rhs!(dydt, y, (parameters, numflux), t)
     return dydt
 end
 
-#dydt = Fields.Field(similar(Fields.field_values(y0)), space)
-#rhs!(dydt, y0, (parameters, numflux), 0.0);
+#=
+dydt = Fields.Field(similar(Fields.field_values(y0)), space)
+rhs!(dydt, y0, (parameters, numflux), 0.0);
+=#
 
+#=
 # Solve the ODE operator
-#prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+sol = @time solve(
+    prob,
+    SSPRK33(),
+    dt = 0.02,
+    saveat = 1.0,
+    progress = true,
+    progress_message = (dt, u, p, t) -> t,
+)
+=#
 
-#__sde_start()
-#__itt_resume()
-
-#sol = @time solve(prob, SSPRK33(), dt = 0.02)
-    #saveat = 1.0,
-    #progress = true,
-    #progress_message = (dt, u, p, t) -> t,
-
-#__itt_pause()
-#__sde_stop()
-
-# reference implementation
+# fast reference implementation
 # ========
 
 const Nstate = 4
 
-# data layout: i, j, k, n1, n2
-#  n1,n2 topology
-#  i,j,k datalayouts
-X = reshape(parent(Fields.coordinate_field(space)), (Nq,Nq,2,n1*n2))
 y0_ref = Array{Float64}(undef, (Nq,Nq,Nstate,n1*n2))
 
 function init_y0_ref!(y0_ref, X, parameters)
-    for h = 1:n1*n2
-        for j = 1:Nq, i = 1:Nq
-            x = (x1=X[i,j,1,h], x2=X[i,j,2,h])
-            y = init_state(x, parameters)
-            y0_ref[i,j,1,h] = y.ρ
-            y0_ref[i,j,2,h] = y.ρu.u1
-            y0_ref[i,j,3,h] = y.ρu.u2
-            y0_ref[i,j,4,h] = y.ρθ
+    @threads for h = 1:n1*n2
+        @inbounds for j = 1:Nq
+            @simd for i = 1:Nq
+                x = (x1 = X[i,j,1,h], x2 = X[i,j,2,h])
+                y = init_state(x, parameters)
+                y0_ref[i,j,1,h] = y.ρ
+                y0_ref[i,j,2,h] = y.ρu.u1
+                y0_ref[i,j,3,h] = y.ρu.u2
+                y0_ref[i,j,4,h] = y.ρθ
+            end
         end
     end
     return y0_ref
 end
 
-init_y0_ref!(y0_ref, X, parameters)
+init_y0_ref!(y0_ref, parent(Fields.coordinate_field(space)), parameters)
 
 Nqf = 3
 _,W = Spaces.Quadratures.quadrature_points(Float64, quad)
 D = Spaces.Quadratures.differentiation_matrix(Float64, quad)
 M = Spaces.Quadratures.cutoff_filter_matrix(Float64, quad, Nqf)
-
-dydt_ref = similar(y0_ref)
 
 Geometry.:⊗(u::SVector, v::SVector) = u*v'
 
@@ -289,179 +273,11 @@ end
 
 const tendency_states = [TendencyState(n1, n2, Nstate, Nq) for _ in 1:nthreads()]
 
-function tendency_test1(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, states), t)
-    global Nstate
-    Nq = getval(valNq)
-    n1 = size(y0_ref,4)
-    n2 = size(y0_ref,5)
-
-    J = 2pi/n1*2pi/n2
-
-    # "Volume" part
-    @threads for h = 1:n1*n2
-        g = parameters.g
-
-        @inbounds begin
-            state = states[threadid()]
-            WJv¹ = state.WJv¹
-            WJv² = state.WJv²
-            ∂ξ∂x = state.∂ξ∂x
-
-            # compute volume flux
-            for j = 1:Nq, i = 1:Nq
-                # 1. evaluate flux function at the point
-                ρ    = y0_ref[i,j,1,h]
-                ρu1  = y0_ref[i,j,2,h]
-                ρu2  = y0_ref[i,j,3,h]
-                ρθ   = y0_ref[i,j,4,h]
-                u1   = ρu1/ρ
-                u2   = ρu2/ρ
-                Fρ   = SVector(ρu1, ρu2)
-                Fρu1 = SVector(ρu1*u1 + g * ρ^2 / 2, ρu1*u2)
-                Fρu2 = SVector(ρu2*u1,               ρu2*u2 + g * ρ^2 / 2)
-                Fρθ  = SVector(ρθ*u1, ρθ*u2)
-
-                # 2. Convert to contravariant coordinates and store in work array
-                WJ = W[i]*W[j]*J
-                WJv¹[1,i,j], WJv²[1,i,j] = WJ * ∂ξ∂x * Fρ
-                WJv¹[2,i,j], WJv²[2,i,j] = WJ * ∂ξ∂x * Fρu1
-                WJv¹[3,i,j], WJv²[3,i,j] = WJ * ∂ξ∂x * Fρu2
-                WJv¹[4,i,j], WJv²[4,i,j] = WJ * ∂ξ∂x * Fρθ
-            end
-
-            # weak derivatives
-            for j = 1:Nq, i = 1:Nq
-                WJ = W[i]*W[j]*J
-                for s = 1:Nstate
-                    adj = 0.0
-                    @simd for k = 1:Nq
-                        # D'[i,:]*WJv¹[:,j]
-                        adj += D[k, i] * WJv¹[s, k, j]
-                    end
-                    @simd for k = 1:Nq
-                        # D'[j,:]*WJv²[i,:]
-                        adj += D[k, j] * WJv²[s, i, k]
-                    end
-                    dydt_ref[i,j,s,h] = adj/WJ
-                end
-            end
-        end
-    end
-
-    return dydt_ref
-end
-
-function tendency_test2(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, states), t)
-    global Nstate
-    Nq = getval(valNq)
-    n1 = size(y0_ref,4)
-    n2 = size(y0_ref,5)
-
-    J = 2pi/n1*2pi/n2
-
-    # "Face" part
-    sJ1 = 2pi/n1
-    sJ2 = 2pi/n2
-    @threads for h2 = 1:n2
-        g = parameters.g
-        @inbounds begin
-            for h1 = 1:n1
-                h = h1*h2
-                # direction 1
-                g1 = mod1(h1-1,n1)
-                g2 = h2
-                g = g1*g2
-                normal = SVector(-1.0,0.0)
-                for j = 1:Nq
-                    sWJ = W[j]*sJ2
-                    WJ⁻ = W[1]*W[j]*J
-                    WJ⁺ = W[Nq]*W[j]*J
-
-                    y⁻ = (ρ=y0_ref[1 ,j,1,h], ρu=SVector(y0_ref[1 ,j,2,h], y0_ref[1 ,j,3,h]), ρθ=y0_ref[1 ,j,4,h])
-                    y⁺ = (ρ=y0_ref[Nq,j,1,g], ρu=SVector(y0_ref[Nq,j,2,g], y0_ref[Nq,j,3,g]), ρθ=y0_ref[Nq,j,4,g])
-                    nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
-
-                    dydt_ref[1 ,j,1,h] -= sWJ/WJ⁻ * nf.ρ
-                    dydt_ref[1 ,j,2,h] -= sWJ/WJ⁻ * nf.ρu[1]
-                    dydt_ref[1 ,j,3,h] -= sWJ/WJ⁻ * nf.ρu[2]
-                    dydt_ref[1 ,j,4,h] -= sWJ/WJ⁻ * nf.ρθ
-
-                    dydt_ref[Nq,j,1,g] += sWJ/WJ⁺ * nf.ρ
-                    dydt_ref[Nq,j,2,g] += sWJ/WJ⁺ * nf.ρu[1]
-                    dydt_ref[Nq,j,3,g] += sWJ/WJ⁺ * nf.ρu[2]
-                    dydt_ref[Nq,j,4,g] += sWJ/WJ⁺ * nf.ρθ
-                end
-                # direction 2
-                g1 = h1
-                g2 = mod1(h2-1,n2)
-                g = g1*g2
-                normal = SVector(0.0,-1.0)
-                for i = 1:Nq
-                    sWJ = W[i]*sJ1
-                    WJ⁻ = W[i]*W[1]*J
-                    WJ⁺ = W[i]*W[Nq]*J
-
-                    y⁻ = (ρ=y0_ref[i,1 ,1,h], ρu=SVector(y0_ref[i,1 ,2,h], y0_ref[i,1 ,3,h]), ρθ=y0_ref[i,1 ,4,h])
-                    y⁺ = (ρ=y0_ref[i,Nq,1,g], ρu=SVector(y0_ref[i,Nq,2,g], y0_ref[i,Nq,3,g]), ρθ=y0_ref[i,Nq,4,g])
-                    nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
-
-                    dydt_ref[i,1 ,1,h] -= sWJ/WJ⁻ * nf.ρ
-                    dydt_ref[i,1 ,2,h] -= sWJ/WJ⁻ * nf.ρu[1]
-                    dydt_ref[i,1 ,3,h] -= sWJ/WJ⁻ * nf.ρu[2]
-                    dydt_ref[i,1 ,4,h] -= sWJ/WJ⁻ * nf.ρθ
-
-                    dydt_ref[i,Nq,1,g] += sWJ/WJ⁺ * nf.ρ
-                    dydt_ref[i,Nq,2,g] += sWJ/WJ⁺ * nf.ρu[1]
-                    dydt_ref[i,Nq,3,g] += sWJ/WJ⁺ * nf.ρu[2]
-                    dydt_ref[i,Nq,4,g] += sWJ/WJ⁺ * nf.ρθ
-                end
-            end
-        end
-    end
-
-    return dydt_ref
-end
-
-function tendency_test3(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, states), t)
-    global Nstate
-    Nq = getval(valNq)
-    n1 = size(y0_ref,4)
-    n2 = size(y0_ref,5)
-
-    # apply filter
-    for h2 = 1:n2
-        @inbounds begin
-            state = states[threadid()]
-            scratch = state.scratch
-            for h1 = 1:n1
-                for j in 1:Nq, i in 1:Nq
-                    for s = 1:Nstate
-                        scratch[i,j,s] = 0.0
-                        for k = 1:Nq
-                            scratch[i,j,s] += M[i,k] * dydt_ref[k,j,s,h1,h2]
-                        end
-                    end
-                end
-                for j in 1:Nq, i in 1:Nq
-                    for s = 1:Nstate
-                        dydt_ref[i,j,s,h1,h2] = 0.0
-                        for k = 1:Nq
-                            dydt_ref[i,j,s,h1,h2] += M[j,k] * scratch[i,k,s]
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return dydt_ref
-end
-
 function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, states), t)
     global Nstate
     Nq = getval(valNq)
-    n1 = size(y0_ref,4)
-    n2 = size(y0_ref,5)
+    n1 = size(y0_ref, 4)
+    n2 = size(y0_ref, 5)
 
     J = 2pi/n1*2pi/n2
 
@@ -502,11 +318,11 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                 WJ = W[i]*W[j]*J
                 for s = 1:Nstate
                     adj = 0.0
-                    for k = 1:Nq
+                    @simd for k = 1:Nq
                         # D'[i,:]*WJv¹[:,j]
                         adj += D[k, i] * WJv¹[s, k, j]
                     end
-                    for k = 1:Nq
+                    @simd for k = 1:Nq
                         # D'[j,:]*WJv²[i,:]
                         adj += D[k, j] * WJv²[s, i, k]
                     end
@@ -524,9 +340,9 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
             for h1 = 1:n1
                 h = h1*h2
                 # direction 1
-                g1 = mod1(h1-1,n1)
-                g2 = h2
-                g = g1*g2
+                m1 = mod1(h1-1,n1)
+                m2 = h2
+                m = m1*m2
                 normal = SVector(-1.0,0.0)
                 for j = 1:Nq
                     sWJ = W[j]*sJ2
@@ -534,7 +350,7 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                     WJ⁺ = W[Nq]*W[j]*J
 
                     y⁻ = (ρ=y0_ref[1 ,j,1,h], ρu=SVector(y0_ref[1 ,j,2,h], y0_ref[1 ,j,3,h]), ρθ=y0_ref[1 ,j,4,h])
-                    y⁺ = (ρ=y0_ref[Nq,j,1,g], ρu=SVector(y0_ref[Nq,j,2,g], y0_ref[Nq,j,3,g]), ρθ=y0_ref[Nq,j,4,g])
+                    y⁺ = (ρ=y0_ref[Nq,j,1,m], ρu=SVector(y0_ref[Nq,j,2,m], y0_ref[Nq,j,3,m]), ρθ=y0_ref[Nq,j,4,m])
                     nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
 
                     dydt_ref[1 ,j,1,h] -= sWJ/WJ⁻ * nf.ρ
@@ -542,15 +358,15 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                     dydt_ref[1 ,j,3,h] -= sWJ/WJ⁻ * nf.ρu[2]
                     dydt_ref[1 ,j,4,h] -= sWJ/WJ⁻ * nf.ρθ
 
-                    dydt_ref[Nq,j,1,g] += sWJ/WJ⁺ * nf.ρ
-                    dydt_ref[Nq,j,2,g] += sWJ/WJ⁺ * nf.ρu[1]
-                    dydt_ref[Nq,j,3,g] += sWJ/WJ⁺ * nf.ρu[2]
-                    dydt_ref[Nq,j,4,g] += sWJ/WJ⁺ * nf.ρθ
+                    dydt_ref[Nq,j,1,m] += sWJ/WJ⁺ * nf.ρ
+                    dydt_ref[Nq,j,2,m] += sWJ/WJ⁺ * nf.ρu[1]
+                    dydt_ref[Nq,j,3,m] += sWJ/WJ⁺ * nf.ρu[2]
+                    dydt_ref[Nq,j,4,m] += sWJ/WJ⁺ * nf.ρθ
                 end
                 # direction 2
-                g1 = h1
-                g2 = mod1(h2-1,n2)
-                g = g1*g2
+                m1 = h1
+                m2 = mod1(h2-1,n2)
+                m = m1*m2
                 normal = SVector(0.0,-1.0)
                 for i = 1:Nq
                     sWJ = W[i]*sJ1
@@ -558,7 +374,7 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                     WJ⁺ = W[i]*W[Nq]*J
 
                     y⁻ = (ρ=y0_ref[i,1 ,1,h], ρu=SVector(y0_ref[i,1 ,2,h], y0_ref[i,1 ,3,h]), ρθ=y0_ref[i,1 ,4,h])
-                    y⁺ = (ρ=y0_ref[i,Nq,1,g], ρu=SVector(y0_ref[i,Nq,2,g], y0_ref[i,Nq,3,g]), ρθ=y0_ref[i,Nq,4,g])
+                    y⁺ = (ρ=y0_ref[i,Nq,1,m], ρu=SVector(y0_ref[i,Nq,2,m], y0_ref[i,Nq,3,m]), ρθ=y0_ref[i,Nq,4,m])
                     nf = numflux(normal, (y⁻, parameters), (y⁺, parameters))
 
                     dydt_ref[i,1 ,1,h] -= sWJ/WJ⁻ * nf.ρ
@@ -566,10 +382,10 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                     dydt_ref[i,1 ,3,h] -= sWJ/WJ⁻ * nf.ρu[2]
                     dydt_ref[i,1 ,4,h] -= sWJ/WJ⁻ * nf.ρθ
 
-                    dydt_ref[i,Nq,1,g] += sWJ/WJ⁺ * nf.ρ
-                    dydt_ref[i,Nq,2,g] += sWJ/WJ⁺ * nf.ρu[1]
-                    dydt_ref[i,Nq,3,g] += sWJ/WJ⁺ * nf.ρu[2]
-                    dydt_ref[i,Nq,4,g] += sWJ/WJ⁺ * nf.ρθ
+                    dydt_ref[i,Nq,1,m] += sWJ/WJ⁺ * nf.ρ
+                    dydt_ref[i,Nq,2,m] += sWJ/WJ⁺ * nf.ρu[1]
+                    dydt_ref[i,Nq,3,m] += sWJ/WJ⁺ * nf.ρu[2]
+                    dydt_ref[i,Nq,4,m] += sWJ/WJ⁺ * nf.ρθ
                 end
             end
         end
@@ -581,19 +397,20 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
             state = states[threadid()]
             scratch = state.scratch
             for h1 = 1:n1
+                h = h1*h2
                 for j in 1:Nq, i in 1:Nq
                     for s = 1:Nstate
                         scratch[i,j,s] = 0.0
                         for k = 1:Nq
-                            scratch[i,j,s] += M[i,k] * dydt_ref[k,j,s,h1,h2]
+                            scratch[i,j,s] += M[i,k] * dydt_ref[k,j,s,h]
                         end
                     end
                 end
                 for j in 1:Nq, i in 1:Nq
                     for s = 1:Nstate
-                        dydt_ref[i,j,s,h1,h2] = 0.0
+                        dydt_ref[i,j,s,h] = 0.0
                         for k = 1:Nq
-                            dydt_ref[i,j,s,h1,h2] += M[j,k] * scratch[i,k,s]
+                            dydt_ref[i,j,s,h] += M[j,k] * scratch[i,k,s]
                         end
                     end
                 end
@@ -604,39 +421,27 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
     return dydt_ref
 end
 
+dydt_ref = similar(y0_ref)
 tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-@timev tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
 
-#__itt_resume()
-#@time for n = 1:1
-#    tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-#end
-#__itt_pause()
+#FIXME
+#dydt_ref ≈ parent(dydt)
 
-#tendency_test1(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-#tendency_test2(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-#tendency_test3(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-#Profile.clear_malloc_data()
-#@timev tendency_test3(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
+@timev for n = 1:10
+    tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
+end
 
-#__itt_resume()
-#@time for n = 1:1
-#    tendency!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, Val(Nq), tendency_states), 0.0);
-#end
-#__itt_pause()
-
-#prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux, W, D, M, Val(Nq), tendency_states))
-
-#__sde_start()
-#__itt_resume()
-
-#sol_ref = @time solve(prob_ref, SSPRK33(), dt = 0.02)
-
-#__itt_pause()
-#__sde_stop()
-
-#dydt_reshaped = reshape(parent(dydt),(Nq,Nq,4,n1,n2))
-#dydt_ref ≈ dydt_reshaped
+#=
+prob_ref = ODEProblem(tendency_ref!, y0_ref, (0.0, 200.0), (parameters, numflux, W, D, M, Val(Nq), tendency_states))
+sol_ref = @time solve(
+    prob,
+    SSPRK33(),
+    dt = 0.02,
+    saveat = 1.0,
+    progress = true,
+    progress_message = (dt, u, p, t) -> t,
+)
+=#
 
 #=
 using Plots

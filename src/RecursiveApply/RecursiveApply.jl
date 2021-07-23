@@ -14,12 +14,20 @@ export ⊞, ⊠, ⊟
 
 Recursively apply `fn` to each element of `X`
 """
+<<<<<<< HEAD
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
 rmap(fn::F, X::Tuple) where {F} = map(x -> rmap(fn, x), X)
 rmap(fn::F, X::Tuple, Y::Tuple) where {F} = map((x, y) -> rmap(fn, x, y), X, Y)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
+=======
+rmap(fn::F, X) where F = fn(X)
+rmap(fn::F, X, Y) where F = fn(X, Y)
+rmap(fn::F, X::Tuple) where F = map(x -> rmap(fn, x), X)
+rmap(fn::F, X::Tuple, Y::Tuple) where F = map((x, y) -> rmap(fn, x, y), X, Y)
+rmap(fn::F, X::NamedTuple{names}) where {F, names} = NamedTuple{names}(rmap(fn, Tuple(X)))
+>>>>>>> a297f51 (More performance improvements)
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
@@ -67,6 +75,11 @@ rsub(X) = rmap(-, X)
 rsub(X, Y) = rmap(-, X, Y)
 const ⊟ = rsub
 
+"""
+    rdiv(X, w)
+
+Recursively divide each element of `X` by `w`.
+"""
 rdiv(X, w::Number) = rmap(x -> x / w, X)
 
 """
@@ -84,7 +97,6 @@ rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 Recursive matrix product along the 1st dimension of `S`. Equivalent to:
 
     mapreduce(⊠, ⊞, W[i,:], S[:,j])
-
 """
 function rmatmul1(W, S, i, j)
     Nq = size(W, 2)
