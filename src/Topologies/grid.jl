@@ -4,10 +4,11 @@
 A periodic `n1` × `n2` topology of elements. Elements are stored sequentially in
 the first dimension, then the second dimension.
 """
-struct GridTopology{M <: EquispacedRectangleMesh, B} <: AbstractTopology
+struct GridTopology{M, B} <: AbstractTopology
     mesh::M
     boundaries::B
 end
+
 function GridTopology(mesh::EquispacedRectangleMesh)
     x1boundary = mesh.domain.x1boundary
     x2boundary = mesh.domain.x2boundary
@@ -25,6 +26,13 @@ function GridTopology(mesh::EquispacedRectangleMesh)
         end
     end
     GridTopology(mesh, boundaries)
+end
+
+function GridTopology1D(mesh::EquispacedLineMesh)
+    x1boundary = mesh.domain.x3boundary
+    x2boundary = nothing
+    boundaries = isnothing(x1boundary) ? NamedTuple() : NamedTuple{x1boundary}((1,2))
+    return GridTopology(mesh, boundaries)
 end
 
 function Base.show(io::IO, topology::GridTopology)

@@ -3,7 +3,7 @@ Base.map(fn, field::Field) = Base.broadcast(fn, field)
 # useful operations
 weighted_jacobian(space::Spaces.FaceFiniteDifferenceSpace) = space.Δh_c2c
 weighted_jacobian(space::Spaces.CenterFiniteDifferenceSpace) = space.Δh_f2f
-weighted_jacobian(space::Spaces.SpectralElementSpace2D) =
+weighted_jacobian(space::Spaces.AbstractSpectralElementSpace) =
     space.local_geometry.WJ
 weighted_jacobian(field) = weighted_jacobian(axes(field))
 

@@ -77,6 +77,25 @@ function Base.show(io::IO, mesh::IntervalMesh)
     print(io, mesh.domain)
 end
 
+struct EquispacedLineMesh{FT, ID <: IntervalDomain{FT}, R} <: AbstractMesh{FT}
+    domain::ID
+    n1::Int64 # number of elements in x1 direction
+    n2::Int64 # always 1
+    range1::R
+    range2::R # always 1:1
+end 
+
+function EquispacedLineMesh(domain::IntervalDomain, n1)
+    range1 = range(domain.x3min, domain.x3max; length = n1 + 1)
+    range2 = range(one(domain.x3min), one(domain.x3max) + one(domain.x3max); length = 2)
+    return EquispacedLineMesh(domain, n1, one(n1), range1, range2)
+end
+
+function Base.show(io::IO, mesh::EquispacedLineMesh)
+    print(io, "(", mesh.n1, " × ", " ) EquispacedLineMesh of ")
+    print(io, mesh.domain)
+end
+
 """
     EquispacedRectangleMesh(domain::RectangleDomain, n1::Integer, n2::Integer)
 
@@ -95,11 +114,11 @@ end
 function EquispacedRectangleMesh(domain::RectangleDomain, n1, n2)
     range1 = range(domain.x1min, domain.x1max; length = n1 + 1)
     range2 = range(domain.x2min, domain.x2max; length = n2 + 1)
-    EquispacedRectangleMesh(domain, n1, n2, range1, range2)
+    return EquispacedRectangleMesh(domain, n1, n2, range1, range2)
 end
 
 function Base.show(io::IO, mesh::EquispacedRectangleMesh)
-    print(io, mesh.n1, "×", mesh.n2, " EquispacedRectangleMesh of ")
+    print(io, "(", mesh.n1, " × ", mesh.n2, " ) EquispacedRectangleMesh of ")
     print(io, mesh.domain)
 end
 

@@ -1,6 +1,37 @@
 import ..Topologies
 using ..RecursiveApply
 
+function dss_1d!(dest,
+    src,
+    topology::Topologies.AbstractTopology,
+    Nq::Integer,
+)
+    nelems = Topologies.nlocalelems(topology)
+    for eidx in 2:nelems
+        src_el_prev = slab(src, eidx - 1) 
+        src_el_curr = slab(src, eidx)
+        value = src_el_curr[1] ⊞ src_el_prev[end]
+        dest_el_prev = slab(dest, eidx - 1)
+        dest_el_curr = slab(dest, eidx)
+        dest_el_curr[1] = dest_el_prev[end] = value
+    end
+    # TODO: hardcoded periodic conditions
+    src_el_curr = slab(src, 1)
+    src_el_prev = slab(src, nelems) 
+    # gather
+    value = src_el_curr[1] ⊞ src_el_prev[end]
+    # scatter
+    slab(dest, 1)[1] = slab(dest, nelems)[end] = value
+    return dest
+end
+
+function dss_1d!(dest, src, space::AbstractSpace)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    return dss_1d!(dest, src, space.topology, Nq)
+end
+dss_1d!(data, space::AbstractSpace) =
+    dss_1d!(data, data, space::AbstractSpace)
+
 """
     horizontal_dss!(dest, src, topology, Nq)
 

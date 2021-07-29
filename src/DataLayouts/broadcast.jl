@@ -12,6 +12,18 @@ abstract type DataColumnStyle <: DataStyle end
 struct VFStyle{A} <: DataColumnStyle end
 DataStyle(::Type{VF{S, A}}) where {S, A} = VFStyle{parent_array_type(A)}()
 
+abstract type DataSlab1DStyle{Ni} <: DataStyle end
+struct IFStyle{Ni, A} <: DataSlab1DStyle{Ni} end
+DataStyle(::Type{IF{S, Ni, A}}) where {S, Ni, A} = 
+    IFStyle{Ni, parent_array_type(A)}()
+
+abstract type Data1DStyle{Ni} <: DataStyle end
+struct IFHStyle{Ni, A} <: Data1DStyle{Ni} end
+DataStyle(::Type{IFH{S, Ni, A}}) where {S, Ni, A} =
+    IFHStyle{Ni, parent_array_type(A)}()
+DataSlab1DStyle(::Type{IFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
+
+
 abstract type DataSlab2DStyle{Nij} <: DataStyle end
 struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
@@ -28,7 +40,7 @@ abstract type Data3DStyle <: DataStyle end
 Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
     DataStyle(D)
 
-# precedence rules
+# precedence rules 
 # scalars are broadcast over the data object
 Base.Broadcast.BroadcastStyle(
     a::Base.Broadcast.AbstractArrayStyle{0},
@@ -40,10 +52,28 @@ Base.Broadcast.broadcastable(data::AbstractData) = data
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
+) where {Ni, DS <: Data1DStyle{Ni}}
+    args = map(arg -> slab(arg, inds...), bc.args)
+    axes = (SOneTo(Ni),)
+    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, args, axes)
+end
+
+function slab(
+    bc::Base.Broadcast.Broadcasted{DS},
+    inds...,
 ) where {Nij, DS <: Data2DStyle{Nij}}
     args = map(arg -> slab(arg, inds...), bc.args)
     axes = (SOneTo(Nij), SOneTo(Nij))
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, args, axes)
+end
+ 
+function Base.similar(
+    data::IFH{<:Any, Ni, A},
+    ::Type{Eltype},
+) where {Ni, A, Eltype}
+    Nh = length(data)
+    array = similar(parent(data), (Ni, typesize(eltype(A), Eltype), Nh))
+    return IFH{Eltype, Ni}(array)
 end
 
 function Base.similar(
@@ -54,6 +84,17 @@ function Base.similar(
     array = similar(parent(data), (Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return IJFH{Eltype, Nij}(array)
 end
+
+function Base.similar(
+    bc::Broadcast.Broadcasted{IFHStyle{Ni, A}},
+    ::Type{Eltype},
+) where {Ni, A, Eltype}
+    Nh = length(bc)
+    # this won't work for A <: SubArray
+    array = similar(A, (Ni, typesize(eltype(A), Eltype), Nh))
+    return IFH{Eltype, Ni}(array)
+end
+
 function Base.similar(
     bc::Broadcast.Broadcasted{IJFHStyle{Nij, A}},
     ::Type{Eltype},
@@ -64,6 +105,14 @@ function Base.similar(
     return IJFH{Eltype, Nij}(array)
 end
 
+function Base.similar(
+    ::Union{IF{<:Any, Ni, A}, Broadcast.Broadcasted{IFStyle{Ni, A}}},
+    ::Type{Eltype},
+) where {S, Ni, A, Eltype} 
+    Nf = typesize(eltype(A), Eltype)
+    array = MArray{Tuple{Ni, Nf}, eltype(A), 2, Ni * Nf}(undef)
+    return IF{Eltype, Ni}(array)
+end
 
 function Base.similar(
     ::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},
@@ -84,6 +133,17 @@ function Base.similar(
     return VF{Eltype, A}(array)
 end
 
+# TODO: share implmeentation here for 1D, 2D styles
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    bc::Base.Broadcast.Broadcasted{IFHStyle{Ni, A}},
+) where {F, Op, Ni, A}
+    mapreduce(op, 1:length(bc)) do h
+        mapreduce(fn, op, slab(bc, h))
+    end
+end
+
 function Base.mapreduce(
     fn::F,
     op::Op,
@@ -94,9 +154,25 @@ function Base.mapreduce(
     end
 end
 
+function Base.mapreduce(fn::F, op::Op, bc::IFH) where {F, Op}
+    mapreduce(op, 1:length(bc)) do h
+        mapreduce(fn, op, slab(bc, h))
+    end
+end
+
 function Base.mapreduce(fn::F, op::Op, bc::IJFH) where {F, Op}
     mapreduce(op, 1:length(bc)) do h
         mapreduce(fn, op, slab(bc, h))
+    end
+end
+
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    slab_bc::IF{S, Ni},
+) where {F, Op, S, Ni}
+    mapreduce(op, 1:Ni) do i
+        fn(slab_bc[i])
     end
 end
 
@@ -117,6 +193,19 @@ function Base.mapreduce(fn::F, op::Op, column_bc::VF{S}) where {F, Op, S}
 end
 
 function Base.copyto!(
+    dest::IFH{S, Ni},
+    bc::Base.Broadcast.Broadcasted{IFHStyle{Ni, A}},
+) where {S, Ni, A}
+    nh = length(dest)
+    for h in 1:nh
+        slab_dest = slab(dest, h)
+        slab_bc = slab(bc, h)
+        copyto!(slab_dest, slab_bc)
+    end
+    return dest
+end
+
+function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
 ) where {S, Nij, A}
@@ -125,6 +214,16 @@ function Base.copyto!(
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
         copyto!(slab_dest, slab_bc)
+    end
+    return dest
+end
+
+function Base.copyto!(
+    dest::IF{S, Ni},
+    bc::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
+) where {S, Ni, A}
+    @inbounds for i in 1:Ni
+        dest[i] = convert(S, bc[i])
     end
     return dest
 end

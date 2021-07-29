@@ -23,7 +23,7 @@ import StaticArrays: SOneTo, MArray
 #  - should some of these be subtypes of AbstractArray?
 
 import ..slab, ..column
-export slab, column, IJFH, IJF, VF
+export slab, column, IJFH, IJF, VF, IFH
 
 include("struct.jl")
 
@@ -218,11 +218,7 @@ function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
 end
 
 Base.length(data::IFH) = size(parent(data), 3)
-
-@inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
-    @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
-    IF{S, Ni}(view(parent(data), :, :, h))
-end
+Base.size(data::Data1D) = (length(data),)
 
 @generated function _property_view(
     data::IFH{S, Ni},
@@ -235,7 +231,6 @@ end
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IFH{$SS, $Ni}(view(parent(data), :, $field_byterange, :)))
 end
-
 
 @inline function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
@@ -377,6 +372,17 @@ function Base.size(::IF{S, Ni}) where {S, Ni}
     return (Ni,)
 end
 
+Base.lastindex(data::IF) = length(data)
+
+@generated function _property_view(data::IF{S, Ni}, idx::Val{Idx}) where {S, Ni, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IF{$SS, $Ni}(view(parent(data), :, $field_byterange)))
+end
+
 @inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
     T = eltype(array)
@@ -403,9 +409,21 @@ function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
     get_struct(view(parent(ijfh), i, j, :, h), S)
 end
 
+@inline function slab(ifh::IFH{S, Ni}, h::Integer) where {S, Ni}
+    @boundscheck (1 <= h <= length(ifh)) || throw(BoundsError(ifh, (h,)))
+    IF{S, Ni}(view(parent(ifh), :, :, h))
+end
+
 @inline function slab(ijfh::IJFH{S, Nij}, h::Integer) where {S, Nij} # k,v are unused
     @boundscheck (1 <= h <= length(ijfh)) || throw(BoundsError(ijfh, (h,)))
     IJF{S, Nij}(view(parent(ijfh), :, :, :, h))
+end
+
+@propagate_inbounds function Base.getindex(
+    slab::DataSlab1D{S},
+    I::CartesianIndex{1},
+) where {S}
+    slab[I[1]]
 end
 
 @propagate_inbounds function Base.getindex(
@@ -415,6 +433,14 @@ end
     slab[I[1], I[2]]
 end
 
+
+# 1D slab size, axes required for defining interation 
+Base.length(::DataSlab1D{S, Ni}) where {S, Ni} = Ni
+Base.size(::DataSlab1D{S, Ni}) where {S, Ni} = (Ni,)
+Base.axes(::DataSlab1D{S, Ni}) where {S, Ni} = (SOneTo(Ni),)
+
+# 2D slab size, axes
+Base.length(::DataSlab2D{S, Nij}) where {S, Nij} = Nij * Nij
 Base.size(::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij)
 Base.axes(::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 

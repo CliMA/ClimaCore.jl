@@ -20,7 +20,7 @@ module Topologies
 
 import ..Geometry
 import ..Domains: coordinate_type
-import ..Meshes: EquispacedRectangleMesh
+import ..Meshes: EquispacedRectangleMesh, EquispacedLineMesh
 
 # TODO: seperate types for MPI/non-MPI topologies
 """

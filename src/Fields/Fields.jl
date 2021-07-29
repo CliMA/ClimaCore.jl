@@ -28,6 +28,9 @@ end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
 
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
 const FiniteDifferenceField{V, S} =
@@ -67,6 +70,7 @@ Base.length(field::Fields.Field) = 1
 
 slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
+
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
@@ -191,11 +195,16 @@ function Spaces.variational_solve!(field::Field)
     return field
 end
 
-function Spaces.horizontal_dss!(field::Field)
+function Spaces.dss_1d!(field::SpectralElementField1D)
+    Spaces.dss_1d!(field_values(field), axes(field))
+    return field
+end
+
+function Spaces.horizontal_dss!(field::SpectralElementField2D)
     Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
-function Spaces.weighted_dss!(field::Field)
+function Spaces.weighted_dss!(field::SpectralElementField2D)
     Spaces.weighted_dss!(field_values(field), axes(field))
     return field
 end

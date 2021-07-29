@@ -77,6 +77,15 @@ rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
 rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 
 
+function rmatmul(W, S, i)
+    Nq = size(W, 2)
+    r = W[i, 1] ⊠ S[1]
+    for ii in 2:Nq
+        r = rmuladd(W[i, ii], S[ii], r)
+    end
+    return r
+end
+
 """
     rmatmul1(W, S, i, j)
 
