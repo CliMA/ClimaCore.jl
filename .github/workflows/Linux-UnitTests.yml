@@ -14,7 +14,9 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: true
-    
+      matrix:
+        julia-version: ['1.6', '1.7-nightly']
+
     env:
       CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
 
@@ -30,14 +32,14 @@ jobs:
     - name: Set up Julia
       uses: julia-actions/setup-julia@latest
       with:
-        version: 1.6
+        version: ${{ matrix.julia-version }}
 
     - name: Cache artifacts
       uses: actions/cache@v1
       env:
         cache-name: cache-artifacts
       with:
-        path: ~/.julia/artifacts 
+        path: ~/.julia/artifacts
         key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
         restore-keys: |
           ${{ runner.os }}-test-${{ env.cache-name }}-
