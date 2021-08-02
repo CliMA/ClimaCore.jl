@@ -30,7 +30,7 @@ function Base.Broadcast.broadcast_shape(
 end
 
 Base.LinearIndices(axs::NTuple{N, AbstractAxis}) where {N} =
-    LinearIndices(map(ax -> ax.range, axs))
+    LinearIndices(map(ax -> first(ax.range):last(ax.range), axs))
 
 struct CovariantAxis{R} <: AbstractAxis
     range::R
