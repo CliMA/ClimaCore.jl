@@ -248,19 +248,29 @@ curl_result_type(::Type{V}) where {V <: Cartesian12Vector{FT}} where {FT} =
 curl_result_type(::Type{V}) where {V <: Covariant3Vector{FT}} where {FT} =
     Contravariant12Vector{FT}
 
-function norm²(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
+_norm_sqr(x, local_geometry) = LinearAlgebra.norm_sqr(x)
+
+function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)
+    LinearAlgebra.norm_sqr(u.u³)
+end
+function _norm_sqr(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
     u = Cartesian12Vector(uᵢ, local_geometry)
-    norm²(u, local_geometry)
+    _norm_sqr(u, local_geometry)
 end
 
-function norm²(u::Cartesian12Vector, local_geometry::LocalGeometry)
+function _norm_sqr(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
+    u = Cartesian12Vector(uᵢ, local_geometry)
+    _norm_sqr(u, local_geometry)
+end
+
+function _norm_sqr(u::Cartesian12Vector, local_geometry::LocalGeometry)
     abs2(u.u1) + abs2(u.u2)
 end
 
-LinearAlgebra.norm(u::CustomAxisFieldVector, local_geometry::LocalGeometry) =
-    sqrt(norm²(u, local_geometry))
+_norm(u::CustomAxisFieldVector, local_geometry) =
+    sqrt(_norm_sqr(u, local_geometry))
 
-function LinearAlgebra.cross(
+function _cross(
     uⁱ::Contravariant12Vector,
     v::Contravariant3Vector,
     local_geometry::LocalGeometry,
@@ -268,13 +278,13 @@ function LinearAlgebra.cross(
     Covariant12Vector(uⁱ.u² * v.u³, -uⁱ.u¹ * v.u³)
 end
 
-function LinearAlgebra.cross(
+function _cross(
     u::Cartesian12Vector,
     v::Contravariant3Vector,
     local_geometry::LocalGeometry,
 )
     uⁱ = Contravariant12Vector(u, local_geometry)
-    LinearAlgebra.cross(uⁱ, v, local_geometry)
+    _cross(uⁱ, v, local_geometry)
 end
 
 # tensors
