@@ -139,9 +139,25 @@ function Base.Broadcast.broadcasted(
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
-        LinearAlgebra.norm,
+        Geometry._norm,
         arg,
-        Field(space.local_geometry, space),
+        hasproperty(space, :local_geometry) ?
+        Field(space.local_geometry, space) : Ref(nothing),
+    )
+end
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(LinearAlgebra.norm_sqr),
+    arg,
+)
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        Geometry._norm_sqr,
+        arg,
+        hasproperty(space, :local_geometry) ?
+        Field(space.local_geometry, space) : Ref(nothing),
     )
 end
 
@@ -155,7 +171,7 @@ function Base.Broadcast.broadcasted(
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(
         fs,
-        LinearAlgebra.cross,
+        Geometry._cross,
         arg1,
         arg2,
         Field(space.local_geometry, space),

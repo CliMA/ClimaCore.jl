@@ -1,5 +1,6 @@
 using Base: operator_associativity
 
+include("recursive.jl")
 include("data1d.jl")
 include("data.jl")
 include("grid.jl")
