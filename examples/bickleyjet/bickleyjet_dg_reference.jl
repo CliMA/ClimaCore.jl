@@ -321,8 +321,6 @@ function tendency_ref!(dydt_ref, y0_ref, (parameters, numflux, W, D, M, valNq, s
                     @simd for k = 1:Nq
                         # D'[i,:]*WJv¹[:,j]
                         adj += D[k, i] * WJv¹[s, k, j]
-                    end
-                    @simd for k = 1:Nq
                         # D'[j,:]*WJv²[i,:]
                         adj += D[k, j] * WJv²[s, i, k]
                     end
