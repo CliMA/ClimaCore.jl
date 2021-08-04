@@ -256,7 +256,7 @@ convergence_rate(err, Δh) =
             operator = Operators.InterpolateF2C()
             cent_field .= operator.(face_field)
 
-            Δh[k] = cs.Δh_c2c[1]
+            Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
                 norm(parent(cent_field) .- parent(cent_field_exact)) /
                 length(parent(cent_field_exact))
@@ -304,7 +304,7 @@ end
             )
             face_field .= operator.(cent_field)
 
-            Δh[k] = cs.Δh_f2f[1]
+            Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
                 norm(parent(face_field) .- parent(face_field_exact)) /
                 length(parent(face_field_exact))
@@ -351,7 +351,7 @@ end
 
             face_field .= operator.(cent_field)
 
-            Δh[k] = cs.Δh_f2f[1]
+            Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
                 norm(parent(face_field) .- parent(face_field_exact)) /
                 length(parent(face_field_exact))
@@ -395,7 +395,7 @@ end
 
             cent_field .= operator.(face_field)
 
-            Δh[k] = cs.Δh_f2f[1]
+            Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
                 norm(parent(cent_field) .- parent(cent_field_exact)) /
                 length(parent(cent_field_exact))

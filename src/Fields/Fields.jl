@@ -26,7 +26,7 @@ end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
 
-Field(::Type{T}, space::S) where {T, S<:AbstractSpace} =
+Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
 
@@ -162,7 +162,8 @@ end
 
 Construct a `Field` of the coordinates of the space.
 """
-coordinate_field(space::AbstractSpace) = Field(Spaces.coordinates_data(space), space)
+coordinate_field(space::AbstractSpace) =
+    Field(Spaces.coordinates_data(space), space)
 coordinate_field(field::Field) = coordinate_field(axes(field))
 
 """

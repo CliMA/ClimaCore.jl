@@ -11,7 +11,6 @@
 # get_offset(array, S, offset) => S(...), next_offset
 import Base: @propagate_inbounds
 
-
 """
     basetype(S...)
 
@@ -30,8 +29,6 @@ function basetype(::Type{S1}, Sx...) where {S1}
     FT1 !== FT2 && error("Inconsistent basetypes $FT1 and $FT2")
     return FT1
 end
-
-
 
 """
     StructArrays.bypass_constructor(T, args)
@@ -148,6 +145,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
         return nothing
     end
 end
+
 @propagate_inbounds function set_struct!(
     array::AbstractArray{S},
     val::S,
@@ -155,6 +153,7 @@ end
 ) where {S}
     array[offset + 1] = val
 end
+
 @propagate_inbounds function set_struct!(array, val)
     set_struct!(array, val, 0)
 end

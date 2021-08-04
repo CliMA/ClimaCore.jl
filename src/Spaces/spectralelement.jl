@@ -15,7 +15,8 @@ end
 Topologies.nlocalelems(Space::AbstractSpace) =
     Topologies.nlocalelems(Space.topology)
 
-undertype(space::AbstractSpace) = DataLayouts.basetype(eltype(space.local_geometry))
+undertype(space::AbstractSpace) =
+    DataLayouts.basetype(eltype(space.local_geometry))
 
 function Base.show(io::IO, Space::SpectralElementSpace2D)
     println(io, "SpectralElementSpace2D:")
@@ -33,7 +34,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
     FT = eltype(CT)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    coordinates = DataLayouts.IJFH{CT, Nq}(Array{FT}, nelements)
     LG = Geometry.LocalGeometry{CT, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
@@ -41,7 +41,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
         Quadratures.quadrature_points(FT, quadrature_style)
 
     for elem in 1:nelements
-        coordinate_slab = slab(coordinates, elem)
         local_geometry_slab = slab(local_geometry, elem)
         for i in 1:Nq, j in 1:Nq
             # this hard-codes a bunch of assumptions, and will unnecesarily duplicate data
@@ -67,8 +66,8 @@ function SpectralElementSpace2D(topology, quadrature_style)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
-            coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ, ∂ξ∂x)
+            local_geometry_slab[i, j] =
+                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ, ∂ξ∂x)
         end
     end
 
@@ -174,7 +173,9 @@ function compute_surface_geometry(
     return Geometry.SurfaceGeometry(sWJ, Geometry.Cartesian12Vector(n...))
 end
 
-coordinates_data(space::SpectralElementSpace2D) = space.local_geometry.coordinates
+coordinates_data(space::SpectralElementSpace2D) =
+    space.local_geometry.coordinates
+local_geometry_data(space::SpectralElementSpace2D) = space.local_geometry
 
 function variational_solve!(data, space::AbstractSpace)
     data .= RecursiveApply.rdiv.(data, space.local_geometry.WJ)
