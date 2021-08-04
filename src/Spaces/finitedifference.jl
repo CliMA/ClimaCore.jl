@@ -68,10 +68,10 @@ function FiniteDifferenceSpace{S}(
     )
 end
 
-Base.length(space::FiniteDifferenceSpace) = length(coordinates(space))
+Base.length(space::FiniteDifferenceSpace) = length(coordinate_data(space))
 
-coordinates(space::CenterFiniteDifferenceSpace) = space.center_coordinates
-coordinates(space::FaceFiniteDifferenceSpace) = space.face_coordinates
+coordinates_data(space::CenterFiniteDifferenceSpace) = space.center_coordinates
+coordinates_data(space::FaceFiniteDifferenceSpace) = space.face_coordinates
 
 coordinate(space::CenterFiniteDifferenceSpace, idx) =
     space.center_coordinates[idx]

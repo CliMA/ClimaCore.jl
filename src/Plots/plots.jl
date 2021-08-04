@@ -52,7 +52,7 @@ function UnicodePlots.lineplot(
     xlabel = repr(name) * " value"
     xdata = Array(parent(field))[:, 1]
 
-    ydata = Array(parent(Spaces.coordinates(space)))[:, 1]
+    ydata = Array(parent(Spaces.coordinates_data(space)))[:, 1]
     ylabel = if field isa Spaces.FaceFiniteDifferenceSpace
         ":y faces"
     else
@@ -77,7 +77,7 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     # unwrap the data to plot
     space = axes(field)
     xdata = parent(field)[:, 1]
-    ydata = parent(Spaces.coordinates(space))[:, 1]
+    ydata = parent(Spaces.coordinates_data(space))[:, 1]
 
     # set the plot attributes
     title --> "Column"

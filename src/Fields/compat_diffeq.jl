@@ -12,6 +12,8 @@ Base.any(f, field::Field) = any(f, parent(field))
 
 Base.muladd(x, field::Field) = muladd.(x, field)
 
+Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+
 RecursiveArrayTools.recursive_unitless_eltype(field::Field) = typeof(field)
 
 RecursiveArrayTools.recursive_unitless_bottom_eltype(field::Field) =

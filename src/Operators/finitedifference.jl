@@ -1194,7 +1194,7 @@ function Base.similar(
     ::Type{Eltype},
 ) where {Eltype, S <: AbstractStencilStyle}
     sp = axes(bc)
-    return Field(similar(Spaces.coordinates(sp), Eltype), sp)
+    return Field(Eltype, sp)
 end
 
 function Base.copyto!(

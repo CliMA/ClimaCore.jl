@@ -258,11 +258,6 @@ function _norm_sqr(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
     _norm_sqr(u, local_geometry)
 end
 
-function _norm_sqr(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
-    u = Cartesian12Vector(uᵢ, local_geometry)
-    _norm_sqr(u, local_geometry)
-end
-
 function _norm_sqr(u::Cartesian12Vector, local_geometry::LocalGeometry)
     abs2(u.u1) + abs2(u.u2)
 end

@@ -20,9 +20,9 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    array = getfield(space.coordinates, :array)
+    array = parent(Spaces.coordinates_data(space))
     @test size(array) == (4, 4, 2, 1)
-    coord_slab = slab(space.coordinates, 1)
+    coord_slab = slab(Spaces.coordinates_data(space), 1)
     @test coord_slab[1, 1] ≈ Cartesian2DPoint(-3.0, -2.0)
     @test coord_slab[4, 1] ≈ Cartesian2DPoint(5.0, -2.0)
     @test coord_slab[1, 4] ≈ Cartesian2DPoint(-3.0, 8.0)
