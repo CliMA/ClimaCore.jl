@@ -141,8 +141,7 @@ function Base.Broadcast.broadcasted(
         fs,
         Geometry._norm,
         arg,
-        hasproperty(space, :local_geometry) ?
-        Field(space.local_geometry, space) : Ref(nothing),
+        Field(space.local_geometry, space),
     )
 end
 function Base.Broadcast.broadcasted(
@@ -156,8 +155,7 @@ function Base.Broadcast.broadcasted(
         fs,
         Geometry._norm_sqr,
         arg,
-        hasproperty(space, :local_geometry) ?
-        Field(space.local_geometry, space) : Ref(nothing),
+        Field(space.local_geometry, space),
     )
 end
 
