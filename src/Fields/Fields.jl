@@ -171,7 +171,8 @@ coordinate_field(field::Field) = coordinate_field(axes(field))
 
 Construct a `Field` of the `LocalGeometry` of the space.
 """
-local_geometry_field(space::AbstractSpace) = Field(space.local_geometry, space)
+local_geometry_field(space::AbstractSpace) =
+    Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry(axes(field))
 
 

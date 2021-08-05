@@ -12,7 +12,7 @@ struct SpectralElementSpace2D{T, Q, G, D, IS, BS} <: AbstractSpace
     boundary_surface_geometries::BS
 end
 
-Topologies.nlocalelems(Space::AbstractSpace) =
+Topologies.nlocalelems(Space::SpectralElementSpace2D) =
     Topologies.nlocalelems(Space.topology)
 
 function Base.show(io::IO, Space::SpectralElementSpace2D)
@@ -170,8 +170,6 @@ function compute_surface_geometry(
     return Geometry.SurfaceGeometry(sWJ, Geometry.Cartesian12Vector(n...))
 end
 
-coordinates_data(space::SpectralElementSpace2D) =
-    space.local_geometry.coordinates
 local_geometry_data(space::SpectralElementSpace2D) = space.local_geometry
 
 function variational_solve!(data, space::AbstractSpace)
@@ -194,3 +192,5 @@ function slab(space::SpectralElementSpace2D, h)
         slab(space.local_geometry, h),
     )
 end
+
+local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry

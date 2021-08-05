@@ -141,7 +141,7 @@ function Base.Broadcast.broadcasted(
         fs,
         Geometry._norm,
         arg,
-        Field(space.local_geometry, space),
+        local_geometry_field(space),
     )
 end
 function Base.Broadcast.broadcasted(
@@ -155,7 +155,7 @@ function Base.Broadcast.broadcasted(
         fs,
         Geometry._norm_sqr,
         arg,
-        Field(space.local_geometry, space),
+        local_geometry_field(space),
     )
 end
 
@@ -172,7 +172,7 @@ function Base.Broadcast.broadcasted(
         Geometry._cross,
         arg1,
         arg2,
-        Field(space.local_geometry, space),
+        local_geometry_field(space),
     )
 end
 
@@ -183,5 +183,5 @@ function Base.Broadcast.broadcasted(
 ) where {V <: Geometry.CustomAxisFieldVector}
     space = Fields.axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
-    Base.Broadcast.broadcasted(fs, V, arg, Field(space.local_geometry, space))
+    Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
