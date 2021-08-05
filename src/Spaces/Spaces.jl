@@ -20,6 +20,12 @@ using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 
 abstract type AbstractSpace end
 
+local_geometry_data(space::AbstractSpace) =
+    error("local geometry not defined for space: $(summary(space))")
+
+undertype(space::AbstractSpace) =
+    DataLayouts.basetype(local_geometry_data(space))
+
 include("quadrature.jl")
 import .Quadratures
 

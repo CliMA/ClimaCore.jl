@@ -15,9 +15,6 @@ end
 Topologies.nlocalelems(Space::AbstractSpace) =
     Topologies.nlocalelems(Space.topology)
 
-undertype(space::AbstractSpace) =
-    DataLayouts.basetype(eltype(space.local_geometry))
-
 function Base.show(io::IO, Space::SpectralElementSpace2D)
     println(io, "SpectralElementSpace2D:")
     println(io, "  topology: ", Space.topology)
