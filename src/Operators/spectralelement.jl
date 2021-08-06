@@ -221,12 +221,12 @@ end
 
 =#
 
-_apply_slab(x, h) = x
+@inline _apply_slab(x, h) = x
 
-_apply_slab(sbc::SpectralBroadcasted, h) =
+@inline _apply_slab(sbc::SpectralBroadcasted, h) =
     apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
 
-_apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
+@inline _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
     Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
         bc.f,
         map(a -> _apply_slab(a, h), bc.args),
@@ -414,7 +414,7 @@ Compute the (strong) gradient on each element via the chain rule:
 struct Gradient <: SpectralElementOperator end
 
 operator_return_eltype(op::Gradient, S) =
-    RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
+    RecursiveApply.rmaptype(T -> Covariant12Vector{T}, S)
 
 struct GradientResult{S, Nq, JM} <: OperatorSlabResult{S, Nq}
     M::JM
@@ -448,12 +448,7 @@ end
     ∂f∂ξ₁ = RecursiveApply.rmatmul1(D, res.M, i, j)
     ∂f∂ξ₂ = RecursiveApply.rmatmul2(D, res.M, i, j)
     ∂f∂ξ = RecursiveApply.rmap(Covariant12Vector, ∂f∂ξ₁, ∂f∂ξ₂)
-    # TODO: return a CovariantVector by default;
-    #       use subsequent broadcasting to convert to desired basis
-    return RecursiveApply.rmap(
-        x -> Cartesian12Vector(x, slab_space.local_geometry[i, j]),
-        ∂f∂ξ,
-    )
+    return ∂f∂ξ
 end
 
 
@@ -467,7 +462,7 @@ Compute the (strong) gradient on each element via the chain rule:
 struct WeakGradient <: SpectralElementOperator end
 
 operator_return_eltype(op::WeakGradient, S) =
-    RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
+    RecursiveApply.rmaptype(T -> Covariant12Vector{T}, S)
 
 struct WeakGradientResult{S, Nq, M} <: OperatorSlabResult{S, Nq}
     WM::M
@@ -511,12 +506,7 @@ end
         Dᵀ₁Wf,
         Dᵀ₂Wf,
     )
-    # TODO: return a CovariantVector by default;
-    #       use subsequent broadcasting to convert to desired basis
-    return RecursiveApply.rmap(
-        x -> Cartesian12Vector(x, slab_space.local_geometry[i, j]),
-        ∂f∂ξ,
-    )
+    return ∂f∂ξ
 end
 
 

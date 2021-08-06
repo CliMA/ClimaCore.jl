@@ -173,6 +173,14 @@ end
 function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
     LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
 end
+function contravariant1(x::Covariant12Vector, local_geometry::LocalGeometry)
+    contravariant1(Cartesian12Vector(x, local_geometry), local_geometry)
+end
+function contravariant2(x::Covariant12Vector, local_geometry::LocalGeometry)
+    contravariant2(Cartesian12Vector(x, local_geometry), local_geometry)
+end
+
+
 function contravariant1(x::Contravariant12Vector, local_geometry::LocalGeometry)
     x.u¹
 end
@@ -180,6 +188,15 @@ function contravariant2(x::Contravariant12Vector, local_geometry::LocalGeometry)
     x.u²
 end
 
+function covariant1(x::Covariant12Vector, local_geometry::LocalGeometry)
+    x.u₁
+end
+function covariant2(x::Covariant12Vector, local_geometry::LocalGeometry)
+    x.u₂
+end
+function covariant3(x::Covariant12Vector, local_geometry::LocalGeometry)
+    zero(eltype(x))
+end
 
 function covariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)
     (local_geometry.∂ξ∂x \ components(x))[1]
@@ -205,6 +222,14 @@ function Cartesian12Vector(u::Covariant12Vector, local_geometry::LocalGeometry)
     # u[j] = ∂ξ∂x[i,j] * uᵢ
     Cartesian12Vector((local_geometry.∂ξ∂x' * components(u))...)
 end
+function Covariant12Vector(u::Cartesian12Vector, local_geometry::LocalGeometry)
+    # uⱼ = ∂x∂ξ[i,j] * u[i]
+    Covariant12Vector((local_geometry.∂x∂ξ' * components(u))...)
+end
+function Covariant12Vector(u::Contravariant12Vector, local_geometry::LocalGeometry)
+    # uⱼ = ∂x∂ξ[i,j] * u[i]
+    Covariant12Vector(Cartesian12Vector(u, local_geometry), local_geometry)
+end
 
 function Covariant3Vector(
     uⁱ::Contravariant3Vector,
@@ -221,12 +246,18 @@ function Contravariant12Vector(
     # uⁱ = ∂ξ∂x[i,j] * u[j]
     Contravariant12Vector((local_geometry.∂ξ∂x * components(u))...)
 end
+function Contravariant12Vector(
+    u::Covariant12Vector,
+    local_geometry::LocalGeometry,
+)
+    Contravariant12Vector(Cartesian12Vector(u, local_geometry), local_geometry)
+end
 function Cartesian12Vector(
     uⁱ::Contravariant12Vector,
     local_geometry::LocalGeometry,
 )
-    # u[j] = ∂ξ∂x[i,j] \ uⁱ
-    Cartesian12Vector((local_geometry.∂ξ∂x \ components(uⁱ))...)
+    # u[i] = ∂x∂ξ[i,j] * uʲ
+    Cartesian12Vector((local_geometry.∂x∂ξ * components(uⁱ))...)
 end
 
 """
@@ -275,6 +306,14 @@ end
 
 function _cross(
     u::Cartesian12Vector,
+    v::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+)
+    uⁱ = Contravariant12Vector(u, local_geometry)
+    _cross(uⁱ, v, local_geometry)
+end
+function _cross(
+    u::Covariant12Vector,
     v::Contravariant3Vector,
     local_geometry::LocalGeometry,
 )
