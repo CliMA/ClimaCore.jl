@@ -20,6 +20,11 @@ using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 
 abstract type AbstractSpace end
 
+undertype(space::AbstractSpace) =
+    Geometry.undertype(eltype(local_geometry_data(space)))
+
+coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
+
 include("quadrature.jl")
 import .Quadratures
 

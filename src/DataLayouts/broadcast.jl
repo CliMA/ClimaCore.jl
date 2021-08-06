@@ -80,8 +80,9 @@ function Base.similar(
     ::Type{Eltype},
 ) where {A, Eltype}
     Nh = length(bc)
-    array = similar(A, (Nh, typesize(eltype(A), Eltype)))
-    return VF{Eltype, A}(array)
+    AA = A <: SubArray ? Array{eltype(A), 2} : A
+    array = similar(AA, (Nh, typesize(eltype(A), Eltype)))
+    return VF{Eltype, AA}(array)
 end
 
 function Base.mapreduce(

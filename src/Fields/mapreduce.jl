@@ -1,12 +1,9 @@
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
 
 # useful operations
-weighted_jacobian(space::Spaces.FaceFiniteDifferenceSpace) = space.Δh_c2c
-weighted_jacobian(space::Spaces.CenterFiniteDifferenceSpace) = space.Δh_f2f
-weighted_jacobian(space::Spaces.SpectralElementSpace2D) =
-    space.local_geometry.WJ
 weighted_jacobian(field) = weighted_jacobian(axes(field))
-
+weighted_jacobian(space::Spaces.AbstractSpace) =
+    Spaces.local_geometry_data(space).WJ
 
 # sum will give the integral over the field
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})

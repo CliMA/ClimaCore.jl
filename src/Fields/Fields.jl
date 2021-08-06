@@ -19,14 +19,16 @@ struct Field{V <: AbstractData, S <: AbstractSpace}
     space::S
     # add metadata/attributes?
     function Field{V, S}(values::V, space::S) where {V, S}
-        # need to enforce that the data size matches the space
-        # @assert support(values) === support(space.coordinates)
-        # @assert size(values) == size(space.coordinates)
+        #TODOneed to enforce that the data size matches the space
         return new{V, S}(values, space)
     end
 end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
+
+Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
+    Field(similar(Spaces.coordinates_data(space), T), space)
+
 
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
@@ -107,21 +109,20 @@ end
 
 
 Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
-    Field(similar(field_values(field), Eltype), axes(field))
+    Field(Eltype, axes(field))
 Base.similar(field::Field) = similar(field, eltype(field))
-Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
 
 
 # fields on different spaces
-function Base.similar(field::Field, (space_to,)::Tuple{AbstractSpace})
-    similar(field, (space_to,), eltype(field))
+function Base.similar(field::Field, space_to::AbstractSpace)
+    similar(field, space_to, eltype(field))
 end
 function Base.similar(
     field::Field,
-    (space_to,)::Tuple{AbstractSpace},
+    space_to::AbstractSpace,
     ::Type{Eltype},
 ) where {Eltype}
-    Field(similar(space_to.coordinates, Eltype), space_to)
+    Field(Eltype, space_to)
 end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
@@ -133,7 +134,7 @@ function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
 end
 
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
-    field = Field(similar(Spaces.coordinates(space), FT), space)
+    field = Field(FT, space)
     data = parent(field)
     fill!(data, zero(eltype(data)))
     return field
@@ -141,7 +142,7 @@ end
 Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
-    field = Field(similar(Spaces.coordinates(space), FT), space)
+    field = Field(FT, space)
     data = parent(field)
     fill!(data, one(eltype(data)))
     return field
@@ -161,8 +162,20 @@ end
 
 Construct a `Field` of the coordinates of the space.
 """
-coordinate_field(space::AbstractSpace) = Field(Spaces.coordinates(space), space)
+coordinate_field(space::AbstractSpace) =
+    Field(Spaces.coordinates_data(space), space)
 coordinate_field(field::Field) = coordinate_field(axes(field))
+
+"""
+    local_geometry_field(space::AbstractSpace)
+
+Construct a `Field` of the `LocalGeometry` of the space.
+"""
+local_geometry_field(space::AbstractSpace) =
+    Field(Spaces.local_geometry_data(space), space)
+local_geometry_field(field::Field) = local_geometry(axes(field))
+
+
 
 include("broadcast.jl")
 include("mapreduce.jl")

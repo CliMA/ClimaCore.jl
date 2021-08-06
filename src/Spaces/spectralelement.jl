@@ -3,21 +3,17 @@
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace2D{T, Q, C, G, D, IS, BS} <: AbstractSpace
+struct SpectralElementSpace2D{T, Q, G, D, IS, BS} <: AbstractSpace
     topology::T
     quadrature_style::Q
-    coordinates::C
     local_geometry::G
     dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
 end
 
-Topologies.nlocalelems(Space::AbstractSpace) =
+Topologies.nlocalelems(Space::SpectralElementSpace2D) =
     Topologies.nlocalelems(Space.topology)
-
-undertype(::Type{Geometry.LocalGeometry{FT, M}}) where {FT, M} = FT
-undertype(Space::AbstractSpace) = undertype(eltype(Space.local_geometry))
 
 function Base.show(io::IO, Space::SpectralElementSpace2D)
     println(io, "SpectralElementSpace2D:")
@@ -35,15 +31,13 @@ function SpectralElementSpace2D(topology, quadrature_style)
     FT = eltype(CT)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    coordinates = DataLayouts.IJFH{CT, Nq}(Array{FT}, nelements)
-    LG = Geometry.LocalGeometry{FT, SMatrix{2, 2, FT, 4}}
+    LG = Geometry.LocalGeometry{CT, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
     for elem in 1:nelements
-        coordinate_slab = slab(coordinates, elem)
         local_geometry_slab = slab(local_geometry, elem)
         for i in 1:Nq, j in 1:Nq
             # this hard-codes a bunch of assumptions, and will unnecesarily duplicate data
@@ -69,8 +63,8 @@ function SpectralElementSpace2D(topology, quadrature_style)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
-            coordinate_slab[i, j] = x
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(J, WJ, ∂ξ∂x)
+            local_geometry_slab[i, j] =
+                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ, ∂ξ∂x)
         end
     end
 
@@ -140,7 +134,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
     return SpectralElementSpace2D(
         topology,
         quadrature_style,
-        coordinates,
         local_geometry,
         dss_weights,
         internal_surface_geometry,
@@ -177,7 +170,7 @@ function compute_surface_geometry(
     return Geometry.SurfaceGeometry(sWJ, Geometry.Cartesian12Vector(n...))
 end
 
-coordinates(space::SpectralElementSpace2D) = space.coordinates
+local_geometry_data(space::SpectralElementSpace2D) = space.local_geometry
 
 function variational_solve!(data, space::AbstractSpace)
     data .= RecursiveApply.rdiv.(data, space.local_geometry.WJ)
@@ -188,16 +181,16 @@ end
 
 A view into a `SpectralElementSpace2D` for a single slab.
 """
-struct SpectralElementSpaceSlab{Q, C, G} <: AbstractSpace
+struct SpectralElementSpaceSlab{Q, G} <: AbstractSpace
     quadrature_style::Q
-    coordinates::C
     local_geometry::G
 end
 
-function slab(Space::SpectralElementSpace2D, h)
+function slab(space::SpectralElementSpace2D, h)
     SpectralElementSpaceSlab(
-        Space.quadrature_style,
-        slab(Space.coordinates, h),
-        slab(Space.local_geometry, h),
+        space.quadrature_style,
+        slab(space.local_geometry, h),
     )
 end
+
+local_geometry_data(space::SpectralElementSpaceSlab) = space.local_geometry

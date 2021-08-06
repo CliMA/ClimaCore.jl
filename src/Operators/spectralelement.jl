@@ -102,7 +102,7 @@ end
 
 function Base.similar(sbc::SpectralBroadcasted, ::Type{Eltype}) where {Eltype}
     space = axes(sbc)
-    return Field(similar(Spaces.coordinates(space), Eltype), space)
+    return Field(Eltype, space)
 end
 
 function Base.similar(
@@ -110,7 +110,7 @@ function Base.similar(
     ::Type{Eltype},
 ) where {Eltype}
     space = axes(bc)
-    return Field(similar(Spaces.coordinates(space), Eltype), space)
+    return Field(Eltype, space)
 end
 
 function Base.copy(sbc::SpectralBroadcasted)
