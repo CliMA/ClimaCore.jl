@@ -28,3 +28,6 @@ struct SurfaceGeometry{FT, N}
     "surface outward pointing normal vector"
     normal::N
 end
+
+undertype(::Type{LocalGeometry{C, FT, M}}) where {C, FT, M} = FT
+undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT

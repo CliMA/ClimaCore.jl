@@ -21,7 +21,8 @@ using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 abstract type AbstractSpace end
 
 undertype(space::AbstractSpace) =
-    DataLayouts.basetype(eltype(local_geometry_data(space)))
+    Geometry.undertype(eltype(local_geometry_data(space)))
+
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
 
 include("quadrature.jl")
