@@ -31,6 +31,15 @@ function basetype(::Type{S1}, Sx...) where {S1}
 end
 
 """
+    parent_array_type(::Type{<:AbstractArray})
+
+Returns the parent array type underlying the `SubArray` wrapper type
+"""
+parent_array_type(::Type{A}) where {A <: AbstractArray{FT}} where {FT} =
+    Array{FT}
+# TODO: extend for device arrays (e.g CuArray)
+
+"""
     StructArrays.bypass_constructor(T, args)
 
 Create an instance of type `T` from a tuple of field values `args`, bypassing

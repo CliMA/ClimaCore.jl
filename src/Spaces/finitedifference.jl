@@ -88,6 +88,8 @@ end
 
 Base.length(space::FiniteDifferenceSpace) = length(coordinate_data(space))
 
+nlevels(space::FiniteDifferenceSpace) = length(space)
+
 local_geometry_data(space::CenterFiniteDifferenceSpace) =
     space.center_local_geometry
 local_geometry_data(space::FaceFiniteDifferenceSpace) =

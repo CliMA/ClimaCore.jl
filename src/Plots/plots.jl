@@ -123,6 +123,24 @@ RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
     (r1, r2, M')
 end
 
+RecipesBase.@recipe function f(field::Fields.ExtrudedFiniteDifferenceField)
+    data = Fields.field_values(field)
+    Ni, _, _, Nv, Nh = size(data)
+    space = axes(field)
+    hcoord = vec(parent(Fields.coordinate_field(space).x)[1, :, 1, :])
+    vcoord = vec(parent(Fields.coordinate_field(space).z)[:, 1, 1, 1])
+
+    # assumes VIFH layout
+    # set the plot attributes
+    seriestype := :heatmap
+
+    xguide --> "x"
+    yguide --> "z"
+    seriescolor --> :balance
+
+    (hcoord, vcoord, reshape(parent(data), (Nv, Ni * Nh)))
+end
+
 function play(
     timesteps::Vector;
     name::Union{Nothing, Symbol} = nothing,
