@@ -37,7 +37,7 @@ Returns the parent array type underlying the `SubArray` wrapper type
 """
 parent_array_type(::Type{A}) where {A <: AbstractArray{FT}} where {FT} =
     Array{FT}
-# TODO: extend for device arrays (e.g CuArray)
+# TODO: extract interface to overload for backends into separate file
 
 """
     StructArrays.bypass_constructor(T, args)
