@@ -115,14 +115,10 @@ end
 
 
 dydt = similar(y0)
-using JETTest
-
-f(y) = @. Geometry.Covariant12Vector( Operators.WeakCurl()(Geometry.Covariant3Vector( Operators.Curl()(y.u))))
-@test_nodispatch f(y0)
-@test_nodispatch rhs!(dydt, y0, nothing, 0.0)
+rhs!(dydt, y0, nothing, 0.0)
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 10.0))
+prob = ODEProblem(rhs!, y0, (0.0, 200.0))
 sol = solve(
     prob,
     SSPRK33(),
