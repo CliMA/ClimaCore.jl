@@ -32,16 +32,28 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
+
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
-
-
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
 const CenterFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CenterFiniteDifferenceSpace}
+
+const ExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+const FaceExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
+const CenterExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))

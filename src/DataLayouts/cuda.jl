@@ -19,6 +19,9 @@ Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
 Adapt.adapt_structure(to, data::VF{S}) where {S} =
     VF{S}(Adapt.adapt(to, parent(data)))
 
+parent_array_type(
+    ::Type{A},
+) where {A <: CUDA.GPUArrays.AbstractGPUArray{FT}} where {FT} = CUDA.CuArray{FT}
 
 function knl_copyto!(dest, src)
 
@@ -53,14 +56,9 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
+    bc::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
 ) where {S, Nij, A <: CUDA.CuArray}
-    Nh = length(dest)
-    #=
-    nthreads = 512
-    nblocks = cld(nij*nij*nh, nthreads)
-    CUDA.@cuda threads = (nthreads,) blocks = (nblocks,) knl_copyto!(dest, bc)
-    =#
+    _, _, _, _, Nh = size(bc)
     CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copyto!(dest, bc)
     return dest
 end

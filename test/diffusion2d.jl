@@ -56,5 +56,7 @@ using OrdinaryDiffEq
     # Reconstruct the result Field at the last timestep
     y1 = sol(1.0)
 
-    @test y1 ≈ f.(Fields.coordinate_field(space), 1.0) rtol = 1e-6
+    @show y1 .- f.(Fields.coordinate_field(space), 1.0)
+
+    @test y1 ≈ f.(Fields.coordinate_field(space), 1.0) rtol = 5e-5
 end

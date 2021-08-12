@@ -27,6 +27,14 @@ function GridTopology(mesh::EquispacedRectangleMesh)
     GridTopology(mesh, boundaries)
 end
 
+function GridTopology1D(mesh::Meshes.EquispacedLineMesh)
+    x1boundary = mesh.domain.x3boundary
+    x2boundary = nothing
+    boundaries =
+        isnothing(x1boundary) ? NamedTuple() : NamedTuple{x1boundary}((1, 2))
+    return GridTopology(mesh, boundaries)
+end
+
 function Base.show(io::IO, topology::GridTopology)
     print(io, "GridTopology on ", topology.mesh)
 end
@@ -37,6 +45,7 @@ function nlocalelems(topology::GridTopology)
     n2 = topology.mesh.n2
     return n1 * n2
 end
+eachslabindex(topology::GridTopology) = 1:nlocalelems(topology)
 
 function vertex_coordinates(topology::GridTopology, elem::Integer)
     @assert 1 <= elem <= nlocalelems(topology)
