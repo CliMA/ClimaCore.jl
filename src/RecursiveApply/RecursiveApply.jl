@@ -72,6 +72,7 @@ rmul(X, Y) = rmap(*, X, Y)
 rmul(w::Number, X) = rmap(x -> w * x, X)
 rmul(X, w::Number) = rmap(x -> x * w, X)
 rmul(w1::Number, w2::Number) = w1 * w2
+rmul(X::NTuple{N}, Y::NTuple{N}) where {N} = rmap(*, X, Y)
 const ⊠ = rmul
 
 """

@@ -1,0 +1,9 @@
+[deps]
+Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
+Insolation = "e98cc03f-d57e-4e3c-b70c-8d51efe9e0d8"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+RRTMGP = "a01a1ee8-cea4-48fc-987c-fc7878d79da1"
+TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
