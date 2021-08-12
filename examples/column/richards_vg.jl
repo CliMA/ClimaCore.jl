@@ -15,6 +15,7 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33,Rosenbrock23, Tsit5,SSPRK432, F
 using Plots
 using DelimitedFiles
 using Printf
+using UnPack
 
 const FT = Float64
 
@@ -50,14 +51,29 @@ function effective_saturation(θ; ν = ν, θr = θr)
     end
     return (θ-θr)/(ν-θr)
 end
-
-function pressure_head(S; vgn = vgn, vgα = vgα, vgm = vgm, ν = ν, θr = θr, S_s = S_s)
-    if S < FT(0)
+function matric_potential(S; vgn = vgn, vgα = vgα, vgm = vgm)
+    mft = eltype(S)
+    if S < mft(0)
         println("Effective saturation is negative")
         println(S)
     end
-    if S < FT(1)
-            ψ = -((S^(-FT(1) / vgm) - FT(1)) * vgα^(-vgn))^(FT(1) / vgn)
+    if S < mft(1)
+        ψ = -((S^(-mft(1) / vgm) - mft(1)) * vgα^(-vgn))^(mft(1) / vgn)
+    else
+        ψ = mft(0)
+    end
+    
+    return ψ
+end
+
+function pressure_head(S; vgn = vgn, vgα = vgα, vgm = vgm, ν = ν, θr = θr, S_s = S_s)
+    mft = eltype(S)
+    if S < mft(0)
+        println("Effective saturation is negative")
+        println(S)
+    end
+    if S < mft(1)
+            ψ = matric_potential(S;vgn = vgn, vgα = vgα, vgm = vgm)
     else
         θ = S* (ν-θr) + θr 
         ψ = (θ-ν)/S_s
@@ -68,18 +84,19 @@ end
 
 
 function hydraulic_conductivity(S; vgm = vgm, ksat = ksat)
-    if S < FT(1)
-        K = sqrt(S) * (FT(1) - (FT(1) - S^(FT(1) / vgm))^vgm)^FT(2)
+    mft = eltype(S)
+    if S < mft(1)
+        K = sqrt(S) * (mft(1) - (mft(1) - S^(mft(1) / vgm))^vgm)^mft(2)
     else
-        K = FT(1)
+        K = mft(1)
     end
         return K*ksat
 end
 function hydrostatic_profile(z, zmin, porosity, n, α, θr)
-    myf = eltype(z)
-    m = FT(1 - 1 / n)
-    S = FT((FT(1) + (α * (z - zmin))^n)^(-m))
-    return FT(S * (porosity-θr)+θr)
+    mft = eltype(z)
+    m = mft(1 - 1 / n)
+    S = mft((mft(1) + (α * (z - zmin))^n)^(-m))
+    return mft(S * (porosity-θr)+θr)
 end
 
 
@@ -164,7 +181,8 @@ end
 
 
 @testset "Richards sand 1" begin
-    n = 60
+    #small difference in Bonan solution and ours, at same resolution.
+    n = 150
     z₀ = FT(-1.5)
     z₁ = FT(0)
     ksat = FT(34 / (3600 * 100))
@@ -175,7 +193,7 @@ end
     ν = FT(0.287)
     θl_0 = FT(0.1)
     θl_surf = FT(0.267)
-    Δt = FT(0.5)
+    Δt = FT(0.05)
     tf = FT(60 * 60 * 0.8)
     t0 = FT(0)
 
@@ -209,7 +227,7 @@ end
         prob,
         Tsit5(),
         dt = Δt,
-        saveat = 60 * Δt,
+        saveat = 600 * Δt,
         progress = true,
         progress_message = (dt, u, p, t) -> t,
     );
@@ -245,11 +263,14 @@ end
         Plots.plot!(bonan_moisture, bonan_z, label = "Bonan solution, 48min", lw = 2, lc = :red)
     end
     Plots.gif(anim, joinpath(path, "richards_sand.gif"), fps = 10)
+    println("mse")
+    println(sqrt.(sum((bonan_moisture .- parent(sol.u[end])).^2.0)))
 end
 
 
 @testset "runoff bc" begin
-    n = 50
+    # not sure yet if this test is passing.
+    n = 100
     z₀ = FT(-0.35)
     z₁ = FT(0)
     ksat = FT(0.0443 / (3600 * 100))
@@ -259,7 +280,7 @@ end
     θr = FT(0.0)
     S_s = FT(1e-4)
     ν = FT(0.495)
-    Δt = FT(0.1)
+    Δt = FT(0.01)
     tf = FT(60*60)
     t0 = FT(0)
     msp = SoilParams{FT}(ν,vgn,vgα,vgm, ksat, θr, FT(S_s))
