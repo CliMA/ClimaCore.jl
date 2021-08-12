@@ -1,4 +1,5 @@
 [deps]
+BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"

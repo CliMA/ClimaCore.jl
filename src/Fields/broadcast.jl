@@ -185,3 +185,23 @@ function Base.Broadcast.broadcasted(
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
+
+function Base.Broadcast.copyto!(
+    field::Field,
+    bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
+)
+    copyto!(Fields.field_values(field), bc)
+    return field
+end
+function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
+    copyto!(
+        field,
+        Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(
+            identity,
+            (nt,),
+            axes(field),
+        ),
+    )
+end
+
+Base.fill!(field::Fields.Field, val) = field .= val

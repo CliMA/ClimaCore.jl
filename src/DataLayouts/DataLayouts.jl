@@ -499,6 +499,11 @@ function VF{S}(ArrayType, nelements) where {S}
     FT = eltype(ArrayType)
     VF{S}(ArrayType(undef, nelements, typesize(FT, S)))
 end
+function replace_basetype(data::VF{S}, ::Type{FT}) where {S, FT}
+    SS = replace_basetype(S, FT)
+    VF{SS}(similar(parent(data), FT))
+end
+
 
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
 Base.lastindex(data::VF) = length(data)
