@@ -6,48 +6,69 @@ struct CellCenter <: Staggering end
 """ Cell face location """
 struct CellFace <: Staggering end
 
-struct FiniteDifferenceSpace{S <: Staggering, M <: Meshes.IntervalMesh, C, H} <:
+struct FiniteDifferenceSpace{S <: Staggering, M <: Meshes.IntervalMesh, G} <:
        AbstractSpace
     staggering::S
     mesh::M
-    nhalo::Int
-    center_coordinates::C
-    face_coordinates::C
-    Δh_f2f::H # lives at cell center coordinates
-    Δh_c2c::H # lives at cell face coordinates
+    center_local_geometry::G
+    face_local_geometry::G
 end
 
 function FiniteDifferenceSpace{S}(
     mesh::Meshes.IntervalMesh,
-    nhalo::Integer = 0,
 ) where {S <: Staggering}
-    if nhalo < 0
-        throw(ArgumentError("nhalo must be ≥ 0"))
-    end
     FT = eltype(mesh)
     face_coordinates = collect(mesh.faces)
-    face_Δh_left = face_coordinates[2] - face_coordinates[1]
-    face_Δh_right = face_coordinates[end] - face_coordinates[end - 1]
-    for _ in 1:nhalo
-        pushfirst!(face_coordinates, face_coordinates[1] - face_Δh_left)
-        push!(face_coordinates, face_coordinates[end] - face_Δh_right)
-    end
     Δh_f2f = diff(face_coordinates)
-    center_coordinates = [
-        (face_coordinates[i] + face_coordinates[i + 1]) / 2 for
-        i in eachindex(Δh_f2f)
-    ]
-    Δh_c2c = diff(center_coordinates)
-    pushfirst!(Δh_c2c, center_coordinates[1] - face_coordinates[1])
-    push!(Δh_c2c, face_coordinates[end] - center_coordinates[end])
+    CT = eltype(face_coordinates)
+    FT = eltype(CT)
+
+    LG = Geometry.LocalGeometry{CT, FT, SMatrix{1, 1, FT, 1}}
+    nface = length(face_coordinates)
+    ncent = nface - 1
+    center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
+    face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
+
+    for i in 1:ncent
+        # centers
+        z⁻ = face_coordinates[i]
+        z⁺ = face_coordinates[i + 1]
+        # at the moment we use a "discrete Jacobian"
+        # ideally we should use the continuous quantity via the derivative of the warp function
+        # could we just define this then as deriv on the mesh element coordinates?
+        z = (z⁺ + z⁻) / 2
+        Δz = z⁺ - z⁻
+        J = Δz
+        WJ = Δz
+        ∂x∂ξ = SMatrix{1, 1}(J)
+        ∂ξ∂x = SMatrix{1, 1}(inv(J))
+        center_local_geometry[i] = Geometry.LocalGeometry(z, J, WJ, ∂x∂ξ, ∂ξ∂x)
+    end
+
+    for i in 1:nface
+        z = face_coordinates[i]
+        if i == 1
+            # bottom face
+            J = face_coordinates[2] - z
+            WJ = J / 2
+        elseif i == nface
+            # top face
+            J = z - face_coordinates[i - 1]
+            WJ = J / 2
+        else
+            J = (face_coordinates[i + 1] - face_coordinates[i - 1]) / 2
+            WJ = J
+        end
+        ∂x∂ξ = SMatrix{1, 1}(J)
+        ∂ξ∂x = SMatrix{1, 1}(inv(J))
+        face_local_geometry[i] = Geometry.LocalGeometry(z, J, WJ, ∂x∂ξ, ∂ξ∂x)
+    end
+
     return FiniteDifferenceSpace(
         S(),
         mesh,
-        nhalo,
-        DataLayouts.VF{FT}(center_coordinates),
-        DataLayouts.VF{FT}(face_coordinates),
-        DataLayouts.VF{FT}(Δh_f2f),
-        DataLayouts.VF{FT}(Δh_c2c),
+        center_local_geometry,
+        face_local_geometry,
     )
 end
 
@@ -60,45 +81,23 @@ function FiniteDifferenceSpace{S}(
     FiniteDifferenceSpace(
         S(),
         space.mesh,
-        space.nhalo,
-        space.center_coordinates,
-        space.face_coordinates,
-        space.Δh_f2f,
-        space.Δh_c2c,
+        space.center_local_geometry,
+        space.face_local_geometry,
     )
 end
 
-Base.length(space::FiniteDifferenceSpace) = length(coordinates(space))
+Base.length(space::FiniteDifferenceSpace) = length(coordinate_data(space))
 
-coordinates(space::CenterFiniteDifferenceSpace) = space.center_coordinates
-coordinates(space::FaceFiniteDifferenceSpace) = space.face_coordinates
+nlevels(space::FiniteDifferenceSpace) = length(space)
 
-coordinate(space::CenterFiniteDifferenceSpace, idx) =
-    space.center_coordinates[idx]
+local_geometry_data(space::CenterFiniteDifferenceSpace) =
+    space.center_local_geometry
+local_geometry_data(space::FaceFiniteDifferenceSpace) =
+    space.face_local_geometry
 
-coordinate(space::FaceFiniteDifferenceSpace, idx) = space.face_coordinates[idx]
 
-Δcoordinate(space::CenterFiniteDifferenceSpace, idx) = space.Δh_c2c[idx]
-Δcoordinate(space::FaceFiniteDifferenceSpace, idx) = space.Δh_f2f[idx]
-
-real_indices(space::CenterFiniteDifferenceSpace) = range(
-    space.nhalo + 1,
-    length(space.center_coordinates) - space.nhalo,
-    step = 1,
-)
-
-real_indices(space::FaceFiniteDifferenceSpace) = range(
-    space.nhalo + 1,
-    length(space.face_coordinates) - space.nhalo,
-    step = 1,
-)
-
-interior_indices(space::CenterFiniteDifferenceSpace) = real_indices(space)
-
-interior_indices(space::FaceFiniteDifferenceSpace) =
-    real_indices(space)[2:(end - 1)]
-
-@inline left_boundary_name(space::FiniteDifferenceSpace) =
+left_boundary_name(space::FiniteDifferenceSpace) =
     propertynames(space.mesh.boundaries)[1]
-@inline right_boundary_name(space::FiniteDifferenceSpace) =
+
+right_boundary_name(space::FiniteDifferenceSpace) =
     propertynames(space.mesh.boundaries)[2]

@@ -12,7 +12,6 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
-
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
     l = 0.5, # Gaussian width
@@ -21,7 +20,6 @@ const parameters = (
     c = 2,
     g = 10,
 )
-
 
 domain = Domains.RectangleDomain(
     -2π..2π,
@@ -39,7 +37,10 @@ quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Spaces.Quadratures.GLL{Nqh}()
-Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+const Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+const IJ = Fields.Field(Ispace.local_geometry.J, Ispace)
+
+
 
 function init_state(x, p)
     @unpack x1, x2 = x
@@ -61,24 +62,17 @@ function init_state(x, p)
     # set initial tracer
     θ = sin(p.k * x2)
 
-    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
+    return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
-function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
-    u = ρu ./ ρ
-    return (
-        ρ = ρu,
-        ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I),
-        ρθ = ρθ .* u,
-    )
-end
+II = Operators.Interpolate(Ispace)
+const Iyp = @. II(y0.ρ)
+const Iyu = @. II(y0.u)
 
 function energy(state, p)
-    @unpack ρ, ρu = state
-    u = ρu ./ ρ
+    @unpack ρ, u = state
     return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
 end
 
@@ -86,27 +80,35 @@ function total_energy(y, parameters)
     sum(state -> energy(state, parameters), y)
 end
 
-
 function rhs!(dydt, y, _, t)
+    space = Fields.axes(y)
 
     I = Operators.Interpolate(Ispace)
-    div = Operators.WeakDivergence()
     R = Operators.Restrict(space)
 
-    rparameters = Ref(parameters)
-    @. dydt = -R(div(flux(I(y), rparameters)))
 
+    div = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    curl = Operators.Curl()
+
+    @unpack g = parameters
+    @. begin
+        Iyp = I(y.ρ)
+        Iyu = I(y.u)
+        dydt.ρ = R(-div(Iyp * Iyu))
+        dydt.u = R(
+            -grad(g * Iyp + norm(Iyu)^2 / 2) +
+            Cartesian12Vector(IJ * (Iyu × curl(Iyu))),
+        )
+        dydt.ρθ = R(-div(I(y.ρθ) * Iyu))
+    end
     Spaces.weighted_dss!(dydt)
     return dydt
 end
 
-# Next steps:
-# 1. add the above to the design docs (divergence + over-integration + DSS)
-# 2. add boundary conditions
 
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
-
 
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
@@ -119,11 +121,12 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
+
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "cg"
+dirname = "cg_invariant"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 

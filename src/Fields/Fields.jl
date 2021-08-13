@@ -19,21 +19,22 @@ struct Field{V <: AbstractData, S <: AbstractSpace}
     space::S
     # add metadata/attributes?
     function Field{V, S}(values::V, space::S) where {V, S}
-        # need to enforce that the data size matches the space
-        # @assert support(values) === support(space.coordinates)
-        # @assert size(values) == size(space.coordinates)
+        #TODOneed to enforce that the data size matches the space
         return new{V, S}(values, space)
     end
 end
 Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
     Field{V, S}(values, space)
 
+Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
+    Field(similar(Spaces.coordinates_data(space), T), space)
+
+
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
+
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
-
-
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
 const CenterFiniteDifferenceField{V, S} = Field{
@@ -41,17 +42,33 @@ const CenterFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterFiniteDifferenceSpace}
 
+const ExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+const FaceExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
+const CenterExtrudedFiniteDifferenceField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
+
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
-field_values(field::Field) = getfield(field, :values)
+@inline field_values(field::Field) = getfield(field, :values)
 
-# Define the axes field to be the space of the return field
-Base.axes(field::Field) = getfield(field, :space)
+# Define the axes field to be the todata(bc) of the return field
+@inline Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
-Base.getproperty(field::Field, name::Symbol) =
-    Field(getproperty(field_values(field), name), axes(field))
-Base.getproperty(field::Field, name::Integer) =
+@inline Base.getproperty(field::Field, name::Symbol) = Field(
+    DataLayouts._getproperty(field_values(field), Val{name}()),
+    axes(field),
+)
+
+@inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 
 Base.eltype(field::Field) = eltype(field_values(field))
@@ -62,15 +79,12 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-
-function slab(field::Field, h)
+slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
-end
-
+const SlabField{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
-
-
 
 # nice printing
 # follow x-array like printing?
@@ -107,21 +121,20 @@ end
 
 
 Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
-    Field(similar(field_values(field), Eltype), axes(field))
-Base.similar(field::Field) = similar(field, eltype(field))
-Base.similar(field::F, ::Type{F}) where {F <: Field} = similar(field)
+    Field(Eltype, axes(field))
+Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 
 
 # fields on different spaces
-function Base.similar(field::Field, (space_to,)::Tuple{AbstractSpace})
-    similar(field, (space_to,), eltype(field))
+function Base.similar(field::Field, space_to::AbstractSpace)
+    similar(field, space_to, eltype(field))
 end
 function Base.similar(
     field::Field,
-    (space_to,)::Tuple{AbstractSpace},
+    space_to::AbstractSpace,
     ::Type{Eltype},
 ) where {Eltype}
-    Field(similar(space_to.coordinates, Eltype), space_to)
+    Field(Eltype, space_to)
 end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
@@ -133,18 +146,20 @@ function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
 end
 
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
-    field = Field(similar(Spaces.coordinates(space), FT), space)
+    field = Field(FT, space)
     data = parent(field)
     fill!(data, zero(eltype(data)))
     return field
 end
+Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
-    field = Field(similar(Spaces.coordinates(space), FT), space)
+    field = Field(FT, space)
     data = parent(field)
     fill!(data, one(eltype(data)))
     return field
 end
+Base.ones(space::AbstractSpace) = ones(Spaces.undertype(space), space)
 
 function Base.zero(field::Field)
     zfield = similar(field)
@@ -159,12 +174,25 @@ end
 
 Construct a `Field` of the coordinates of the space.
 """
-coordinate_field(space::AbstractSpace) = Field(Spaces.coordinates(space), space)
+coordinate_field(space::AbstractSpace) =
+    Field(Spaces.coordinates_data(space), space)
 coordinate_field(field::Field) = coordinate_field(axes(field))
+
+"""
+    local_geometry_field(space::AbstractSpace)
+
+Construct a `Field` of the `LocalGeometry` of the space.
+"""
+local_geometry_field(space::AbstractSpace) =
+    Field(Spaces.local_geometry_data(space), space)
+local_geometry_field(field::Field) = local_geometry(axes(field))
+
+
 
 include("broadcast.jl")
 include("mapreduce.jl")
 include("compat_diffeq.jl")
+include("fieldvector.jl")
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1
@@ -193,5 +221,10 @@ function Spaces.horizontal_dss!(field::Field)
     Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
+function Spaces.weighted_dss!(field::Field)
+    Spaces.weighted_dss!(field_values(field), axes(field))
+    return field
+end
+
 
 end # module

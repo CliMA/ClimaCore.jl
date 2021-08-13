@@ -25,7 +25,7 @@ ca  fa  fb  cb
 2           2    Interior indices
   \       /
     3 - 3
-  /       \
+  /       \l
 3           3
 
 gradient with dirichlet
@@ -142,10 +142,11 @@ Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
 Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
 
 left_idx(::Spaces.CenterFiniteDifferenceSpace) = 1
-right_idx(space::Spaces.CenterFiniteDifferenceSpace) = length(space.Δh_f2f)
+right_idx(space::Spaces.CenterFiniteDifferenceSpace) =
+    length(space.center_local_geometry)
 left_idx(::Spaces.FaceFiniteDifferenceSpace) = half
 right_idx(space::Spaces.FaceFiniteDifferenceSpace) =
-    PlusHalf(length(space.Δh_f2f))
+    PlusHalf(length(space.center_local_geometry))
 
 left_face_boundary_idx(space::Spaces.FiniteDifferenceSpace) =
     left_idx(Spaces.FaceFiniteDifferenceSpace(space))
@@ -161,15 +162,18 @@ right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
-Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) = space.Δh_f2f[idx]
+Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) =
+    space.center_local_geometry.J[idx]
 Δh_c2c(space::Spaces.FiniteDifferenceSpace, idx::PlusHalf) =
-    space.Δh_c2c[idx.i + 1]
+    space.face_local_geometry.J[idx.i + 1]
 
 # boundary face to left first cell center distance
-Δh_left_bf2c(space::Spaces.FiniteDifferenceSpace) = space.Δh_c2c[1]
+Δh_left_bf2c(space::Spaces.FiniteDifferenceSpace) =
+    space.face_local_geometry.J[1] / 2
 
 # last right cell center to last boundary face distance
-Δh_right_c2bf(space::Spaces.FiniteDifferenceSpace) = space.Δh_c2c[end]
+Δh_right_c2bf(space::Spaces.FiniteDifferenceSpace) =
+    space.face_local_geometry.J[end] / 2
 
 abstract type BoundaryCondition end
 """
@@ -1194,7 +1198,7 @@ function Base.similar(
     ::Type{Eltype},
 ) where {Eltype, S <: AbstractStencilStyle}
     sp = axes(bc)
-    return Field(similar(Spaces.coordinates(sp), Eltype), sp)
+    return Field(Eltype, sp)
 end
 
 function Base.copyto!(
@@ -1205,20 +1209,6 @@ function Base.copyto!(
     return field_out
 end
 
-Spaces.interior_indices(field::Field) = Spaces.real_indices(axes(field))
-
-Spaces.interior_indices(
-    field::Base.Broadcast.Broadcasted{FS},
-) where {FS <: Fields.AbstractFieldStyle} = Spaces.real_indices(axes(field))
-
-function Spaces.interior_indices(bc::Base.Broadcast.Broadcasted{StencilStyle})
-    width_op = stencil_interior_width(bc.f)   # tuple of 2-tuples
-    indices_args = map(Spaces.interior_indices, bc.args) # tuple of indices
-    @assert length(width_op) == length(indices_args)
-    lo = minimum(map((o, a) -> first(a) - o[1], width_op, indices_args))
-    hi = maximum(map((o, a) -> last(a) - o[2], width_op, indices_args))
-    return lo:hi
-end
 
 function apply_stencil!(field_out, bc)
     space = axes(bc)

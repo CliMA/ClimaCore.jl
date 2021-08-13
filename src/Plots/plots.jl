@@ -52,7 +52,7 @@ function UnicodePlots.lineplot(
     xlabel = repr(name) * " value"
     xdata = Array(parent(field))[:, 1]
 
-    ydata = Array(parent(Spaces.coordinates(space)))[:, 1]
+    ydata = Array(parent(Spaces.coordinates_data(space)))[:, 1]
     ylabel = if field isa Spaces.FaceFiniteDifferenceSpace
         ":y faces"
     else
@@ -77,7 +77,7 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     # unwrap the data to plot
     space = axes(field)
     xdata = parent(field)[:, 1]
-    ydata = parent(Spaces.coordinates(space))[:, 1]
+    ydata = parent(Spaces.coordinates_data(space))[:, 1]
 
     # set the plot attributes
     title --> "Column"
@@ -121,6 +121,24 @@ RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
     seriescolor --> :balance
 
     (r1, r2, M')
+end
+
+RecipesBase.@recipe function f(field::Fields.ExtrudedFiniteDifferenceField)
+    data = Fields.field_values(field)
+    Ni, _, _, Nv, Nh = size(data)
+    space = axes(field)
+    hcoord = vec(parent(Fields.coordinate_field(space).x)[1, :, 1, :])
+    vcoord = vec(parent(Fields.coordinate_field(space).z)[:, 1, 1, 1])
+
+    # assumes VIFH layout
+    # set the plot attributes
+    seriestype := :heatmap
+
+    xguide --> "x"
+    yguide --> "z"
+    seriescolor --> :balance
+
+    (hcoord, vcoord, reshape(parent(data), (Nv, Ni * Nh)))
 end
 
 function play(

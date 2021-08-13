@@ -12,6 +12,47 @@
 import Base: @propagate_inbounds
 
 """
+    basetype(S...)
+
+Compute the "base" floating point type of one or more types `S`. This will throw
+an error if there is no unique type.
+"""
+basetype(::Type{FT}) where {FT <: AbstractFloat} = FT
+basetype(::Type{NamedTuple{names, T}}) where {names, T} = basetype(T)
+function basetype(::Type{S}) where {S}
+    isprimitivetype(S) && error("$S is not a floating point type")
+    basetype(ntuple(i -> fieldtype(S, i), fieldcount(S))...)
+end
+function basetype(::Type{S1}, Sx...) where {S1}
+    FT1 = basetype(S1)
+    FT2 = basetype(Sx...)
+    FT1 !== FT2 && error("Inconsistent basetypes $FT1 and $FT2")
+    return FT1
+end
+
+replace_basetype(::Type{S}, ::Type{FT}) where {S <: AbstractFloat, FT} = FT
+function replace_basetype(::Type{S}, ::Type{FT}) where {S <: Tuple, FT}
+    Tuple{ntuple(i -> replace_basetype(fieldtype(S, i), FT), fieldcount(S))...}
+end
+function replace_basetype(
+    ::Type{NamedTuple{names, T}},
+    ::Type{FT},
+) where {names, T, FT}
+    NamedTuple{names, replace_basetype(T, FT)}
+end
+
+
+
+"""
+    parent_array_type(::Type{<:AbstractArray})
+
+Returns the parent array type underlying the `SubArray` wrapper type
+"""
+parent_array_type(::Type{A}) where {A <: AbstractArray{FT}} where {FT} =
+    Array{FT}
+# TODO: extract interface to overload for backends into separate file
+
+"""
     StructArrays.bypass_constructor(T, args)
 
 Create an instance of type `T` from a tuple of field values `args`, bypassing
@@ -126,6 +167,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
         return nothing
     end
 end
+
 @propagate_inbounds function set_struct!(
     array::AbstractArray{S},
     val::S,
@@ -133,6 +175,7 @@ end
 ) where {S}
     array[offset + 1] = val
 end
+
 @propagate_inbounds function set_struct!(array, val)
     set_struct!(array, val, 0)
 end

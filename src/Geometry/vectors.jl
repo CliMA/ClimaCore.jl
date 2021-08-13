@@ -30,7 +30,7 @@ function Base.Broadcast.broadcast_shape(
 end
 
 Base.LinearIndices(axs::NTuple{N, AbstractAxis}) where {N} =
-    LinearIndices(map(ax -> ax.range, axs))
+    LinearIndices(map(ax -> first(ax.range):last(ax.range), axs))
 
 struct CovariantAxis{R} <: AbstractAxis
     range::R
@@ -62,6 +62,9 @@ end
 # Vectors
 
 abstract type CustomAxisFieldVector{N, FT} <: StaticArrays.FieldVector{N, FT} end
+
+(::Type{SA})(a::StaticArrays.StaticArray) where {SA <: CustomAxisFieldVector} =
+    error("Cannot convert without local geometry information")
 
 Base.axes(::CV) where {CV <: CustomAxisFieldVector} = Base.axes(CV)
 
@@ -104,14 +107,21 @@ end
 Base.axes(::Type{Covariant12Vector{FT}}) where {FT} =
     (CovariantAxis(StaticArrays.SOneTo(2)),)
 
+struct Covariant3Vector{FT} <: AbstractCovariantVector{2, FT}
+    u₃::FT
+end
+# Axes wrappers
+Base.axes(::Type{Covariant3Vector{FT}}) where {FT} =
+    (CovariantAxis(StaticArrays.SUnitRange(3, 3)),)
 
+Covariant3Vector(x::AbstractFloat, ::LocalGeometry) = Covariant3Vector(x)
 
 abstract type AbstractContravariantVector{N, FT} <: CustomAxisFieldVector{N, FT} end
 
 """
     Contravariant12Vector
 
-A vector point value represented as the first two contavariant coordinates.
+A vector point value represented as the first two contravariant coordinates.
 """
 struct Contravariant12Vector{FT} <: AbstractContravariantVector{2, FT}
     u¹::FT
@@ -120,6 +130,22 @@ end
 Base.axes(::Type{Contravariant12Vector{FT}}) where {FT} =
     (ContravariantAxis(StaticArrays.SOneTo(2)),)
 
+
+"""
+    Contravariant3Vector
+
+A vector point value represented as the third contravariant coordinates.
+"""
+struct Contravariant3Vector{FT} <: AbstractContravariantVector{1, FT}
+    u³::FT
+end
+Contravariant3Vector{FT}(tup::Tuple{FT}) where {FT} =
+    Contravariant3Vector{FT}(tup[1])
+
+Base.axes(::Type{Contravariant3Vector{FT}}) where {FT} =
+    (ContravariantAxis(StaticArrays.SUnitRange(3, 3)),)
+Contravariant3Vector(x::AbstractFloat, ::LocalGeometry) =
+    Contravariant3Vector(x)
 
 #Base.:(*)(u::Contravariant12Vector,)
 # Sphere:
@@ -147,6 +173,30 @@ end
 function contravariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
     LinearAlgebra.dot(local_geometry.∂ξ∂x[2, :], x)
 end
+function contravariant1(x::Contravariant12Vector, local_geometry::LocalGeometry)
+    x.u¹
+end
+function contravariant2(x::Contravariant12Vector, local_geometry::LocalGeometry)
+    x.u²
+end
+
+
+function covariant1(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    (local_geometry.∂ξ∂x \ components(x))[1]
+end
+
+function covariant2(x::Cartesian12Vector, local_geometry::LocalGeometry)
+    (local_geometry.∂ξ∂x \ components(x))[2]
+end
+
+# need to rethink
+covariant3(x::Cartesian12Vector, local_geometry::LocalGeometry) =
+    zero(eltype(x))
+
+
+covariant1(x::Covariant3Vector, local_geometry::LocalGeometry) = zero(x.u₃)
+covariant2(x::Covariant3Vector, local_geometry::LocalGeometry) = zero(x.u₃)
+covariant3(x::Covariant3Vector, local_geometry::LocalGeometry) = x.u₃
 
 # conversions
 
@@ -156,12 +206,27 @@ function Cartesian12Vector(u::Covariant12Vector, local_geometry::LocalGeometry)
     Cartesian12Vector((local_geometry.∂ξ∂x' * components(u))...)
 end
 
+function Covariant3Vector(
+    uⁱ::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+)
+    # Not true generally, but is in 2D
+    Covariant3Vector(uⁱ.u³)
+end
+
 function Contravariant12Vector(
     u::Cartesian12Vector,
     local_geometry::LocalGeometry,
 )
     # uⁱ = ∂ξ∂x[i,j] * u[j]
     Contravariant12Vector((local_geometry.∂ξ∂x * components(u))...)
+end
+function Cartesian12Vector(
+    uⁱ::Contravariant12Vector,
+    local_geometry::LocalGeometry,
+)
+    # u[j] = ∂ξ∂x[i,j] \ uⁱ
+    Cartesian12Vector((local_geometry.∂ξ∂x \ components(uⁱ))...)
 end
 
 """
@@ -173,6 +238,49 @@ Required for statically infering the result type of the divergence operation for
 """
 divergence_result_type(::Type{V}) where {V <: CustomAxisFieldVector} = eltype(V)
 
+curl_result_type(::Type{V}) where {V <: Covariant12Vector{FT}} where {FT} =
+    Contravariant3Vector{FT}
+curl_result_type(::Type{V}) where {V <: Cartesian12Vector{FT}} where {FT} =
+    Contravariant3Vector{FT}
+
+# not generally true that Contravariant3Vector => Covariant3Vector, but is for our 2D case
+# curl of Covariant3Vector -> Contravariant12Vector
+curl_result_type(::Type{V}) where {V <: Covariant3Vector{FT}} where {FT} =
+    Contravariant12Vector{FT}
+
+_norm_sqr(x, local_geometry) = LinearAlgebra.norm_sqr(x)
+
+function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)
+    LinearAlgebra.norm_sqr(u.u³)
+end
+function _norm_sqr(uᵢ::Covariant12Vector, local_geometry::LocalGeometry)
+    u = Cartesian12Vector(uᵢ, local_geometry)
+    _norm_sqr(u, local_geometry)
+end
+
+function _norm_sqr(u::Cartesian12Vector, local_geometry::LocalGeometry)
+    abs2(u.u1) + abs2(u.u2)
+end
+
+_norm(u::CustomAxisFieldVector, local_geometry) =
+    sqrt(_norm_sqr(u, local_geometry))
+
+function _cross(
+    uⁱ::Contravariant12Vector,
+    v::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+)
+    Covariant12Vector(uⁱ.u² * v.u³, -uⁱ.u¹ * v.u³)
+end
+
+function _cross(
+    u::Cartesian12Vector,
+    v::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+)
+    uⁱ = Contravariant12Vector(u, local_geometry)
+    _cross(uⁱ, v, local_geometry)
+end
 
 # tensors
 
@@ -267,7 +375,6 @@ function contravariant2(
 ) where {FT, V}
     V((local_geometry.∂ξ∂x[2, :]' * A.matrix)...)
 end
-
 
 #=
 
