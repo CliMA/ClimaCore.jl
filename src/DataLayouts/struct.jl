@@ -24,6 +24,9 @@ function basetype(::Type{S}) where {S}
     basetype(ntuple(i -> fieldtype(S, i), fieldcount(S))...)
 end
 function basetype(::Type{S1}, Sx...) where {S1}
+    if sizeof(S1) == 0
+        return basetype(Sx...)
+    end
     FT1 = basetype(S1)
     FT2 = basetype(Sx...)
     FT1 !== FT2 && error("Inconsistent basetypes $FT1 and $FT2")

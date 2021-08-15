@@ -100,7 +100,10 @@ function SpectralElementSpace2D(topology, quadrature_style)
     FT = eltype(CT)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    LG = Geometry.LocalGeometry{CT, FT, SMatrix{2, 2, FT, 4}}
+
+    Mxξ = Geometry.Axis2Tensor{FT,Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis}, SMatrix{2, 2, FT, 4}}
+    Mξx = Geometry.Axis2Tensor{FT,Tuple{Geometry.Contravariant12Axis, Geometry.Cartesian12Axis}, SMatrix{2, 2, FT, 4}}
+    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
@@ -133,7 +136,9 @@ function SpectralElementSpace2D(topology, quadrature_style)
             WJ = J * quad_weights[i] * quad_weights[j]
 
             local_geometry_slab[i, j] =
-                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ, ∂ξ∂x)
+                Geometry.LocalGeometry(x, J, WJ,
+                Geometry.AxisTensor((Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()), ∂x∂ξ),
+                Geometry.AxisTensor((Geometry.Contravariant12Axis(), Geometry.Cartesian12Axis()),∂ξ∂x))
         end
     end
 
