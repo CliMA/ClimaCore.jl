@@ -81,8 +81,15 @@ Base.length(field::Fields.Field) = 1
 
 slab(field::Field, h) =
     Field(slab(field_values(field), h), slab(axes(field), h))
+
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
+
+const SlabField1D{V, S} = 
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab1D}
+
+const SlabField2D{V, S} = 
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab2D}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
