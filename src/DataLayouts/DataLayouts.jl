@@ -137,13 +137,13 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
 end
 
 @generated function _property_view(
-    data::IJKFVH{S, Nij, Nk},
+    data::IJKFVH{S, Nij, Nk, A},
     idx::Val{Idx},
-) where {S, Nij, Nk, Idx}
+) where {S, Nij, Nk, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
-    offset = fieldtypeoffset(T, S, Idx)
-    nbytes = typesize(T, SS)
+    FT = eltype(A)
+    offset = fieldtypeoffset(FT, S, Idx)
+    nbytes = typesize(FT, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJKFVH{$SS, $Nij, $Nk}(
         view(parent(data), :, :, :, $field_byterange, :, :),
@@ -253,13 +253,13 @@ end
 @inline slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 
 @generated function _property_view(
-    data::IFH{S, Ni},
+    data::IFH{S, Ni, A},
     i::Val{Idx},
-) where {S, Ni, Idx}
+) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
-    offset = fieldtypeoffset(T, S, Idx)
-    nbytes = typesize(T, SS)
+    FT = eltype(A)
+    offset = fieldtypeoffset(FT, S, Idx)
+    nbytes = typesize(FT, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IFH{$SS, $Ni}(view(parent(data), :, $field_byterange, :)))
 end
@@ -346,13 +346,13 @@ function Base.size(data::IJF{S, Nij}) where {S, Nij}
 end
 
 @generated function _property_view(
-    data::IJF{S, Nij},
+    data::IJF{S, Nij, A},
     i::Val{Idx},
-) where {S, Nij, Idx}
+) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
-    offset = fieldtypeoffset(T, S, Idx)
-    nbytes = typesize(T, SS)
+    FT = eltype(A)
+    offset = fieldtypeoffset(FT, S, Idx)
+    nbytes = typesize(FT, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJF{$SS, $Nij}(view(parent(data), :, :, $field_byterange)))
 end
@@ -508,11 +508,14 @@ end
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
 Base.lastindex(data::VF) = length(data)
 
-@generated function _property_view(data::VF{S}, idx::Val{Idx}) where {S, Idx}
+@generated function _property_view(
+    data::VF{S, A},
+    idx::Val{Idx},
+) where {S, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
-    offset = fieldtypeoffset(T, S, Idx)
-    nbytes = typesize(T, SS)
+    FT = eltype(A)
+    offset = fieldtypeoffset(FT, S, Idx)
+    nbytes = typesize(FT, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(VF{$SS}(view(parent(data), :, $field_byterange)))
 end

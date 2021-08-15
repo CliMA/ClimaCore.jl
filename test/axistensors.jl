@@ -16,8 +16,21 @@ M = Geometry.AxisTensor(
 @test dot(y, x) == y' * x == 9.0
 
 @test x == x
+@test x != components(x)
+@test x != Contravariant12Vector(components(x)...)
+
+@test x[1] == 1.0
+@test y[2] == 4.0
+@test M[2] == 0.5
+@test M[2, 1] == 0.5
+@test M[:, 1] == Geometry.Cartesian12Vector(1.0, 0.5)
+@test M[1, :] == Geometry.Covariant12Vector(1.0, 0.0)
+
+@test Geometry.components(M * inv(M)) == @SMatrix [1.0 0.0; 0.0 1.0]
+@test Geometry.components(inv(M) * M) == @SMatrix [1.0 0.0; 0.0 1.0]
 
 @test M * y == Geometry.Cartesian12Vector(1.0, 8.5)
+@test M \ Geometry.Cartesian12Vector(1.0, 8.5) == y
 
 @test_throws DimensionMismatch dot(x, x)
 

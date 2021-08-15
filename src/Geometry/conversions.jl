@@ -53,6 +53,15 @@ contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     ContravariantVector(u, local_geometry).u³
 
 
+contravariant1(
+    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
+    local_geometry::LocalGeometry,
+) = (local_geometry.∂ξ∂x * A)[1, :]
+contravariant2(
+    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
+    local_geometry::LocalGeometry,
+) = (local_geometry.∂ξ∂x * A)[2, :]
+
 
 Covariant3Vector(x::AbstractFloat, ::LocalGeometry) = Covariant3Vector(x)
 Contravariant3Vector(x::AbstractFloat, ::LocalGeometry) =
@@ -77,6 +86,14 @@ The return type when taking the divergence of a field of type `V`.
 Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
 """
 divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
+divergence_result_type(
+    ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
+) where {
+    FT,
+    A1 <: CartesianAxis,
+    A2 <: CartesianAxis,
+    S <: StaticMatrix{S1, S2},
+} where {S1, S2} = AxisVector{FT, A1, SVector{S1, FT}}
 
 curl_result_type(::Type{V}) where {V <: Covariant12Vector{FT}} where {FT} =
     Contravariant3Vector{FT}
@@ -107,8 +124,9 @@ _cross(u::AxisVector, v::AxisVector, local_geometry) = LinearAlgebra.cross(
 )
 
 
+
+
 #=
-divergence_result_type(::Type{T}) where {T <: Tensor{U, V}} where {U, V} = V
 
 function contravariant1(
     A::Tensor{Contravariant12Vector{FT}, V},

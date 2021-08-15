@@ -92,6 +92,23 @@ components(a::AxisTensor) = getfield(a, :components)
 
 Base.getindex(v::AxisTensor, i...) = getindex(components(v), i...)
 
+
+function Base.getindex(
+    v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
+    ::Colon,
+    i::Integer,
+) where {A1, A2}
+    AxisVector(A1(), getindex(components(v), :, i))
+end
+function Base.getindex(
+    v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
+    i::Integer,
+    ::Colon,
+) where {A1, A2}
+    AxisVector(A2(), getindex(components(v), i, :))
+end
+
+
 Base.map(f::F, a::AxisTensor) where {F} =
     AxisTensor(axes(a), map(f, components(a)))
 Base.map(

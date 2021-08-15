@@ -75,13 +75,13 @@ y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
-    u = ρu ./ ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ .* u)
+    u = ρu / ρ
+    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ * u)
 end
 
 function energy(state, p)
     @unpack ρ, ρu = state
-    u = ρu ./ ρ
+    u = ρu / ρ
     return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
 end
 

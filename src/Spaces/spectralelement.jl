@@ -271,7 +271,7 @@ function compute_surface_geometry(
     end
     sWJ = norm(n)
     n = n / sWJ
-    return Geometry.SurfaceGeometry(sWJ, Geometry.Cartesian12Vector(n...))
+    return Geometry.SurfaceGeometry(sWJ, n)
 end
 
 function variational_solve!(data, space::AbstractSpace)
