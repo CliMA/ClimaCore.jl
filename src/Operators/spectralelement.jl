@@ -183,7 +183,17 @@ function Base.copyto!(
     return field_out
 end
 
-function copy_slab!(slab_out, res)
+function copy_slab!(slab_out::Fields.SlabField1D, res)
+    space = axes(slab_out)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    for i in 1:Nq
+        # slab_out[i, j] = res[i, j]
+        set_node!(slab_out, i, get_node(res, i))
+    end
+    return slab_out
+end
+
+function copy_slab!(slab_out::Fields.SlabField2D, res)
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
     for i in 1:Nq, j in 1:Nq
@@ -193,10 +203,24 @@ function copy_slab!(slab_out, res)
     return slab_out
 end
 
+# 1D get/set node
+@inline get_node(scalar, i) = scalar[]
 
+@inline get_node(field::Fields.SlabField1D, i) =
+    getindex(Fields.field_values(field), i)
+
+@inline function get_node(bc::Base.Broadcast.Broadcasted, i)
+    args = map(arg -> get_node(arg, i), bc.args)
+    bc.f(args...)
+end
+
+@inline set_node!(field::Fields.SlabField1D, i, val) =
+    setindex!(Fields.field_values(field), val, i)
+
+# 2D get/set node
 @inline get_node(scalar, i, j) = scalar[]
 
-@inline get_node(field::Fields.SlabField, i, j) =
+@inline get_node(field::Fields.SlabField2D, i, j) =
     getindex(Fields.field_values(field), i, j)
 
 @inline function get_node(bc::Base.Broadcast.Broadcasted, i, j)
@@ -204,7 +228,7 @@ end
     bc.f(args...)
 end
 
-@inline set_node!(field::Fields.SlabField, i, j, val) =
+@inline set_node!(field::Fields.SlabField2D, i, j, val) =
     setindex!(Fields.field_values(field), val, i, j)
 
 #res = Broadcasted{CompositeSpectralStyle}(-, Field(DivergenceResult{S, Nq}(Jv¹, Jv²), slab_space))
@@ -413,33 +437,62 @@ Compute the (strong) gradient on each element via the chain rule:
 """
 struct Gradient <: SpectralElementOperator end
 
-operator_return_eltype(op::Gradient, S) =
-    RecursiveApply.rmaptype(T -> Cartesian12Vector{T}, S)
+operator_return_eltype(::Gradient, ::Spaces.SpectralElementSpaceSlab1D, S) =
+    RecursiveApply.rmaptype(T -> Geometry.Cartesian1Vector{T}, S)
+
+operator_return_eltype(::Gradient, ::Spaces.SpectralElementSpaceSlab2D, S) =
+    RecursiveApply.rmaptype(T -> Geometry.Cartesian12Vector{T}, S)
 
 struct GradientResult{S, Nq, JM} <: OperatorSlabResult{S, Nq}
     M::JM
 end
 GradientResult{S, Nq}(M::JM) where {S, Nq, JM} = GradientResult{S, Nq, JM}(M)
 
-function allocate_work(op::Gradient, arg)
-    space = axes(arg)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    S = eltype(arg)
-    # TODO: switch memory order?
-    return MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
+function allocate_work(::Gradient, S, space::Spaces.SpectralElementSpace1D)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    return StaticArrays.MVector{Nq, S}(undef)
 end
+   
+function allocate_work(::Gradient, S, space::Spaces.SpectralElementSpace2D)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    return StaticArrays.MArray{Tuple{Nq, Nq}, S, 2, Nq * Nq}(undef)
+end
+ 
+allocate_work(op::Gradient, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Gradient, M, slab_field, h)
+function apply_slab(op::Gradient, M, slab_field::Fields.SlabField1D, h)
     slab_space = axes(slab_field)
-    Nq = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
-    for i in 1:Nq, j in 1:Nq
-        M[i, j] = get_node(slab_field, i, j)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    for i in 1:Nq
+        M[i] = get_node(slab_field, i)
     end
-    S = operator_return_eltype(op, eltype(M))
+    S = operator_return_eltype(op, slab_space, eltype(M))
     return Field(GradientResult{S, Nq}(M), slab_space)
 end
 
-@inline function get_node(field::Fields.SlabField{<:GradientResult}, i, j)
+@inline function get_node(field::Fields.SlabField1D{<:GradientResult}, i)
+    slab_space = axes(field)
+    FT = Spaces.undertype(slab_space)
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    res = Fields.field_values(field)
+    ∂f∂ξ₁ = D[:, i] ⊠ res.M[i]
+    error("todo")
+    ∂f∂ξ = RecursiveApply.rmap(Geometry.Covariant1Vector, ∂f∂ξ₁)
+    return RecursiveApply.rmap(x -> Geometry.Cartesian1Vector(x, slab_space.local_geometry[i]),
+        ∂f∂ξ) 
+end
+
+function apply_slab(op::Gradient, M, slab_field::Fields.SlabField2D, h)
+    slab_space = axes(slab_field)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    for i in 1:Nq, j in 1:Nq
+        M[i, j] = get_node(slab_field, i, j)
+    end
+    S = operator_return_eltype(op, slab_space, eltype(M))
+    return Field(GradientResult{S, Nq}(M), slab_space)
+end
+
+@inline function get_node(field::Fields.SlabField2D{<:GradientResult}, i, j)
     slab_space = axes(field)
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)

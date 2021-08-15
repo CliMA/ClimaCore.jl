@@ -23,7 +23,7 @@ import StaticArrays: SOneTo, MArray
 #  - should some of these be subtypes of AbstractArray?
 
 import ..slab, ..column
-export slab, column, IJFH, IJF, IFH, VF, VIFH
+export slab, column, IJFH, IJF, IFH, IF, VF, VIFH
 
 include("struct.jl")
 
@@ -421,6 +421,15 @@ end
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     IF{S, Ni, typeof(array)}(array)
+end
+
+@generated function _property_view(data::IF{S, Ni}, idx::Val{Idx}) where {S, Ni, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(IF{$SS, $Ni}(view(parent(data), :, $field_byterange)))
 end
 
 @inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}

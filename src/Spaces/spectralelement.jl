@@ -288,7 +288,13 @@ struct SpectralElementSpaceSlab{Q, G} <: AbstractSpectralElementSpace
     local_geometry::G
 end
 
-function slab(space::SpectralElementSpace2D, h)
+const SpectralElementSpaceSlab1D = 
+    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab1D}
+
+const SpectralElementSpaceSlab2D = 
+    SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab2D}
+
+function slab(space::AbstractSpectralElementSpace, h)
     SpectralElementSpaceSlab(
         space.quadrature_style,
         slab(space.local_geometry, h),
