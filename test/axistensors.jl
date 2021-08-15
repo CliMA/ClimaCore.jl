@@ -16,8 +16,8 @@ M = Geometry.AxisTensor(
 @test dot(y, x) == y' * x == 9.0
 
 @test x == x
-@test x != components(x)
-@test x != Contravariant12Vector(components(x)...)
+@test x != Geometry.components(x)
+@test x != Geometry.Contravariant12Vector(Geometry.components(x)...)
 
 @test x[1] == 1.0
 @test y[2] == 4.0
