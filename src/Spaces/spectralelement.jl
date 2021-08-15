@@ -64,7 +64,9 @@ function SpectralElementSpace1D(topology, quadrature_style)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i]
             local_geometry_slab[i] =
-                Geometry.LocalGeometry(x, J, WJ, ∂x∂ξ, ∂ξ∂x)
+                Geometry.LocalGeometry(x, J, WJ, 
+                Geometry.AxisTensor((Geometry.Cartesian1Axis(), Geometry.Covariant1Axis()), ∂ξ∂x),
+                Geometry.AxisTensor((Geometry.Contravariant1Axis(), Geometry.Cartesian1Axis()), ∂ξ∂x))
         end
     end
     dss_weights = copy(local_geometry.J)

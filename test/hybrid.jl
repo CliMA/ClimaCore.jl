@@ -7,6 +7,7 @@ import ClimaCore:
     Spaces,
     Domains,
     Meshes,
+    Geometry,
     Topologies,
     Spaces,
     Fields,
@@ -81,7 +82,8 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
     function rhs!(dudt, u, _, t)
         grad = Operators.Gradient()
-        @. dudt = grad(u)
+        div = Operators.Divergence()
+        @. dudt = div(u * Geometry.Cartesian1Vector(1.0))
         #space = axes(u)
         #slab_gradient!(Fields.field_values(dudt), Fields.field_values(u), space)
         ClimaCore.Spaces.weighted_dss!(dudt)

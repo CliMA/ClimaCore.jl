@@ -30,10 +30,10 @@ coords = Fields.coordinate_field(space)
     Spaces.weighted_dss!(gradf)
 
     @test gradf ≈
-          Geometry.Cartesian12Vector.(
+          Geometry.Covariant12Vector.(Geometry.Cartesian12Vector.(
         cos.(coords.x1 .+ 2 .* coords.x2),
         2 .* cos.(coords.x1 .+ 2 .* coords.x2),
-    ) rtol = 1e-2
+    )) rtol = 1e-2
 end
 
 
@@ -44,7 +44,7 @@ end
     gradf = wgrad.(f)
     Spaces.weighted_dss!(gradf)
 
-    @test gradf ≈
+    @test Geometry.Cartesian12Vector.(gradf) ≈
           Geometry.Cartesian12Vector.(
         cos.(coords.x1 .+ 2 .* coords.x2),
         2 .* cos.(coords.x1 .+ 2 .* coords.x2),

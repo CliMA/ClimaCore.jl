@@ -448,7 +448,7 @@ end
 
 @inline function Base.setindex!(data::IF{S, Ni}, val, i::Integer) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    set_struct!(view(parent(data), i, :), val)
+    set_struct!(view(parent(data), i, :), convert(S,val))
 end
 
 # TODO: should this return a S or a 0-d box containing S?
