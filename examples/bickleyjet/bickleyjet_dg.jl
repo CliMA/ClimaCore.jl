@@ -190,7 +190,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
         y,
         parameters,
     ) do normal, (y⁻, parameters)
-        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu .- dot(y⁻.ρu, normal) .* normal, ρθ = y⁻.ρθ)
+        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ = y⁻.ρθ)
         numflux(normal, (y⁻, parameters), (y⁺, parameters))
     end
 
