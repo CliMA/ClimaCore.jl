@@ -12,7 +12,7 @@ include("field.jl")
 include("spectraloperators.jl")
 include("fdspaces.jl")
 include("fielddiffeq.jl")
-include("hybrid.jl")
+#include("hybrid.jl")
 #include("diffusion2d.jl")
 
 if "CUDA" in ARGS

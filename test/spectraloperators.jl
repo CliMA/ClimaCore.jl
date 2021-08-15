@@ -17,10 +17,40 @@ grid_topology = Topologies.GridTopology(mesh)
 
 Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
-
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 coords = Fields.coordinate_field(space)
+
+@testset "interpolate / restrict" begin
+    INq = 9
+    Iquad = Spaces.Quadratures.GLL{INq}()
+    Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
+
+    I = Operators.Interpolate(Ispace)
+    R = Operators.Restrict(space)
+
+    f = sin.(coords.x1 .+ 2 .* coords.x2)
+
+    interpolated_field = I.(f)
+    Spaces.weighted_dss!(interpolated_field)
+
+    @test axes(interpolated_field).quadrature_style == Iquad
+    @test axes(interpolated_field).topology == grid_topology
+
+    restrict_field = R.(f)
+    Spaces.weighted_dss!(restrict_field)
+
+    @test axes(restrict_field).quadrature_style == quad
+    @test axes(restrict_field).topology == grid_topology
+
+    interp_restrict_field = R.(I.(f))
+    Spaces.weighted_dss!(interp_restrict_field)
+
+    @test axes(interp_restrict_field).quadrature_style == quad
+    @test axes(interp_restrict_field).topology == grid_topology
+
+    @test norm(interp_restrict_field .- f) ≤ 3.0e-4
+end
 
 @testset "gradient" begin
     f = sin.(coords.x1 .+ 2 .* coords.x2)
@@ -30,9 +60,11 @@ coords = Fields.coordinate_field(space)
     Spaces.weighted_dss!(gradf)
 
     @test gradf ≈
-          Geometry.Cartesian12Vector.(
-        cos.(coords.x1 .+ 2 .* coords.x2),
-        2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+          Geometry.Covariant12Vector.(
+        Geometry.Cartesian12Vector.(
+            cos.(coords.x1 .+ 2 .* coords.x2),
+            2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+        ),
     ) rtol = 1e-2
 end
 
@@ -44,7 +76,7 @@ end
     gradf = wgrad.(f)
     Spaces.weighted_dss!(gradf)
 
-    @test gradf ≈
+    @test Geometry.Cartesian12Vector.(gradf) ≈
           Geometry.Cartesian12Vector.(
         cos.(coords.x1 .+ 2 .* coords.x2),
         2 .* cos.(coords.x1 .+ 2 .* coords.x2),
@@ -69,8 +101,6 @@ end
 
     @test curlv ≈ curlv_ref rtol = 1e-2
 end
-
-
 
 @testset "curl-curl" begin
     v =
@@ -126,8 +156,6 @@ end
           Geometry.Cartesian12Vector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
         4e-2
 end
-
-
 
 @testset "weak curl" begin
     v =
@@ -196,7 +224,6 @@ end
     @test norm(curlgradf) < 1e-12
 end
 
-
 @testset "annhilator property: div-curl" begin
     v = Geometry.Covariant3Vector.(sin.(coords.x1 .+ 2 .* coords.x2))
     curl = Operators.Curl()
@@ -232,7 +259,6 @@ end
         (k^2 + l^2)^2 * sin(k * coords.x1 + l * coords.x2),
         0.0,
     )
-
     curl = Operators.Curl()
     wcurl = Operators.WeakCurl()
 
@@ -240,12 +266,14 @@ end
     wgrad = Operators.WeakGradient()
 
     χ = Spaces.weighted_dss!(
-        @. wgrad(sdiv(y)) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(y))) -
+           Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(y))),
         )
     )
     ∇⁴y = Spaces.weighted_dss!(
-        @. wgrad(sdiv(χ)) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(χ))) -
+           Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(χ))),
         )
     )
