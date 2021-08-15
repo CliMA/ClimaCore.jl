@@ -187,7 +187,6 @@ function copy_slab!(slab_out::Fields.SlabField1D, res)
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
     for i in 1:Nq
-        # slab_out[i, j] = res[i, j]
         set_node!(slab_out, i, get_node(res, i))
     end
     return slab_out
@@ -475,10 +474,9 @@ end
     FT = Spaces.undertype(slab_space)
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     res = Fields.field_values(field)
-    ∂f∂ξ₁ = D[:, i] ⊠ res.M[i]
-    error("todo")
+    ∂f∂ξ₁ = RecursiveApply.rmatmul1(D, res.M, i, 1)
     ∂f∂ξ = RecursiveApply.rmap(Geometry.Covariant1Vector, ∂f∂ξ₁)
-    return RecursiveApply.rmap(x -> Geometry.Cartesian1Vector(x, slab_space.local_geometry[i]),
+    return RecursiveApply.rmap(x -> Geometry.CartesianVector(x, slab_space.local_geometry[i]),
         ∂f∂ξ) 
 end
 
