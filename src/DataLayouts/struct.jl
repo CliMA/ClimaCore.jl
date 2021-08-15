@@ -84,8 +84,11 @@ fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
 
 Similar to `sizeof(S)`, but gives the result in multiples of `sizeof(T)`.
 """
-typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
-
+function typesize(::Type{T}, ::Type{S}) where {T, S}
+    isbitstype(T) || error("$T is not isbitstype")
+    isbitstype(S) || error("$S is not isbitstype")
+    div(sizeof(S), sizeof(T))
+end
 
 """
     get_struct(array, S[, offset=0])

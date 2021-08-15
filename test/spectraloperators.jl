@@ -29,8 +29,11 @@ coords = Fields.coordinate_field(space)
     gradf = grad.(f)
     Spaces.weighted_dss!(gradf)
 
-    @test gradf.u1 ≈ cos.(coords.x1 .+ 2 .* coords.x2) rtol = 1e-2
-    @test gradf.u2 ≈ 2 .* cos.(coords.x1 .+ 2 .* coords.x2) rtol = 1e-2
+    @test gradf ≈
+          Geometry.Cartesian12Vector.(
+        cos.(coords.x1 .+ 2 .* coords.x2),
+        2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+    ) rtol = 1e-2
 end
 
 
@@ -41,8 +44,11 @@ end
     gradf = wgrad.(f)
     Spaces.weighted_dss!(gradf)
 
-    @test gradf.u1 ≈ cos.(coords.x1 .+ 2 .* coords.x2) rtol = 1e-2
-    @test gradf.u2 ≈ 2 .* cos.(coords.x1 .+ 2 .* coords.x2) rtol = 1e-2
+    @test gradf ≈
+          Geometry.Cartesian12Vector.(
+        cos.(coords.x1 .+ 2 .* coords.x2),
+        2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+    ) rtol = 1e-2
 end
 
 @testset "curl" begin
@@ -56,10 +62,12 @@ end
     curlv = curl.(v)
     Spaces.weighted_dss!(curlv)
     curlv_ref =
-        .-3 .* sin.(3 .* coords.x1 .+ 4 .* coords.x2) .-
-        2 .* cos.(coords.x1 .+ 2 .* coords.x2)
+        Geometry.Contravariant3Vector.(
+            .-3 .* sin.(3 .* coords.x1 .+ 4 .* coords.x2) .-
+            2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+        )
 
-    @test curlv.u³ ≈ curlv_ref rtol = 1e-2
+    @test curlv ≈ curlv_ref rtol = 1e-2
 end
 
 
@@ -82,13 +90,12 @@ end
 
     curl = Operators.Curl()
     curlcurlv =
-        Geometry.Cartesian12Vector.(
-            curl.(Geometry.Covariant3Vector.(curl.(v).u³)),
-        )
+        Geometry.Cartesian12Vector.(curl.(Geometry.Covariant3Vector.(curl.(v))))
     Spaces.weighted_dss!(curlcurlv)
 
-    @test curlcurlv.u1 ≈ curlcurlv_ref1 rtol = 1e-2
-    @test curlcurlv.u2 ≈ curlcurlv_ref2 rtol = 4e-2
+    @test curlcurlv ≈
+          Geometry.Cartesian12Vector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
+        4e-2
 end
 
 @testset "weak curl-strong curl" begin
@@ -111,12 +118,13 @@ end
     wcurl = Operators.WeakCurl()
     curlcurlv =
         Geometry.Cartesian12Vector.(
-            wcurl.(Geometry.Covariant3Vector.(curl.(v).u³)),
+            wcurl.(Geometry.Covariant3Vector.(curl.(v))),
         )
     Spaces.weighted_dss!(curlcurlv)
 
-    @test curlcurlv.u1 ≈ curlcurlv_ref1 rtol = 1e-2
-    @test curlcurlv.u2 ≈ curlcurlv_ref2 rtol = 4e-2
+    @test curlcurlv ≈
+          Geometry.Cartesian12Vector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
+        4e-2
 end
 
 
@@ -135,7 +143,7 @@ end
         .-3 .* sin.(3 .* coords.x1 .+ 4 .* coords.x2) .-
         2 .* cos.(coords.x1 .+ 2 .* coords.x2)
 
-    @test curlv.u³ ≈ curlv_ref rtol = 1e-2
+    @test curlv ≈ Geometry.Contravariant3Vector.(curlv_ref) rtol = 1e-2
 end
 
 @testset "div" begin

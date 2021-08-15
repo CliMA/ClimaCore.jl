@@ -108,6 +108,10 @@ function _show_compact_field(io, field, prefix, isfirst = false)
     else
         names = propertynames(field)
         for name in names
+            subfield = getproperty(field, name)
+            if sizeof(eltype(subfield)) == 0
+                continue
+            end
             print(io, "\n", prefix)
             print(io, name, ": ")
             _show_compact_field(io, getproperty(field, name), prefix * "  ")

@@ -36,7 +36,17 @@ function SpectralElementSpace1D(topology, quadrature_style)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    LG = Geometry.LocalGeometry{CT, FT, SMatrix{1, 1, FT, 1}}
+    Mxξ = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian1Axis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    }
+    Mξx = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Contravariant1Axis, Geometry.Cartesian1Axis},
+        SMatrix{1, 1, FT, 1},
+    }
+    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -101,8 +111,16 @@ function SpectralElementSpace2D(topology, quadrature_style)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    Mxξ = Geometry.Axis2Tensor{FT,Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis}, SMatrix{2, 2, FT, 4}}
-    Mξx = Geometry.Axis2Tensor{FT,Tuple{Geometry.Contravariant12Axis, Geometry.Cartesian12Axis}, SMatrix{2, 2, FT, 4}}
+    Mxξ = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    }
+    Mξx = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Contravariant12Axis, Geometry.Cartesian12Axis},
+        SMatrix{2, 2, FT, 4},
+    }
     LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
@@ -135,10 +153,22 @@ function SpectralElementSpace2D(topology, quadrature_style)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
-            local_geometry_slab[i, j] =
-                Geometry.LocalGeometry(x, J, WJ,
-                Geometry.AxisTensor((Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()), ∂x∂ξ),
-                Geometry.AxisTensor((Geometry.Contravariant12Axis(), Geometry.Cartesian12Axis()),∂ξ∂x))
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(
+                x,
+                J,
+                WJ,
+                Geometry.AxisTensor(
+                    (Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()),
+                    ∂x∂ξ,
+                ),
+                Geometry.AxisTensor(
+                    (
+                        Geometry.Contravariant12Axis(),
+                        Geometry.Cartesian12Axis(),
+                    ),
+                    ∂ξ∂x,
+                ),
+            )
         end
     end
 

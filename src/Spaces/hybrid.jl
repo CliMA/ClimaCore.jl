@@ -53,8 +53,26 @@ nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
 nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
     size(space.face_local_geometry, 4)
 
-blockmat(a::SMatrix{1, 1, FT}, b::SMatrix{1, 1, FT}) where {FT} =
-    SMatrix{2, 2}(a[1, 1], zero(FT), zero(FT), b[1, 1])
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian1Axis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.Cartesian13Axis(), Geometry.Covariant13Axis()),
+        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
+    )
+end
+
 
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,

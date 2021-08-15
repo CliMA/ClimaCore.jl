@@ -200,13 +200,13 @@ end
 Base.length(data::IJFH) = size(parent(data), 4)
 
 @generated function _property_view(
-    data::IJFH{S, Nij},
+    data::IJFH{S, Nij, A},
     idx::Val{Idx},
-) where {S, Nij, Idx}
+) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
-    offset = fieldtypeoffset(T, S, Idx)
-    nbytes = typesize(T, SS)
+    FT = eltype(A)
+    offset = fieldtypeoffset(FT, S, Idx)
+    nbytes = typesize(FT, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJFH{$SS, $Nij}(view(parent(data), :, :, $field_byterange, :)))
 end

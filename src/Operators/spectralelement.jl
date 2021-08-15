@@ -451,7 +451,7 @@ end
     # TODO: return a CovariantVector by default;
     #       use subsequent broadcasting to convert to desired basis
     return RecursiveApply.rmap(
-        x -> Cartesian12Vector(x, slab_space.local_geometry[i, j]),
+        x -> Geometry.CartesianVector(x, slab_space.local_geometry[i, j]),
         ∂f∂ξ,
     )
 end
