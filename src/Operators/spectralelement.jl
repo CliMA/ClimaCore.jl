@@ -144,10 +144,11 @@ function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     Nh = length(data_out)
     for h in 1:Nh
         slab_out = slab(field_out, h)
+        slab_space = slab(axes(sbc), h)
         slab_args = map(arg -> _apply_slab(slab(arg, h), h), sbc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copy_slab!(slab_out, apply_slab(sbc.op, sbc.work, slab_args..., h))
+        copy_slab!(slab_out, apply_slab(sbc.op, slab_space, slab_args...))
     end
     return field_out
 end
@@ -258,7 +259,7 @@ end
 _apply_slab(x, h) = x
 
 _apply_slab(sbc::SpectralBroadcasted, h) =
-    apply_slab(sbc.op, sbc.work, map(a -> _apply_slab(a, h), sbc.args)..., h)
+    apply_slab(sbc.op, slab(axes(sbc), h), map(a -> _apply_slab(a, h), sbc.args)...)
 
 _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
     Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
@@ -477,16 +478,15 @@ end
  
 allocate_work(op::Gradient, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Gradient{(1,)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::Gradient{(1,)}, slab_space, slab_data)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MVector{Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for i in 1:Nq
-        x = get_node(slab_field, i)       
+        x = get_node(slab_data, i)       
         for ii in 1:Nq
             ∂f∂ξ = RecursiveApply.rmap(
                 Geometry.Covariant1Vector,
@@ -498,16 +498,15 @@ function apply_slab(op::Gradient{(1,)}, _, slab_field, h)
     return SVector(out)
 end
 
-function apply_slab(op::Gradient{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::Gradient{(1,2)}, slab_space, slab_data)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for j in 1:Nq, i in 1:Nq
-        x = get_node(slab_field, i, j)
+        x = get_node(slab_data, i, j)
         for ii in 1:Nq
             ∂f∂ξ = RecursiveApply.rmap(
                 u -> Geometry.Covariant12Vector(u, zero(u)),
@@ -631,19 +630,18 @@ operator_return_eltype(op::WeakGradient{(1,2)}, S) =
 
 
 
-function apply_slab(op::WeakGradient{(1,)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MVector{Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for i in 1:Nq
         local_geometry = slab_local_geometry[i]
         W = local_geometry.WJ / local_geometry.J
-        Wx = W * get_node(slab_field, i)       
+        Wx = W ⊠ get_node(slab_data, i)       
         for ii in 1:Nq
             Dᵀ₁Wf = RecursiveApply.rmap(
                 Geometry.Covariant1Vector,
@@ -655,24 +653,23 @@ function apply_slab(op::WeakGradient{(1,)}, _, slab_field, h)
     for i in 1:Nq
         local_geometry = slab_local_geometry[i]
         W = local_geometry.WJ / local_geometry.J
-        out[i] /= W
+        out[i] = RecursiveApply.rdiv(out[i], W)
     end
     return SVector(out)
 end
 
-function apply_slab(op::WeakGradient{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::WeakGradient{(1,2)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
         W = local_geometry.WJ / local_geometry.J
-        Wx = W * get_node(slab_field, i, j)
+        Wx = W ⊠ get_node(slab_data, i, j)
         for ii in 1:Nq
             Dᵀ₁Wf = RecursiveApply.rmap(
                 u -> Geometry.Covariant12Vector(u, zero(u)),
@@ -691,7 +688,7 @@ function apply_slab(op::WeakGradient{(1,2)}, _, slab_field, h)
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
         W = local_geometry.WJ / local_geometry.J
-        out[i, j] /= W
+        out[i, j] = RecursiveApply.rdiv(out[i, j], W)
     end
     return SMatrix(out)
 end
@@ -709,28 +706,27 @@ struct WeakCurl{I} <: CurlSpectralElementOperator end
 WeakCurl() = WeakCurl{nothing}()
 WeakCurl{nothing}(space) = WeakCurl{operator_axes(space)}()
 
-operator_return_eltype(op::Curl{(1,2)}, S) =
+operator_return_eltype(::Curl{(1,2)}, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
-operator_return_eltype(op::WeakCurl{(1,2)}, S) =
+operator_return_eltype(::WeakCurl{(1,2)}, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
 
-function apply_slab(op::Curl{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     if RT <: Geometry.Contravariant3Vector
         for j in 1:Nq, i in 1:Nq
-            v₁ = Geometry.covariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            v₁ = Geometry.covariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 D₂v₁ = D[jj,j] ⊠ v₁
                 out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(⊟(D₂v₁), slab_local_geometry[i, jj])
             end
-            v₂ = Geometry.covariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            v₂ = Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 D₁v₂ = D[ii,i] ⊠ v₂
                 out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(D₁v₂, slab_local_geometry[ii, j])
@@ -738,7 +734,7 @@ function apply_slab(op::Curl{(1,2)}, _, slab_field, h)
         end
     elseif RT <: Geometry.Contravariant12Vector
         for j in 1:Nq, i in 1:Nq
-            v₃ = Geometry.covariant3(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            v₃ = Geometry.covariant3(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 D₁v₃ = D[ii,i] ⊠ v₃
                 out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
@@ -753,30 +749,29 @@ function apply_slab(op::Curl{(1,2)}, _, slab_field, h)
     end
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        out[i, j] /= local_geometry.J
+        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakCurl{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     if RT <: Geometry.Contravariant3Vector
         for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i,j]
             W = local_geometry.WJ / local_geometry.J
-            Wv₁ = W ⊠ Geometry.covariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            Wv₁ = W ⊠ Geometry.covariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
                 out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(Dᵀ₂Wv₁) 
             end
-            Wv₂ = W ⊠ Geometry.covariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            Wv₂ = W ⊠ Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
                 out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂))
@@ -786,7 +781,7 @@ function apply_slab(op::WeakCurl{(1,2)}, _, slab_field, h)
         for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i,j]
             W = local_geometry.WJ / local_geometry.J
-            Wv₃ = W ⊠ Geometry.covariant3(get_node(slab_field, i, j), slab_local_geometry[i, j])
+            Wv₃ = W ⊠ Geometry.covariant3(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 Dᵀ₁Wv₃ = D[i,ii] ⊠ Wv₃
                 out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(Dᵀ₁Wv₃), Dᵀ₁Wv₃)
@@ -801,7 +796,7 @@ function apply_slab(op::WeakCurl{(1,2)}, _, slab_field, h)
     end
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        out[i, j] /= local_geometry.WJ
+        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
     return SMatrix(out)
 end
