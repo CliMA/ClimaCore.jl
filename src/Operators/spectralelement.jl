@@ -327,7 +327,9 @@ where
  - `W` is the diagonal matrix of quadrature weights
  - `D₁` and `D₂` are the discrete derivative matrices along the first and second dimensions.
 """
-struct WeakDivergence <: SpectralElementOperator end
+struct WeakDivergence{I} <: SpectralElementOperator end
+WeakDivergence() = WeakDivergence{nothing}()
+WeakDivergence{nothing}(space) = WeakDivergence{operator_axes(space)}()
 
 operator_return_eltype(op::Union{WeakDivergence, Divergence}, S) =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
@@ -475,10 +477,8 @@ end
  
 allocate_work(op::Gradient, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-# https://github.com/trixi-framework/Trixi.jl/blob/56fe8a6fbb2ddfaf22c21b6def7eca2f4ef1fd0b/src/solvers/dgsem_tree/dg_2d.jl#L172-L198
 function apply_slab(op::Gradient{(1,)}, _, slab_field, h)
     slab_space = axes(slab_field)
-    slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
@@ -500,7 +500,6 @@ end
 
 function apply_slab(op::Gradient{(1,2)}, _, slab_field, h)
     slab_space = axes(slab_field)
-    slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
@@ -545,16 +544,17 @@ function apply_slab(op::Divergence{(1,)}, _, slab_field, h)
     out = zero(StaticArrays.MVector{Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for i in 1:Nq
-        Jv¹ = slab_local_geometry[i].J * Geometry.contravariant1(get_node(slab_field, i), slab_local_geometry[i])
+        Jv¹ = slab_local_geometry[i].J ⊠ Geometry.contravariant1(get_node(slab_field, i), slab_local_geometry[i])
         for ii in 1:Nq
-            out[ii] += D[ii,i] ⊠ Jv¹
+            out[ii] = out[ii] ⊞ (D[ii,i] ⊠ Jv¹)
         end        
     end
     for i in 1:Nq
-        out[i] /= slab_local_geometry[i].J
+        out[i] = RecursiveApply.rdiv(out[i], slab_local_geometry[i].J)
     end
     return SVector(out)
 end
+
 function apply_slab(op::Divergence{(1,2)}, _, slab_field, h)
     slab_space = axes(slab_field)
     slab_local_geometry = slab_space.local_geometry
@@ -565,21 +565,45 @@ function apply_slab(op::Divergence{(1,2)}, _, slab_field, h)
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for j in 1:Nq, i in 1:Nq
-        Jv¹ = slab_local_geometry[i, j].J * Geometry.contravariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        Jv¹ = slab_local_geometry[i, j].J ⊠ Geometry.contravariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
         for ii in 1:Nq
-            out[ii,j] += D[ii,i] ⊠ Jv¹
+            out[ii,j] = out[ii, j] ⊞ (D[ii,i] ⊠ Jv¹)
         end
-        Jv² = slab_local_geometry[i, j].J * Geometry.contravariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        Jv² = slab_local_geometry[i, j].J ⊠ Geometry.contravariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
         for jj in 1:Nq
-            out[i,jj] += D[jj,j] ⊠ Jv²
+            out[i,jj] = out[i, jj] ⊞ (D[jj,j] ⊠ Jv²)
         end        
     end
     for j in 1:Nq, i in 1:Nq
-        out[i, j] /= slab_local_geometry[i,j].J
+        out[i, j] = RecursiveApply.rdiv(out[i, j], slab_local_geometry[i,j].J)
     end
     return SMatrix(out)
 end
 
+function apply_slab(op::WeakDivergence{(1,2)}, _, slab_field, h)
+    slab_space = axes(slab_field)
+    slab_local_geometry = slab_space.local_geometry
+    FT = Spaces.undertype(slab_space)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(slab_field))
+    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    for j in 1:Nq, i in 1:Nq
+        WJv¹ = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        for ii in 1:Nq
+            out[ii,j] = out[ii, j] ⊞ (D[i, ii] ⊠ WJv¹)
+        end
+        WJv² = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        for jj in 1:Nq
+            out[i, jj] = out[i, jj] ⊞ (D[j, jj] ⊠ WJv²)
+        end        
+    end
+    for j in 1:Nq, i in 1:Nq
+        out[i, j] = RecursiveApply.rdiv(out[i, j], ⊟(slab_local_geometry[i,j].WJ))
+    end
+    return SMatrix(out)
+end
 
 @inline function get_node(v::SVector, i)
     v[i]
@@ -704,12 +728,12 @@ function apply_slab(op::Curl{(1,2)}, _, slab_field, h)
             v₁ = Geometry.covariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 D₂v₁ = D[jj,j] ⊠ v₁
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(⊟(D₂v₁))
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(⊟(D₂v₁), slab_local_geometry[i, jj])
             end
             v₂ = Geometry.covariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 D₁v₂ = D[ii,i] ⊠ v₂
-                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(D₁v₂)
+                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(D₁v₂, slab_local_geometry[ii, j])
             end
         end
     elseif RT <: Geometry.Contravariant12Vector
@@ -1336,7 +1360,7 @@ function slab_divergence!(divflux::Field, flux::Field)
     Operators.slab_divergence!(
         Fields.field_values(divflux),
         Fields.field_values(flux),
-        axes(flux),
+        axes(flux),Dᵀ
     )
     return divflux
 end
