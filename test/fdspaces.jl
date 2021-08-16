@@ -2,7 +2,27 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
-import ClimaCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore.Domains: Geometry
+
+import ClimaCore.Operators: half, PlusHalf
+
+@testset "PlusHalf" begin
+    @test half + 0 == half
+    @test half < half+1
+    @test half <= half+1
+    @test !(half > half+1)
+    @test !(half >= half+1)
+    @test half != half+1
+    @test half + half == 1
+    @test half - half == 0
+    @test half + 3 == 3 + half == PlusHalf(3)
+    @test min(half, half+3) == half
+    @test max(half, half+3) == half+3
+
+    @test_throws InexactError convert(Int, half)
+    @test_throws InexactError convert(PlusHalf, 1)
+    @test_throws InexactError convert(PlusHalf{Int}, 1)
+end
 
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
@@ -29,7 +49,11 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
-        ∂sin = ∇ᶜ.(sin.(faces))
+        ∂sin = Geometry.CartesianVector.(∇ᶜ.(sin.(faces)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+
+        divᶜ = Operators.DivergenceF2C()
+        ∂sin = divᶜ.(Geometry.Cartesian3Vector.(sin.(faces)))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
         # check that operator is callable as well

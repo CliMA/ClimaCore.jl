@@ -9,6 +9,15 @@
 #           ↑             ↑             ↑
 #          i-1            i            i+1
 
+# Gradient:
+#  scalar => d₃ = D₃ x = Covariant3Vector(x[i+half] - x[i-half])
+# ∂ξ³∂x * d₃
+
+# Divergence: 1/J * D₃ (Jv³):
+#  Jv³ = J * contravariant3(v)
+#  div = 1/J * (Jv³[i+half] - Jv³[i-half])
+
+
 
 #====
 
@@ -120,11 +129,26 @@ interior_indices1 = 1:n
 interior_indices2 = 2:n-1
 ===#
 
+
+"""
+    PlusHalf(i)
+
+Represents `i + 1/2`, but stored as internally as an integer value. Used for
+indexing into staggered finite difference meshes: the convention "half" values
+are indexed at cell faces, whereas centers are indexed at cell centers.
+
+Supports `+`, `-` and inequalities.
+
+See also [`half`](@ref).
+"""
 struct PlusHalf{I <: Integer} <: Real
     i::I
 end
 PlusHalf{I}(h::PlusHalf{I}) where {I <: Integer} = h
 
+"""
+    const half = PlusHalf(0)
+"""
 const half = PlusHalf(0)
 
 Base.:+(h::PlusHalf) = h
@@ -140,6 +164,11 @@ Base.:<=(h1::PlusHalf, h2::PlusHalf) = h1.i <= h2.i
 Base.:<(h1::PlusHalf, h2::PlusHalf) = h1.i < h2.i
 Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
 Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
+
+Base.convert(::Type{P}, i::Integer) where {P<:PlusHalf}= throw(InexactError(:convert, P, i))
+Base.convert(::Type{I}, h::PlusHalf) where {I<:Integer}= throw(InexactError(:convert, I, h))
+
+
 
 left_idx(::Spaces.CenterFiniteDifferenceSpace) = 1
 right_idx(space::Spaces.CenterFiniteDifferenceSpace) =
@@ -161,6 +190,15 @@ left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))
 right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
+
+function Geometry.LocalGeometry(space::Spaces.FiniteDifferenceSpace, idx::Integer)
+    space.center_local_geometry[idx]
+end
+function Geometry.LocalGeometry(space::Spaces.FiniteDifferenceSpace, idx::PlusHalf)
+    space.face_local_geometry[idx.i + 1]
+end
+
+
 
 Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) =
     space.center_local_geometry.J[idx]
@@ -863,6 +901,8 @@ end
 
 
 abstract type GradientOperator <: FiniteDifferenceOperator end
+return_eltype(::GradientOperator, arg) = Geometry.Covariant3Vector{eltype(arg)}
+
 
 """
     GradientF2C(;boundaryname=boundarycondition...)
@@ -886,31 +926,19 @@ return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
 stencil_interior_width(::GradientF2C) = ((-half, half),)
 
 function stencil_interior(::GradientF2C, loc, idx, arg)
-    space = axes(arg)
-    RecursiveApply.rdiv(
-        (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half)),
-        Δh_f2f(space, idx),
-    )
+    Geometry.Covariant3Vector(getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half))
 end
 
 boundary_width(op::GradientF2C, ::SetValue) = 1
 
 function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
-    space = axes(arg)
     @assert idx == left_center_boundary_idx(arg)
-    RecursiveApply.rdiv(
-        (getidx(arg, loc, idx + half) ⊟ bc.val),
-        Δh_f2f(space, idx),
-    )
+    Geometry.Covariant3Vector(getidx(arg, loc, idx + half) ⊟ bc.val)
 end
 
 function stencil_right_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
-    space = axes(arg)
     @assert idx == right_center_boundary_idx(arg)
-    RecursiveApply.rdiv(
-        (bc.val ⊟ getidx(arg, loc, idx - half)),
-        Δh_f2f(space, idx),
-    )
+    Geometry.Covariant3Vector(bc.val ⊟ getidx(arg, loc, idx - half))
 end
 
 boundary_width(op::GradientF2C, ::Extrapolate) = 1
@@ -919,7 +947,6 @@ function stencil_left_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
     @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, arg)
 end
-
 function stencil_right_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
     @assert idx == right_center_boundary_idx(arg)
     stencil_interior(op, loc, idx - 1, arg)
@@ -945,43 +972,148 @@ return_space(::GradientC2F, space::Spaces.CenterFiniteDifferenceSpace) =
 stencil_interior_width(::GradientC2F) = ((-half, half),)
 
 function stencil_interior(::GradientC2F, loc, idx, arg)
-    space = axes(arg)
-    RecursiveApply.rdiv(
-        (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half)),
-        Δh_c2c(space, idx),
-    )
+    Geometry.Covariant3Vector(getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half))
 end
 
-boundary_width(op::GradientC2F, ::SetGradient) = 1
-
-function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
-    space = axes(arg)
-    @assert idx == left_face_boundary_idx(arg)
-    RecursiveApply.rdiv(
-        (getidx(arg, loc, idx + half) ⊟ bc.val),
-        Δh_c2c(space, idx),
-    )
-end
 
 boundary_width(op::GradientC2F, ::SetValue) = 1
-
+function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
+    @assert idx == left_face_boundary_idx(arg)
+    # ∂x[i] = 2(∂x[i + half] - val)
+    Geometry.Covariant3Vector(2 ⊠ (getidx(arg, loc, idx + half) ⊟ bc.val))
+end
 function stencil_right_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
-    space = axes(arg)
     @assert idx == right_face_boundary_idx(arg)
-    RecursiveApply.rdiv(
-        (bc.val ⊟ getidx(arg, loc, idx - half)),
-        Δh_c2c(space, idx),
-    )
+    Geometry.Covariant3Vector(2 ⊠ (bc.val ⊟ getidx(arg, loc, idx - half)))
 end
 
 # left / right SetGradient boundary conditions
+boundary_width(op::GradientC2F, ::SetGradient) = 1
 function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     # imposed flux boundary condition at left most face
     bc.val
 end
-
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
+    @assert idx == right_face_boundary_idx(arg)
+    # imposed flux boundary condition at right most face
+    bc.val
+end
+
+abstract type DivergenceOperator <: FiniteDifferenceOperator end
+
+"""
+    DivergenceF2C(;boundaryname=boundarycondition...)
+
+Centered-difference Divergence operator from a `FaceFiniteDifferenceSpace` to a
+`CenterFiniteDifferenceSpace`, applying the relevant boundary conditions. These
+can be:
+ - by default, the current value at the boundary face will be used.
+ - [`SetValue(val)`](@ref): calculate the Divergence assuming the value at the boundary is `val`.
+ - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
+   to be the same as the neighbouring interior value.
+"""
+struct DivergenceF2C{BCS} <: DivergenceOperator
+    bcs::BCS
+end
+DivergenceF2C(; kwargs...) = DivergenceF2C(NamedTuple(kwargs))
+
+return_space(::DivergenceF2C, space::Spaces.FaceFiniteDifferenceSpace) =
+    Spaces.CenterFiniteDifferenceSpace(space)
+
+stencil_interior_width(::DivergenceF2C) = ((-half, half),)
+
+function stencil_interior(::DivergenceF2C, loc, idx, arg)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(getidx(arg, loc, idx + half), Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(getidx(arg, loc, idx - half), Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+end
+
+boundary_width(op::DivergenceF2C, ::SetValue) = 1
+function stencil_left_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+    @assert idx == left_center_boundary_idx(arg)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(getidx(arg, loc, idx + half), Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(bc.val, Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+end
+function stencil_right_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+    @assert idx == right_center_boundary_idx(arg)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(bc.val, Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(getidx(arg, loc, idx - half), Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+end
+
+boundary_width(op::DivergenceF2C, ::Extrapolate) = 1
+function stencil_left_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+    @assert idx == left_center_boundary_idx(arg)
+    stencil_interior(op, loc, idx + 1, arg)
+end
+function stencil_right_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+    @assert idx == right_center_boundary_idx(arg)
+    stencil_interior(op, loc, idx - 1, arg)
+end
+
+"""
+    DivergenceC2F(;boundaries)
+
+Centered-difference Divergence operator from a `CenterFiniteDifferenceSpace` to a
+`FaceFiniteDifferenceSpace`, applying the relevant boundary conditions. These
+can be:
+ - [`SetValue(val)`](@ref): calculate the Divergence assuming the value at the boundary is `val`.
+ - [`SetDivergence(val)`](@ref): set the value of the Divergence at the boundary to be `val`.
+"""
+struct DivergenceC2F{BC} <: DivergenceOperator
+    bcs::BC
+end
+DivergenceC2F(; kwargs...) = DivergenceC2F(NamedTuple(kwargs))
+
+return_space(::DivergenceC2F, space::Spaces.CenterFiniteDifferenceSpace) =
+    Spaces.FaceFiniteDifferenceSpace(space)
+
+stencil_interior_width(::DivergenceC2F) = ((-half, half),)
+
+function stencil_interior(::DivergenceC2F, loc, idx, arg)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(getidx(arg, loc, idx + half), Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(getidx(arg, loc, idx - half), Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+end
+
+
+boundary_width(op::DivergenceC2F, ::SetValue) = 1
+function stencil_left_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
+    @assert idx == left_face_boundary_idx(arg)
+    # ∂x[i] = 2(∂x[i + half] - val)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(getidx(arg, loc, idx + half), Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(bc.val, Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J/2)
+end
+function stencil_right_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
+    @assert idx == right_face_boundary_idx(arg)
+    space = axes(arg)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    Ju³₊ = Geometry.Jcontravariant3(bc.val, Geometry.LocalGeometry(space, idx + half))
+    Ju³₋ = Geometry.Jcontravariant3(getidx(arg, loc, idx - half), Geometry.LocalGeometry(space, idx - half))
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J/2)
+end
+
+# left / right SetDivergence boundary conditions
+boundary_width(op::DivergenceC2F, ::SetGradient) = 1
+function stencil_left_boundary(::DivergenceC2F, bc::SetGradient, loc, idx, arg)
+    @assert idx == left_face_boundary_idx(arg)
+    # imposed flux boundary condition at left most face
+    bc.val
+end
+function stencil_right_boundary(::DivergenceC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     # imposed flux boundary condition at right most face
     bc.val

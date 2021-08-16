@@ -1,4 +1,9 @@
 
+(AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where T)(u::Real, local_geometry::LocalGeometry) where {A} =
+    (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where T)(u)
+
+
+
 ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
 ContravariantVector(u::CartesianVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x * u
@@ -51,6 +56,9 @@ contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
     ContravariantVector(u, local_geometry).u²
 contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     ContravariantVector(u, local_geometry).u³
+
+Jcontravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+    local_geometry.J * contravariant3(u, local_geometry)
 
 
 contravariant1(
