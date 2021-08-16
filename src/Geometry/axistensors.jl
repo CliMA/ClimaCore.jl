@@ -1,6 +1,28 @@
 using StaticArrays, LinearAlgebra
 
+"""
+    AbstractAxis
+
+An axis of a [`AxisTensor`](@ref).
+"""
 abstract type AbstractAxis{I} end
+
+"""
+    dual(ax::AbstractAxis)
+
+The dual axis to `ax`.
+
+```
+julia> using ClimaCore.Geometry
+
+julia> Geometry.dual(Geometry.Covariant12Axis())
+ClimaCore.Geometry.ContravariantAxis{(1, 2)}()
+
+julia> Geometry.dual(Geometry.Cartesian123Axis())
+ClimaCore.Geometry.CartesianAxis{(1, 2, 3)}()
+```
+"""
+function dual end
 
 struct CovariantAxis{I} <: AbstractAxis{I} end
 symbols(::CovariantAxis) = (:u₁, :u₂, :u₃)
@@ -51,7 +73,10 @@ Base.getindex(m::AbstractAxis, i::Int) = i
     AxisTensor(axes, components)
 
 An `AxisTensor` is a wrapper around a `StaticArray`, where each dimension is
-labelled with an `AbstractAxis`.
+labelled with an [`AbstractAxis`](@ref). These axes must be consistent for
+operations such as addition or subtraction, or be dual to each other for
+operations such as multiplication.
+
 
 # See also
 [`components`](@ref) to obtain the underlying array.
@@ -77,10 +102,17 @@ AxisTensor(
 AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
     AxisTensor(axes, SArray{Tuple{map(length, axes)...}}(components))
 
+# if the axes are already defined
+(AxisTensor{T, N, A, S} where {S})(
+    components::AbstractArray{T, N},
+) where {T, N, A} = AxisTensor(A.instance, components)
+(AxisTensor{T, N, A, S} where {T, S})(
+    components::AbstractArray{<:Any, N},
+) where {N, A} = AxisTensor(A.instance, components)
+
 
 Base.axes(a::AxisTensor) = getfield(a, :axes)
-Base.axes(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
-    map(x -> x(), fieldtypes(A))
+Base.axes(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} = A.instance
 Base.size(a::AxisTensor) = map(length, axes(a))
 
 """
@@ -98,14 +130,14 @@ function Base.getindex(
     ::Colon,
     i::Integer,
 ) where {A1, A2}
-    AxisVector(A1(), getindex(components(v), :, i))
+    AxisVector(axes(v, 1), getindex(components(v), :, i))
 end
 function Base.getindex(
     v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
     i::Integer,
     ::Colon,
 ) where {A1, A2}
-    AxisVector(A2(), getindex(components(v), i, :))
+    AxisVector(axes(v, 2), getindex(components(v), i, :))
 end
 
 
@@ -152,7 +184,7 @@ AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
 (AxisVector{T, A, SVector{N, T}} where {T})(args...) where {A, N} =
-    AxisVector(A(), SVector(args))
+    AxisVector(A.instance, SVector(args))
 
 const CovariantVector{T, A1 <: CovariantAxis, S} = AxisVector{T, A1, S}
 const ContravariantVector{T, A1 <: ContravariantAxis, S} = AxisVector{T, A1, S}
@@ -174,6 +206,11 @@ Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
 
 # 2-tensors
 const Axis2Tensor{T, A, S} = AxisTensor{T, 2, A, S}
+Axis2Tensor(
+    axes::Tuple{AbstractAxis, AbstractAxis},
+    components::AbstractMatrix,
+) = AxisTensor(axes, components)
+
 const AdjointAxis2Tensor{T, A, S} = Adjoint{T, Axis2Tensor{T, A, S}}
 components(va::AdjointAxis2Tensor) = components(parent(va))'
 
@@ -216,14 +253,14 @@ function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
     check_dual(axes(x, 1), axes(y, 1))
     return LinearAlgebra.dot(components(x), components(y))
 end
+
 function ⊗(x::AbstractVector, y::AbstractVector)
     x * y'
 end
 
-function ⊗(x::AxisVector, y::AxisVector)
-    AxisTensor((axes(x, 1), axes(y, 1)), components(x) * components(y)')
+function Base.:*(x::AxisVector, y::AdjointAxisVector)
+    AxisTensor((axes(x, 1), axes(y, 2)), components(x) * components(y))
 end
-
 function Base.:*(A::Axis2TensorOrAdj, x::AxisVector)
     check_dual(axes(A, 2), axes(x, 1))
     return AxisVector(axes(A, 1), components(A) * components(x))
