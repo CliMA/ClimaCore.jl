@@ -216,6 +216,9 @@ function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
     check_dual(axes(x, 1), axes(y, 1))
     return LinearAlgebra.dot(components(x), components(y))
 end
+function ⊗(x::AbstractVector, y::AbstractVector)
+    x * y'
+end
 
 function ⊗(x::AxisVector, y::AxisVector)
     AxisTensor((axes(x, 1), axes(y, 1)), components(x) * components(y)')
@@ -272,18 +275,3 @@ function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
 end
-
-
-
-# conversion
-#=
-@generated function project(::Type{AxisVector{<:Any,Axis{an}}}, b::AxisVector{T, Axis{bn}}) where {T, an, bn}
-    vals = Any[]
-    for a in an
-        i = findfirst(==(a), bn)
-        push!(vals, i === nothing ? :(zero($T)) : :(b[$i]))
-    end
-    :( AxisVector(Axis{an}(),SVector($(vals...),)) )
-end
-
-=#
