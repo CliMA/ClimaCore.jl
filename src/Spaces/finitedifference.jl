@@ -23,7 +23,17 @@ function FiniteDifferenceSpace{S}(
     CT = eltype(face_coordinates)
     FT = eltype(CT)
 
-    LG = Geometry.LocalGeometry{CT, FT, SMatrix{1, 1, FT, 1}}
+    Mxξ = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    }
+    Mξx = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Contravariant3Axis, Geometry.Cartesian3Axis},
+        SMatrix{1, 1, FT, 1},
+    }
+    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
     nface = length(face_coordinates)
     ncent = nface - 1
     center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
@@ -42,7 +52,19 @@ function FiniteDifferenceSpace{S}(
         WJ = Δz
         ∂x∂ξ = SMatrix{1, 1}(J)
         ∂ξ∂x = SMatrix{1, 1}(inv(J))
-        center_local_geometry[i] = Geometry.LocalGeometry(z, J, WJ, ∂x∂ξ, ∂ξ∂x)
+        center_local_geometry[i] = Geometry.LocalGeometry(
+            z,
+            J,
+            WJ,
+            Geometry.AxisTensor(
+                (Geometry.Cartesian3Axis(), Geometry.Covariant3Axis()),
+                ∂x∂ξ,
+            ),
+            Geometry.AxisTensor(
+                (Geometry.Contravariant3Axis(), Geometry.Cartesian3Axis()),
+                ∂ξ∂x,
+            ),
+        )
     end
 
     for i in 1:nface

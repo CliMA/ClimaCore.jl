@@ -180,7 +180,7 @@ function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,
     ::Type{V},
     arg,
-) where {V <: Geometry.CustomAxisFieldVector}
+) where {V <: Geometry.AxisVector}
     space = Fields.axes(arg)
     # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))

@@ -83,8 +83,8 @@ function volume_ref!(dYdt, Y, (parameters, valNq), t)
             )
             F = flux(y, parameters)
             Fρ = F.ρ
-            Fρu1 = SVector(F.ρu.matrix[1, 1], F.ρu.matrix[1, 2])
-            Fρu2 = SVector(F.ρu.matrix[2, 1], F.ρu.matrix[2, 2])
+            Fρu1 = SVector(F.ρu[1, 1], F.ρu[1, 2])
+            Fρu2 = SVector(F.ρu[2, 1], F.ρu[2, 2])
             Fρθ = F.ρθ
 
             # 2. Convert to contravariant coordinates and store in work array
@@ -140,15 +140,12 @@ function add_face_ref!(dYdt, Y, (parameters, valNq), t)
 
             y⁻ = (
                 ρ = Y[1, j, 1, h1, h2],
-                ρu = Cartesian12Vector(Y[1, j, 2, h1, h2], Y[1, j, 3, h1, h2]),
+                ρu = SVector(Y[1, j, 2, h1, h2], Y[1, j, 3, h1, h2]),
                 ρθ = Y[1, j, 4, h1, h2],
             )
             y⁺ = (
                 ρ = Y[Nq, j, 1, g1, g2],
-                ρu = Cartesian12Vector(
-                    Y[Nq, j, 2, g1, g2],
-                    Y[Nq, j, 3, g1, g2],
-                ),
+                ρu = SVector(Y[Nq, j, 2, g1, g2], Y[Nq, j, 3, g1, g2]),
                 ρθ = Y[Nq, j, 4, g1, g2],
             )
             nf = roeflux(normal, (y⁻, parameters), (y⁺, parameters))
@@ -174,15 +171,12 @@ function add_face_ref!(dYdt, Y, (parameters, valNq), t)
 
             y⁻ = (
                 ρ = Y[i, 1, 1, h1, h2],
-                ρu = Cartesian12Vector(Y[i, 1, 2, h1, h2], Y[i, 1, 3, h1, h2]),
+                ρu = SVector(Y[i, 1, 2, h1, h2], Y[i, 1, 3, h1, h2]),
                 ρθ = Y[i, 1, 4, h1, h2],
             )
             y⁺ = (
                 ρ = Y[i, Nq, 1, g1, g2],
-                ρu = Cartesian12Vector(
-                    Y[i, Nq, 2, g1, g2],
-                    Y[i, Nq, 3, g1, g2],
-                ),
+                ρu = SVector(Y[i, Nq, 2, g1, g2], Y[i, Nq, 3, g1, g2]),
                 ρθ = Y[i, Nq, 4, g1, g2],
             )
             nf = roeflux(normal, (y⁻, parameters), (y⁺, parameters))

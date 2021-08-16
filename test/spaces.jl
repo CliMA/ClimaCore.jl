@@ -2,6 +2,7 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces
+import ClimaCore.Geometry
 import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 @testset "1×1 domain space" begin
@@ -33,7 +34,8 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
 
     for i in 1:4, j in 1:4
-        @test local_geometry_slab[i, j].∂ξ∂x ≈ @SMatrix [2/8 0; 0 2/10]
+        @test Geometry.components(local_geometry_slab[i, j].∂ξ∂x) ≈
+              @SMatrix [2/8 0; 0 2/10]
         @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
         @test local_geometry_slab[i, j].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]

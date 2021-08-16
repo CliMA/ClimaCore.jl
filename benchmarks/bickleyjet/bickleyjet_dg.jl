@@ -53,8 +53,8 @@ end
 
 function flux(state, p)
     @unpack ρ, ρu, ρθ = state
-    u = ρu ./ ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ .* u)
+    u = ρu / ρ
+    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ * u)
 end
 
 roe_average(ρ⁻, ρ⁺, var⁻, var⁺) =
