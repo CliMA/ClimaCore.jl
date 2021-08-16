@@ -1,0 +1,8 @@
+# Slab model
+
+"""
+Formulation:
+ 
+
+
+"""
