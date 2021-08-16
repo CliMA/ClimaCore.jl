@@ -533,17 +533,16 @@ end
  
 allocate_work(op::Divergence, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Divergence{(1,)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::Divergence{(1,)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MVector{Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for i in 1:Nq
-        Jv¹ = slab_local_geometry[i].J ⊠ Geometry.contravariant1(get_node(slab_field, i), slab_local_geometry[i])
+        Jv¹ = slab_local_geometry[i].J ⊠ Geometry.contravariant1(get_node(slab_data, i), slab_local_geometry[i])
         for ii in 1:Nq
             out[ii] = out[ii] ⊞ (D[ii,i] ⊠ Jv¹)
         end        
@@ -554,21 +553,20 @@ function apply_slab(op::Divergence{(1,)}, _, slab_field, h)
     return SVector(out)
 end
 
-function apply_slab(op::Divergence{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::Divergence{(1,2)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for j in 1:Nq, i in 1:Nq
-        Jv¹ = slab_local_geometry[i, j].J ⊠ Geometry.contravariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        Jv¹ = slab_local_geometry[i, j].J ⊠ Geometry.contravariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
         for ii in 1:Nq
             out[ii,j] = out[ii, j] ⊞ (D[ii,i] ⊠ Jv¹)
         end
-        Jv² = slab_local_geometry[i, j].J ⊠ Geometry.contravariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        Jv² = slab_local_geometry[i, j].J ⊠ Geometry.contravariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
         for jj in 1:Nq
             out[i,jj] = out[i, jj] ⊞ (D[jj,j] ⊠ Jv²)
         end        
@@ -579,21 +577,20 @@ function apply_slab(op::Divergence{(1,2)}, _, slab_field, h)
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakDivergence{(1,2)}, _, slab_field, h)
-    slab_space = axes(slab_field)
+function apply_slab(op::WeakDivergence{(1,2)}, slab_space, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_field))
+    RT = operator_return_eltype(op, eltype(slab_data))
     out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     for j in 1:Nq, i in 1:Nq
-        WJv¹ = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant1(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        WJv¹ = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
         for ii in 1:Nq
             out[ii,j] = out[ii, j] ⊞ (D[i, ii] ⊠ WJv¹)
         end
-        WJv² = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant2(get_node(slab_field, i, j), slab_local_geometry[i, j])
+        WJv² = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
         for jj in 1:Nq
             out[i, jj] = out[i, jj] ⊞ (D[j, jj] ⊠ WJv²)
         end        
@@ -724,7 +721,7 @@ function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
             v₁ = Geometry.covariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 D₂v₁ = D[jj,j] ⊠ v₁
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(⊟(D₂v₁), slab_local_geometry[i, jj])
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(-(D₂v₁), slab_local_geometry[i, jj])
             end
             v₂ = Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
@@ -737,7 +734,7 @@ function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
             v₃ = Geometry.covariant3(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 D₁v₃ = D[ii,i] ⊠ v₃
-                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
+                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(D₁v₃), -(D₁v₃))
             end
             for jj in 1:Nq
                 D₂v₃ = D[jj,j] ⊠ v₃
@@ -769,12 +766,12 @@ function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
             Wv₁ = W ⊠ Geometry.covariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(Dᵀ₂Wv₁) 
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(Dᵀ₂Wv₁, slab_local_geometry[i, jj]) 
             end
             Wv₂ = W ⊠ Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂))
+                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(-(Dᵀ₁Wv₂), slab_local_geometry[ii, j])
             end
         end
     elseif RT <: Geometry.Contravariant12Vector
@@ -788,7 +785,7 @@ function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
             end
             for jj in 1:Nq
                 Dᵀ₂Wv₃ = D[j,jj] ⊠ Wv₃
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant12Vector(⊟(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant12Vector(-(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
             end
         end
     else

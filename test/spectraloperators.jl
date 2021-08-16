@@ -232,7 +232,6 @@ end
         (k^2 + l^2)^2 * sin(k * coords.x1 + l * coords.x2),
         0.0,
     )
-
     curl = Operators.Curl()
     wcurl = Operators.WeakCurl()
 
@@ -240,12 +239,12 @@ end
     wgrad = Operators.WeakGradient()
 
     χ = Spaces.weighted_dss!(
-        @. wgrad(sdiv(y)) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(y))) - Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(y))),
         )
     )
     ∇⁴y = Spaces.weighted_dss!(
-        @. wgrad(sdiv(χ)) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(χ))) - Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(χ))),
         )
     )
