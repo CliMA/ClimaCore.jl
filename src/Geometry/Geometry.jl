@@ -1,8 +1,10 @@
 module Geometry
 
-export ⊗, Cartesian12Vector
+using ..RecursiveApply
 
 import StaticArrays: SVector
+
+export ⊗, Cartesian12Vector
 
 include("coordinates.jl")
 include("axistensors.jl")

@@ -11,6 +11,8 @@ import ClimaCore:
     Geometry,
     Spaces
 
+import ClimaCore.Geometry: ⊗
+
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
 using Logging: global_logger
@@ -35,6 +37,7 @@ const nelems = 30
 const Cd = ν / (L / nelems)
 const ug = 1.0
 const vg = 0.0
+const uvg = Geometry.Cartesian12Vector(ug, vg)
 const d = sqrt(2 * ν / f)
 domain = Domains.IntervalDomain(0.0, L; x3boundary = (:bottom, :top))
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
@@ -75,18 +78,16 @@ function adiabatic_temperature_profile(z; T_surf = 300.0, T_min_ref = 230.0)
     ρ = ρ_from_pθ(p, θ)
     ρθ = ρ * θ
 
-    u = FT(1.0)
-    v = FT(0.0)
-    return (ρ = ρ, u = u, v = v, ρθ = ρθ)
+    uv = Geometry.Cartesian12Vector(FT(1.0), FT(0.0))
+    return (ρ = ρ, uv = uv, ρθ = ρθ)
 end
 
 Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
-
-
+Φ(z) = grav * z
 
 zc = Fields.coordinate_field(cspace)
 Yc = adiabatic_temperature_profile.(zc)
-w = zeros(Float64, fspace)
+w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
 w_init = copy(w)
@@ -94,73 +95,67 @@ w_init = copy(w)
 # Y = (Yc, w)
 
 function tendency!(dY, Y, _, t)
-
     (Yc, w) = Y.x
     (dYc, dw) = dY.x
 
-    UnPack.@unpack ρ, u, v, ρθ = Yc
+    UnPack.@unpack ρ, uv, ρθ = Yc
     dρ = dYc.ρ
-    du = dYc.u
-    dv = dYc.v
+    duv = dYc.uv
     dρθ = dYc.ρθ
 
-    # S 4.4.1: potential temperature density
-    # Mass conservation
-
-    If = Operators.InterpolateC2F(;
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
+    # density
+    If = Operators.InterpolateC2F()
+    ∂f = Operators.GradientC2F()
+    ∂c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
     )
-    ∂c = Operators.GradientF2C()
-    @. dρ = -(∂c(w * If(ρ)))  # Eq. 4.11
+    @. dρ = -∂c(w * If(ρ))
 
+    # potential temperature
+    If = Operators.InterpolateC2F()
+    ∂f = Operators.GradientC2F()
+    ∂c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+    )
+    # TODO!: Undesirable casting to vector required
+    @. dρθ = -∂c(w * If(ρθ) + Geometry.CartesianVector(ν * ∂f(ρθ / ρ)))
 
-    u_1 = parent(u)[1]
-    v_1 = parent(v)[1]
-    u_wind = sqrt(u_1^2 + v_1^2)
+    uv_1 = Operators.getidx(uv, Operators.Interior(), 1)
+    u_wind = LinearAlgebra.norm(uv_1)
     A = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
+        bottom = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
+        top = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
     )
 
-    # u-momentum
-    bcs_bottom = Operators.SetValue(Cd * u_wind * u_1)  # Eq. 4.16
-    bcs_top = Operators.SetValue(FT(ug))  # Eq. 4.18
-    gradc2f = Operators.GradientC2F(top = bcs_top)
-    gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
-    @. du = gradf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u) # Eq. 4.8
+    # uv
+    bcs_bottom =
+        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind * uv_1))
+    bcs_top = Operators.SetValue(uvg)
+    ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
+    ∂f = Operators.GradientC2F(top = bcs_top)
+    duv .= (uv .- Ref(uvg)) .× Ref(Geometry.Cartesian3Vector(f))
+    @. duv += ∂c(ν * ∂f(uv)) - A(w, uv)
 
-    # v-momentum
-    bcs_bottom = Operators.SetValue(Cd * u_wind * v_1)  # Eq. 4.17
-    bcs_top = Operators.SetValue(FT(vg))  # Eq. 4.19
-    gradc2f = Operators.GradientC2F(top = bcs_top)
-    gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
-    @. dv = gradf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v) # Eq. 4.9
-
-    # w-momentum
-    B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
-    )
-    # gradc2f = Operators.GradientC2F(;bottom =  Operators.SetValue(0.0), top = Operators.SetValue(0.0))
-    gradc2f = Operators.GradientC2F()
-    If = Operators.InterpolateC2F(;
+    # w
+    If = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    gradf2c = Operators.GradientF2C()
+    ∂f = Operators.GradientC2F()
+    ∂c = Operators.GradientF2C()
+    Af = Operators.AdvectionF2F()
+    divf = Operators.DivergenceC2F()
+    B = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+    )
     @. dw = B(
-        -(If(ρθ / ρ) * gradc2f(Π(ρθ))) - grav + gradc2f(ν * gradf2c(w)) -
-        w * If(gradf2c(w)),
-    )   # Eq. 4.10
-
-
-    # potential temperature density conservation
-    bcs_bottom = Operators.SetValue(FT(0.0))  # Eq. 4.20
-    bcs_top = Operators.SetValue(FT(0.0))  # Eq. 4.21
-    gradc2f = Operators.GradientC2F()
-    gradf2c = Operators.GradientF2C(bottom = bcs_bottom, top = bcs_top)
-    @. dρθ = -(∂c(w * If(ρθ))) + gradf2c(ν * gradc2f(ρθ / ρ))  # Eq. 4.12
+        Geometry.CartesianVector(
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+        ) + divf(ν * ∂c(w)) - Af(w, w),
+    )
 
     return dY
 end
@@ -172,7 +167,6 @@ Y = ArrayPartition(Yc, w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0 / 100.0
-ndays = 0
 # Solve the ODE operator
 prob = ODEProblem(tendency!, Y, (0.0, 60 * 60))
 sol = solve(
@@ -207,8 +201,13 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "u",
         label = "Ref",
     )
-    sub_plt1 =
-        Plots.plot!(sub_plt1, parent(u.x[1].u), z_centers, label = "Comp")
+    # get u component of uv vector
+    sub_plt1 = Plots.plot!(
+        sub_plt1,
+        parent(u.x[1].uv.components.data.:1),
+        z_centers,
+        label = "Comp",
+    )
 
     v_ref =
         vg .+
@@ -221,8 +220,13 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "v",
         label = "Ref",
     )
-    sub_plt2 =
-        Plots.plot!(sub_plt2, parent(u.x[1].v), z_centers, label = "Comp")
+    # get v component of uv vector
+    sub_plt2 = Plots.plot!(
+        sub_plt2,
+        parent(u.x[1].uv.components.data.:2),
+        z_centers,
+        label = "Comp",
+    )
 
 
     return Plots.plot(
@@ -251,3 +255,40 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/hydrostatic_ekman_end.png", "ekman end")
+
+
+# w = ClimaCore.Geometry.AxisTensor{
+#         Float64,
+#         1,
+#         Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
+#         StaticArrays.SVector{
+#             1,
+#             Float64
+#         }
+#     }
+
+# If.(∂c.(w)) = ClimaCore.Geometry.AxisTensor{
+#         ClimaCore.Geometry.AxisTensor{
+#             Float64,
+#             1,
+#             Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
+#             StaticArrays.SVector{
+#                 1,
+#                 Float64
+#             }
+#         },
+#         1,
+#         Tuple{ClimaCore.Geometry.CovariantAxis{(3,)}},
+#         StaticArrays.SVector{
+#             1,
+#             ClimaCore.Geometry.AxisTensor{
+#                 Float64,
+#                 1,
+#                 Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
+#                 StaticArrays.SVector{
+#                     1,
+#                     Float64
+#                 }
+#             }
+#         }
+#     }

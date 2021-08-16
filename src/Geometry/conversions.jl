@@ -1,3 +1,13 @@
+#=
+(AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(
+    u::Real,
+    local_geometry::LocalGeometry,
+) where {A} = (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(u)
+=#
+
+Cartesian3Vector(w::Real, ::LocalGeometry) = Cartesian3Vector(w)
+Covariant3Vector(w₃::Real, ::LocalGeometry) = Covariant3Vector(w₃)
+Contravariant3Vector(w³::Real, ::LocalGeometry) = Contravariant3Vector(w³)
 
 ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
 ContravariantVector(u::CartesianVector, local_geometry::LocalGeometry) =
@@ -52,6 +62,9 @@ contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
 contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     ContravariantVector(u, local_geometry).u³
 
+Jcontravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+    local_geometry.J * contravariant3(u, local_geometry)
+
 
 contravariant1(
     A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
@@ -62,10 +75,6 @@ contravariant2(
     local_geometry::LocalGeometry,
 ) = (local_geometry.∂ξ∂x * A)[2, :]
 
-
-Covariant3Vector(x::AbstractFloat, ::LocalGeometry) = Covariant3Vector(x)
-Contravariant3Vector(x::AbstractFloat, ::LocalGeometry) =
-    Contravariant3Vector(x)
 
 
 # conversions
@@ -120,10 +129,15 @@ end
 
 _norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
 
+
+
+
 _cross(u::AxisVector, v::AxisVector, local_geometry) = LinearAlgebra.cross(
     ContravariantVector(u, local_geometry),
     ContravariantVector(v, local_geometry),
 )
+_cross(u::CartesianVector, v::CartesianVector, local_geometry) =
+    LinearAlgebra.cross(u, v)
 
 
 

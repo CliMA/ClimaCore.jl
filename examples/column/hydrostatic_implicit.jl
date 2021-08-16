@@ -71,7 +71,7 @@ function decaying_temperature_profile(z; T_virt_surf = 280.0, T_min_ref = 230.0)
 end
 
 Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
-
+Φ(z) = grav * z
 
 function discrete_hydrostatic_balance!(
     ρ,
@@ -101,7 +101,7 @@ end
 
 zc = Fields.coordinate_field(cspace)
 Yc = decaying_temperature_profile.(zc)
-w = zeros(Float64, fspace)
+w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
 zf = parent(Fields.coordinate_field(fspace))
 Δz = zf[2:end] - zf[1:(end - 1)]
 Y_init = copy(Yc)
@@ -115,23 +115,23 @@ function tendency!(dY, Y, _, t)
     dw = dY.w
 
     If = Operators.InterpolateC2F()
-
-    ∂c = Operators.GradientF2C(
-        bottom = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
-        top = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
+    ∂ = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
     )
-
     ∂f = Operators.GradientC2F()
-
     B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
     )
 
-    @. dYc = -(∂c(w * If(Yc)))
-    @. dw = B(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - grav)
-
-    # @info norm(parent(dY))
+    @. dYc.ρ = -(∂(w * If(Yc.ρ)))
+    @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
+    @. dw = B(
+        Geometry.CartesianVector(
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+        ),
+    )
     return dY
 end
 

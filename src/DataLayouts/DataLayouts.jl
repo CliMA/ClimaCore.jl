@@ -556,11 +556,11 @@ end
     val,
     I::CartesianIndex{5},
 ) where {S}
-    col[I[4]] = val
+    col[I[4]] = convert(S, val)
 end
 
 @inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
-    set_struct!(view(parent(data), v, :), val)
+    set_struct!(view(parent(data), v, :), convert(S, val))
 end
 
 # combined 1D spectral element + extruded 1D FV column data layout

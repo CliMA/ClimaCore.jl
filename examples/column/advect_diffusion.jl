@@ -49,7 +49,7 @@ function ∇gaussian(z, t; μ = -1 // 2, ν = 1, 𝓌 = 1, δ = 1)
 end
 
 T = gaussian.(zc, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
-V = ones(FT, fs)
+V = Geometry.Cartesian3Vector.(ones(FT, fs))
 
 # Solve Adv-Diff Equation: ∂_t T = α ∇²T
 z₀ = FT(0)
@@ -60,10 +60,16 @@ function ∑tendencies!(dT, T, z, t)
     ic2f = Operators.InterpolateC2F()
     bc_vb = Operators.SetValue(FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
     bc_vt = Operators.SetValue(FT(gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
-    bc_gb =
-        Operators.SetGradient(FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
-    bc_gt =
-        Operators.SetGradient(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
+    bc_gb = Operators.SetGradient(
+        Geometry.Cartesian3Vector(
+            FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
+        ),
+    )
+    bc_gt = Operators.SetGradient(
+        Geometry.Cartesian3Vector(
+            FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
+        ),
+    )
 
     #   Upwind Biased Product
     #   UB = Operators.UpwindBiasedProductC2F(
@@ -77,9 +83,9 @@ function ∑tendencies!(dT, T, z, t)
 
 
     gradc2f = Operators.GradientC2F(bottom = bc_vb, top = bc_gt)
-    gradf2c = Operators.GradientF2C()
+    divf2c = Operators.DivergenceF2C()
 
-    return @. dT = gradf2c(ν * gradc2f(T)) - A(V, T)
+    return @. dT = divf2c(ν * gradc2f(T)) - A(V, T)
 end
 
 @show ∑tendencies!(similar(T), T, nothing, 0.0);

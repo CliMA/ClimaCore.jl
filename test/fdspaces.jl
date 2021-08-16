@@ -2,7 +2,29 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
-import ClimaCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore.Domains: Geometry
+
+import ClimaCore.Operators: half, PlusHalf
+
+@testset "PlusHalf" begin
+    @test half + 0 == half
+    @test half < half + 1
+    @test half <= half + 1
+    @test !(half > half + 1)
+    @test !(half >= half + 1)
+    @test half != half + 1
+    @test half + half == 1
+    @test half - half == 0
+    @test half + 3 == 3 + half == PlusHalf(3)
+    @test min(half, half + 3) == half
+    @test max(half, half + 3) == half + 3
+
+    @test collect(half:(2 + half)) == [half, 1 + half, 2 + half]
+
+    @test_throws InexactError convert(Int, half)
+    @test_throws InexactError convert(PlusHalf, 1)
+    @test_throws InexactError convert(PlusHalf{Int}, 1)
+end
 
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
@@ -29,11 +51,11 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
-        ∂sin = ∇ᶜ.(sin.(faces))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∇ᶜ.(sin.(faces)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
-        # check that operator is callable as well
-        ∂sin = ∇ᶜ(sin.(faces))
+        divᶜ = Operators.DivergenceF2C()
+        ∂sin = divᶜ.(Geometry.Cartesian3Vector.(sin.(faces)))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
         # Center -> Face operator
@@ -42,33 +64,23 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
             left = Operators.SetValue(FT(0)),
             right = Operators.SetValue(FT(pi)),
         )
-        ∂z = ∇ᶠ.(centers)
-        @test ∂z ≈ ones(FT, face_space) rtol = 10 * eps(FT)
+        ∂z = Geometry.CartesianVector.(∇ᶠ.(centers))
+        @test ∂z ≈ Geometry.Cartesian3Vector.(ones(FT, face_space)) rtol =
+            10 * eps(FT)
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
-        ∂cos = ∇ᶠ.(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-1
-
-        # check that operator is callable as well
-        ∂cos = ∇ᶠ(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-1
+        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
 
         ∇ᶠ = Operators.GradientC2F(
-            left = Operators.SetGradient(FT(1)),
-            right = Operators.SetGradient(FT(1)),
+            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
+            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
         )
-        ∂z = ∇ᶠ.(centers)
-        @test ∂z ≈ ones(FT, face_space) rtol = 10 * eps(FT)
-
-        ∇ᶠ = Operators.GradientC2F(
-            left = Operators.SetGradient(FT(0)),
-            right = Operators.SetGradient(FT(0)),
-        )
-        ∂cos = ∇ᶠ.(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-2
+        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
@@ -101,8 +113,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # can't define Neumann conditions on GradientF2C
         ∂ = Operators.GradientF2C(
@@ -110,7 +122,7 @@ end
             right = Operators.SetGradient(FT(-1)),
         )
 
-        @test_throws Exception ∂sin = ∂.(w .* I.(θ))
+        @test_throws Exception ∂.(w .* I.(θ))
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
@@ -119,8 +131,8 @@ end
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         I = Operators.InterpolateC2F(
             left = Operators.SetGradient(FT(1)),
@@ -128,8 +140,8 @@ end
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
@@ -141,8 +153,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_faces = zeros(FT, face_space)
@@ -154,47 +166,6 @@ end
 
         # TODO: should we throw something else?
         @test_throws BoundsError ∂.(w .* I.(θ))
-    end
-end
-
-@testset "Test that FD Operators are callable" begin
-    for FT in (Float32, Float64)
-        domain = Domains.IntervalDomain(
-            FT(0.0),
-            FT(pi);
-            x3boundary = (:left, :right),
-        )
-
-        @test eltype(domain) === FT
-        mesh = Meshes.IntervalMesh(domain; nelems = 16)
-
-        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
-        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
-
-        ones_centers = ones(FT, center_space)
-        ones_faces = ones(FT, face_space)
-
-        If = Operators.InterpolateC2F(
-            left = Operators.SetValue(one(FT)),
-            right = Operators.SetValue(one(FT)),
-        )
-        Ic = Operators.InterpolateF2C()
-        Ic(If(ones_centers))
-
-        ∂ = Operators.GradientF2C()
-        ∂(ones_faces)
-
-        A = Operators.AdvectionC2C(
-            left = Operators.SetValue(one(FT)),
-            right = Operators.SetValue(one(FT)),
-        )
-        A(ones_faces, ones_centers)
-
-        U = Operators.UpwindBiasedProductC2F(
-            left = Operators.SetValue(one(FT)),
-            right = Operators.SetValue(one(FT)),
-        )
-        U(ones_faces, ones_centers)
     end
 end
 
@@ -348,36 +319,36 @@ end
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-            face_field_exact = zeros(FT, fs)
+            face_field_exact = Geometry.Covariant3Vector.(zeros(FT, fs))
             cent_field = zeros(FT, cs)
-            face_field = zeros(FT, fs)
+            face_field = Geometry.Covariant3Vector.(zeros(FT, fs))
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             cent_field .= sin.(3π .* centers)
-            face_field_exact .= 3π .* cos.(3π .* faces)
+            face_field_exact .=
+                Geometry.CovariantVector.(
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces)),
+                )
 
             operator = Operators.GradientC2F(
-                left = Operators.SetGradient(3π),
-                right = Operators.SetGradient(-3π),
+                left = Operators.SetGradient(Geometry.Cartesian3Vector(3π)),
+                right = Operators.SetGradient(Geometry.Cartesian3Vector(-3π)),
             )
 
             face_field .= operator.(cent_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(parent(face_field) .- parent(face_field_exact)) /
-                length(parent(face_field_exact))
+            err[k] = norm(face_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 2e-2
+        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+        @test conv[1] ≈ 2 atol = 0.1
+        @test conv[2] ≈ 2 atol = 0.1
+        @test conv[3] ≈ 2 atol = 0.1
+        @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end
 
@@ -395,32 +366,32 @@ end
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-            cent_field_exact = zeros(FT, cs)
-            cent_field = zeros(FT, cs)
+            cent_field_exact = Geometry.Covariant3Vector.(zeros(FT, cs))
+            cent_field = Geometry.Covariant3Vector.(zeros(FT, cs))
             face_field = zeros(FT, fs)
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             face_field .= sin.(3π .* faces)
-            cent_field_exact .= 3π .* cos.(3π .* centers)
+            cent_field_exact .=
+                Geometry.CovariantVector.(
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers)),
+                )
 
             operator = Operators.GradientF2C()
 
             cent_field .= operator.(face_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(parent(cent_field) .- parent(cent_field_exact)) /
-                length(parent(cent_field_exact))
+            err[k] = norm(cent_field .- cent_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 2e-2
+        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+        @test conv[1] ≈ 2 atol = 0.1
+        @test conv[2] ≈ 2 atol = 0.1
+        @test conv[3] ≈ 2 atol = 0.1
+        @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end

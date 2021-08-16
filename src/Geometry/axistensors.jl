@@ -166,17 +166,14 @@ import Base: +, -, *, /, \, ==
 # Between arrays
 @inline +(a::AxisTensor, b::AxisTensor) = map(+, a, b)
 @inline -(a::AxisTensor, b::AxisTensor) = map(-, a, b)
-
 # Scalar-array
 @inline *(a::Number, b::AxisTensor) = map(c -> a * c, b)
 @inline *(a::AxisTensor, b::Number) = map(c -> c * b, a)
-
 @inline /(a::AxisTensor, b::Number) = map(c -> c / b, a)
-@inline \(a::Number, b::AxisTensor) = map(c -> a \ c, b)
+@inline \(a, b::AxisTensor) = map(c -> a \ c, b)
 
 @inline (==)(a::AxisTensor, b::AxisTensor) =
     axes(a) == axes(b) && components(a) == components(b)
-
 
 # vectors
 
@@ -303,6 +300,11 @@ LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant12Vector) =
 
 LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant3Vector) =
     Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+
+LinearAlgebra.cross(x::Cartesian12Vector, y::Cartesian3Vector) =
+    Cartesian12Vector(x.u2 * y.u3, -x.u1 * y.u3)
+LinearAlgebra.cross(y::Cartesian3Vector, x::Cartesian12Vector) =
+    Cartesian12Vector(-x.u2 * y.u3, x.u1 * y.u3)
 
 function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
