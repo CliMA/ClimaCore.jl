@@ -163,13 +163,13 @@ left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
 Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) =
-    space.center_local_geometry.WJ[idx]
+    space.center_local_geometry.J[idx]
 Δh_c2c(space::Spaces.FiniteDifferenceSpace, idx::PlusHalf) =
-    space.face_local_geometry.WJ[idx.i + 1]
+    space.face_local_geometry.J[idx.i + 1]
 
 # boundary face to left first cell center distance
 Δh_left_bf2c(space::Spaces.FiniteDifferenceSpace) =
-    space.face_local_geometry.J[1] / 2s
+    space.face_local_geometry.J[1] / 2
 
 # last right cell center to last boundary face distance
 Δh_right_c2bf(space::Spaces.FiniteDifferenceSpace) =
