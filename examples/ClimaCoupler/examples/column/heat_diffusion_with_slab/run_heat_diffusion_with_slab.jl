@@ -42,7 +42,7 @@ zmax_atm = FT(1.0)
 zmin_lnd = FT(-1.0)
 zmax_lnd = FT(0.0)
 
-n = 10
+n = 15
 
 # initiate model domain and grid
 domain_atm  = Domains.IntervalDomain(zmin_atm, zmax_atm, x3boundary = (:bottom, :top)) # struct
@@ -64,25 +64,23 @@ function ∑tendencies_atm!(du, u, (parameters, T_sfc), t)
     # We also use this model to accumulate fluxes
     # ∂_t ϕ_bottom = n \cdot F
 
-    α = FT(0.1) # diffusion coefficient
+    μ = FT(0.0001) # diffusion coefficient
 
     T = u.x[1]
 
-    F_sfc = calculate_flux(T_sfc[1], parent(T)[1] )
-
+    F_sfc = - calculate_flux( T_sfc[1], parent(T)[1] )
+    
     # set BCs
     bcs_bottom = Operators.SetValue(F_sfc) # struct w bottom BCs
-    bcs_top = Operators.SetValue(FT(230.0))
+    bcs_top = Operators.SetValue(FT(280.0))
 
     gradc2f = Operators.GradientC2F(top = bcs_top) # gradient struct w BCs
     gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
 
     # tendency calculations
-    @. du.x[1] = α * gradf2c(gradc2f(T))
-    du.x[2] .= F_sfc[1]
+    @. du.x[1] = gradf2c( μ * gradc2f(T))
+    du.x[2] .= - F_sfc[1]
 
-    #@show "here :)"
-    #@show t
 end
 
 function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, F_sfc), t)
@@ -90,7 +88,7 @@ function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, F_sfc), t)
     Slab ocean:
     ∂_t T_sfc = F_sfc + G
     """
-    G = 0.0 # placeholder for soil dynamics
+    G = 0.0 # place holder for soil dynamics
 
     @. dT_sfc = F_sfc + G
 end
@@ -107,11 +105,11 @@ ics = (;
 # specify timestepping info
 stepping = (;
         Δt_min = 0.02,
-        timerange = (0.0, 3.0),
+        timerange = (0.0, 6.0),
         Δt_cpl = 1.0,
         odesolver = SSPRK33(),
-        nsteps_atm = 1,
-        nsteps_lnd = 3,
+        nsteps_atm = 4,
+        nsteps_lnd = 1,
         )
 
 # coupler comm functions which export / import / transform variables
@@ -133,8 +131,6 @@ function coupler_solve!(stepping, ics, parameters)
     # atmos copies of coupler variables
     atm_T_lnd = copy(coupler_T_lnd)
     atm_F_sfc = copy(coupler_F_sfc)
-
-
 
     # SETUP ATMOS
     # put all prognostic variable arrays into a vector and ensure that solve can partition them
@@ -161,22 +157,25 @@ function coupler_solve!(stepping, ics, parameters)
 
     # coupler stepping
     for t in (t_start : Δt_cpl : t_end)
+
         ## Atmos
-        # pre_atmos
-        atm_T_lnd .= coupler_get(coupler_T_lnd)
-        atm_F_sfc .= [0.0] # surfce flux to be accumulated
+         # pre_atmos
+         integ_atm.p[2] .= coupler_get(coupler_T_lnd)
+         integ_atm.u.x[2] .= [0.0] # surface flux to be accumulated
 
-        # run atmos
-        # NOTE: use (t - integ_atm.t) here instead of Δt_cpl to avoid accumulating roundoff error in our timestepping.
-        step!(integ_atm, t - integ_atm.t, true)
+         # run atmos
+         # NOTE: use (t - integ_atm.t) here instead of Δt_cpl to avoid accumulating roundoff error in our timestepping.
+         step!(integ_atm, t - integ_atm.t, true)
 
-        # post_atmos
-        coupler_F_sfc .= coupler_put(integ_atm.sol.u[end].x[2])  / Δt_cpl
+         # post_atmos
+         # negate sign
+         coupler_F_sfc .= -coupler_put(integ_atm.u.x[2]) / Δt_cpl
 
         ## Land
         # pre_land
+        
         lnd_F_sfc .= coupler_get(coupler_F_sfc)
-
+        
         # run land
         step!(integ_lnd, t - integ_lnd.t, true)
 
@@ -204,13 +203,20 @@ anim = Plots.@animate for u in sol_atm.u
     Plots.plot(u.x[1], xlim=(220,280))
 end
 Plots.mp4(anim, joinpath(path, "heat.mp4"), fps = 10)
-Plots.png(Plots.plot(sol_atm.u[end].x[1] ), joinpath(path, "heat_end.png"))
+Plots.png(Plots.plot(sol_atm.u[end].x[1] ), joinpath(path, "T_atm_end.png"))
 
 atm_sfc_u_t = [parent(u.x[1])[1] for u in sol_atm.u]
-Plots.png(Plots.plot(sol_atm.t, atm_sfc_u_t), joinpath(path, "heat_atmos_surface_time.png"))
+Plots.png(Plots.plot(sol_atm.t, atm_sfc_u_t), joinpath(path, "T_atmos_surface_time.png"))
 
 lnd_sfc_u_t = [u[1] for u in sol_lnd.u]
-Plots.png(Plots.plot(sol_lnd.t, lnd_sfc_u_t), joinpath(path, "heat_land_surface_time.png"))
+Plots.png(Plots.plot(sol_lnd.t, lnd_sfc_u_t), joinpath(path, "T_land_surface_time.png"))
+
+atm_sum_u_t = [sum(parent(u.x[1])[:]) for u in sol_atm.u] ./ n
+
+v1 = lnd_sfc_u_t .- lnd_sfc_u_t[1] 
+v2 = atm_sum_u_t .- atm_sum_u_t[1] 
+Plots.png(Plots.plot(sol_lnd.t, [v1 v2 v1+v2], labels = ["lnd" "atm" "tot"]), joinpath(path, "heat_both_surface_time.png"))
+Plots.png(Plots.plot(sol_lnd.t, [v1+v2], labels = ["tot"]), joinpath(path, "heat_total_surface_time.png"))
 
 
 function linkfig(figpath, alt = "")
@@ -234,7 +240,6 @@ linkfig("output/$(dirname)/heat_end.png", "Heat End Simulation")
 # - quite hard to find original functions e.g. which solve etc
 # - extracting values from individual levels is quite clunky
 # - Fields don't seem to contain variable names... (maybe?)
-
 
 # Refs:
 
