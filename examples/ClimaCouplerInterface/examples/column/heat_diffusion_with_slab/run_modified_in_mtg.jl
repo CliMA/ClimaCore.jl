@@ -194,7 +194,7 @@ function solve!(::Coupler, stepping, ics, parameters)
     # would be nice to have
     #g = parameters.g
     # OR
-    #grav = parameters.gravity :)
+    #grav = parameters.gravity :) \thumbsup
 
     # init coupler fields
     coupler_F_sfc = coupler_put([0.0])

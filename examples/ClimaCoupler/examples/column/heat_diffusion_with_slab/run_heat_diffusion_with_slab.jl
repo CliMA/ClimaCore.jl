@@ -69,7 +69,7 @@ function ∑tendencies_atm!(du, u, (parameters, T_sfc), t)
     T = u.x[1]
 
     F_sfc = - calculate_flux( T_sfc[1], parent(T)[1] )
-    
+
     # set BCs
     bcs_bottom = Operators.SetValue(F_sfc) # struct w bottom BCs
     bcs_top = Operators.SetValue(FT(280.0))
@@ -161,7 +161,7 @@ function coupler_solve!(stepping, ics, parameters)
         ## Atmos
          # pre_atmos
          integ_atm.p[2] .= coupler_get(coupler_T_lnd)
-         integ_atm.u.x[2] .= [0.0] # surface flux to be accumulated
+         integ_atm.u.x[3] .= [0.0] # surface flux to be accumulated
 
          # run atmos
          # NOTE: use (t - integ_atm.t) here instead of Δt_cpl to avoid accumulating roundoff error in our timestepping.
@@ -169,7 +169,7 @@ function coupler_solve!(stepping, ics, parameters)
 
          # post_atmos
          # negate sign
-         coupler_F_sfc .= -coupler_put(integ_atm.u.x[2]) / Δt_cpl
+         coupler_F_sfc .= -coupler_put(integ_atm.u.x[3]) / Δt_cpl
 
         ## Land
         # pre_land
