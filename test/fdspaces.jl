@@ -39,6 +39,13 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         # Center -> Face operator
         # first order convergence at boundaries
         ∇ᶠ = Operators.GradientC2F(
+            left = Operators.SetValue(FT(0)),
+            right = Operators.SetValue(FT(pi)),
+        )
+        ∂z = ∇ᶠ.(centers)
+        @test ∂z ≈ ones(FT, face_space) rtol = 10 * eps(FT)
+
+        ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
@@ -48,6 +55,13 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
         # check that operator is callable as well
         ∂cos = ∇ᶠ(cos.(centers))
         @test ∂cos ≈ .-sin.(faces) atol = 1e-1
+
+        ∇ᶠ = Operators.GradientC2F(
+            left = Operators.SetGradient(FT(1)),
+            right = Operators.SetGradient(FT(1)),
+        )
+        ∂z = ∇ᶠ.(centers)
+        @test ∂z ≈ ones(FT, face_space) rtol = 10 * eps(FT)
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(FT(0)),
