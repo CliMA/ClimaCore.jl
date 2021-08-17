@@ -19,6 +19,8 @@ import ClimaCore.Operators: half, PlusHalf
     @test min(half, half+3) == half
     @test max(half, half+3) == half+3
 
+    @test collect(half:2+half) == [half, 1+half, 2+half]
+
     @test_throws InexactError convert(Int, half)
     @test_throws InexactError convert(PlusHalf, 1)
     @test_throws InexactError convert(PlusHalf{Int}, 1)
@@ -58,7 +60,7 @@ end
 
         # check that operator is callable as well
         ∂sin = ∇ᶜ(sin.(faces))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        @test Geometry.CartesianVector.(∂sin) ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # Center -> Face operator
         # first order convergence at boundaries
@@ -66,12 +68,12 @@ end
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
-        ∂cos = ∇ᶠ.(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-1
+        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
 
         # check that operator is callable as well
         ∂cos = ∇ᶠ(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-1
+        @test Geometry.CartesianVector.(∂cos) ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(FT(0)),

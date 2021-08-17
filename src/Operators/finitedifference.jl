@@ -168,6 +168,7 @@ Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
 Base.convert(::Type{P}, i::Integer) where {P<:PlusHalf}= throw(InexactError(:convert, P, i))
 Base.convert(::Type{I}, h::PlusHalf) where {I<:Integer}= throw(InexactError(:convert, I, h))
 
+Base.step(::AbstractUnitRange{PlusHalf{I}}) where {I} = one(I)
 
 
 left_idx(::Spaces.CenterFiniteDifferenceSpace) = 1
@@ -1001,6 +1002,7 @@ function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
 end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
+return_eltype(::DivergenceOperator, arg) = Geometry.divergence_result_type(eltype(arg))
 
 """
     DivergenceF2C(;boundaryname=boundarycondition...)

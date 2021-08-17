@@ -71,10 +71,6 @@ contravariant2(
 ) = (local_geometry.∂ξ∂x * A)[2, :]
 
 
-Covariant3Vector(x::AbstractFloat, ::LocalGeometry) = Covariant3Vector(x)
-Contravariant3Vector(x::AbstractFloat, ::LocalGeometry) =
-    Contravariant3Vector(x)
-
 
 # conversions
 function Covariant3Vector(
