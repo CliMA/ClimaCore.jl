@@ -67,14 +67,13 @@ end
 
 y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
-function energy(state, p)
+function energy(state, p, local_geometry)
     @unpack ρ, u = state
-    return ρ * norm(u)^2 / 2 + p.g * ρ^2 / 2
+    return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
     sum(energy.(y, Ref(parameters), Fields.local_geometry_field(space)))
-    #sum(Base.Broadcast.broadcasted(energy, y, Ref(parameters), Fields.local_geometry_field(space)))
 end
 
 function rhs!(dydt, y, _, t)
