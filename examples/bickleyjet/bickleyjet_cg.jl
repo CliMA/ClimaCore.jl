@@ -57,7 +57,7 @@ function init_state(x, p)
     u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
 
 
-    u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
+    u = Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * x2)
 
@@ -83,7 +83,7 @@ function energy(state, p)
 end
 
 function total_energy(y, parameters)
-    sum(state -> energy(state, parameters), y)
+    sum(energy.(y, Ref(parameters)))
 end
 
 
@@ -94,6 +94,7 @@ function rhs!(dydt, y, _, t)
     R = Operators.Restrict(space)
 
     rparameters = Ref(parameters)
+
     @. dydt = -R(div(flux(I(y), rparameters)))
 
     Spaces.weighted_dss!(dydt)

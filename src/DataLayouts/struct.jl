@@ -90,6 +90,21 @@ function typesize(::Type{T}, ::Type{S}) where {T, S}
     div(sizeof(S), sizeof(T))
 end
 
+# TODO: this assumes that the field struct zero type is the same as the backing
+# zero'd out memory, which should be true in all "real world" cases 
+# but is something that should be revisited
+@inline function _mzero!(out::MArray{S, T, N, L}, FT) where {S, T, N, L}
+    TdivFT = DataLayouts.typesize(FT, T)
+    Base.GC.@preserve out begin
+        @inbounds for i in 1:(L * TdivFT)
+            Base.unsafe_store!(
+                Base.unsafe_convert(Ptr{FT}, Base.pointer_from_objref(out)), zero(FT), i)
+        end
+    end
+    return out
+end
+
+
 """
     get_struct(array, S[, offset=0])
 

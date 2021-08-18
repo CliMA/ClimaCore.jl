@@ -70,8 +70,6 @@ end
     @test curlv ≈ curlv_ref rtol = 1e-2
 end
 
-
-
 @testset "curl-curl" begin
     v =
         Geometry.Cartesian12Vector.(
@@ -195,7 +193,6 @@ end
 
     @test norm(curlgradf) < 1e-12
 end
-
 
 @testset "annhilator property: div-curl" begin
     v = Geometry.Covariant3Vector.(sin.(coords.x1 .+ 2 .* coords.x2))

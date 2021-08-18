@@ -27,8 +27,8 @@ Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_slab` s
 """
 abstract type SpectralElementOperator end
 
-operator_axes(space::Spaces.SpectralElementSpace1D) = (1,)
-operator_axes(space::Spaces.SpectralElementSpace2D) = (1,2)
+operator_axes(::Spaces.SpectralElementSpace1D) = (1,)
+operator_axes(::Spaces.SpectralElementSpace2D) = (1,2)
 
 
 """
@@ -148,7 +148,7 @@ function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
         slab_args = map(arg -> _apply_slab(slab(arg, h), h), sbc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copy_slab!(slab_out, apply_slab(sbc.op, slab_space, slab_args...))
+        copy_slab!(slab_out, apply_slab(sbc.op, slab_space, slab_args..., h))
     end
     return field_out
 end
@@ -198,7 +198,7 @@ end
 function copy_slab!(slab_out::Fields.SlabField1D, res)
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    for i in 1:Nq
+    @inbounds for i in 1:Nq
         set_node!(slab_out, i, get_node(res, i))
     end
     return slab_out
@@ -207,8 +207,7 @@ end
 function copy_slab!(slab_out::Fields.SlabField2D, res)
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    for i in 1:Nq, j in 1:Nq
-        # slab_out[i, j] = res[i, j]
+    @inbounds for i in 1:Nq, j in 1:Nq
         set_node!(slab_out, i, j, get_node(res, i, j))
     end
     return slab_out
@@ -259,7 +258,7 @@ end
 _apply_slab(x, h) = x
 
 _apply_slab(sbc::SpectralBroadcasted, h) =
-    apply_slab(sbc.op, slab(axes(sbc), h), map(a -> _apply_slab(a, h), sbc.args)...)
+    apply_slab(sbc.op, slab(axes(sbc), h), map(a -> _apply_slab(a, h), sbc.args)..., h)
 
 _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
     Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
@@ -478,13 +477,14 @@ end
  
 allocate_work(op::Gradient, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Gradient{(1,)}, slab_space, slab_data)
+function apply_slab(op::Gradient{(1,)}, slab_space, slab_data, h)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MVector{Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for i in 1:Nq
         x = get_node(slab_data, i)       
         for ii in 1:Nq
@@ -498,13 +498,14 @@ function apply_slab(op::Gradient{(1,)}, slab_space, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::Gradient{(1,2)}, slab_space, slab_data)
+function apply_slab(op::Gradient{(1,2)}, slab_space, slab_data, h)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for j in 1:Nq, i in 1:Nq
         x = get_node(slab_data, i, j)
         for ii in 1:Nq
@@ -533,70 +534,79 @@ end
  
 allocate_work(op::Divergence, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Divergence{(1,)}, slab_space, slab_data)
+function apply_slab(op::Divergence{(1,)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MVector{Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for i in 1:Nq
-        Jv¹ = slab_local_geometry[i].J ⊠ Geometry.contravariant1(get_node(slab_data, i), slab_local_geometry[i])
+        local_geometry = slab_local_geometry[i]
+        Jv¹ = local_geometry.J ⊠ RecursiveApply.rmap(v -> Geometry.contravariant1(v, local_geometry), get_node(slab_data, i))
         for ii in 1:Nq
             out[ii] = out[ii] ⊞ (D[ii,i] ⊠ Jv¹)
         end        
     end
     for i in 1:Nq
-        out[i] = RecursiveApply.rdiv(out[i], slab_local_geometry[i].J)
+        local_geometry = slab_local_geometry[i]
+        out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
     end
     return SVector(out)
 end
 
-function apply_slab(op::Divergence{(1,2)}, slab_space, slab_data)
+function apply_slab(op::Divergence{(1,2)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for j in 1:Nq, i in 1:Nq
-        Jv¹ = slab_local_geometry[i, j].J ⊠ Geometry.contravariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
+        local_geometry = slab_local_geometry[i, j]
+        Jv¹ = local_geometry.J ⊠ RecursiveApply.rmap(v -> Geometry.contravariant1(v, local_geometry), get_node(slab_data, i, j))
         for ii in 1:Nq
-            out[ii,j] = out[ii, j] ⊞ (D[ii,i] ⊠ Jv¹)
+            out[ii,j] = out[ii, j] ⊞ (D[ii, i] ⊠ Jv¹)
         end
-        Jv² = slab_local_geometry[i, j].J ⊠ Geometry.contravariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
+        Jv² = local_geometry.J ⊠ RecursiveApply.rmap(v -> Geometry.contravariant2(v, local_geometry), get_node(slab_data, i, j))
         for jj in 1:Nq
-            out[i,jj] = out[i, jj] ⊞ (D[jj,j] ⊠ Jv²)
+            out[i,jj] = out[i, jj] ⊞ (D[jj, j] ⊠ Jv²)
         end        
     end
     for j in 1:Nq, i in 1:Nq
-        out[i, j] = RecursiveApply.rdiv(out[i, j], slab_local_geometry[i,j].J)
+        local_geometry = slab_local_geometry[i, j]
+        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakDivergence{(1,2)}, slab_space, slab_data)
+function apply_slab(op::WeakDivergence{(1,2)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    RT = operator_return_eltype(op, eltype(slab_data))
+    # allocate temp output
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for j in 1:Nq, i in 1:Nq
-        WJv¹ = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
+        local_geometry = slab_local_geometry[i, j]
+        WJv¹ = local_geometry.WJ ⊠ RecursiveApply.rmap(v -> Geometry.contravariant1(v, local_geometry), get_node(slab_data, i, j))
         for ii in 1:Nq
-            out[ii,j] = out[ii, j] ⊞ (D[i, ii] ⊠ WJv¹)
+            out[ii, j] = out[ii, j] ⊞ (D[i, ii] ⊠ WJv¹)
         end
-        WJv² = slab_local_geometry[i, j].WJ ⊠ Geometry.contravariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
+        WJv² = local_geometry.WJ ⊠ RecursiveApply.rmap(v -> Geometry.contravariant2(v, local_geometry), get_node(slab_data, i, j))
         for jj in 1:Nq
             out[i, jj] = out[i, jj] ⊞ (D[j, jj] ⊠ WJv²)
         end        
     end
     for j in 1:Nq, i in 1:Nq
-        out[i, j] = RecursiveApply.rdiv(out[i, j], ⊟(slab_local_geometry[i,j].WJ))
+        local_geometry = slab_local_geometry[i, j]
+        out[i, j] = RecursiveApply.rdiv(out[i, j], ⊟(local_geometry.WJ))
     end
     return SMatrix(out)
 end
@@ -627,14 +637,15 @@ operator_return_eltype(op::WeakGradient{(1,2)}, S) =
 
 
 
-function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data)
+function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MVector{Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for i in 1:Nq
         local_geometry = slab_local_geometry[i]
         W = local_geometry.WJ / local_geometry.J
@@ -655,14 +666,15 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::WeakGradient{(1,2)}, slab_space, slab_data)
+function apply_slab(op::WeakGradient{(1,2)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
         W = local_geometry.WJ / local_geometry.J
@@ -705,23 +717,25 @@ WeakCurl{nothing}(space) = WeakCurl{operator_axes(space)}()
 
 operator_return_eltype(::Curl{(1,2)}, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
+
 operator_return_eltype(::WeakCurl{(1,2)}, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
 
-function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
+function apply_slab(op::Curl{(1,2)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     if RT <: Geometry.Contravariant3Vector
         for j in 1:Nq, i in 1:Nq
             v₁ = Geometry.covariant1(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for jj in 1:Nq
                 D₂v₁ = D[jj,j] ⊠ v₁
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(-(D₂v₁), slab_local_geometry[i, jj])
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant3Vector(⊟(D₂v₁), slab_local_geometry[i, jj])
             end
             v₂ = Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
@@ -734,7 +748,7 @@ function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
             v₃ = Geometry.covariant3(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 D₁v₃ = D[ii,i] ⊠ v₃
-                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(D₁v₃), -(D₁v₃))
+                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
             end
             for jj in 1:Nq
                 D₂v₃ = D[jj,j] ⊠ v₃
@@ -751,14 +765,15 @@ function apply_slab(op::Curl{(1,2)}, slab_space, slab_data)
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
+function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data, h)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
+    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(slab_data))
-    out = zero(StaticArrays.MMatrix{Nq, Nq, RT})
-    D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
     if RT <: Geometry.Contravariant3Vector
         for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i,j]
@@ -771,7 +786,7 @@ function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
             Wv₂ = W ⊠ Geometry.covariant2(get_node(slab_data, i, j), slab_local_geometry[i, j])
             for ii in 1:Nq
                 Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(-(Dᵀ₁Wv₂), slab_local_geometry[ii, j])
+                out[ii,j] = out[ii, j] ⊞ Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂), slab_local_geometry[ii, j])
             end
         end
     elseif RT <: Geometry.Contravariant12Vector
@@ -785,7 +800,7 @@ function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
             end
             for jj in 1:Nq
                 Dᵀ₂Wv₃ = D[j,jj] ⊠ Wv₃
-                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant12Vector(-(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
+                out[i,jj] = out[i, jj] ⊞ Geometry.Contravariant12Vector(⊟(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
             end
         end
     else
@@ -797,8 +812,6 @@ function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data)
     end
     return SMatrix(out)
 end
-
-
 
 abstract type TensorOperator <: SpectralElementOperator end
 
@@ -822,10 +835,16 @@ Discretely it is equivalent to
 
 where `I` is the interpolation matrix.
 """
+#=
 struct Interpolate{S} <: TensorOperator
     space::S
 end
-
+=#
+struct Interpolate{I, S} <: TensorOperator
+    space::S
+end
+Interpolate(space) = 
+    Interpolate{operator_axes(space), typeof(space)}(space)
 
 struct InterpolateResult{S, Nq, M, TM} <: OperatorSlabResult{S, Nq}
     Imat::M
@@ -834,6 +853,35 @@ end
 InterpolateResult{S, Nq}(Imat::M, temp2::TM) where {S, Nq, M, TM} =
     InterpolateResult{S, Nq, M, TM}(Imat, temp2)
 
+# TODO: we `loose` the input space here in the broadcasted expression as axes only works on the output `return_space`
+# so we assume that interpolate will only recieve a slab_field input argument
+function apply_slab(op::Interpolate{(1,2)}, slab_space_out, slab_data, h)
+    slab_space = axes(slab_data)
+    FT = Spaces.undertype(slab_space)
+    Nq_in = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
+    Nq_out = Quadratures.degrees_of_freedom(slab_space_out.quadrature_style)
+    Imat = Quadratures.interpolation_matrix(
+        FT,
+        slab_space_out.quadrature_style,
+        slab_space.quadrature_style,
+    )
+    S = eltype(slab_data)
+    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
+    # temporary storage
+    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
+    for j in 1:Nq_in, i in 1:Nq_out
+        # manually inlined rmatmul1 with slab get_node
+        r = Imat[i, 1] ⊠ get_node(slab_data, 1, j)
+        for ii in 2:Nq_in
+            r = RecursiveApply.rmuladd(Imat[i, ii], get_node(slab_data, ii, j), r)
+        end
+        temp[i, j] = r
+    end
+    for j in 1:Nq_out, i in 1:Nq_out
+        slab_data_out[i, j] = RecursiveApply.rmatmul2(Imat, temp, i, j)
+    end
+    return SMatrix(slab_data_out)
+end
 
 function allocate_work(op::Interpolate, arg)
     space_in = axes(arg)
@@ -845,14 +893,12 @@ function allocate_work(op::Interpolate, arg)
         space_out.quadrature_style,
         space_in.quadrature_style,
     )
-
     S = eltype(arg)
     # TODO: switch memory order?
     temp1 = MArray{Tuple{Nq_in, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
     temp2 = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
     return (Imat, temp1, temp2)
 end
-
 
 function apply_slab(op::Interpolate, (mat, temp1, temp2), slab_field, h)
     space_in = axes(slab_field)
@@ -874,8 +920,6 @@ end
     return RecursiveApply.rmatmul2(res.Imat, res.temp2, i, j)
 end
 
-
-
 """
     Restrict(space)
 
@@ -893,8 +937,38 @@ Discretely it is equivalent to
 where `I` is the interpolation matrix, and `JWr` is the Jacobian multiplied by
 quadrature weights on the lower-degree space.
 """
-struct Restrict{S} <: TensorOperator
+struct Restrict{I, S} <: TensorOperator
     space::S
+end
+Restrict(space) = 
+    Restrict{operator_axes(space), typeof(space)}(space)
+
+function apply_slab(op::Restrict{(1,2)}, slab_space, slab_data, h)
+    FT = Spaces.undertype(slab_space)
+    Nq_in = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
+    slab_space_out = slab(op.space, h)
+    Nq_out = Quadratures.degrees_of_freedom(slab_space_out.quadrature_style)
+    ImatT = Quadratures.interpolation_matrix(
+        FT,
+        slab_space.quadrature_style,
+        slab_space_out.quadrature_style,
+    )' # transpose
+    S = eltype(slab_data)
+    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
+    # temporary storage
+    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
+    for j in 1:Nq_in, i in 1:Nq_out
+        # manually inlined rmatmul1 with slab get_node
+        r = ImatT[i, 1] ⊠ get_node(slab_data, 1, j)
+        for ii in 2:Nq_in
+            r = RecursiveApply.rmuladd(ImatT[i, ii], get_node(slab_data, ii, j), r)
+        end
+        temp[i, j] = r
+    end
+    for j in 1:Nq_out, i in 1:Nq_out
+        slab_data_out[i, j] = RecursiveApply.rmatmul2(ImatT, temp, i, j)
+    end
+    return SMatrix(slab_data_out)
 end
 
 struct RestrictResult{S, Nq, M, TM} <: OperatorSlabResult{S, Nq}
@@ -997,10 +1071,8 @@ function tensor_product!(
     in_slab::DataLayouts.DataSlab2D{S, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
-
     # temporary storage
     temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
-
     for j in 1:Nij_in, i in 1:Nij_out
         temp[i, j] = RecursiveApply.rmatmul1(M, in_slab, i, j)
     end
