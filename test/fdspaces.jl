@@ -360,36 +360,34 @@ end
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-            face_field_exact = zeros(FT, fs)
+            face_field_exact = Geometry.Covariant3Vector.(zeros(FT, fs))
             cent_field = zeros(FT, cs)
-            face_field = zeros(FT, fs)
+            face_field = Geometry.Covariant3Vector.(zeros(FT, fs))
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             cent_field .= sin.(3π .* centers)
-            face_field_exact .= 3π .* cos.(3π .* faces)
+            face_field_exact .= Geometry.CovariantVector.(Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces)))
 
             operator = Operators.GradientC2F(
-                left = Operators.SetGradient(3π),
-                right = Operators.SetGradient(-3π),
+                left = Operators.SetGradient(Geometry.Cartesian3Vector(3π)),
+                right = Operators.SetGradient(Geometry.Cartesian3Vector(-3π)),
             )
 
             face_field .= operator.(cent_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
-                norm(parent(face_field) .- parent(face_field_exact)) /
-                length(parent(face_field_exact))
+                norm(face_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 2e-2
+        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+        @test conv[1] ≈ 2 atol=0.1
+        @test conv[2] ≈ 2 atol=0.1
+        @test conv[3] ≈ 2 atol=0.1
+        @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end
 
@@ -407,15 +405,15 @@ end
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-            cent_field_exact = zeros(FT, cs)
-            cent_field = zeros(FT, cs)
+            cent_field_exact = Geometry.Covariant3Vector.(zeros(FT, cs))
+            cent_field = Geometry.Covariant3Vector.(zeros(FT, cs))
             face_field = zeros(FT, fs)
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             face_field .= sin.(3π .* faces)
-            cent_field_exact .= 3π .* cos.(3π .* centers)
+            cent_field_exact .= Geometry.CovariantVector.(Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers)))
 
             operator = Operators.GradientF2C()
 
@@ -423,16 +421,14 @@ end
 
             Δh[k] = cs.face_local_geometry.J[1]
             err[k] =
-                norm(parent(cent_field) .- parent(cent_field_exact)) /
-                length(parent(cent_field_exact))
+                norm(cent_field .- cent_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 2e-2
+        @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+        @test conv[1] ≈ 2 atol=0.1
+        @test conv[2] ≈ 2 atol=0.1
+        @test conv[3] ≈ 2 atol=0.1
+        @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end
