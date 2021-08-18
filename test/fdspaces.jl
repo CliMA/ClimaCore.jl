@@ -76,11 +76,11 @@ end
         @test Geometry.CartesianVector.(∂cos) ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
 
         ∇ᶠ = Operators.GradientC2F(
-            left = Operators.SetGradient(FT(0)),
-            right = Operators.SetGradient(FT(0)),
+            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
+            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
         )
-        ∂cos = ∇ᶠ.(cos.(centers))
-        @test ∂cos ≈ .-sin.(faces) atol = 1e-2
+        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
@@ -113,8 +113,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # can't define Neumann conditions on GradientF2C
         ∂ = Operators.GradientF2C(
@@ -122,7 +122,7 @@ end
             right = Operators.SetGradient(FT(-1)),
         )
 
-        @test_throws Exception ∂sin = ∂.(w .* I.(θ))
+        @test_throws Exception ∂.(w .* I.(θ))
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
@@ -131,8 +131,8 @@ end
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         I = Operators.InterpolateC2F(
             left = Operators.SetGradient(FT(1)),
@@ -140,8 +140,8 @@ end
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
@@ -153,8 +153,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = ∂.(w .* I.(θ))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_faces = zeros(FT, face_space)

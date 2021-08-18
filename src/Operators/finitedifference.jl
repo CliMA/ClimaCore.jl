@@ -992,13 +992,15 @@ end
 boundary_width(op::GradientC2F, ::SetGradient) = 1
 function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
+    space = axes(arg)
     # imposed flux boundary condition at left most face
-    bc.val
+    Geometry.CovariantVector(bc.val, Geometry.LocalGeometry(space, idx))
 end
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
+    space = axes(arg)
     # imposed flux boundary condition at right most face
-    bc.val
+    Geometry.CovariantVector(bc.val, Geometry.LocalGeometry(space, idx))
 end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
