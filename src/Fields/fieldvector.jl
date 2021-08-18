@@ -55,8 +55,39 @@ end
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
 
+struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
+Base.Broadcast.BroadcastStyle(::Type{<:FieldVector}) = FieldVectorStyle()
 
+Base.Broadcast.BroadcastStyle(
+    fs::FieldVectorStyle,
+    as::Base.Broadcast.DefaultArrayStyle{0},
+) = fs
+Base.Broadcast.BroadcastStyle(
+    fs::FieldVectorStyle,
+    as::Base.Broadcast.AbstractArrayStyle{0},
+) = fs
+Base.Broadcast.BroadcastStyle(
+    fs::FieldVectorStyle,
+    as::Base.Broadcast.DefaultArrayStyle,
+) = as
+Base.Broadcast.BroadcastStyle(
+    fs::FieldVectorStyle,
+    as::Base.Broadcast.AbstractArrayStyle,
+) = as
+
+function Base.similar(
+    bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
+    ::Type{T},
+) where {T}
+    for arg in bc.args
+        if arg isa FieldVector ||
+           arg isa Base.Broadcast.Broadcasted{FieldVectorStyle}
+            return similar(arg, T)
+        end
+    end
+    error("Cannot construct FieldVector")
+end
 
 Base.mapreduce(f, op, fv::FieldVector) =
     mapreduce(x -> mapreduce(f, op, x), op, _parent_values(fv))
@@ -72,12 +103,14 @@ Base.all(fv::FieldVector) = all(identity, fv)
 
 # TODO: figure out a better way to handle these
 # https://github.com/JuliaArrays/BlockArrays.jl/issues/185
-function LinearAlgebra.ldiv!(
+LinearAlgebra.ldiv!(
     x::FieldVector,
     A::LinearAlgebra.QRCompactWY,
     b::FieldVector,
-)
-    v = Vector(b)
-    LinearAlgebra.ldiv!(A, v)
-    x .= v
-end
+) = x .= LinearAlgebra.ldiv!(A, Vector(b))
+
+LinearAlgebra.ldiv!(x::FieldVector, A::LinearAlgebra.LU, b::FieldVector) =
+    x .= LinearAlgebra.ldiv!(A, Vector(b))
+
+LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
+    x .= LinearAlgebra.ldiv!(A, Vector(x))
