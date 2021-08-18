@@ -30,72 +30,74 @@ const R_m = R_d # moist R, assumed to be dry
 
 
 domain = Domains.IntervalDomain(0.0, 30e3, x3boundary = (:bottom, :top))
-#mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
-mesh = Meshes.IntervalMesh(domain; nelems = 30)
+#mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 5)
+    mesh = Meshes.IntervalMesh(domain; nelems = 300)
 
-cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
+    cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 # https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155
 # https://clima.github.io/Thermodynamics.jl/dev/TemperatureProfiles/#DecayingTemperatureProfile
-function decaying_temperature_profile(z; T_virt_surf = 280.0, T_min_ref = 230.0)
-    # Scale height for surface temperature
+    function decaying_temperature_profile(z; T_virt_surf = 280.0, T_min_ref = 230.0)
+# Scale height for surface temperature
     H_sfc = R_d * T_virt_surf / grav
     H_t = H_sfc
 
     z′ = z / H_t
-    tanh_z′ = tanh(z′)
+tanh_z′ = tanh(z′)
 
     ΔTv = T_virt_surf - T_min_ref
     Tv = T_virt_surf - ΔTv * tanh_z′
 
     ΔTv′ = ΔTv / T_virt_surf
     p =
-        MSLP * exp(
+    MSLP * exp(
             (
-                -H_t *
-                (z′ + ΔTv′ * (log(1 - ΔTv′ * tanh_z′) - log(1 + tanh_z′) + z′))
+             -H_t *
+             (z′ + ΔTv′ * (log(1 - ΔTv′ * tanh_z′) - log(1 + tanh_z′) + z′))
             ) / (H_sfc * (1 - ΔTv′^2)),
-        )
+            )
     ρ = p / (R_d * Tv)
     ρθ = ρ * Tv * (MSLP / p)^(R_m / C_p)
-    return (ρ = ρ, ρθ = ρθ)
-end
+return (ρ = ρ, ρθ = ρθ)
+    end
 
-Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
+    Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
+p(ρθ) = ( ρθ * R_d / MSLP^(R_d/C_p) ).^(γ)
 
 
 function discrete_hydrostatic_balance!(
-    ρ,
-    w,
-    ρθ,
-    Δz::Float64,
-    _grav::Float64,
-    Π::Function,
-)
-    # compute θ such that
-    #   I(θ)[i+1/2] = -g / ∂f(Π(ρθ))
-    # discretely, then set
-    #   ρ = ρθ/θ
+        ρ,
+        w,
+        ρθ,
+        Δz::Float64,
+        _grav::Float64,
+        Π::Function,
+        )
+# compute θ such that
+#   I(θ)[i+1/2] = -g / ∂f(Π(ρθ))
+# discretely, then set
+#   ρ = ρθ/θ
     for i in 1:(length(ρ) - 1)
-        #  ρ[i+1] = ρθ[i+1]/(-2Δz*_grav/(Π(ρθ[i+1]) - Π(ρθ[i])) - ρθ[i]/ρ[i])
-        ρ[i + 1] =
-            ρθ[i + 1] /
-            (-2 * _grav / ((Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz) - ρθ[i] / ρ[i])
+#  ρ[i+1] = ρθ[i+1]/(-2Δz*_grav/(Π(ρθ[i+1]) - Π(ρθ[i])) - ρθ[i]/ρ[i])
+    ρ[i + 1] =
+    ρθ[i + 1] /
+(-2 * _grav / ((Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz) - ρθ[i] / ρ[i])
 
-        ρ[i + 1] =
-            ρθ[i + 1] /
-            (1 / ((-2 * _grav) * (Π(ρθ[i + 1]) - Π(ρθ[i]))Δz) - ρθ[i] / ρ[i])
+    ρ[i + 1] =
+    ρθ[i + 1] /
+(1 / ((-2 * _grav) * (Π(ρθ[i + 1]) - Π(ρθ[i]))Δz) - ρθ[i] / ρ[i])
 
-        ∂Π∂z = (Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz
+    ∂Π∂z = (Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz
     end
-end
+    end
 
 zc = Fields.coordinate_field(cspace)
-Yc = decaying_temperature_profile.(zc)
+    println(" zc  ",zc)
+    Yc = decaying_temperature_profile.(zc)
 w = zeros(Float64, fspace)
 
-Y_init = copy(Yc)
+    Y_init = copy(Yc)
 w_init = copy(w)
 
 Y = (Yc, w)
@@ -119,7 +121,16 @@ function tendency!(dY, Y, _, t)
     )
 
     @. dYc = -(∂c(w * If(Yc)))
-    @. dw = B(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - grav)
+    @. dw = B(-(∂f(p(Yc.ρθ)))./If(Yc.ρ) - grav)
+
+#   dw1 = copy(dw)
+#   @. dw1 = B(If(Yc.ρ))
+#   println(" Yc.ρθ  ",Yc.ρθ)
+#   println(" w      ",w)
+#   println(" dw     ",dw)
+#   println(" Yc.ρ   ",Yc.ρ)
+#   println(" dw1    ",dw1)
+#   println(" Yc.ρθ  ",AAA)
 
     return dY
 end
@@ -130,8 +141,8 @@ using RecursiveArrayTools
 Y = ArrayPartition(Yc, w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
-Δt = 1.0
-ndays = 10
+Δt = 1.0 / 10.
+ndays = 1
 
 # Solve the ODE operator
 prob = ODEProblem(tendency!, Y, (0.0, 60 * 60 * 24 * ndays))
