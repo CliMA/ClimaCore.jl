@@ -86,11 +86,8 @@ function Base.Broadcast.instantiate(
     end
     # allocate intermediate work space
     #work = allocate_work(op, args...)
-    work = nothing
-    if op isa Divergence || op isa WeakDivergence || op isa Gradient || op isa WeakGradient || op isa Curl || op isa WeakCurl
-        op = typeof(op)(axes)
-    end
-    return SpectralBroadcasted{Style}(op, args, axes, work)
+    op = typeof(op)(axes)
+    return SpectralBroadcasted{Style}(op, args, axes, nothing)
 end
 
 function Base.Broadcast.instantiate(
@@ -207,7 +204,7 @@ end
 function copy_slab!(slab_out::Fields.SlabField2D, res)
     space = axes(slab_out)
     Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    @inbounds for i in 1:Nq, j in 1:Nq
+    @inbounds for j in 1:Nq, i in 1:Nq
         set_node!(slab_out, i, j, get_node(res, i, j))
     end
     return slab_out
