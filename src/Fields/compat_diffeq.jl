@@ -1,4 +1,4 @@
-import RecursiveArrayTools, Requires, DiffEqBase
+import RecursiveArrayTools, DiffEqBase
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions

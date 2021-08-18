@@ -14,7 +14,6 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 """
 module DataLayouts
 
-import Requires
 import StaticArrays: SOneTo, MArray
 
 # TODO:

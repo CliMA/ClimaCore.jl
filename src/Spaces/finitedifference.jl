@@ -83,7 +83,10 @@ function FiniteDifferenceSpace{S}(
         end
         ∂x∂ξ = SMatrix{1, 1}(J)
         ∂ξ∂x = SMatrix{1, 1}(inv(J))
-        face_local_geometry[i] = Geometry.LocalGeometry(z, J, WJ,
+        face_local_geometry[i] = Geometry.LocalGeometry(
+            z,
+            J,
+            WJ,
             Geometry.AxisTensor(
                 (Geometry.Cartesian3Axis(), Geometry.Covariant3Axis()),
                 ∂x∂ξ,
@@ -93,7 +96,7 @@ function FiniteDifferenceSpace{S}(
                 ∂ξ∂x,
             ),
         )
-end
+    end
 
     return FiniteDifferenceSpace(
         S(),

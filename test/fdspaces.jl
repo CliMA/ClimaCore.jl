@@ -8,18 +8,18 @@ import ClimaCore.Operators: half, PlusHalf
 
 @testset "PlusHalf" begin
     @test half + 0 == half
-    @test half < half+1
-    @test half <= half+1
-    @test !(half > half+1)
-    @test !(half >= half+1)
-    @test half != half+1
+    @test half < half + 1
+    @test half <= half + 1
+    @test !(half > half + 1)
+    @test !(half >= half + 1)
+    @test half != half + 1
     @test half + half == 1
     @test half - half == 0
     @test half + 3 == 3 + half == PlusHalf(3)
-    @test min(half, half+3) == half
-    @test max(half, half+3) == half+3
+    @test min(half, half + 3) == half
+    @test max(half, half + 3) == half + 3
 
-    @test collect(half:2+half) == [half, 1+half, 2+half]
+    @test collect(half:(2 + half)) == [half, 1 + half, 2 + half]
 
     @test_throws InexactError convert(Int, half)
     @test_throws InexactError convert(PlusHalf, 1)
@@ -60,10 +60,19 @@ end
 
         # check that operator is callable as well
         ∂sin = ∇ᶜ(sin.(faces))
-        @test Geometry.CartesianVector.(∂sin) ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        @test Geometry.CartesianVector.(∂sin) ≈
+              Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         # Center -> Face operator
         # first order convergence at boundaries
+        ∇ᶠ = Operators.GradientC2F(
+            left = Operators.SetValue(FT(0)),
+            right = Operators.SetValue(FT(pi)),
+        )
+        ∂z = Geometry.CartesianVector.(∇ᶠ.(centers))
+        @test ∂z ≈ Geometry.Cartesian3Vector.(ones(FT, face_space)) rtol =
+            10 * eps(FT)
+
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
@@ -73,7 +82,16 @@ end
 
         # check that operator is callable as well
         ∂cos = ∇ᶠ(cos.(centers))
-        @test Geometry.CartesianVector.(∂cos) ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
+        @test Geometry.CartesianVector.(∂cos) ≈
+              Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
+
+        ∇ᶠ = Operators.GradientC2F(
+            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1))),
+            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1))),
+        )
+        ∂z = Geometry.CartesianVector.(∇ᶠ.(centers))
+        @test ∂z ≈ Geometry.Cartesian3Vector.(ones(FT, face_space)) rtol =
+            10 * eps(FT)
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
@@ -368,7 +386,10 @@ end
             faces = Fields.coordinate_field(fs)
 
             cent_field .= sin.(3π .* centers)
-            face_field_exact .= Geometry.CovariantVector.(Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces)))
+            face_field_exact .=
+                Geometry.CovariantVector.(
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces)),
+                )
 
             operator = Operators.GradientC2F(
                 left = Operators.SetGradient(Geometry.Cartesian3Vector(3π)),
@@ -378,15 +399,14 @@ end
             face_field .= operator.(cent_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(face_field .- face_field_exact)
+            err[k] = norm(face_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
         @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-        @test conv[1] ≈ 2 atol=0.1
-        @test conv[2] ≈ 2 atol=0.1
-        @test conv[3] ≈ 2 atol=0.1
+        @test conv[1] ≈ 2 atol = 0.1
+        @test conv[2] ≈ 2 atol = 0.1
+        @test conv[3] ≈ 2 atol = 0.1
         @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end
@@ -413,22 +433,24 @@ end
             faces = Fields.coordinate_field(fs)
 
             face_field .= sin.(3π .* faces)
-            cent_field_exact .= Geometry.CovariantVector.(Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers)))
+            cent_field_exact .=
+                Geometry.CovariantVector.(
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers)),
+                )
 
             operator = Operators.GradientF2C()
 
             cent_field .= operator.(face_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(cent_field .- cent_field_exact)
+            err[k] = norm(cent_field .- cent_field_exact)
         end
         conv = convergence_rate(err, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
         @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-        @test conv[1] ≈ 2 atol=0.1
-        @test conv[2] ≈ 2 atol=0.1
-        @test conv[3] ≈ 2 atol=0.1
+        @test conv[1] ≈ 2 atol = 0.1
+        @test conv[2] ≈ 2 atol = 0.1
+        @test conv[3] ≈ 2 atol = 0.1
         @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end

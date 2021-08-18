@@ -1,6 +1,8 @@
 
-(AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where T)(u::Real, local_geometry::LocalGeometry) where {A} =
-    (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where T)(u)
+(AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(
+    u::Real,
+    local_geometry::LocalGeometry,
+) where {A} = (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(u)
 
 
 
