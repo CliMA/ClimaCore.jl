@@ -22,4 +22,5 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
 [compat]
+StructArrays = "0.6"
 julia = "1.6"
