@@ -38,22 +38,28 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <:
+struct SpectralBroadcasted{Style, Op, Args, Axes, InputSpace} <:
        Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
-    work::Work
+    input_space::InputSpace
 end
 SpectralBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-    work::Work = nothing,
-) where {Style, Op, Args, Axes, Work} =
-    SpectralBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
+    input_space::InputSpace = nothing,
+) where {Style, Op, Args, Axes, InputSpace} =
+    SpectralBroadcasted{Style, Op, Args, Axes, InputSpace}(op, args, axes, input_space)
 
+input_space(arg) = axes(arg)
+input_space(::SpectralElementOperator, space) = space
 return_space(::SpectralElementOperator, space) = space
+
+input_space(sbc::SpectralBroadcasted) =
+    isnothing(sbc.input_space) ? input_space(sbc.op, map(axes, sbc.args)...) :
+    sbc.input_space
 
 Base.axes(sbc::SpectralBroadcasted) =
     isnothing(sbc.axes) ? return_space(sbc.op, map(axes, sbc.args)...) :
@@ -84,10 +90,13 @@ function Base.Broadcast.instantiate(
         axes = sbc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-    # allocate intermediate work space
-    #work = allocate_work(op, args...)
+    if sbc.input_space isa Nothing
+        inspace = input_space(sbc)
+    else
+        inspace = sbc.input_space
+    end
     op = typeof(op)(axes)
-    return SpectralBroadcasted{Style}(op, args, axes, nothing)
+    return SpectralBroadcasted{Style}(op, args, axes, inspace)
 end
 
 function Base.Broadcast.instantiate(
@@ -141,11 +150,13 @@ function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     Nh = length(data_out)
     for h in 1:Nh
         slab_out = slab(field_out, h)
-        slab_space = slab(axes(sbc), h)
+        out_slab_space = slab(axes(sbc), h)
+        in_slab_space = slab(input_space(sbc), h)
         slab_args = map(arg -> _apply_slab(slab(arg, h), h), sbc.args)
         # TODO have a slab field type with local geometry
         #apply_slab!(slab_out, sbc.op, sbc.work, slab_args...)
-        copy_slab!(slab_out, apply_slab(sbc.op, slab_space, slab_args..., h))
+        copy_slab!(slab_out, 
+            apply_slab(sbc.op, out_slab_space, in_slab_space, slab_args...))
     end
     return field_out
 end
@@ -157,7 +168,7 @@ end
 function slab(sbc::SpectralBroadcasted{Style}, h) where {Style <: SpectralStyle}
     _args = map(a -> slab(a, h), sbc.args)
     _axes = slab(axes(sbc), h)
-    SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.work)
+    SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
 end
 
 function slab(
@@ -255,7 +266,8 @@ end
 _apply_slab(x, h) = x
 
 _apply_slab(sbc::SpectralBroadcasted, h) =
-    apply_slab(sbc.op, slab(axes(sbc), h), map(a -> _apply_slab(a, h), sbc.args)..., h)
+    apply_slab(sbc.op, slab(axes(sbc), h), slab(input_space(sbc), h), 
+               map(a -> _apply_slab(a, h), sbc.args)...)
 
 _apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, h) =
     Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
@@ -474,7 +486,7 @@ end
  
 allocate_work(op::Gradient, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Gradient{(1,)}, slab_space, slab_data, h)
+function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -495,7 +507,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, slab_data, h)
     return SVector(out)
 end
 
-function apply_slab(op::Gradient{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::Gradient{(1,2)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
     D = Quadratures.differentiation_matrix(FT, slab_space.quadrature_style)
@@ -531,7 +543,7 @@ end
  
 allocate_work(op::Divergence, arg) = allocate_work(op, eltype(arg), axes(arg))
 
-function apply_slab(op::Divergence{(1,)}, slab_space, slab_data, h)
+function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -554,7 +566,7 @@ function apply_slab(op::Divergence{(1,)}, slab_space, slab_data, h)
     return SVector(out)
 end
 
-function apply_slab(op::Divergence{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::Divergence{(1,2)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -581,7 +593,7 @@ function apply_slab(op::Divergence{(1,2)}, slab_space, slab_data, h)
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakDivergence{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::WeakDivergence{(1,2)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -634,7 +646,7 @@ operator_return_eltype(op::WeakGradient{(1,2)}, S) =
 
 
 
-function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data, h)
+function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -663,7 +675,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, slab_data, h)
     return SVector(out)
 end
 
-function apply_slab(op::WeakGradient{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::WeakGradient{(1,2)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -718,7 +730,7 @@ operator_return_eltype(::Curl{(1,2)}, S) =
 operator_return_eltype(::WeakCurl{(1,2)}, S) =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
 
-function apply_slab(op::Curl{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::Curl{(1,2)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -762,7 +774,7 @@ function apply_slab(op::Curl{(1,2)}, slab_space, slab_data, h)
     return SMatrix(out)
 end
 
-function apply_slab(op::WeakCurl{(1,2)}, slab_space, slab_data, h)
+function apply_slab(op::WeakCurl{(1,2)}, slab_space, _, slab_data)
     slab_local_geometry = slab_space.local_geometry
     FT = Spaces.undertype(slab_space)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(slab_space))
@@ -812,6 +824,7 @@ end
 
 abstract type TensorOperator <: SpectralElementOperator end
 
+input_space(op::TensorOperator, inspace) = inspace
 return_space(op::TensorOperator, inspace) = op.space
 operator_return_eltype(op::TensorOperator, S) = S
 
@@ -852,22 +865,22 @@ InterpolateResult{S, Nq}(Imat::M, temp2::TM) where {S, Nq, M, TM} =
 
 # TODO: we `loose` the input space here in the broadcasted expression as axes only works on the output `return_space`
 # so we assume that interpolate will only recieve a slab_field input argument
-function apply_slab(op::Interpolate{(1,2)}, slab_space_out, slab_data, h)
-    slab_space = axes(slab_data)
-    FT = Spaces.undertype(slab_space)
-    Nq_in = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
+function apply_slab(op::Interpolate{(1,2)}, slab_space_out, slab_space_in, slab_data)
+    FT = Spaces.undertype(slab_space_out)
+    Nq_in = Quadratures.degrees_of_freedom(slab_space_in.quadrature_style)
     Nq_out = Quadratures.degrees_of_freedom(slab_space_out.quadrature_style)
     Imat = Quadratures.interpolation_matrix(
         FT,
         slab_space_out.quadrature_style,
-        slab_space.quadrature_style,
+        slab_space_in.quadrature_style,
     )
     S = eltype(slab_data)
-    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
     # temporary storage
     temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
+    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
     for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
+        # we do this to remove one allocated intermediate array 
         r = Imat[i, 1] ⊠ get_node(slab_data, 1, j)
         for ii in 2:Nq_in
             r = RecursiveApply.rmuladd(Imat[i, ii], get_node(slab_data, ii, j), r)
@@ -940,30 +953,35 @@ end
 Restrict(space) = 
     Restrict{operator_axes(space), typeof(space)}(space)
 
-function apply_slab(op::Restrict{(1,2)}, slab_space, slab_data, h)
-    FT = Spaces.undertype(slab_space)
-    Nq_in = Quadratures.degrees_of_freedom(slab_space.quadrature_style)
-    slab_space_out = slab(op.space, h)
+function apply_slab(op::Restrict{(1,2)}, slab_space_out, slab_space_in, slab_data)
+    FT = Spaces.undertype(slab_space_out)
+    Nq_in = Quadratures.degrees_of_freedom(slab_space_in.quadrature_style)
     Nq_out = Quadratures.degrees_of_freedom(slab_space_out.quadrature_style)
     ImatT = Quadratures.interpolation_matrix(
         FT,
-        slab_space.quadrature_style,
+        slab_space_in.quadrature_style,
         slab_space_out.quadrature_style,
     )' # transpose
     S = eltype(slab_data)
-    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
     # temporary storage
-    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_in * Nq_in}(undef)
+    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
+    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
+    WJ_in = slab_space_in.local_geometry.WJ
     for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
-        r = ImatT[i, 1] ⊠ get_node(slab_data, 1, j)
+        r = ImatT[i, 1] ⊠ (WJ_in[1, j] ⊠ get_node(slab_data, 1, j))
         for ii in 2:Nq_in
-            r = RecursiveApply.rmuladd(ImatT[i, ii], get_node(slab_data, ii, j), r)
+            WJ_node = WJ_in[ii, j] ⊠ get_node(slab_data, ii, j) 
+            r = RecursiveApply.rmuladd(ImatT[i, ii], WJ_node, r)
         end
         temp[i, j] = r
     end
+    WJ_out = slab_space_out.local_geometry.WJ
     for j in 1:Nq_out, i in 1:Nq_out
-        slab_data_out[i, j] = RecursiveApply.rmatmul2(ImatT, temp, i, j)
+        slab_data_out[i, j] = RecursiveApply.rdiv(
+            RecursiveApply.rmatmul2(ImatT, temp, i, j),
+            WJ_out[i, j]
+        )
     end
     return SMatrix(slab_data_out)
 end
