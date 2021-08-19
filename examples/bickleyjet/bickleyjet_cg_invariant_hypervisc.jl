@@ -128,7 +128,7 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )
-#=
+
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
@@ -141,9 +141,9 @@ anim = Plots.@animate for u in sol.u
     Plots.plot(u.ρθ, clim = (-1, 1))
 end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
-=#
+
 Es = [total_energy(u, parameters) for u in sol.u]
-#=
+
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
 function linkfig(figpath, alt = "")
@@ -156,4 +156,3 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/energy.png", "Total Energy")
-=#
