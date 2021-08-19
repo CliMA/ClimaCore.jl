@@ -105,7 +105,7 @@ curl_result_type(::Type{V}) where {V <: Cartesian12Vector{FT}} where {FT} =
 curl_result_type(::Type{V}) where {V <: Covariant3Vector{FT}} where {FT} =
     Contravariant12Vector{FT}
 
-_norm_sqr(x, local_geometry) = sum(x-> _norm_sqr(x, local_geometry), x)
+_norm_sqr(x, local_geometry) = sum(x -> _norm_sqr(x, local_geometry), x)
 _norm_sqr(x::Number, local_geometry) = LinearAlgebra.norm_sqr(x)
 _norm_sqr(x::AbstractArray, local_geometry) = LinearAlgebra.norm_sqr(x)
 function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)

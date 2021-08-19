@@ -98,7 +98,10 @@ end
     Base.GC.@preserve out begin
         @inbounds for i in 1:(L * TdivFT)
             Base.unsafe_store!(
-                Base.unsafe_convert(Ptr{FT}, Base.pointer_from_objref(out)), zero(FT), i)
+                Base.unsafe_convert(Ptr{FT}, Base.pointer_from_objref(out)),
+                zero(FT),
+                i,
+            )
         end
     end
     return out

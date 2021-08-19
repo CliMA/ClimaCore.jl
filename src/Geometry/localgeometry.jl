@@ -17,8 +17,10 @@ struct LocalGeometry{C, FT, Mxξ, Mξx}
     ∂ξ∂x::Mξx
 end
 
-const LocalGeometry1D = LocalGeometry{C, FT, M} where {C <: Abstract1DPoint{FT}} where {FT, M}
-const LocalGeometry2D = LocalGeometry{C, FT, M} where {C <: Abstract2DPoint{FT}} where {FT, M}
+const LocalGeometry1D =
+    LocalGeometry{C, FT, M} where {C <: Abstract1DPoint{FT}} where {FT, M}
+const LocalGeometry2D =
+    LocalGeometry{C, FT, M} where {C <: Abstract2DPoint{FT}} where {FT, M}
 
 """
     SurfaceGeometry

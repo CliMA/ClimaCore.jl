@@ -85,11 +85,15 @@ slab(field::Field, h) =
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
-const SlabField1D{V, S} = 
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab1D}
+const SlabField1D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab1D}
 
-const SlabField2D{V, S} = 
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab2D}
+const SlabField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab2D}
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 

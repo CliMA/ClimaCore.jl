@@ -56,8 +56,8 @@ function init_state(local_geometry, p)
     u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
 
     u = Geometry.Covariant12Vector(
-            Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′), 
-            local_geometry
+        Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        local_geometry,
     )
 
     # set initial tracer
@@ -97,8 +97,9 @@ function rhs!(dydt, y, _, t)
 
     @. dydt.u =
         -D₄ * (
-            wgrad(sdiv(dydt.u)) -
-            Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(dydt.u))))
+            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            )
         )
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 

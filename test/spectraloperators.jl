@@ -21,7 +21,7 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 coords = Fields.coordinate_field(space)
 
-@testset "interpolate / restrict" begin 
+@testset "interpolate / restrict" begin
     INq = 9
     Iquad = Spaces.Quadratures.GLL{INq}()
     Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
@@ -39,16 +39,16 @@ coords = Fields.coordinate_field(space)
 
     restrict_field = R.(f)
     Spaces.weighted_dss!(restrict_field)
-    
+
     @test axes(restrict_field).quadrature_style == quad
     @test axes(restrict_field).topology == grid_topology
-    
+
     interp_restrict_field = R.(I.(f))
     Spaces.weighted_dss!(interp_restrict_field)
-    
+
     @test axes(interp_restrict_field).quadrature_style == quad
     @test axes(interp_restrict_field).topology == grid_topology
-    
+
     @test norm(interp_restrict_field .- f) ≤ 3.0e-4
 end
 
@@ -60,10 +60,12 @@ end
     Spaces.weighted_dss!(gradf)
 
     @test gradf ≈
-          Geometry.Covariant12Vector.(Geometry.Cartesian12Vector.(
-        cos.(coords.x1 .+ 2 .* coords.x2),
-        2 .* cos.(coords.x1 .+ 2 .* coords.x2),
-    )) rtol = 1e-2
+          Geometry.Covariant12Vector.(
+        Geometry.Cartesian12Vector.(
+            cos.(coords.x1 .+ 2 .* coords.x2),
+            2 .* cos.(coords.x1 .+ 2 .* coords.x2),
+        ),
+    ) rtol = 1e-2
 end
 
 
@@ -264,12 +266,14 @@ end
     wgrad = Operators.WeakGradient()
 
     χ = Spaces.weighted_dss!(
-        @. Geometry.Cartesian12Vector(wgrad(sdiv(y))) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(y))) -
+           Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(y))),
         )
     )
     ∇⁴y = Spaces.weighted_dss!(
-        @. Geometry.Cartesian12Vector(wgrad(sdiv(χ))) - Geometry.Cartesian12Vector(
+        @. Geometry.Cartesian12Vector(wgrad(sdiv(χ))) -
+           Geometry.Cartesian12Vector(
             wcurl(Geometry.Covariant3Vector(curl(χ))),
         )
     )

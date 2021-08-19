@@ -423,7 +423,10 @@ function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     IF{S, Ni, typeof(array)}(array)
 end
 
-@generated function _property_view(data::IF{S, Ni}, idx::Val{Idx}) where {S, Ni, Idx}
+@generated function _property_view(
+    data::IF{S, Ni},
+    idx::Val{Idx},
+) where {S, Ni, Idx}
     SS = fieldtype(S, Idx)
     T = basetype(SS)
     offset = fieldtypeoffset(T, S, Idx)
@@ -448,7 +451,7 @@ end
 
 @inline function Base.setindex!(data::IF{S, Ni}, val, i::Integer) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    set_struct!(view(parent(data), i, :), convert(S,val))
+    set_struct!(view(parent(data), i, :), convert(S, val))
 end
 
 # TODO: should this return a S or a 0-d box containing S?
