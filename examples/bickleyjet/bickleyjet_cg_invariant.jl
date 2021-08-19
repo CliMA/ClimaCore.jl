@@ -115,7 +115,7 @@ dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 10.0))
+prob = ODEProblem(rhs!, y0, (0.0, 80.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -124,7 +124,6 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )
-
 
 ENV["GKSwstype"] = "nul"
 import Plots
