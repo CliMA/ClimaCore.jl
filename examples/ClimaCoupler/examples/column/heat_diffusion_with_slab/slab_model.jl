@@ -1,8 +1,0 @@
-# Slab model
-
-"""
-Formulation:
- 
-
-
-"""

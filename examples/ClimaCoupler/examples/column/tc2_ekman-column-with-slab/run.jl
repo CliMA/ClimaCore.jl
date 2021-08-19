@@ -1,8 +1,8 @@
-    using Base: show_supertypes
+using Base: show_supertypes
 #push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-# add https://github.com/CliMA/ClimaCore.jl
-# add https://github.com/CliMA/ClimaAtmos.jl
+# add https://github.com/CliMA/ClimaCore.jl/#main
+# add https://github.com/CliMA/ClimaAtmos.jl/#main
 
 # import required modules
 import ClimaCore.Geometry, LinearAlgebra, UnPack
@@ -93,7 +93,6 @@ domain_atm  = Domains.IntervalDomain(parameters.zmin_atm, parameters.zmax_atm, x
 mesh_atm = Meshes.IntervalMesh(domain_atm, nelems = parameters.n) # struct, allocates face boundaries to 5,6
 center_space_atm = Spaces.CenterFiniteDifferenceSpace(mesh_atm) # collection of the above, discretises space into FD and provides coords
 face_space_atm = Spaces.FaceFiniteDifferenceSpace(center_space_atm)
-
 
 ########
 # Set up inital conditions
@@ -317,19 +316,14 @@ end
 
 linkfig("output/$(dirname)/heat_end.png", "Heat End Simulation")
 
-# TODO
-# - add flux accumulation ()®ecursive array error
+# TODO here
+# - integrate CouplerMachine.jl
+# - revamp for 2D 
+
+# TODO after
+# - integrate SurfaceFluxes.jl
+# - revamp for 2D 
 
 # Questions / Comments
-# - ok to add bottom flux as prognostic variable again?
-# - MPIStateArray overhead issue doesn't apply
-# - coupler src code can still be used, ust the do_step function needs to be rewritten
-# - quite hard to find original functions e.g. which solve etc
-# - extracting values from individual levels is quite clunky
-# - Fields don't seem to contain variable names... (maybe?)
+# 
 
-# Refs:
-
-# ODEProblem(f,u0,tspan; _..) https://diffeq.sciml.ai/release-2.1/types/ode_types.html
-    # ~/.julia/packages/DiffEqBase/NarCz/src/solve.jl:66
-    # for options for solve, see: https://diffeq.sciml.ai/stable/basics/common_solver_opts/
