@@ -29,13 +29,19 @@ for Nq in Nqs
 
     # setup reference
     X = coordinates(Val(Nq), n1, n2)
-    Y0 = init_Y(X, Val(Nq), parameters)
-    dYdt = similar(Y0)
-    volume_ref!(dYdt, Y0, (parameters, Val(Nq)), 0.0)
+    y0_ref = init_y0_ref(X, Val(Nq), parameters)
+    dydt_ref = similar(y0_ref)
+    tendency_states = init_tendency_states(n1, n2, Val(Nq))
+    volume_ref!(
+        dydt_ref,
+        y0_ref,
+        (n1, n2, parameters, Val(Nq), tendency_states),
+        0.0,
+    )
 
     # check equivalent
-    @assert Y0 ≈ reshape(parent(y0), (Nq, Nq, 4, n1, n2))
-    @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
+    @assert y0_ref ≈ reshape(parent(y0), (Nq, Nq, 4, n1, n2))
+    @assert dydt_ref ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
     # run benchmarks
     @info("Benchmark volume!", Nq)
@@ -43,7 +49,12 @@ for Nq in Nqs
     @info("Benchmark volume_ref!", Nq)
     push!(
         volRs,
-        @belapsed volume_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
+        @belapsed volume_ref!(
+            $dydt_ref,
+            $y0_ref,
+            ($n1, $n2, $parameters, $(Val(Nq)), $tendency_states),
+            0.0,
+        )
     )
 
     # faces
@@ -53,17 +64,22 @@ for Nq in Nqs
     dydt_data = Fields.field_values(dydt)
     dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
 
-    fill!(dYdt, 0.0)
-    add_face_ref!(dYdt, Y0, (parameters, Val(Nq)), 0.0)
+    fill!(dydt_ref, 0.0)
+    add_face_ref!(dydt_ref, y0_ref, (n1, n2, parameters, Val(Nq)), 0.0)
 
-    @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
+    @assert dydt_ref ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
     @info("Benchmark face!", Nq)
     push!(faceTs, @belapsed add_face!($dydt, $y0, ($parameters,), 0.0))
     @info("Benchmark face_ref!", Nq)
     push!(
         faceRs,
-        @belapsed add_face_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
+        @belapsed add_face_ref!(
+            $dydt_ref,
+            $y0_ref,
+            ($n1, $n2, $parameters, $(Val(Nq))),
+            0.0,
+        )
     )
 end
 

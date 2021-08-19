@@ -216,13 +216,26 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: :fast_forward: Bickley jet DG"
+  - label: ":computer: :fast_forward: Bickley jet DG core vs reference"
     key: "cpu_benchmark_bickleyjet_dg"
     command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/runbenchmarks.jl"
+      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/core_vs_ref.jl"
     artifact_paths:
       - "benchmarks/bickleyjet/*.png"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
+
+  - label: ":computer: :fast_forward: Bickley jet DG reference thread scaling"
+    key: "cpu_benchmark_bickleyjet_dg_thread_scaling"
+    command:
+      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/ref_thread_scaling.jl"
+    artifact_paths:
+      - "benchmarks/bickleyjet/*.png"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_cpus_per_task: 16
+      slurm_exclusive: ""

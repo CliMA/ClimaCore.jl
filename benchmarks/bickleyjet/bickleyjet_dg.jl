@@ -28,7 +28,6 @@ domain = Domains.RectangleDomain(
 )
 
 
-
 function init_state(x, p)
     @unpack x1, x2 = x
     # set initial state
