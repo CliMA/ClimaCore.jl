@@ -1,17 +1,23 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
+using BenchmarkTools, Plots
+using CUDA
+
 include("bickleyjet_dg.jl")
 include("bickleyjet_dg_reference.jl")
 
-using BenchmarkTools, Plots
 
 n1, n2 = 16, 16
 
 Nqs = 2:7
 volTs = Float64[]
 volRs = Float64[]
+volRGPUs = Float64[]
 faceTs = Float64[]
 faceRs = Float64[]
+faceRGPUs = Float64[]
+
+DA = CUDA.has_cuda_gpu() ? CuArray : Array
 
 for Nq in Nqs
     # setup core
@@ -37,6 +43,15 @@ for Nq in Nqs
     @assert Y0 ≈ reshape(parent(y0), (Nq, Nq, 4, n1, n2))
     @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
+    # setup GPU reference
+    if DA === CuArray
+        Y0_GPU = DA(Y0)
+        dYdt_GPU = similar(Y0_GPU)
+        volume_ref_CUDA!(dYdt_GPU, Y0_GPU, parameters, Nq)
+        # check equivalent
+        @assert Array(Y0_GPU) ≈ Y0
+        @assert Array(dYdt_GPU) ≈ dYdt
+    end
     # run benchmarks
     @info("Benchmark volume!", Nq)
     push!(volTs, @belapsed volume!($dydt, $y0, ($parameters,), 0.0))
@@ -45,6 +60,13 @@ for Nq in Nqs
         volRs,
         @belapsed volume_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
     )
+    if DA === CuArray
+        @info("Benchmark volume_ref GPU!", Nq)
+        push!(
+            volRGPUs,
+            @belapsed volume_ref_CUDA!($dYdt_GPU, $Y0_GPU, $parameters, $Nq)
+        )
+    end
 
     # faces
     fill!(parent(dydt), 0.0)
@@ -58,6 +80,13 @@ for Nq in Nqs
 
     @assert dYdt ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
+    # setup GPU face reference
+    if DA === CuArray
+        fill!(dYdt_GPU, 0.0)
+        add_face_ref_CUDA!(dYdt_GPU, Y0_GPU, parameters, Nq)
+        @assert Array(Y0_GPU) ≈ Y0
+        @assert Array(dYdt_GPU) ≈ dYdt
+    end
     @info("Benchmark face!", Nq)
     push!(faceTs, @belapsed add_face!($dydt, $y0, ($parameters,), 0.0))
     @info("Benchmark face_ref!", Nq)
@@ -65,6 +94,13 @@ for Nq in Nqs
         faceRs,
         @belapsed add_face_ref!($dYdt, $Y0, ($parameters, $(Val(Nq))), 0.0)
     )
+    if DA === CuArray
+        @info("Benchmark face_ref GPU!", Nq)
+        push!(
+            faceRGPUs,
+            @belapsed add_face_ref_CUDA!($dYdt_GPU, $Y0_GPU, $parameters, $Nq)
+        )
+    end
 end
 
 
@@ -79,6 +115,9 @@ plt = plot(
 )
 plot!(plt, Nqs, 1e3 .* volTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* volRs, label = "Reference")
+if DA === CuArray
+    plot!(plt, Nqs, 1e3 .* volRGPUs, label = "Reference GPU")
+end
 
 png(plt, joinpath(@__DIR__, "volume.png"))
 
@@ -87,6 +126,9 @@ plt =
     plot(ylims = (0, Inf), xlabel = "Nq", ylabel = "Time (ms)", title = "Face")
 plot!(plt, Nqs, 1e3 .* faceTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* faceRs, label = "Reference")
+if DA === CuArray
+    plot!(plt, Nqs, 1e3 .* faceRGPUs, label = "Reference GPU")
+end
 
 png(plt, joinpath(@__DIR__, "face.png"))
 

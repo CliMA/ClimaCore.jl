@@ -44,6 +44,9 @@ steps:
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
       - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
 
+      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: gpu
@@ -216,13 +219,14 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: :fast_forward: Bickley jet DG"
-    key: "cpu_benchmark_bickleyjet_dg"
+  - label: ":flower_playing_cards: :fast_forward: Bickley jet DG"
+    key: "benchmark_bickleyjet_dg"
     command:
       - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/runbenchmarks.jl"
     artifact_paths:
       - "benchmarks/bickleyjet/*.png"
     agents:
-      config: cpu
+      config: gpu
       queue: central
       slurm_ntasks: 1
+      slurm_gres: "gpu:1"
