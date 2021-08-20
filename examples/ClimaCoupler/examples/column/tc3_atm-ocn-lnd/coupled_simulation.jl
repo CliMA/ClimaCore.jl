@@ -40,7 +40,7 @@ function step!(coupled_sim::CoupledSimulation, coupling_Δt)
     step!(atmos_sim, next_time - atmos_sim.t, true)
 
     # Calculate ocean and land fluxes
-    fluxes_per_s = - atmos_sim.u.x[3] / coupling_Δt 
+    fluxes_per_s = - atmos_sim.u.x[3] / coupling_Δt # W / m2
     
     # Since land model struct isnt set up yet, pass flux to use as argument
     flux_computed_by_atmos = 0.0 # can see if we recover the original land sim even in "coupled" mode :)
@@ -55,14 +55,17 @@ function step!(coupled_sim::CoupledSimulation, coupling_Δt)
     surface_flux_v_ocean = ocean_sim.model.velocities.v.boundary_conditions.top.condition
     surface_flux_T_ocean = ocean_sim.model.tracers.T.boundary_conditions.top.condition
 
+    ρ_atmos = parent(getproperty(atmos_sim.u.x[1], :ρ))[1]
+    ρ_ocean = 1000.0
+
     @. surface_flux_u_ocean = ρ_atmos / ρ_ocean * ∫surface_flux_u_atmos / coupling_Δt 
     @. surface_flux_v_ocean = ρ_atmos / ρ_ocean * ∫surface_flux_v_atmos / coupling_Δt 
     @. surface_flux_T_ocean = 1 / ρ_ocean       * ∫surface_flux_ρθ_atmos / coupling_Δt 
 
-    # We'll develop a new function step!(ocean_sim, Δt) :thumsup:
+    # We'll develop a new function step!(ocean_sim, coupling_Δt) :thumsup:
     time_step!(ocean_sim.model, next_time - ocean_sim.model.clock.time)
     
-    tick!(clock, Δt)
+    tick!(clock, coupling_Δt)
 
     return nothing
 end
