@@ -348,7 +348,7 @@ function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
         local_geometry = slab_local_geometry[i]
         out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
     end
-    return out
+    return SVector(out)
 end
 
 function apply_slab(op::Divergence{(1, 2)}, slab_space, _, slab_data)
@@ -383,7 +383,7 @@ function apply_slab(op::Divergence{(1, 2)}, slab_space, _, slab_data)
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
-    return out
+    return SMatrix(out)
 end
 
 
@@ -447,7 +447,7 @@ function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], ⊟(local_geometry.WJ))
     end
-    return out
+    return SMatrix(out)
 end
 
 """
@@ -482,7 +482,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
             out[ii] += ∂f∂ξ
         end
     end
-    return out
+    return SVector(out)
 end
 
 function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
@@ -510,7 +510,7 @@ function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
             out[i, jj] = out[i, jj] ⊞ ∂f∂ξ
         end
     end
-    return out
+    return SMatrix(out)
 end
 
 
@@ -554,7 +554,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         out[i] = RecursiveApply.rdiv(out[i], W)
     end
-    return out
+    return SVector(out)
 end
 
 function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
@@ -590,7 +590,7 @@ function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         out[i, j] = RecursiveApply.rdiv(out[i, j], W)
     end
-    return out
+    return SMatrix(out)
 end
 
 abstract type CurlSpectralElementOperator <: SpectralElementOperator end
@@ -669,7 +669,7 @@ function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
-    return out
+    return SMatrix(out)
 end
 
 
@@ -754,7 +754,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
-    return out
+    return SMatrix(out)
 end
 
 # interplation / restriction
@@ -820,7 +820,7 @@ function apply_slab(
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
         slab_data_out[i, j] = RecursiveApply.rmatmul2(Imat, temp, i, j)
     end
-    return slab_data_out
+    return SMatrix(slab_data_out)
 end
 
 
@@ -882,7 +882,7 @@ function apply_slab(
             WJ_out[i, j],
         )
     end
-    return slab_data_out
+    return SMatrix(slab_data_out)
 end
 
 """
