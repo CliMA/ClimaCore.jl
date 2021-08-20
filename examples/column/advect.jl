@@ -30,7 +30,7 @@ mesh = Meshes.IntervalMesh(domain, nelems = n)
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-V = ones(FT, fs)
+V = Geometry.Cartesian3Vector.(ones(FT, fs))
 θ = sin.(Fields.coordinate_field(cs))
 
 # Solve advection Equation: ∂θ/dt = -∂(vθ)
@@ -41,7 +41,7 @@ function tendency1!(dθ, θ, _, t)
         left = Operators.SetValue(sin(a - t)),
         right = Operators.SetValue(sin(b - t)),
     )
-    ∂ = Operators.GradientF2C()
+    ∂ = Operators.DivergenceF2C()
 
     return @. dθ = -∂(UB(V, θ))
 end

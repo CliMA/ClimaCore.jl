@@ -645,13 +645,13 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
 UpwindBiasedProductC2F(; kwargs...) = UpwindBiasedProductC2F(NamedTuple(kwargs))
-
+return_eltype(::UpwindBiasedProductC2F, V, A) = Geometry.Contravariant3Vector{eltype(eltype(V))}
 function return_space(
     ::UpwindBiasedProductC2F,
     velocity_space::Spaces.FaceFiniteDifferenceSpace,
     field_space::Spaces.CenterFiniteDifferenceSpace,
 )
-    Spaces.FaceFiniteDifferenceSpace(field_space)
+    velocity_space
 end
 
 stencil_interior_width(::UpwindBiasedProductC2F) = ((0, 0), (-half, half))
@@ -674,9 +674,8 @@ function stencil_interior(
     space = axes(value_field)
     a⁻ = stencil_interior(LeftBiasedC2F(), loc, idx, value_field)
     a⁺ = stencil_interior(RightBiasedC2F(), loc, idx, value_field)
-    vᶠ = getidx(velocity_field, loc, idx)
-    Δh = Δh_c2c(space, idx)
-    return upwind_biased_product(vᶠ, a⁻, a⁺)
+    vᶠ = Geometry.contravariant3(getidx(velocity_field, loc, idx),  Geometry.LocalGeometry(space, idx))
+    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, a⁺))
 end
 
 boundary_width(op::UpwindBiasedProductC2F, ::SetValue) = 1
@@ -693,8 +692,8 @@ function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(space)
     aᴸᴮ = bc.val
     a⁺ = stencil_interior(RightBiasedC2F(), loc, idx, value_field)
-    vᶠ = getidx(velocity_field, loc, idx)
-    return upwind_biased_product(vᶠ, aᴸᴮ, a⁺)
+    vᶠ = Geometry.contravariant3(getidx(velocity_field, loc, idx),  Geometry.LocalGeometry(space, idx))
+    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, aᴸᴮ, a⁺))
 end
 
 function stencil_right_boundary(
@@ -709,8 +708,8 @@ function stencil_right_boundary(
     @assert idx == right_face_boundary_idx(space)
     a⁻ = stencil_interior(LeftBiasedC2F(), loc, idx, value_field)
     aᴿᴮ = bc.val
-    vᶠ = getidx(velocity_field, loc, idx)
-    return upwind_biased_product(vᶠ, a⁻, aᴿᴮ)
+    vᶠ = Geometry.contravariant3(getidx(velocity_field, loc, idx),  Geometry.LocalGeometry(space, idx))
+    return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, aᴿᴮ))
 end
 
 boundary_width(op::UpwindBiasedProductC2F, ::Extrapolate) = 1
@@ -765,7 +764,7 @@ function return_space(
     velocity_space::Spaces.FaceFiniteDifferenceSpace,
     field_space::Spaces.CenterFiniteDifferenceSpace,
 )
-    Spaces.CenterFiniteDifferenceSpace(field_space)
+    field_space
 end
 
 function stencil_interior(::AdvectionC2C, loc, idx, velocity_field, value_field)
@@ -773,10 +772,9 @@ function stencil_interior(::AdvectionC2C, loc, idx, velocity_field, value_field)
     a⁺ⁱ = getidx(value_field, loc, idx + 1)
     aⁱ = getidx(value_field, loc, idx)
     a⁻ⁱ = getidx(value_field, loc, idx - 1)
-    w⁺ = getidx(velocity_field, loc, idx + half)
-    w⁻ = getidx(velocity_field, loc, idx - half)
-    Δh = Δh_f2f(space, idx)
-    return RecursiveApply.rdiv((w⁺ ⊠ (a⁺ⁱ - aⁱ)) ⊞ (w⁻ ⊠ (aⁱ ⊟ a⁻ⁱ)), (2 ⊠ Δh))
+    w⁺ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx + half), Geometry.LocalGeometry(space, idx+half))
+    w⁻ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx - half), Geometry.LocalGeometry(space, idx-half))
+    return RecursiveApply.rdiv(LinearAlgebra.dot(w⁺, Geometry.Covariant3Vector(a⁺ⁱ - aⁱ)) ⊞ LinearAlgebra.dot(w⁻, Geometry.Covariant3Vector(aⁱ ⊟ a⁻ⁱ)), 2)
 end
 
 boundary_width(op::AdvectionC2C, ::SetValue) = 1
@@ -793,14 +791,10 @@ function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(space)
     a⁺ⁱ = getidx(value_field, loc, idx + 1)
     aⁱ = getidx(value_field, loc, idx)
-    aᵈ = bc.val
-    w⁺ = getidx(velocity_field, loc, idx + half)
-    w⁻ = getidx(velocity_field, loc, idx - half)
-    Δh = Δh_f2f(space, idx)
-    return RecursiveApply.rdiv(
-        (w⁺ ⊠ (a⁺ⁱ - aⁱ)) ⊞ (w⁻ ⊠ (2 ⊠ (aⁱ - aᵈ))),
-        (2 ⊠ Δh),
-    )
+    a⁻ⁱ = bc.val
+    w⁺ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx + half), Geometry.LocalGeometry(space, idx+half))
+    w⁻ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx - half), Geometry.LocalGeometry(space, idx-half))
+    return RecursiveApply.rdiv(LinearAlgebra.dot(w⁺, Geometry.Covariant3Vector(a⁺ⁱ - aⁱ)) ⊞ LinearAlgebra.dot(w⁻, Geometry.Covariant3Vector(aⁱ ⊟ a⁻ⁱ)), 2)
 end
 
 function stencil_right_boundary(
@@ -813,16 +807,12 @@ function stencil_right_boundary(
 )
     space = axes(value_field)
     @assert idx == right_center_boundary_idx(space)
-    aᵈ = bc.val
+    a⁺ⁱ = bc.val
     aⁱ = getidx(value_field, loc, idx)
     a⁻ⁱ = getidx(value_field, loc, idx - 1)
-    w⁺ = getidx(velocity_field, loc, idx + half)
-    w⁻ = getidx(velocity_field, loc, idx - half)
-    Δh = Δh_f2f(space, idx)
-    return RecursiveApply.rdiv(
-        (w⁺ ⊠ (2 ⊠ (aᵈ - aⁱ))) ⊞ (w⁻ ⊠ (aⁱ ⊟ a⁻ⁱ)),
-        (2 ⊠ Δh),
-    )
+    w⁺ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx + half), Geometry.LocalGeometry(space, idx+half))
+    w⁻ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx - half), Geometry.LocalGeometry(space, idx-half))
+    return RecursiveApply.rdiv(LinearAlgebra.dot(w⁺, Geometry.Covariant3Vector(a⁺ⁱ - aⁱ)) ⊞ LinearAlgebra.dot(w⁻, Geometry.Covariant3Vector(aⁱ ⊟ a⁻ⁱ)), 2)
 end
 
 boundary_width(op::AdvectionC2C, ::Extrapolate) = 1
@@ -839,9 +829,8 @@ function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(space)
     a⁺ⁱ = getidx(value_field, loc, idx + 1)
     aⁱ = getidx(value_field, loc, idx)
-    w⁺ = getidx(velocity_field, loc, idx + half)
-    Δh = Δh_f2f(space, idx)
-    return RecursiveApply.rdiv((w⁺ ⊠ (a⁺ⁱ - aⁱ)), (2 ⊠ Δh))
+    w⁺ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx + half), Geometry.LocalGeometry(space, idx+half))
+    return RecursiveApply.rdiv(LinearAlgebra.dot(w⁺, Geometry.Covariant3Vector(a⁺ⁱ - aⁱ)), 2)
 end
 
 function stencil_right_boundary(
@@ -856,9 +845,8 @@ function stencil_right_boundary(
     @assert idx == right_center_boundary_idx(space)
     aⁱ = getidx(value_field, loc, idx)
     a⁻ⁱ = getidx(value_field, loc, idx - 1)
-    w⁻ = getidx(velocity_field, loc, idx - half)
-    Δh = Δh_f2f(space, idx)
-    return RecursiveApply.rdiv((w⁻ ⊠ (aⁱ ⊟ a⁻ⁱ)), (2 ⊠ Δh))
+    w⁻ = Geometry.ContravariantVector(getidx(velocity_field, loc, idx - half), Geometry.LocalGeometry(space, idx+half))
+    return RecursiveApply.rdiv(LinearAlgebra.dot(w⁻, Geometry.Covariant3Vector(aⁱ ⊟ a⁻ⁱ)), 2)
 end
 
 
