@@ -322,8 +322,38 @@ function set_arrays!(array, value, ext_value, vertical_symbol, coords)
     end
 end
 
-set_array!(array, value::Union{Real, AbstractArray{<:Real}}, args...) =
-    array .= value
+# The following 3 functions are identical to
+#     set_array!(array, value::Union{Real, AbstractArray{<:Real}}, args...) =
+#         array .= value
+# but they also allow `array` to be a CuArray while `value` is an Array (in
+# which case broadcasting results in an error).
+set_array!(array, value::Real, args...) = fill!(array, value)
+function set_array!(array, value::AbstractArray{<:Real, 1}, args...)
+    if size(value, 1) == size(array, 1)
+        for col in eachcol(array)
+            copyto!(col, value)
+        end
+    else
+        throw(ArgumentError(string(
+            "expected array of size ($(size(array, 1)),); ",
+            "received array of size $(size(value))",
+        )))
+    end
+end
+function set_array!(array, value::AbstractArray{<:Real, 2}, args...)
+    if size(value) == size(array)
+        copyto!(array, value)
+    elseif size(value) == (1, size(array, 2))
+        for (icol, col) in enumerate(eachcol(array))
+            fill!(col, value[1, icol])
+        end
+    else
+        throw(ArgumentError(string(
+            "expected array of size $(size(array)); ",
+            "received array of size $(size(value))",
+        )))
+    end
+end
 set_array!(array, value::Function, args...) =
     set_array_fun!(array, value, args...)
 
@@ -944,9 +974,10 @@ function RRTMGPModel(
     end
 
     op_type = use_one_scalar ? RRTMGP.Optics.OneScalar : RRTMGP.Optics.TwoStream
+    op = op_type(FT, ncol, nlay, DA)
     solver = RRTMGP.RTE.Solver(
         as,
-        op_type(FT, ncol, nlay, DA),
+        op,
         src_lw,
         src_sw,
         bcs_lw,
