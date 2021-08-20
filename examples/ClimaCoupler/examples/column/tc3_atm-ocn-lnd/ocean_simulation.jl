@@ -6,14 +6,30 @@ using Oceananigans.TurbulenceClosures: TKEBasedVerticalDiffusivity
 ##### Parameters
 #####
 
-function ocean_simulation(; Nz = 64  # Number of vertical grid points
-                            Lz = 512 # Vertical extent of domain
-                            f = 1e-4 # Coriolis parameter
-                            g = 9.81 # Gravitational acceleration
-                            T₀ = 20  # ᵒC, sea surface temperature
-                            S₀ = 35  # psu, sea surface salinity
-                            α = 2e-4 # Thermal expansion coefficient
-                            β = 8e-5 # Haline contraction coefficient
+"""
+    ocean_simulation(; kwargs...)
+
+Return an `Oceananigans.Simulation` of a column model initialized with
+mutable array surface boundary conditions and a linear density stratification.
+
+Arguments
+=========
+
+    * Nz: Number of vertical grid points
+    * Lz: [m] Vertical extent of domain,
+    * f:  [s-1] Coriolis parameter,
+    * g:  [m s-2] Gravitational acceleration,
+    * T₀: [ᵒC], sea surface temperature,
+    * S₀: [psu], sea surface salinity,
+    * α: Thermal expansion coefficient
+    * β: Haline contraction coefficient
+"""
+function ocean_simulation(; Nz = 64,  # Number of vertical grid points
+                            Lz = 512, # Vertical extent of domain
+                            f = 1e-4, # Coriolis parameter
+                            g = 9.81, # Gravitational acceleration
+                            α = 2e-4, # Thermal expansion coefficient
+                            β = 8e-5, # Haline contraction coefficient
                           )
 
     grid = RegularRectilinearGrid(size=(1, 1, Nz), x=(0, 1), y=(0, 1), z=(-Lz, 0), topology=(Periodic, Periodic, Bounded))
@@ -33,17 +49,7 @@ function ocean_simulation(; Nz = 64  # Number of vertical grid points
                                         boundary_conditions = (T=T_bcs, S=S_bcs, u=u_bcs, v=v_bcs),
                                         closure = TKEBasedVerticalDiffusivity())
     
-    # Half temperature, half salinity stratification
-    N² = 1e-5
-    dTdz = + α * g * N² / 2
-    dSdz = - β * g * N² / 2
-    Tᵢ(x, y, z) = T₀ + dTdz * z
-    Sᵢ(x, y, z) = S₀ + dSdz * z
-    set!(model, T = Tᵢ, S = Sᵢ)
-    
-    simulation = Simulation(model, Δt=1.0, stop_iteration=1)
+    simulation = Oceananigans.Simulation(model, Δt=1.0, stop_iteration=1)
 
     return simulation
 end
-
-    # simulation = Simulation(model, Δt=1minute, stop_time=12hour)

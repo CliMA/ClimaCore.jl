@@ -3,7 +3,7 @@ using Base: show_supertypes
 
 # add https://github.com/CliMA/ClimaCore.jl/#main
 # add https://github.com/CliMA/ClimaAtmos.jl/#main
-
+# will need to add https://github.com/CliMA/LandHydrology.jl/#main
 # import required modules
 import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
@@ -17,7 +17,21 @@ import ClimaCore:
     Spaces
 
 using ClimaAtmos
-@boilerplate
+
+# explicit imports for Backend 
+import ClimaAtmos.Backends: evolve, ClimaCoreBackend
+
+# explicit imports from Interface
+import ClimaAtmos.Interface: TimeStepper, Simulation
+import ClimaAtmos.Interface: PeriodicRectangle, BarotropicFluidModel
+
+# Imports from Julia Ecosystem
+using IntervalSets, UnPack
+using OrdinaryDiffEq: SSPRK33
+
+# imports from Clima Core
+using ClimaCore.Geometry
+import ClimaCore: Fields, Domains, Topologies, Meshes, Spaces
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 

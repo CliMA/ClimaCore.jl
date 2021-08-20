@@ -26,20 +26,12 @@ const FT = Float64
 
 abstract type BC{FT <: AbstractFloat} end
 
-struct FluxBC{FT} <: BC{FT}
+mutable struct FluxBC{FT} <: BC{FT}
     top_heat_flux::FT
     top_water_flux::FT
     btm_heat_flux::FT
     btm_water_flux::FT
 end
-
-
-abstract type LandModel end
-
-struct SoilModel <: LandModel
-    integrator::A
-end
-
 
 function compute_soil_rhs!(dY, Y, t, p)
 
@@ -111,7 +103,7 @@ vg_α = FT(7.5); # inverse meters
 vg_m = FT(1) -FT(1)/vg_n
 θ_r = FT(0)
 
-#Heat specific
+# Heat specific
 κ_quartz = FT(7.7) # W/m/K
 κ_minerals = FT(2.5) # W/m/K
 κ_om = FT(0.25) # W/m/K
@@ -146,7 +138,6 @@ t0 = FT(0)
 tf = FT(60 * 60 * 72)
 dt = FT(30)
 
-
 n = 50
 
 zmax = FT(0)
@@ -158,7 +149,7 @@ cs = Spaces.CenterFiniteDifferenceSpace(mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 zc = Fields.coordinate_field(cs)
 
-#Boundary conditions
+# Boundary conditions
 top_water_flux = FT(0)
 top_heat_flux = FT(0)
 bottom_water_flux = FT(0)
@@ -168,14 +159,14 @@ bc = FluxBC(top_heat_flux,
             bottom_heat_flux,
             bottom_water_flux)
 
-#Parameter structure
+# Parameter structure
 p = [msp, param_set, zc,bc]
 
-#initial conditions
+# initial conditions
 T_max = FT(289.0)
 T_min = FT(288.0)
 c = FT(20.0)
-T= @.  T_min + (T_max - T_min) * exp(-(zc - zmax) / (zmin - zmax) * c)
+T = @.  T_min + (T_max - T_min) * exp(-(zc - zmax) / (zmin - zmax) * c)
 
 θ_i = Fields.zeros(FT,cs)
 
@@ -183,40 +174,17 @@ theta_max = FT(ν * 0.5)
 theta_min = FT(ν * 0.4)
 θ_l = @. theta_min + (theta_max - theta_min) * exp(-(zc - zmax) / (zmin - zmax) * c)
 
-
 ρc_s = volumetric_heat_capacity.(θ_l, θ_i, ρc_ds, Ref(param_set))
 ρe_int = volumetric_internal_energy.(θ_i, ρc_s, T, Ref(param_set))
 
 Y = ArrayPartition(θ_l, θ_i, ρe_int)
 
 function ∑land_tendencies!(dY, Y, p, t)
-    #intermediate step to be added if needed
-    compute_soil_rhs!(dY, Y,t, p)
+    # Intermediate step to be added if needed
+    compute_soil_rhs!(dY, Y, t, p)
 end
 
-land_prob = ODEProblem(∑land_tendencies!, Y, (t0, tf),p)
+land_prob = ODEProblem(∑land_tendencies!, Y, (t0, tf), p)
 algorithm = CarpenterKennedy2N54()
-land_integrator = init(land_prob, algorithm, dt = dt) # dt is the land model step
 
-function step!(model::SoilModel, Δt, flux)
-    integ = model.land_integrator
-    integ.p[4].top_heat_flux = flux # same BC across Δt
-    OrdinaryDiffEq.step!(integ, Δt, true) #Δt here does not need to be the land model step
-    # the integrator contains the land model timestep dt. with [Δt, true] args the integrator will step by dt until it has
-    # advanced exactly Δt. 
-end
-
-#     step!(integrator,dt,true) # integrates to t+dt exactly
-# integrator.p[4].top_heat_flux = new_value #(from coupler) # = \sum atmos flux*dt_atmos /dt_alnd?
-
-#alternatively, can do with callback
-#=
-function condition(u,t,integrator) # Event at every time step?
-    t = integrator.t_prev+dt ## should access dt in integrator?
-end
-function affect!(integrator)
-    integrator.p[4].top_heat_flux= new_top_heat_flux_value
-end
-cb = ContinuousCallback(condition, affect!)
-integrator = init(prob, CarpenterKennedy2N54(),dt= dt, callback= cb)
-#etc.
+land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model step
