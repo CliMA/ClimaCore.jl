@@ -23,7 +23,7 @@ function step!(coupled_sim::CoupledSimulation, coupling_Δt)
     next_time = clock.time + coupling_Δt
 
     # Extract interface states
-    land_surface_temp = parent(land_sim.u.x[3])[end]
+    land_surface_temp = land_sim.p[5]#parent(land_sim.u.x[3])[end]
 
     #=
     ocean_Nz = ocean_sim.model.grid.Nz
