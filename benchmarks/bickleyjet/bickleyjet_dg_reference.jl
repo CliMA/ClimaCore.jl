@@ -1,11 +1,12 @@
 using Base.Threads
 import ClimaCore.Spaces
+using CUDA
 
-function spaceconfig(::Val{Nq}) where {Nq}
+function spaceconfig(::Val{Nq}, ::Type{DA} = Array) where {Nq, DA}
     quad = Spaces.Quadratures.GLL{Nq}()
     ξ, W = Spaces.Quadratures.quadrature_points(Float64, quad)
     D = Spaces.Quadratures.differentiation_matrix(Float64, quad)
-    return (ξ, W, D)
+    return (DA(ξ), DA(W), DA(D))
 end
 
 # construct the coordinate array
@@ -247,4 +248,173 @@ function add_face_ref!(dydt_ref, y0_ref, (n1, n2, parameters, valNq), t)
     end
 
     return dydt_ref
+end
+
+
+function volume_ref_cuda!(dYdt, Y, parameters, Nq)
+    Nstate = 4
+    n1, n2 = size(Y, 4), size(Y, 5)
+
+    (ξ, W, D) = spaceconfig(Val(Nq), CuArray)
+    max_threads = 256
+    @assert (Nq * Nq) ≤ max_threads
+
+    @cuda threads = (Nq, Nq) blocks = (n1, n2) volume_ref_cuda_kernel!(
+        dYdt,
+        Y,
+        parameters,
+        W,
+        D,
+        Val(Nq),
+        Val(Nstate),
+    )
+    return dYdt
+end
+
+function volume_ref_cuda_kernel!(
+    dYdt,
+    Y,
+    parameters,
+    W,
+    D,
+    ::Val{Nq},
+    ::Val{Nstate},
+) where {Nq, Nstate}
+    h1, h2 = blockIdx().x, blockIdx().y
+    i, j = threadIdx().x, threadIdx().y
+    n1, n2 = size(Y, 4), size(Y, 5)
+    FT = eltype(dYdt)
+    J = 2pi / n1 * 2pi / n2
+    ∂ξ∂x = @SMatrix [n1/(2pi) 0; 0 n2/(2pi)]
+
+    WJv¹ = @cuStaticSharedMem FT (Nstate, Nq, Nq)
+    WJv² = @cuStaticSharedMem FT (Nstate, Nq, Nq)
+
+    # 1. evaluate flux function at the point
+    y = (
+        ρ = Y[i, j, 1, h1, h2],
+        ρu = Cartesian12Vector(Y[i, j, 2, h1, h2], Y[i, j, 3, h1, h2]),
+        ρθ = Y[i, j, 4, h1, h2],
+    )
+
+    F = flux(y, parameters)
+    Fρ = F.ρ
+    Fρu1 = SVector(F.ρu[1, 1], F.ρu[1, 2])
+    Fρu2 = SVector(F.ρu[2, 1], F.ρu[2, 2])
+    Fρθ = F.ρθ
+    # 2. Convert to contravariant coordinates and store in work array
+    WJ = W[i] * W[j] * J
+
+    WJv¹[1, i, j], WJv²[1, i, j] = WJ * ∂ξ∂x * Fρ
+    WJv¹[2, i, j], WJv²[2, i, j] = WJ * ∂ξ∂x * Fρu1
+    WJv¹[3, i, j], WJv²[3, i, j] = WJ * ∂ξ∂x * Fρu2
+    WJv¹[4, i, j], WJv²[4, i, j] = WJ * ∂ξ∂x * Fρθ
+    sync_threads()
+    # weak derivatives
+    for s in 1:Nstate
+        t = 0.0
+        # D'[i,:]*WJv¹[:,j]
+        for k in 1:Nq
+            t += D[k, i] * WJv¹[s, k, j]
+        end
+        # D'[j,:]*WJv²[i,:]
+        for k in 1:Nq
+            t += D[k, j] * WJv²[s, i, k]
+        end
+        dYdt[i, j, s, h1, h2] = t / WJ
+    end
+    return nothing
+end
+
+function add_face_ref_cuda!(dYdt, Y, parameters, Nq)
+    (ξ, W, D) = spaceconfig(Val(Nq), CuArray)
+    n1, n2 = size(Y, 4), size(Y, 5)
+
+    @cuda threads = (Nq) blocks = (n1, n2) add_face_ref_cuda_kernel!(
+        dYdt,
+        Y,
+        parameters,
+        Nq,
+        W,
+        D,
+    )
+    return dYdt
+end
+
+function add_face_ref_cuda_kernel!(dYdt, Y, parameters, Nq, W, D)
+    h1, h2 = blockIdx().x, blockIdx().y
+    i = j = threadIdx().x
+    n1, n2 = size(Y, 4), size(Y, 5)
+    FT = eltype(dYdt)
+
+    # "Face" part
+    sJ1 = 2pi / n1
+    sJ2 = 2pi / n2
+
+    J = 2pi / n1 * 2pi / n2
+
+    # direction 1
+    g1 = mod1(h1 - 1, n1)
+    g2 = h2
+    normal = SVector(-1.0, 0.0)
+
+    sWJ = W[j] * sJ2
+    WJ⁻ = W[1] * W[j] * J
+    WJ⁺ = W[Nq] * W[j] * J
+
+    y⁻ = (
+        ρ = Y[1, j, 1, h1, h2],
+        ρu = SVector(Y[1, j, 2, h1, h2], Y[1, j, 3, h1, h2]),
+        ρθ = Y[1, j, 4, h1, h2],
+    )
+    y⁺ = (
+        ρ = Y[Nq, j, 1, g1, g2],
+        ρu = SVector(Y[Nq, j, 2, g1, g2], Y[Nq, j, 3, g1, g2]),
+        ρθ = Y[Nq, j, 4, g1, g2],
+    )
+    nf = roeflux(normal, (y⁻, parameters), (y⁺, parameters))
+
+    dYdt[1, j, 1, h1, h2] -= sWJ / WJ⁻ * nf.ρ
+    dYdt[1, j, 2, h1, h2] -= sWJ / WJ⁻ * nf.ρu[1]
+    dYdt[1, j, 3, h1, h2] -= sWJ / WJ⁻ * nf.ρu[2]
+    dYdt[1, j, 4, h1, h2] -= sWJ / WJ⁻ * nf.ρθ
+
+    dYdt[Nq, j, 1, g1, g2] += sWJ / WJ⁺ * nf.ρ
+    dYdt[Nq, j, 2, g1, g2] += sWJ / WJ⁺ * nf.ρu[1]
+    dYdt[Nq, j, 3, g1, g2] += sWJ / WJ⁺ * nf.ρu[2]
+    dYdt[Nq, j, 4, g1, g2] += sWJ / WJ⁺ * nf.ρθ
+
+    sync_threads()
+
+    # direction 2
+    g1 = h1
+    g2 = mod1(h2 - 1, n2)
+    normal = SVector(0.0, -1.0)
+
+    sWJ = W[i] * sJ1
+    WJ⁻ = W[i] * W[1] * J
+    WJ⁺ = W[i] * W[Nq] * J
+
+    y⁻ = (
+        ρ = Y[i, 1, 1, h1, h2],
+        ρu = SVector(Y[i, 1, 2, h1, h2], Y[i, 1, 3, h1, h2]),
+        ρθ = Y[i, 1, 4, h1, h2],
+    )
+    y⁺ = (
+        ρ = Y[i, Nq, 1, g1, g2],
+        ρu = SVector(Y[i, Nq, 2, g1, g2], Y[i, Nq, 3, g1, g2]),
+        ρθ = Y[i, Nq, 4, g1, g2],
+    )
+    nf = roeflux(normal, (y⁻, parameters), (y⁺, parameters))
+
+    dYdt[i, 1, 1, h1, h2] -= sWJ / WJ⁻ * nf.ρ
+    dYdt[i, 1, 2, h1, h2] -= sWJ / WJ⁻ * nf.ρu[1]
+    dYdt[i, 1, 3, h1, h2] -= sWJ / WJ⁻ * nf.ρu[2]
+    dYdt[i, 1, 4, h1, h2] -= sWJ / WJ⁻ * nf.ρθ
+
+    dYdt[i, Nq, 1, g1, g2] += sWJ / WJ⁺ * nf.ρ
+    dYdt[i, Nq, 2, g1, g2] += sWJ / WJ⁺ * nf.ρu[1]
+    dYdt[i, Nq, 3, g1, g2] += sWJ / WJ⁺ * nf.ρu[2]
+    dYdt[i, Nq, 4, g1, g2] += sWJ / WJ⁺ * nf.ρθ
+    return nothing
 end

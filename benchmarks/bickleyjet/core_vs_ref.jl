@@ -1,17 +1,22 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
+using BenchmarkTools, Plots
+using CUDA
+
 include("bickleyjet_dg.jl")
 include("bickleyjet_dg_reference.jl")
-
-using BenchmarkTools, Plots
 
 n1, n2 = 16, 16
 
 Nqs = 2:7
 volTs = Float64[]
 volRs = Float64[]
+volRGPUs = Float64[]
 faceTs = Float64[]
 faceRs = Float64[]
+faceRGPUs = Float64[]
+
+DA = CUDA.has_cuda_gpu() ? CuArray : Array
 
 for Nq in Nqs
     # setup core
@@ -43,6 +48,15 @@ for Nq in Nqs
     @assert y0_ref ≈ reshape(parent(y0), (Nq, Nq, 4, n1, n2))
     @assert dydt_ref ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
+    # setup GPU reference
+    if DA === CuArray
+        y0_gpu = DA(y0_ref)
+        dydt_gpu = similar(y0_gpu)
+        volume_ref_cuda!(dydt_gpu, y0_gpu, parameters, Nq)
+        # check equivalent
+        @assert Array(y0_gpu) ≈ y0_ref
+        @assert Array(dydt_gpu) ≈ dydt_ref
+    end
     # run benchmarks
     @info("Benchmark volume!", Nq)
     push!(volTs, @belapsed volume!($dydt, $y0, ($parameters,), 0.0))
@@ -56,6 +70,13 @@ for Nq in Nqs
             0.0,
         )
     )
+    if DA === CuArray
+        @info("Benchmark volume_ref GPU!", Nq)
+        push!(
+            volRGPUs,
+            @belapsed volume_ref_cuda!($dydt_gpu, $y0_gpu, $parameters, $Nq)
+        )
+    end
 
     # faces
     fill!(parent(dydt), 0.0)
@@ -69,6 +90,13 @@ for Nq in Nqs
 
     @assert dydt_ref ≈ reshape(parent(dydt), (Nq, Nq, 4, n1, n2))
 
+    # setup GPU face reference
+    if DA === CuArray
+        fill!(dydt_gpu, 0.0)
+        add_face_ref_cuda!(dydt_gpu, y0_gpu, parameters, Nq)
+        @assert Array(y0_gpu) ≈ y0_ref
+        @assert Array(dydt_gpu) ≈ dydt_ref
+    end
     @info("Benchmark face!", Nq)
     push!(faceTs, @belapsed add_face!($dydt, $y0, ($parameters,), 0.0))
     @info("Benchmark face_ref!", Nq)
@@ -81,6 +109,13 @@ for Nq in Nqs
             0.0,
         )
     )
+    if DA === CuArray
+        @info("Benchmark face_ref GPU!", Nq)
+        push!(
+            faceRGPUs,
+            @belapsed add_face_ref_cuda!($dydt_gpu, $y0_gpu, $parameters, $Nq)
+        )
+    end
 end
 
 
@@ -95,6 +130,9 @@ plt = plot(
 )
 plot!(plt, Nqs, 1e3 .* volTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* volRs, label = "Reference")
+if DA === CuArray
+    plot!(plt, Nqs, 1e3 .* volRGPUs, label = "Reference GPU")
+end
 
 png(plt, joinpath(@__DIR__, "volume.png"))
 
@@ -103,6 +141,9 @@ plt =
     plot(ylims = (0, Inf), xlabel = "Nq", ylabel = "Time (ms)", title = "Face")
 plot!(plt, Nqs, 1e3 .* faceTs, label = "ClimaCore")
 plot!(plt, Nqs, 1e3 .* faceRs, label = "Reference")
+if DA === CuArray
+    plot!(plt, Nqs, 1e3 .* faceRGPUs, label = "Reference GPU")
+end
 
 png(plt, joinpath(@__DIR__, "face.png"))
 
