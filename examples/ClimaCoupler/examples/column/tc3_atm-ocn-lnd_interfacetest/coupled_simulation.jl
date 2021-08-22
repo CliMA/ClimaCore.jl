@@ -150,16 +150,11 @@ Plots.png(Plots.plot([t0_ρe tend_ρe],z_centers, labels = ["t=0" "t=end"]), joi
 # ocean plots
 sol_ocn = coupled_sim.ocean.model
 #sol_ocn.velocities.u.data 
-tend_T = sol_ocn.tracers.T.data[1,1,:]
-z_centers =  collect(1:1:length(tend_T))
-Plots.png(Plots.plot([tend_T tend_T],z_centers, labels = ["t=end" "t=end"]), joinpath(path, "T_ocn_height.png"))
 
 # TODO
 # - add domain info, similar to aceananigans: coupled_sim.ocean.model.grid. ... 
 #       - like that oceananigans model prints out basic characteristics (nel, BCs etc)
 # - oceananigans doesn't store all times...?
-# - how would be do the accumulation in oceananigans?
 # - ekman column - dw equation looks odd
-
 
 

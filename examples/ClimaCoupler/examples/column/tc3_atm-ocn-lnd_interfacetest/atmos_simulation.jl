@@ -90,7 +90,7 @@ function atmos_simulation(land_simulation;
         ρ = p / (R_d * θ * (p / MSLP)^(R_d / C_p))
     
         # velocties
-        u = 10.0
+        u = 1.0
         v = 0.0
     
         return (ρ = ρ, u = u, v = v, ρθ = ρ * θ)

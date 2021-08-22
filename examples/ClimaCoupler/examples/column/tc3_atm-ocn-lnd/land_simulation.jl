@@ -52,6 +52,8 @@ function compute_soil_rhs!(dY, Y, t, p)
     θ_l = ϑ_l
     ρc_s = volumetric_heat_capacity.(θ_l, θ_i, ρc_ds, Ref(param_set))
     T = temperature_from_ρe_int.(ρe_int, θ_i, ρc_s, Ref(param_set))
+    T_sfc = parent(T)[end]
+    p[5] = T_sfc
     κ_dry = k_dry(param_set, sp)
     S_r = relative_saturation.(θ_l, θ_i, ν)
     kersten = kersten_number.(θ_i, S_r, Ref(sp))
@@ -86,7 +88,6 @@ function compute_soil_rhs!(dY, Y, t, p)
     return dY
   
 end
-
 
 # General composition
 ν = FT(0.395);
@@ -136,7 +137,7 @@ msp = SoilParams{FT}(ν,vg_n,vg_α,vg_m, Ksat, θ_r, S_s,
 #Simulation and domain info
 t0 = FT(0)
 tf = FT(60 * 60 * 72)
-dt = FT(30)
+dt = FT(0.01)
 
 n = 50
 
@@ -160,14 +161,14 @@ bc = FluxBC(top_heat_flux,
             bottom_water_flux)
 
 # Parameter structure
-p = [msp, param_set, zc,bc]
 
 # initial conditions
 T_max = FT(289.0)
 T_min = FT(288.0)
 c = FT(20.0)
 T = @.  T_min + (T_max - T_min) * exp(-(zc - zmax) / (zmin - zmax) * c)
-
+Tsfc = parent(T)[end]
+p = [msp, param_set, zc,bc,Tsfc]
 θ_i = Fields.zeros(FT,cs)
 
 theta_max = FT(ν * 0.5)
@@ -187,4 +188,4 @@ end
 land_prob = ODEProblem(∑land_tendencies!, Y, (t0, tf), p)
 algorithm = CarpenterKennedy2N54()
 
-land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model step
+land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model
