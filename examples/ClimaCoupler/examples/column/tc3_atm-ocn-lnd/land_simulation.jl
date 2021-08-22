@@ -188,4 +188,4 @@ end
 land_prob = ODEProblem(∑land_tendencies!, Y, (t0, tf), p)
 algorithm = CarpenterKennedy2N54()
 
-land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model
+land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model step
