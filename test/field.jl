@@ -83,3 +83,18 @@ end
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     @test norm.(u) ≈ hypot(4 / 8 / 2, 4 / 10 / 2) .* ones(space)
 end
+
+@testset "FieldVector" begin
+    u = Geometry.Covariant12Vector.(ones(space), ones(space))
+    x = Fields.coordinate_field(space)
+    Y = Fields.FieldVector(u = u, x = x)
+
+    Y1 = 2 .* Y
+    @test parent(Y1.u) == 2 .* parent(u)
+    @test parent(Y1.x) == 2 .* parent(x)
+
+    Y1 .= Y1 .+ 2 .* Y
+    @test parent(Y1.u) == 4 .* parent(u)
+    @test parent(Y1.x) == 4 .* parent(x)
+
+end
