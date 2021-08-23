@@ -17,7 +17,7 @@ import ClimaCore:
     Spaces
 
 using ClimaAtmos
-@boilerplate
+#@boilerplate
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -34,6 +34,8 @@ const CI = !isnothing(get(ENV, "CI", nothing))
 
 # general parameters
 const FT = Float64
+
+include("surface_fluxes.jl") # dummy for SurfaceFluxes.jl
 
 ########
 # Set up parameters
@@ -54,9 +56,10 @@ parameters = (
         C_p = 287.058 * 1.4 / (1.4 - 1), # heat capacity at constant pressure [J / K / kg]
         C_v = 287.058 / (1.4 - 1), # heat capacity at constant volume [J / K / kg]
         R_m = 87.058, # moist R, assumed to be dry [J / K / kg]
-        f = 5e-5, # Coriolis parameters [1/s]
-        ν = .01, # viscosity, diffusivity
+        f = 7.29e-5,#5e-5,# Coriolis parameters [1/s]
+        ν = .1, #0.01,# viscosity, diffusivity
         Cd = 0.01 / (2e2 / 30.0), #drag coeff
+        Ch = 0.01 / (2e2 / 30.0), #thermal transfer coefficient
         ug = 1.0,
         vg = 0.0,
         d = sqrt(2.0 * 0.01 / 5e-5), #?
@@ -79,7 +82,7 @@ parameters = (
         τ_d   = 10,     # idealized daily cycle period [s]
 
         # surface fluxes
-        λ = FT(1e-5)    # coupling transfer coefficient (to be replaced by the bulk formula)
+        λ = FT(0.01),#FT(1e-5)    # coupling transfer coefficient (to be replaced by the bulk formula)
 
         # Q: ML???
     )
@@ -167,16 +170,13 @@ end
 ########
 # specify timestepping info
 stepping = (;
-        Δt_min = 0.01,
-        timerange = (0.0, 6.0),
+        Δt_min = 0.02,
+        timerange = (0.0, 10000.0),
         Δt_cpl = 1.0,
         odesolver = SSPRK33(),
         nsteps_atm = 4,
         nsteps_lnd = 1,
         )
-
-# coupling parameters
-calculate_flux(T_sfc, T1) = parameters.λ .* (T_sfc .- T1)
 
 # coupler comm functions which export / import / transform variables
 coupler_get(x) = x
@@ -285,13 +285,28 @@ dirname = "heat"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-anim = Plots.@animate for u in sol_atm.u
-    Plots.plot(u.x[1], xlim=(220,280))
-end
-Plots.mp4(anim, joinpath(path, "heat.mp4"), fps = 10)
-Plots.png(Plots.plot(sol_atm.u[end].x[1] ), joinpath(path, "T_atm_end.png"))
+# animation
+# anim = Plots.@animate for u in sol_atm.u
+#     Plots.plot(u.x[1], xlim=(220,280))
+# end
+# Plots.mp4(anim, joinpath(path, "heat.mp4"), fps = 10)
 
-atm_sfc_u_t = [parent(u.x[1])[1] for u in sol_atm.u]
+
+# atmos vertical profile at t=0 and t=end
+t0_ρθ = parent(sol_atm.u[1].x[1])[:,4]
+tend_ρθ = parent(sol_atm.u[end].x[1])[:,4]
+t0_u = parent(sol_atm.u[1].x[1])[:,2]
+tend_u = parent(sol_atm.u[end].x[1])[:,2]
+t0_v = parent(sol_atm.u[1].x[1])[:,3]
+tend_v = parent(sol_atm.u[end].x[1])[:,3]
+z_centers =  collect(1:1:length(tend_u))#parent(Fields.coordinate_field(center_space_atm))[:,1]
+Plots.png(Plots.plot([t0_ρθ tend_ρθ],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "T_atm_height.png"))
+Plots.png(Plots.plot([t0_u tend_u],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "u_atm_height.png"))
+Plots.png(Plots.plot([t0_v tend_v],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "v_atm_height.png"))
+
+
+# time evolution
+atm_sfc_u_t = [parent(u.x[1])[1,4] for u in sol_atm.u]
 Plots.png(Plots.plot(sol_atm.t, atm_sfc_u_t), joinpath(path, "T_atmos_surface_time.png"))
 
 lnd_sfc_u_t = [u[1] for u in sol_lnd.u]

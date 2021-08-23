@@ -26,7 +26,7 @@ const CI = !isnothing(get(ENV, "CI", nothing))
 const FT = Float64
 
 # define model equations:
-include("atmos_rhs_fully_coupled.jl")
+include("atmos_rhs.jl")
 
 parameters = (
         # atmos physics (overwriting CliMAParameters defaults?)

@@ -131,9 +131,8 @@ t0_u = parent(sol_atm.u[1].x[1])[:,2]
 tend_u = parent(sol_atm.u[end].x[1])[:,2]
 t0_v = parent(sol_atm.u[1].x[1])[:,3]
 tend_v = parent(sol_atm.u[end].x[1])[:,3]
-z_centers =  collect(1:1:length(tend_))#parent(Fields.coordinate_field(center_space_atm))[:,1]
+z_centers =  collect(1:1:length(tend_u))#parent(Fields.coordinate_field(center_space_atm))[:,1]
 Plots.png(Plots.plot([t0_ρθ tend_ρθ],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "T_atm_height.png"))
-z_centers =  collect(1:1:length(tend_))#parent(Fields.coordinate_field(center_space_atm))[:,1]
 Plots.png(Plots.plot([t0_u tend_u],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "u_atm_height.png"))
 Plots.png(Plots.plot([t0_v tend_v],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "v_atm_height.png"))
 

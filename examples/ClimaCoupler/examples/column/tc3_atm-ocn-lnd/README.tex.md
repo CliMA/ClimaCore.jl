@@ -1,10 +1,6 @@
 # Atmos-Ocean-Soil Columns
 
 
-## Test:
-$$
-\partial T = \frac{1}{2}
-$$
 
 ## Notes
 - extracting states in Oceananigans
