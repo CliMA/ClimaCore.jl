@@ -50,6 +50,13 @@ function ∑tendencies_atm!(dY, Y, (parameters, T_sfc), t)
     v_1 = parent(v)[1]
     ρ_1 = parent(ρ)[1]
     ρθ_1 = parent(ρθ)[1]
+    θ_1 = parent(ρθ)[1] / parent(ρ)[1]
+    u_wind = sqrt(u_1^2 + v_1^2)
+
+    # surface flux calculations 
+    #calculate_flux(T_sfc, T1) = parameters.λ .* (T_sfc .- T1)
+    #F_sfc = - calculate_flux( T_sfc[1], parent(ρθ)[1] / parent(ρ)[1] ) 
+    F_sfc = - calculate_sfc_fluxes_energy(DryBulkFormulaWithRadiation(), parameters, T_sfc[1], θ_1 , u_1, v_1, ρ_1, t ) # W / m2
 
     # **Bulk formulae** (will be imported from SurfaceFluxes.jl)
     surface_flux_ρθ = - Ch * ρ_1 *sqrt(u_1^2 + v_1^2) * (T_sfc[1] .- ρθ_1 / ρ_1)

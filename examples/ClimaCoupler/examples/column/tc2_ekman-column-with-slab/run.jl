@@ -17,7 +17,6 @@ import ClimaCore:
     Spaces
 
 using ClimaAtmos
-#@boilerplate
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -37,17 +36,26 @@ const FT = Float64
 
 include("surface_fluxes.jl") # dummy for SurfaceFluxes.jl
 
+
 ########
 # Set up parameters
 ########
 
 parameters = (
+        # timestepping parameters 
+        Δt_min = 0.02, # minimum model timestep [s]
+        timerange = (0.0, 100.0),  # start time and end time [s]
+        odesolver = SSPRK33(), # timestepping method from DifferentialEquations.jl (used in both models here)
+        nsteps_atm = 4, # no. time steps of atm before coupling 
+        nsteps_lnd = 1, # no. time steps of lnd before coupling 
+        saveat = 0.2, # interval at which to save diagnostics [s]
+
         # atmos domain
         zmin_atm = FT(0.0),     # height of atmos stack bottom
         zmax_atm = FT(200.0), # height of atmos domain top
         n = 30,                 # number of vertical levels
 
-        # atmos physics (overwriting CliMAParameters defaults?)
+        # atmos physics (eventually will be importing/overwriting CliMAParameters defaults?)
         T_surf = 300.0, # K
         T_min_ref = 230.0, #K
         MSLP = 1e5, # mean sea level pressure [Pa]
@@ -96,6 +104,7 @@ domain_atm  = Domains.IntervalDomain(parameters.zmin_atm, parameters.zmax_atm, x
 mesh_atm = Meshes.IntervalMesh(domain_atm, nelems = parameters.n) # struct, allocates face boundaries to 5,6
 center_space_atm = Spaces.CenterFiniteDifferenceSpace(mesh_atm) # collection of the above, discretises space into FD and provides coords
 face_space_atm = Spaces.FaceFiniteDifferenceSpace(center_space_atm)
+
 
 ########
 # Set up inital conditions
@@ -147,12 +156,13 @@ ics = (;
         lnd = T_lnd_0
         )
 
+
 ########
 # Set up rhs! and BCs
 ########
 
 # define model equations:
-include("atmos_rhs_fully_coupled.jl")
+include("atmos_rhs_fully_coupled.jl") 
 
 function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, F_sfc), t)
     """
@@ -165,17 +175,19 @@ function ∑tendencies_lnd!(dT_sfc, T_sfc, (parameters, F_sfc), t)
     @. dT_sfc = (F_sfc * p.C_p + G) / (p.h_s * p.ρ_s * p.c_s)
 end
 
+
 ########
 # Set up time steppers
 ########
+
 # specify timestepping info
 stepping = (;
-        Δt_min = 0.02,
-        timerange = (0.0, 10000.0),
-        Δt_cpl = 1.0,
-        odesolver = SSPRK33(),
-        nsteps_atm = 4,
-        nsteps_lnd = 1,
+        Δt_min = parameters.Δt_min,
+        timerange = parameters.timerange,
+        Δt_cpl = max(parameters.nsteps_atm, parameters.nsteps_lnd) * parameters.Δt_min, # period of coupling cycle [s]
+        odesolver = parameters.odesolver,
+        nsteps_atm = parameters.nsteps_atm,
+        nsteps_lnd = parameters.nsteps_lnd,
         )
 
 # coupler comm functions which export / import / transform variables
@@ -189,6 +201,8 @@ function coupler_solve!(stepping, ics, parameters)
     Δt_cpl  = stepping.Δt_cpl
     t_start = stepping.timerange[1]
     t_end   = stepping.timerange[2]
+    nsteps_atm = stepping.nsteps_atm
+    nsteps_lnd = stepping.nsteps_lnd
 
     # init coupler fields
     coupler_F_sfc = coupler_put([0.0])
@@ -206,8 +220,8 @@ function coupler_solve!(stepping, ics, parameters)
     integ_atm = init(
                         prob_atm,
                         stepping.odesolver,
-                        dt = Δt_min,
-                        saveat = 10 * Δt_min,)
+                        dt = Δt_cpl / nsteps_atm,
+                        saveat = parameters.saveat,)
 
     # land copies of coupler variables
     T_lnd = ics.lnd
@@ -218,54 +232,48 @@ function coupler_solve!(stepping, ics, parameters)
     integ_lnd = init(
                         prob_lnd,
                         stepping.odesolver,
-                        dt = Δt_min,
-                        saveat = 10 * Δt_min,)
+                        dt = Δt_cpl / nsteps_lnd,
+                        saveat = parameters.saveat,)
 
     # coupler stepping
     for t in (t_start : Δt_cpl : t_end)
-        # integ_atm.p = (atm_parameters, atm_T_lnd)
-        # integ_atm.u.x = (T_atm_0.Yc, T_atm_0.Yf , atm_F_sfc)
 
-
-         ## Atmos
-         # pre_atmos
+        ## Atmos
+        # pre_atmos
         # coupler_get_atmosphere!(atmos_simulation, coupler)
-        #   1) get the land temperature from the coupler
-        #   2) regrid
-        #   3) reset the flux accumulator to 0
+        #   1) get the land state (e.g., temperature) from the coupler
+        #   2) reset the flux accumulator to 0
 
-         integ_atm.p[2] .= coupler_get(coupler_T_lnd) # get land temperature and set on atmosphere (Tland is prognostic)
-         integ_atm.u.x[3] .= [0.0] # surface flux to be accumulated
+        integ_atm.p[2] .= coupler_get(coupler_T_lnd) # get land temperature and set on atmosphere (Tland is prognostic)
+        integ_atm.u.x[3] .= [0.0] # surface flux to be accumulated
 
 
-         # run atmos
-         # NOTE: use (t - integ_atm.t) here instead of Δt_cpl to avoid accumulating roundoff error in our timestepping.
-         step!(integ_atm, t - integ_atm.t, true)
+        # run atmos
+        # NOTE: use (t - integ_atm.t) here instead of Δt_cpl to avoid accumulating roundoff error in our timestepping.
+        step!(integ_atm, t - integ_atm.t, true)
 
-         # post_atmos
+        # post_atmos
         # coupler_put_atmosphere!(atmos_simulation, coupler)
         #  1) compute the time-averaged flux to/from the land
-        #  2) store that in the coupler
+        #  2) regrid
+        #  3) store that in the coupler
 
         # negate sign
-         coupler_F_sfc .= - coupler_put(integ_atm.u.x[3]) / Δt_cpl
+        coupler_F_sfc .= - coupler_put(integ_atm.u.x[3]) / Δt_cpl
 
         ## Land
-        # integ_lnd.p = (lnd_parameters, atm_T_lnd)
-        # integ_atm.u.x = (T_atm_0.Yc, T_atm_0.Yf , atm_F_sfc)
 
         # pre_land
         # coupler_get_land!(land_simulation, coupler)
-        #  1) get thet time-averaged flux from the coupler
-
+        #  1) get thet time-averaged flux from the coupler and save it in the `lnd_F_sfc` parameter of `integ_lnd`
         lnd_F_sfc .= coupler_get(coupler_F_sfc)
-        #@show lnd_F_sfc
+
         # run land
         step!(integ_lnd, t - integ_lnd.t, true)
 
         # post land
         # coupler_put_land!(land_simulation, coupler)
-        #  1) 
+        #  1) store required land state (e.g., temperature) in the coupler 
         coupler_T_lnd .= coupler_put(integ_lnd.u) # update T_sfc
     end
 
@@ -273,9 +281,17 @@ function coupler_solve!(stepping, ics, parameters)
 end
 
 
-# run
+########
+# Run simulation
+########
+
 integ_atm, integ_lnd = coupler_solve!(stepping, ics, parameters)
 sol_atm, sol_lnd = integ_atm.sol, integ_lnd.sol
+
+
+########
+# Visualisation
+########
 
 ENV["GKSwstype"] = "nul"
 import Plots
@@ -291,7 +307,6 @@ mkpath(path)
 # end
 # Plots.mp4(anim, joinpath(path, "heat.mp4"), fps = 10)
 
-
 # atmos vertical profile at t=0 and t=end
 t0_ρθ = parent(sol_atm.u[1].x[1])[:,4]
 tend_ρθ = parent(sol_atm.u[end].x[1])[:,4]
@@ -304,21 +319,19 @@ Plots.png(Plots.plot([t0_ρθ tend_ρθ],z_centers, labels = ["t=0" "t=end"]), j
 Plots.png(Plots.plot([t0_u tend_u],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "u_atm_height.png"))
 Plots.png(Plots.plot([t0_v tend_v],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "v_atm_height.png"))
 
-
 # time evolution
-atm_sfc_u_t = [parent(u.x[1])[1,4] for u in sol_atm.u]
-Plots.png(Plots.plot(sol_atm.t, atm_sfc_u_t), joinpath(path, "T_atmos_surface_time.png"))
-
-lnd_sfc_u_t = [u[1] for u in sol_lnd.u]
-Plots.png(Plots.plot(sol_lnd.t, lnd_sfc_u_t), joinpath(path, "T_land_surface_time.png"))
-
-atm_sum_u_t = [sum(parent(u.x[1])[:]) for u in sol_atm.u] ./ parameters.n
+atm_sum_u_t = [sum(parent(u.x[1])[:,4]) for u in sol_atm.u] ./ parameters.n .* parameters.zmax_atm * parameters.C_p # J / m2
+lnd_sfc_u_t = [u[1] for u in sol_lnd.u] * parameters.h_s * parameters.ρ_s * parameters.c_s # J / m2
 
 v1 = lnd_sfc_u_t .- lnd_sfc_u_t[1]
 v2 = atm_sum_u_t .- atm_sum_u_t[1]
-Plots.png(Plots.plot(sol_lnd.t, [v1 v2 v1+v2], labels = ["lnd" "atm" "tot"]), joinpath(path, "heat_both_surface_time.png"))
-Plots.png(Plots.plot(sol_lnd.t, [v1+v2], labels = ["tot"]), joinpath(path, "heat_total_surface_time.png"))
+Plots.png(Plots.plot(sol_lnd.t, [v1 v2 v1+v2], labels = ["lnd" "atm" "tot"]), joinpath(path, "energy_both_surface_time.png"))
 
+# relative error
+using Statistics
+total = atm_sum_u_t + lnd_sfc_u_t
+rel_error = (total .- total[1]) / mean(total)
+Plots.png(Plots.plot(sol_lnd.t, rel_error, labels = ["tot"]), joinpath(path, "rel_error_surface_time.png"))
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath
@@ -334,8 +347,6 @@ linkfig("output/$(dirname)/heat_end.png", "Heat End Simulation")
 # TODO here
 # - integrate CouplerMachine.jl
 # - revamp for 2D 
-
-# TODO after
 # - integrate SurfaceFluxes.jl
 # - revamp for 2D 
 

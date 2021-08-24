@@ -113,7 +113,7 @@ coupled_sim = CoupledSimulation(ocean_sim, atmos_sim, land_sim, clock)
 # Run it!
 coupling_Δt = 0.01
 
-stop_time = coupling_Δt*300#60*60
+stop_time = coupling_Δt*100#60*60
 solve!(coupled_sim, coupling_Δt, stop_time)
 
 using Plots
@@ -138,20 +138,32 @@ Plots.png(Plots.plot([t0_v tend_v],z_centers, labels = ["t=0" "t=end"]), joinpat
 
 # land plots
 sol_lnd = coupled_sim.land.sol
+
 t0_θ_l = parent(sol_lnd.u[1].x[1])
 tend_θ_l = parent(sol_lnd.u[end].x[1])
 t0_ρe = parent(sol_lnd.u[1].x[3])
 tend_ρe = parent(sol_lnd.u[end].x[3])
-z_centers =  collect(1:1:length(tend_ρe))#parent(Fields.coordinate_field(center_space_atm))[:,1]
-Plots.png(Plots.plot([t0_θ_l tend_θ_l],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "Th_l_lnd_height.png"))
-Plots.png(Plots.plot([t0_ρe tend_ρe],z_centers, labels = ["t=0" "t=end"]), joinpath(path, "e_lnd_height.png"))
+#convert energy to temp
+t0_ρc_s = volumetric_heat_capacity.(t0_θ_l, parent(θ_i), Ref(msp.ρc_ds), Ref(param_set))
+t0_T = temperature_from_ρe_int.(t0_ρe, parent(θ_i),t0_ρc_s, Ref(param_set))
 
+tend_ρc_s = volumetric_heat_capacity.(tend_θ_l, parent(θ_i), Ref(msp.ρc_ds), Ref(param_set))
+tend_T = temperature_from_ρe_int.(tend_ρe, parent(θ_i),tend_ρc_s, Ref(param_set))
+z_centers =  collect(1:1:length(tend_ρe))#parent(Fields.coordinate_field(center_space_atm))[:,1]
+Plots.png(Plots.plot([t0_θ_l tend_θ_l],parent(zc), labels = ["t=0" "t=end"]), joinpath(path, "Th_l_lnd_height.png"))
+Plots.png(Plots.plot([t0_T tend_T],parent(zc), labels = ["t=0" "t=end"]), joinpath(path, "T(K)_lnd_height.png"))
 # ocean plots
 sol_ocn = coupled_sim.ocean.model
 #sol_ocn.velocities.u.data 
 tend_T = sol_ocn.tracers.T.data[1,1,:]
 z_centers =  collect(1:1:length(tend_T))
 Plots.png(Plots.plot([tend_T tend_T],z_centers, labels = ["t=end" "t=end"]), joinpath(path, "T_ocn_height.png"))
+
+#=
+simulation.output_writers[:fields] =
+    JLD2OutputWriter(model, merge(model.tracers, model.velocities), prefix = "ocean_column_model",
+                     schedule=TimeInterval(coupling_dt), force = true)
+=#
 
 # TODO
 # - add domain info, similar to aceananigans: coupled_sim.ocean.model.grid. ... 
