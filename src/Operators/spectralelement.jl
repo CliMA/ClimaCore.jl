@@ -262,7 +262,12 @@ end
     bc.f(args...)
 end
 
-Base.@propagate_inbounds function set_node!(field::Fields.SlabField2D, i, j, val)
+Base.@propagate_inbounds function set_node!(
+    field::Fields.SlabField2D,
+    i,
+    j,
+    val,
+)
     setindex!(Fields.field_values(field), val, i, j)
 end
 
