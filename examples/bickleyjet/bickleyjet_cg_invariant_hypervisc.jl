@@ -39,7 +39,8 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 const J = Fields.Field(space.local_geometry.J, space)
 
 
-function init_state(x, p)
+function init_state(local_geometry, p)
+    x = local_geometry.coordinates
     @unpack x1, x2 = x
     # set initial state
     ρ = p.ρ₀
@@ -54,23 +55,25 @@ function init_state(x, p)
     u₁′ += p.k * gaussian * cos(p.k * x1) * sin(p.k * x2)
     u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
 
+    u = Geometry.Covariant12Vector(
+        Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        local_geometry,
+    )
 
-    u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * x2)
-
     return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
+y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
-function energy(state, p)
+function energy(state, p, local_geometry)
     @unpack ρ, u = state
-    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+    return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
-    sum(state -> energy(state, parameters), y)
+    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(space)))
 end
 
 function rhs!(dydt, y, _, t)
@@ -87,15 +90,16 @@ function rhs!(dydt, y, _, t)
     # compute hyperviscosity first
     @. dydt.u =
         wgrad(sdiv(y.u)) -
-        Cartesian12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ))
 
     Spaces.weighted_dss!(dydt)
 
     @. dydt.u =
         -D₄ * (
-            wgrad(sdiv(dydt.u)) -
-            Cartesian12Vector(wcurl(Geometry.Covariant3Vector(curl(dydt.u))))
+            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            )
         )
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 
@@ -104,7 +108,7 @@ function rhs!(dydt, y, _, t)
         dydt.ρ = -wdiv(y.ρ * y.u)
         dydt.u +=
             -grad(g * y.ρ + norm(y.u)^2 / 2) +
-            Cartesian12Vector(J * (y.u × curl(y.u)))
+            Geometry.Covariant12Vector((J * (y.u × curl(y.u))))
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
     Spaces.weighted_dss!(dydt)
@@ -116,7 +120,7 @@ dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0))
+prob = ODEProblem(rhs!, y0, (0.0, 80.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -140,6 +144,7 @@ end
 Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
+
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
 function linkfig(figpath, alt = "")

@@ -152,6 +152,7 @@ Base.map(
 #Base.map(f, a::AxisTensor{Ta,N}, b::AxisTensor{Tb,N}) where {Ta,Tb,N} =
 #    map(f, promote(a,b)...)
 
+Base.zero(a::AxisTensor{T, N, A, S}) where {T, N, A, S} = zero(typeof(a))
 Base.zero(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
     AxisTensor(axes(AxisTensor{T, N, A, S}), zero(S))
 
@@ -299,10 +300,9 @@ LinearAlgebra.cross(x::ContravariantVector, y::ContravariantVector) =
 
 LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant12Vector) =
     Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
+
 LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant3Vector) =
     Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
-
-
 
 function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)

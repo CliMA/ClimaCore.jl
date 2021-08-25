@@ -42,7 +42,8 @@ const IJ = Fields.Field(Ispace.local_geometry.J, Ispace)
 
 
 
-function init_state(x, p)
+function init_state(local_geometry, p)
+    x = local_geometry.coordinates
     @unpack x1, x2 = x
     # set initial state
     ρ = p.ρ₀
@@ -58,26 +59,29 @@ function init_state(x, p)
     u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
 
 
-    u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
+    u = Geometry.Covariant12Vector(
+        Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        local_geometry,
+    )
     # set initial tracer
     θ = sin(p.k * x2)
 
     return (ρ = ρ, u = u, ρθ = ρ * θ)
 end
 
-y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
+y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
 II = Operators.Interpolate(Ispace)
 const Iyp = @. II(y0.ρ)
 const Iyu = @. II(y0.u)
 
-function energy(state, p)
+function energy(state, p, local_geometry)
     @unpack ρ, u = state
-    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+    return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
-    sum(state -> energy(state, parameters), y)
+    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(space)))
 end
 
 function rhs!(dydt, y, _, t)
@@ -98,7 +102,7 @@ function rhs!(dydt, y, _, t)
         dydt.ρ = R(-div(Iyp * Iyu))
         dydt.u = R(
             -grad(g * Iyp + norm(Iyu)^2 / 2) +
-            Cartesian12Vector(IJ * (Iyu × curl(Iyu))),
+            Geometry.Covariant12Vector(IJ * (Iyu × curl(Iyu))),
         )
         dydt.ρθ = R(-div(I(y.ρθ) * Iyu))
     end
@@ -120,7 +124,6 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )
-
 
 ENV["GKSwstype"] = "nul"
 import Plots
