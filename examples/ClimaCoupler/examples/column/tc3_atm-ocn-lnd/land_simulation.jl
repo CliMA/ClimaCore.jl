@@ -137,7 +137,7 @@ msp = SoilParams{FT}(ν,vg_n,vg_α,vg_m, Ksat, θ_r, S_s,
 #Simulation and domain info
 t0 = FT(0)
 tf = FT(60 * 60 * 72)
-dt = FT(0.01)
+dt = FT(0.02)
 
 n = 50
 
@@ -188,4 +188,13 @@ end
 land_prob = ODEProblem(∑land_tendencies!, Y, (t0, tf), p)
 algorithm = CarpenterKennedy2N54()
 
-land_simulation() = init(land_prob, algorithm, dt = dt) # dt is the land model step
+land_simulation() = init(land_prob, algorithm, dt = dt, saveat = 1 * dt) # dt is the land model step
+
+
+function  surface_temperature_from_soil(land_sim)
+    θ_l = parent(land_sim.u.x[1])
+    ρe = parent(land_sim.u.x[3])
+    #convert energy to temp
+    ρc_s = volumetric_heat_capacity.(θ_l, parent(θ_i), Ref(msp.ρc_ds), Ref(param_set))
+    tend_T = temperature_from_ρe_int.(ρe, parent(θ_i),ρc_s, Ref(param_set))
+end

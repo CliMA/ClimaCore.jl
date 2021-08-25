@@ -50,6 +50,9 @@ function ocean_simulation(; Nz = 64,  # Number of vertical grid points
                                         closure = TKEBasedVerticalDiffusivity())
     
     simulation = Oceananigans.Simulation(model, Δt=0.01, stop_iteration=1)
-
+    
+    simulation.output_writers[:fields] =
+    JLD2OutputWriter(model, merge(model.tracers, model.velocities), prefix = "ocean_column_model",
+                     schedule=TimeInterval(0.02), force = true)
     return simulation
 end

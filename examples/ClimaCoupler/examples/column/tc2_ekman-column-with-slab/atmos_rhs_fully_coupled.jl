@@ -88,7 +88,7 @@ function ∑tendencies_atm!(dY, Y, (parameters, T_sfc), t)
     gradf2c = Operators.GradientF2C(bottom = Operators.SetValue(0.0), top = Operators.SetValue(0.0))
 
     B = Operators.SetBoundaryOperator(bottom = Operators.SetValue(0.0), top = Operators.SetValue(0.0))
-    Π(ρθ) = C_p .* (R_d .* ρθ ./ MSLP).^(R_m ./ C_v)
+    Π(ρθ) = C_p .* (R_d .* ρθ ./ MSLP).^(R_m ./ C_v) ## This should be R_d/ C_p (but needs stabilising...reported to original developer)
     @. dw = B( -(If(ρθ / ρ) * gradc2f(Π(ρθ))) - grav + gradc2f(ν * gradf2c(w)) - w * If(gradf2c(w))) 
     return dY
 

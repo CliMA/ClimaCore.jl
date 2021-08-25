@@ -4,6 +4,8 @@ import SciMLBase: step!
 
 using Printf
 
+include("dummy_surface_fluxes.jl") # placeholder for SurfaceFluxes.jl
+
 include("land_simulation.jl") #refactoring of land interface to come
 include("ocean_simulation.jl")
 include("atmos_simulation.jl")
@@ -93,11 +95,23 @@ ocean_S₀ = 35  # psu, sea surface salinity
 atmos_Nz = 30  # Number of vertical grid points
 atmos_Lz = 200 # Vertical extent of domain
 
+# land domain params (need to abstract)
+# n = 50
+# zmax = FT(0)
+# zmin = FT(-1)
+land_Nz = n
+land_Lz = zmax - zmin
+
+start_time = 0.0 
+stop_time = 100#coupling_Δt*100#60*60
+
+
 land_sim = land_simulation()
-atmos_sim = atmos_simulation(land_sim, Nz=atmos_Nz, Lz=atmos_Lz)
+atmos_sim = atmos_simulation(land_sim, Nz=atmos_Nz, Lz=atmos_Lz, start_time = start_time, stop_time = stop_time,)
 
 # Build the ocean model
 ocean_sim = ocean_simulation(Nz=ocean_Nz, Lz=ocean_Lz, f=f, g=g)
+
 
 # Initialize the ocean state with a linear temperature and salinity stratification
 α = ocean_sim.model.buoyancy.model.equation_of_state.α
@@ -111,9 +125,7 @@ clock = Clock(time=0.0)
 coupled_sim = CoupledSimulation(ocean_sim, atmos_sim, land_sim, clock)
 
 # Run it!
-coupling_Δt = 0.01
-
-stop_time = coupling_Δt*100#60*60
+coupling_Δt = 0.02
 solve!(coupled_sim, coupling_Δt, stop_time)
 
 using Plots
@@ -151,7 +163,8 @@ tend_ρc_s = volumetric_heat_capacity.(tend_θ_l, parent(θ_i), Ref(msp.ρc_ds),
 tend_T = temperature_from_ρe_int.(tend_ρe, parent(θ_i),tend_ρc_s, Ref(param_set))
 z_centers =  collect(1:1:length(tend_ρe))#parent(Fields.coordinate_field(center_space_atm))[:,1]
 Plots.png(Plots.plot([t0_θ_l tend_θ_l],parent(zc), labels = ["t=0" "t=end"]), joinpath(path, "Th_l_lnd_height.png"))
-Plots.png(Plots.plot([t0_T tend_T],parent(zc), labels = ["t=0" "t=end"]), joinpath(path, "T(K)_lnd_height.png")
+Plots.png(Plots.plot([t0_T tend_T],parent(zc), labels = ["t=0" "t=end"]), joinpath(path, "T(K)_lnd_height.png"))
+
 # ocean plots
 sol_ocn = coupled_sim.ocean.model
 #sol_ocn.velocities.u.data 
@@ -159,6 +172,24 @@ tend_T = sol_ocn.tracers.T.data[1,1,:]
 z_centers =  collect(1:1:length(tend_T))
 Plots.png(Plots.plot([tend_T tend_T],z_centers, labels = ["t=end" "t=end"]), joinpath(path, "T_ocn_height.png"))
 
+#using JLD2, FileIO
+#ocean_data = load("ocean_column_model.jld2") 
+
+# time evolution of all energies TODO: add ocean - need to extract T!
+atm_sum_u_t = [sum(parent(u.x[1])[:,4]) for u in sol_atm.u] ./ atmos_Nz .* atmos_Lz * parameters.C_p # J / m2
+lnd_sfc_u_t = [sum(parent(u.x[3])[:]) for u in sol_lnd.u] ./ land_Nz .* land_Lz # J / m2
+
+v1 = lnd_sfc_u_t .- lnd_sfc_u_t[1]
+v2 = atm_sum_u_t .- atm_sum_u_t[1]
+Plots.png(Plots.plot(sol_lnd.t, [v1 v2 v1+v2], labels = ["lnd" "atm" "tot"]), joinpath(path, "energy_both_surface_time.png"))
+
+# relative error of total energy
+using Statistics
+total = atm_sum_u_t + lnd_sfc_u_t
+rel_error = (total .- total[1]) / mean(total)
+Plots.png(Plots.plot(sol_lnd.t, rel_error, labels = ["tot"]), joinpath(path, "rel_error_surface_time.png"))
+
+parent(sol_lnd.u[end].x[3])
 # TODO
 # - add domain info, similar to aceananigans: coupled_sim.ocean.model.grid. ... 
 #       - like that oceananigans model prints out basic characteristics (nel, BCs etc)

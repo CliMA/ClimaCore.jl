@@ -36,13 +36,26 @@ parameters = (
         C_p = 287.058 * 1.4 / (1.4 - 1), # heat capacity at constant pressure [J / K / kg]
         C_v = 287.058 / (1.4 - 1), # heat capacity at constant volume [J / K / kg]
         R_m = 87.058, # moist R, assumed to be dry [J / K / kg]
-        f = 5e-5, # Coriolis parameters [1/s]
-        ν = 0.01, # viscosity, diffusivity
-        Ch = 0.1, #0.0015, # bulk transfer coefficient for sensible heat
-        Cd = 0.1, #0.01 / (2e2 / 30.0), #drag coeff
+        f = 7.29e-5, # Coriolis parameters [1/s]
+        ν = 0.1, #0.01 # viscosity, diffusivity
+        Ch = 0.0015, # bulk transfer coefficient for sensible heat
+        Cd = 0.01 / (2e2 / 30.0), #drag coeff
         ug = 1.0,
         vg = 0.0,
         d = sqrt(2.0 * 0.01 / 5e-5), #?
+
+        # radiation parameters for DryBulkFormulaWithRadiation() SurfaceFluxType
+        τ    = 0.9,     # atmospheric transmissivity
+        α    = 0.5,     # surface albedo
+        σ    = 5.67e-8, # Steffan Boltzmann constant [kg / s^3 / K^4]
+        g_a  = 0.06,    # aerodynamic conductance for heat transfer [kg / m^2 / s]
+        ϵ    = 0.98,    # broadband emissivity / absorptivity of the surface
+        F_a  = 0.0,     # downward LW flux from the atmosphere [W / m^2]
+        F_sol = 1361,   # incoming solar TOA radiation [W / m^2]
+        τ_d   = 10,     # idealized daily cycle period [s]
+
+        # surface fluxes
+        λ = FT(0.01),#FT(1e-5)    # coupling transfer coefficient for LinearRelaxation() SurfaceFluxType 
     )
 
 function atmos_simulation(land_simulation;
@@ -51,11 +64,11 @@ function atmos_simulation(land_simulation;
                           minimum_reference_temperature = 230.0, # K
                           start_time = 0.0,
                           stop_time = 1.0,
-                          Δt_min  = 0.01,
+                          Δt_min  = 0.02,
                           )
 
     # Get surface temperature from the land simulation
-    land_surface_temperature = parent(land_simulation.u.x[3])[end]
+    land_surface_temperature = land_sim.p[5]
 
     ########
     # Set up atmos domain
@@ -90,7 +103,7 @@ function atmos_simulation(land_simulation;
         ρ = p / (R_d * θ * (p / MSLP)^(R_d / C_p))
     
         # velocties
-        u = 10.0
+        u = 1.0
         v = 0.0
     
         return (ρ = ρ, u = u, v = v, ρθ = ρ * θ)
@@ -111,7 +124,7 @@ function atmos_simulation(land_simulation;
     # Put all prognostic variable arrays into a vector and ensure that solve can partition them
     Y_atm = ArrayPartition((T_atm_0.Yc, T_atm_0.Yf, zeros(3)))
     prob_atm = ODEProblem(∑tendencies_atm!, Y_atm, (start_time, stop_time), (parameters, [land_surface_temperature]))
-    simulation = init(prob_atm, Euler(), dt = Δt_min, saveat = 10 * Δt_min)
+    simulation = init(prob_atm, SSPRK33(), dt = Δt_min, saveat = 1 * Δt_min)
     
     return simulation
 end

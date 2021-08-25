@@ -49,7 +49,9 @@ function ocean_simulation(; Nz = 64,  # Number of vertical grid points
                                         boundary_conditions = (T=T_bcs, S=S_bcs, u=u_bcs, v=v_bcs),
                                         closure = TKEBasedVerticalDiffusivity())
     
+    
     simulation = Oceananigans.Simulation(model, Δt=0.01, stop_iteration=1)
+
 
     return simulation
 end

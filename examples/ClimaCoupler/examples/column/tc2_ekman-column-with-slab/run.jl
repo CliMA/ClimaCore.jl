@@ -34,7 +34,7 @@ const CI = !isnothing(get(ENV, "CI", nothing))
 # general parameters
 const FT = Float64
 
-include("surface_fluxes.jl") # dummy for SurfaceFluxes.jl
+include("dummy_surface_fluxes.jl") # placeholder for SurfaceFluxes.jl
 
 
 ########
@@ -46,7 +46,7 @@ parameters = (
         Δt_min = 0.02, # minimum model timestep [s]
         timerange = (0.0, 100.0),  # start time and end time [s]
         odesolver = SSPRK33(), # timestepping method from DifferentialEquations.jl (used in both models here)
-        nsteps_atm = 4, # no. time steps of atm before coupling 
+        nsteps_atm = 1, # no. time steps of atm before coupling 
         nsteps_lnd = 1, # no. time steps of lnd before coupling 
         saveat = 0.2, # interval at which to save diagnostics [s]
 
