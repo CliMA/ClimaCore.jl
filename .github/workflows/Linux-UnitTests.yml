@@ -3,6 +3,7 @@ name: Unit Tests
 on:
   pull_request:
     paths:
+      - '.github/workflows/Linux-UnitTests.yml'
       - 'src/**'
       - 'test/**'
       - 'Project.toml'
@@ -49,10 +50,25 @@ jobs:
     - name: Install Project Packages
       run: |
         julia --color=yes --project -e 'using Pkg; Pkg.instantiate()'
-        julia --color=yes --project -e 'using Pkg; Pkg.precompile()'
+        julia --color=yes --project -e 'using Pkg; Pkg.precompile(;strict=true)'
+        julia --color=yes --project -e 'using Pkg; Pkg.status()'
+
+    - name: Project Manifest
+      run: |
+        julia --color=no --project -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
+
+    - name: Install Project Test Packages
+      run: |
+        julia --color=yes --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
+        julia --color=yes --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'
+        julia --color=yes --project=test -e 'using Pkg; Pkg.status()'
+
+    - name: Project Test Manifest
+      run: |
+        julia --color=no --project=test -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
 
     - name: Run Unit Tests
       env:
         TEST_MODULES: ${{ matrix.test-modules }}
       run: |
-        julia --color=yes --project -e 'using Pkg; Pkg.test()'
+        julia --color=yes --project=test test/runtests.jl
