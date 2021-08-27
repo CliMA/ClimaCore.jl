@@ -47,12 +47,21 @@ function ocean_simulation(; Nz = 64,  # Number of vertical grid points
                                         buoyancy = SeawaterBuoyancy(gravitational_acceleration=g, equation_of_state=eos),
                                         coriolis = FPlane(f=f),
                                         boundary_conditions = (T=T_bcs, S=S_bcs, u=u_bcs, v=v_bcs),
-                                        closure = TKEBasedVerticalDiffusivity())
+                                        closure = TKEBasedVerticalDiffusivity(),)
     
-    simulation = Oceananigans.Simulation(model, Δt=0.01, stop_iteration=1)
+    simulation = Oceananigans.Simulation(model, Δt=0.02, stop_iteration=1)
     
-    simulation.output_writers[:fields] =
-    JLD2OutputWriter(model, merge(model.tracers, model.velocities), prefix = "ocean_column_model",
-                     schedule=TimeInterval(0.02), force = true)
-    return simulation
+    # Initialize the ocean state with a linear temperature and salinity stratification
+    α = simulation.model.buoyancy.model.equation_of_state.α
+    β = simulation.model.buoyancy.model.equation_of_state.β
+    Tᵢ(x, y, z) = 16 + α * g * 5e-5 * z
+    Sᵢ(x, y, z) = 35 - β * g * 5e-5 * z
+    set!(simulation.model, T = Tᵢ, S = Sᵢ)
+
+    # collect data (needs optimising)
+    ocean_data = []
+    data = (T = deepcopy(simulation.model.tracers.T), time = simulation.model.clock.time)
+    push!(ocean_data, data)
+    
+    return simulation, ocean_data
 end

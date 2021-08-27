@@ -190,11 +190,10 @@ algorithm = CarpenterKennedy2N54()
 
 land_simulation() = init(land_prob, algorithm, dt = dt, saveat = 1 * dt) # dt is the land model step
 
-
-function  surface_temperature_from_soil(land_sim)
-    θ_l = parent(land_sim.u.x[1])
-    ρe = parent(land_sim.u.x[3])
-    #convert energy to temp
-    ρc_s = volumetric_heat_capacity.(θ_l, parent(θ_i), Ref(msp.ρc_ds), Ref(param_set))
-    tend_T = temperature_from_ρe_int.(ρe, parent(θ_i),ρc_s, Ref(param_set))
-end
+# function  surface_temperature_from_soil(land_sim)
+#     θ_l = parent(land_sim.u.x[1])
+#     ρe = parent(land_sim.u.x[3])
+#     #convert energy to temp
+#     ρc_s = volumetric_heat_capacity.(θ_l, parent(θ_i), Ref(msp.ρc_ds), Ref(param_set))
+#     tend_T = temperature_from_ρe_int.(ρe, parent(θ_i),ρc_s, Ref(param_set))
+# end
