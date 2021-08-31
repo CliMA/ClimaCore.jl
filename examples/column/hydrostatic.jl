@@ -20,16 +20,16 @@ global_logger(TerminalLogger())
 const FT = Float64
 
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacit at constant volume
-const R_m = R_d # moist R, assumed to be dry
+const MSLP = FT(1e5) # mean sea level pressure
+const grav = FT(9.8) # gravitational constant
+const R_d = FT(287.058) # R dry (gas constant / mol mass dry air)
+const γ = FT(1.4) # heat capacity ratio
+const C_p = FT(R_d * γ / (γ - 1)) # heat capacity at constant pressure
+const C_v = FT(R_d / (γ - 1)) # heat capacit at constant volume
+const R_m = FT(R_d) # moist R, assumed to be dry
 
 
-domain = Domains.IntervalDomain(0.0, 30e3, x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(FT(0.0), FT(30e3), x3boundary = (:bottom, :top))
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -38,7 +38,11 @@ fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 # https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155
 # https://clima.github.io/Thermodynamics.jl/dev/TemperatureProfiles/#DecayingTemperatureProfile
-function decaying_temperature_profile(z; T_virt_surf = 280.0, T_min_ref = 230.0)
+function decaying_temperature_profile(
+    z;
+    T_virt_surf = FT(280.0),
+    T_min_ref = FT(230.0),
+)
     # Scale height for surface temperature
     H_sfc = R_d * T_virt_surf / grav
     H_t = H_sfc
@@ -63,16 +67,9 @@ function decaying_temperature_profile(z; T_virt_surf = 280.0, T_min_ref = 230.0)
 end
 
 Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
+Φ(z) = grav * z
 
-
-function discrete_hydrostatic_balance!(
-    ρ,
-    w,
-    ρθ,
-    Δz::Float64,
-    _grav::Float64,
-    Π::Function,
-)
+function discrete_hydrostatic_balance!(ρ, w, ρθ, Δz::FT, _grav::FT, Π::Function)
     # compute θ such that
     #   I(θ)[i+1/2] = -g / ∂f(Π(ρθ))
     # discretely, then set
@@ -93,7 +90,7 @@ end
 
 zc = Fields.coordinate_field(cspace)
 Yc = decaying_temperature_profile.(zc)
-w = zeros(Float64, fspace)
+w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
 w_init = copy(w)
@@ -105,22 +102,23 @@ function tendency!(dY, Y, _, t)
     (dYc, dw) = dY.x
 
     If = Operators.InterpolateC2F()
-
-    ∂c = Operators.GradientF2C(
-        bottom = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
-        top = Operators.SetValue((ρ = 0.0, ρθ = 0.0)),
+    ∂ = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
     )
-
     ∂f = Operators.GradientC2F()
-
     B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
+        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
     )
 
-    @. dYc = -(∂c(w * If(Yc)))
-    @. dw = B(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - grav)
-
+    @. dYc.ρ = -(∂(w * If(Yc.ρ)))
+    @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
+    @. dw = B(
+        Geometry.CartesianVector(
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+        ),
+    )
     return dY
 end
 

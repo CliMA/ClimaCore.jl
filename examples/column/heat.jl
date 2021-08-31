@@ -36,12 +36,12 @@ T = Fields.zeros(FT, cs)
 function ∑tendencies!(dT, T, _, t)
 
     bcs_bottom = Operators.SetValue(FT(0.0))
-    bcs_top = Operators.SetGradient(FT(1.0))
+    bcs_top = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1.0)))
 
     gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
-    gradf2c = Operators.GradientF2C()
+    divf2c = Operators.DivergenceF2C()
 
-    return @. dT = α * gradf2c(gradc2f(T))
+    return @. dT = α * divf2c(gradc2f(T))
 end
 
 @show ∑tendencies!(similar(T), T, nothing, 0.0);

@@ -59,7 +59,7 @@ end
 
 zc = Fields.coordinate_field(cspace)
 Yc = adiabatic_temperature_profile.(zc)
-w = zeros(Float64, fspace)
+w = Geometry.Cartesian3Vector.(zeros(Float64, fspace))
 
 Y_init = copy(Yc)
 w_init = copy(w)
@@ -87,18 +87,20 @@ function tendency!(dY, Y, _, t)
     )
 
     # u-momentum
-    bcs_bottom = Operators.SetValue(Cd * u_wind * u_1)  # Eq. 4.16
+    bcs_bottom =
+        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind * u_1))  # Eq. 4.16
     bcs_top = Operators.SetValue(FT(ug))  # Eq. 4.18
     gradc2f = Operators.GradientC2F(top = bcs_top)
-    gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
-    @. du = gradf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)   # Eq. 4.8
+    divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
+    @. du = divf2c(ν * gradc2f(u)) + f * (v - vg) - A(w, u)   # Eq. 4.8
 
     # v-momentum
-    bcs_bottom = Operators.SetValue(Cd * u_wind * v_1)  # Eq. 4.17
+    bcs_bottom =
+        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind * v_1))  # Eq. 4.17
     bcs_top = Operators.SetValue(FT(vg))  # Eq. 4.19
     gradc2f = Operators.GradientC2F(top = bcs_top)
-    gradf2c = Operators.GradientF2C(bottom = bcs_bottom)
-    @. dv = gradf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)   # Eq. 4.9
+    divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
+    @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)   # Eq. 4.9
 
 
     return dY
