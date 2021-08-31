@@ -224,6 +224,19 @@ end
         @test length(V[1]) == 1
         @test collect(V[1]) == [(1, 1)]
     end
+
+    @testset "2×3 element quad mesh with periodic boundaries" begin
+        _, _, grid_topology = rectangular_grid(2, 3, true, true)
+        @test length(Topologies.vertices(grid_topology)) == 2 * 3
+        V = collect(Topologies.vertices(grid_topology))
+        @test length(V) == 6
+        @test collect(V[1]) == [(1, 1), (2, 2), (5, 3), (6, 4)]
+        @test collect(V[2]) == [(2, 1), (1, 2), (6, 3), (5, 4)]
+        @test collect(V[3]) == [(3, 1), (4, 2), (1, 3), (2, 4)]
+        @test collect(V[4]) == [(4, 1), (3, 2), (2, 3), (1, 4)]
+        @test collect(V[5]) == [(5, 1), (6, 2), (3, 3), (4, 4)]
+        @test collect(V[6]) == [(6, 1), (5, 2), (4, 3), (3, 4)]
+    end
 end
 
 @testset "simple rectangular grid coordinates" begin
