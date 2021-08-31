@@ -79,8 +79,8 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-slab(field::Field, h) =
-    Field(slab(field_values(field), h), slab(axes(field), h))
+slab(field::Field, inds...) =
+    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}

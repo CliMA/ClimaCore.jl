@@ -6,8 +6,10 @@ A "pancake" view into an underlying
 data layout `data` at location `h`.
 """
 function slab end
-
+#=
 # TODO: this could cause problems when it fails...
+#slab(x::Number, inds...) = x
+=#
 slab(x, inds...) = x
 slab(tup::Tuple, inds...) = map(x -> slab(x, inds...), tup)
 

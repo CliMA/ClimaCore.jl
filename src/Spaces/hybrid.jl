@@ -48,8 +48,12 @@ quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
 
 topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 
+slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
+    slab(space.horizontal_space, v, h)
+
 nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
     size(space.center_local_geometry, 4)
+
 nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
     size(space.face_local_geometry, 4)
 
@@ -72,7 +76,6 @@ function blockmat(
         SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
     )
 end
-
 
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
