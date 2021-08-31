@@ -12,7 +12,7 @@ domain = Domains.RectangleDomain(
     x1periodic = true,
     x2periodic = true,
 )
-mesh = Meshes.EquispacedRectangleMesh(domain, 16, 16)
+mesh = Meshes.EquispacedRectangleMesh(domain, 17, 16)
 grid_topology = Topologies.GridTopology(mesh)
 
 Nq = 5
