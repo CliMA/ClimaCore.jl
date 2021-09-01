@@ -1,3 +1,5 @@
+abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
+
 abstract type Staggering end
 
 """ Cell center location """
@@ -7,7 +9,7 @@ struct CellCenter <: Staggering end
 struct CellFace <: Staggering end
 
 struct FiniteDifferenceSpace{S <: Staggering, M <: Meshes.IntervalMesh, G} <:
-       AbstractSpace
+       AbstractFiniteDifferenceSpace
     staggering::S
     mesh::M
     center_local_geometry::G
@@ -126,9 +128,9 @@ nlevels(space::FiniteDifferenceSpace) = length(space)
 
 local_geometry_data(space::CenterFiniteDifferenceSpace) =
     space.center_local_geometry
+
 local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
-
 
 left_boundary_name(space::FiniteDifferenceSpace) =
     propertynames(space.mesh.boundaries)[1]

@@ -2,29 +2,49 @@
 ##### Hybrid mesh
 #####
 
-struct ExtrudedFiniteDifferenceSpace{S <: Staggering, H <: AbstractSpace, G} <:
-       AbstractSpace
+struct ExtrudedFiniteDifferenceSpace{
+    S <: Staggering,
+    H <: AbstractSpace,
+    M,
+    G,
+} <: AbstractSpace
     staggering::S
     horizontal_space::H
+    vertical_mesh::M
     center_local_geometry::G
     face_local_geometry::G
 end
 
 const CenterExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellCenter}
+
 const FaceExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellFace}
 
+function ExtrudedFiniteDifferenceSpace{S}(
+    space::ExtrudedFiniteDifferenceSpace,
+) where {S <: Staggering}
+    ExtrudedFiniteDifferenceSpace(
+        S(),
+        space.horizontal_space,
+        space.vertical_mesh,
+        space.center_local_geometry,
+        space.face_local_geometry,
+    )
+end
+
 local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_local_geometry
+
 local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.center_local_geometry
+    space.face_local_geometry
 
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_space::V,
 ) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
     staggering = vertical_space.staggering
+    vertical_mesh = vertical_space.mesh
     center_local_geometry =
         product_geometry.(
             horizontal_space.local_geometry,
@@ -38,10 +58,12 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(
         staggering,
         horizontal_space,
+        vertical_mesh,
         center_local_geometry,
         face_local_geometry,
     )
 end
+
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
@@ -51,11 +73,24 @@ topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
     slab(space.horizontal_space, v, h)
 
+column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
+    space.staggering,
+    space.vertical_mesh,
+    column(space.center_local_geometry, i, j, h),
+    column(space.face_local_geometry, i, j, h),
+)
+
 nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
     size(space.center_local_geometry, 4)
 
 nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
     size(space.face_local_geometry, 4)
+
+left_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
+    propertynames(space.vertical_mesh.boundaries)[1]
+
+right_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
+    propertynames(space.vertical_mesh.boundaries)[2]
 
 function blockmat(
     a::Geometry.Axis2Tensor{

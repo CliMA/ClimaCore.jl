@@ -563,6 +563,10 @@ end
     set_struct!(view(parent(data), v, :), convert(S, val))
 end
 
+column(data::VF, i, h) = data
+column(data::VF, i, j, h) = column(data, i, h)
+
+
 # combined 1D spectral element + extruded 1D FV column data layout
 
 struct VIFH{S, Ni, A} <: Data1DX{S, Ni}
@@ -616,6 +620,7 @@ end
 function column(data::VIFH{S}, i, h) where {S}
     VF{S}(view(parent(data), :, i, :, h))
 end
+column(data::VIFH{S}, i, j, h) where {S} = column(data, i, h)
 
 @propagate_inbounds function Base.getindex(col::VIFH, I::CartesianIndex)
     col[I[1], I[4]]
