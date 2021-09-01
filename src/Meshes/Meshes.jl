@@ -1,6 +1,5 @@
 module Meshes
 
-using Base: Bool
 export EquispacedRectangleMesh
 export TensorProductMesh
 

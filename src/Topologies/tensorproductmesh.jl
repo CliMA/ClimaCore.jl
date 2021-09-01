@@ -169,8 +169,8 @@ function boundary_tag(topology::TensorProductTopology, name::Symbol)
         x1boundary[2] == name && return 2
     end
     if !isnothing(x2boundary)
-        x1boundary[1] == name && return 3
-        x1boundary[2] == name && return 4
+        x2boundary[1] == name && return 3
+        x2boundary[2] == name && return 4
     end
     error("Invalid boundary name")
 end
