@@ -1,6 +1,6 @@
 module Meshes
 using DocStringExtensions
-export EquispacedRectangleMesh
+export EquispacedRectangleMesh, rectangular_mesh, cube_panel_mesh
 
 import ..Domains: IntervalDomain, RectangleDomain, SphereDomain
 
@@ -167,61 +167,63 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I, IA1D, IA2D, FT, FTA2D} <: AbstractMesh{FT}
+struct Mesh2D{I,IA1D,IA2D,FT,FTA2D} <: AbstractMesh{FT}
     "# of unique nodes in the mesh"
-    nnodes::I
+    nverts::I
     "# of unique faces in the mesh"
     nfaces::I
     "# of elements in the mesh"
     nelems::I
     "# of zones in the mesh"
     nbndry::I
-    "x₁, x₂, ... coordinates of nodes `(nnodes, dim)`, dim can be greater than 2 for 2D manifolds embedded in higher dimensional space"
+    "x₁, x₂, ... coordinates of nodes `(nverts, dim)`, dim can be greater than 2 for 2D manifolds embedded in higher dimensional space"
     coordinates::FTA2D
     "face node numbers `(nfaces, 2)`"
-    face_nodes::IA2D
+    face_verts::IA2D
     "boundary elems for each face `(nfaces, 2)`"
-    face_neigh::IA2D
+    face_neighbors::IA2D
     "face zones for each face `(nfaces, 1)`"
     face_bndry::IA1D
     "node numbers for each elem `(nelems, 4)`"
-    elem_nodes::IA2D
+    elem_verts::IA2D
     "face numbers for each elem `(nelems, 4)`"
     elem_faces::IA2D
 end
 
 function Mesh2D(
-    nnodes,
+    nverts,
     nfaces,
     nelems,
     nbndry,
     coordinates,
-    face_nodes,
-    face_neigh,
+    face_verts,
+    face_neighbors,
     face_bndry,
-    elem_nodes,
+    elem_verts,
     elem_faces,
 )
 
     return Mesh2D{
-        eltype(nnodes),
+        eltype(nverts),
         typeof(face_bndry),
-        typeof(face_nodes),
+        typeof(face_verts),
         eltype(coordinates),
         typeof(coordinates),
     }(
-        nnodes,
+        nverts,
         nfaces,
         nelems,
         nbndry,
         coordinates,
-        face_nodes,
-        face_neigh,
+        face_verts,
+        face_neighbors,
         face_bndry,
-        elem_nodes,
+        elem_verts,
         elem_faces,
     )
 end
 
+include("BoxMesh.jl")
+include("CubedSphereMesh.jl")
 
 end # module

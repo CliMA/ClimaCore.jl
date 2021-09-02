@@ -1,9 +1,8 @@
-module BoxMesh
+"""
+    rectangular_mesh(x1c, x2c, per = (false, false))
 
-using ..Mesh
-
-export rectangular_mesh
-
+This function builds a 2D rectangular mesh with points located at x1c and x2c in x1 and x2 directions respectively.
+"""
 function rectangular_mesh(x1c, x2c, per = (false, false))
     FT = eltype(x1c)
     I = Int
@@ -11,14 +10,14 @@ function rectangular_mesh(x1c, x2c, per = (false, false))
     nx1, nx2 = length(x1c), length(x2c)
     nel1, nel2 = nx1-1, nx2-1
 
-    nnodes = nx1 * nx2
+    nverts = nx1 * nx2
     nfaces = nx1 * (nx2 - 1) + (nx1 - 1) * nx2
     nelems = (nx1 - 1) * (nx2 - 1)
     nbndry = 4
 
     nfc1 = nx1 * (nx2 - 1) # faces with normals along x1 direction 
 
-    ndmat = reshape(1:nnodes, nx1, nx2)
+    ndmat = reshape(1:nverts, nx1, nx2)
 
     fcmat1 = reshape(1:nfc1, nx1, nx2-1)        # faces with normals along x1 direction
     fcmat2 = reshape(nfc1+1:nfaces, nx1-1, nx2) # faces with normals along x2 direction
@@ -27,7 +26,7 @@ function rectangular_mesh(x1c, x2c, per = (false, false))
 
     coordinates = [repeat(x1c, 1, nx2)[:] repeat(x2c', nx1, 1)[:]] # node coordinates
 
-    face_nodes = hcat(vcat(ndmat[:, 1:nx2-1][:], ndmat[1:nx1-1, :][:]), # face nodes
+    face_verts = hcat(vcat(ndmat[:, 1:nx2-1][:], ndmat[1:nx1-1, :][:]), # face nodes
                       vcat(ndmat[:, 2:nx2][:],   ndmat[2:nx1, :][:]),
                      )
 
@@ -52,13 +51,13 @@ function rectangular_mesh(x1c, x2c, per = (false, false))
         face_bndry[fcmat2[  :, end]] .= 4  # top boundary
     end
 
-    face_neigh = hcat(vcat(vcat(bdy1, emat)[:],
+    face_neighbors = hcat(vcat(vcat(bdy1, emat)[:],
                            hcat(bdy3, emat)[:]),
                       vcat(vcat(emat, bdy2)[:],
                            hcat(emat, bdy4)[:]),
                      )
 
-    elem_nodes = hcat(ndmat[1:nx1-1, 1:nx2-1][:], # node numbers
+    elem_verts = hcat(ndmat[1:nx1-1, 1:nx2-1][:], # node numbers
                       ndmat[2:nx1,   1:nx2-1][:], # for each element
                       ndmat[1:nx1-1, 2:nx2][:],
                       ndmat[2:nx1,   2:nx2][:],
@@ -70,17 +69,15 @@ function rectangular_mesh(x1c, x2c, per = (false, false))
                      )
 
     return Mesh2D(
-        nnodes,
+        nverts,
         nfaces,
         nelems,
         nbndry,
         coordinates,
-        face_nodes,
-        face_neigh,
+        face_verts,
+        face_neighbors,
         face_bndry,
-        elem_nodes,
+        elem_verts,
         elem_faces,
     )
-end
-
 end
