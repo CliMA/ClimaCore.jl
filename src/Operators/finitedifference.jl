@@ -321,6 +321,11 @@ InterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
 return_space(::InterpolateF2C, space::Spaces.FaceFiniteDifferenceSpace) =
     Spaces.CenterFiniteDifferenceSpace(space)
 
+return_space(
+    ::InterpolateF2C,
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+
 stencil_interior_width(::InterpolateF2C) = ((-half, half),)
 
 function stencil_interior(::InterpolateF2C, loc, idx, arg)
@@ -345,6 +350,11 @@ InterpolateC2F(; kwargs...) = InterpolateC2F(NamedTuple(kwargs))
 
 return_space(::InterpolateC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
+
+return_space(
+    ::InterpolateC2F,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::InterpolateC2F) = ((-half, half),)
 
@@ -432,6 +442,14 @@ function return_space(
     Spaces.CenterFiniteDifferenceSpace(value_space)
 end
 
+function return_space(
+    ::WeightedInterpolateF2C,
+    weight_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    value_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+)
+    Spaces.CenterExtrudedFiniteDifferenceSpace(value_space)
+end
+
 stencil_interior_width(::WeightedInterpolateF2C) = ((0, 0), (-half, half))
 
 function stencil_interior(
@@ -474,6 +492,14 @@ function return_space(
     value_space::Spaces.CenterFiniteDifferenceSpace,
 )
     Spaces.FaceFiniteDifferenceSpace(value_space)
+end
+
+function return_space(
+    ::WeightedInterpolateC2F,
+    weight_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    value_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+)
+    Spaces.FaceExtrudedFiniteDifferenceSpace(value_space)
 end
 
 stencil_interior_width(::WeightedInterpolateC2F) = ((0, 0), (0, 1))
@@ -593,6 +619,11 @@ LeftBiasedC2F(; kwargs...) = LeftBiasedC2F(NamedTuple(kwargs))
 return_space(::LeftBiasedC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
 
+return_space(
+    ::LeftBiasedC2F,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+
 stencil_interior_width(::LeftBiasedC2F) = ((-half, -half),)
 
 stencil_interior(::LeftBiasedC2F, loc, idx, arg) = getidx(arg, loc, idx - half)
@@ -618,6 +649,11 @@ RightBiasedC2F(; kwargs...) = RightBiasedC2F(NamedTuple(kwargs))
 return_space(::RightBiasedC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
 
+return_space(
+    ::RightBiasedC2F,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+
 stencil_interior_width(::RightBiasedC2F) = ((half, half),)
 
 stencil_interior(::RightBiasedC2F, loc, idx, arg) = getidx(arg, loc, idx + half)
@@ -642,12 +678,22 @@ struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
 UpwindBiasedProductC2F(; kwargs...) = UpwindBiasedProductC2F(NamedTuple(kwargs))
+
 return_eltype(::UpwindBiasedProductC2F, V, A) =
     Geometry.Contravariant3Vector{eltype(eltype(V))}
+
 function return_space(
     ::UpwindBiasedProductC2F,
     velocity_space::Spaces.FaceFiniteDifferenceSpace,
     field_space::Spaces.CenterFiniteDifferenceSpace,
+)
+    velocity_space
+end
+
+function return_space(
+    ::UpwindBiasedProductC2F,
+    velocity_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    field_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 )
     velocity_space
 end
@@ -764,6 +810,14 @@ function return_space(
     field_space
 end
 
+function return_space(
+    ::AdvectionF2F,
+    velocity_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    field_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+)
+    field_space
+end
+
 function stencil_interior(::AdvectionF2F, loc, idx, velocity_field, value_field)
     space = axes(value_field)
     θ⁺ = getidx(value_field, loc, idx + 1)
@@ -803,6 +857,15 @@ function return_space(
 )
     field_space
 end
+
+function return_space(
+    ::AdvectionC2C,
+    velocity_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    field_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+)
+    field_space
+end
+
 
 function stencil_interior(::AdvectionC2C, loc, idx, velocity_field, value_field)
     space = axes(value_field)
@@ -935,6 +998,11 @@ SetBoundaryOperator(; kwargs...) = SetBoundaryOperator(NamedTuple(kwargs))
 return_space(::SetBoundaryOperator, space::Spaces.FaceFiniteDifferenceSpace) =
     space
 
+return_space(
+    ::SetBoundaryOperator,
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+) = space
+
 stencil_interior_width(::SetBoundaryOperator) = ((0, 0),)
 
 function stencil_interior(::SetBoundaryOperator, loc, idx, arg)
@@ -989,6 +1057,9 @@ GradientF2C(; kwargs...) = GradientF2C(NamedTuple(kwargs))
 return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
     Spaces.CenterFiniteDifferenceSpace(space)
 
+return_space(::GradientF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
+    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+
 stencil_interior_width(::GradientF2C) = ((-half, half),)
 
 function stencil_interior(::GradientF2C, loc, idx, arg)
@@ -1036,6 +1107,9 @@ GradientC2F(; kwargs...) = GradientC2F(NamedTuple(kwargs))
 
 return_space(::GradientC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
+
+return_space(::GradientC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
+    Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::GradientC2F) = ((-half, half),)
 
@@ -1094,6 +1168,9 @@ DivergenceF2C(; kwargs...) = DivergenceF2C(NamedTuple(kwargs))
 
 return_space(::DivergenceF2C, space::Spaces.FaceFiniteDifferenceSpace) =
     Spaces.CenterFiniteDifferenceSpace(space)
+
+return_space(::DivergenceF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
+    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::DivergenceF2C) = ((-half, half),)
 
@@ -1167,6 +1244,11 @@ DivergenceC2F(; kwargs...) = DivergenceC2F(NamedTuple(kwargs))
 
 return_space(::DivergenceC2F, space::Spaces.CenterFiniteDifferenceSpace) =
     Spaces.FaceFiniteDifferenceSpace(space)
+
+return_space(
+    ::DivergenceC2F,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::DivergenceC2F) = ((-half, half),)
 
@@ -1380,12 +1462,9 @@ getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
 
 getidx(scalar, ::Location, idx) = scalar
 
-function getidx(
-    bc::Base.Broadcast.Broadcasted{FS},
-    loc::Location,
-    idx,
-) where {FS <: Fields.AbstractFieldStyle}
-    bc.f(map(arg -> getidx(arg, loc, idx), bc.args)...)
+function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
+    args = map(arg -> getidx(arg, loc, idx), bc.args)
+    bc.f(args...)
 end
 
 function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
@@ -1435,6 +1514,15 @@ Base.Broadcast._broadcast_getindex_eltype(
     )
 end
 
+function column(
+    bc::Base.Broadcast.Broadcasted{Style},
+    inds...,
+) where {Style <: AbstractStencilStyle}
+    _args = map(a -> column(a, inds...), bc.args)
+    _axes = column(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+end
+
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{S},
     ::Type{Eltype},
@@ -1447,10 +1535,16 @@ function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
 ) where {S <: AbstractStencilStyle}
-    apply_stencil!(field_out, bc)
+    space = axes(bc)
+    local_geometry = Spaces.local_geometry_data(space)
+    (Ni, Nj, _, _, Nh) = size(local_geometry)
+    for h in 1:Nh, j in 1:Nj, i in 1:Ni
+        column_field_out = column(field_out, i, j, h)
+        column_bc = column(bc, i, j, h)
+        apply_stencil!(column_field_out, column_bc)
+    end
     return field_out
 end
-
 
 function apply_stencil!(field_out, bc)
     space = axes(bc)
