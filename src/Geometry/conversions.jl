@@ -5,9 +5,11 @@
 ) where {A} = (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(u)
 =#
 
-Cartesian3Vector(w::Real, ::LocalGeometry) = Cartesian3Vector(w)
-Covariant3Vector(w₃::Real, ::LocalGeometry) = Covariant3Vector(w₃)
-Contravariant3Vector(w³::Real, ::LocalGeometry) = Contravariant3Vector(w³)
+
+(AxisVector{T, A, SVector{1, T}} where {T})(
+    a::Real,
+    ::LocalGeometry,
+) where {A} = AxisVector(A.instance, SVector(a))
 
 ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
 ContravariantVector(u::CartesianVector, local_geometry::LocalGeometry) =

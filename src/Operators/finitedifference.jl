@@ -839,7 +839,7 @@ Advection operator at cell centers, for cell face velocity field `v` cell center
     op = Advection(...)
     center_field .= op(v, θ)
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
+- [`SetValue(val)`](@ref): set the value of `θ` at the boundary face to be `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 """
 struct AdvectionC2C{BCS} <: AdvectionOperator
