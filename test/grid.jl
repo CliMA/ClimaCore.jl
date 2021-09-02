@@ -19,7 +19,7 @@ function rectangular_grid(
         x2min..x2max,
         x1periodic = x1periodic,
         x2periodic = x2periodic,
-        x1boundary = x1periodic ? nothing : (:east, :west),
+        x1boundary = x1periodic ? nothing : (:west, :east),
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
@@ -29,7 +29,7 @@ end
 
 @testset "simple rectangular grid opposing face" begin
 
-    @testset "assert coorect element numbering" begin
+    @testset "assert correct element numbering" begin
         _, _, grid_topology = rectangular_grid(1, 1, true, true)
         @test_throws AssertionError Topologies.opposing_face(
             grid_topology,
@@ -63,8 +63,8 @@ end
         @test Topologies.opposing_face(grid_topology, 1, 2) == (1, 1, false)
         @test Topologies.opposing_face(grid_topology, 1, 3) == (1, 4, false)
         @test Topologies.opposing_face(grid_topology, 1, 4) == (1, 3, false)
-
     end
+
     @testset "1×1 element quad mesh with 1 periodic boundary" begin
         _, _, grid_topology = rectangular_grid(1, 1, true, false)
         @test Topologies.opposing_face(grid_topology, 1, 1) == (1, 2, false)
@@ -72,6 +72,7 @@ end
         @test Topologies.opposing_face(grid_topology, 1, 3) == (0, 3, false)
         @test Topologies.opposing_face(grid_topology, 1, 4) == (0, 4, false)
     end
+
     @testset "1×1 element quad mesh with non-periodic boundaries" begin
         _, _, grid_topology = rectangular_grid(1, 1, false, false)
         @test Topologies.opposing_face(grid_topology, 1, 1) == (0, 1, false)
@@ -79,6 +80,7 @@ end
         @test Topologies.opposing_face(grid_topology, 1, 3) == (0, 3, false)
         @test Topologies.opposing_face(grid_topology, 1, 4) == (0, 4, false)
     end
+
     @testset "2×2 element quad mesh with non-periodic boundaries" begin
         _, _, grid_topology = rectangular_grid(2, 2, false, false)
         @test Topologies.opposing_face(grid_topology, 1, 1) == (0, 1, false)
@@ -156,6 +158,10 @@ end
         @test collect(Topologies.boundary_faces(grid_topology, 2)) == [(1, 2)]
         @test collect(Topologies.boundary_faces(grid_topology, 3)) == [(1, 3)]
         @test collect(Topologies.boundary_faces(grid_topology, 4)) == [(1, 4)]
+        @test Topologies.boundary_tag(grid_topology, :west) == 1
+        @test Topologies.boundary_tag(grid_topology, :east) == 2
+        @test Topologies.boundary_tag(grid_topology, :south) == 3
+        @test Topologies.boundary_tag(grid_topology, :north) == 4
     end
     @testset "2×3 element quad mesh with non-periodic boundaries" begin
         _, _, grid_topology = rectangular_grid(2, 3, false, false)

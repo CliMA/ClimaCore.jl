@@ -28,3 +28,4 @@ docs/site/
 *.gif
 *.mp4
 *.png
+examples/column/output/hydrostatic_implicit/.DS_Store
