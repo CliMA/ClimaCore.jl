@@ -42,10 +42,11 @@ end
 
 function slab(
     bc::Base.Broadcast.Broadcasted{Style},
+    v,
     h,
 ) where {Style <: AbstractFieldStyle}
-    _args = map(a -> slab(a, h), bc.args)
-    _axes = slab(axes(bc), h)
+    _args = map(a -> slab(a, v, h), bc.args)
+    _axes = slab(axes(bc), v, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 

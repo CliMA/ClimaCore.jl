@@ -96,6 +96,8 @@ function SpectralElementSpace1D(topology, quadrature_style)
     )
 end
 
+nlevels(space::SpectralElementSpace1D) = 1
+
 """
     SpectralElementSpace2D <: AbstractSpace
 
@@ -256,6 +258,8 @@ function SpectralElementSpace2D(topology, quadrature_style)
     )
 end
 
+nlevels(space::SpectralElementSpace2D) = 1
+
 function compute_surface_geometry(
     local_geometry_slab,
     quad_weights,
@@ -305,9 +309,12 @@ const SpectralElementSpaceSlab1D =
 const SpectralElementSpaceSlab2D =
     SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab2D}
 
-function slab(space::AbstractSpectralElementSpace, h)
+nlevels(space::SpectralElementSpaceSlab1D) = 1
+nlevels(space::SpectralElementSpaceSlab2D) = 1
+
+function slab(space::AbstractSpectralElementSpace, v, h)
     SpectralElementSpaceSlab(
         space.quadrature_style,
-        slab(space.local_geometry, h),
+        slab(space.local_geometry, v, h),
     )
 end
