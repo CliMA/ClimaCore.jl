@@ -72,6 +72,16 @@ contravariant1(
     A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
     local_geometry::LocalGeometry,
 ) = (local_geometry.∂ξ∂x * A)[1, :]
+
+
+contravariant1(
+    A::Axis2Tensor{<:Any, Tuple{Cartesian1Axis, Cartesian1Axis}},
+    local_geometry::LocalGeometry,
+) = (local_geometry.∂ξ∂x * A)[1, :]
+contravariant1(
+    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
+    local_geometry::LocalGeometry,
+) = (local_geometry.∂ξ∂x * A)[1, :]
 contravariant2(
     A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
     local_geometry::LocalGeometry,

@@ -478,11 +478,15 @@ struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
-operator_return_eltype(::Gradient{(1,)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.Covariant1Vector{T}, S)
+operator_return_eltype(::Gradient{(1,)}, ::Type{T}) where {T<:Number} =
+    Geometry.Covariant1Vector{T}
+operator_return_eltype(::Gradient{(1,2)}, ::Type{T}) where {T<:Number} =
+    Geometry.Covariant12Vector{T}
+operator_return_eltype(::Gradient{(1,)}, ::Type{V}) where {V<:AxisVector{T, A, SVector{N, T}}} where {T,A,N} =
+    Geometry.Axis2Tensor{T,Tuple{Geometry.Covariant1Axis,A},SMatrix{1,N,T,N}}
 
-operator_return_eltype(::Gradient{(1, 2)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.Covariant12Vector{T}, S)
+operator_return_eltype(grad::Gradient, S) where {I} =
+    RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
 
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
@@ -852,7 +856,7 @@ function apply_slab(
     slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
-        # we do this to remove one allocated intermediate array 
+        # we do this to remove one allocated intermediate array
         r = Imat[i, 1] ⊠ get_node(slab_data, 1, j)
         for ii in 2:Nq_in
             r = RecursiveApply.rmuladd(
