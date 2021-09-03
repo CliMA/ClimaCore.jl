@@ -59,15 +59,13 @@ function rhs!(dY, Y, _, t)
     dh = dY.h
 
     # vertical advection
-    # TODO! Should be written as divergence to be consistent
-    vadv = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(0.0),
-        top = Operators.SetValue(0.0),
+    Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
+    divf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.Cartesian13Vector(0.0, 0.0)),
     )
-    @. dh = -vadv(w, h)
+    @. dh = -divf2c(w * Ic2f(h))
 
     # horizontal advection
-    # Also should need: ∇ₕ ⋅(uₕh) =  uₕ⋅∇ₕh + h(∇ₕ⋅uₕ) -> @. dot(uₕ, ∇ₕ(h))
     hdiv = Operators.Divergence()
     @. dh -= hdiv(h * uₕ)
     Spaces.weighted_dss!(dh)
@@ -86,14 +84,14 @@ Y = Fields.FieldVector(h = h)
 using OrdinaryDiffEq
 Δt = 0.01
 prob = ODEProblem(rhs!, Y, (0.0, 1.0))
-sol = solve(prob, SSPRK33(), dt = Δt);
+sol = solve(prob, SSPRK33(), dt = Δt, saveat = 0.05);
 
 # post-processing
 using Plots
 Plots.png(Plots.plot(sol.u[1].h), "initial.png")
 Plots.png(Plots.plot(sol.u[end].h), "final.png")
 
-# anim = Plots.@animate for u in sol.u
-#     Plots.plot(u.h, clim = (-1, 1))
-# end
-# Plots.mp4(anim, "movie.mp4", fps = 10)
+anim = Plots.@animate for u in sol.u
+    Plots.plot(u.h, clim = (0, 1))
+end
+Plots.mp4(anim, "movie.mp4", fps = 10)

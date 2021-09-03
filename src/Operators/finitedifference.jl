@@ -839,6 +839,10 @@ Advection operator at cell centers, for cell face velocity field `v` cell center
     op = Advection(...)
     center_field .= op(v, θ)
 
+It uses the following stencil
+```math
+A(v,θ)[i] = \\frac{1}{2} \\{ (θ[i+1] - θ[i]) v³[i+\\tfrac{1}{2}] + (θ[i] - θ[i-1])v³[i-\\tfrac{1}{2}]\\}
+```
 - [`SetValue(val)`](@ref): set the value of `θ` at the boundary face to be `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 """

@@ -15,6 +15,12 @@ UpwindLeftC2F
 SetBoundaryOperator
 ```
 
+### Advection operators
+
+```@docs
+AdvectionC2C
+```
+
 ### Gradient operators
 
 ```@docs
