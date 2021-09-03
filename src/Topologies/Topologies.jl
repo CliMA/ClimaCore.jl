@@ -20,7 +20,8 @@ module Topologies
 
 import ..Geometry
 import ..Domains: Domains, coordinate_type
-import ..Meshes: Meshes, EquispacedRectangleMesh, TensorProductMesh
+import ..Meshes:
+    Meshes, AbstractMesh, EquispacedRectangleMesh, TensorProductMesh
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
@@ -165,8 +166,8 @@ struct Vertex{T <: AbstractTopology, V}
     num::V
 end
 
+
 # implementations
-include("grid.jl")
-include("tensorproductmesh.jl")
+include("grids.jl")
 
 end # module

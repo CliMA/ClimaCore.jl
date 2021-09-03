@@ -46,7 +46,7 @@ function regular_tensorproduct_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.TensorProductMesh(domain, n1, n2)
-    r_ts_topology = Topologies.TensorProductTopology(mesh)
+    r_ts_topology = Topologies.GridTopology(mesh)
     return (domain, mesh, r_ts_topology)
 end
 
@@ -97,7 +97,7 @@ function irregular_tensorproduct_grid(
         end
     end
     ts_mesh = Meshes.TensorProductMesh(domain, n1, n2, coordinates)
-    i_ts_topology = Topologies.TensorProductTopology(ts_mesh)
+    i_ts_topology = Topologies.GridTopology(ts_mesh)
     return (domain, ts_mesh, i_ts_topology)
 end
 

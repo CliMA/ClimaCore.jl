@@ -22,7 +22,7 @@ grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 grid_coords = Geometry.Cartesian2DPoint.(Fields.coordinate_field(grid_space))
 
 ts_mesh = Meshes.TensorProductMesh(domain, 17, 16)
-ts_topology = Topologies.TensorProductTopology(ts_mesh)
+ts_topology = Topologies.GridTopology(ts_mesh)
 ts_space = Spaces.SpectralElementSpace2D(ts_topology, quad)
 ts_coords = Geometry.Cartesian2DPoint.(Fields.coordinate_field(ts_space))
 

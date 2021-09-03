@@ -1,19 +1,14 @@
 """
-    TensorProductTopology(n)
+    GridTopology(mesh)
 
-A tensor-product topology of `n` unstructured elements.
+A generic tensor-product topology defined on either an equispaced, regular rectangular
+structured grid or irregular one.
 """
-struct TensorProductTopology{M <: TensorProductMesh, B} <: AbstractTopology
+struct GridTopology{M <: AbstractMesh, B} <: AbstractTopology
     mesh::M
     boundaries::B
 end
-
-"""
-    TensorProductTopology(n)
-
-A tensor-product topology of `n` unstructured elements
-"""
-function TensorProductTopology(mesh::TensorProductMesh)
+function GridTopology(mesh::M) where {M <: AbstractMesh}
     x1boundary = mesh.domain.x1boundary
     x2boundary = mesh.domain.x2boundary
     boundaries = if isnothing(x1boundary)
@@ -29,55 +24,31 @@ function TensorProductTopology(mesh::TensorProductMesh)
             NamedTuple{(x1boundary..., x2boundary...)}((1, 2, 3, 4))
         end
     end
-    TensorProductTopology(mesh, boundaries)
+    GridTopology(mesh, boundaries)
 end
 
-function Base.show(io::IO, topology::TensorProductTopology)
-    print(io, "TensorProductTopology on ", topology.mesh)
-end
-domain(topology::TensorProductTopology) = topology.mesh.domain
 
-function nlocalelems(topology::TensorProductTopology)
+
+function Base.show(io::IO, topology::GridTopology{M}) where {M <: AbstractMesh}
+    print(io, "GridTopology on ", topology.mesh)
+end
+domain(topology::GridTopology{M}) where {M <: AbstractMesh} =
+    topology.mesh.domain
+
+function nlocalelems(topology::GridTopology{M}) where {M <: AbstractMesh}
     n1 = topology.mesh.n1
     n2 = topology.mesh.n2
     return n1 * n2
 end
-eachslabindex(topology::TensorProductTopology) = 1:nlocalelems(topology)
 
-function vertex_coordinates(topology::TensorProductTopology, elem::Integer)
-    @assert 1 <= elem <= nlocalelems(topology)
+eachslabindex(topology::GridTopology{M}) where {M <: AbstractMesh} =
+    1:nlocalelems(topology)
 
-    # convert to 0-based indices
-    mesh = topology.mesh
-    n1 = mesh.n1
-    n2 = mesh.n2
-    coordinates = mesh.coordinates
-
-    z2, z1 = fldmod(elem - 1, n1)
-
-    c1 = coordinates[z1 * (n2 + 1) + (z2 + 1)]
-    c2 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 1)]
-    c3 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
-    c4 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
-
-    return (c1, c2, c3, c4)
-end
-
-function opposing_face(
-    topology::TensorProductTopology,
-    elem::Integer,
-    face::Integer,
-)
-    @assert 1 <= elem <= nlocalelems(topology)
-    @assert 1 <= face <= 4
-
-    return topology.mesh.faces[(elem - 1) * 4 + face][3:5]
-end
 
 # InteriorFaceIterator
 function Base.length(
     fiter::InteriorFaceIterator{T},
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     topology = fiter.topology
     mesh = topology.mesh
     n1 = mesh.n1
@@ -90,7 +61,7 @@ end
 function Base.iterate(
     fiter::InteriorFaceIterator{T},
     (d, z1, z2) = (1, 0, 0),
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     # iteration state (major first)
     #  - d ∈ (1,2): face direction
     #  - z1 ∈ 0:n1-1: 0-based face index in direction 1
@@ -151,7 +122,7 @@ function Base.iterate(
 end
 
 # BoundaryFaceIterator
-function boundary_names(topology::TensorProductTopology)
+function boundary_names(topology::GridTopology{M}) where {M <: AbstractMesh}
     x1boundary = topology.mesh.domain.x1boundary
     x2boundary = topology.mesh.domain.x2boundary
     if isnothing(x1boundary)
@@ -161,7 +132,10 @@ function boundary_names(topology::TensorProductTopology)
     end
 end
 
-function boundary_tag(topology::TensorProductTopology, name::Symbol)
+function boundary_tag(
+    topology::GridTopology{M},
+    name::Symbol,
+) where {M <: AbstractMesh}
     x1boundary = topology.mesh.domain.x1boundary
     x2boundary = topology.mesh.domain.x2boundary
     if !isnothing(x1boundary)
@@ -175,13 +149,13 @@ function boundary_tag(topology::TensorProductTopology, name::Symbol)
     error("Invalid boundary name")
 end
 
-function boundaries(topology::TensorProductTopology)
+function boundaries(topology::GridTopology{M}) where {M <: AbstractMesh}
     return topology.boundaries
 end
 
 function Base.length(
     bfiter::BoundaryFaceIterator{T},
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     boundary = bfiter.boundary
     topology = bfiter.topology
     if boundary in (1, 2)
@@ -202,7 +176,7 @@ end
 
 function Base.iterate(
     bfiter::BoundaryFaceIterator{T},
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     boundary = bfiter.boundary
     topology = bfiter.topology
     if boundary in (1, 2) && isnothing(topology.mesh.domain.x1boundary)
@@ -217,7 +191,7 @@ end
 function Base.iterate(
     bfiter::BoundaryFaceIterator{T},
     z,
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     boundary = bfiter.boundary
     topology = bfiter.topology
     mesh = topology.mesh
@@ -242,7 +216,7 @@ end
 # VertexIterator
 function Base.length(
     viter::VertexIterator{T},
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     topology = viter.topology
     mesh = topology.mesh
     n1 = mesh.n1
@@ -257,7 +231,7 @@ end
 function Base.iterate(
     viter::VertexIterator{T},
     (z1, z2) = (0, 0),
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     topology = viter.topology
     mesh = topology.mesh
     n1 = mesh.n1
@@ -281,7 +255,9 @@ function Base.iterate(
 end
 
 # Vertex
-function Base.length(vertex::Vertex{T}) where {T <: TensorProductTopology}
+function Base.length(
+    vertex::Vertex{T},
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     topology = vertex.topology
     mesh = topology.mesh
     n1 = mesh.n1
@@ -299,7 +275,7 @@ end
 function Base.iterate(
     vertex::Vertex{T},
     vert = 0,
-) where {T <: TensorProductTopology}
+) where {M <: AbstractMesh, T <: GridTopology{M}}
     # iterator of (element, vertnum) that share global vertex
     topology = vertex.topology
     mesh = topology.mesh
@@ -342,4 +318,135 @@ function Base.iterate(
     end
     elem = z2 * n1 + z1 + 1
     return (elem, vert), vert
+end
+
+# GridTopology1D
+"""
+    GridTopology1D(mesh)
+
+A line topology defined on an equispaced linear mesh.
+"""
+
+function GridTopology1D(mesh::Meshes.EquispacedLineMesh)
+    x1boundary = mesh.domain.x3boundary
+    x2boundary = nothing
+    boundaries =
+        isnothing(x1boundary) ? NamedTuple() : NamedTuple{x1boundary}((1, 2))
+    return GridTopology(mesh, boundaries)
+end
+
+# Uniform grid implementations, dispatching on EquispacedRectangleMesh
+function vertex_coordinates(
+    topology::GridTopology{M},
+    elem::Integer,
+) where {M <: EquispacedRectangleMesh}
+    @assert 1 <= elem <= nlocalelems(topology)
+
+    # convert to 0-based indices
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    range1 = mesh.range1
+    range2 = mesh.range2
+
+    z2, z1 = fldmod(elem - 1, n1)
+
+    c1 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 1])
+    c2 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 1])
+    c3 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 2])
+    c4 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 2])
+    return (c1, c2, c3, c4)
+end
+
+function opposing_face(
+    topology::GridTopology{M},
+    elem::Integer,
+    face::Integer,
+) where {M <: EquispacedRectangleMesh}
+    @assert 1 <= elem <= nlocalelems(topology)
+    @assert 1 <= face <= 4
+
+    # convert to 0-based indices
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    x1periodic = isnothing(mesh.domain.x1boundary)
+    x2periodic = isnothing(mesh.domain.x2boundary)
+
+    z2, z1 = fldmod(elem - 1, n1)
+    if face == 1
+        z1 -= 1
+        if z1 < 0
+            if !x1periodic
+                return (0, 1, false)
+            end
+            z1 += n1
+        end
+        opface = 2
+    elseif face == 2
+        z1 += 1
+        if z1 == n1
+            if !x1periodic
+                return (0, 2, false)
+            end
+            z1 -= n1
+        end
+        opface = 1
+    elseif face == 3
+        z2 -= 1
+        if z2 < 0
+            if !x2periodic
+                return (0, 3, false)
+            end
+            z2 += n2
+        end
+        opface = 4
+    elseif face == 4
+        z2 += 1
+        if z2 == n2
+            if !x2periodic
+                return (0, 4, false)
+            end
+            z2 -= n2
+        end
+        opface = 3
+    end
+    opelem = z2 * n1 + z1 + 1
+    return opelem, opface, false
+end
+
+
+# Non-uniform grid implementations, dispatching on TensorProductMesh
+
+function vertex_coordinates(
+    topology::GridTopology{M},
+    elem::Integer,
+) where {M <: TensorProductMesh}
+    @assert 1 <= elem <= nlocalelems(topology)
+
+    # convert to 0-based indices
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+    coordinates = mesh.coordinates
+
+    z2, z1 = fldmod(elem - 1, n1)
+
+    c1 = coordinates[z1 * (n2 + 1) + (z2 + 1)]
+    c2 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 1)]
+    c3 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
+    c4 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
+
+    return (c1, c2, c3, c4)
+end
+
+function opposing_face(
+    topology::GridTopology{M},
+    elem::Integer,
+    face::Integer,
+) where {M <: TensorProductMesh}
+    @assert 1 <= elem <= nlocalelems(topology)
+    @assert 1 <= face <= 4
+
+    return topology.mesh.faces[(elem - 1) * 4 + face][3:5]
 end
