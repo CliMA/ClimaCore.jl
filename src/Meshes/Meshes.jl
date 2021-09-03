@@ -167,7 +167,7 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I,IA1D,IA2D,FT,FTA2D} <: AbstractMesh{FT}
+struct Mesh2D{I, IA1D, IA2D, FT, FTA2D} <: AbstractMesh{FT}
     "# of unique nodes in the mesh"
     nverts::I
     "# of unique faces in the mesh"

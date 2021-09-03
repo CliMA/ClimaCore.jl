@@ -51,77 +51,90 @@ function cube_panel_mesh(ne)
     FT = Float64
     I = Int
 
-    nverts = (ne+1)^3 - (ne-1)^3
-    nfaces = 12 * ne + 6 * (2 * ne * (ne-1))
+    nverts = (ne + 1)^3 - (ne - 1)^3
+    nfaces = 12 * ne + 6 * (2 * ne * (ne - 1))
     nelems = 6 * ne * ne
     nbndry = 0
 
     nx = ne + 1
 
-    nfaces_edg = 12*ne
+    nfaces_edg = 12 * ne
 
     emat = reshape(1:nelems, ne, ne, 6)
-    ndmat = zeros(I, ne+1, ne+1)
+    ndmat = zeros(I, ne + 1, ne + 1)
 
-    panel_verts = [1  2  3  1  1  5
-                   2  4  4  3  2  6
-                   3  6  7  5  5  7
-                   4  8  8  7  6  8]
+    panel_verts = [
+        1 2 3 1 1 5
+        2 4 4 3 2 6
+        3 6 7 5 5 7
+        4 8 8 7 6 8
+    ]
 
 
-    edge_nodes = reshape(1:(ne-1)*12, ne-1, 12) .+ 8
+    edge_nodes = reshape(1:((ne - 1) * 12), ne - 1, 12) .+ 8
 
-    panel_edges = [5 10 11  9  9 7
-                   6 12 12 11 10 8
-                   1  6  2  5  1 3
-                   2  8  4  7  3 4]
+    panel_edges = [
+        5 10 11 9 9 7
+        6 12 12 11 10 8
+        1 6 2 5 1 3
+        2 8 4 7 3 4
+    ]
 
-    face_interior = reshape(1:(ne-1)*(ne-1), ne-1, ne-1)
+    face_interior = reshape(1:((ne - 1) * (ne - 1)), ne - 1, ne - 1)
 
     nfc1i = (nx - 2) * (nx - 1) # panels with normals along first direction 
     nfc2i = (nx - 1) * (nx - 2) # panels with normals along second direction 
-    nfci  = nfc1i + nfc2i
-    fci1 = reshape(1:nfc1i, nx-2, nx-1)
-    fci2 = reshape(1:nfc2i, nx-1, nx-2)
+    nfci = nfc1i + nfc2i
+    fci1 = reshape(1:nfc1i, nx - 2, nx - 1)
+    fci2 = reshape(1:nfc2i, nx - 1, nx - 2)
 
-    fcmat1 = zeros(I, nx, nx-1) # face numbering
-    fcmat2 = zeros(I, nx-1, nx) # for each panel 
+    fcmat1 = zeros(I, nx, nx - 1) # face numbering
+    fcmat2 = zeros(I, nx - 1, nx) # for each panel 
 
-    edge_faces = reshape(1:12*ne, ne, 12)
+    edge_faces = reshape(1:(12 * ne), ne, 12)
 
     # node coordinates
-    xc = range(FT(0), FT(1); step = FT(1/ne))
+    xc = range(FT(0), FT(1); step = FT(1 / ne))
     xci = view(xc, 2:ne)
-    zc = zeros(FT, ne-1)
-    oc = ones(FT, ne-1)
-    zc2 = zeros(FT, (ne-1)*(ne-1))
-    oc2 = ones(FT, (ne-1)*(ne-1))
+    zc = zeros(FT, ne - 1)
+    oc = ones(FT, ne - 1)
+    zc2 = zeros(FT, (ne - 1) * (ne - 1))
+    oc2 = ones(FT, (ne - 1) * (ne - 1))
 
-    xci12 = repeat(xci, ne-1)
-    xci21 = repeat(xci', ne-1, 1)[:]
+    xci12 = repeat(xci, ne - 1)
+    xci21 = repeat(xci', ne - 1, 1)[:]
 
-    coordinates = vcat(hcat([0, 1, 0, 1, 0, 1, 0, 1],  # x1,
-                            [0, 0, 1, 1, 0, 0, 1, 1],  # x2,
-                            [0, 0, 0, 0, 1, 1, 1, 1]), # x3 vertex coordinates
-                  vcat(hcat(xci, zc, zc),    # edge  1  
-                       hcat(xci, oc, zc),    # edge  2
-                       hcat(xci, zc, oc),    # edge  3
-                       hcat(xci, oc, oc)),   # edge  4
-                  vcat(hcat(zc, xci, zc),    # edge  5
-                       hcat(oc, xci, zc),    # edge  6
-                       hcat(zc, xci, oc),    # edge  7
-                       hcat(oc, xci, oc)),   # edge  8
-                  vcat(hcat(zc, zc, xci),    # edge  9
-                       hcat(oc, zc, xci),    # edge 10
-                       hcat(zc, oc, xci),    # edge 11
-                       hcat(oc, oc, xci)),   # edge 12
-                  hcat(xci12, xci21, zc2),   # panel 1
-                  hcat(oc2, xci12, xci21),   # panel 2
-                  hcat(xci12, oc2, xci21),   # panel 3
-                  hcat(zc2, xci12, xci21),   # panel 4
-                  hcat(xci12, zc2, xci21),   # panel 5
-                  hcat(xci12, xci21, oc2),   # panel 6
-            )
+    coordinates = vcat(
+        hcat(
+            [0, 1, 0, 1, 0, 1, 0, 1],  # x1,
+            [0, 0, 1, 1, 0, 0, 1, 1],  # x2,
+            [0, 0, 0, 0, 1, 1, 1, 1],
+        ), # x3 vertex coordinates
+        vcat(
+            hcat(xci, zc, zc),    # edge  1  
+            hcat(xci, oc, zc),    # edge  2
+            hcat(xci, zc, oc),    # edge  3
+            hcat(xci, oc, oc),
+        ),   # edge  4
+        vcat(
+            hcat(zc, xci, zc),    # edge  5
+            hcat(oc, xci, zc),    # edge  6
+            hcat(zc, xci, oc),    # edge  7
+            hcat(oc, xci, oc),
+        ),   # edge  8
+        vcat(
+            hcat(zc, zc, xci),    # edge  9
+            hcat(oc, zc, xci),    # edge 10
+            hcat(zc, oc, xci),    # edge 11
+            hcat(oc, oc, xci),
+        ),   # edge 12
+        hcat(xci12, xci21, zc2),   # panel 1
+        hcat(oc2, xci12, xci21),   # panel 2
+        hcat(xci12, oc2, xci21),   # panel 3
+        hcat(zc2, xci12, xci21),   # panel 4
+        hcat(xci12, zc2, xci21),   # panel 5
+        hcat(xci12, xci21, oc2),   # panel 6
+    )
 
     face_verts = zeros(I, nfaces, 2)
     face_neighbors = zeros(I, nfaces, 2)
@@ -130,29 +143,31 @@ function cube_panel_mesh(ne)
     elem_faces = zeros(I, nelems, 4)
 
     for sfc in 1:6
-        ndmat[1,    1], ndmat[ne+1,    1],  # panel vertices
-        ndmat[1, ne+1], ndmat[ne+1, ne+1] = panel_verts[:, sfc] 
+        ndmat[1, 1],
+        ndmat[ne + 1, 1],  # panel vertices
+        ndmat[1, ne + 1],
+        ndmat[ne + 1, ne + 1] = panel_verts[:, sfc]
 
-        ndmat[   1, 2:ne] .= edge_nodes[:, panel_edges[1, sfc]] # panel edges
-        ndmat[ end, 2:ne] .= edge_nodes[:, panel_edges[2, sfc]]
-        ndmat[2:ne,    1] .= edge_nodes[:, panel_edges[3, sfc]]
-        ndmat[2:ne,  end] .= edge_nodes[:, panel_edges[4, sfc]]
-        
-        offset = 8 + 12 * (ne-1) + (sfc-1)*(ne-1)*(ne-1) # interior
+        ndmat[1, 2:ne] .= edge_nodes[:, panel_edges[1, sfc]] # panel edges
+        ndmat[end, 2:ne] .= edge_nodes[:, panel_edges[2, sfc]]
+        ndmat[2:ne, 1] .= edge_nodes[:, panel_edges[3, sfc]]
+        ndmat[2:ne, end] .= edge_nodes[:, panel_edges[4, sfc]]
+
+        offset = 8 + 12 * (ne - 1) + (sfc - 1) * (ne - 1) * (ne - 1) # interior
         ndmat[2:ne, 2:ne] .= face_interior .+ offset
 
-        fcmat1[1,   :] = edge_faces[:, panel_edges[1, sfc]]
+        fcmat1[1, :] = edge_faces[:, panel_edges[1, sfc]]
         fcmat1[end, :] = edge_faces[:, panel_edges[2, sfc]]
-        fcmat2[:,   1] = edge_faces[:, panel_edges[3, sfc]]
+        fcmat2[:, 1] = edge_faces[:, panel_edges[3, sfc]]
         fcmat2[:, end] = edge_faces[:, panel_edges[4, sfc]]
-        off = ne * 12 + (sfc-1) * nfci
-        fcmat1[2:end-1, :] .= fci1 .+ off
-        fcmat2[:, 2:end-1] .= fci2 .+ (off + nfc1i)
+        off = ne * 12 + (sfc - 1) * nfci
+        fcmat1[2:(end - 1), :] .= fci1 .+ off
+        fcmat2[:, 2:(end - 1)] .= fci2 .+ (off + nfc1i)
 
-        face_verts[fcmat1[:], 1] .= ndmat[:,   1:ne][:] # face nodes
-        face_verts[fcmat1[:], 2] .= ndmat[:, 2:ne+1][:]
-        face_verts[fcmat2[:], 1] .= ndmat[1:ne,   :][:]
-        face_verts[fcmat2[:], 2] .= ndmat[2:ne+1, :][:]
+        face_verts[fcmat1[:], 1] .= ndmat[:, 1:ne][:] # face nodes
+        face_verts[fcmat1[:], 2] .= ndmat[:, 2:(ne + 1)][:]
+        face_verts[fcmat2[:], 1] .= ndmat[1:ne, :][:]
+        face_verts[fcmat2[:], 2] .= ndmat[2:(ne + 1), :][:]
 
         if sfc == 1
             bdy1 = emat[:, 1:1, 4]'
@@ -191,19 +206,19 @@ function cube_panel_mesh(ne)
         face_neighbors[fcmat2[:], 1] .= hcat(bdy3, emat[:, :, sfc])[:]
         face_neighbors[fcmat2[:], 2] .= hcat(emat[:, :, sfc], bdy4)[:]
 
-        elem_verts[emat[:,:,sfc][:], :] .= 
-            hcat(ndmat[1:ne,   1:ne  ][:], # node numbers
-                 ndmat[2:ne+1, 1:ne  ][:], # for each element
-                 ndmat[1:ne,   2:ne+1][:],
-                 ndmat[2:ne+1, 2:ne+1][:],
+        elem_verts[emat[:, :, sfc][:], :] .= hcat(
+            ndmat[1:ne, 1:ne][:], # node numbers
+            ndmat[2:(ne + 1), 1:ne][:], # for each element
+            ndmat[1:ne, 2:(ne + 1)][:],
+            ndmat[2:(ne + 1), 2:(ne + 1)][:],
         )
 
-        elem_faces[emat[:,:,sfc][:], :] .= 
-            hcat(fcmat1[1:nx-1, :][:], # face numbers for 
-                 fcmat1[2:nx, :][:],   # each element
-                 fcmat2[:, 1:nx-1][:],
-                 fcmat2[:, 2:nx][:],
-                )
+        elem_faces[emat[:, :, sfc][:], :] .= hcat(
+            fcmat1[1:(nx - 1), :][:], # face numbers for 
+            fcmat1[2:nx, :][:],   # each element
+            fcmat2[:, 1:(nx - 1)][:],
+            fcmat2[:, 2:nx][:],
+        )
     end
 
     return Mesh2D(
