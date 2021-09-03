@@ -29,6 +29,8 @@ CartesianVector(u::CovariantVector, local_geometry::LocalGeometry) =
 CartesianVector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ * u
 
+
+
 # These are for compatibility, and should be removed
 
 Contravariant12Vector(u::ContravariantVector, local_geometry::LocalGeometry) = u
@@ -66,12 +68,6 @@ contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
 
 Jcontravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
-
-
-contravariant1(
-    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
-    local_geometry::LocalGeometry,
-) = (local_geometry.∂ξ∂x * A)[1, :]
 
 
 contravariant1(

@@ -69,7 +69,7 @@ function SpectralElementSpace1D(topology, quadrature_style)
                 WJ,
                 Geometry.AxisTensor(
                     (Geometry.Cartesian1Axis(), Geometry.Covariant1Axis()),
-                    ∂ξ∂x,
+                    ∂x∂ξ,
                 ),
                 Geometry.AxisTensor(
                     (Geometry.Contravariant1Axis(), Geometry.Cartesian1Axis()),

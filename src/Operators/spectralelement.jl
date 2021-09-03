@@ -482,12 +482,20 @@ operator_return_eltype(::Gradient{(1,)}, ::Type{T}) where {T<:Number} =
     Geometry.Covariant1Vector{T}
 operator_return_eltype(::Gradient{(1,2)}, ::Type{T}) where {T<:Number} =
     Geometry.Covariant12Vector{T}
-operator_return_eltype(::Gradient{(1,)}, ::Type{V}) where {V<:AxisVector{T, A, SVector{N, T}}} where {T,A,N} =
+operator_return_eltype(::Gradient{(1,)}, ::Type{V}) where {V<:Geometry.AxisVector{T, A, SVector{N, T}}} where {T,A,N} =
     Geometry.Axis2Tensor{T,Tuple{Geometry.Covariant1Axis,A},SMatrix{1,N,T,N}}
 
 operator_return_eltype(grad::Gradient, S) where {I} =
     RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
 
+
+extend(A::Geometry.AbstractAxis, x::Number) = Geometry.AxisVector(A, x)
+extend(A::Geometry.AbstractAxis, x) =
+    RecursiveApply.rmap(x -> extend(A, x), x)
+function extend(::Geometry.Covariant1Axis, x::Geometry.AxisVector)
+    v = Geometry.components(x)
+    Geometry.Axis2Tensor((Geometry.Covariant1Axis(),axes(x,1)), hcat(v'))
+end
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -500,7 +508,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     @inbounds for i in 1:Nq
         x = get_node(slab_data, i)
         for ii in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(Geometry.Covariant1Vector, D[ii, i] ⊠ x)
+            ∂f∂ξ = extend(Geometry.Covariant1Axis(), D[ii, i] ⊠ x)
             out[ii] += ∂f∂ξ
         end
     end

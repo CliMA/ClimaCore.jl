@@ -71,18 +71,23 @@ function rhs!(dY, Y, _, t)
     dρuₕ = dY.ρuₕ
     dρw = dY.ρw
 
-    # density
-    Ic2f = Operators.InterpolateC2F(
+    # scalars
+    interpc2f = Operators.InterpolateC2F(
         top=Operators.Extrapolate()
     )
-    divf2c = Operators.DivergenceF2C(
+    vdivf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.Cartesian13Vector(0.0,0.0)),
     )
     hdiv = Operators.Divergence()
-    @. dρ = -divf2c(ρw)
-    @. dρ -= hdiv(ρuₕ)
-    Spaces.weighted_dss!(dρ)
 
+    @. dρ   = -vdivf2c(ρw) # density
+    @. dρ  -= hdiv(ρuₕ)
+    @. dρθ  = -vdivf2c(interpc2f(ρθ) * w) # potential temperature density
+    @. dρθ -= hdiv(ρθ * uₕ)
+    Spaces.weighted_dss!(dρ)
+    Spaces.weighted_dss!(dρθ)
+
+    # vectors
     # velocities (auxiliary)
     @. uₕ = ρuₕ / ρ
     @. w = ρw / ρ
@@ -100,17 +105,7 @@ function rhs!(dY, Y, _, t)
 
     dρw = -hdiv(ρuₕ * w') - vdiv(ρw * w') + ρ * div(ν * grad(w))
 
-    # potential temperature density
-    Ic2f = Operators.InterpolateC2F(
-        top=Operators.Extrapolate()
-    )
-    divf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian13Vector(0.0,0.0)),
-    )
-    hdiv = Operators.Divergence()
-    @. dρθ = -divf2c(ρθ * w)
-    @. dρθ -= hdiv(ρθ * uₕ)
-    Spaces.weighted_dss!(dρθ)
+
 
     # Eq2. d\rho = -\div( \rhou\_h + \rhow )
     # Eq3a. d\rhou_h = -\div( \rhou_h \circtimes \rhou/\rho) - \grad_h(p) - \grad_h(\Phi)
@@ -120,6 +115,8 @@ function rhs!(dY, Y, _, t)
 
     return dY
 end
+
+# ρᶜ, ρθᶜ, uᶜ, wᶠ
 
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
@@ -144,17 +141,18 @@ Yc = map(coords) do coord
   )
 end
 
-function hflux(state, ∇u)
+function hflux(state, ∇u, local_geom)
   @unpack ρ, ρuₕ = state
   uₕ = ρuₕ / ρ
   ν = 0.1
   return (
       ρ = ρuₕ,
-      ρuₕ = ((ρuₕ ⊗ uₕ) + 0.0 * LinearAlgebra.I + ρ*ν*∇u),
+      ρuₕ = ((ρuₕ ⊗ uₕ) + 0.0 * LinearAlgebra.I + ρ*ν*(local_geom.∂ξ∂x' * ∇u)),
   )
 end
 hgrad = Operators.Gradient()
-@. hflux(Yc, hgrad(Yc.ρuₕ / Yc.ρ))
+@. hgrad(Yc.ρuₕ / Yc.ρ)
+@. hflux(Yc, hgrad(Yc.ρuₕ / Yc.ρ), Fields.local_geometry_field(axes(Yc)))
 
 
 Y = Fields.FieldVector(ρ = ρ, ρuₕ = ρuₕ, ρw = ρw, ρθ = ρθ)
