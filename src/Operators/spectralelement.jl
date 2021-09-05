@@ -488,14 +488,6 @@ operator_return_eltype(::Gradient{(1,)}, ::Type{V}) where {V<:Geometry.AxisVecto
 operator_return_eltype(grad::Gradient, S) where {I} =
     RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
 
-
-extend(A::Geometry.AbstractAxis, x::Number) = Geometry.AxisVector(A, x)
-extend(A::Geometry.AbstractAxis, x) =
-    RecursiveApply.rmap(x -> extend(A, x), x)
-function extend(::Geometry.Covariant1Axis, x::Geometry.AxisVector)
-    v = Geometry.components(x)
-    Geometry.Axis2Tensor((Geometry.Covariant1Axis(),axes(x,1)), hcat(v'))
-end
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -508,7 +500,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     @inbounds for i in 1:Nq
         x = get_node(slab_data, i)
         for ii in 1:Nq
-            ∂f∂ξ = extend(Geometry.Covariant1Axis(), D[ii, i] ⊠ x)
+            ∂f∂ξ = Geometry.Covariant1Vector(D[ii, i]) ⊗ x
             out[ii] += ∂f∂ξ
         end
     end
@@ -527,18 +519,12 @@ function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
     @inbounds for j in 1:Nq, i in 1:Nq
         x = get_node(slab_data, i, j)
         for ii in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(u, zero(u)),
-                D[ii, i] ⊠ x,
-            )
-            out[ii, j] = out[ii, j] ⊞ ∂f∂ξ
+            ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
+            out[ii, j] = out[ii, j] ⊞ ∂f∂ξ₁
         end
         for jj in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(zero(u), u),
-                D[jj, j] ⊠ x,
-            )
-            out[i, jj] = out[i, jj] ⊞ ∂f∂ξ
+            ∂f∂ξ₂ = Geometry.Covariant12Vector(zero(eltype(D)), D[jj, j]) ⊗ x
+            out[i, jj] = out[i, jj] ⊞ ∂f∂ξ₂
         end
     end
     return SMatrix(out)
@@ -576,8 +562,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         Wx = W ⊠ get_node(slab_data, i)
         for ii in 1:Nq
-            Dᵀ₁Wf =
-                RecursiveApply.rmap(Geometry.Covariant1Vector, D[i, ii] ⊠ Wx)
+            Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
             out[ii] = out[ii] ⊟ Dᵀ₁Wf
         end
     end
@@ -604,17 +589,11 @@ function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         Wx = W ⊠ get_node(slab_data, i, j)
         for ii in 1:Nq
-            Dᵀ₁Wf = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(u, zero(u)),
-                D[i, ii] ⊠ Wx,
-            )
+            Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
             out[ii, j] = out[ii, j] ⊟ Dᵀ₁Wf
         end
         for jj in 1:Nq
-            Dᵀ₂Wf = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(zero(u), u),
-                D[j, jj] ⊠ Wx,
-            )
+            Dᵀ₂Wf = Geometry.Covariant12Vector(zero(eltype(D)), D[j, jj]) ⊗ Wx
             out[i, jj] = out[i, jj] ⊟ Dᵀ₂Wf
         end
     end

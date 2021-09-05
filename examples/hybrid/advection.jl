@@ -14,7 +14,7 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-import ClimaCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore.Domains.Geometry
 
 # set up function space
 function hvspace_2D()
@@ -63,7 +63,7 @@ function rhs!(dY, Y, _, t)
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.Cartesian13Vector(0.0, 0.0)),
     )
-    @. dh = -divf2c(w * Ic2f(h))
+    @. dh = -divf2c(w ⊗ Ic2f(h))
 
     # horizontal advection
     hdiv = Operators.Divergence()
@@ -76,7 +76,7 @@ end
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
 h = map(coords) do coord
-    exp(-((coord.x + 0.5)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2))
+    Geometry.Cartesian1Vector(exp(-((coord.x + 0.5)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2)))
 end
 Y = Fields.FieldVector(h = h)
 
