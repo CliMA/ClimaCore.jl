@@ -252,10 +252,6 @@ function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
     return LinearAlgebra.dot(components(x), components(y))
 end
 
-function ⊗(x::AbstractVector, y::AbstractVector)
-    x * y'
-end
-
 function Base.:*(x::AxisVector, y::AdjointAxisVector)
     AxisTensor((axes(x, 1), axes(y, 2)), components(x) * components(y))
 end
@@ -313,4 +309,18 @@ end
 function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
+end
+
+
+function outer end
+const ⊗ = outer
+
+function outer(x::AbstractVector, y::AbstractVector)
+    x * y'
+end
+function outer(x::AbstractVector, y::Number)
+    x * y
+end
+function outer(x::AbstractVector, y)
+    RecursiveApply.rmap(y -> x ⊗ y, y)
 end
