@@ -478,13 +478,21 @@ struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
-operator_return_eltype(::Gradient{(1,)}, ::Type{T}) where {T<:Number} =
-    Geometry.Covariant1Vector{T}
-operator_return_eltype(::Gradient{(1,2)}, ::Type{T}) where {T<:Number} =
-    Geometry.Covariant12Vector{T}
-operator_return_eltype(::Gradient{(1,)}, ::Type{V}) where {V<:Geometry.AxisVector{T, A, SVector{N, T}}} where {T,A,N} =
-    Geometry.Axis2Tensor{T,Tuple{Geometry.Covariant1Axis,A},SMatrix{1,N,T,N}}
-
+function operator_return_eltype(::Gradient{I}, ::Type{T}) where {I, T <: Number}
+    N = length(I)
+    Geometry.AxisVector{T, Geometry.CovariantAxis{I}, SVector{N, T}}
+end
+function operator_return_eltype(
+    ::Gradient{I},
+    ::Type{V},
+) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
+    M = length(I)
+    Geometry.Axis2Tensor{
+        T,
+        Tuple{Geometry.CovariantAxis{I}, A},
+        SMatrix{M, N, T, M * N},
+    }
+end
 operator_return_eltype(grad::Gradient, S) where {I} =
     RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
 

@@ -312,6 +312,31 @@ function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
 end
 
 
+"""
+    outer(x, y)
+    x ⊗ y
+
+Compute the outer product of `x` and `y`. Typically `x` will be a vector, and
+`y` can be either a number, vector or tuple/named tuple.
+
+```julia
+# vector ⊗ scalar = vector
+julia> [1.0,2.0] ⊗ 2.0
+2-element Vector{Float64}:
+ 2.0
+ 4.0
+
+# vector ⊗ vector = matrix
+julia> [1.0,2.0] ⊗ [1.0,3.0]
+2×2 Matrix{Float64}:
+ 1.0  3.0
+ 2.0  6.0
+
+# vector ⊗ tuple = recursion
+julia> [1.0,2.0] ⊗ (1.0, (a=2.0, b=3.0))
+([1.0, 2.0], (a = [2.0, 4.0], b = [3.0, 6.0]))
+```
+"""
 function outer end
 const ⊗ = outer
 
