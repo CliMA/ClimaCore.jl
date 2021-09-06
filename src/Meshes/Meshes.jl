@@ -1,8 +1,11 @@
 module Meshes
 using DocStringExtensions
-export EquispacedRectangleMesh, rectangular_mesh, cube_panel_mesh
+export EquispacedRectangleMesh,
+    rectangular_mesh, cube_panel_mesh, equispaced_rectangular_mesh
 
-import ..Domains: IntervalDomain, RectangleDomain, SphereDomain
+import ..Domains:
+    IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
+import IntervalSets: ClosedInterval
 
 """
     AbstractMesh
@@ -167,8 +170,8 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I, IA1D, IA2D, FT, FTA2D} <: AbstractMesh{FT}
-    "# of unique nodes in the mesh"
+struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
+    "# of unique vertices in the mesh"
     nverts::I
     "# of unique faces in the mesh"
     nfaces::I
@@ -176,52 +179,76 @@ struct Mesh2D{I, IA1D, IA2D, FT, FTA2D} <: AbstractMesh{FT}
     nelems::I
     "# of zones in the mesh"
     nbndry::I
-    "x₁, x₂, ... coordinates of nodes `(nverts, dim)`, dim can be greater than 2 for 2D manifolds embedded in higher dimensional space"
+    "x₁, x₂, ... coordinates of vertices `(nverts, dim)`, dim can be greater than 2 for 2D manifolds embedded in higher dimensional space"
     coordinates::FTA2D
-    "face node numbers `(nfaces, 2)`"
+    "unique vertices `(n_uniquevertices)`"
+    unique_verts::IA1D
+    "connectivity information for unique vertices"
+    uverts_conn::IA1D
+    "offset information for uverts_conn `(n_unique_verts + 1)`"
+    uverts_offset::IA1D
+    "face vertices numbers `(nfaces, 2)`"
     face_verts::IA2D
-    "boundary elems for each face `(nfaces, 2)`"
+    "boundary elems for each face `(nfaces, 5)` -> [elem1, localface1, elem2, localface2, relative orientation]"
     face_neighbors::IA2D
-    "face zones for each face `(nfaces, 1)`"
-    face_bndry::IA1D
-    "node numbers for each elem `(nelems, 4)`"
+    "face numbers on each boundary `(nfaces)`"
+    face_boundary::IA1D
+    "boundary tags"
+    boundary_tags::IA1D
+    "boundary tag names"
+    boundary_tag_names::SNT
+    "face boundary offset for each boundary for face_boundary array"
+    face_boundary_offset::IA1D
+    "vertices numbers for each elem `(nelems, 4)`"
     elem_verts::IA2D
     "face numbers for each elem `(nelems, 4)`"
     elem_faces::IA2D
 end
 
-function Mesh2D(
+Mesh2D(
     nverts,
     nfaces,
     nelems,
     nbndry,
     coordinates,
+    unique_verts,
+    uverts_conn,
+    uverts_offset,
     face_verts,
     face_neighbors,
-    face_bndry,
+    face_boundary,
+    boundary_tags,
+    boundary_tag_names,
+    face_boundary_offset,
+    elem_verts,
+    elem_faces,
+) = Mesh2D{
+    eltype(nverts),
+    typeof(face_boundary),
+    typeof(face_verts),
+    eltype(coordinates),
+    typeof(coordinates),
+    typeof(boundary_tag_names),
+    length(boundary_tag_names),
+}(
+    nverts,
+    nfaces,
+    nelems,
+    nbndry,
+    coordinates,
+    unique_verts,
+    uverts_conn,
+    uverts_offset,
+    face_verts,
+    face_neighbors,
+    face_boundary,
+    boundary_tags,
+    boundary_tag_names,
+    face_boundary_offset,
     elem_verts,
     elem_faces,
 )
 
-    return Mesh2D{
-        eltype(nverts),
-        typeof(face_bndry),
-        typeof(face_verts),
-        eltype(coordinates),
-        typeof(coordinates),
-    }(
-        nverts,
-        nfaces,
-        nelems,
-        nbndry,
-        coordinates,
-        face_verts,
-        face_neighbors,
-        face_bndry,
-        elem_verts,
-        elem_faces,
-    )
-end
 
 include("BoxMesh.jl")
 include("CubedSphereMesh.jl")

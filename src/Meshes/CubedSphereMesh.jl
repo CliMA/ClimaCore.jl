@@ -47,9 +47,10 @@ This function builds a cube panel mesh with a resolution of `ne` elements along 
             |       |
             +-------+
 """
-function cube_panel_mesh(ne)
-    FT = Float64
-    I = Int
+function cube_panel_mesh(
+    ne::I,
+    ::Type{FT},
+) where {FT <: AbstractFloat, I <: Integer}
 
     nverts = (ne + 1)^3 - (ne - 1)^3
     nfaces = 12 * ne + 6 * (2 * ne * (ne - 1))
@@ -137,8 +138,8 @@ function cube_panel_mesh(ne)
     )
 
     face_verts = zeros(I, nfaces, 2)
-    face_neighbors = zeros(I, nfaces, 2)
-    face_bndry = zeros(I, nfaces)    # all interior nodes (no boundaries)
+    face_neighbors = zeros(I, nfaces, 5)
+    face_boundary = Vector{I}(zeros(nfaces)) # all interior nodes (no boundaries)
     elem_verts = zeros(I, nelems, 4)
     elem_faces = zeros(I, nelems, 4)
 
@@ -202,9 +203,9 @@ function cube_panel_mesh(ne)
         end
 
         face_neighbors[fcmat1[:], 1] .= vcat(bdy1, emat[:, :, sfc])[:]
-        face_neighbors[fcmat1[:], 2] .= vcat(emat[:, :, sfc], bdy2)[:]
+        face_neighbors[fcmat1[:], 3] .= vcat(emat[:, :, sfc], bdy2)[:]
         face_neighbors[fcmat2[:], 1] .= hcat(bdy3, emat[:, :, sfc])[:]
-        face_neighbors[fcmat2[:], 2] .= hcat(emat[:, :, sfc], bdy4)[:]
+        face_neighbors[fcmat2[:], 3] .= hcat(emat[:, :, sfc], bdy4)[:]
 
         elem_verts[emat[:, :, sfc][:], :] .= hcat(
             ndmat[1:ne, 1:ne][:], # node numbers
@@ -221,15 +222,84 @@ function cube_panel_mesh(ne)
         )
     end
 
+    ref_fc_verts = [1 2 1 3; 3 4 2 4]
+
+
+    for fc in 1:nfaces
+        elems = (face_neighbors[fc, 1], face_neighbors[fc, 3])
+        for e in 1:2
+            el = elems[e]
+            if el ≠ 0
+                localface = findfirst(elem_faces[el, :] .== fc)
+                if isnothing(localface)
+                    error(
+                        "rectangular_mesh: Fatal error, face could not be located in neighboring element",
+                    )
+                else
+                    face_neighbors[fc, 2 + (e - 1) * 2] = localface
+                end
+            end
+        end
+        # setting up relative orientation
+        or1 =
+            elem_verts[elems[1], ref_fc_verts[:, face_neighbors[fc, 2]]] ==
+            face_verts[fc, :] ? 1 : -1
+        or2 =
+            elem_verts[elems[2], ref_fc_verts[:, face_neighbors[fc, 4]]] ==
+            face_verts[fc, :] ? 1 : -1
+        face_neighbors[fc, 5] = or1 * or2
+    end
+
+    boundary_tags = sort(unique(face_boundary))
+    face_boundary_offset = ones(I, length(boundary_tags) + 1)
+    face_boundary_tags = sort(face_boundary)
+    face_boundary = sortperm(face_boundary)
+
+    for i in 1:(length(boundary_tags) - 1)
+        tag = boundary_tags[i + 1]
+        face_boundary_offset[i + 1] = findfirst(face_boundary_tags .== tag)
+    end
+    face_boundary_offset[end] = length(face_boundary) + 1
+
+    boundary_tag_names = (:interior,)
+
+    # add unique vertex iterator information
+    vtconn = map(i -> zeros(I, i), zeros(I, nverts))
+
+    for el in 1:nelems
+        for lv in 1:4
+            vt = elem_verts[el, lv]
+            push!(vtconn[vt], el, lv)
+        end
+    end
+    unique_verts = I[]
+    uverts_conn = I[]
+    uverts_offset = I.([1])
+    for vt in 1:nverts
+        lconn = length(vtconn[vt])
+        if lconn > 0
+            push!(unique_verts, vt)
+            push!(uverts_conn, vtconn[vt]...)
+            push!(uverts_offset, uverts_offset[end] + lconn)
+        end
+    end
+
+
     return Mesh2D(
         nverts,
         nfaces,
         nelems,
         nbndry,
         coordinates,
+        unique_verts,
+        uverts_conn,
+        uverts_offset,
         face_verts,
         face_neighbors,
-        face_bndry,
+        face_boundary,
+        boundary_tags,
+        boundary_tag_names,
+        face_boundary_offset,
         elem_verts,
         elem_faces,
     )
