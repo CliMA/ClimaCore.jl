@@ -204,7 +204,7 @@ Construct a `Field` of the `LocalGeometry` of the space.
 """
 local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
-local_geometry_field(field::Field) = local_geometry(axes(field))
+local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
 
 

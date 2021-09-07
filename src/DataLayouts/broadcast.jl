@@ -125,6 +125,15 @@ function column(bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}}, i, h)
     Ref(slab(bc, h)[i])
 end
 
+function column(
+    bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},
+    i,
+    j,
+    h,
+)
+    Ref(slab(bc, h)[i, j])
+end
+
 function Base.similar(
     bc::Union{IJFH{<:Any, Nij, A}, Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
     ::Type{Eltype},
@@ -324,7 +333,7 @@ function Base.copyto!(
     dest::VF{S},
     bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {S, A}
-    _, _, _, Nv, _ = size(bc)
+    _, _, _, Nv, _ = size(dest)
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
         dest[idx] = convert(S, bc[idx])

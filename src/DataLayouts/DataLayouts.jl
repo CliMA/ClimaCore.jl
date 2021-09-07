@@ -467,10 +467,9 @@ end
 
 # TODO: should this return a S or a 0-d box containing S?
 #  - perhaps the latter, as then it is mutable?
-
-function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
-    get_struct(view(parent(ijfh), i, j, :, h), S)
-end
+#function column(ijfh::IJFH{S}, i::Integer, j::Integer, h) where {S}
+#    get_struct(view(parent(ijfh), i, j, :, h), S)
+#end
 
 @inline function slab(ijfh::IJFH{S, Nij}, h::Integer) where {S, Nij}
     @boundscheck (1 <= h <= length(ijfh)) || throw(BoundsError(ijfh, (h,)))
@@ -630,6 +629,7 @@ end
 function column(data::VIFH{S}, i, h) where {S}
     VF{S}(view(parent(data), :, i, :, h))
 end
+
 function column(data::VIFH{S}, i, j, h) where {S}
     @assert j == 1
     column(data, i, h)
@@ -677,7 +677,7 @@ end
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIFH{$SS, $Nij}(view(parent(data), :, :, :, $field_byterange, :)))
+    return :(VIJFH{$SS, $Nij}(view(parent(data), :, :, :, $field_byterange, :)))
 end
 
 @inline function Base.getproperty(
@@ -700,12 +700,16 @@ function column(data::VIJFH{S}, i, j, h) where {S}
     VF{S}(view(parent(data), :, i, j, :, h))
 end
 
-@propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex)
-    data[I[1], I[5]]
+@propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex{5})
+    data[I[1], I[2], I[4]]
 end
 
-@propagate_inbounds function Base.setindex!(data::VIJFH, val, I::CartesianIndex)
-    data[I[1], I[5]] = val
+@propagate_inbounds function Base.setindex!(
+    data::VIJFH,
+    val,
+    I::CartesianIndex{5},
+)
+    data[I[1], I[2], I[4]] = val
 end
 
 # broadcast machinery
