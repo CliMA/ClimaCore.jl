@@ -392,7 +392,7 @@ end
 ) where {S, Nij}
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
                  throw(BoundsError(ijf, (i, j)))
-    set_struct!(view(parent(ijf), i, j, :), val)
+    set_struct!(view(parent(ijf), i, j, :), convert(S, val))
 end
 
 function Base.size(::DataSlab1D{<:Any, Ni}) where {Ni}
@@ -510,6 +510,7 @@ function VF{S}(ArrayType, nelements) where {S}
     FT = eltype(ArrayType)
     VF{S}(ArrayType(undef, nelements, typesize(FT, S)))
 end
+
 function replace_basetype(data::VF{S}, ::Type{FT}) where {S, FT}
     SS = replace_basetype(S, FT)
     VF{SS}(similar(parent(data), FT))
@@ -545,18 +546,18 @@ end
 end
 
 @propagate_inbounds function Base.getindex(
-    col::DataColumn{S},
+    col::DataColumn,
     I::CartesianIndex{5},
-) where {S}
+)
     col[I[4]]
 end
 
 @propagate_inbounds function Base.setindex!(
-    col::DataColumn{S},
+    col::DataColumn,
     val,
     I::CartesianIndex{5},
-) where {S}
-    col[I[4]] = convert(S, val)
+)
+    col[I[4]] = val
 end
 
 @inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}

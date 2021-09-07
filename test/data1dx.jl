@@ -9,11 +9,11 @@ import ClimaCore.DataLayouts: VIFH, slab, column
         S = Tuple{Complex{FT}, FT}
         Nv = 10 # number of vertical levels
         Ni = 4  # number of nodal points
-        Ne = 10 # number of elements
+        Nh = 10 # number of elements
 
         # construct a data object with 10 cells in vertical and
         # 10 elements in horizontal with 4 nodal points per element in horizontal
-        array = rand(FT, Nv, Ni, 3, Ne)
+        array = rand(FT, Nv, Ni, 3, Nh)
 
         data = VIFH{S, Ni}(array)
         sum(x -> x[2], data)
@@ -21,7 +21,7 @@ import ClimaCore.DataLayouts: VIFH, slab, column
         @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
         @test getfield(data.:2, :array) == @view(array[:, :, 3:3, :])
 
-        @test size(data) == (Ni, 1, 1, Nv, Ne)
+        @test size(data) == (Ni, 1, 1, Nv, Nh)
 
         # test tuple assignment on columns
         val = (Complex{FT}(-1.0, -2.0), FT(-3.0))
@@ -39,6 +39,28 @@ import ClimaCore.DataLayouts: VIFH, slab, column
               Complex{FT}(sum(array[:, :, 1, :]), sum(array[:, :, 2, :]))
         @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :])
     end
+end
+
+@testset "VIFH type safety" begin
+    Nv = 1 # number of vertical levels
+    Ni = 1  # number of nodal points per element
+    Nh = 1 # number of elements
+
+    # check that types of the same bitstype throw a conversion error
+    SA = (a = 1.0, b = 2.0)
+    SB = (c = 1.0, d = 2.0)
+
+    array = zeros(Float64, Nv, Ni, 2, Nh)
+    data = VIFH{typeof(SA), Ni}(array)
+
+    cdata = column(data, 1, 1)
+    cdata[1] = SA
+    @test cdata[1] isa typeof(SA)
+    @test_throws MethodError cdata[1] = SB
+
+    sdata = slab(data, 1, 1)
+    @test sdata[1] isa typeof(SA)
+    @test_throws MethodError sdata[1] = SB
 end
 
 @testset "broadcasting between VIFH data object + scalars" begin

@@ -3,7 +3,6 @@ using ClimaCore.DataLayouts
 using StaticArrays
 using ClimaCore.DataLayouts: get_struct, set_struct!, basetype
 
-
 @testset "basetype" begin
     @test basetype(Float64) === Float64
     @test basetype(Float32) === Float32
@@ -53,6 +52,23 @@ end
     @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :]) atol = 10eps()
 end
 
+
+@testset "IJFH type safety" begin
+    Nij = 2 # number of nodal points per element
+    Nh = 1 # number of elements
+
+    # check that types of the same bitstype throw a conversion error
+    SA = (a = 1.0, b = 2.0)
+    SB = (c = 1.0, d = 2.0)
+
+    array = zeros(Float64, Nij, Nij, 2, Nh)
+    data = IJFH{typeof(SA), Nij}(array)
+    data_slab = slab(data, 1)
+    data_slab[1, 1] = SA
+    @test data_slab[1, 1] isa typeof(SA)
+    @test_throws MethodError data_slab[1, 1] = SB
+end
+
 @testset "broadcasting between data object + scalars" begin
     FT = Float64
     data1 = ones(FT, 2, 2, 2, 2)
@@ -80,7 +96,6 @@ end
           FT[f == 1 ? 1 : 0 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
 
 end
-
 
 @testset "broadcasting between data objects" begin
     FT = Float64
