@@ -1,6 +1,4 @@
 using Test
-using StaticArrays
-
 import ClimaCore.DataLayouts: VIFH, slab, column
 
 @testset "VIFH" begin

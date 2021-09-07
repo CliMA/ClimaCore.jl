@@ -39,6 +39,13 @@ Data1DXStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = VIFHStyle{Ni, A}
 DataColumnStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = VFStyle{A}
 DataSlab1DStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
 
+abstract type Data2DXStyle{Nij} <: DataStyle end
+struct VIJFHStyle{Nij, A} <: Data2DXStyle{Nij} end
+DataStyle(::Type{VIJFH{S, Nij, A}}) where {S, Nij, A} =
+    VIJFHStyle{Nij, parent_array_type(A)}()
+Data2DXStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = VIJFHStyle{Nij, A}
+DataColumnStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = VFStyle{A}
+DataSlab2DStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
 
 abstract type Data3DStyle <: DataStyle end
 
@@ -55,19 +62,35 @@ Base.Broadcast.BroadcastStyle(
 Base.Broadcast.BroadcastStyle(::VFStyle{A}, ::IFHStyle{Ni, A}) where {Ni, A} =
     VIFHStyle{Ni, A}()
 
+Base.Broadcast.BroadcastStyle(
+    ::VFStyle{A},
+    ::IJFHStyle{Nij, A},
+) where {Nij, A} = VIJFHStyle{Nij, A}()
+
 Base.Broadcast.BroadcastStyle(::VFStyle{A}, ::VIFHStyle{Ni, A}) where {Ni, A} =
     VIFHStyle{Ni, A}()
+
+Base.Broadcast.BroadcastStyle(
+    ::VFStyle{A},
+    ::VIJFHStyle{Nij, A},
+) where {Nij, A} = VIJFHStyle{Nij, A}()
+
 Base.Broadcast.BroadcastStyle(
     ::IFHStyle{Ni, A},
     ::VIFHStyle{Ni, A},
 ) where {Ni, A} = VIFHStyle{Ni, A}()
+
+Base.Broadcast.BroadcastStyle(
+    ::IJFHStyle{Nij, A},
+    ::VIJFHStyle{Nij, A},
+) where {Nij, A} = VIJFHStyle{Nij, A}()
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {Ni, DS <: Data1DStyle{Ni}}
+) where {Ni, DS <: Union{Data1DStyle{Ni}, Data1DXStyle{Ni}}}
     args = map(arg -> slab(arg, inds...), bc.args)
     axes = (SOneTo(Ni),)
     Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, args, axes)
@@ -76,25 +99,16 @@ end
 function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {Nij, DS <: Data2DStyle{Nij}}
+) where {Nij, DS <: Union{Data2DStyle{Nij}, Data2DXStyle{Nij}}}
     args = map(arg -> slab(arg, inds...), bc.args)
     axes = (SOneTo(Nij), SOneTo(Nij))
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, args, axes)
 end
 
-function slab(
-    bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
-) where {Ni, DS <: Data1DXStyle{Ni}}
-    args = map(arg -> slab(arg, inds...), bc.args)
-    axes = (SOneTo(Ni),)
-    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, args, axes)
-end
-
 function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {Ni, DS <: Data1DXStyle{Ni}}
+) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
     args = map(arg -> column(arg, inds...), bc.args)
     axes = nothing
     Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, args, axes)
@@ -169,6 +183,16 @@ function Base.similar(
     return VIFH{Eltype, Ni}(array)
 end
 
+function Base.similar(
+    bc::Union{VIJFH{<:Any, Nij, A}, Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
+    ::Type{Eltype},
+) where {Nij, A, Eltype}
+    _, _, _, Nv, Nh = size(bc)
+    PA = parent_array_type(A)
+    array = similar(PA, (Nv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
+    return VIJFH{Eltype, Nij}(array)
+end
+
 function Base.mapreduce(
     fn::F,
     op::Op,
@@ -230,6 +254,21 @@ function Base.mapreduce(
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
         mapreduce(fn, op, column(bc, i, h))
+    end
+end
+
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    bc::Union{
+        VIJFH{<:Any, Nij, A},
+        Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
+    },
+) where {F, Op, Nij, A}
+    # mapreduce across columns
+    _, _, _, _, Nh = size(bc)
+    mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
+        mapreduce(fn, op, column(bc, i, j, h))
     end
 end
 
@@ -302,6 +341,20 @@ function Base.copyto!(
     @inbounds for h in 1:Nh, i in 1:Ni
         col_dest = column(dest, i, h)
         col_bc = column(bc, i, h)
+        copyto!(col_dest, col_bc)
+    end
+    return dest
+end
+
+function Base.copyto!(
+    dest::VIJFH{S, Nij},
+    bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
+) where {S, Nij, A}
+    # copy contiguous columns
+    _, _, _, _, Nh = size(dest)
+    @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
+        col_dest = column(dest, i, j, h)
+        col_bc = column(bc, i, j, h)
         copyto!(col_dest, col_bc)
     end
     return dest
