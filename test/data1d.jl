@@ -27,6 +27,21 @@ TestFloatTypes = (Float32, Float64)
     end
 end
 
+@testset "VF type safety" begin
+    Nv = 1 # number of vertical levels
+
+    # check that types of the same bitstype throw a conversion error
+    SA = (a = 1.0, b = 2.0)
+    SB = (c = 1.0, d = 2.0)
+
+    array = zeros(Float64, Nv, 2)
+    data = VF{typeof(SA)}(array)
+
+    data[1] = SA
+    @test data[1] isa typeof(SA)
+    @test_throws MethodError data[1] = SB
+end
+
 @testset "broadcasting between 1D data objects and scalars" begin
     for FT in TestFloatTypes
         data1 = ones(FT, 2, 2)
