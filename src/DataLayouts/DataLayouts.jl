@@ -75,13 +75,25 @@ abstract type Data2D{S, Nij} <: AbstractData{S} end
 """
     Data1DX{S,Ni}
 
-Abstract type for data storage for 1D field, with extruded columns. The horizontal made up of `Ni` values in , of type `S`.
+Abstract type for data storage for a 1D field with extruded columns.
+The horizontal is made up of `Ni` values of type `S`.
 
-Objects `data` should define `slab(data, v, h)` to return a `DataSlab1D{S,Nij}` object, and a `column(data, i, h)` to return a `DataColumn`.
+Objects `data` should define `slab(data, v, h)` to return a
+`DataSlab1D{S,Ni}` object, and a `column(data, i, h)` to return a `DataColumn`.
 """
-abstract type Data1DX{S, Nij} <: AbstractData{S} end
+abstract type Data1DX{S, Ni} <: AbstractData{S} end
+
+"""
+    Data2DX{S,Nij}
+
+Abstract type for data storage for a 2D field with extruded columns.
+The horizontal is made  is made up of `Nij × Nij` values of type `S`.
 
 
+Objects `data` should define `slab(data, v, h)` to return a
+`DataSlab2D{S,Nij}` object, and a `column(data, i, j, h)` to return a `DataColumn`.
+"""
+abstract type Data2DX{S, Nij} <: AbstractData{S} end
 
 """
     Data3D{S,Nij,Nk}
@@ -579,18 +591,15 @@ function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     VIFH{S, Ni, typeof(array)}(array)
 end
 
-function VIFH{S}(ArrayType, nelements) where {S}
-    FT = eltype(ArrayType)
-    VIFH{S}(ArrayType(undef, nelements, typesize(FT, S)))
-end
-
 function Base.size(data::VIFH{<:Any, Ni}) where {Ni}
     Nv = size(parent(data), 1)
     Nh = size(parent(data), 4)
     return (Ni, 1, 1, Nv, Nh)
 end
 
-Base.length(data::VIFH) = size(parent(data), 1) * size(parent(data), 4)
+function Base.length(data::VIFH)
+    size(parent(data), 1) * size(parent(data), 4)
+end
 Base.copy(data::VIFH{S, Ni}) where {S, Ni} = VIFH{S, Ni}(copy(parent(data)))
 
 @generated function _property_view(
@@ -602,7 +611,7 @@ Base.copy(data::VIFH{S, Ni}) where {S, Ni} = VIFH{S, Ni}(copy(parent(data)))
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIFH{$SS, Ni}(view(parent(data), :, :, $field_byterange, :)))
+    return :(VIFH{$SS, $Ni}(view(parent(data), :, :, $field_byterange, :)))
 end
 
 @inline function Base.getproperty(data::VIFH{S, Ni}, i::Integer) where {S, Ni}
@@ -621,14 +630,82 @@ end
 function column(data::VIFH{S}, i, h) where {S}
     VF{S}(view(parent(data), :, i, :, h))
 end
-column(data::VIFH{S}, i, j, h) where {S} = column(data, i, h)
-
-@propagate_inbounds function Base.getindex(col::VIFH, I::CartesianIndex)
-    col[I[1], I[4]]
+function column(data::VIFH{S}, i, j, h) where {S}
+    @assert j == 1
+    column(data, i, h)
 end
 
-@propagate_inbounds function Base.setindex!(col::VIFH, val, I::CartesianIndex)
-    col[I[1], I[4]] = val
+@propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)
+    data[I[1], I[4]]
+end
+
+@propagate_inbounds function Base.setindex!(data::VIFH, val, I::CartesianIndex)
+    data[I[1], I[4]] = val
+end
+
+# combined 2D spectral element + extruded 1D FV column data layout
+
+struct VIJFH{S, Nij, A} <: Data2DX{S, Nij}
+    array::A
+end
+
+function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
+    @assert size(array, 2) == size(array, 3) == Nij
+    VIJFH{S, Nij, typeof(array)}(array)
+end
+
+function Base.size(data::VIJFH{<:Any, Nij}) where {Nij}
+    Nv = size(parent(data), 1)
+    Nh = size(parent(data), 5)
+    return (Nij, Nij, 1, Nv, Nh)
+end
+
+function Base.length(data::VIJFH)
+    size(parent(data), 1) * size(parent(data), 5)
+end
+
+function Base.copy(data::VIJFH{S, Nij}) where {S, Nij}
+    VIJFH{S, Nij}(copy(parent(data)))
+end
+
+@generated function _property_view(
+    data::VIJFH{S, Nij},
+    idx::Val{Idx},
+) where {S, Nij, Idx}
+    SS = fieldtype(S, Idx)
+    T = basetype(SS)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(VIFH{$SS, $Nij}(view(parent(data), :, :, :, $field_byterange, :)))
+end
+
+@inline function Base.getproperty(
+    data::VIJFH{S, Nij},
+    i::Integer,
+) where {S, Nij}
+    array = parent(data)
+    T = eltype(array)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    len = typesize(T, SS)
+    VIJFH{SS, Nij}(view(array, :, :, :, (offset + 1):(offset + len), :))
+end
+
+function slab(data::VIJFH{S, Nij}, v, h) where {S, Nij}
+    IJF{S, Nij}(view(parent(data), v, :, :, :, h))
+end
+
+function column(data::VIJFH{S}, i, j, h) where {S}
+    VF{S}(view(parent(data), :, i, j, :, h))
+end
+
+@propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex)
+    data[I[1], I[5]]
+end
+
+@propagate_inbounds function Base.setindex!(data::VIJFH, val, I::CartesianIndex)
+    data[I[1], I[5]] = val
 end
 
 # broadcast machinery
