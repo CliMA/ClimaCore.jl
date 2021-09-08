@@ -14,7 +14,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Domains.Geometry: Cartesian2DPoint
 
-function hvspace_2D(
+function hvspace_2D(;
     xlim = (-π, π),
     zlim = (0, 4π),
     helem::I = 10,
@@ -49,38 +49,78 @@ function hvspace_2D(
     return (hv_center_space, hv_face_space)
 end
 
-@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
+"""
+    convergence_rate(err, Δh)
 
-    hv_center_space, hv_face_space = hvspace_2D()
-    V =
-        Geometry.Cartesian13Vector.(
-            zeros(Float64, hv_face_space),
-            ones(Float64, hv_face_space),
-        )
+Estimate convergence rate given vectors `err` and `Δh`
 
-    function rhs!(dudt, u, _, t)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(sin(-t)),
-            top = Operators.Extrapolate(),
-        )
-        return @. dudt = -A(V, u)
+    err = C Δh^p+ H.O.T
+    err_k ≈ C Δh_k^p
+    err_k/err_m ≈ Δh_k^p/Δh_m^p
+    log(err_k/err_m) ≈ log((Δh_k/Δh_m)^p)
+    log(err_k/err_m) ≈ p*log(Δh_k/Δh_m)
+    log(err_k/err_m)/log(Δh_k/Δh_m) ≈ p
+
+"""
+convergence_rate(err, Δh) =
+    [log(err[i] / err[i - 1]) / log(Δh[i] / Δh[i - 1]) for i in 2:length(Δh)]
+
+@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve vertical \\w convergence test" begin
+    metric(x, y) = norm(x .- y)
+    
+    n_elems_seq = 2 .^ [4, 5, 6, 7, 8]
+    err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+
+    # convergence test loop
+    for (k, nv) in enumerate(n_elems_seq)
+        hv_center_space, hv_face_space = hvspace_2D(velem = nv)
+        V =
+            Geometry.Cartesian13Vector.(
+                zeros(Float64, hv_face_space),
+                ones(Float64, hv_face_space),
+            )
+
+        # rhs! for test
+        function rhs!(dudt, u, _, t)
+            A = Operators.AdvectionC2C(
+                bottom = Operators.SetValue(sin(-t)),
+                top = Operators.Extrapolate(),
+            )
+            return @. dudt = -A(V, u)
+        end
+
+        # run setup
+        using OrdinaryDiffEq
+        U = sin.(Fields.coordinate_field(hv_center_space).z)
+        Δt = 0.01
+        prob = ODEProblem(rhs!, U, (0.0, 2π))
+        sol = solve(prob, SSPRK33(), dt = Δt)
+
+        # calculate error metrics
+        Δh[k] = ClimaCore.column(hv_center_space.face_local_geometry.J, 1, 1, 1)[1]
+        err[k] = metric(U, sol.u[end])    
     end
+    
+    conv = convergence_rate(err, Δh)
+    # conv should be approximately 2 for second order-accurate stencil.
+    @test conv[1] ≈ 2 atol = 0.1
+    @test conv[2] ≈ 2 atol = 0.1
+    @test conv[3] ≈ 2 atol = 0.1
+    @test conv[4] ≈ 2 atol = 0.1
+    @test conv[5] ≈ 2 atol = 0.1
 
-    U = sin.(Fields.coordinate_field(hv_center_space).z)
-    dudt = zeros(eltype(U), hv_center_space)
-    rhs!(dudt, U, nothing, 0.0)
-
-    using OrdinaryDiffEq
-    Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
-
-    htopo = Spaces.topology(hv_center_space)
-    for h in 1:Topologies.nlocalelems(htopo)
-        sol_column_field = ClimaCore.column(sol.u[end], 1, 1, h)
-        ref_column_field = ClimaCore.column(U, 1, 1, h)
-        @test norm(sol_column_field .- ref_column_field) ≤ 5e-2
-    end
+    # post-processing
+    summary = Plots.plot(
+        log10.(Δh), 
+        log10.(err), 
+        xlabel = "log10 of vertical grid spacing",
+        ylabel = "log10 of absolute error norm",
+        marker = true,
+        label = "data",
+        title = "Error convergence for vertical FD grid refinement"
+    )
+    plot!(summary, log10.(Δh), log10.(err[3].*(Δh./Δh[3]).^2), label = "expected")
+    Plots.png(summary, "err_vadvect.png")        
 end
 
 @testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve horzizontal" begin
