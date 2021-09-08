@@ -87,6 +87,18 @@ function Covariant3Vector(
 end
 
 
+function transform(
+    ax::CartesianAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x' * transform(axes(local_geometry.∂ξ∂x, 1), v),
+    )
+end
+
+
 """
     divergence_result_type(V)
 

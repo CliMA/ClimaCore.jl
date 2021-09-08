@@ -176,7 +176,6 @@ import Base: +, -, *, /, \, ==
     axes(a) == axes(b) && components(a) == components(b)
 
 # vectors
-
 const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
@@ -215,7 +214,17 @@ components(va::AdjointAxis2Tensor) = components(parent(va))'
 const Axis2TensorOrAdj{T, A, S} =
     Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
 
+# based on 1st dimension
+const Covariant2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{CovariantAxis, AbstractAxis}}
+const Contravariant2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{ContravariantAxis, AbstractAxis}}
+const Cartesian2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{CartesianAxis, AbstractAxis}}
 
+const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
+const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
+const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
 
 for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     strI = join(I)
@@ -313,4 +322,88 @@ end
 function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
+end
+
+
+@generated function _transform(
+    ato::Ato,
+    x::AxisVector{T, Afrom, SVector{N, T}},
+) where {
+    Ato <: AbstractAxis{Ito},
+    Afrom <: AbstractAxis{Ifrom},
+} where {Ito, Ifrom, T, N}
+    errcond = false
+    for n in 1:N
+        i = Ifrom[n]
+        if i ∉ Ito
+            errcond = :($errcond || x[$n] != 0)
+        end
+    end
+    vals = []
+    for i in Ito
+        val = :(zero(T))
+        for n in 1:N
+            if i == Ifrom[n]
+                val = :(x[$n])
+                break
+            end
+        end
+        push!(vals, val)
+    end
+    quote
+        if $errcond
+            throw(InexactError(:transform, Ato, x))
+        end
+        AxisVector(ato, SVector($(vals...)))
+    end
+end
+
+@generated function _transform(
+    ato::Ato,
+    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+) where {
+    Ato <: AbstractAxis{Ito},
+    Afrom <: AbstractAxis{Ifrom},
+    A2 <: AbstractAxis{J},
+} where {Ito, Ifrom, J, T}
+    N = length(Ifrom)
+    M = length(J)
+    errcond = false
+    for n in 1:N
+        i = Ifrom[n]
+        if i ∉ Ito
+            for m in 1:M
+                errcond = :($errcond || x[$n, $m] != 0)
+            end
+        end
+    end
+    vals = []
+    for m in 1:M
+        for i in Ito
+            val = :(zero(T))
+            for n in 1:N
+                if i == Ifrom[n]
+                    val = :(x[$n, $m])
+                    break
+                end
+            end
+            push!(vals, val)
+        end
+    end
+    quote
+        if $errcond
+            throw(InexactError(:transform, Ato, x))
+        end
+        Axis2Tensor((ato, axes(x, 2)), SMatrix{$(length(Ito)), $M}($(vals...)))
+    end
+end
+
+function transform(ato::CovariantAxis, v::CovariantTensor)
+    _transform(ato, v)
+end
+function transform(ato::ContravariantAxis, v::ContravariantTensor)
+    _transform(ato, v)
+end
+function transform(ato::CartesianAxis, v::CartesianTensor)
+    _transform(ato, v)
 end

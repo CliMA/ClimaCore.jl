@@ -44,3 +44,30 @@ M = Geometry.Axis2Tensor(
 
 @test DataLayouts.basetype(typeof(x)) == Float64
 @test DataLayouts.typesize(Float64, typeof(x)) == 2
+
+@test Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant1Vector(2.0),
+) == Geometry.Covariant12Vector(2.0, 0.0)
+@test Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant13Vector(2.0, 0.0),
+) == Geometry.Covariant12Vector(2.0, 0.0)
+@test_throws InexactError Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant13Vector(2.0, 2.0),
+)
+
+
+@test Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant1Vector(2.0) * Geometry.Cartesian1Vector(1.0)',
+) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+@test Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant13Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)',
+) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+@test_throws InexactError Geometry.transform(
+    Geometry.Covariant12Axis(),
+    Geometry.Covariant13Vector(2.0, 2.0) * Geometry.Cartesian1Vector(1.0)',
+)
