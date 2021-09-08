@@ -44,7 +44,7 @@ Covariant12Vector(u::CartesianVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * u
 Covariant12Vector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * local_geometry.∂x∂ξ * u
-
+3
 Cartesian12Vector(u::CartesianVector, local_geometry::LocalGeometry) = u
 Cartesian12Vector(u::CovariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x' * u
@@ -93,6 +93,91 @@ function Covariant3Vector(
     # Not true generally, but is in 2D
     Covariant3Vector(uⁱ.u³)
 end
+
+"""
+    transform(axis, V[, local_geometry])
+
+Transform the first axis of the vector or tensor `V` to `axis`.
+"""
+function transform end
+
+# Covariant <-> Cartesian
+function transform(
+    ax::CartesianAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x' * transform(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+    )
+end
+function transform(
+    ax::CovariantAxis,
+    v::CartesianTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂x∂ξ' * transform(dual(axes(local_geometry.∂x∂ξ, 1)), v),
+    )
+end
+
+# Contravariant <-> Cartesian
+function transform(
+    ax::ContravariantAxis,
+    v::CartesianTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x * transform(dual(axes(local_geometry.∂ξ∂x, 2)), v),
+    )
+end
+function transform(
+    ax::CartesianAxis,
+    v::ContravariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂x∂ξ * transform(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+    )
+end
+
+# Covariant <-> Contravariant
+function transform(
+    ax::ContravariantAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x *
+        local_geometry.∂ξ∂x' *
+        transform(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+    )
+end
+function transform(
+    ax::CovariantAxis,
+    v::ContravariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂x∂ξ' *
+        local_geometry.∂x∂ξ *
+        transform(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+    )
+end
+
+transform(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
+    transform(ato, v)
+transform(ato::ContravariantAxis, v::ContravariantTensor, ::LocalGeometry) =
+    transform(ato, v)
+transform(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
+    transform(ato, v)
+
 
 
 """
