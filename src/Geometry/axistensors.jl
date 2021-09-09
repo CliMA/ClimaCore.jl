@@ -177,11 +177,16 @@ import Base: +, -, *, /, \, ==
 
 # vectors
 const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
+
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
-(AxisVector{T, A, SVector{N, T}} where {T})(args...) where {A, N} =
-    AxisVector(A.instance, SVector(args))
+(AxisVector{T, A, SVector{1, T}} where {T})(arg1) where {A} =
+    AxisVector(A.instance, SVector(arg1))
+(AxisVector{T, A, SVector{2, T}} where {T})(arg1, arg2) where {A} =
+    AxisVector(A.instance, SVector(arg1, arg2))
+(AxisVector{T, A, SVector{3, T}} where {T})(arg1, arg2, arg3) where {A} =
+    AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
 const CovariantVector{T, A1 <: CovariantAxis, S} = AxisVector{T, A1, S}
 const ContravariantVector{T, A1 <: ContravariantAxis, S} = AxisVector{T, A1, S}
@@ -324,7 +329,12 @@ function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     AxisTensor(axes(A), components(A) - b)
 end
 
-
+function _transform(
+    ato::Ato,
+    x::AxisVector{T, Afrom, SVector{N, T}},
+) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
+    x
+end
 @generated function _transform(
     ato::Ato,
     x::AxisVector{T, Afrom, SVector{N, T}},
@@ -356,6 +366,17 @@ end
         end
         AxisVector(ato, SVector($(vals...)))
     end
+end
+
+function _transform(
+    ato::Ato,
+    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+) where {
+    Ato <: AbstractAxis{I},
+    Afrom <: AbstractAxis{I},
+    A2 <: AbstractAxis{J},
+} where {I, J, T}
+    x
 end
 
 @generated function _transform(
