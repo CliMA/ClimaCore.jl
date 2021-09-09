@@ -211,7 +211,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 false,
             )
             sgeom⁺ = compute_surface_geometry(
-                local_geometry_slab⁻,
+                local_geometry_slab⁺,
                 quad_weights,
                 face⁺,
                 q,
