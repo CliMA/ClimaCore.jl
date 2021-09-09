@@ -119,7 +119,7 @@ convergence_rate(err, Δh) =
         label = "data",
         title = "Error convergence for vertical FD grid refinement"
     )
-    plot!(summary, log10.(Δh), log10.(err[3].*(Δh./Δh[3]).^2), label = "expected")
+    plot!(summary, log10.(Δh), log10.(err[3].*(Δh./Δh[3]).^2), label = "expected-2nd-order")
     Plots.png(summary, "err_vadvect.png")        
 end
 
