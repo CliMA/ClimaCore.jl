@@ -478,11 +478,23 @@ struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
-operator_return_eltype(::Gradient{(1,)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.Covariant1Vector{T}, S)
-
-operator_return_eltype(::Gradient{(1, 2)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.Covariant12Vector{T}, S)
+function operator_return_eltype(::Gradient{I}, ::Type{T}) where {I, T <: Number}
+    N = length(I)
+    Geometry.AxisVector{T, Geometry.CovariantAxis{I}, SVector{N, T}}
+end
+function operator_return_eltype(
+    ::Gradient{I},
+    ::Type{V},
+) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
+    M = length(I)
+    Geometry.Axis2Tensor{
+        T,
+        Tuple{Geometry.CovariantAxis{I}, A},
+        SMatrix{M, N, T, M * N},
+    }
+end
+operator_return_eltype(grad::Gradient, S) where {I} =
+    RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
 
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
@@ -496,7 +508,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     @inbounds for i in 1:Nq
         x = get_node(slab_data, i)
         for ii in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(Geometry.Covariant1Vector, D[ii, i] ⊠ x)
+            ∂f∂ξ = Geometry.Covariant1Vector(D[ii, i]) ⊗ x
             out[ii] += ∂f∂ξ
         end
     end
@@ -515,18 +527,12 @@ function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
     @inbounds for j in 1:Nq, i in 1:Nq
         x = get_node(slab_data, i, j)
         for ii in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(u, zero(u)),
-                D[ii, i] ⊠ x,
-            )
-            out[ii, j] = out[ii, j] ⊞ ∂f∂ξ
+            ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
+            out[ii, j] = out[ii, j] ⊞ ∂f∂ξ₁
         end
         for jj in 1:Nq
-            ∂f∂ξ = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(zero(u), u),
-                D[jj, j] ⊠ x,
-            )
-            out[i, jj] = out[i, jj] ⊞ ∂f∂ξ
+            ∂f∂ξ₂ = Geometry.Covariant12Vector(zero(eltype(D)), D[jj, j]) ⊗ x
+            out[i, jj] = out[i, jj] ⊞ ∂f∂ξ₂
         end
     end
     return SMatrix(out)
@@ -564,8 +570,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         Wx = W ⊠ get_node(slab_data, i)
         for ii in 1:Nq
-            Dᵀ₁Wf =
-                RecursiveApply.rmap(Geometry.Covariant1Vector, D[i, ii] ⊠ Wx)
+            Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
             out[ii] = out[ii] ⊟ Dᵀ₁Wf
         end
     end
@@ -592,17 +597,11 @@ function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
         W = local_geometry.WJ / local_geometry.J
         Wx = W ⊠ get_node(slab_data, i, j)
         for ii in 1:Nq
-            Dᵀ₁Wf = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(u, zero(u)),
-                D[i, ii] ⊠ Wx,
-            )
+            Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
             out[ii, j] = out[ii, j] ⊟ Dᵀ₁Wf
         end
         for jj in 1:Nq
-            Dᵀ₂Wf = RecursiveApply.rmap(
-                u -> Geometry.Covariant12Vector(zero(u), u),
-                D[j, jj] ⊠ Wx,
-            )
+            Dᵀ₂Wf = Geometry.Covariant12Vector(zero(eltype(D)), D[j, jj]) ⊗ Wx
             out[i, jj] = out[i, jj] ⊟ Dᵀ₂Wf
         end
     end
@@ -852,7 +851,7 @@ function apply_slab(
     slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
-        # we do this to remove one allocated intermediate array 
+        # we do this to remove one allocated intermediate array
         r = Imat[i, 1] ⊠ get_node(slab_data, 1, j)
         for ii in 2:Nq_in
             r = RecursiveApply.rmuladd(

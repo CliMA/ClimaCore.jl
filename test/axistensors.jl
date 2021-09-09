@@ -37,6 +37,18 @@ using LinearAlgebra, StaticArrays
 
     @test M * y == Geometry.Cartesian12Vector(1.0, 8.5)
     @test M \ Geometry.Cartesian12Vector(1.0, 8.5) == y
+    @test x ⊗ 3 == Geometry.Covariant12Vector(3.0, 6.0)
+    @test x ⊗ (1, (a = 2, b = 3)) == (
+        Geometry.Covariant12Vector(1.0, 2.0),
+        (
+            a = Geometry.Covariant12Vector(2.0, 4.0),
+            b = Geometry.Covariant12Vector(3.0, 6.0),
+        ),
+    )
+
+
+    @test Geometry.components(M * inv(M)) == @SMatrix [1.0 0.0; 0.0 1.0]
+    @test Geometry.components(inv(M) * M) == @SMatrix [1.0 0.0; 0.0 1.0]
 
     @test_throws DimensionMismatch dot(x, x)
     @test_throws DimensionMismatch M * x

@@ -5,9 +5,11 @@
 ) where {A} = (AxisTensor{T, 1, Tuple{A}, SVector{1, T}} where {T})(u)
 =#
 
-Cartesian3Vector(w::Real, ::LocalGeometry) = Cartesian3Vector(w)
-Covariant3Vector(w₃::Real, ::LocalGeometry) = Covariant3Vector(w₃)
-Contravariant3Vector(w³::Real, ::LocalGeometry) = Contravariant3Vector(w³)
+
+(AxisVector{T, A, SVector{1, T}} where {T})(
+    a::Real,
+    ::LocalGeometry,
+) where {A} = AxisVector(A.instance, SVector(a))
 
 ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
 ContravariantVector(u::CartesianVector, local_geometry::LocalGeometry) =
@@ -26,6 +28,8 @@ CartesianVector(u::CovariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x' * u
 CartesianVector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ * u
+
+
 
 # These are for compatibility, and should be removed
 
@@ -66,6 +70,10 @@ Jcontravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
 
+contravariant1(
+    A::Axis2Tensor{<:Any, Tuple{Cartesian1Axis, Cartesian1Axis}},
+    local_geometry::LocalGeometry,
+) = (local_geometry.∂ξ∂x * A)[1, :]
 contravariant1(
     A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
     local_geometry::LocalGeometry,

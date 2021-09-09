@@ -59,6 +59,7 @@ end
     gradf = grad.(f)
     Spaces.weighted_dss!(gradf)
 
+    @test eltype(gradf) == Geometry.Covariant12Vector{Float64}
     @test gradf ≈
           Geometry.Covariant12Vector.(
         Geometry.Cartesian12Vector.(
@@ -66,6 +67,18 @@ end
             2 .* cos.(coords.x1 .+ 2 .* coords.x2),
         ),
     ) rtol = 1e-2
+
+
+    fv =
+        Geometry.Cartesian12Vector.(
+            sin.(coords.x1 .+ 2 .* coords.x2),
+            cos.(coords.x1 .+ 2 .* coords.x2),
+        )
+    gradfv = grad.(fv)
+    Spaces.weighted_dss!(gradfv)
+    @test eltype(gradfv) <: Geometry.Axis2Tensor
+
+
 end
 
 
