@@ -53,7 +53,7 @@ hv_center_space, hv_face_space = hvspace_2D()
 coords = Fields.coordinate_field(hv_center_space)
 
 Yc = map(coords) do coord
-  ρ = exp(-((coord.x + 0.5)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2))
+  ρ = exp(-((coord.x)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2))
   (
     ρ = ρ,
     ρθ = ρ,
@@ -61,7 +61,7 @@ Yc = map(coords) do coord
   )
 end
 ρw = map(Fields.coordinate_field(hv_face_space)) do coord
-  ρ = exp(-((coord.x + 0.5)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2))
+  ρ = exp(-((coord.x)^2 + (coord.z + 0.5)^2) / (2 * 0.2^2))
   ρ * Geometry.Cartesian3Vector(1.0)
 end
 
@@ -104,16 +104,13 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρθ = -vdivf2c(ρw * interpc2f( Yc.ρθ / Yc.ρ ))
     @. dYc.ρθ -= hdiv(Yc.ρuₕ * Yc.ρθ / Yc.ρ)
 
-
-    #@. dYc.ρuₕ = 0 * Yc.ρuₕ
-    #@. dρw = 0 * ρw
-
     # 1) dρu = -div(ρu ⊗ ρu / ρ)
     #   a) horizontal advection of horizontal momentum
     @. dYc.ρuₕ = -hdiv(Yc.ρuₕ ⊗ Yc.ρuₕ / Yc.ρ)
     #   b) vertical advection of horizontal momentum
     uvdivf2c = Operators.DivergenceF2C(
       bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)),
+      top = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)), # ?
     )
     @. dYc.ρuₕ -= uvdivf2c(ρw ⊗ interpc2f(Yc.ρuₕ / Yc.ρ))
 
@@ -140,20 +137,28 @@ function rhs!(dY, Y, _, t)
 
     # 3) diffusion
 
-    #  a) horizontal div of horizontal grad of horiz momentun
-    κ = 1.0
     hgrad = Operators.Gradient()
-    @. dYc.ρuₕ -= hdiv(κ * Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ))
+    gradc2f = Operators.GradientC2F()
+    gradf2c = Operators.GradientF2C()
+
+    #  a) horizontal div of horizontal grad of horiz momentun
+    # TODO: a * b * c doesn't work, need to provide both methods, use parens for now
+    κ = 1.0
+    @. dYc.ρuₕ -= hdiv(κ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
 
     #  b) vertical div of vertical grad of horiz momentun
-    gradc2f = Operators.GradientC2F()
-    @. dYc.ρuₕ -= uvdivf2c(κ * interpc2f(Yc.ρ) * gradc2f(Yc.ρuₕ / Yc.ρ))
+    Yfρ = @. interpc2f(Yc.ρ)
+    @. dYc.ρuₕ -= uvdivf2c(κ * (Yfρ * gradc2f(Yc.ρuₕ / Yc.ρ)))
 
-    #  c) horizontal div of horizontal grad of vert momentun
-    @. dρw -= hdiv(κ * interpc2f(Yc.ρ) * hgrad(uₕc))
+    #  c) horizontal div of horizontal grad of vert momentum
+    # TODO: output is Cartesian3, computed result is Cartesian1
+    # uₕc -> Cartesian1Vector
+    # hgrad(uₕc) -> AT(CovariantAxis() , CartesianAxis())
+    # hdiv(res) -> Cartesian1Vector()
+    @. dρw -= hdiv(κ * (Yfρ * hgrad(uₕc)))
 
     #  d) vertical div of vertical grad of vert momentun
-    @. dρw -= vvdivc2f(κ * Yc.ρ * gradf2c(ρw / interpc2f(Yc.ρ)))
+    @. dρw -= vvdivc2f(κ * (Yc.ρ * gradf2c(ρw / Yfρ)))
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
@@ -232,13 +237,13 @@ v\partial_xu = v * e_x \cdot grad(u)
 @. hflux(Yc, hgrad(Yc.ρuₕ / Yc.ρ), Fields.local_geometry_field(axes(Yc)))
 =#
 
-#=
 # run!
 using OrdinaryDiffEq
 Δt = 0.01
 prob = ODEProblem(rhs!, Y, (0.0, 1.0))
 sol = solve(prob, SSPRK33(), dt = Δt, saveat=0.05);
 
+#=
 # post-processing
 using Plots
 Plots.png(Plots.plot(sol.u[1].h), "initial.png")

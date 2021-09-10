@@ -1464,6 +1464,9 @@ getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
 
 getidx(scalar, ::Location, idx) = scalar
 
+# unwap boxed scalars
+getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
+
 function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
     args = map(arg -> getidx(arg, loc, idx), bc.args)
     bc.f(args...)
