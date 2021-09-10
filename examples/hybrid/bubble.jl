@@ -21,9 +21,9 @@ using ClimaCore.Geometry
 function hvspace_2D(
   xlim = (-π, π),
   zlim = (0, 4π),
-  helem = 10,
-  velem = 64,
-  npoly = 7,
+  helem = 5,
+  velem = 100,
+  npoly = 4,
 )
   FT = Float64
   vertdomain = Domains.IntervalDomain(
@@ -60,7 +60,7 @@ const grav = 9.8 # gravitational constant
 const R_d = 287.058 # R dry (gas constant / mol mass dry air)
 const γ = 1.4 # heat capacity ratio
 const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacit at constant volume
+const C_v = R_d / (γ - 1) # heat capacity at constant volume
 const R_m = R_d # moist R, assumed to be dry
 
 function pressure(ρθ)
@@ -72,28 +72,47 @@ function pressure(ρθ)
   end
 end
 
+Φ(z) = grav * z
+
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 function init_dry_rising_bubble_2d(x, z)
     x_c = 0.0
     z_c = 350.0
     r_c = 250.0
     θ_b = 300.0
-    θ_c = 10.0 #0.5
+    θ_c = 0.0 #0.5
     cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
-    g = 0.0 #grav
+    g = grav
 
     # auxiliary quantities
     r = sqrt((x - x_c)^2 + (z - z_c)^2)
     θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0 # potential temperature perturbation
+
     θ = θ_b + θ_p # potential temperature
-    p_exn = 1.0 - g * z / cp_d / θ # exner function
+    π_exn = 1.0 - g * z / cp_d / θ # exner function
+    T = π_exn * θ # temperature
+    p = p_0 * π_exn^(cp_d / R_d) # pressure
+    ρ = p / R_d / T # density
+    ρθ = ρ * θ # potential temperature density
 
-    # density
-    ρ = p_0 * p_exn^(cv_d / R_d) / R_d / θ
+    # # p = p_0 * (R_d * ρθ  / p_0)^(R_d / C_v)
+    # #   = p_0 * p_exn = p_0 * (1 - (g*z)/(cp_d *θ  ))
 
-    return (ρ = ρ, ρθ = ρ * θ,  ρuₕ = ρ * Geometry.Cartesian1Vector(0.0))
+    # # dp/dz = p0 * g / cp_d / θ = 1e5 * 9.8 / 1008 / 300 ≈ 3.2
+
+    # # ρ * g = ρθ / θ * g = p_0 * p_exn^(cv_d / R_d) / R_d / θ * g
+
+    # # density
+    # ρθ = p_0 * p_exn^(cv_d / R_d) / R_d
+    # ρ = ρθ / θ
+
+    # ## Compute perturbed thermodynamic state:
+    # p_exn = 1.0 - grav / cp_d / θ * z             # exner pressure
+    # ρ = p_0 / (R_d * θ) * (π_exner)^(cv_d / R_d)      # density
+
+    return (ρ = ρ, ρθ = ρθ,  ρuₕ = ρ * Geometry.Cartesian1Vector(0.0))
 end
 
 # initial conditions
@@ -159,87 +178,108 @@ function rhs!(dY, Y, _, t)
     )
     hdiv = Operators.Divergence()
 
-    @. dYc.ρ = -vdivf2c(ρw)
-    @. dYc.ρ -= hdiv(Yc.ρuₕ)
+    # @. dYc.ρ = -vdivf2c(ρw)
+    # @. dYc.ρ -= hdiv(Yc.ρuₕ)
 
-    @. dYc.ρθ = -vdivf2c(ρw * interpc2f( Yc.ρθ / Yc.ρ ))
-    @. dYc.ρθ -= hdiv(Yc.ρuₕ * Yc.ρθ / Yc.ρ)
+    # @. dYc.ρθ = -vdivf2c(ρw * interpc2f( Yc.ρθ / Yc.ρ ))
+    # @. dYc.ρθ -= hdiv(Yc.ρuₕ * Yc.ρθ / Yc.ρ)
 
-    # 1) dρu = -div(ρu ⊗ ρu / ρ)
-    #   a) horizontal advection of horizontal momentum
+    # # 1) dρu = -div(ρu ⊗ ρu / ρ)
+    # #   a) horizontal advection of horizontal momentum
 
-    @. dYc.ρuₕ = -hdiv(Yc.ρuₕ ⊗ Yc.ρuₕ / Yc.ρ)
-    #   b) vertical advection of horizontal momentum
-    uvdivf2c = Operators.DivergenceF2C(
-      bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)),
-      top = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)), # ?
-    )
-    @. dYc.ρuₕ -= uvdivf2c(ρw ⊗ interpc2f(Yc.ρuₕ / Yc.ρ))
+    # @. dYc.ρuₕ = -hdiv(Yc.ρuₕ ⊗ Yc.ρuₕ / Yc.ρ)
+    # #   b) vertical advection of horizontal momentum
+    # uvdivf2c = Operators.DivergenceF2C(
+    #   bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)),
+    #   top = Operators.SetValue(Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0)), # ?
+    # )
+    # @. dYc.ρuₕ -= uvdivf2c(ρw ⊗ interpc2f(Yc.ρuₕ / Yc.ρ))
 
-    #   c) horizontal advection of vertical momentum
-    uₕc = @. interpc2f(Yc.ρuₕ / Yc.ρ)    # requires boundary conditions
-    @. dρw  = -hdiv(uₕc ⊗ ρw)
+    # #   c) horizontal advection of vertical momentum
+    # uₕc = @. interpc2f(Yc.ρuₕ / Yc.ρ)    # requires boundary conditions
+    # @. dρw  = -hdiv(uₕc ⊗ ρw)
 
-    #   d) vertical advection of vertical momentum
-    interpf2c = Operators.InterpolateF2C()
+    # #   d) vertical advection of vertical momentum
+    # interpf2c = Operators.InterpolateF2C()
     vvdivc2f = Operators.DivergenceC2F(
-      bottom = Operators.SetGradient(Geometry.Cartesian3Vector(0.0)),
-      top = Operators.SetGradient(Geometry.Cartesian3Vector(0.0))
+       bottom = Operators.SetGradient(Geometry.Cartesian3Vector(0.0)),
+       top = Operators.SetGradient(Geometry.Cartesian3Vector(0.0))
     )
-    @. dρw  -= vvdivc2f(interpf2c(ρw ⊗ ρw) / Yc.ρ) # vvdivc2f requires boundary conditions
+    #∂f =  Operators.GradientC2F(bottom=Operators.SetGradient(Geometry.Cartesian3Vector(0.0)), top = Operators.SetGradient(Geometry.Cartesian3Vector(0.0)))
+    ∂f = Operators.GradientC2F()
+    B = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.Cartesian13Vector(0.0, 0.0)),
+        top = Operators.SetValue(Geometry.Cartesian13Vector(0.0, 0.0)),
+    )
 
-    # 2) pressure gradient terms
-    # not sure how pressure is computed, but for now we set it to 1.0
+    # @. dρw -= vvdivc2f(interpf2c(ρw ⊗ ρw) / Yc.ρ) # vvdivc2f requires boundary conditions
+
+    # # 2) pressure & geopotential gradient terms
+    # # not sure how pressure is computed, but for now we set it to 1.0
     p = @. pressure(Yc.ρθ)
 
-    #   a) horizontal
-    Ih =  Ref(Geometry.Axis2Tensor((Geometry.Cartesian1Axis(), Geometry.Cartesian1Axis()), @SMatrix [1.0]))
-    @. dYc.ρuₕ -= hdiv(p * Ih)
+    # #   a) horizontal
+    # Ih =  Ref(Geometry.Axis2Tensor((Geometry.Cartesian1Axis(), Geometry.Cartesian1Axis()), @SMatrix [1.0]))
+    # @. dYc.ρuₕ -= hdiv(p * Ih)
 
     #   b) vertical
     Iv =  Ref(Geometry.Axis2Tensor((Geometry.Cartesian3Axis(), Geometry.Cartesian3Axis()), @SMatrix [1.0]))
-    @. dρw -= vvdivc2f(p * Iv)
-
-    # 3) diffusion
-    hgrad = Operators.Gradient()
-    gradc2f = Operators.GradientC2F()
-    gradf2c = Operators.GradientF2C()
+    #@. dρw -= vvdivc2f(p * Iv)
+    #@. dρw = -vvdivc2f(p * Iv)
+    @. dρw = B(Geometry.Cartesian3Vector(-∂f(p)))
     einterpc2f = Operators.InterpolateC2F(
       bottom = Operators.Extrapolate(),
       top = Operators.Extrapolate(),
     )
-    #  a) horizontal div of horizontal grad of horiz momentun
-    # TODO: a * b * c doesn't work, need to provide recursive pairwise method? use parens for now
-    κ = 10.0 # m^2/s
-    @. dYc.ρuₕ += hdiv(κ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
+    #gradc2f = Operators.GradientC2F(
+    #  bottom = Operators.SetGradient(0.0),
+    #  top = Operators.SetGradient(0.0)
+    #)
 
-    #  b) vertical div of vertical grad of horiz momentun
-    Yfρ = @. einterpc2f(Yc.ρ)
-    @. dYc.ρuₕ += uvdivf2c(κ * (Yfρ * gradc2f(Yc.ρuₕ / Yc.ρ)))
+    #@. dρw -= einterpc2f(Yc.ρ) * gradc2f(Φ(coords.z))
+    @. dρw -= einterpc2f(Yc.ρ) * Geometry.Cartesian3Vector(grav)
 
-    #  c) horizontal div of horizontal grad of vert momentum
-    @. dρw += hdiv(κ * (Yfρ * hgrad(ρw / Yfρ)))
+    # # 3) diffusion
+    # hgrad = Operators.Gradient()
+    # gradf2c = Operators.GradientF2C()
+    # gradc2f = Operators.GradientC2F()
+    # einterpc2f = Operators.InterpolateC2F(
+    #   bottom = Operators.Extrapolate(),
+    #   top = Operators.Extrapolate(),
+    # )
+    # #  a) horizontal div of horizontal grad of horiz momentun
+    # # TODO: a * b * c doesn't work, need to provide recursive pairwise method? use parens for now
+    # κ = 10.0 # m^2/s
+    # @. dYc.ρuₕ += hdiv(κ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
 
-    #  d) vertical div of vertical grad of vert momentun
-    @. dρw += vvdivc2f(κ * (Yc.ρ * gradf2c(ρw / Yfρ)))
+    # #  b) vertical div of vertical grad of horiz momentun
+    # Yfρ = @. einterpc2f(Yc.ρ)
+    # @. dYc.ρuₕ += uvdivf2c(κ * (Yfρ * gradc2f(Yc.ρuₕ / Yc.ρ)))
+
+    # #  c) horizontal div of horizontal grad of vert momentum
+    # @. dρw += hdiv(κ * (Yfρ * hgrad(ρw / Yfρ)))
+
+    # #  d) vertical div of vertical grad of vert momentun
+    # @. dρw += vvdivc2f(κ * (Yc.ρ * gradf2c(ρw / Yfρ)))
 
     #W = parent(ClimaCore.column(dρw, 1, 1))
     #@show W[1] W[2] W[end-1] W[end]
 
-    Spaces.weighted_dss!(dYc)
-    Spaces.weighted_dss!(dρw)
+    #Spaces.weighted_dss!(dYc)
+    #Spaces.weighted_dss!(dρw)
     return dY
 end
 
 dYdt = similar(Y)
-rhs!(dYdt, Y, nothing, 0.0)
+rhs!(dYdt, Y, nothing, 0.0);
 
+#=
 # run!
 using OrdinaryDiffEq
-Δt = 0.001
-prob = ODEProblem(rhs!, Y, (0.0, 0.1))
-sol = solve(prob, SSPRK33(), dt = Δt);
-
+Δt = 0.01
+prob = ODEProblem(rhs!, Y, (0.0, 100.0))
+sol = solve(prob, SSPRK33(), dt = Δt, progress=true);
+=#
 # post-processing
 #=
 using Plots
