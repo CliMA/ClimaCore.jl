@@ -28,37 +28,37 @@ end
 
 const Nstate = 4
 
-function init_y0_ref!(y0_ref, X, ::Val{Nq}, parameters) where {Nq}
-    @assert Nq == size(X, 1) == size(X, 2) == size(y0_ref, 1) == size(y0_ref, 2)
+function init_st_ref!(st_ref, X, ::Val{Nq}, parameters) where {Nq}
+    @assert Nq == size(X, 1) == size(X, 2) == size(st_ref, 1) == size(st_ref, 2)
     n1 = size(X, 4)
     n2 = size(X, 5)
-    @assert size(y0_ref, 4) == n1
-    @assert size(y0_ref, 5) == n2
+    @assert size(st_ref, 4) == n1
+    @assert size(st_ref, 5) == n2
 
     @threads for h2 in 1:n2
         for h1 in 1:n1
             @inbounds for j in 1:Nq
                 @simd for i in 1:Nq
-                    x = (x1 = X[i, j, 1, h1, h2], x2 = X[i, j, 2, h1, h2])
-                    y = init_state(x, parameters)
-                    y0_ref[i, j, 1, h1, h2] = y.ρ
-                    y0_ref[i, j, 2, h1, h2] = y.ρu.u1
-                    y0_ref[i, j, 3, h1, h2] = y.ρu.u2
-                    y0_ref[i, j, 4, h1, h2] = y.ρθ
+                    coord = (x = X[i, j, 1, h1, h2], y = X[i, j, 2, h1, h2])
+                    st = init_state(coord, parameters)
+                    st_ref[i, j, 1, h1, h2] = st.ρ
+                    st_ref[i, j, 2, h1, h2] = st.ρu.u1
+                    st_ref[i, j, 3, h1, h2] = st.ρu.u2
+                    st_ref[i, j, 4, h1, h2] = st.ρθ
                 end
             end
         end
     end
-    return y0_ref
+    return st_ref
 end
 
-function init_y0_ref(X, ::Val{Nq}, parameters) where {Nq}
+function init_st_ref(X, ::Val{Nq}, parameters) where {Nq}
     global Nstate
     n1 = size(X, 4)
     n2 = size(X, 5)
-    y0_ref = Array{Float64}(undef, (Nq, Nq, Nstate, n1, n2))
-    init_y0_ref!(y0_ref, X, Val(Nq), parameters)
-    return y0_ref
+    st_ref = Array{Float64}(undef, (Nq, Nq, Nstate, n1, n2))
+    init_st_ref!(st_ref, X, Val(Nq), parameters)
+    return st_ref
 end
 
 struct TendencyState{DT, WJT, ST}
