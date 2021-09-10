@@ -175,7 +175,7 @@ function Base.getproperty(model::RRTMGPModel, s::Symbol)
     end
 end
 
-function Base.propertynames(model::RRTMGPModel, private = false)
+function Base.propertynames(model::RRTMGPModel, private::Bool = false)
     names = propertynames(getfield(model, :mutable_values))
     if private
         return (fieldnames(typeof(model)), names...)
@@ -327,6 +327,7 @@ end
 #         array .= value
 # but they also allow `array` to be a CuArray while `value` is an Array (in
 # which case broadcasting results in an error).
+# TODO: Can this be parallelized?
 set_array!(array, value::Real, args...) = fill!(array, value)
 function set_array!(array, value::AbstractArray{<:Real, 1}, args...)
     if size(value, 1) == size(array, 1)
@@ -632,7 +633,8 @@ function RRTMGPModel(
         src_lw = 
             RRTMGP.Sources.source_func_longwave(FT, ncol, nlay, op_symb, DA)
         flux_lw = RRTMGP.Fluxes.FluxLW(ncol, nlay, FT, DA)
-        fluxb_lw = optics == :gray ? nothing : deepcopy(flux_lw)
+        fluxb_lw =
+            optics == :gray ? nothing : RRTMGP.Fluxes.FluxLW(ncol, nlay, FT, DA)
         record_array!(rec, flux_lw.flux_up, "up_lw_flux", :lev, coords)
         record_array!(rec, flux_lw.flux_dn, "dn_lw_flux", :lev, coords)
         record_array!(rec, flux_lw.flux_net, "lw_flux", :lev, coords)
@@ -694,7 +696,8 @@ function RRTMGPModel(
         src_sw = 
             RRTMGP.Sources.source_func_shortwave(FT, ncol, nlay, op_symb, DA)
         flux_sw = RRTMGP.Fluxes.FluxSW(ncol, nlay, FT, DA)
-        fluxb_sw = optics == :gray ? nothing : deepcopy(flux_sw)
+        fluxb_sw =
+            optics == :gray ? nothing : RRTMGP.Fluxes.FluxSW(ncol, nlay, FT, DA)
         record_array!(rec, flux_sw.flux_up, "up_sw_flux", :lev, coords)
         record_array!(rec, flux_sw.flux_dn, "dn_sw_flux", :lev, coords)
         record_array!(rec, flux_sw.flux_net, "sw_flux", :lev, coords)
@@ -715,7 +718,7 @@ function RRTMGPModel(
         set_and_record_array!(zenith, "solar_zenith_angle", :NA, tuple...)
         set_and_record_array!(
             toa_flux,
-            "top_of_atmosphere_dir_dn_sw_flux",
+            "weighted_irradiance",
             :NA,
             tuple...,
         )
@@ -825,14 +828,21 @@ function RRTMGPModel(
             gas_name -> !(gas_name in ("h2o", "h2o_frgn", "h2o_self", "o3")),
             keys(idx_gases),
         )
-        gm = all(
+        use_global_means = all(
             gas_name ->
                 init_dict[Symbol(vmr_str * gas_name)] isa Real &&
                 !(Symbol("extension_" * vmr_str * gas_name) in keys(init_dict)),
             gas_names,
-        ) # whether to use global means
-        vmr = RRTMGP.Vmrs.init_vmr(ngas, nlay, ncol, FT, DA; gm)
-        if gm
+        )
+        # TODO: This gives the wrong types for CUDA 3.4 and above.
+        # vmr = RRTMGP.Vmrs.init_vmr(ngas, nlay, ncol, FT, DA; gm = use_global_means)
+        if use_global_means
+            vmr = RRTMGP.Vmrs.VmrGM(
+                DA{FT}(undef, nlay, ncol),
+                DA{FT}(undef, nlay, ncol),
+                DA{FT}(undef, ngas),
+            )
+            vmr.vmr .= zero(FT)
             set_and_record_array!(vmr.vmr_h2o, vmr_str * "h2o", :lay, tuple...)
             set_and_record_array!(vmr.vmr_o3, vmr_str * "o3", :lay, tuple...)
             for gas_name in gas_names
@@ -844,6 +854,7 @@ function RRTMGPModel(
                 )
             end
         else
+            vmr = RRTMGP.Vmrs.Vmr(DA{FT}(undef, nlay, ncol, ngas))
             for gas_name in ["h2o", "o3", gas_names...]
                 set_and_record_array!(
                     @view(vmr.vmr[:, :, idx_gases[gas_name]]),
@@ -974,10 +985,9 @@ function RRTMGPModel(
     end
 
     op_type = use_one_scalar ? RRTMGP.Optics.OneScalar : RRTMGP.Optics.TwoStream
-    op = op_type(FT, ncol, nlay, DA)
     solver = RRTMGP.RTE.Solver(
         as,
-        op,
+        op_type(FT, ncol, nlay, DA),
         src_lw,
         src_sw,
         bcs_lw,
@@ -1039,8 +1049,8 @@ end
 
 # TODO: If the extension profile doesn't change, we don't need to recompute
 #       `col_dry` for it.
-compute_col_dry!(::RRTMGPModel{:gray}) = nothing
-compute_col_dry!(model::RRTMGPModel) = RRTMGP.Optics.compute_col_dry!(
+compute_concentrations!(::RRTMGPModel{:gray}) = nothing
+compute_concentrations!(model::RRTMGPModel) = RRTMGP.Optics.compute_col_dry!(
     model.solver.as.p_lev,
     model.solver.as.col_dry,
     model.param_set,
@@ -1132,8 +1142,15 @@ function compute_fluxes!(model::RRTMGPModel)
     for level_olator in model.level_olators
         level_olator()
     end
+    # model.solver.as.t_lev[1, :] .= model.solver.as.t_sfc
+    model.solver.as.p_lev[end, :] .= get_p_min(model.solver.as, model.lookups)
+    # model.solver.as.t_lev[end, :] .= model.solver.as.t_lay[end, :]
+    # model.solver.as.p_lay .=
+    #     max.(model.solver.as.p_lay, get_p_min(model.solver.as, model.lookups))
+    # model.solver.as.p_lev .=
+    #     max.(model.solver.as.p_lev, get_p_min(model.solver.as, model.lookups))
     compute_boundary_layer!(model)
-    compute_col_dry!(model)
+    compute_concentrations!(model)
     compute_lw_fluxes!(model)
     compute_sw_fluxes!(model)
     return compute_net_flux!(model)
