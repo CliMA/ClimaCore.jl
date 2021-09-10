@@ -423,6 +423,7 @@ function transform(ato::ContravariantAxis, v::ContravariantTensor)
 end
 function transform(ato::CartesianAxis, v::CartesianTensor)
     _transform(ato, v)
+end
 
 """
     outer(x, y)
