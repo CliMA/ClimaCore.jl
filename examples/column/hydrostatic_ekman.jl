@@ -124,6 +124,7 @@ function tendency!(dY, Y, _, t)
 
     uv_1 = Operators.getidx(uv, Operators.Interior(), 1)
     u_wind = LinearAlgebra.norm(uv_1)
+
     A = Operators.AdvectionC2C(
         bottom = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
         top = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
@@ -131,7 +132,7 @@ function tendency!(dY, Y, _, t)
 
     # uv
     bcs_bottom =
-        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind * uv_1))
+        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind) ⊗ uv_1)
     bcs_top = Operators.SetValue(uvg)
     ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
     ∂f = Operators.GradientC2F(top = bcs_top)
