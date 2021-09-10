@@ -30,6 +30,24 @@ abstract type AbstractData{S} end
 
 Base.size(data::AbstractData, i::Integer) = size(data)[i]
 
+function Base.show(io::IO, data::AbstractData)
+    indent_width = 2
+    (rows, cols) = displaysize(io)
+    println(io, summary(data))
+    print(io, " "^indent_width)
+    print(
+        IOContext(
+            io,
+            :compact => true,
+            :limit => true,
+            :displaysize => (rows, cols - indent_width),
+        ),
+        vec(parent(data)),
+    )
+    return io
+end
+
+
 """
     DataColumn{S}
 
