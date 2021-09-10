@@ -1131,7 +1131,11 @@ end
 
 
 abstract type GradientOperator <: FiniteDifferenceOperator end
-return_eltype(::GradientOperator, arg) = Geometry.Covariant3Vector{eltype(arg)}
+# TODO: we should probably make the axis the operator is working over as part of the operator type
+# similar to the spectral operators, hardcoded to vertical only `(3,)` for now
+return_eltype(::GradientOperator, arg) =
+    Geometry.gradient_result_type(Val((3,)), eltype(arg))
+#return_eltype(::GradientOperator, arg) = Geometry.Covariant3Vector{eltype(arg)}
 
 
 """
@@ -1265,6 +1269,7 @@ boundary_width(op::GradientC2F, ::SetGradient) = 1
 function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     space = axes(arg)
+    # imposed flux boundary condition at left most face
     Geometry.transform(
         Geometry.Covariant3Axis(),
         bc.val,
@@ -1274,6 +1279,7 @@ end
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
+    # imposed flux boundary condition at right most face
     Geometry.transform(
         Geometry.Covariant3Axis(),
         bc.val,
@@ -1441,25 +1447,19 @@ function stencil_left_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
         getidx(arg, loc, idx + half),
         Geometry.LocalGeometry(space, idx + half),
     )
-    Ju³₋ = Geometry.Jcontravariant3(
-        bc.val,
-        Geometry.LocalGeometry(space, idx - half),
-    )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J / 2)
+    Ju³ = Geometry.Jcontravariant3(bc.val, local_geometry)
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³, local_geometry.J / 2)
 end
 function stencil_right_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
-    Ju³₊ = Geometry.Jcontravariant3(
-        bc.val,
-        Geometry.LocalGeometry(space, idx + half),
-    )
+    Ju³ = Geometry.Jcontravariant3(bc.val, local_geometry)
     Ju³₋ = Geometry.Jcontravariant3(
         getidx(arg, loc, idx - half),
         Geometry.LocalGeometry(space, idx - half),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J / 2)
+    RecursiveApply.rdiv(Ju³ ⊟ Ju³₋, local_geometry.J / 2)
 end
 
 # left / right SetDivergence boundary conditions
@@ -1637,6 +1637,9 @@ getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
     )
 
 getidx(scalar, ::Location, idx) = scalar
+
+# unwap boxed scalars
+getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
 
 function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
     args = map(arg -> getidx(arg, loc, idx), bc.args)
