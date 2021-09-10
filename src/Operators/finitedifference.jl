@@ -1067,32 +1067,41 @@ return_space(::GradientF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
 stencil_interior_width(::GradientF2C) = ((-half, half),)
 
 function stencil_interior(::GradientF2C, loc, idx, arg)
-    Geometry.Covariant3Vector(
-        getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half),
-    )
+    Geometry.Covariant3Vector(1) ⊗
+    (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half))
 end
 
 boundary_width(op::GradientF2C, ::SetValue) = 1
 
 function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
     @assert idx == left_center_boundary_idx(arg)
-    Geometry.Covariant3Vector(getidx(arg, loc, idx + half) ⊟ bc.val)
+    Geometry.Covariant3Vector(1) ⊗ (getidx(arg, loc, idx + half) ⊟ bc.val)
 end
 
 function stencil_right_boundary(::GradientF2C, bc::SetValue, loc, idx, arg)
     @assert idx == right_center_boundary_idx(arg)
-    Geometry.Covariant3Vector(bc.val ⊟ getidx(arg, loc, idx - half))
+    Geometry.Covariant3Vector(1) ⊗ (bc.val ⊟ getidx(arg, loc, idx - half))
 end
 
 boundary_width(op::GradientF2C, ::Extrapolate) = 1
 
 function stencil_left_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
+    space = axes(arg)
     @assert idx == left_center_boundary_idx(arg)
-    stencil_interior(op, loc, idx + 1, arg)
+    Geometry.transform(
+        Geometery.Covariant3Axis(),
+        stencil_interior(op, loc, idx + 1, arg),
+        Geometry.LocalGeometry(space, idx),
+    )
 end
 function stencil_right_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
+    space = axes(arg)
     @assert idx == right_center_boundary_idx(arg)
-    stencil_interior(op, loc, idx - 1, arg)
+    Geometry.transform(
+        Geometry.Covariant3Axis(),
+        stencil_interior(op, loc, idx - 1, arg),
+        Geometry.LocalGeometry(space, idx),
+    )
 end
 
 """
@@ -1118,9 +1127,8 @@ return_space(::GradientC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
 stencil_interior_width(::GradientC2F) = ((-half, half),)
 
 function stencil_interior(::GradientC2F, loc, idx, arg)
-    Geometry.Covariant3Vector(
-        getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half),
-    )
+    Geometry.Covariant3Vector(1) ⊗
+    (getidx(arg, loc, idx + half) ⊟ getidx(arg, loc, idx - half))
 end
 
 
@@ -1128,11 +1136,11 @@ boundary_width(op::GradientC2F, ::SetValue) = 1
 function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     # ∂x[i] = 2(∂x[i + half] - val)
-    Geometry.Covariant3Vector(2 ⊠ (getidx(arg, loc, idx + half) ⊟ bc.val))
+    Geometry.Covariant3Vector(2) ⊗ (getidx(arg, loc, idx + half) ⊟ bc.val)
 end
 function stencil_right_boundary(::GradientC2F, bc::SetValue, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
-    Geometry.Covariant3Vector(2 ⊠ (bc.val ⊟ getidx(arg, loc, idx - half)))
+    Geometry.Covariant3Vector(2) ⊗ (bc.val ⊟ getidx(arg, loc, idx - half))
 end
 
 # left / right SetGradient boundary conditions
@@ -1141,13 +1149,21 @@ function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     space = axes(arg)
     # imposed flux boundary condition at left most face
-    Geometry.CovariantVector(bc.val, Geometry.LocalGeometry(space, idx))
+    Geometry.transform(
+        Geometry.Covariant3Axis(),
+        bc.val,
+        Geometry.LocalGeometry(space, idx),
+    )
 end
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
     # imposed flux boundary condition at right most face
-    Geometry.CovariantVector(bc.val, Geometry.LocalGeometry(space, idx))
+    Geometry.transform(
+        Geometry.Covariant3Axis(),
+        bc.val,
+        Geometry.LocalGeometry(space, idx),
+    )
 end
 
 abstract type DivergenceOperator <: FiniteDifferenceOperator end
@@ -1252,7 +1268,7 @@ return_space(::DivergenceC2F, space::Spaces.CenterFiniteDifferenceSpace) =
 return_space(
     ::DivergenceC2F,
     space::Spaces.CenterExtrudedFiniteDifferenceSpace,
-) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::DivergenceC2F) = ((-half, half),)
 

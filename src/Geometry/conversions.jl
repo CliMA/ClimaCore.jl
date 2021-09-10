@@ -59,30 +59,23 @@ covariant2(u::AxisVector, local_geometry::LocalGeometry) =
 covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
+# TODO: specialize?
 contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
-    ContravariantVector(u, local_geometry).u¹
+    transform(Contravariant123Axis(), u, local_geometry).u¹
 contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
-    ContravariantVector(u, local_geometry).u²
+    transform(Contravariant123Axis(), u, local_geometry).u²
 contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
-    ContravariantVector(u, local_geometry).u³
+    transform(Contravariant123Axis(), u, local_geometry).u³
 
-Jcontravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    transform(Contravariant123Axis(), u, local_geometry)[1, :]
+contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    transform(Contravariant123Axis(), u, local_geometry)[2, :]
+contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    transform(Contravariant123Axis(), u, local_geometry)[3, :]
+
+Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
-
-
-contravariant1(
-    A::Axis2Tensor{<:Any, Tuple{Cartesian1Axis, Cartesian1Axis}},
-    local_geometry::LocalGeometry,
-) = (local_geometry.∂ξ∂x * A)[1, :]
-contravariant1(
-    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
-    local_geometry::LocalGeometry,
-) = (local_geometry.∂ξ∂x * A)[1, :]
-contravariant2(
-    A::Axis2Tensor{<:Any, Tuple{Cartesian12Axis, Cartesian12Axis}},
-    local_geometry::LocalGeometry,
-) = (local_geometry.∂ξ∂x * A)[2, :]
-
 
 
 # conversions
@@ -192,10 +185,10 @@ divergence_result_type(
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
 ) where {
     FT,
-    A1 <: CartesianAxis,
+    A1,
     A2 <: CartesianAxis,
     S <: StaticMatrix{S1, S2},
-} where {S1, S2} = AxisVector{FT, A1, SVector{S1, FT}}
+} where {S1, S2} = AxisVector{FT, A2, SVector{S2, FT}}
 
 curl_result_type(::Type{V}) where {V <: Covariant12Vector{FT}} where {FT} =
     Contravariant3Vector{FT}
