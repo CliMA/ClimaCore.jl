@@ -19,8 +19,12 @@ end
 
 const LocalGeometry1D =
     LocalGeometry{C, FT, M} where {C <: Abstract1DPoint{FT}} where {FT, M}
+
 const LocalGeometry2D =
     LocalGeometry{C, FT, M} where {C <: Abstract2DPoint{FT}} where {FT, M}
+
+const LocalGeometry3D =
+    LocalGeometry{C, FT, M} where {C <: Abstract3DPoint{FT}} where {FT, M}
 
 """
     SurfaceGeometry

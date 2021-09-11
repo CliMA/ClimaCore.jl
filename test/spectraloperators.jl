@@ -19,7 +19,7 @@ Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-coords = Fields.coordinate_field(space)
+coords = Geometry.Cartesian2DPoint.(Fields.coordinate_field(space))
 
 @testset "interpolate / restrict" begin
     INq = 9

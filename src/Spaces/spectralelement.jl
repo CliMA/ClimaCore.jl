@@ -119,8 +119,8 @@ end
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
 function SpectralElementSpace2D(topology, quadrature_style)
-    CT = Domains.coordinate_type(topology)
-    FT = eltype(CT)
+    FT = eltype(topology.mesh)
+    CT = Geometry.XYPoint{FT} # Domains.coordinate_type(topology)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
@@ -149,14 +149,18 @@ function SpectralElementSpace2D(topology, quadrature_style)
             # (where the integration is of different order)
             ξ = SVector(quad_points[i], quad_points[j])
             x = Geometry.interpolate(
-                Topologies.vertex_coordinates(topology, elem),
+                Geometry.XYPoint.(
+                    Topologies.vertex_coordinates(topology, elem),
+                ),
                 ξ[1],
                 ξ[2],
             )
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 local x
                 x = Geometry.interpolate(
-                    Topologies.vertex_coordinates(topology, elem),
+                    Geometry.XYPoint.(
+                        Topologies.vertex_coordinates(topology, elem),
+                    ),
                     ξ[1],
                     ξ[2],
                 )

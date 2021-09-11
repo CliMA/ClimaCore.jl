@@ -62,8 +62,8 @@ function ExtrudedFiniteDifferenceSpace(
         center_local_geometry,
         face_local_geometry,
     )
+    return nothing
 end
-
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
@@ -109,6 +109,36 @@ function blockmat(
     Geometry.AxisTensor(
         (Geometry.Cartesian13Axis(), Geometry.Covariant13Axis()),
         SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
+    )
+end
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.Cartesian123Axis(), Geometry.Covariant123Axis()),
+        SMatrix{3, 3}(
+            A[1, 1],
+            A[1, 2],
+            zero(FT),
+            A[2, 1],
+            A[2, 2],
+            zero(FT),
+            zero(FT),
+            zero(FT),
+            B[1, 1],
+        ),
     )
 end
 

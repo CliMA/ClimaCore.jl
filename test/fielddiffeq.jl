@@ -23,7 +23,7 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 # y = [cos(x1+x2+t), sin(x1+x2+t)]
 # dy/dt = [-y[2], y[1]]
 
-f(x, t) = (c = cos(x.x1 + x.x2 + t), s = sin(x.x1 + x.x2 + t))
+f(x, t) = (c = cos(x.x + x.y + t), s = sin(x.x + x.y + t))
 function dfdt(y, _, t)
     broadcast(y -> (c = -y.s, s = y.c), y)
 end

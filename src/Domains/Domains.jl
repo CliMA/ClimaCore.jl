@@ -70,7 +70,7 @@ end
         x2periodic = false,
     )
 
-Construct a `RectangularDomain` in the horizontal. 
+Construct a `RectangularDomain` in the horizontal.
 If a given x1 or x2 boundary is not periodic, then `x1boundary` or `x2boundary` boundary tag keyword arguments must be supplied.
 """
 function RectangleDomain(
