@@ -36,7 +36,7 @@ function UnicodePlots.heatmap(
 end
 
 function UnicodePlots.lineplot(
-    field::Fields.FiniteDifferenceField;
+    field::Fields.ColumnFiniteDifferenceField;
     name::Union{Nothing, Symbol} = nothing,
     width = 80,
     height = 40,
@@ -73,7 +73,7 @@ function UnicodePlots.lineplot(
     )
 end
 
-RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
+RecipesBase.@recipe function f(field::Fields.ColumnFiniteDifferenceField)
     # unwrap the data to plot
     space = axes(field)
     xdata = parent(field)[:, 1]
@@ -230,19 +230,20 @@ function play(
             t = @elapsed begin
                 if first_print || lastframe != frame
                     field = timesteps[frame]
-                    field_plot = if field isa Fields.FiniteDifferenceField
-                        UnicodePlots.lineplot(
-                            field,
-                            title = "Column t=$(frame-1)",
-                            width = io_w,
-                            height = io_h,
-                            #xlim = field_limits,
-                        )
-                    elseif field isa Fields.SpectralElementField2D
-                        UnicodePlots.heatmap(field, width = io_w, height = io_h)
-                    else
-                        error("unknown field type: $(summary(field))")
-                    end
+                    field_plot =
+                        if field isa Fields.ColumnFiniteDifferenceField
+                            UnicodePlots.lineplot(
+                                field,
+                                title = "Column t=$(frame-1)",
+                                width = io_w,
+                                height = io_h,
+                                #xlim = field_limits,
+                            )
+                        elseif field isa Fields.SpectralElementField2D
+                            UnicodePlots.heatmap(field, width = io_w, height = io_h)
+                        else
+                            error("unknown field type: $(summary(field))")
+                        end
                     # TODO: dig through structure to just compute the number of lines directly
                     nlines = countlines(IOBuffer(string(field_plot)))
                     str = sprint(; context = (:color => true)) do ios

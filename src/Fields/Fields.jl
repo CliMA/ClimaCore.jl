@@ -34,7 +34,7 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
 
-const FiniteDifferenceField{V, S} =
+const ColumnFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
@@ -71,6 +71,13 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 
 @inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
+
+Base.@propagate_inbounds function Base.getindex(
+    field::ColumnFiniteDifferenceField,
+    i::Integer,
+)
+    Base.getindex(field_values(field), i)
+end
 
 Base.eltype(field::Field) = eltype(field_values(field))
 Base.parent(field::Field) = parent(field_values(field))

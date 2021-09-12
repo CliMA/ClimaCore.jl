@@ -89,3 +89,18 @@ end
     @test parent(Y1.u) == 4 .* parent(u)
     @test parent(Y1.x) == 4 .* parent(x)
 end
+
+
+@testset "Column getindex support" begin
+    FT = Float64
+    z₀, z₁ = FT(0), FT(1)
+    domain = Domains.IntervalDomain(z₀, z₁, x3boundary = (:bottom, :top))
+    mesh = Meshes.IntervalMesh(domain, nelems = 10)
+
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+    zc = Fields.coordinate_field(cs)
+    zf = Fields.coordinate_field(fs)
+    @test all(getindex.(Ref(zf), 1:11) .== vec(zf))
+    @test all(getindex.(Ref(zc), 1:10) .== vec(zc))
+end
