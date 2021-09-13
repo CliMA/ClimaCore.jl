@@ -11,9 +11,18 @@ CurrentModule = ClimaCore.Operators
 ```@docs
 InterpolateC2F
 InterpolateF2C
-UpwindLeftC2F
-SetBoundaryOperator
+UpwindBiasedProductC2F
+LeftBiasedC2F
+RightBiasedC2F
 ```
+
+### Advection operators
+
+```@docs
+AdvectionF2F
+AdvectionC2C
+```
+
 
 ### Gradient operators
 
@@ -22,7 +31,20 @@ GradientF2C
 GradientC2F
 ```
 
-### Boundary conditions
+### Divergence operators
+
+```@docs
+DivergenceF2C
+DivergenceC2F
+```
+
+### Other
+
+```@docs
+SetBoundaryOperator
+```
+
+## Finite difference boundary conditions
 
 ```@docs
 SetValue

@@ -335,13 +335,31 @@ function stencil_interior(::InterpolateF2C, loc, idx, arg)
 end
 
 """
-    InterpolateC2F(;boundaries..)
+    I = InterpolateC2F(;boundaries..)
+    I.(x)
 
-Interpolate from center to face. Supported boundary conditions are:
+Interpolate a center-valued field `x` to faces, using the stencil
+```math
+I(x)[i] = \\frac{1}{2} (x[i+\\tfrac{1}{2}] + x[i-\\tfrac{1}{2}])
+```
 
-- [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
-- [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value
+Supported boundary conditions are:
+
+- [`SetValue(x₀)`](@ref): set the value at the boundary face to be `x₀`. On the
+  left boundary the stencil is
+```math
+I(x)[\\tfrac{1}{2}] = x₀
+```
+- [`SetGradient(v)`](@ref): set the value at the boundary such that the gradient
+  is `v`. At the left boundary the stencil is
+```math
+I(x)[\\tfrac{1}{2}] = x[1] - \\frac{1}{2} v³
+```
+- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  At the left boundary the stencil is
+```math
+I(x)[\\tfrac{1}{2}] = x[1]
+```
 """
 struct InterpolateC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -420,14 +438,20 @@ function stencil_right_boundary(
 end
 
 """
-    WeightedInterpolateF2C()
+    WI = WeightedInterpolateF2C(; boundaries)
+    WI.(w, x)
 
-Interpolate from face to center mesh weighted by face field `ω`.
+Interpolate a face-valued field `x` to centers, weighted by a face-valued field
+`w`, using the stencil
+```math
+WI(w, x)[i] = \\frac{
+        w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
+    }{
+        2 (w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}])
+    }
+```
 
-    op = WeightedInterpolateF2C()
-    center_field .= op(ω, face_field)
-
-No boundary conditions are required (or supported).
+No boundary conditions are required (or supported)
 """
 struct WeightedInterpolateF2C{BCS} <: InterpolationOperator
     bcs::BCS
@@ -467,19 +491,24 @@ function stencil_interior(
 end
 
 """
-    WeightedInterpolateC2F(;boundaries..)
+    WI = WeightedInterpolateC2F(; boundaries)
+    WI.(w, x)
 
-Interpolate from center to face weighted by weight field `ω`.
-
-    op = WeightedInterpolateC2F(...)
-    face_field .= op(ω, center_field)
+Interpolate a center-valued field `x` to faces, weighted by a center-valued field
+`w`, using the stencil
+```math
+WI(w, x)[i] = \\frac{
+    w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
+}{
+    2 (w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}])
+}
+```
 
 Supported boundary conditions are:
 
 - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
 - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
-
 """
 struct WeightedInterpolateC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -606,10 +635,19 @@ function stencil_right_boundary(
 end
 
 """
-    LeftBiasedC2F(;boundaries)
+    L = LeftBiasedC2F(;boundaries)
+    L.(x)
 
-Interpolate from the left. Only the left boundary condition should be set:
-- [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+Interpolate a left-value field to a face-valued field from the left.
+```math
+L(x)[i] = x[i-\\tfrac{1}{2}]
+```
+
+Only the left boundary condition should be set. Currently supported is:
+- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+```math
+L(x)[\\tfrac{1}{2}] = x_0
+```
 """
 struct LeftBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -636,10 +674,19 @@ function stencil_left_boundary(::LeftBiasedC2F, bc::SetValue, loc, idx, arg)
 end
 
 """
-    RightBiasedC2F(;boundaries)
+    R = RightBiasedC2F(;boundaries)
+    R.(x)
 
-Interpolate from the right. Only the right boundary condition should be set:
-- [`SetValue(val)`](@ref): set the value to be `val` on the boundary.
+Interpolate a center-valued field to a face-valued field from the right.
+```math
+R(x)[i] = x[i+\\tfrac{1}{2}]
+```
+
+Only the right boundary condition should be set. Currently supported is:
+- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+```math
+R(x)[n+\\tfrac{1}{2}] = x_0
+```
 """
 struct RightBiasedC2F{BCS} <: InterpolationOperator
     bcs::BCS
@@ -670,9 +717,30 @@ abstract type AdvectionOperator <: FiniteDifferenceOperator end
 return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
 
 """
-    UpwindBiasedProductC2F(;boundaries)
+    U = UpwindBiasedProductC2F(;boundaries)
+    U.(v, x)
 
-TODO:
+Compute the product of a face-valued vector field `v` and a center-valued field
+`x` at cell faces by upwinding `x` according to `v`
+```math
+U(v,x)[i] = \\begin{cases}
+  v[i] x[i-\\tfrac{1}{2}] \\quad v^3[i] > 0 \\\\
+  v[i] x[i+\\tfrac{1}{2}] \\quad v^3[i] < 0
+  \\end{cases}
+```
+
+Supported boundary conditions are:
+- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` on the boundary. On
+  the left boundary the stencil is
+  ```math
+  U(v,x)[\\tfrac{1}{2}] = \\begin{cases}
+    v[\\tfrac{1}{2}] x_0 \\quad v^3[\\tfrac{1}{2}] > 0 \\\\
+    v[\\tfrac{1}{2}] x[1] \\quad v^3[\\tfrac{1}{2}] < 0
+    \\end{cases}
+  ```
+- [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
+  interior point. On the left boundary, the stencil is
+  U(v,x)[\\tfrac{1}{2}] = U(v,x)[1 + \\tfrac{1}{2}]
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -794,6 +862,21 @@ function stencil_right_boundary(
 end
 
 
+"""
+    A = AdvectionF2F(;boundaries)
+    A.(v, θ)
+
+Vertical advection operator at cell faces, for a face-valued velocity field `v` and face-valued
+variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
+
+It uses the following stencil
+```math
+A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
+```
+
+No boundary conditions are currently supported.
+```
+"""
 struct AdvectionF2F{BCS} <: AdvectionOperator
     bcs::BCS
 end
@@ -832,19 +915,29 @@ end
 
 
 """
-    AdvectionC2C(;boundaries)
+    A = AdvectionC2C(;boundaries)
+    A.(v, θ)
 
-Advection operator at cell centers, for cell face velocity field `v` cell center variables `θ`:
-
-    op = Advection(...)
-    center_field .= op(v, θ)
+Vertical advection operator at cell centers, for cell face velocity field `v` cell center
+variables `θ`, approximating ``v^3 \\partial_3 \\theta``.
 
 It uses the following stencil
 ```math
 A(v,θ)[i] = \\frac{1}{2} \\{ (θ[i+1] - θ[i]) v³[i+\\tfrac{1}{2}] + (θ[i] - θ[i-1])v³[i-\\tfrac{1}{2}]\\}
 ```
-- [`SetValue(val)`](@ref): set the value of `θ` at the boundary face to be `val`.
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value
+
+Supported boundary conditions:
+
+- [`SetValue(θ₀)`](@ref): set the value of `θ` at the boundary face to be `θ₀`.
+  At the lower boundary, this is:
+```math
+A(v,θ)[1] = \\frac{1}{2} \\{ (θ[2] - θ[1]) v³[1\\tfrac{1}{2}] + (θ[1] - θ₀)v³[\\tfrac{1}{2}]\\}
+```
+- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+  At the lower boundary, this is:
+```math
+A(v,θ)[1] = (θ[2] - θ[1]) v³[1\\tfrac{1}{2}] \\}
+```
 """
 struct AdvectionC2C{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1043,15 +1136,27 @@ return_eltype(::GradientOperator, arg) = Geometry.Covariant3Vector{eltype(arg)}
 
 
 """
-    GradientF2C(;boundaryname=boundarycondition...)
+    G = GradientF2C(;boundaryname=boundarycondition...)
+    G.(x)
 
-Centered-difference gradient operator from a `FaceFiniteDifferenceSpace` to a
-`CenterFiniteDifferenceSpace`, applying the relevant boundary conditions. These
-can be:
- - by default, the current value at the boundary face will be used.
- - [`SetValue(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
- - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-   to be the same as the neighbouring interior value.
+Compute the gradient of a face-valued field `x`, returning a center-valued
+`Covariant3` vector field, using the stencil:
+```math
+G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
+```
+
+The following boundary conditions are supported:
+ - by default, the value of `x` at the boundary face will be used.
+ - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
+   boundary is `x₀`. For the left boundary, this becomes:
+```math
+G(x)[1]³ = x[1+\\tfrac{1}{2}] - x₀
+```
+- [`Extrapolate()`](@ref): set the value at the center closest to the boundary
+to be the same as the neighbouring interior value. For the left boundary, this becomes:
+```math
+G(x)[1]³ = G(x)[2]³
+```
 """
 struct GradientF2C{BCS} <: GradientOperator
     bcs::BCS
@@ -1105,13 +1210,26 @@ function stencil_right_boundary(op::GradientF2C, ::Extrapolate, loc, idx, arg)
 end
 
 """
-    GradientC2F(;boundaries)
+    G = GradientC2F(;boundaryname=boundarycondition...)
+    G.(x)
 
-Centered-difference gradient operator from a `CenterFiniteDifferenceSpace` to a
-`FaceFiniteDifferenceSpace`, applying the relevant boundary conditions. These
-can be:
- - [`SetValue(val)`](@ref): calculate the gradient assuming the value at the boundary is `val`.
- - [`SetGradient(val)`](@ref): set the value of the gradient at the boundary to be `val`.
+Compute the gradient of a center-valued field `x`, returning a face-valued
+`Covariant3` vector field, using the stencil:
+```math
+G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
+```
+
+The following boundary conditions are supported:
+- [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
+  boundary is `x₀`. For the left boundary, this becomes:
+  ```math
+  G(x)[\\tfrac{1}{2}]³ = 2 (x[1] - x₀)
+  ```
+- [`SetGradient(v₀)`](@ref): set the value of the gradient at the boundary to be
+  `v₀`. For the left boundary, this becomes:
+  ```math
+  G(x)[\\tfrac{1}{2}] = v₀
+  ```
 """
 struct GradientC2F{BC} <: GradientOperator
     bcs::BC
@@ -1148,7 +1266,6 @@ boundary_width(op::GradientC2F, ::SetGradient) = 1
 function stencil_left_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
     space = axes(arg)
-    # imposed flux boundary condition at left most face
     Geometry.transform(
         Geometry.Covariant3Axis(),
         bc.val,
@@ -1158,7 +1275,6 @@ end
 function stencil_right_boundary(::GradientC2F, bc::SetGradient, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
-    # imposed flux boundary condition at right most face
     Geometry.transform(
         Geometry.Covariant3Axis(),
         bc.val,
@@ -1171,15 +1287,30 @@ return_eltype(::DivergenceOperator, arg) =
     Geometry.divergence_result_type(eltype(arg))
 
 """
-    DivergenceF2C(;boundaryname=boundarycondition...)
+    D = DivergenceF2C(;boundaryname=boundarycondition...)
+    D.(v)
 
-Centered-difference Divergence operator from a `FaceFiniteDifferenceSpace` to a
-`CenterFiniteDifferenceSpace`, applying the relevant boundary conditions. These
-can be:
- - by default, the current value at the boundary face will be used.
- - [`SetValue(val)`](@ref): calculate the Divergence assuming the value at the boundary is `val`.
- - [`Extrapolate()`](@ref): set the value at the center closest to the boundary
-   to be the same as the neighbouring interior value.
+Compute the vertical contribution to the divergence of a face-valued field
+vector `v`, returning a center-valued scalar field, using the stencil
+```math
+D(v)[i] = (Jv³[i+\\tfrac{1}{2}] - Jv³[i-\\tfrac{1}{2}]) / J[i]
+```
+where `Jv³` is the Jacobian multiplied by the third contravariant component of
+`v`.
+
+The following boundary conditions are supported:
+ - by default, the value of `v` at the boundary face will be used.
+ - [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
+   boundary is `v₀`. For the left boundary, this becomes:
+```math
+D(v)[1] = (Jv³[1+\\tfrac{1}{2}] - Jv³₀) / J[i]
+```
+- [`Extrapolate()`](@ref): set the value at the center closest to the boundary
+  to be the same as the neighbouring interior value. For the left boundary, this
+  becomes:
+```math
+D(v)[1]³ = D(v)[2]³
+```
 """
 struct DivergenceF2C{BCS} <: DivergenceOperator
     bcs::BCS
@@ -1249,13 +1380,27 @@ function stencil_right_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
 end
 
 """
-    DivergenceC2F(;boundaries)
+    D = DivergenceC2F(;boundaryname=boundarycondition...)
+    D.(v)
 
-Centered-difference Divergence operator from a `CenterFiniteDifferenceSpace` to a
-`FaceFiniteDifferenceSpace`, applying the relevant boundary conditions. These
-can be:
- - [`SetValue(val)`](@ref): calculate the Divergence assuming the value at the boundary is `val`.
- - [`SetDivergence(val)`](@ref): set the value of the Divergence at the boundary to be `val`.
+Compute the vertical contribution to the divergence of a center-valued field
+vector `v`, returning a face-valued scalar field, using the stencil
+```math
+D(v)[i] = (Jv³[i+\\tfrac{1}{2}] - Jv³[i-\\tfrac{1}{2}]) / J[i]
+```
+where `Jv³` is the Jacobian multiplied by the third contravariant component of
+`v`.
+
+The following boundary conditions are supported:
+- [`SetValue(v₀)`](@ref): calculate the divergence assuming the value at the
+   boundary is `v₀`. For the left boundary, this becomes:
+  ```math
+  D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
+  ```
+- [`SetGradient(x)`](@ref): set the value of the Divergence at the boundary to be `x`.
+  ```math
+  D(v)[\\tfrac{1}{2}] = x
+  ```
 """
 struct DivergenceC2F{BC} <: DivergenceOperator
     bcs::BC
