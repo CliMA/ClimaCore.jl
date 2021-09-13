@@ -7,6 +7,8 @@ An axis of a [`AxisTensor`](@ref).
 """
 abstract type AbstractAxis{I} end
 
+Base.Broadcast.broadcastable(a::AbstractAxis) = a
+
 """
     dual(ax::AbstractAxis)
 
