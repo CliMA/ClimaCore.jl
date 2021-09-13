@@ -1,8 +1,10 @@
 module Meshes
 
 export EquispacedRectangleMesh
+export TensorProductMesh
 
 import ..Domains: IntervalDomain, RectangleDomain, SphereDomain
+import ..Geometry: Cartesian2DPoint
 
 """
     AbstractMesh
@@ -131,5 +133,9 @@ struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
     domain::SphereDomain{FT}
     n::Int64
 end
+
+
+# implementations
+include("tensorproductmesh.jl")
 
 end # module
