@@ -121,7 +121,9 @@ Abstract type for data storage for a 3D field made up of `Nij × Nij × Nk` valu
 abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 
 Base.eltype(::AbstractData{S}) where {S} = S
-Base.propertynames(::AbstractData{S}) where {S} = fieldnames(S)
+@inline function Base.propertynames(::AbstractData{S}) where {S}
+    filter(name -> sizeof(fieldtype(S, name)) > 0, fieldnames(S))
+end
 Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
