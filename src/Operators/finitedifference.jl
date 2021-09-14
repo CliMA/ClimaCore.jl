@@ -207,21 +207,6 @@ function Geometry.LocalGeometry(
     space.face_local_geometry[idx.i + 1]
 end
 
-
-
-Δh_f2f(space::Spaces.FiniteDifferenceSpace, idx::Integer) =
-    space.center_local_geometry.WJ[idx]
-Δh_c2c(space::Spaces.FiniteDifferenceSpace, idx::PlusHalf) =
-    space.face_local_geometry.WJ[idx.i + 1]
-
-# boundary face to left first cell center distance
-Δh_left_bf2c(space::Spaces.FiniteDifferenceSpace) =
-    space.face_local_geometry.J[1] / 2
-
-# last right cell center to last boundary face distance
-Δh_right_c2bf(space::Spaces.FiniteDifferenceSpace) =
-    space.face_local_geometry.J[end] / 2
-
 abstract type BoundaryCondition end
 """
     SetValue(val)
@@ -377,7 +362,6 @@ return_space(
 stencil_interior_width(::InterpolateC2F) = ((-half, half),)
 
 function stencil_interior(::InterpolateC2F, loc, idx, arg)
-    #RecursiveApply.rdiv(((getidx(arg, loc, idx) ⊠ space.Δh_f2f[idx]) ⊞ (getidx(arg, loc, idx - 1) ⊠ space.Δh_f2f[idx-1])), 2 ⊠ space.Δh_c2c[idx])
     a⁺ = getidx(arg, loc, idx + half)
     a⁻ = getidx(arg, loc, idx - half)
     RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
@@ -401,7 +385,8 @@ function stencil_left_boundary(::InterpolateC2F, bc::SetGradient, loc, idx, arg)
     space = axes(arg)
     @assert idx == left_face_boundary_idx(space)
     a⁺ = getidx(arg, loc, idx + half)
-    a⁺ ⊟ (Δh_left_bf2c(space) ⊠ bc.val)
+    v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
+    a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
 
 function stencil_right_boundary(
@@ -414,7 +399,8 @@ function stencil_right_boundary(
     space = axes(arg)
     @assert idx == right_face_boundary_idx(space)
     a⁻ = getidx(arg, loc, idx - half)
-    a⁻ ⊞ (Δh_right_c2bf(space) ⊠ bc.val)
+    v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
+    a⁻ ⊞ RecursiveApply.rdiv(v₃, 2)
 end
 
 boundary_width(op::InterpolateC2F, ::Extrapolate) = 1
@@ -588,7 +574,8 @@ function stencil_left_boundary(
     space = axes(value_field)
     @assert idx == left_face_boundary_idx(space)
     a⁺ = getidx(arg, loc, idx + half)
-    a⁺ ⊟ (Δh_left_bf2c(space) ⊠ bc.val)
+    v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
+    a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
 
 function stencil_right_boundary(
@@ -602,7 +589,8 @@ function stencil_right_boundary(
     space = axes(value_field)
     @assert idx == right_face_boundary_idx(space)
     a⁻ = getidx(value_field, loc, idx - half)
-    a⁻ ⊞ (Δh_right_c2bf(space) ⊠ bc.val)
+    v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
+    a⁻ ⊞ RecursiveApply.rdiv(v₃, 2)
 end
 
 boundary_width(op::WeightedInterpolateC2F, ::Extrapolate) = 1
