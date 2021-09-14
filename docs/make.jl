@@ -14,7 +14,11 @@ makedocs(
     clean = true,
     doctest = true,
     modules = [ClimaCore],
-    pages = Any["Home" => "index.md", "API" => "api.md"],
+    pages = Any[
+        "Home" => "index.md",
+        "API" => "api.md",
+        "Operators" => "operators.md",
+    ],
 )
 
 deploydocs(

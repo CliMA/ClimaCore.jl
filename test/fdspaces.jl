@@ -135,8 +135,8 @@ end
         @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
 
         I = Operators.InterpolateC2F(
-            left = Operators.SetGradient(FT(1)),
-            right = Operators.SetGradient(FT(-1)),
+            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1))),
+            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(-1))),
         )
         ∂ = Operators.GradientF2C()
 
