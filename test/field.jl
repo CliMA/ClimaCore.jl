@@ -81,6 +81,9 @@ end
     x = Fields.coordinate_field(space)
     Y = Fields.FieldVector(u = u, x = x)
 
+    @test propertynames(Y) == (:u, :x)
+    @test Y.u == u
+
     Y1 = 2 .* Y
     @test parent(Y1.u) == 2 .* parent(u)
     @test parent(Y1.x) == 2 .* parent(x)
