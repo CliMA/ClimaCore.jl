@@ -187,10 +187,46 @@ function jacobian!(J, Y, p, t)
     # G_W = (γ - 1) * diagm(0=>Πh./ρh/Δz, 1=>-Πh./ρh/Δz)[1:N-1, 1:N]
     # A_W = diagm(0=>-ones(N-1)./ρh/2, 1=>-ones(N-1)./ρh/2)[1:N-1, 1:N]
 
-    # P = ([zeros(N,N)     D_ρ       zeros(N,N);
-    #      A_W*_grav       zeros(N-1,N-1)      G_W
-    #      zeros(N,N)     D_Θ              zeros(N,N)])
+    # P = ([zeros(N,N)     zeros(N,N)      D_ρ;
+    #       zeros(N,N)     zeros(N,N)      D_Θ   
+    #       A_W*_grav        G_W          zeros(N+1,N+1)])
 
+end
+
+function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
+    function _linsolve!(x, A, b, update_matrix = false; kwargs...)
+        #     _A = RecursiveFactorization.lu(A)
+        #   ldiv!(x,_A,b)
+        #   @info "norm: ", norm(x), norm(A), norm(b)
+        x = copy(b)
+        N = div(length(x) - 1, 3)
+        J = A[(2N + 1):(3N + 1), (2N + 1):(3N + 1)]
+        J +=
+            -A[(2N + 1):(3N + 1), 1:N] *
+            (Diagonal(A[1:N, 1:N]) \ A[1:N, (2N + 1):(3N + 1)])
+        J +=
+            -A[(2N + 1):(3N + 1), (N + 1):(2N)] * (
+                Diagonal(A[(N + 1):(2N), (N + 1):(2N)]) \
+                A[(N + 1):(2N), (2N + 1):(3N + 1)]
+            )
+
+        x[(2N + 1):(3N + 1)] +=
+            -A[(2N + 1):(3N + 1), 1:N] * (Diagonal(A[1:N, 1:N]) \ b[1:N])
+        x[(2N + 1):(3N + 1)] +=
+            -A[(2N + 1):(3N + 1), (N + 1):(2N)] *
+            (Diagonal(A[(N + 1):(2N), (N + 1):(2N)]) \ b[(N + 1):(2N)])
+
+        x[(2N + 1):(3N + 1)] .= Tridiagonal(J) \ x[(2N + 1):(3N + 1)]
+        x[1:N] .=
+            Diagonal(A[1:N, 1:N]) \
+            (b[1:N] - A[1:N, (2N + 1):(3N + 1)] * x[(2N + 1):(3N + 1)])
+        x[(N + 1):(2N)] .=
+            Diagonal(A[(N + 1):(2N), (N + 1):(2N)]) \ (
+                b[(N + 1):(2N)] -
+                A[(N + 1):(2N), (2N + 1):(3N + 1)] * x[(2N + 1):(3N + 1)]
+            )
+
+    end
 end
 
 Δt = 600.0
@@ -211,7 +247,7 @@ prob = ODEProblem(
 sol = solve(
     prob,
     # ImplicitEuler(),
-    Rosenbrock23(),
+    Rosenbrock23(linsolve = linsolve!),
     dt = Δt,
     saveat = 60 * 60, # save every hour
     progress = true,
