@@ -20,11 +20,8 @@ module Topologies
 
 import ..Geometry
 import ..Domains: Domains, coordinate_type, Unstructured2DDomain
-import ..Meshes: Meshes, 
-    EquispacedRectangleMesh,
-    Mesh2D,
-    AbstractMesh,
-    TensorProductMesh
+import ..Meshes:
+    Meshes, EquispacedRectangleMesh, Mesh2D, AbstractMesh, TensorProductMesh
 
 
 # TODO: seperate types for MPI/non-MPI topologies

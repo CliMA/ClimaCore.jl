@@ -1,7 +1,7 @@
 module Meshes
 using DocStringExtensions
 export EquispacedRectangleMesh,
-    rectangular_mesh, 
+    rectangular_mesh,
     cube_panel_mesh,
     equispaced_rectangular_mesh,
     TensorProductMesh
