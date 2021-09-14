@@ -19,9 +19,10 @@ x2    |       |
 module Topologies
 
 import ..Geometry
-import ..Domains: Domains, coordinate_type
+import ..Domains: Domains, coordinate_type, Unstructured2DDomain
 import ..Meshes:
-    Meshes, AbstractMesh, EquispacedRectangleMesh, TensorProductMesh
+    Meshes, EquispacedRectangleMesh, Mesh2D, AbstractMesh, TensorProductMesh
+
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
@@ -169,5 +170,6 @@ end
 
 # implementations
 include("grids.jl")
+include("grid2d.jl")
 
 end # module
