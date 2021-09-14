@@ -36,6 +36,7 @@ function FieldVector(; kwargs...)
     return FieldVector{T}(values)
 end
 
+Base.propertynames(fv::FieldVector) = propertynames(_values(fv))
 @inline function Base.getproperty(fv::FieldVector, name::Symbol)
     getfield(_values(fv), name)
 end
