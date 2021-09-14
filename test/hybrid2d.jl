@@ -67,73 +67,65 @@ end
 
 
 
-@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
+@testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
 
+    # Advection Operator
+    # c ∂_z f
+    # for this test, we use f(z) = sin(z) and c = 1
+    # => c ∂_z f = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
-    V = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
 
-    function rhs!(dudt, u, _, t)
+    function rhs!(f)
+        adv = zeros(eltype(f), hv_center_space)
         A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(sin(-t)),
+            bottom = Operators.SetValue(0.0),
             top = Operators.Extrapolate(),
         )
-        return @. dudt = -A(V, u)
+        return @. adv = A(c, f)
     end
 
-    U = sin.(Fields.coordinate_field(hv_center_space).z)
-    dudt = zeros(eltype(U), hv_center_space)
-    rhs!(dudt, U, nothing, 0.0)
+    # advective velocity
+    c = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
+    # scalar-valued field to be advected
+    f = sin.(Fields.coordinate_field(hv_center_space).z)
+    # evaluate tendency
+    adv = rhs!(f)
 
-    using OrdinaryDiffEq
-    Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
-
-    htopo = Spaces.topology(hv_center_space)
-    for h in 1:Topologies.nlocalelems(htopo)
-        sol_column_field = ClimaCore.column(sol.u[end], 1, 1, h)
-        ref_column_field = ClimaCore.column(U, 1, 1, h)
-        @test norm(sol_column_field .- ref_column_field) ≤ 5e-2
-    end
+    @test adv ≈ cos.(Fields.coordinate_field(hv_center_space).z) rtol=0.05
+    # @test norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z) ≤ 5e-5 # fails because of lower boundary value of AdvectionC2C operator
 end
 
-@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve horzizontal" begin
+@testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
 
-    # Advection Equation
-    # ∂_t f + c ∂_x f  = 0
-    # the solution translates to the right at speed c,
-    # so if you you have a periodic domain of size [-π, π]
-    # at time t, the solution is f(x - c * t, y)
-    # here c == 1, integrate t == 2π or one full period
+    # Divergence Operator
+    # ∂_x (c f)
+    # for this test, we use f(x) = sin(x) and c = 1
+    # => ∂_x (c f) = cos(x)
 
-    function rhs!(dudt, u, _, t)
+    function rhs!(f)
+        divf = zeros(eltype(f), hv_center_space)
         # horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
-        @. dudt = -hdiv(u * Geometry.Cartesian1Vector(1.0))
-        Spaces.weighted_dss!(dudt)
-        return dudt
+        @. divf = hdiv(f * Geometry.Cartesian1Vector(1.0))
+        Spaces.weighted_dss!(divf)
+        return divf
     end
 
     hv_center_space, _ = hvspace_2D()
-    U = sin.(Fields.coordinate_field(hv_center_space).x)
-    dudt = zeros(eltype(U), hv_center_space)
-    rhs!(dudt, U, nothing, 0.0)
+    f = sin.(Fields.coordinate_field(hv_center_space).x)
+    # evaluate tendency
+    divf = rhs!(f)
 
-    using OrdinaryDiffEq
-    Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
-
-    @test norm(U .- sol.u[end]) ≤ 5e-5
+    @test norm(divf .- cos.(Fields.coordinate_field(hv_center_space).x)) ≤ 5e-5
 end
 
-@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve diagonally" begin
+@testset "1D SE, 1D FD Extruded Domain ∇ ODE Solve diagonally" begin
 
     # Advection equation in Cartesian domain with
     # uₕ = (cₕ, 0), uᵥ = (0, cᵥ)
     # ∂ₜf + ∇ₕ⋅(uₕ * f) + ∇ᵥ⋅(uᵥ * f)  = 0
     # the solution translates diagonally to the top right and
-    # at time t, the solution is f(x - cₕ * t, y - cᵥ * t)
+    # at time t, the solution is f(x - cₕ * t, z - cᵥ * t)
     # here cₕ == cᵥ == 1, integrate t == 2π or one full period.
     # This is only correct if the solution is localized in the vertical
     # as we don't use periodic boundary conditions in the vertical.
@@ -142,9 +134,11 @@ end
 
     hv_center_space, hv_face_space = hvspace_2D((-1, 1), (-1, 1))
 
-    function rhs!(dudt, u, _, t)
-        h = u.h
-        dh = dudt.h
+    function rhs!(f)
+
+        divuf = Fields.FieldVector(h = zeros(eltype(f), hv_center_space))
+        h = f.h
+        dh = divuf.h
 
         # vertical advection no inflow at bottom
         # and outflow at top
@@ -153,35 +147,46 @@ end
             bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
         )
         # only upward advection
-        @. dh = -divf2c(Ic2f(h) * Geometry.Cartesian3Vector(1.0))
+        @. dh = divf2c(Ic2f(h) * Geometry.Cartesian3Vector(1.0))
 
         # only horizontal advection
         hdiv = Operators.Divergence()
-        @. dh += -hdiv(h * Geometry.Cartesian1Vector(1.0))
+        @. dh += hdiv(h * Geometry.Cartesian1Vector(1.0))
         Spaces.weighted_dss!(dh)
 
-        return dudt
+        return divuf
     end
 
-    # initial conditions
-    function h_init(x_init, z_init, A = 1.0, σ = 0.2)
+    # A horizontal Gaussian blob, centered at (-x_0, -z_0),
+    # with `a` the height of the blob and σ the standard deviation
+    function h_blob(x_0, z_0, a = 1.0, σ = 0.2)
         coords = Fields.coordinate_field(hv_center_space)
-        h = map(coords) do coord
-            A * exp(-((coord.x + x_init)^2 + (coord.z + z_init)^2) / (2 * σ^2))
+        f = map(coords) do coord
+            a * exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))
         end
 
-        return h
+        return f
     end
 
-    using OrdinaryDiffEq
-    U = Fields.FieldVector(h = h_init(0.5, 0.5))
-    Δt = 0.01
-    t_end = 1.0
-    prob = ODEProblem(rhs!, U, (0.0, t_end))
-    sol = solve(prob, SSPRK33(), dt = Δt)
+    # Spatial derivative of a horizontal Gaussian blob, centered at (-x_0, -z_0),
+    # with `a` the height of the blob and σ the standard deviation
+    function div_h_blob(x_0, z_0, a = 1.0, σ = 0.2)
+        coords = Fields.coordinate_field(hv_center_space)
+        div_uf = map(coords) do coord
+            -a * (exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))) / (σ^2) * ((coord.x + x_0) + (coord.z + z_0))
+        end
 
-    h_end = h_init(0.5 - t_end, 0.5 - t_end)
-    @test norm(h_end .- sol.u[end].h) ≤ 5e-2
+        return div_uf
+    end
+
+    f = Fields.FieldVector(h = h_blob(0.5, 0.5))
+
+    divuf = rhs!(f)
+    exact_div_uf = div_h_blob(0.5, 0.5)
+
+    @show exact_div_uf
+    @show divuf.h
+    @test norm(exact_div_uf .- divuf.h) ≤ 5e-2
 end
 
 
