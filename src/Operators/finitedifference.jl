@@ -1131,8 +1131,11 @@ end
 
 
 abstract type GradientOperator <: FiniteDifferenceOperator end
-return_eltype(::GradientOperator, arg) = Geometry.Covariant3Vector{eltype(arg)}
 
+# TODO: we should probably make the axis the operator is working over as part of the operator type
+# similar to the spectral operators, hardcoded to vertical only `(3,)` for now
+return_eltype(::GradientOperator, arg) =
+    Geometry.gradient_result_type(Val((3,)), eltype(arg))
 
 """
     G = GradientF2C(;boundaryname=boundarycondition...)
@@ -1434,32 +1437,25 @@ end
 boundary_width(op::DivergenceC2F, ::SetValue) = 1
 function stencil_left_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
-    # ∂x[i] = 2(∂x[i + half] - val)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
     Ju³₊ = Geometry.Jcontravariant3(
         getidx(arg, loc, idx + half),
         Geometry.LocalGeometry(space, idx + half),
     )
-    Ju³₋ = Geometry.Jcontravariant3(
-        bc.val,
-        Geometry.LocalGeometry(space, idx - half),
-    )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J / 2)
+    Ju³ = Geometry.Jcontravariant3(bc.val, local_geometry)
+    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³, local_geometry.J / 2)
 end
 function stencil_right_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
-    Ju³₊ = Geometry.Jcontravariant3(
-        bc.val,
-        Geometry.LocalGeometry(space, idx + half),
-    )
+    Ju³ = Geometry.Jcontravariant3(bc.val, local_geometry)
     Ju³₋ = Geometry.Jcontravariant3(
         getidx(arg, loc, idx - half),
         Geometry.LocalGeometry(space, idx - half),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J / 2)
+    RecursiveApply.rdiv(Ju³ ⊟ Ju³₋, local_geometry.J / 2)
 end
 
 # left / right SetDivergence boundary conditions
