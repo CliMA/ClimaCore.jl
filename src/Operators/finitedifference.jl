@@ -208,6 +208,7 @@ function Geometry.LocalGeometry(
 end
 
 abstract type BoundaryCondition end
+
 """
     SetValue(val)
 
@@ -227,6 +228,16 @@ this will set the output value of the gradient.
 struct SetGradient{S} <: BoundaryCondition
     val::S
 end
+
+"""
+    SetDivergence(val)
+
+Set the divergence at the boundary to be `val`.
+"""
+struct SetDivergence{S} <: BoundaryCondition
+    val::S
+end
+
 
 """
     Extrapolate()
@@ -1385,7 +1396,7 @@ The following boundary conditions are supported:
   ```math
   D(v)[\\tfrac{1}{2}] = \\frac{1}{2} (Jv³[1] - Jv³₀) / J[i]
   ```
-- [`SetGradient(x)`](@ref): set the value of the Divergence at the boundary to be `x`.
+- [`SetDivergence(x)`](@ref): set the value of the divergence at the boundary to be `x`.
   ```math
   D(v)[\\tfrac{1}{2}] = x
   ```
@@ -1452,13 +1463,25 @@ function stencil_right_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
 end
 
 # left / right SetDivergence boundary conditions
-boundary_width(op::DivergenceC2F, ::SetGradient) = 1
-function stencil_left_boundary(::DivergenceC2F, bc::SetGradient, loc, idx, arg)
+boundary_width(op::DivergenceC2F, ::SetDivergence) = 1
+function stencil_left_boundary(
+    ::DivergenceC2F,
+    bc::SetDivergence,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == left_face_boundary_idx(arg)
     # imposed flux boundary condition at left most face
     bc.val
 end
-function stencil_right_boundary(::DivergenceC2F, bc::SetGradient, loc, idx, arg)
+function stencil_right_boundary(
+    ::DivergenceC2F,
+    bc::SetDivergence,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == right_face_boundary_idx(arg)
     # imposed flux boundary condition at right most face
     bc.val

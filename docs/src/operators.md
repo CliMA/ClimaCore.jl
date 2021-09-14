@@ -49,5 +49,6 @@ SetBoundaryOperator
 ```@docs
 SetValue
 SetGradient
+SetDivergence
 Extrapolate
 ```
