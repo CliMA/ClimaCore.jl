@@ -1,11 +1,15 @@
 module Meshes
 using DocStringExtensions
 export EquispacedRectangleMesh,
-    rectangular_mesh, cube_panel_mesh, equispaced_rectangular_mesh
+    rectangular_mesh, 
+    cube_panel_mesh,
+    equispaced_rectangular_mesh,
+    TensorProductMesh
 
 import ..Domains:
     IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
 import IntervalSets: ClosedInterval
+import ..Geometry: Cartesian2DPoint
 
 """
     AbstractMesh
@@ -249,8 +253,10 @@ Mesh2D(
     elem_faces,
 )
 
-
 include("BoxMesh.jl")
 include("CubedSphereMesh.jl")
+
+# implementations
+include("tensorproductmesh.jl")
 
 end # module

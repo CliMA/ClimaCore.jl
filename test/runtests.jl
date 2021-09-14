@@ -2,8 +2,9 @@ using Base: operator_associativity
 
 include("recursive.jl")
 include("data1d.jl")
-include("data.jl")
+include("data2d.jl")
 include("data1dx.jl")
+include("data2dx.jl")
 include("axistensors.jl")
 include("grid.jl")
 include("grid2d.jl")
@@ -14,7 +15,8 @@ include("field.jl")
 include("spectraloperators.jl")
 include("fdspaces.jl")
 include("fielddiffeq.jl")
-include("hybrid.jl")
+include("hybrid2d.jl")
+include("hybrid3d.jl")
 #include("diffusion2d.jl")
 
 if "CUDA" in ARGS

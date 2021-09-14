@@ -41,25 +41,25 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 Iquad = Spaces.Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
-function init_state(x, p)
-    @unpack x1, x2 = x
+function init_state(coord, p)
+    @unpack x, y = coord
     # set initial state
     ρ = p.ρ₀
 
     # set initial velocity
-    U₁ = cosh(x2)^(-2)
+    U₁ = cosh(y)^(-2)
 
-    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x1) * cos(p.k * x2)
+    # Ψ′ = exp(-(y + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
     # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
-    gaussian = exp(-(x2 + p.l / 10)^2 / 2p.l^2)
-    u₁′ = gaussian * (x2 + p.l / 10) / p.l^2 * cos(p.k * x1) * cos(p.k * x2)
-    u₁′ += p.k * gaussian * cos(p.k * x1) * sin(p.k * x2)
-    u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
+    gaussian = exp(-(y + p.l / 10)^2 / 2p.l^2)
+    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
+    u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
+    u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
 
     u = Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
-    θ = sin(p.k * x2)
+    θ = sin(p.k * y)
 
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end

@@ -1,6 +1,7 @@
 module Fields
 
-import ..slab, ..column
+import ..slab
+import ..column
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
@@ -81,6 +82,9 @@ Base.length(field::Fields.Field) = 1
 
 slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+
+column(field::Field, inds...) =
+    Field(column(field_values(field), inds...), column(axes(field), inds...))
 
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
@@ -200,7 +204,7 @@ Construct a `Field` of the `LocalGeometry` of the space.
 """
 local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
-local_geometry_field(field::Field) = local_geometry(axes(field))
+local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
 
 

@@ -176,13 +176,17 @@ import Base: +, -, *, /, \, ==
     axes(a) == axes(b) && components(a) == components(b)
 
 # vectors
-
 const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
+
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
-(AxisVector{T, A, SVector{N, T}} where {T})(args...) where {A, N} =
-    AxisVector(A.instance, SVector(args))
+(AxisVector{T, A, SVector{1, T}} where {T})(arg1) where {A} =
+    AxisVector(A.instance, SVector(arg1))
+(AxisVector{T, A, SVector{2, T}} where {T})(arg1, arg2) where {A} =
+    AxisVector(A.instance, SVector(arg1, arg2))
+(AxisVector{T, A, SVector{3, T}} where {T})(arg1, arg2, arg3) where {A} =
+    AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
 const CovariantVector{T, A1 <: CovariantAxis, S} = AxisVector{T, A1, S}
 const ContravariantVector{T, A1 <: ContravariantAxis, S} = AxisVector{T, A1, S}
@@ -215,7 +219,17 @@ components(va::AdjointAxis2Tensor) = components(parent(va))'
 const Axis2TensorOrAdj{T, A, S} =
     Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
 
+# based on 1st dimension
+const Covariant2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{CovariantAxis, AbstractAxis}}
+const Contravariant2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{ContravariantAxis, AbstractAxis}}
+const Cartesian2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{CartesianAxis, AbstractAxis}}
 
+const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
+const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
+const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
 
 for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     strI = join(I)
@@ -250,10 +264,6 @@ _check_dual(ax1, ax2, _) =
 function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
     check_dual(axes(x, 1), axes(y, 1))
     return LinearAlgebra.dot(components(x), components(y))
-end
-
-function ⊗(x::AbstractVector, y::AbstractVector)
-    x * y'
 end
 
 function Base.:*(x::AxisVector, y::AdjointAxisVector)
@@ -313,4 +323,143 @@ end
 function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
+end
+
+
+"""
+    outer(x, y)
+    x ⊗ y
+
+Compute the outer product of `x` and `y`. Typically `x` will be a vector, and
+`y` can be either a number, vector or tuple/named tuple.
+
+```julia
+# vector ⊗ scalar = vector
+julia> [1.0,2.0] ⊗ 2.0
+2-element Vector{Float64}:
+ 2.0
+ 4.0
+
+# vector ⊗ vector = matrix
+julia> [1.0,2.0] ⊗ [1.0,3.0]
+2×2 Matrix{Float64}:
+ 1.0  3.0
+ 2.0  6.0
+
+# vector ⊗ tuple = recursion
+julia> [1.0,2.0] ⊗ (1.0, (a=2.0, b=3.0))
+([1.0, 2.0], (a = [2.0, 4.0], b = [3.0, 6.0]))
+```
+"""
+function outer end
+const ⊗ = outer
+
+function outer(x::AbstractVector, y::AbstractVector)
+    x * y'
+end
+function outer(x::AbstractVector, y::Number)
+    x * y
+end
+function outer(x::AbstractVector, y)
+    RecursiveApply.rmap(y -> x ⊗ y, y)
+end
+
+function _transform(
+    ato::Ato,
+    x::AxisVector{T, Afrom, SVector{N, T}},
+) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
+    x
+end
+@generated function _transform(
+    ato::Ato,
+    x::AxisVector{T, Afrom, SVector{N, T}},
+) where {
+    Ato <: AbstractAxis{Ito},
+    Afrom <: AbstractAxis{Ifrom},
+} where {Ito, Ifrom, T, N}
+    errcond = false
+    for n in 1:N
+        i = Ifrom[n]
+        if i ∉ Ito
+            errcond = :($errcond || x[$n] != 0)
+        end
+    end
+    vals = []
+    for i in Ito
+        val = :(zero(T))
+        for n in 1:N
+            if i == Ifrom[n]
+                val = :(x[$n])
+                break
+            end
+        end
+        push!(vals, val)
+    end
+    quote
+        if $errcond
+            throw(InexactError(:transform, Ato, x))
+        end
+        AxisVector(ato, SVector($(vals...)))
+    end
+end
+
+function _transform(
+    ato::Ato,
+    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+) where {
+    Ato <: AbstractAxis{I},
+    Afrom <: AbstractAxis{I},
+    A2 <: AbstractAxis{J},
+} where {I, J, T}
+    x
+end
+
+@generated function _transform(
+    ato::Ato,
+    x::Axis2Tensor{T, Tuple{Afrom, A2}},
+) where {
+    Ato <: AbstractAxis{Ito},
+    Afrom <: AbstractAxis{Ifrom},
+    A2 <: AbstractAxis{J},
+} where {Ito, Ifrom, J, T}
+    N = length(Ifrom)
+    M = length(J)
+    errcond = false
+    for n in 1:N
+        i = Ifrom[n]
+        if i ∉ Ito
+            for m in 1:M
+                errcond = :($errcond || x[$n, $m] != 0)
+            end
+        end
+    end
+    vals = []
+    for m in 1:M
+        for i in Ito
+            val = :(zero(T))
+            for n in 1:N
+                if i == Ifrom[n]
+                    val = :(x[$n, $m])
+                    break
+                end
+            end
+            push!(vals, val)
+        end
+    end
+    quote
+        if $errcond
+            throw(InexactError(:transform, Ato, x))
+        end
+        Axis2Tensor((ato, axes(x, 2)), SMatrix{$(length(Ito)), $M}($(vals...)))
+    end
+end
+
+function transform(ato::CovariantAxis, v::CovariantTensor)
+    _transform(ato, v)
+end
+function transform(ato::ContravariantAxis, v::ContravariantTensor)
+    _transform(ato, v)
+end
+function transform(ato::CartesianAxis, v::CartesianTensor)
+    _transform(ato, v)
 end

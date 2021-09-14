@@ -34,7 +34,7 @@ for Nq in Nqs
 
     # setup reference
     X = coordinates(Val(Nq), n1, n2)
-    y0_ref = init_y0_ref(X, Val(Nq), parameters)
+    y0_ref = init_st_ref(X, Val(Nq), parameters)
     dydt_ref = similar(y0_ref)
     tendency_states = init_tendency_states(n1, n2, Val(Nq))
     volume_ref!(

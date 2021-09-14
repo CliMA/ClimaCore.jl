@@ -14,8 +14,9 @@
 """
 module Spaces
 
-import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 import ..slab
+import ..column
+import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 
 abstract type AbstractSpace end

@@ -41,13 +41,7 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
           [Complex(1.0, 1.0) for i in 1:(4 * n1), j in 1:(4 * n2)]
 
 
-
-    #@test parent(Fields.field_values(3 .* nt_field)) ==
-
-    field_sin = map(x -> sin((x.x1) / 2), Fields.coordinate_field(space))
-
-    heatmap(field_sin)
-
+    field_sin = map(x -> sin((x.x) / 2), Fields.coordinate_field(space))
     Operators.matrix_interpolate(field_sin, 20)
     real_field = field.re
 
@@ -61,8 +55,6 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     @test parent(Fields.field_values(res)) ==
           Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
 end
-
-
 
 @testset "Broadcasting interception for tuple-valued fields" begin
 
@@ -96,5 +88,4 @@ end
     Y1 .= Y1 .+ 2 .* Y
     @test parent(Y1.u) == 4 .* parent(u)
     @test parent(Y1.x) == 4 .* parent(x)
-
 end
