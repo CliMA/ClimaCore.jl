@@ -995,7 +995,7 @@ function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(space)
     θ⁺ = getidx(value_field, loc, idx + 1)
     θ = getidx(value_field, loc, idx)
-    θ⁻ = bc.val
+    θ⁻ = bc.val # defined at face, not the center
     w³⁺ = Geometry.contravariant3(
         getidx(velocity_field, loc, idx + half),
         Geometry.LocalGeometry(space, idx + half),
@@ -1005,7 +1005,7 @@ function stencil_left_boundary(
         Geometry.LocalGeometry(space, idx - half),
     )
     ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = θ ⊟ θ⁻
+    ∂θ₃⁻ = 2 ⊠ (θ ⊟ θ⁻)
     return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
 end
 
@@ -1019,7 +1019,7 @@ function stencil_right_boundary(
 )
     space = axes(value_field)
     @assert idx == right_center_boundary_idx(space)
-    θ⁺ = bc.val
+    θ⁺ = bc.val # value at the face
     θ = getidx(value_field, loc, idx)
     θ⁻ = getidx(value_field, loc, idx - 1)
     w³⁺ = Geometry.contravariant3(
@@ -1030,7 +1030,7 @@ function stencil_right_boundary(
         getidx(velocity_field, loc, idx - half),
         Geometry.LocalGeometry(space, idx - half),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
+    ∂θ₃⁺ = 2 ⊠ (θ⁺ ⊟ θ)
     ∂θ₃⁻ = θ ⊟ θ⁻
     return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
 end

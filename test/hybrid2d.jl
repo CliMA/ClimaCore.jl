@@ -67,173 +67,179 @@ end
 
 
 
-@testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
+# @testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
 
-    # Advection Operator
-    # c ∂_z f
-    # for this test, we use f(z) = sin(z) and c = 1
-    # => c ∂_z f = cos(z)
-    hv_center_space, hv_face_space = hvspace_2D()
+#     # Advection Operator
+#     # c ∂_z f
+#     # for this test, we use f(z) = sin(z) and c = 1
+#     # => c ∂_z f = cos(z)
+#     hv_center_space, hv_face_space = hvspace_2D()
 
-    function rhs!(f)
-        adv = zeros(eltype(f), hv_center_space)
-        A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(0.0),
-            top = Operators.Extrapolate(),
-        )
-        return @. adv = A(c, f)
-    end
+#     function rhs!(f)
+#         adv = zeros(eltype(f), hv_center_space)
+#         A = Operators.AdvectionC2C(
+#             bottom = Operators.SetValue(0.0),
+#             top = Operators.Extrapolate(),
+#         )
+#         return @. adv = A(c, f)
+#     end
 
-    # advective velocity
-    c = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
-    # scalar-valued field to be advected
-    f = sin.(Fields.coordinate_field(hv_center_space).z)
-    # evaluate tendency
-    adv = rhs!(f)
+#     # advective velocity
+#     c = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
+#     # scalar-valued field to be advected
+#     f = sin.(Fields.coordinate_field(hv_center_space).z)
+#     # evaluate tendency
+#     adv = rhs!(f)
 
-    @test adv ≈ cos.(Fields.coordinate_field(hv_center_space).z) rtol=0.05
-    # @test norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z) ≤ 5e-5 # fails because of lower boundary value of AdvectionC2C operator
-end
+#     @test norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z)) ≤ 5e-2
+# end
 
-@testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
+# @testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
 
-    # Divergence Operator
-    # ∂_x (c f)
-    # for this test, we use f(x) = sin(x) and c = 1
-    # => ∂_x (c f) = cos(x)
+#     # Divergence Operator
+#     # ∂_x (c f)
+#     # for this test, we use f(x) = sin(x) and c = 1
+#     # => ∂_x (c f) = cos(x)
 
-    function rhs!(f)
-        divf = zeros(eltype(f), hv_center_space)
-        # horizontal divergence operator applied to all levels
-        hdiv = Operators.Divergence()
-        @. divf = hdiv(f * Geometry.Cartesian1Vector(1.0))
-        Spaces.weighted_dss!(divf)
-        return divf
-    end
+#     function rhs!(f)
+#         divf = zeros(eltype(f), hv_center_space)
+#         # horizontal divergence operator applied to all levels
+#         hdiv = Operators.Divergence()
+#         @. divf = hdiv(f * Geometry.Cartesian1Vector(1.0))
+#         Spaces.weighted_dss!(divf)
+#         return divf
+#     end
 
-    hv_center_space, _ = hvspace_2D()
-    f = sin.(Fields.coordinate_field(hv_center_space).x)
-    # evaluate tendency
-    divf = rhs!(f)
+#     hv_center_space, _ = hvspace_2D()
+#     f = sin.(Fields.coordinate_field(hv_center_space).x)
+#     # evaluate tendency
+#     divf = rhs!(f)
 
-    @test norm(divf .- cos.(Fields.coordinate_field(hv_center_space).x)) ≤ 5e-5
-end
+#     @test norm(divf .- cos.(Fields.coordinate_field(hv_center_space).x)) ≤ 5e-5
+# end
 
-@testset "1D SE, 1D FD Extruded Domain ∇ ODE Solve diagonally" begin
+# @testset "1D SE, 1D FD Extruded Domain ∇ ODE Solve diagonally" begin
 
-    # Advection equation in Cartesian domain with
-    # uₕ = (cₕ, 0), uᵥ = (0, cᵥ)
-    # ∂ₜf + ∇ₕ⋅(uₕ * f) + ∇ᵥ⋅(uᵥ * f)  = 0
-    # the solution translates diagonally to the top right and
-    # at time t, the solution is f(x - cₕ * t, z - cᵥ * t)
-    # here cₕ == cᵥ == 1, integrate t == 2π or one full period.
-    # This is only correct if the solution is localized in the vertical
-    # as we don't use periodic boundary conditions in the vertical.
-    #
-    # NOTE: the equation setup is only correct for Cartesian domains!
+#     # Advection equation in Cartesian domain with
+#     # uₕ = (cₕ, 0), uᵥ = (0, cᵥ)
+#     # ∂ₜf + ∇ₕ⋅(uₕ * f) + ∇ᵥ⋅(uᵥ * f)  = 0
+#     # the solution translates diagonally to the top right and
+#     # at time t, the solution is f(x - cₕ * t, z - cᵥ * t)
+#     # here cₕ == cᵥ == 1, integrate t == 2π or one full period.
+#     # This is only correct if the solution is localized in the vertical
+#     # as we don't use periodic boundary conditions in the vertical.
+#     #
+#     # NOTE: the equation setup is only correct for Cartesian domains!
 
-    hv_center_space, hv_face_space = hvspace_2D((-1, 1), (-1, 1))
+#     hv_center_space, hv_face_space = hvspace_2D((-1, 1), (-1, 1))
 
-    function rhs!(f)
+#     function rhs!(f)
 
-        divuf = Fields.FieldVector(h = zeros(eltype(f), hv_center_space))
-        h = f.h
-        dh = divuf.h
+#         divuf = Fields.FieldVector(h = zeros(eltype(f), hv_center_space))
+#         h = f.h
+#         dh = divuf.h
 
-        # vertical advection no inflow at bottom
-        # and outflow at top
-        Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
-        divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
-        )
-        # only upward advection
-        @. dh = divf2c(Ic2f(h) * Geometry.Cartesian3Vector(1.0))
+#         # vertical advection no inflow at bottom
+#         # and outflow at top
+#         Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate(), bottom = Operators.Extrapolate())
+#         divf2c = Operators.DivergenceF2C()
+#         # only upward advection
+#         @. dh = divf2c(Ic2f(h) * Geometry.Cartesian3Vector(1.0))
 
-        # only horizontal advection
-        hdiv = Operators.Divergence()
-        @. dh += hdiv(h * Geometry.Cartesian1Vector(1.0))
-        Spaces.weighted_dss!(dh)
+#         # only horizontal advection
+#         hdiv = Operators.Divergence()
+#         @. dh += hdiv(h * Geometry.Cartesian1Vector(1.0))
+#         Spaces.weighted_dss!(dh)
 
-        return divuf
-    end
+#         return divuf
+#     end
 
-    # A horizontal Gaussian blob, centered at (-x_0, -z_0),
-    # with `a` the height of the blob and σ the standard deviation
-    function h_blob(x_0, z_0, a = 1.0, σ = 0.2)
-        coords = Fields.coordinate_field(hv_center_space)
-        f = map(coords) do coord
-            a * exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))
-        end
+#     # A horizontal Gaussian blob, centered at (-x_0, -z_0),
+#     # with `a` the height of the blob and σ the standard deviation
+#     function h_blob(x_0, z_0, a = 1.0, σ = 0.2)
+#         coords = Fields.coordinate_field(hv_center_space)
+#         f = map(coords) do coord
+#             a * exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))
+#         end
 
-        return f
-    end
+#         return f
+#     end
 
-    # Spatial derivative of a horizontal Gaussian blob, centered at (-x_0, -z_0),
-    # with `a` the height of the blob and σ the standard deviation
-    function div_h_blob(x_0, z_0, a = 1.0, σ = 0.2)
-        coords = Fields.coordinate_field(hv_center_space)
-        div_uf = map(coords) do coord
-            -a * (exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))) / (σ^2) * ((coord.x + x_0) + (coord.z + z_0))
-        end
+#     # Spatial derivative of a horizontal Gaussian blob, centered at (-x_0, -z_0),
+#     # with `a` the height of the blob and σ the standard deviation
+#     function div_h_blob(x_0, z_0, a = 1.0, σ = 0.2)
+#         coords = Fields.coordinate_field(hv_center_space)
+#         div_uf = map(coords) do coord
+#             -a * (exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))) / (σ^2) * ((coord.x + x_0) + (coord.z + z_0))
+#         end
 
-        return div_uf
-    end
+#         return div_uf
+#     end
 
-    f = Fields.FieldVector(h = h_blob(0.5, 0.5))
+#     f = Fields.FieldVector(h = h_blob(0.5, 0.5))
 
-    divuf = rhs!(f)
-    exact_div_uf = div_h_blob(0.5, 0.5)
+#     divuf = rhs!(f)
+#     exact_divuf = div_h_blob(0.5, 0.5)
 
-    @show exact_div_uf
-    @show divuf.h
-    @test norm(exact_div_uf .- divuf.h) ≤ 5e-2
-end
+#     @test norm(exact_divuf .- divuf.h) ≤ 5e-2
+# end
 
 
-@testset "1D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
+@testset "1D SE, 1D FD Extruded Domain vertical vector advection" begin
 
+    # Vector Advection Operator
+    # c ∂_z F
+    # for this test, we use F(z) = sin(z) and c = 1
+    # => c ∂_z F = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
     V = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
 
-    function rhs_advect!(dudt, u, _, t)
+    function rhs_advect!(f)
+        advf = zeros(eltype(f), hv_center_space)
         A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(Geometry.Cartesian1Vector(sin(-t))),
+            bottom = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
             top = Operators.Extrapolate(),
         )
-        @. dudt = -A(V, u)
+        @. advf = A(V, f)
     end
 
-    U =
+    f =
         Geometry.Cartesian1Vector.(
             sin.(Fields.coordinate_field(hv_center_space).z),
         )
-    dudt = similar(U)
-    rhs_advect!(dudt, U, nothing, 0.0)
+    # dudt = similar(U)
+    advf = rhs_advect!(f)
 
 
-    function rhs_div!(dUdt, U, _, t)
+    function rhs_div!(U)
+        vecdivf = zeros(eltype(U), hv_center_space)
         Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
         divf2c = Operators.DivergenceF2C(
             bottom = Operators.SetValue(
                 Geometry.Cartesian3Vector(1.0) ⊗
-                Geometry.Cartesian1Vector(sin(-t)),
+                Geometry.Cartesian1Vector(0.0),
             ),
         )
         # only upward advection
-        @. dUdt = -divf2c(V ⊗ Ic2f(U))
+        @. vecdivf = divf2c(V ⊗ Ic2f(U))
 
         hdiv = Operators.Divergence()
-        @. dUdt += -hdiv(Geometry.Cartesian1Vector(1.0) ⊗ U)
-        Spaces.weighted_dss!(dUdt)
-        return dUdt
+        @. vecdivf += hdiv(Geometry.Cartesian1Vector(1.0) ⊗ U)
+        Spaces.weighted_dss!(vecdivf)
+        return vecdivf
     end
 
     U =
         Geometry.Cartesian1Vector.(
             sin.(Fields.coordinate_field(hv_center_space).z),
         )
-    dUdt = similar(U)
-    rhs_div!(dUdt, U, nothing, 0.0)
+    # dUdt = similar(U)
+    vecdivf = rhs_div!(U)
+
+    using Plots
+    Plots.plot(vecdivf)
+
+    # @test norm(vecdivf .- cos.(Fields.coordinate_field(hv_center_space).z)) ≤ 5e-2
 
 end
 
