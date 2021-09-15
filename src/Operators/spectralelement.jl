@@ -478,23 +478,8 @@ struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
-function operator_return_eltype(::Gradient{I}, ::Type{T}) where {I, T <: Number}
-    N = length(I)
-    Geometry.AxisVector{T, Geometry.CovariantAxis{I}, SVector{N, T}}
-end
-function operator_return_eltype(
-    ::Gradient{I},
-    ::Type{V},
-) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
-    M = length(I)
-    Geometry.Axis2Tensor{
-        T,
-        Tuple{Geometry.CovariantAxis{I}, A},
-        SMatrix{M, N, T, M * N},
-    }
-end
-operator_return_eltype(grad::Gradient, S) where {I} =
-    RecursiveApply.rmaptype(T -> operator_return_eltype(grad, T), S)
+operator_return_eltype(::Gradient{I}, S) where {I} =
+    RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
@@ -539,8 +524,6 @@ function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
 end
 
 
-
-
 """
     WeakGradient()
 
@@ -552,8 +535,8 @@ struct WeakGradient{I} <: SpectralElementOperator end
 WeakGradient() = WeakGradient{()}()
 WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 
-operator_return_eltype(op::WeakGradient{(1, 2)}, S) =
-    RecursiveApply.rmaptype(T -> Covariant12Vector{T}, S)
+operator_return_eltype(::WeakGradient{I}, S) where {I} =
+    RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
 function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)

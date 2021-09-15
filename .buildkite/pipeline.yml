@@ -19,6 +19,9 @@ steps:
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -224,6 +227,17 @@ steps:
       - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe noslip"
     artifact_paths:
       - "examples/bickleyjet/output/dg_roe_noslip/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble hybrid"
+    key: "cpu_rising_bubble_hybrid"
+    command:
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
+    artifact_paths:
+      - "examples/hybrid/output/*"
     agents:
       config: cpu
       queue: central
