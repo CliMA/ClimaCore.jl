@@ -3,13 +3,21 @@ using DocStringExtensions
 export EquispacedRectangleMesh,
     rectangular_mesh,
     cube_panel_mesh,
+    sphere_mesh,
     equispaced_rectangular_mesh,
-    TensorProductMesh
+    TensorProductMesh,
+    AbstractSphereMesh,
+    EquiangularSphereMesh,
+    EquidistantSphereMesh
 
 import ..Domains:
     IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
 import IntervalSets: ClosedInterval
 import ..Geometry: Cartesian2DPoint
+
+abstract type AbstractSphereMesh end
+struct EquiangularSphereMesh <: AbstractSphereMesh end
+struct EquidistantSphereMesh <: AbstractSphereMesh end
 
 """
     AbstractMesh

@@ -1,7 +1,12 @@
 using Test
 import ClimaCore: Domains, Meshes, Topologies
 import ClimaCore.Geometry: Cartesian2DPoint
-using ClimaCore.Meshes: equispaced_rectangular_mesh, cube_panel_mesh
+using ClimaCore.Meshes:
+    equispaced_rectangular_mesh,
+    cube_panel_mesh,
+    EquidistantSphereMesh,
+    EquiangularSphereMesh,
+    sphere_mesh
 using StaticArrays
 using IntervalSets
 
@@ -109,5 +114,20 @@ end
         @test length(Topologies.boundary_faces(grid_topology, 2)) == 0
         @test length(Topologies.boundary_faces(grid_topology, 3)) == 0
         @test length(Topologies.boundary_faces(grid_topology, 4)) == 0
+    end
+end
+
+@testset "sphere mesh" begin
+    @testset "4 elements per edge, equidistant spherical mesh of radius 10" begin
+        radius = FT(10)
+        mesh = sphere_mesh(4, radius, FT, EquidistantSphereMesh())
+        crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
+        @test maximum(crad) ≤ 100 * eps(FT)
+    end
+    @testset "4 elements per edge, equiangular spherical mesh of radius 10" begin
+        radius = FT(10)
+        mesh = sphere_mesh(4, radius, FT, EquiangularSphereMesh())
+        crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
+        @test maximum(crad) ≤ 100 * eps(FT)
     end
 end
