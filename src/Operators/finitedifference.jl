@@ -930,12 +930,12 @@ Supported boundary conditions:
 - [`SetValue(θ₀)`](@ref): set the value of `θ` at the boundary face to be `θ₀`.
   At the lower boundary, this is:
 ```math
-A(v,θ)[1] = \\frac{1}{2} \\{ (θ[2] - θ[1]) v³[1\\tfrac{1}{2}] + (θ[1] - θ₀)v³[\\tfrac{1}{2}]\\}
+A(v,θ)[1] = \\frac{1}{2} \\{ (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] + (θ[1] - θ₀)v³[\\tfrac{1}{2}]\\}
 ```
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value.
   At the lower boundary, this is:
 ```math
-A(v,θ)[1] = (θ[2] - θ[1]) v³[1\\tfrac{1}{2}] \\}
+A(v,θ)[1] = (θ[2] - θ[1]) v³[1 + \\tfrac{1}{2}] \\}
 ```
 """
 struct AdvectionC2C{BCS} <: AdvectionOperator
