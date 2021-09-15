@@ -218,11 +218,12 @@ end
 
     function div!(F)
         vecdivf = zeros(eltype(F), hv_center_space)
-        Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
+        Ic2f = Operators.InterpolateC2F()
         divf2c = Operators.DivergenceF2C(
             bottom = Operators.SetValue(
                 Geometry.Cartesian3Vector(1.0) ⊗ Geometry.Cartesian1Vector(0.0),
             ),
+            top = Operators.Extrapolate(),
         )
         # only upward advection
         @. vecdivf = divf2c(C ⊗ Ic2f(F))
