@@ -1,10 +1,8 @@
-include("WarpCubetoSphere.jl")
 
-function sphere_mesh(
+function Mesh2D(
+    stype::AbstractSphere{FT},
     ne,
     radius,
-    ::Type{FT},
-    stype::AbstractSphereMesh,
 ) where {FT <: AbstractFloat}
     # map the cube to [-radius, radius],[-radius, radius],[-radius, radius]
     mesh = cube_panel_mesh(ne, FT)

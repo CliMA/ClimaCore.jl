@@ -6,18 +6,16 @@ export EquispacedRectangleMesh,
     sphere_mesh,
     equispaced_rectangular_mesh,
     TensorProductMesh,
-    AbstractSphereMesh,
-    EquiangularSphereMesh,
-    EquidistantSphereMesh
+    AbstractSphere,
+    EquiangularSphere,
+    EquidistantSphere,
+    Mesh2D
 
 import ..Domains:
     IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
 import IntervalSets: ClosedInterval
 import ..Geometry: Cartesian2DPoint
 
-abstract type AbstractSphereMesh end
-struct EquiangularSphereMesh <: AbstractSphereMesh end
-struct EquidistantSphereMesh <: AbstractSphereMesh end
 
 """
     AbstractMesh
@@ -28,6 +26,10 @@ It should be lightweight (i.e. exists on all MPI ranks), e.g for meshes stored
 in a file, it would contain the filename.
 """
 abstract type AbstractMesh{FT} end
+
+abstract type AbstractSphere{FT} end
+struct EquiangularSphere{FT} <: AbstractSphere{FT} end
+struct EquidistantSphere{FT} <: AbstractSphere{FT} end
 
 Base.eltype(::AbstractMesh{FT}) where {FT} = FT
 
@@ -261,8 +263,9 @@ Mesh2D(
     elem_faces,
 )
 
-include("BoxMesh.jl")
-include("CubedSphereMesh.jl")
+include("box_mesh.jl")
+include("warp_cube_to_sphere.jl")
+include("sphere_mesh.jl")
 
 # implementations
 include("tensorproductmesh.jl")

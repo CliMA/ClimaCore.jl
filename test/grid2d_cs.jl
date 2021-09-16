@@ -4,9 +4,9 @@ import ClimaCore.Geometry: Cartesian2DPoint
 using ClimaCore.Meshes:
     equispaced_rectangular_mesh,
     cube_panel_mesh,
-    EquidistantSphereMesh,
-    EquiangularSphereMesh,
-    sphere_mesh
+    EquidistantSphere,
+    EquiangularSphere,
+    Mesh2D
 using StaticArrays
 using IntervalSets
 
@@ -118,15 +118,30 @@ end
 end
 
 @testset "sphere mesh" begin
-    @testset "4 elements per edge, equidistant spherical mesh of radius 10" begin
+    FT = Float64
+    @testset "4 elements per edge, equidistant spherical mesh of radius 10; Float type = Float64" begin
         radius = FT(10)
-        mesh = sphere_mesh(4, radius, FT, EquidistantSphereMesh())
+        mesh = Mesh2D(EquidistantSphere{FT}(), 4, radius)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end
-    @testset "4 elements per edge, equiangular spherical mesh of radius 10" begin
+    @testset "4 elements per edge, equiangular spherical mesh of radius 10; Float type = Float64" begin
         radius = FT(10)
-        mesh = sphere_mesh(4, radius, FT, EquiangularSphereMesh())
+        mesh = Mesh2D(EquiangularSphere{FT}(), 4, radius)
+        crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
+        @test maximum(crad) ≤ 100 * eps(FT)
+    end
+
+    FT = BigFloat
+    @testset "4 elements per edge, equidistant spherical mesh of radius 10; Float type = BigFloat" begin
+        radius = FT(10)
+        mesh = Mesh2D(EquidistantSphere{FT}(), 4, radius)
+        crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
+        @test maximum(crad) ≤ 100 * eps(FT)
+    end
+    @testset "4 elements per edge, equiangular spherical mesh of radius 10; Float type = BigFloat" begin
+        radius = FT(10)
+        mesh = Mesh2D(EquiangularSphere{FT}(), 4, radius)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end

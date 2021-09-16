@@ -1,11 +1,14 @@
 
 
 """
-    cubed_sphere_warp(::EquiangularSphereMesh, a, b, c)
+    cubed_sphere_warp(::EquiangularSphereMesh{FT}, a, b, c)
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
 spherical shell of radius `R` based on the equiangular gnomonic grid proposed by
 [Ronchi1996]
+
+Returns a tuple of (x1, x2, x3), where x1, x2, x3 are the corresponding coordinates on a sphere
+of radius R.
 
 The "Cubed Sphere": A New Method for the Solution of Partial Differential Equations in Spherical Geometry
 C. RONCHI,*,1 R. IACONO,* AND P. S. PAOLUCCI†
@@ -13,7 +16,12 @@ JOURNAL OF COMPUTATIONAL PHYSICS 124, 93–114 (1996)
 
 https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Numerics/Mesh/Topologies.jl
 """
-function cubed_sphere_warp(::EquiangularSphereMesh, a, b, c)
+function cubed_sphere_warp(
+    ::EquiangularSphere{FT},
+    a::FT,
+    b::FT,
+    c::FT,
+) where {FT <: AbstractFloat}
 
     R = max(abs(a), abs(b), abs(c))
     function f(sR, ξ, η)
@@ -57,11 +65,14 @@ function cubed_sphere_warp(::EquiangularSphereMesh, a, b, c)
 end
 
 """
-    cubed_sphere_warp(::EquidistantSphereMesh, a, b, c)
+    cubed_sphere_warp(::EquidistantSphereMesh{FT}, a, b, c)
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
 spherical shell of radius `R` based on the equidistant gnomonic grid outlined in
 [Rancic1996] and [Nair2005]
+
+Returns a tuple of (x1, x2, x3), where x1, x2, x3 are the corresponding coordinates on a sphere
+of radius R.
 
 The "Cubed Sphere": A New Method for the Solution of Partial Differential Equations in Spherical Geometry
 C. RONCHI,*,1 R. IACONO,* AND P. S. PAOLUCCI†
@@ -73,7 +84,12 @@ https://doi.org/10.1175/MWR2890.1
 
 https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Numerics/Mesh/Topologies.jl
 """
-function cubed_sphere_warp(::EquidistantSphereMesh, a, b, c)
+function cubed_sphere_warp(
+    ::EquidistantSphere{FT},
+    a::FT,
+    b::FT,
+    c::FT,
+) where {FT <: AbstractFloat}
     R = max(abs(a), abs(b), abs(c))
     r = hypot(a, b, c)
     return R * a / r, R * b / r, R * c / r
