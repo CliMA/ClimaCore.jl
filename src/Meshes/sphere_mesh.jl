@@ -1,3 +1,21 @@
+
+function Mesh2D(
+    stype::AbstractSphere{FT},
+    ne,
+    radius,
+) where {FT <: AbstractFloat}
+    # map the cube to [-radius, radius],[-radius, radius],[-radius, radius]
+    mesh = cube_panel_mesh(ne, FT)
+    mesh.coordinates .-= FT(0.5)
+    mesh.coordinates .*= (FT(2) * radius)
+
+    for i in 1:(mesh.nverts)
+        mesh.coordinates[i, :] .=
+            cubed_sphere_warp(stype, mesh.coordinates[i, :]...)
+    end
+    return mesh
+end
+
 """
     cube_panel_mesh(ne)
 
