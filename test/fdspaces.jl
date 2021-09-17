@@ -395,3 +395,103 @@ end
         @test conv[1] ≤ conv[2] ≤ conv[3]
     end
 end
+
+@testset "∂ Center -> Face and ∂ Face-> Center (uniform)" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+
+    err_grad_sin_c = err_div_sin_c = err_grad_z_f = err_grad_cos_f = zeros(length(n_elems_seq))
+    Δh = zeros(length(n_elems_seq))
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            FT(0.0),
+            FT(pi);
+            x3boundary = (:left, :right),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = Fields.coordinate_field(cs)
+        faces = Fields.coordinate_field(fs)
+
+        # Face -> Center operators:
+        # GradientF2C
+        # f(z) = sin(z)
+        ∇ᶜ = Operators.GradientF2C()
+        gradsinᶜ = Geometry.CartesianVector.(∇ᶜ.(sin.(faces)))
+
+        # DivergenceF2C
+        # f(z) = sin(z)
+        divᶜ = Operators.DivergenceF2C()
+        divsinᶜ = divᶜ.(Geometry.Cartesian3Vector.(sin.(faces)))
+
+        # Center -> Face operators:
+        # GradientC2F
+        # f(z) = z
+        ∇ᶠ⁰ = Operators.GradientC2F(
+            left = Operators.SetValue(FT(0)),
+            right = Operators.SetValue(FT(pi)),
+        )
+        ∂zᶠ = Geometry.CartesianVector.(∇ᶠ⁰.(centers))
+
+        # GradientC2F
+        # f(z) = cos(z)
+        ∇ᶠ¹ = Operators.GradientC2F(
+            left = Operators.SetValue(FT(1)),
+            right = Operators.SetValue(FT(-1)),
+        )
+        gradcosᶠ = Geometry.CartesianVector.(∇ᶠ¹.(cos.(centers)))
+
+        Δh[k] = cs.face_local_geometry.J[1]
+        # Errors
+        err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.Cartesian3Vector.(cos.(centers)))
+        err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
+        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.Cartesian3Vector.(ones(FT, fs)))
+        err_grad_cos_f[k] = norm(gradcosᶠ .- Geometry.Cartesian3Vector.(.-sin.(faces)))
+    end
+
+    # GradientF2C conv
+    conv_grad_sin_c = convergence_rate(err_grad_sin_c, Δh)
+    # DivergenceF2C conv
+    conv_div_sin_c = convergence_rate(err_div_sin_c, Δh)
+    # GradientC2F conv, with f(z) = z
+    conv_grad_z = convergence_rate(err_grad_z_f, Δh)
+    # GradientC2F conv, with f(z) = cos(z)
+    conv_grad_cos = convergence_rate(err_grad_cos_f, Δh)
+
+    # GradientF2C
+    @test err_grad_sin_c[3] ≤ err_grad_sin_c[2] ≤ err_grad_sin_c[1] ≤ 0.1
+    @test conv_grad_sin_c[1] ≈ 1.5 atol = 0.1
+    @test conv_grad_sin_c[2] ≈ 1.5 atol = 0.1
+    @test conv_grad_sin_c[3] ≈ 1.5 atol = 0.1
+    @show conv_grad_sin_c
+    # @test conv_grad_sin_c[1] ≤ conv_grad_sin_c[2] ≤ conv_grad_sin_c[3]
+
+
+    # DivergenceF2C
+    @test err_div_sin_c[3] ≤ err_div_sin_c[2] ≤ err_div_sin_c[1] ≤ 0.1
+    @test conv_div_sin_c[1] ≈ 1.5 atol = 0.1
+    @test conv_div_sin_c[2] ≈ 1.5 atol = 0.1
+    @test conv_div_sin_c[3] ≈ 1.5 atol = 0.1
+    @show conv_div_sin_c
+    # @test conv_div_sin_c[1] ≤ conv_div_sin_c[2] ≤ conv_div_sin_c[3]
+
+    # GradientC2F conv should be approximately 2 for second order-accurate stencil.
+    @test err_grad_z_f[3] ≤ err_grad_z_f[2] ≤ err_grad_z_f[1] ≤ 0.1
+    @test conv_grad_z[1] ≈ 1.5 atol = 0.1
+    @test conv_grad_z[2] ≈ 1.5 atol = 0.1
+    @test conv_grad_z[3] ≈ 1.5 atol = 0.1
+    @show conv_grad_z
+    # @test conv_grad_z[1] ≤ conv_grad_z[2] ≤ conv_grad_z[3]
+
+    # GradientC2F conv should be approximately 2 for second order-accurate stencil. But it is ≈ 1.5
+    @test err_grad_cos_f[3] ≤ err_grad_cos_f[2] ≤ err_grad_cos_f[1] ≤ 0.1
+    @test conv_grad_cos[1] ≈ 1.5 atol = 0.1
+    @test conv_grad_cos[2] ≈ 1.5 atol = 0.1
+    @test conv_grad_cos[3] ≈ 1.5 atol = 0.1
+    @show conv_grad_cos
+    # @test conv_grad_cos[1] ≤ conv_grad_cos[2] ≤ conv_grad_cos[3]
+
+end
