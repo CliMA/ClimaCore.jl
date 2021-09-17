@@ -572,9 +572,8 @@ end
     len = typesize(T, SS)
     VF{SS}(view(array, :, (offset + 1):(offset + len)))
 end
-
 @propagate_inbounds function Base.getindex(data::VF{S}, i::Integer) where {S}
-    get_struct(view(parent(data), i, :), S)
+    get_struct(parent(data), S, i - 1, length(data))
 end
 
 @propagate_inbounds function Base.getindex(

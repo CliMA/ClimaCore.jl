@@ -91,7 +91,7 @@ function typesize(::Type{T}, ::Type{S}) where {T, S}
 end
 
 # TODO: this assumes that the field struct zero type is the same as the backing
-# zero'd out memory, which should be true in all "real world" cases 
+# zero'd out memory, which should be true in all "real world" cases
 # but is something that should be revisited
 @inline function _mzero!(out::MArray{S, T, N, L}, FT) where {S, T, N, L}
     TdivFT = DataLayouts.typesize(FT, T)
@@ -113,41 +113,61 @@ end
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
+function get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+    offset,
+    stride,
+) where {T, S}
     if @generated
-        tup = :(())
-        for i in 1:fieldcount(S)
-            push!(
-                tup.args,
-                :(get_struct(
-                    array,
-                    fieldtype(S, $i),
-                    offset + fieldtypeoffset(T, S, $i),
-                )),
-            )
+        function _get_struct_expr(T, S, xoffset)
+            if T == S
+                return :(array[offset + $xoffset + 1])
+            end
+            if isprimitivetype(S)
+                error("invalid type $S")
+            end
+            tup = :(())
+            for i in 1:fieldcount(S)
+                push!(
+                    tup.args,
+                    _get_struct_expr(
+                        T,
+                        fieldtype(S, i),
+                        :($xoffset + stride * $(fieldtypeoffset(T, S, i))),
+                    ),
+                )
+            end
+            :(bypass_constructor($S, $tup))
         end
-        :(bypass_constructor(S, $tup))
+
+        quote
+            Base.@_propagate_inbounds_meta
+            $(_get_struct_expr(T, S, 0))
+        end
     else
         args = ntuple(fieldcount(S)) do i
-            get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
+            get_struct(
+                array,
+                fieldtype(S, i),
+                offset + stride * fieldtypeoffset(T, S, i),
+                stride,
+            )
         end
         return bypass_constructor(S, args)
     end
 end
-@propagate_inbounds function get_struct(
-    array::AbstractArray{S},
-    ::Type{S},
-    offset,
-) where {S}
-    return array[offset + 1]
-end
-
 @propagate_inbounds get_struct(
     array::AbstractArray{T},
     ::Type{S},
-) where {T, S} = get_struct(array, S, 0)
+) where {T, S} = get_struct(array, S, 0, 1)
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
+function set_struct!(
+    array::AbstractArray{T},
+    val::S,
+    offset,
+    stride,
+) where {T, S}
     if @generated
         errorstring = "Expected type $T, got type $S"
         ex = quote
@@ -171,7 +191,8 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 :(set_struct!(
                     array,
                     getfield(val, $i),
-                    offset + fieldtypeoffset(T, S, $i),
+                    offset + stride * fieldtypeoffset(T, S, $i),
+                    stride,
                 )),
             )
         end
@@ -185,7 +206,8 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
             set_struct!(
                 array,
                 getfield(val, i),
-                offset + fieldtypeoffset(T, S, i),
+                offset + stride * fieldtypeoffset(T, S, i),
+                stride,
             )
         end
         return nothing
@@ -196,10 +218,11 @@ end
     array::AbstractArray{S},
     val::S,
     offset,
+    stride,
 ) where {S}
-    array[offset + 1] = val
+    @inbounds array[offset + 1] = val
 end
 
 @propagate_inbounds function set_struct!(array, val)
-    set_struct!(array, val, 0)
+    set_struct!(array, val, 0, 1)
 end

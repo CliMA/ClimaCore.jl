@@ -18,6 +18,7 @@ include("fdspaces.jl")
 include("fielddiffeq.jl")
 include("hybrid2d.jl")
 include("hybrid3d.jl")
+include("allocations.jl")
 #include("diffusion2d.jl")
 
 if "CUDA" in ARGS
