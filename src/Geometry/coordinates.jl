@@ -41,8 +41,12 @@ end
 @pointtype Cartesian2Point x2
 @pointtype Cartesian3Point x3
 
-@pointtype Cartesian2DPoint x1 x2
-@pointtype Cartesian3DPoint x1 x2 x3
+@pointtype Cartesian12Point x1 x2
+@pointtype Cartesian123Point x1 x2 x3
+# TODO: deprecate these
+const Cartesian2DPoint = Cartesian12Point
+const Cartesian3DPoint = Cartesian123Point
+
 
 product_coordinates(xp::XPoint{FT}, zp::ZPoint{FT}) where {FT} =
     XZPoint{FT}(xp.x, zp.z)

@@ -33,33 +33,25 @@ function vertex_coordinates(topology::Grid2DTopology, elem::Integer)
         )
     else
         return (
-            (
-                Geometry.Cartesian2DPoint(
-                    coords[verts[1], 1],
-                    coords[verts[1], 2],
-                ),
-                Geometry.Cartesion3Point(coords[verts[1], 3]),
+            Geometry.Cartesian123Point(
+                coords[verts[1], 1],
+                coords[verts[1], 2],
+                coords[verts[1], 3],
             ),
-            (
-                Geometry.Cartesian2DPoint(
-                    coords[verts[2], 1],
-                    coords[verts[2], 2],
-                ),
-                Geometry.Cartesion3Point(coords[verts[2], 3]),
+            Geometry.Cartesian123Point(
+                coords[verts[2], 1],
+                coords[verts[2], 2],
+                coords[verts[2], 3],
             ),
-            (
-                Geometry.Cartesian2DPoint(
-                    coords[verts[3], 1],
-                    coords[verts[3], 2],
-                ),
-                Geometry.Cartesion3Point(coords[verts[3], 3]),
+            Geometry.Cartesian123Point(
+                coords[verts[3], 1],
+                coords[verts[3], 2],
+                coords[verts[3], 3],
             ),
-            (
-                Geometry.Cartesian2DPoint(
-                    coords[verts[4], 1],
-                    coords[verts[4], 2],
-                ),
-                Geometry.Cartesion3Point(coords[verts[4], 3]),
+            Geometry.Cartesian123Point(
+                coords[verts[4], 1],
+                coords[verts[4], 2],
+                coords[verts[4], 3],
             ),
         )
     end
