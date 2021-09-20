@@ -36,7 +36,7 @@ Covariant12Vector(u::CartesianVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * u
 Covariant12Vector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * local_geometry.∂x∂ξ * u
-3
+
 Cartesian12Vector(u::CartesianVector, local_geometry::LocalGeometry) = u
 Cartesian12Vector(u::CovariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x' * u

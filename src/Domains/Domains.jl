@@ -12,52 +12,57 @@ abstract type VerticalDomain <: AbstractDomain end
 
 const BCTagType = Union{Nothing, Tuple{Symbol, Symbol}}
 
-struct IntervalDomain{FT, B} <:
-       VerticalDomain where {FT <: AbstractFloat, B <: BCTagType}
-    x3min::FT
-    x3max::FT
-    x3boundary::B
+struct IntervalDomain{CT, B} <: VerticalDomain where {
+    CT <: Geometry.Abstract1DPoint{FT},
+    B <: BCTagType,
+} where {FT}
+    coord_min::CT
+    coord_max::CT
+    boundary_tags::B
 end
 
+"""
+    IntervalDomain(coord⁻, coord⁺; boundary_tags::Tuple{Symbol,Symbol})
+
+Construct a `IntervalDomain`, the closed interval is given by `coord⁻`, `coord⁺` coordinate arguments.
+Because `IntervalDomain` does not support periodic boundary conditions, the `boundary_tags` keyword arugment must be supplied.
+"""
+function IntervalDomain(
+    coord⁻::Geometry.Abstract1DPoint,
+    coord⁺::Geometry.Abstract1DPoint;
+    boundary_tags::Tuple{Symbol, Symbol},
+)
+    coords = promote(coord⁻, coord⁺)
+    IntervalDomain(first(coords), last(coords), boundary_tags)
+end
 
 """
-    IntervalDomain(x3min, x3max; x3boundary::Tuple{Symbol,Symbol})
+    IntervalDomain(coords::ClosedInterval; boundary_tags::Tuple{Symbol,Symbol})
 
-Construct a `IntervalDomain` in the vertical, the closed interval is given by `x3min`, `x3max` arugments.
-Because vertical domains are not periodic, the `x3boundary` boundary tag keyword arugment must be supplied.
+Construct a `IntervalDomain`, over the closed coordinate interval `coords`
+Because `IntervalDomain` does not support periodic boundary conditions, the `boundary_tags` keyword arugment must be supplied.
 """
-IntervalDomain(x3min, x3max; x3boundary::Tuple{Symbol, Symbol}) =
-    IntervalDomain(x3min, x3max, x3boundary)
+IntervalDomain(coords::ClosedInterval; boundary_tags::Tuple{Symbol, Symbol}) =
+    IntervalDomain(coords.left, coords.right, boundary_tags)
 
-"""
-    IntervalDomain(x3::ClosedInterval; x3boundary::Tuple{Symbol,Symbol})
-
-Construct a `IntervalDomain` in the vertical.
-Because vertical domains are not periodic, the `x3boundary` boundary tag keyword arugment must be supplied.
-"""
-IntervalDomain(x3::ClosedInterval; x3boundary::Tuple{Symbol, Symbol}) =
-    IntervalDomain(float(x3.left), float(x3.right), x3boundary)
-
-Base.eltype(::IntervalDomain{FT}) where {FT} = FT
-coordinate_type(::IntervalDomain{FT}) where {FT} = Geometry.Cartesian3Point{FT}
+coordinate_type(::IntervalDomain{CT}) where {CT} = CT
+Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
 
 function Base.show(io::IO, domain::IntervalDomain)
     print(
         io,
-        "IntervalDomain($(domain.x3min) .. $(domain.x3max), x3boundary = $(domain.x3boundary))",
+        "IntervalDomain($(domain.coord_min) .. $(domain.coord_max), boundary_tags = $(domain.boundary_tags))",
     )
 end
 # coordinates (x1,x2)
 
-struct RectangleDomain{FT, B1, B2} <: HorizontalDomain where {
-    FT <: AbstractFloat,
+struct RectangleDomain{CT, B1, B2} <: HorizontalDomain where {
+    CT <: Geometry.Abstract2DPoint{FT},
     B1 <: BCTagType,
     B2 <: BCTagType,
-}
-    x1min::FT
-    x1max::FT
-    x2min::FT
-    x2max::FT
+} where {FT}
+    x1x2min::CT
+    x1x2max::CT
     x1boundary::B1
     x2boundary::B2
 end
@@ -74,13 +79,22 @@ Construct a `RectangularDomain` in the horizontal.
 If a given x1 or x2 boundary is not periodic, then `x1boundary` or `x2boundary` boundary tag keyword arguments must be supplied.
 """
 function RectangleDomain(
-    x1::ClosedInterval,
-    x2::ClosedInterval;
+    x1::ClosedInterval{X1CT},
+    x2::ClosedInterval{X2CT};
     x1periodic = false,
     x2periodic = false,
     x1boundary::BCTagType = nothing,
     x2boundary::BCTagType = nothing,
-)
+) where {X1CT <: Geometry.Abstract1DPoint, X2CT <: Geometry.Abstract1DPoint}
+    UX1CT = Geometry.unionalltype(X1CT)
+    UX2CT = Geometry.unionalltype(X2CT)
+    if UX1CT === UX2CT
+        throw(
+            ArgumentError(
+                "x1 and x2 domain axis coordinates cannot be the same type: `$(UX1CT)`",
+            ),
+        )
+    end
     if !x1periodic && !(x1boundary isa Tuple{Symbol, Symbol})
         throw(
             ArgumentError(
@@ -95,21 +109,24 @@ function RectangleDomain(
             ),
         )
     end
+    x1x2min, x1x2max = promote(
+        Geometry.product_coordinates(x1.left, x2.left),
+        Geometry.product_coordinates(x1.right, x2.right),
+    )
     RectangleDomain(
-        float(x1.left),
-        float(x1.right),
-        float(x2.left),
-        float(x2.right),
+        x1x2min,
+        x1x2max,
         x1periodic ? nothing : x1boundary,
         x2periodic ? nothing : x2boundary,
     )
 end
 
-function Base.show(io::IO, domain::RectangleDomain)
-    print(
-        io,
-        "RectangleDomain($(domain.x1min)..$(domain.x1max), $(domain.x2min)..$(domain.x2max)",
-    )
+function Base.show(io::IO, domain::RectangleDomain{CT}) where {CT}
+    x1min = Geometry.coordinate(domain.x1x2min, 1)
+    x2min = Geometry.coordinate(domain.x1x2min, 2)
+    x1max = Geometry.coordinate(domain.x1x2max, 1)
+    x2max = Geometry.coordinate(domain.x1x2max, 2)
+    print(io, "RectangleDomain($(x1min)..$(x1max), $(x2min)..$(x2max)")
     if domain.x1boundary === nothing
         print(io, ", x1periodic=true")
     else
@@ -122,8 +139,7 @@ function Base.show(io::IO, domain::RectangleDomain)
     end
     print(io, ")")
 end
-coordinate_type(::RectangleDomain{FT}) where {FT} =
-    Geometry.Cartesian2DPoint{FT}
+coordinate_type(::RectangleDomain{CT}) where {CT} = CT
 
 # coordinates (-pi/2 < lat < pi/2, -pi < lon < pi)
 struct SphereDomain{FT} <: HorizontalDomain
@@ -133,6 +149,6 @@ end
 struct Unstructured2DDomain{FT} <: HorizontalDomain where {FT <: AbstractFloat} end
 
 coordinate_type(::Unstructured2DDomain{FT}) where {FT} =
-    Geometry.Cartesian2DPoint{FT}
+    Geometry.Cartesian12Point{FT}
 
 end # module

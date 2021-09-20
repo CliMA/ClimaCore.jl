@@ -31,22 +31,25 @@ struct SpectralElementSpace1D{T, Q, G, D, M} <: AbstractSpectralElementSpace
 end
 
 function SpectralElementSpace1D(topology, quadrature_style)
-    FT = eltype(topology.mesh)
-    CT = Geometry.XPoint{FT} # Domains.coordinate_type(topology)
+    # TODO: we need to massage the coordinate points because the grid is assumed 2D
+    CoordType = Topologies.coordinate_type(topology)
+    CoordType1D = Geometry.coordinate_type(CoordType, 1)
+    AIdx = Geometry.coordinate_axis(CoordType1D)
+    FT = eltype(CoordType1D)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     Mxξ = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian1Axis, Geometry.Covariant1Axis},
+        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
     Mξx = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Contravariant1Axis, Geometry.Cartesian1Axis},
+        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
-    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{CoordType1D, FT, Mxξ, Mξx}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -55,11 +58,18 @@ function SpectralElementSpace1D(topology, quadrature_style)
         local_geometry_slab = slab(local_geometry, elem)
         for i in 1:Nq
             ξ = quad_points[i]
-            # TODO: we need to reconsruct the points becuase the grid is assumed 2D
+            # TODO: we need to massage the coordinate points because the grid is assumed 2D
             vcoords = Topologies.vertex_coordinates(topology, elem)
-            vcoords1D = (CT(vcoords[1].x1), CT(vcoords[2].x1))
+            vcoords1D = (
+                Geometry.coordinate(vcoords[1], 1),
+                Geometry.coordinate(vcoords[2], 1),
+            )
             x = Geometry.interpolate(vcoords1D, ξ)
-            ∂x∂ξ = (vcoords1D[2].x - vcoords1D[1].x) / 2
+            ∂x∂ξ =
+                (
+                    Geometry.component(vcoords1D[2], 1) -
+                    Geometry.component(vcoords1D[1], 1)
+                ) / 2
             J = abs(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i]
@@ -68,11 +78,17 @@ function SpectralElementSpace1D(topology, quadrature_style)
                 J,
                 WJ,
                 Geometry.AxisTensor(
-                    (Geometry.Cartesian1Axis(), Geometry.Covariant1Axis()),
+                    (
+                        Geometry.CartesianAxis{AIdx}(),
+                        Geometry.CovariantAxis{AIdx}(),
+                    ),
                     ∂x∂ξ,
                 ),
                 Geometry.AxisTensor(
-                    (Geometry.Contravariant1Axis(), Geometry.Cartesian1Axis()),
+                    (
+                        Geometry.ContravariantAxis{AIdx}(),
+                        Geometry.CartesianAxis{AIdx}(),
+                    ),
                     ∂ξ∂x,
                 ),
             )
@@ -119,22 +135,23 @@ end
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
 function SpectralElementSpace2D(topology, quadrature_style)
-    FT = eltype(topology.mesh)
-    CT = Geometry.XYPoint{FT} # Domains.coordinate_type(topology)
+    CoordType2D = Topologies.coordinate_type(topology)
+    AIdx = Geometry.coordinate_axis(CoordType2D)
+    FT = eltype(CoordType2D)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     Mxξ = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis},
+        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
         SMatrix{2, 2, FT, 4},
     }
     Mξx = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Contravariant12Axis, Geometry.Cartesian12Axis},
+        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
         SMatrix{2, 2, FT, 4},
     }
-    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{CoordType2D, FT, Mxξ, Mξx}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
@@ -149,22 +166,20 @@ function SpectralElementSpace2D(topology, quadrature_style)
             # (where the integration is of different order)
             ξ = SVector(quad_points[i], quad_points[j])
             x = Geometry.interpolate(
-                Geometry.XYPoint.(
-                    Topologies.vertex_coordinates(topology, elem),
-                ),
+                CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
                 ξ[1],
                 ξ[2],
             )
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 local x
                 x = Geometry.interpolate(
-                    Geometry.XYPoint.(
+                    CoordType2D.(
                         Topologies.vertex_coordinates(topology, elem),
                     ),
                     ξ[1],
                     ξ[2],
                 )
-                SVector(getfield(x, 1), getfield(x, 2))
+                SVector(Geometry.component(x, 1), Geometry.component(x, 2))
             end
             J = det(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
@@ -175,13 +190,16 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 J,
                 WJ,
                 Geometry.AxisTensor(
-                    (Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()),
+                    (
+                        Geometry.CartesianAxis{AIdx}(),
+                        Geometry.CovariantAxis{AIdx}(),
+                    ),
                     ∂x∂ξ,
                 ),
                 Geometry.AxisTensor(
                     (
-                        Geometry.Contravariant12Axis(),
-                        Geometry.Cartesian12Axis(),
+                        Geometry.ContravariantAxis{AIdx}(),
+                        Geometry.CartesianAxis{AIdx}(),
                     ),
                     ∂ξ∂x,
                 ),
@@ -194,6 +212,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
     dss_2d!(dss_weights, local_geometry.J, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
+    # TODO: this assumes XYDomain, need to dispatch SG Vector type on domain axis type
     SG = Geometry.SurfaceGeometry{FT, Geometry.Cartesian12Vector{FT}}
     interior_faces = Topologies.interior_faces(topology)
 

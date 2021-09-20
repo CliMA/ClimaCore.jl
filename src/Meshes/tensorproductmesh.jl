@@ -1,23 +1,27 @@
 """
-    TensorProductMesh(domain::RectangleDomain, n1::Integer, n2::Integer, coordinates::Vector{Cartesian2DPoint{FT})
+    TensorProductMesh(domain::RectangleDomain, n1::Integer, n2::Integer, coordinates::Vector{<:Abstract2DPoint})
 
 A tensor-product `AbstractMesh` of `domain` with `n1` elements in dimension 1, and `n2`
 in dimension 2. `coordinates` is an optional argument that can be used to specify the coordinates vector. If `coordinates = nothing`, mesh vertices are defaulted to be equispaced.
 """
-struct TensorProductMesh{FT, RD <: RectangleDomain{FT}} <: AbstractMesh{FT}
+struct TensorProductMesh{
+    FT,
+    CT <: Geometry.Abstract2DPoint{FT},
+    RD <: RectangleDomain{CT},
+} <: AbstractMesh{FT}
     domain::RD
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # number of elements in x2 direction
     faces::Vector{Tuple{Int64, Int64, Int64, Int64, Bool}}
-    coordinates::Vector{Cartesian2DPoint{FT}}
+    coordinates::Vector{CT}
 end
 
 function TensorProductMesh(
-    domain::RectangleDomain{FT},
+    domain::RectangleDomain,
     n1,
     n2,
     coordinates = nothing,
-) where {FT}
+)
 
     nelem = n1 * n2
     x1periodic = isnothing(domain.x1boundary)
@@ -85,17 +89,19 @@ function TensorProductMesh(
     end
 
     if isnothing(coordinates)
-
-        coordinates = Vector{Cartesian2DPoint{FT}}(undef, (n1 + 1) * (n2 + 1))
+        CT = Domains.coordinate_type(domain)
+        coordinates = Vector{CT}(undef, (n1 + 1) * (n2 + 1))
+        x1min = Geometry.component(domain.x1x2min, 1)
+        x2min = Geometry.component(domain.x1x2min, 2)
+        x1max = Geometry.component(domain.x1x2max, 1)
+        x2max = Geometry.component(domain.x1x2max, 2)
         # Default equispaced vertex coordinates, if the user has not specified their locations
-        range1 = range(domain.x1min, domain.x1max; length = n1 + 1)
-        range2 = range(domain.x2min, domain.x2max; length = n2 + 1)
-
+        range1 = range(x1min, x1max; length = n1 + 1)
+        range2 = range(x2min, x2max; length = n2 + 1)
         # Coordinates array, row-major storage
         for i in 1:(n1 + 1)
             for j in 1:(n2 + 1)
-                coordinates[(i - 1) * (n2 + 1) + j] =
-                    Cartesian2DPoint(range1[i], range2[j])
+                coordinates[(i - 1) * (n2 + 1) + j] = CT(range1[i], range2[j])
             end
         end
     end

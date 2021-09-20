@@ -2,13 +2,13 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces
-import ClimaCore.Geometry
-import ClimaCore.Domains.Geometry: Cartesian2DPoint
+import ClimaCore.Geometry: Geometry
 
 @testset "1d domain space" begin
+    FT = Float64
     domain = Domains.RectangleDomain(
-        -3..5,
-        0..0,
+        Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
+        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(0),
         x1periodic = true,
         x2periodic = false,
         x2boundary = (:south, :north),
@@ -17,7 +17,7 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
     grid_topology = Topologies.GridTopology(mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
+    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace1D(grid_topology, quad)
 
@@ -27,12 +27,11 @@ import ClimaCore.Domains.Geometry: Cartesian2DPoint
     array = parent(Spaces.coordinates_data(space))
     @test size(array) == (4, 1, 1)
     coord_slab = slab(Spaces.coordinates_data(space), 1)
-    @test coord_slab[1] == Geometry.XPoint(-3.0)
-    @test coord_slab[4] == Geometry.XPoint(5.0)
+    @test coord_slab[1] == Geometry.XPoint{FT}(-3)
+    @test coord_slab[4] == Geometry.XPoint{FT}(5)
 
     local_geometry_slab = slab(space.local_geometry, 1)
     dss_weights_slab = slab(space.dss_weights, 1)
-
 
     for i in 1:4
         @test Geometry.components(local_geometry_slab[i].∂x∂ξ) ≈
@@ -52,9 +51,10 @@ end
 
 
 @testset "1×1 domain space" begin
+    FT = Float32
     domain = Domains.RectangleDomain(
-        -3..5,
-        -2..8,
+        Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
+        Geometry.YPoint{FT}(-2)..Geometry.YPoint{FT}(8),
         x1periodic = true,
         x2periodic = false,
         x2boundary = (:south, :north),
@@ -63,17 +63,17 @@ end
     grid_topology = Topologies.GridTopology(mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
+    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     array = parent(Spaces.coordinates_data(space))
     @test size(array) == (4, 4, 2, 1)
     coord_slab = slab(Spaces.coordinates_data(space), 1)
-    @test coord_slab[1, 1] ≈ Geometry.XYPoint(Cartesian2DPoint(-3.0, -2.0))
-    @test coord_slab[4, 1] ≈ Geometry.XYPoint(Cartesian2DPoint(5.0, -2.0))
-    @test coord_slab[1, 4] ≈ Geometry.XYPoint(Cartesian2DPoint(-3.0, 8.0))
-    @test coord_slab[4, 4] ≈ Geometry.XYPoint(Cartesian2DPoint(5.0, 8.0))
+    @test coord_slab[1, 1] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
+    @test coord_slab[4, 1] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
+    @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
+    @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
     local_geometry_slab = slab(space.local_geometry, 1)
     dss_weights_slab = slab(space.dss_weights, 1)

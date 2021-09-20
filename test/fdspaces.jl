@@ -30,11 +30,11 @@ end
 @testset "Scalar Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
-            FT(0.0),
-            FT(pi);
-            x3boundary = (:left, :right),
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:left, :right),
         )
-        @test eltype(domain) === FT
+        @test eltype(domain) === Geometry.ZPoint{FT}
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
@@ -44,10 +44,10 @@ end
         @test sum(ones(FT, center_space)) ≈ pi
         @test sum(ones(FT, face_space)) ≈ pi
 
-        centers = Fields.coordinate_field(center_space)
+        centers = getproperty(Fields.coordinate_field(center_space), :z)
         @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2
 
-        faces = Fields.coordinate_field(face_space)
+        faces = getproperty(Fields.coordinate_field(face_space), :z)
         @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
@@ -91,18 +91,18 @@ end
 @testset "Test composed stencils" begin
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
-            FT(0.0),
-            FT(pi);
-            x3boundary = (:left, :right),
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:left, :right),
         )
-        @test eltype(domain) === FT
+        @test eltype(domain) === Geometry.ZPoint{FT}
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
         center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
-        centers = Fields.coordinate_field(center_space)
+        centers = getproperty(Fields.coordinate_field(center_space), :z)
         w = ones(FT, face_space)
         θ = sin.(centers)
 
@@ -172,12 +172,12 @@ end
 @testset "Composite Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
-            FT(0.0),
-            FT(pi);
-            x3boundary = (:left, :right),
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:left, :right),
         )
 
-        @test eltype(domain) === FT
+        @test eltype(domain) === Geometry.ZPoint{FT}
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
         center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -220,10 +220,14 @@ convergence_rate(err, Δh) =
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
-        err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+        err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
 
         for (k, n) in enumerate(n_elems_seq)
-            domain = Domains.IntervalDomain(a, b; x3boundary = (:left, :right))
+            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            domain = Domains.IntervalDomain(
+                interval;
+                boundary_tags = (:left, :right),
+            )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -236,8 +240,8 @@ convergence_rate(err, Δh) =
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
-            face_field .= sin.(3π .* faces)
-            cent_field_exact .= sin.(3π .* centers)
+            face_field .= sin.(3π .* faces.z)
+            cent_field_exact .= sin.(3π .* centers.z)
             operator = Operators.InterpolateF2C()
             cent_field .= operator.(face_field)
 
@@ -264,10 +268,14 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
-        err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+        err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
 
         for (k, n) in enumerate(n_elems_seq)
-            domain = Domains.IntervalDomain(a, b; x3boundary = (:left, :right))
+            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            domain = Domains.IntervalDomain(
+                interval;
+                boundary_tags = (:left, :right),
+            )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -280,8 +288,8 @@ end
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
-            cent_field .= sin.(3π .* centers)
-            face_field_exact .= sin.(3π .* faces)
+            cent_field .= sin.(3π .* centers.z)
+            face_field_exact .= sin.(3π .* faces.z)
 
             operator = Operators.InterpolateC2F(
                 left = Operators.SetValue(0.0),
@@ -311,9 +319,13 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
-        err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+        err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
-            domain = Domains.IntervalDomain(a, b; x3boundary = (:left, :right))
+            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            domain = Domains.IntervalDomain(
+                interval;
+                boundary_tags = (:left, :right),
+            )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -326,10 +338,10 @@ end
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
-            cent_field .= sin.(3π .* centers)
+            cent_field .= sin.(3π .* centers.z)
             face_field_exact .=
                 Geometry.CovariantVector.(
-                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces)),
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces.z)),
                 )
 
             operator = Operators.GradientC2F(
@@ -358,9 +370,13 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
-        err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+        err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
-            domain = Domains.IntervalDomain(a, b; x3boundary = (:left, :right))
+            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            domain = Domains.IntervalDomain(
+                interval;
+                boundary_tags = (:left, :right),
+            )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
             cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -373,10 +389,10 @@ end
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
-            face_field .= sin.(3π .* faces)
+            face_field .= sin.(3π .* faces.z)
             cent_field_exact .=
                 Geometry.CovariantVector.(
-                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers)),
+                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers.z)),
                 )
 
             operator = Operators.GradientF2C()
@@ -400,27 +416,28 @@ end
     FT = Float64
     n_elems_seq = 2 .^ (5, 6, 7, 8)
 
-    err_grad_sin_c = zeros(length(n_elems_seq))
-    err_div_sin_c = zeros(length(n_elems_seq))
-    err_grad_z_f = zeros(length(n_elems_seq))
-    err_grad_cos_f1 = zeros(length(n_elems_seq))
-    err_grad_cos_f2 = zeros(length(n_elems_seq))
-    err_div_sin_f = zeros(length(n_elems_seq))
-    err_div_cos_f = zeros(length(n_elems_seq))
-    Δh = zeros(length(n_elems_seq))
+    err_grad_sin_c = zeros(FT, length(n_elems_seq))
+    err_div_sin_c = zeros(FT, length(n_elems_seq))
+    err_grad_z_f = zeros(FT, length(n_elems_seq))
+    err_grad_cos_f1 = zeros(FT, length(n_elems_seq))
+    err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
+    err_div_sin_f = zeros(FT, length(n_elems_seq))
+    err_div_cos_f = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
+
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
-            FT(0.0),
-            FT(pi);
-            x3boundary = (:left, :right),
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:left, :right),
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
         cs = Spaces.CenterFiniteDifferenceSpace(mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-        centers = Fields.coordinate_field(cs)
-        faces = Fields.coordinate_field(fs)
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+        faces = getproperty(Fields.coordinate_field(fs), :z)
 
         # Face -> Center operators:
         # GradientF2C

@@ -29,7 +29,11 @@ const C_v = FT(R_d / (γ - 1)) # heat capacit at constant volume
 const R_m = FT(R_d) # moist R, assumed to be dry
 
 
-domain = Domains.IntervalDomain(FT(0.0), FT(30e3), x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0.0),
+    Geometry.ZPoint{FT}(30e3),
+    boundary_tags = (:bottom, :top),
+)
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -89,7 +93,7 @@ function discrete_hydrostatic_balance!(ρ, w, ρθ, Δz::FT, _grav::FT, Π::Func
 end
 
 zc = Fields.coordinate_field(cspace)
-Yc = decaying_temperature_profile.(zc)
+Yc = decaying_temperature_profile.(zc.z)
 w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
@@ -116,7 +120,7 @@ function tendency!(dY, Y, _, t)
     @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
     @. dw = B(
         Geometry.CartesianVector(
-            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z)),
         ),
     )
     return dY

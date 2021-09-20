@@ -1,6 +1,6 @@
 using Test
 import ClimaCore: Domains, Meshes, Topologies
-import ClimaCore.Geometry: Cartesian2DPoint
+import ClimaCore.Geometry: Geometry
 using StaticArrays
 using IntervalSets
 
@@ -15,8 +15,8 @@ function rectangular_grid(
     x2max = 1.0,
 )
     domain = Domains.RectangleDomain(
-        x1min..x1max,
-        x2min..x2max,
+        Geometry.XPoint(x1min)..Geometry.XPoint(x1max),
+        Geometry.YPoint(x2min)..Geometry.YPoint(x2max),
         x1periodic = x1periodic,
         x2periodic = x2periodic,
         x1boundary = x1periodic ? nothing : (:west, :east),
@@ -38,8 +38,8 @@ function regular_tensorproduct_grid(
     x2max = 1.0,
 )
     domain = Domains.RectangleDomain(
-        x1min..x1max,
-        x2min..x2max,
+        Geometry.XPoint(x1min)..Geometry.XPoint(x1max),
+        Geometry.YPoint(x2min)..Geometry.YPoint(x2max),
         x1periodic = x1periodic,
         x2periodic = x2periodic,
         x1boundary = x1periodic ? nothing : (:west, :east),
@@ -61,8 +61,8 @@ function irregular_tensorproduct_grid(
     x2max = 1.0,
 )
     domain = Domains.RectangleDomain(
-        x1min..x1max,
-        x2min..x2max,
+        Geometry.XPoint(x1min)..Geometry.XPoint(x1max),
+        Geometry.YPoint(x2min)..Geometry.YPoint(x2max),
         x1periodic = x1periodic,
         x2periodic = x2periodic,
         x1boundary = x1periodic ? nothing : (:west, :east),
@@ -76,7 +76,7 @@ function irregular_tensorproduct_grid(
     elemheight = range2[2] - range2[1]
 
     coordinates =
-        Vector{Cartesian2DPoint{typeof(x1min)}}(undef, (n1 + 1) * (n2 + 1))
+        Vector{Geometry.XYPoint{typeof(x1min)}}(undef, (n1 + 1) * (n2 + 1))
 
     # Iterate mesh vertices
     grid_topo = Topologies.GridTopology(mesh)
@@ -87,13 +87,13 @@ function irregular_tensorproduct_grid(
         # Shift 0-based indices
         i += 1
         j += 1
-        vcoords = Cartesian2DPoint(range1[i], range2[j])
+        vcoords = Geometry.XYPoint(range1[i], range2[j])
         # If I am on a boundary, don't apply any warping
         if j == 1 || j == nv2
             coordinates[(i - 1) * (n2 + 1) + j] = vcoords
         else # Interior vertex case, shift x2-coord of a fixed amount
             coordinates[(i - 1) * (n2 + 1) + j] =
-                Cartesian2DPoint(vcoords.x1, vcoords.x2 + 0.5 * elemheight)
+                Geometry.XYPoint(vcoords.x, vcoords.y + 0.5 * elemheight)
         end
     end
     ts_mesh = Meshes.TensorProductMesh(domain, n1, n2, coordinates)
@@ -384,10 +384,10 @@ end
     for topology in topologies
         @testset "1×1 element quad mesh with all periodic boundries" begin
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
-            @test c1 == Cartesian2DPoint(0.0, 0.0)
-            @test c2 == Cartesian2DPoint(1.0, 0.0)
-            @test c3 == Cartesian2DPoint(0.0, 1.0)
-            @test c4 == Cartesian2DPoint(1.0, 1.0)
+            @test c1 == Geometry.XYPoint(0.0, 0.0)
+            @test c2 == Geometry.XYPoint(1.0, 0.0)
+            @test c3 == Geometry.XYPoint(0.0, 1.0)
+            @test c4 == Geometry.XYPoint(1.0, 1.0)
 
         end
     end
@@ -416,10 +416,10 @@ end
     for topology in topologies
         @testset "1×1 element quad mesh with non-periodic boundries" begin
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
-            @test c1 == Cartesian2DPoint(-1.0, -1.0)
-            @test c2 == Cartesian2DPoint(1.0, -1.0)
-            @test c3 == Cartesian2DPoint(-1.0, 1.0)
-            @test c4 == Cartesian2DPoint(1.0, 1.0)
+            @test c1 == Geometry.XYPoint(-1.0, -1.0)
+            @test c2 == Geometry.XYPoint(1.0, -1.0)
+            @test c3 == Geometry.XYPoint(-1.0, 1.0)
+            @test c4 == Geometry.XYPoint(1.0, 1.0)
         end
     end
 
@@ -429,31 +429,31 @@ end
     for topology in topologies
         @testset "2×4 element quad mesh with non-periodic boundaries" begin
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
-            @test c1 == Cartesian2DPoint(0.0, 0.0)
-            @test c2 == Cartesian2DPoint(0.5, 0.0)
-            @test c3 == Cartesian2DPoint(0.0, 0.25)
-            @test c4 == Cartesian2DPoint(0.5, 0.25)
+            @test c1 == Geometry.XYPoint(0.0, 0.0)
+            @test c2 == Geometry.XYPoint(0.5, 0.0)
+            @test c3 == Geometry.XYPoint(0.0, 0.25)
+            @test c4 == Geometry.XYPoint(0.5, 0.25)
 
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 8)
-            @test c1 == Cartesian2DPoint(0.5, 0.75)
-            @test c2 == Cartesian2DPoint(1.0, 0.75)
-            @test c3 == Cartesian2DPoint(0.5, 1.0)
-            @test c4 == Cartesian2DPoint(1.0, 1.0)
+            @test c1 == Geometry.XYPoint(0.5, 0.75)
+            @test c2 == Geometry.XYPoint(1.0, 0.75)
+            @test c3 == Geometry.XYPoint(0.5, 1.0)
+            @test c4 == Geometry.XYPoint(1.0, 1.0)
         end
     end
     _, _, i_ts_topology = irregular_tensorproduct_grid(2, 4, false, false)
     @testset "2×4 element quad mesh with non-periodic boundaries" begin
         c1, c2, c3, c4 = Topologies.vertex_coordinates(i_ts_topology, 1)
-        @test c1 == Cartesian2DPoint(0.0, 0.0)
-        @test c2 == Cartesian2DPoint(0.5, 0.0)
-        @test c3 == Cartesian2DPoint(0.0, 0.375)
-        @test c4 == Cartesian2DPoint(0.5, 0.375)
+        @test c1 == Geometry.XYPoint(0.0, 0.0)
+        @test c2 == Geometry.XYPoint(0.5, 0.0)
+        @test c3 == Geometry.XYPoint(0.0, 0.375)
+        @test c4 == Geometry.XYPoint(0.5, 0.375)
 
         c1, c2, c3, c4 = Topologies.vertex_coordinates(i_ts_topology, 8)
-        @test c1 == Cartesian2DPoint(0.5, 0.875)
-        @test c2 == Cartesian2DPoint(1.0, 0.875)
-        @test c3 == Cartesian2DPoint(0.5, 1.0)
-        @test c4 == Cartesian2DPoint(1.0, 1.0)
+        @test c1 == Geometry.XYPoint(0.5, 0.875)
+        @test c2 == Geometry.XYPoint(1.0, 0.875)
+        @test c3 == Geometry.XYPoint(0.5, 1.0)
+        @test c4 == Geometry.XYPoint(1.0, 1.0)
     end
 
     _, _, grid_topology = rectangular_grid(
@@ -492,8 +492,8 @@ end
         @testset "check coordinate type accuracy" begin
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
             @test eltype(c2) == BigFloat
-            @test c2.x1 ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
-            @test c2.x2 == 0.0
+            @test getfield(c2, 1) ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
+            @test getfield(c2, 2) == 0.0
         end
     end
 end

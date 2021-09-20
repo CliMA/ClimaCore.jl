@@ -36,7 +36,11 @@ const Cd = ν / (L / nelems)
 const ug = 1.0
 const vg = 0.0
 const d = sqrt(2 * ν / f)
-domain = Domains.IntervalDomain(0.0, L; x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0.0),
+    Geometry.ZPoint{FT}(L);
+    boundary_tags = (:bottom, :top),
+)
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
 
@@ -48,8 +52,6 @@ fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 # https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155
 # https://clima.github.io/Thermodynamics.jl/dev/TemperatureProfiles/#DecayingTemperatureProfile
 function adiabatic_temperature_profile(z; T_surf = 300.0, T_min_ref = 230.0)
-
-
     u = FT(ug)
     v = FT(vg)
     return (u = u, v = v)
@@ -58,7 +60,7 @@ end
 
 
 zc = Fields.coordinate_field(cspace)
-Yc = adiabatic_temperature_profile.(zc)
+Yc = adiabatic_temperature_profile.(zc.z)
 w = Geometry.Cartesian3Vector.(zeros(Float64, fspace))
 
 Y_init = copy(Yc)

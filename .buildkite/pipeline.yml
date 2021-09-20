@@ -237,7 +237,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
     artifact_paths:
-      - "examples/hybrid/output/*"
+      - "examples/hybrid/output/bubble/*"
     agents:
       config: cpu
       queue: central

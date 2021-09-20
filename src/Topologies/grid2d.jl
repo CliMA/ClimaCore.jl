@@ -26,10 +26,10 @@ function vertex_coordinates(topology::Grid2DTopology, elem::Integer)
     dim = size(coords, 2)
     if dim == 2
         return (
-            Geometry.Cartesian2DPoint(coords[verts[1], 1], coords[verts[1], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[2], 1], coords[verts[2], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[3], 1], coords[verts[3], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[4], 1], coords[verts[4], 2]),
+            Geometry.Cartesian12Point(coords[verts[1], 1], coords[verts[1], 2]),
+            Geometry.Cartesian12Point(coords[verts[2], 1], coords[verts[2], 2]),
+            Geometry.Cartesian12Point(coords[verts[3], 1], coords[verts[3], 2]),
+            Geometry.Cartesian12Point(coords[verts[4], 1], coords[verts[4], 2]),
         )
     else
         return (
