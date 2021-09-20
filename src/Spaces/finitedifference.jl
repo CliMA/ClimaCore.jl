@@ -122,7 +122,7 @@ function FiniteDifferenceSpace{S}(
     )
 end
 
-Base.length(space::FiniteDifferenceSpace) = length(coordinate_data(space))
+Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
 nlevels(space::FiniteDifferenceSpace) = length(space)
 
