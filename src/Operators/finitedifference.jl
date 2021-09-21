@@ -1723,7 +1723,7 @@ function Base.similar(
     return Field(Eltype, sp)
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
 ) where {S <: AbstractStencilStyle}
@@ -1738,7 +1738,7 @@ function Base.copyto!(
     return field_out
 end
 
-function apply_stencil!(field_out, bc)
+@inline function apply_stencil!(field_out, bc)
     space = axes(bc)
     lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
     rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
