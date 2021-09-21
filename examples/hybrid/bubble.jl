@@ -170,11 +170,11 @@ function rhs!(dY, Y, _, t)
     p = @. pressure(Yc.ρθ)
 
     # density
-    @. dYc.ρ = -(∂(w * If(Yc.ρ)))
+    @. dYc.ρ = -∂(ρw)
     @. dYc.ρ -= hdiv(Yc.ρuₕ)
 
     # potential temperature
-    @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
+    @. dYc.ρθ = -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
     @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
 
     # horizontal momentum
