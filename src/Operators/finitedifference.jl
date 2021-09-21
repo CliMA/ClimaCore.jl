@@ -1672,6 +1672,14 @@ Base.Broadcast._broadcast_getindex_eltype(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
 ) = eltype(bc)
 
+# TODO only take necessary fields instead of entire space
+@noinline function bc_error(dest_space, result_space)
+    error(
+        "dest space `$(summary(dest_space))` is not equal to the inferred broadcasted result space `$(summary(result_space))`",
+    )
+end
+
+
 # check that inferred output field space is equal to dest field space
 @inline function Base.Broadcast.materialize!(
     ::Base.Broadcast.BroadcastStyle,
@@ -1680,9 +1688,7 @@ Base.Broadcast._broadcast_getindex_eltype(
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
     if result_space !== dest_space
-        error(
-            "dest space `$(summary(dest_space))` is not equal to the inferred broadcasted result space `$(summary(result_space))`",
-        )
+        bc_error(dest_space, result_space)
     end
     # the default Base behavior is to instantiate a Broadcasted object with the same axes as the dest
     return copyto!(
