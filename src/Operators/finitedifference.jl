@@ -1701,11 +1701,16 @@ end
     )
 end
 
-function column(
+# Doesn't remove self-referential of `column`, but is best way of writing it.
+column_rec(inds, arg) = (column(arg, inds...),)
+column_rec(inds, arg, args...) = (column(arg, inds...), column_rec(inds, args...)...)
+
+# This is self-referential when `bc.args` contains Broadcasted 
+@inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractStencilStyle}
-    _args = map(a -> column(a, inds...), bc.args)
+    _args = column_rec(inds, bc.args...)
     _axes = column(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end

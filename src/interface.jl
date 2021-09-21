@@ -22,4 +22,4 @@ data layout `data` at nodal point index `i`.
 function column end
 
 column(x, inds...) = x
-column(tup::Tuple, inds...) = map(x -> column(x, inds...), tup)
+@inline column(tup::Tuple, inds...) = map(x -> column(x, inds...), tup)
