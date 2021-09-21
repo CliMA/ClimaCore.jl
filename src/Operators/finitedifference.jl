@@ -1522,7 +1522,8 @@ function left_interor_window_idx(
     loc::LeftBoundaryWindow,
 )
     space = axes(bc)
-    maximum(arg -> left_interor_window_idx(arg, space, loc), bc.args)
+    # maximum(arg -> left_interor_window_idx(arg, space, loc), bc.args)
+    max(tuplemap(arg->left_interor_window_idx(arg, space, loc), bc.args)...)
 end
 function right_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
@@ -1530,7 +1531,8 @@ function right_interor_window_idx(
     loc::RightBoundaryWindow,
 )
     space = axes(bc)
-    minimum(arg -> right_interor_window_idx(arg, space, loc), bc.args)
+    #minimum(arg -> right_interor_window_idx(arg, space, loc), bc.args)
+    min(tuplemap(arg->right_interor_window_idx(arg, space, loc), bc.args)...)
 end
 
 function left_interor_window_idx(field::Field, _, loc::LeftBoundaryWindow)
@@ -1750,4 +1752,12 @@ function apply_stencil!(field_out, bc)
         setidx!(field_out, idx, getidx(bc, rbw, idx))
     end
     return field_out
+end
+
+@inline function tuplemap(f::F, tup) where F
+    ntuple(Val(length(tup))) do I
+        Base.@_inline_meta
+        @inbounds elem = tup[I]
+        f(elem)
+    end 
 end
