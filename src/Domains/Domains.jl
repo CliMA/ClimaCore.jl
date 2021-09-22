@@ -125,15 +125,9 @@ end
 coordinate_type(::RectangleDomain{FT}) where {FT} =
     Geometry.Cartesian2DPoint{FT}
 
-abstract type AbstractSphere{FT} end
-struct EquiangularSphere{FT} <: AbstractSphere{FT} end
-struct EquidistantSphere{FT} <: AbstractSphere{FT} end
-
 # coordinates (-pi/2 < lat < pi/2, -pi < lon < pi)
-struct SphereDomain{FT, AS} <:
-       HorizontalDomain where {FT <: AbstractFloat, AS <: AbstractSphere{FT}}
+struct SphereDomain{FT} <: HorizontalDomain where {FT <: AbstractFloat}
     radius::FT
-    stype::AS
 end
 
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}

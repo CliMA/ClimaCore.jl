@@ -6,16 +6,13 @@ export EquispacedRectangleMesh,
     sphere_mesh,
     equispaced_rectangular_mesh,
     TensorProductMesh,
-    Mesh2D
+    Mesh2D,
+    AbstractWarp,
+    AbstractSphereWarp,
+    EquiangularSphereWarp,
+    EquidistantSphereWarp
 
-import ..Domains:
-    IntervalDomain,
-    RectangleDomain,
-    CubePanelDomain,
-    SphereDomain,
-    AbstractSphere,
-    EquiangularSphere,
-    EquidistantSphere
+import ..Domains: IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
 import IntervalSets: ClosedInterval
 import ..Geometry: Cartesian2DPoint
 
@@ -33,6 +30,12 @@ abstract type AbstractMesh{FT} end
 Base.eltype(::AbstractMesh{FT}) where {FT} = FT
 
 warp_mesh(mesh::AbstractMesh) = mesh
+
+abstract type AbstractWarp end
+abstract type AbstractSphereWarp <: AbstractWarp end
+struct NoWarp <: AbstractWarp end
+struct EquiangularSphereWarp <: AbstractSphereWarp end
+struct EquidistantSphereWarp <: AbstractSphereWarp end
 
 struct IntervalMesh{FT, I <: IntervalDomain, V <: AbstractVector, B} <:
        AbstractMesh{FT}
@@ -183,9 +186,11 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB, D} <: AbstractMesh{FT}
+struct Mesh2D{D, W, I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
     "domain"
     domain::D
+    "warping type"
+    warp_type::W
     "# of unique vertices in the mesh"
     nverts::I
     "# of unique faces in the mesh"
@@ -222,6 +227,7 @@ end
 
 Mesh2D(
     domain,
+    warp_type,
     nverts,
     nfaces,
     nelems,
@@ -239,6 +245,8 @@ Mesh2D(
     elem_verts,
     elem_faces,
 ) = Mesh2D{
+    typeof(domain),
+    typeof(warp_type),
     eltype(nverts),
     typeof(face_boundary),
     typeof(face_verts),
@@ -246,9 +254,9 @@ Mesh2D(
     typeof(coordinates),
     typeof(boundary_tag_names),
     length(boundary_tag_names),
-    typeof(domain),
 }(
     domain,
+    warp_type,
     nverts,
     nfaces,
     nelems,

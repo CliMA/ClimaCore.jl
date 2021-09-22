@@ -200,6 +200,7 @@ function Mesh2D(
 
     return Mesh2D(
         domain,
+        NoWarp(),
         nverts,
         nfaces,
         nelems,
