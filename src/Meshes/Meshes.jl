@@ -6,13 +6,16 @@ export EquispacedRectangleMesh,
     sphere_mesh,
     equispaced_rectangular_mesh,
     TensorProductMesh,
-    AbstractSphere,
-    EquiangularSphere,
-    EquidistantSphere,
     Mesh2D
 
 import ..Domains:
-    IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
+    IntervalDomain,
+    RectangleDomain,
+    CubePanelDomain,
+    SphereDomain,
+    AbstractSphere,
+    EquiangularSphere,
+    EquidistantSphere
 import IntervalSets: ClosedInterval
 import ..Geometry: Cartesian2DPoint
 
@@ -26,10 +29,6 @@ It should be lightweight (i.e. exists on all MPI ranks), e.g for meshes stored
 in a file, it would contain the filename.
 """
 abstract type AbstractMesh{FT} end
-
-abstract type AbstractSphere{FT} end
-struct EquiangularSphere{FT} <: AbstractSphere{FT} end
-struct EquidistantSphere{FT} <: AbstractSphere{FT} end
 
 Base.eltype(::AbstractMesh{FT}) where {FT} = FT
 
@@ -144,10 +143,10 @@ function Base.show(io::IO, mesh::EquispacedRectangleMesh)
     print(io, mesh.domain)
 end
 
-struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
-    domain::SphereDomain{FT}
-    n::Int64
-end
+#struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
+#    domain::SphereDomain{FT}
+#    n::Int64
+#end
 
 """
     Mesh2D{I,IA2D,FT,FTA2D} <: AbstractMesh{FT}
@@ -184,7 +183,9 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
+struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB, D} <: AbstractMesh{FT}
+    "domain"
+    domain::D
     "# of unique vertices in the mesh"
     nverts::I
     "# of unique faces in the mesh"
@@ -220,6 +221,7 @@ struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
 end
 
 Mesh2D(
+    domain,
     nverts,
     nfaces,
     nelems,
@@ -244,7 +246,9 @@ Mesh2D(
     typeof(coordinates),
     typeof(boundary_tag_names),
     length(boundary_tag_names),
+    typeof(domain),
 }(
+    domain,
     nverts,
     nfaces,
     nelems,

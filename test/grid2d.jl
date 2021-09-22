@@ -16,16 +16,16 @@ function rectangular_grid(
     x2max = 1.0,
 )
     FT = eltype(x1min)
-    domain = Domains.Unstructured2DDomain{FT}()
-    mesh = equispaced_rectangular_mesh(
-        domain,
+    domain = Domains.RectangleDomain(
         x1min..x1max,
         x2min..x2max,
-        n1,
-        n2,
-        (x1periodic, x2periodic),
+        x1periodic = x1periodic,
+        x2periodic = x2periodic,
+        x1boundary = x1periodic ? nothing : (:west, :east),
+        x2boundary = x2periodic ? nothing : (:south, :north),
     )
-    grid_topology = Topologies.Grid2DTopology(mesh, domain)
+    mesh = equispaced_rectangular_mesh(domain, n1, n2)
+    grid_topology = Topologies.Grid2DTopology(mesh)
     return (domain, mesh, grid_topology)
 end
 

@@ -2,7 +2,7 @@ module Domains
 
 import ..Geometry
 using IntervalSets
-export RectangleDomain, Unstructured2DDomain
+export RectangleDomain
 
 
 abstract type AbstractDomain end
@@ -125,14 +125,22 @@ end
 coordinate_type(::RectangleDomain{FT}) where {FT} =
     Geometry.Cartesian2DPoint{FT}
 
+abstract type AbstractSphere{FT} end
+struct EquiangularSphere{FT} <: AbstractSphere{FT} end
+struct EquidistantSphere{FT} <: AbstractSphere{FT} end
+
 # coordinates (-pi/2 < lat < pi/2, -pi < lon < pi)
-struct SphereDomain{FT} <: HorizontalDomain
+struct SphereDomain{FT, AS} <:
+       HorizontalDomain where {FT <: AbstractFloat, AS <: AbstractSphere{FT}}
     radius::FT
+    stype::AS
 end
 
-struct Unstructured2DDomain{FT} <: HorizontalDomain where {FT <: AbstractFloat} end
+coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
 
-coordinate_type(::Unstructured2DDomain{FT}) where {FT} =
-    Geometry.Cartesian2DPoint{FT}
+struct CubePanelDomain{FT} <: HorizontalDomain where {FT <: AbstractFloat} end
+
+coordinate_type(::CubePanelDomain{FT}) where {FT} =
+    Geometry.Cartesian123Point{FT}
 
 end # module

@@ -3,15 +3,11 @@
 
 An unstructured 2D conformal mesh of elements.
 """
-struct Grid2DTopology{M, D} <: AbstractTopology
+struct Grid2DTopology{M} <: AbstractTopology
     mesh::M
-    domain::D
 end
 
-Grid2DTopology(mesh::Mesh2D, domain::Unstructured2DDomain) =
-    Grid2DTopology{typeof(mesh), typeof(domain)}(mesh, domain)
-
-domain(topology::Grid2DTopology) = topology.domain #Unstructured2DDomain()
+domain(topology::Grid2DTopology) = topology.mesh.domain #Unstructured2DDomain()
 
 function nlocalelems(topology::Grid2DTopology)
     return topology.mesh.nelems
