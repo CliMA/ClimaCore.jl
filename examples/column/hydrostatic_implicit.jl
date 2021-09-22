@@ -161,9 +161,9 @@ function jacobian!(J, Y, p, t)
 
     # A_W = diagm(0=>-ones(N-1)./ρh/2, 1=>-ones(N-1)./ρh/2)[1:N-1, 1:N]
 
-    # J = ([zeros(N,N)      zeros(N,N)      D_ρ (dρ/dw);
-    #       zeros(N,N)      zeros(N,N)      D_Θ (dρΘ/dw)
-    #       A_W*_grav (dw/dρ)  G_W (dw/dρΘ)  zeros(N+1,N+1)])
+    # J = ([zeros(N,N)             zeros(N,N)      D_ρ (dρₜ/dw);
+    #       zeros(N,N)             zeros(N,N)      D_Θ (dρΘₜ/dw)
+    #       A_W*_grav (dwₜ/dρ)  G_W (dwₜ/dρΘ)   zeros(N+1,N+1)])
 
     #
     # D_ρ = diagm(0=>-ρh/Δz, -1=>ρh/Δz)[1:N, 1:N-1]
@@ -230,18 +230,18 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         #=
         # A = I - gamma J
 
-        # J = ([zeros(N,N)      zeros(N,N)      D_ρ (dρ/dw);
-        #       zeros(N,N)      zeros(N,N)      D_Θ (dρΘ/dw)
-        #       A_W*_grav (dw/dρ)  G_W (dw/dρΘ)  zeros(N+1,N+1)])
+        # J = ([zeros(N,N)           zeros(N,N)      D_ρ (dρₜ/dw);
+        #       zeros(N,N)           zeros(N,N)      D_Θ (dρΘₜ/dw)
+        #       A_W*_grav (dwₜ/dρ)  G_W (dwₜ/dρΘ)  zeros(N+1,N+1)])
 
-        # A = ([I               0           -γ*(dρₜ/dw);
-        #       0               I           -γ*(dρΘₜ/dw)
+        # A = ([I               0               -γ*(dρₜ/dw);
+        #       0               I               -γ*(dρΘₜ/dw)
         #       -γ*(dwₜ/dρ)   -γ*(dwₜ/dρΘ)       I           ])
 
 
         # A = ([I               0           A13;
         #       0               I           A23
-        #       A31             A32         I           ])
+        #       A31             A32         I    ])
         # b = ([b1;
         #       b2
         #       b3])
