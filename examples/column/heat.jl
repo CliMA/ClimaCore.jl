@@ -26,7 +26,11 @@ b = FT(1.0)
 n = 10
 α = FT(0.1)
 
-domain = Domains.IntervalDomain(a, b, x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(a),
+    Geometry.ZPoint{FT}(b),
+    boundary_tags = (:bottom, :top),
+)
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)

@@ -341,6 +341,7 @@ function vertex_coordinates(
     elem::Integer,
 ) where {M <: EquispacedRectangleMesh}
     @assert 1 <= elem <= nlocalelems(topology)
+    CT = Topologies.coordinate_type(topology)
 
     # convert to 0-based indices
     mesh = topology.mesh
@@ -351,10 +352,10 @@ function vertex_coordinates(
 
     z2, z1 = fldmod(elem - 1, n1)
 
-    c1 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 1])
-    c2 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 1])
-    c3 = Geometry.Cartesian2DPoint(range1[z1 + 1], range2[z2 + 2])
-    c4 = Geometry.Cartesian2DPoint(range1[z1 + 2], range2[z2 + 2])
+    c1 = CT(range1[z1 + 1], range2[z2 + 1])
+    c2 = CT(range1[z1 + 2], range2[z2 + 1])
+    c3 = CT(range1[z1 + 1], range2[z2 + 2])
+    c4 = CT(range1[z1 + 2], range2[z2 + 2])
     return (c1, c2, c3, c4)
 end
 

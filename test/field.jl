@@ -9,8 +9,8 @@ using LinearAlgebra: norm
 using UnicodePlots
 
 domain = Domains.RectangleDomain(
-    -3..5,
-    -2..8,
+    Geometry.XPoint(-3.0)..Geometry.XPoint(5.0),
+    Geometry.YPoint(-2.0)..Geometry.YPoint(8.0),
     x1periodic = false,
     x2periodic = false,
     x1boundary = (:east, :west),

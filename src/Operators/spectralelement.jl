@@ -1414,18 +1414,16 @@ function matrix_interpolate(
 ) where {Nu}
     S = eltype(field)
     space = axes(field)
-    mesh = space.topology.mesh
+    topology = Spaces.topology(space)
+    quadrature_style = Spaces.quadrature_style(space)
+    mesh = topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
 
     interp_data =
         DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
 
-    M = Quadratures.interpolation_matrix(
-        Float64,
-        Q_interp,
-        space.quadrature_style,
-    )
+    M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end

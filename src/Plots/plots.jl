@@ -15,20 +15,30 @@ function UnicodePlots.heatmap(
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
-    domain = mesh.domain
 
     Nu = max(div(width, n1), div(height, n2))
     M = Operators.matrix_interpolate(field, Nu)
     m1, m2 = size(M)
+    domain = Meshes.domain(mesh)
+    x1min = Geometry.component(domain.x1x2min, 1)
+    x2min = Geometry.component(domain.x1x2min, 2)
+    x1max = Geometry.component(domain.x1x2max, 1)
+    x2max = Geometry.component(domain.x1x2max, 2)
+
+    CT = Domains.coordinate_type(domain)
+    X1CT = Geometry.coordinate_type(CT, 1)
+    X2CT = Geometry.coordinate_type(CT, 2)
+    X1CTname = Base.typename(X1CT).name
+    X2CTname = Base.typename(X1CT).name
 
     UnicodePlots.heatmap(
         M',
-        xlabel = "x1",
-        ylabel = "x2",
-        xoffset = domain.x1min,
-        xscale = (domain.x1max - domain.x1min) / (m1 - 1),
-        yoffset = domain.x2min,
-        yscale = (domain.x2max - domain.x2min) / (m2 - 1),
+        xlabel = "$(X1CTname)",
+        ylabel = "$(X2CTname)",
+        xoffset = x1min,
+        xscale = (x1max - x1min) / (m1 - 1),
+        yoffset = x2min,
+        yscale = (x2max - x2min) / (m2 - 1),
         width = width,
         height = height,
         kwargs...,
@@ -76,6 +86,9 @@ end
 RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     # unwrap the data to plot
     space = axes(field)
+    CT = Meshes.coordinate_type(space.mesh)
+    CTName = Base.typename(CT).name
+
     xdata = parent(field)[:, 1]
     ydata = parent(Spaces.coordinates_data(space))[:, 1]
 
@@ -84,9 +97,9 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     xguide --> ":x value"
     yguide --> (
         if field isa Spaces.FaceFiniteDifferenceSpace
-            ":y faces"
+            "$(CTname) faces"
         else
-            ":y centers"
+            "$(CTName) centers"
         end
     )
 
@@ -104,20 +117,32 @@ RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
-    domain = mesh.domain
 
     Nu = 10
     M = Operators.matrix_interpolate(field, Nu)
-    r1 = range(domain.x1min, domain.x1max, length = n1 * Nu + 1)
+
+    domain = Meshes.domain(mesh)
+    x1min = Geometry.component(domain.x1x2min, 1)
+    x2min = Geometry.component(domain.x1x2min, 2)
+    x1max = Geometry.component(domain.x1x2max, 1)
+    x2max = Geometry.component(domain.x1x2max, 2)
+
+    r1 = range(x1min, x1max, length = n1 * Nu + 1)
     r1 = r1[1:(end - 1)] .+ step(r1) ./ 2
-    r2 = range(domain.x2min, domain.x2max, length = n2 * Nu + 1)
+    r2 = range(x2min, x2max, length = n2 * Nu + 1)
     r2 = r2[1:(end - 1)] .+ step(r2) ./ 2
+
+    CT = Domains.coordinate_type(domain)
+    X1CT = Geometry.coordinate_type(CT, 1)
+    X2CT = Geometry.coordinate_type(CT, 2)
+    X1CTname = Base.typename(X1CT).name
+    X2CTname = Base.typename(X1CT).name
 
     # set the plot attributes
     seriestype := :heatmap
 
-    xguide --> "x1"
-    yguide --> "x2"
+    xguide --> "$(X1CTname)"
+    yguide --> "$(X2CTname)"
     seriescolor --> :balance
 
     (r1, r2, M')
@@ -127,10 +152,11 @@ RecipesBase.@recipe function f(field::Fields.ExtrudedFiniteDifferenceField)
     data = Fields.field_values(field)
     Ni, _, _, Nv, Nh = size(data)
     space = axes(field)
+
+    #TODO: assumes VIFH layout
     hcoord = vec(parent(Fields.coordinate_field(space).x)[1, :, 1, :])
     vcoord = vec(parent(Fields.coordinate_field(space).z)[:, 1, 1, 1])
 
-    # assumes VIFH layout
     # set the plot attributes
     seriestype := :heatmap
 

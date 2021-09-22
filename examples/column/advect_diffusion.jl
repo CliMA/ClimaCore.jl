@@ -31,7 +31,11 @@ t₁ = FT(10)
 𝓌 = FT(1)
 δ = FT(1)
 
-domain = Domains.IntervalDomain(z₀, z₁, x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(z₀),
+    Geometry.ZPoint{FT}(z₁),
+    boundary_tags = (:bottom, :top),
+)
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -48,7 +52,7 @@ function ∇gaussian(z, t; μ = -1 // 2, ν = 1, 𝓌 = 1, δ = 1)
            exp(-(z - μ - 𝓌 * t)^2 / (4 * ν * (δ + t))) / sqrt(1 + t / δ)
 end
 
-T = gaussian.(zc, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
+T = gaussian.(zc.z, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
 V = Geometry.Cartesian3Vector.(ones(FT, fs))
 
 # Solve Adv-Diff Equation: ∂_t T = α ∇²T

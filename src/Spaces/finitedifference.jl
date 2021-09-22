@@ -19,20 +19,21 @@ end
 function FiniteDifferenceSpace{S}(
     mesh::Meshes.IntervalMesh,
 ) where {S <: Staggering}
-    FT = eltype(mesh)
-    face_coordinates = collect(mesh.faces)
-    Δh_f2f = diff(face_coordinates)
-    CT = eltype(face_coordinates)
+    CT = Meshes.coordinate_type(mesh)
+    AIdx = Geometry.coordinate_axis(CT)
+    # TODO: FD operators  hardcoded to work over the 3-axis, need to generalize
+    # similar to spectral operators
+    @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
     FT = eltype(CT)
-
+    face_coordinates = collect(mesh.faces)
     Mxξ = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
     Mξx = Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Contravariant3Axis, Geometry.Cartesian3Axis},
+        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
     LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
@@ -40,66 +41,79 @@ function FiniteDifferenceSpace{S}(
     ncent = nface - 1
     center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
     face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
-
     for i in 1:ncent
         # centers
-        z⁻ = face_coordinates[i]
-        z⁺ = face_coordinates[i + 1]
+        coord⁻ = Geometry.component(face_coordinates[i], 1)
+        coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
         # at the moment we use a "discrete Jacobian"
         # ideally we should use the continuous quantity via the derivative of the warp function
         # could we just define this then as deriv on the mesh element coordinates?
-        z = (z⁺ + z⁻) / 2
-        Δz = z⁺ - z⁻
-        J = Δz
-        WJ = Δz
+        coord = (coord⁺ + coord⁻) / 2
+        Δcoord = coord⁺ - coord⁻
+        J = Δcoord
+        WJ = Δcoord
         ∂x∂ξ = SMatrix{1, 1}(J)
         ∂ξ∂x = SMatrix{1, 1}(inv(J))
         center_local_geometry[i] = Geometry.LocalGeometry(
-            z,
+            CT(coord),
             J,
             WJ,
             Geometry.AxisTensor(
-                (Geometry.Cartesian3Axis(), Geometry.Covariant3Axis()),
+                (
+                    Geometry.CartesianAxis{AIdx}(),
+                    Geometry.CovariantAxis{AIdx}(),
+                ),
                 ∂x∂ξ,
             ),
             Geometry.AxisTensor(
-                (Geometry.Contravariant3Axis(), Geometry.Cartesian3Axis()),
+                (
+                    Geometry.ContravariantAxis{AIdx}(),
+                    Geometry.CartesianAxis{AIdx}(),
+                ),
                 ∂ξ∂x,
             ),
         )
     end
-
     for i in 1:nface
-        z = face_coordinates[i]
+        coord = Geometry.component(face_coordinates[i], 1)
         if i == 1
             # bottom face
-            J = face_coordinates[2] - z
+            coord⁺ = Geometry.component(face_coordinates[2], 1)
+            J = coord⁺ - coord
             WJ = J / 2
         elseif i == nface
             # top face
-            J = z - face_coordinates[i - 1]
+            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
+            J = coord - coord⁻
             WJ = J / 2
         else
-            J = (face_coordinates[i + 1] - face_coordinates[i - 1]) / 2
+            coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
+            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
+            J = (coord⁺ - coord⁻) / 2
             WJ = J
         end
         ∂x∂ξ = SMatrix{1, 1}(J)
         ∂ξ∂x = SMatrix{1, 1}(inv(J))
         face_local_geometry[i] = Geometry.LocalGeometry(
-            z,
+            CT(coord),
             J,
             WJ,
             Geometry.AxisTensor(
-                (Geometry.Cartesian3Axis(), Geometry.Covariant3Axis()),
+                (
+                    Geometry.CartesianAxis{AIdx}(),
+                    Geometry.CovariantAxis{AIdx}(),
+                ),
                 ∂x∂ξ,
             ),
             Geometry.AxisTensor(
-                (Geometry.Contravariant3Axis(), Geometry.Cartesian3Axis()),
+                (
+                    Geometry.ContravariantAxis{AIdx}(),
+                    Geometry.CartesianAxis{AIdx}(),
+                ),
                 ∂ξ∂x,
             ),
         )
     end
-
     return FiniteDifferenceSpace(
         S(),
         mesh,

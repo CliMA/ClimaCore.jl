@@ -37,7 +37,11 @@ const C_v = R_d / (γ - 1) # heat capacit at constant volume
 const R_m = R_d # moist R, assumed to be dry
 
 
-domain = Domains.IntervalDomain(0.0, 30e3, x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0.0),
+    Geometry.ZPoint{FT}(30e3),
+    boundary_tags = (:bottom, :top),
+)
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -100,9 +104,9 @@ function discrete_hydrostatic_balance!(
 end
 
 zc = Fields.coordinate_field(cspace)
-Yc = decaying_temperature_profile.(zc)
+Yc = decaying_temperature_profile.(zc.z)
 w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
-zf = parent(Fields.coordinate_field(fspace))
+zf = parent(Fields.coordinate_field(fspace).z)
 Δz = zf[2:end] - zf[1:(end - 1)]
 Y_init = copy(Yc)
 w_init = copy(w)
@@ -129,7 +133,7 @@ function tendency!(dY, Y, _, t)
     @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
     @. dw = B(
         Geometry.CartesianVector(
-            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z)),
         ),
     )
     return dY
@@ -188,7 +192,7 @@ function jacobian!(J, Y, p, t)
     # A_W = diagm(0=>-ones(N-1)./ρh/2, 1=>-ones(N-1)./ρh/2)[1:N-1, 1:N]
 
     # P = ([zeros(N,N)     zeros(N,N)      D_ρ;
-    #       zeros(N,N)     zeros(N,N)      D_Θ   
+    #       zeros(N,N)     zeros(N,N)      D_Θ
     #       A_W*_grav        G_W          zeros(N+1,N+1)])
 
 end

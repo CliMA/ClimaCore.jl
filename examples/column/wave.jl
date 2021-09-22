@@ -19,25 +19,18 @@ global_logger(TerminalLogger())
 
 const FT = Float64
 
-# https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
-const MSLP = 1e5 # mean sea level pressure
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const γ = 1.4 # heat capacity ratio
-const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
-const C_v = R_d / (γ - 1) # heat capacit at constant volume
-const R_m = R_d # moist R, assumed to be dry
-
-
-domain = Domains.IntervalDomain(0.0, 4pi, x3boundary = (:left, :right))
-#mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0.0),
+    Geometry.ZPoint{FT}(4pi),
+    boundary_tags = (:left, :right),
+)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
 cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 zc = Fields.coordinate_field(cspace)
-u = sin.(zc)
+u = sin.(zc.z)
 p = Geometry.Cartesian3Vector.(zeros(Float64, fspace))
 
 using RecursiveArrayTools

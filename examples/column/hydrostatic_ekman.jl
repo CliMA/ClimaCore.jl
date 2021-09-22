@@ -39,7 +39,11 @@ const ug = 1.0
 const vg = 0.0
 const uvg = Geometry.Cartesian12Vector(ug, vg)
 const d = sqrt(2 * ν / f)
-domain = Domains.IntervalDomain(0.0, L; x3boundary = (:bottom, :top))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(0.0),
+    Geometry.ZPoint{FT}(L);
+    boundary_tags = (:bottom, :top),
+)
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
 
@@ -86,7 +90,7 @@ end
 Φ(z) = grav * z
 
 zc = Fields.coordinate_field(cspace)
-Yc = adiabatic_temperature_profile.(zc)
+Yc = adiabatic_temperature_profile.(zc.z)
 w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
@@ -154,7 +158,7 @@ function tendency!(dY, Y, _, t)
     )
     @. dw = B(
         Geometry.CartesianVector(
-            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc)),
+            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z)),
         ) + divf(ν * ∂c(w)) - Af(w, w),
     )
 
