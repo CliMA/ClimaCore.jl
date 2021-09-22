@@ -177,6 +177,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Bickley jet CG unstructured mesh"
+    key: "cpu_bickleyjet_cg_unsmesh"
+    command:
+      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
+    artifact_paths:
+      - "examples/bickleyjet/output/cg_unsmesh/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Bickley jet CG vector invariant"
     key: "cpu_bickleyjet_cg_invariant"
     command:
@@ -237,7 +248,7 @@ steps:
     command:
       - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
     artifact_paths:
-      - "examples/hybrid/output/*"
+      - "examples/hybrid/output/bubble/*"
     agents:
       config: cpu
       queue: central

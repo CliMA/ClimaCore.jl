@@ -42,6 +42,13 @@ struct CartesianAxis{I} <: AbstractAxis{I} end
 symbols(::CartesianAxis) = (:u1, :u2, :u3)
 dual(::CartesianAxis{I}) where {I} = CartesianAxis{I}()
 
+coordinate_axis(::Type{<:XPoint}) = (1,)
+coordinate_axis(::Type{<:YPoint}) = (2,)
+coordinate_axis(::Type{<:ZPoint}) = (3,)
+coordinate_axis(::Type{<:XYPoint}) = (1, 2)
+coordinate_axis(::Type{<:XZPoint}) = (1, 3)
+coordinate_axis(::Type{<:XYZPoint}) = (1, 2, 3)
+coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
 @inline function idxin(I::Tuple{Vararg{Int}}, i::Int)
     N = length(I)

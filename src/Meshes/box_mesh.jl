@@ -1,10 +1,15 @@
 function equispaced_rectangular_mesh(
-    domain::RectangleDomain{FT},
+    domain::RectangleDomain{CT},
     n1,
     n2,
-) where {FT <: AbstractFloat}
-    x1c = range(domain.x1min, domain.x1max; length = n1 + 1)
-    x2c = range(domain.x2min, domain.x2max; length = n2 + 1)
+) where {FT <: AbstractFloat, CT <: Geometry.Abstract2DPoint{FT}}
+    x1x2min, x1x2max = domain.x1x2min, domain.x1x2max
+    x1max = Geometry.component(x1x2max, 1)
+    x2max = Geometry.component(x1x2max, 2)
+    x1min = Geometry.component(x1x2min, 1)
+    x2min = Geometry.component(x1x2min, 2)
+    x1c = range(x1min, x1max; length = n1 + 1)
+    x2c = range(x2min, x2max; length = n2 + 1)
     return Mesh2D(domain, x1c, x2c)
 end
 
@@ -14,10 +19,10 @@ end
 This function builds a 2D rectangular mesh with points located at x1c and x2c in x1 and x2 directions respectively.
 """
 function Mesh2D(
-    domain::RectangleDomain{FT},
+    domain::RectangleDomain{CT},
     x1c,
     x2c,
-) where {FT <: AbstractFloat}
+) where {FT <: AbstractFloat, CT <: Geometry.Abstract2DPoint{FT}}
     per = tuple(domain.x1boundary === nothing, domain.x2boundary === nothing)
     I = Int
     nx1, nx2 = length(x1c), length(x2c)

@@ -5,10 +5,10 @@ import ClimaCore:
     Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
 using LinearAlgebra, IntervalSets
 
-
+FT = Float64
 domain = Domains.RectangleDomain(
-    -pi..pi,
-    -pi..pi;
+    Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
+    Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
     x1periodic = true,
     x2periodic = true,
 )
@@ -19,12 +19,12 @@ quad = Spaces.Quadratures.GLL{Nq}()
 grid_mesh = Meshes.EquispacedRectangleMesh(domain, 17, 16)
 grid_topology = Topologies.GridTopology(grid_mesh)
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-grid_coords = Geometry.Cartesian2DPoint.(Fields.coordinate_field(grid_space))
+grid_coords = Geometry.Cartesian12Point.(Fields.coordinate_field(grid_space))
 
 ts_mesh = Meshes.TensorProductMesh(domain, 17, 16)
 ts_topology = Topologies.GridTopology(ts_mesh)
 ts_space = Spaces.SpectralElementSpace2D(ts_topology, quad)
-ts_coords = Geometry.Cartesian2DPoint.(Fields.coordinate_field(ts_space))
+ts_coords = Geometry.Cartesian12Point.(Fields.coordinate_field(ts_space))
 
 grid_test_setup = (grid_topology, grid_space, grid_coords)
 ts_test_setup = (ts_topology, ts_space, ts_coords)

@@ -12,9 +12,10 @@ export EquispacedRectangleMesh,
     EquiangularSphereWarp,
     EquidistantSphereWarp
 
-import ..Domains: IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
+import ..Domains:
+    Domains, IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
 import IntervalSets: ClosedInterval
-import ..Geometry: Cartesian2DPoint
+import ..Geometry: Geometry
 
 
 """
@@ -29,7 +30,8 @@ abstract type AbstractMesh{FT} end
 
 Base.eltype(::AbstractMesh{FT}) where {FT} = FT
 
-warp_mesh(mesh::AbstractMesh) = mesh
+domain(mesh::AbstractMesh) = getfield(mesh, :domain)
+coordinate_type(mesh::AbstractMesh) = Domains.coordinate_type(domain(mesh))
 
 abstract type AbstractWarp end
 abstract type AbstractSphereWarp <: AbstractWarp end
@@ -48,12 +50,15 @@ IntervalMesh{FT}(domain::I, faces::V, boundaries::B) where {FT, I, V, B} =
     IntervalMesh{FT, I, V, B}(domain, faces, boundaries)
 
 abstract type Stretching end
-
 struct Uniform <: Stretching end
 
-function IntervalMesh(domain::IntervalDomain{FT}, ::Uniform; nelems) where {FT}
-    faces = range(domain.x3min, domain.x3max; length = nelems + 1)
-    boundaries = NamedTuple{domain.x3boundary}((5, 6))
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    ::Uniform;
+    nelems,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+    faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
+    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
     IntervalMesh{FT}(domain, faces, boundaries)
 end
 
@@ -68,18 +73,18 @@ struct ExponentialStretching{FT} <: Stretching
 end
 
 function IntervalMesh(
-    domain::IntervalDomain{FT},
+    domain::IntervalDomain{CT},
     stretch::ExponentialStretching;
     nelems,
-) where {FT}
-    R = domain.x3max - domain.x3min
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+    cmin = Geometry.component(domain.coord_min, 1)
+    cmax = Geometry.component(domain.coord_max, 1)
+    R = cmax - cmin
     h = stretch.H / R
     η(ζ) = -h * log1p(-(1 - exp(-1 / h)) * ζ)
-    faces = [
-        domain.x3min + R * η(ζ) for
-        ζ in range(FT(0), FT(1); length = nelems + 1)
-    ]
-    boundaries = NamedTuple{domain.x3boundary}((5, 6))
+    faces =
+        [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
+    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
     IntervalMesh{FT, typeof(domain), typeof(faces), typeof(boundaries)}(
         domain,
         faces,
@@ -97,7 +102,7 @@ function Base.show(io::IO, mesh::IntervalMesh)
 end
 
 
-struct EquispacedLineMesh{FT, ID <: IntervalDomain{FT}, R} <: AbstractMesh{FT}
+struct EquispacedLineMesh{FT, ID <: IntervalDomain, R} <: AbstractMesh{FT}
     domain::ID
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # always 1
@@ -106,13 +111,12 @@ struct EquispacedLineMesh{FT, ID <: IntervalDomain{FT}, R} <: AbstractMesh{FT}
 end
 
 function EquispacedLineMesh(domain::IntervalDomain, n1)
-    range1 = range(domain.x3min, domain.x3max; length = n1 + 1)
-    range2 = range(
-        one(domain.x3min),
-        one(domain.x3max) + one(domain.x3max);
-        length = 2,
-    )
-    return EquispacedLineMesh(domain, n1, one(n1), range1, range2)
+    FT = eltype(Domains.coordinate_type(domain))
+    cmin = Geometry.component(domain.coord_min, 1)
+    cmax = Geometry.component(domain.coord_max, 1)
+    range1 = range(cmin, cmax; length = n1 + 1)
+    range2 = range(zero(FT), zero(FT), length = zero(n1))
+    return EquispacedLineMesh(domain, n1, zero(n1), range1, range2)
 end
 
 function Base.show(io::IO, mesh::EquispacedLineMesh)
@@ -126,8 +130,7 @@ end
 A regular `AbstractMesh` of `domain` with `n1` elements in dimension 1, and `n2`
 in dimension 2.
 """
-struct EquispacedRectangleMesh{FT, RD <: RectangleDomain{FT}, R} <:
-       AbstractMesh{FT}
+struct EquispacedRectangleMesh{FT, RD <: RectangleDomain, R} <: AbstractMesh{FT}
     domain::RD
     n1::Int64 # number of elements in x1 direction
     n2::Int64 # number of elements in x2 direction
@@ -135,10 +138,25 @@ struct EquispacedRectangleMesh{FT, RD <: RectangleDomain{FT}, R} <:
     range2::R
 end
 
-function EquispacedRectangleMesh(domain::RectangleDomain, n1, n2)
-    range1 = range(domain.x1min, domain.x1max; length = n1 + 1)
-    range2 = range(domain.x2min, domain.x2max; length = n2 + 1)
-    EquispacedRectangleMesh(domain, n1, n2, range1, range2)
+function EquispacedRectangleMesh(
+    domain::RectangleDomain,
+    n1::Integer,
+    n2::Integer,
+)
+    FT = eltype(Domains.coordinate_type(domain))
+    x1min = Geometry.component(domain.x1x2min, 1)
+    x2min = Geometry.component(domain.x1x2min, 2)
+    x1max = Geometry.component(domain.x1x2max, 1)
+    x2max = Geometry.component(domain.x1x2max, 2)
+    range1 = range(x1min, x1max; length = n1 + 1)
+    range2 = range(x2min, x2max; length = n2 + 1)
+    EquispacedRectangleMesh{FT, typeof(domain), typeof(range1)}(
+        domain,
+        n1,
+        n2,
+        range1,
+        range2,
+    )
 end
 
 function Base.show(io::IO, mesh::EquispacedRectangleMesh)
@@ -154,7 +172,7 @@ end
 """
     Mesh2D{I,IA2D,FT,FTA2D} <: AbstractMesh{FT}
 
-Conformal mesh for a 2D manifold. The manifold can be 
+Conformal mesh for a 2D manifold. The manifold can be
 embedded in a higher dimensional space.
 
                         Quadrilateral
@@ -162,8 +180,8 @@ embedded in a higher dimensional space.
                 v3            f4           v4
                   o------------------------o
                   |                        |		  face    vertices
-                  |                        |             
-                  |                        |		   f1 =>  v1 v3 
+                  |                        |
+                  |                        |		   f1 =>  v1 v3
                f1 |                        | f2        f2 =>  v2 v4
                   |                        |		   f3 =>  v1 v2
                   |                        |           f4 =>  v3 v4

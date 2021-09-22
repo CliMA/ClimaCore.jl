@@ -24,8 +24,8 @@ const parameters = (
 )
 
 domain = Domains.RectangleDomain(
-    -2π..2π,
-    -2π..2π,
+    Geometry.XPoint(-2π)..Geometry.XPoint(2π),
+    Geometry.YPoint(-2π)..Geometry.YPoint(2π),
     x1periodic = true,
     x2periodic = true,
 )
@@ -124,7 +124,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "cg_Uns2DMesh"
+dirname = "cg_unsmesh"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 

@@ -24,14 +24,18 @@ b = FT(4pi)
 n = 128
 α = FT(0.1)
 
-domain = Domains.IntervalDomain(a, b, x3boundary = (:left, :right))
+domain = Domains.IntervalDomain(
+    Geometry.ZPoint{FT}(a),
+    Geometry.ZPoint{FT}(b),
+    boundary_tags = (:left, :right),
+)
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
 V = Geometry.Cartesian3Vector.(ones(FT, fs))
-θ = sin.(Fields.coordinate_field(cs))
+θ = sin.(Fields.coordinate_field(cs).z)
 
 # Solve advection Equation: ∂θ/dt = -∂(vθ)
 

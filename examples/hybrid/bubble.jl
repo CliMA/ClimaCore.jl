@@ -31,15 +31,15 @@ function hvspace_2D(
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
-        FT(zlim[1]),
-        FT(zlim[2]);
-        x3boundary = (:bottom, :top),
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
     horzdomain = Domains.RectangleDomain(
-        xlim[1]..xlim[2],
-        -0..0,
+        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.YPoint{FT}(-0)..Geometry.YPoint{FT}(0),
         x1periodic = true,
         x2boundary = (:a, :b),
     )

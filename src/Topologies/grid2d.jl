@@ -7,7 +7,8 @@ struct Grid2DTopology{M} <: AbstractTopology
     mesh::M
 end
 
-domain(topology::Grid2DTopology) = topology.mesh.domain #Unstructured2DDomain()
+domain(topology::Grid2DTopology{M}) where {M <: AbstractMesh} =
+    topology.mesh.domain
 
 function nlocalelems(topology::Grid2DTopology)
     return topology.mesh.nelems
@@ -20,35 +21,20 @@ function vertex_coordinates(topology::Grid2DTopology, elem::Integer)
     coords = topology.mesh.coordinates
     verts = view(topology.mesh.elem_verts, elem, :)
     dim = size(coords, 2)
+    CT = Topologies.coordinate_type(topology)
     if dim == 2
         return (
-            Geometry.Cartesian2DPoint(coords[verts[1], 1], coords[verts[1], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[2], 1], coords[verts[2], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[3], 1], coords[verts[3], 2]),
-            Geometry.Cartesian2DPoint(coords[verts[4], 1], coords[verts[4], 2]),
+            CT(coords[verts[1], 1], coords[verts[1], 2]),
+            CT(coords[verts[2], 1], coords[verts[2], 2]),
+            CT(coords[verts[3], 1], coords[verts[3], 2]),
+            CT(coords[verts[4], 1], coords[verts[4], 2]),
         )
     else
         return (
-            Geometry.Cartesian123Point(
-                coords[verts[1], 1],
-                coords[verts[1], 2],
-                coords[verts[1], 3],
-            ),
-            Geometry.Cartesian123Point(
-                coords[verts[2], 1],
-                coords[verts[2], 2],
-                coords[verts[2], 3],
-            ),
-            Geometry.Cartesian123Point(
-                coords[verts[3], 1],
-                coords[verts[3], 2],
-                coords[verts[3], 3],
-            ),
-            Geometry.Cartesian123Point(
-                coords[verts[4], 1],
-                coords[verts[4], 2],
-                coords[verts[4], 3],
-            ),
+            CT(coords[verts[1], 1], coords[verts[1], 2], coords[verts[1], 3]),
+            CT(coords[verts[2], 1], coords[verts[2], 2], coords[verts[2], 3]),
+            CT(coords[verts[3], 1], coords[verts[3], 2], coords[verts[3], 3]),
+            CT(coords[verts[4], 1], coords[verts[4], 2], coords[verts[4], 3]),
         )
     end
 end

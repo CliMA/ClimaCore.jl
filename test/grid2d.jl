@@ -1,6 +1,6 @@
 using Test
 import ClimaCore: Domains, Meshes, Topologies
-import ClimaCore.Geometry: Cartesian2DPoint
+import ClimaCore.Geometry: Geometry
 using ClimaCore.Meshes: equispaced_rectangular_mesh
 using StaticArrays
 using IntervalSets
@@ -15,7 +15,15 @@ function rectangular_grid(
     x2min = 0.0,
     x2max = 1.0,
 )
-    FT = eltype(x1min)
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint(x1min)..Geometry.XPoint(x1max),
+        Geometry.YPoint(x2min)..Geometry.YPoint(x2max),
+        x1periodic = x1periodic,
+        x2periodic = x2periodic,
+        x1boundary = x1periodic ? nothing : (:west, :east),
+        x2boundary = x2periodic ? nothing : (:south, :north),
+    )
+    #=
     domain = Domains.RectangleDomain(
         x1min..x1max,
         x2min..x2max,
@@ -24,6 +32,7 @@ function rectangular_grid(
         x1boundary = x1periodic ? nothing : (:west, :east),
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
+    =#
     mesh = equispaced_rectangular_mesh(domain, n1, n2)
     grid_topology = Topologies.Grid2DTopology(mesh)
     return (domain, mesh, grid_topology)
@@ -237,10 +246,10 @@ end
     @testset "1×1 element quad mesh with all periodic boundries" begin
         _, _, grid_topology = rectangular_grid(1, 1, true, true)
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
-        @test c1 == Cartesian2DPoint(0.0, 0.0)
-        @test c2 == Cartesian2DPoint(1.0, 0.0)
-        @test c3 == Cartesian2DPoint(0.0, 1.0)
-        @test c4 == Cartesian2DPoint(1.0, 1.0)
+        @test c1 == Geometry.XYPoint(0.0, 0.0)
+        @test c2 == Geometry.XYPoint(1.0, 0.0)
+        @test c3 == Geometry.XYPoint(0.0, 1.0)
+        @test c4 == Geometry.XYPoint(1.0, 1.0)
 
         _, _, grid_topology = rectangular_grid(
             1,
@@ -253,25 +262,25 @@ end
             x2max = 1.0,
         )
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
-        @test c1 == Cartesian2DPoint(-1.0, -1.0)
-        @test c2 == Cartesian2DPoint(1.0, -1.0)
-        @test c3 == Cartesian2DPoint(-1.0, 1.0)
-        @test c4 == Cartesian2DPoint(1.0, 1.0)
+        @test c1 == Geometry.XYPoint(-1.0, -1.0)
+        @test c2 == Geometry.XYPoint(1.0, -1.0)
+        @test c3 == Geometry.XYPoint(-1.0, 1.0)
+        @test c4 == Geometry.XYPoint(1.0, 1.0)
     end
 
     @testset "2×4 element quad mesh with non-periodic boundaries" begin
         _, _, grid_topology = rectangular_grid(2, 4, false, false)
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
-        @test c1 == Cartesian2DPoint(0.0, 0.0)
-        @test c2 == Cartesian2DPoint(0.5, 0.0)
-        @test c3 == Cartesian2DPoint(0.0, 0.25)
-        @test c4 == Cartesian2DPoint(0.5, 0.25)
+        @test c1 == Geometry.XYPoint(0.0, 0.0)
+        @test c2 == Geometry.XYPoint(0.5, 0.0)
+        @test c3 == Geometry.XYPoint(0.0, 0.25)
+        @test c4 == Geometry.XYPoint(0.5, 0.25)
 
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 8)
-        @test c1 == Cartesian2DPoint(0.5, 0.75)
-        @test c2 == Cartesian2DPoint(1.0, 0.75)
-        @test c3 == Cartesian2DPoint(0.5, 1.0)
-        @test c4 == Cartesian2DPoint(1.0, 1.0)
+        @test c1 == Geometry.XYPoint(0.5, 0.75)
+        @test c2 == Geometry.XYPoint(1.0, 0.75)
+        @test c3 == Geometry.XYPoint(0.5, 1.0)
+        @test c4 == Geometry.XYPoint(1.0, 1.0)
     end
 
     @testset "check coordinate type accuracy" begin
@@ -287,7 +296,7 @@ end
         )
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
         @test eltype(c2) == BigFloat
-        @test c2.x1 ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
-        @test c2.x2 == 0.0
+        @test getfield(c2, 1) ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
+        @test getfield(c2, 2) == 0.0
     end
 end
