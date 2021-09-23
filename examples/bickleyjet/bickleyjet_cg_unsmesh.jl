@@ -5,7 +5,6 @@ import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimaCore: slab
 import ClimaCore.Operators
 import ClimaCore.Geometry
-using ClimaCore.Domains: Unstructured2DDomain
 using ClimaCore.Meshes: equispaced_rectangular_mesh
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
@@ -24,40 +23,44 @@ const parameters = (
     g = 10,
 )
 
-domain = Unstructured2DDomain{FT}()
+domain = Domains.RectangleDomain(
+    Geometry.XPoint(-2π)..Geometry.XPoint(2π),
+    Geometry.YPoint(-2π)..Geometry.YPoint(2π),
+    x1periodic = true,
+    x2periodic = true,
+)
 
 n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
 
-mesh =
-    equispaced_rectangular_mesh(domain, -2π..2π, -2π..2π, n1, n2, (true, true))
-grid_topology = Topologies.Grid2DTopology(mesh, domain)
+mesh = equispaced_rectangular_mesh(domain, n1, n2)
+grid_topology = Topologies.Grid2DTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 Iquad = Spaces.Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
-function init_state(x, p)
-    @unpack x1, x2 = x
+function init_state(coord, p)
+    @unpack x, y = coord
     # set initial state
     ρ = p.ρ₀
 
     # set initial velocity
-    U₁ = cosh(x2)^(-2)
+    U₁ = cosh(y)^(-2)
 
-    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x1) * cos(p.k * x2)
+    # Ψ′ = exp(-(y + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
     # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
-    gaussian = exp(-(x2 + p.l / 10)^2 / 2p.l^2)
-    u₁′ = gaussian * (x2 + p.l / 10) / p.l^2 * cos(p.k * x1) * cos(p.k * x2)
-    u₁′ += p.k * gaussian * cos(p.k * x1) * sin(p.k * x2)
-    u₂′ = -p.k * gaussian * sin(p.k * x1) * cos(p.k * x2)
+    gaussian = exp(-(y + p.l / 10)^2 / 2p.l^2)
+    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * y)
+    u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
+    u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
 
     u = Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
-    θ = sin(p.k * x2)
+    θ = sin(p.k * y)
 
     return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
 end
@@ -121,7 +124,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "cg_Uns2DMesh"
+dirname = "cg_unsmesh"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 

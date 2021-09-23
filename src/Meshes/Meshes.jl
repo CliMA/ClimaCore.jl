@@ -6,13 +6,14 @@ export EquispacedRectangleMesh,
     sphere_mesh,
     equispaced_rectangular_mesh,
     TensorProductMesh,
-    AbstractSphere,
-    EquiangularSphere,
-    EquidistantSphere,
-    Mesh2D
+    Mesh2D,
+    AbstractWarp,
+    AbstractSphereWarp,
+    EquiangularSphereWarp,
+    EquidistantSphereWarp
 
 import ..Domains:
-    Domains, IntervalDomain, RectangleDomain, SphereDomain, Unstructured2DDomain
+    Domains, IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
 import IntervalSets: ClosedInterval
 import ..Geometry: Geometry
 
@@ -27,14 +28,16 @@ in a file, it would contain the filename.
 """
 abstract type AbstractMesh{FT} end
 
-abstract type AbstractSphere{FT} end
-struct EquiangularSphere{FT} <: AbstractSphere{FT} end
-struct EquidistantSphere{FT} <: AbstractSphere{FT} end
-
 Base.eltype(::AbstractMesh{FT}) where {FT} = FT
 
 domain(mesh::AbstractMesh) = getfield(mesh, :domain)
 coordinate_type(mesh::AbstractMesh) = Domains.coordinate_type(domain(mesh))
+
+abstract type AbstractWarp end
+abstract type AbstractSphereWarp <: AbstractWarp end
+struct NoWarp <: AbstractWarp end
+struct EquiangularSphereWarp <: AbstractSphereWarp end
+struct EquidistantSphereWarp <: AbstractSphereWarp end
 
 struct IntervalMesh{FT, I <: IntervalDomain, V <: AbstractVector, B} <:
        AbstractMesh{FT}
@@ -161,10 +164,10 @@ function Base.show(io::IO, mesh::EquispacedRectangleMesh)
     print(io, mesh.domain)
 end
 
-struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
-    domain::SphereDomain{FT}
-    n::Int64
-end
+#struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
+#    domain::SphereDomain{FT}
+#    n::Int64
+#end
 
 """
     Mesh2D{I,IA2D,FT,FTA2D} <: AbstractMesh{FT}
@@ -201,7 +204,11 @@ https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
+struct Mesh2D{D, W, I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
+    "domain"
+    domain::D
+    "warping type"
+    warp_type::W
     "# of unique vertices in the mesh"
     nverts::I
     "# of unique faces in the mesh"
@@ -237,6 +244,8 @@ struct Mesh2D{I, IA1D, IA2D, FT, FTA2D, SNT, NB} <: AbstractMesh{FT}
 end
 
 Mesh2D(
+    domain,
+    warp_type,
     nverts,
     nfaces,
     nelems,
@@ -254,6 +263,8 @@ Mesh2D(
     elem_verts,
     elem_faces,
 ) = Mesh2D{
+    typeof(domain),
+    typeof(warp_type),
     eltype(nverts),
     typeof(face_boundary),
     typeof(face_verts),
@@ -262,6 +273,8 @@ Mesh2D(
     typeof(boundary_tag_names),
     length(boundary_tag_names),
 }(
+    domain,
+    warp_type,
     nverts,
     nfaces,
     nelems,

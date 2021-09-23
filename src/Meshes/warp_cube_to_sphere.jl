@@ -1,7 +1,7 @@
 
 
 """
-    cubed_sphere_warp(::EquiangularSphereMesh{FT}, a, b, c)
+    cubed_sphere_warp(::EquiangularSphereWarp, a, b, c)
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
 spherical shell of radius `R` based on the equiangular gnomonic grid proposed by
@@ -17,7 +17,7 @@ JOURNAL OF COMPUTATIONAL PHYSICS 124, 93–114 (1996)
 https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Numerics/Mesh/Topologies.jl
 """
 function cubed_sphere_warp(
-    ::EquiangularSphere{FT},
+    ::EquiangularSphereWarp,
     a::FT,
     b::FT,
     c::FT,
@@ -65,7 +65,7 @@ function cubed_sphere_warp(
 end
 
 """
-    cubed_sphere_warp(::EquidistantSphereMesh{FT}, a, b, c)
+    cubed_sphere_warp(::EquidistantSphereWarp, a, b, c)
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
 spherical shell of radius `R` based on the equidistant gnomonic grid outlined in
@@ -85,7 +85,7 @@ https://doi.org/10.1175/MWR2890.1
 https://github.com/CliMA/ClimateMachine.jl/blob/master/src/Numerics/Mesh/Topologies.jl
 """
 function cubed_sphere_warp(
-    ::EquidistantSphere{FT},
+    ::EquidistantSphereWarp,
     a::FT,
     b::FT,
     c::FT,

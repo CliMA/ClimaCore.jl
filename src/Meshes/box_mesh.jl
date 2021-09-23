@@ -1,14 +1,16 @@
 function equispaced_rectangular_mesh(
-    domain::Unstructured2DDomain{FT},
-    x1::ClosedInterval,
-    x2::ClosedInterval,
+    domain::RectangleDomain{CT},
     n1,
     n2,
-    per = (false, false),
-) where {FT <: AbstractFloat}
-    x1c = range(FT(x1.left), FT(x1.right); length = n1 + 1)
-    x2c = range(FT(x2.left), FT(x2.right); length = n2 + 1)
-    return rectangular_mesh(x1c, x2c, per)
+) where {FT <: AbstractFloat, CT <: Geometry.Abstract2DPoint{FT}}
+    x1x2min, x1x2max = domain.x1x2min, domain.x1x2max
+    x1max = Geometry.component(x1x2max, 1)
+    x2max = Geometry.component(x1x2max, 2)
+    x1min = Geometry.component(x1x2min, 1)
+    x2min = Geometry.component(x1x2min, 2)
+    x1c = range(x1min, x1max; length = n1 + 1)
+    x2c = range(x2min, x2max; length = n2 + 1)
+    return Mesh2D(domain, x1c, x2c)
 end
 
 """
@@ -16,10 +18,13 @@ end
 
 This function builds a 2D rectangular mesh with points located at x1c and x2c in x1 and x2 directions respectively.
 """
-function rectangular_mesh(x1c, x2c, per = (false, false))
-    FT = eltype(x1c)
+function Mesh2D(
+    domain::RectangleDomain{CT},
+    x1c,
+    x2c,
+) where {FT <: AbstractFloat, CT <: Geometry.Abstract2DPoint{FT}}
+    per = tuple(domain.x1boundary === nothing, domain.x2boundary === nothing)
     I = Int
-
     nx1, nx2 = length(x1c), length(x2c)
     nel1, nel2 = nx1 - 1, nx2 - 1
 
@@ -199,6 +204,8 @@ function rectangular_mesh(x1c, x2c, per = (false, false))
     end
 
     return Mesh2D(
+        domain,
+        NoWarp(),
         nverts,
         nfaces,
         nelems,

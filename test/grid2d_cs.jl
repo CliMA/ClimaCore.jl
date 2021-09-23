@@ -4,16 +4,18 @@ import ClimaCore.Geometry: Cartesian2DPoint, Cartesian123Point
 using ClimaCore.Meshes:
     equispaced_rectangular_mesh,
     cube_panel_mesh,
-    EquidistantSphere,
-    EquiangularSphere,
+    AbstractWarp,
+    EquidistantSphereWarp,
+    EquiangularSphereWarp,
+    NoWarp,
     Mesh2D
 using StaticArrays
 using IntervalSets
 
 function cube_panel_topology(ne, ::Type{FT}) where {FT <: AbstractFloat}
-    domain = Domains.Unstructured2DDomain{FT}()
-    mesh = cube_panel_mesh(ne, FT)
-    grid_topology = Topologies.Grid2DTopology(mesh, domain)
+    domain = Domains.CubePanelDomain{FT}()
+    mesh = Mesh2D(domain, ne)
+    grid_topology = Topologies.Grid2DTopology(mesh)
     return (domain, mesh, grid_topology)
 end
 
@@ -129,13 +131,15 @@ end
     FT = Float64
     @testset "4 elements per edge, equidistant spherical mesh of radius 10; Float type = Float64" begin
         radius = FT(10)
-        mesh = Mesh2D(EquidistantSphere{FT}(), 4, radius)
+        domain = Domains.SphereDomain(radius)
+        mesh = Mesh2D(domain, EquidistantSphereWarp(), 4)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end
     @testset "4 elements per edge, equiangular spherical mesh of radius 10; Float type = Float64" begin
         radius = FT(10)
-        mesh = Mesh2D(EquiangularSphere{FT}(), 4, radius)
+        domain = Domains.SphereDomain(radius)
+        mesh = Mesh2D(domain, EquiangularSphereWarp(), 4)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end
@@ -143,13 +147,15 @@ end
     FT = BigFloat
     @testset "4 elements per edge, equidistant spherical mesh of radius 10; Float type = BigFloat" begin
         radius = FT(10)
-        mesh = Mesh2D(EquidistantSphere{FT}(), 4, radius)
+        domain = Domains.SphereDomain(radius)
+        mesh = Mesh2D(domain, EquidistantSphereWarp(), 4)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end
     @testset "4 elements per edge, equiangular spherical mesh of radius 10; Float type = BigFloat" begin
         radius = FT(10)
-        mesh = Mesh2D(EquiangularSphere{FT}(), 4, radius)
+        domain = Domains.SphereDomain(radius)
+        mesh = Mesh2D(domain, EquiangularSphereWarp(), 4)
         crad = abs.(sqrt.(sum(mesh.coordinates .^ 2, dims = 2)) .- radius)
         @test maximum(crad) ≤ 100 * eps(FT)
     end

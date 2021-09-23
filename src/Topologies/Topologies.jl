@@ -19,7 +19,7 @@ x2    |       |
 module Topologies
 
 import ..Geometry
-import ..Domains: Domains, coordinate_type, Unstructured2DDomain
+import ..Domains: Domains, coordinate_type
 import ..Meshes:
     Meshes, EquispacedRectangleMesh, Mesh2D, AbstractMesh, TensorProductMesh
 

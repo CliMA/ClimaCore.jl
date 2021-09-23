@@ -1,17 +1,22 @@
 
+function Mesh2D(domain::CubePanelDomain{FT}, ne) where {FT <: AbstractFloat}
+    return cube_panel_mesh(domain, NoWarp(), ne, FT)
+end
+
 function Mesh2D(
-    stype::AbstractSphere{FT},
+    domain::SphereDomain{FT},
+    warp_type::AbstractSphereWarp,
     ne,
-    radius,
 ) where {FT <: AbstractFloat}
+    radius = domain.radius
     # map the cube to [-radius, radius],[-radius, radius],[-radius, radius]
-    mesh = cube_panel_mesh(ne, FT)
+    mesh = cube_panel_mesh(domain, warp_type, ne, FT)
     mesh.coordinates .-= FT(0.5)
     mesh.coordinates .*= (FT(2) * radius)
 
     for i in 1:(mesh.nverts)
         mesh.coordinates[i, :] .=
-            cubed_sphere_warp(stype, mesh.coordinates[i, :]...)
+            cubed_sphere_warp(warp_type, mesh.coordinates[i, :]...)
     end
     return mesh
 end
@@ -66,6 +71,8 @@ This function builds a cube panel mesh with a resolution of `ne` elements along 
             +-------+
 """
 function cube_panel_mesh(
+    domain::Union{CubePanelDomain{FT}, SphereDomain{FT}},
+    warp_type::AbstractWarp,
     ne::I,
     ::Type{FT},
 ) where {FT <: AbstractFloat, I <: Integer}
@@ -304,6 +311,8 @@ function cube_panel_mesh(
 
 
     return Mesh2D(
+        domain,
+        warp_type,
         nverts,
         nfaces,
         nelems,
