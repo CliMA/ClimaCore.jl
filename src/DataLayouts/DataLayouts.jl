@@ -353,6 +353,7 @@ end
 
 
 
+
 #=
 struct KFV{S,A} <: DataColumn{S}
   array::A
@@ -662,6 +663,51 @@ end
 @propagate_inbounds function Base.setindex!(data::VIFH, val, I::CartesianIndex)
     data[I[1], I[4]] = val
 end
+
+
+"""
+    IV1JH2{S, Ni}(data::AbstractMatrix{S})
+
+Stores values from an extruded 1D spectral field in a matrix using a column-major format.
+The primary use is for interpolation to a regular grid.
+"""
+struct IV1JH2{S, Ni, A} <: Data1DX{S, Ni}
+    array::A
+end
+
+function IV1JH2{S, Ni}(array::AbstractMatrix{S}) where {S, Ni}
+    @assert size(array, 2) % Ni == 0
+    IV1JH2{S, Ni, typeof(array)}(array)
+end
+
+function Base.size(data::IV1JH2{S, Ni}) where {S, Ni}
+    Nv = size(parent(data), 1)
+    Nh = div(size(parent(data), 2), Ni)
+    (Ni, 1, 1, Nv, Nh)
+end
+
+Base.length(data::IV1JH2{S, Ni}) where {S, Ni} = div(length(parent(data)), Ni)
+
+function Base.similar(
+    data::IV1JH2{S, Ni, A},
+    ::Type{Eltype},
+) where {S, Ni, A, Eltype}
+    array = similar(A, Eltype)
+    return IV1JH2{Eltype, Ni}(array)
+end
+
+Base.copy(data::IV1JH2{S, Ni}) where {S, Ni} = IV1JH2{S, Ni}(copy(parent(data)))
+
+@inline function slab(data::IV1JH2{S, Ni}, v::Integer, h::Integer) where {S, Ni}
+    N1, N2 = size(parent(data))
+    n1 = N1
+    n2 = div(N2, Ni)
+    _, z2 = fldmod(h - 1, n2)
+    @boundscheck (1 <= v <= n1) && (1 <= h <= n2) ||
+                 throw(BoundsError(data, (v, h)))
+    return view(parent(data), v, Ni * z2 .+ (1:Ni))
+end
+
 
 # combined 2D spectral element + extruded 1D FV column data layout
 

@@ -6,28 +6,27 @@ import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
 using LinearAlgebra: norm
 
-using UnicodePlots
+function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint(-3.0)..Geometry.XPoint(5.0),
+        Geometry.YPoint(-2.0)..Geometry.YPoint(8.0),
+        x1periodic = false,
+        x2periodic = false,
+        x1boundary = (:east, :west),
+        x2boundary = (:south, :north),
+    )
+    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+    grid_topology = Topologies.GridTopology(mesh)
 
-domain = Domains.RectangleDomain(
-    Geometry.XPoint(-3.0)..Geometry.XPoint(5.0),
-    Geometry.YPoint(-2.0)..Geometry.YPoint(8.0),
-    x1periodic = false,
-    x2periodic = false,
-    x1boundary = (:east, :west),
-    x2boundary = (:south, :north),
-)
-n1, n2 = 1, 1
-Nij = 4
-mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-grid_topology = Topologies.GridTopology(mesh)
+    quad = Spaces.Quadratures.GLL{Nij}()
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    return space
+end
 
-quad = Spaces.Quadratures.GLL{Nij}()
-points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
-
-space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-
-
-@testset "1×1 domain space" begin
+@testset "1×1 2D domain space" begin
+    Nij = 4
+    n1 = n2 = 1
+    space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
     field =
         Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), space)
@@ -42,7 +41,9 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 
     field_sin = map(x -> sin((x.x) / 2), Fields.coordinate_field(space))
-    Operators.matrix_interpolate(field_sin, 20)
+    M = Operators.matrix_interpolate(field_sin, 20)
+    @test size(M) == (20, 20)  # 20 x 20 for a 1 element field
+
     real_field = field.re
 
     # test broadcasting
@@ -57,6 +58,9 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 end
 
 @testset "Broadcasting interception for tuple-valued fields" begin
+    n1 = n2 = 1
+    Nij = 4
+    space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
     nt_field = Fields.Field(
         IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
@@ -72,11 +76,13 @@ end
 end
 
 @testset "Special case handling for broadcased norm to pass through space local geometry" begin
+    space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     @test norm.(u) ≈ hypot(4 / 8 / 2, 4 / 10 / 2) .* ones(space)
 end
 
 @testset "FieldVector" begin
+    space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     x = Fields.coordinate_field(space)
     Y = Fields.FieldVector(u = u, x = x)

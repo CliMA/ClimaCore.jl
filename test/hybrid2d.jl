@@ -14,7 +14,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Domains.Geometry: Geometry.Cartesian12Point, ⊗
 
-function hvspace_2D(
+function hvspace_2D(;
     xlim = (-π, π),
     zlim = (0, 4π),
     helem = 10,
@@ -66,6 +66,20 @@ end
 
 
 
+@testset "1D SE, 1D FD Extruded Domain matrix interpolation" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(npoly = 4, velem = 10, helem = 10)
+
+    center_field = sin.(Fields.coordinate_field(hv_center_space).z)
+    face_field = sin.(Fields.coordinate_field(hv_face_space).z)
+
+    for npoints in (3, 8)
+        M_center = Operators.matrix_interpolate(center_field, npoints)
+        M_face = Operators.matrix_interpolate(face_field, npoints)
+        @test size(M_center) == (10, 10 * npoints)
+        @test size(M_face) == (10 + 1, 10 * npoints)
+    end
+end
 
 @testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
 
@@ -134,7 +148,7 @@ end
 
     # NOTE: the equation setup is only correct for Cartesian domains!
 
-    hv_center_space, hv_face_space = hvspace_2D((-1, 1), (-1, 1))
+    hv_center_space, hv_face_space = hvspace_2D(xlim = (-1, 1), zlim = (-1, 1))
 
     function divergence(f)
 
@@ -260,7 +274,7 @@ end
     # Scalar diffusion operator in 2D
     # ∂_xx u + ∂_zz u
 
-    hv_center_space, hv_face_space = hvspace_2D((-5, 5), (-5, 5))
+    hv_center_space, hv_face_space = hvspace_2D(xlim = (-5, 5), zlim = (-5, 5))
 
     K = 1.0
 
@@ -313,7 +327,7 @@ end
     # (one component only)
     # ∂_xx u + ∂_zz u
 
-    hv_center_space, hv_face_space = hvspace_2D((-5, 5), (-5, 5))
+    hv_center_space, hv_face_space = hvspace_2D(xlim = (-5, 5), zlim = (-5, 5))
 
     K = 1.0
 
