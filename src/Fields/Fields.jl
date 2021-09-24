@@ -31,26 +31,36 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
 
+# Spectral Element Field
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
 
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+
+# Finite Difference Field
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
+
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
+
 const CenterFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CenterFiniteDifferenceSpace}
 
+# Extruded Fields
 const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
+
 const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,

@@ -942,15 +942,42 @@ function apply_slab(
     return SMatrix(slab_data_out)
 end
 
+
 """
     tensor_product!(out, in, M)
     tensor_product!(inout, M)
 
 Computes the tensor product `out = (M ⊗ M) * in` on each element.
 """
+function tensor_product! end
+
 function tensor_product!(
-    out::Data2D{S, Nij_out},
-    in::Data2D{S, Nij_in},
+    out::DataLayouts.Data1DX{S, Ni_out},
+    in::DataLayouts.Data1DX{S, Ni_in},
+    M::SMatrix{Ni_out, Ni_in},
+) where {S, Ni_out, Ni_in}
+    (_, _, _, Nv_in, Nh_in) = size(in)
+    (_, _, _, Nv_out, Nh_out) = size(out)
+    # TODO: assumes the same number of levels (horizontal only)
+    @assert Nv_in == Nv_out
+    @assert Nh_in == Nh_out
+    for h in 1:Nh_out, v in 1:Nv_out
+        in_slab = slab(in, v, h)
+        out_slab = slab(out, v, h)
+        @inbounds for i in 1:Ni_out
+            r = M[i, 1] ⊠ in_slab[1]
+            for ii in 2:Ni_in
+                r = RecursiveApply.rmuladd(M[i, ii], in_slab[ii], r)
+            end
+            out_slab[i] = r
+        end
+    end
+    return out
+end
+
+function tensor_product!(
+    out::DataLayouts.Data2D{S, Nij_out},
+    in::DataLayouts.Data2D{S, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
 
@@ -1408,8 +1435,9 @@ function restrict!(field_to::Field, field_from::Field)
     return field_to
 end
 
+# matrix interpolate used for 2D field plots
 function matrix_interpolate(
-    field::Field,
+    field::Fields.SpectralElementField2D,
     Q_interp::Quadratures.Uniform{Nu},
 ) where {Nu}
     S = eltype(field)
@@ -1419,13 +1447,28 @@ function matrix_interpolate(
     mesh = topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
-
     interp_data =
         DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
-
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)
 end
+
+function matrix_interpolate(
+    field::Fields.ExtrudedFiniteDifferenceField,
+    Q_interp::Quadratures.Uniform{Nu},
+) where {Nu}
+    S = eltype(field)
+    space = axes(field)
+    quadrature_style = Spaces.quadrature_style(space)
+    nl = Spaces.nlevels(space)
+    mesh = Spaces.topology(space).mesh
+    n1 = mesh.n1
+    interp_data = DataLayouts.IV1JH2{S, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
+    M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
+    Operators.tensor_product!(interp_data, Fields.field_values(field), M)
+    return parent(interp_data)
+end
+
 matrix_interpolate(field::Field, Nu::Integer) =
     matrix_interpolate(field, Quadratures.Uniform{Nu}())

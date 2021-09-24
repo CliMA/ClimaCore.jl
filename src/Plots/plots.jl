@@ -111,14 +111,19 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     (xdata, ydata)
 end
 
-RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
+RecipesBase.@recipe function f(
+    field::Fields.SpectralElementField2D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
     # compute the interpolated data to plot
     space = axes(field)
     mesh = space.topology.mesh
     n1 = mesh.n1
     n2 = mesh.n2
 
-    Nu = 10
+    Nu = interpolate
     M = Operators.matrix_interpolate(field, Nu)
 
     domain = Meshes.domain(mesh)
@@ -132,39 +137,58 @@ RecipesBase.@recipe function f(field::Fields.SpectralElementField2D)
     r2 = range(x2min, x2max, length = n2 * Nu + 1)
     r2 = r2[1:(end - 1)] .+ step(r2) ./ 2
 
-    CT = Domains.coordinate_type(domain)
-    X1CT = Geometry.coordinate_type(CT, 1)
-    X2CT = Geometry.coordinate_type(CT, 2)
-    X1CTname = Base.typename(X1CT).name
-    X2CTname = Base.typename(X1CT).name
+    coord_symbols = propertynames(Fields.coordinate_field(space))
 
     # set the plot attributes
     seriestype := :heatmap
 
-    xguide --> "$(X1CTname)"
-    yguide --> "$(X2CTname)"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
     seriescolor --> :balance
 
     (r1, r2, M')
 end
 
-RecipesBase.@recipe function f(field::Fields.ExtrudedFiniteDifferenceField)
+RecipesBase.@recipe function f(
+    field::Fields.ExtrudedFiniteDifferenceField;
+    hinterpolate = 0,
+)
     data = Fields.field_values(field)
-    Ni, _, _, Nv, Nh = size(data)
+    Ni, Nj, _, Nv, Nh = size(data)
+
     space = axes(field)
+    hmesh = Spaces.topology(space).mesh
+    vmesh = space.vertical_mesh
 
     #TODO: assumes VIFH layout
-    hcoord = vec(parent(Fields.coordinate_field(space).x)[1, :, 1, :])
-    vcoord = vec(parent(Fields.coordinate_field(space).z)[:, 1, 1, 1])
+    @assert Nj == 1 "plotting only defined for 1D extruded fields"
+
+    coord_symbols = propertynames(Fields.coordinate_field(space))
+    hcoord_field = getproperty(Fields.coordinate_field(space), 1)
+    vcoord_field = getproperty(Fields.coordinate_field(space), 2)
+
+    if hinterpolate ≥ 1
+        Nu = hinterpolate
+        M_hcoord = Operators.matrix_interpolate(hcoord_field, Nu)
+        M_data = Operators.matrix_interpolate(field, Nu)
+
+        hcoord = vec(M_hcoord[1, :])
+        vcoord = vec(parent(vcoord_field)[:, 1, 1, 1])
+        data = M_data
+    else
+        hcoord = vec(parent(hcoord_field)[1, :, 1, :])
+        vcoord = vec(parent(vcoord_field)[:, 1, 1, 1])
+        data = reshape(parent(data), (Nv, Ni * Nh))
+    end
 
     # set the plot attributes
     seriestype := :heatmap
 
-    xguide --> "x"
-    yguide --> "z"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
     seriescolor --> :balance
 
-    (hcoord, vcoord, reshape(parent(data), (Nv, Ni * Nh)))
+    (hcoord, vcoord, data)
 end
 
 function play(
