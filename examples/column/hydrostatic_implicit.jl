@@ -429,14 +429,17 @@ L * L:
 . . .                           .     .     .     .     .
 =#
 
-struct CustomFactorization{T, AT, AT1, AT2}
+struct CustomFactorization{T,AT1,AT2,AT3}
     dtgamma_ref::T # Reference, so that we can modify it.
-    Jρ_w::AT
-    Jρθ_w::AT
-    Jw_ρ::AT
-    Jw_ρθ::AT
-    S::AT1
-    W_test::AT2
+    Jρ_w::AT1
+    Jρθ_w::AT1
+    Jw_ρ::AT1
+    Jw_ρθ::AT1
+    S::AT2
+    ρh::AT3
+    ρθh::AT3
+    Πh::AT3
+    Δzh::AT3
 end
 function CustomFactorization(n::Integer; FT = Float64)
     dtgamma_ref = Ref(zero(FT))
@@ -445,85 +448,87 @@ function CustomFactorization(n::Integer; FT = Float64)
     Jw_ρ = GeneralBidiagonal(Array{FT}, false, n + 1, n)
     Jw_ρθ = GeneralBidiagonal(Array{FT}, false, n + 1, n)
     S = Tridiagonal(zeros(FT, n), zeros(FT, n + 1), zeros(FT, n))
-    W_test = zeros(FT, 3n + 1, 3n + 1)
-    CustomFactorization{typeof(dtgamma_ref), typeof(Jρ_w), typeof(S), typeof(W_test)}(
+    ρh = zeros(FT, n + 1)
+    ρθh = zeros(FT, n + 1)
+    Πh = zeros(FT, n + 1)
+    Δzh = zeros(FT, n + 1)
+    CustomFactorization{typeof(dtgamma_ref),typeof(Jρ_w),typeof(S),typeof(ρh)}(
         dtgamma_ref,
         Jρ_w,
         Jρθ_w,
         Jw_ρ,
         Jw_ρθ,
         S,
-        W_test,
+        ρh,
+        ρθh,
+        Πh,
+        Δzh,
     )
 end
 
 import Base: similar
-Base.similar(cf::CustomFactorization{T, AT}) where {T, AT} = cf
+# We only use Wfact, but the OrdinaryDiffEq interface requires us to pass
+# jac_prototype, then calls similar(jac_prototype) to obtain J and Wfact. This
+# is a temporary workaround to avoid unnecessary allocations.
+Base.similar(cf::CustomFactorization{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, u, p, dtgamma, t)
-    @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S, W_test = W
+    @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S, ρh, ρθh, Πh, Δzh = W
 
     dtgamma_ref[] = dtgamma
 
-    N = div(length(Y) - 1, 3)
+    N = size(Jρ_w, 1)
+    ρ = reshape(parent(u.Yc.ρ), N)
+    ρθ = reshape(parent(u.Yc.ρθ), N)
 
-    ρ, ρθ, w = u[1:N], u[(N + 1):(2N)], u[(2N + 1):(3N + 1)]
-    # construct cell center
-    ρh = [ρ[1]; (ρ[1:(N - 1)] + ρ[2:N]) / 2.0; ρ[N]]
-    ρθh = [ρθ[1]; (ρθ[1:(N - 1)] + ρθ[2:N]) / 2.0; ρθ[N]]
+    # construct cell face values
+    
+    ρh[1] = ρ[1]
+    @views @. ρh[2:N] = (ρ[1:N - 1] + ρ[2:N]) / 2
+    ρh[N + 1] = ρ[N]
 
+    ρθh[1] = ρθ[1]
+    @views @. ρθh[2:N] = (ρθ[1:N - 1] + ρθ[2:N]) / 2
+    ρθh[N + 1] = ρθ[N]
 
-    Πc = Π.(ρθ)
-    Πh = [NaN; (Πc[1:(N - 1)] + Πc[2:N]) / 2.0; NaN]
-    Δzh = [NaN; (Δz[1:(N - 1)] + Δz[2:N]) / 2.0; NaN]
+    @views @. Πh[1:N] = Π(ρθ) # temporarily store center values in this array
+    @views @. Πh[2:N] = (Πh[1:N - 1] + Πh[2:N]) / 2
 
-    # (dρₜ/dw)
-    # Bidiagonal
+    @views @. Δzh[2:N] = (Δz[1:N - 1] + Δz[2:N]) / 2
+
+    # construct Bidiagonl matrices
+    
     @views @. Jρ_w.d = ρh[1:N] / Δz
     @views @. Jρ_w.d2 = -ρh[2:N + 1] / Δz
 
-    # D_Θ = diagm(0=>-ρθh/Δz, -1=>ρθh/Δz)[1:N, 1:N-1]
-    # (dρΘₜ/dw)
-    # Bidiagonal
     @views @. Jρθ_w.d = ρθh[1:N] / Δz
     @views @. Jρθ_w.d2 = -ρθh[2:N + 1] / Δz
 
-    # (dwₜ/dρ) = A_W*_grav
-    # A_W = diagm(0=>-ones(N-1)./ρh/2, 1=>-ones(N-1)./ρh/2)[1:N-1, 1:N]
-    # Bidiagonal
     Jw_ρ.d[1] = 0
     Jw_ρ.d2[N] = 0
     @views @. Jw_ρ.d[2:N] = -grav / (2 * ρh[2:N])
     @views @. Jw_ρ.d2[1:N - 1] = Jw_ρ.d[2:N]
 
-    # G_W = (γ - 1) * diagm(0=>Πh./ρh/Δz, 1=>-Πh./ρh/Δz)[1:N-1, 1:N]
-    # (dwₜ/dρΘ) = G_W
-    # Bidiagonal
     Jw_ρθ.d[1] = 0
     Jw_ρθ.d2[N] = 0
     @views @. Jw_ρθ.d[2:N] = -(γ - 1) * Πh[2:N] / (ρh[2:N] * Δzh[2:N])
     @views @. Jw_ρθ.d2[1:N - 1] = -Jw_ρθ.d[2:N]
 
-    jacobian!(W_test, u, p, t)
-    W_test .= -(I - dtgamma .* W_test)
 end
 function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
     function _linsolve!(x, A, b, update_matrix = false; kwargs...)
-        x_test = deepcopy(x)
-        b_test = deepcopy(b)
-        
-        @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S, W_test = A
-        
+        @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S = A
+    
         dtgamma = dtgamma_ref[]
 
-        x1 = parent(x_test.Yc.ρ)
-        x2 = parent(x_test.Yc.ρθ)
-        x3 = parent(x_test.w)
-        b1 = parent(b_test.Yc.ρ)
-        b2 = parent(b_test.Yc.ρθ)
-        b3 = parent(b_test.w)
+        N = size(Jρ_w, 1)
+        x1 = reshape(parent(x.Yc.ρ), N)
+        x2 = reshape(parent(x.Yc.ρθ), N)
+        x3 = reshape(parent(x.w), N + 1)
+        b1 = reshape(parent(b.Yc.ρ), N)
+        b2 = reshape(parent(b.Yc.ρθ), N)
+        b3 = reshape(parent(b.w), N + 1)
         
-
         # A = -I + dtgamma J
 
         # J = ([zeros(N,N)           zeros(N,N)      D_ρ (dρₜ/dw);
@@ -551,18 +556,18 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         # bring x1 and x2 into eq(3)
         # A31 ( -b1 + A13 * x3) + A32 (-b2 + A23 * x3) - x3 = b3
         # S:= -I + A31*A13 + A32*A23 "Schur complement" =>  Tridiagonal
-        # RHS = b3 +
+
         # 1) Form tridiagonal matrix
-        S .= 0
-        S[diagind(S)] .= -1
+        S.dl .= 0
+        S.d .= -1
+        S.du .= 0
         # S = S + dtgamma^2 * Jw_ρ * Jρ_w
         mul!(S, Jw_ρ, Jρ_w, dtgamma^2, 1)
         # S = S + dtgamma^2 * Jw_ρθ * Jρθ_w
         mul!(S, Jw_ρθ, Jρθ_w, dtgamma^2, 1)
-        # S * x3 = b3 - A31 *b1 - A32 * b2
-        S_test = copy(S)
 
         # 2) form RHS
+        # S * x3 = b3 - A31 *b1 - A32 * b2
         # x3 = S\(b3 - A31 *b1 - A32 * b2)
         # x3 = b3 + dtgamma * Jw_ρ *b1 + dtgamma * Jw_ρθ * b2
         x3 .= b3
@@ -573,9 +578,7 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         # TODO: LinearAlgebra will compute the LU factorization, then solve
         # Thomas' algorithm can do this in one step:
         # https://en.wikipedia.org/wiki/Tridiagonal_matrix_algorithm
-        # can also reuse x3 storage for t3, and solve in-place
         ldiv!(lu!(S), x3)
-
 
         # 4) compute x1
         # use (1) & (2) to get x1, x2
@@ -588,42 +591,10 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         # x2 .= b2 + dtgamma * Jρθ_w * x3
         x2 .= -b2
         mul!(x2, Jρθ_w, x3, dtgamma, 1)
-        
-        x .= copy(b)
-        N = div(length(x) - 1, 3)
-        J = W_test[(2N + 1):(3N + 1), (2N + 1):(3N + 1)]
-        J +=
-            -W_test[(2N + 1):(3N + 1), 1:N] *
-            (Diagonal(W_test[1:N, 1:N]) \ W_test[1:N, (2N + 1):(3N + 1)])
-        J +=
-            -W_test[(2N + 1):(3N + 1), (N + 1):(2N)] * (
-                Diagonal(W_test[(N + 1):(2N), (N + 1):(2N)]) \
-                W_test[(N + 1):(2N), (2N + 1):(3N + 1)]
-            )
-
-        x[(2N + 1):(3N + 1)] +=
-            -W_test[(2N + 1):(3N + 1), 1:N] * (Diagonal(W_test[1:N, 1:N]) \ b[1:N])
-        x[(2N + 1):(3N + 1)] +=
-            -W_test[(2N + 1):(3N + 1), (N + 1):(2N)] *
-            (Diagonal(W_test[(N + 1):(2N), (N + 1):(2N)]) \ b[(N + 1):(2N)])
-
-        x[(2N + 1):(3N + 1)] .= Tridiagonal(J) \ x[(2N + 1):(3N + 1)]
-        x[1:N] .=
-            Diagonal(W_test[1:N, 1:N]) \
-            (b[1:N] - W_test[1:N, (2N + 1):(3N + 1)] * x[(2N + 1):(3N + 1)])
-        x[(N + 1):(2N)] .=
-            Diagonal(W_test[(N + 1):(2N), (N + 1):(2N)]) \ (
-                b[(N + 1):(2N)] -
-                W_test[(N + 1):(2N), (2N + 1):(3N + 1)] * x[(2N + 1):(3N + 1)]
-            )
-
-        @assert J ≈ S_test
-        @assert x ≈ x_test
-        @assert b ≈ b_test
     end
 end
 
-Δt = 5.0
+Δt = 100.0
 ndays = 1.0
 
 # Solve the ODE operator
