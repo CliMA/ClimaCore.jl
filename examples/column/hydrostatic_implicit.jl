@@ -429,36 +429,36 @@ L * L:
 . . .                           .     .     .     .     .
 =#
 
-struct CustomFactorization{T, AT}
+struct CustomFactorization{T, AT, AT1, AT2}
     dtgamma_ref::T # Reference, so that we can modify it.
     Jρ_w::AT
     Jρθ_w::AT
     Jw_ρ::AT
     Jw_ρθ::AT
-    S::AT
-    W_test::AT
+    S::AT1
+    W_test::AT2
 end
-CustomFactorization(n::Integer; FT = Float64) =
-    CustomFactorization{Base.RefValue{FT}, Array{FT}}(
-        Ref(zero(FT)),
-        zeros(FT, n, n + 1),
-        zeros(FT, n, n + 1),
-        zeros(FT, n + 1, n),
-        zeros(FT, n + 1, n),
-        zeros(FT, n + 1, n + 1),
-        zeros(FT, 3n + 1, 3n + 1),
+function CustomFactorization(n::Integer; FT = Float64)
+    dtgamma_ref = Ref(zero(FT))
+    Jρ_w = GeneralBidiagonal(Array{FT}, true, n, n + 1)
+    Jρθ_w = GeneralBidiagonal(Array{FT}, true, n, n + 1)
+    Jw_ρ = GeneralBidiagonal(Array{FT}, false, n + 1, n)
+    Jw_ρθ = GeneralBidiagonal(Array{FT}, false, n + 1, n)
+    S = Tridiagonal(zeros(FT, n), zeros(FT, n + 1), zeros(FT, n))
+    W_test = zeros(FT, 3n + 1, 3n + 1)
+    CustomFactorization{typeof(dtgamma_ref), typeof(Jρ_w), typeof(S), typeof(W_test)}(
+        dtgamma_ref,
+        Jρ_w,
+        Jρθ_w,
+        Jw_ρ,
+        Jw_ρθ,
+        S,
+        W_test,
     )
+end
+
 import Base: similar
-Base.similar(cf::CustomFactorization{T, AT}) where {T, AT} = # cf
-    CustomFactorization{T, AT}(
-        deepcopy(cf.dtgamma_ref),
-        deepcopy(cf.Jρ_w),
-        deepcopy(cf.Jρθ_w),
-        deepcopy(cf.Jw_ρ),
-        deepcopy(cf.Jw_ρθ),
-        deepcopy(cf.S),
-        deepcopy(cf.W_test),
-    )
+Base.similar(cf::CustomFactorization{T, AT}) where {T, AT} = cf
 
 function Wfact!(W, u, p, dtgamma, t)
     @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S, W_test = W
@@ -479,34 +479,30 @@ function Wfact!(W, u, p, dtgamma, t)
 
     # (dρₜ/dw)
     # Bidiagonal
-    for i in 1:N
-        Jρ_w[i, i] = ρh[i] / Δz[i]
-        Jρ_w[i, i + 1] = -ρh[i + 1] / Δz[i]
-    end
+    @views @. Jρ_w.d = ρh[1:N] / Δz
+    @views @. Jρ_w.d2 = -ρh[2:N + 1] / Δz
 
     # D_Θ = diagm(0=>-ρθh/Δz, -1=>ρθh/Δz)[1:N, 1:N-1]
     # (dρΘₜ/dw)
     # Bidiagonal
-    for i in 1:N
-        Jρθ_w[i, i] = ρθh[i] / Δz[i]
-        Jρθ_w[i, i + 1] = -ρθh[i + 1] / Δz[i]
-    end
+    @views @. Jρθ_w.d = ρθh[1:N] / Δz
+    @views @. Jρθ_w.d2 = -ρθh[2:N + 1] / Δz
 
     # (dwₜ/dρ) = A_W*_grav
     # A_W = diagm(0=>-ones(N-1)./ρh/2, 1=>-ones(N-1)./ρh/2)[1:N-1, 1:N]
     # Bidiagonal
-    for i in 2:N
-        Jw_ρ[i, (i - 1)] = -grav / (2 * ρh[i])
-        Jw_ρ[i, (i - 1) + 1] = -grav / (2 * ρh[i])
-    end
+    Jw_ρ.d[1] = 0
+    Jw_ρ.d2[N] = 0
+    @views @. Jw_ρ.d[2:N] = -grav / (2 * ρh[2:N])
+    @views @. Jw_ρ.d2[1:N - 1] = Jw_ρ.d[2:N]
 
     # G_W = (γ - 1) * diagm(0=>Πh./ρh/Δz, 1=>-Πh./ρh/Δz)[1:N-1, 1:N]
     # (dwₜ/dρΘ) = G_W
     # Bidiagonal
-    for i in 2:N
-        Jw_ρθ[i, (i - 1)] = (γ - 1) * Πh[i] ./ (ρh[i] * Δzh[i])
-        Jw_ρθ[i, (i - 1) + 1] = -(γ - 1) * Πh[i] ./ (ρh[i] * Δzh[i])
-    end
+    Jw_ρθ.d[1] = 0
+    Jw_ρθ.d2[N] = 0
+    @views @. Jw_ρθ.d[2:N] = -(γ - 1) * Πh[2:N] / (ρh[2:N] * Δzh[2:N])
+    @views @. Jw_ρθ.d2[1:N - 1] = -Jw_ρθ.d[2:N]
 
     jacobian!(W_test, u, p, t)
     W_test .= -(I - dtgamma .* W_test)
@@ -516,7 +512,6 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         x_test = deepcopy(x)
         b_test = deepcopy(b)
         
-
         @unpack dtgamma_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S, W_test = A
         
         dtgamma = dtgamma_ref[]
@@ -565,6 +560,7 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         # S = S + dtgamma^2 * Jw_ρθ * Jρθ_w
         mul!(S, Jw_ρθ, Jρθ_w, dtgamma^2, 1)
         # S * x3 = b3 - A31 *b1 - A32 * b2
+        S_test = copy(S)
 
         # 2) form RHS
         # x3 = S\(b3 - A31 *b1 - A32 * b2)
@@ -572,8 +568,6 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
         x3 .= b3
         mul!(x3, Jw_ρ, b1, dtgamma, 1)
         mul!(x3, Jw_ρθ, b2, dtgamma, 1)
-
-        S_test = copy(S)
 
         # 3) solve for x3
         # TODO: LinearAlgebra will compute the LU factorization, then solve
