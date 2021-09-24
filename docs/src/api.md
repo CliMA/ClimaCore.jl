@@ -32,10 +32,10 @@ Topologies
 ```@docs
 Spaces
 Spaces.Quadratures.degrees_of_freedom
-Spaces.Quadratures.GL
+Spaces.Quadratures.LegendreGauss
+Spaces.Quadratures.LegendreGaussLobatto
 Spaces.Quadratures.Uniform
 Spaces.Quadratures.quadrature_points
-Spaces.Quadratures.GLL
 Spaces.Quadratures.polynomial_degree
 Spaces.Quadratures.QuadratureStyle
 ```
