@@ -272,15 +272,16 @@ get_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = getproperty(op.bcs, name)
 
+Base.@pure _hasproperty(x, name) = hasproperty(x, name)
 has_boundary(
     op::FiniteDifferenceOperator,
     ::LeftBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = _hasproperty(op.bcs, name)
 
 has_boundary(
     op::FiniteDifferenceOperator,
     ::RightBoundaryWindow{name},
-) where {name} = hasproperty(op.bcs, name)
+) where {name} = _hasproperty(op.bcs, name)
 
 
 abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
