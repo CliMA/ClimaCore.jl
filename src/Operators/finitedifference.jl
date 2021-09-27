@@ -1722,7 +1722,7 @@ end
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractStencilStyle}
-    _args = column_rec(inds, bc.args...)
+    _args = column_args(bc.args, inds...)
     _axes = column(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end

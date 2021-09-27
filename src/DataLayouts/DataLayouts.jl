@@ -21,8 +21,8 @@ import StaticArrays: SOneTo, MArray
 #  - printing
 #  - should some of these be subtypes of AbstractArray?
 
-import ..slab, ..column
-export slab, column, IJFH, IJF, IFH, IF, VF, VIFH
+import ..slab, ..column, ..column_args
+export slab, column, column_args, IJFH, IJF, IFH, IF, VF, VIFH
 
 include("struct.jl")
 
@@ -645,11 +645,11 @@ function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
     IF{S, Ni}(view(parent(data), v, :, :, h))
 end
 
-function column(data::VIFH{S}, i, h) where {S}
+@inline function column(data::VIFH{S}, i, h) where {S}
     VF{S}(view(parent(data), :, i, :, h))
 end
 
-function column(data::VIFH{S}, i, j, h) where {S}
+@inline function column(data::VIFH{S}, i, j, h) where {S}
     @assert j == 1
     column(data, i, h)
 end
@@ -715,7 +715,7 @@ function slab(data::VIJFH{S, Nij}, v, h) where {S, Nij}
     IJF{S, Nij}(view(parent(data), v, :, :, :, h))
 end
 
-function column(data::VIJFH{S}, i, j, h) where {S}
+@inline function column(data::VIJFH{S}, i, j, h) where {S}
     VF{S}(view(parent(data), :, i, j, :, h))
 end
 

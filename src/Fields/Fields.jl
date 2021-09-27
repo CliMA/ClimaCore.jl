@@ -1,7 +1,7 @@
 module Fields
 
 import ..slab
-import ..column
+import ..column, ..column_args
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
@@ -83,7 +83,7 @@ Base.length(field::Fields.Field) = 1
 slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
-column(field::Field, inds...) =
+@inline column(field::Field, inds...) =
     Field(column(field_values(field), inds...), column(axes(field), inds...))
 
 const SlabField{V, S} =
