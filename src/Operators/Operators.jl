@@ -2,7 +2,7 @@ module Operators
 
 using StaticArrays: maximum
 import ..slab
-import ..column
+import ..column, ..column_args
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..Geometry:
     Geometry, Cartesian12Vector, Covariant12Vector, Contravariant12Vector, ⊗

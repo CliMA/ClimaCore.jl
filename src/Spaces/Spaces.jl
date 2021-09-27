@@ -15,7 +15,7 @@
 module Spaces
 
 import ..slab
-import ..column
+import ..column, ..column_args
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 

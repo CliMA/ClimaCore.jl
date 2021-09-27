@@ -49,13 +49,13 @@ function slab(
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     i,
     j,
     h,
 ) where {Style <: AbstractFieldStyle}
-    _args = map(a -> column(a, i, j, h), bc.args)
+    _args = column_args(bc.args, i, j, h)
     _axes = column(axes(bc), i, j, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end

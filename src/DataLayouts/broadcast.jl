@@ -105,27 +105,27 @@ function slab(
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, args, axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
-    args = map(arg -> column(arg, inds...), bc.args)
+    args = column_args(bc.args, inds...)
     axes = nothing
     Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, args, axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {DS <: DataColumnStyle}
     bc
 end
 
-function column(bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}}, i, h)
+@inline function column(bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}}, i, h)
     Ref(slab(bc, h)[i])
 end
 
-function column(
+@inline function column(
     bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},
     i,
     j,
