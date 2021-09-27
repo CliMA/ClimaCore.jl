@@ -1346,7 +1346,7 @@ stencil_interior_width(::DivergenceF2C) = ((-half, half),)
 end
 
 boundary_width(op::DivergenceF2C, ::SetValue) = 1
-function stencil_left_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+@inline function stencil_left_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
     @assert idx == left_center_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
@@ -1360,7 +1360,7 @@ function stencil_left_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
-function stencil_right_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+@inline function stencil_right_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
     @assert idx == right_center_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
@@ -1376,11 +1376,11 @@ function stencil_right_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
 end
 
 boundary_width(op::DivergenceF2C, ::Extrapolate) = 1
-function stencil_left_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+@inline function stencil_left_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
     @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, arg)
 end
-function stencil_right_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+@inline function stencil_right_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
     @assert idx == right_center_boundary_idx(arg)
     stencil_interior(op, loc, idx - 1, arg)
 end
@@ -1568,7 +1568,7 @@ function right_interor_window_idx(_, space, loc::RightBoundaryWindow)
     right_idx(space)
 end
 
-@inline function getidx(
+Base.@propagate_inbounds function getidx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::Interior,
     idx,
@@ -1576,7 +1576,7 @@ end
     stencil_interior(bc.f, loc, idx, bc.args...)
 end
 
-function getidx(
+Base.@propagate_inbounds function getidx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::LeftBoundaryWindow,
     idx,
@@ -1591,7 +1591,7 @@ function getidx(
     end
 end
 
-@inline function getidx(
+Base.@propagate_inbounds function getidx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::RightBoundaryWindow,
     idx,
@@ -1619,7 +1619,7 @@ Base.Broadcast.BroadcastStyle(
 Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     return_eltype(bc.f, bc.args...)
 
-function getidx(
+Base.@propagate_inbounds function getidx(
     bc::Fields.CenterFiniteDifferenceField,
     ::Location,
     idx::Integer,
@@ -1642,21 +1642,21 @@ getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
 getidx(scalar, ::Location, idx) = scalar
 
 # unwap boxed scalars
-getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
+Base.@propagate_inbounds getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
 
-@inline function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
+Base.@propagate_inbounds function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
     args = tuplemap(bc.args) do arg
         Base.@_inline_meta
-        getidx(arg, loc, idx)
+        getidx(arg, loc, idx) # FIXME: will not propagate inbounds into here
     end
     bc.f(args...)
 end
 
-function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
+Base.@propagate_inbounds function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
     Fields.field_values(bc)[idx] = val
 end
 
-function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
+Base.@propagate_inbounds function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
     Fields.field_values(bc)[idx.i + 1] = val
 end
 
