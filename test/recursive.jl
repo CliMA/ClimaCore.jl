@@ -2,6 +2,7 @@ using Test, JETTest
 
 using ClimaCore.RecursiveApply
 
+if VERSION < v"1.7"
 for x in [
     1.0,
     1.0f0,
@@ -13,4 +14,5 @@ for x in [
     @test_nodispatch 2 ⊠ x
     @test_nodispatch x ⊞ x
     @test_nodispatch RecursiveApply.rdiv(x, 3)
+end
 end
