@@ -113,7 +113,7 @@ end
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-function get_struct(
+Base.@propagate_inbounds function get_struct(
     array::AbstractArray{T},
     ::Type{S},
     offset,

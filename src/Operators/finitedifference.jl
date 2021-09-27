@@ -200,7 +200,7 @@ function Geometry.LocalGeometry(
 )
     space.center_local_geometry[idx]
 end
-function Geometry.LocalGeometry(
+Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::PlusHalf,
 )
@@ -1627,7 +1627,7 @@ function getidx(
     Fields.field_values(bc)[idx]
 end
 
-function getidx(bc::Fields.FaceFiniteDifferenceField, ::Location, idx::PlusHalf)
+Base.@propagate_inbounds function getidx(bc::Fields.FaceFiniteDifferenceField, ::Location, idx::PlusHalf)
     Fields.field_values(bc)[idx.i + 1]
 end
 
