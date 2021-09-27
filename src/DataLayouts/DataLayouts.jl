@@ -591,8 +591,9 @@ end
     col[I[4]] = val
 end
 
-@inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
-    set_struct!(view(parent(data), v, :), convert(S, val))
+@propagate_inbounds function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
+    subdata = @inbounds view(parent(data), v, :)
+    set_struct!(subdata, convert(S, val))
 end
 
 column(data::VF, i, h) = data
