@@ -33,4 +33,8 @@ end
 
 f!(divx, x)
 divx = ones(Float64, vert_center_space)
-@test @allocated(f!(divx, x)) == 0
+if VERSION < v"1.7.0-beta1"
+    @test_broken @allocated(f!(divx, x)) == 0
+else
+    @test @allocated(f!(divx, x)) == 0
+end
