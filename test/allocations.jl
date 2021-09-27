@@ -32,4 +32,5 @@ function f!(divx, x)
 end
 
 f!(divx, x)
+divx = ones(Float64, vert_center_space)
 @test @allocated(f!(divx, x)) == 0
