@@ -267,7 +267,7 @@ get_boundary(
     ::LeftBoundaryWindow{name},
 ) where {name} = getproperty(op.bcs, name)
 
-get_boundary(
+@inline get_boundary(
     op::FiniteDifferenceOperator,
     ::RightBoundaryWindow{name},
 ) where {name} = getproperty(op.bcs, name)
@@ -1331,7 +1331,7 @@ return_space(::DivergenceF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
 
 stencil_interior_width(::DivergenceF2C) = ((-half, half),)
 
-function stencil_interior(::DivergenceF2C, loc, idx, arg)
+@inline function stencil_interior(::DivergenceF2C, loc, idx, arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
     Ju³₊ = Geometry.Jcontravariant3(
@@ -1568,7 +1568,7 @@ function right_interor_window_idx(_, space, loc::RightBoundaryWindow)
     right_idx(space)
 end
 
-function getidx(
+@inline function getidx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::Interior,
     idx,
@@ -1591,7 +1591,7 @@ function getidx(
     end
 end
 
-function getidx(
+@inline function getidx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     loc::RightBoundaryWindow,
     idx,
@@ -1644,8 +1644,11 @@ getidx(scalar, ::Location, idx) = scalar
 # unwap boxed scalars
 getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
 
-function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
-    args = map(arg -> getidx(arg, loc, idx), bc.args)
+@inline function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
+    args = tuplemap(bc.args) do arg
+        Base.@_inline_meta
+        getidx(arg, loc, idx)
+    end
     bc.f(args...)
 end
 
