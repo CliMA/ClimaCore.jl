@@ -53,6 +53,9 @@ end
 @pointtype Cartesian12Point x1 x2
 @pointtype Cartesian123Point x1 x2 x3
 
+@pointtype LatLongPoint lat long
+
+
 const Cartesian2DPoint = Cartesian12Point
 @deprecate Cartesian2DPoint Cartesian12Point
 
@@ -132,6 +135,26 @@ function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
 
+LinearAlgebra.norm(pt::Cartesian2DPoint, p::Real = 2) =
+    LinearAlgebra.norm((pt.x1, pt.x2), p)
+LinearAlgebra.norm(pt::Cartesian3DPoint, p::Real = 2) =
+    LinearAlgebra.norm((pt.x1, pt.x2, pt.x3), p)
+
+
+function LatLongPoint(pt::Cartesian123Point)
+    lat = atand(pt.x3, hypot(pt.x2, pt.x1))
+    long = atand(pt.x2, pt.x1)
+    LatLongPoint(lat, long)
+end
+
+function Cartesian123Point(pt::LatLongPoint)
+    x1 = cosd(pt.long) * cosd(pt.lat)
+    x2 = sind(pt.long) * cosd(pt.lat)
+    x3 = sind(pt.lat)
+    Cartesian123Point(x1, x2, x3)
+end
+
+
 """
     interpolate(coords::NTuple{4}, ξ1, ξ2)
 
@@ -154,6 +177,24 @@ function interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: Abstract2DPoint
     )
 end
 
+function interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: Abstract3DPoint}
+    VV = unionalltype(V)
+    VV(
+        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 1) +
+        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 1) +
+        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 1) +
+        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 1),
+        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 2) +
+        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 2) +
+        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 2) +
+        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 2),
+        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 3) +
+        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 3) +
+        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 3) +
+        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 3),
+    )
+end
+
 """
     interpolate(coords::NTuple{2}, ξ1)
 
@@ -166,4 +207,10 @@ function interpolate(coords::NTuple{2, V}, ξ1) where {V <: Abstract1DPoint}
         (1 - ξ1) / 2 * component(coords[1], 1) +
         (1 + ξ1) / 2 * component(coords[2], 1),
     )
+end
+
+function spherical_bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
+    r = norm(x1) # assume all are same radius        
+    x = Geometry.interpolate((x1, x2, x3, x4), ξ1, ξ2)
+    x = x * (r / norm(x))
 end

@@ -48,6 +48,15 @@ coordinate_axis(::Type{<:ZPoint}) = (3,)
 coordinate_axis(::Type{<:XYPoint}) = (1, 2)
 coordinate_axis(::Type{<:XZPoint}) = (1, 3)
 coordinate_axis(::Type{<:XYZPoint}) = (1, 2, 3)
+
+coordinate_axis(::Type{<:Cartesian1Point}) = (1,)
+coordinate_axis(::Type{<:Cartesian2Point}) = (2,)
+coordinate_axis(::Type{<:Cartesian3Point}) = (3,)
+
+coordinate_axis(::Type{<:Cartesian123Point}) = (1, 2, 3)
+
+coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
+
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
 @inline function idxin(I::Tuple{Vararg{Int}}, i::Int)
@@ -243,6 +252,7 @@ const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
 for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     strI = join(I)
     N = length(I)
+    strUVW = join(map(i -> [:U, :V, :W][i], I))
     @eval begin
         const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{$I}
         const $(Symbol(:Covariant, strI, :Vector)){T} =
@@ -255,6 +265,10 @@ for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
         const $(Symbol(:Cartesian, strI, :Axis)) = CartesianAxis{$I}
         const $(Symbol(:Cartesian, strI, :Vector)){T} =
             AxisVector{T, CartesianAxis{$I}, SVector{$N, T}}
+
+        const $(Symbol(strUVW, :Axis)) = LocalAxis{$I}
+        const $(Symbol(strUVW, :Vector)){T} =
+            AxisVector{T, LocalAxis{$I}, SVector{$N, T}}
     end
 end
 

@@ -1,6 +1,7 @@
 module Geometry
 
 using ..RecursiveApply
+using LinearAlgebra
 
 import StaticArrays: SVector
 
