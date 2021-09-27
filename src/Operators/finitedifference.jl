@@ -1706,6 +1706,17 @@ end
 column_rec(inds, arg) = (column(arg, inds...),)
 column_rec(inds, arg, args...) = (column(arg, inds...), column_rec(inds, args...)...)
 
+if VERSION >= v"1.7.0-beta1"
+# FIXME(vchuravy/aviatesk): This should not be necessary
+# we know the recursion is assured to terminate, tell it to the compiler
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(column_rec)
+        m.recursion_relation = dont_limit
+    end
+end
+end
+
 # This is self-referential when `bc.args` contains Broadcasted 
 @inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
