@@ -2,7 +2,7 @@ using Test, JETTest
 
 using ClimaCore.RecursiveApply
 
-if VERSION < v"1.7"
+if VERSION < v"1.7.0-beta1"
 for x in [
     1.0,
     1.0f0,
