@@ -28,7 +28,7 @@ column(x, inds...) = x
 function column_args end
 
 # See Base.Broadcast.preprocess_args
-@inline column_args(args::Tuple, inds...) = (column(args[1], inds...), column_args(Base.tail(args), args...)...)
+@inline column_args(args::Tuple, inds...) = (column(args[1], inds...), column_args(Base.tail(args), inds...)...)
 @inline column_args(args::Tuple{Any}, inds...) = (column(args[1], inds...),)
 @inline column_args(args::Tuple{}, inds...) = ()
 
