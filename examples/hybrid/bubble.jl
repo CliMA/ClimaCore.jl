@@ -127,6 +127,8 @@ function rhs!(dY, Y, _, t)
     # spectral horizontal operators
     hdiv = Operators.Divergence()
     hgrad = Operators.Gradient()
+    hwdiv = Operators.WeakDivergence()
+    hwgrad = Operators.WeakGradient()
 
     # vertical FD operators with BC's
     vdivf2c = Operators.DivergenceF2C(
@@ -165,16 +167,42 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
     )
 
+    fcc = Operators.FluxCorrectionC2C(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    fcf = Operators.FluxCorrectionF2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+
+
+    # 1) compute hyperviscosity coefficients
+    #
+    @. dYc.ρ = hdiv(hgrad(Yc.ρ))
+    @. dYc.ρθ = hdiv(hgrad(Yc.ρθ))
+    @. dYc.ρuₕ = hdiv(hgrad(Yc.ρuₕ))
+    @. dρw = hdiv(hgrad(ρw))
+    Spaces.weighted_dss!(dYc)
+
+    κ = 10.0
+    @. dYc.ρ = κ * hdiv(hgrad(dYc.ρ))
+    @. dYc.ρθ = κ * hdiv(hgrad(dYc.ρθ))
+    @. dYc.ρuₕ = κ * hdiv(hgrad(dYc.ρuₕ))
+    @. dρw = κ * hdiv(hgrad(dρw))
+
     uₕ = @. Yc.ρuₕ / Yc.ρ
     w = @. ρw / If(Yc.ρ)
+    wc = @. Ic(ρw) / Yc.ρ
     p = @. pressure(Yc.ρθ)
 
     # density
-    @. dYc.ρ = -∂(ρw)
+    @. dYc.ρ += -∂(ρw) + fcc(w, Yc.ρ)
     @. dYc.ρ -= hdiv(Yc.ρuₕ)
 
     # potential temperature
-    @. dYc.ρθ = -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
+    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ))) + fcc(w, Yc.ρθ)
     @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
 
     # horizontal momentum
@@ -184,20 +212,23 @@ function rhs!(dY, Y, _, t)
             @SMatrix [1.0]
         ),
     )
-    @. dYc.ρuₕ = -hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
-    @. dYc.ρuₕ -= uvdivf2c(ρw ⊗ If_bc(uₕ))
+    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If_bc(uₕ)) + fcc(w, Yc.ρuₕ)
+    @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
+
 
     # vertical momentum
-    @. dρw = B(
-        Geometry.transform(
-            Geometry.Cartesian3Axis(),
-            -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-        ) - vvdivc2f(Ic(ρw ⊗ w)),
-    )
+    @. dρw +=
+        B(
+            Geometry.transform(
+                Geometry.Cartesian3Axis(),
+                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
+            ) - vvdivc2f(Ic(ρw ⊗ w)),
+        ) + fcf(wc, ρw)
     uₕf = @. If_bc(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     # 3) diffusion
+    #=
     κ = 10.0 # m^2/s
 
     Yfρ = @. If(Yc.ρ)
@@ -219,6 +250,8 @@ function rhs!(dY, Y, _, t)
 
     # 2b) vertical div of vertial grad of potential temperature
     @. dYc.ρθ += ∂(κ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
+    =#
+
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)

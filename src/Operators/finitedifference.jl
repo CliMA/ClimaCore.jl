@@ -1078,6 +1078,189 @@ function stencil_right_boundary(
 end
 
 
+struct FluxCorrectionC2C{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+
+FluxCorrectionC2C(; kwargs...) = FluxCorrectionC2C(NamedTuple(kwargs))
+
+stencil_interior_width(::FluxCorrectionC2C) = ((-half, +half), (-1, 1))
+
+function return_space(
+    ::FluxCorrectionC2C,
+    velocity_space::Spaces.FaceFiniteDifferenceSpace,
+    field_space::Spaces.CenterFiniteDifferenceSpace,
+)
+    field_space
+end
+
+function return_space(
+    ::FluxCorrectionC2C,
+    velocity_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    field_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+)
+    field_space
+end
+
+
+function stencil_interior(
+    ::FluxCorrectionC2C,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    θ⁺ = getidx(value_field, loc, idx + 1)
+    θ = getidx(value_field, loc, idx)
+    θ⁻ = getidx(value_field, loc, idx - 1)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    ∂θ₃⁺ = θ⁺ ⊟ θ
+    ∂θ₃⁻ = θ ⊟ θ⁻
+    return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
+end
+
+boundary_width(op::FluxCorrectionC2C, ::Extrapolate) = 1
+function stencil_left_boundary(
+    ::FluxCorrectionC2C,
+    ::Extrapolate,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    @assert idx == left_center_boundary_idx(space)
+    θ⁺ = getidx(value_field, loc, idx + 1)
+    θ = getidx(value_field, loc, idx)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    ∂θ₃⁺ = θ⁺ ⊟ θ
+    return (abs(w³⁺) ⊠ ∂θ₃⁺)
+end
+
+function stencil_right_boundary(
+    ::FluxCorrectionC2C,
+    ::Extrapolate,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    @assert idx == right_center_boundary_idx(space)
+    θ = getidx(value_field, loc, idx)
+    θ⁻ = getidx(value_field, loc, idx - 1)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    ∂θ₃⁻ = θ ⊟ θ⁻
+    return ⊟(abs(w³⁻) ⊠ ∂θ₃⁻)
+end
+
+
+struct FluxCorrectionF2F{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+
+FluxCorrectionF2F(; kwargs...) = FluxCorrectionF2F(NamedTuple(kwargs))
+
+stencil_interior_width(::FluxCorrectionF2F) = ((-half, +half), (-1, 1))
+
+function return_space(
+    ::FluxCorrectionF2F,
+    velocity_space::Spaces.CenterFiniteDifferenceSpace,
+    field_space::Spaces.FaceFiniteDifferenceSpace,
+)
+    field_space
+end
+
+function return_space(
+    ::FluxCorrectionF2F,
+    velocity_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    field_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+)
+    field_space
+end
+
+
+function stencil_interior(
+    ::FluxCorrectionF2F,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    θ⁺ = getidx(value_field, loc, idx + 1)
+    θ = getidx(value_field, loc, idx)
+    θ⁻ = getidx(value_field, loc, idx - 1)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    ∂θ₃⁺ = θ⁺ ⊟ θ
+    ∂θ₃⁻ = θ ⊟ θ⁻
+    return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
+end
+
+boundary_width(op::FluxCorrectionF2F, ::Extrapolate) = 1
+function stencil_left_boundary(
+    ::FluxCorrectionF2F,
+    ::Extrapolate,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    @assert idx == left_face_boundary_idx(space)
+    θ⁺ = getidx(value_field, loc, idx + 1)
+    θ = getidx(value_field, loc, idx)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    ∂θ₃⁺ = θ⁺ ⊟ θ
+    return (abs(w³⁺) ⊠ ∂θ₃⁺)
+end
+
+function stencil_right_boundary(
+    ::FluxCorrectionF2F,
+    ::Extrapolate,
+    loc,
+    idx,
+    velocity_field,
+    value_field,
+)
+    space = axes(value_field)
+    @assert idx == right_face_boundary_idx(space)
+    θ = getidx(value_field, loc, idx)
+    θ⁻ = getidx(value_field, loc, idx - 1)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity_field, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    ∂θ₃⁻ = θ ⊟ θ⁻
+    return ⊟(abs(w³⁻) ⊠ ∂θ₃⁻)
+end
+
+
+
 abstract type BoundaryOperator <: FiniteDifferenceOperator end
 
 """
