@@ -1346,7 +1346,13 @@ stencil_interior_width(::DivergenceF2C) = ((-half, half),)
 end
 
 boundary_width(op::DivergenceF2C, ::SetValue) = 1
-@inline function stencil_left_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+@inline function stencil_left_boundary(
+    ::DivergenceF2C,
+    bc::SetValue,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == left_center_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
@@ -1360,7 +1366,13 @@ boundary_width(op::DivergenceF2C, ::SetValue) = 1
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
-@inline function stencil_right_boundary(::DivergenceF2C, bc::SetValue, loc, idx, arg)
+@inline function stencil_right_boundary(
+    ::DivergenceF2C,
+    bc::SetValue,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == right_center_boundary_idx(arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
@@ -1376,11 +1388,23 @@ end
 end
 
 boundary_width(op::DivergenceF2C, ::Extrapolate) = 1
-@inline function stencil_left_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+@inline function stencil_left_boundary(
+    op::DivergenceF2C,
+    ::Extrapolate,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, arg)
 end
-@inline function stencil_right_boundary(op::DivergenceF2C, ::Extrapolate, loc, idx, arg)
+@inline function stencil_right_boundary(
+    op::DivergenceF2C,
+    ::Extrapolate,
+    loc,
+    idx,
+    arg,
+)
     @assert idx == right_center_boundary_idx(arg)
     stencil_interior(op, loc, idx - 1, arg)
 end
@@ -1627,7 +1651,11 @@ Base.@propagate_inbounds function getidx(
     Fields.field_values(bc)[idx]
 end
 
-Base.@propagate_inbounds function getidx(bc::Fields.FaceFiniteDifferenceField, ::Location, idx::PlusHalf)
+Base.@propagate_inbounds function getidx(
+    bc::Fields.FaceFiniteDifferenceField,
+    ::Location,
+    idx::PlusHalf,
+)
     Fields.field_values(bc)[idx.i + 1]
 end
 
@@ -1642,9 +1670,14 @@ getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
 getidx(scalar, ::Location, idx) = scalar
 
 # unwap boxed scalars
-Base.@propagate_inbounds getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
+Base.@propagate_inbounds getidx(scalar::Ref, loc::Location, idx) =
+    getidx(scalar[], loc, idx)
 
-Base.@propagate_inbounds function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
+Base.@propagate_inbounds function getidx(
+    bc::Base.Broadcast.Broadcasted,
+    loc::Location,
+    idx,
+)
     args = tuplemap(bc.args) do arg
         Base.@_inline_meta
         getidx(arg, loc, idx) # FIXME: will not propagate inbounds into here
@@ -1652,11 +1685,19 @@ Base.@propagate_inbounds function getidx(bc::Base.Broadcast.Broadcasted, loc::Lo
     bc.f(args...)
 end
 
-Base.@propagate_inbounds function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
+Base.@propagate_inbounds function setidx!(
+    bc::Fields.CenterFiniteDifferenceField,
+    idx::Integer,
+    val,
+)
     Fields.field_values(bc)[idx] = val
 end
 
-Base.@propagate_inbounds function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
+Base.@propagate_inbounds function setidx!(
+    bc::Fields.FaceFiniteDifferenceField,
+    idx::PlusHalf,
+    val,
+)
     Fields.field_values(bc)[idx.i + 1] = val
 end
 

@@ -56,8 +56,4 @@ end
 divx = ones(Float64, vert_center_space)
 g!(divx, x)
 divx = ones(Float64, vert_center_space)
-if VERSION < v"1.7.0-beta1"
-    @test_broken @allocated(g!(divx, x)) == 0
-else
-    @test @allocated(g!(divx, x)) == 0
-end
+@test @allocated(g!(divx, x)) == 0
