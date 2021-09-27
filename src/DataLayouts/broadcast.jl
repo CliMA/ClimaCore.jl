@@ -121,7 +121,11 @@ end
     bc
 end
 
-@inline function column(bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}}, i, h)
+@inline function column(
+    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
+    i,
+    h,
+)
     Ref(slab(bc, h)[i])
 end
 

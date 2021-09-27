@@ -14,7 +14,11 @@ using Test
 
 Nv = 100
 
-vertdomain = Domains.IntervalDomain(Geometry.ZPoint(0.0), Geometry.ZPoint(1000.0), boundary_tags=(:bottom, :top))
+vertdomain = Domains.IntervalDomain(
+    Geometry.ZPoint(0.0),
+    Geometry.ZPoint(1000.0),
+    boundary_tags = (:bottom, :top),
+)
 
 vertmesh = Meshes.IntervalMesh(vertdomain, nelems = Nv)
 vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)

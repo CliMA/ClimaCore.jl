@@ -1524,7 +1524,7 @@ function left_interor_window_idx(
 )
     space = axes(bc)
     # maximum(arg -> left_interor_window_idx(arg, space, loc), bc.args)
-    max(tuplemap(arg->left_interor_window_idx(arg, space, loc), bc.args)...)
+    max(tuplemap(arg -> left_interor_window_idx(arg, space, loc), bc.args)...)
 end
 function right_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
@@ -1533,7 +1533,7 @@ function right_interor_window_idx(
 )
     space = axes(bc)
     #minimum(arg -> right_interor_window_idx(arg, space, loc), bc.args)
-    min(tuplemap(arg->right_interor_window_idx(arg, space, loc), bc.args)...)
+    min(tuplemap(arg -> right_interor_window_idx(arg, space, loc), bc.args)...)
 end
 
 function left_interor_window_idx(field::Field, _, loc::LeftBoundaryWindow)
@@ -1704,17 +1704,18 @@ end
 
 # Doesn't remove self-referential of `column`, but is best way of writing it.
 column_rec(inds, arg) = (column(arg, inds...),)
-column_rec(inds, arg, args...) = (column(arg, inds...), column_rec(inds, args...)...)
+column_rec(inds, arg, args...) =
+    (column(arg, inds...), column_rec(inds, args...)...)
 
 if VERSION >= v"1.7.0-beta1"
-# FIXME(vchuravy/aviatesk): This should not be necessary
-# we know the recursion is assured to terminate, tell it to the compiler
-if hasfield(Method, :recursion_relation)
-    dont_limit = (args...) -> true
-    for m in methods(column_rec)
-        m.recursion_relation = dont_limit
+    # FIXME(vchuravy/aviatesk): This should not be necessary
+    # we know the recursion is assured to terminate, tell it to the compiler
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(column_rec)
+            m.recursion_relation = dont_limit
+        end
     end
-end
 end
 
 # This is self-referential when `bc.args` contains Broadcasted 
@@ -1771,10 +1772,10 @@ end
     return field_out
 end
 
-@inline function tuplemap(f::F, tup) where F
+@inline function tuplemap(f::F, tup) where {F}
     ntuple(Val(length(tup))) do I
         Base.@_inline_meta
         @inbounds elem = tup[I]
         f(elem)
-    end 
+    end
 end
