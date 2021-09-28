@@ -2,30 +2,31 @@ env:
   JULIA_VERSION: "1.6.2"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
+  JULIA: "~/julia/v1.7.0/julia"
 
 steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
-      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
-      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project -e 'using Pkg; Pkg.status()'"
+      - "$JULIA --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
       queue: central
@@ -36,20 +37,20 @@ steps:
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
 
-      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
-      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
       # force the initialization of the CUDA runtime as it is lazily loaded by default
-      - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
-      - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+      - "$JULIA --project -e 'using CUDA; CUDA.precompile_runtime()'"
+      - "$JULIA --project -e 'using CUDA; CUDA.versioninfo()'"
 
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "$JULIA --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "$JULIA --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project -e 'using Pkg; Pkg.status()'"
+      - "$JULIA --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: gpu
       queue: central
@@ -61,7 +62,7 @@ steps:
   - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
-      - "julia --color=yes --project=test test/runtests.jl"
+      - "$JULIA --color=yes --project=test test/runtests.jl"
     agents:
       config: cpu
       queue: central
@@ -71,7 +72,7 @@ steps:
     key: "gpu_unittests"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --project=test test/runtests.jl CUDA"
+      - "$JULIA --color=yes --project=test test/runtests.jl CUDA"
     agents:
       config: gpu
       queue: central
@@ -81,7 +82,7 @@ steps:
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
     command:
-      - "julia --color=yes --project=examples/column examples/column/heat.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/heat.jl"
     artifact_paths:
       - "examples/column/output/heat/*"
     agents:
@@ -92,7 +93,7 @@ steps:
   - label: ":computer: Column Advection Eq"
     key: "cpu_column_advect"
     command:
-      - "julia --color=yes --project=examples/column examples/column/advect.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/advect.jl"
     artifact_paths:
       - "examples/column/output/advect/*"
     agents:
@@ -103,7 +104,7 @@ steps:
   - label: ":computer: Column Advection Diffusion Eq"
     key: "cpu_column_advect_diff"
     command:
-      - "julia --color=yes --project=examples/column examples/column/advect_diffusion.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/advect_diffusion.jl"
     artifact_paths:
       - "examples/column/output/advect_diffusion/*"
     agents:
@@ -114,7 +115,7 @@ steps:
   - label: ":computer: Column Ekman Eq"
     key: "cpu_column_ekman"
     command:
-      - "julia --color=yes --project=examples/column examples/column/ekman.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/ekman.jl"
     artifact_paths:
       - "examples/column/output/ekman/*"
     agents:
@@ -125,7 +126,7 @@ steps:
   - label: ":computer: Column Hydrostatic Ekman Eq"
     key: "cpu_column_hydrostatic_ekman"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic_ekman.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/hydrostatic_ekman.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic_ekman/*"
     agents:
@@ -136,7 +137,7 @@ steps:
   - label: ":computer: Column Wave Eq"
     key: "cpu_column_wave"
     command:
-      - "julia --color=yes --project=examples/column examples/column/wave.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/wave.jl"
     artifact_paths:
       - "examples/column/output/wave/*"
     agents:
@@ -147,7 +148,7 @@ steps:
   - label: ":computer: Column Hydrostatic Balance Eq"
     key: "cpu_column_hydrostatic"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/hydrostatic.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic/*"
     agents:
@@ -158,7 +159,7 @@ steps:
   - label: ":computer: Column Hydrostatic Balance Eq - implicit"
     key: "cpu_column_hydrostatic_implicit"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic_implicit.jl"
+      - "$JULIA --color=yes --project=examples/column examples/column/hydrostatic_implicit.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic_implicit/*"
     agents:
@@ -169,7 +170,7 @@ steps:
   - label: ":computer: Bickley jet CG"
     key: "cpu_bickleyjet_cg"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg.jl"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg/*"
     agents:
@@ -180,7 +181,7 @@ steps:
   - label: ":computer: Bickley jet CG unstructured mesh"
     key: "cpu_bickleyjet_cg_unsmesh"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_unsmesh/*"
     agents:
@@ -191,7 +192,7 @@ steps:
   - label: ":computer: Bickley jet CG vector invariant"
     key: "cpu_bickleyjet_cg_invariant"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant.jl"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_invariant/*"
     agents:
@@ -202,7 +203,7 @@ steps:
   - label: ":computer: Bickley jet CG vector invariant hyperviscosity"
     key: "cpu_bickleyjet_cg_invariant_hypervisc"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
     agents:
@@ -213,7 +214,7 @@ steps:
   - label: ":computer: Bickley jet DG rusanov"
     key: "cpu_bickleyjet_dg_rusanov"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl rusanov"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl rusanov"
     artifact_paths:
       - "examples/bickleyjet/output/dg_rusanov/*"
     agents:
@@ -224,7 +225,7 @@ steps:
   - label: ":computer: Bickley jet DG roe"
     key: "cpu_bickleyjet_dg_roe"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe"
     artifact_paths:
       - "examples/bickleyjet/output/dg_roe/*"
     agents:
@@ -235,7 +236,7 @@ steps:
   - label: ":computer: Bickley jet DG roe noslip"
     key: "cpu_bickleyjet_dg_roe_noslip"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe noslip"
+      - "$JULIA --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe noslip"
     artifact_paths:
       - "examples/bickleyjet/output/dg_roe_noslip/*"
     agents:
@@ -246,7 +247,7 @@ steps:
   - label: ":computer: Rising Bubble hybrid"
     key: "cpu_rising_bubble_hybrid"
     command:
-      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
+      - "$JULIA --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
     artifact_paths:
       - "examples/hybrid/output/bubble/*"
     agents:
@@ -257,7 +258,7 @@ steps:
   - label: ":flower_playing_cards: Bickley jet DG"
     key: "benchmark_bickleyjet_dg"
     command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/core_vs_ref.jl"
+      - "$JULIA --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/core_vs_ref.jl"
     artifact_paths:
       - "benchmarks/bickleyjet/*.png"
     agents:
@@ -269,7 +270,7 @@ steps:
   - label: ":computer: :fast_forward: Bickley jet DG reference thread scaling"
     key: "cpu_benchmark_bickleyjet_dg_thread_scaling"
     command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/ref_thread_scaling.jl"
+      - "$JULIA --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/ref_thread_scaling.jl"
     artifact_paths:
       - "benchmarks/bickleyjet/*.png"
     agents:
