@@ -20,8 +20,8 @@ using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 # A _domain_ a region of space (think of a mathematical domain). 
 
 column_domain = ClimaCore.Domains.IntervalDomain(
-    ClimaCore.Geometry.ZPoint(0.0)..ClimaCore.Geometry.ZPoint(10.0), 
-    boundary_tags=(:bottom,:top)
+    ClimaCore.Geometry.ZPoint(0.0)..ClimaCore.Geometry.ZPoint(10.0),
+    boundary_tags = (:bottom, :top),
 )
 #----------------------------------------------------------------------------
 
@@ -37,10 +37,11 @@ rectangle_domain = ClimaCore.Domains.RectangleDomain(
 # 
 # A _mesh_ is a division of a domain into elements
 
-column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems=32)
+column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems = 32)
 #----------------------------------------------------------------------------
 
-rectangle_mesh = ClimaCore.Meshes.EquispacedRectangleMesh(rectangle_domain , 16, 16)
+rectangle_mesh =
+    ClimaCore.Meshes.EquispacedRectangleMesh(rectangle_domain, 16, 16)
 #----------------------------------------------------------------------------
 
 # ### 1.3 Topologies 
@@ -64,7 +65,8 @@ rectangle_topology = ClimaCore.Topologies.GridTopology(rectangle_mesh)
 
 column_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(column_mesh)
 ## construct the face space from the center one
-column_face_space = ClimaCore.Spaces.FaceFiniteDifferenceSpace(column_center_space) 
+column_face_space =
+    ClimaCore.Spaces.FaceFiniteDifferenceSpace(column_center_space)
 #----------------------------------------------------------------------------
 
 # #### 1.4.2 Spectral element discretization
@@ -75,7 +77,8 @@ column_face_space = ClimaCore.Spaces.FaceFiniteDifferenceSpace(column_center_spa
 
 ## Gauss-Legendre-Lobatto quadrature with 4 nodes in each direction, so 16 in each element
 quad = ClimaCore.Spaces.Quadratures.GLL{4}()
-rectangle_space = ClimaCore.Spaces.SpectralElementSpace2D(rectangle_topology, quad)
+rectangle_space =
+    ClimaCore.Spaces.SpectralElementSpace2D(rectangle_topology, quad)
 #----------------------------------------------------------------------------
 
 # ### 1.5 Fields
@@ -111,8 +114,8 @@ column_center_coords = ClimaCore.Fields.coordinate_field(column_center_space)
 column_face_coords = ClimaCore.Fields.coordinate_field(column_face_space)
 #----------------------------------------------------------------------------
 
-plot(sin.(column_center_coords.z), ylim=(0.0,10.0))
-plot!(cos.(column_face_coords.z), ylim=(0.0,10.0))
+plot(sin.(column_center_coords.z), ylim = (0.0, 10.0))
+plot!(cos.(column_face_coords.z), ylim = (0.0, 10.0))
 #----------------------------------------------------------------------------
 
 # Reduction operations are defined anologously:
@@ -159,7 +162,7 @@ grad = ClimaCore.Operators.Gradient()
 ∇sinx = grad.(sinx)
 #----------------------------------------------------------------------------
 
-plot(∇sinx.components.data.:1, clim=(-1,1))
+plot(∇sinx.components.data.:1, clim = (-1, 1))
 #----------------------------------------------------------------------------
 
 # This returns the gradient in [_covariant_](https://en.wikipedia.org/wiki/Covariance_and_contravariance_of_vectors) coordinates
@@ -176,10 +179,10 @@ plot(∇sinx.components.data.:1, clim=(-1,1))
 ∇sinx_cart = ClimaCore.Geometry.CartesianVector.(∇sinx)
 #----------------------------------------------------------------------------
 
-plot(∇sinx_cart.components.data.:1, clim=(-1,1))
+plot(∇sinx_cart.components.data.:1, clim = (-1, 1))
 #----------------------------------------------------------------------------
 
-plot(∇sinx_cart.components.data.:2, clim=(-1,1))
+plot(∇sinx_cart.components.data.:2, clim = (-1, 1))
 #----------------------------------------------------------------------------
 
 ∇sinx_ref = ClimaCore.Geometry.Cartesian12Vector.(cos.(x), 0.0)
@@ -258,7 +261,10 @@ gradf2c = ClimaCore.Operators.GradientF2C()
 ∇cosz = gradf2c.(cosz)
 #----------------------------------------------------------------------------
 
-plot(ClimaCore.Geometry.CartesianVector.(∇cosz).components.data.:1, ylim=(0,10))
+plot(
+    ClimaCore.Geometry.CartesianVector.(∇cosz).components.data.:1,
+    ylim = (0, 10),
+)
 #----------------------------------------------------------------------------
 
 # **Center to face gradient**
@@ -302,12 +308,17 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 sinz = sin.(column_center_coords.z)
 gradc2f = ClimaCore.Operators.GradientC2F(
     bottom = ClimaCore.Operators.SetValue(sin(0.0)),
-    top = ClimaCore.Operators.SetGradient(ClimaCore.Geometry.Cartesian3Vector(cos(10.0)))
+    top = ClimaCore.Operators.SetGradient(
+        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
+    ),
 )
 ∇sinz = gradc2f.(sinz)
 #----------------------------------------------------------------------------
 
-plot(ClimaCore.Geometry.CartesianVector.(∇sinz).components.data.:1, ylim=(0,10))
+plot(
+    ClimaCore.Geometry.CartesianVector.(∇sinz).components.data.:1,
+    ylim = (0, 10),
+)
 #----------------------------------------------------------------------------
 
 # As before, multiple operators (or functions) can be fused together with broadcasting.
@@ -332,15 +343,19 @@ plot(ClimaCore.Geometry.CartesianVector.(∇sinz).components.data.:1, ylim=(0,10
 
 sinz = sin.(column_center_coords.z)
 ## we don't need to specify boundaries, as the stencil won't reach that far
-gradc2f = ClimaCore.Operators.GradientC2F() 
+gradc2f = ClimaCore.Operators.GradientC2F()
 divf2c = ClimaCore.Operators.DivergenceF2C(
-    bottom = ClimaCore.Operators.SetValue(ClimaCore.Geometry.Cartesian3Vector(cos(0.0))),
-    top = ClimaCore.Operators.SetValue(ClimaCore.Geometry.Cartesian3Vector(cos(10.0))),
+    bottom = ClimaCore.Operators.SetValue(
+        ClimaCore.Geometry.Cartesian3Vector(cos(0.0)),
+    ),
+    top = ClimaCore.Operators.SetValue(
+        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
+    ),
 )
 ∇∇sinz = divf2c.(gradc2f.(sinz))
 #----------------------------------------------------------------------------
 
-plot(∇∇sinz, ylim=(0,10))
+plot(∇∇sinz, ylim = (0, 10))
 #----------------------------------------------------------------------------
 
 # # 3. Solving PDEs
@@ -369,25 +384,22 @@ y0 = zeros(column_center_space)
 function heat_fd_tendency!(dydt, y, α, t)
     gradc2f = ClimaCore.Operators.GradientC2F(
         bottom = ClimaCore.Operators.SetValue(1.0),
-        top = ClimaCore.Operators.SetGradient(ClimaCore.Geometry.Cartesian3Vector(0.0)),
-    ) 
+        top = ClimaCore.Operators.SetGradient(
+            ClimaCore.Geometry.Cartesian3Vector(0.0),
+        ),
+    )
     divf2c = ClimaCore.Operators.DivergenceF2C()
     ## the @. macro "dots" the whole expression
     ## i.e.  dydt .= α .* divf2c.(gradc2f.(y))
     @. dydt = α * divf2c(gradc2f(y))
 end
-    
+
 heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 50.0), 0.1)
-heat_fd_sol = solve(
-    heat_fd_prob,
-    SSPRK33(),
-    dt = 0.1,
-    saveat = 0.25,
-)
+heat_fd_sol = solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = 0.25)
 #----------------------------------------------------------------------------
 
 Plots.@gif for u in heat_fd_sol.u
-    plot(u, xlim=(0,1), ylim = (0, 10))
+    plot(u, xlim = (0, 1), ylim = (0, 10))
 end
 #----------------------------------------------------------------------------
 
@@ -406,15 +418,10 @@ function heat_cg_tendency!(dydt, y, α, t)
     return dydt
 end
 
-y0 = exp.(.-(coord.y.^2 .+ coord.x.^2)./2)
+y0 = exp.(.-(coord.y .^ 2 .+ coord.x .^ 2) ./ 2)
 
 heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 50.0), 0.1)
-heat_cg_sol = solve(
-    heat_cg_prob,
-    SSPRK33(),
-    dt = 0.1,
-    saveat = 0.5,
-)
+heat_cg_sol = solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = 0.5)
 #----------------------------------------------------------------------------
 
 Plots.@gif for u in heat_cg_sol.u
@@ -480,14 +487,18 @@ function init_state(local_geometry, p)
 end
 
 
-y0 = init_state.(ClimaCore.Fields.local_geometry_field(rectangle_space), Ref(parameters))
+y0 =
+    init_state.(
+        ClimaCore.Fields.local_geometry_field(rectangle_space),
+        Ref(parameters),
+    )
 
 ## plot initial tracer
 Plots.plot(y0.ρθ)
 #----------------------------------------------------------------------------
 
 function shallow_water_tendency!(dydt, y, _, t)
-    
+
     space = axes(y)
     J = ClimaCore.Fields.local_geometry_field(space).J
 
@@ -532,16 +543,12 @@ end
 #----------------------------------------------------------------------------
 
 shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 80.0))
-@time shallow_water_sol = solve(
-    shallow_water_prob,
-    SSPRK33(),
-    dt = 0.05,
-    saveat = 1.0,
-)
+@time shallow_water_sol =
+    solve(shallow_water_prob, SSPRK33(), dt = 0.05, saveat = 1.0)
 #----------------------------------------------------------------------------
 
 Plots.@gif for u in shallow_water_sol.u
-    Plots.plot(u.ρθ , clim = (-1, 1))
+    Plots.plot(u.ρθ, clim = (-1, 1))
 end
 #----------------------------------------------------------------------------
 
