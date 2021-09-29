@@ -106,6 +106,26 @@ function transform(
         local_geometry.∂x∂ξ' * transform(dual(axes(local_geometry.∂x∂ξ, 1)), v),
     )
 end
+function transform(
+    ax::LocalAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x' * transform(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+    )
+end
+function transform(
+    ax::CovariantAxis,
+    v::LocalTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂x∂ξ' * transform(dual(axes(local_geometry.∂x∂ξ, 1)), v),
+    )
+end
 
 # Contravariant <-> Cartesian
 function transform(
@@ -120,6 +140,26 @@ function transform(
 end
 function transform(
     ax::CartesianAxis,
+    v::ContravariantTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂x∂ξ * transform(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+    )
+end
+function transform(
+    ax::ContravariantAxis,
+    v::LocalTensor,
+    local_geometry::LocalGeometry,
+)
+    transform(
+        ax,
+        local_geometry.∂ξ∂x * transform(dual(axes(local_geometry.∂ξ∂x, 2)), v),
+    )
+end
+function transform(
+    ax::LocalAxis,
     v::ContravariantTensor,
     local_geometry::LocalGeometry,
 )
@@ -161,6 +201,7 @@ transform(ato::ContravariantAxis, v::ContravariantTensor, ::LocalGeometry) =
     transform(ato, v)
 transform(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
     transform(ato, v)
+transform(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = transform(ato, v)
 
 
 

@@ -209,6 +209,7 @@ AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
 const CovariantVector{T, A1 <: CovariantAxis, S} = AxisVector{T, A1, S}
 const ContravariantVector{T, A1 <: ContravariantAxis, S} = AxisVector{T, A1, S}
 const CartesianVector{T, A1 <: CartesianAxis, S} = AxisVector{T, A1, S}
+const LocalVector{T, A1 <: LocalAxis, S} = AxisVector{T, A1, S}
 
 Base.propertynames(x::AxisVector) = symbols(axes(x, 1))
 function Base.getproperty(x::AxisVector, name::Symbol)
@@ -244,10 +245,13 @@ const Contravariant2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {A <: Tuple{ContravariantAxis, AbstractAxis}}
 const Cartesian2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {A <: Tuple{CartesianAxis, AbstractAxis}}
+const Local2Tensor{T, A, S} =
+    Axis2Tensor{T, A, S} where {A <: Tuple{LocalAxis, AbstractAxis}}
 
 const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
 const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
 const CartesianTensor = Union{CartesianVector, Cartesian2Tensor}
+const LocalTensor = Union{LocalVector, Local2Tensor}
 
 for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     strI = join(I)
@@ -445,6 +449,9 @@ function transform(ato::ContravariantAxis, v::ContravariantTensor)
     _transform(ato, v)
 end
 function transform(ato::CartesianAxis, v::CartesianTensor)
+    _transform(ato, v)
+end
+function transform(ato::LocalAxis, v::LocalTensor)
     _transform(ato, v)
 end
 
