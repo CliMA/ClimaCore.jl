@@ -1,10 +1,6 @@
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using ClimaCore.Meshes: EquidistantSphereWarp, EquiangularSphereWarp, Mesh2D
-using LinearAlgebra, IntervalSets
+using LinearAlgebra, IntervalSets, UnPack
+import ClimaCore: Domains, Topologies, Meshes, Spaces
+import ClimaCore.Meshes: EquiangularSphereWarp, Mesh2D
 
 using Test
 
