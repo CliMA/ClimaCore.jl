@@ -14,7 +14,7 @@ using Test
     mesh = Mesh2D(domain, EquiangularSphereWarp(), ne)
     grid_topology = Topologies.Grid2DTopology(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
-    space = Spaces.SpectralElementSpace2D_sphere(grid_topology, quad)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3
 end

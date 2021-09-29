@@ -27,7 +27,7 @@ domain = Domains.SphereDomain(R)
 mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), ne)
 grid_topology = Topologies.Grid2DTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
-space = Spaces.SpectralElementSpace2D_sphere(grid_topology, quad)
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 
 coords = Fields.coordinate_field(space)

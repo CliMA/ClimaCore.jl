@@ -288,7 +288,12 @@ nlevels(space::SpectralElementSpace2D) = 1
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
-function SpectralElementSpace2D_sphere(topology, quadrature_style)
+function SpectralElementSpace2D(
+    topology::Topologies.Grid2DTopology{
+        <:Meshes.Mesh2D{<:Domains.SphereDomain},
+    },
+    quadrature_style,
+)
     FT = eltype(topology.mesh)
     CT = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
     CoordType3D = Topologies.coordinate_type(topology)
