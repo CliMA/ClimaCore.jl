@@ -19,16 +19,16 @@ global_logger(TerminalLogger())
 
 const FT = Float64
 
-a = FT(-20.0)
-b = FT(20.0)
+a = Geometry.ZPoint(FT(-20.0))
+b = Geometry.ZPoint(FT(20.0))
 n = 64
 α = FT(0.1)
 
-function heaviside(t)
-    0.5 * (sign(t) + 1)
+function heaviside(pt)
+    0.5 * (sign(pt.z) + 1)
 end
 
-domain = Domains.IntervalDomain(a, b, x3boundary = (:left, :right))
+domain = Domains.IntervalDomain(a, b, boundary_tags = (:left, :right))
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -50,8 +50,8 @@ function tendency1!(dθ, θ, _, t)
         right = Operators.Extrapolate(),
     )
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(sin(a - t)),
-        right = Operators.SetValue(sin(b - t)),
+        left = Operators.SetValue(sin(a.z - t)),
+        right = Operators.SetValue(sin(b.z - t)),
     )
     ∂ = Operators.DivergenceF2C()
 
@@ -67,8 +67,8 @@ function tendency2!(dθ, θ, _, t)
         right = Operators.Extrapolate(),
     )
     UB = Operators.UpwindBiasedProductC2F(
-        left = Operators.SetValue(sin(a - t)),
-        right = Operators.SetValue(sin(b - t)),
+        left = Operators.SetValue(sin(a.z - t)),
+        right = Operators.SetValue(sin(b.z - t)),
     )
     ∂ = Operators.DivergenceF2C()
     return @. dθ = -∂(UB(V, θ)) + fcc(V, θ)

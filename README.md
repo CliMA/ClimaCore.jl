@@ -1,4 +1,6 @@
-ClimaCore.jl
+# ClimaCore.jl
+
+CliMA model dycore
 
 |||
 |---------------------:|:----------------------------------------------|
@@ -19,7 +21,7 @@ ClimaCore.jl
 [gha-ci-url]: https://github.com/CliMA/ClimaCore.jl/actions/workflows/OS-UnitTests.yml
 
 [buildkite-ci-img]: https://badge.buildkite.com/2b63d3c49347804f61bd8e99c8b85e05871253b92612cd1af4.svg
-[buildkite-ci-url]: https://buildkite.com/clima/ClimaCore-ci
+[buildkite-ci-url]: https://buildkite.com/clima/climacore-ci
 
 [codecov-img]: https://codecov.io/gh/CliMA/ClimaCore.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/CliMA/ClimaCore.jl

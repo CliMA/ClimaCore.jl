@@ -89,6 +89,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column Advection Step Eq"
+    key: "cpu_column_step_advect"
+    command:
+      - "julia --color=yes --project=examples/column examples/column/step.jl"
+    artifact_paths:
+      - "examples/column/output/advect_step_function/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Column Advection Eq"
     key: "cpu_column_advect"
     command:
