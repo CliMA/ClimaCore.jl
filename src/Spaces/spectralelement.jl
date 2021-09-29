@@ -283,6 +283,171 @@ end
 
 nlevels(space::SpectralElementSpace2D) = 1
 
+"""
+    SpectralElementSpace2D_sphere(topology, quadrature_style)
+
+Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
+"""
+function SpectralElementSpace2D(
+    topology::Topologies.Grid2DTopology{
+        <:Meshes.Mesh2D{<:Domains.SphereDomain},
+    },
+    quadrature_style,
+)
+    FT = eltype(topology.mesh)
+    CT = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
+    CoordType3D = Topologies.coordinate_type(topology)
+    AIdx = Geometry.coordinate_axis(CoordType3D)
+    radius = topology.mesh.domain.radius
+    nelements = Topologies.nlocalelems(topology)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    # types of the partial derivative tensors
+    # ∂r∂ξ
+    Mxξ = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    }
+    # ∂ξ∂r
+    Mξx = Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.Contravariant12Axis, Geometry.UVAxis},
+        SMatrix{2, 2, FT, 4},
+    }
+    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
+    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
+    quad_points, quad_weights =
+        Quadratures.quadrature_points(FT, quadrature_style)
+    for elem in 1:nelements
+        local_geometry_slab = slab(local_geometry, elem)
+        for i in 1:Nq, j in 1:Nq
+            # compute the coordinate and partial derivative matrices for each quadrature point
+            # Guba (2014))
+            ξ = SVector(quad_points[i], quad_points[j])
+            x = Geometry.spherical_bilinear_interpolate(
+                CoordType3D.(Topologies.vertex_coordinates(topology, elem),),
+                ξ[1],
+                ξ[2],
+            )
+            xl = Geometry.LatLongPoint(x)
+            ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
+                Geometry.components(
+                    Geometry.spherical_bilinear_interpolate(
+                        CoordType3D.(
+                            Topologies.vertex_coordinates(topology, elem),
+                        ),
+                        ξ[1],
+                        ξ[2],
+                    ),
+                )
+            end
+            if abs(xl.lat) ≈ oftype(xl.lat, 90.0)
+                # at the pole: choose u to line with x1, v to line with x2
+                ∂u∂ξ = ∂x∂ξ[SOneTo(2), :]
+            else
+                θ = xl.lat
+                λ = xl.long
+                F = @SMatrix [
+                    -sind(λ) cosd(λ) 0
+                    0 0 1/cosd(θ)
+                ]
+                ∂u∂ξ = F * ∂x∂ξ
+            end
+
+            J = abs(det(∂u∂ξ))
+            @assert J ≈ sqrt(det(∂x∂ξ' * ∂x∂ξ))
+            ∂ξ∂u = inv(∂u∂ξ)
+            WJ = J * quad_weights[i] * quad_weights[j]
+
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(
+                xl,
+                J,
+                WJ,
+                Geometry.AxisTensor(
+                    (Geometry.UVAxis(), Geometry.Covariant12Axis()),
+                    ∂u∂ξ,
+                ),
+                Geometry.AxisTensor(
+                    (Geometry.Contravariant12Axis(), Geometry.UVAxis()),
+                    ∂ξ∂u,
+                ),
+            )
+        end
+    end
+    # dss_weights = J ./ dss(J)
+    dss_weights = copy(local_geometry.J)
+    dss_2d!(dss_weights, local_geometry.J, topology, Nq)
+    dss_weights .= local_geometry.J ./ dss_weights
+
+    SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
+    interior_faces = Topologies.interior_faces(topology)
+
+    internal_surface_geometry =
+        DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
+    for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
+        enumerate(interior_faces)
+        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
+
+        local_geometry_slab⁻ = slab(local_geometry, elem⁻)
+        local_geometry_slab⁺ = slab(local_geometry, elem⁺)
+
+        for q in 1:Nq
+            sgeom⁻ = compute_surface_geometry(
+                local_geometry_slab⁻,
+                quad_weights,
+                face⁻,
+                q,
+                false,
+            )
+            sgeom⁺ = compute_surface_geometry(
+                local_geometry_slab⁺,
+                quad_weights,
+                face⁺,
+                q,
+                false,
+            )
+
+            @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
+            @assert sgeom⁻.normal ≈ -sgeom⁺.normal
+
+            internal_surface_geometry_slab[q] = sgeom⁻
+        end
+    end
+
+    boundary_surface_geometries =
+        map(Topologies.boundaries(topology)) do boundarytag
+            boundary_faces = Topologies.boundary_faces(topology, boundarytag)
+            boundary_surface_geometry =
+                DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
+            for (iface, (elem, face)) in enumerate(boundary_faces)
+                boundary_surface_geometry_slab =
+                    slab(boundary_surface_geometry, iface)
+                local_geometry_slab = slab(local_geometry, elem)
+                for q in 1:Nq
+                    boundary_surface_geometry_slab[q] =
+                        compute_surface_geometry(
+                            local_geometry_slab,
+                            quad_weights,
+                            face,
+                            q,
+                            false,
+                        )
+                end
+            end
+            boundary_surface_geometry
+        end
+
+    return SpectralElementSpace2D(
+        topology,
+        quadrature_style,
+        local_geometry,
+        dss_weights,
+        internal_surface_geometry,
+        boundary_surface_geometries,
+    )
+    return nothing
+end
+
 function compute_surface_geometry(
     local_geometry_slab,
     quad_weights,
