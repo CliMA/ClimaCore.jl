@@ -75,7 +75,6 @@ function UnicodePlots.lineplot(
     UnicodePlots.lineplot(
         xdata,
         ydata;
-        title = "Column",
         xlabel = xlabel,
         ylabel = ylabel,
         ylim = [ylim[1], ylim[2]],
@@ -96,7 +95,6 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     coord_symbols = propertynames(coord_field)
 
     # set the plot attributes
-    title --> "Column"
     xguide --> "value"
     yguide --> (
         if field isa Spaces.FaceFiniteDifferenceSpace
@@ -113,6 +111,71 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
 
     (xdata, ydata)
 end
+
+RecipesBase.@recipe function f(
+    space::Spaces.SpectralElementSpace2D;
+)
+    quad = Spaces.quadrature_style(space)
+    quad_name = Base.typename(typeof(quad)).name
+    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+
+    coord_field = Fields.coordinate_field(space)
+    x1coord = vec(parent(coord_field)[:, :, 1, :])
+    x2coord = vec(parent(coord_field)[:, :, 2, :])
+
+    coord_symbols = propertynames(coord_field)
+
+    seriestype := :scatter
+    title --> "$n1 × $n2 $quad_name{$dof} element space"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    marker --> :cross
+    markersize --> 1
+    seriescolor --> :blue
+    legend --> false
+
+    (x1coord, x2coord)
+end
+
+RecipesBase.@recipe function f(
+    space::Spaces.ExtrudedFiniteDifferenceSpace
+)
+    coord_field = Fields.coordinate_field(space)
+    data = Fields.field_values(coord_field)
+    Ni, Nj, _, Nv, Nh = size(data)
+
+    #TODO: assumes VIFH layout
+    @assert Nj == 1 "plotting only defined for 1D extruded fields"
+
+    hspace = space.horizontal_space
+
+    quad = Spaces.quadrature_style(hspace)
+    quad_name = Base.typename(typeof(quad)).name
+    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+
+    coord_symbols = propertynames(coord_field)
+    hcoord = vec(parent(coord_field)[:, :, 1, :])
+    vcoord = vec(parent(coord_field)[:, :, 2, :])
+
+    stagger = space.staggering isa Spaces.CellCenter ? :center : :face
+
+    seriestype := :scatter
+    title --> "$Nh $quad_name{$dof} element × $Nv level $stagger space"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    marker --> :cross
+    markersize --> 1
+    seriescolor --> :blue
+    legend --> false
+
+    (hcoord, vcoord)
+end
+
 
 RecipesBase.@recipe function f(
     field::Fields.SpectralElementField2D;
