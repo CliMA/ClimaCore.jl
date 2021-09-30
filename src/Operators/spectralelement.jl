@@ -1463,7 +1463,7 @@ function matrix_interpolate(
     quadrature_style = Spaces.quadrature_style(space)
     nl = Spaces.nlevels(space)
     mesh = Spaces.topology(space).mesh
-    n1 = mesh.n1
+    n1 = Meshes.nlocalelems(mesh)
     interp_data = DataLayouts.IV1JH2{S, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
