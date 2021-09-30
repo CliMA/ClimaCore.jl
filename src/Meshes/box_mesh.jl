@@ -13,6 +13,53 @@ function equispaced_rectangular_mesh(
     return Mesh2D(domain, x1c, x2c)
 end
 
+function Base.getproperty(
+    mesh::Meshes.Mesh2D{<:Domains.RectangleDomain},
+    s::Symbol,
+)
+    if s == :n1
+        return get_n1(mesh)
+    elseif s == :n2
+        return get_n2(mesh)
+    else
+        return Base.getfield(mesh, s)
+    end
+end
+
+function get_n1(mesh::Meshes.Mesh2D{<:Domains.RectangleDomain})
+    elem_faces = mesh.elem_faces
+    face_neighbors = mesh.face_neighbors
+    elem, next_elem, n1 = 1, 2, 0
+    while next_elem > 1
+        n1 += 1
+        face = elem_faces[elem, 2]
+        if face_neighbors[face, 1] == elem
+            next_elem = face_neighbors[face, 3]
+        else
+            next_elem = face_neighbors[face, 1]
+        end
+        elem = next_elem
+    end
+    return n1
+end
+
+function get_n2(mesh::Meshes.Mesh2D{<:Domains.RectangleDomain})
+    elem_faces = mesh.elem_faces
+    face_neighbors = mesh.face_neighbors
+    elem, next_elem, n2 = 1, 2, 0
+    while next_elem > 1
+        n2 += 1
+        face = elem_faces[elem, 4]
+        if face_neighbors[face, 1] == elem
+            next_elem = face_neighbors[face, 3]
+        else
+            next_elem = face_neighbors[face, 1]
+        end
+        elem = next_elem
+    end
+    return n2
+end
+
 """
     rectangular_mesh(x1c, x2c, per = (false, false))
 

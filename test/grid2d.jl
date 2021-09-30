@@ -23,21 +23,10 @@ function rectangular_grid(
         x1boundary = x1periodic ? nothing : (:west, :east),
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
-    #=
-    domain = Domains.RectangleDomain(
-        x1min..x1max,
-        x2min..x2max,
-        x1periodic = x1periodic,
-        x2periodic = x2periodic,
-        x1boundary = x1periodic ? nothing : (:west, :east),
-        x2boundary = x2periodic ? nothing : (:south, :north),
-    )
-    =#
     mesh = equispaced_rectangular_mesh(domain, n1, n2)
     grid_topology = Topologies.Grid2DTopology(mesh)
     return (domain, mesh, grid_topology)
 end
-
 
 @testset "simple rectangular grid opposing face" begin
 
@@ -298,5 +287,18 @@ end
         @test eltype(c2) == BigFloat
         @test getfield(c2, 1) ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
         @test getfield(c2, 2) == 0.0
+    end
+end
+
+@testset "test get_n1, get_n2 for rectangular mesh" begin
+    @testset "3×4 element quad mesh with non-periodic boundaries" begin
+        _, mesh, _ = rectangular_grid(3, 4, false, false)
+        @test mesh.n1 == 3
+        @test mesh.n2 == 4
+    end
+    @testset "4×9 element quad mesh with periodic boundaries" begin
+        _, mesh, _ = rectangular_grid(4, 9, true, true)
+        @test mesh.n1 == 4
+        @test mesh.n2 == 9
     end
 end

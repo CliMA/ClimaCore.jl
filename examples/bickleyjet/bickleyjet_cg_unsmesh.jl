@@ -128,5 +128,22 @@ dirname = "cg_unsmesh"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
+anim = Plots.@animate for u in sol.u
+    Plots.plot(u.ρθ, clim = (-1, 1))
+end
+Plots.mp4(anim, joinpath(path, "tracer_uns2dmesh.mp4"), fps = 10)
+
 Es = [total_energy(u, parameters) for u in sol.u]
 Plots.png(Plots.plot(Es), joinpath(path, "energy_uns2dmesh.png"))
+
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig("output/$(dirname)/energy_uns2dmesh.png", "Total Energy")
