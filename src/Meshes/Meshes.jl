@@ -296,6 +296,7 @@ Mesh2D(
 include("box_mesh.jl")
 include("warp_cube_to_sphere.jl")
 include("sphere_mesh.jl")
+include("partition.jl")
 
 # implementations
 include("tensorproductmesh.jl")
