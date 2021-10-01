@@ -217,6 +217,52 @@ RecipesBase.@recipe function f(
 end
 
 RecipesBase.@recipe function f(
+    field::Fields.CubedSphereSpectralElementField2D;
+    interpolate=10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    space = axes(field)
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+
+    coord_field = Fields.coordinate_field(space)
+
+    nelem = Topologies.nlocalelems(topology)
+    pannel_size = div(nelem, 6)
+
+    pannel_range(i) =
+        (pannel_size * (i - 1) + 1) : (pannel_size * (i - 1) + pannel_size)
+
+    pannel_data = []
+    for i in 1:6
+        push!(pannel_data, reshape(parent(field)[:, :, 1, pannel_range(i)], (pannel_size, pannel_size)))
+    end
+    unfolded_pannels = fill(NaN, (pannel_size * 3, pannel_size * 4))
+
+    # top most pannel
+    unfolded_pannels[pannel_range(1), pannel_range(2)] = pannel_data[3]
+    # center pannels
+    unfolded_pannels[pannel_range(2), pannel_range(1)] = pannel_data[4]
+    unfolded_pannels[pannel_range(2), pannel_range(2)] = pannel_data[1]
+    unfolded_pannels[pannel_range(2), pannel_range(3)] = pannel_data[2]
+    unfolded_pannels[pannel_range(2), pannel_range(4)] = pannel_data[6]
+    # bottom pannel
+    unfolded_pannels[pannel_range(3), pannel_range(2)] = pannel_data[5]
+
+    # set the plot attributes
+    seriestype := :heatmap
+    coord_field = Fields.coordinate_field(space)
+
+    coord_symbols = propertynames(coord_field)
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    seriescolor --> :balance
+
+    (unfolded_pannels)
+end
+
+RecipesBase.@recipe function f(
     field::Fields.ExtrudedFiniteDifferenceField;
     hinterpolate = 0,
 )
@@ -257,6 +303,7 @@ RecipesBase.@recipe function f(
 
     (hcoord, vcoord, data)
 end
+
 
 function play(
     timesteps::Vector;

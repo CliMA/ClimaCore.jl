@@ -2,11 +2,12 @@ module Fields
 
 import ..slab
 import ..column
+import ..RecursiveApply
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
+import ..Domains
+import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..RecursiveApply
-import ..Topologies
 
 import LinearAlgebra
 
@@ -38,7 +39,6 @@ const SpectralElementField2D{V, S} =
 const SpectralElementField1D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
 
-# Finite Difference Field
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
 
@@ -66,6 +66,9 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+# Cubed Sphere Fields
+const CubedSphereSpectralElementField2D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)
