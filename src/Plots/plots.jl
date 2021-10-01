@@ -112,9 +112,7 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     (xdata, ydata)
 end
 
-RecipesBase.@recipe function f(
-    space::Spaces.SpectralElementSpace2D;
-)
+RecipesBase.@recipe function f(space::Spaces.SpectralElementSpace2D;)
     quad = Spaces.quadrature_style(space)
     quad_name = Base.typename(typeof(quad)).name
     dof = Spaces.Quadratures.degrees_of_freedom(quad)
@@ -142,9 +140,7 @@ RecipesBase.@recipe function f(
     (x1coord, x2coord)
 end
 
-RecipesBase.@recipe function f(
-    space::Spaces.ExtrudedFiniteDifferenceSpace
-)
+RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     coord_field = Fields.coordinate_field(space)
     data = Fields.field_values(coord_field)
     Ni, Nj, _, Nv, Nh = size(data)
@@ -217,6 +213,91 @@ RecipesBase.@recipe function f(
 end
 
 RecipesBase.@recipe function f(
+    field::Fields.CubedSphereSpectralElementField2D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    space = axes(field)
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+
+    nelem = Topologies.nlocalelems(topology)
+    panel_size = isqrt(div(nelem, 6))
+
+    quad_from = Spaces.quadrature_style(space)
+    quad_to = Spaces.Quadratures.Uniform{interpolate}()
+    Imat = Spaces.Quadratures.interpolation_matrix(Float64, quad_to, quad_from)
+
+    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
+    dof = interpolate
+
+    pannel_range(i) =
+        ((panel_size * dof) * (i - 1) + 1):((panel_size * dof) * i)
+
+    # construct a matrix to fill in the rotated / flipped pannel data
+    unfolded_panels =
+        fill(NaN, ((panel_size * dof) * 3, (panel_size * dof) * 4))
+
+    # temporary pannels as we have to rotate / flip some and not all operators are in place
+    # TODO: inefficient memory wise, but good enough for now
+    panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
+
+    interpolated_data =
+        DataLayouts.IJFH{Float64, interpolate}(Array{Float64}, nelem)
+    Operators.tensor_product!(
+        interpolated_data,
+        Fields.field_values(field),
+        Imat,
+    )
+
+    # element index ordering defined by a specific layout
+    eidx = 1
+    for panel_idx in 1:6
+        panel_data = panels[panel_idx]
+        # elements are ordered along fastest axis defined in sphere box mesh
+        for ex2 in 1:panel_size, ex1 in 1:panel_size
+            # compute the nodal extent index range for this element
+            x1_nodal_range = (dof * (ex1 - 1) + 1):(dof * ex1)
+            x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
+            # transpose the data as our plotting axis order is
+            # reverse nodal element order (x1 axis varies fastest)
+            data_element = permutedims(parent(interpolated_data)[:, :, 1, eidx])
+            panel_data[x2_nodal_range, x1_nodal_range] = data_element
+            eidx += 1
+        end
+    end
+
+    # fill in the panel data doing the correct flipping / rotations wrt to pannel reference vertex
+    # "top" pannel (will be 3 when flipped)
+    unfolded_panels[pannel_range(1), pannel_range(2)] =
+        reverse!(panels[5], dims = 1)
+    # center pannels
+    unfolded_panels[pannel_range(2), pannel_range(1)] = rotr90(panels[4], 1)
+    unfolded_panels[pannel_range(2), pannel_range(2)] = panels[1]
+    unfolded_panels[pannel_range(2), pannel_range(3)] =
+        reverse!(rotl90(panels[2]), dims = 1)
+    unfolded_panels[pannel_range(2), pannel_range(4)] =
+        reverse!(panels[6], dims = 2)
+    # "bottom pannel" (will be 5 when flipped)
+    unfolded_panels[pannel_range(3), pannel_range(2)] = panels[3]
+
+    # flip whole unfolded pannel vertically in place get the "right" orentation
+    # with respect to the plotting reference coord in lower left
+    reverse!(unfolded_panels, dims = 1)
+
+    quad_from_name = Base.typename(typeof(quad_from)).name
+    # set the plot attributes
+    seriestype := :heatmap
+    title --> "$nelem $quad_from_name{$dof_in} element space"
+    xguide --> "panel x1"
+    yguide --> "panel x2"
+    seriescolor --> :balance
+
+    (unfolded_panels)
+end
+
+RecipesBase.@recipe function f(
     field::Fields.ExtrudedFiniteDifferenceField;
     hinterpolate = 0,
 )
@@ -257,6 +338,7 @@ RecipesBase.@recipe function f(
 
     (hcoord, vcoord, data)
 end
+
 
 function play(
     timesteps::Vector;

@@ -8,6 +8,7 @@ import ..Geometry:
     Geometry, Cartesian12Vector, Covariant12Vector, Contravariant12Vector, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
 import ..Topologies
+import ..Meshes
 import ..Fields: Fields, Field
 using ..RecursiveApply
 
