@@ -7,7 +7,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
 
 using OrdinaryDiffEq
 
-@testset "2D field Poisson problem - ∇⋅∇ = f" begin
+@testset "Scalar Poisson problem - ∇⋅∇ = f in 2D" begin
     # Poisson equation
     # - ∇⋅(∇ u(x,y)) = f(x,y)
 
@@ -23,7 +23,7 @@ using OrdinaryDiffEq
         x2periodic = true,
     )
 
-    mesh = Meshes.EquispacedRectangleMesh(domain, 3, 3)
+    mesh = Meshes.EquispacedRectangleMesh(domain, 10, 10)
     grid_topology = Topologies.GridTopology(mesh)
 
     Nq = 6
@@ -31,28 +31,40 @@ using OrdinaryDiffEq
     points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    x = Fields.coordinate_field(space).x
-    y = Fields.coordinate_field(space).y
-    c₁ = 0.0
-    k₁ = 1.0
-    c₂ = 2.0
-    k₂ = 3.0
-
     # Define eigensolution
-    u(coord, c₁, c₂, k₁, k₂) = sin(c₁ + k₁ * coord.x) * sin(c₂ + k₂ * coord.y)
-    true_sol = u.(Fields.coordinate_field(space), c₁, c₂, k₁, k₂)
+    u = map(Fields.coordinate_field(space)) do coord
+        c₁ = 0.0
+        k₁ = 1.0
+        c₂ = 2.0
+        k₂ = 3.0
+        sin(c₁ + k₁ * coord.x) * sin(c₂ + k₂ * coord.y)
+    end
 
-    function diffusion(f)
-        diff = zeros(eltype(f), space)
-        ∇f = Operators.slab_gradient(f)
-        diff .= Operators.slab_weak_divergence(∇f)
+    function laplacian_u(space)
+        coords = Fields.coordinate_field(space)
+        laplacian_u = map(coords) do coord
+            c₁ = 0.0
+            k₁ = 1.0
+            c₂ = 2.0
+            k₂ = 3.0
+            (k₁^2 + k₂^2) * sin(c₁ + k₁ * coord.x) * sin(c₂ + k₂ * coord.y)
+        end
 
-        Spaces.horizontal_dss!(diff)
+        return laplacian_u
+    end
+
+    function diffusion(u)
+        grad = Operators.Gradient()
+        wdiv = Operators.WeakDivergence()
+        diff = @. -wdiv(grad(u))
+        Spaces.weighted_dss!(diff)
         return diff
     end
 
-    diff = diffusion(true_sol)
+    # Call the diffusion operator
+    diff = diffusion(u)
 
-    @show (diff .- (k₁^2 + k₂^2) .* true_sol)
-    @test norm(diff .- (k₁^2 + k₂^2) .* true_sol) ≤ 1e-2
+    exact_solution = laplacian_u(space)
+
+    @test norm(diff .- exact_solution) ≤ 5e-3
 end
