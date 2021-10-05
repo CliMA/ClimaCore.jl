@@ -3,17 +3,17 @@
 
 Objects describing the horizontal connections between elements.
 
-All elements are quadrilaterals, using the face and vertex numbering
-convention from [p4est](https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf):
+All elements are quadrilaterals, using the following face and vertex numbering
+convention:
 ```
           4
-      3-------4
+      4-------3
  ^    |       |
  |  1 |       | 2
-x2    |       |
+ξ2    |       |
       1-------2
           3
-        x1-->
+        ξ1-->
 ```
 """
 module Topologies
@@ -101,9 +101,9 @@ function vertex_node_index(vertex_num, Nq)
     elseif vertex_num == 2
         return Nq, 1
     elseif vertex_num == 3
-        return 1, Nq
-    else
         return Nq, Nq
+    else
+        return 1, Nq
     end
 end
 
@@ -166,7 +166,7 @@ struct Vertex{T <: AbstractTopology, V}
     topology::T
     num::V
 end
-
+Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
 
 # implementations
 include("grids.jl")

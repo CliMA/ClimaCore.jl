@@ -302,11 +302,11 @@ end
     topologies = (grid_topology, r_ts_topology)
     for topology in topologies
         @testset "1×1 element quad mesh with all periodic boundries" begin
+            # this has 1 global vertex
             @test length(Topologies.vertices(topology)) == 1
             V = collect(Topologies.vertices(topology))
             @test V[1] isa Topologies.Vertex
-            @test length(V[1]) == 4
-            @test collect(V[1]) == [(1, 1), (1, 2), (1, 3), (1, 4)]
+            @test sort(collect(V[1])) == [(1, 1), (1, 2), (1, 3), (1, 4)]
         end
     end
 
@@ -318,10 +318,8 @@ end
             @test length(Topologies.vertices(topology)) == 2
             V = collect(Topologies.vertices(topology))
             @test V[1] isa Topologies.Vertex
-            @test length(V[1]) == 2
-            @test collect(V[1]) == [(1, 1), (1, 2)]
-            @test length(V[2]) == 2
-            @test collect(V[2]) == [(1, 3), (1, 4)]
+            @test sort(collect(V[1])) == [(1, 1), (1, 2)]
+            @test sort(collect(V[2])) == [(1, 3), (1, 4)]
         end
     end
 
@@ -333,13 +331,9 @@ end
             @test length(Topologies.vertices(topology)) == 4
             V = collect(Topologies.vertices(topology))
             @test V[1] isa Topologies.Vertex
-            @test length(V[1]) == 1
             @test collect(V[1]) == [(1, 1)]
-            @test length(V[2]) == 1
             @test collect(V[2]) == [(1, 2)]
-            @test length(V[3]) == 1
             @test collect(V[3]) == [(1, 3)]
-            @test length(V[4]) == 1
             @test collect(V[4]) == [(1, 4)]
         end
     end
@@ -386,9 +380,8 @@ end
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
             @test c1 == Geometry.XYPoint(0.0, 0.0)
             @test c2 == Geometry.XYPoint(1.0, 0.0)
-            @test c3 == Geometry.XYPoint(0.0, 1.0)
-            @test c4 == Geometry.XYPoint(1.0, 1.0)
-
+            @test c3 == Geometry.XYPoint(1.0, 1.0)
+            @test c4 == Geometry.XYPoint(0.0, 1.0)
         end
     end
 
@@ -418,8 +411,8 @@ end
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
             @test c1 == Geometry.XYPoint(-1.0, -1.0)
             @test c2 == Geometry.XYPoint(1.0, -1.0)
-            @test c3 == Geometry.XYPoint(-1.0, 1.0)
-            @test c4 == Geometry.XYPoint(1.0, 1.0)
+            @test c3 == Geometry.XYPoint(1.0, 1.0)
+            @test c4 == Geometry.XYPoint(-1.0, 1.0)
         end
     end
 
@@ -431,14 +424,14 @@ end
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 1)
             @test c1 == Geometry.XYPoint(0.0, 0.0)
             @test c2 == Geometry.XYPoint(0.5, 0.0)
-            @test c3 == Geometry.XYPoint(0.0, 0.25)
-            @test c4 == Geometry.XYPoint(0.5, 0.25)
+            @test c3 == Geometry.XYPoint(0.5, 0.25)
+            @test c4 == Geometry.XYPoint(0.0, 0.25)
 
             c1, c2, c3, c4 = Topologies.vertex_coordinates(topology, 8)
             @test c1 == Geometry.XYPoint(0.5, 0.75)
             @test c2 == Geometry.XYPoint(1.0, 0.75)
-            @test c3 == Geometry.XYPoint(0.5, 1.0)
-            @test c4 == Geometry.XYPoint(1.0, 1.0)
+            @test c3 == Geometry.XYPoint(1.0, 1.0)
+            @test c4 == Geometry.XYPoint(0.5, 1.0)
         end
     end
     _, _, i_ts_topology = irregular_tensorproduct_grid(2, 4, false, false)
@@ -446,14 +439,14 @@ end
         c1, c2, c3, c4 = Topologies.vertex_coordinates(i_ts_topology, 1)
         @test c1 == Geometry.XYPoint(0.0, 0.0)
         @test c2 == Geometry.XYPoint(0.5, 0.0)
-        @test c3 == Geometry.XYPoint(0.0, 0.375)
-        @test c4 == Geometry.XYPoint(0.5, 0.375)
+        @test c3 == Geometry.XYPoint(0.5, 0.375)
+        @test c4 == Geometry.XYPoint(0.0, 0.375)
 
         c1, c2, c3, c4 = Topologies.vertex_coordinates(i_ts_topology, 8)
         @test c1 == Geometry.XYPoint(0.5, 0.875)
         @test c2 == Geometry.XYPoint(1.0, 0.875)
-        @test c3 == Geometry.XYPoint(0.5, 1.0)
-        @test c4 == Geometry.XYPoint(1.0, 1.0)
+        @test c3 == Geometry.XYPoint(1.0, 1.0)
+        @test c4 == Geometry.XYPoint(0.5, 1.0)
     end
 
     _, _, grid_topology = rectangular_grid(

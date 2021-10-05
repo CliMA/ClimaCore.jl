@@ -354,8 +354,8 @@ function vertex_coordinates(
 
     c1 = CT(range1[z1 + 1], range2[z2 + 1])
     c2 = CT(range1[z1 + 2], range2[z2 + 1])
-    c3 = CT(range1[z1 + 1], range2[z2 + 2])
-    c4 = CT(range1[z1 + 2], range2[z2 + 2])
+    c3 = CT(range1[z1 + 2], range2[z2 + 2])
+    c4 = CT(range1[z1 + 1], range2[z2 + 2])
     return (c1, c2, c3, c4)
 end
 
@@ -435,8 +435,8 @@ function vertex_coordinates(
 
     c1 = coordinates[z1 * (n2 + 1) + (z2 + 1)]
     c2 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 1)]
-    c3 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
-    c4 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
+    c3 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
+    c4 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
 
     return (c1, c2, c3, c4)
 end

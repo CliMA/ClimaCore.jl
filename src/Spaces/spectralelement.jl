@@ -64,7 +64,7 @@ function SpectralElementSpace1D(topology, quadrature_style)
                 Geometry.coordinate(vcoords[1], 1),
                 Geometry.coordinate(vcoords[2], 1),
             )
-            x = Geometry.interpolate(vcoords1D, ξ)
+            x = Geometry.linear_interpolate(vcoords1D, ξ)
             ∂x∂ξ =
                 (
                     Geometry.component(vcoords1D[2], 1) -
@@ -165,14 +165,14 @@ function SpectralElementSpace2D(topology, quadrature_style)
             # alternatively: move local_geometry to a different object entirely, to support overintegration
             # (where the integration is of different order)
             ξ = SVector(quad_points[i], quad_points[j])
-            x = Geometry.interpolate(
+            x = Geometry.bilinear_interpolate(
                 CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
                 ξ[1],
                 ξ[2],
             )
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 local x
-                x = Geometry.interpolate(
+                x = Geometry.bilinear_interpolate(
                     CoordType2D.(
                         Topologies.vertex_coordinates(topology, elem),
                     ),
