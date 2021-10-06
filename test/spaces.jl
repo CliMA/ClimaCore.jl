@@ -1,8 +1,10 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimaCore: slab, Domains, Meshes, Topologies, Spaces
+import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields
+
 import ClimaCore.Geometry: Geometry
+import ClimaCore.DataLayouts: IJFH
 
 @testset "1d domain space" begin
     FT = Float64
@@ -99,4 +101,161 @@ end
     @test sum(parent(space.boundary_surface_geometries.north.sWJ)) ≈ 8
     @test parent(space.boundary_surface_geometries.north.normal)[1, :, 1] ≈
           [0.0, 1.0]
+end
+
+@testset "dss on 2×2 rectangular mesh (unstructured)" begin
+    FT = Float64
+    n1, n2 = 2, 2
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(0)..Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(4),
+        x1periodic = false,
+        x2periodic = false,
+        x1boundary = (:west, :east),
+        x2boundary = (:south, :north),
+    )
+    mesh = Meshes.equispaced_rectangular_mesh(domain, n1, n2)
+    grid_topology = Topologies.Grid2DTopology(mesh)
+
+    quad = Spaces.Quadratures.GLL{4}()
+    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+    array = parent(Spaces.coordinates_data(space))
+    @test size(array) == (4, 4, 2, 4)
+
+    Nij = length(points)
+    field = Fields.Field(IJFH{FT, Nij}(ones(Nij, Nij, 1, n1 * n2)), space)
+    field_values = Fields.field_values(field)
+    Spaces.horizontal_dss!(field)
+
+    @testset "dss should not modify interior degrees of freedom of any element" begin
+        result = true
+        for el in 1:(n1 * n2)
+            slb = slab(field_values, 1, el)
+            for i in 2:(Nij - 1), j in 2:(Nij - 1)
+                if slb[i, j] ≠ 1
+                    result = false
+                end
+            end
+        end
+        @test result
+    end
+    s1 = slab(field_values, 1, 1)
+    s2 = slab(field_values, 1, 2)
+    s3 = slab(field_values, 1, 3)
+    s4 = slab(field_values, 1, 4)
+
+    @testset "vertex common to all (4) elements" begin
+        @test (s1[Nij, Nij] == s2[1, Nij] == s3[Nij, 1] == s4[1, 1])
+    end
+
+    @testset "vertices common to (2) elements" begin
+        @test s1[Nij, 1] == s2[1, 1]
+        @test s1[1, Nij] == s3[1, 1]
+        @test s2[Nij, Nij] == s4[Nij, 1]
+        @test s3[Nij, Nij] == s4[1, Nij]
+    end
+
+    @testset "boundary faces" begin
+        for fc in 2:(Nij - 1)
+            @test s1[1, fc] == 1 # element 1 face 1
+            @test s1[fc, 1] == 1 # element 1 face 3
+            @test s2[Nij, fc] == 1 # element 2 face 2
+            @test s2[fc, 1] == 1 # element 2 face 3
+            @test s3[1, fc] == 1 # element 3 face 1
+            @test s3[fc, Nij] == 1 # element 3 face 4
+            @test s4[Nij, fc] == 1 # element 4 face 2
+            @test s4[fc, Nij] == 1 # element 4 face 4
+        end
+    end
+
+    @testset "interior faces" begin
+        for fc in 2:(Nij - 1)
+            @test (s1[Nij, fc] == s2[1, fc] == 2) # (e1, f2) == (e2, f1) == 2
+            @test (s1[fc, Nij] == s3[fc, 1] == 2) # (e1, f4) == (e3, f3) == 2
+            @test (s2[fc, Nij] == s4[fc, 1] == 2) # (e2, f4) == (e4, f3) == 2
+            @test (s3[Nij, fc] == s4[1, fc] == 2) # (e3, f2) == (e4, f1) == 2
+        end
+    end
+end
+
+
+@testset "dss on 2×2 rectangular mesh" begin
+    FT = Float64
+    n1, n2 = 2, 2
+    domain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(0)..Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(4),
+        x1periodic = false,
+        x2periodic = false,
+        x1boundary = (:west, :east),
+        x2boundary = (:south, :north),
+    )
+    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+    grid_topology = Topologies.GridTopology(mesh)
+
+    quad = Spaces.Quadratures.GLL{4}()
+    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+
+    array = parent(Spaces.coordinates_data(space))
+    @test size(array) == (4, 4, 2, 4)
+
+    Nij = length(points)
+    field = Fields.Field(IJFH{FT, Nij}(ones(Nij, Nij, 1, n1 * n2)), space)
+    field_values = Fields.field_values(field)
+    Spaces.horizontal_dss!(field)
+
+    @testset "dss should not modify interior degrees of freedom of any element" begin
+        result = true
+        for el in 1:(n1 * n2)
+            slb = slab(field_values, 1, el)
+            for i in 2:(Nij - 1), j in 2:(Nij - 1)
+                if slb[i, j] ≠ 1
+                    result = false
+                end
+            end
+        end
+        @test result
+    end
+    s1 = slab(field_values, 1, 1)
+    s2 = slab(field_values, 1, 2)
+    s3 = slab(field_values, 1, 3)
+    s4 = slab(field_values, 1, 4)
+
+    @testset "vertex common to all (4) elements" begin
+        @test (s1[Nij, Nij] == s2[1, Nij] == s3[Nij, 1] == s4[1, 1])
+    end
+
+    @testset "vertices common to (2) elements" begin
+        @test s1[Nij, 1] == s2[1, 1]
+        @test s1[1, Nij] == s3[1, 1]
+        @test s2[Nij, Nij] == s4[Nij, 1]
+        @test s3[Nij, Nij] == s4[1, Nij]
+    end
+
+    @testset "boundary faces" begin
+        for fc in 2:(Nij - 1)
+            @test s1[1, fc] == 1 # element 1 face 1
+            @test s1[fc, 1] == 1 # element 1 face 3
+            @test s2[Nij, fc] == 1 # element 2 face 2
+            @test s2[fc, 1] == 1 # element 2 face 3
+            @test s3[1, fc] == 1 # element 3 face 1
+            @test s3[fc, Nij] == 1 # element 3 face 4
+            @test s4[Nij, fc] == 1 # element 4 face 2
+            @test s4[fc, Nij] == 1 # element 4 face 4
+        end
+    end
+
+    @testset "interior faces" begin
+        for fc in 2:(Nij - 1)
+            @test (s1[Nij, fc] == s2[1, fc] == 2) # (e1, f2) == (e2, f1) == 2
+            @test (s1[fc, Nij] == s3[fc, 1] == 2) # (e1, f4) == (e3, f3) == 2
+            @test (s2[fc, Nij] == s4[fc, 1] == 2) # (e2, f4) == (e4, f3) == 2
+            @test (s3[Nij, fc] == s4[1, fc] == 2) # (e3, f2) == (e4, f1) == 2
+        end
+    end
 end
