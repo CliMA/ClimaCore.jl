@@ -273,7 +273,7 @@ plot(
 
 sinz = sin.(column_center_coords.z)
 gradc2f = ClimaCore.Operators.GradientC2F()
-∇sinz = gradc2f.(sinz)
+## ∇sinz = gradc2f.(sinz) ## this would throw an error
 #----------------------------------------------------------------------------
 
 # This throws an error because face values at the boundary are _not_ well-defined:
@@ -394,7 +394,7 @@ function heat_fd_tendency!(dydt, y, α, t)
     @. dydt = α * divf2c(gradc2f(y))
 end
 
-heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 50.0), 0.1)
+heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 5.0), 0.1)
 heat_fd_sol = solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = 0.25)
 #----------------------------------------------------------------------------
 
@@ -420,7 +420,7 @@ end
 
 y0 = exp.(.-(coord.y .^ 2 .+ coord.x .^ 2) ./ 2)
 
-heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 50.0), 0.1)
+heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 5.0), 0.1)
 heat_cg_sol = solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = 0.5)
 #----------------------------------------------------------------------------
 
@@ -542,7 +542,7 @@ end
 
 #----------------------------------------------------------------------------
 
-shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 80.0))
+shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 8.0))
 @time shallow_water_sol =
     solve(shallow_water_prob, SSPRK33(), dt = 0.05, saveat = 1.0)
 #----------------------------------------------------------------------------
