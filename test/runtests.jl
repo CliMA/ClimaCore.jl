@@ -20,7 +20,6 @@ include("fielddiffeq.jl")
 include("hybrid2d.jl")
 include("hybrid3d.jl")
 include("sphere.jl")
-include("diffusion2d.jl")
 include("hyperdiffusion_sphere.jl")
 
 if "CUDA" in ARGS
