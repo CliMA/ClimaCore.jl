@@ -448,6 +448,15 @@ function SpectralElementSpace2D(
     return nothing
 end
 
+const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
+    T,
+} where {
+    T <:
+    Topologies.Grid2DTopology{
+        M,
+    },
+} where {M <: Meshes.Mesh2D{<:Domains.SphereDomain}}
+
 function compute_surface_geometry(
     local_geometry_slab,
     quad_weights,
