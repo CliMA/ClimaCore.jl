@@ -333,8 +333,8 @@ end
             @test V[1] isa Topologies.Vertex
             @test collect(V[1]) == [(1, 1)]
             @test collect(V[2]) == [(1, 2)]
-            @test collect(V[3]) == [(1, 3)]
-            @test collect(V[4]) == [(1, 4)]
+            @test collect(V[3]) == [(1, 4)]
+            @test collect(V[4]) == [(1, 3)]
         end
     end
 
@@ -360,12 +360,12 @@ end
             @test length(Topologies.vertices(topology)) == 2 * 3
             V = collect(Topologies.vertices(topology))
             @test length(V) == 6
-            @test collect(V[1]) == [(1, 1), (2, 2), (5, 3), (6, 4)]
-            @test collect(V[2]) == [(2, 1), (1, 2), (6, 3), (5, 4)]
-            @test collect(V[3]) == [(3, 1), (4, 2), (1, 3), (2, 4)]
-            @test collect(V[4]) == [(4, 1), (3, 2), (2, 3), (1, 4)]
-            @test collect(V[5]) == [(5, 1), (6, 2), (3, 3), (4, 4)]
-            @test collect(V[6]) == [(6, 1), (5, 2), (4, 3), (3, 4)]
+            @test sort(collect(V[1])) == sort([(1, 1), (2, 2), (5, 4), (6, 3)])
+            @test sort(collect(V[2])) == sort([(2, 1), (1, 2), (6, 4), (5, 3)])
+            @test sort(collect(V[3])) == sort([(3, 1), (4, 2), (1, 4), (2, 3)])
+            @test sort(collect(V[4])) == sort([(4, 1), (3, 2), (2, 4), (1, 3)])
+            @test sort(collect(V[5])) == sort([(5, 1), (6, 2), (3, 4), (4, 3)])
+            @test sort(collect(V[6])) == sort([(6, 1), (5, 2), (4, 4), (3, 3)])
         end
     end
 end

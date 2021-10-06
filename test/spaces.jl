@@ -185,6 +185,7 @@ end
 @testset "dss on 2×2 rectangular mesh" begin
     FT = Float64
     n1, n2 = 2, 2
+    Nij = 4
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(0)..Geometry.XPoint{FT}(4),
         Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(4),
@@ -196,66 +197,66 @@ end
     mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
     grid_topology = Topologies.GridTopology(mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Spaces.Quadratures.GLL{Nij}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     array = parent(Spaces.coordinates_data(space))
-    @test size(array) == (4, 4, 2, 4)
+    @test size(array) == (Nij, Nij, 2, n1 * n2)
 
-    Nij = length(points)
-    field = Fields.Field(IJFH{FT, Nij}(ones(Nij, Nij, 1, n1 * n2)), space)
-    field_values = Fields.field_values(field)
-    Spaces.horizontal_dss!(field)
+    data = zeros(Nij, Nij, 3, n1 * n2)
+    data[:, :, 1, :] .= 1:Nij
+    data[:, :, 2, :] .= (1:Nij)'
+    data[:, :, 3, :] .= reshape(1:(n1 * n2), 1, 1, :)
+    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij}(data), space)
+    field_dss = Spaces.horizontal_dss!(copy(field))
+    data_dss = parent(field_dss)
 
-    @testset "dss should not modify interior degrees of freedom of any element" begin
-        result = true
-        for el in 1:(n1 * n2)
-            slb = slab(field_values, 1, el)
-            for i in 2:(Nij - 1), j in 2:(Nij - 1)
-                if slb[i, j] ≠ 1
-                    result = false
-                end
-            end
-        end
-        @test result
-    end
-    s1 = slab(field_values, 1, 1)
-    s2 = slab(field_values, 1, 2)
-    s3 = slab(field_values, 1, 3)
-    s4 = slab(field_values, 1, 4)
-
-    @testset "vertex common to all (4) elements" begin
-        @test (s1[Nij, Nij] == s2[1, Nij] == s3[Nij, 1] == s4[1, 1])
+    @testset "slab 1" begin
+        @test data_dss[1:(Nij - 1), 1:(Nij - 1), :, 1] ==
+              data[1:(Nij - 1), 1:(Nij - 1), :, 1]
+        @test data_dss[Nij, 1:(Nij - 1), :, 1] ==
+              data[Nij, 1:(Nij - 1), :, 1] .+ data[1, 1:(Nij - 1), :, 2]
+        @test data_dss[1:(Nij - 1), Nij, :, 1] ==
+              data[1:(Nij - 1), Nij, :, 1] .+ data[1:(Nij - 1), 1, :, 3]
+        @test data_dss[Nij, Nij, :, 1] ==
+              data[Nij, Nij, :, 1] .+ data[1, Nij, :, 2] .+
+              data[Nij, 1, :, 3] .+ data[1, 1, :, 4]
     end
 
-    @testset "vertices common to (2) elements" begin
-        @test s1[Nij, 1] == s2[1, 1]
-        @test s1[1, Nij] == s3[1, 1]
-        @test s2[Nij, Nij] == s4[Nij, 1]
-        @test s3[Nij, Nij] == s4[1, Nij]
+    @testset "slab 2" begin
+        @test data_dss[2:Nij, 1:(Nij - 1), :, 2] ==
+              data[2:Nij, 1:(Nij - 1), :, 2]
+        @test data_dss[1, 1:(Nij - 1), :, 2] ==
+              data[Nij, 1:(Nij - 1), :, 1] .+ data[1, 1:(Nij - 1), :, 2]
+        @test data_dss[2:Nij, Nij, :, 2] ==
+              data[2:Nij, Nij, :, 2] .+ data[2:Nij, 1, :, 4]
+        @test data_dss[1, Nij, :, 2] ==
+              data[Nij, Nij, :, 1] .+ data[1, Nij, :, 2] .+
+              data[Nij, 1, :, 3] .+ data[1, 1, :, 4]
     end
 
-    @testset "boundary faces" begin
-        for fc in 2:(Nij - 1)
-            @test s1[1, fc] == 1 # element 1 face 1
-            @test s1[fc, 1] == 1 # element 1 face 3
-            @test s2[Nij, fc] == 1 # element 2 face 2
-            @test s2[fc, 1] == 1 # element 2 face 3
-            @test s3[1, fc] == 1 # element 3 face 1
-            @test s3[fc, Nij] == 1 # element 3 face 4
-            @test s4[Nij, fc] == 1 # element 4 face 2
-            @test s4[fc, Nij] == 1 # element 4 face 4
-        end
+    @testset "slab 3" begin
+        @test data_dss[1:(Nij - 1), 2:Nij, :, 3] ==
+              data[1:(Nij - 1), 2:Nij, :, 3]
+        @test data_dss[Nij, 2:Nij, :, 3] ==
+              data[Nij, 2:Nij, :, 3] .+ data[1, 2:Nij, :, 4]
+        @test data_dss[1:(Nij - 1), 1, :, 3] ==
+              data[1:(Nij - 1), Nij, :, 1] .+ data[1:(Nij - 1), 1, :, 3]
+        @test data_dss[Nij, 1, :, 3] ==
+              data[Nij, Nij, :, 1] .+ data[1, Nij, :, 2] .+
+              data[Nij, 1, :, 3] .+ data[1, 1, :, 4]
     end
 
-    @testset "interior faces" begin
-        for fc in 2:(Nij - 1)
-            @test (s1[Nij, fc] == s2[1, fc] == 2) # (e1, f2) == (e2, f1) == 2
-            @test (s1[fc, Nij] == s3[fc, 1] == 2) # (e1, f4) == (e3, f3) == 2
-            @test (s2[fc, Nij] == s4[fc, 1] == 2) # (e2, f4) == (e4, f3) == 2
-            @test (s3[Nij, fc] == s4[1, fc] == 2) # (e3, f2) == (e4, f1) == 2
-        end
+    @testset "slab 3" begin
+        @test data_dss[2:Nij, 2:Nij, :, 4] == data[2:Nij, 2:Nij, :, 4]
+        @test data_dss[1, 2:Nij, :, 4] ==
+              data[Nij, 2:Nij, :, 3] .+ data[1, 2:Nij, :, 4]
+        @test data_dss[2:Nij, 1, :, 4] ==
+              data[2:Nij, Nij, :, 2] .+ data[2:Nij, 1, :, 4]
+        @test data_dss[1, 1, :, 4] ==
+              data[Nij, Nij, :, 1] .+ data[1, Nij, :, 2] .+
+              data[Nij, 1, :, 3] .+ data[1, 1, :, 4]
     end
 end
