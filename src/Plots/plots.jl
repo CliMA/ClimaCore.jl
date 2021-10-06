@@ -18,27 +18,25 @@ function UnicodePlots.heatmap(
 
     Nu = max(div(width, n1), div(height, n2))
     M = Operators.matrix_interpolate(field, Nu)
-    m1, m2 = size(M)
+
+    m1, m2 = size(M')
     domain = Meshes.domain(mesh)
     x1min = Geometry.component(domain.x1x2min, 1)
     x2min = Geometry.component(domain.x1x2min, 2)
     x1max = Geometry.component(domain.x1x2max, 1)
     x2max = Geometry.component(domain.x1x2max, 2)
 
-    CT = Domains.coordinate_type(domain)
-    X1CT = Geometry.coordinate_type(CT, 1)
-    X2CT = Geometry.coordinate_type(CT, 2)
-    X1CTname = Base.typename(X1CT).name
-    X2CTname = Base.typename(X1CT).name
+    coord_field = Fields.coordinate_field(space)
+    coord_symbols = propertynames(coord_field)
 
     UnicodePlots.heatmap(
         M',
-        xlabel = "$(X1CTname)",
-        ylabel = "$(X2CTname)",
+        xlabel = "$(coord_symbols[1])",
+        ylabel = "$(coord_symbols[2])",
         xoffset = x1min,
-        xscale = (x1max - x1min) / (m1 - 1),
+        xfact = (x1max - x1min) / (m1 - 1),
         yoffset = x2min,
-        yscale = (x2max - x2min) / (m2 - 1),
+        yfact = (x2max - x2min) / (m2 - 1),
         width = width,
         height = height,
         kwargs...,
@@ -63,17 +61,20 @@ function UnicodePlots.lineplot(
     xdata = Array(parent(field))[:, 1]
 
     ydata = Array(parent(Spaces.coordinates_data(space)))[:, 1]
+
+    coord_field = Fields.coordinate_field(space)
+    coord_symbols = propertynames(coord_field)
+
     ylabel = if field isa Spaces.FaceFiniteDifferenceSpace
-        ":y faces"
+        "$(coord_symbols[1]) faces"
     else
-        ":y centers"
+        "$(coord_symbols[1]) centers"
     end
     # fix the ylim to the column space (domain)
     ylim = extrema(ydata)
     UnicodePlots.lineplot(
         xdata,
         ydata;
-        title = "Column",
         xlabel = xlabel,
         ylabel = ylabel,
         ylim = [ylim[1], ylim[2]],
@@ -86,20 +87,20 @@ end
 RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     # unwrap the data to plot
     space = axes(field)
-    CT = Meshes.coordinate_type(space.mesh)
-    CTName = Base.typename(CT).name
+    coord_field = Fields.coordinate_field(space)
 
     xdata = parent(field)[:, 1]
     ydata = parent(Spaces.coordinates_data(space))[:, 1]
 
+    coord_symbols = propertynames(coord_field)
+
     # set the plot attributes
-    title --> "Column"
-    xguide --> ":x value"
+    xguide --> "value"
     yguide --> (
         if field isa Spaces.FaceFiniteDifferenceSpace
-            "$(CTname) faces"
+            "$(coord_symbols[1]) faces"
         else
-            "$(CTName) centers"
+            "$(coord_symbols[1]) centers"
         end
     )
 
@@ -111,6 +112,67 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
     (xdata, ydata)
 end
 
+RecipesBase.@recipe function f(space::Spaces.SpectralElementSpace2D;)
+    quad = Spaces.quadrature_style(space)
+    quad_name = Base.typename(typeof(quad)).name
+    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+    n1 = mesh.n1
+    n2 = mesh.n2
+
+    coord_field = Fields.coordinate_field(space)
+    x1coord = vec(parent(coord_field)[:, :, 1, :])
+    x2coord = vec(parent(coord_field)[:, :, 2, :])
+
+    coord_symbols = propertynames(coord_field)
+
+    seriestype := :scatter
+    title --> "$n1 × $n2 $quad_name{$dof} element space"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    marker --> :cross
+    markersize --> 1
+    seriescolor --> :blue
+    legend --> false
+
+    (x1coord, x2coord)
+end
+
+RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
+    coord_field = Fields.coordinate_field(space)
+    data = Fields.field_values(coord_field)
+    Ni, Nj, _, Nv, Nh = size(data)
+
+    #TODO: assumes VIFH layout
+    @assert Nj == 1 "plotting only defined for 1D extruded fields"
+
+    hspace = space.horizontal_space
+
+    quad = Spaces.quadrature_style(hspace)
+    quad_name = Base.typename(typeof(quad)).name
+    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+
+    coord_symbols = propertynames(coord_field)
+    hcoord = vec(parent(coord_field)[:, :, 1, :])
+    vcoord = vec(parent(coord_field)[:, :, 2, :])
+
+    stagger = space.staggering isa Spaces.CellCenter ? :center : :face
+
+    seriestype := :scatter
+    title --> "$Nh $quad_name{$dof} element × $Nv level $stagger space"
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    marker --> :cross
+    markersize --> 1
+    seriescolor --> :blue
+    legend --> false
+
+    (hcoord, vcoord)
+end
+
+
 RecipesBase.@recipe function f(
     field::Fields.SpectralElementField2D;
     interpolate = 10,
@@ -119,11 +181,13 @@ RecipesBase.@recipe function f(
 
     # compute the interpolated data to plot
     space = axes(field)
-    mesh = space.topology.mesh
-    n1 = mesh.n1
-    n2 = mesh.n2
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
 
     Nu = interpolate
+    coord_field = Fields.coordinate_field(space)
+
+    M_coords = Operators.matrix_interpolate(coord_field, Nu)
     M = Operators.matrix_interpolate(field, Nu)
 
     domain = Meshes.domain(mesh)
@@ -132,12 +196,11 @@ RecipesBase.@recipe function f(
     x1max = Geometry.component(domain.x1x2max, 1)
     x2max = Geometry.component(domain.x1x2max, 2)
 
-    r1 = range(x1min, x1max, length = n1 * Nu + 1)
-    r1 = r1[1:(end - 1)] .+ step(r1) ./ 2
-    r2 = range(x2min, x2max, length = n2 * Nu + 1)
-    r2 = r2[1:(end - 1)] .+ step(r2) ./ 2
+    # our interpolated field is transposed
+    x1coord = [Geometry.component(pt, 1) for pt in M_coords[:, 1]]
+    x2coord = [Geometry.component(pt, 2) for pt in M_coords[1, :]]
 
-    coord_symbols = propertynames(Fields.coordinate_field(space))
+    coord_symbols = propertynames(coord_field)
 
     # set the plot attributes
     seriestype := :heatmap
@@ -146,7 +209,92 @@ RecipesBase.@recipe function f(
     yguide --> "$(coord_symbols[2])"
     seriescolor --> :balance
 
-    (r1, r2, M')
+    (x1coord, x2coord, M')
+end
+
+RecipesBase.@recipe function f(
+    field::Fields.CubedSphereSpectralElementField2D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    space = axes(field)
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+
+    nelem = Topologies.nlocalelems(topology)
+    panel_size = isqrt(div(nelem, 6))
+
+    quad_from = Spaces.quadrature_style(space)
+    quad_to = Spaces.Quadratures.Uniform{interpolate}()
+    Imat = Spaces.Quadratures.interpolation_matrix(Float64, quad_to, quad_from)
+
+    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
+    dof = interpolate
+
+    pannel_range(i) =
+        ((panel_size * dof) * (i - 1) + 1):((panel_size * dof) * i)
+
+    # construct a matrix to fill in the rotated / flipped pannel data
+    unfolded_panels =
+        fill(NaN, ((panel_size * dof) * 3, (panel_size * dof) * 4))
+
+    # temporary pannels as we have to rotate / flip some and not all operators are in place
+    # TODO: inefficient memory wise, but good enough for now
+    panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
+
+    interpolated_data =
+        DataLayouts.IJFH{Float64, interpolate}(Array{Float64}, nelem)
+    Operators.tensor_product!(
+        interpolated_data,
+        Fields.field_values(field),
+        Imat,
+    )
+
+    # element index ordering defined by a specific layout
+    eidx = 1
+    for panel_idx in 1:6
+        panel_data = panels[panel_idx]
+        # elements are ordered along fastest axis defined in sphere box mesh
+        for ex2 in 1:panel_size, ex1 in 1:panel_size
+            # compute the nodal extent index range for this element
+            x1_nodal_range = (dof * (ex1 - 1) + 1):(dof * ex1)
+            x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
+            # transpose the data as our plotting axis order is
+            # reverse nodal element order (x1 axis varies fastest)
+            data_element = permutedims(parent(interpolated_data)[:, :, 1, eidx])
+            panel_data[x2_nodal_range, x1_nodal_range] = data_element
+            eidx += 1
+        end
+    end
+
+    # fill in the panel data doing the correct flipping / rotations wrt to pannel reference vertex
+    # "top" pannel (will be 3 when flipped)
+    unfolded_panels[pannel_range(1), pannel_range(2)] =
+        reverse!(panels[5], dims = 1)
+    # center pannels
+    unfolded_panels[pannel_range(2), pannel_range(1)] = rotr90(panels[4], 1)
+    unfolded_panels[pannel_range(2), pannel_range(2)] = panels[1]
+    unfolded_panels[pannel_range(2), pannel_range(3)] =
+        reverse!(rotl90(panels[2]), dims = 1)
+    unfolded_panels[pannel_range(2), pannel_range(4)] =
+        reverse!(panels[6], dims = 2)
+    # "bottom pannel" (will be 5 when flipped)
+    unfolded_panels[pannel_range(3), pannel_range(2)] = panels[3]
+
+    # flip whole unfolded pannel vertically in place get the "right" orentation
+    # with respect to the plotting reference coord in lower left
+    reverse!(unfolded_panels, dims = 1)
+
+    quad_from_name = Base.typename(typeof(quad_from)).name
+    # set the plot attributes
+    seriestype := :heatmap
+    title --> "$nelem $quad_from_name{$dof_in} element space"
+    xguide --> "panel x1"
+    yguide --> "panel x2"
+    seriescolor --> :balance
+
+    (unfolded_panels)
 end
 
 RecipesBase.@recipe function f(
@@ -190,6 +338,7 @@ RecipesBase.@recipe function f(
 
     (hcoord, vcoord, data)
 end
+
 
 function play(
     timesteps::Vector;
