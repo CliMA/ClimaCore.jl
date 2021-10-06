@@ -122,17 +122,18 @@ function energy(Yc, ρu, z)
     ρ = Yc.ρ
     ρθ = Yc.ρθ
     u = ρu / ρ
-    kinetic = ρ * norm(u)^2 /2
+    kinetic = ρ * norm(u)^2 / 2
     potential = z * grav * ρ
-    internal = C_v*pressure(ρθ)/(ρ*R_d)
+    internal = C_v * pressure(ρθ) / (ρ * R_d)
     return kinetic + potential + internal
 end
 function combine_momentum(ρuₕ, ρw)
-    Geometry.transform(Geometry.Cartesian13Axis(), ρuₕ) + Geometry.transform(Geometry.Cartesian13Axis(), ρw)
+    Geometry.transform(Geometry.Cartesian13Axis(), ρuₕ) +
+    Geometry.transform(Geometry.Cartesian13Axis(), ρw)
 end
 function center_momentum(Y)
     If2c = Operators.InterpolateF2C()
-    combine_momentum.(Y.Yc.ρuₕ,  If2c.(Y.ρw))
+    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
 end
 function total_energy(Y)
     ρ = Y.Yc.ρ
@@ -213,7 +214,7 @@ function rhs!(dY, Y, _, t)
     @. dρw = hdiv(hgrad(ρw))
     Spaces.weighted_dss!(dYc)
 
-    κ = 10.0
+    κ = 3.65 # m^4/s
     @. dYc.ρ = κ * hdiv(hgrad(dYc.ρ))
     @. dYc.ρθ = κ * hdiv(hgrad(dYc.ρθ))
     @. dYc.ρuₕ = κ * hdiv(hgrad(dYc.ρuₕ))
