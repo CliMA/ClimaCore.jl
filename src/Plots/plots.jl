@@ -306,7 +306,6 @@ RecipesBase.@recipe function f(
 
     space = axes(field)
     hmesh = Spaces.topology(space).mesh
-    vmesh = space.vertical_mesh
 
     #TODO: assumes VIFH layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
