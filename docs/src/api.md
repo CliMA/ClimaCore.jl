@@ -11,20 +11,32 @@ DataLayouts
 DataLayouts.IJFH
 ```
 
-## Meshes
-```@docs
-Meshes.EquispacedRectangleMesh
-```
-
 ## Geometry
 ```@docs
 Geometry.Cartesian12Vector
+```
+
+## Domains
+
+```@docs
+Domains.IntervalDomain
+Domains.RectangleDomain
+```
+
+## Meshes
+
+```@docs
+Meshes.IntervalMesh
+Meshes.Uniform
+Meshes.ExponentialStretching
+Meshes.EquispacedRectangleMesh
 ```
 
 ## Topologies
 
 ```@docs
 Topologies
+Topologies.IntervalTopology
 ```
 
 ## Spaces

@@ -5,12 +5,12 @@
 struct ExtrudedFiniteDifferenceSpace{
     S <: Staggering,
     H <: AbstractSpace,
-    M,
+    T <: Topologies.IntervalTopology,
     G,
 } <: AbstractSpace
     staggering::S
     horizontal_space::H
-    vertical_mesh::M
+    vertical_topology::T
     center_local_geometry::G
     face_local_geometry::G
 end
@@ -27,7 +27,7 @@ function ExtrudedFiniteDifferenceSpace{S}(
     ExtrudedFiniteDifferenceSpace(
         S(),
         space.horizontal_space,
-        space.vertical_mesh,
+        space.vertical_topology,
         space.center_local_geometry,
         space.face_local_geometry,
     )
@@ -44,7 +44,7 @@ function ExtrudedFiniteDifferenceSpace(
     vertical_space::V,
 ) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
     staggering = vertical_space.staggering
-    vertical_mesh = vertical_space.mesh
+    vertical_topology = vertical_space.topology
     center_local_geometry =
         product_geometry.(
             horizontal_space.local_geometry,
@@ -58,7 +58,7 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(
         staggering,
         horizontal_space,
-        vertical_mesh,
+        vertical_topology,
         center_local_geometry,
         face_local_geometry,
     )
@@ -75,7 +75,7 @@ slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
 
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
     space.staggering,
-    space.vertical_mesh,
+    space.vertical_topology,
     column(space.center_local_geometry, i, j, h),
     column(space.face_local_geometry, i, j, h),
 )
@@ -87,10 +87,10 @@ nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
     size(space.face_local_geometry, 4)
 
 left_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
-    propertynames(space.vertical_mesh.boundaries)[1]
+    propertynames(space.vertical_topology.boundaries)[1]
 
 right_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
-    propertynames(space.vertical_mesh.boundaries)[2]
+    propertynames(space.vertical_topology.boundaries)[2]
 
 function blockmat(
     a::Geometry.Axis2Tensor{

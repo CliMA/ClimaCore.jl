@@ -169,6 +169,7 @@ end
 
 
 # implementations
+include("interval.jl")
 include("grids.jl")
 include("grid2d.jl")
 

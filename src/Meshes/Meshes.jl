@@ -39,67 +39,8 @@ struct NoWarp <: AbstractWarp end
 struct EquiangularSphereWarp <: AbstractSphereWarp end
 struct EquidistantSphereWarp <: AbstractSphereWarp end
 
-struct IntervalMesh{FT, I <: IntervalDomain, V <: AbstractVector, B} <:
-       AbstractMesh{FT}
-    domain::I
-    faces::V
-    boundaries::B
-end
+include("interval.jl")
 
-IntervalMesh{FT}(domain::I, faces::V, boundaries::B) where {FT, I, V, B} =
-    IntervalMesh{FT, I, V, B}(domain, faces, boundaries)
-
-abstract type Stretching end
-struct Uniform <: Stretching end
-
-function IntervalMesh(
-    domain::IntervalDomain{CT},
-    ::Uniform;
-    nelems,
-) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-    faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
-    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
-    IntervalMesh{FT}(domain, faces, boundaries)
-end
-
-# 3.1.2 in the design docs
-"""
-    ExponentialStretching(H)
-
-Apply exponential stretching to the  domain. `H` is the scale height (a typical atmospheric scale height `H ≈ 7.5e3`km).
-"""
-struct ExponentialStretching{FT} <: Stretching
-    H::FT
-end
-
-function IntervalMesh(
-    domain::IntervalDomain{CT},
-    stretch::ExponentialStretching;
-    nelems,
-) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-    cmin = Geometry.component(domain.coord_min, 1)
-    cmax = Geometry.component(domain.coord_max, 1)
-    R = cmax - cmin
-    h = stretch.H / R
-    η(ζ) = -h * log1p(-(1 - exp(-1 / h)) * ζ)
-    faces =
-        [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
-    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
-    IntervalMesh{FT, typeof(domain), typeof(faces), typeof(boundaries)}(
-        domain,
-        faces,
-        boundaries,
-    )
-end
-
-IntervalMesh(domain::IntervalDomain; nelems) =
-    IntervalMesh(domain, Uniform(); nelems)
-
-function Base.show(io::IO, mesh::IntervalMesh)
-    nelements = length(mesh.faces) - 1
-    print(io, nelements, " IntervalMesh of ")
-    print(io, mesh.domain)
-end
 
 
 struct EquispacedLineMesh{FT, ID <: IntervalDomain, R} <: AbstractMesh{FT}

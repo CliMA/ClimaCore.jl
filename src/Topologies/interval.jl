@@ -1,13 +1,23 @@
+# at the moment, this only serves the purpose of putting the boundary tags into type space.
 """
-    IntervalTopology([domain::IntervalDomain, ]faces::AbstractVector)
+    IntervalTopology(mesh::IntervalMesh)
 
-A 1D topology of elements, with element boundaries at `faces`.
+A sequential topology on an [`IntervalMesh`](@ref).
 """
-struct IntervalTopology{D <: IntervalDomain, V} <: AbstractTopology
-    domain::D
-    faces::V
+struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
+    mesh::M
+    boundaries::B
 end
 
+function IntervalTopology(mesh::Meshes.IntervalMesh)
+    if isnothing(mesh.domain.boundary_tags)
+        boundaries = NamedTuple()
+    else
+        boundaries = NamedTuple{mesh.domain.boundary_tags}((1, 2))
+    end
+    IntervalTopology(mesh, boundaries)
+end
 
-IntervalTopology(faces::AbstractVector) =
-    IntervalTopology(IntervalDomain(faces[1], faces[end]), faces)
+function Base.show(io::IO, topology::IntervalTopology)
+    print(io, "IntervalTopology on ", topology.mesh)
+end
