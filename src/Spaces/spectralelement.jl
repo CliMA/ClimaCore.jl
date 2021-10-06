@@ -345,11 +345,11 @@ function SpectralElementSpace2D(
                 # at the pole: choose u to line with x1, v to line with x2
                 ∂u∂ξ = ∂x∂ξ[SOneTo(2), :]
             else
-                θ = xl.lat
+                ϕ = xl.lat
                 λ = xl.long
                 F = @SMatrix [
                     -sind(λ) cosd(λ) 0
-                    0 0 1/cosd(θ)
+                    0 0 1/cosd(ϕ)
                 ]
                 ∂u∂ξ = F * ∂x∂ξ
             end

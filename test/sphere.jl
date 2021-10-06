@@ -14,14 +14,14 @@ function rotational_field(space, axis::Geometry.LatLongPoint)
     map(coords) do coord
         n_coord = Geometry.components(Geometry.Cartesian123Point(coord))
         u_cart = n_axis × n_coord
-        θ = coord.lat
+        ϕ = coord.lat
         λ = coord.long
         F = @SMatrix [
             -sind(λ) cosd(λ) 0
-            0 0 1/cosd(θ)
+            0 0 1/cosd(ϕ)
         ]
         uv = F * u_cart
-        if abs(θ) ≈ 90
+        if abs(ϕ) ≈ 90
             Geometry.UVVector(u_cart[1], u_cart[2])
         else
 
