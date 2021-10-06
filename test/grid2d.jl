@@ -199,9 +199,9 @@ end
         @test length(V[2]) == 1
         @test collect(V[2]) == [(1, 2)]
         @test length(V[3]) == 1
-        @test collect(V[3]) == [(1, 3)]
+        @test collect(V[3]) == [(1, 4)]
         @test length(V[4]) == 1
-        @test collect(V[4]) == [(1, 4)]
+        @test collect(V[4]) == [(1, 3)]
     end
 
     @testset "2×3 element quad mesh with non-periodic boundaries" begin
@@ -217,17 +217,12 @@ end
         @test length(Topologies.vertices(grid_topology)) == 2 * 3
         V = collect(Topologies.vertices(grid_topology))
         @test length(V) == 6
-        @test collect(V[1]) == [(1, 1), (2, 2), (5, 3), (6, 4)]
-        @test collect(V[2]) == [(2, 1), (1, 2), (6, 3), (5, 4)] ||
-              collect(V[2]) == [(1, 2), (2, 1), (5, 4), (6, 3)]
-        @test collect(V[3]) == [(3, 1), (4, 2), (1, 3), (2, 4)] ||
-              collect(V[3]) == [(1, 3), (2, 4), (3, 1), (4, 2)]
-        @test collect(V[4]) == [(4, 1), (3, 2), (2, 3), (1, 4)] ||
-              collect(V[4]) == [(1, 4), (2, 3), (3, 2), (4, 1)]
-        @test collect(V[5]) == [(5, 1), (6, 2), (3, 3), (4, 4)] ||
-              collect(V[5]) == [(3, 3), (4, 4), (5, 1), (6, 2)]
-        @test collect(V[6]) == [(6, 1), (5, 2), (4, 3), (3, 4)] ||
-              collect(V[6]) == [(3, 4), (4, 3), (5, 2), (6, 1)]
+        @test sort(collect(V[1])) == sort([(1, 1), (2, 2), (5, 4), (6, 3)])
+        @test sort(collect(V[2])) == sort([(2, 1), (1, 2), (5, 3), (6, 4)])
+        @test sort(collect(V[3])) == sort([(3, 1), (4, 2), (1, 4), (2, 3)])
+        @test sort(collect(V[4])) == sort([(4, 1), (3, 2), (2, 4), (1, 3)])
+        @test sort(collect(V[5])) == sort([(5, 1), (6, 2), (3, 4), (4, 3)])
+        @test sort(collect(V[6])) == sort([(6, 1), (5, 2), (4, 4), (3, 3)])
     end
 end
 
@@ -237,8 +232,8 @@ end
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
         @test c1 == Geometry.XYPoint(0.0, 0.0)
         @test c2 == Geometry.XYPoint(1.0, 0.0)
-        @test c3 == Geometry.XYPoint(0.0, 1.0)
-        @test c4 == Geometry.XYPoint(1.0, 1.0)
+        @test c3 == Geometry.XYPoint(1.0, 1.0)
+        @test c4 == Geometry.XYPoint(0.0, 1.0)
 
         _, _, grid_topology = rectangular_grid(
             1,
@@ -253,8 +248,8 @@ end
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
         @test c1 == Geometry.XYPoint(-1.0, -1.0)
         @test c2 == Geometry.XYPoint(1.0, -1.0)
-        @test c3 == Geometry.XYPoint(-1.0, 1.0)
-        @test c4 == Geometry.XYPoint(1.0, 1.0)
+        @test c3 == Geometry.XYPoint(1.0, 1.0)
+        @test c4 == Geometry.XYPoint(-1.0, 1.0)
     end
 
     @testset "2×4 element quad mesh with non-periodic boundaries" begin
@@ -262,14 +257,14 @@ end
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 1)
         @test c1 == Geometry.XYPoint(0.0, 0.0)
         @test c2 == Geometry.XYPoint(0.5, 0.0)
-        @test c3 == Geometry.XYPoint(0.0, 0.25)
-        @test c4 == Geometry.XYPoint(0.5, 0.25)
+        @test c3 == Geometry.XYPoint(0.5, 0.25)
+        @test c4 == Geometry.XYPoint(0.0, 0.25)
 
         c1, c2, c3, c4 = Topologies.vertex_coordinates(grid_topology, 8)
         @test c1 == Geometry.XYPoint(0.5, 0.75)
         @test c2 == Geometry.XYPoint(1.0, 0.75)
-        @test c3 == Geometry.XYPoint(0.5, 1.0)
-        @test c4 == Geometry.XYPoint(1.0, 1.0)
+        @test c3 == Geometry.XYPoint(1.0, 1.0)
+        @test c4 == Geometry.XYPoint(0.5, 1.0)
     end
 
     @testset "check coordinate type accuracy" begin

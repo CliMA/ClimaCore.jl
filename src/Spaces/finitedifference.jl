@@ -8,17 +8,21 @@ struct CellCenter <: Staggering end
 """ Cell face location """
 struct CellFace <: Staggering end
 
-struct FiniteDifferenceSpace{S <: Staggering, M <: Meshes.IntervalMesh, G} <:
-       AbstractFiniteDifferenceSpace
+struct FiniteDifferenceSpace{
+    S <: Staggering,
+    T <: Topologies.IntervalTopology,
+    G,
+} <: AbstractFiniteDifferenceSpace
     staggering::S
-    mesh::M
+    topology::T
     center_local_geometry::G
     face_local_geometry::G
 end
 
 function FiniteDifferenceSpace{S}(
-    mesh::Meshes.IntervalMesh,
+    topology::Topologies.IntervalTopology,
 ) where {S <: Staggering}
+    mesh = topology.mesh
     CT = Meshes.coordinate_type(mesh)
     AIdx = Geometry.coordinate_axis(CT)
     # TODO: FD operators  hardcoded to work over the 3-axis, need to generalize
@@ -116,11 +120,15 @@ function FiniteDifferenceSpace{S}(
     end
     return FiniteDifferenceSpace(
         S(),
-        mesh,
+        topology,
         center_local_geometry,
         face_local_geometry,
     )
 end
+
+FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
+    FiniteDifferenceSpace{S}(Topologies.IntervalTopology(mesh))
+
 
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
@@ -130,7 +138,7 @@ function FiniteDifferenceSpace{S}(
 ) where {S <: Staggering}
     FiniteDifferenceSpace(
         S(),
-        space.mesh,
+        space.topology,
         space.center_local_geometry,
         space.face_local_geometry,
     )
@@ -147,7 +155,7 @@ local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
 
 left_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.mesh.boundaries)[1]
+    propertynames(space.topology.boundaries)[1]
 
 right_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.mesh.boundaries)[2]
+    propertynames(space.topology.boundaries)[2]

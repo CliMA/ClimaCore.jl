@@ -27,23 +27,23 @@ end
 This function builds a cube panel mesh with a resolution of `ne` elements along each edge.
 
                 v7                     v8 (1,1,1)
-                 o--------e4----------o       
-                /|                   /|                                   
-               / |                  / |       
-              /  |                 /  |       
-             e7  e11              e8 e12       
-            /    |               /    |       
-           /     |            v6/     |       
-       v5 o--------e3----------o      |       
+                 o--------e4----------o
+                /|                   /|
+               / |                  / |
+              /  |                 /  |
+             e7  e11              e8 e12
+            /    |               /    |
+           /     |            v6/     |
+       v5 o--------e3----------o      |
           |    v3o------e2-----|------o v4 (1,1,0)
-          |     /              |     / 
-          |    /               |    / 
-          e9  e5              e10  e6 
-          |  /                 |  / 
-          | /                  | / 
-          |/                   |/ 
-          o--------e1----------o   
-         v1                    v2 
+          |     /              |     /
+          |    /               |    /
+          e9  e5              e10  e6
+          |  /                 |  /
+          | /                  | /
+          |/                   |/
+          o--------e1----------o
+         v1                    v2
        (0,0,0)               (1,0,0)
 
        Partitioning with Space-Filling Curves on the Cubed-Sphere - John M. Dennis  (2003 iEEE)
@@ -108,27 +108,27 @@ function cube_panel_mesh(
 
     face_interior = reshape(1:((ne - 1) * (ne - 1)), ne - 1, ne - 1)
 
-    nfc1i = (nx - 2) * (nx - 1) # panels with normals along first direction 
-    nfc2i = (nx - 1) * (nx - 2) # panels with normals along second direction 
+    nfc1i = (nx - 2) * (nx - 1) # panels with normals along first direction
+    nfc2i = (nx - 1) * (nx - 2) # panels with normals along second direction
     nfci = nfc1i + nfc2i
     fci1 = reshape(1:nfc1i, nx - 2, nx - 1)
     fci2 = reshape(1:nfc2i, nx - 1, nx - 2)
 
     fcmat1 = zeros(I, nx, nx - 1) # face numbering
-    fcmat2 = zeros(I, nx - 1, nx) # for each panel 
+    fcmat2 = zeros(I, nx - 1, nx) # for each panel
 
     edge_faces = reshape(1:(12 * ne), ne, 12)
 
     # node coordinates
-    xc = range(FT(0), FT(1); step = FT(1 / ne))
-    xci = view(xc, 2:ne)
-    zc = zeros(FT, ne - 1)
-    oc = ones(FT, ne - 1)
+    xc = range(FT(0), FT(1); step = FT(1 / ne)) # [0, 1/ne, 2/ne, ..., 1]
+    xci = view(xc, 2:ne)                        # [1/ne, 2/ne, ..., 1-1/ne]
+    zc = zeros(FT, ne - 1)                      # [0, ...., 0]
+    oc = ones(FT, ne - 1)                       # [1, ...., 1]
     zc2 = zeros(FT, (ne - 1) * (ne - 1))
     oc2 = ones(FT, (ne - 1) * (ne - 1))
 
-    xci12 = repeat(xci, ne - 1)
-    xci21 = repeat(xci', ne - 1, 1)[:]
+    xci12 = repeat(xci, outer = ne - 1) # [1/ne, 2/ne, ..., 1-1/ne, 1/ne, ...]
+    xci21 = repeat(xci, inner = ne - 1) # [1/ne, 1/ne, ..., 1/ne, 2/ne, ...]
 
     coordinates = vcat(
         hcat(
@@ -137,7 +137,7 @@ function cube_panel_mesh(
             [0, 0, 0, 0, 1, 1, 1, 1],
         ), # x3 vertex coordinates
         vcat(
-            hcat(xci, zc, zc),    # edge  1  
+            hcat(xci, zc, zc),    # edge  1
             hcat(xci, oc, zc),    # edge  2
             hcat(xci, zc, oc),    # edge  3
             hcat(xci, oc, oc),
@@ -235,19 +235,22 @@ function cube_panel_mesh(
         elem_verts[emat[:, :, sfc][:], :] .= hcat(
             ndmat[1:ne, 1:ne][:], # node numbers
             ndmat[2:(ne + 1), 1:ne][:], # for each element
-            ndmat[1:ne, 2:(ne + 1)][:],
             ndmat[2:(ne + 1), 2:(ne + 1)][:],
+            ndmat[1:ne, 2:(ne + 1)][:],
         )
 
         elem_faces[emat[:, :, sfc][:], :] .= hcat(
-            fcmat1[1:(nx - 1), :][:], # face numbers for 
+            fcmat1[1:(nx - 1), :][:], # face numbers for
             fcmat1[2:nx, :][:],   # each element
             fcmat2[:, 1:(nx - 1)][:],
             fcmat2[:, 2:nx][:],
         )
     end
 
-    ref_fc_verts = [1 2 1 3; 3 4 2 4]
+    ref_fc_verts = [
+        1 2 1 4
+        4 3 2 3
+    ]
 
 
     for fc in 1:nfaces

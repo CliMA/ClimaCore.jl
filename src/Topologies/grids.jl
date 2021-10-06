@@ -290,19 +290,19 @@ function Base.iterate(
     vert += 1
     # at the boundary, skip non-existent elements
     if !x1periodic
-        if z1 == 0 && (vert == 2 || vert == 4)
-            vert += 1
+        if z1 == 0 && (vert == 2 || vert == 3)
+            vert = 4
         end
-        if z1 == n1 && (vert == 1 || vert == 3)
+        if z1 == n1 && (vert == 1 || vert == 4)
             vert += 1
         end
     end
     if !x2periodic
-        if z2 == 0 && (vert == 3 || vert == 4)
+        if z2 == 0 && vert >= 3
             vert += 2
         end
-        if z2 == n2 && (vert == 1 || vert == 2)
-            vert += 2
+        if z2 == n2 && vert <= 2
+            vert = !x1periodic && z1 == 0 ? 4 : 3
         end
     end
 
@@ -310,7 +310,7 @@ function Base.iterate(
         return nothing
     end
 
-    if vert == 2 || vert == 4
+    if vert == 2 || vert == 3
         z1 = mod(z1 - 1, nv1)
     end
     if vert == 3 || vert == 4
@@ -354,8 +354,8 @@ function vertex_coordinates(
 
     c1 = CT(range1[z1 + 1], range2[z2 + 1])
     c2 = CT(range1[z1 + 2], range2[z2 + 1])
-    c3 = CT(range1[z1 + 1], range2[z2 + 2])
-    c4 = CT(range1[z1 + 2], range2[z2 + 2])
+    c3 = CT(range1[z1 + 2], range2[z2 + 2])
+    c4 = CT(range1[z1 + 1], range2[z2 + 2])
     return (c1, c2, c3, c4)
 end
 
@@ -435,8 +435,8 @@ function vertex_coordinates(
 
     c1 = coordinates[z1 * (n2 + 1) + (z2 + 1)]
     c2 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 1)]
-    c3 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
-    c4 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
+    c3 = coordinates[(z1 + 1) * (n2 + 1) + (z2 + 2)]
+    c4 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
 
     return (c1, c2, c3, c4)
 end

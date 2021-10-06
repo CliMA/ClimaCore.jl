@@ -80,7 +80,7 @@ function Mesh2D(
     nelems = (nx1 - 1) * (nx2 - 1)
     nbndry = 4
 
-    nfc1 = nx1 * (nx2 - 1) # faces with normals along x1 direction 
+    nfc1 = nx1 * (nx2 - 1) # faces with normals along x1 direction
 
     ndmat = reshape(1:nverts, nx1, nx2)
 
@@ -146,11 +146,11 @@ function Mesh2D(
     elem_verts = hcat(
         ndmat[1:(nx1 - 1), 1:(nx2 - 1)][:], # node numbers
         ndmat[2:nx1, 1:(nx2 - 1)][:], # for each element
-        ndmat[1:(nx1 - 1), 2:nx2][:],
         ndmat[2:nx1, 2:nx2][:],
+        ndmat[1:(nx1 - 1), 2:nx2][:],
     )
     elem_faces = hcat(
-        fcmat1[1:(nx1 - 1), :][:], # face numbers for 
+        fcmat1[1:(nx1 - 1), :][:], # face numbers for
         fcmat1[2:nx1, :][:],   # each element
         fcmat2[:, 1:(nx2 - 1)][:],
         fcmat2[:, 2:nx2][:],
