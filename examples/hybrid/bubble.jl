@@ -104,19 +104,46 @@ function init_dry_rising_bubble_2d(x, z)
 end
 
 # initial conditions
-coords = Fields.coordinate_field(hv_center_space);
-face_coords = Fields.coordinate_field(hv_face_space);
+coords = Fields.coordinate_field(hv_center_space)
+face_coords = Fields.coordinate_field(hv_face_space)
 
 Yc = map(coords) do coord
     bubble = init_dry_rising_bubble_2d(coord.x, coord.z)
     bubble
-end;
+end
 
 ρw = map(face_coords) do coord
     Geometry.Cartesian3Vector(0.0)
-end;
+end
 
-Y = Fields.FieldVector(Yc = Yc, ρw = ρw);
+Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
+
+function energy(Yc, ρu, z)
+    ρ = Yc.ρ
+    ρθ = Yc.ρθ
+    u = ρu / ρ
+    kinetic = ρ * norm(u)^2 /2
+    potential = z * grav * ρ
+    internal = C_v*pressure(ρθ)/(ρ*R_d)
+    return kinetic + potential + internal
+end
+function combine_momentum(ρuₕ, ρw)
+    Geometry.transform(Geometry.Cartesian13Axis(), ρuₕ) + Geometry.transform(Geometry.Cartesian13Axis(), ρw)
+end
+function center_momentum(Y)
+    If2c = Operators.InterpolateF2C()
+    combine_momentum.(Y.Yc.ρuₕ,  If2c.(Y.ρw))
+end
+function total_energy(Y)
+    ρ = Y.Yc.ρ
+    ρu = center_momentum(Y)
+    ρθ = Y.Yc.ρθ
+    z = Fields.coordinate_field(axes(ρ)).z
+    sum(energy.(Yc, ρu, z))
+end
+total_energy(Y)
+
+
 
 function rhs!(dY, Y, _, t)
     ρw = Y.ρw
@@ -265,7 +292,7 @@ rhs!(dYdt, Y, nothing, 0.0);
 # run!
 using OrdinaryDiffEq
 Δt = 0.03
-prob = ODEProblem(rhs!, Y, (0.0, 200.0))
+prob = ODEProblem(rhs!, Y, (0.0, 800.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -289,3 +316,7 @@ anim = Plots.@animate for u in sol.u
     Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
 end
 Plots.mp4(anim, joinpath(path, "bubble.mp4"), fps = 20)
+
+
+Es = [total_energy(u) for u in sol.u]
+Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
