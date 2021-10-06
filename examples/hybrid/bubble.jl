@@ -124,7 +124,7 @@ function energy(Yc, ρu, z)
     u = ρu / ρ
     kinetic = ρ * norm(u)^2 / 2
     potential = z * grav * ρ
-    internal = C_v * pressure(ρθ) / (ρ * R_d)
+    internal = C_v * pressure(ρθ) / R_d
     return kinetic + potential + internal
 end
 function combine_momentum(ρuₕ, ρw)
