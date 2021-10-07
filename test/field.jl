@@ -1,4 +1,3 @@
-
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
@@ -34,7 +33,10 @@ end
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
     @test norm(field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+    @test norm(field, 1) ≈ norm(Complex(1.0, 1.0)) * 8.0 * 10.0 rtol = 10eps()
+    @test norm(field, Inf) ≈ norm(Complex(1.0, 1.0)) rtol = 10eps()
 
+    @test extrema(real, field) == (1.0, 1.0)
 
     @test Operators.matrix_interpolate(field, 4) ≈
           [Complex(1.0, 1.0) for i in 1:(4 * n1), j in 1:(4 * n2)]
