@@ -1,5 +1,6 @@
 using Base: operator_associativity
 
+# Order of tests is intended to reflect dependency order of functionality
 include("recursive.jl")
 include("data1d.jl")
 include("data2d.jl")
@@ -20,6 +21,8 @@ include("fielddiffeq.jl")
 include("hybrid2d.jl")
 include("hybrid3d.jl")
 include("sphere.jl")
+include("sphere_metric_terms.jl")
+include("sphere_diffusion.jl")
 include("hyperdiffusion_sphere.jl")
 
 if "CUDA" in ARGS
