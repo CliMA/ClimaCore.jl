@@ -6,6 +6,10 @@ format = Documenter.HTML(
     collapselevel = 1,
 )
 
+using Literate
+
+#Literate.markdown("tutorials/tutorial.jl", "src")
+
 makedocs(
     sitename = "ClimaCore.jl",
     strict = false,
@@ -18,6 +22,7 @@ makedocs(
         "Home" => "index.md",
         "API" => "api.md",
         "Operators" => "operators.md",
+        "Tutorial" => "tutorial.md",
     ],
 )
 
