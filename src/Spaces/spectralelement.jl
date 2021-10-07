@@ -30,12 +30,14 @@ struct SpectralElementSpace1D{T, Q, G, D, M} <: AbstractSpectralElementSpace
     inverse_mass_matrix::M
 end
 
-function SpectralElementSpace1D(topology, quadrature_style)
+function SpectralElementSpace1D(
+    topology::Topologies.IntervalTopology,
+    quadrature_style,
+)
     # TODO: we need to massage the coordinate points because the grid is assumed 2D
     CoordType = Topologies.coordinate_type(topology)
-    CoordType1D = Geometry.coordinate_type(CoordType, 1)
-    AIdx = Geometry.coordinate_axis(CoordType1D)
-    FT = eltype(CoordType1D)
+    AIdx = Geometry.coordinate_axis(CoordType)
+    FT = eltype(CoordType)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
@@ -49,7 +51,7 @@ function SpectralElementSpace1D(topology, quadrature_style)
         Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
-    LG = Geometry.LocalGeometry{CoordType1D, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{CoordType, FT, Mxξ, Mξx}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -60,15 +62,11 @@ function SpectralElementSpace1D(topology, quadrature_style)
             ξ = quad_points[i]
             # TODO: we need to massage the coordinate points because the grid is assumed 2D
             vcoords = Topologies.vertex_coordinates(topology, elem)
-            vcoords1D = (
-                Geometry.coordinate(vcoords[1], 1),
-                Geometry.coordinate(vcoords[2], 1),
-            )
-            x = Geometry.linear_interpolate(vcoords1D, ξ)
+            x = Geometry.linear_interpolate(vcoords, ξ)
             ∂x∂ξ =
                 (
-                    Geometry.component(vcoords1D[2], 1) -
-                    Geometry.component(vcoords1D[1], 1)
+                    Geometry.component(vcoords[2], 1) -
+                    Geometry.component(vcoords[1], 1)
                 ) / 2
             J = abs(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)

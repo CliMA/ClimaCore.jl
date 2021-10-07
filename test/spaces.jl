@@ -8,20 +8,17 @@ import ClimaCore.DataLayouts: IJFH
 
 @testset "1d domain space" begin
     FT = Float64
-    domain = Domains.RectangleDomain(
+    domain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
-        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(0),
-        x1periodic = true,
-        x2periodic = false,
-        x2boundary = (:south, :north),
+        periodic = true,
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.IntervalMesh(domain; nelems = 1)
+    topology = Topologies.IntervalTopology(mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
 
-    space = Spaces.SpectralElementSpace1D(grid_topology, quad)
+    space = Spaces.SpectralElementSpace1D(topology, quad)
 
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
