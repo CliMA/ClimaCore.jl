@@ -38,11 +38,12 @@ rmaptype(
     NamedTuple{names, rmaptype(fn, tup)}
 
 """
-    rmul(w, X)
-    w ⊠ X
+    rmul(X, Y)
+    X ⊠ Y
 
-Recursively scale each element of `X` by `w`.
+Recursively scale each element of `X` by `Y`.
 """
+rmul(X, Y) = rmap(*, X, Y)
 rmul(w::Number, X) = rmap(x -> w * x, X)
 rmul(X, w::Number) = rmap(x -> x * w, X)
 rmul(w1::Number, w2::Number) = w1 * w2
@@ -55,7 +56,17 @@ const ⊠ = rmul
 Recursively add elements of `X` and `Y`.
 """
 radd(X, Y) = rmap(+, X, Y)
+radd(w::Number, X) = rmap(x -> w + x, X)
+radd(X, w::Number) = rmap(x -> x + w, X)
+radd(w1::Number, w2::Number) = w1 + w2
 const ⊞ = radd
+
+# Adapted from Base/operators.jl for general nary operator fallbacks
+for op in (:rmul, :radd)
+    @eval begin
+        ($op)(a, b, c, xs...) = Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
+    end
+end
 
 """
     rsub(X, Y)
@@ -65,9 +76,20 @@ Recursively subtract elements of `Y` from `X`.
 """
 rsub(X) = rmap(-, X)
 rsub(X, Y) = rmap(-, X, Y)
+rsub(X, w::Number) = rmap(x -> x - w, X)
+rsub(w::Number, X) = rmap(x -> w - x, X)
+rsub(w1::Number, w2::Number) = w1 - w2
 const ⊟ = rsub
 
+"""
+    rdiv(X, Y)
+
+Recursively divide each element of `X` by `Y`
+"""
+rdiv(X, Y) = rmap(/, X, Y)
 rdiv(X, w::Number) = rmap(x -> x / w, X)
+rdiv(w::Number, X) = rmap(x -> w / x, X)
+rdiv(w1::Number, w2::Number) = w1 / w2
 
 """
     rmuladd(w, X, Y)
