@@ -115,9 +115,9 @@ function Base.iterate(
         nextstate = (1, z1, z2)
     end
     if d == 1
-        return (elem1, 1, elem2, 2, false), nextstate
+        return (elem1, 4, elem2, 2, true), nextstate
     else
-        return (elem1, 3, elem2, 4, false), nextstate
+        return (elem1, 1, elem2, 3, true), nextstate
     end
 end
 
@@ -136,17 +136,7 @@ function boundary_tag(
     topology::GridTopology{M},
     name::Symbol,
 ) where {M <: AbstractMesh}
-    x1boundary = topology.mesh.domain.x1boundary
-    x2boundary = topology.mesh.domain.x2boundary
-    if !isnothing(x1boundary)
-        x1boundary[1] == name && return 1
-        x1boundary[2] == name && return 2
-    end
-    if !isnothing(x2boundary)
-        x2boundary[1] == name && return 3
-        x2boundary[2] == name && return 4
-    end
-    error("Invalid boundary name")
+    getproperty(topology.boundaries, name)
 end
 
 function boundaries(topology::GridTopology{M}) where {M <: AbstractMesh}
@@ -200,17 +190,21 @@ function Base.iterate(
     if boundary == 1
         z >= n2 && return nothing
         elem = z * n1 + 1
+        face = 4
     elseif boundary == 2
         z >= n2 && return nothing
         elem = z * n1 + n1
+        face = 2
     elseif boundary == 3
         z >= n1 && return nothing
         elem = z + 1
+        face = 1
     elseif boundary == 4
         z >= n1 && return nothing
         elem = (n2 - 1) * n1 + z + 1
+        face = 3
     end
-    return (elem, boundary), z + 1
+    return (elem, face), z + 1
 end
 
 # VertexIterator
@@ -363,7 +357,7 @@ function opposing_face(
     topology::GridTopology{M},
     elem::Integer,
     face::Integer,
-) where {M <: EquispacedRectangleMesh}
+) where {M}
     @assert 1 <= elem <= nlocalelems(topology)
     @assert 1 <= face <= 4
 
@@ -375,11 +369,11 @@ function opposing_face(
     x2periodic = isnothing(mesh.domain.x2boundary)
 
     z2, z1 = fldmod(elem - 1, n1)
-    if face == 1
+    if face == 4
         z1 -= 1
         if z1 < 0
             if !x1periodic
-                return (0, 1, false)
+                return (0, 1, false) # boundary
             end
             z1 += n1
         end
@@ -388,32 +382,32 @@ function opposing_face(
         z1 += 1
         if z1 == n1
             if !x1periodic
-                return (0, 2, false)
+                return (0, 2, false) # boundary
             end
             z1 -= n1
         end
-        opface = 1
-    elseif face == 3
+        opface = 4
+    elseif face == 1
         z2 -= 1
         if z2 < 0
             if !x2periodic
-                return (0, 3, false)
+                return (0, 3, false) # boundary
             end
             z2 += n2
         end
-        opface = 4
-    elseif face == 4
+        opface = 3
+    elseif face == 3
         z2 += 1
         if z2 == n2
             if !x2periodic
-                return (0, 4, false)
+                return (0, 4, false) # boundary
             end
             z2 -= n2
         end
-        opface = 3
+        opface = 1
     end
     opelem = z2 * n1 + z1 + 1
-    return opelem, opface, false
+    return opelem, opface, true
 end
 
 
@@ -439,15 +433,4 @@ function vertex_coordinates(
     c4 = coordinates[z1 * (n2 + 1) + (z2 + 2)]
 
     return (c1, c2, c3, c4)
-end
-
-function opposing_face(
-    topology::GridTopology{M},
-    elem::Integer,
-    face::Integer,
-) where {M <: TensorProductMesh}
-    @assert 1 <= elem <= nlocalelems(topology)
-    @assert 1 <= face <= 4
-
-    return topology.mesh.faces[(elem - 1) * 4 + face][3:5]
 end

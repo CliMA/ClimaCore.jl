@@ -238,7 +238,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 quad_weights,
                 face⁺,
                 q,
-                false,
+                reversed,
             )
 
             @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
@@ -472,13 +472,13 @@ function compute_surface_geometry(
     @unpack J, ∂ξ∂x = local_geometry
 
     # surface mass matrix
-    n = if face == 1
+    n = if face == 4
         -J * ∂ξ∂x[1, :] * quad_weights[j]
     elseif face == 2
         J * ∂ξ∂x[1, :] * quad_weights[j]
-    elseif face == 3
+    elseif face == 1
         -J * ∂ξ∂x[2, :] * quad_weights[i]
-    elseif face == 4
+    elseif face == 3
         J * ∂ξ∂x[2, :] * quad_weights[i]
     end
     sWJ = norm(n)

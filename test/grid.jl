@@ -118,10 +118,10 @@ end
         end
 
         @testset "1×1 element quad mesh with all periodic boundries" begin
-            @test Topologies.opposing_face(topology, 1, 1) == (1, 2, false)
-            @test Topologies.opposing_face(topology, 1, 2) == (1, 1, false)
-            @test Topologies.opposing_face(topology, 1, 3) == (1, 4, false)
-            @test Topologies.opposing_face(topology, 1, 4) == (1, 3, false)
+            @test Topologies.opposing_face(topology, 1, 1) == (1, 3, true)
+            @test Topologies.opposing_face(topology, 1, 2) == (1, 4, true)
+            @test Topologies.opposing_face(topology, 1, 3) == (1, 1, true)
+            @test Topologies.opposing_face(topology, 1, 4) == (1, 2, true)
         end
     end
 
@@ -131,10 +131,10 @@ end
     for topology in topologies
         @testset "1×1 element quad mesh with 1 periodic boundary" begin
             _, _, topology = rectangular_grid(1, 1, true, false)
-            @test Topologies.opposing_face(topology, 1, 1) == (1, 2, false)
-            @test Topologies.opposing_face(topology, 1, 2) == (1, 1, false)
-            @test Topologies.opposing_face(topology, 1, 3) == (0, 3, false)
-            @test Topologies.opposing_face(topology, 1, 4) == (0, 4, false)
+            @test Topologies.opposing_face(topology, 1, 1) == (0, 3, false)
+            @test Topologies.opposing_face(topology, 1, 2) == (1, 4, true)
+            @test Topologies.opposing_face(topology, 1, 3) == (0, 4, false)
+            @test Topologies.opposing_face(topology, 1, 4) == (1, 2, true)
         end
     end
 
@@ -143,10 +143,10 @@ end
     topologies = (grid_topology, r_ts_topology)
     for topology in topologies
         @testset "1×1 element quad mesh with non-periodic boundaries" begin
-            @test Topologies.opposing_face(topology, 1, 1) == (0, 1, false)
+            @test Topologies.opposing_face(topology, 1, 1) == (0, 3, false)
             @test Topologies.opposing_face(topology, 1, 2) == (0, 2, false)
-            @test Topologies.opposing_face(topology, 1, 3) == (0, 3, false)
-            @test Topologies.opposing_face(topology, 1, 4) == (0, 4, false)
+            @test Topologies.opposing_face(topology, 1, 3) == (0, 4, false)
+            @test Topologies.opposing_face(topology, 1, 4) == (0, 1, false)
         end
     end
 
@@ -155,20 +155,19 @@ end
     topologies = (grid_topology, r_ts_topology)
     for topology in topologies
         @testset "2×2 element quad mesh with non-periodic boundaries" begin
-            @test Topologies.opposing_face(topology, 1, 1) == (0, 1, false)
-            @test Topologies.opposing_face(topology, 1, 2) == (2, 1, false)
-            @test Topologies.opposing_face(topology, 1, 3) == (0, 3, false)
-            @test Topologies.opposing_face(topology, 1, 4) == (3, 3, false)
-            @test Topologies.opposing_face(topology, 2, 1) == (1, 2, false)
+            @test Topologies.opposing_face(topology, 1, 1) == (0, 3, false)
+            @test Topologies.opposing_face(topology, 1, 2) == (2, 4, true)
+            @test Topologies.opposing_face(topology, 1, 3) == (3, 1, true)
+            @test Topologies.opposing_face(topology, 1, 4) == (0, 1, false)
+            @test Topologies.opposing_face(topology, 2, 1) == (0, 3, false)
             @test Topologies.opposing_face(topology, 2, 2) == (0, 2, false)
-            @test Topologies.opposing_face(topology, 2, 3) == (0, 3, false)
-            @test Topologies.opposing_face(topology, 2, 4) == (4, 3, false)
+            @test Topologies.opposing_face(topology, 2, 3) == (4, 1, true)
+            @test Topologies.opposing_face(topology, 2, 4) == (1, 2, true)
         end
     end
 end
 
 @testset "simple rectangular mesh interior faces iterator" begin
-
     _, _, grid_topology = rectangular_grid(1, 1, true, true)
     _, _, r_ts_topology = regular_tensorproduct_grid(1, 1, true, true)
     topologies = (grid_topology, r_ts_topology)
@@ -176,8 +175,7 @@ end
         @testset "1×1 element quad mesh with all periodic boundries" begin
             @test length(Topologies.interior_faces(topology)) == 2
             faces = collect(Topologies.interior_faces(topology))
-            @test faces[1] == (1, 1, 1, 2, false)
-            @test faces[2] == (1, 3, 1, 4, false)
+            @test sort(faces) == sort([(1, 4, 1, 2, true), (1, 1, 1, 3, true)])
         end
     end
 
@@ -188,7 +186,7 @@ end
         @testset "1×1 element quad mesh with 1 periodic boundary" begin
             @test length(Topologies.interior_faces(topology)) == 1
             faces = collect(Topologies.interior_faces(topology))
-            @test faces[1] == (1, 1, 1, 2, false)
+            @test faces == [(1, 4, 1, 2, true)]
         end
     end
 
@@ -211,10 +209,12 @@ end
         @testset "2×2 element quad mesh with non-periodic boundaries" begin
             @test length(Topologies.interior_faces(topology)) == 4
             faces = collect(Topologies.interior_faces(topology))
-            @test faces[1] == (2, 1, 1, 2, false)
-            @test faces[2] == (3, 3, 1, 4, false)
-            @test faces[3] == (4, 1, 3, 2, false)
-            @test faces[4] == (4, 3, 2, 4, false)
+            @test sort(faces) == sort([
+                (2, 4, 1, 2, true),
+                (3, 1, 1, 3, true),
+                (4, 4, 3, 2, true),
+                (4, 1, 2, 3, true),
+            ])
         end
     end
 end
@@ -247,8 +247,8 @@ end
             @test length(Topologies.boundary_faces(topology, 4)) == 1
             @test isempty(collect(Topologies.boundary_faces(topology, 1)))
             @test isempty(collect(Topologies.boundary_faces(topology, 2)))
-            @test collect(Topologies.boundary_faces(topology, 3)) == [(1, 3)]
-            @test collect(Topologies.boundary_faces(topology, 4)) == [(1, 4)]
+            @test collect(Topologies.boundary_faces(topology, 3)) == [(1, 1)]
+            @test collect(Topologies.boundary_faces(topology, 4)) == [(1, 3)]
         end
     end
 
@@ -261,10 +261,10 @@ end
             @test length(Topologies.boundary_faces(topology, 2)) == 1
             @test length(Topologies.boundary_faces(topology, 3)) == 1
             @test length(Topologies.boundary_faces(topology, 4)) == 1
-            @test collect(Topologies.boundary_faces(topology, 1)) == [(1, 1)]
+            @test collect(Topologies.boundary_faces(topology, 1)) == [(1, 4)]
             @test collect(Topologies.boundary_faces(topology, 2)) == [(1, 2)]
-            @test collect(Topologies.boundary_faces(topology, 3)) == [(1, 3)]
-            @test collect(Topologies.boundary_faces(topology, 4)) == [(1, 4)]
+            @test collect(Topologies.boundary_faces(topology, 3)) == [(1, 1)]
+            @test collect(Topologies.boundary_faces(topology, 4)) == [(1, 3)]
             @test Topologies.boundary_tag(topology, :west) == 1
             @test Topologies.boundary_tag(topology, :east) == 2
             @test Topologies.boundary_tag(topology, :south) == 3
@@ -284,13 +284,13 @@ end
             @test length(Topologies.boundary_faces(topology, 4)) == 2
 
             @test collect(Topologies.boundary_faces(topology, 1)) ==
-                  [(1, 1), (3, 1), (5, 1)]
+                  [(1, 4), (3, 4), (5, 4)]
             @test collect(Topologies.boundary_faces(topology, 2)) ==
                   [(2, 2), (4, 2), (6, 2)]
             @test collect(Topologies.boundary_faces(topology, 3)) ==
-                  [(1, 3), (2, 3)]
+                  [(1, 1), (2, 1)]
             @test collect(Topologies.boundary_faces(topology, 4)) ==
-                  [(5, 4), (6, 4)]
+                  [(5, 3), (6, 3)]
         end
     end
 end
