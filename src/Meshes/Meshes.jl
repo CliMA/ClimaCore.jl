@@ -42,29 +42,6 @@ struct EquidistantSphereWarp <: AbstractSphereWarp end
 include("interval.jl")
 
 
-
-struct EquispacedLineMesh{FT, ID <: IntervalDomain, R} <: AbstractMesh{FT}
-    domain::ID
-    n1::Int64 # number of elements in x1 direction
-    n2::Int64 # always 1
-    range1::R
-    range2::R # always 1:1
-end
-
-function EquispacedLineMesh(domain::IntervalDomain, n1)
-    FT = eltype(Domains.coordinate_type(domain))
-    cmin = Geometry.component(domain.coord_min, 1)
-    cmax = Geometry.component(domain.coord_max, 1)
-    range1 = range(cmin, cmax; length = n1 + 1)
-    range2 = range(zero(FT), zero(FT), length = zero(n1))
-    return EquispacedLineMesh(domain, n1, zero(n1), range1, range2)
-end
-
-function Base.show(io::IO, mesh::EquispacedLineMesh)
-    print(io, "(", mesh.n1, " × ", " ) EquispacedLineMesh of ")
-    print(io, mesh.domain)
-end
-
 """
     EquispacedRectangleMesh(domain::RectangleDomain, n1::Integer, n2::Integer)
 

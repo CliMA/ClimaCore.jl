@@ -320,20 +320,6 @@ function Base.iterate(
     return (elem, vert), vert
 end
 
-# GridTopology1D
-"""
-    GridTopology1D(mesh)
-
-A line topology defined on an equispaced linear mesh.
-"""
-
-function GridTopology1D(mesh::Meshes.EquispacedLineMesh)
-    x1boundary = mesh.domain.x3boundary
-    x2boundary = nothing
-    boundaries =
-        isnothing(x1boundary) ? NamedTuple() : NamedTuple{x1boundary}((1, 2))
-    return GridTopology(mesh, boundaries)
-end
 
 # Uniform grid implementations, dispatching on EquispacedRectangleMesh
 function vertex_coordinates(
