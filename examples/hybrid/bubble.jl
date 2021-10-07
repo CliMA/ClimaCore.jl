@@ -214,11 +214,11 @@ function rhs!(dY, Y, _, t)
     @. dρw = hdiv(hgrad(ρw))
     Spaces.weighted_dss!(dYc)
 
-    κ = 3.65 # m^4/s
-    @. dYc.ρ = κ * hdiv(hgrad(dYc.ρ))
-    @. dYc.ρθ = κ * hdiv(hgrad(dYc.ρθ))
-    @. dYc.ρuₕ = κ * hdiv(hgrad(dYc.ρuₕ))
-    @. dρw = κ * hdiv(hgrad(dρw))
+    κ = 10 # m^4/s
+    @. dYc.ρ = -κ * hdiv(hgrad(dYc.ρ))
+    @. dYc.ρθ = -κ * hdiv(hgrad(dYc.ρθ))
+    @. dYc.ρuₕ = -κ * hdiv(hgrad(dYc.ρuₕ))
+    @. dρw = -κ * hdiv(hgrad(dρw))
 
     uₕ = @. Yc.ρuₕ / Yc.ρ
     w = @. ρw / If(Yc.ρ)
