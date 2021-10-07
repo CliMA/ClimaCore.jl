@@ -404,7 +404,7 @@ function SpectralElementSpace2D(
                 quad_weights,
                 face⁺,
                 q,
-                false,
+                reversed,
             )
 
             @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
