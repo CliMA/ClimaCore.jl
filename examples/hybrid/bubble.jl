@@ -37,14 +37,13 @@ function hvspace_2D(
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
-    horzdomain = Domains.RectangleDomain(
+
+    horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
-        Geometry.YPoint{FT}(-0)..Geometry.YPoint{FT}(0),
-        x1periodic = true,
-        x2boundary = (:a, :b),
+        periodic = true,
     )
-    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, helem, 1)
-    horztopology = Topologies.GridTopology(horzmesh)
+    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
+    horztopology = Topologies.IntervalTopology(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)

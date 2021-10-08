@@ -13,7 +13,7 @@ function dss_1d!(
     for (elem1, face1, elem2, face2, reversed) in
         Topologies.interior_faces(htopology)
         for level in 1:Nv
-            @assert face1 == 4 && face2 == 2 && reversed
+            @assert face1 == 1 && face2 == 2 && !reversed
             src_slab1 = slab(src, level, elem1)
             src_slab2 = slab(src, level, elem2)
             val = src_slab1[idx1] ⊞ src_slab2[idx2]

@@ -51,8 +51,8 @@ end
 Construct a `IntervalDomain`, over the closed coordinate interval `coords`
 Because `IntervalDomain` does not support periodic boundary conditions, the `boundary_tags` keyword arugment must be supplied.
 """
-IntervalDomain(coords::ClosedInterval; boundary_tags::Tuple{Symbol, Symbol}) =
-    IntervalDomain(coords.left, coords.right, boundary_tags)
+IntervalDomain(coords::ClosedInterval; kwargs...) =
+    IntervalDomain(coords.left, coords.right; kwargs...)
 
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
