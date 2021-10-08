@@ -49,7 +49,7 @@ function get_n2(mesh::Meshes.Mesh2D{<:Domains.RectangleDomain})
     elem, next_elem, n2 = 1, 2, 0
     while next_elem > 1
         n2 += 1
-        face = elem_faces[elem, 4]
+        face = elem_faces[elem, 3]
         if face_neighbors[face, 1] == elem
             next_elem = face_neighbors[face, 3]
         else
@@ -80,14 +80,14 @@ function Mesh2D(
     nelems = (nx1 - 1) * (nx2 - 1)
     nbndry = 4
 
-    nfc1 = nx1 * (nx2 - 1) # faces with normals along x1 direction
+    nfc1 = nx1 * (nx2 - 1) # faces with normals along x1 direction 
 
-    ndmat = reshape(1:nverts, nx1, nx2)
+    ndmat = reshape(1:nverts, nx1, nx2) # node numbers
 
     fcmat1 = reshape(1:nfc1, nx1, nx2 - 1)        # faces with normals along x1 direction
     fcmat2 = reshape((nfc1 + 1):nfaces, nx1 - 1, nx2) # faces with normals along x2 direction
 
-    emat = reshape(1:nelems, nx1 - 1, nx2 - 1)
+    emat = reshape(1:nelems, nx1 - 1, nx2 - 1) # element numbers
 
     coordinates = [repeat(x1c, 1, nx2)[:] repeat(x2c', nx1, 1)[:]] # node coordinates
 
@@ -140,22 +140,25 @@ function Mesh2D(
         zeros(I, nfaces),
         vcat(vcat(emat, bdy2)[:], hcat(emat, bdy4)[:]),
         zeros(I, nfaces),
-        ones(I, nfaces),
+        -ones(I, nfaces), # relative orientation is always reversed
     )
 
     elem_verts = hcat(
-        ndmat[1:(nx1 - 1), 1:(nx2 - 1)][:], # node numbers
-        ndmat[2:nx1, 1:(nx2 - 1)][:], # for each element
-        ndmat[2:nx1, 2:nx2][:],
-        ndmat[1:(nx1 - 1), 2:nx2][:],
+        ndmat[1:(nx1 - 1), 1:(nx2 - 1)][:], # node numbers (local vertex # 1)
+        ndmat[2:nx1, 1:(nx2 - 1)][:], # for each element (local vertex # 2)
+        ndmat[2:nx1, 2:nx2][:], #(local vertex # 3)
+        ndmat[1:(nx1 - 1), 2:nx2][:], # (local vertex # 4)
     )
-    elem_faces = hcat(
-        fcmat1[1:(nx1 - 1), :][:], # face numbers for
-        fcmat1[2:nx1, :][:],   # each element
-        fcmat2[:, 1:(nx2 - 1)][:],
-        fcmat2[:, 2:nx2][:],
+    elem_faces = hcat( # face numbers for each element
+        fcmat2[:, 1:(nx2 - 1)][:], # local face 1
+        fcmat1[2:nx1, :][:], # local face 2
+        fcmat2[:, 2:nx2][:], # local face face 3
+        fcmat1[1:(nx1 - 1), :][:], # local face 4
     )
-
+    ref_fc_verts = [
+        1 2 3 4
+        2 3 4 1
+    ]
     for fc in 1:nfaces
         elems = (face_neighbors[fc, 1], face_neighbors[fc, 3])
 
@@ -198,7 +201,7 @@ function Mesh2D(
                     end
                 end
             end
-        end # note: no orientation mismatch in this case
+        end
     end
 
     if periodic # marking shadow faces with -1

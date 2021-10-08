@@ -95,29 +95,22 @@ embedded in a higher dimensional space.
 
                         Quadrilateral
 
-                v4            f4           v3
+                v4            f3           v3
                   o------------------------o
-                  |                        |		  face    vertices
-                  |                        |
-                  |                        |		   f1 =>  v1 v4
-               f1 |                        | f2        f2 =>  v2 v3
-                  |                        |		   f3 =>  v1 v2
-                  |                        |           f4 =>  v4 v3
-                  |                        |
+                  |                        |	  face    vertices
+                  |       <----------      |             
+                  |                 |      |		f1 =>  v1 v2 
+               f4 |                 |      | f2     f2 =>  v2 v3
+                  |                 |      |		f3 =>  v3 v4
+                  |                 |      |        f4 =>  v4 v1
+                  |       -----------      |
                   |                        |
                   o------------------------o
-                 v1           f3           v2
+                 v1           f1           v2
 
-z-order numbering convention for 2D quadtrees
 
 Reference:
-
-p4est: SCALABLE ALGORITHMS FOR PARALLEL ADAPTIVE
-MESH REFINEMENT ON FORESTS OF OCTREES∗
-CARSTEN BURSTEDDE†, LUCAS C. WILCOX‡ , AND OMAR GHATTAS§
-SIAM J. Sci. Comput. Vol. 33, No. 3, pp. 1103-1133
-
-https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
+https://gsjaardema.github.io/seacas-docs/html/element_types.html#ordering
 
 # Fields
 $(DocStringExtensions.FIELDS)

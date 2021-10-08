@@ -58,7 +58,7 @@ function opposing_face(topology::Grid2DTopology, elem::Integer, face::Integer)
     if opelem == 0
         opface = face
     end
-    reversed = face_neighbors[5] == -1
+    reversed = face_neighbors[fc, 5] == -1
     return opelem, opface, reversed
 end
 

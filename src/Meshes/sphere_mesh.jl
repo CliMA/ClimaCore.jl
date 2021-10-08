@@ -132,34 +132,34 @@ function cube_panel_mesh(
 
     coordinates = vcat(
         hcat(
-            [0, 1, 0, 1, 0, 1, 0, 1],  # x1,
-            [0, 0, 1, 1, 0, 0, 1, 1],  # x2,
-            [0, 0, 0, 0, 1, 1, 1, 1],
-        ), # x3 vertex coordinates
+            [0, 1, 0, 1, 0, 1, 0, 1], # x1,
+            [0, 0, 1, 1, 0, 0, 1, 1], # x2,
+            [0, 0, 0, 0, 1, 1, 1, 1], # x3 vertex coordinates
+        ),
         vcat(
-            hcat(xci, zc, zc),    # edge  1
-            hcat(xci, oc, zc),    # edge  2
-            hcat(xci, zc, oc),    # edge  3
-            hcat(xci, oc, oc),
-        ),   # edge  4
+            hcat(xci, zc, zc), # edge 1
+            hcat(xci, oc, zc), # edge 2
+            hcat(xci, zc, oc), # edge 3
+            hcat(xci, oc, oc), # edge 4
+        ),
         vcat(
-            hcat(zc, xci, zc),    # edge  5
-            hcat(oc, xci, zc),    # edge  6
-            hcat(zc, xci, oc),    # edge  7
-            hcat(oc, xci, oc),
-        ),   # edge  8
+            hcat(zc, xci, zc), # edge 5
+            hcat(oc, xci, zc), # edge 6
+            hcat(zc, xci, oc), # edge 7
+            hcat(oc, xci, oc), # edge 8
+        ),
         vcat(
-            hcat(zc, zc, xci),    # edge  9
-            hcat(oc, zc, xci),    # edge 10
-            hcat(zc, oc, xci),    # edge 11
-            hcat(oc, oc, xci),
-        ),   # edge 12
-        hcat(xci12, xci21, zc2),   # panel 1
-        hcat(oc2, xci12, xci21),   # panel 2
-        hcat(xci12, oc2, xci21),   # panel 3
-        hcat(zc2, xci12, xci21),   # panel 4
-        hcat(xci12, zc2, xci21),   # panel 5
-        hcat(xci12, xci21, oc2),   # panel 6
+            hcat(zc, zc, xci), # edge  9
+            hcat(oc, zc, xci), # edge 10
+            hcat(zc, oc, xci), # edge 11
+            hcat(oc, oc, xci), # edge 12
+        ),
+        hcat(xci12, xci21, zc2), # panel 1
+        hcat(oc2, xci12, xci21), # panel 2
+        hcat(xci12, oc2, xci21), # panel 3
+        hcat(zc2, xci12, xci21), # panel 4
+        hcat(xci12, zc2, xci21), # panel 5
+        hcat(xci12, xci21, oc2), # panel 6
     )
 
     face_verts = zeros(I, nfaces, 2)
@@ -233,25 +233,24 @@ function cube_panel_mesh(
         face_neighbors[fcmat2[:], 3] .= hcat(emat[:, :, sfc], bdy4)[:]
 
         elem_verts[emat[:, :, sfc][:], :] .= hcat(
-            ndmat[1:ne, 1:ne][:], # node numbers
-            ndmat[2:(ne + 1), 1:ne][:], # for each element
-            ndmat[2:(ne + 1), 2:(ne + 1)][:],
-            ndmat[1:ne, 2:(ne + 1)][:],
+            ndmat[1:ne, 1:ne][:], # node numbers (local node 1)
+            ndmat[2:(ne + 1), 1:ne][:], # for each element (local node 2)
+            ndmat[2:(ne + 1), 2:(ne + 1)][:], #(local node 3)
+            ndmat[1:ne, 2:(ne + 1)][:], # (local node 4)
         )
 
         elem_faces[emat[:, :, sfc][:], :] .= hcat(
-            fcmat1[1:(nx - 1), :][:], # face numbers for
-            fcmat1[2:nx, :][:],   # each element
-            fcmat2[:, 1:(nx - 1)][:],
-            fcmat2[:, 2:nx][:],
+            fcmat2[:, 1:(nx - 1)][:], # (local face 1)
+            fcmat1[2:nx, :][:],   # each element (local face 2)
+            fcmat2[:, 2:nx][:], # (local face 3)
+            fcmat1[1:(nx - 1), :][:], # face numbers for (local face 4)
         )
     end
 
     ref_fc_verts = [
-        1 2 1 4
-        4 3 2 3
+        1 2 3 4
+        2 3 4 1
     ]
-
 
     for fc in 1:nfaces
         elems = (face_neighbors[fc, 1], face_neighbors[fc, 3])
