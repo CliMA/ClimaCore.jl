@@ -142,6 +142,9 @@ function tendency!(dY, Y, _, t)
 end
 
 struct CustomWRepresentation{T,AT1,AT2,AT3}
+    # whether this struct is used to compute Wfact_t or Wfact
+    transform::Bool
+
     # reference to dtγ, which is specified by the ODE solver
     dtγ_ref::T
 
@@ -164,7 +167,7 @@ struct CustomWRepresentation{T,AT1,AT2,AT3}
     S::AT3
 end
 
-function CustomWRepresentation(FT = Float64)
+function CustomWRepresentation(transform::Bool; FT = Float64)
     N = length(cspace)
 
     dtγ_ref = Ref(zero(FT))
@@ -190,6 +193,7 @@ function CustomWRepresentation(FT = Float64)
     )
 
     CustomWRepresentation{typeof(dtγ_ref),typeof(ρf),typeof(Jρ_w),typeof(S)}(
+        transform,
         dtγ_ref,
         Δz,
         Δzf,
@@ -253,7 +257,7 @@ end
 
 function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
     function _linsolve!(x, A, b, update_matrix = false; kwargs...)
-        @unpack dtγ_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S = A
+        @unpack transform, dtγ_ref, Jρ_w, Jρθ_w, Jw_ρ, Jw_ρθ, S = A
         dtγ = dtγ_ref[]
 
         N = length(cspace)
@@ -271,6 +275,10 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             dtγ,
             S,
         )
+
+        if transform
+            parent(x) .*= dtγ
+        end
     end
 end
 
@@ -282,7 +290,7 @@ prob = ODEProblem(
     ODEFunction(
         tendency!,
         Wfact = Wfact!,
-        jac_prototype = CustomWRepresentation(),
+        jac_prototype = CustomWRepresentation(false),
         tgrad = (dT, Y, p, t) -> fill!(dT, 0),
     ),
     Y,

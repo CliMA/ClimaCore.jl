@@ -1,6 +1,6 @@
 include("inertial_gravity_wave_utils.jl")
 
-ode_algorithm = Rosenbrock32
+ode_algorithm = KenCarp4
 
 prob = inertial_gravity_wave_prob(;
     helem = 75,
@@ -8,14 +8,14 @@ prob = inertial_gravity_wave_prob(;
     npoly = 4,
     is_large_domain = true,
     ode_algorithm = ode_algorithm,
-    is_imex = false,
+    is_imex = true,
     tspan = (0., 10000.),
 )
 
 sol = solve(
     prob,
     ode_algorithm(linsolve = linsolve!);
-    dt = 2.,
+    dt = 25.,
     adaptive = false,
     saveat = 10.,
     progress = true,
@@ -23,4 +23,4 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-inertial_gravity_wave_plots(sol, "large_domain_rosenbrock32_2s_10000s")
+inertial_gravity_wave_plots(sol, "large_domain_kencarp4_imex_25s_10000s")
