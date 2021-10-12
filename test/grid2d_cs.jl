@@ -40,35 +40,35 @@ _, _, grid_topology = cube_panel_topology(1, FT)
 
     @testset "6 element mesh with 1 element per panel" begin
         _, _, grid_topology = cube_panel_topology(1, FT)
-        @test Topologies.opposing_face(grid_topology, 1, 1) == (5, 1, false)
-        @test Topologies.opposing_face(grid_topology, 1, 2) == (2, 1, false)
-        @test Topologies.opposing_face(grid_topology, 1, 3) == (3, 1, true)
-        @test Topologies.opposing_face(grid_topology, 1, 4) == (4, 1, true)
+        @test Topologies.opposing_face(grid_topology, 1, 1) == (4, 4, true)
+        @test Topologies.opposing_face(grid_topology, 1, 2) == (3, 1, true)
+        @test Topologies.opposing_face(grid_topology, 1, 3) == (2, 1, true)
+        @test Topologies.opposing_face(grid_topology, 1, 4) == (5, 1, true)
 
-        @test Topologies.opposing_face(grid_topology, 2, 1) == (1, 2, false)
-        @test Topologies.opposing_face(grid_topology, 2, 2) == (3, 2, false)
+        @test Topologies.opposing_face(grid_topology, 2, 1) == (1, 3, true)
+        @test Topologies.opposing_face(grid_topology, 2, 2) == (3, 4, true)
         @test Topologies.opposing_face(grid_topology, 2, 3) == (6, 2, true)
         @test Topologies.opposing_face(grid_topology, 2, 4) == (5, 2, true)
 
-        @test Topologies.opposing_face(grid_topology, 3, 1) == (1, 3, true)
-        @test Topologies.opposing_face(grid_topology, 3, 2) == (2, 2, false)
-        @test Topologies.opposing_face(grid_topology, 3, 3) == (6, 3, false)
-        @test Topologies.opposing_face(grid_topology, 3, 4) == (4, 2, true)
+        @test Topologies.opposing_face(grid_topology, 3, 1) == (1, 2, true)
+        @test Topologies.opposing_face(grid_topology, 3, 2) == (4, 3, true)
+        @test Topologies.opposing_face(grid_topology, 3, 3) == (6, 3, true)
+        @test Topologies.opposing_face(grid_topology, 3, 4) == (2, 2, true)
 
-        @test Topologies.opposing_face(grid_topology, 4, 1) == (1, 4, true)
-        @test Topologies.opposing_face(grid_topology, 4, 2) == (3, 4, true)
-        @test Topologies.opposing_face(grid_topology, 4, 3) == (6, 4, false)
-        @test Topologies.opposing_face(grid_topology, 4, 4) == (5, 4, false)
+        @test Topologies.opposing_face(grid_topology, 4, 1) == (5, 4, true)
+        @test Topologies.opposing_face(grid_topology, 4, 2) == (6, 4, true)
+        @test Topologies.opposing_face(grid_topology, 4, 3) == (3, 2, true)
+        @test Topologies.opposing_face(grid_topology, 4, 4) == (1, 1, true)
 
-        @test Topologies.opposing_face(grid_topology, 5, 1) == (1, 1, false)
+        @test Topologies.opposing_face(grid_topology, 5, 1) == (1, 4, true)
         @test Topologies.opposing_face(grid_topology, 5, 2) == (2, 4, true)
         @test Topologies.opposing_face(grid_topology, 5, 3) == (6, 1, true)
-        @test Topologies.opposing_face(grid_topology, 5, 4) == (4, 4, false)
+        @test Topologies.opposing_face(grid_topology, 5, 4) == (4, 1, true)
 
         @test Topologies.opposing_face(grid_topology, 6, 1) == (5, 3, true)
         @test Topologies.opposing_face(grid_topology, 6, 2) == (2, 3, true)
-        @test Topologies.opposing_face(grid_topology, 6, 3) == (3, 3, false)
-        @test Topologies.opposing_face(grid_topology, 6, 4) == (4, 3, false)
+        @test Topologies.opposing_face(grid_topology, 6, 3) == (3, 3, true)
+        @test Topologies.opposing_face(grid_topology, 6, 4) == (4, 2, true)
 
         # 6 faces, 4 vertices per face, 8 global vertices, so each vertex should be part of 3 elements        
         @test Topologies.vertex_coordinates(grid_topology, 1)[1] isa
@@ -78,13 +78,12 @@ _, _, grid_topology = cube_panel_topology(1, FT)
             @test length(vert) == 3
         end
     end
-
     @testset "24 element mesh with 4 elements per panel" begin
         _, _, grid_topology = cube_panel_topology(2, FT)
-        @test Topologies.opposing_face(grid_topology, 1, 1) == (17, 1, false)
+        @test Topologies.opposing_face(grid_topology, 1, 1) == (13, 4, true)
         @test Topologies.opposing_face(grid_topology, 1, 2) == (2, 4, true)
         @test Topologies.opposing_face(grid_topology, 1, 3) == (3, 1, true)
-        @test Topologies.opposing_face(grid_topology, 1, 4) == (13, 1, true)
+        @test Topologies.opposing_face(grid_topology, 1, 4) == (17, 1, true)
     end
 end
 
@@ -101,18 +100,18 @@ end
     @testset "6 element mesh with 1 element per panel" begin
         _, _, grid_topology = cube_panel_topology(1, FT)
         faces = collect(Topologies.interior_faces(grid_topology))
-        @test faces[1] == (1, 1, 5, 1, false)
-        @test faces[2] == (1, 3, 3, 1, true)
-        @test faces[3] == (5, 3, 6, 1, true)
-        @test faces[4] == (6, 3, 3, 3, false)
-        @test faces[5] == (1, 4, 4, 1, true)
-        @test faces[6] == (1, 2, 2, 1, false)
-        @test faces[7] == (4, 3, 6, 4, false)
-        @test faces[8] == (6, 2, 2, 3, true)
-        @test faces[9] == (4, 4, 5, 4, false)
-        @test faces[10] == (5, 2, 2, 4, true)
-        @test faces[11] == (4, 2, 3, 4, true)
-        @test faces[12] == (3, 2, 2, 2, false)
+        @test faces[1] == (1, 4, 5, 1, true)
+        @test faces[2] == (1, 3, 2, 1, true)
+        @test faces[3] == (1, 2, 3, 1, true)
+        @test faces[4] == (1, 1, 4, 4, true)
+        @test faces[5] == (4, 1, 5, 4, true)
+        @test faces[6] == (5, 2, 2, 4, true)
+        @test faces[7] == (2, 2, 3, 4, true)
+        @test faces[8] == (4, 3, 3, 2, true)
+        @test faces[9] == (5, 3, 6, 1, true)
+        @test faces[10] == (6, 2, 2, 3, true)
+        @test faces[11] == (6, 3, 3, 3, true)
+        @test faces[12] == (4, 2, 6, 4, true)
     end
 end
 
