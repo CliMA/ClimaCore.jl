@@ -7,9 +7,9 @@ using OrdinaryDiffEq: Rosenbrock32, build_J_W, constvalue, Rosenbrock32Tableau,
 using OrdinaryDiffEq.SciMLBase: RECOMPILE_BY_DEFAULT
 
 #=
-Issue: Rosenbrock32 requires Wfact_t, rather than Wfact. However, the function
-       that constructs a cache for Rosenbrock32 is missing a Val(false), which
-       causes it to attempt to construct a jacobian from Wfact.
+Issue: Rosenbrock32 requires Wfact, rather than Wfact_t. However, the function
+       that constructs a cache for Rosenbrock32 is missing a Val(false), so it
+       attempts to construct a jacobian from Wfact_t.
 =#
 function alg_cache(alg::Rosenbrock32,u,rate_prototype,::Type{uEltypeNoUnits},::Type{uBottomEltypeNoUnits},::Type{tTypeNoUnits},uprev,uprev2,f,t,dt,reltol,p,calck,::Val{true}) where {uEltypeNoUnits,uBottomEltypeNoUnits,tTypeNoUnits}
   k₁ = zero(rate_prototype)
@@ -43,7 +43,7 @@ Issue: calc_W! attempts to access f.Wfact when has_Wfact(f) and f.Wfact_t when
 
        In addition, build_J_W uses f.jac_prototype to construct J and W when
        f.jac_prototype !== nothing. However, when f is a SplitFunction,
-       jac_prototype is stored in f.f1, and f.jac_prototype === nothing.
+       jac_prototype is stored in f.f1, and f.jac_prototype is set to nothing.
 =#
 function SplitFunction{iip}(f1,f2; kwargs...) where iip
   f1 = ODEFunction(f1)
