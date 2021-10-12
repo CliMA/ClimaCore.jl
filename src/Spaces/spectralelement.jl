@@ -94,11 +94,17 @@ function SpectralElementSpace1D(
     end
     dss_weights = copy(local_geometry.J)
     dss_weights .= one(FT)
-    dss_1d!(dss_weights, dss_weights, topology, Nq)
+    dss_1d!(dss_weights, dss_weights, local_geometry, topology, Nq)
     dss_weights = one(FT) ./ dss_weights
 
     inverse_mass_matrix = copy(local_geometry.WJ)
-    dss_1d!(inverse_mass_matrix, inverse_mass_matrix, topology, Nq)
+    dss_1d!(
+        inverse_mass_matrix,
+        inverse_mass_matrix,
+        local_geometry,
+        topology,
+        Nq,
+    )
     inverse_mass_matrix = one(FT) ./ inverse_mass_matrix
 
     return SpectralElementSpace1D(
@@ -207,7 +213,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
 
     # dss_weights = J ./ dss(J)
     dss_weights = copy(local_geometry.J)
-    dss_2d!(dss_weights, local_geometry.J, topology, Nq)
+    dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
     # TODO: this assumes XYDomain, need to dispatch SG Vector type on domain axis type
@@ -374,7 +380,7 @@ function SpectralElementSpace2D(
     end
     # dss_weights = J ./ dss(J)
     dss_weights = copy(local_geometry.J)
-    dss_2d!(dss_weights, local_geometry.J, topology, Nq)
+    dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
     SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
