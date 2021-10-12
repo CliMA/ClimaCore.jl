@@ -2,7 +2,7 @@
 """
     IntervalTopology(mesh::IntervalMesh)
 
-A sequential topology on an [`IntervalMesh`](@ref).
+A sequential topology on an [`Meshes.IntervalMesh`](@ref).
 """
 struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
     mesh::M
