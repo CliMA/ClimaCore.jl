@@ -1,9 +1,9 @@
-# # ClimaCore.jl
-# 
-# ## What is ClimaCore?
-# 
+# # Introduction to ClimaCore.jl
+#
+# ### What is ClimaCore?
+#
 # A suite of tools for constructing spatial discretizations
-# 
+#
 # - primarily aimed at climate and weather models
 # - initial aim:
 #   - spectral element discretization in the horizontal
@@ -16,8 +16,8 @@ using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 # ## 1. Constructing a discretization
 
 # ### 1.1 Domains
-# 
-# A _domain_ a region of space (think of a mathematical domain). 
+#
+# A _domain_ a region of space (think of a mathematical domain).
 
 column_domain = ClimaCore.Domains.IntervalDomain(
     ClimaCore.Geometry.ZPoint(0.0)..ClimaCore.Geometry.ZPoint(10.0),
@@ -34,7 +34,7 @@ rectangle_domain = ClimaCore.Domains.RectangleDomain(
 #----------------------------------------------------------------------------
 
 # ### 1.2 Meshes
-# 
+#
 # A _mesh_ is a division of a domain into elements
 
 column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems = 32)
@@ -44,8 +44,8 @@ rectangle_mesh =
     ClimaCore.Meshes.EquispacedRectangleMesh(rectangle_domain, 16, 16)
 #----------------------------------------------------------------------------
 
-# ### 1.3 Topologies 
-# 
+# ### 1.3 Topologies
+#
 # A _topology_ determines the ordering and connections between elements of a mesh
 # - At the moment, this is only required for 2D meshes
 
@@ -53,14 +53,14 @@ rectangle_topology = ClimaCore.Topologies.GridTopology(rectangle_mesh)
 #----------------------------------------------------------------------------
 
 # ### 1.4 Spaces
-# 
+#
 # A _space_ represents a discretized function space over some domain. Currently two discretizations are supported.
-# 
+#
 
 # #### 1.4.1 Staggered finite difference discretization
-# 
+#
 # This discretizes an interval domain by approximating the function by a value at either the center of each element (`CenterFiniteDifferenceSpace`), or the faces between elements (`FaceFiniteDifferenceSpace`).
-# 
+#
 # You can construct either the center or face space from the mesh, then construct the opposite space from the original one (this is to avoid allocating additional memory).
 
 column_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(column_mesh)
@@ -70,9 +70,9 @@ column_face_space =
 #----------------------------------------------------------------------------
 
 # #### 1.4.2 Spectral element discretization
-# 
+#
 # A spectral element space approximates the function with polynomials in each element. The polynomials are represented using a *nodal discretization*, which stores the values of the polynomials at particular points in each element (termed *nodes* or *degrees of freedom*).
-# 
+#
 # These nodes are chosen by a particular *quadrature rule*, which allows us to integrate functions over the domain. The only supported choice for now is a Gauss-Legendre-Lobatto rule.
 
 ## Gauss-Legendre-Lobatto quadrature with 4 nodes in each direction, so 16 in each element
@@ -82,9 +82,9 @@ rectangle_space =
 #----------------------------------------------------------------------------
 
 # ### 1.5 Fields
-# 
+#
 # Finally, we can construct a *field*: a function in a space. A field is simply a space and the values at each node in the space.
-# 
+#
 # The easiest field to construct is the _coordinate field_
 
 coord = ClimaCore.Fields.coordinate_field(rectangle_space)
@@ -119,16 +119,16 @@ plot!(cos.(column_face_coords.z), ylim = (0.0, 10.0))
 #----------------------------------------------------------------------------
 
 # Reduction operations are defined anologously:
-# 
+#
 # - `sum` will give the integral of the function
-# $$
+# ```math
 # \int_D f(x) dx
-# $$
+# ```
 # - `norm` will give the L² function norm
-# $$
+# ```math
 # \sqrt{\int_D |f(x)|^2 dx}
-# $$
-# 
+# ```
+#
 
 sum(sinx) ## integral
 #----------------------------------------------------------------------------
@@ -137,25 +137,25 @@ norm(sinx) ## L² norm
 #----------------------------------------------------------------------------
 
 # ### 1.6 Vectors and vector fields
-# 
-# A *vector field* is a field with vector-valued quantity, i.e. at every point in space, you have a vector. 
-# 
+#
+# A *vector field* is a field with vector-valued quantity, i.e. at every point in space, you have a vector.
+#
 # However one of the key requirements of ClimaCore is to support vectors specified in curvilinear or non-Cartesian coordinates. We will discuss this in a bit further, but for now, you can define a 2-dimensional vector field using `Geometry.Cartesian12Vector`:
 
 v = ClimaCore.Geometry.Cartesian12Vector.(coord.y, .-coord.x)
 #----------------------------------------------------------------------------
 
 # ## 2. Operators
-# 
-# _Operators_ can compute spatial derivative operations. 
-# 
+#
+# _Operators_ can compute spatial derivative operations.
+#
 #  - for performance reasons, we need to be able to "fuse" multiple operators and function applications
 #  - Julia provides a tool for this: **broadcasting**, with a very flexible API
-# 
+#
 # Can think of operators are "pseudo-functions": can't be called directly, but act similar to functions in the context of broadcasting.
 
 # ### 2.1 Spectral element operators
-# 
+#
 # The `Gradient` operator takes the gradient of a scalar field, and returns a vector field.
 
 grad = ClimaCore.Operators.Gradient()
@@ -166,14 +166,15 @@ plot(∇sinx.components.data.:1, clim = (-1, 1))
 #----------------------------------------------------------------------------
 
 # This returns the gradient in [_covariant_](https://en.wikipedia.org/wiki/Covariance_and_contravariance_of_vectors) coordinates
-# $$
+# ```math
 # (\nabla f)_i = \frac{\partial f}{\partial \xi^i}
-# $$
+# ```
 # where $(\xi^1,\xi^2)$ are the coordinates in the *reference element*: a square $[-1,1]^2$.
-# 
+#
 # This can be converted to a Cartesian basis by multiplying by the partial derivative matrix
-# $$\frac{\partial \xi}{\partial x}$$
-# 
+# ```math
+# \frac{\partial \xi}{\partial x}
+# ```
 # This can be done calling `ClimaCore.Geometry.CartesianVector:
 
 ∇sinx_cart = ClimaCore.Geometry.CartesianVector.(∇sinx)
@@ -190,7 +191,7 @@ norm(∇sinx_cart .- ∇sinx_ref)
 #----------------------------------------------------------------------------
 
 # Similarly, the `Divergence` operator takes the divergence of vector field, and returns a scalar field.
-# 
+#
 # If we take the divergence of a gradient, we can get a Laplacian:
 
 div = ClimaCore.Operators.Divergence()
@@ -199,15 +200,15 @@ plot(∇²sinx)
 #----------------------------------------------------------------------------
 
 # *Note*: In curvilinear coordinates, the divergence is defined in terms of the _contravariant_ components $u^i$:
-# $$
+# ```math
 # \nabla \cdot u = \frac{1}{J} \sum_i \frac{\partial}{\partial \xi^i} (J u^i)
-# $$
+# ```
 # The `Divergence` operator handles this conversion internally.
 
 # #### 2.1.1 Direct stiffness summation
-# 
+#
 # Spectral element operators only operate _within_ a single element, and so the result may be discontinuous. To address this, the usual fix is _direct stiffness summation_ (DSS), which averages the values at the element boundaries.
-# 
+#
 # This corresponds to the $L^2$ projection onto the subset of continuous functions in our function space.
 
 ∇²sinx_dss = ClimaCore.Spaces.weighted_dss!(copy(∇²sinx))
@@ -218,27 +219,27 @@ plot(∇²sinx_dss .- ∇²sinx)
 #----------------------------------------------------------------------------
 
 # ### 2.2 Finite difference operators
-# 
+#
 # Finite difference operators are similar with some subtle differences:
 # - they can change staggering (center to face, or vice versa)
 # - they can span multiple elements
 #   - no DSS is required
 #   - boundary handling may be required
-#   
+#
 # We use the following convention:
 #  - centers are indexed by integers `1, 2, ..., n`
 #  - faces are indexed by half integers `½, 1+½, ..., n+½`
 
 # **Face to center gradient**
-# 
+#
 # An finite-difference operator defines a _stencil_. For example, the gradient operator
-# 
-# $$
+#
+# ```math
 # \nabla\theta[i] = \frac{\theta [i+\tfrac{1}{2}] - \theta[i-\tfrac{1}{2}]}{\Delta z}
-# $$
+# ```
 # (actually, a little more complicated as it gives a vector in a covariant basis)
-# 
-# 
+#
+#
 # ```
 #         ...
 #       /
@@ -250,11 +251,11 @@ plot(∇²sinx_dss .- ∇²sinx)
 #       \
 #         ∇θ[1]
 #       /
-# θ[½]  
+# θ[½]
 # ```
-# 
+#
 # Every center value is well-defined, so boundary handling is optional.
-# 
+#
 
 cosz = cos.(column_face_coords.z)
 gradf2c = ClimaCore.Operators.GradientF2C()
@@ -268,7 +269,7 @@ plot(
 #----------------------------------------------------------------------------
 
 # **Center to face gradient**
-# 
+#
 # Uses the same stencil, but doesn't work directly:
 
 sinz = sin.(column_center_coords.z)
@@ -277,7 +278,7 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 #----------------------------------------------------------------------------
 
 # This throws an error because face values at the boundary are _not_ well-defined:
-# 
+#
 # ```
 # ...
 #       \
@@ -287,22 +288,22 @@ gradc2f = ClimaCore.Operators.GradientC2F()
 #       \
 #         ∇θ[1+½]
 #       /
-# θ[1]  
+# θ[1]
 #       \
 #         ????
 # ```
-# 
+#
 # To handle boundaries we need to *modify the stencil*. Two options:
 # - provide the _value_ $\theta^*$ of $\theta$ at the boundary:
-# $$
+# ```math
 # \nabla\theta[\tfrac{1}{2}] = \frac{\theta[1] - \theta^*}{\Delta z /2}
-# $$
-# 
+# ```
+#
 # - provide the *gradient* $\nabla\theta^*$ of $\theta$ at the boundary:
-# $$
+# ```math
 # \nabla\theta[\tfrac{1}{2}] = \nabla\theta^*
-# $$
-# 
+# ```
+#
 # These modified stencils are provided as keyword arguments to the operator (based on the boundary label names):
 
 sinz = sin.(column_center_coords.z)
@@ -322,11 +323,11 @@ plot(
 #----------------------------------------------------------------------------
 
 # As before, multiple operators (or functions) can be fused together with broadcasting.
-# 
+#
 # One extra advantage of this is that boundaries of the inner operators only need to be specified if they would affect the final result.
-# 
+#
 # Consider the center-to-center Laplacian:
-# 
+#
 # ```
 # ...
 #       \       /
@@ -359,23 +360,25 @@ plot(∇∇sinz, ylim = (0, 10))
 #----------------------------------------------------------------------------
 
 # # 3. Solving PDEs
-# 
+#
 # ClimaCore can be used for spatial discretizations of PDEs. For temporal discretization, we can use the OrdinaryDiffEq package, which we aim to be compatibile with.
 
 using OrdinaryDiffEq
 #----------------------------------------------------------------------------
 
 # ### 3.1 Heat equation using finite differences
-# 
+#
 # We will use a cell-center discretization of the heat equation:
-# $$ \frac{\partial y}{\partial t} = \alpha \nabla \cdot \nabla y $$
-# 
-# At the bottom we will use a Dirichlet condition $y(0) = 1$ at the bottom: since we don't actually have a value located at the bottom, we will use a `SetValue` boundary modifier on the inner gradient.
-# 
-# At the top we will use a Neumann condition $\frac{\partial y}{\partial z}(10) = 0$. We can do this two equivalent ways:
+# ```math
+# \frac{\partial y}{\partial t} = \alpha \nabla \cdot \nabla y
+# ```
+#
+# At the bottom we will use a Dirichlet condition ``y(0) = 1``` at the bottom: since we don't actually have a value located at the bottom, we will use a `SetValue` boundary modifier on the inner gradient.
+#
+# At the top we will use a Neumann condition ``\frac{\partial y}{\partial z}(10) = 0``. We can do this two equivalent ways:
 #  - a `SetGradient` on the gradient operator
 #  - a `SetValue` on the divergence operator
-#  
+#
 # either will work.
 
 y0 = zeros(column_center_space)
@@ -398,14 +401,15 @@ heat_fd_prob = ODEProblem(heat_fd_tendency!, y0, (0.0, 5.0), 0.1)
 heat_fd_sol = solve(heat_fd_prob, SSPRK33(), dt = 0.1, saveat = 0.25)
 #----------------------------------------------------------------------------
 
-Plots.@gif for u in heat_fd_sol.u
+anim = Plots.@animate for u in heat_fd_sol.u
     plot(u, xlim = (0, 1), ylim = (0, 10))
 end
+mp4(anim)
 #----------------------------------------------------------------------------
 
 # ### 3.2 Heat equation using continuous Galerkin (CG) spectral element
-# 
-# 
+#
+#
 
 function heat_cg_tendency!(dydt, y, α, t)
     grad = ClimaCore.Operators.Gradient()
@@ -424,29 +428,30 @@ heat_cg_prob = ODEProblem(heat_cg_tendency!, y0, (0.0, 5.0), 0.1)
 heat_cg_sol = solve(heat_cg_prob, SSPRK33(), dt = 0.1, saveat = 0.5)
 #----------------------------------------------------------------------------
 
-Plots.@gif for u in heat_cg_sol.u
+anim = Plots.@animate for u in heat_cg_sol.u
     Plots.plot(u, c = :thermal)
 end
+mp4(anim)
 #----------------------------------------------------------------------------
 
-# ## Shallow water equations
-# 
-# 
+# ### 3.3 Shallow water equations
+#
+#
 # The shallow water equations in vector invariant form can be written as
-# $$
+# ```math
 # \begin{align*}
 #     \frac{\partial \rho}{\partial t} + \nabla \cdot (\rho u) &= 0\\
 #     \frac{\partial u_i}{\partial t} + \nabla (\Phi + \tfrac{1}{2}\|u\|^2)_i  &= J (u \times (\nabla \times u))_i
 # \end{align*}
-# $$
-# where $J$ is the Jacobian determinant, and $\Phi = g \rho  $. 
-# 
-# Note that the velocity $u$ is specified in _covariant_ coordinates $u_i$.
-# 
+# ```
+# where ``J`` is the Jacobian determinant, and ``\Phi = g \rho``.
+#
+# Note that the velocity ``u`` is specified in _covariant_ coordinates ``u_i``.
+#
 # For vizualization purposes, we can model a passive tracer $\theta$ as
-# $$
+# ```math
 # \frac{\partial \rho \theta}{\partial t} + \nabla \cdot (\rho \theta u) = 0
-# $$
+# ```
 
 using ClimaCore.Geometry
 
@@ -542,14 +547,13 @@ end
 
 #----------------------------------------------------------------------------
 
-shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 8.0))
+shallow_water_prob = ODEProblem(shallow_water_tendency!, y0, (0.0, 20.0))
 @time shallow_water_sol =
     solve(shallow_water_prob, SSPRK33(), dt = 0.05, saveat = 1.0)
-#----------------------------------------------------------------------------
-
-Plots.@gif for u in shallow_water_sol.u
+anim = Plots.@animate for u in shallow_water_sol.u
     Plots.plot(u.ρθ, clim = (-1, 1))
 end
+mp4(anim)
 #----------------------------------------------------------------------------
 
 
