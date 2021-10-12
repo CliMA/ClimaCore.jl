@@ -108,3 +108,9 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/error.png", "Absolute error in height")
+
+#----------------lat, long plots
+Plots.png(Plots.plot(coords.lat), joinpath(path, "latitude.png"))
+linkfig("output/$(dirname)/latitude.png", "latitude")
+Plots.png(Plots.plot(coords.long), joinpath(path, "longitude.png"))
+linkfig("output/$(dirname)/longitude.png", "longitude")
