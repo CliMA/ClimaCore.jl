@@ -50,4 +50,15 @@ end
     divu = Spaces.weighted_dss!(div.(u))
     @test norm(divu) < 1e-2
 
+    # test dss on UVcoordinates
+    uu = Spaces.weighted_dss!(copy(u))
+    @test norm(uu .- u) < 1e-14
+
+    uᵢ = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u)
+    uuᵢ = Spaces.weighted_dss!(copy(uᵢ))
+    @test norm(uuᵢ .- uᵢ) < 1e-14
+
+    uⁱ = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), u)
+    uuⁱ = Spaces.weighted_dss!(copy(uⁱ))
+    @test norm(uuⁱ .- uⁱ) < 1e-14
 end
