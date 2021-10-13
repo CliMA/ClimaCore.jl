@@ -2,21 +2,21 @@ name: ReleaseChangelogBuilder
 
 on:
   push:
-    branches:
-      - main
-      - trying
-      - staging
-    tags: '*'
-  pull_request:
+    tags:
+      - '*'
 
 jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - name: Build Changelog
+      - uses: actions/checkout@v2
+
+      - name: Build Changelog from PRs with Labels
         id: github_release
         uses: mikepenz/release-changelog-builder-action@v1
+        with:
+          configuration: ".github/changelogconf.json"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # For authentication with GitHub Actions token
 
@@ -26,5 +26,6 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: ${{ github.ref }}
           body: ${{steps.github_release.outputs.changelog}}
+          commit: main # Ensure target branch for release is "main"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # For authentication with GitHub Actions token
