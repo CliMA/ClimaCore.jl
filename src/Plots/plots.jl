@@ -268,23 +268,16 @@ RecipesBase.@recipe function f(
         end
     end
 
-    # fill in the panel data doing the correct flipping / rotations wrt to pannel reference vertex
-    # "top" pannel (will be 3 when flipped)
     unfolded_panels[pannel_range(1), pannel_range(2)] =
-        reverse!(panels[5], dims = 1)
-    # center pannels
-    unfolded_panels[pannel_range(2), pannel_range(1)] = rotr90(panels[4], 1)
-    unfolded_panels[pannel_range(2), pannel_range(2)] = panels[1]
-    unfolded_panels[pannel_range(2), pannel_range(3)] =
-        reverse!(rotl90(panels[2]), dims = 1)
+        reverse(panels[5], dims = 1)
+    unfolded_panels[pannel_range(2), pannel_range(1)] =
+        reverse(panels[4], dims = 2)
+    unfolded_panels[pannel_range(2), pannel_range(2)] = transpose(panels[1])
+    unfolded_panels[pannel_range(2), pannel_range(3)] = transpose(panels[2])
     unfolded_panels[pannel_range(2), pannel_range(4)] =
-        reverse!(panels[6], dims = 2)
-    # "bottom pannel" (will be 5 when flipped)
-    unfolded_panels[pannel_range(3), pannel_range(2)] = panels[3]
-
-    # flip whole unfolded pannel vertically in place get the "right" orentation
-    # with respect to the plotting reference coord in lower left
-    reverse!(unfolded_panels, dims = 1)
+        reverse(panels[6], dims = 2)
+    unfolded_panels[pannel_range(3), pannel_range(2)] =
+        reverse(panels[3], dims = 2)
 
     quad_from_name = Base.typename(typeof(quad_from)).name
     # set the plot attributes
