@@ -18,7 +18,6 @@ const r0 = R / 3
 const α0 = 0.0
 const u0 = 2 * pi * R / (86400 * 12)
 const center = Geometry.LatLongPoint(0.0, 270.0)
-const D₄ = 1.0e16
 
 ne = 4
 Nq = 4
@@ -37,10 +36,15 @@ h_init = map(coords) do coord
     # https://en.wikipedia.org/wiki/Great-circle_distance
     rd = R * atan(norm(n_coord × n_center), dot(n_coord, n_center))
 
-    if rd < r0
-        h0 / 2 * (1 + cospi(rd / r0))
+    cosine_bell_test = false
+    if cosine_bell_test
+        if rd < r0
+            h0 / 2 * (1 + cospi(rd / r0))
+        else
+            0.0
+        end
     else
-        0.0
+        h0 * exp(-(rd / r0)^2 / 2)
     end
 
 end
@@ -55,24 +59,17 @@ u = map(coords) do coord
 end
 
 function rhs!(dh, h, u, t)
-    wdiv = Operators.WeakDivergence()
-    grad = Operators.Gradient()
     div = Operators.Divergence()
 
-    # compute hyperviscosity first
-    @. dh = wdiv(grad(h))
-    Spaces.weighted_dss!(dh)
-    @. dh = -D₄ * wdiv(grad(dh))
-
     # add in pieces
-    @. dh += -div(h * u)
+    @. dh = -div(h * u)
     Spaces.weighted_dss!(dh)
 end
 rhs!(similar(h_init), h_init, u, 0.0)
 
 # Solve the ODE operator
 T = 86400 * 12
-dt = 90 * 60
+dt = 30 * 60
 prob = ODEProblem(rhs!, h_init, (0.0, T), u)
 sol = solve(
     prob,
@@ -84,9 +81,9 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-@info "Solution norm at T = 0: ", norm(h_init)
-@info "Solution norm at T = $(T): ", norm(sol.u[end])
-@info "L2 error at T = $(T): ", norm(sol.u[end] .- h_init)
+@info "Solution norm at t = 0: ", norm(h_init)
+@info "Solution norm at t = $(T): ", norm(sol.u[end])
+@info "L2 error at t = $(T): ", norm(sol.u[end] .- h_init)
 
 ENV["GKSwstype"] = "nul"
 import Plots
