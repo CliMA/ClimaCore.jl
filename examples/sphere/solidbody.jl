@@ -5,9 +5,9 @@ import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimaCore: slab
 import ClimaCore.Operators
 import ClimaCore.Geometry
+import Plots
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
-
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
@@ -74,7 +74,6 @@ for (k, ne) in enumerate(ne_seq)
                 0.0
             end
         end
-
     end
 
     u = map(coords) do coord
@@ -89,13 +88,14 @@ for (k, ne) in enumerate(ne_seq)
     function rhs!(dh, h, u, t)
         div = Operators.Divergence()
 
-        # add in pieces
-        @. dh = -div(h * u)
+        @. dh = -div(h * u) # strong form of equation
         Spaces.weighted_dss!(dh)
     end
+
+    # Set the RHS function
     rhs!(similar(h_init), h_init, u, 0.0)
 
-    # Solve the ODE operator
+    # Solve the ODE
     T = 86400 * 12
     dt = 30 * 60
     prob = ODEProblem(rhs!, h_init, (0.0, T), u)
@@ -116,33 +116,33 @@ for (k, ne) in enumerate(ne_seq)
     @info "Solution norm at t = $(T): ", norm(sol.u[end])
     @info "L2 error at t = $(T): ", norm(sol.u[end] .- h_init)
 
+    # Plot the error
+    ENV["GKSwstype"] = "nul"
+    Plots.GRBackend()
+
+    dirname = "cg_sphere_solidbody"
+    path = joinpath(@__DIR__, "output", dirname)
+    mkpath(path)
+
+    Plots.png(Plots.plot(1:length(ne_seq), err), joinpath(path, "error.png"))
+
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
+    end
+
+    linkfig("output/$(dirname)/error.png", "Absolute error in height")
+
+    #----------------lat, long plots
+    Plots.png(Plots.plot(coords.lat), joinpath(path, "latitude.png"))
+    linkfig("output/$(dirname)/latitude.png", "latitude")
+    Plots.png(Plots.plot(coords.long), joinpath(path, "longitude.png"))
+    linkfig("output/$(dirname)/longitude.png", "longitude")
 end
 
 conv = convergence_rate(err, Δh)
-
-ENV["GKSwstype"] = "nul"
-import Plots
-Plots.GRBackend()
-
-dirname = "cg_sphere_solidbody"
-path = joinpath(@__DIR__, "output", dirname)
-mkpath(path)
-
-Plots.png(Plots.plot(sol.u[end] .- h_init), joinpath(path, "error.png"))
-
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
-
-linkfig("output/$(dirname)/error.png", "Absolute error in height")
-
-#----------------lat, long plots
-Plots.png(Plots.plot(coords.lat), joinpath(path, "latitude.png"))
-linkfig("output/$(dirname)/latitude.png", "latitude")
-Plots.png(Plots.plot(coords.long), joinpath(path, "longitude.png"))
-linkfig("output/$(dirname)/longitude.png", "longitude")
+@info "Converge rates for this test case are: ", conv
