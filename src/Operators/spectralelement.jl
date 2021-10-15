@@ -415,16 +415,19 @@ end
     wdiv = WeakDivergence()
     wdiv.(u)
 
-Computes the "weak divergence" of a vector field `u`. This is defined as the
-scalar field ``\\theta`` such that for all ``\\phi``
+Computes the "weak divergence" of a vector field `u`.
+
+This is defined as the scalar field ``\\theta \\in \\mathcal{V}_0`` such that
+for all ``\\phi\\in \\mathcal{V}_0``
 ```math
 \\int_\\Omega \\phi \\theta \\, d \\Omega
 =
 - \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
 ```
+where ``\\mathcal{V}_0`` is the space of ``u``.
 
-This is named as it arises as the contribution of the volume integral after by
-applying integration by parts to the weak form expression of the divergence
+This arises as the contribution of the volume integral after by applying
+integration by parts to the weak form expression of the divergence
 ```math
 \\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
 =
@@ -562,16 +565,19 @@ end
     wgrad = WeakGradient()
     wgrad.(f)
 
-Compute the "weak gradient" of `f` on each element. This is defined as the the
-vector field ``u`` such that for all ``\\phi``
+Compute the "weak gradient" of `f` on each element.
+
+This is defined as the the vector field ``\\theta \\in \\mathcal{V}_0`` such
+that for all ``\\phi \\in \\mathcal{V}_0``
 ```math
-\\int_\\Omega \\phi \\cdot u \\, d \\Omega
+\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
 =
 - \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
 ```
+where ``\\mathcal{V}_0`` is the space of ``f``.
 
-This arises from the contribution of the volume integral after by
-applying integration by parts to the weak form expression of the gradient
+This arises from the contribution of the volume integral after by applying
+integration by parts to the weak form expression of the gradient
 ```math
 \\int_\\Omega \\phi \\cdot (\\nabla f) \\, d \\Omega
 =
@@ -581,11 +587,11 @@ applying integration by parts to the weak form expression of the gradient
 
 In matrix form, this becomes
 ```math
-{\\phi^i}^\\top W J u_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
+{\\phi^i}^\\top W J \\theta_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
 ```
 which reduces to
 ```math
-u_i = -W^{-1} D_i^\\top W f
+\\theta_i = -W^{-1} D_i^\\top W f
 ```
 where ``D_i`` is the derivative matrix along the ``i``th dimension.
 """
@@ -770,16 +776,19 @@ end
     wcurl = WeakCurl()
     wcurl.(u)
 
-Computes the "weak curl" on each element of a vector field `u`. This is defined
-as the vector field ``\\theta`` such that for all ``\\phi``
+Computes the "weak curl" on each element of a vector field `u`.
+
+This is defined as the vector field ``\\theta \\in \\mathcal{V}_0`` such that
+for all ``\\phi \\in \\mathcal{V}_0``
 ```math
 \\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
 =
 \\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
 ```
+where ``\\mathcal{V}_0`` is the space of ``f``.
 
-This arises from the contribution of the volume integral after by
-applying integration by parts to the weak form expression of the curl
+This arises from the contribution of the volume integral after by applying
+integration by parts to the weak form expression of the curl
 ```math
 \\int_\\Omega \\phi \\cdot (\\nabla \\times u) \\,d\\Omega
 =
@@ -968,25 +977,24 @@ end
     r = Restrict(space)
     r.(f)
 
-Computes the projection of a field to a lower degree polynomial space. `space`
-must be on the same topology as the space of `f`, but have a lower polynomial
-degree.
+Computes the projection of a field `f` on ``\\mathcal{V}_0`` to a lower degree
+polynomial space `space` (``\\mathcal{V}_0^*``). `space` must be on the same
+topology as the space of `f`, but have a lower polynomial degree.
 
-It is defined as the field ``\\theta`` such that for all ``\\phi``
+It is defined as the field ``\\theta \\in \\mathcal{V}_0^*`` such that for all ``\\phi \\in \\mathcal{V}_0^*``
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
 In matrix form, this is
 ```math
-\\phi^\\top W_r J_r \\theta = (I \\phi)^\\top WJ f
+\\phi^\\top W^* J^* \\theta = (I \\phi)^\\top WJ f
 ```
-where ``W_r`` and ``J_r`` are the quadrature weights and Jacobian determinant of
-`space`, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
-from `space` to the space of `f`. This reduces to
+where ``W^*`` and ``J^*`` are the quadrature weights and Jacobian determinant of
+``\\mathcal{V}_0^*``, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
+from ``\\mathcal{V}_0^*`` to ``\\mathcal{V}_0``. This reduces to
 ```math
-\\theta = (W_rJ_r)^{-1} I^\\top WJ f
+\\theta = (W^* J^*)^{-1} I^\\top WJ f
 ```
-
 """
 struct Restrict{I, S} <: TensorOperator
     space::S

@@ -6,7 +6,6 @@ CurrentModule = ClimaCore.Operators
 
 ## Spectral element operators
 
-
 ### Differential Operators
 ```@docs
 Divergence
@@ -21,6 +20,11 @@ WeakCurl
 ```@docs
 Interpolate
 Restrict
+```
+
+### DSS
+```@docs
+Spaces.weighted_dss!
 ```
 
 ## Finite difference operators

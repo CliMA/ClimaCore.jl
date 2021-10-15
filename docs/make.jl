@@ -1,15 +1,18 @@
 if joinpath(@__DIR__, "..") ∉ LOAD_PATH
     push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 end
-using Documenter, ClimaCore
+using Documenter, ClimaCore, Literate
 
 format = Documenter.HTML(
     prettyurls = !isempty(get(ENV, "CI", "")),
     collapselevel = 1,
 )
 
-using Literate
-TUTORIALS = ["introduction"]
+if !@isdefined(TUTORIALS)
+    TUTORIALS = ["introduction"]
+end
+
+rm(joinpath(@__DIR__, "src", "tutorials"), force = true, recursive = true)
 function preprocess_markdown(input)
     line1, rest = split(input, '\n', limit = 2)
     string(
@@ -31,23 +34,26 @@ for tutorial in TUTORIALS
     )
 end
 
-makedocs(
-    sitename = "ClimaCore.jl",
-    strict = false,
-    format = format,
-    checkdocs = :exports,
-    clean = true,
-    doctest = true,
-    modules = [ClimaCore],
-    pages = Any[
-        "Home" => "index.md",
-        "API" => "api.md",
-        "Operators" => "operators.md",
-        "Tutorials" => [
-            joinpath("tutorials", tutorial * ".md") for tutorial in TUTORIALS
+withenv("GKSwstype" => "100") do
+    makedocs(
+        sitename = "ClimaCore.jl",
+        strict = false,
+        format = format,
+        checkdocs = :exports,
+        clean = true,
+        doctest = true,
+        modules = [ClimaCore],
+        pages = Any[
+            "Home" => "index.md",
+            "API" => "api.md",
+            "Operators" => "operators.md",
+            "Tutorials" => [
+                joinpath("tutorials", tutorial * ".md") for
+                tutorial in TUTORIALS
+            ],
         ],
-    ],
-)
+    )
+end
 
 deploydocs(
     repo = "github.com/CliMA/ClimaCore.jl.git",
