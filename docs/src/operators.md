@@ -4,6 +4,25 @@
 CurrentModule = ClimaCore.Operators
 ```
 
+## Spectral element operators
+
+
+### Differential Operators
+```@docs
+Divergence
+WeakDivergence
+Gradient
+WeakGradient
+Curl
+WeakCurl
+```
+
+### Interpolation Operators
+```@docs
+Interpolate
+Restrict
+```
+
 ## Finite difference operators
 
 ### Interpolation operators

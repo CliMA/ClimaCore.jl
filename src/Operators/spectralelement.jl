@@ -312,21 +312,29 @@ end
 
 
 """
-    Divergence()
+    div = Divergence()
+    div.(u)
 
-Computes the "strong" divergence of a vector field `v`.
+Computes the per-element spectral (strong) divergence of a vector field ``u``.
 
-We compute the divergence as
+The divergence of a vector field ``u`` is defined as
+```math
+\\nabla \\cdot u = \\sum_i \\frac{1}{J} \\frac{\\partial (J u^i)}{\\partial \\xi^i}
+```
+where ``J`` is the Jacobian determinant, ``u^i`` is the ``i``th contravariant
+component of ``u``.
 
-    [∂(Jv¹)/∂ξ¹ + ∂(Jv²)/∂ξ²] / J
-
-where `J` is the Jacobian determinant, `vⁱ` is the `i`th contravariant component of `v`.
-
-This is discretized at the quadrature points as
-
-    I{[∂(I{Jv¹})/∂ξ¹ + ∂(I{Jv²})/∂ξ²] / J}
-
-where `I{x}` is the interpolation operator applied to a field `x`.
+This is discretized by
+```math
+\\sum_i I \\left\\{\\frac{1}{J} \\frac{\\partial (I\\{J u^i\\})}{\\partial \\xi^i} \\right\\}
+```
+where ``I\\{x\\}`` is the interpolation operator that projects to the
+unique polynomial interpolating ``x`` at the quadrature points. In matrix
+form, this can be written as
+```math
+J^{-1} \\sum_i D_i J u^i
+```
+where ``D_i`` is the derivative matrix along the ``i``th dimension
 
 ## References
  - Taylor and Fournier (2010), equation 15
@@ -404,25 +412,38 @@ end
 
 
 """
-    WeakDivergence()
+    wdiv = WeakDivergence()
+    wdiv.(u)
 
-Computes the divergence of a vector field `v` weakly.
+Computes the "weak divergence" of a vector field `u`. This is defined as the
+scalar field ``\\theta`` such that for all ``\\phi``
+```math
+\\int_\\Omega \\phi \\theta \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
+```
 
-This spolves the variational problem of finding `θ` such that
+This is named as it arises as the contribution of the volume integral after by
+applying integration by parts to the weak form expression of the divergence
+```math
+\\int_\\Omega \\phi (\\nabla \\cdot u) \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\phi) \\cdot u \\,d \\Omega
++ \\oint_{\\partial \\Omega} \\phi (u \\cdot n) \\,d \\sigma
+```
 
-    ⟨ϕ, J θ⟩ = - ⟨∂ϕ/∂ξ¹, J v¹⟩ + ⟨∂ϕ/∂ξ², J v²⟩
-
-for all `ϕ` (which arises by integration by parts).
-
-Discretely it is equivalent to
-
-    - J \\ (D₁' * W * J * v¹ + D₂' * W * J * v²)
-
+It can be written in matrix form as
+```math
+ϕ^\\top WJ θ = - \\sum_i (D_i ϕ)^\\top WJ u^i
+```
+which reduces to
+```math
+θ = -(WJ)^{-1} \\sum_i D_i^\\top WJ u^i
+```
 where
-
- - `J` is the diagonal Jacobian matrix
- - `W` is the diagonal matrix of quadrature weights
- - `D₁` and `D₂` are the discrete derivative matrices along the first and second dimensions.
+ - ``J`` is the diagonal Jacobian matrix
+ - ``W`` is the diagonal matrix of quadrature weights
+ - ``D_i`` is the derivative matrix along the ``i``th dimension
 """
 struct WeakDivergence{I} <: SpectralElementOperator end
 WeakDivergence() = WeakDivergence{()}()
@@ -468,11 +489,24 @@ function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
 end
 
 """
-    Gradient()
 
-Compute the (strong) gradient on each element via the chain rule:
+    grad = Gradient()
+    grad.(f)
 
-    ∂f/∂xⁱ = ∂f/∂ξʲ * ∂ξʲ/∂xⁱ
+Compute the (strong) gradient of `f` on each element, returning a
+`CovariantVector`-field.
+
+The ``i``th covariant component of the gradient is the partial derivative with
+respect to the reference element:
+```math
+(\\nabla f)_i = \\frac{\\partial f}{\\partial \\xi^i}
+```
+
+Discretely, this can be written in matrix form as
+```math
+D_i f
+```
+where ``D_i`` is the derivative matrix along the ``i``th dimension
 """
 struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
@@ -525,11 +559,35 @@ end
 
 
 """
-    WeakGradient()
+    wgrad = WeakGradient()
+    wgrad.(f)
 
-Compute the (strong) gradient on each element via the chain rule:
+Compute the "weak gradient" of `f` on each element. This is defined as the the
+vector field ``u`` such that for all ``\\phi``
+```math
+\\int_\\Omega \\phi \\cdot u \\, d \\Omega
+=
+- \\int_\\Omega (\\nabla \\cdot \\phi) f \\, d\\Omega
+```
 
-    ∂f/∂xⁱ = ∂f/∂ξʲ * ∂ξʲ/∂xⁱ
+This arises from the contribution of the volume integral after by
+applying integration by parts to the weak form expression of the gradient
+```math
+\\int_\\Omega \\phi \\cdot (\\nabla f) \\, d \\Omega
+=
+- \\int_\\Omega f (\\nabla \\cdot \\phi) \\, d\\Omega
++ \\oint_{\\partial \\Omega} f (\\phi \\cdot n) \\, d \\sigma
+```
+
+In matrix form, this becomes
+```math
+{\\phi^i}^\\top W J u_i = - ( J^{-1} D_i J \\phi^i )^\\top W J f
+```
+which reduces to
+```math
+u_i = -W^{-1} D_i^\\top W f
+```
+where ``D_i`` is the derivative matrix along the ``i``th dimension.
 """
 struct WeakGradient{I} <: SpectralElementOperator end
 WeakGradient() = WeakGradient{()}()
@@ -599,9 +657,40 @@ end
 abstract type CurlSpectralElementOperator <: SpectralElementOperator end
 
 """
-    Curl()
+    curl = Curl()
+    curl.(u)
 
-Compute the (strong) curl on each element
+Computes the per-element spectral (strong) curl of a vector field ``u``.
+
+The curl of a vector field ``u`` is a vector field with contravariant components
+```math
+(\\nabla \\times u)^i = \\frac{1}{J} \\sum_{jk} \\epsilon^{ijk} \\frac{\\partial u_k}{\\partial \\xi^j}
+```
+where ``J`` is the Jacobian determinant, ``u_k`` is the ``k``th covariant
+component of ``u``, and ``\\epsilon^{ijk}`` are the [Levi-Civita
+symbols](https://en.wikipedia.org/wiki/Levi-Civita_symbol#Three_dimensions_2).
+In other words
+```math
+\\begin{bmatrix}
+  (\\nabla \\times u)^1 \\\\
+  (\\nabla \\times u)^2 \\\\
+  (\\nabla \\times u)^3
+\\end{bmatrix}
+=
+\\frac{1}{J} \\begin{bmatrix}
+  \\frac{\\partial u_3}{\\partial \\xi^2} - \\frac{\\partial u_2}{\\partial \\xi^3} \\\\
+  \\frac{\\partial u_1}{\\partial \\xi^3} - \\frac{\\partial u_3}{\\partial \\xi^1} \\\\
+  \\frac{\\partial u_2}{\\partial \\xi^1} - \\frac{\\partial u_1}{\\partial \\xi^2}
+\\end{bmatrix}
+```
+
+In matrix form, this becomes
+```math
+\\epsilon^{ijk} J^{-1} D_j u_k
+```
+Note that unused dimensions will be dropped: e.g. the 2D curl of a
+`Covariant12Vector`-field will return a `Contravariant3Vector`.
+
 """
 struct Curl{I} <: CurlSpectralElementOperator end
 Curl() = Curl{()}()
@@ -678,9 +767,34 @@ end
 
 
 """
-    WeakCurl()
+    wcurl = WeakCurl()
+    wcurl.(u)
 
-Compute the weak curl on each element
+Computes the "weak curl" on each element of a vector field `u`. This is defined
+as the vector field ``\\theta`` such that for all ``\\phi``
+```math
+\\int_\\Omega \\phi \\cdot \\theta \\, d \\Omega
+=
+\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
+```
+
+This arises from the contribution of the volume integral after by
+applying integration by parts to the weak form expression of the curl
+```math
+\\int_\\Omega \\phi \\cdot (\\nabla \\times u) \\,d\\Omega
+=
+\\int_\\Omega (\\nabla \\times \\phi) \\cdot u \\,d \\Omega
+- \\oint_{\\partial \\Omega} (\\phi \\times u) \\cdot n \\,d\\sigma
+```
+
+In matrix form, this becomes
+```math
+{\\phi_i}^\\top W J \\theta^i = (J^{-1} \\epsilon^{kji} D_j \\phi_i)^\\top W J u_k
+```
+which, by using the anti-symmetry of the Levi-Civita symbol, reduces to
+```math
+\\theta^i = - \\epsilon^{ijk} (WJ)^{-1} D_j^\\top W u_k
+```
 """
 struct WeakCurl{I} <: CurlSpectralElementOperator end
 WeakCurl() = WeakCurl{()}()
@@ -770,21 +884,19 @@ return_space(op::TensorOperator, inspace) = op.space
 operator_return_eltype(op::TensorOperator, S) = S
 
 """
-    Interpolate(space)
+    i = Interpolate(space)
+    i.(f)
 
-Computes the projection of a field to a higher degree polynomial space. `space`
-must be on the same element mesh as the field, but have equal or higher
-polynomial degree.
+Interpolates `f` to the `space`. If `space` has equal or higher polynomial
+degree as the space of `f`, this is exact, otherwise it will be lossy.
 
-    ⟨ϕ, J θ⟩ = ⟨ϕ, J σ⟩
+In matrix form, it is the linear operator
+```math
+I = \\bigotimes_i I_i
+```
+where ``I_i`` is the barycentric interpolation matrix in the ``i``th dimension.
 
-where `ϕ` and `θ` are on the higher degree space.
-
-Discretely it is equivalent to
-
-    I σ
-
-where `I` is the interpolation matrix.
+See also [`Restrict`](@ref).
 """
 struct Interpolate{I, S} <: TensorOperator
     space::S
@@ -853,21 +965,28 @@ end
 
 
 """
-    Restrict(space)
+    r = Restrict(space)
+    r.(f)
 
 Computes the projection of a field to a lower degree polynomial space. `space`
-must be on the same element mesh as the field, but have lower polynomial degree.
+must be on the same topology as the space of `f`, but have a lower polynomial
+degree.
 
-    ⟨ϕ, J θ⟩ = ⟨ϕ, J σ⟩
+It is defined as the field ``\\theta`` such that for all ``\\phi``
+```math
+\\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
+```
+In matrix form, this is
+```math
+\\phi^\\top W_r J_r \\theta = (I \\phi)^\\top WJ f
+```
+where ``W_r`` and ``J_r`` are the quadrature weights and Jacobian determinant of
+`space`, and ``I`` is the interpolation operator (see [`Interpolate`](@ref))
+from `space` to the space of `f`. This reduces to
+```math
+\\theta = (W_rJ_r)^{-1} I^\\top WJ f
+```
 
-where `ϕ` and `θ` are on the lower degree space.
-
-Discretely it is equivalent to
-
-    (JWr) \\  I' (JW) σ
-
-where `I` is the interpolation matrix, and `JWr` is the Jacobian multiplied by
-quadrature weights on the lower-degree space.
 """
 struct Restrict{I, S} <: TensorOperator
     space::S
