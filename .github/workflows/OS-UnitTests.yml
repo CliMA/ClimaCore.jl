@@ -41,7 +41,6 @@ jobs:
             - 'Project.toml'
             - 'Manifest.toml'
 
-
     - name: Set up Julia
       uses: julia-actions/setup-julia@latest
       if: steps.filter.outputs.run_test == 'true'

@@ -8,7 +8,7 @@ on:
       - 'test/**'
       - 'Project.toml'
       - 'Manifest.toml'
-
+      - '!lib/**'
 jobs:
   test:
     runs-on: ubuntu-latest

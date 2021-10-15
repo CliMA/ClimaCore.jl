@@ -9,7 +9,7 @@ VTK output for ClimaCore fields for visualization with [Paraview](https://www.pa
 
 Activate the Pkg repl mode and dev the ClimaCoreVTK subpackge:
 
-    (ClimaCore) pkg> dev ClimaCoreVTK
+    (ClimaCore) pkg> dev lib/ClimaCoreVTK
 
 You can now use ClimaCoreVTK in your ClimaCore pkg environment:
 
@@ -18,10 +18,10 @@ You can now use ClimaCoreVTK in your ClimaCore pkg environment:
 
 ### Development of the `ClimaCoreVTK` subpackage
 
-    cd ClimaCore/ClimaCoreVTK
+    cd ClimaCore/lib/ClimaCoreVTK
 
     # Add ClimaCore to subpackage environment
-    julia --project -e 'using Pkg; Pkg.develop("../")
+    julia --project -e 'using Pkg; Pkg.develop("../../")
 
     # Instantiate ClimaCoreVTK project environment
     julia --project -e 'using Pkg; Pkg.instantiate()'
