@@ -173,7 +173,7 @@ function rhs_implicit!(dY, Y, p, t)
 
     # ∂ρu/∂t ≈ -∇P - ρ∇Φ
     # ∂u/∂t ≈ -(∇P)/ρ - ∇Φ
-    @. dY.Yc.ρuₕ .*= 0.
+    @. dY.Yc.ρuₕ *= 0.
     if :ρw in propertynames(Y)
         @. dY.ρw = B(
             Geometry.transform(
