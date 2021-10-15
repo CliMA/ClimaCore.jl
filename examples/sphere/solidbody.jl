@@ -41,6 +41,21 @@ const test_name = get(ARGS, 1, "cosine_bell") # default test case to run
 const cosine_test_name = "cosine_bell"
 const gaussian_test_name = "gaussian_bell"
 
+# Plot variables and auxiliary function
+ENV["GKSwstype"] = "nul"
+Plots.GRBackend()
+dirname = "cg_sphere_solidbody"
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
 
 FT = Float64
 ne_seq = 2 .^ (2, 3, 4, 5)
@@ -108,34 +123,13 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    err[k] = norm(sol.u[end] .- h_init) / length(h_init)
+    err[k] = norm(sol.u[end] .- h_init)
 
     @info "Test case: $(test_name)"
     @info "Number of elements per cube panel: $(ne) x $(ne)"
     @info "Solution norm at t = 0: ", norm(h_init)
     @info "Solution norm at t = $(T): ", norm(sol.u[end])
-    @info "L2 error at t = $(T): ", norm(sol.u[end] .- h_init)
-
-    # Plot the error
-    ENV["GKSwstype"] = "nul"
-    Plots.GRBackend()
-
-    dirname = "cg_sphere_solidbody"
-    path = joinpath(@__DIR__, "output", dirname)
-    mkpath(path)
-
-    Plots.png(Plots.plot(1:length(ne_seq), err), joinpath(path, "error.png"))
-
-    function linkfig(figpath, alt = "")
-        # buildkite-agent upload figpath
-        # link figure in logs if we are running on CI
-        if get(ENV, "BUILDKITE", "") == "true"
-            artifact_url = "artifact://$figpath"
-            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-        end
-    end
-
-    linkfig("output/$(dirname)/error.png", "Absolute error in height")
+    @info "L2 error at t = $(T): ", err[k]
 
     #----------------lat, long plots
     Plots.png(Plots.plot(coords.lat), joinpath(path, "latitude.png"))
@@ -143,6 +137,11 @@ for (k, ne) in enumerate(ne_seq)
     Plots.png(Plots.plot(coords.long), joinpath(path, "longitude.png"))
     linkfig("output/$(dirname)/longitude.png", "longitude")
 end
+
+# Plot the error
+Plots.png(Plots.plot(1:length(ne_seq), err), joinpath(path, "error.png"))
+
+linkfig("output/$(dirname)/error.png", "L2 error Vs ne")
 
 conv = convergence_rate(err, Δh)
 @info "Converge rates for this test case are: ", conv
