@@ -628,3 +628,22 @@ end
 # use generated functions to build timestepper from Butcher Tableau
 #     handle 0, 1, -1, and 1//N nicely
 #     automatically unroll stage looops and eliminate tableau dereferences
+
+
+# 1. Redo plots (bar graphs with total f+J evals per solver type)
+# 2. Change tolerances on KenCarp4
+#    - Plot of adaptive timestep over time
+# 3. Redo current examples with large rising bubble
+#    - Increase vertical resolution until explicit solver hits tme limit
+#    - Show imex solver exceeds limit
+# 4. Implent arbitrary Butcher tableau explicit and Rosenbrock implicit solvers
+# 5. Make new rhs with ρe_tot instead of ρθ
+
+# Explicit: 
+# | Algorithm type | Δt | wall time | final error | num f calls |
+
+# Implicit: 
+# | Algorithm type | Δt | wall time | final error | num f calls | num J calls | num linsolves |
+
+# Imex: 
+# | Algorithm type | Δt | wall time | final error | num f_ex calls | num f_im calls | num J calls | num linsolves |
