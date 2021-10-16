@@ -739,7 +739,9 @@ Supported boundary conditions are:
   ```
 - [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
   interior point. On the left boundary, the stencil is
+  ```math
   U(v,x)[\\tfrac{1}{2}] = U(v,x)[1 + \\tfrac{1}{2}]
+  ```
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -874,7 +876,6 @@ A(v,θ)[i] = \\frac{1}{2} (θ[i+1] - θ[i-1]) v³[i]
 ```
 
 No boundary conditions are currently supported.
-```
 """
 struct AdvectionF2F{BCS} <: AdvectionOperator
     bcs::BCS
