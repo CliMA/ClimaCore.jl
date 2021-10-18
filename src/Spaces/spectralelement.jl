@@ -519,3 +519,46 @@ function slab(space::AbstractSpectralElementSpace, v, h)
         slab(space.local_geometry, v, h),
     )
 end
+
+"""
+    triangulate(space::SpectralElementSpace2D)
+
+Construct a triangulation of nodes within each element of `space`, returning
+three vectors `I, J, K` containing the 0-based indices of the vertices of each
+triangle, appropriate for use with e.g. PlotlyJS.jl. There is no continuity
+across element boundaries (i.e. a shared vertex byt two elements is represented
+as distinct vertices in the mesh), so as to make it easier to represent
+discontinuous fields.
+"""
+function triangulate(space::SpectralElementSpace2D)
+
+    # Each element is triangulated as
+    #
+    #    3+-----+-----+
+    #     | \ 6 | \ 8 |
+    #     | 5 \ | 7 \ |
+    #  j 2+-----+-----+
+    #     | \ 2 | \ 4 |
+    #     | 1 \ | 3 \ |
+    #    1+-----+-----+
+    #     1     2     3
+    #           i
+
+    Nelem = Topologies.nlocalelems(space)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
+    L = LinearIndices((1:Nq, 1:Nq))
+
+    I = vec([
+        (t == 1 ? L[i, j] : L[i + 1, j]) - 1 + Nq * Nq * (h - 1) for
+        t in 1:2, i in 1:(Nq - 1), j in 1:(Nq - 1), h in 1:Nelem
+    ])
+    J = vec([
+        (t == 1 ? L[i + 1, j] : L[i + 1, j + 1]) - 1 + Nq * Nq * (h - 1) for
+        t in 1:2, i in 1:(Nq - 1), j in 1:(Nq - 1), h in 1:Nelem
+    ])
+    K = vec([
+        (t == 1 ? L[i, j + 1] : L[i, j + 1]) - 1 + Nq * Nq * (h - 1) for
+        t in 1:2, i in 1:(Nq - 1), j in 1:(Nq - 1), h in 1:Nelem
+    ])
+    return (I, J, K)
+end
