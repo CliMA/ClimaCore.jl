@@ -69,7 +69,9 @@ end
 FT = Float64
 ne_seq = 2 .^ (2, 3, 4, 5)
 Δh = zeros(FT, length(ne_seq))
-L1err, L2err, Linferr = zeros(FT, length(ne_seq)), zeros(FT, length(ne_seq)), zeros(FT, length(ne_seq))
+L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
+zeros(FT, length(ne_seq)),
+zeros(FT, length(ne_seq))
 Nq = 4
 
 # h-refinement study
@@ -147,11 +149,41 @@ for (k, ne) in enumerate(ne_seq)
 end
 
 # Plot the errors
-Plots.png(Plots.plot(1:length(ne_seq), L1err, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L₁ err"), joinpath(path, "L1error.png"))
+Plots.png(
+    Plots.plot(
+        1:length(ne_seq),
+        L1err,
+        xscale = :log,
+        yscale = :log,
+        xlabel = "Nₑ",
+        ylabel = "L₁ err",
+    ),
+    joinpath(path, "L1error.png"),
+)
 linkfig("output/$(dirname)/L1error.png", "L₁ error Vs Nₑ")
-Plots.png(Plots.plot(1:length(ne_seq), L2err, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L₂ err"), joinpath(path, "L2error.png"))
+Plots.png(
+    Plots.plot(
+        1:length(ne_seq),
+        L2err,
+        xscale = :log,
+        yscale = :log,
+        xlabel = "Nₑ",
+        ylabel = "L₂ err",
+    ),
+    joinpath(path, "L2error.png"),
+)
 linkfig("output/$(dirname)/L2error.png", "L₂ error Vs Nₑ")
-Plots.png(Plots.plot(1:length(ne_seq), Linferr, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L∞ err"), joinpath(path, "Linferror.png"))
+Plots.png(
+    Plots.plot(
+        1:length(ne_seq),
+        Linferr,
+        xscale = :log,
+        yscale = :log,
+        xlabel = "Nₑ",
+        ylabel = "L∞ err",
+    ),
+    joinpath(path, "Linferror.png"),
+)
 linkfig("output/$(dirname)/Linferror.png", "L∞ error Vs Nₑ")
 
 conv = convergence_rate(L2err, Δh)
