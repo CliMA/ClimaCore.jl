@@ -34,17 +34,26 @@ convergence_rate(err, Δh) =
 const R = 6.37122e6
 const h0 = 1000.0
 const r0 = R / 3
-const α0 = 0.0
 const u0 = 2 * pi * R / (86400 * 12)
 const center = Geometry.LatLongPoint(0.0, 270.0)
 const test_name = get(ARGS, 1, "cosine_bell") # default test case to run
+const test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
 const cosine_test_name = "cosine_bell"
 const gaussian_test_name = "gaussian_bell"
+const alpha0_test_name = "alpha0"
+const alpha45_test_name = "alpha45"
+
+if test_angle_name == alpha45_test_name
+    const α0 = 45.0
+else # default test case, α0 = 0.0
+    const α0 = 0.0
+end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
 Plots.GRBackend()
-dirname = "cg_sphere_solidbody"
+dirname = "cg_sphere_solidbody_$(test_name)"
+dirname = "$(dirname)_$(test_angle_name)"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
@@ -59,7 +68,8 @@ end
 
 FT = Float64
 ne_seq = 2 .^ (2, 3, 4, 5)
-err, Δh = zeros(FT, length(ne_seq)), zeros(FT, length(ne_seq))
+Δh = zeros(FT, length(ne_seq))
+L1err, L2err, Linferr = zeros(FT, length(ne_seq)), zeros(FT, length(ne_seq)), zeros(FT, length(ne_seq))
 Nq = 4
 
 # h-refinement study
@@ -112,7 +122,7 @@ for (k, ne) in enumerate(ne_seq)
 
     # Solve the ODE
     T = 86400 * 12
-    dt = 30 * 60
+    dt = 20 * 60
     prob = ODEProblem(rhs!, h_init, (0.0, T), u)
     sol = solve(
         prob,
@@ -123,25 +133,26 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    err[k] = norm(sol.u[end] .- h_init)
+    L1err[k] = norm(sol.u[end] .- h_init, 1)
+    L2err[k] = norm(sol.u[end] .- h_init)
+    Linferr[k] = norm(sol.u[end] .- h_init, Inf)
 
-    @info "Test case: $(test_name)"
+    @info "Test case: $(test_name) with α: $(test_angle_name)"
     @info "Number of elements per cube panel: $(ne) x $(ne)"
     @info "Solution norm at t = 0: ", norm(h_init)
     @info "Solution norm at t = $(T): ", norm(sol.u[end])
-    @info "L2 error at t = $(T): ", err[k]
-
-    #----------------lat, long plots
-    Plots.png(Plots.plot(coords.lat), joinpath(path, "latitude.png"))
-    linkfig("output/$(dirname)/latitude.png", "latitude")
-    Plots.png(Plots.plot(coords.long), joinpath(path, "longitude.png"))
-    linkfig("output/$(dirname)/longitude.png", "longitude")
+    @info "L₁ error at t = $(T): ", L1err[k]
+    @info "L₂ error at t = $(T): ", L2err[k]
+    @info "L∞ error at t = $(T): ", Linferr[k]
 end
 
-# Plot the error
-Plots.png(Plots.plot(1:length(ne_seq), err), joinpath(path, "error.png"))
+# Plot the errors
+Plots.png(Plots.plot(1:length(ne_seq), L1err, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L₁ err"), joinpath(path, "L1error.png"))
+linkfig("output/$(dirname)/L1error.png", "L₁ error Vs Nₑ")
+Plots.png(Plots.plot(1:length(ne_seq), L2err, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L₂ err"), joinpath(path, "L2error.png"))
+linkfig("output/$(dirname)/L2error.png", "L₂ error Vs Nₑ")
+Plots.png(Plots.plot(1:length(ne_seq), Linferr, xscale = :log, yscale = :log, xlabel = "Nₑ", ylabel = "L∞ err"), joinpath(path, "Linferror.png"))
+linkfig("output/$(dirname)/Linferror.png", "L∞ error Vs Nₑ")
 
-linkfig("output/$(dirname)/error.png", "L2 error Vs ne")
-
-conv = convergence_rate(err, Δh)
+conv = convergence_rate(L2err, Δh)
 @info "Converge rates for this test case are: ", conv
