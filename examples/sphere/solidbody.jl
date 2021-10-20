@@ -148,43 +148,49 @@ for (k, ne) in enumerate(ne_seq)
     @info "L∞ error at t = $(T): ", Linferr[k]
 end
 
+# Print convergence rate info
+conv = convergence_rate(L2err, Δh)
+@info "Converge rates for this test case are: ", conv
+
 # Plot the errors
+# L₁ error Vs number of elements
 Plots.png(
     Plots.plot(
-        1:length(ne_seq),
+        collect(ne_seq),
         L1err,
-        xscale = :log,
-        yscale = :log,
+        yscale = :log10,
         xlabel = "Nₑ",
-        ylabel = "L₁ err",
+        ylabel = "log₁₀(L₁ err)",
+        label = "",
     ),
     joinpath(path, "L1error.png"),
 )
-linkfig("output/$(dirname)/L1error.png", "L₁ error Vs Nₑ")
+linkfig(relpath(joinpath(path, "L1error.png"), "../.."), "L₁ error Vs Nₑ")
+
+# L₂ error Vs number of elements
 Plots.png(
     Plots.plot(
-        1:length(ne_seq),
+        collect(ne_seq),
         L2err,
-        xscale = :log,
-        yscale = :log,
+        yscale = :log10,
         xlabel = "Nₑ",
-        ylabel = "L₂ err",
+        ylabel = "log₁₀(L₂ err)",
+        label = "",
     ),
     joinpath(path, "L2error.png"),
 )
-linkfig("output/$(dirname)/L2error.png", "L₂ error Vs Nₑ")
+linkfig(relpath(joinpath(path, "L2error.png"), "../.."), "L₂ error Vs Nₑ")
+
+# L∞ error Vs number of elements
 Plots.png(
     Plots.plot(
-        1:length(ne_seq),
+        collect(ne_seq),
         Linferr,
-        xscale = :log,
-        yscale = :log,
+        yscale = :log10,
         xlabel = "Nₑ",
-        ylabel = "L∞ err",
+        ylabel = "log₁₀(L∞ err)",
+        label = "",
     ),
     joinpath(path, "Linferror.png"),
 )
-linkfig("output/$(dirname)/Linferror.png", "L∞ error Vs Nₑ")
-
-conv = convergence_rate(L2err, Δh)
-@info "Converge rates for this test case are: ", conv
+linkfig(relpath(joinpath(path, "Linferror.png"), "../.."), "L∞ error Vs Nₑ")
