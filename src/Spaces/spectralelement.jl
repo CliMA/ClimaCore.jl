@@ -334,6 +334,9 @@ function SpectralElementSpace2D(
                 ξ[2],
             )
             xl = Geometry.LatLongPoint(x)
+            # [∂x1/∂ξ¹ ∂x1/∂ξ²
+            #  ∂x2/∂ξ¹ ∂x2/∂ξ²
+            #  ∂x3/∂ξ¹ ∂x3/∂ξ²]
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 Geometry.components(
                     Geometry.spherical_bilinear_interpolate(
@@ -345,18 +348,26 @@ function SpectralElementSpace2D(
                     ),
                 )
             end
-            if abs(xl.lat) ≈ oftype(xl.lat, 90.0)
-                # at the pole: choose u to line with x1, v to line with x2
-                ∂u∂ξ = ∂x∂ξ[SOneTo(2), :]
+            ϕ = xl.lat
+            λ = xl.long
+            # [∂u/∂x1 ∂u/∂x2 ∂u/∂x3
+            #  ∂v/∂x1 ∂v/∂x2 ∂v/∂x3]
+            ∂u∂x = if abs(ϕ) ≈ oftype(ϕ, 90.0)
+                # at the pole we orient u and v by taking the limit approaching
+                # from the line λ == 0 (i.e. along the line x2 = 0, x1 > 0)
+                # => u axis is aligned with x2, v is aligned with -x1
+                @assert λ ≈ 0
+                @SMatrix [
+                    0 one(ϕ) 0
+                    -one(ϕ) 0 0
+                ]
             else
-                ϕ = xl.lat
-                λ = xl.long
-                F = @SMatrix [
+                @SMatrix [
                     -sind(λ) cosd(λ) 0
                     0 0 1/cosd(ϕ)
                 ]
-                ∂u∂ξ = F * ∂x∂ξ
             end
+            ∂u∂ξ = ∂u∂x * ∂x∂ξ
 
             J = abs(det(∂u∂ξ))
             @assert J ≈ sqrt(det(∂x∂ξ' * ∂x∂ξ))
