@@ -67,7 +67,7 @@ function linkfig(figpath, alt = "")
 end
 
 FT = Float64
-ne_seq = 2 .^ (2, 3, 4, 5)
+ne_seq = (5, 9, 17, 33)
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
