@@ -36,7 +36,10 @@ function hvspace_2D(
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    # todo 
+    # vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    vert_stretching_function = 
 
     horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
@@ -48,9 +51,17 @@ function hvspace_2D(
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    # todo
+    # read topography 
+    topography = topography_interpolation(horzspace, file)
+
+    # todo 
+    # construct hv center/face spaces, recompute metric terms
+    hv_center_space, hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_stretching_function, topography)
+
+    # hv_center_space =
+    #     Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    # hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
     return (hv_center_space, hv_face_space)
 end
 
