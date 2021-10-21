@@ -165,7 +165,11 @@ Plots.png(
     ),
     joinpath(path, "L1error.png"),
 )
-linkfig(relpath(joinpath(path, "L1error.png"), "../.."), "L₁ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "L1error.png"), joinpath(@__DIR__, "../..")),
+    "L₁ error Vs Nₑ",
+)
+
 
 # L₂ error Vs number of elements
 Plots.png(
@@ -179,7 +183,10 @@ Plots.png(
     ),
     joinpath(path, "L2error.png"),
 )
-linkfig(relpath(joinpath(path, "L2error.png"), "../.."), "L₂ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "L2error.png"), joinpath(@__DIR__, "../..")),
+    "L₂ error Vs Nₑ",
+)
 
 # L∞ error Vs number of elements
 Plots.png(
@@ -193,4 +200,7 @@ Plots.png(
     ),
     joinpath(path, "Linferror.png"),
 )
-linkfig(relpath(joinpath(path, "Linferror.png"), "../.."), "L∞ error Vs Nₑ")
+linkfig(
+    relpath(joinpath(path, "Linferror.png"), joinpath(@__DIR__, "../..")),
+    "L∞ error Vs Nₑ",
+)

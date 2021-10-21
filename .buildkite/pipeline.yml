@@ -268,12 +268,45 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Solid body 2D CG sphere"
-    key: "cpu_solidbody_2d_cg_sphere"
+  - label: ":computer: Solid body CG sphere cosine bell alpha0"
+    key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
     command:
       - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
     artifact_paths:
-      - "examples/sphere/output/cg_sphere_solidbody/*"
+      - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere cosine bell alpha45"
+    key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha45/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere gaussian bell alpha0"
+    key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere gaussian bell alpha45"
+    key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha45/*"
     agents:
       config: cpu
       queue: central
