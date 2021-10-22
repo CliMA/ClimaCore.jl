@@ -282,7 +282,7 @@ steps:
   - label: ":computer: Solid body CG sphere cosine bell alpha45"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl cosine_bell alpha45"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha45/*"
     agents:
@@ -293,7 +293,7 @@ steps:
   - label: ":computer: Solid body CG sphere gaussian bell alpha0"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl gaussian_bell"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha0/*"
     agents:
@@ -304,7 +304,7 @@ steps:
   - label: ":computer: Solid body CG sphere gaussian bell alpha45"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl gaussian_bell alpha45"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha45/*"
     agents:
@@ -312,12 +312,34 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Shallow water 2D CG sphere"
-    key: "cpu_shallowwater_2d_cg_sphere"
+  - label: ":computer: Steady-state shallow water 2D CG sphere alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_alpha0"
     command:
       - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl"
     artifact_paths:
-      - "examples/sphere/output/cg_sphere_shallowwater/*"
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Steady-state shallow water 2D CG sphere alpha45"
+    key: "cpu_shallowwater_2d_cg_sphere_alpha45"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state alpha45"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha45/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
+    key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl mountain"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_mountain_alpha0/*"
     agents:
       config: cpu
       queue: central
