@@ -4,45 +4,67 @@
 ) where {A} = AxisVector(A.instance, SVector(a))
 
 ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
-ContravariantVector(u::CartesianVector, local_geometry::LocalGeometry) =
+ContravariantVector(u::LocalVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x * u
 ContravariantVector(u::CovariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x * local_geometry.∂ξ∂x' * u
 
 CovariantVector(u::CovariantVector, local_geometry::LocalGeometry) = u
-CovariantVector(u::CartesianVector, local_geometry::LocalGeometry) =
+CovariantVector(u::LocalVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * u
 CovariantVector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ' * local_geometry.∂x∂ξ * u
 
-CartesianVector(u::CartesianVector, local_geometry::LocalGeometry) = u
-CartesianVector(u::CovariantVector, local_geometry::LocalGeometry) =
+LocalVector(u::LocalVector, local_geometry::LocalGeometry) = u
+LocalVector(u::CovariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂ξ∂x' * u
-CartesianVector(u::ContravariantVector, local_geometry::LocalGeometry) =
+LocalVector(u::ContravariantVector, local_geometry::LocalGeometry) =
     local_geometry.∂x∂ξ * u
 
+# common conversion functions
+for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
+    N = length(I)
+    @eval begin
+        (::Type{ContravariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::ContravariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = u
+        (::Type{ContravariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::LocalVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂ξ∂x * u
+        (::Type{ContravariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::CovariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂ξ∂x * (local_geometry.∂ξ∂x' * u)
 
+        (::Type{CovariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::CovariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = u
+        (::Type{CovariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::LocalVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂x∂ξ' * u
+        (::Type{CovariantVector{T, $I, SVector{$N, T}} where {T}})(
+            u::ContravariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂x∂ξ' * (local_geometry.∂x∂ξ * u)
 
-# These are for compatibility, and should be removed
-
-Contravariant12Vector(u::ContravariantVector, local_geometry::LocalGeometry) = u
-Contravariant12Vector(u::CartesianVector, local_geometry::LocalGeometry) =
-    local_geometry.∂ξ∂x * u
-Contravariant12Vector(u::CovariantVector, local_geometry::LocalGeometry) =
-    local_geometry.∂ξ∂x * local_geometry.∂ξ∂x' * u
-
-Covariant12Vector(u::CovariantVector, local_geometry::LocalGeometry) = u
-Covariant12Vector(u::CartesianVector, local_geometry::LocalGeometry) =
-    local_geometry.∂x∂ξ' * u
-Covariant12Vector(u::ContravariantVector, local_geometry::LocalGeometry) =
-    local_geometry.∂x∂ξ' * local_geometry.∂x∂ξ * u
-
-Cartesian12Vector(u::CartesianVector, local_geometry::LocalGeometry) = u
-Cartesian12Vector(u::CovariantVector, local_geometry::LocalGeometry) =
-    local_geometry.∂ξ∂x' * u
-Cartesian12Vector(u::ContravariantVector, local_geometry::LocalGeometry) =
-    local_geometry.∂x∂ξ * u
-
+        (::Type{LocalVector{T, $I, SVector{$N, T}} where {T}})(
+            u::LocalVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = u
+        (::Type{LocalVector{T, $I, SVector{$N, T}} where {T}})(
+            u::CovariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂ξ∂x' * u
+        (::Type{LocalVector{T, $I, SVector{$N, T}} where {T}})(
+            u::ContravariantVector{<:Any, $I},
+            local_geometry::LocalGeometry{$I},
+        ) = local_geometry.∂x∂ξ * u
+    end
+end
 
 covariant1(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₁
@@ -69,13 +91,22 @@ contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
 Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
-# conversions
+# In order to make curls and cross products work in 2D, we define the 3rd
+# dimension to be orthogonal to the exisiting dimensions, and have unit length
+# (so covariant, contravariant and local axes are equal)
+
+# required for curl-curl
+covariant3(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
+    contravariant3(u, local_geometry)
+
+function WVector(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)})
+    WVector(contravariant3(u, local_geometry))
+end
 function Covariant3Vector(
-    uⁱ::Contravariant3Vector,
-    local_geometry::LocalGeometry,
+    u::Contravariant3Vector,
+    local_geometry::LocalGeometry{(1, 2)},
 )
-    # Not true generally, but is in 2D
-    Covariant3Vector(uⁱ.u³)
+    Covariant3Vector(contravariant3(u, local_geometry))
 end
 
 """
@@ -210,25 +241,23 @@ transform(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = transform(ato, v)
 
 The return type when taking the divergence of a field of `V`.
 
-Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
-"""
+Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
+    """
 divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
+
+# this isn't quite right: it only is true when the Christoffel symbols are zero
 divergence_result_type(
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
-) where {
-    FT,
-    A1,
-    A2 <: CartesianAxis,
-    S <: StaticMatrix{S1, S2},
-} where {S1, S2} = AxisVector{FT, A2, SVector{S2, FT}}
+) where {FT, A1, A2 <: LocalAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
+    AxisVector{FT, A2, SVector{S2, FT}}
 
 """
-    gradient_result_type(axes, V)
+    gradient_result_type(Val(I), V)
 
-The return type when taking the gradient over `axes` of a field `V`.
+The return type when taking the gradient along dimension `I` of a field `V`.
 
-Required for statically infering the result type of the gradient operator for StaticArray.FieldVector subtypes.
-"""
+Required for statically infering the result type of the gradient operation for `AxisVector` subtypes.
+    """
 function gradient_result_type(::Val{I}, ::Type{V}) where {I, V <: Number}
     N = length(I)
     AxisVector{V, CovariantAxis{I}, SVector{N, V}}
@@ -242,20 +271,27 @@ function gradient_result_type(
 end
 
 """
-    curl_result_type(V)
+    curl_result_type(Val(I), Val(L), V)
 
-The return type when taking the curl of a field of `V`.
+The return type when taking the curl along dimensions `I` of a field of eltype `V`, defined on dimensions `L`
 
-Required for statically infering the result type of the divergence operation for StaticArray.FieldVector subtypes.
+Required for statically infering the result type of the curl operation for `AxisVector` subtypes.
 """
-curl_result_type(::Type{V}) where {V <: Covariant12Vector{FT}} where {FT} =
+curl_result_type(::Val{(1, 2)}, ::Type{Covariant12Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
-curl_result_type(::Type{V}) where {V <: Cartesian12Vector{FT}} where {FT} =
-    Contravariant3Vector{FT}
-# TODO: not generally true that Contravariant3Vector => Covariant3Vector, but is for our 2D case
-# curl of Covariant3Vector -> Contravariant12Vector
-curl_result_type(::Type{V}) where {V <: Covariant3Vector{FT}} where {FT} =
+curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant12Vector{FT}
+
+# these are only true in 2D
+curl_result_type(::Val{(1, 2)}, ::Type{Contravariant12Vector{FT}}) where {FT} =
+    Contravariant3Vector{FT}
+curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
+    Contravariant3Vector{FT}
+curl_result_type(::Val{(1, 2)}, ::Type{Contravariant3Vector{FT}}) where {FT} =
+    Contravariant12Vector{FT}
+curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
+    Contravariant12Vector{FT}
+
 
 _norm_sqr(x, local_geometry) = sum(x -> _norm_sqr(x, local_geometry), x)
 _norm_sqr(x::Number, local_geometry) = LinearAlgebra.norm_sqr(x)
@@ -266,11 +302,11 @@ function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)
 end
 
 function _norm_sqr(uᵢ::CovariantVector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(CartesianVector(uᵢ, local_geometry))
+    LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
 
 function _norm_sqr(uᵢ::ContravariantVector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(CartesianVector(uᵢ, local_geometry))
+    LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
 
 _norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
@@ -280,4 +316,6 @@ _cross(u::AxisVector, v::AxisVector, local_geometry) = LinearAlgebra.cross(
     ContravariantVector(v, local_geometry),
 )
 _cross(u::CartesianVector, v::CartesianVector, local_geometry) =
+    LinearAlgebra.cross(u, v)
+_cross(u::LocalVector, v::LocalVector, local_geometry) =
     LinearAlgebra.cross(u, v)

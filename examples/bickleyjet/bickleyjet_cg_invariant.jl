@@ -59,7 +59,7 @@ function init_state(local_geometry, p)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
     u = Geometry.Covariant12Vector(
-        Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
         local_geometry,
     )
     # set initial tracer

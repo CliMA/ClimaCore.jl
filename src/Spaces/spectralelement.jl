@@ -41,17 +41,7 @@ function SpectralElementSpace1D(
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    Mxξ = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
-        SMatrix{1, 1, FT, 1},
-    }
-    Mξx = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
-        SMatrix{1, 1, FT, 1},
-    }
-    LG = Geometry.LocalGeometry{CoordType, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -69,7 +59,6 @@ function SpectralElementSpace1D(
                     Geometry.component(vcoords[1], 1)
                 ) / 2
             J = abs(∂x∂ξ)
-            ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i]
             local_geometry_slab[i] = Geometry.LocalGeometry(
                 x,
@@ -77,17 +66,10 @@ function SpectralElementSpace1D(
                 WJ,
                 Geometry.AxisTensor(
                     (
-                        Geometry.CartesianAxis{AIdx}(),
+                        Geometry.LocalAxis{AIdx}(),
                         Geometry.CovariantAxis{AIdx}(),
                     ),
                     ∂x∂ξ,
-                ),
-                Geometry.AxisTensor(
-                    (
-                        Geometry.ContravariantAxis{AIdx}(),
-                        Geometry.CartesianAxis{AIdx}(),
-                    ),
-                    ∂ξ∂x,
                 ),
             )
         end
@@ -145,17 +127,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
-    Mxξ = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
-        SMatrix{2, 2, FT, 4},
-    }
-    Mξx = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
-        SMatrix{2, 2, FT, 4},
-    }
-    LG = Geometry.LocalGeometry{CoordType2D, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
@@ -186,7 +158,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 SVector(Geometry.component(x, 1), Geometry.component(x, 2))
             end
             J = det(∂x∂ξ)
-            ∂ξ∂x = inv(∂x∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
             local_geometry_slab[i, j] = Geometry.LocalGeometry(
@@ -195,17 +166,10 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 WJ,
                 Geometry.AxisTensor(
                     (
-                        Geometry.CartesianAxis{AIdx}(),
+                        Geometry.LocalAxis{AIdx}(),
                         Geometry.CovariantAxis{AIdx}(),
                     ),
                     ∂x∂ξ,
-                ),
-                Geometry.AxisTensor(
-                    (
-                        Geometry.ContravariantAxis{AIdx}(),
-                        Geometry.CartesianAxis{AIdx}(),
-                    ),
-                    ∂ξ∂x,
                 ),
             )
         end
@@ -216,8 +180,10 @@ function SpectralElementSpace2D(topology, quadrature_style)
     dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
-    # TODO: this assumes XYDomain, need to dispatch SG Vector type on domain axis type
-    SG = Geometry.SurfaceGeometry{FT, Geometry.Cartesian12Vector{FT}}
+    SG = Geometry.SurfaceGeometry{
+        FT,
+        Geometry.AxisVector{FT, Geometry.LocalAxis{AIdx}, SVector{2, FT}},
+    }
     interior_faces = Topologies.interior_faces(topology)
 
     internal_surface_geometry =
@@ -287,11 +253,6 @@ end
 
 nlevels(space::SpectralElementSpace2D) = 1
 
-"""
-    SpectralElementSpace2D_sphere(topology, quadrature_style)
-
-Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
-"""
 function SpectralElementSpace2D(
     topology::Topologies.Grid2DTopology{
         <:Meshes.Mesh2D{<:Domains.SphereDomain},
@@ -300,25 +261,13 @@ function SpectralElementSpace2D(
 )
     FT = eltype(topology.mesh)
     CT = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
+    AIdx = (1, 2)
     CoordType3D = Topologies.coordinate_type(topology)
-    AIdx = Geometry.coordinate_axis(CoordType3D)
     radius = topology.mesh.domain.radius
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    # types of the partial derivative tensors
-    # ∂r∂ξ
-    Mxξ = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
-        SMatrix{2, 2, FT, 4},
-    }
-    # ∂ξ∂r
-    Mξx = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.Contravariant12Axis, Geometry.UVAxis},
-        SMatrix{2, 2, FT, 4},
-    }
-    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{2, 2, FT, 4}}
+
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -371,7 +320,6 @@ function SpectralElementSpace2D(
 
             J = abs(det(∂u∂ξ))
             @assert J ≈ sqrt(det(∂x∂ξ' * ∂x∂ξ))
-            ∂ξ∂u = inv(∂u∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
             local_geometry_slab[i, j] = Geometry.LocalGeometry(
@@ -381,10 +329,6 @@ function SpectralElementSpace2D(
                 Geometry.AxisTensor(
                     (Geometry.UVAxis(), Geometry.Covariant12Axis()),
                     ∂u∂ξ,
-                ),
-                Geometry.AxisTensor(
-                    (Geometry.Contravariant12Axis(), Geometry.UVAxis()),
-                    ∂ξ∂u,
                 ),
             )
         end

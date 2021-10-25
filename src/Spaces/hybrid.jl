@@ -95,19 +95,19 @@ right_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
 function blockmat(
     a::Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian1Axis, Geometry.Covariant1Axis},
+        Tuple{Geometry.UAxis, Geometry.Covariant1Axis},
         SMatrix{1, 1, FT, 1},
     },
     b::Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
         SMatrix{1, 1, FT, 1},
     },
 ) where {FT}
     A = Geometry.components(a)
     B = Geometry.components(b)
     Geometry.AxisTensor(
-        (Geometry.Cartesian13Axis(), Geometry.Covariant13Axis()),
+        (Geometry.UWAxis(), Geometry.Covariant13Axis()),
         SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
     )
 end
@@ -115,19 +115,19 @@ end
 function blockmat(
     a::Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian12Axis, Geometry.Covariant12Axis},
+        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
         SMatrix{2, 2, FT, 4},
     },
     b::Geometry.Axis2Tensor{
         FT,
-        Tuple{Geometry.Cartesian3Axis, Geometry.Covariant3Axis},
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
         SMatrix{1, 1, FT, 1},
     },
 ) where {FT}
     A = Geometry.components(a)
     B = Geometry.components(b)
     Geometry.AxisTensor(
-        (Geometry.Cartesian123Axis(), Geometry.Covariant123Axis()),
+        (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
         SMatrix{3, 3}(
             A[1, 1],
             A[1, 2],
@@ -154,8 +154,7 @@ function product_geometry(
     WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
     ∂x∂ξ =
         blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
-    ∂ξ∂x = inv(∂x∂ξ)
-    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ, ∂ξ∂x)
+    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)

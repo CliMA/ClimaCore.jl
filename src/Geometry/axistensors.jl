@@ -199,17 +199,20 @@ const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
 AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
-(AxisVector{T, A, SVector{1, T}} where {T})(arg1) where {A} =
+(AxisVector{T, A, SVector{1, T}} where {T})(arg1::Real) where {A} =
     AxisVector(A.instance, SVector(arg1))
-(AxisVector{T, A, SVector{2, T}} where {T})(arg1, arg2) where {A} =
+(AxisVector{T, A, SVector{2, T}} where {T})(arg1::Real, arg2::Real) where {A} =
     AxisVector(A.instance, SVector(arg1, arg2))
-(AxisVector{T, A, SVector{3, T}} where {T})(arg1, arg2, arg3) where {A} =
-    AxisVector(A.instance, SVector(arg1, arg2, arg3))
+(AxisVector{T, A, SVector{3, T}} where {T})(
+    arg1::Real,
+    arg2::Real,
+    arg3::Real,
+) where {A} = AxisVector(A.instance, SVector(arg1, arg2, arg3))
 
-const CovariantVector{T, A1 <: CovariantAxis, S} = AxisVector{T, A1, S}
-const ContravariantVector{T, A1 <: ContravariantAxis, S} = AxisVector{T, A1, S}
-const CartesianVector{T, A1 <: CartesianAxis, S} = AxisVector{T, A1, S}
-const LocalVector{T, A1 <: LocalAxis, S} = AxisVector{T, A1, S}
+const CovariantVector{T, I, S} = AxisVector{T, CovariantAxis{I}, S}
+const ContravariantVector{T, I, S} = AxisVector{T, ContravariantAxis{I}, S}
+const CartesianVector{T, I, S} = AxisVector{T, CartesianAxis{I}, S}
+const LocalVector{T, I, S} = AxisVector{T, LocalAxis{I}, S}
 
 Base.propertynames(x::AxisVector) = symbols(axes(x, 1))
 function Base.getproperty(x::AxisVector, name::Symbol)
@@ -260,19 +263,18 @@ for I in [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
     @eval begin
         const $(Symbol(:Covariant, strI, :Axis)) = CovariantAxis{$I}
         const $(Symbol(:Covariant, strI, :Vector)){T} =
-            AxisVector{T, CovariantAxis{$I}, SVector{$N, T}}
+            CovariantVector{T, $I, SVector{$N, T}}
 
         const $(Symbol(:Contravariant, strI, :Axis)) = ContravariantAxis{$I}
         const $(Symbol(:Contravariant, strI, :Vector)){T} =
-            AxisVector{T, ContravariantAxis{$I}, SVector{$N, T}}
+            ContravariantVector{T, $I, SVector{$N, T}}
 
         const $(Symbol(:Cartesian, strI, :Axis)) = CartesianAxis{$I}
         const $(Symbol(:Cartesian, strI, :Vector)){T} =
-            AxisVector{T, CartesianAxis{$I}, SVector{$N, T}}
+            CartesianVector{T, $I, SVector{$N, T}}
 
         const $(Symbol(strUVW, :Axis)) = LocalAxis{$I}
-        const $(Symbol(strUVW, :Vector)){T} =
-            AxisVector{T, LocalAxis{$I}, SVector{$N, T}}
+        const $(Symbol(strUVW, :Vector)){T} = LocalVector{T, $I, SVector{$N, T}}
     end
 end
 
@@ -342,6 +344,8 @@ LinearAlgebra.cross(x::Cartesian12Vector, y::Cartesian3Vector) =
     Cartesian12Vector(x.u2 * y.u3, -x.u1 * y.u3)
 LinearAlgebra.cross(y::Cartesian3Vector, x::Cartesian12Vector) =
     Cartesian12Vector(-x.u2 * y.u3, x.u1 * y.u3)
+LinearAlgebra.cross(x::UVVector, y::WVector) = UVVector(x.v * y.u, -x.u * y.w)
+LinearAlgebra.cross(y::WVector, x::UVVector) = UVVector(-x.v * y.w, x.u * y.w)
 
 function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)

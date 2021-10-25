@@ -58,7 +58,7 @@ function init_state(coord, p)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
 
-    u = Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
+    u = Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * y)
 
@@ -80,7 +80,7 @@ end
 function energy(state, p)
     @unpack ρ, ρu = state
     u = ρu / ρ
-    return ρ * (u.u1^2 + u.u2^2) / 2 + p.g * ρ^2 / 2
+    return ρ * (u.u^2 + u.v^2) / 2 + p.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)

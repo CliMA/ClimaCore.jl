@@ -702,8 +702,8 @@ struct Curl{I} <: CurlSpectralElementOperator end
 Curl() = Curl{()}()
 Curl{()}(space) = Curl{operator_axes(space)}()
 
-operator_return_eltype(::Curl{(1, 2)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
+operator_return_eltype(::Curl{I}, S) where {I, L} =
+    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
 function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
@@ -809,8 +809,9 @@ struct WeakCurl{I} <: CurlSpectralElementOperator end
 WeakCurl() = WeakCurl{()}()
 WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
-operator_return_eltype(::WeakCurl{(1, 2)}, S) =
-    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(T), S)
+operator_return_eltype(::WeakCurl{I}, S) where {I, L} =
+    RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
+
 
 function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)

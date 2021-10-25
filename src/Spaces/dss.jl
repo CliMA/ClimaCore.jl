@@ -31,7 +31,8 @@ function dss_transform(
 )
     ax = axes(local_geometry.∂x∂ξ, 1)
     axfrom = axes(arg, 1)
-    if ax isa Geometry.Cartesian12Axis && (
+    # TODO: make this consistent
+    if ax isa Geometry.UVAxis && (
         axfrom isa Geometry.Covariant3Axis ||
         axfrom isa Geometry.Contravariant3Axis
     )

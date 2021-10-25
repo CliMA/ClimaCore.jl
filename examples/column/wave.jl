@@ -31,7 +31,7 @@ fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 zc = Fields.coordinate_field(cspace)
 u = sin.(zc.z)
-p = Geometry.Cartesian3Vector.(zeros(Float64, fspace))
+p = Geometry.WVector.(zeros(Float64, fspace))
 
 using RecursiveArrayTools
 
@@ -47,7 +47,7 @@ function tendency!(dY, Y, _, t)
     )
     ∂c = Operators.DivergenceF2C()
 
-    @. dp = -Geometry.CartesianVector(∂f(u))
+    @. dp = -Geometry.WVector(∂f(u))
     @. du = -∂c(p)
 
     return dY

@@ -56,7 +56,7 @@ function init_state(local_geometry, p)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
     u = Geometry.Covariant12Vector(
-        Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
         local_geometry,
     )
 
@@ -88,19 +88,14 @@ function rhs!(dydt, y, _, t)
     wcurl = Operators.WeakCurl()
 
     # compute hyperviscosity first
-    @. dydt.u =
-        wgrad(sdiv(y.u)) -
-        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+    @. dydt.u = wgrad(sdiv(y.u)) - Geometry.Covariant12Vector(wcurl(curl(y.u)))
     @. dydt.ρθ = wdiv(grad(y.ρθ))
 
     Spaces.weighted_dss!(dydt)
 
     @. dydt.u =
-        -D₄ * (
-            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
-                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
-            )
-        )
+        -D₄ *
+        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 
     # add in pieces
