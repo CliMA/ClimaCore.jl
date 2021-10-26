@@ -28,9 +28,9 @@ function hvspace_2D(
     helem = 10,
     velem = 50,
     npoly = 4;
-    vert_stretching_function = ξ -> (1 - ξ)*zlim[1] + ξ*zlim[2],
-    topography_file = nothing
-)   
+    vert_stretching_function = (ξ) -> ξ,
+    topography_file = nothing,
+)
 
     # build vertical mesh information
     FT = Float64
@@ -53,21 +53,29 @@ function hvspace_2D(
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-    # todo
-    # read topography on each horizontal mesh point
-    topography = topography_interpolation(horzspace, topography_file)
 
+    if topography_file === nothing
+        topography = [zeros(npoly + 1) for i in 1:helem]
+    else
+        # todo Akshay
+        # read topography on each horizontal mesh point
+        # topography = topography_interpolation(horzspace, topography_file)
+    end
     # todo do we seperate hv_center_space & hv_face_space
     # construct hv center/face spaces, recompute metric terms
-    hv_center_space, hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_stretching_function, topography)
+    Spaces.ExtrudedFiniteDifferenceSpace(
+        horzspace,
+        vertmesh,
+        vert_stretching_function,
+        topography,
+    )
 
     # hv_center_space =
     #     Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     # hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
+    # return (hv_center_space, hv_face_space)
+
 end
 
 # set up rhs!
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
-#hv_center_space, hv_face_space = hvspace_2D((-500,500),(0,30000), 5, 30)
-
+hvspace_2D((-500, 500), (0, 1000))
