@@ -65,6 +65,99 @@ function ExtrudedFiniteDifferenceSpace(
     return nothing
 end
 
+
+
+function ExtrudedFiniteDifferenceSpace(
+    horizontal_space::H,
+    vertical_mesh::V,
+    # stretching function is (0,1)->（0,1)
+    stretching_function,
+    topography,
+) where {H <: AbstractSpace, V}
+    #todo how to get FT
+    FT = Float64
+    nhelems = Topologies.nlocalelems(horizontal_space.topology)
+    nvelems = length(vertical_mesh.faces) - 1
+    nvlevels = 2nvelems + 1
+
+    quadrature_style = horizontal_space.quadrature_style
+    Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    quad_points, quad_weights =
+        Quadratures.quadrature_points(FT, quadrature_style)
+    Hb = Geometry.component(vertical_mesh.domain.coord_min, 1)
+    Ht = Geometry.component(vertical_mesh.domain.coord_max, 1)
+
+
+    topo_coord_x1, topo_coord_x3 = zeros(Nq), zeros(Nq)
+
+    # loop each column
+    for helem in 1:nhelems
+        # odd layer indicates cell faces, even layer indeicates cell centers
+
+        @show slab(horizontal_space.local_geometry.coordinates, helem)
+        @show topo_coord_x1
+        topo_coord_x1 .= reshape(
+            parent(slab(horizontal_space.local_geometry.coordinates, helem)),
+            Nq,
+        )
+        topo_coord_x3 .= Hb .+ topography[helem]
+        for i in 1:Nq
+            for vlevel in 1:nvlevels
+
+
+                ξ1 = quad_points[i]
+                ξ3 = (vlevel - 1) / 2.0
+
+                # the map is 
+                ξ_x_map =
+                    (ξ1, ξ3) -> begin
+                        xb1 = Geometry.high_order_interpolate(topo_coord_x1, ξ1)
+                        xb3 = Geometry.high_order_interpolate(topo_coord_x3, ξ1)
+
+                        x1 = xb1
+                        x3 =
+                            xb3 + (Ht - xb3) * stretching_function(ξ3 / nvelems)
+                        return x1, x3
+                    end
+                ξ = SVector(ξ1, ξ3)
+
+                ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
+                    local x
+                    x = ξ_x_map(ξ[1], ξ[2])
+                    SVector(Geometry.component(x, 1), Geometry.component(x, 2))
+                end
+
+                J = det(∂x∂ξ)
+                ∂ξ∂x = inv(∂x∂ξ)
+                WJ = J * quad_weights[i]
+
+
+                # compute metric terms at the cell center
+                if vlevel % 2 == 0
+                    center_local_geometry = 0
+
+                    # compute metric terms at the cell face
+                else
+
+                    face_local_geometry = 0
+
+                end
+            end
+
+
+        end
+
+        # compute metric terms at the top (cell top face)
+
+    end
+
+
+
+
+    return nothing
+end
+
+
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
 
