@@ -23,7 +23,7 @@ global_logger(TerminalLogger())
 
 
 
-function warp_schar(x_in, z_in; Lx = 500.0, Lz = 1000.0, a = 1 / 2)
+function warp_agnesi_peak(x_in, z_in; Lx = 500.0, Lz = 1000.0, a = 1 / 2)
     FT = eltype(x_in)
     h = 8 * a^3 / (x_in^2 + 4 * a^2)
     x, z = x_in, z_in + h * (Lz - z_in) / Lz
@@ -70,7 +70,7 @@ function hvspace_2D(
         for elem in 1:helem
             x = slab(horzspace.local_geometry.coordinates, elem)
             for i in 1:(npoly + 1)
-                topography[elem][i, :] .= warp_schar(x[i], zlim[1])
+                topography[elem][i, :] .= warp_agnesi_peak(x[i], zlim[1])
             end
         end
     end
