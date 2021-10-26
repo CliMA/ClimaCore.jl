@@ -84,7 +84,6 @@ function ExtrudedFiniteDifferenceSpace(
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
-    Hb = Geometry.component(vertical_mesh.domain.coord_min, 1)
     Ht = Geometry.component(vertical_mesh.domain.coord_max, 1)
 
 
@@ -94,13 +93,14 @@ function ExtrudedFiniteDifferenceSpace(
     for helem in 1:nhelems
         # odd layer indicates cell faces, even layer indeicates cell centers
 
-        @show slab(horizontal_space.local_geometry.coordinates, helem)
-        @show topo_coord_x1
-        topo_coord_x1 .= reshape(
-            parent(slab(horizontal_space.local_geometry.coordinates, helem)),
-            Nq,
-        )
-        topo_coord_x3 .= Hb .+ topography[helem]
+        # topo_coord_x1 .= reshape(
+        #     parent(slab(horizontal_space.local_geometry.coordinates, helem)),
+        #     Nq,
+        # )
+        # topo_coord_x3 .= Hb .+ topography[helem]
+
+        topo_coord_x1 .= topography[helem][:, 1]
+        topo_coord_x3 .= topography[helem][:, 2]
         for i in 1:Nq
             for vlevel in 1:nvlevels
 

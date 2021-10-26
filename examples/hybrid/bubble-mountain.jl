@@ -21,6 +21,16 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
+
+
+function warp_schar(x_in, z_in; Lx = 500.0, Lz = 1000.0, a = 1 / 2)
+    FT = eltype(x_in)
+    h = 8 * a^3 / (x_in^2 + 4 * a^2)
+    x, z = x_in, z_in + h * (Lz - z_in) / Lz
+    return x, z
+end
+
+
 # set up function space
 function hvspace_2D(
     xlim = (-π, π),
@@ -54,13 +64,19 @@ function hvspace_2D(
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
 
+    topography = [zeros(npoly + 1, 2) for i in 1:helem]
+
     if topography_file === nothing
-        topography = [zeros(npoly + 1) for i in 1:helem]
-    else
-        # todo Akshay
-        # read topography on each horizontal mesh point
-        # topography = topography_interpolation(horzspace, topography_file)
+        for elem in 1:helem
+            x = slab(horzspace.local_geometry.coordinates, elem)
+            for i in 1:(npoly + 1)
+                topography[elem][i, :] .= warp_schar(x[i], zlim[1])
+            end
+        end
     end
+
+
+
     # todo do we seperate hv_center_space & hv_face_space
     # construct hv center/face spaces, recompute metric terms
     Spaces.ExtrudedFiniteDifferenceSpace(
