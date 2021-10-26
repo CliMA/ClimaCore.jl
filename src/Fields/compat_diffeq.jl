@@ -1,4 +1,4 @@
-import RecursiveArrayTools, DiffEqBase
+import DiffEqBase, RecursiveArrayTools, Static
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions
@@ -56,6 +56,7 @@ function DiffEqBase.calculate_residuals!(
     ρ,
     internalnorm,
     t,
+    thread::Union{Static.False, Static.True},
 )
     DiffEqBase.calculate_residuals!(
         parent(out),
@@ -66,11 +67,22 @@ function DiffEqBase.calculate_residuals!(
         ρ,
         internalnorm,
         t,
+        thread,
     )
 end
 
-@inline function calculate_residuals!(out, ũ, u₀, u₁, α, ρ, internalnorm, t)
-    @. out = calculate_residuals(ũ, u₀, u₁, α, ρ, internalnorm, t)
+@inline function calculate_residuals!(
+    out,
+    ũ,
+    u₀,
+    u₁,
+    α,
+    ρ,
+    internalnorm,
+    t,
+    thread::Union{Static.False, Static.True},
+)
+    @. out = calculate_residuals(ũ, u₀, u₁, α, ρ, internalnorm, t, thread)
     nothing
 end
 
