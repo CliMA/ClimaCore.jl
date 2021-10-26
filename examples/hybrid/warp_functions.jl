@@ -26,7 +26,7 @@ end
 
 # General function for Agnesi peak
 # Modify for 2D 
-function warp_schar(
+function warp_agnesi_peak(
     x_in,
     y_in,
     z_in;
