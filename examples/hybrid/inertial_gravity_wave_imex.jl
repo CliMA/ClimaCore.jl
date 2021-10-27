@@ -3,6 +3,8 @@ include("inertial_gravity_wave_utils.jl")
 ode_algorithm = KenCarp4
 
 prob = inertial_gravity_wave_prob(;
+    𝔼_var = :ρθ,
+    𝕄_var = :ρw,
     helem = 75,
     velem = 10,
     npoly = 4,

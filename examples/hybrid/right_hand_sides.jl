@@ -157,7 +157,8 @@ function rhs_implicit!(dY, Y, p, t)
     elseif :w in propertynames(Y)
         @. dY.w = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ)
     end
-    @. dY.Yc.ρuₕ *= 0.
+    # `dY.Yc.ρuₕ .= Ref(Geometry.Cartesian1Vector(0.))` gives an error
+    Fields.field_values(dY.Yc.ρuₕ) .= Ref(Geometry.Cartesian1Vector(0.))
 
     return dY
 end
@@ -536,10 +537,10 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             )
         end
 
-        parent(x.Yc.ρuₕ) .= -parent(b.Yc.ρuₕ)
+        @. x.Yc.ρuₕ = -b.Yc.ρuₕ
 
         if transform
-            parent(x) .*= dtγ
+            x .*= dtγ
         end
     end
 end

@@ -137,19 +137,19 @@ function inertial_gravity_wave_prob(;
         coords,
         face_coords,
         use_transform,
-        true,
-        true,
+        false,
+        false,
     )
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
     if is_imex
         prob = SplitODEProblem(
             ODEFunction(
-                rhs_vertical!;
+                rhs_implicit!;
                 w_kwarg...,
                 jac_prototype = jac_prototype,
                 tgrad = (dT, Y, p, t) -> fill!(dT, 0),
             ),
-            rhs_horizontal!,
+            rhs_remainder!,
             Y,
             tspan,
             p,
@@ -240,3 +240,39 @@ end
 
 # Imex: 
 # | Algorithm type | Δt | wall time | final error | num f_ex calls | num f_im calls | num J calls | num linsolves |
+
+# algorithm isa OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm -> use linsolve!
+
+# # profiling code; use @prof "<name>" <code> to generate "name.cpuprofile" file
+# using Profile
+# using ChromeProfileFormat
+# Profile.init(n = 10^7, delay = 0.001)
+# macro prof(s::String, ex)
+#     return quote
+#         Profile.clear()
+#         Profile.@profile $(esc(ex))
+#         ChromeProfileFormat.save_cpuprofile(
+#             string($s, ".cpuprofile");
+#             from_c = true,
+#         )
+#     end
+# end
+
+# temporary FieldVector broadcast overwrite that speeds up ODE solve by 2-3x
+import Base: copyto!
+using Base.Broadcast: Broadcasted, broadcasted, BroadcastStyle
+transform_broadcasted(bc::Broadcasted{Fields.FieldVectorStyle}, symb, axes) =
+    Broadcasted(bc.f, map(arg -> transform_broadcasted(arg, symb, axes), bc.args), axes)
+transform_broadcasted(fv::Fields.FieldVector, symb, axes) =
+    parent(getproperty(fv, symb))
+transform_broadcasted(x, symb, axes) = x
+@inline function Base.copyto!(
+    dest::Fields.FieldVector,
+    bc::Broadcasted{Fields.FieldVectorStyle},
+)
+    for symb in propertynames(dest)
+        p = parent(getproperty(dest, symb))
+        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
+    end
+    return dest
+end
