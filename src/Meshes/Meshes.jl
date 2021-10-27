@@ -39,90 +39,8 @@ struct NoWarp <: AbstractWarp end
 struct EquiangularSphereWarp <: AbstractSphereWarp end
 struct EquidistantSphereWarp <: AbstractSphereWarp end
 
-struct IntervalMesh{FT, I <: IntervalDomain, V <: AbstractVector, B} <:
-       AbstractMesh{FT}
-    domain::I
-    faces::V
-    boundaries::B
-end
+include("interval.jl")
 
-IntervalMesh{FT}(domain::I, faces::V, boundaries::B) where {FT, I, V, B} =
-    IntervalMesh{FT, I, V, B}(domain, faces, boundaries)
-
-abstract type Stretching end
-struct Uniform <: Stretching end
-
-function IntervalMesh(
-    domain::IntervalDomain{CT},
-    ::Uniform;
-    nelems,
-) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-    faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
-    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
-    IntervalMesh{FT}(domain, faces, boundaries)
-end
-
-# 3.1.2 in the design docs
-"""
-    ExponentialStretching(H)
-
-Apply exponential stretching to the  domain. `H` is the scale height (a typical atmospheric scale height `H ≈ 7.5e3`km).
-"""
-struct ExponentialStretching{FT} <: Stretching
-    H::FT
-end
-
-function IntervalMesh(
-    domain::IntervalDomain{CT},
-    stretch::ExponentialStretching;
-    nelems,
-) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-    cmin = Geometry.component(domain.coord_min, 1)
-    cmax = Geometry.component(domain.coord_max, 1)
-    R = cmax - cmin
-    h = stretch.H / R
-    η(ζ) = -h * log1p(-(1 - exp(-1 / h)) * ζ)
-    faces =
-        [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
-    boundaries = NamedTuple{domain.boundary_tags}((5, 6))
-    IntervalMesh{FT, typeof(domain), typeof(faces), typeof(boundaries)}(
-        domain,
-        faces,
-        boundaries,
-    )
-end
-
-IntervalMesh(domain::IntervalDomain; nelems) =
-    IntervalMesh(domain, Uniform(); nelems)
-
-function Base.show(io::IO, mesh::IntervalMesh)
-    nelements = length(mesh.faces) - 1
-    print(io, nelements, " IntervalMesh of ")
-    print(io, mesh.domain)
-end
-
-
-struct EquispacedLineMesh{FT, ID <: IntervalDomain, R} <: AbstractMesh{FT}
-    domain::ID
-    n1::Int64 # number of elements in x1 direction
-    n2::Int64 # always 1
-    range1::R
-    range2::R # always 1:1
-end
-
-function EquispacedLineMesh(domain::IntervalDomain, n1)
-    FT = eltype(Domains.coordinate_type(domain))
-    cmin = Geometry.component(domain.coord_min, 1)
-    cmax = Geometry.component(domain.coord_max, 1)
-    range1 = range(cmin, cmax; length = n1 + 1)
-    range2 = range(zero(FT), zero(FT), length = zero(n1))
-    return EquispacedLineMesh(domain, n1, zero(n1), range1, range2)
-end
-
-function Base.show(io::IO, mesh::EquispacedLineMesh)
-    print(io, "(", mesh.n1, " × ", " ) EquispacedLineMesh of ")
-    print(io, mesh.domain)
-end
 
 """
     EquispacedRectangleMesh(domain::RectangleDomain, n1::Integer, n2::Integer)
@@ -177,29 +95,22 @@ embedded in a higher dimensional space.
 
                         Quadrilateral
 
-                v3            f4           v4
+                v4            f3           v3
                   o------------------------o
-                  |                        |		  face    vertices
-                  |                        |
-                  |                        |		   f1 =>  v1 v3
-               f1 |                        | f2        f2 =>  v2 v4
-                  |                        |		   f3 =>  v1 v2
-                  |                        |           f4 =>  v3 v4
-                  |                        |
+                  |                        |	  face    vertices
+                  |       <----------      |             
+                  |                 |      |		f1 =>  v1 v2 
+               f4 |                 |      | f2     f2 =>  v2 v3
+                  |                 |      |		f3 =>  v3 v4
+                  |                 |      |        f4 =>  v4 v1
+                  |       -----------      |
                   |                        |
                   o------------------------o
-                 v1           f3           v2
+                 v1           f1           v2
 
-z-order numbering convention for 2D quadtrees
 
 Reference:
-
-p4est: SCALABLE ALGORITHMS FOR PARALLEL ADAPTIVE
-MESH REFINEMENT ON FORESTS OF OCTREES∗
-CARSTEN BURSTEDDE†, LUCAS C. WILCOX‡ , AND OMAR GHATTAS§
-SIAM J. Sci. Comput. Vol. 33, No. 3, pp. 1103-1133
-
-https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf
+https://gsjaardema.github.io/seacas-docs/html/element_types.html#ordering
 
 # Fields
 $(DocStringExtensions.FIELDS)

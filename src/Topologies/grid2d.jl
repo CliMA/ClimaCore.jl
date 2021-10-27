@@ -58,7 +58,7 @@ function opposing_face(topology::Grid2DTopology, elem::Integer, face::Integer)
     if opelem == 0
         opface = face
     end
-    reversed = face_neighbors[5] == -1
+    reversed = face_neighbors[fc, 5] == -1
     return opelem, opface, reversed
 end
 
@@ -211,5 +211,5 @@ function Base.iterate(vertex::Vertex{T}, iterno = 1) where {T <: Grid2DTopology}
         return nothing
     end
     loc = (iterno - 1) * 2 + st
-    return tuple(uverts_conn[loc:(loc + 1)]...), iterno + 1
+    return (uverts_conn[loc], uverts_conn[loc + 1]), iterno + 1
 end

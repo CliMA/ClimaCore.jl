@@ -8,46 +8,52 @@ using Test
 
 
 using StaticArrays, LinearAlgebra
-function rotational_field(space, axis::Geometry.LatLongPoint)
-    n_axis = Geometry.components(Geometry.Cartesian123Point(axis))
+
+
+
+function rotational_field(space, α0 = 45.0)
     coords = Fields.coordinate_field(space)
     map(coords) do coord
-        n_coord = Geometry.components(Geometry.Cartesian123Point(coord))
-        u_cart = n_axis × n_coord
-        θ = coord.lat
+        ϕ = coord.lat
         λ = coord.long
-        F = @SMatrix [
-            -sind(λ) cosd(λ) 0
-            0 0 1/cosd(θ)
-        ]
-        uv = F * u_cart
-        if abs(θ) ≈ 90
-            Geometry.UVVector(u_cart[1], u_cart[2])
-        else
-
-            Geometry.UVVector(uv...)
-        end
+        uu = (cosd(α0) * cosd(ϕ) + sind(α0) * cosd(λ) * sind(ϕ))
+        uv = -sind(α0) * sind(λ)
+        Geometry.UVVector(uu, uv)
     end
 end
 
 @testset "Spherical geometry properties" begin
-    FT = Float64
-    radius = FT(3)
-    ne = 4
-    Nq = 4
-    Nqh = 7
-    domain = Domains.SphereDomain(radius)
-    mesh = Mesh2D(domain, EquiangularSphereWarp(), ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    # test different combinations of odd/even to ensure pole is correctly
+    # handled
+    for Ne in (4, 5), Nq in (4, 5)
+        FT = Float64
+        radius = FT(3)
 
-    @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3
+        domain = Domains.SphereDomain(radius)
+        mesh = Mesh2D(domain, EquiangularSphereWarp(), Ne)
+        grid_topology = Topologies.Grid2DTopology(mesh)
+        quad = Spaces.Quadratures.GLL{Nq}()
+        space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
+        @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3
 
-    div = Operators.Divergence()
-    u = rotational_field(space, Geometry.LatLongPoint(45.0, 45.0))
-    divu = Spaces.weighted_dss!(div.(u))
-    @test norm(divu) < 1e-2
+        for α in [0.0, 45.0, 90.0]
+            div = Operators.Divergence()
+            u = rotational_field(space, α)
+            divu = Spaces.weighted_dss!(div.(u))
+            @test norm(divu) < 1e-2
 
+            # test dss on UVcoordinates
+            uu = Spaces.weighted_dss!(copy(u))
+            @test norm(uu .- u) < 1e-14
+
+            uᵢ = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u)
+            uuᵢ = Spaces.weighted_dss!(copy(uᵢ))
+            @test norm(uuᵢ .- uᵢ) < 1e-14
+
+            uⁱ = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), u)
+            uuⁱ = Spaces.weighted_dss!(copy(uⁱ))
+            @test norm(uuⁱ .- uⁱ) < 1e-14
+        end
+    end
 end

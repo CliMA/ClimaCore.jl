@@ -3,17 +3,17 @@
 
 Objects describing the horizontal connections between elements.
 
-All elements are quadrilaterals, using the face and vertex numbering
-convention from [p4est](https://p4est.github.io/papers/BursteddeWilcoxGhattas11.pdf):
+All elements are quadrilaterals, using the following face and vertex numbering
+convention:
 ```
-          4
-      3-------4
- ^    |       |
- |  1 |       | 2
-x2    |       |
-      1-------2
           3
-        x1-->
+      4-------3
+ ^    |       |
+ |  4 |       | 2
+ξ2    |       |
+      1-------2
+          1
+        ξ1-->
 ```
 """
 module Topologies
@@ -74,18 +74,18 @@ function opposing_face end
 The node indices of the `q`th node on face `face`, where `Nq` is the number of
 face nodes in each direction.
 """
-function face_node_index(face, Nq, q, reversed = false)
+@inline function face_node_index(face, Nq, q, reversed = false)
     if reversed
         q = Nq - q + 1
     end
     if face == 1
-        return 1, q
+        return q, 1
     elseif face == 2
         return Nq, q
     elseif face == 3
-        return q, 1
+        return Nq - q + 1, Nq
     else
-        return q, Nq
+        return 1, Nq - q + 1
     end
 end
 
@@ -101,9 +101,9 @@ function vertex_node_index(vertex_num, Nq)
     elseif vertex_num == 2
         return Nq, 1
     elseif vertex_num == 3
-        return 1, Nq
-    else
         return Nq, Nq
+    else
+        return 1, Nq
     end
 end
 
@@ -166,9 +166,10 @@ struct Vertex{T <: AbstractTopology, V}
     topology::T
     num::V
 end
-
+Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
 
 # implementations
+include("interval.jl")
 include("grids.jl")
 include("grid2d.jl")
 

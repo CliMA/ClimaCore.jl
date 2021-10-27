@@ -30,12 +30,14 @@ struct SpectralElementSpace1D{T, Q, G, D, M} <: AbstractSpectralElementSpace
     inverse_mass_matrix::M
 end
 
-function SpectralElementSpace1D(topology, quadrature_style)
+function SpectralElementSpace1D(
+    topology::Topologies.IntervalTopology,
+    quadrature_style,
+)
     # TODO: we need to massage the coordinate points because the grid is assumed 2D
     CoordType = Topologies.coordinate_type(topology)
-    CoordType1D = Geometry.coordinate_type(CoordType, 1)
-    AIdx = Geometry.coordinate_axis(CoordType1D)
-    FT = eltype(CoordType1D)
+    AIdx = Geometry.coordinate_axis(CoordType)
+    FT = eltype(CoordType)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
@@ -49,7 +51,7 @@ function SpectralElementSpace1D(topology, quadrature_style)
         Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
         SMatrix{1, 1, FT, 1},
     }
-    LG = Geometry.LocalGeometry{CoordType1D, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{CoordType, FT, Mxξ, Mξx}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -60,15 +62,11 @@ function SpectralElementSpace1D(topology, quadrature_style)
             ξ = quad_points[i]
             # TODO: we need to massage the coordinate points because the grid is assumed 2D
             vcoords = Topologies.vertex_coordinates(topology, elem)
-            vcoords1D = (
-                Geometry.coordinate(vcoords[1], 1),
-                Geometry.coordinate(vcoords[2], 1),
-            )
-            x = Geometry.interpolate(vcoords1D, ξ)
+            x = Geometry.linear_interpolate(vcoords, ξ)
             ∂x∂ξ =
                 (
-                    Geometry.component(vcoords1D[2], 1) -
-                    Geometry.component(vcoords1D[1], 1)
+                    Geometry.component(vcoords[2], 1) -
+                    Geometry.component(vcoords[1], 1)
                 ) / 2
             J = abs(∂x∂ξ)
             ∂ξ∂x = inv(∂x∂ξ)
@@ -96,11 +94,17 @@ function SpectralElementSpace1D(topology, quadrature_style)
     end
     dss_weights = copy(local_geometry.J)
     dss_weights .= one(FT)
-    dss_1d!(dss_weights, dss_weights, topology, Nq)
+    dss_1d!(dss_weights, dss_weights, local_geometry, topology, Nq)
     dss_weights = one(FT) ./ dss_weights
 
     inverse_mass_matrix = copy(local_geometry.WJ)
-    dss_1d!(inverse_mass_matrix, inverse_mass_matrix, topology, Nq)
+    dss_1d!(
+        inverse_mass_matrix,
+        inverse_mass_matrix,
+        local_geometry,
+        topology,
+        Nq,
+    )
     inverse_mass_matrix = one(FT) ./ inverse_mass_matrix
 
     return SpectralElementSpace1D(
@@ -165,14 +169,14 @@ function SpectralElementSpace2D(topology, quadrature_style)
             # alternatively: move local_geometry to a different object entirely, to support overintegration
             # (where the integration is of different order)
             ξ = SVector(quad_points[i], quad_points[j])
-            x = Geometry.interpolate(
+            x = Geometry.bilinear_interpolate(
                 CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
                 ξ[1],
                 ξ[2],
             )
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 local x
-                x = Geometry.interpolate(
+                x = Geometry.bilinear_interpolate(
                     CoordType2D.(
                         Topologies.vertex_coordinates(topology, elem),
                     ),
@@ -209,7 +213,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
 
     # dss_weights = J ./ dss(J)
     dss_weights = copy(local_geometry.J)
-    dss_2d!(dss_weights, local_geometry.J, topology, Nq)
+    dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
     # TODO: this assumes XYDomain, need to dispatch SG Vector type on domain axis type
@@ -238,7 +242,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 quad_weights,
                 face⁺,
                 q,
-                false,
+                reversed,
             )
 
             @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
@@ -330,6 +334,9 @@ function SpectralElementSpace2D(
                 ξ[2],
             )
             xl = Geometry.LatLongPoint(x)
+            # [∂x1/∂ξ¹ ∂x1/∂ξ²
+            #  ∂x2/∂ξ¹ ∂x2/∂ξ²
+            #  ∂x3/∂ξ¹ ∂x3/∂ξ²]
             ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
                 Geometry.components(
                     Geometry.spherical_bilinear_interpolate(
@@ -341,18 +348,26 @@ function SpectralElementSpace2D(
                     ),
                 )
             end
-            if abs(xl.lat) ≈ oftype(xl.lat, 90.0)
-                # at the pole: choose u to line with x1, v to line with x2
-                ∂u∂ξ = ∂x∂ξ[SOneTo(2), :]
-            else
-                θ = xl.lat
-                λ = xl.long
-                F = @SMatrix [
-                    -sind(λ) cosd(λ) 0
-                    0 0 1/cosd(θ)
+            ϕ = xl.lat
+            λ = xl.long
+            # [∂u/∂x1 ∂u/∂x2 ∂u/∂x3
+            #  ∂v/∂x1 ∂v/∂x2 ∂v/∂x3]
+            ∂u∂x = if abs(ϕ) ≈ oftype(ϕ, 90.0)
+                # at the pole we orient u and v by taking the limit approaching
+                # from the line λ == 0 (i.e. along the line x2 = 0, x1 > 0)
+                # => u axis is aligned with x2, v is aligned with -x1
+                @assert λ ≈ 0
+                @SMatrix [
+                    0 one(ϕ) 0
+                    -one(ϕ) 0 0
                 ]
-                ∂u∂ξ = F * ∂x∂ξ
+            else
+                @SMatrix [
+                    -sind(λ) cosd(λ) 0
+                    0 0 1/cosd(ϕ)
+                ]
             end
+            ∂u∂ξ = ∂u∂x * ∂x∂ξ
 
             J = abs(det(∂u∂ξ))
             @assert J ≈ sqrt(det(∂x∂ξ' * ∂x∂ξ))
@@ -376,7 +391,7 @@ function SpectralElementSpace2D(
     end
     # dss_weights = J ./ dss(J)
     dss_weights = copy(local_geometry.J)
-    dss_2d!(dss_weights, local_geometry.J, topology, Nq)
+    dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
     dss_weights .= local_geometry.J ./ dss_weights
 
     SG = Geometry.SurfaceGeometry{FT, Geometry.UVVector{FT}}
@@ -404,7 +419,7 @@ function SpectralElementSpace2D(
                 quad_weights,
                 face⁺,
                 q,
-                false,
+                reversed,
             )
 
             @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
@@ -472,13 +487,13 @@ function compute_surface_geometry(
     @unpack J, ∂ξ∂x = local_geometry
 
     # surface mass matrix
-    n = if face == 1
+    n = if face == 4
         -J * ∂ξ∂x[1, :] * quad_weights[j]
     elseif face == 2
         J * ∂ξ∂x[1, :] * quad_weights[j]
-    elseif face == 3
+    elseif face == 1
         -J * ∂ξ∂x[2, :] * quad_weights[i]
-    elseif face == 4
+    elseif face == 3
         J * ∂ξ∂x[2, :] * quad_weights[i]
     end
     sWJ = norm(n)

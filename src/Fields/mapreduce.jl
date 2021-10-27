@@ -22,6 +22,16 @@ function Base.sum(fn, field::Field)
     Base.sum(Base.Broadcast.broadcasted(fn, field))
 end
 
+Base.maximum(fn, field::Field) = mapreduce(fn, max, todata(field))
+Base.maximum(field::Field) = maximum(identity, field)
+
+Base.minimum(fn, field::Field) = mapreduce(fn, min, todata(field))
+Base.minimum(field::Field) = minimum(identity, field)
+
+# somewhat inefficient
+Base.extrema(fn, field::Field) = (minimum(fn, field), maximum(fn, field))
+Base.extrema(field::Field) = extrema(identity, field)
+
 function LinearAlgebra.norm(field::Field, p::Real = 2)
     if p == 2
         # currently only one which supports structured types
@@ -29,7 +39,7 @@ function LinearAlgebra.norm(field::Field, p::Real = 2)
     elseif p == 1
         sum(abs, field)
     elseif p == Inf
-        error("Inf norm not yet supported")
+        maximum(abs, field)
     else
         sum(x -> x^p, field)^(1 / p)
     end

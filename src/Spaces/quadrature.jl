@@ -84,6 +84,29 @@ struct Uniform{Nq} <: QuadratureStyle end
     :($points, $weights)
 end
 
+"""
+    ClosedUniform{Nq}()
+
+Uniformly-spaced quadrature including boundary.
+"""
+struct ClosedUniform{Nq} <: QuadratureStyle end
+
+polynomial_degree(::ClosedUniform{Nq}) where {Nq} = Nq - 1
+degrees_of_freedom(::ClosedUniform{Nq}) where {Nq} = Nq
+
+@generated function quadrature_points(
+    ::Type{FT},
+    ::ClosedUniform{Nq},
+) where {FT, Nq}
+    points = SVector{Nq}(range(FT(-1), FT(1), length = Nq))
+    weights = SVector{Nq}(
+        1 / (Nq - 1),
+        ntuple(i -> 2 / (Nq - 1), Nq - 2)...,
+        1 / (Nq - 1),
+    )
+    :($points, $weights)
+end
+
 
 """
     barycentric_weights(x::AbstractVector)

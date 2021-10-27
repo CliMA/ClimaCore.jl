@@ -255,6 +255,36 @@ function Spaces.horizontal_dss!(field::Field)
     Spaces.horizontal_dss!(field_values(field), axes(field))
     return field
 end
+
+"""
+    Spaces.weighted_dss!(f::Field)
+
+Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
+(i.e. it modifies the `f`).
+
+This is a projection operation from the piecewise polynomial space
+``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
+\\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1`` such
+that for all ``\\phi \\in \\mathcal{V}_1``
+```math
+\\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
+```
+
+In matrix form, we define ``\\bar \\theta`` to be the unique global node
+representation, and ``Q`` to be the "scatter" operator which maps to the
+redundant node representation ``\\theta``
+```math
+\\theta = Q \\bar \\theta
+```
+Then the problem can be written as
+```math
+(Q \\bar\\phi)^\\top W J Q \\bar\\theta = (Q \\bar\\phi)^\\top W J f
+```
+which reduces to
+```math
+\\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
+```
+"""
 function Spaces.weighted_dss!(field::Field)
     Spaces.weighted_dss!(field_values(field), axes(field))
     return field

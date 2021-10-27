@@ -22,6 +22,9 @@ steps:
       - "julia --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/sphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/sphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -260,6 +263,61 @@ steps:
       - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
     artifact_paths:
       - "examples/hybrid/output/bubble/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere cosine bell alpha0"
+    key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere cosine bell alpha45"
+    key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha45/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere gaussian bell alpha0"
+    key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere gaussian bell alpha45"
+    key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha45/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere"
+    key: "cpu_shallowwater_2d_cg_sphere"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater/*"
     agents:
       config: cpu
       queue: central

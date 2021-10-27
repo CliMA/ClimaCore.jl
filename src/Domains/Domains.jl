@@ -22,18 +22,27 @@ struct IntervalDomain{CT, B} <: VerticalDomain where {
 end
 
 """
+    IntervalDomain(coord⁻, coord⁺; periodic=true)
     IntervalDomain(coord⁻, coord⁺; boundary_tags::Tuple{Symbol,Symbol})
 
 Construct a `IntervalDomain`, the closed interval is given by `coord⁻`, `coord⁺` coordinate arguments.
-Because `IntervalDomain` does not support periodic boundary conditions, the `boundary_tags` keyword arugment must be supplied.
+
+Either a `periodic` or `boundary_tags` keyword argument is required.
 """
 function IntervalDomain(
     coord⁻::Geometry.Abstract1DPoint,
     coord⁺::Geometry.Abstract1DPoint;
-    boundary_tags::Tuple{Symbol, Symbol},
+    periodic = false,
+    boundary_tags::BCTagType = nothing,
 )
-    coords = promote(coord⁻, coord⁺)
-    IntervalDomain(first(coords), last(coords), boundary_tags)
+    if !periodic && isnothing(boundary_tags)
+        throw(
+            ArgumentError(
+                "if `periodic=false` then an `boundary_tags::Tuple{Symbol,Symbol}` keyword argument is required.",
+            ),
+        )
+    end
+    IntervalDomain(promote(coord⁻, coord⁺)..., boundary_tags)
 end
 
 """
@@ -42,8 +51,8 @@ end
 Construct a `IntervalDomain`, over the closed coordinate interval `coords`
 Because `IntervalDomain` does not support periodic boundary conditions, the `boundary_tags` keyword arugment must be supplied.
 """
-IntervalDomain(coords::ClosedInterval; boundary_tags::Tuple{Symbol, Symbol}) =
-    IntervalDomain(coords.left, coords.right, boundary_tags)
+IntervalDomain(coords::ClosedInterval; kwargs...) =
+    IntervalDomain(coords.left, coords.right; kwargs...)
 
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)

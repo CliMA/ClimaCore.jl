@@ -156,43 +156,38 @@ end
 
 
 """
-    interpolate(coords::NTuple{4}, ξ1, ξ2)
+    bilinear_interpolate(coords::NTuple{4}, ξ1, ξ2)
 
-Interpolate between `coords` by parameters `ξ1, ξ2` in the interval `[-1,1]`.
+Bilinear interpolate between `coords` by parameters `ξ1, ξ2`, each in the interval `[-1,1]`.
 
-The type of interpolation is determined by the element type of `coords`:
-- `SVector`: use bilinear interpolation
+`coords` should be a 4-tuple of coordinates in counter-clockwise order.
+
+```
+      4-------3
+ ^    |       |
+ |    |       |
+ξ2    |       |
+      1-------2
+
+        ξ1-->
+```
 """
-function interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: Abstract2DPoint}
-    VV = unionalltype(V)
-    VV(
-        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 1) +
-        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 1) +
-        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 1) +
-        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 1),
-        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 2) +
-        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 2) +
-        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 2) +
-        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 2),
-    )
+function bilinear_interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: SVector}
+    w1 = (1 - ξ1) * (1 - ξ2) / 4
+    w2 = (1 + ξ1) * (1 - ξ2) / 4
+    w3 = (1 + ξ1) * (1 + ξ2) / 4
+    w4 = (1 - ξ1) * (1 + ξ2) / 4
+    w1 .* coords[1] .+ w2 .* coords[2] .+ w3 .* coords[3] .+ w4 .* coords[4]
 end
 
-function interpolate(coords::NTuple{4, V}, ξ1, ξ2) where {V <: Abstract3DPoint}
+function bilinear_interpolate(
+    coords::NTuple{4, V},
+    ξ1,
+    ξ2,
+) where {V <: AbstractPoint}
     VV = unionalltype(V)
-    VV(
-        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 1) +
-        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 1) +
-        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 1) +
-        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 1),
-        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 2) +
-        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 2) +
-        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 2) +
-        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 2),
-        ((1 - ξ1) * (1 - ξ2)) / 4 * component(coords[1], 3) +
-        ((1 + ξ1) * (1 - ξ2)) / 4 * component(coords[2], 3) +
-        ((1 - ξ1) * (1 + ξ2)) / 4 * component(coords[3], 3) +
-        ((1 + ξ1) * (1 + ξ2)) / 4 * component(coords[4], 3),
-    )
+    c = bilinear_interpolate(map(components, coords), ξ1, ξ2)
+    VV(c...)
 end
 
 """
@@ -201,7 +196,10 @@ end
 Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
 The type of interpolation is determined by the element type of `coords`
 """
-function interpolate(coords::NTuple{2, V}, ξ1) where {V <: Abstract1DPoint}
+function linear_interpolate(
+    coords::NTuple{2, V},
+    ξ1,
+) where {V <: Abstract1DPoint}
     VV = unionalltype(V)
     VV(
         (1 - ξ1) / 2 * component(coords[1], 1) +
@@ -210,7 +208,7 @@ function interpolate(coords::NTuple{2, V}, ξ1) where {V <: Abstract1DPoint}
 end
 
 function spherical_bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
-    r = norm(x1) # assume all are same radius        
-    x = Geometry.interpolate((x1, x2, x3, x4), ξ1, ξ2)
+    r = norm(x1) # assume all are same radius
+    x = bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
     x = x * (r / norm(x))
 end

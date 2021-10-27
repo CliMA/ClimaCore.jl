@@ -1,0 +1,39 @@
+name: ClimaCoreVTK CI
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ClimaCoreVTK.yml"
+      - "lib/ClimaCoreVTK/**"
+  push:
+    branches:
+      - staging
+      - trying
+jobs:
+  lib-climacorevtk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1.6'
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - name: Install Julia dependencies
+        shell: julia --project=monorepo {0}
+        run: |
+          using Pkg;
+          # dev mono repo versions
+          pkg"dev . lib/ClimaCoreVTK"
+      - name: Run the tests
+        run: |
+          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreVTK")'

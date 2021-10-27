@@ -85,7 +85,7 @@ end
                 sin.(coords.x1 .+ 2 .* coords.x2),
                 cos.(coords.x1 .+ 2 .* coords.x2),
             )
-        gradfv = grad.(fv)
+        gradfv = Geometry.transform.(Ref(Geometry.Cartesian12Axis()), grad.(fv))
         Spaces.weighted_dss!(gradfv)
         @test eltype(gradfv) <: Geometry.Axis2Tensor
     end
