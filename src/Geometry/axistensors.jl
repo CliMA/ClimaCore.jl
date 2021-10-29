@@ -327,24 +327,11 @@ function LinearAlgebra.norm_sqr(x::AxisVector)
 end
 
 
-LinearAlgebra.cross(x::ContravariantVector, y::ContravariantVector) =
-    Covariant123Vector(
-        x.u² * y.u³ - x.u³ * y.u²,
-        x.u³ * y.u¹ - x.u¹ * y.u³,
-        x.u¹ * y.u² - x.u² * y.u¹,
-    )
-
-LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant12Vector) =
-    Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
-
-LinearAlgebra.cross(x::Contravariant12Vector, y::Contravariant3Vector) =
-    Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
-
 LinearAlgebra.cross(x::Cartesian12Vector, y::Cartesian3Vector) =
     Cartesian12Vector(x.u2 * y.u3, -x.u1 * y.u3)
 LinearAlgebra.cross(y::Cartesian3Vector, x::Cartesian12Vector) =
     Cartesian12Vector(-x.u2 * y.u3, x.u1 * y.u3)
-LinearAlgebra.cross(x::UVVector, y::WVector) = UVVector(x.v * y.u, -x.u * y.w)
+LinearAlgebra.cross(x::UVVector, y::WVector) = UVVector(x.v * y.w, -x.u * y.w)
 LinearAlgebra.cross(y::WVector, x::UVVector) = UVVector(-x.v * y.w, x.u * y.w)
 
 function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)

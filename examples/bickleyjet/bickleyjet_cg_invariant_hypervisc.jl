@@ -36,9 +36,6 @@ grid_topology = Topologies.GridTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-const J = Fields.Field(space.local_geometry.J, space)
-
-
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     @unpack x, y = coord
@@ -101,9 +98,7 @@ function rhs!(dydt, y, _, t)
     # add in pieces
     @. begin
         dydt.ρ = -wdiv(y.ρ * y.u)
-        dydt.u +=
-            -grad(g * y.ρ + norm(y.u)^2 / 2) +
-            Geometry.Covariant12Vector((J * (y.u × curl(y.u))))
+        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
     Spaces.weighted_dss!(dydt)

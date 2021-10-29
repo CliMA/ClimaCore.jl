@@ -87,7 +87,6 @@ quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 coords = Fields.coordinate_field(space)
-const J = Fields.Field(space.local_geometry.J, space)
 
 # Definition of Coriolis force field
 f = map(Fields.local_geometry_field(space)) do local_geometry
@@ -165,8 +164,7 @@ function rhs!(dydt, y, parameters, t)
     @. begin
         dydt.h += -wdiv(y.h * y.u)
         dydt.u +=
-            -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) +
-            Geometry.Covariant12Vector((J * (y.u × (f + curl(y.u)))))
+            -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) + y.u × (f + curl(y.u))
     end
     Spaces.weighted_dss!(dydt)
     return dydt

@@ -14,34 +14,57 @@ CovariantVector(u::ContravariantVector, local_geometry::LocalGeometry) =
     CovariantVector(LocalVector(u, local_geometry), local_geometry)
 
 # standard conversions
-ContravariantVector(u::LocalVector{T,I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂ξ∂x * u
-LocalVector(u::ContravariantVector{T,I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂x∂ξ * u
-CovariantVector(u::LocalVector{T,I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂x∂ξ' * u
-LocalVector(u::CovariantVector{T,I}, local_geometry::LocalGeometry{I}) where {T, I} =
-    local_geometry.∂ξ∂x' * u
+ContravariantVector(
+    u::LocalVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.∂ξ∂x * u
+LocalVector(
+    u::ContravariantVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.∂x∂ξ * u
+CovariantVector(
+    u::LocalVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.∂x∂ξ' * u
+LocalVector(
+    u::CovariantVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.∂ξ∂x' * u
 
 # In order to make curls and cross products work in 2D, we define the 3rd
 # dimension to be orthogonal to the exisiting dimensions, and have unit length
 # (so covariant, contravariant and local axes are equal)
-ContravariantVector(u::LocalVector{T,(3,)}, local_geometry::LocalGeometry{(1,2)}) where {T} =
-    AxisVector(Contravariant3Axis(), components(u))
-LocalVector(u::ContravariantVector{T,(3,)}, local_geometry::LocalGeometry{(1,2)}) where {T} =
-    AxisVector(WAxis(), components(u))
-CovariantVector(u::LocalVector{T,(3,)}, local_geometry::LocalGeometry{(1,2)}) where {T} =
-    AxisVector(Covariant3Axis(), components(u))
-LocalVector(u::CovariantVector{T,(3,)}, local_geometry::LocalGeometry{(1,2)}) where {T} =
-    AxisVector(WAxis(), components(u))
+ContravariantVector(
+    u::LocalVector{T, (3,)},
+    local_geometry::LocalGeometry{(1, 2)},
+) where {T} = AxisVector(Contravariant3Axis(), components(u))
+LocalVector(
+    u::ContravariantVector{T, (3,)},
+    local_geometry::LocalGeometry{(1, 2)},
+) where {T} = AxisVector(WAxis(), components(u))
+CovariantVector(
+    u::LocalVector{T, (3,)},
+    local_geometry::LocalGeometry{(1, 2)},
+) where {T} = AxisVector(Covariant3Axis(), components(u))
+LocalVector(
+    u::CovariantVector{T, (3,)},
+    local_geometry::LocalGeometry{(1, 2)},
+) where {T} = AxisVector(WAxis(), components(u))
 
 # Converting to specific dimension types
-(::Type{<:ContravariantVector{<:Any, I}})(u::AxisVector, local_geometry::LocalGeometry) where {I} =
+(::Type{<:ContravariantVector{<:Any, I}})(
+    u::AxisVector,
+    local_geometry::LocalGeometry,
+) where {I} =
     transform(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
-(::Type{<:CovariantVector{<:Any, I}})(u::AxisVector, local_geometry::LocalGeometry) where {I} =
-    transform(CovariantAxis{I}(), CovariantVector(u, local_geometry))
-(::Type{<:LocalVector{<:Any, I}})(u::AxisVector, local_geometry::LocalGeometry) where {I} =
-    transform(LocalAxis{I}(), LocalVector(u, local_geometry))
+(::Type{<:CovariantVector{<:Any, I}})(
+    u::AxisVector,
+    local_geometry::LocalGeometry,
+) where {I} = transform(CovariantAxis{I}(), CovariantVector(u, local_geometry))
+(::Type{<:LocalVector{<:Any, I}})(
+    u::AxisVector,
+    local_geometry::LocalGeometry,
+) where {I} = transform(LocalAxis{I}(), LocalVector(u, local_geometry))
 
 
 
@@ -277,11 +300,35 @@ end
 
 _norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
 
-_cross(u::AxisVector, v::AxisVector, local_geometry) = LinearAlgebra.cross(
+_cross(u::AxisVector, v::AxisVector, local_geometry::LocalGeometry) = _cross(
     ContravariantVector(u, local_geometry),
     ContravariantVector(v, local_geometry),
+    local_geometry,
 )
-_cross(u::CartesianVector, v::CartesianVector, local_geometry) =
+
+_cross(
+    x::ContravariantVector,
+    y::ContravariantVector,
+    local_geometry::LocalGeometry,
+) =
+    local_geometry.J * Covariant123Vector(
+        x.u² * y.u³ - x.u³ * y.u²,
+        x.u³ * y.u¹ - x.u¹ * y.u³,
+        x.u¹ * y.u² - x.u² * y.u¹,
+    )
+_cross(
+    x::Contravariant12Vector,
+    y::Contravariant12Vector,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
+_cross(
+    x::Contravariant12Vector,
+    y::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+
+
+_cross(u::CartesianVector, v::CartesianVector, local_geometry::LocalGeometry) =
     LinearAlgebra.cross(u, v)
-_cross(u::LocalVector, v::LocalVector, local_geometry) =
+_cross(u::LocalVector, v::LocalVector, local_geometry::LocalGeometry) =
     LinearAlgebra.cross(u, v)
