@@ -202,17 +202,6 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Bickley jet CG vector invariant"
-    key: "cpu_bickleyjet_cg_invariant"
-    command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant.jl"
-    artifact_paths:
-      - "examples/bickleyjet/output/cg_invariant/*"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-
   - label: ":computer: Bickley jet CG vector invariant hyperviscosity"
     key: "cpu_bickleyjet_cg_invariant_hypervisc"
     command:

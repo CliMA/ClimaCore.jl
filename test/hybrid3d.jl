@@ -54,7 +54,7 @@ end
 
     hv_center_space, hv_face_space = hvspace_3D()
     V =
-        Geometry.Cartesian123Vector.(
+        Geometry.UVWVector.(
             zeros(Float64, hv_face_space),
             zeros(Float64, hv_face_space),
             ones(Float64, hv_face_space),
@@ -97,7 +97,7 @@ end
     function rhs!(dudt, u, _, t)
         # horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
-        @. dudt = -hdiv(u * Geometry.Cartesian12Vector(1.0, 1.0))
+        @. dudt = -hdiv(u * Geometry.UVVector(1.0, 1.0))
         Spaces.weighted_dss!(dudt)
         return dudt
     end
@@ -139,16 +139,14 @@ end
         # and outflow at top
         Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
         divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(
-                Geometry.Cartesian123Vector(0.0, 0.0, 0.0),
-            ),
+            bottom = Operators.SetValue(Geometry.UVWVector(0.0, 0.0, 0.0)),
         )
         # only upward advection
-        @. dh = -divf2c(Ic2f(h) * Geometry.Cartesian123Vector(0.0, 0.0, 1.0))
+        @. dh = -divf2c(Ic2f(h) * Geometry.UVWVector(0.0, 0.0, 1.0))
 
         # only horizontal advection
         hdiv = Operators.Divergence()
-        @. dh += -hdiv(h * Geometry.Cartesian12Vector(1.0, 1.0))
+        @. dh += -hdiv(h * Geometry.UVVector(1.0, 1.0))
         Spaces.weighted_dss!(dh)
 
         return dudt

@@ -34,7 +34,7 @@ mesh = Meshes.IntervalMesh(domain, nelems = n)
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-V = Geometry.Cartesian3Vector.(ones(FT, fs))
+V = Geometry.WVector.(ones(FT, fs))
 θ = heaviside.(Fields.coordinate_field(cs))
 
 # Solve advection Equation: ∂θ/dt = -∂(vθ)

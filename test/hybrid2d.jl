@@ -12,7 +12,7 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-import ClimaCore.Domains.Geometry: Geometry.Cartesian12Point, ⊗
+import ClimaCore.Domains.Geometry: ⊗
 
 function hvspace_2D(;
     xlim = (-π, π),
@@ -83,7 +83,7 @@ end
 
     # Advection Operator
     # c ∂_z f
-    # for this test, we use f(z) = sin(z) and c = 1, a Cartesian3Vector
+    # for this test, we use f(z) = sin(z) and c = 1, a WVector
     # => c ∂_z f = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
 
@@ -97,7 +97,7 @@ end
     end
 
     # advective velocity
-    c = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
+    c = Geometry.WVector.(ones(Float64, hv_face_space),)
     # scalar-valued field to be advected
     f = sin.(Fields.coordinate_field(hv_center_space).z)
 
@@ -111,7 +111,7 @@ end
 
     # Divergence Operator
     # ∂_x (c f)
-    # for this test, we use f(x) = sin(x) and c = 2, a Cartesian1Vector
+    # for this test, we use f(x) = sin(x) and c = 2, a UVector
     # => ∂_x (c f) = 2 * cos(x)
 
     function divergence(c, f)
@@ -127,7 +127,7 @@ end
     f = sin.(Fields.coordinate_field(hv_center_space).x)
 
     # Set up constant velocity field
-    c = Geometry.Cartesian1Vector(2.0)
+    c = Geometry.UVector(2.0)
 
     # Call the divergence operator
     divf = divergence(c, f)
@@ -162,11 +162,11 @@ end
         )
         divf2c = Operators.DivergenceF2C()
         # only upward component of divergence
-        @. dh = divf2c(Ic2f(h) * Geometry.Cartesian3Vector(1.0))
+        @. dh = divf2c(Ic2f(h) * Geometry.WVector(1.0))
 
         # only horizontal component of divergence
         hdiv = Operators.Divergence()
-        @. dh += hdiv(h * Geometry.Cartesian1Vector(1.0)) # add the two components for full divergence +=
+        @. dh += hdiv(h * Geometry.UVector(1.0)) # add the two components for full divergence +=
         Spaces.weighted_dss!(dh)
 
         return divuf
@@ -209,26 +209,23 @@ end
     # Vector Advection Operator
     # C ∂_z F
     # for this test, we use F(z) = sin(z),
-    # with F a Cartesian1Vector and C = ones, a Cartesian3Vector constant field
+    # with F a UVector and C = ones, a WVector constant field
     # => C ∂_z F = cos(z)
     hv_center_space, hv_face_space = hvspace_2D()
 
     function advect(f)
         advf = zeros(eltype(f), hv_center_space)
         A = Operators.AdvectionC2C(
-            bottom = Operators.SetValue(Geometry.Cartesian1Vector(0.0)), # value of f at the boundary (Cartesian1Vector field)
+            bottom = Operators.SetValue(Geometry.UVector(0.0)), # value of f at the boundary (UVector field)
             top = Operators.Extrapolate(),
         )
         @. advf = A(vC, f)
     end
 
     # Vertical advective velocity
-    vC = Geometry.Cartesian3Vector.(ones(Float64, hv_face_space),)
-    # vector-valued field to be advected (one component only, a Cartesian1Vector)
-    f =
-        Geometry.Cartesian1Vector.(
-            sin.(Fields.coordinate_field(hv_center_space).z),
-        )
+    vC = Geometry.WVector.(ones(Float64, hv_face_space),)
+    # vector-valued field to be advected (one component only, a UVector)
+    f = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
 
     advf = advect(f)
 
@@ -237,7 +234,7 @@ end
         Ic2f = Operators.InterpolateC2F()
         divf2c = Operators.DivergenceF2C(
             bottom = Operators.SetValue(
-                Geometry.Cartesian3Vector(1.0) ⊗ Geometry.Cartesian1Vector(0.0),
+                Geometry.WVector(1.0) ⊗ Geometry.UVector(0.0),
             ),
             top = Operators.Extrapolate(),
         )
@@ -245,24 +242,19 @@ end
         @. vecdivf = divf2c(vC ⊗ Ic2f(F))
 
         hdiv = Operators.Divergence()
-        @. vecdivf += hdiv(Geometry.Cartesian1Vector(1.0) ⊗ F)
+        @. vecdivf += hdiv(Geometry.UVector(1.0) ⊗ F)
         Spaces.weighted_dss!(vecdivf)
         return vecdivf
     end
 
-    F =
-        Geometry.Cartesian1Vector.(
-            sin.(Fields.coordinate_field(hv_center_space).z),
-        )
+    F = Geometry.UVector.(sin.(Fields.coordinate_field(hv_center_space).z),)
 
     # Call the divergence operator
     vecdivf = div!(F)
 
     @test norm(
         vecdivf .-
-        Geometry.Cartesian1Vector.(
-            cos.(Fields.coordinate_field(hv_center_space).z),
-        ),
+        Geometry.UVector.(cos.(Fields.coordinate_field(hv_center_space).z),),
     ) ≤ 6.5e-2
 
 end
@@ -333,8 +325,8 @@ end
 
         vec_diff = zeros(eltype(U), hv_center_space)
         gradc2f = Operators.GradientC2F(
-            top = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
-            bottom = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
+            top = Operators.SetValue(Geometry.UVector(0.0)),
+            bottom = Operators.SetValue(Geometry.UVector(0.0)),
         )
         divf2c = Operators.DivergenceF2C()
         @. vec_diff = divf2c(K * gradc2f(U))
@@ -350,14 +342,14 @@ end
 
     # vector-valued field to be diffused (one component only) u = exp(-(coord.x^2 + coord.z^2) / 2)
     U = map(Fields.coordinate_field(hv_center_space)) do coord
-        Geometry.Cartesian1Vector(exp(-(coord.x^2 + coord.z^2) / 2))
+        Geometry.UVector(exp(-(coord.x^2 + coord.z^2) / 2))
     end
 
     # Laplacian of u = exp(-(coord.x^2 + coord.z^2) / 2)
     function hessian_u()
         coords = Fields.coordinate_field(hv_center_space)
         hessian_u = map(coords) do coord
-            Geometry.Cartesian1Vector(
+            Geometry.UVector(
                 ((coord.x^2 - 1) + (coord.z^2 - 1)) *
                 (exp(-((coord.x^2) / 2 + (coord.z^2) / 2))),
             )

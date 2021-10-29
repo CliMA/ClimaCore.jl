@@ -51,11 +51,11 @@ end
         @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
-        ∂sin = Geometry.CartesianVector.(∇ᶜ.(sin.(faces)))
-        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        ∂sin = Geometry.WVector.(∇ᶜ.(sin.(faces)))
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         divᶜ = Operators.DivergenceF2C()
-        ∂sin = divᶜ.(Geometry.Cartesian3Vector.(sin.(faces)))
+        ∂sin = divᶜ.(Geometry.WVector.(sin.(faces)))
         @test ∂sin ≈ cos.(centers) atol = 1e-2
 
         # Center -> Face operator
@@ -64,23 +64,22 @@ end
             left = Operators.SetValue(FT(0)),
             right = Operators.SetValue(FT(pi)),
         )
-        ∂z = Geometry.CartesianVector.(∇ᶠ.(centers))
-        @test ∂z ≈ Geometry.Cartesian3Vector.(ones(FT, face_space)) rtol =
-            10 * eps(FT)
+        ∂z = Geometry.WVector.(∇ᶠ.(centers))
+        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT)
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
-        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-1
+        ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-1
 
         ∇ᶠ = Operators.GradientC2F(
-            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
-            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
+            left = Operators.SetGradient(Geometry.WVector(FT(0))),
+            right = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
-        ∂cos = Geometry.CartesianVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.Cartesian3Vector.(.-sin.(faces)) atol = 1e-2
+        ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
@@ -113,8 +112,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
-        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         # can't define Neumann conditions on GradientF2C
         ∂ = Operators.GradientF2C(
@@ -131,17 +130,17 @@ end
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
-        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         I = Operators.InterpolateC2F(
-            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1))),
-            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(-1))),
+            left = Operators.SetGradient(Geometry.WVector(FT(1))),
+            right = Operators.SetGradient(Geometry.WVector(FT(-1))),
         )
         ∂ = Operators.GradientF2C()
 
-        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
-        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         # 3) we set boundaries on both: 2nd should take precedence
         I = Operators.InterpolateC2F(
@@ -153,8 +152,8 @@ end
             right = Operators.SetValue(FT(0)),
         )
 
-        ∂sin = Geometry.CartesianVector.(∂.(w .* I.(θ)))
-        @test ∂sin ≈ Geometry.Cartesian3Vector.(cos.(centers)) atol = 1e-2
+        ∂sin = Geometry.WVector.(∂.(w .* I.(θ)))
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_faces = zeros(FT, face_space)
@@ -341,12 +340,12 @@ end
             cent_field .= sin.(3π .* centers.z)
             face_field_exact .=
                 Geometry.CovariantVector.(
-                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* faces.z)),
+                    Geometry.WVector.(3π .* cos.(3π .* faces.z)),
                 )
 
             operator = Operators.GradientC2F(
-                left = Operators.SetGradient(Geometry.Cartesian3Vector(3π)),
-                right = Operators.SetGradient(Geometry.Cartesian3Vector(-3π)),
+                left = Operators.SetGradient(Geometry.WVector(3π)),
+                right = Operators.SetGradient(Geometry.WVector(-3π)),
             )
 
             face_field .= operator.(cent_field)
@@ -392,7 +391,7 @@ end
             face_field .= sin.(3π .* faces.z)
             cent_field_exact .=
                 Geometry.CovariantVector.(
-                    Geometry.Cartesian3Vector.(3π .* cos.(3π .* centers.z)),
+                    Geometry.WVector.(3π .* cos.(3π .* centers.z)),
                 )
 
             operator = Operators.GradientF2C()
@@ -443,12 +442,12 @@ end
         # GradientF2C
         # f(z) = sin(z)
         ∇ᶜ = Operators.GradientF2C()
-        gradsinᶜ = Geometry.CartesianVector.(∇ᶜ.(sin.(faces)))
+        gradsinᶜ = Geometry.WVector.(∇ᶜ.(sin.(faces)))
 
         # DivergenceF2C
         # f(z) = sin(z)
         divᶜ = Operators.DivergenceF2C()
-        divsinᶜ = divᶜ.(Geometry.Cartesian3Vector.(sin.(faces)))
+        divsinᶜ = divᶜ.(Geometry.WVector.(sin.(faces)))
 
         # Center -> Face operators:
         # GradientC2F, SetValue
@@ -457,7 +456,7 @@ end
             left = Operators.SetValue(FT(0)),
             right = Operators.SetValue(FT(pi)),
         )
-        ∂zᶠ = Geometry.CartesianVector.(∇ᶠ⁰.(centers))
+        ∂zᶠ = Geometry.WVector.(∇ᶠ⁰.(centers))
 
         # GradientC2F, SetValue
         # f(z) = cos(z)
@@ -465,23 +464,23 @@ end
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
-        gradcosᶠ¹ = Geometry.CartesianVector.(∇ᶠ¹.(cos.(centers)))
+        gradcosᶠ¹ = Geometry.WVector.(∇ᶠ¹.(cos.(centers)))
 
         # GradientC2F, SetGradient
         # f(z) = cos(z)
         ∇ᶠ² = Operators.GradientC2F(
-            left = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
-            right = Operators.SetGradient(Geometry.Cartesian3Vector(FT(0))),
+            left = Operators.SetGradient(Geometry.WVector(FT(0))),
+            right = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
-        gradcosᶠ² = Geometry.CartesianVector.(∇ᶠ².(cos.(centers)))
+        gradcosᶠ² = Geometry.WVector.(∇ᶠ².(cos.(centers)))
 
         # DivergenceC2F, SetValue
         # f(z) = sin(z)
         divᶠ⁰ = Operators.DivergenceC2F(
-            left = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-            right = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+            left = Operators.SetValue(Geometry.WVector(zero(FT))),
+            right = Operators.SetValue(Geometry.WVector(zero(FT))),
         )
-        divsinᶠ = divᶠ⁰.(Geometry.Cartesian3Vector.(sin.(centers)))
+        divsinᶠ = divᶠ⁰.(Geometry.WVector.(sin.(centers)))
 
         # DivergenceC2F, SetDivergence
         # f(z) = cos(z)
@@ -489,25 +488,19 @@ end
             left = Operators.SetDivergence(FT(0)),
             right = Operators.SetDivergence(FT(0)),
         )
-        divcosᶠ = divᶠ¹.(Geometry.Cartesian3Vector.(cos.(centers)))
+        divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
 
         Δh[k] = cs.face_local_geometry.J[1]
         # Errors
-        err_grad_sin_c[k] =
-            norm(gradsinᶜ .- Geometry.Cartesian3Vector.(cos.(centers)))
+        err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
-        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.Cartesian3Vector.(ones(FT, fs)))
-        err_grad_cos_f1[k] =
-            norm(gradcosᶠ¹ .- Geometry.Cartesian3Vector.(.-sin.(faces)))
-        err_grad_cos_f2[k] =
-            norm(gradcosᶠ² .- Geometry.Cartesian3Vector.(.-sin.(faces)))
-        err_div_sin_f[k] = norm(
-            divsinᶠ .-
-            (Geometry.Cartesian3Vector.(cos.(faces))).components.data.:1,
-        )
+        err_grad_z_f[k] = norm(∂zᶠ .- Geometry.WVector.(ones(FT, fs)))
+        err_grad_cos_f1[k] = norm(gradcosᶠ¹ .- Geometry.WVector.(.-sin.(faces)))
+        err_grad_cos_f2[k] = norm(gradcosᶠ² .- Geometry.WVector.(.-sin.(faces)))
+        err_div_sin_f[k] =
+            norm(divsinᶠ .- (Geometry.WVector.(cos.(faces))).components.data.:1)
         err_div_cos_f[k] = norm(
-            divcosᶠ .-
-            (Geometry.Cartesian3Vector.(.-sin.(faces))).components.data.:1,
+            divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
         )
     end
 

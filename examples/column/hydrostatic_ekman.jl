@@ -37,7 +37,7 @@ const nelems = 30
 const Cd = ν / (L / nelems)
 const ug = 1.0
 const vg = 0.0
-const uvg = Geometry.Cartesian12Vector(ug, vg)
+const uvg = Geometry.UVVector(ug, vg)
 const d = sqrt(2 * ν / f)
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
@@ -82,7 +82,7 @@ function adiabatic_temperature_profile(z; T_surf = 300.0, T_min_ref = 230.0)
     ρ = ρ_from_pθ(p, θ)
     ρθ = ρ * θ
 
-    uv = Geometry.Cartesian12Vector(FT(1.0), FT(0.0))
+    uv = Geometry.UVVector(FT(1.0), FT(0.0))
     return (ρ = ρ, uv = uv, ρθ = ρθ)
 end
 
@@ -91,7 +91,7 @@ end
 
 zc = Fields.coordinate_field(cspace)
 Yc = adiabatic_temperature_profile.(zc.z)
-w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
+w = Geometry.WVector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
 w_init = copy(w)
@@ -111,8 +111,8 @@ function tendency!(dY, Y, _, t)
     If = Operators.InterpolateC2F()
     ∂f = Operators.GradientC2F()
     ∂c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+        top = Operators.SetValue(Geometry.WVector(zero(FT))),
     )
     @. dρ = -∂c(w * If(ρ))
 
@@ -120,27 +120,26 @@ function tendency!(dY, Y, _, t)
     If = Operators.InterpolateC2F()
     ∂f = Operators.GradientC2F()
     ∂c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+        top = Operators.SetValue(Geometry.WVector(zero(FT))),
     )
     # TODO!: Undesirable casting to vector required
-    @. dρθ = -∂c(w * If(ρθ)) + ρ * ∂c(Geometry.CartesianVector(ν * ∂f(ρθ / ρ)))
+    @. dρθ = -∂c(w * If(ρθ)) + ρ * ∂c(ν * ∂f(ρθ / ρ))
 
     uv_1 = Operators.getidx(uv, Operators.Interior(), 1)
     u_wind = LinearAlgebra.norm(uv_1)
 
     A = Operators.AdvectionC2C(
-        bottom = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
-        top = Operators.SetValue(Geometry.Cartesian12Vector(0.0, 0.0)),
+        bottom = Operators.SetValue(Geometry.UVVector(0.0, 0.0)),
+        top = Operators.SetValue(Geometry.UVVector(0.0, 0.0)),
     )
 
     # uv
-    bcs_bottom =
-        Operators.SetValue(Geometry.Cartesian3Vector(Cd * u_wind) ⊗ uv_1)
+    bcs_bottom = Operators.SetValue(Geometry.WVector(Cd * u_wind) ⊗ uv_1)
     bcs_top = Operators.SetValue(uvg)
     ∂c = Operators.DivergenceF2C(bottom = bcs_bottom)
     ∂f = Operators.GradientC2F(top = bcs_top)
-    duv .= (uv .- Ref(uvg)) .× Ref(Geometry.Cartesian3Vector(f))
+    duv .= (uv .- Ref(uvg)) .× Ref(Geometry.WVector(f))
     @. duv += ∂c(ν * ∂f(uv)) - A(w, uv)
 
     # w
@@ -153,13 +152,12 @@ function tendency!(dY, Y, _, t)
     Af = Operators.AdvectionF2F()
     divf = Operators.DivergenceC2F()
     B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+        top = Operators.SetValue(Geometry.WVector(zero(FT))),
     )
     @. dw = B(
-        Geometry.CartesianVector(
-            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z)),
-        ) + divf(ν * ∂c(w)) - Af(w, w),
+        Geometry.WVector(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z))) +
+        divf(ν * ∂c(w)) - Af(w, w),
     )
 
     return dY
@@ -260,40 +258,3 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig("output/$(dirname)/hydrostatic_ekman_end.png", "ekman end")
-
-
-# w = ClimaCore.Geometry.AxisTensor{
-#         Float64,
-#         1,
-#         Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
-#         StaticArrays.SVector{
-#             1,
-#             Float64
-#         }
-#     }
-
-# If.(∂c.(w)) = ClimaCore.Geometry.AxisTensor{
-#         ClimaCore.Geometry.AxisTensor{
-#             Float64,
-#             1,
-#             Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
-#             StaticArrays.SVector{
-#                 1,
-#                 Float64
-#             }
-#         },
-#         1,
-#         Tuple{ClimaCore.Geometry.CovariantAxis{(3,)}},
-#         StaticArrays.SVector{
-#             1,
-#             ClimaCore.Geometry.AxisTensor{
-#                 Float64,
-#                 1,
-#                 Tuple{ClimaCore.Geometry.CartesianAxis{(3,)}},
-#                 StaticArrays.SVector{
-#                     1,
-#                     Float64
-#                 }
-#             }
-#         }
-#     }
