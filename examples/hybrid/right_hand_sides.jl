@@ -115,50 +115,168 @@ function rhs!(dY, Y, p, t)
     return dY
 end
 
+# function rhs_implicit!(dY, Y, p, t)
+#     @unpack P, Φ, ∇Φ = p
+
+#     # ∂ρ/∂t ≈ -∇◦ᵥρu
+#     if :ρw in propertynames(Y)
+#         @. dY.Yc.ρ = -∇◦ᵥc(Y.ρw)
+#     elseif :w in propertynames(Y)
+#         @. dY.Yc.ρ = -∇◦ᵥc(Y.w * If(Y.Yc.ρ))
+#     end
+
+#     # ∂ρθ/∂t ≈ -∇◦ᵥρθu
+#     # ∂ρe/∂t ≈ -∇◦ᵥ(ρe + P)u
+#     if :ρθ in propertynames(Y.Yc)
+#         @. P = P_ρθ_factor * Y.Yc.ρθ^γ
+#         if :ρw in propertynames(Y)
+#             @. dY.Yc.ρθ = -∇◦ᵥc(Y.ρw * If(Y.Yc.ρθ / Y.Yc.ρ))
+#         elseif :w in propertynames(Y)
+#             @. dY.Yc.ρθ = -∇◦ᵥc(Y.w * If(Y.Yc.ρθ))
+#         end
+#     elseif :ρe_tot in propertynames(Y.Yc)
+#         if :ρw in propertynames(Y)
+#             @. P = P_ρe_factor * (
+#                 Y.Yc.ρe_tot - Y.Yc.ρ * Φ -
+#                 norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ)
+#             )
+#             @. dY.Yc.ρe_tot = -∇◦ᵥc(Y.ρw * If((Y.Yc.ρe_tot + P) / Y.Yc.ρ))
+#         elseif :w in propertynames(Y)
+#             @. P = P_ρe_factor * (
+#                 Y.Yc.ρe_tot -
+#                 Y.Yc.ρ * (Φ + norm_sqr(Y.Yc.ρuₕ / Y.Yc.ρ, Ic(Y.w)) / 2.)
+#             )
+#             @. dY.Yc.ρe_tot = -∇◦ᵥc(Y.w * If(Y.Yc.ρe_tot + P))
+#         end
+#     end
+
+#     # ∂ρu/∂t ≈ -∇ᵥP - ρ∇ᵥΦ
+#     # ∂u/∂t ≈ -(∇ᵥP)/ρ - ∇ᵥΦ
+#     if :ρw in propertynames(Y)
+#         @. dY.ρw = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ)
+#     elseif :w in propertynames(Y)
+#         @. dY.w = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ)
+#     end
+#     # `dY.Yc.ρuₕ .= Ref(Geometry.Cartesian1Vector(0.))` gives an error
+#     Fields.field_values(dY.Yc.ρuₕ) .= Ref(Geometry.Cartesian1Vector(0.))
+
+#     return dY
+# end
+
+# Replace fields with parent arrays.
 function rhs_implicit!(dY, Y, p, t)
     @unpack P, Φ, ∇Φ = p
 
-    # ∂ρ/∂t ≈ -∇◦ᵥρu
-    if :ρw in propertynames(Y)
-        @. dY.Yc.ρ = -∇◦ᵥc(Y.ρw)
-    elseif :w in propertynames(Y)
-        @. dY.Yc.ρ = -∇◦ᵥc(Y.w * If(Y.Yc.ρ))
+    N = size(parent(Y.Yc.ρ), 1)
+    M = length(parent(Y.Yc.ρ)) ÷ N
+    arr_c(field) = reshape(parent(field), N, M)
+    arr_f(field) = reshape(parent(field), N + 1, M)
+
+    z = arr_c(p.coords.z)
+    z_f = arr_f(p.face_coords.z)
+    Δz = arr_c(p.uₕ)
+    Δz_f = arr_f(p.uₕ_f)
+    @views @. Δz = z_f[2:N + 1, :] .- z_f[1:N, :]
+    @views @. Δz_f[2:N, :] = z[2:N, :] .- z[1:N - 1, :]
+
+    function interp_f!(dest_f, src_c)
+        @views @. dest_f[2:N, :] = (src_c[1:N - 1, :] + src_c[2:N, :]) / 2.
+        @views @. dest_f[1, :] = dest_f[2, :]
+        @views @. dest_f[N + 1, :] = dest_f[N, :]
     end
+    function interp_c!(dest_c, src_f)
+        @views @. dest_c = (src_f[1:N, :] + src_f[2:N + 1, :]) / 2.
+    end
+    function neg_deriv_f!(dest_f, src_c)
+        @views @. dest_f[2:N, :] =
+            (src_c[1:N - 1, :] - src_c[2:N, :]) / Δz_f[2:N, :]
+        @views @. dest_f[1, :] = 0.
+        @views @. dest_f[N + 1, :] = 0.
+    end
+    function neg_deriv_c!(dest_c, src_f)
+        @views @. dest_c = (src_f[1:N, :] - src_f[2:N + 1, :]) / Δz
+    end
+
+    P = arr_c(P)
+    Φ = arr_c(Φ)
+    ∇Φ = arr_f(∇Φ)
+    ρ = arr_c(Y.Yc.ρ)
+    dρ = arr_c(dY.Yc.ρ)
+    ρuₕ = arr_c(Y.Yc.ρuₕ)
+    dρuₕ = arr_c(dY.Yc.ρuₕ)
+
+    temp_c = dρuₕ
+    if :ρw in propertynames(Y)
+        ρw = arr_f(Y.ρw)
+        dρw = arr_f(dY.ρw)
+        temp_f = dρw
+    elseif :w in propertynames(Y)
+        w = arr_f(Y.w)
+        dw = arr_f(dY.w)
+        temp_f = dw
+    end
+
+    # ∂ρ/∂t ≈ -∇◦ᵥρu
+    if :w in propertynames(Y)
+        ρ_f = ρw = temp_f
+        interp_f!(ρ_f, ρ)
+        @. ρw = ρ_f * w
+    end
+    neg_deriv_c!(dρ, ρw)
 
     # ∂ρθ/∂t ≈ -∇◦ᵥρθu
     # ∂ρe/∂t ≈ -∇◦ᵥ(ρe + P)u
     if :ρθ in propertynames(Y.Yc)
-        @. P = P_ρθ_factor * Y.Yc.ρθ^γ
+        ρθ = arr_c(Y.Yc.ρθ)
+        dρθ = arr_c(dY.Yc.ρθ)
+        @. P = P_ρθ_factor * ρθ^γ
         if :ρw in propertynames(Y)
-            @. dY.Yc.ρθ = -∇◦ᵥc(Y.ρw * If(Y.Yc.ρθ / Y.Yc.ρ))
+            θ = temp_c
+            θ_f = ρwθ = temp_f
+            @. θ = ρθ / ρ
+            interp_f!(θ_f, θ)
+            @. ρwθ = ρw * θ_f
         elseif :w in propertynames(Y)
-            @. dY.Yc.ρθ = -∇◦ᵥc(Y.w * If(Y.Yc.ρθ))
+            ρθ_f = ρwθ = temp_f
+            interp_f!(ρθ_f, ρθ)
+            @. ρwθ = w * ρθ_f
         end
+        neg_deriv_c!(dρθ, ρwθ)
     elseif :ρe_tot in propertynames(Y.Yc)
+        ρe_tot = arr_c(Y.Yc.ρe_tot)
+        dρe_tot = arr_c(dY.Yc.ρe_tot)
         if :ρw in propertynames(Y)
-            @. P = P_ρe_factor * (
-                Y.Yc.ρe_tot - Y.Yc.ρ * Φ -
-                norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ)
-            )
-            @. dY.Yc.ρe_tot = -∇◦ᵥc(Y.ρw * If((Y.Yc.ρe_tot + P) / Y.Yc.ρ))
+            ρw_c = h = temp_c
+            h_f = ρwh = temp_f
+            interp_c!(ρw_c, ρw)
+            @. P = P_ρe_factor * (ρe_tot - ρ * Φ - (ρuₕ^2 + ρw_c^2) / (2. * ρ))
+            @. h = (ρe_tot + P) / ρ
+            interp_f!(h_f, h)
+            @. ρwh = ρw * h_f
         elseif :w in propertynames(Y)
-            @. P = P_ρe_factor * (
-                Y.Yc.ρe_tot -
-                Y.Yc.ρ * (Φ + norm_sqr(Y.Yc.ρuₕ / Y.Yc.ρ, Ic(Y.w)) / 2.)
-            )
-            @. dY.Yc.ρe_tot = -∇◦ᵥc(Y.w * If(Y.Yc.ρe_tot + P))
+            w_c = ρh = temp_c
+            ρh_f = ρwh = temp_f
+            interp_c!(w_c, w)
+            @. P = P_ρe_factor * (ρe_tot - ρ * (Φ + ((ρuₕ / ρ)^2 + w_c^2) / 2.))
+            @. ρh = ρe_tot + P
+            interp_f!(ρh_f, ρh)
+            @. ρwh = w * ρh_f
         end
+        neg_deriv_c!(dρe_tot, ρwh)
     end
 
     # ∂ρu/∂t ≈ -∇ᵥP - ρ∇ᵥΦ
     # ∂u/∂t ≈ -(∇ᵥP)/ρ - ∇ᵥΦ
     if :ρw in propertynames(Y)
-        @. dY.ρw = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ)
+        neg_deriv_f!(dρw, P)
+        @views @. dρw[2:N, :] =
+            dρw[2:N, :] - ((ρ[1:N - 1, :] + ρ[2:N, :]) / 2.) * ∇Φ[2:N, :]
     elseif :w in propertynames(Y)
-        @. dY.w = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ)
+        neg_deriv_f!(dw, P)
+        @views @. dw[2:N, :] =
+            dw[2:N, :] / ((ρ[1:N - 1, :] + ρ[2:N, :]) / 2.) - ∇Φ[2:N, :]
     end
-    # `dY.Yc.ρuₕ .= Ref(Geometry.Cartesian1Vector(0.))` gives an error
-    Fields.field_values(dY.Yc.ρuₕ) .= Ref(Geometry.Cartesian1Vector(0.))
+    dρuₕ .= 0.
 
     return dY
 end

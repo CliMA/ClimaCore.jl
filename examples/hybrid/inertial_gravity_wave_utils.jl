@@ -28,29 +28,28 @@ include("right_hand_sides.jl")
 # set up function space
 function hvspace_2D(xmin, xmax, zmin, zmax, velem, helem, npoly)
     FT = Float64
-    vertdomain = Domains.IntervalDomain(
+    
+    vdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zmin),
         Geometry.ZPoint{FT}(zmax);
         boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
-    horzdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(xmin)..Geometry.XPoint{FT}(xmax),
-        Geometry.YPoint{FT}(-0)..Geometry.YPoint{FT}(0),
-        x1periodic = true,
-        x2boundary = (:a, :b),
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+
+    hdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(xmin),
+        Geometry.XPoint{FT}(xmax);
+        periodic = true,
     )
-    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, helem, 1)
-    horztopology = Topologies.GridTopology(horzmesh)
-
+    hmesh = Meshes.IntervalMesh(hdomain; nelems = helem)
+    htopology = Topologies.IntervalTopology(hmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    hspace = Spaces.SpectralElementSpace1D(htopology, quad)
 
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return hv_center_space, hv_face_space
+    space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+    return space, face_space
 end
 
 gravitational_potential(z) = grav * z
@@ -73,10 +72,9 @@ function init_inertial_gravity_wave_ρθ(x, z, A)
 
     return (ρ = ρ, ρθ = ρθ, ρuₕ = Geometry.Cartesian1Vector(0.))
 end
-function init_inertial_gravity_wave_ρe_tot(x, z, A)
-    ρ, ρθ, ρuₕ = init_inertial_gravity_wave_ρθ(x, z, A)
-    ρe_tot = (P_ρθ_factor * ρθ^γ) / (γ - 1) + ρ * gravitational_potential(z)
-    return (ρ = ρ, ρe_tot = ρe_tot, ρuₕ = ρuₕ)
+function ρθ_to_ρe_tot(Yc, Φ)
+    ρe_tot = (P_ρθ_factor * Yc.ρθ^γ) / P_ρe_factor + Yc.ρ * Φ
+    return (ρ = Yc.ρ, ρe_tot = ρe_tot, ρuₕ = Yc.ρuₕ)
 end
 
 using OrdinaryDiffEq
@@ -90,23 +88,16 @@ function inertial_gravity_wave_prob(;
     ode_algorithm,
     is_imex,
     tspan,
+    J_𝕄ρ_grav_overwrite = false,
+    J_𝕄ρ_pres_overwrite = false,
 )
     xmax = is_large_domain ? 1500000. : 150000.
     zmax = 10000.
     A = is_large_domain ? 100000. : 5000.
 
-    hv_center_space, hv_face_space =
-        hvspace_2D(-xmax, xmax, 0., zmax, velem, helem, npoly)
-    coords = Fields.coordinate_field(hv_center_space)
-    face_coords = Fields.coordinate_field(hv_face_space)
-    if 𝔼_var == :ρθ
-        Yc = map(c -> init_inertial_gravity_wave_ρθ(c.x, c.z, A), coords)
-    elseif 𝔼_var == :ρe_tot
-        Yc = map(c -> init_inertial_gravity_wave_ρe_tot(c.x, c.z, A), coords)
-    else
-        throw(ArgumentError("Invalid 𝔼_var $𝔼_var"))
-    end
-    𝕄 = map(c -> Geometry.Cartesian3Vector(0.), face_coords)
+    space, face_space = hvspace_2D(-xmax, xmax, 0., zmax, velem, helem, npoly)
+    coords = Fields.coordinate_field(space)
+    face_coords = Fields.coordinate_field(face_space)
 
     uₕ = map(c -> Geometry.Cartesian1Vector(0.), coords)
     uₕ_f = map(c -> Geometry.Cartesian1Vector(0.), face_coords)
@@ -117,16 +108,43 @@ function inertial_gravity_wave_prob(;
         top = Operators.SetValue(gravitational_potential(zmax)),
     )
     ∇Φ = @. Geometry.transform(ẑ(), ∇ᵥf_Φ(Φ))
+    p = (; coords, face_coords, uₕ, uₕ_f, P, Φ, ∇Φ)
+
+    Yc = map(c -> init_inertial_gravity_wave_ρθ(c.x, c.z, A), coords)
+    if 𝔼_var == :ρe_tot
+        Yc = ρθ_to_ρe_tot.(Yc, Φ)
+    elseif 𝔼_var != :ρθ
+        throw(ArgumentError("Invalid 𝔼_var $𝔼_var (must be :ρθ or :ρe_tot)"))
+    end
+    𝕄 = map(c -> Geometry.Cartesian3Vector(0.), face_coords)
 
     if 𝕄_var == :ρw
         Y = Fields.FieldVector(; Yc, ρw = 𝕄)
-        p = (; coords, face_coords, uₕ, uₕ_f, P, Φ, ∇Φ)
+        if J_𝕄ρ_grav_overwrite && 𝔼_var == :ρθ
+            throw(ArgumentError(
+                "J_𝕄ρ_grav_overwrite must be false if 𝔼_var is :ρθ and 𝕄_var is :ρw"
+            ))
+        end
+        if J_𝕄ρ_pres_overwrite
+            throw(ArgumentError(
+                "J_𝕄ρ_pres_overwrite must be false if 𝕄_var is :ρw"
+            ))
+        end
     elseif 𝕄_var == :w
+        p = (; ρw = similar(𝕄), p...)
         Y = Fields.FieldVector(; Yc, w = 𝕄)
-        ρw = similar(𝕄)
-        p = (; coords, face_coords, ρw, uₕ, uₕ_f, P, Φ, ∇Φ)
+        if J_𝕄ρ_pres_overwrite && 𝔼_var == :ρθ
+            throw(ArgumentError(
+                "J_𝕄ρ_pres_overwrite must be false if 𝔼_var is :ρθ and 𝕄_var is :w"
+            ))
+        end
+        if J_𝕄ρ_pres_overwrite && J_𝕄ρ_grav_overwrite
+            throw(ArgumentError(
+                "J_𝕄ρ_grav_overwrite must be false if J_𝕄ρ_pres_overwrite is true"
+            ))
+        end
     else
-        throw(ArgumentError("Invalid 𝕄_var $𝕄_var"))
+        throw(ArgumentError("Invalid 𝕄_var $𝕄_var (must be :ρw or :w)"))
     end
     
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
@@ -137,8 +155,8 @@ function inertial_gravity_wave_prob(;
         coords,
         face_coords,
         use_transform,
-        false,
-        false,
+        J_𝕄ρ_grav_overwrite,
+        J_𝕄ρ_pres_overwrite,
     )
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
     if is_imex

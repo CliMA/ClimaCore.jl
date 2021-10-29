@@ -11,7 +11,9 @@ prob = inertial_gravity_wave_prob(;
     is_large_domain = true,
     ode_algorithm = ode_algorithm,
     is_imex = false,
-    tspan = (0., 1000.),
+    tspan = (0., 10000.),
+    J_𝕄ρ_grav_overwrite = false,
+    J_𝕄ρ_pres_overwrite = false,
 )
 
 sol = solve(
@@ -25,4 +27,4 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-inertial_gravity_wave_plots(sol, "large_domain_w_rosenbrock23_5s_1000s")
+inertial_gravity_wave_plots(sol, "large_domain_w_rosenbrock23_5s_10000s")
