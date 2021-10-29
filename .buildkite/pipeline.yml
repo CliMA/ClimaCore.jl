@@ -323,6 +323,28 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha60"
+    key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact alpha60"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha60/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
     key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
     command:
