@@ -1,6 +1,5 @@
 using Test
-import ClimaCore: Domains, Meshes, Topologies
-import ClimaCore.Geometry: Cartesian2DPoint, Cartesian123Point
+import ClimaCore: Domains, Meshes, Topologies, Geometry
 using ClimaCore.Meshes:
     equispaced_rectangular_mesh,
     cube_panel_mesh,
@@ -70,9 +69,9 @@ _, _, grid_topology = cube_panel_topology(1, FT)
         @test Topologies.opposing_face(grid_topology, 6, 3) == (3, 3, true)
         @test Topologies.opposing_face(grid_topology, 6, 4) == (4, 2, true)
 
-        # 6 faces, 4 vertices per face, 8 global vertices, so each vertex should be part of 3 elements        
+        # 6 faces, 4 vertices per face, 8 global vertices, so each vertex should be part of 3 elements
         @test Topologies.vertex_coordinates(grid_topology, 1)[1] isa
-              Cartesian123Point
+              Geometry.Cartesian123Point
         # check that all vertices appear as part of 3 elements
         for vert in Topologies.vertices(grid_topology)
             @test length(vert) == 3

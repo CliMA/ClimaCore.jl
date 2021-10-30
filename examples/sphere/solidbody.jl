@@ -86,11 +86,10 @@ for (k, ne) in enumerate(ne_seq)
 
     Δh[k] = 2 * R / ne
 
+    global_geom = space.global_geometry
+
     h_init = map(coords) do coord
-        n_coord = Geometry.components(Geometry.Cartesian123Point(coord))
-        n_center = Geometry.components(Geometry.Cartesian123Point(center))
-        # https://en.wikipedia.org/wiki/Great-circle_distance
-        rd = R * atan(norm(n_coord × n_center), dot(n_coord, n_center))
+        rd = Geometry.great_circle_distance(coord, center, global_geom)
 
         if test_name == gaussian_test_name
             h0 * exp(-(rd / r0)^2 / 2)

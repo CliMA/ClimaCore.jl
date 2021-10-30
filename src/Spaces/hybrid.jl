@@ -6,13 +6,15 @@ struct ExtrudedFiniteDifferenceSpace{
     S <: Staggering,
     H <: AbstractSpace,
     T <: Topologies.IntervalTopology,
-    G,
+    GG <: Geometry.AbstractGlobalGeometry,
+    LG,
 } <: AbstractSpace
     staggering::S
     horizontal_space::H
     vertical_topology::T
-    center_local_geometry::G
-    face_local_geometry::G
+    global_geometry::GG
+    center_local_geometry::LG
+    face_local_geometry::LG
 end
 
 const CenterExtrudedFiniteDifferenceSpace =
@@ -28,6 +30,7 @@ function ExtrudedFiniteDifferenceSpace{S}(
         S(),
         space.horizontal_space,
         space.vertical_topology,
+        space.global_geometry,
         space.center_local_geometry,
         space.face_local_geometry,
     )
@@ -45,6 +48,7 @@ function ExtrudedFiniteDifferenceSpace(
 ) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
     staggering = vertical_space.staggering
     vertical_topology = vertical_space.topology
+    global_geometry = horizontal_space.global_geometry
     center_local_geometry =
         product_geometry.(
             horizontal_space.local_geometry,
@@ -59,6 +63,7 @@ function ExtrudedFiniteDifferenceSpace(
         staggering,
         horizontal_space,
         vertical_topology,
+        global_geometry,
         center_local_geometry,
         face_local_geometry,
     )
@@ -76,6 +81,7 @@ slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
     space.staggering,
     space.vertical_topology,
+    Geometry.CartesianGlobalGeometry(),
     column(space.center_local_geometry, i, j, h),
     column(space.face_local_geometry, i, j, h),
 )

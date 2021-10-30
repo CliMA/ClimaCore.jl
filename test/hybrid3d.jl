@@ -12,7 +12,6 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-import ClimaCore.Domains.Geometry: Geometry.Cartesian12Point
 
 function hvspace_3D(
     xlim = (-π, π),
