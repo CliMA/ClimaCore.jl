@@ -25,11 +25,11 @@ using NCDatasets
 #     1/P(z) ∂P(z)/∂z = -g/RT(z) ==>
 #     ∫_0^{z₁} 1/P(z) ∂P(z)/∂z dz = -g/R ∫_0^{z₁} 1/T(z) dz ==>
 #     ∫_{P(0)}^{P(z₁)} 1/u du = -g/R ∫_0^{z₁} 1/T(z) dz ==>
-#     ln(P(z₁)/P(0)) = -g/R ∫_0^{z₁} 1/T(z) dz ==>
+#     log(P(z₁)/P(0)) = -g/R ∫_0^{z₁} 1/T(z) dz ==>
 #     P(0) = P(z₁) exp(g/R ∫_0^{z₁} 1/T(z) dz)
 # T(z) = T(0) - (T(0) - T(z₁))z/z₁ ==>
-#     ∫_0^{z₁} 1/T(z) dz = z₁/(T(0) - T(z₁)) ln(T(0)/T(z₁)) ==>
-#     P(0) = P(z₁) exp(gz₁/(R(T(0) - T(z₁))) ln(T(0)/T(z₁))) ==>
+#     ∫_0^{z₁} 1/T(z) dz = z₁/(T(0) - T(z₁)) log(T(0)/T(z₁)) ==>
+#     P(0) = P(z₁) exp(gz₁/(R(T(0) - T(z₁))) log(T(0)/T(z₁))) ==>
 #   * P(0) = P(z₁)(T(0)/T(z₁))^(gz₁/(R(T(0) - T(z₁))))
 #
 # Combining equations for P(0):
@@ -81,35 +81,29 @@ using NCDatasets
 #             p(zlay2) = play2 ==>
 #                 play1 (tlay2/tlay1)^C = play2 ==>
 #                 (tlay2/tlay1)^C = play2/play1 ==>
-#                 C ln(tlay2/tlay1) = ln(play2/play1) ==>
-#                 C = ln(play2/play1)/ln(tlay2/tlay1)
+#                 C log(tlay2/tlay1) = log(play2/play1) ==>
+#                 C = log(play2/play1)/log(tlay2/tlay1)
 #             plev2 = p(zlev2) =
-#                   = play1 (tlev2/tlay1)^(ln(play2/play1)/ln(tlay2/tlay1))
+#                   = play1 (tlev2/tlay1)^(log(play2/play1)/log(tlay2/tlay1)) =
+#                   = play1 (play2/play1)^(log(tlev2/tlay1)/log(tlay2/tlay1))
 #         If tlay2 = tlay1:
-#             p(z) = play1 exp(D z)
+#             p(z) = play1 exp(D (z - zlay1))
 #             p(zlay2) = play2 ==>
-#                 play1 exp(D zlay2) = play2 ==>
-#                 exp(D zlay2) = play2/play1 ==>
-#                 D = ln(play2/play1)/zlay2
+#                 play1 exp(D (zlay2 - zlay1)) = play2 ==>
+#                 exp(D (zlay2 - zlay1)) = play2/play1 ==>
+#                 D = log(play2/play1)/(zlay2 - zlay1)
 #             plev2 = p(zlev2) =
-#                   = play1 exp(ln(play2/play1) zlev2/zlay2)
+#                   = play1 exp(log(play2/play1)(zlev2 - zlay1)/(zlay2 - zlay1)) =
+#                   = play1 (play2/play1)^((zlev2 - zlay1)/(zlay2 - zlay1))
 #     Extrapolation:
 #         tlev3 = t(zlev3) =
 #               = tlay1 + (tlay2 - tlay1)(zlev3 - zlay1)/(zlay2 - zlay1)
 #         If tlay2 ≠ tlay1:
 #             plev3 = p(zlev3) =
-#                   = play1 (tlev3/tlay1)^(ln(play2/play1)/ln(tlay2/tlay1))
+#                   = play1 (play2/play1)^(log(tlev3/tlay1)/log(tlay2/tlay1))
 #         If tlay2 = tlay1:
 #             plev3 = p(zlev3) =
-#                   = play1 exp(ln(play2/play1) zlev3/zlay2)
-# :reverse_pressure_interpolation
-#     Interpolation:
-#         If tlay2 ≠ tlay1:
-#             p(z) = play1 (t(z)/tlay1)^C ==>
-#                 t(z) = tlay1 (p(z)/play1)^(1/C) =
-#                      = tlay1 (p(z)/play1)^(ln(tlay2/tlay1)/ln(play2/play1))
-#         If tlay2 = tlay1:
-#             t(z) = tlay1
+#                   = play1 (play2/play1)^((zlev3 - zlay1)/(zlay2 - zlay1))
 
 #
 # Alternatives for determining T(0)
@@ -192,9 +186,10 @@ end
 # TODO: Implement this once 3D spaces are available.
 struct AllCoordsProvided{Pass} <: AbstractCoordsProvided{Pass} end
 
-function coordinate_info(pass, add_boundary, extension, args...)
-    FT, ncol, nlay_domain, domain_coords = domain_info(pass, args...)
-    nlay_extension, extension_coords = extension_info(pass, FT, ncol, extension)
+function coordinate_info(pass, DA, add_boundary, extension, args...)
+    FT, ncol, nlay_domain, domain_coords = domain_info(pass, DA, args...)
+    nlay_extension, extension_coords =
+        extension_info(pass, DA, FT, ncol, extension)
     nlay_boundary = add_boundary ? 1 : 0
     return (FT, ncol, nlay_domain + nlay_extension + nlay_boundary, (;
         domain = domain_coords,
@@ -204,39 +199,57 @@ function coordinate_info(pass, add_boundary, extension, args...)
     ))
 end
 
-domain_info(pass, FT::Type{<:AbstractFloat}, nlay::Int, ncol::Int = 1) =
+domain_info(pass, DA, FT::Type{<:AbstractFloat}, nlay::Int, ncol::Int = 1) =
     (FT, ncol, nlay, NoCoordsProvided{pass}())
-function domain_info(pass, space::FiniteDifferenceSpace, ncol::Int = 1)
-    z_lay = parent(space.center_coordinates)
-    zs = (; lay = z_lay, lev = parent(space.face_coordinates))
+function domain_info(pass, DA, z_lev::AbstractArray{<:AbstractFloat, 2})
+    zs = (;
+        lay = DA((z_lev[1:end - 1, :] .+ z_lev[2:end, :]) ./ 2),
+        lev = DA(z_lev),
+    )
     return (
-        eltype(z_lay),
-        ncol,
-        length(z_lay),
+        eltype(z_lev),
+        size(z_lev, 2),
+        size(z_lev, 1) - 1,
         VertCoordsProvided{pass, typeof(zs)}(zs),
     )
 end
-domain_info(pass, space) = throw(ArgumentError(
-    "`RRTMGPData` is not implemented for `$(typeof(space).name)`",
-))
+domain_info(pass, DA, z_lev::AbstractArray{<:AbstractFloat, 1}, ncol::Int = 1) =
+    domain_info(pass, DA, repeat(z_lev, 1, ncol))
+# TODO: Use coordinates_data
+domain_info(pass, DA, space::FiniteDifferenceSpace, ncol::Int = 1) =
+    domain_info(pass, DA, collect(space.mesh.faces), ncol)
 
-extension_info(pass, FT, ncol, nlay::Int) =
-    (nlay, NoCoordsProvided{pass}())
-function extension_info(pass, FT, ncol, space::FiniteDifferenceSpace)
-    z_lay = parent(space.center_coordinates)
-    if eltype(z_lay) != FT
+extension_info(pass, DA, FT, ncol, nlay::Int) = (nlay, NoCoordsProvided{pass}())
+function extension_info(
+    pass,
+    DA,
+    FT,
+    ncol,
+    z_lev::AbstractArray{<:AbstractFloat, 2},
+)
+    if eltype(z_lev) != FT
         throw(ArgumentError(string(
-            "extension coordinates and domain coordinates must have the same ",
-            "types, but they have types $FT and $(eltype(z_lay)), respectively",
+            "domain coordinates and extension coordinates must have the same ",
+            "types, but they have types $FT and $(eltype(z_lev)), respectively",
         )))
     end
-    zs = (; lay = z_lay, lev = parent(space.face_coordinates))
-    return (length(z_lay), VertCoordsProvided{pass, typeof(zs)}(zs))
+    if size(z_lev, 2) != ncol
+        throw(ArgumentError(string(
+            "domain coordinates and extension coordinates must have the same ",
+            "number of columns, but they have $ncol and $(size(z_lev, 2)) ",
+            "columns, respectively",
+        )))
+    end
+    zs = (;
+        lay = DA((z_lev[1:end - 1, :] .+ z_lev[2:end, :]) ./ 2),
+        lev = DA(z_lev),
+    )
+    return (size(z_lev, 1) - 1, VertCoordsProvided{pass, typeof(zs)}(zs))
 end
-extension_info(pass, space) = throw(ArgumentError(string(
-    "`RRTMGPData` is not implemented for an extension of type ",
-    typeof(space).name,
-)))
+extension_info(pass, DA, FT, ncol, z_lev::AbstractArray{<:AbstractFloat, 1}) =
+    extension_info(pass, DA, FT, ncol, repeat(z_lev, 1, ncol))
+extension_info(pass, DA, FT, ncol, space::FiniteDifferenceSpace) =
+    extension_info(pass, DA, FT, ncol, collect(space.mesh.faces))
 
 function rrtmgp_artifact(subfolder, file_name)
     artifact_name = "RRTMGPReferenceData"
@@ -416,7 +429,9 @@ function level_olator(
     p_lev,
     t_lay,
     t_lev,
-    coords,
+    # coords,
+    z_lay,
+    z_lev,
     param_set,
 )
     if length(lev_range) == 0
@@ -437,27 +452,32 @@ function level_olator(
         cₚ = CLIMAParameters.Planet.cp_d(param_set)
         R = CLIMAParameters.Planet.R_d(param_set)
         precomputed_constant = cₚ / R
-        if coords.domain isa NoCoordsProvided
-            throw(ArgumentError(
-                "domain coordinates must be provided to use :ideal_coefs mode",
-            ))
-        end
-        z = @view coords.domain.zs.lev[lev_range, :]
-        z1 = @view coords.domain.zs.lay[lay_range1, :]
+        # if coords.domain isa NoCoordsProvided
+        #     throw(ArgumentError(
+        #         "domain coordinates must be provided to use :ideal_coefs mode",
+        #     ))
+        # end
+        # z = @view coords.domain.zs.lev[lev_range, :]
+        # z1 = @view coords.domain.zs.lay[lay_range1, :]
+        z = @view z_lev[lev_range, :]
+        z1 = @view z_lay[lay_range1, :]
         precomputed_z_values = g / cₚ .* (z1 .- z)
     else
         p2 = @view p_lay[lay_range2, :]
         t2 = @view t_lay[lay_range2, :]
         precomputed_constant = nothing
         if mode == :best_fit
-            if coords.domain isa NoCoordsProvided
-                throw(ArgumentError(
-                    "domain coordinates must be provided to use :best_fit mode",
-                ))
-            end
-            z = @view coords.domain.zs.lev[lev_range, :]
-            z1 = @view coords.domain.zs.lay[lay_range1, :]
-            z2 = @view coords.domain.zs.lay[lay_range2, :]
+            # if coords.domain isa NoCoordsProvided
+            #     throw(ArgumentError(
+            #         "domain coordinates must be provided to use :best_fit mode",
+            #     ))
+            # end
+            # z = @view coords.domain.zs.lev[lev_range, :]
+            # z1 = @view coords.domain.zs.lay[lay_range1, :]
+            # z2 = @view coords.domain.zs.lay[lay_range2, :]
+            z = @view z_lev[lev_range, :]
+            z1 = @view z_lay[lay_range1, :]
+            z2 = @view z_lay[lay_range2, :]
             precomputed_z_values = (z .- z1) ./ (z2 .- z1)
         else
             precomputed_z_values = nothing
@@ -473,15 +493,21 @@ function level_olator(
     }(p, p1, p2, t, t1, t2, precomputed_constant, precomputed_z_values)
 end
 
-# NOTE: :geometric_mean, :uniform_t, and :uniform_p are all special cases of
+# NOTE: :geometric_mean, :uniform_z, and :uniform_p are all special cases of
 #       :best_fit (they assume different values for z, rather than using the
 #       true values), but :average and :ideal_coefs are not consistent with
 #       :best_fit.
 # NOTE: p⁺⁺ and t⁺⁺ could be switched from layers to levels, which would make
 #       the extrapolation code a little simpler, but that would make it harder
 #       to understand what's going on.
-# TODO: Replace functions cotaining `@assert all(t⍰ .!= t⍰)` with kernel
-#       functions that are able to handle points which fail the assertion.
+# TODO: Should uniform_z_p and best_fit_p be kernel functions?
+
+uniform_z_p(t, t1, t2, p1, p2) = t1 == t2 ?
+    sqrt(p1 * p2) : # p1 * (p2 / p1)^0.5
+    p1 * (p2 / p1)^(log(t / t1) / log(t2 / t1))
+best_fit_p(t, t1, t2, p1, p2, precomputed_z_value) = t1 == t2 ?
+    p1 * (p2 / p1)^precomputed_z_value :
+    p1 * (p2 / p1)^(log(t / t1) / log(t2 / t1))
 
 function (l::LevelInterpolator{:average})()
     l.t .= (l.tꜜ .+ l.tꜛ) ./ 2
@@ -491,20 +517,17 @@ function (l::LevelInterpolator{:geometric_mean})()
     l.t .= sqrt.(l.tꜜ .* l.tꜛ)
     l.p .= sqrt.(l.pꜜ .* l.pꜛ)
 end
-function (l::LevelInterpolator{:uniform_t})()
-    @assert all(l.tꜜ .!= l.tꜛ)
+function (l::LevelInterpolator{:uniform_z})()
     l.t .= (l.tꜜ .+ l.tꜛ) ./ 2
-    l.p .= l.pꜜ .* (l.t ./ l.tꜜ).^(ln.(l.pꜛ ./ l.pꜜ) ./ ln.(l.tꜛ ./ l.tꜜ))
+    l.p .= uniform_z_p.(l.t, l.tꜜ, l.tꜛ, l.pꜜ, l.pꜛ)
 end
 function (l::LevelInterpolator{:uniform_p})()
-    # @assert all(l.pꜜ .!= l.pꜛ) # Assume that this will never occur.
     l.p .= (l.pꜜ .+ l.pꜛ) ./ 2
-    l.t .= l.tꜜ .* (l.p ./ l.pꜜ).^(ln.(l.tꜛ ./ l.tꜜ) ./ ln.(l.pꜛ ./ l.pꜜ))
+    l.t .= l.tꜜ .* (l.tꜛ ./ l.tꜜ).^(log.(l.p ./ l.pꜜ) ./ log.(l.pꜛ ./ l.pꜜ))
 end
 function (l::LevelInterpolator{:best_fit})()
-    @assert all(l.tꜜ .!= l.tꜛ)
     l.t .= l.tꜜ .+ (l.tꜛ .- l.tꜜ) .* l.precomputed_z_values
-    l.p .= l.pꜜ .* (l.t ./ l.tꜜ).^(ln.(l.pꜛ ./ l.pꜜ) ./ ln.(l.tꜛ ./ l.tꜜ))
+    l.p .= best_fit_p.(l.t, l.tꜜ, l.tꜛ, l.pꜜ, l.pꜛ, l.precomputed_z_values)
 end
 
 function (l::LevelExtrapolator{:average})()
@@ -515,25 +538,24 @@ function (l::LevelExtrapolator{:geometric_mean})()
     l.t .= sqrt.(l.t⁺.^3 ./ l.t⁺⁺)
     l.p .= sqrt.(l.p⁺.^3 ./ l.p⁺⁺)
 end
-function (l::LevelExtrapolator{:uniform_t})()
-    @assert all(l.t⁺ .!= l.t⁺⁺)
+function (l::LevelExtrapolator{:uniform_z})()
     l.t .= (3 .* l.t⁺ .- l.t⁺⁺) ./ 2
-    l.p .= l.p⁺ .* (l.t ./ l.t⁺).^(ln.(l.p⁺⁺ ./ l.p⁺) ./ ln.(l.t⁺⁺ ./ l.t⁺))
+    l.p .= uniform_z_p.(l.t, l.t⁺, l.t⁺⁺, l.p⁺, l.p⁺⁺)
 end
 function (l::LevelExtrapolator{:uniform_p})()
-    # @assert all(l.p⁺ .!= l.p⁺⁺) # Assume that this will never occur.
     l.p .= (3 .* l.p⁺ .- l.p⁺⁺) ./ 2
-    l.t .= l.t⁺ .* (l.p ./ l.p⁺).^(ln.(l.t⁺⁺ ./ l.t⁺) ./ ln.(l.p⁺⁺ ./ l.p⁺))
+    l.t .= l.t⁺ .* (l.p ./ l.p⁺).^(log.(l.t⁺⁺ ./ l.t⁺) ./ log.(l.p⁺⁺ ./ l.p⁺))
 end
 function (l::LevelExtrapolator{:best_fit})()
-    @assert all(l.t⁺ .!= l.t⁺⁺)
     l.t .= l.t⁺ .+ (l.t⁺⁺ .- l.t⁺) .* l.precomputed_z_values
-    l.p .= l.p⁺ .* (l.t ./ l.t⁺).^(ln.(l.p⁺⁺ ./ l.p⁺) ./ ln.(l.t⁺⁺ ./ l.t⁺))
+    l.p .= best_fit_p.(l.t, l.t⁺, l.t⁺⁺, l.p⁺, l.p⁺⁺, l.precomputed_z_values)
 end
+# l.t⁺ .+ (l.t⁺⁺ .- l.t⁺) .* (z - z⁺) / (z⁺⁺ - z⁺)
 function (l::LevelExtrapolator{:ideal_coefs})()
     l.t .= l.t⁺ .+ l.precomputed_z_values
     l.p .= l.p⁺ .* (l.t ./ l.t⁺).^l.precomputed_constant
 end
+
 
 function RRTMGPModel(
     param_set::CLIMAParameters.AbstractEarthParameterSet,
@@ -560,7 +582,7 @@ function RRTMGPModel(
         )))
     end
     level_modes =
-        (:none, :average, :geometric_mean, :uniform_t, :uniform_p, :best_fit)
+        (:none, :average, :geometric_mean, :uniform_z, :uniform_p, :best_fit)
     if !(level_computation in level_modes)
         throw(ArgumentError(string(
             "keyword argument level_computation must be set to ",
@@ -588,6 +610,7 @@ function RRTMGPModel(
 
     FT, ncol, nlay, coords = coordinate_info(
         pass_column_to_function,
+        DA,
         add_isothermal_boundary_layer,
         extension,
         args...,
@@ -775,22 +798,30 @@ function RRTMGPModel(
         if optics == :all_with_clear
             push!(rec, (:clear_flux, DA{FT}(undef, nlev_domain, ncol)))
         end
-        @assert lookup_lw.n_gases == lookup_sw.n_gases
-        @assert lookup_lw.p_ref_min == lookup_sw.p_ref_min
+        if optics != :gray
+            @assert lookup_lw.n_gases == lookup_sw.n_gases
+            @assert lookup_lw.p_ref_min == lookup_sw.p_ref_min
+        end
     end
 
     p_lay = DA{FT}(undef, nlay, ncol)
     p_lev = DA{FT}(undef, nlay + 1, ncol)
     t_lay = DA{FT}(undef, nlay, ncol)
     t_lev = DA{FT}(undef, nlay + 1, ncol)
-    t_sfc = DA{FT}(undef, ncol)
-    set_and_record_array!(p_lay, "pressure", :lay, tuple...)
-    set_and_record_array!(t_lay, "temperature", :lay, tuple...)
-    set_and_record_array!(t_sfc, "surface_temperature", :NA, tuple...)
-    if level_computation == :none
+    implicit_lays =
+        !(:pressure in keys(init_dict) && :temperature in keys(init_dict))
+    implicit_levs =
+        !(:level_pressure in keys(init_dict) && :level_temperature in keys(init_dict))
+    if !implicit_lays
+        set_and_record_array!(p_lay, "pressure", :lay, tuple...)
+        set_and_record_array!(t_lay, "temperature", :lay, tuple...)
+    end
+    if !implicit_levs
         set_and_record_array!(p_lev, "level_pressure", :lev, tuple...)
         set_and_record_array!(t_lev, "level_temperature", :lev, tuple...)
     end
+    t_sfc = DA{FT}(undef, ncol)
+    set_and_record_array!(t_sfc, "surface_temperature", :NA, tuple...)
 
     if optics == :gray
         d0 = DA{FT}(undef, ncol)
@@ -945,17 +976,9 @@ function RRTMGPModel(
         )))
     end
 
-    if level_computation == :none
-        level_olators = ()
-        if use_ideal_coefs_for_bottom_level
-            @warn string(
-                "the bottom level will not be automatically computed when ",
-                "`level_computation = :none`",
-            )
-        end
-    else
+    if implicit_levs
         tuple =
-            (level_computation, p_lay, p_lev, t_lay, t_lev, coords, param_set)
+            (level_computation, p_lay, p_lev, t_lay, t_lev, coords.domain.zs.lay, coords.domain.zs.lev, param_set)
         bottom_tuple = (
             use_ideal_coefs_for_bottom_level ? :ideal_coefs : level_computation,
             tuple[2:end]...,
@@ -969,6 +992,8 @@ function RRTMGPModel(
             level_olators = ()
             
             i2 = nlay - coords.nlay_boundary
+            # TODO: Will need another level_computation here if extension
+            #       coordinates are not provided.
             level_olator(true, i + 1:i2, i:i2 - 1, i + 1:i2, tuple...)()
             level_olator(false, i2 + 1, i2, i2 - 1, tuple...)()
         end
@@ -978,6 +1003,27 @@ function RRTMGPModel(
             level_olator(false, 1, 1, 2, bottom_tuple...),
             level_olators...,
         )
+    else
+        if implicit_lays
+            tuple =
+                (level_computation, p_lev, p_lay, t_lev, t_lay, coords.domain.zs.lev, coords.domain.zs.lay, param_set)
+            i = nlay - coords.nlay_ghost
+            if extension != 0
+                i2 = nlay - coords.nlay_boundary
+                level_olator(true, i + 1:i2, i + 1:i2, i + 2:i2 + 1, tuple...)()
+            end
+            level_olators = (
+                level_olator(true, 1:i, 1:i, 2:i + 1, tuple...),
+            )
+        else
+            level_olators = ()
+        end
+        if use_ideal_coefs_for_bottom_level
+            @warn string(
+                "the bottom level will not be automatically computed when ",
+                "`level_computation = :none`",
+            )
+        end
     end
 
     if add_isothermal_boundary_layer && extension != 0
@@ -1062,23 +1108,87 @@ get_vmr_h2o(vmr::RRTMGP.Vmrs.VmrGM, idx_gases) = vmr.vmr_h2o
 get_vmr_h2o(vmr::RRTMGP.Vmrs.Vmr, idx_gases) =
     @view vmr.vmr[:, :, idx_gases["h2o"]]
 
-compute_lw_fluxes!(::RRTMGPModel{Optics, true}) where {Optics} = nothing
-compute_lw_fluxes!(model::RRTMGPModel{:gray}) = RRTMGP.RTESolver.solve_lw!(
-    model.solver,
-    model.max_threads,
-)
-compute_lw_fluxes!(model::RRTMGPModel{:clear}) = RRTMGP.RTESolver.solve_lw!(
-    model.solver,
-    model.max_threads,
-    model.lookups.lookup_lw,
-)
-compute_lw_fluxes!(model::RRTMGPModel{:all}) = RRTMGP.RTESolver.solve_lw!(
-    model.solver,
-    model.max_threads,
-    model.lookups.lookup_lw,
-    model.lookups.lookup_lw_cld,
-)
-function compute_lw_fluxes!(model::RRTMGPModel{:all_with_clear})
+# compute_lw_fluxes!(::RRTMGPModel) = nothing
+# compute_lw_fluxes!(model::RRTMGPModel{:gray, false}) =
+#     RRTMGP.RTESolver.solve_lw!(
+#         model.solver,
+#         model.max_threads,
+#     )
+using UnPack
+function compute_lw_fluxes!(model::RRTMGPModel)
+    slv = model.solver
+    τ = similar(slv.op.τ)
+    τ .= 0
+    I = Int
+    lkp_args = model.lookups
+    max_threads = model.max_threads
+
+    @unpack as, op, bcs_lw, src_lw, flux_lw, fluxb_lw = slv
+    @unpack nlay, ncol = as
+
+    nargs = length(lkp_args)
+    @assert nargs < 3
+    if nargs > 0
+        @assert lkp_args[1] isa RRTMGP.LookUpTables.LookUpLW
+        if nargs == 2
+            @assert lkp_args[2] isa RRTMGP.LookUpTables.LookUpCld
+        end
+        n_gpt = lkp_args[1].n_gpt
+        major_gpt2bnd = Array{I,1}(lkp_args[1].major_gpt2bnd) #TODO temp fix to avoid scalar indexing
+        flux = fluxb_lw
+    else
+        n_gpt = 1
+        flux = flux_lw
+    end
+    ibnd = 1
+    RRTMGP.Fluxes.set_flux_to_zero!(flux_lw)
+
+    for igpt = 1:n_gpt
+        if nargs > 0 && lkp_args[1] isa RRTMGP.LookUpTables.LookUpLW
+            ibnd = major_gpt2bnd[igpt]
+        end
+        # computing optical properties
+        RRTMGP.Optics.compute_optical_props!(op, as, src_lw, igpt, lkp_args...)
+        # τ .+= op.τ
+
+        if op isa RRTMGP.Optics.OneScalar
+            RRTMGP.RTESolver.rte_lw_noscat_solve!(
+                flux,
+                src_lw,
+                bcs_lw,
+                op,
+                nlay,
+                ncol,
+                igpt,
+                ibnd,
+                max_threads,
+            ) # no-scattering solver
+        else
+            RRTMGP.RTESolver.rte_lw_2stream_solve!(
+                flux,
+                src_lw,
+                bcs_lw,
+                op,
+                nlay,
+                ncol,
+                igpt,
+                ibnd,
+                max_threads,
+            ) # 2-stream solver
+        end
+
+        nargs > 0 && RRTMGP.Fluxes.add_to_flux!(flux_lw, flux)
+    end
+    flux_lw.flux_net .= flux_lw.flux_up .- flux_lw.flux_dn
+end
+# compute_lw_fluxes!(model::RRTMGPModel{:all, false}) =
+#     RRTMGP.RTESolver.solve_lw!(
+#         model.solver,
+#         model.max_threads,
+#         model.lookups.lookup_lw,
+#         model.lookups.lookup_lw_cld,
+#     )
+function compute_lw_fluxes!(model::RRTMGPModel{:all_with_clear, false})
     RRTMGP.RTESolver.solve_lw!(
         model.solver,
         model.max_threads,
@@ -1095,24 +1205,79 @@ function compute_lw_fluxes!(model::RRTMGPModel{:all_with_clear})
     )
 end
 
-compute_sw_fluxes!(::RRTMGPModel{Optics, No_LW, true}) where {Optics, No_LW} =
-    nothing
-compute_sw_fluxes!(model::RRTMGPModel{:gray}) = RRTMGP.RTESolver.solve_sw!(
-    model.solver,
-    model.max_threads,
-)
-compute_sw_fluxes!(model::RRTMGPModel{:clear}) = RRTMGP.RTESolver.solve_sw!(
-    model.solver,
-    model.max_threads,
-    model.lookups.lookup_sw,
-)
-compute_sw_fluxes!(model::RRTMGPModel{:all}) = RRTMGP.RTESolver.solve_sw!(
-    model.solver,
-    model.max_threads,
-    model.lookups.lookup_sw,
-    model.lookups.lookup_sw_cld,
-)
-function compute_sw_fluxes!(model::RRTMGPModel{:all_with_clear})
+import RRTMGP.Optics: compute_optical_props_kernel!
+function compute_optical_props_kernel!(
+    op::RRTMGP.Optics.AbstractOpticalProps{FT},
+    as::RRTMGP.AtmosphericStates.GrayAtmosphericState{FT},
+    glaycol,
+    source::RRTMGP.Sources.AbstractSourceLW{FT},
+) where {FT<:AbstractFloat}
+    compute_optical_props_kernel_lw!(op, as, glaycol)     # computing optical thickness
+    RRTMGP.Optics.compute_sources_gray_kernel!(source, as, glaycol) # computing Planck sources
+end
+function compute_optical_props_kernel_lw!(
+    op::RRTMGP.Optics.AbstractOpticalProps{FT},
+    as::RRTMGP.AtmosphericStates.GrayAtmosphericState{FT},
+    glaycol,
+) where {FT<:AbstractFloat}
+    # setting references
+    glay, gcol = glaycol
+    @unpack p_lay, p_lev, d0 = as
+    @inbounds p0 = p_lev[1, gcol]
+
+    f = FT(0.2)
+    α = FT(1)
+    τ0_lw = d0
+    @inbounds op.τ[glaycol...] =
+        α * τ0_lw[gcol] * (f / p0 + FT(4) * (FT(1) - f) / p0 * (p_lay[glaycol...] / p0)^3) * (p_lev[glaycol...] - p_lev[glay+1, gcol])
+
+    if op isa RRTMGP.Optics.TwoStream
+        op.ssa[glaycol...] = FT(0)
+        op.g[glaycol...] = FT(0)
+    end
+end
+function compute_optical_props_kernel!(
+    op::RRTMGP.Optics.AbstractOpticalProps{FT},
+    as::RRTMGP.AtmosphericStates.GrayAtmosphericState{FT},
+    glaycol,
+) where {FT<:AbstractFloat}
+    # setting references
+    glay, gcol = glaycol
+    @unpack p_lay, p_lev = as
+    @inbounds p0 = p_lev[1, gcol]
+
+    τ0_sw = FT(0.22)
+    @inbounds op.τ[glaycol...] =
+        FT(2) * τ0_sw * (p_lay[glaycol...] / p0) / p0 * (p_lev[glaycol...] - p_lev[glay+1, gcol])
+
+    if op isa RRTMGP.Optics.TwoStream
+        op.ssa[glaycol...] = FT(0)
+        op.g[glaycol...] = FT(0)
+    end
+end
+
+compute_sw_fluxes!(::RRTMGPModel) = nothing
+compute_sw_fluxes!(model::RRTMGPModel{:gray, No_LW, false}) where {No_LW} =
+    RRTMGP.RTESolver.solve_sw!(
+        model.solver,
+        model.max_threads,
+    )
+compute_sw_fluxes!(model::RRTMGPModel{:clear, No_LW, false}) where {No_LW} =
+    RRTMGP.RTESolver.solve_sw!(
+        model.solver,
+        model.max_threads,
+        model.lookups.lookup_sw,
+    )
+compute_sw_fluxes!(model::RRTMGPModel{:all, No_LW, false}) where {No_LW} =
+    RRTMGP.RTESolver.solve_sw!(
+        model.solver,
+        model.max_threads,
+        model.lookups.lookup_sw,
+        model.lookups.lookup_sw_cld,
+    )
+function compute_sw_fluxes!(
+    model::RRTMGPModel{:all_with_clear, No_LW, false},
+) where {No_LW}
     RRTMGP.RTESolver.solve_sw!(
         model.solver,
         model.max_threads,
@@ -1142,13 +1307,13 @@ function compute_fluxes!(model::RRTMGPModel)
     for level_olator in model.level_olators
         level_olator()
     end
+    model.solver.as.p_lay .=
+        max.(model.solver.as.p_lay, get_p_min(model.solver.as, model.lookups))
+    model.solver.as.p_lev .=
+        max.(model.solver.as.p_lev, get_p_min(model.solver.as, model.lookups))
     # model.solver.as.t_lev[1, :] .= model.solver.as.t_sfc
-    model.solver.as.p_lev[end, :] .= get_p_min(model.solver.as, model.lookups)
+    # model.solver.as.p_lev[end, :] .= get_p_min(model.solver.as, model.lookups)
     # model.solver.as.t_lev[end, :] .= model.solver.as.t_lay[end, :]
-    # model.solver.as.p_lay .=
-    #     max.(model.solver.as.p_lay, get_p_min(model.solver.as, model.lookups))
-    # model.solver.as.p_lev .=
-    #     max.(model.solver.as.p_lev, get_p_min(model.solver.as, model.lookups))
     compute_boundary_layer!(model)
     compute_concentrations!(model)
     compute_lw_fluxes!(model)
