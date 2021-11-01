@@ -26,7 +26,7 @@ global_logger(TerminalLogger())
 function warp_agnesi_peak(x_in, z_in; Lx = 500.0, Lz = 1000.0, a = 1 / 2)
     FT = eltype(x_in)
     h = 8 * a^3 / (x_in^2 + 4 * a^2)
-    x, z = x_in, z_in + h * (Lz - z_in) / Lz
+    x, z = x_in, z_in + h #* (Lz - z_in) / Lz
     return x, z
 end
 
@@ -42,14 +42,16 @@ function hvspace_2D(
     topography_file = nothing,
 )
 
-    # build vertical mesh information
+    # build vertical mesh information with stretching in [0, H]
     FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
+    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
+
+
 
 
     # build horizontal mesh information
@@ -79,12 +81,7 @@ function hvspace_2D(
 
     # todo do we seperate hv_center_space & hv_face_space
     # construct hv center/face spaces, recompute metric terms
-    Spaces.ExtrudedFiniteDifferenceSpace(
-        horzspace,
-        vertmesh,
-        vert_stretching_function,
-        topography,
-    )
+    Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vertmesh, topography)
 
     # hv_center_space =
     #     Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)

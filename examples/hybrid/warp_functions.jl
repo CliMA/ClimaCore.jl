@@ -32,7 +32,7 @@ function warp_agnesi_peak(
     Lx = 500.0,
     Ly = 0.0,
     Lz = 1000.0,
-    a = 1/2,
+    a = 1 / 2,
 )
     FT = eltype(x_in)
     h = 8 * a^3 / (x_in^2 + 4 * a^2)

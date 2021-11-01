@@ -215,6 +215,8 @@ end
 
 Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
 The type of interpolation is determined by the element type of `coords`
+   x         x
+x      x   
 """
 function high_order_interpolate(coords, ξ1::FT) where {FT}
     Nq = length(coords)
