@@ -111,7 +111,7 @@ function ExtrudedFiniteDifferenceSpace(
 
                 ∂x∂ξ = [
                     ∂xₛ∂ξ₁[1] 0
-                    ∂xₛ∂ξ₁[2](1 - f) (Ht - xₛ[2])*∂f∂ξ₃
+                    ∂xₛ∂ξ₁[2](1 - f/Ht) (1 - xₛ[2]/Ht)*∂f∂ξ₃
                 ]
 
                 J = det(∂x∂ξ)
