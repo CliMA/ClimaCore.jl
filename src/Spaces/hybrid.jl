@@ -131,6 +131,44 @@ function ExtrudedFiniteDifferenceSpace(
 
                 center_local_geometry = 0
 
+            end
+
+            for vface in 1:(nvelems + 1)
+
+                # the map is 
+                f = vertical_mesh.faces[vface].z
+
+                if vface == 1
+                    ∂f∂ξ₃ = (
+                        vertical_mesh.faces[velem + 1].z -
+                        vertical_mesh.faces[velem].z
+                    )
+                elseif vface == nvelems + 1
+                    ∂f∂ξ₃ = (
+                        vertical_mesh.faces[velem].z -
+                        vertical_mesh.faces[velem - 1].z
+                    )
+                else
+                    ∂f∂ξ₃ =
+                        (
+                            vertical_mesh.faces[velem + 1].z -
+                            vertical_mesh.faces[velem - 1].z
+                        ) / 2
+                end
+
+
+                ∂x∂ξ = [
+                    ∂xₛ∂ξ₁[1] 0
+                    ∂xₛ∂ξ₁[2]*(1 - f / Ht) (1 - xₛ[2] / Ht)*∂f∂ξ₃
+                ]
+
+                J = det(∂x∂ξ)
+                ∂ξ∂x = inv(∂x∂ξ)
+                WJ = J * quad_weights[i]
+
+
+                # compute metric terms at the cell faces
+
 
 
                 face_local_geometry = 0
