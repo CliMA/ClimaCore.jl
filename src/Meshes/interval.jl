@@ -87,6 +87,29 @@ function IntervalMesh(
     IntervalMesh(domain, faces)
 end
 
+
+"""
+    NoStretching
+
+Apply no stretching to the domain when constructing elements. 
+"""
+struct NoStretching <: StretchingRule end
+
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::NoStretching;
+    nelems,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+    cmin = Geometry.component(domain.coord_min, 1)
+    cmax = Geometry.component(domain.coord_max, 1)
+    Δc = (cmax - cmin) / (nelems)
+
+    faces = [CT(cmin + i * Δc) for i in 0:nelems]
+    IntervalMesh(domain, faces)
+end
+
+
+
 function Base.show(io::IO, mesh::IntervalMesh)
     nelements = length(mesh.faces) - 1
     print(io, nelements, "-element IntervalMesh of ")

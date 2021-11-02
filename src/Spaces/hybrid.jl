@@ -70,7 +70,6 @@ end
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_mesh::V,
-    # stretching function is (0,1)->（0,1)
     topography,
 ) where {H <: AbstractSpace, V}
     #todo how to get FT
@@ -85,6 +84,7 @@ function ExtrudedFiniteDifferenceSpace(
         Quadratures.quadrature_points(FT, quadrature_style)
     Ht = Geometry.component(vertical_mesh.domain.coord_max, 1)
 
+    D = Quadratures.differentiation_matrix(FT, quadrature_style)
 
     topo_coord_x1, topo_coord_x3 = zeros(Nq), zeros(Nq)
 
@@ -96,8 +96,9 @@ function ExtrudedFiniteDifferenceSpace(
         topo_coord_x1 .= topography[helem][:, 1]
         topo_coord_x3 .= topography[helem][:, 2]
 
-        D₁ = differentiation_matrix(topo_coord_x1)
-        D₃ = differentiation_matrix(topo_coord_x3)
+
+        D₁ = D * topo_coord_x1
+        D₃ = D * topo_coord_x3
 
         for i in 1:Nq
             ξ₁ = quad_points[i]
@@ -106,12 +107,19 @@ function ExtrudedFiniteDifferenceSpace(
             for velem in 1:nvelems
 
                 # the map is 
-                f = (vertical_mesh[velem] + vertical_mesh[velem + 1]) / 2.0
-                ∂f∂ξ₃ = (vertical_mesh[velem + 1] - vertical_mesh[velem])
+                f =
+                    (
+                        vertical_mesh.faces[velem].z +
+                        vertical_mesh.faces[velem + 1].z
+                    ) / 2.0
+                ∂f∂ξ₃ = (
+                    vertical_mesh.faces[velem + 1].z -
+                    vertical_mesh.faces[velem].z
+                )
 
                 ∂x∂ξ = [
                     ∂xₛ∂ξ₁[1] 0
-                    ∂xₛ∂ξ₁[2](1 - f/Ht) (1 - xₛ[2]/Ht)*∂f∂ξ₃
+                    ∂xₛ∂ξ₁[2]*(1 - f / Ht) (1 - xₛ[2] / Ht)*∂f∂ξ₃
                 ]
 
                 J = det(∂x∂ξ)

@@ -1,5 +1,3 @@
-import GaussQuadrature
-
 abstract type AbstractPoint{FT} end
 
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
@@ -208,65 +206,6 @@ function linear_interpolate(
         (1 + ξ1) / 2 * component(coords[2], 1),
     )
 end
-
-
-"""
-    high_order_interpolate(coords::NTuple{2}, ξ1)
-
-Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
-The type of interpolation is determined by the element type of `coords`
-   x         x
-x      x   
-"""
-function high_order_interpolate(coords, ξ1::FT) where {FT}
-    Nq = length(coords)
-
-    points, _ = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
-
-    c = ones(FT, Nq)
-
-    for i in 1:Nq
-        for j in 1:Nq
-            if j != i
-                c[i] *= (ξ1 - points[j]) / (points[i] - points[j])
-            end
-        end
-    end
-
-    return c' * coords
-
-end
-
-
-"""
-    high_order_interpolate(coords::NTuple{2}, ξ1)
-
-Interpolate between `coords` by parameters `ξ1` in the interval `[-1,1]`.
-The type of interpolation is determined by the element type of `coords`
-"""
-function high_order_interpolate(coords, ξ1::FT, ξ2::FT) where {FT}
-
-    Nq, Np = size(coords)
-    @assert(Nq == Np)
-
-    points, _ = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
-
-    c1 = ones(FT, Nq)
-    c2 = ones(FT, Nq)
-
-    for i in 1:Nq
-        for j in 1:Nq
-            if j != i
-                c1[i] *= (ξ1 - points[j]) / (points[i] - points[j])
-                c2[i] *= (ξ2 - points[j]) / (points[i] - points[j])
-            end
-        end
-    end
-
-    return c1' * coords * c2
-end
-
-
 
 function spherical_bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
     r = norm(x1) # assume all are same radius
