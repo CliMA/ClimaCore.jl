@@ -213,6 +213,23 @@ function Base.Broadcast.broadcasted(
     Base.Broadcast.broadcasted(fs, V, arg, local_geometry_field(space))
 end
 
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::Type{V},
+    arg,
+) where {V <: Geometry.CartesianVector}
+    space = Fields.axes(arg)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        V,
+        arg,
+        Ref(space.global_geometry),
+        local_geometry_field(space),
+    )
+end
+
+
 function Base.Broadcast.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},

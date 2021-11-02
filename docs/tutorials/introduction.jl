@@ -504,9 +504,6 @@ Plots.plot(y0.ρθ)
 
 function shallow_water_tendency!(dydt, y, _, t)
 
-    space = axes(y)
-    J = ClimaCore.Fields.local_geometry_field(space).J
-
     @unpack D₄, g = parameters
 
     sdiv = ClimaCore.Operators.Divergence()
@@ -526,19 +523,14 @@ function shallow_water_tendency!(dydt, y, _, t)
     ClimaCore.Spaces.weighted_dss!(dydt)
 
     @. dydt.u =
-        -D₄ * (
-            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
-                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
-            )
-        )
+        -D₄ *
+        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 
     ## comute rest of tendency
     @. begin
         dydt.ρ = -wdiv(y.ρ * y.u)
-        dydt.u +=
-            -grad(g * y.ρ + norm(y.u)^2 / 2) +
-            Geometry.Covariant12Vector((J * (y.u × curl(y.u))))
+        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
     ClimaCore.Spaces.weighted_dss!(dydt)

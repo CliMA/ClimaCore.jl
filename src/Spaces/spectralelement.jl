@@ -20,12 +20,21 @@ quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 
 """
     SpectralElementSpace1D <: AbstractSpace
+
 A one-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace1D{T, Q, G, D, M} <: AbstractSpectralElementSpace
+struct SpectralElementSpace1D{
+    T,
+    Q,
+    GG <: Geometry.AbstractGlobalGeometry,
+    LG,
+    D,
+    M,
+} <: AbstractSpectralElementSpace
     topology::T
     quadrature_style::Q
-    local_geometry::G
+    global_geometry::GG
+    local_geometry::LG
     dss_weights::D
     inverse_mass_matrix::M
 end
@@ -34,7 +43,7 @@ function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
     quadrature_style,
 )
-    # TODO: we need to massage the coordinate points because the grid is assumed 2D
+    global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
@@ -92,6 +101,7 @@ function SpectralElementSpace1D(
     return SpectralElementSpace1D(
         topology,
         quadrature_style,
+        global_geometry,
         local_geometry,
         dss_weights,
         inverse_mass_matrix,
@@ -105,11 +115,19 @@ nlevels(space::SpectralElementSpace1D) = 1
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace2D{T, Q, G, D, IS, BS} <:
-       AbstractSpectralElementSpace
+struct SpectralElementSpace2D{
+    T,
+    Q,
+    GG <: Geometry.AbstractGlobalGeometry,
+    LG,
+    D,
+    IS,
+    BS,
+} <: AbstractSpectralElementSpace
     topology::T
     quadrature_style::Q
-    local_geometry::G
+    global_geometry::GG
+    local_geometry::LG
     dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
@@ -121,6 +139,7 @@ end
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
 function SpectralElementSpace2D(topology, quadrature_style)
+    global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType2D = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
     FT = eltype(CoordType2D)
@@ -244,6 +263,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
     return SpectralElementSpace2D(
         topology,
         quadrature_style,
+        global_geometry,
         local_geometry,
         dss_weights,
         internal_surface_geometry,
@@ -263,7 +283,8 @@ function SpectralElementSpace2D(
     CT = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
     AIdx = (1, 2)
     CoordType3D = Topologies.coordinate_type(topology)
-    radius = topology.mesh.domain.radius
+    global_geometry =
+        Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{2, 2, FT, 4}}
@@ -281,8 +302,9 @@ function SpectralElementSpace2D(
                 CoordType3D.(Topologies.vertex_coordinates(topology, elem),),
                 ξ[1],
                 ξ[2],
+                global_geometry.radius,
             )
-            xl = Geometry.LatLongPoint(x)
+            xl = Geometry.LatLongPoint(x, global_geometry)
             # [∂x1/∂ξ¹ ∂x1/∂ξ²
             #  ∂x2/∂ξ¹ ∂x2/∂ξ²
             #  ∂x3/∂ξ¹ ∂x3/∂ξ²]
@@ -294,6 +316,7 @@ function SpectralElementSpace2D(
                         ),
                         ξ[1],
                         ξ[2],
+                        global_geometry.radius,
                     ),
                 )
             end
@@ -301,14 +324,21 @@ function SpectralElementSpace2D(
             λ = xl.long
             # [∂u/∂x1 ∂u/∂x2 ∂u/∂x3
             #  ∂v/∂x1 ∂v/∂x2 ∂v/∂x3]
-            ∂u∂x = if abs(ϕ) ≈ oftype(ϕ, 90.0)
-                # at the pole we orient u and v by taking the limit approaching
-                # from the line λ == 0 (i.e. along the line x2 = 0, x1 > 0)
-                # => u axis is aligned with x2, v is aligned with -x1
-                @assert λ ≈ 0
+            # at the pole we orient u and v by taking the limit approaching
+            # from the line λ == 0
+            ∂u∂x = if ϕ == 90
+                # north pole => u axis is aligned with x2, v is aligned with -x1
+                @assert λ == 0
                 @SMatrix [
                     0 one(ϕ) 0
                     -one(ϕ) 0 0
+                ]
+            elseif ϕ == -90
+                # south pole => u axis is aligned with x2, v is aligned with x1
+                @assert λ == 0
+                @SMatrix [
+                    0 one(ϕ) 0
+                    one(ϕ) 0 0
                 ]
             else
                 @SMatrix [
@@ -399,6 +429,7 @@ function SpectralElementSpace2D(
     return SpectralElementSpace2D(
         topology,
         quadrature_style,
+        global_geometry,
         local_geometry,
         dss_weights,
         internal_surface_geometry,

@@ -11,17 +11,20 @@ struct CellFace <: Staggering end
 struct FiniteDifferenceSpace{
     S <: Staggering,
     T <: Topologies.IntervalTopology,
-    G,
+    GG,
+    LG,
 } <: AbstractFiniteDifferenceSpace
     staggering::S
     topology::T
-    center_local_geometry::G
-    face_local_geometry::G
+    global_geometry::GG
+    center_local_geometry::LG
+    face_local_geometry::LG
 end
 
 function FiniteDifferenceSpace{S}(
     topology::Topologies.IntervalTopology,
 ) where {S <: Staggering}
+    global_geometry = Geometry.CartesianGlobalGeometry()
     mesh = topology.mesh
     CT = Meshes.coordinate_type(mesh)
     AIdx = Geometry.coordinate_axis(CT)
@@ -90,6 +93,7 @@ function FiniteDifferenceSpace{S}(
     return FiniteDifferenceSpace(
         S(),
         topology,
+        global_geometry,
         center_local_geometry,
         face_local_geometry,
     )
@@ -108,6 +112,7 @@ function FiniteDifferenceSpace{S}(
     FiniteDifferenceSpace(
         S(),
         space.topology,
+        space.global_geometry,
         space.center_local_geometry,
         space.face_local_geometry,
     )
