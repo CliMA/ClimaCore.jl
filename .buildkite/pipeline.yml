@@ -334,6 +334,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Rossby Haurwitz 2D CG sphere"
+    key: "cpu_rossbyhaurwitz_2d_cg_sphere"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl rossby_haurwitz"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_rossby_haurwitz_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":flower_playing_cards: Bickley jet DG"
     key: "benchmark_bickleyjet_dg"
     command:

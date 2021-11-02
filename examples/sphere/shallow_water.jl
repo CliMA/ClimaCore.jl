@@ -13,7 +13,7 @@ using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
 # This example solves the shallow-water equations on a cubed-sphere manifold.
-# This file contains two test cases:
+# This file contains three test cases:
 # - One, called "steady_state", reproduces Test Case 2 in Williamson et al,
 #   "A standard test set for numerical approximations to the shallow water
 #   equations in spherical geometry", 1992. This test case gives the steady-state
@@ -21,11 +21,14 @@ global_logger(TerminalLogger())
 #   body rotation or zonal flow with the corresponding geostrophic height field.
 #   This can be run with an angle α that represents the angle between the north
 #   pole and the center of the top cube panel.
-# - The other one, called "mountain", reproduces Test Case 5 in the same
+# - A second one, called "mountain", reproduces Test Case 5 in the same
 #   reference paper. It represents a zonal flow over an isolated mountain,
 #   where the governing equations describe a global steady-state nonlinear
 #   zonal geostrophic flow, with a corresponding geostrophic height field over
 #   a non-uniform reference surface h_s.
+# - A third one, called "rossby_haurwitz", reproduces Test Case 6 in the same
+#   reference paper. It represents the solution of the nonlinear barotropic
+#   vorticity equation on the sphere
 
 # Physical parameters needed
 const R = 6.37122e6
@@ -36,6 +39,7 @@ const test_name = get(ARGS, 1, "steady_state") # default test case to run
 const test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
 const steady_state_test_name = "steady_state"
 const mountain_test_name = "mountain"
+const rossby_haurwitz_test_name = "rossby_haurwitz"
 const alpha0_test_name = "alpha0"
 const alpha45_test_name = "alpha45"
 
@@ -53,6 +57,11 @@ if test_name == mountain_test_name
     const λc = 90.0 # center of mountain long coord, shifted by 180 compared to the paper, because our λ ∈ [-180, 180] (in the paper it was 270, with λ ∈ [0, 360])
     const ϕc = 30.0 # center of mountain lat coord
     const h_s0 = 2e3
+elseif test_name == rossby_haurwitz_test_name
+    const a = 4.0
+    const h0 = 8.0e3
+    const ω = 7.848e-6
+    const K = 7.848e-6
 else # default case, steady-state test case
     const u0 = 2 * pi * R / (12 * 86400)
     const h0 = 2.94e4 / g
@@ -77,7 +86,7 @@ function linkfig(figpath, alt = "")
 end
 
 # Set up discretization
-ne = 8
+ne = 7 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
 Nq = 4
 
 domain = Domains.SphereDomain(R)
@@ -88,19 +97,32 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 coords = Fields.coordinate_field(space)
 
-# Definition of Coriolis force field
-f = map(Fields.local_geometry_field(space)) do local_geometry
+# Definition of Coriolis parameter
+if test_name == rossby_haurwitz_test_name
+    f = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
 
-    coord = local_geometry.coordinates
-    ϕ = coord.lat
-    λ = coord.long
+        ϕ = coord.lat
+        λ = coord.long
 
-    f = 2 * Ω * (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))
+        f = 2 * Ω * sind(ϕ)
+        # Technically this should be a WVector, but since we are only in a 2D space,
+        # WVector, Contravariant3Vector, Covariant3Vector are all equivalent.
+        # This _won't_ be true in 3D however!
+        Geometry.Contravariant3Vector(f)
+    end
+else # steady-state and mountain test cases share the same Coriolis parameter
+    f = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+        ϕ = coord.lat
+        λ = coord.long
 
-    # Technically this should be a WVector, but since we are only in a 2D space,
-    # WVector, Contravariant3Vector, Covariant3Vector are all equivalent.
-    # This _won't_ be true in 3D however!
-    Geometry.Contravariant3Vector(f)
+        f = 2 * Ω * (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))
+        # Technically this should be a WVector, but since we are only in a 2D space,
+        # WVector, Contravariant3Vector, Covariant3Vector are all equivalent.
+        # This _won't_ be true in 3D however!
+        Geometry.Contravariant3Vector(f)
+    end
 end
 
 # Definition of bottom surface topography field
@@ -115,27 +137,63 @@ else
     h_s = zeros(space)
 end
 
-function init_state(local_geometry)
-    coord = local_geometry.coordinates
+# Set initial condition
+if test_name == rossby_haurwitz_test_name
+    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+        ϕ = coord.lat
+        λ = coord.long
 
-    ϕ = coord.lat
-    λ = coord.long
+        A =
+            ω / 2 * (2 * Ω + ω) * cosd(ϕ)^2 +
+            1 / 4 *
+            K^2 *
+            cosd(ϕ)^(2 * a) *
+            ((a + 1) * cosd(ϕ)^2 + (2 * a^2 - a - 2) - 2 * a^2 * cosd(ϕ)^-2)
+        B =
+            2 * (Ω + ω) * K / (a + 1) / (a + 2) *
+            cosd(ϕ)^a *
+            ((a^2 + 2 * a + 2) - (a + 1)^2 * cosd(ϕ)^2)
+        C = 1 / 4 * K^2 * cosd(ϕ)^(2 * a) * ((a + 1) * cosd(ϕ)^2 - (a + 2))
 
-    # Set initial state
-    h =
-        h0 -
-        (R * Ω * u0 + u0^2 / 2) / g *
-        (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))^2
-    uλ = u0 * (cosd(α) * cosd(ϕ) + sind(α) * cosd(λ) * sind(ϕ))
-    uϕ = -u0 * sind(α) * sind(λ)
+        h =
+            h0 +
+            (R^2 * A + R^2 * B * cosd(a * λ) + R^2 * C * cosd(2 * a * λ)) / g
 
-    u = Geometry.transform(
-        Geometry.Covariant12Axis(),
-        Geometry.UVVector(uλ, uϕ),
-        local_geometry,
-    )
+        uλ =
+            R * ω * cosd(ϕ) +
+            R * K * cosd(ϕ)^(a - 1) * (a * sind(ϕ)^2 - cosd(ϕ)^2) * cosd(a * λ)
+        uϕ = -R * K * a * cosd(ϕ)^(a - 1) * sind(ϕ) * sind(a * λ)
 
-    return (h = h, u = u)
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+        return (h = h, u = u)
+    end
+else # steady-state and mountain test cases share the same form of fields
+    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+
+        ϕ = coord.lat
+        λ = coord.long
+        h =
+            h0 -
+            (R * Ω * u0 + u0^2 / 2) / g *
+            (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))^2
+        uλ = u0 * (cosd(α) * cosd(ϕ) + sind(α) * cosd(λ) * sind(ϕ))
+        uϕ = -u0 * sind(α) * sind(λ)
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+
+        return (h = h, u = u)
+    end
 end
 
 function rhs!(dydt, y, parameters, t)
@@ -170,9 +228,6 @@ function rhs!(dydt, y, parameters, t)
     return dydt
 end
 
-# Set initial condition
-y0 = init_state.(Fields.local_geometry_field(space))
-
 # Set up RHS function
 dydt = similar(y0)
 rhs!(dydt, y0, (f = f, h_s = h_s), 0.0)
@@ -201,7 +256,7 @@ end
 @info "Fluid volume at T = $(T): ", sum(sol.u[end].h)
 
 if test_name == steady_state_test_name # In this case, we use the IC as the reference exact solution
-    @info "L2 error at T = $(T): ", norm(sol.u[end].h .- y0.h)
+    @info "L₂ error at T = $(T): ", norm(sol.u[end].h .- y0.h)
     Plots.png(Plots.plot(sol.u[end].h .- y0.h), joinpath(path, "error.png"))
     linkfig(
         relpath(joinpath(path, "error.png"), joinpath(@__DIR__, "../..")),
