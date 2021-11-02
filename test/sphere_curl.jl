@@ -32,10 +32,10 @@ wcurl = Operators.WeakCurl()
     u = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u_local)
 
     curl_us = scurl.(u)
-    # Spaces.weighted_dss!(curl_us)
+    Spaces.weighted_dss!(curl_us)
 
     curl_uw = wcurl.(u)
-    # Spaces.weighted_dss!(curl_uw)
+    Spaces.weighted_dss!(curl_uw)
 
     curl_exact = @. Geometry.Contravariant3Vector(
         -2 * sind(coords.long) * cosd(coords.lat) / radius,
@@ -43,7 +43,7 @@ wcurl = Operators.WeakCurl()
 
 
     @test curl_us ≈ curl_exact rtol = 1e-2
-    # @test curl_uw ≈ curl_exact rtol = 1e-2
+    @test curl_uw ≈ curl_exact rtol = 1e-2
 
 end
 
@@ -65,8 +65,8 @@ convergence_rate(err, Δh) =
     Nqs = [4, 6]
 
     for (Iq, Nq) in enumerate(Nqs)
-        # TODO!: The reference array needs to be changed once the dss is ready.
         err_scurl = Array{FT}(undef, length(Nes))
+        err_wcurl = Array{FT}(undef, length(Nes))
         Δh = Array{FT}(undef, length(Nes))
 
         for (Ie, Ne) in enumerate(Nes)
@@ -85,23 +85,26 @@ convergence_rate(err, Δh) =
             u = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u_local)
 
             curl_us = scurl.(u)
-            # Spaces.weighted_dss!(curl_us)
+            Spaces.weighted_dss!(curl_us)
 
-            # curl_uw = wcurl.(u)
-            # Spaces.weighted_dss!(curl_uw)
+            curl_uw = wcurl.(u)
+            Spaces.weighted_dss!(curl_uw)
 
             curl_exact = @. Geometry.Contravariant3Vector(
                 -2 * sind(coords.long) * cosd(coords.lat) / radius,
             )
 
             err_scurl[Ie] = norm(curl_us .- curl_exact)
+            err_wcurl[Ie] = norm(curl_uw .- curl_exact)
             Δh[Ie] = 1 / Ne
 
         end
 
         convergence_rate_scurl = convergence_rate(err_scurl, Δh)
+        convergence_rate_wcurl = convergence_rate(err_scurl, Δh)
         for Ie in range(1, length = length(Nes) - 1)
             @test convergence_rate_scurl[Ie] ≈ (Nq - 1) atol = 0.1
+            @test convergence_rate_wcurl[Ie] ≈ (Nq - 1) atol = 0.1
         end
     end
 end
