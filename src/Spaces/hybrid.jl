@@ -140,19 +140,19 @@ function ExtrudedFiniteDifferenceSpace(
 
                 if vface == 1
                     ∂f∂ξ₃ = (
-                        vertical_mesh.faces[velem + 1].z -
-                        vertical_mesh.faces[velem].z
+                        vertical_mesh.faces[vface + 1].z -
+                        vertical_mesh.faces[vface].z
                     )
                 elseif vface == nvelems + 1
                     ∂f∂ξ₃ = (
-                        vertical_mesh.faces[velem].z -
-                        vertical_mesh.faces[velem - 1].z
+                        vertical_mesh.faces[vface].z -
+                        vertical_mesh.faces[vface - 1].z
                     )
                 else
                     ∂f∂ξ₃ =
                         (
-                            vertical_mesh.faces[velem + 1].z -
-                            vertical_mesh.faces[velem - 1].z
+                            vertical_mesh.faces[vface + 1].z -
+                            vertical_mesh.faces[vface - 1].z
                         ) / 2
                 end
 
