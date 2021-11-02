@@ -22,8 +22,11 @@ include("hybrid2d.jl")
 include("hybrid3d.jl")
 include("sphere.jl")
 include("sphere_metric_terms.jl")
+include("sphere_gradient.jl")
+include("sphere_divergence.jl")
+include("sphere_curl.jl")
 include("sphere_diffusion.jl")
-include("hyperdiffusion_sphere.jl")
+include("sphere_hyperdiffusion.jl")
 
 if "CUDA" in ARGS
     include("gpu/cuda.jl")
