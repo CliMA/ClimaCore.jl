@@ -1,5 +1,5 @@
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 ClimaCoreVTK = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
-WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

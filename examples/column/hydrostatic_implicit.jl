@@ -105,7 +105,7 @@ end
 
 zc = Fields.coordinate_field(cspace)
 Yc = decaying_temperature_profile.(zc.z)
-w = Geometry.Cartesian3Vector.(zeros(FT, fspace))
+w = Geometry.WVector.(zeros(FT, fspace))
 zf = parent(Fields.coordinate_field(fspace).z)
 Δz = zf[2:end] - zf[1:(end - 1)]
 Y_init = copy(Yc)
@@ -120,22 +120,19 @@ function tendency!(dY, Y, _, t)
 
     If = Operators.InterpolateC2F()
     ∂ = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+        top = Operators.SetValue(Geometry.WVector(zero(FT))),
     )
     ∂f = Operators.GradientC2F()
     B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(zero(FT))),
+        bottom = Operators.SetValue(Geometry.WVector(zero(FT))),
+        top = Operators.SetValue(Geometry.WVector(zero(FT))),
     )
 
     @. dYc.ρ = -(∂(w * If(Yc.ρ)))
     @. dYc.ρθ = -(∂(w * If(Yc.ρθ)))
-    @. dw = B(
-        Geometry.CartesianVector(
-            -(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z)),
-        ),
-    )
+    @. dw =
+        B(Geometry.WVector(-(If(Yc.ρθ / Yc.ρ) * ∂f(Π(Yc.ρθ))) - ∂f(Φ(zc.z))))
     return dY
 end
 

@@ -1,7 +1,8 @@
 using Test
 using OrdinaryDiffEq
-using ClimaCore
-import ClimaCore: Domains, Topologies, Meshes, Fields, Spaces
+
+import ClimaCore:
+    ClimaCore, Domains, Topologies, Meshes, Geometry, Fields, Spaces
 using LinearAlgebra, IntervalSets
 
 

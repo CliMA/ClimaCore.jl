@@ -53,7 +53,7 @@ function ∇gaussian(z, t; μ = -1 // 2, ν = 1, 𝓌 = 1, δ = 1)
 end
 
 T = gaussian.(zc.z, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
-V = Geometry.Cartesian3Vector.(ones(FT, fs))
+V = Geometry.WVector.(ones(FT, fs))
 
 # Solve Adv-Diff Equation: ∂_t T = α ∇²T
 z₀ = FT(0)
@@ -65,14 +65,10 @@ function ∑tendencies!(dT, T, z, t)
     bc_vb = Operators.SetValue(FT(gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
     bc_vt = Operators.SetValue(FT(gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)))
     bc_gb = Operators.SetGradient(
-        Geometry.Cartesian3Vector(
-            FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-        ),
+        Geometry.WVector(FT(∇gaussian(z₀, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
     )
     bc_gt = Operators.SetGradient(
-        Geometry.Cartesian3Vector(
-            FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ)),
-        ),
+        Geometry.WVector(FT(∇gaussian(z₁, t; ν = ν, δ = δ, 𝓌 = 𝓌, μ = μ))),
     )
 
     #   Upwind Biased Product

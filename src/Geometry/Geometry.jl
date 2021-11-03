@@ -5,11 +5,12 @@ import LinearAlgebra
 
 import StaticArrays: SVector
 
-export ⊗, Cartesian12Vector
+export ⊗
 
 include("coordinates.jl")
 include("axistensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
+include("globalgeometry.jl")
 
 end # module

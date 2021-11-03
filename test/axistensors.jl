@@ -87,3 +87,29 @@ end
         Geometry.Covariant13Vector(2.0, 2.0) * Geometry.Cartesian1Vector(1.0)',
     )
 end
+
+
+@testset "cross product" begin
+    M = @SMatrix [
+        4.0 1.0
+        0.5 2.0
+    ]
+    J = det(M)
+    local_geom = Geometry.LocalGeometry(
+        Geometry.XYPoint(0.0, 0.0),
+        J,
+        J,
+        Geometry.Axis2Tensor(
+            (Geometry.UVAxis(), Geometry.Covariant12Axis()),
+            M,
+        ),
+    )
+
+    u = Geometry.UVVector(1.0, 2.0)
+    v = Geometry.WVector(3.0)
+    @test u × v == -v × u == Geometry.UVVector(6.0, -3.0)
+    uⁱ = Geometry.ContravariantVector(u, local_geom)
+    vⁱ = Geometry.ContravariantVector(v, local_geom)
+    @test Geometry.UVVector(Geometry._cross(uⁱ, vⁱ, local_geom), local_geom) ==
+          Geometry.UVVector(6.0, -3.0)
+end

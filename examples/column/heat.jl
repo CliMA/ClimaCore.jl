@@ -40,7 +40,7 @@ T = Fields.zeros(FT, cs)
 function ∑tendencies!(dT, T, _, t)
 
     bcs_bottom = Operators.SetValue(FT(0.0))
-    bcs_top = Operators.SetGradient(Geometry.Cartesian3Vector(FT(1.0)))
+    bcs_top = Operators.SetGradient(Geometry.WVector(FT(1.0)))
 
     gradc2f = Operators.GradientC2F(bottom = bcs_bottom, top = bcs_top)
     divf2c = Operators.DivergenceF2C()
