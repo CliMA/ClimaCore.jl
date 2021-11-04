@@ -72,128 +72,6 @@ end
 
 
 
-function ExtrudedFiniteDifferenceSpace(
-    horizontal_space::H,
-    vertical_mesh::V,
-    topography,
-) where {H <: AbstractSpace, V}
-    #todo how to get FT
-    FT = Float64
-    nhelems = Topologies.nlocalelems(horizontal_space.topology)
-    nvelems = length(vertical_mesh.faces) - 1
-
-
-    quadrature_style = horizontal_space.quadrature_style
-    Nq = Quadratures.degrees_of_freedom(quadrature_style)
-    quad_points, quad_weights =
-        Quadratures.quadrature_points(FT, quadrature_style)
-    Ht = Geometry.component(vertical_mesh.domain.coord_max, 1)
-
-    D = Quadratures.differentiation_matrix(FT, quadrature_style)
-
-    topo_coord_x1, topo_coord_x3 = zeros(Nq), zeros(Nq)
-
-
-    # loop each column
-    for helem in 1:nhelems
-        # odd layer indicates cell faces, even layer indeicates cell centers
-
-        topo_coord_x1 .= topography[helem][:, 1]
-        topo_coord_x3 .= topography[helem][:, 2]
-
-
-        D₁ = D * topo_coord_x1
-        D₃ = D * topo_coord_x3
-
-        for i in 1:Nq
-            ξ₁ = quad_points[i]
-            ∂xₛ∂ξ₁ = [D₁[i] D₃[i]]
-            xₛ = [topo_coord_x1[i] topo_coord_x3[i]]
-            for velem in 1:nvelems
-
-                # the map is 
-                f =
-                    (
-                        vertical_mesh.faces[velem].z +
-                        vertical_mesh.faces[velem + 1].z
-                    ) / 2.0
-                ∂f∂ξ₃ = (
-                    vertical_mesh.faces[velem + 1].z -
-                    vertical_mesh.faces[velem].z
-                )
-
-                ∂x∂ξ = [
-                    ∂xₛ∂ξ₁[1] 0
-                    ∂xₛ∂ξ₁[2]*(1 - f / Ht) (1 - xₛ[2] / Ht)*∂f∂ξ₃
-                ]
-
-                J = det(∂x∂ξ)
-                ∂ξ∂x = inv(∂x∂ξ)
-                WJ = J * quad_weights[i]
-
-
-                # compute metric terms at the cell center
-
-                center_local_geometry = 0
-
-            end
-
-            for vface in 1:(nvelems + 1)
-
-                # the map is 
-                f = vertical_mesh.faces[vface].z
-
-                if vface == 1
-                    ∂f∂ξ₃ = (
-                        vertical_mesh.faces[vface + 1].z -
-                        vertical_mesh.faces[vface].z
-                    )
-                elseif vface == nvelems + 1
-                    ∂f∂ξ₃ = (
-                        vertical_mesh.faces[vface].z -
-                        vertical_mesh.faces[vface - 1].z
-                    )
-                else
-                    ∂f∂ξ₃ =
-                        (
-                            vertical_mesh.faces[vface + 1].z -
-                            vertical_mesh.faces[vface - 1].z
-                        ) / 2
-                end
-
-
-                ∂x∂ξ = [
-                    ∂xₛ∂ξ₁[1] 0
-                    ∂xₛ∂ξ₁[2]*(1 - f / Ht) (1 - xₛ[2] / Ht)*∂f∂ξ₃
-                ]
-
-                J = det(∂x∂ξ)
-                ∂ξ∂x = inv(∂x∂ξ)
-                WJ = J * quad_weights[i]
-
-
-                # compute metric terms at the cell faces
-
-
-
-                face_local_geometry = 0
-
-            end
-
-
-        end
-
-        # compute metric terms at the top (cell top face)
-
-    end
-
-
-
-
-    return nothing
-end
-
-
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
 
@@ -269,8 +147,7 @@ function blockmat(
             zero(FT),
             B[1, 1],
         ),
-    )
-end
+    )end
 
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
