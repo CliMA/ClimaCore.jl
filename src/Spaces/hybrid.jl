@@ -147,7 +147,8 @@ function blockmat(
             zero(FT),
             B[1, 1],
         ),
-    )end
+    )
+end
 
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,

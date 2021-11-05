@@ -110,6 +110,47 @@ end
 
 
 
+"""
+    GeneralizedExponentialStretching
+
+Apply Tapio's stretching to the domain when constructing elements. 
+"""
+struct GeneralizedExponentialStretching <: StretchingRule end
+
+
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::GeneralizedExponentialStretching;
+    nelems,
+    # target grid spacings at surface and top (m)
+    dz_s = 20.0,
+    dz_t = 7000.0,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+
+    cmin = Geometry.component(domain.coord_min, 1)
+    cmax = Geometry.component(domain.coord_max, 1)
+
+    exp_stretch(ζ_n, h) = -h .* log.(1 .- (1 .- exp.(-1 ./ h)) .* ζ_n)
+
+    # nondimensional vertical coordinate
+    ζ_n = LinRange(1, nelems, nelems) / nelems
+
+
+    f_s(h) = dz_s - cmax * exp_stretch(ζ_n[1], h)
+    h_s = find_zero(f_s, -dz_s / cmax / log(1 - 1 / nelems))
+    f_t(h) = dz_t - cmax * (1 - exp_stretch(ζ_n[end - 1], h))
+    h_t = find_zero(f_t, ((cmax - cmin) - dz_t) / cmax / log(nelems))
+
+    # scale height variation with height
+    h = h_s .+ (ζ_n .- ζ_n[1]) * (h_t - h_s) / (ζ_n[end - 1] - ζ_n[1])
+
+
+    faces = cmin .+ (cmax - cmin) * exp_stretch(ζ_n, h)
+
+    IntervalMesh(domain, faces)
+end
+
+
 function Base.show(io::IO, mesh::IntervalMesh)
     nelements = length(mesh.faces) - 1
     print(io, nelements, "-element IntervalMesh of ")
