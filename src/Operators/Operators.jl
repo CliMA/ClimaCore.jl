@@ -17,5 +17,6 @@ using StaticArrays
 include("spectralelement.jl")
 include("numericalflux.jl")
 include("finitedifference.jl")
+include("remapping.jl")
 
 end # module
