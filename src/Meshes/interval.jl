@@ -147,6 +147,9 @@ function IntervalMesh(
 
     faces = cmin .+ (cmax - cmin) * exp_stretch(ζ_n, h)
 
+    # add the bottom level
+    faces = [cmin; faces...]
+
     IntervalMesh(domain, faces)
 end
 
