@@ -151,6 +151,32 @@ function IntervalMesh(
 end
 
 
+"""
+    TableStretching
+
+Apply stretching to the domain based on a table when constructing elements. 
+"""
+struct TableStretching <: StretchingRule end
+
+
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::TableStretching;
+    nelems,
+    levels,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+
+    cmin = Geometry.component(domain.coord_min, 1)
+    cmax = Geometry.component(domain.coord_max, 1)
+
+    @assert(length(levels) == nelems + 1)
+    α = (cmax - cmin) / (levels[end] - levels[1])
+    β = cmin - (cmax - cmin) / (levels[end] - levels[1]) * level[1]
+    faces = α * levels .+ β
+
+    IntervalMesh(domain, faces)
+end
+
 function Base.show(io::IO, mesh::IntervalMesh)
     nelements = length(mesh.faces) - 1
     print(io, nelements, "-element IntervalMesh of ")
