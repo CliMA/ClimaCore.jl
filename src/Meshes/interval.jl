@@ -1,3 +1,5 @@
+using Roots
+
 """
     IntervalMesh <: AbstractMesh
 
@@ -74,7 +76,7 @@ end
 
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::ExponentialStretching;
+    stretch::ExponentialStretching{FT};
     nelems,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     cmin = Geometry.component(domain.coord_min, 1)
@@ -88,48 +90,29 @@ function IntervalMesh(
 end
 
 
-"""
-    NoStretching
-
-Apply no stretching to the domain when constructing elements. 
-"""
-struct NoStretching <: StretchingRule end
-
-function IntervalMesh(
-    domain::IntervalDomain{CT},
-    stretch::NoStretching;
-    nelems,
-) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
-    cmin = Geometry.component(domain.coord_min, 1)
-    cmax = Geometry.component(domain.coord_max, 1)
-    Δc = (cmax - cmin) / (nelems)
-
-    faces = [CT(cmin + i * Δc) for i in 0:nelems]
-    IntervalMesh(domain, faces)
-end
-
-
 
 """
     GeneralizedExponentialStretching
 
 Apply Tapio's stretching to the domain when constructing elements. 
+dz_s and dz_t are target grid spacings at surface and top (m)
 """
-struct GeneralizedExponentialStretching <: StretchingRule end
+struct GeneralizedExponentialStretching{FT} <: StretchingRule
+    dz_s::FT
+    dz_t::FT
+end
 
 
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::GeneralizedExponentialStretching;
+    stretch::GeneralizedExponentialStretching{FT};
     nelems,
-    # target grid spacings at surface and top (m)
-    dz_s = 20.0,
-    dz_t = 7000.0,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
 
     cmin = Geometry.component(domain.coord_min, 1)
     cmax = Geometry.component(domain.coord_max, 1)
-
+    dz_s = stretch.dz_s
+    dz_t = stretch.dz_t
     exp_stretch(ζ_n, h) = -h .* log.(1 .- (1 .- exp.(-1 ./ h)) .* ζ_n)
 
     # nondimensional vertical coordinate
@@ -150,7 +133,7 @@ function IntervalMesh(
     # add the bottom level
     faces = [cmin; faces...]
 
-    IntervalMesh(domain, faces)
+    IntervalMesh(domain, CT.(faces))
 end
 
 
@@ -159,25 +142,26 @@ end
 
 Apply stretching to the domain based on a table when constructing elements. 
 """
-struct TableStretching <: StretchingRule end
+struct TableStretching{FT} <: StretchingRule
+    levels::Array{FT}
+end
 
 
 function IntervalMesh(
     domain::IntervalDomain{CT},
-    stretch::TableStretching;
+    stretch::TableStretching{FT};
     nelems,
-    levels,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
 
     cmin = Geometry.component(domain.coord_min, 1)
     cmax = Geometry.component(domain.coord_max, 1)
-
+    levels = stretch.levels
     @assert(length(levels) == nelems + 1)
     α = (cmax - cmin) / (levels[end] - levels[1])
     β = cmin - (cmax - cmin) / (levels[end] - levels[1]) * level[1]
     faces = α * levels .+ β
 
-    IntervalMesh(domain, faces)
+    IntervalMesh(domain, CT.(faces))
 end
 
 function Base.show(io::IO, mesh::IntervalMesh)

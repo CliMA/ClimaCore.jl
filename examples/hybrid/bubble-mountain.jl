@@ -34,8 +34,7 @@ function hvspace_2D(
     helem = 10,
     velem = 50,
     npoly = 4;
-    stretch = Meshes.NoStretching(),
-    topography_file = nothing,
+    stretch = Meshes.Uniform(),
 )
 
     # build vertical mesh information with stretching in [0, H]
@@ -71,7 +70,11 @@ function hvspace_2D(
 end
 
 # set up rhs!
-space = hvspace_2D((-500, 500), (0, 1000))
+space = hvspace_2D(
+    (-500, 500),
+    (0, 1000);
+    stretch = Meshes.GeneralizedExponentialStretching(10.0, 50.0),
+)
 
 
 Z = map(Fields.coordinate_field(space)) do coord
