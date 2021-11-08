@@ -14,7 +14,6 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-import ClimaCore.Domains.Geometry: Cartesian2DPoint
 using ClimaCore.Geometry
 
 using Logging: global_logger
@@ -99,7 +98,7 @@ function init_dry_rising_bubble_2d(x, z)
     ρ = p / R_d / T # density
     ρθ = ρ * θ # potential temperature density
 
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.Cartesian1Vector(0.0))
+    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVector(0.0))
 end
 
 # initial conditions
@@ -112,7 +111,7 @@ Yc = map(coords) do coord
 end;
 
 ρw = map(face_coords) do coord
-    Geometry.Cartesian3Vector(0.0)
+    Geometry.WVector(0.0)
 end;
 
 Y = Fields.FieldVector(Yc = Yc, ρw = ρw);
@@ -131,24 +130,22 @@ function rhs!(dY, Y, _, t)
 
     # vertical FD operators with BC's
     vdivf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
     )
     vvdivc2f = Operators.DivergenceC2F(
-        bottom = Operators.SetDivergence(Geometry.Cartesian3Vector(0.0)),
-        top = Operators.SetDivergence(Geometry.Cartesian3Vector(0.0)),
+        bottom = Operators.SetDivergence(Geometry.WVector(0.0)),
+        top = Operators.SetDivergence(Geometry.WVector(0.0)),
     )
     uvdivf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(
-            Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0),
+            Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0),
         ),
-        top = Operators.SetValue(
-            Geometry.Cartesian3Vector(0.0) ⊗ Geometry.Cartesian1Vector(0.0),
-        ),
+        top = Operators.SetValue(Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0)),
     )
     If_bc = Operators.InterpolateC2F(
-        bottom = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
-        top = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.UVector(0.0)),
+        top = Operators.SetValue(Geometry.UVector(0.0)),
     )
     If = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -156,14 +153,14 @@ function rhs!(dY, Y, _, t)
     )
     Ic = Operators.InterpolateF2C()
     ∂ = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
     )
     ∂f = Operators.GradientC2F()
     ∂c = Operators.GradientF2C()
     B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
-        top = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
     )
 
     fcc = Operators.FluxCorrectionC2C(
@@ -207,7 +204,7 @@ function rhs!(dY, Y, _, t)
     # horizontal momentum
     Ih = Ref(
         Geometry.Axis2Tensor(
-            (Geometry.Cartesian1Axis(), Geometry.Cartesian1Axis()),
+            (Geometry.UAxis(), Geometry.UAxis()),
             @SMatrix [1.0]
         ),
     )
@@ -219,7 +216,7 @@ function rhs!(dY, Y, _, t)
     @. dρw +=
         B(
             Geometry.transform(
-                Geometry.Cartesian3Axis(),
+                Geometry.WAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
         ) + fcf(wc, ρw)

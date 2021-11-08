@@ -51,33 +51,28 @@ end
 @pointtype Cartesian3Point x3
 
 @pointtype Cartesian12Point x1 x2
+@pointtype Cartesian13Point x1 x3
 @pointtype Cartesian123Point x1 x2 x3
 
+Cartesian123Point(pt::Cartesian123Point) = pt
+Cartesian123Point(pt::Cartesian1Point{FT}) where {FT} =
+    Cartesian123Point(pt.x1, zero(FT), zero(FT))
+Cartesian123Point(pt::Cartesian2Point{FT}) where {FT} =
+    Cartesian123Point(zero(FT), pt.x2, zero(FT))
+Cartesian123Point(pt::Cartesian3Point{FT}) where {FT} =
+    Cartesian123Point(zero(FT), zero(FT), pt.x3)
+Cartesian123Point(pt::Cartesian12Point{FT}) where {FT} =
+    Cartesian123Point(pt.x1, pt.x2, zero(FT))
+Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
+    Cartesian123Point(pt.x1, zero(FT), pt.x3)
+
 @pointtype LatLongPoint lat long
-
-
-const Cartesian2DPoint = Cartesian12Point
-@deprecate Cartesian2DPoint Cartesian12Point
-
-const Cartesian3DPoint = Cartesian123Point
-@deprecate Cartesian3DPoint Cartesian123Point
 
 product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
 
 product_coordinates(xyp::XYPoint, zp::ZPoint) =
     XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
-
-# TODO: get rid of these and refactor to consistent point types
-ZPoint(pt::Cartesian3Point{FT}) where {FT} = ZPoint{FT}(pt.x3)
-XYPoint(pt::Cartesian12Point{FT}) where {FT} = XYPoint{FT}(pt.x1, pt.x2)
-XYZPoint(pt::Cartesian123Point{FT}) where {FT} =
-    XYZPoint{FT}(pt.x1, pt.x2, pt.x3)
-
-Cartesian3Point(pt::ZPoint{FT}) where {FT} = Cartesian3Point{FT}(pt.z)
-Cartesian12Point(pt::XYPoint{FT}) where {FT} = Cartesian12Point{FT}(pt.x, pt.y)
-Cartesian123Point(pt::XYZPoint{FT}) where {FT} =
-    Cartesian123Point{FT}(pt.x, pt.y, pt.z)
 
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
@@ -135,25 +130,6 @@ function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
 
-LinearAlgebra.norm(pt::Cartesian2DPoint, p::Real = 2) =
-    LinearAlgebra.norm((pt.x1, pt.x2), p)
-LinearAlgebra.norm(pt::Cartesian3DPoint, p::Real = 2) =
-    LinearAlgebra.norm((pt.x1, pt.x2, pt.x3), p)
-
-
-function LatLongPoint(pt::Cartesian123Point)
-    lat = atand(pt.x3, hypot(pt.x2, pt.x1))
-    long = atand(pt.x2, pt.x1)
-    LatLongPoint(lat, long)
-end
-
-function Cartesian123Point(pt::LatLongPoint)
-    x1 = cosd(pt.long) * cosd(pt.lat)
-    x2 = sind(pt.long) * cosd(pt.lat)
-    x3 = sind(pt.lat)
-    Cartesian123Point(x1, x2, x3)
-end
-
 
 """
     bilinear_interpolate(coords::NTuple{4}, ξ1, ξ2)
@@ -207,8 +183,7 @@ function linear_interpolate(
     )
 end
 
-function spherical_bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
-    r = norm(x1) # assume all are same radius
+function spherical_bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2, radius)
     x = bilinear_interpolate((x1, x2, x3, x4), ξ1, ξ2)
-    x = x * (r / norm(x))
+    return x * (radius / norm(components(x)))
 end

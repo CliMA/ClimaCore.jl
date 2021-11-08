@@ -43,7 +43,7 @@ function init_state(coord, p)
     u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
-    u = Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
+    u = Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * y)
 

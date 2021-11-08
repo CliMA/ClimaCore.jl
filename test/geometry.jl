@@ -95,7 +95,7 @@ end
 end
 
 @testset "Sample flux calculation" begin
-    state = (ρ = 2.0, ρu = Geometry.Cartesian12Vector(1.0, 2.0), ρθ = 0.5)
+    state = (ρ = 2.0, ρu = Geometry.UVVector(1.0, 2.0), ρθ = 0.5)
 
     function flux(state, g)
         @unpack ρ, ρu, ρθ = state
@@ -103,11 +103,548 @@ end
         return (ρ = ρu, ρu = (ρu ⊗ u) + (g * ρ^2 / 2) * I, ρθ = ρθ * u)
     end
     @test flux(state, 10.0) == (
-        ρ = Geometry.Cartesian12Vector(1.0, 2.0),
+        ρ = Geometry.UVVector(1.0, 2.0),
         ρu = Geometry.Axis2Tensor(
-            (Geometry.Cartesian12Axis(), Geometry.Cartesian12Axis()),
+            (Geometry.UVAxis(), Geometry.UVAxis()),
             SMatrix{2, 2}(0.5 + 20.0, 1.0, 1.0, 2.0 + 20.0),
         ),
-        ρθ = Geometry.Cartesian12Vector(0.25, 0.5),
+        ρθ = Geometry.UVVector(0.25, 0.5),
     )
+end
+
+@testset "XYZ -> Cartesian coordinate conversions" begin
+
+    global_geom = Geometry.CartesianGlobalGeometry()
+
+    @test Geometry.CartesianPoint(Geometry.XYPoint(1.0, 2.0), global_geom) ==
+          Geometry.Cartesian12Point(1.0, 2.0)
+    @test Geometry.Cartesian123Point(Geometry.XYPoint(1.0, 2.0), global_geom) ==
+          Geometry.Cartesian123Point(1.0, 2.0, 0.0)
+
+    @test Geometry.CartesianPoint(Geometry.XPoint(1.0), global_geom) ==
+          Geometry.Cartesian1Point(1.0)
+    @test Geometry.Cartesian123Point(Geometry.XPoint(1.0), global_geom) ==
+          Geometry.Cartesian123Point(1.0, 0.0, 0.0)
+
+    @test Geometry.CartesianPoint(Geometry.ZPoint(3.0), global_geom) ==
+          Geometry.Cartesian3Point(3.0)
+    @test Geometry.Cartesian123Point(Geometry.ZPoint(3.0), global_geom) ==
+          Geometry.Cartesian123Point(0.0, 0.0, 3.0)
+
+    @test Geometry.CartesianPoint(Geometry.XZPoint(1.0, 3.0), global_geom) ==
+          Geometry.Cartesian13Point(1.0, 3.0)
+    @test Geometry.Cartesian123Point(Geometry.XZPoint(1.0, 3.0), global_geom) ==
+          Geometry.Cartesian123Point(1.0, 0.0, 3.0)
+end
+
+
+@testset "LatLong -> Cartesian coordinate conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(2.0, 0.0, 0.0)
+    @test Geometry.Cartesian123Point(
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(2.0, 0.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(0.0, 90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 2.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(0.0, -90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, -2.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(0.0, 180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-2.0, 0.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(0.0, -180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-2.0, 0.0, 0.0)
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(45.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(sqrt(2.0), 0.0, sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(45.0, 90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, sqrt(2.0), sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(45.0, -90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, -sqrt(2.0), sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(45.0, 180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-sqrt(2.0), 0.0, sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(45.0, -180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-sqrt(2.0), 0.0, sqrt(2.0))
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-45.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(sqrt(2.0), 0.0, -sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-45.0, 90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, sqrt(2.0), -sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-45.0, -90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, -sqrt(2.0), -sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-45.0, 180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-sqrt(2.0), 0.0, -sqrt(2.0))
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-45.0, -180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-sqrt(2.0), 0.0, -sqrt(2.0))
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(90.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, 2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(90.0, 90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, 2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(90.0, -90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, 2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(90.0, 180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, 2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(90.0, -180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, 2.0)
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-90.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-90.0, 90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-90.0, -90.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-90.0, 180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongPoint(-90.0, -180.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
+
+end
+
+@testset "Cartesian -> LatLong coordinate conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(2.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(0.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, 2.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(0.0, 90.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(0.0, 180.0)
+    # check we handle the branch cut smoothly
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, -0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(0.0, -180.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, -2.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(0.0, -90.0)
+
+    # should be invariant to radius
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(2.0, 0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(45.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, 2.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(45.0, 90.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, 0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(45.0, 180.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, -0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(45.0, -180.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, -2.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(45.0, -90.0)
+
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(2.0, 0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-45.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, 2.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-45.0, 90.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, 0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-45.0, 180.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-2.0, -0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-45.0, -180.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, -2.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-45.0, -90.0)
+
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, 0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, -0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-0.0, 0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-0.0, -0.0, 2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(90.0, 0.0)
+
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, 0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(0.0, -0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-0.0, 0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-90.0, 0.0)
+    @test Geometry.LatLongPoint(
+        Geometry.Cartesian123Point(-0.0, -0.0, -2.0),
+        global_geom,
+    ) == Geometry.LatLongPoint(-90.0, 0.0)
+end
+
+
+@testset "great circle distance" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) == 0.0
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(22.0, 32.0),
+        Geometry.LatLongPoint(22.0, 32.0),
+        global_geom,
+    ) == 0.0
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, 1e-20),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, -1e-20),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 1e-20),
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, -1e-20),
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, 10.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 30.0),
+        Geometry.LatLongPoint(0.0, 40.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(1e-20, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(-1e-20, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 1e-20),
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, -1e-20),
+        Geometry.LatLongPoint(0.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(10.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 30.0),
+        Geometry.LatLongPoint(1e-20, 30.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(1e-20) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 30.0),
+        Geometry.LatLongPoint(10.0, 30.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    # points near poles
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(89.99, 30.0),
+        Geometry.LatLongPoint(90.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(90.0 - 89.99) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(89.99, 90.0),
+        Geometry.LatLongPoint(89.99, -90.0),
+        global_geom,
+    ) ≈ 2 * 2 * deg2rad(90.0 - 89.99) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(-89.99, 30.0),
+        Geometry.LatLongPoint(-90.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(90.0 - 89.99) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(-89.99, 90.0),
+        Geometry.LatLongPoint(-89.99, -90.0),
+        global_geom,
+    ) ≈ 2 * 2 * deg2rad(90.0 - 89.99) rtol = 2eps()
+
+    # antipodal pairs
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, 180.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 0.0),
+        Geometry.LatLongPoint(0.0, -180.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(0.0, 90.0),
+        Geometry.LatLongPoint(0.0, -90.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(20.0, 0.0),
+        Geometry.LatLongPoint(-20.0, 180.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(20.0, 0.0),
+        Geometry.LatLongPoint(-20.0, -180.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(20.0, 0.0),
+        Geometry.LatLongPoint(-20.0, 180.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(20.0, 90.0),
+        Geometry.LatLongPoint(-20.0, -90.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(89.99, 90.0),
+        Geometry.LatLongPoint(-89.99, -90.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(90.0, 0.0),
+        Geometry.LatLongPoint(-90.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongPoint(-90.0, 0.0),
+        Geometry.LatLongPoint(90.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
+
+end
+
+@testset "UVW -> Cartesian spherical vector conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 0.0),
+    ) == Geometry.Cartesian123Vector(1.0, 0.0, 0.0)
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(-sqrt(0.5), 0.0, sqrt(0.5))
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, sqrt(0.5))
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, sqrt(0.5))
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(-45.0, 0.0),
+    ) == Geometry.Cartesian123Vector(sqrt(0.5), 0.0, -sqrt(0.5))
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 90.0),
+    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 90.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 90.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 180.0),
+    ) == Geometry.Cartesian123Vector(0.0, -1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 180.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, 180.0),
+    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, -180.0),
+    ) == Geometry.Cartesian123Vector(0.0, -1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, -180.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(0.0, -180.0),
+    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+
+    # north pole
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(-1.0, 0.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, 1.0)
+
+    # south pole
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 1.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(1.0, 0.0, 0.0)
+    @test Geometry.CartesianVector(
+        Geometry.UVWVector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.Cartesian123Vector(0.0, 0.0, -1.0)
 end

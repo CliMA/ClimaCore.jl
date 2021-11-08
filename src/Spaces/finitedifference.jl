@@ -11,17 +11,20 @@ struct CellFace <: Staggering end
 struct FiniteDifferenceSpace{
     S <: Staggering,
     T <: Topologies.IntervalTopology,
-    G,
+    GG,
+    LG,
 } <: AbstractFiniteDifferenceSpace
     staggering::S
     topology::T
-    center_local_geometry::G
-    face_local_geometry::G
+    global_geometry::GG
+    center_local_geometry::LG
+    face_local_geometry::LG
 end
 
 function FiniteDifferenceSpace{S}(
     topology::Topologies.IntervalTopology,
 ) where {S <: Staggering}
+    global_geometry = Geometry.CartesianGlobalGeometry()
     mesh = topology.mesh
     CT = Meshes.coordinate_type(mesh)
     AIdx = Geometry.coordinate_axis(CT)
@@ -30,17 +33,7 @@ function FiniteDifferenceSpace{S}(
     @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
     FT = eltype(CT)
     face_coordinates = collect(mesh.faces)
-    Mxξ = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.CartesianAxis{AIdx}, Geometry.CovariantAxis{AIdx}},
-        SMatrix{1, 1, FT, 1},
-    }
-    Mξx = Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.ContravariantAxis{AIdx}, Geometry.CartesianAxis{AIdx}},
-        SMatrix{1, 1, FT, 1},
-    }
-    LG = Geometry.LocalGeometry{CT, FT, Mxξ, Mξx}
+    LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     nface = length(face_coordinates)
     ncent = nface - 1
     center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
@@ -57,24 +50,13 @@ function FiniteDifferenceSpace{S}(
         J = Δcoord
         WJ = Δcoord
         ∂x∂ξ = SMatrix{1, 1}(J)
-        ∂ξ∂x = SMatrix{1, 1}(inv(J))
         center_local_geometry[i] = Geometry.LocalGeometry(
             CT(coord),
             J,
             WJ,
             Geometry.AxisTensor(
-                (
-                    Geometry.CartesianAxis{AIdx}(),
-                    Geometry.CovariantAxis{AIdx}(),
-                ),
+                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
                 ∂x∂ξ,
-            ),
-            Geometry.AxisTensor(
-                (
-                    Geometry.ContravariantAxis{AIdx}(),
-                    Geometry.CartesianAxis{AIdx}(),
-                ),
-                ∂ξ∂x,
             ),
         )
     end
@@ -103,24 +85,15 @@ function FiniteDifferenceSpace{S}(
             J,
             WJ,
             Geometry.AxisTensor(
-                (
-                    Geometry.CartesianAxis{AIdx}(),
-                    Geometry.CovariantAxis{AIdx}(),
-                ),
+                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
                 ∂x∂ξ,
-            ),
-            Geometry.AxisTensor(
-                (
-                    Geometry.ContravariantAxis{AIdx}(),
-                    Geometry.CartesianAxis{AIdx}(),
-                ),
-                ∂ξ∂x,
             ),
         )
     end
     return FiniteDifferenceSpace(
         S(),
         topology,
+        global_geometry,
         center_local_geometry,
         face_local_geometry,
     )
@@ -139,6 +112,7 @@ function FiniteDifferenceSpace{S}(
     FiniteDifferenceSpace(
         S(),
         space.topology,
+        space.global_geometry,
         space.center_local_geometry,
         space.face_local_geometry,
     )

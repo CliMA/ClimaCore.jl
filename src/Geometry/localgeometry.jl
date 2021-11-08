@@ -4,7 +4,7 @@
 
 The necessary local metric information defined at each node.
 """
-struct LocalGeometry{C, FT, Mxξ, Mξx}
+struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     "Coordinates of the current point"
     coordinates::C
     "Jacobian determinant of the transformation `ξ` to `x`"
@@ -12,19 +12,13 @@ struct LocalGeometry{C, FT, Mxξ, Mξx}
     "Metric terms: `J` multiplied by the quadrature weights"
     WJ::FT
     "Partial derivatives of the map from `ξ` to `x`: `∂x∂ξ[i,j]` is ∂xⁱ/∂ξʲ"
-    ∂x∂ξ::Mxξ
+    ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S}
     "Partial derivatives of the map from `x` to `ξ`: `∂ξ∂x[i,j]` is ∂ξⁱ/∂xʲ"
-    ∂ξ∂x::Mξx
+    ∂ξ∂x::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
 end
 
-const LocalGeometry1D =
-    LocalGeometry{C, FT, M} where {C <: Abstract1DPoint{FT}} where {FT, M}
-
-const LocalGeometry2D =
-    LocalGeometry{C, FT, M} where {C <: Abstract2DPoint{FT}} where {FT, M}
-
-const LocalGeometry3D =
-    LocalGeometry{C, FT, M} where {C <: Abstract3DPoint{FT}} where {FT, M}
+LocalGeometry(coordinates, J, WJ, ∂x∂ξ) =
+    LocalGeometry(coordinates, J, WJ, ∂x∂ξ, inv(∂x∂ξ))
 
 """
     SurfaceGeometry
@@ -38,5 +32,5 @@ struct SurfaceGeometry{FT, N}
     normal::N
 end
 
-undertype(::Type{LocalGeometry{C, FT, Mxξ, Mξx}}) where {C, FT, Mxξ, Mξx} = FT
+undertype(::Type{LocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT

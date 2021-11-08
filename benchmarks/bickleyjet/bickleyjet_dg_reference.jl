@@ -42,8 +42,8 @@ function init_st_ref!(st_ref, X, ::Val{Nq}, parameters) where {Nq}
                     coord = (x = X[i, j, 1, h1, h2], y = X[i, j, 2, h1, h2])
                     st = init_state(coord, parameters)
                     st_ref[i, j, 1, h1, h2] = st.ρ
-                    st_ref[i, j, 2, h1, h2] = st.ρu.u1
-                    st_ref[i, j, 3, h1, h2] = st.ρu.u2
+                    st_ref[i, j, 2, h1, h2] = st.ρu.u
+                    st_ref[i, j, 3, h1, h2] = st.ρu.v
                     st_ref[i, j, 4, h1, h2] = st.ρθ
                 end
             end
@@ -114,7 +114,7 @@ function volume_ref!(dydt_ref, y0_ref, (n1, n2, parameters, valNq, states), t)
                     # 1. evaluate flux function at the point
                     y = (
                         ρ = y0_ref[i, j, 1, h1, h2],
-                        ρu = Cartesian12Vector(
+                        ρu = Geometry.UVVector(
                             y0_ref[i, j, 2, h1, h2],
                             y0_ref[i, j, 3, h1, h2],
                         ),
@@ -293,7 +293,7 @@ function volume_ref_cuda_kernel!(
     # 1. evaluate flux function at the point
     y = (
         ρ = Y[i, j, 1, h1, h2],
-        ρu = Cartesian12Vector(Y[i, j, 2, h1, h2], Y[i, j, 3, h1, h2]),
+        ρu = Geometry.UVVector(Y[i, j, 2, h1, h2], Y[i, j, 3, h1, h2]),
         ρθ = Y[i, j, 4, h1, h2],
     )
 
