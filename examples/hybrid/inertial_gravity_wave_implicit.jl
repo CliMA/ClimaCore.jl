@@ -12,8 +12,7 @@ prob = inertial_gravity_wave_prob(;
     ode_algorithm = ode_algorithm,
     is_imex = false,
     tspan = (0., 10000.),
-    J_𝕄ρ_grav_overwrite = false,
-    J_𝕄ρ_pres_overwrite = false,
+    J_𝕄ρ_overwrite = :none,
 )
 
 sol = solve(

@@ -1,29 +1,28 @@
 include("inertial_gravity_wave_utils.jl")
 
-ode_algorithm = KenCarp4
+ode_algorithm = IMEXEuler
 
 prob = inertial_gravity_wave_prob(;
     𝔼_var = :ρθ,
-    𝕄_var = :ρw,
+    𝕄_var = :w,
     helem = 75,
     velem = 10,
     npoly = 4,
     is_large_domain = true,
     ode_algorithm = ode_algorithm,
     is_imex = true,
-    tspan = (0., 10000.),
-    J_𝕄ρ_grav_overwrite = false,
-    J_𝕄ρ_pres_overwrite = false,
+    tspan = (0., 40000.),
+    J_𝕄ρ_overwrite = :grav,
 )
 
 sol = solve(
     prob,
-    ode_algorithm(linsolve = linsolve!);
-    dt = 25.,
-    reltol = 1e-2,
+    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10));
+    dt = 1.,
+    reltol = 1e-1,
     abstol = 1e-6,
     adaptive = false,
-    saveat = 10.,
+    saveat = 200.,
     progress = true,
     progress_steps = 1,
     progress_message = (dt, u, p, t) -> t,

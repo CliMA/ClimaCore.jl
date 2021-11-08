@@ -88,8 +88,7 @@ function inertial_gravity_wave_prob(;
     ode_algorithm,
     is_imex,
     tspan,
-    J_𝕄ρ_grav_overwrite = false,
-    J_𝕄ρ_pres_overwrite = false,
+    J_𝕄ρ_overwrite = :none,
 )
     xmax = is_large_domain ? 1500000. : 150000.
     zmax = 10000.
@@ -118,29 +117,31 @@ function inertial_gravity_wave_prob(;
     end
     𝕄 = map(c -> Geometry.Cartesian3Vector(0.), face_coords)
 
+    if !(J_𝕄ρ_overwrite in (:none, :grav, :pres))
+        throw(ArgumentError(string(
+            "Invalid J_𝕄ρ_overwrite $J_𝕄ρ_overwrite (must be :none, :grav, ",
+            "or :pres)",
+        )))
+    end
+
     if 𝕄_var == :ρw
         Y = Fields.FieldVector(; Yc, ρw = 𝕄)
-        if J_𝕄ρ_grav_overwrite && 𝔼_var == :ρθ
+        if J_𝕄ρ_overwrite == :grav && 𝔼_var == :ρθ
             throw(ArgumentError(
-                "J_𝕄ρ_grav_overwrite must be false if 𝔼_var is :ρθ and 𝕄_var is :ρw"
+                "J_𝕄ρ_overwrite must be :none if 𝔼_var is :ρθ and 𝕄_var is :ρw"
             ))
         end
-        if J_𝕄ρ_pres_overwrite
+        if J_𝕄ρ_overwrite == :pres
             throw(ArgumentError(
-                "J_𝕄ρ_pres_overwrite must be false if 𝕄_var is :ρw"
+                "J_𝕄ρ_overwrite can't be :pres if 𝕄_var is :ρw"
             ))
         end
     elseif 𝕄_var == :w
         p = (; ρw = similar(𝕄), p...)
         Y = Fields.FieldVector(; Yc, w = 𝕄)
-        if J_𝕄ρ_pres_overwrite && 𝔼_var == :ρθ
+        if J_𝕄ρ_overwrite == :pres && 𝔼_var == :ρθ
             throw(ArgumentError(
-                "J_𝕄ρ_pres_overwrite must be false if 𝔼_var is :ρθ and 𝕄_var is :w"
-            ))
-        end
-        if J_𝕄ρ_pres_overwrite && J_𝕄ρ_grav_overwrite
-            throw(ArgumentError(
-                "J_𝕄ρ_grav_overwrite must be false if J_𝕄ρ_pres_overwrite is true"
+                "J_𝕄ρ_overwrite can't be :pres if 𝔼_var is :ρθ and 𝕄_var is :w"
             ))
         end
     else
@@ -155,8 +156,7 @@ function inertial_gravity_wave_prob(;
         coords,
         face_coords,
         use_transform,
-        J_𝕄ρ_grav_overwrite,
-        J_𝕄ρ_pres_overwrite,
+        J_𝕄ρ_overwrite,
     )
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
     if is_imex
@@ -261,7 +261,7 @@ end
 
 # algorithm isa OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm -> use linsolve!
 
-# # profiling code; use @prof "<name>" <code> to generate "name.cpuprofile" file
+# profiling code; use @prof "<name>" <code> to generate "name.cpuprofile" file
 # using Profile
 # using ChromeProfileFormat
 # Profile.init(n = 10^7, delay = 0.001)
@@ -276,8 +276,8 @@ end
 #     end
 # end
 
-# temporary FieldVector broadcast overwrite that speeds up ODE solve by 2-3x
-import Base: copyto!
+# temporary FieldVector broadcast and fill patches that speeds up solves by 2-3x
+import Base: copyto!, fill!
 using Base.Broadcast: Broadcasted, broadcasted, BroadcastStyle
 transform_broadcasted(bc::Broadcasted{Fields.FieldVectorStyle}, symb, axes) =
     Broadcasted(bc.f, map(arg -> transform_broadcasted(arg, symb, axes), bc.args), axes)
@@ -293,4 +293,10 @@ transform_broadcasted(x, symb, axes) = x
         copyto!(p, transform_broadcasted(bc, symb, axes(p)))
     end
     return dest
+end
+function Base.fill!(a::Fields.FieldVector, x)
+    for symb in propertynames(a)
+        fill!(parent(getproperty(a, symb)), x)
+    end
+    return a
 end
