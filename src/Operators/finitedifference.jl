@@ -637,7 +637,7 @@ end
     L = LeftBiasedC2F(;boundaries)
     L.(x)
 
-Interpolate a left-value field to a face-valued field from the left.
+Interpolate a center-value field to a face-valued field from the left.
 ```math
 L(x)[i] = x[i-\\tfrac{1}{2}]
 ```
@@ -669,6 +669,43 @@ boundary_width(op::LeftBiasedC2F, ::SetValue) = 1
 
 function stencil_left_boundary(::LeftBiasedC2F, bc::SetValue, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
+    bc.val
+end
+
+"""
+    L = LeftBiasedF2C(;boundaries)
+    L.(x)
+
+Interpolate a face-value field to a center-valued field from the left.
+```math
+L(x)[i+\\tfrac{1}{2}] = x[i]
+```
+
+Only the left boundary condition should be set. Currently supported is:
+- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+```math
+L(x)[1] = x_0
+```
+"""
+struct LeftBiasedF2C{BCS} <: InterpolationOperator
+    bcs::BCS
+end
+LeftBiasedF2C(; kwargs...) = LeftBiasedF2C(NamedTuple(kwargs))
+
+return_space(::LeftBiasedF2C, space::Spaces.FaceFiniteDifferenceSpace) =
+    Spaces.CenterFiniteDifferenceSpace(space)
+
+return_space(::LeftBiasedF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
+    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+
+stencil_interior_width(::LeftBiasedF2C) = ((-half, -half),)
+
+stencil_interior(::LeftBiasedF2C, loc, idx, arg) = getidx(arg, loc, idx - half)
+
+boundary_width(op::LeftBiasedF2C, ::SetValue) = 1
+
+function stencil_left_boundary(::LeftBiasedF2C, bc::SetValue, loc, idx, arg)
+    @assert idx == left_center_boundary_idx(arg)
     bc.val
 end
 
@@ -708,6 +745,45 @@ boundary_width(op::RightBiasedC2F, ::SetValue) = 1
 
 function stencil_right_boundary(::RightBiasedC2F, bc::SetValue, loc, idx, arg)
     @assert idx == right_face_boundary_idx(arg)
+    bc.val
+end
+
+"""
+    R = RightBiasedF2C(;boundaries)
+    R.(x)
+
+Interpolate a face-valued field to a center-valued field from the right.
+```math
+R(x)[i] = x[i+\\tfrac{1}{2}]
+```
+
+Only the right boundary condition should be set. Currently supported is:
+- [`SetValue(x₀)`](@ref): set the value to be `x₀` on the boundary.
+```math
+R(x)[n+\\tfrac{1}{2}] = x_0
+```
+"""
+struct RightBiasedF2C{BCS} <: InterpolationOperator
+    bcs::BCS
+end
+RightBiasedF2C(; kwargs...) = RightBiasedF2C(NamedTuple(kwargs))
+
+return_space(::RightBiasedF2C, space::Spaces.FaceFiniteDifferenceSpace) =
+    Spaces.CenterFiniteDifferenceSpace(space)
+
+return_space(
+    ::RightBiasedF2C,
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+
+stencil_interior_width(::RightBiasedF2C) = ((half, half),)
+
+stencil_interior(::RightBiasedF2C, loc, idx, arg) = getidx(arg, loc, idx + half)
+
+boundary_width(op::RightBiasedF2C, ::SetValue) = 1
+
+function stencil_right_boundary(::RightBiasedF2C, bc::SetValue, loc, idx, arg)
+    @assert idx == right_center_boundary_idx(arg)
     bc.val
 end
 
