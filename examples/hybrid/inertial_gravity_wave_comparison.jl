@@ -136,32 +136,53 @@ function compare_solvers()
 
     if rank == root_index
         problems = [(; velem) for velem in 10:10:30]
-        implicit_formulations = [
+        explicit_formulations = [
             (; 𝔼_var = :ρθ, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :none),
             (; 𝔼_var = :ρθ, 𝕄_var = :w, J_𝕄ρ_overwrite = :none),
-            (; 𝔼_var = :ρθ, 𝕄_var = :w, J_𝕄ρ_overwrite = :grav),
             (; 𝔼_var = :ρe_tot, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :none),
-            (; 𝔼_var = :ρe_tot, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :grav),
             (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :none),
-            (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :grav),
-            (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :pres),
         ]
-        rosenbrock_solver_infos = [
+        explicit_solver_infos = [
             (; ode_algorithm, dt) for
-            dt in 8.:2.:30.,
+            dt in 4.:1.:10.,
             ode_algorithm in (
-                # Rosenbrock Methods
-                ROS3P, Rodas3, RosShamp4, Veldd4, Velds4, GRK4T, GRK4A,
-                Ros4LStab, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas5,
-                # Rosenbrock-W Methods
-                Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS, ROS34PW1a,
-                ROS34PW1b, ROS34PW2, ROS34PW3,
+                # Explicit Runge-Kutta Methods
+                Euler, Midpoint, Heun, Ralston, RK4, BS3, OwrenZen3, OwrenZen4,
+                OwrenZen5, DP5, Tsit5, Anas5, FRK65, PFRK87, RKO65, TanYam7,
+                DP8, TsitPap8, Feagin10, Feagin12, Feagin14, BS5, Vern6, Vern7,
+                Vern8, Vern9,
+                # Explicit Strong-Stability Preserving Runge-Kutta Methods for
+                # Hyperbolic PDEs (Conservation Laws)
+                SSPRK22, SSPRK33, SSPRK53, SSPRK63, SSPRK73, SSPRK83, SSPRK432,
+                SSPRK43, SSPRK932, SSPRK54, SSPRK104, SSPRKMSVS32, SSPRKMSVS43,
             )
         ]
+        # implicit_formulations = [
+        #     (; 𝔼_var = :ρθ, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :none),
+        #     (; 𝔼_var = :ρθ, 𝕄_var = :w, J_𝕄ρ_overwrite = :none),
+        #     (; 𝔼_var = :ρθ, 𝕄_var = :w, J_𝕄ρ_overwrite = :grav),
+        #     (; 𝔼_var = :ρe_tot, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :none),
+        #     (; 𝔼_var = :ρe_tot, 𝕄_var = :ρw, J_𝕄ρ_overwrite = :grav),
+        #     (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :none),
+        #     (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :grav),
+        #     (; 𝔼_var = :ρe_tot, 𝕄_var = :w, J_𝕄ρ_overwrite = :pres),
+        # ]
+        # rosenbrock_solver_infos = [
+        #     (; ode_algorithm, dt) for
+        #     dt in 8.:2.:30.,
+        #     ode_algorithm in (
+        #         # Rosenbrock Methods
+        #         ROS3P, Rodas3, RosShamp4, Veldd4, Velds4, GRK4T, GRK4A,
+        #         Ros4LStab, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas5,
+        #         # Rosenbrock-W Methods
+        #         Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS, ROS34PW1a,
+        #         ROS34PW1b, ROS34PW2, ROS34PW3,
+        #     )
+        # ]
         variable_inputs = [
             (; problem..., formulation..., solver_info...) for
-            solver_info in rosenbrock_solver_infos,
-            formulation in implicit_formulations,
+            solver_info in explicit_solver_infos, # rosenbrock_solver_infos,
+            formulation in explicit_formulations, # implicit_formulations,
             problem in problems
         ]
         constant_input = (;

@@ -12,13 +12,13 @@ const P_ρe_factor = γ - 1
 
 norm_sqr(uₕ, w) =
     LinearAlgebra.norm_sqr(
-        Geometry.transform(Geometry.Cartesian13Axis(), uₕ) +
-        Geometry.transform(Geometry.Cartesian13Axis(), w)
+        Geometry.transform(Geometry.UWAxis(), uₕ) +
+        Geometry.transform(Geometry.UWAxis(), w)
     )
 
 # axes
-const x̂ = Geometry.Cartesian1Axis
-const ẑ = Geometry.Cartesian3Axis
+const û = Geometry.UAxis
+const ŵ = Geometry.WAxis
 
 # horizontal operators
 const ∇◦ₕ = Operators.Divergence()
@@ -30,16 +30,16 @@ const If = Operators.InterpolateC2F(
     top = Operators.Extrapolate(),
 )
 const If_uₕ = Operators.InterpolateC2F(
-    bottom = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
-    top = Operators.SetValue(Geometry.Cartesian1Vector(0.0)),
+    bottom = Operators.SetValue(Geometry.UVector(0.0)),
+    top = Operators.SetValue(Geometry.UVector(0.0)),
 )
 const Ic = Operators.InterpolateF2C()
 const ∇◦ᵥf = Operators.DivergenceC2F()
 const ∇◦ᵥc = Operators.DivergenceF2C()
 const ∇ᵥf = Operators.GradientC2F()
 const B_w = Operators.SetBoundaryOperator(
-    bottom = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
-    top = Operators.SetValue(Geometry.Cartesian3Vector(0.0)),
+    bottom = Operators.SetValue(Geometry.WVector(0.0)),
+    top = Operators.SetValue(Geometry.WVector(0.0)),
 )
 
 ClimaCore.RecursiveApply.rmul(x::AbstractArray, y::AbstractArray) = x * y
@@ -89,22 +89,22 @@ function rhs!(dY, Y, p, t)
     # ∂u/∂t = -(∇P)/ρ - ∇Φ - u◦∇u
     if :ρw in propertynames(Y)
         @. dY.ρw = B_w(
-            -Geometry.transform(ẑ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ -
+            -Geometry.transform(ŵ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ -
             ∇◦ᵥf(Ic(ρw ⊗ ρw) / Y.Yc.ρ)
         )
         @. dY.ρw -= ∇◦ₕ(uₕ_f ⊗ ρw)
     elseif :w in propertynames(Y)
         @. dY.w = B_w(
-            -Geometry.transform(ẑ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ - 
+            -Geometry.transform(ŵ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ - 
             adjoint(∇ᵥf(Ic(Y.w))) *
                 Geometry.transform(Geometry.Contravariant3Axis(), Y.w)
         )
         @. dY.w -= adjoint(∇ₕ(Y.w)) *
             Geometry.transform(Geometry.Contravariant1Axis(), uₕ_f)
     end
-    e₁₁ = Ref(Geometry.Axis2Tensor((x̂(), x̂()), @SMatrix [1.]))
+    eᵤᵤ = Ref(Geometry.Axis2Tensor((û(), û()), @SMatrix [1.]))
     @. dY.Yc.ρuₕ = -∇◦ᵥc(ρw ⊗ uₕ_f)
-    @. dY.Yc.ρuₕ -= ∇◦ₕ(P * e₁₁ + Y.Yc.ρuₕ ⊗ uₕ)
+    @. dY.Yc.ρuₕ -= ∇◦ₕ(P * eᵤᵤ + Y.Yc.ρuₕ ⊗ uₕ)
 
     Spaces.weighted_dss!(dY.Yc)
     if :ρw in propertynames(Y)
@@ -153,12 +153,12 @@ end
 #     # ∂ρu/∂t ≈ -∇ᵥP - ρ∇ᵥΦ
 #     # ∂u/∂t ≈ -(∇ᵥP)/ρ - ∇ᵥΦ
 #     if :ρw in propertynames(Y)
-#         @. dY.ρw = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ)
+#         @. dY.ρw = B_w(-Geometry.transform(ŵ(), ∇ᵥf(P)) - If(Y.Yc.ρ) * ∇Φ)
 #     elseif :w in propertynames(Y)
-#         @. dY.w = B_w(-Geometry.transform(ẑ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ)
+#         @. dY.w = B_w(-Geometry.transform(ŵ(), ∇ᵥf(P)) / If(Y.Yc.ρ) - ∇Φ)
 #     end
-#     # `dY.Yc.ρuₕ .= Ref(Geometry.Cartesian1Vector(0.))` gives an error
-#     Fields.field_values(dY.Yc.ρuₕ) .= Ref(Geometry.Cartesian1Vector(0.))
+#     # `dY.Yc.ρuₕ .= Ref(Geometry.UVector(0.))` gives an error
+#     Fields.field_values(dY.Yc.ρuₕ) .= Ref(Geometry.UVector(0.))
 
 #     return dY
 # end
@@ -328,9 +328,9 @@ function rhs_remainder!(dY, Y, p, t)
         @. dY.w -= adjoint(∇ₕ(Y.w)) *
             Geometry.transform(Geometry.Contravariant1Axis(), uₕ_f)
     end
-    e₁₁ = Ref(Geometry.Axis2Tensor((x̂(), x̂()), @SMatrix [1.]))
+    eᵤᵤ = Ref(Geometry.Axis2Tensor((û(), û()), @SMatrix [1.]))
     @. dY.Yc.ρuₕ = -∇◦ᵥc(ρw ⊗ uₕ_f)
-    @. dY.Yc.ρuₕ -= ∇◦ₕ(P * e₁₁ + Y.Yc.ρuₕ ⊗ uₕ)
+    @. dY.Yc.ρuₕ -= ∇◦ₕ(P * eᵤᵤ + Y.Yc.ρuₕ ⊗ uₕ)
 
     Spaces.weighted_dss!(dY.Yc)
     if :ρw in propertynames(Y)
@@ -557,7 +557,7 @@ function Wfact!(W, Y, p, dtγ, t)
     #     ∂(∂𝕄[N + 1]/∂t)/∂ρ[N] = ∂(∂𝕄[N + 1]/∂t)/∂𝔼[N] = 0
     @. J_𝕄ρ.d[1, :] = J_𝕄𝔼.d[1, :] = J_𝕄ρ.d2[N, :] = J_𝕄𝔼.d2[N, :] = 0.
     # if :ρw in propertynames(Y)
-        # dY.ρw = B_w(Geometry.transform(ẑ(), -∇ᵥf(P) - If(Y.Yc.ρ) * ∇Φ)) ==>
+        # dY.ρw = B_w(Geometry.transform(ŵ(), -∇ᵥf(P) - If(Y.Yc.ρ) * ∇Φ)) ==>
         # For all 1 < n < N + 1, ∂ρw[n]/∂t =
         # (P[n - 1] - P[n]) / Δz_f[n] - (ρ[n - 1] + ρ[n]) ∇Φ[n] / 2 ==>
         #     ∂(∂ρw[n]/∂t)/∂𝔼[n] = -∂P[n]/∂𝔼[n] / Δz_f[n]
@@ -565,7 +565,7 @@ function Wfact!(W, Y, p, dtγ, t)
         #     ∂(∂ρw[n]/∂t)/∂ρ[n] = -∂P[n]/∂ρ[n] / Δz_f[n] - ∇Φ[n] / 2
         #     ∂(∂ρw[n]/∂t)/∂ρ[n - 1] = ∂P[n - 1]/∂ρ[n - 1] / Δz_f[n] - ∇Φ[n] / 2
     # elseif :w in propertynames(Y)
-        # dY.w = B_w(Geometry.transform(ẑ(), -∇ᵥf(P) / If(Y.Yc.ρ) - ∇Φ)) ==>
+        # dY.w = B_w(Geometry.transform(ŵ(), -∇ᵥf(P) / If(Y.Yc.ρ) - ∇Φ)) ==>
         # For all 1 < n < N + 1, ∂w[n]/∂t =
         # (P[n - 1] - P[n]) / ((ρ[n - 1] + ρ[n]) / 2 * Δz_f[n]) - ∇Φ[n] ==>
         #     ∂(∂w[n]/∂t)/∂𝔼[n] = -∂P[n]/∂𝔼[n] / (ρ_f[n] Δz_f[n])

@@ -70,7 +70,7 @@ function init_inertial_gravity_wave_ρθ(x, z, A)
     ρ = p_ref / ((p_ref / p_0)^(R_d / cp_d) * R_d * θ)
     ρθ = ρ * θ
 
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = Geometry.Cartesian1Vector(0.))
+    return (ρ = ρ, ρθ = ρθ, ρuₕ = Geometry.UVector(0.))
 end
 function ρθ_to_ρe_tot(Yc, Φ)
     ρe_tot = (P_ρθ_factor * Yc.ρθ^γ) / P_ρe_factor + Yc.ρ * Φ
@@ -98,15 +98,15 @@ function inertial_gravity_wave_prob(;
     coords = Fields.coordinate_field(space)
     face_coords = Fields.coordinate_field(face_space)
 
-    uₕ = map(c -> Geometry.Cartesian1Vector(0.), coords)
-    uₕ_f = map(c -> Geometry.Cartesian1Vector(0.), face_coords)
+    uₕ = map(c -> Geometry.UVector(0.), coords)
+    uₕ_f = map(c -> Geometry.UVector(0.), face_coords)
     P = map(c -> 0., coords)
     Φ = map(c -> gravitational_potential(c.z), coords)
     ∇ᵥf_Φ = Operators.GradientC2F(
         bottom = Operators.SetValue(gravitational_potential(0.)),
         top = Operators.SetValue(gravitational_potential(zmax)),
     )
-    ∇Φ = @. Geometry.transform(ẑ(), ∇ᵥf_Φ(Φ))
+    ∇Φ = @. Geometry.transform(ŵ(), ∇ᵥf_Φ(Φ))
     p = (; coords, face_coords, uₕ, uₕ_f, P, Φ, ∇Φ)
 
     Yc = map(c -> init_inertial_gravity_wave_ρθ(c.x, c.z, A), coords)
@@ -115,7 +115,7 @@ function inertial_gravity_wave_prob(;
     elseif 𝔼_var != :ρθ
         throw(ArgumentError("Invalid 𝔼_var $𝔼_var (must be :ρθ or :ρe_tot)"))
     end
-    𝕄 = map(c -> Geometry.Cartesian3Vector(0.), face_coords)
+    𝕄 = map(c -> Geometry.WVector(0.), face_coords)
 
     if !(J_𝕄ρ_overwrite in (:none, :grav, :pres))
         throw(ArgumentError(string(
