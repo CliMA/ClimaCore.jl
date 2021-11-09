@@ -567,3 +567,63 @@ end
     @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
 
 end
+
+@testset "Biased interpolation" begin
+    FT = Float64
+    n_elems = 10
+
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(pi);
+        boundary_tags = (:bottom, :top),
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
+
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+    zc = getproperty(Fields.coordinate_field(cs), :z)
+    zf = getproperty(Fields.coordinate_field(fs), :z)
+
+    function field_wrapper(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+
+    field_vars() = (; y = FT(0))
+
+    cfield = field_wrapper(cs, field_vars())
+    ffield = field_wrapper(fs, field_vars())
+
+    cy = cfield.y
+    fy = ffield.y
+
+    cyp = parent(cy)
+    fyp = parent(fy)
+
+    # C2F biased operators
+    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = LBC2F(cy)
+    fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
+    @test all(fy_ref .== fyp)
+
+    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = RBC2F(cy)
+    fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
+    @test all(fy_ref .== fyp)
+
+    # F2C biased operators
+    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = LBF2C(fy)
+    cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
+
+    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = RBF2C(fy)
+    cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
+end
