@@ -1,10 +1,18 @@
+"""
+    AbstractIntervalTopology <: AbstractTopology
+
+A topology on a 1D interval domain.
+"""
+abstract type AbstractIntervalTopology <: AbstractTopology end
+
+
 # at the moment, this only serves the purpose of putting the boundary tags into type space.
 """
     IntervalTopology(mesh::IntervalMesh)
 
-A sequential topology on an [`Meshes.IntervalMesh`](@ref).
+A topology on a [`Meshes.IntervalMesh`](@ref), with the elements stored sequentially
 """
-struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
+struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractIntervalTopology
     mesh::M
     boundaries::B
 end

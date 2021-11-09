@@ -5,7 +5,7 @@
 struct ExtrudedFiniteDifferenceSpace{
     S <: Staggering,
     H <: AbstractSpace,
-    T <: Topologies.IntervalTopology,
+    T <: Topologies.AbstractIntervalTopology,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
 } <: AbstractSpace
