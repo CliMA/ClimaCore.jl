@@ -46,10 +46,10 @@ function opposing_face(topology::Grid2DTopology, elem::Integer, face::Integer)
     face_neighbors = topology.mesh.face_neighbors
     fc = topology.mesh.elem_faces[elem, face]
 
-    if face_neighbors[fc, 1] == elem
+    if face_neighbors[fc, 1] == elem && face_neighbors[fc, 2] == face
         opelem = face_neighbors[fc, 3]
         opface = face_neighbors[fc, 4]
-    elseif face_neighbors[fc, 3] == elem
+    elseif face_neighbors[fc, 3] == elem && face_neighbors[fc, 4] == face
         opelem = face_neighbors[fc, 1]
         opface = face_neighbors[fc, 2]
     else
