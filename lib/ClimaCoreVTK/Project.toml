@@ -1,7 +1,7 @@
 name = "ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
@@ -9,5 +9,5 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 julia = "1.6"
-ClimaCore = "0.3"
+ClimaCore = "0.4"
 WriteVTK = "1.11"
