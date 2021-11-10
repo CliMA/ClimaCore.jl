@@ -87,16 +87,27 @@ end
     space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     x = Fields.coordinate_field(space)
-    Y = Fields.FieldVector(u = u, x = x)
+    y = [1.0, 2.0, 3.0]
+    z = 1.0
+    Y = Fields.FieldVector(u = u, x = x, y = y, z = z)
 
-    @test propertynames(Y) == (:u, :x)
-    @test Y.u == u
+    @test propertynames(Y) == (:u, :x, :y, :z)
+    @test Y.u === u
+    @test Y.y === y
+    @test Y.z === z
 
     Y1 = 2 .* Y
     @test parent(Y1.u) == 2 .* parent(u)
     @test parent(Y1.x) == 2 .* parent(x)
+    @test Y1.y == 2 .* y
+    @test Y1.z === 2 * z
 
     Y1 .= Y1 .+ 2 .* Y
     @test parent(Y1.u) == 4 .* parent(u)
     @test parent(Y1.x) == 4 .* parent(x)
+    @test Y1.y == 4 .* y
+    @test Y1.z === 4 * z
+
+    Y.z = 3.0
+    @test Y.z === 3.0
 end
