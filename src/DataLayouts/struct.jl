@@ -9,7 +9,6 @@
 # there is no heterogeneity in the struct (can store recursive representations) of field types
 
 # get_offset(array, S, offset) => S(...), next_offset
-import Base: @propagate_inbounds
 
 """
     basetype(S...)
@@ -43,8 +42,6 @@ function replace_basetype(
 ) where {names, T, FT}
     NamedTuple{names, replace_basetype(T, FT)}
 end
-
-
 
 """
     parent_array_type(::Type{<:AbstractArray})
@@ -91,7 +88,7 @@ function typesize(::Type{T}, ::Type{S}) where {T, S}
 end
 
 # TODO: this assumes that the field struct zero type is the same as the backing
-# zero'd out memory, which should be true in all "real world" cases 
+# zero'd out memory, which should be true in all "real world" cases
 # but is something that should be revisited
 @inline function _mzero!(out::MArray{S, T, N, L}, FT) where {S, T, N, L}
     TdivFT = DataLayouts.typesize(FT, T)
@@ -126,7 +123,10 @@ function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
                 )),
             )
         end
-        :(bypass_constructor(S, $tup))
+        return quote
+            Base.@_propagate_inbounds_meta
+            bypass_constructor(S, $tup)
+        end
     else
         args = ntuple(fieldcount(S)) do i
             get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
@@ -134,6 +134,7 @@ function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
         return bypass_constructor(S, args)
     end
 end
+
 @propagate_inbounds function get_struct(
     array::AbstractArray{S},
     ::Type{S},
@@ -151,19 +152,14 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     if @generated
         errorstring = "Expected type $T, got type $S"
         ex = quote
+            Base.@_propagate_inbounds_meta
             # TODO: need to figure out a better way to handle the case where we require conversion
             # e.g. if T = Dual or Double64
-
             if isprimitivetype(S)
                 # error if we dont hit triangular dispatch method (defined below):
                 # set_struct!(::AbstractArray{S}, ::S) where {S}
                 error($errorstring)
             end
-            # TODO: we get a segfault here when trying to pass propogate_inbounds
-            # with a generated function ctx (in the quote block or attached to the generated function)
-            # passing it in the quoted expr for args seems to work :( @propagate_inbounds set_struct! ...)
-            # https://github.com/JuliaArrays/StaticArrays.jl/blob/52fc10278667dd5fa82ded1edcfd5f7fedfae1c4/src/indexing.jl#L16-L38
-            # Base.@_propagate_inbounds_meta
         end
         for i in 1:fieldcount(S)
             push!(
@@ -176,7 +172,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
             )
         end
         push!(ex.args, :(return nothing))
-        ex
+        return ex
     else
         if isprimitivetype(S)
             return error("Expected type $T, got type $S")
@@ -200,6 +196,6 @@ end
     array[offset + 1] = val
 end
 
-@propagate_inbounds function set_struct!(array, val)
-    set_struct!(array, val, 0)
+@inline function set_struct!(array, val)
+    @inbounds set_struct!(array, val, 0)
 end

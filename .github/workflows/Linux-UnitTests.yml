@@ -71,4 +71,4 @@ jobs:
       env:
         TEST_MODULES: ${{ matrix.test-modules }}
       run: |
-        julia --color=yes --project=test test/runtests.jl
+        julia --color=yes --check-bounds=yes --project=test test/runtests.jl
