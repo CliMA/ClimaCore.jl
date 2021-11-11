@@ -1,3 +1,4 @@
+# Toplevel interface functions for recurisve broadcast expressions
 
 """
     slab(data::AbstractData, h::Integer)
@@ -6,12 +7,17 @@ A "pancake" view into an underlying
 data layout `data` at location `h`.
 """
 function slab end
-#=
-# TODO: this could cause problems when it fails...
-#slab(x::Number, inds...) = x
-=#
-slab(x, inds...) = x
-slab(tup::Tuple, inds...) = map(x -> slab(x, inds...), tup)
+
+# generic fallback
+@inline slab(x, inds...) = x
+@inline slab(tup::Tuple, inds...) = slab_args(tup, inds...)
+
+# Recursively call slab() on broadcast arguments in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline slab_args(args::Tuple, inds...) =
+    (slab(args[1], inds...), slab_args(Base.tail(args), inds...)...)
+@inline slab_args(args::Tuple{Any}, inds...) = (slab(args[1], inds...),)
+@inline slab_args(args::Tuple{}, inds...) = ()
 
 """
     column(data::AbstractData, i::Integer)
@@ -21,5 +27,13 @@ data layout `data` at nodal point index `i`.
 """
 function column end
 
-column(x, inds...) = x
-column(tup::Tuple, inds...) = map(x -> column(x, inds...), tup)
+# generic fallback
+@inline column(x, inds...) = x
+@inline column(tup::Tuple, inds...) = column_args(tup, inds...)
+
+# Recursively call column() on broadcast arguments in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline column_args(args::Tuple, inds...) =
+    (column(args[1], inds...), column_args(Base.tail(args), inds...)...)
+@inline column_args(args::Tuple{Any}, inds...) = (column(args[1], inds...),)
+@inline column_args(args::Tuple{}, inds...) = ()

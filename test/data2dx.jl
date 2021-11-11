@@ -40,6 +40,28 @@ import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
     end
 end
 
+@testset "VIJFH boundscheck" begin
+    Nv = 1 # number of vertical levels
+    Nij = 1  # number of nodal points
+    Nh = 2 # number of elements
+
+    S = Tuple{Complex{Float64}, Float64}
+    array = zeros(Float64, Nv, Nij, Nij, 3, Nh)
+    data = VIJFH{S, Nij}(array)
+
+    @test_throws BoundsError slab(data, -1, 1)
+    @test_throws BoundsError slab(data, 1, -1)
+    @test_throws BoundsError slab(data, 3, 1)
+    @test_throws BoundsError slab(data, 1, 3)
+
+    @test_throws BoundsError column(data, -1, 1, 1)
+    @test_throws BoundsError column(data, 1, -1, 1)
+    @test_throws BoundsError column(data, 1, 1, -1)
+    @test_throws BoundsError column(data, 3, 1, 1)
+    @test_throws BoundsError column(data, 1, 3, 1)
+    @test_throws BoundsError column(data, 1, 1, 3)
+end
+
 @testset "VIJFH type safety" begin
     Nv = 1 # number of vertical levels
     Nij = 2 # Nij × Nij nodal points per element

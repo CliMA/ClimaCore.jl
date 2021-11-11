@@ -24,7 +24,7 @@ jobs:
             {{ custom }}
             {% endif %}
 
-            ## 📢 API Changes:
+            ### 📢 API Changes:
             {% if issues %}
             {% for issue in issues if 'API' in issue.labels %}
             - {{ issue.title }} (#{{ issue.number }})
@@ -36,11 +36,11 @@ jobs:
             {% endfor %}
             {% endif %}
 
-            ## 🚀 Features
+            ### 🚀 Features
             {% if issues %}
             {% for issue in issues if 'enhancement' in issue.labels or 'feature' in issue.labels %}
             - {{ issue.title }} (#{{ issue.number }})
-            {% endfor}
+            {% endfor %}
             {% endif %}
             {% if pulls %}
             {% for pull in pulls if 'enhancement' in pull.labels or 'feature' in pull.labels %}
@@ -48,7 +48,7 @@ jobs:
             {% endfor %}
             {% endif %}
 
-            ## 📑 Documentation
+            ### 📑 Documentation
             {% if issues %}
             {% for issue in issues if 'documentation' in issue.labels %}
             - {{ issue.title }} (#{{ issue.number }})
@@ -60,7 +60,7 @@ jobs:
             {% endfor %}
             {% endif %}
 
-            ## 🐛 Fixes
+            ### 🐛 Fixes
             {% if issues %}
             {% for issue in issues if 'bug' in issue.labels %}
             - {{ issue.title }} (#{{ issue.number }})

@@ -231,7 +231,7 @@ transform(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = transform(ato, v)
 The return type when taking the divergence of a field of `V`.
 
 Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
-    """
+"""
 divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
 
 # this isn't quite right: it only is true when the Christoffel symbols are zero

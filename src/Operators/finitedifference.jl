@@ -69,6 +69,7 @@ D - 1
 
 c2c laplacian, neumann
 c   f   c
+
     N
       \
 1       1
@@ -194,13 +195,13 @@ right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
-function Geometry.LocalGeometry(
+Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::Integer,
 )
     space.center_local_geometry[idx]
 end
-function Geometry.LocalGeometry(
+Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::PlusHalf,
 )
@@ -258,9 +259,12 @@ abstract type FiniteDifferenceOperator end
 
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
 
-boundary_width(op::FiniteDifferenceOperator, bc) =
-    error("Boundary $(typeof(bc)) is not supported for operator $(typeof(op))")
+# boundary width error fallback
+@noinline invalid_boundary_condition_error(op_type::Type, bc_type::Type) =
+    error("Boundary `$bc_type` is not supported for operator `$op_type`")
 
+boundary_width(op::FiniteDifferenceOperator, bc::BoundaryCondition) =
+    invalid_boundary_condition_error(typeof(bc), typeof(op))
 
 get_boundary(
     op::FiniteDifferenceOperator,
@@ -434,6 +438,13 @@ function stencil_right_boundary(
     a⁻
 end
 
+abstract type WeightedInterpolationOperator <: InterpolationOperator end
+
+# TODO: this is not in general correct and the return type
+# should be based on the component operator types (rdiv, rmul) but we don't have a good way
+# of creating ex. one(field_type) for complex fields for inference
+return_eltype(::WeightedInterpolationOperator, weights, arg) = eltype(arg)
+
 """
     WI = WeightedInterpolateF2C(; boundaries)
     WI.(w, x)
@@ -450,10 +461,10 @@ WI(w, x)[i] = \\frac{
 
 No boundary conditions are required (or supported)
 """
-struct WeightedInterpolateF2C{BCS} <: InterpolationOperator
+struct WeightedInterpolateF2C{BCS} <: WeightedInterpolationOperator
     bcs::BCS
 end
-WeightedInterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
+WeightedInterpolateF2C(; kwargs...) = WeightedInterpolateF2C(NamedTuple(kwargs))
 
 function return_space(
     ::WeightedInterpolateF2C,
@@ -471,7 +482,8 @@ function return_space(
     Spaces.CenterExtrudedFiniteDifferenceSpace(value_space)
 end
 
-stencil_interior_width(::WeightedInterpolateF2C) = ((0, 0), (-half, half))
+stencil_interior_width(::WeightedInterpolateF2C) =
+    ((-half, half), (-half, half))
 
 function stencil_interior(
     ::WeightedInterpolateF2C,
@@ -507,7 +519,7 @@ Supported boundary conditions are:
 - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
 - [`Extrapolate`](@ref): use the closest interior point as the boundary value
 """
-struct WeightedInterpolateC2F{BCS} <: InterpolationOperator
+struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
     bcs::BCS
 end
 WeightedInterpolateC2F(; kwargs...) = WeightedInterpolateC2F(NamedTuple(kwargs))
@@ -528,7 +540,8 @@ function return_space(
     Spaces.FaceExtrudedFiniteDifferenceSpace(value_space)
 end
 
-stencil_interior_width(::WeightedInterpolateC2F) = ((0, 0), (0, 1))
+stencil_interior_width(::WeightedInterpolateC2F) =
+    ((-half, half), (-half, half))
 
 function stencil_interior(
     ::WeightedInterpolateC2F,
@@ -584,7 +597,7 @@ function stencil_left_boundary(
 )
     space = axes(value_field)
     @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(arg, loc, idx + half)
+    a⁺ = getidx(value_field, loc, idx + half)
     v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
     a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
@@ -614,8 +627,9 @@ function stencil_left_boundary(
     weight_field,
     value_field,
 )
+    space = axes(value_field)
     @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(arg, loc, idx + half)
+    a⁺ = getidx(value_field, loc, idx + half)
     a⁺
 end
 
@@ -1696,7 +1710,6 @@ function stencil_interior(::DivergenceC2F, loc, idx, arg)
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
 
-
 boundary_width(op::DivergenceC2F, ::SetValue) = 1
 function stencil_left_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)
     @assert idx == left_face_boundary_idx(arg)
@@ -1758,10 +1771,13 @@ function left_interor_window_idx(
     loc::LeftBoundaryWindow,
 )
     space = axes(bc)
-    arg_idxs = map(bc.args, stencil_interior_width(bc.f)) do arg, width
-        left_interor_window_idx(arg, space, loc) - width[1]
-    end
-    return max(maximum(arg_idxs), left_idx(space) + boundary_width(bc, loc))
+    widths = stencil_interior_width(bc.f)
+    arg_idxs = tuplemap(
+        (arg, width) -> left_interor_window_idx(arg, space, loc) - width[1],
+        bc.args,
+        widths,
+    )
+    return max(max(arg_idxs...), left_idx(space) + boundary_width(bc, loc))
 end
 
 function right_interor_window_idx(
@@ -1770,10 +1786,14 @@ function right_interor_window_idx(
     loc::RightBoundaryWindow,
 )
     space = axes(bc)
-    arg_idxs = map(bc.args, stencil_interior_width(bc.f)) do arg, width
-        right_interor_window_idx(arg, space, loc) - width[2]
-    end
-    return min(minimum(arg_idxs), right_idx(space) - boundary_width(bc, loc))
+    widths = stencil_interior_width(bc.f)
+    arg_idxs = tuplemap(
+        (arg, width) ->
+            right_interor_window_idx(arg, space, loc) - width[2],
+        bc.args,
+        widths,
+    )
+    return min(min(arg_idxs...), right_idx(space) - boundary_width(bc, loc))
 end
 
 function left_interor_window_idx(
@@ -1782,15 +1802,20 @@ function left_interor_window_idx(
     loc::LeftBoundaryWindow,
 )
     space = axes(bc)
-    maximum(arg -> left_interor_window_idx(arg, space, loc), bc.args)
+    arg_idxs =
+        tuplemap(arg -> left_interor_window_idx(arg, space, loc), bc.args)
+    maximum(arg_idxs)
 end
+
 function right_interor_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
     _,
     loc::RightBoundaryWindow,
 )
     space = axes(bc)
-    minimum(arg -> right_interor_window_idx(arg, space, loc), bc.args)
+    arg_idxs =
+        tuplemap(arg -> right_interor_window_idx(arg, space, loc), bc.args)
+    minimum(arg_idxs)
 end
 
 function left_interor_window_idx(field::Field, _, loc::LeftBoundaryWindow)
@@ -1876,55 +1901,90 @@ Base.Broadcast.BroadcastStyle(
 Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     return_eltype(bc.f, bc.args...)
 
-function getidx(
+@inline function getidx(
     bc::Fields.CenterFiniteDifferenceField,
     ::Location,
     idx::Integer,
 )
-    Fields.field_values(bc)[idx]
+    field_data = Fields.field_values(bc)
+    return field_data[idx]
 end
 
-function getidx(bc::Fields.FaceFiniteDifferenceField, ::Location, idx::PlusHalf)
-    Fields.field_values(bc)[idx.i + 1]
-end
-
-getidx(field::Fields.Field, ::Location, idx) = error(
-    "Invalid index type $(typeof(idx)) for field on space $(summary(axes(field)))",
+@inline function getidx(
+    bc::Fields.FaceFiniteDifferenceField,
+    ::Location,
+    idx::PlusHalf,
 )
-getidx(field::Base.Broadcast.Broadcasted{StencilStyle}, ::Location, idx) =
-    error(
-        "Invalid index type $(typeof(idx)) for field on space $(summary(axes(field)))",
-    )
-
-getidx(scalar, ::Location, idx) = scalar
+    field_data = Fields.field_values(bc)
+    return field_data[idx.i + 1]
+end
 
 # unwap boxed scalars
 getidx(scalar::Ref, loc::Location, idx) = getidx(scalar[], loc, idx)
 
-function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
-    args = map(arg -> getidx(arg, loc, idx), bc.args)
-    bc.f(args...)
+# recrusive fallback for scalar, just return
+getidx(scalar, ::Location, idx) = scalar
+
+# getidx error fallbacks
+@noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
+    error("Invalid index type `$idx_type` for field on space `$space_type`")
+
+function getidx(field::Fields.Field, ::Location, idx)
+    space = axes(field)
+    inferred_getidx_error(typeof(idx), typeof(space))
 end
 
+function getidx(
+    field::Base.Broadcast.Broadcasted{StencilStyle},
+    ::Location,
+    idx,
+)
+    space = axes(field)
+    inferred_getidx_error(typeof(idx), typeof(space))
+end
+
+# recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
+@inline getidx_args(args::Tuple, loc::Location, idx) =
+    (getidx(args[1], loc, idx), getidx_args(Base.tail(args), loc, idx)...)
+@inline getidx_args(arg::Tuple{Any}, loc::Location, idx) =
+    (getidx(arg[1], loc, idx),)
+@inline getidx_args(::Tuple{}, loc::Location, idx) = ()
+
+function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
+    #_args = tuplemap(arg -> getidx(arg, loc, idx), bc.args)
+    _args = getidx_args(bc.args, loc, idx)
+    bc.f(_args...)
+end
+
+# setidx! methods for copyto!
 function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
-    Fields.field_values(bc)[idx] = val
+    field_data = Fields.field_values(bc)
+    field_data[idx] = val
+    val
 end
 
 function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
-    Fields.field_values(bc)[idx.i + 1] = val
+    field_data = Fields.field_values(bc)
+    field_data[idx.i + 1] = val
+    val
 end
 
 function Base.Broadcast.broadcasted(op::FiniteDifferenceOperator, args...)
     Base.Broadcast.broadcasted(StencilStyle(), op, args...)
 end
 
+# recursively unwrap axes broadcast arguments in a way that is statically reducible by the optimizer
+@inline axes_args(args::Tuple) = (axes(args[1]), axes_args(Base.tail(args))...)
+@inline axes_args(arg::Tuple{Any}) = (axes(arg[1]),)
+@inline axes_args(::Tuple{}) = ()
+
 function Base.Broadcast.broadcasted(
     ::StencilStyle,
     op::FiniteDifferenceOperator,
     args...,
 )
-    ax = return_space(op, map(axes, args)...)
-    Base.Broadcast.Broadcasted{StencilStyle}(op, args, ax)
+    _axes = return_space(op, axes_args(args)...)
+    Base.Broadcast.Broadcasted{StencilStyle}(op, args, _axes)
 end
 
 Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{StencilStyle}) = bc
@@ -1933,16 +1993,23 @@ Base.Broadcast._broadcast_getindex_eltype(
 ) = eltype(bc)
 
 # check that inferred output field space is equal to dest field space
-@inline function Base.Broadcast.materialize!(
+@noinline inferred_stencil_spaces_error(
+    dest_space_type::Type,
+    result_space_type::Type,
+) = error(
+    "dest space `$dest_space_type` is not the same instance as the inferred broadcasted result space `$result_space_type`",
+)
+
+function Base.Broadcast.materialize!(
     ::Base.Broadcast.BroadcastStyle,
     dest::Fields.Field,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
     if result_space !== dest_space
-        error(
-            "dest space `$(summary(dest_space))` is not equal to the inferred broadcasted result space `$(summary(result_space))`",
-        )
+        # TODO: we pass the types here to avoid stack copying data
+        # but this could lead to a confusing error message (same space type but different instances)
+        inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
     end
     # the default Base behavior is to instantiate a Broadcasted object with the same axes as the dest
     return copyto!(
@@ -1953,11 +2020,11 @@ Base.Broadcast._broadcast_getindex_eltype(
     )
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractStencilStyle}
-    _args = map(a -> column(a, inds...), bc.args)
+    _args = column_args(bc.args, inds...)
     _axes = column(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
