@@ -29,6 +29,15 @@ TestFloatTypes = (Float32, Float64)
     end
 end
 
+@testset "VF boundscheck" begin
+    S = Tuple{Complex{Float64}, Float64}
+    array = zeros(Float64, 4, 3)
+    data = VF{S}(array)
+    @test data[1][2] == zero(Float64)
+    @test_throws BoundsError data[-1]
+    @test_throws BoundsError data[5]
+end
+
 @testset "VF type safety" begin
     Nv = 1 # number of vertical levels
 

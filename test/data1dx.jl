@@ -39,6 +39,29 @@ import ClimaCore.DataLayouts: VIFH, slab, column
     end
 end
 
+@testset "VIFH boundscheck" begin
+    Nv = 1 # number of vertical levels
+    Ni = 1  # number of nodal points
+    Nh = 2 # number of elements
+
+    S = Tuple{Complex{Float64}, Float64}
+    array = zeros(Float64, Nv, Ni, 3, Nh)
+    data = VIFH{S, Ni}(array)
+
+    @test_throws BoundsError slab(data, -1, -1)
+    @test_throws BoundsError slab(data, 1, 3)
+
+    sdata = slab(data, 1, 1)
+    @test_throws BoundsError sdata[-1]
+    @test_throws BoundsError sdata[2]
+
+    @test_throws BoundsError column(data, -1, 1)
+    @test_throws BoundsError column(data, -1, 1, 1)
+    @test_throws BoundsError column(data, 2, 1)
+    @test_throws BoundsError column(data, 1, 3)
+end
+
+
 @testset "VIFH type safety" begin
     Nv = 1 # number of vertical levels
     Ni = 1  # number of nodal points per element
