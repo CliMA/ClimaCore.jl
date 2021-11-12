@@ -277,7 +277,13 @@ end
     dataview = @inbounds view(parent(data), :, :, :, h)
     IJF{S, Nij}(dataview)
 end
-@inline slab(data::IJFH, v::Integer, h::Integer) = slab(data, h)
+
+@inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
+    @boundscheck (v >= 1 && 1 <= h <= length(data)) ||
+                 throw(BoundsError(data, (v, h)))
+    dataview = @inbounds view(parent(data), :, :, :, h)
+    IJF{S, Nij}(dataview)
+end
 
 # ==================
 # Data1D DataLayout
@@ -378,6 +384,16 @@ end
 Base.size(::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
 Base.axes(::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
+@inline function slab(data::DataSlab2D, h)
+    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
+    data
+end
+
+@inline function slab(data::DataSlab2D, v, h)
+    @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
+    data
+end
+
 """
     IJF{S, Nij, A} <: DataSlab2D{S, Nij}
 
@@ -452,10 +468,6 @@ end
 # DataSlab1D DataLayout
 # ======================
 
-function Base.size(::DataSlab1D{<:Any, Ni}) where {Ni}
-    return (Ni, 1, 1, 1, 1)
-end
-
 @propagate_inbounds function Base.getindex(slab::DataSlab1D, I::CartesianIndex)
     slab[I[1]]
 end
@@ -468,7 +480,21 @@ end
     slab[I[1]] = val
 end
 
+function Base.size(::DataSlab1D{<:Any, Ni}) where {Ni}
+    return (Ni, 1, 1, 1, 1)
+end
+Base.axes(::DataSlab1D{S, Ni}) where {S, Ni} = (SOneTo(Ni),)
 Base.lastindex(::DataSlab1D{S, Ni}) where {S, Ni} = Ni
+
+@inline function slab(data::DataSlab1D, h)
+    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
+    data
+end
+
+@inline function slab(data::DataSlab1D, v, h)
+    @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
+    data
+end
 
 """
     IF{S, Ni, A} <: DataSlab1D{S, Ni}
@@ -583,8 +609,10 @@ end
     VF{SS}(dataview)
 end
 
-@propagate_inbounds function Base.getindex(data::VF{S}, i::Integer) where {S}
-    dataview = @inbounds view(parent(data), i, :)
+@inline function Base.getindex(data::VF{S}, v::Integer) where {S}
+    @boundscheck (1 <= v <= length(parent(data))) ||
+                 throw(BoundsError(data, (v,)))
+    dataview = @inbounds view(parent(data), v, :)
     get_struct(dataview, S)
 end
 
@@ -603,17 +631,23 @@ end
     col[I[4]] = val
 end
 
-@propagate_inbounds function Base.setindex!(
-    data::VF{S},
-    val,
-    v::Integer,
-) where {S}
+@inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
+    @boundscheck (1 <= v <= length(parent(data))) ||
+                 throw(BoundsError(data, (v,)))
     dataview = @inbounds view(parent(data), v, :)
     set_struct!(dataview, convert(S, val))
 end
 
-@inline column(data::VF, i, h) = data
-@inline column(data::VF, i, j, h) = column(data, i, h)
+@inline function column(data::VF, i, h)
+    @boundscheck (i >= 1 && h >= 1) || throw(BoundsError(data, (i, h)))
+    data
+end
+
+@inline function column(data::VF, i, j, h)
+    @boundscheck (i >= 1 && j >= 1 && h >= 1) ||
+                 throw(BoundsError(data, (i, j, h)))
+    data
+end
 
 # ======================
 # Data2DX DataLayout
@@ -677,12 +711,18 @@ end
     VIJFH{SS, Nij}(dataview)
 end
 
-@propagate_inbounds function slab(data::VIJFH{S, Nij}, v, h) where {S, Nij}
+@inline function slab(data::VIJFH{S, Nij}, v, h) where {S, Nij}
+    @boundscheck (
+        1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 5)
+    ) || throw(BoundsError(data, (v, h)))
     dataview = @inbounds view(parent(data), v, :, :, :, h)
     IJF{S, Nij}(dataview)
 end
 
-@propagate_inbounds function column(data::VIJFH{S}, i, j, h) where {S}
+@inline function column(data::VIJFH{S, Nij}, i, j, h) where {S, Nij}
+    @boundscheck (
+        1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= size(parent(data), 5)
+    ) || throw(BoundsError(data, (i, j, h)))
     dataview = @inbounds view(parent(data), :, i, j, :, h)
     VF{S}(dataview)
 end
@@ -756,19 +796,26 @@ end
     VIFH{SS, Ni}(dataview)
 end
 
-@propagate_inbounds function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
+@inline function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
+    @boundscheck (
+        1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 4)
+    ) || throw(BoundsError(data, (v, h)))
     dataview = @inbounds view(parent(data), v, :, :, h)
     IF{S, Ni}(dataview)
 end
 
-@propagate_inbounds function column(data::VIFH{S}, i, h) where {S}
+@inline function column(data::VIFH{S, Ni}, i, h) where {S, Ni}
+    @boundscheck (1 <= i <= Ni && 1 <= h <= size(parent(data), 4)) ||
+                 throw(BoundsError(data, (i, h)))
     dataview = @inbounds view(parent(data), :, i, :, h)
     VF{S}(dataview)
 end
 
-@inline function column(data::VIFH{S}, i, j, h) where {S}
-    @boundscheck j == 1 || throw(BoundsError(data, (i, j, h)))
-    column(data, i, h)
+@inline function column(data::VIFH{S, Ni}, i, j, h) where {S, Ni}
+    @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= size(parent(data), 4)) ||
+                 throw(BoundsError(data, (i, j, h)))
+    dataview = @inbounds view(parent(data), :, i, :, h)
+    VF{S}(dataview)
 end
 
 @propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)
@@ -826,7 +873,9 @@ end
     n2 = div(N2, Nij)
     z2, z1 = fldmod(h - 1, n1)
     @boundscheck (1 <= h <= n1 * n2) || throw(BoundsError(data, (h,)))
-    return view(parent(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
+    dataview =
+        @inbounds view(parent(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
+    return dataview
 end
 
 struct IV1JH2{S, Ni, A} <: Data1DX{S, Ni}

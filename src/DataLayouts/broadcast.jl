@@ -229,16 +229,18 @@ function Base.mapreduce(
 end
 
 function Base.mapreduce(fn::F, op::Op, bc::IJF{S, Nij}) where {F, Op, S, Nij}
+    # mapreduce across DataSlab2D nodes
     mapreduce(op, Iterators.product(1:Nij, 1:Nij)) do (i, j)
         idx = CartesianIndex(i, j, 1, 1, 1)
-        fn(bc[idx])
+        fn(@inbounds bc[idx])
     end
 end
 
 function Base.mapreduce(fn::F, op::Op, bc::IF{S, Ni}) where {F, Op, S, Ni}
+    # mapreduce across DataSlab1D nodes
     mapreduce(op, 1:Ni) do i
         idx = CartesianIndex(i, 1, 1, 1, 1)
-        fn(bc[idx])
+        fn(@inbounds bc[idx])
     end
 end
 
@@ -247,10 +249,11 @@ function Base.mapreduce(
     op::Op,
     bc::Union{VF{<:Any, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {F, Op, A}
+    # mapreduce across DataColumn levels
     _, _, _, Nv, _ = size(bc)
     mapreduce(op, 1:Nv) do v
         idx = CartesianIndex(1, 1, 1, v, 1)
-        fn(bc[idx])
+        fn(@inbounds bc[idx])
     end
 end
 
@@ -262,7 +265,8 @@ function Base.mapreduce(
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
-        mapreduce(fn, op, column(bc, i, h))
+        columnview = @inbounds column(bc, i, h)
+        mapreduce(fn, op, columnview)
     end
 end
 
@@ -277,7 +281,8 @@ function Base.mapreduce(
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
-        mapreduce(fn, op, column(bc, i, j, h))
+        columnview = @inbounds column(bc, i, j, h)
+        mapreduce(fn, op, columnview)
     end
 end
 
@@ -286,7 +291,7 @@ function Base.copyto!(
     bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
 ) where {S, Nij, A}
     _, _, _, _, Nh = size(bc)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
         copyto!(slab_dest, slab_bc)
@@ -299,7 +304,7 @@ function Base.copyto!(
     bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}},
 ) where {S, Ni, A}
     _, _, _, _, Nh = size(bc)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
         copyto!(slab_dest, slab_bc)

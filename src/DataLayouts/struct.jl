@@ -143,10 +143,9 @@ end
     return array[offset + 1]
 end
 
-@propagate_inbounds get_struct(
-    array::AbstractArray{T},
-    ::Type{S},
-) where {T, S} = get_struct(array, S, 0)
+@inline function get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S}
+    @inbounds get_struct(array, S, 0)
+end
 
 function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     if @generated

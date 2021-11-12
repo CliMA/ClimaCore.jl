@@ -29,9 +29,10 @@ end
 end
 
 @testset "IJFH" begin
-    Nij = 2
+    Nij = 2 # number of nodal points
+    Nh = 2 # number of elements
     S = Tuple{Complex{Float64}, Float64}
-    array = rand(Nij, Nij, 3, 2)
+    array = rand(Nij, Nij, 3, Nh)
     data = IJFH{S, 2}(array)
     @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
     data_slab = slab(data, 1)
@@ -52,6 +53,25 @@ end
     @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :]) atol = 10eps()
 end
 
+@testset "IJFH boundscheck" begin
+    Nij = 1 # number of nodal points
+    Nh = 2 # number of elements
+    S = Tuple{Complex{Float64}, Float64}
+    array = zeros(Float64, Nij, Nij, 3, 2)
+    data = IJFH{S, Nij}(array)
+
+    @test_throws BoundsError slab(data, -1)
+    @test_throws BoundsError slab(data, 3)
+    @test_throws BoundsError slab(data, 1, -1)
+    @test_throws BoundsError slab(data, 1, 3)
+
+    # 2D Slab boundscheck
+    sdata = slab(data, 1)
+    @test_throws BoundsError sdata[-1, 1]
+    @test_throws BoundsError sdata[1, -1]
+    @test_throws BoundsError sdata[2, 1]
+    @test_throws BoundsError sdata[1, 2]
+end
 
 @testset "IJFH type safety" begin
     Nij = 2 # number of nodal points per element
