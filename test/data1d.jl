@@ -1,4 +1,6 @@
 using Test
+using JET
+
 using ClimaCore.DataLayouts
 using StaticArrays
 using ClimaCore.DataLayouts: get_struct, set_struct!
@@ -42,7 +44,7 @@ end
     @test_throws MethodError data[1] = SB
 end
 
-@testset "broadcasting between 1D data objects and scalars" begin
+@testset "VF broadcasting between 1D data objects and scalars" begin
     for FT in TestFloatTypes
         data1 = ones(FT, 2, 2)
         S = Complex{FT}
@@ -56,7 +58,7 @@ end
     end
 end
 
-@testset "broadcasting 1D assignment from scalar" begin
+@testset "VF broadcasting 1D assignment from scalar" begin
     for FT in TestFloatTypes
         S = Complex{FT}
         data = VF{S}(Array{FT}, 3)
@@ -67,7 +69,7 @@ end
     end
 end
 
-@testset "broadcasting between 1D data objects" begin
+@testset "VF broadcasting between 1D data objects" begin
     for FT in TestFloatTypes
         data1 = ones(FT, 2, 2)
         data2 = ones(FT, 2, 1)
@@ -82,19 +84,25 @@ end
     end
 end
 
-#= TODO
-@testset "broadcasting 1D data complicated function" begin
-    for FT in TestFloatTypes
-        S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
-        data1 = ones(FT, 2, 2)
-        S2 = NamedTuple{(:c,), Tuple{FT,}}
-        data2 = ones(FT, 2, 1)
-        data1 = VF{S1}(data1)
-        data2 = VF{S2}(data2)
+# Test that Julia ia able to optimize VF DataLayouts v1.7+
+@static if @isdefined(var"@test_opt")
+    @testset "VF analyzer optimizations" begin
+        for FT in TestFloatTypes
+            S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
+            data1 = ones(FT, 2, 2)
+            S2 = NamedTuple{(:c,), Tuple{FT}}
+            data2 = ones(FT, 2, 1)
 
-        f(a1, a2) = a1.a.re * a2.c + a1.b
-        res = f.(data1, data2)
-        @test res isa VF[FT]
+            dl1 = VF{S1}(data1)
+            dl2 = VF{S2}(data2)
+
+            f(a1, a2) = a1.a.re * a2.c + a1.b
+
+            # property access
+            @test_opt getproperty(data1, :a)
+            # test map as proxy for broadcast
+            @test_opt map(f, data1, data2)
+            @test_opt mapreduce(f, +, data1, data2)
+        end
     end
 end
-=#
