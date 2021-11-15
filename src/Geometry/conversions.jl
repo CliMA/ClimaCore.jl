@@ -270,6 +270,15 @@ curl_result_type(::Val{(1, 2)}, ::Type{Covariant12Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
 curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant12Vector{FT}
+curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
+    Contravariant2Vector{FT}
+curl_result_type(::Val{(3,)}, ::Type{Covariant12Vector{FT}}) where {FT} =
+    Contravariant12Vector{FT}
+curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
+    Contravariant2Vector{FT}
+curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
+    Contravariant1Vector{FT}
+
 
 # these are only true in 2D
 curl_result_type(::Val{(1, 2)}, ::Type{Contravariant12Vector{FT}}) where {FT} =
@@ -286,10 +295,6 @@ _norm_sqr(x, local_geometry) = sum(x -> _norm_sqr(x, local_geometry), x)
 _norm_sqr(x::Number, local_geometry) = LinearAlgebra.norm_sqr(x)
 _norm_sqr(x::AbstractArray, local_geometry) = LinearAlgebra.norm_sqr(x)
 
-function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(u.u³)
-end
-
 function _norm_sqr(uᵢ::CovariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
@@ -297,6 +302,20 @@ end
 function _norm_sqr(uᵢ::ContravariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
+
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1,)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(3,)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1, 3)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+
+_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1,)}) =
+    LinearAlgebra.norm_sqr(u.u³)
+_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
+    LinearAlgebra.norm_sqr(u.u³)
+
+
 
 _norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
 

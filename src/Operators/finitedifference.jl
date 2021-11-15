@@ -239,7 +239,6 @@ struct SetDivergence{S} <: BoundaryCondition
     val::S
 end
 
-
 """
     Extrapolate()
 
@@ -1759,6 +1758,93 @@ function stencil_right_boundary(
     # imposed flux boundary condition at right most face
     bc.val
 end
+
+
+
+abstract type CurlFiniteDifferenceOperator <: FiniteDifferenceOperator end
+return_eltype(::CurlFiniteDifferenceOperator, arg) =
+    Geometry.curl_result_type(Val((3,)), eltype(arg))
+
+"""
+    C = CurlC2F(;boundaryname=boundarycondition...)
+    C.(v)
+
+Compute the vertical-derivative contribution to the curl of a center-valued
+covariant vector field `v`. It acts on the horizontal covariant components of
+`v` (that is it only depends on ``v₁`` and ``v₂``), and will return a face-valued horizontal
+contravariant vector field (that is ``C(v)³ = 0``).
+
+Specifically it approximates:
+```math
+\\begin{align*}
+C(v)^1 &= -\\frac{1}{J} \\frac{\\partial v_2}{\\partial \\xi^3}  \\\\
+C(v)^2 &= \\frac{1}{J} \\frac{\\partial v_1}{\\partial \\xi^3} \\\\
+\\end{align*}
+```
+using the stencils
+```math
+\\begin{align*}
+C(v)[i]^1 &= - \\frac{1}{J[i]} (v₂[i+\\tfrac{1}{2}] - v₂[i-\\tfrac{1}{2}]) \\\\
+C(v)[i]^2 &= \\frac{1}{J[i]}  (v₁[i+\\tfrac{1}{2}] - v₁[i-\\tfrac{1}{2}])
+\\end{align*}
+```
+where ``v₁` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
+``J`` is the Jacobian determinant.
+
+The following boundary conditions are supported:
+
+- [`SetValue(v₀)`](@ref): calculate the curl assuming the value of ``v`` at the
+   boundary is `v₀`. For the left boundary, this becomes:
+  ```math
+  C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
+  C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
+  ```
+"""
+struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
+    bcs::BC
+end
+CurlC2F(; kwargs...) = CurlC2F(NamedTuple(kwargs))
+
+return_space(::CurlC2F, space::Spaces.CenterFiniteDifferenceSpace) =
+    Spaces.FaceFiniteDifferenceSpace(space)
+return_space(::CurlC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
+    Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+
+
+stencil_interior_width(::CurlC2F) = ((-half, half),)
+
+fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, J) =
+    Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
+fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, J) =
+    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) / J)
+fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, J) =
+    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) / J)
+
+function stencil_interior(::CurlC2F, loc, idx, arg)
+    space = axes(arg)
+    u₊ = getidx(arg, loc, idx + half)
+    u₋ = getidx(arg, loc, idx - half)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    return fd3_curl(u₊, u₋, local_geometry.J)
+end
+
+
+boundary_width(::CurlC2F, ::SetValue) = 1
+function stencil_left_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
+    space = axes(arg)
+    u₊ = getidx(arg, loc, idx + half)
+    u = bc.val
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    return fd3_curl(u₊, u, local_geometry.J / 2)
+end
+function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
+    space = axes(arg)
+    u = bc.val
+    u₋ = getidx(arg, loc, idx - half)
+    local_geometry = Geometry.LocalGeometry(space, idx)
+    return fd3_curl(u, u₋, local_geometry.J / 2)
+end
+
 
 boundary_width(obj, loc) = 0
 

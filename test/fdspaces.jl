@@ -423,6 +423,7 @@ end
     err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
     err_div_sin_f = zeros(FT, length(n_elems_seq))
     err_div_cos_f = zeros(FT, length(n_elems_seq))
+    err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
 
     for (k, n) in enumerate(n_elems_seq)
@@ -491,6 +492,13 @@ end
         )
         divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
 
+        curlᶠ = Operators.CurlC2F(
+            left = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+            right = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+        )
+        curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(centers)))
+
+
         Δh[k] = cs.face_local_geometry.J[1]
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
@@ -503,6 +511,8 @@ end
         err_div_cos_f[k] = norm(
             divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
         )
+        err_curl_sin_f[k] =
+            norm(curlsinᶠ .- Geometry.Contravariant2Vector.(cos.(faces)))
     end
 
     # GradientF2C conv, with f(z) = sin(z)
@@ -519,6 +529,8 @@ end
     conv_div_sin_f = convergence_rate(err_div_sin_f, Δh)
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
+    # CurlC2F with f(z) = sin(z), SetValue
+    conv_curl_sin_f = convergence_rate(err_curl_sin_f, Δh)
 
     # GradientF2C conv, with f(z) = sin(z)
     @test err_grad_sin_c[3] ≤ err_grad_sin_c[2] ≤ err_grad_sin_c[1] ≤ 0.1
@@ -526,7 +538,6 @@ end
     @test conv_grad_sin_c[2] ≈ 2 atol = 0.1
     @test conv_grad_sin_c[3] ≈ 2 atol = 0.1
     @test conv_grad_sin_c[1] ≤ conv_grad_sin_c[2] ≤ conv_grad_sin_c[3]
-
 
     # DivergenceF2C conv, with f(z) = sin(z)
     @test err_div_sin_c[3] ≤ err_div_sin_c[2] ≤ err_div_sin_c[1] ≤ 0.1
@@ -567,6 +578,12 @@ end
     @test conv_div_cos_f[3] ≈ 2 atol = 0.1
     @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
 
+    # CurlC2F with f(z) = sin(z), SetValue
+    @test err_curl_sin_f[3] ≤ err_curl_sin_f[2] ≤ err_curl_sin_f[1] ≤ 0.1
+    @test conv_curl_sin_f[1] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[2] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[3] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
 end
 
 @testset "Biased interpolation" begin
