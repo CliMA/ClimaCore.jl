@@ -1,5 +1,6 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
+using JET
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
