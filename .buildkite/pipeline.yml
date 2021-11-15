@@ -345,6 +345,28 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha30"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability alpha30"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha30/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
     key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
     command:
