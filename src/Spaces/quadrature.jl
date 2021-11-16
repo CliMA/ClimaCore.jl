@@ -42,41 +42,135 @@ function quadrature_points end
 
 
 """
-    GLL{Nq}()
+    LegendreGaussLobatto
+    LGL
 
-Gauss-Legendre-Lobatto quadrature using `Nq` quadrature points.
+A Legendre-Gauss-Lobatto (LGL) quadrature rule.
+
+# Constructors
+
+    LegendreGaussLobatto(npoints=N)
+    LGL(npoints=N)
+
+Construct the quadrature rule with `N` quadrature points (`N ≥ 2`).
+
+    LegendreGaussLobatto(degree=p)
+    LGL(degree=p)
+
+Construct the quadrature rule with polynomial degree `p` (i.e. `p+1` quadrature
+points, with `p ≥ 1`).
+
+# Details
+
+A Legendre-Gauss-Lobatto rule has places quadrature points at the endpoints of
+the interval, and is able to exactly integrate polynomials of degree `2N-3`
+where `N` is the number of quadrature points.
+
+# External links
+
+- [Gauss-Lobatto rules on
+  Wikipedia](https://en.wikipedia.org/wiki/Gaussian_quadrature#Gauss%E2%80%93Lobatto_rules)
 """
-struct GLL{Nq} <: QuadratureStyle end
+struct LegendreGaussLobatto{Nq} <: QuadratureStyle end
+function LegendreGaussLobatto(;
+    npoints::Union{Int, Nothing} = nothing,
+    degree::Union{Int, Nothing} = nothing,
+)
+    if !isnothing(npoints)
+        LegendreGaussLobatto{npoints}()
+    elseif !isnothing(degree)
+        LegendreGaussLobatto{degree + 1}()
+    else
+        error("either npoints or degree option must be specified.")
+    end
+end
+const LGL = LegendreGaussLobatto
 
-polynomial_degree(::GLL{Nq}) where {Nq} = Nq - 1
-degrees_of_freedom(::GLL{Nq}) where {Nq} = Nq
+# TODO: deprecate
+const GLL = LegendreGaussLobatto
+polynomial_degree(::LegendreGaussLobatto{Nq}) where {Nq} = Nq - 1
+degrees_of_freedom(::LegendreGaussLobatto{Nq}) where {Nq} = Nq
 
-@generated function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
+@generated function quadrature_points(
+    ::Type{FT},
+    ::LegendreGaussLobatto{Nq},
+) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
     :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
 end
 
 """
-    GL{Nq}()
+    LegendreGauss
+    LG
 
-Gauss-Legendre quadrature using `Nq` quadrature points.
+A Legendre-Gauss (LG) quadrature rule.
+
+# Constructors
+
+    LegendreGauss(npoints=N)
+    LG(npoints=N)
+
+Construct the quadrature rule with `N` quadrature points
+
+    LegendreGauss(degree=p)
+    LG(degree=p)
+
+Construct the quadrature rule with polynomial degree `p` (`p+1` quadrature
+points)
+
+# Details
+
+A Legendre-Gauss rule is able to exactly integrate polynomials of degree `2N-1`
+where `N` is the number of quadrature points.
+
+# External links
+
+- [Gauss-Legendre quadrature on
+  Wikipedia](https://en.wikipedia.org/wiki/Gaussian_quadrature#Gauss%E2%80%93Legendre_quadrature)
 """
-struct GL{Nq} <: QuadratureStyle end
+struct LegendreGauss{Nq} <: QuadratureStyle end
+function LegendreGauss(;
+    npoints::Union{Int, Nothing} = nothing,
+    degree::Union{Int, Nothing} = nothing,
+)
+    if !isnothing(npoints)
+        LegendreGauss{npoints}()
+    elseif !isnothing(degree)
+        LegendreGauss{degree + 1}()
+    else
+        error("either npoints or degree option must be specified.")
+    end
+end
 
-polynomial_degree(::GL{Nq}) where {Nq} = Nq - 1
-degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
+const LG = LegendreGauss
+# TODO: deprecate
+const GL = LegendreGauss
 
-@generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
+polynomial_degree(::LegendreGauss{Nq}) where {Nq} = Nq - 1
+degrees_of_freedom(::LegendreGauss{Nq}) where {Nq} = Nq
+
+@generated function quadrature_points(
+    ::Type{FT},
+    ::LegendreGauss{Nq},
+) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
     :($(SVector{Nq}(points)), $(SVector{Nq}(weights)))
 end
 
 """
-    Uniform{Nq}()
+    Uniform
 
 Uniformly-spaced quadrature.
+
+# Constructors
+
+    Uniform(npoints=N)
+
+Construct the quadrature rule with `N` quadrature points. This is mainly used
+for vizualization.
 """
 struct Uniform{Nq} <: QuadratureStyle end
+Uniform(; npoints) = Uniform{npoints}()
 
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
     points = SVector{Nq}(range(-1 + 1 / Nq, step = 2 / Nq, length = Nq))
