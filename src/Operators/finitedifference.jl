@@ -195,13 +195,13 @@ right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
-function Geometry.LocalGeometry(
+Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::Integer,
 )
     space.center_local_geometry[idx]
 end
-function Geometry.LocalGeometry(
+Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::PlusHalf,
 )
@@ -597,7 +597,7 @@ function stencil_left_boundary(
 )
     space = axes(value_field)
     @assert idx == left_face_boundary_idx(space)
-    a⁺ = getidx(arg, loc, idx + half)
+    a⁺ = getidx(value_field, loc, idx + half)
     v₃ = Geometry.covariant3(bc.val, Geometry.LocalGeometry(space, idx))
     a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
@@ -1709,7 +1709,6 @@ function stencil_interior(::DivergenceC2F, loc, idx, arg)
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
-
 
 boundary_width(op::DivergenceC2F, ::SetValue) = 1
 function stencil_left_boundary(::DivergenceC2F, bc::SetValue, loc, idx, arg)

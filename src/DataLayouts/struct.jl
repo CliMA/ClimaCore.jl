@@ -76,14 +76,18 @@ Similar to `fieldoffset(S,i)`, but gives result in multiples of `sizeof(T)` inst
 fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
     Int(div(fieldoffset(S, i), sizeof(T)))
 
+@noinline function error_not_isbits(T::Type)
+    error("$T is not isbitstype")
+end
+
 """
     typesize(T,S)
 
 Similar to `sizeof(S)`, but gives the result in multiples of `sizeof(T)`.
 """
 function typesize(::Type{T}, ::Type{S}) where {T, S}
-    isbitstype(T) || error("$T is not isbitstype")
-    isbitstype(S) || error("$S is not isbitstype")
+    isbitstype(T) || error_not_isbits(T)
+    isbitstype(S) || error_not_isbits(S)
     div(sizeof(S), sizeof(T))
 end
 
@@ -103,7 +107,6 @@ end
     end
     return out
 end
-
 
 """
     get_struct(array, S[, offset=0])
@@ -135,6 +138,7 @@ function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
     end
 end
 
+# recursion base case: hit array type is the same as the struct leaf type
 @propagate_inbounds function get_struct(
     array::AbstractArray{S},
     ::Type{S},
@@ -173,6 +177,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
         push!(ex.args, :(return nothing))
         return ex
     else
+        Base.@_propagate_inbounds_meta
         if isprimitivetype(S)
             return error("Expected type $T, got type $S")
         end
@@ -197,4 +202,20 @@ end
 
 @inline function set_struct!(array, val)
     @inbounds set_struct!(array, val, 0)
+end
+
+if VERSION >= v"1.7.0-beta1"
+    # For complex nested types (ex. wrapped SMatrix) we hit a recursion limit and de-optimize
+    # We know the recursion will terminate due to the fact that bitstype fields
+    # cannot be self referential so there are no cycles in get/set_struct (bounded tree)
+    # TODO: enforce inference termination some other way
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(get_struct)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(set_struct!)
+            m.recursion_relation = dont_limit
+        end
+    end
 end
