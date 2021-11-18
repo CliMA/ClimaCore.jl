@@ -89,37 +89,52 @@ function Base.copyto!(
     return dest
 end
 
+@noinline function error_mismatched_spaces(
+    space1::Type{S},
+    space2::Type{S},
+) where {S <: AbstractSpace}
+    error(
+        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
+    )
+end
 
-function Base.Broadcast.broadcast_shape(
+@noinline function error_mismatched_spaces(space1::Type, space2::Type)
+    error("Broacasted spaces are not the same ClimaCore.Spaces type")
+end
+
+@inline function Base.Broadcast.broadcast_shape(
     space1::AbstractSpace,
     space2::AbstractSpace,
 )
     if space1 !== space2
-        error("Mismatched spaces\n$space1\n$space2")
+        error_mismatched_spaces(typeof(space1), typeof(space2))
     end
     return space1
 end
-Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple{}) = space
-Base.Broadcast.broadcast_shape(::Tuple{}, space::AbstractSpace) = space
-
+@inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple{}) = space
+@inline Base.Broadcast.broadcast_shape(::Tuple{}, space::AbstractSpace) = space
 
 # Overload broadcast axes shape checking for more useful error message for Field Spaces
-function Base.Broadcast.check_broadcast_shape(
+@inline function Base.Broadcast.check_broadcast_shape(
     space1::AbstractSpace,
     space2::AbstractSpace,
 )
     if space1 !== space2
-        error("Mismatched spaces\n$(summary(space1))\n$(summary(space2))")
+        error_mismatched_spaces(typeof(space1), typeof(space2))
     end
     return nothing
 end
-
-function Base.Broadcast.check_broadcast_shape(::AbstractSpace, ::Tuple{})
-    return nothing
+@inline function Base.Broadcast.check_broadcast_shape(
+    space::AbstractSpace,
+    ax2::Tuple,
+)
+    error_mismatched_spaces(typeof(space), typeof(ax2))
 end
-
-function Base.Broadcast.check_broadcast_shape(::AbstractSpace, ax2::Tuple)
-    error("$ax2 is not a AbstractSpace")
+@inline function Base.Broadcast.check_broadcast_shape(
+    ::AbstractSpace,
+    ::Tuple{},
+)
+    return nothing
 end
 
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types

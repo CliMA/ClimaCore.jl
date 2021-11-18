@@ -613,7 +613,7 @@ end
     @boundscheck (1 <= v <= length(parent(data))) ||
                  throw(BoundsError(data, (v,)))
     dataview = @inbounds view(parent(data), v, :)
-    get_struct(dataview, S)
+    @inbounds get_struct(dataview, S)
 end
 
 @propagate_inbounds function Base.getindex(
@@ -635,7 +635,7 @@ end
     @boundscheck (1 <= v <= length(parent(data))) ||
                  throw(BoundsError(data, (v,)))
     dataview = @inbounds view(parent(data), v, :)
-    set_struct!(dataview, convert(S, val))
+    @inbounds set_struct!(dataview, convert(S, val))
 end
 
 @inline function column(data::VF, i, h)
