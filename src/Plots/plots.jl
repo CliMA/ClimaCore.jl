@@ -172,6 +172,41 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     (hcoord, vcoord)
 end
 
+RecipesBase.@recipe function f(
+    field::Fields.SpectralElementField1D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    # compute the interpolated data to plot
+    space = axes(field)
+    topology = Spaces.topology(space)
+    mesh = topology.mesh
+
+    Nu = interpolate
+    coord_field = Fields.coordinate_field(space)
+
+    M_coords = Operators.matrix_interpolate(coord_field, Nu)
+    M = Operators.matrix_interpolate(field, Nu)
+
+    domain = Meshes.domain(mesh)
+    xmin = Geometry.component(domain.coord_min, 1)
+    xmax = Geometry.component(domain.coord_max, 1)
+
+    # our interpolated field is transposed
+    xcoord = [Geometry.component(pt, 1) for pt in M_coords[:, 1]]
+
+    coord_symbols = propertynames(coord_field)
+
+    # set the plot attributes
+    seriestype := :heatmap
+
+    xguide --> "$(coord_symbols[1])"
+    yguide --> "$(coord_symbols[2])"
+    seriescolor --> :balance
+
+    (xcoord, M')
+end
 
 RecipesBase.@recipe function f(
     field::Fields.SpectralElementField2D;

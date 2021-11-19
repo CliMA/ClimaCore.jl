@@ -1524,7 +1524,7 @@ function slab_weak_divergence(field::Field)
 end
 
 function interpolate(space_to::AbstractSpace, field_from::Field)
-    field_to = similar(field_from, (space_to,), eltype(field_from))
+    field_to = similar(field_from, space_to, eltype(field_from))
     interpolate!(field_to, field_from)
 end
 function interpolate!(field_to::Field, field_from::Field)
@@ -1561,6 +1561,24 @@ function restrict!(field_to::Field, field_from::Field)
         M',
     )
     return field_to
+end
+
+# matrix interpolate used for 1D field plots
+function matrix_interpolate(
+    field::Fields.SpectralElementField1D,
+    Q_interp::Quadratures.Uniform{Nu},
+) where {Nu}
+    S = eltype(field)
+    space = axes(field)
+    topology = Spaces.topology(space)
+    quadrature_style = Spaces.quadrature_style(space)
+    mesh = topology.mesh
+    n = length(mesh.faces) - 1
+    interp_data =
+        DataLayouts.IV1JH2{S, Nu}(Matrix{S}(undef, (1, Nu * n)))
+    M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
+    
+    return parent(interp_data)
 end
 
 # matrix interpolate used for 2D field plots
