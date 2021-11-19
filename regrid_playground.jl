@@ -135,14 +135,14 @@ function overlap_weights(target, source)
     QS_s = Spaces.quadrature_style(source)
     Nq_t = Quadratures.degrees_of_freedom(QS_t)
     Nq_s = Quadratures.degrees_of_freedom(QS_s)
-    W_ov = spzeros(nelems_t * Nq_t, nelems_s * Nq_s)
+    J_ov = spzeros(nelems_t * Nq_t, nelems_s * Nq_s)
     
     # Calculate element overlap pattern
     # X_ov[i,j] = overlap length between target elem i and source elem j
     for i in 1:nelems_t
         vertices_i = Topologies.vertex_coordinates(target_topo, i)
         min_i, max_i = Geometry.component(vertices_i[1],1), Geometry.component(vertices_i[2],1)
-        for j in 1:nelems_s
+        for j in 1:nelems_s # elems coincide w nodes in FV source
             vertices_j = Topologies.vertex_coordinates(source_topo, j)
             # get interval for quadrature
             min_j, max_j = Geometry.component(vertices_j[1],1), Geometry.component(vertices_j[2],1)
@@ -151,14 +151,13 @@ function overlap_weights(target, source)
             x_ov = FT(0.5) * (min_ov + max_ov) .+ FT(0.5) * (max_ov - min_ov) * ξ
             x_t = FT(0.5) * (min_i + max_i) .+ FT(0.5) * (max_i - min_i) * ξ
 
-            I_mat = Quadratures.interpolation_matrix(x_t, x_ov)
-
-            w' * I_mat * x_ov # I_mat * x_ov = x_t
-
-            W_ov[i, j] = overlap
+            I_mat = Quadratures.interpolation_matrix(x_ov, x_t)
+            for k in 1:Nq_t
+                J_ov[k, j] = w' * I_mat[:, k]
+            end
         end
     end
-    return W_ov
+    return J_ov
 end
 
 function f(coord)
