@@ -89,25 +89,27 @@ end
     x = Fields.coordinate_field(space)
     y = [1.0, 2.0, 3.0]
     z = 1.0
-    Y = Fields.FieldVector(u = u, x = x, y = y, z = z)
+    Y = Fields.FieldVector(u = u, k = (x = x, y = y, z = z))
 
-    @test propertynames(Y) == (:u, :x, :y, :z)
+    @test propertynames(Y) == (:u, :k)
+    @test propertynames(Y.k) == (:x, :y, :z)
     @test Y.u === u
-    @test Y.y === y
-    @test Y.z === z
+    @test Y.k.x === x
+    @test Y.k.y === y
+    @test Y.k.z === z
 
     Y1 = 2 .* Y
     @test parent(Y1.u) == 2 .* parent(u)
-    @test parent(Y1.x) == 2 .* parent(x)
-    @test Y1.y == 2 .* y
-    @test Y1.z === 2 * z
+    @test parent(Y1.k.x) == 2 .* parent(x)
+    @test Y1.k.y == 2 .* y
+    @test Y1.k.z === 2 * z
 
     Y1 .= Y1 .+ 2 .* Y
     @test parent(Y1.u) == 4 .* parent(u)
-    @test parent(Y1.x) == 4 .* parent(x)
-    @test Y1.y == 4 .* y
-    @test Y1.z === 4 * z
+    @test parent(Y1.k.x) == 4 .* parent(x)
+    @test Y1.k.y == 4 .* y
+    @test Y1.k.z === 4 * z
 
-    Y.z = 3.0
-    @test Y.z === 3.0
+    Y.k.z = 3.0
+    @test Y.k.z === 3.0
 end

@@ -25,7 +25,7 @@ FieldVector{T}(values::M) where {T, M} = FieldVector{T, M}(values)
 
 
 """
-    ScalarWrapper(val) <: AbstractArray{T,0}
+    Fields.ScalarWrapper(val) <: AbstractArray{T,0}
 
 This is a wrapper around scalar values that allows them to be mutated as part of
 a FieldVector. A call `getproperty` on a `FieldVector` with this component will
@@ -39,8 +39,23 @@ Base.getindex(s::ScalarWrapper, args...) = s.val
 Base.setindex!(s::ScalarWrapper, value, args...) = s.val = value
 Base.similar(s::ScalarWrapper) = ScalarWrapper(s.val)
 
+"""
+    Fields.wrap(x)
+
+Construct a mutable wrapper around `x`. This can be extended for new types
+(especially immutable ones).
+"""
 wrap(x) = x
 wrap(x::Real) = ScalarWrapper(x)
+wrap(x::NamedTuple) = FieldVector(; pairs(x)...)
+
+
+"""
+    Fields.unwrap(x::T)
+
+This is called when calling `getproperty` on a `FieldVector` property of element
+type `T`.
+"""
 unwrap(x) = x
 unwrap(x::ScalarWrapper) = x[]
 
