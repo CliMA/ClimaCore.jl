@@ -28,6 +28,16 @@ dir = mktempdir()
     end
 
     writevtk(joinpath(dir, "sphere"), (coords = coords, u = u))
+
+    times = 0:10:350
+    A = [
+        map(coords) do coord
+            cosd(coord.lat) *
+            (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α))
+        end for α in times
+    ]
+    writevtk(joinpath(dir, "sphere_series"), times, A)
+
 end
 
 @testset "rectangle" begin
