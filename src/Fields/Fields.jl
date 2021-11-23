@@ -1,13 +1,13 @@
 module Fields
 
-import ..slab
-import ..column
-import ..RecursiveApply
+import ..slab, ..slab_args, ..column, ..column_args
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
+
+using ..RecursiveApply
 
 import LinearAlgebra
 

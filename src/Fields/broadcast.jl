@@ -28,15 +28,19 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
 # we implement our own to avoid the type-widening code, and throw a more useful error
+@noinline error_inferred_eltype(bc) = error(
+    "cannot infer concrete eltype of $(bc.f) on $(tuplemap(eltype, bc.args))",
+)
+
 function Base.copy(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractFieldStyle}
     ElType = eltype(bc)
-    if Base.isconcretetype(ElType)
-        # We can trust it and defer to the simpler `copyto!`
-        return copyto!(similar(bc, ElType), bc)
+    if !Base.isconcretetype(ElType)
+        error_inferred_eltype(bc)
     end
-    error("cannot infer concrete eltype of $(bc.f) on $(map(eltype, bc.args))")
+    # We can trust it and defer to the simpler `copyto!`
+    return copyto!(similar(bc, ElType), bc)
 end
 
 function slab(
@@ -44,7 +48,7 @@ function slab(
     v,
     h,
 ) where {Style <: AbstractFieldStyle}
-    _args = map(a -> slab(a, v, h), bc.args)
+    _args = slab_args(bc.args, v, h)
     _axes = slab(axes(bc), v, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
@@ -55,17 +59,22 @@ function column(
     j,
     h,
 ) where {Style <: AbstractFieldStyle}
-    _args = map(a -> column(a, i, j, h), bc.args)
+    _args = column_args(bc.args, i, j, h)
     _axes = column(axes(bc), i, j, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
 # for `Base.similar` of a Field
+_todata_args(args::Tuple) = (todata(args[1]), _todata_args(Base.tail(args))...)
+_todata_args(args::Tuple{Any}) = (todata(args[1]),)
+_todata_args(::Tuple{}) = ()
+
 todata(obj) = obj
 todata(field::Field) = Fields.field_values(field)
 function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
-    Base.Broadcast.Broadcasted{DS}(bc.f, map(todata, bc.args))
+    _args = _todata_args(bc.args)
+    Base.Broadcast.Broadcasted{DS}(bc.f, _args)
 end
 
 # same logic as Base.Broadcasted (which only defines it for Tuples)
