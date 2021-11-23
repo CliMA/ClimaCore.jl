@@ -165,7 +165,17 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     @assert size(array, 3) == Nk
+    check_basetype(T, S)
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
+end
+
+function replace_basetype(
+    data::IJKFVH{S, Nij, Nk},
+    ::Type{T},
+) where {S, Nij, Nk, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return IJKFVH{S′, Nij, Nk}(similar(array, T))
 end
 
 @generated function _property_view(
@@ -173,9 +183,9 @@ end
     ::Val{Idx},
 ) where {S, Nij, Nk, A, Idx}
     SS = fieldtype(S, Idx)
-    FT = eltype(A)
-    offset = fieldtypeoffset(FT, S, Idx)
-    nbytes = typesize(FT, SS)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJKFVH{$SS, $Nij, $Nk}(
         @inbounds view(parent(data), :, :, :, $field_byterange, :, :)
@@ -221,6 +231,7 @@ end
 function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
+    check_basetype(T, S)
     IJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -242,8 +253,14 @@ quadrature degrees of freedom `Nij × Nij`  ,
 and the number of mesh elements `nelements`.
 """
 function IJFH{S, Nij}(ArrayType, nelements) where {S, Nij}
-    FT = eltype(ArrayType)
-    IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(FT, S), nelements))
+    T = eltype(ArrayType)
+    IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(T, S), nelements))
+end
+
+function replace_basetype(data::IJFH{S, Nij}, ::Type{T}) where {S, Nij, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return IJFH{S′, Nij}(similar(array, T))
 end
 
 Base.length(data::IJFH) = size(parent(data), 4)
@@ -253,9 +270,9 @@ Base.length(data::IJFH) = size(parent(data), 4)
     ::Val{Idx},
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    FT = eltype(A)
-    offset = fieldtypeoffset(FT, S, Idx)
-    nbytes = typesize(FT, SS)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJFH{$SS, $Nij}(
         @inbounds view(parent(data), :, :, $field_byterange, :)
@@ -305,7 +322,14 @@ end
 
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
+    check_basetype(T, S)
     IFH{S, Ni, typeof(array)}(array)
+end
+
+function replace_basetype(data::IFH{S, Ni}, ::Type{T}) where {S, Ni, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return IFH{S′, Ni}(similar(array, T))
 end
 
 """
@@ -316,8 +340,8 @@ quadrature degrees of freedom `Ni`  ,
 and the number of mesh elements `nelements`.
 """
 function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
-    FT = eltype(ArrayType)
-    IFH{S, Ni}(ArrayType(undef, Ni, typesize(FT, S), nelements))
+    T = eltype(ArrayType)
+    IFH{S, Ni}(ArrayType(undef, Ni, typesize(T, S), nelements))
 end
 
 rebuild(data::IFH{S, Ni}, array::AbstractArray{T, 3}) where {S, Ni, T} =
@@ -343,9 +367,9 @@ slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
     ::Val{Idx},
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    FT = eltype(A)
-    offset = fieldtypeoffset(FT, S, Idx)
-    nbytes = typesize(FT, SS)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IFH{$SS, $Ni}(
         @inbounds view(parent(data), :, $field_byterange, :)
@@ -410,7 +434,14 @@ end
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
+    check_basetype(T, S)
     IJF{S, Nij, typeof(array)}(array)
+end
+
+function replace_basetype(data::IJF{S, Nij}, ::Type{T}) where {S, Nij, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return IJF{S′, Nij}(similar(array, T))
 end
 
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
@@ -422,9 +453,9 @@ end
     ::Val{Idx},
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    FT = eltype(A)
-    offset = fieldtypeoffset(FT, S, Idx)
-    nbytes = typesize(FT, SS)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJF{$SS, $Nij}(
         @inbounds view(parent(data), :, :, $field_byterange)
@@ -511,15 +542,22 @@ end
 
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
+    check_basetype(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
 
+function replace_basetype(data::IF{S, Ni}, ::Type{T}) where {S, Ni, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return IF{S′, Ni}(similar(array, T))
+end
+
 @generated function _property_view(
-    data::IF{S, Ni},
+    data::IF{S, Ni, A},
     ::Val{Idx},
-) where {S, Ni, Idx}
+) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
+    T = eltype(A)
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
@@ -569,6 +607,7 @@ struct VF{S, A} <: DataColumn{S}
 end
 
 function VF{S}(array::AbstractArray{T, 2}) where {S, T}
+    check_basetype(T, S)
     VF{S, typeof(array)}(array)
 end
 
@@ -578,13 +617,14 @@ function VF{S}(array::AbstractVector{T}) where {S, T}
 end
 
 function VF{S}(ArrayType, nelements) where {S}
-    FT = eltype(ArrayType)
-    VF{S}(ArrayType(undef, nelements, typesize(FT, S)))
+    T = eltype(ArrayType)
+    VF{S}(ArrayType(undef, nelements, typesize(T, S)))
 end
 
-function replace_basetype(data::VF{S}, ::Type{FT}) where {S, FT}
-    SS = replace_basetype(S, FT)
-    VF{SS}(similar(parent(data), FT))
+function replace_basetype(data::VF{S}, ::Type{T}) where {S, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return VF{S′}(similar(array, T))
 end
 
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
@@ -592,9 +632,9 @@ Base.lastindex(data::VF) = length(data)
 
 @generated function _property_view(data::VF{S, A}, ::Val{Idx}) where {S, A, Idx}
     SS = fieldtype(S, Idx)
-    FT = eltype(A)
-    offset = fieldtypeoffset(FT, S, Idx)
-    nbytes = typesize(FT, SS)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(VF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
 end
@@ -670,6 +710,12 @@ function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
     VIJFH{S, Nij, typeof(array)}(array)
 end
 
+function replace_basetype(data::VIJFH{S, Nij}, ::Type{T}) where {S, Nij, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return VIJFH{S′, Nij}(similar(array, T))
+end
+
 function Base.copy(data::VIJFH{S, Nij}) where {S, Nij}
     VIJFH{S, Nij}(copy(parent(data)))
 end
@@ -685,11 +731,11 @@ function Base.length(data::VIJFH)
 end
 
 @generated function _property_view(
-    data::VIJFH{S, Nij},
+    data::VIJFH{S, Nij, A},
     ::Val{Idx},
-) where {S, Nij, Idx}
+) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
+    T = eltype(A)
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
@@ -757,7 +803,14 @@ end
 
 function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     @assert size(array, 2) == Ni
+    check_basetype(T, S)
     VIFH{S, Ni, typeof(array)}(array)
+end
+
+function replace_basetype(data::VIFH{S, Ni}, ::Type{T}) where {S, Ni, T}
+    array = parent(data)
+    S′ = replace_basetype(eltype(array), T, S)
+    return VIFH{S′, Ni}(similar(array, T))
 end
 
 Base.copy(data::VIFH{S, Ni}) where {S, Ni} = VIFH{S, Ni}(copy(parent(data)))
@@ -773,11 +826,11 @@ function Base.length(data::VIFH)
 end
 
 @generated function _property_view(
-    data::VIFH{S, Ni},
+    data::VIFH{S, Ni, A},
     ::Val{Idx},
-) where {S, Ni, Idx}
+) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    T = basetype(SS)
+    T = eltype(A)
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)

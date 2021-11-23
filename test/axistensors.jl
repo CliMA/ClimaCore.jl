@@ -55,7 +55,6 @@ using LinearAlgebra, StaticArrays
     @test_throws DimensionMismatch M * x
     @test_throws DimensionMismatch M \ x
 
-    @test DataLayouts.basetype(typeof(x)) == Float64
     @test DataLayouts.typesize(Float64, typeof(x)) == 2
 end
 

@@ -11,46 +11,93 @@
 # get_offset(array, S, offset) => S(...), next_offset
 
 """
-    basetype(S...)
+    is_valid_basetype(::Type{T}, ::Type{S})
 
-Compute the "base" floating point type of one or more types `S`. This will throw
-an error if there is no unique type.
+Determines whether an object of type `S` can be stored in an array with elements
+of type `T` by recursively checking whether the non-empty fields of `S` can be
+stored in such an array. If `S` is empty, this is always true.
 """
-basetype(::Type{FT}) where {FT <: AbstractFloat} = FT
-basetype(::Type{NamedTuple{names, T}}) where {names, T} = basetype(T)
-function basetype(::Type{S}) where {S}
-    isprimitivetype(S) && error("$S is not a floating point type")
-    basetype(ntuple(i -> fieldtype(S, i), fieldcount(S))...)
-end
-function basetype(::Type{S1}, Sx...) where {S1}
-    if sizeof(S1) == 0
-        return basetype(Sx...)
+is_valid_basetype(::Type{T}, ::Type{S}) where {T, S} =
+    sizeof(S) == 0 ||
+    (fieldcount(S) > 0 && is_valid_basetype(T, fieldtypes(S)...))
+is_valid_basetype(::Type{T}, ::Type{<:T}) where {T} = true
+is_valid_basetype(::Type{T}, ::Type{S}, Ss...) where {T, S} =
+    is_valid_basetype(T, S) && is_valid_basetype(T, Ss...)
+
+"""
+    check_basetype(::Type{T}, ::Type{S})
+
+Check whether the types `T` and `S` have well-defined sizes, and whether an
+object of type `S` can be stored in an array with elements of type `T`.
+"""
+function check_basetype(::Type{T}, ::Type{S}) where {T, S}
+    if @generated
+        if !isbitstype(T)
+            estr = "Base type $T has indeterminate size"
+            :(error($estr))
+        elseif !isbitstype(S)
+            estr = "Struct type $S has indeterminate size"
+            :(error($estr))
+        elseif !is_valid_basetype(T, S)
+            estr = "Struct type $S cannot be represented using base type $T"
+            :(error($estr))
+        else
+            :(return nothing)
+        end
+    else
+        isbitstype(T) || error("Base type $T has indeterminate size")
+        isbitstype(S) || error("Struct type $S has indeterminate size")
+        is_valid_basetype(T, S) ||
+            error("Struct type $S cannot be represented using base type $T")
+        return nothing
     end
-    FT1 = basetype(S1)
-    FT2 = basetype(Sx...)
-    FT1 !== FT2 && error("Inconsistent basetypes $FT1 and $FT2")
-    return FT1
 end
 
-replace_basetype(::Type{S}, ::Type{FT}) where {S <: AbstractFloat, FT} = FT
-function replace_basetype(::Type{S}, ::Type{FT}) where {S <: Tuple, FT}
-    Tuple{ntuple(i -> replace_basetype(fieldtype(S, i), FT), fieldcount(S))...}
-end
-function replace_basetype(
-    ::Type{NamedTuple{names, T}},
-    ::Type{FT},
-) where {names, T, FT}
-    NamedTuple{names, replace_basetype(T, FT)}
-end
+"""
+    replace_basetype(::Type{T}, ::Type{T′}, ::Type{S})
+
+Changes the type parameters of `S` to produce a new type `S′` such that, if
+`is_valid_basetype(T, S)` is true, then so is `is_valid_basetype(T′, S′)`.
+"""
+replace_basetype(::Type{T}, ::Type{T′}, ::Type{S}) where {T, T′, S} =
+    length(S.parameters) == 0 ? S :
+    S.name.wrapper{replace_basetypes(T, T′, S.parameters...)...}
+replace_basetype(::Type{T}, ::Type{T′}, ::Type{<:T}) where {T, T′} = T′
+replace_basetype(::Type{T}, ::Type{T′}, value) where {T, T′} = value
+replace_basetypes(::Type{T}, ::Type{T′}, value) where {T, T′} =
+    (replace_basetype(T, T′, value),)
+replace_basetypes(::Type{T}, ::Type{T′}, value, values...) where {T, T′} =
+    (replace_basetype(T, T′, value), replace_basetypes(T, T′, values...)...)
+# TODO: This could potentially lead to some annoying bugs, since it replaces
+# type parameters instead of field types. So, if `S` has `Float64` as a
+# parameter, `replace_basetype(Float64, Float32, S)` will replace that parameter
+# with `Float32`, regardless of whether the parameter corresponds to any values
+# stored in an object of type `S`. In other words, if a user utilizes types as
+# type parameters and specializes their code on those parameters, this may
+# change the results of their code.
+# Note that there is no way to write `replace_basetype` using field types
+# instead of type parameters, since replacing the field types of an object will
+# change that object's type parameters, but there is no general way to map field
+# types to type parameters.
 
 """
     parent_array_type(::Type{<:AbstractArray})
 
-Returns the parent array type underlying the `SubArray` wrapper type
+Returns the parent array type underlying any wrapper types, with all
+dimensionality information removed.
 """
-parent_array_type(::Type{A}) where {A <: AbstractArray{FT}} where {FT} =
-    Array{FT}
-# TODO: extract interface to overload for backends into separate file
+parent_array_type(::Type{<:Array{T}}) where {T} = Array{T}
+parent_array_type(::Type{<:SubArray{T, N, A}}) where {T, N, A} =
+    parent_array_type(A)
+
+"""
+    promote_parent_array_type(::Type{<:AbstractArray}, ::Type{<:AbstractArray})
+
+Given two parent array types (without any dimensionality information), promote
+both the element types and the array types themselves.
+"""
+promote_parent_array_type(::Type{Array{T1}}, ::Type{Array{T2}}) where {T1, T2} =
+    Array{promote_type(T1, T2)}
 
 """
     StructArrays.bypass_constructor(T, args)
@@ -76,20 +123,12 @@ Similar to `fieldoffset(S,i)`, but gives result in multiples of `sizeof(T)` inst
 fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
     Int(div(fieldoffset(S, i), sizeof(T)))
 
-@noinline function error_not_isbits(T::Type)
-    error("$T is not isbitstype")
-end
-
 """
     typesize(T,S)
 
 Similar to `sizeof(S)`, but gives the result in multiples of `sizeof(T)`.
 """
-function typesize(::Type{T}, ::Type{S}) where {T, S}
-    isbitstype(T) || error_not_isbits(T)
-    isbitstype(S) || error_not_isbits(S)
-    div(sizeof(S), sizeof(T))
-end
+typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
 # TODO: this assumes that the field struct zero type is the same as the backing
 # zero'd out memory, which should be true in all "real world" cases
@@ -131,6 +170,7 @@ function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
             bypass_constructor(S, $tup)
         end
     else
+        Base.@_propagate_inbounds_meta
         args = ntuple(fieldcount(S)) do i
             get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
         end
@@ -153,16 +193,8 @@ end
 
 function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     if @generated
-        errorstring = "Expected type $T, got type $S"
         ex = quote
             Base.@_propagate_inbounds_meta
-            # TODO: need to figure out a better way to handle the case where we require conversion
-            # e.g. if T = Dual or Double64
-            if isprimitivetype(S)
-                # error if we dont hit triangular dispatch method (defined below):
-                # set_struct!(::AbstractArray{S}, ::S) where {S}
-                error($errorstring)
-            end
         end
         for i in 1:fieldcount(S)
             push!(
@@ -178,9 +210,6 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
         return ex
     else
         Base.@_propagate_inbounds_meta
-        if isprimitivetype(S)
-            return error("Expected type $T, got type $S")
-        end
         for i in 1:fieldcount(S)
             set_struct!(
                 array,

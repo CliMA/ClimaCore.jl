@@ -116,16 +116,22 @@ Base.similar(fv::FieldVector{T}) where {T} =
     FieldVector{T}(map(similar, _values(fv)))
 Base.similar(fv::FieldVector{T}, ::Type{T}) where {T} =
     FieldVector{T}(map(similar, _values(fv)))
-function Base.similar(fv::FieldVector{T}, ::Type{FT}) where {T, FT}
-    FieldVector{FT}(
-        map(_values(fv)) do x
-            Field(DataLayouts.replace_basetype(field_values(x), FT), axes(x))
-        end,
-    )
-end
+_similar(x, ::Type{T}) where {T} = similar(x, T)
+_similar(x::Field, ::Type{T}) where {T} =
+    Field(DataLayouts.replace_basetype(field_values(x), T), axes(x))
+Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
+    FieldVector{T′}(map(x -> _similar(x, T′), _values(fv)))
 
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
+
+# Ensure that Field axes are preserved when FieldVectors are deepcopied and when
+# objects that contain FieldVectors are deepcopied.
+_deepcopy_internal(x, stackdict::IdDict) = Base.deepcopy_internal(x, stackdict)
+_deepcopy_internal(x::Field, stackdict::IdDict) =
+    Field(Base.deepcopy_internal(field_values(x), stackdict), axes(x))
+Base.deepcopy_internal(fv::FieldVector{T}, stackdict::IdDict) where {T} =
+    FieldVector{T}(map(x -> _deepcopy_internal(x, stackdict), _values(fv)))
 
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
