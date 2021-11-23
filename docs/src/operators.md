@@ -39,26 +39,16 @@ LeftBiasedC2F
 RightBiasedC2F
 ```
 
-### Advection operators
+### Derivative operators
 
 ```@docs
 AdvectionF2F
 AdvectionC2C
-```
-
-
-### Gradient operators
-
-```@docs
-GradientF2C
-GradientC2F
-```
-
-### Divergence operators
-
-```@docs
 DivergenceF2C
 DivergenceC2F
+GradientF2C
+GradientC2F
+CurlC2F
 ```
 
 ### Other

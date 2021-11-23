@@ -192,6 +192,16 @@ function opt_DivergenceC2F_SetDivergence(center_field)
     return divᶠ.(Geometry.WVector.(cos.(center_field)))
 end
 
+
+function opt_CurlC2F_SetValue(center_field)
+    # DivergenceC2F, SetDivergence
+    curlᶠ = Operators.CurlC2F(
+        left = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
+        right = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
+    )
+    return curlᶠ.(Geometry.Covariant1Vector.(cos.(center_field)))
+end
+
 # Test that Julia ia able to optimize Stencil operations v1.7+
 @static if @isdefined(var"@test_opt")
     @testset "Scalar Field FiniteDifferenceSpaces optimizations" begin
@@ -282,7 +292,7 @@ end
 
             @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)
-
+            @test_opt opt_CurlC2F_SetValue(centers)
         end
     end
 end

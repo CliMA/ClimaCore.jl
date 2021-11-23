@@ -75,8 +75,12 @@ quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
 
 topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 
-slab(space::ExtrudedFiniteDifferenceSpace, v, h) =
-    slab(space.horizontal_space, v, h)
+function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
+    SpectralElementSpaceSlab(
+        space.horizontal_space.quadrature_style,
+        slab(local_geometry_data(space), v, h),
+    )
+end
 
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
     space.staggering,

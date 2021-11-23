@@ -38,6 +38,12 @@ function dss_transform(
     )
         return arg
     end
+    if ax isa Geometry.UWAxis && (
+        axfrom isa Geometry.Covariant2Axis ||
+        axfrom isa Geometry.Contravariant2Axis
+    )
+        return arg
+    end
     Geometry.transform(ax, arg, local_geometry)
 end
 
