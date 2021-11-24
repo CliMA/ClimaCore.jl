@@ -111,7 +111,7 @@ function get_outputs(inputs, comm, tag, num_workers)
             last_printed_progress = progress
         end
 
-        if time() - initial_time > 60. * 60. * 4.
+        if time() - initial_time > 60. * 60. * 16.5
             println("This is taking too long. I give up!")
             for output_index in 1:num_inputs
                 if !isassigned(outputs, output_index)
@@ -144,7 +144,7 @@ function compare_solvers()
         ]
         explicit_solver_infos = [
             (; ode_algorithm, dt) for
-            dt in 4.:1.:10.,
+            dt in 2.5:0.5:12.,
             ode_algorithm in (
                 # Explicit Runge-Kutta Methods
                 Euler, Midpoint, Heun, Ralston, RK4, BS3, OwrenZen3, OwrenZen4,
@@ -204,7 +204,7 @@ function compare_solvers()
             MPI.send(nothing, worker_index, tag, comm)
         end
         
-        open("comparison_results_rosenbrock_40000s_version2.csv", "w") do io
+        open("comparison_results_explicit_40000s_version2.csv", "w") do io
             variable_keys = keys(variable_inputs[1])
             println(io,
                 join(variable_keys, ", "), ", ",
