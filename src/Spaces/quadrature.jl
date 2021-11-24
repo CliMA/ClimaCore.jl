@@ -48,8 +48,8 @@ Gauss-Legendre-Lobatto quadrature using `Nq` quadrature points.
 """
 struct GLL{Nq} <: QuadratureStyle end
 
-polynomial_degree(::GLL{Nq}) where {Nq} = Nq - 1
-degrees_of_freedom(::GLL{Nq}) where {Nq} = Nq
+@inline polynomial_degree(::GLL{Nq}) where {Nq} = Int(Nq - 1)
+@inline degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq)
 
 @generated function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
@@ -63,8 +63,8 @@ Gauss-Legendre quadrature using `Nq` quadrature points.
 """
 struct GL{Nq} <: QuadratureStyle end
 
-polynomial_degree(::GL{Nq}) where {Nq} = Nq - 1
-degrees_of_freedom(::GL{Nq}) where {Nq} = Nq
+@inline polynomial_degree(::GL{Nq}) where {Nq} = Int(Nq - 1)
+@inline degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)
 
 @generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)
@@ -91,8 +91,8 @@ Uniformly-spaced quadrature including boundary.
 """
 struct ClosedUniform{Nq} <: QuadratureStyle end
 
-polynomial_degree(::ClosedUniform{Nq}) where {Nq} = Nq - 1
-degrees_of_freedom(::ClosedUniform{Nq}) where {Nq} = Nq
+@inline polynomial_degree(::ClosedUniform{Nq}) where {Nq} = Int(Nq - 1)
+@inline degrees_of_freedom(::ClosedUniform{Nq}) where {Nq} = Int(Nq)
 
 @generated function quadrature_points(
     ::Type{FT},

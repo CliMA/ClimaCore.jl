@@ -62,13 +62,13 @@ input_space(arg) = axes(arg)
 input_space(::SpectralElementOperator, space) = space
 
 input_space(sbc::SpectralBroadcasted) =
-    isnothing(sbc.input_space) ? input_space(sbc.op, map(axes, sbc.args)...) :
-    sbc.input_space
+    isnothing(sbc.input_space) ?
+    input_space(sbc.op, tuplemap(axes, sbc.args)...) : sbc.input_space
 
 return_space(::SpectralElementOperator, space) = space
 
 Base.axes(sbc::SpectralBroadcasted) =
-    isnothing(sbc.axes) ? return_space(sbc.op, map(axes, sbc.args)...) :
+    isnothing(sbc.axes) ? return_space(sbc.op, tuplemap(axes, sbc.args)...) :
     sbc.axes
 
 Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
@@ -81,14 +81,14 @@ Base.Broadcast.broadcasted(
 ) = SpectralBroadcasted{SpectralStyle}(op, args)
 
 Base.eltype(sbc::SpectralBroadcasted) =
-    operator_return_eltype(sbc.op, map(eltype, sbc.args)...)
+    operator_return_eltype(sbc.op, tuplemap(eltype, sbc.args)...)
 
 function Base.Broadcast.instantiate(
     sbc::SpectralBroadcasted{Style},
 ) where {Style}
     op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
-    args = map(Base.Broadcast.instantiate, sbc.args)
+    args = tuplemap(Base.Broadcast.instantiate, sbc.args)
     # axes: same logic as Broadcasted
     if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
         axes = Base.axes(sbc)
@@ -109,7 +109,7 @@ function Base.Broadcast.instantiate(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
     # recursively instantiate the arguments to allocate intermediate work arrays
-    args = map(Base.Broadcast.instantiate, bc.args)
+    args = tuplemap(Base.Broadcast.instantiate, bc.args)
     # axes: same logic as Broadcasted
     if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
         axes = Base.Broadcast.combine_axes(args...)
@@ -150,14 +150,14 @@ function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     space = axes(field_out)
     Nv = Spaces.nlevels(space)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
-    for h in 1:Nh, v in 1:Nv
+    @inbounds for h in 1:Nh, v in 1:Nv
         slab_out = slab(field_out, v, h)
         out_slab_space = slab(axes(sbc), v, h)
         in_slab_space = slab(input_space(sbc), v, h)
-        slab_args = map(arg -> _apply_slab(slab(arg, v, h), v, h), sbc.args)
+        _slab_args = _apply_slab_args(slab_args(sbc.args, v, h), v, h)
         copy_slab!(
             slab_out,
-            apply_slab(sbc.op, out_slab_space, in_slab_space, slab_args...),
+            apply_slab(sbc.op, out_slab_space, in_slab_space, _slab_args...),
         )
     end
     return field_out
@@ -171,7 +171,7 @@ function slab(
     sbc::SpectralBroadcasted{Style},
     inds...,
 ) where {Style <: SpectralStyle}
-    _args = map(a -> slab(a, inds...), sbc.args)
+    _args = slab_args(sbc.args, inds...)
     _axes = slab(axes(sbc), inds...)
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
 end
@@ -180,7 +180,7 @@ function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractSpectralStyle}
-    _args = map(a -> slab(a, inds...), bc.args)
+    _args = slab_args(bc.args, inds...)
     _axes = slab(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
@@ -189,16 +189,16 @@ function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
-    data_out = Fields.field_values(field_out)
     space = axes(field_out)
-    Nv = Spaces.nlevels(space)
-    Nh = Topologies.nlocalelems(Spaces.topology(space))
-    for h in 1:Nh, v in 1:Nv
+    topology = Spaces.topology(space)
+    Nv = Spaces.nlevels(space)::Int
+    Nh = Topologies.nlocalelems(topology)::Int
+    @inbounds for h in 1:Nh, v in 1:Nv
         slab_out = slab(field_out, v, h)
-        slab_args = map(arg -> _apply_slab(slab(arg, v, h), v, h), bc.args)
+        _slab_args = _apply_slab_args(slab_args(bc.args, v, h), v, h)
         copy_slab!(
             slab_out,
-            Base.Broadcast.Broadcasted{Style}(bc.f, slab_args, axes(slab_out)),
+            Base.Broadcast.Broadcasted{Style}(bc.f, _slab_args, axes(slab_out)),
         )
     end
     return field_out
@@ -206,7 +206,7 @@ end
 
 function copy_slab!(slab_out::Fields.SlabField1D, res)
     space = axes(slab_out)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)::Int
     @inbounds for i in 1:Nq
         set_node!(slab_out, i, get_node(res, i))
     end
@@ -215,7 +215,7 @@ end
 
 function copy_slab!(slab_out::Fields.SlabField2D, res)
     space = axes(slab_out)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)::Int
     @inbounds for j in 1:Nq, i in 1:Nq
         set_node!(slab_out, i, j, get_node(res, i, j))
     end
@@ -225,15 +225,15 @@ end
 # 1D get/set node
 
 # 1D intermediate slab data types
-Base.Base.@propagate_inbounds function get_node(v::MVector, i)
+Base.@propagate_inbounds function get_node(v::MVector, i)
     v[i]
 end
 
-Base.Base.@propagate_inbounds function get_node(v::SVector, i)
+Base.@propagate_inbounds function get_node(v::SVector, i)
     v[i]
 end
 
-Base.Base.@propagate_inbounds function get_node(scalar, i)
+Base.@propagate_inbounds function get_node(scalar, i)
     scalar[]
 end
 
@@ -241,8 +241,11 @@ Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
     getindex(Fields.field_values(field), i)
 end
 
-@inline function get_node(bc::Base.Broadcast.Broadcasted, i)
-    args = map(arg -> get_node(arg, i), bc.args)
+Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i)
+    args = tuplemap(bc.args) do arg
+        Base.@_propagate_inbounds_meta
+        get_node(arg, i)
+    end
     bc.f(args...)
 end
 
@@ -266,8 +269,11 @@ Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
     getindex(Fields.field_values(field), i, j)
 end
 
-@inline function get_node(bc::Base.Broadcast.Broadcasted, i, j)
-    args = map(arg -> get_node(arg, i, j), bc.args)
+Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
+    args = tuplemap(bc.args) do arg
+        Base.@_propagate_inbounds_meta
+        get_node(arg, i, j)
+    end
     bc.f(args...)
 end
 
@@ -281,21 +287,29 @@ Base.@propagate_inbounds function set_node!(
 end
 
 # Broadcast recursive machinery
-_apply_slab(x, inds...) = x
+@inline _apply_slab_args(args::Tuple, inds...) = (
+    _apply_slab(args[1], inds...),
+    _apply_slab_args(Base.tail(args), inds...)...,
+)
+@inline _apply_slab_args(args::Tuple{Any}, inds...) =
+    (_apply_slab(args[1], inds...),)
+@inline _apply_slab_args(args::Tuple{}, inds...) = ()
 
-_apply_slab(sbc::SpectralBroadcasted, inds...) = apply_slab(
+@inline _apply_slab(x, inds...) = x
+@inline _apply_slab(sbc::SpectralBroadcasted, inds...) = apply_slab(
     sbc.op,
     slab(axes(sbc), inds...),
     slab(input_space(sbc), inds...),
-    map(a -> _apply_slab(a, inds...), sbc.args)...,
+    _apply_slab_args(sbc.args, inds...)...,
 )
-
-_apply_slab(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, inds...) =
-    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
-        bc.f,
-        map(a -> _apply_slab(a, inds...), bc.args),
-        bc.axes,
-    )
+@inline _apply_slab(
+    bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle},
+    inds...,
+) = Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
+    bc.f,
+    _apply_slab_args(bc.args, inds...),
+    bc.axes,
+)
 
 function Base.Broadcast.BroadcastStyle(
     ::Type{SB},
@@ -343,7 +357,7 @@ struct Divergence{I} <: SpectralElementOperator end
 Divergence() = Divergence{()}()
 Divergence{()}(space) = Divergence{operator_axes(space)}()
 
-operator_return_eltype(op::Divergence, S) =
+operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
 function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
@@ -452,7 +466,7 @@ struct WeakDivergence{I} <: SpectralElementOperator end
 WeakDivergence() = WeakDivergence{()}()
 WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 
-operator_return_eltype(op::WeakDivergence, S) =
+operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
 function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
@@ -515,7 +529,7 @@ struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
 Gradient{()}(space) = Gradient{operator_axes(space)}()
 
-operator_return_eltype(::Gradient{I}, S) where {I} =
+operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
 function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
@@ -599,7 +613,7 @@ struct WeakGradient{I} <: SpectralElementOperator end
 WeakGradient() = WeakGradient{()}()
 WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 
-operator_return_eltype(::WeakGradient{I}, S) where {I} =
+operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
 function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
@@ -702,7 +716,7 @@ struct Curl{I} <: CurlSpectralElementOperator end
 Curl() = Curl{()}()
 Curl{()}(space) = Curl{operator_axes(space)}()
 
-operator_return_eltype(::Curl{I}, S) where {I, L} =
+operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
 function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
@@ -839,7 +853,7 @@ struct WeakCurl{I} <: CurlSpectralElementOperator end
 WeakCurl() = WeakCurl{()}()
 WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
-operator_return_eltype(::WeakCurl{I}, S) where {I, L} =
+operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
 
@@ -921,7 +935,7 @@ abstract type TensorOperator <: SpectralElementOperator end
 
 input_space(op::TensorOperator, inspace) = inspace
 return_space(op::TensorOperator, inspace) = op.space
-operator_return_eltype(op::TensorOperator, S) = S
+operator_return_eltype(::TensorOperator, ::Type{S}) where {S} = S
 
 """
     i = Interpolate(space)
