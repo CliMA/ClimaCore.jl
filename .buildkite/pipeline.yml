@@ -33,6 +33,9 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - label: "init :flower_playing_cards:"
     key: "init_gpu_env"
@@ -57,7 +60,10 @@ steps:
       config: gpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
       slurm_gres: "gpu:1"
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
 
