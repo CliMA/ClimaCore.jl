@@ -1,13 +1,13 @@
 module Fields
 
-import ..slab
-import ..column
-import ..RecursiveApply
+import ..slab, ..slab_args, ..column, ..column_args
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
+
+using ..RecursiveApply
 
 import LinearAlgebra
 
@@ -154,9 +154,9 @@ end
 # https://github.com/gridap/Gridap.jl/blob/master/src/Fields/FieldsInterfaces.jl#L70
 
 
-Base.similar(field::Field, ::Type{Eltype}) where {Eltype} =
-    Field(Eltype, axes(field))
 Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
+Base.similar(field::Field, ::Type{T}) where {T} =
+    Field(similar(field_values(field), T), axes(field))
 
 
 # fields on different spaces

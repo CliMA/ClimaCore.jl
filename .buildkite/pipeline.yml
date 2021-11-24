@@ -33,6 +33,9 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - label: "init :flower_playing_cards:"
     key: "init_gpu_env"
@@ -57,14 +60,17 @@ steps:
       config: gpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
       slurm_gres: "gpu:1"
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
 
   - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
-      - "julia --color=yes --project=test test/runtests.jl"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
     agents:
       config: cpu
       queue: central
@@ -74,7 +80,7 @@ steps:
     key: "gpu_unittests"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --project=test test/runtests.jl CUDA"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
     agents:
       config: gpu
       queue: central
@@ -340,6 +346,28 @@ steps:
       - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact alpha60"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha60/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha30"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability alpha30"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha30/*"
     agents:
       config: cpu
       queue: central

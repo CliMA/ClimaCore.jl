@@ -19,9 +19,20 @@ Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
 Adapt.adapt_structure(to, data::VF{S}) where {S} =
     VF{S}(Adapt.adapt(to, parent(data)))
 
-parent_array_type(
-    ::Type{A},
-) where {A <: CUDA.GPUArrays.AbstractGPUArray{FT}} where {FT} = CUDA.CuArray{FT}
+parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
+    CUDA.CuArray{T, N, B} where {N}
+
+# Ensure that both parent array types have the same memory buffer type.
+promote_parent_array_type(
+    ::Type{CUDA.CuArray{T1, N, B} where {N}},
+    ::Type{CUDA.CuArray{T2, N, B} where {N}},
+) where {T1, T2, B} = CUDA.CuArray{promote_type(T1, T2), N, B} where {N}
+
+# Make `similar` accept our special `UnionAll` parent array type for CuArray.
+Base.similar(
+    ::Type{CUDA.CuArray{T, N′, B} where {N′}},
+    dims::Dims{N},
+) where {T, N, B} = similar(CUDA.CuArray{T, N, B}, dims)
 
 function knl_copyto!(dest, src)
 

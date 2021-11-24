@@ -14,7 +14,7 @@ using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
 # This example solves the shallow-water equations on a cubed-sphere manifold.
-# This file contains four test cases:
+# This file contains five test cases:
 # - One, called "steady_state", reproduces Test Case 2 in Williamson et al,
 #   "A standard test set for numerical approximations to the shallow water
 #   equations in spherical geometry", 1992. This test case gives the steady-state
@@ -34,24 +34,38 @@ global_logger(TerminalLogger())
 # - A fourth one, called "rossby_haurwitz", reproduces Test Case 6 in the same
 #   reference paper. It represents the solution of the nonlinear barotropic
 #   vorticity equation on the sphere
+# - A fifth one, called "barotropic_instability", reproduces the test case in
+#   Galewsky et al, "An initial-value problem for testing numerical models of
+#   the global shallow-water equations", 2004 (also in Sec. 7.6 of Ullirch et al,
+#   "High-order ﬁnite-volume methods for the shallow-water equations on
+#   the sphere", 2010). This test case consists of a zonal jet with compact
+#   support at a latitude of 45°. A small height disturbance is then added,
+#   which causes the jet to become unstable and collapse into a highly vortical
+#   structure.
 
 # Physical parameters needed
 const R = 6.37122e6
 const Ω = 7.292e-5
 const g = 9.80616
 const D₄ = 1.0e16 # hyperdiffusion coefficient
+
+# Test case specifications
 const test_name = get(ARGS, 1, "steady_state") # default test case to run
 const test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
 const steady_state_test_name = "steady_state"
 const steady_state_compact_test_name = "steady_state_compact"
 const mountain_test_name = "mountain"
 const rossby_haurwitz_test_name = "rossby_haurwitz"
+const barotropic_instability_test_name = "barotropic_instability"
 const alpha0_test_name = "alpha0"
+const alpha30_test_name = "alpha30"
 const alpha45_test_name = "alpha45"
 const alpha60_test_name = "alpha60"
 
 # Test-specific physical parameters
-if test_angle_name == alpha45_test_name
+if test_angle_name == alpha30_test_name
+    const α = 30.0
+elseif test_angle_name == alpha45_test_name
     const α = 45.0
 elseif test_angle_name == alpha60_test_name
     const α = 60.0
@@ -77,6 +91,17 @@ elseif test_name == steady_state_compact_test_name
     const ϕᵦ = -30.0
     const ϕₑ = 90.0
     const xₑ = 0.3
+elseif test_name == barotropic_instability_test_name
+    const u_max = 80.0
+    const xₑ = 0.3
+    const αₚ = 19.09859
+    const βₚ = 3.81971
+    const h0 = 10158.18617 # value for initial height from Tempest https://github.com/paullric/tempestmodel/blob/master/test/shallowwater_sphere/BarotropicInstabilityTest.cpp#L86
+    const h_hat = 120.0
+    const ϕ₀ = 25.71428
+    const ϕ₁ = 64.28571
+    const ϕ₂ = 45.0
+    const eₙ = exp(-4.0 / (deg2rad(ϕ₁) - deg2rad(ϕ₀))^2)
 else # default case, steady-state test case
     const u0 = 2 * pi * R / (12 * 86400)
     const h0 = 2.94e4 / g
@@ -101,7 +126,7 @@ function linkfig(figpath, alt = "")
 end
 
 # Set up discretization
-ne = 7 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
+ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
 Nq = 4
 
 domain = Domains.SphereDomain(R)
@@ -202,7 +227,7 @@ elseif test_name == steady_state_compact_test_name
             λprime = λ
         else
             ϕprime = asind(sind(ϕ) * cosd(α) - cosd(ϕ) * cosd(λ) * sind(α))
-            λprime = asind(sind(λ) * cosd(ϕ) / cosd(ϕprime))
+            λprime = asind(sind(λ) * cosd(ϕ) / cosd(ϕprime)) # for alpha45, this experiences numerical precision issues. The test case is designed for either alpha0 or alpha60
 
             # Temporary angle to ensure λprime is in the right quadrant
             λcond = cosd(α) * cosd(λ) * cosd(ϕ) + sind(α) * sind(ϕ)
@@ -249,6 +274,55 @@ elseif test_name == steady_state_compact_test_name
                 (uϕ * sind(ϕ) * sind(λ) + uλprime(ϕprime) * cosd(λprime)) /
                 cosd(λ)
         end
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+
+        return (h = h, u = u)
+    end
+elseif test_name == barotropic_instability_test_name
+    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+
+        ϕ = coord.lat
+        λ = coord.long
+
+        if α == 0.0
+            ϕprime = ϕ
+        else
+            ϕprime = asind(sind(ϕ) * cosd(α) - cosd(ϕ) * cosd(λ) * sind(α))
+        end
+
+        # Set initial state of velocity field
+        uλprime(ϕprime) =
+            (u_max / eₙ) *
+            exp(1.0 / (deg2rad(ϕprime - ϕ₀) * deg2rad(ϕprime - ϕ₁))) *
+            (ϕ₀ < ϕprime < ϕ₁)
+        uϕprime = 0.0
+
+        # Set integral needed for height initial state
+        h_int(γ) =
+            abs(γ) < 90.0 ?
+            (2 * Ω * sind(γ) + uλprime(γ) * tand(γ) / R) * uλprime(γ) : 0.0
+
+        # Set initial state for height field
+        h = h0 - (R / g) * (pi / 180.0) * quadgk(h_int, -90.0, ϕprime)[1]
+
+        if λ > 0.0
+            λ -= 360.0
+        end
+        if λ < -360.0 || λ > 0.0
+            @info "Invalid longitude value"
+        end
+
+        # Add height perturbation
+        h += h_hat * cosd(ϕ) * exp(-(λ^2 / αₚ^2) - ((ϕ₂ - ϕ)^2 / βₚ^2))
+
+        uλ = uλprime(ϕprime)
+        uϕ = uϕprime
 
         u = Geometry.transform(
             Geometry.Covariant12Axis(),
@@ -317,9 +391,10 @@ end
 dydt = similar(y0)
 rhs!(dydt, y0, (f = f, h_s = h_s), 0.0)
 
-# Solve the ODE operator
-dt = 10 * 60
+# Solve the ODE
+dt = 9 * 60
 T = 86400 * 2
+
 prob = ODEProblem(rhs!, y0, (0.0, T), (f = f, h_s = h_s))
 sol = solve(
     prob,
@@ -332,14 +407,11 @@ sol = solve(
 )
 
 @info "Test case: $(test_name)"
-if test_name == steady_state_test_name ||
-   test_name == steady_state_compact_test_name
-    @info "  with α: $(test_angle_name)"
-end
-@info "Solution L₂ norm at T = 0: ", norm(y0.h)
-@info "Solution L₂ norm at T = $(T): ", norm(sol.u[end].h)
-@info "Fluid volume at T = 0: ", sum(y0.h)
-@info "Fluid volume at T = $(T): ", sum(sol.u[end].h)
+@info "  with α: $(test_angle_name)"
+@info "Solution L₂ norm at time t = 0: ", norm(y0.h)
+@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].h)
+@info "Fluid volume at time t = 0: ", sum(y0.h)
+@info "Fluid volume at time t = $(T): ", sum(sol.u[end].h)
 
 if test_name == steady_state_test_name ||
    test_name == steady_state_compact_test_name
@@ -368,7 +440,7 @@ if test_name == steady_state_test_name ||
         Plots.plot(
             [1:dt:T],
             relL1err,
-            xlabel = "time",
+            xlabel = "time [s]",
             ylabel = "Relative L₁ err",
             label = "",
         ),
@@ -390,7 +462,7 @@ if test_name == steady_state_test_name ||
         Plots.plot(
             [1:dt:T],
             relL2err,
-            xlabel = "time",
+            xlabel = "time [s]",
             ylabel = "Relative L₂ err",
             label = "",
         ),
@@ -412,7 +484,7 @@ if test_name == steady_state_test_name ||
         Plots.plot(
             [1:dt:T],
             RelLInferr,
-            xlabel = "time",
+            xlabel = "time [s]",
             ylabel = "Relative L∞ err",
             label = "",
         ),

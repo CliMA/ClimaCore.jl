@@ -771,6 +771,36 @@ function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
     return SMatrix(out)
 end
 
+function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
+    slab_local_geometry = Spaces.local_geometry_data(slab_space)
+    FT = Spaces.undertype(slab_space)
+    QS = Spaces.quadrature_style(slab_space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(slab_data))
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
+    if RT <: Geometry.Contravariant2Vector
+        @inbounds for i in 1:Nq
+            v₃ = Geometry.covariant3(
+                get_node(slab_data, i),
+                slab_local_geometry[i],
+            )
+            for ii in 1:Nq
+                D₁v₃ = D[ii, i] ⊠ v₃
+                out[ii] = out[ii] ⊞ Geometry.Contravariant2Vector(⊟(D₁v₃))
+            end
+        end
+    else
+        error("invalid return type: $RT")
+    end
+    @inbounds for i in 1:Nq
+        local_geometry = slab_local_geometry[i]
+        out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
+    end
+    return SVector(out)
+end
 
 """
     wcurl = WeakCurl()

@@ -87,4 +87,4 @@ jobs:
     - name: Run Unit Tests
       if: steps.filter.outputs.run_test == 'true'
       run: |
-        julia --color=yes --project=test test/runtests.jl
+        julia --color=yes --check-bounds=yes --project=test test/runtests.jl

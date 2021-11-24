@@ -4,6 +4,7 @@ import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
 using LinearAlgebra: norm
+using ForwardDiff
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     domain = Domains.RectangleDomain(
@@ -87,16 +88,94 @@ end
     space = spectral_space_2D()
     u = Geometry.Covariant12Vector.(ones(space), ones(space))
     x = Fields.coordinate_field(space)
-    Y = Fields.FieldVector(u = u, x = x)
+    y = [1.0, 2.0, 3.0]
+    z = 1.0
+    Y = Fields.FieldVector(u = u, k = (x = x, y = y, z = z))
 
-    @test propertynames(Y) == (:u, :x)
-    @test Y.u == u
+    @test propertynames(Y) == (:u, :k)
+    @test propertynames(Y.k) == (:x, :y, :z)
+    @test Y.u === u
+    @test Y.k.x === x
+    @test Y.k.y === y
+    @test Y.k.z === z
 
     Y1 = 2 .* Y
     @test parent(Y1.u) == 2 .* parent(u)
-    @test parent(Y1.x) == 2 .* parent(x)
+    @test parent(Y1.k.x) == 2 .* parent(x)
+    @test Y1.k.y == 2 .* y
+    @test Y1.k.z === 2 * z
 
     Y1 .= Y1 .+ 2 .* Y
     @test parent(Y1.u) == 4 .* parent(u)
-    @test parent(Y1.x) == 4 .* parent(x)
+    @test parent(Y1.k.x) == 4 .* parent(x)
+    @test Y1.k.y == 4 .* y
+    @test Y1.k.z === 4 * z
+
+    Y.k.z = 3.0
+    @test Y.k.z === 3.0
+end
+
+@testset "FieldVector basetype replacement and deepcopy" begin
+    domain_z = Domains.IntervalDomain(
+        Geometry.ZPoint(-1.0)..Geometry.ZPoint(1.0),
+        periodic = true,
+    )
+    mesh_z = Meshes.IntervalMesh(domain_z; nelems = 10)
+    topology_z = Topologies.IntervalTopology(mesh_z)
+
+    domain_x = Domains.IntervalDomain(
+        Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+        periodic = true,
+    )
+    mesh_x = Meshes.IntervalMesh(domain_x; nelems = 10)
+    topology_x = Topologies.IntervalTopology(mesh_x)
+
+    domain_xy = Domains.RectangleDomain(
+        Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+        Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+        x1periodic = true,
+        x2periodic = true,
+    )
+    mesh_xy = Meshes.EquispacedRectangleMesh(domain_xy, 10, 10)
+    topology_xy = Topologies.GridTopology(mesh_xy)
+
+    quad = Spaces.Quadratures.GLL{4}()
+
+    space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
+    space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
+    space_ijfh = Spaces.SpectralElementSpace2D(topology_xy, quad)
+    space_vifh = Spaces.ExtrudedFiniteDifferenceSpace(space_ifh, space_vf)
+    space_vijfh = Spaces.ExtrudedFiniteDifferenceSpace(space_ijfh, space_vf)
+
+    space2field(space) = map(
+        coord -> (coord, Geometry.Covariant12Vector(1.0, 2.0)),
+        Fields.coordinate_field(space),
+    )
+
+    Y = Fields.FieldVector(
+        field_vf = space2field(space_vf),
+        field_if = slab(space2field(space_ifh), 1),
+        field_ifh = space2field(space_ifh),
+        field_ijf = slab(space2field(space_ijfh), 1, 1),
+        field_ijfh = space2field(space_ijfh),
+        field_vifh = space2field(space_vifh),
+        field_vijfh = space2field(space_vijfh),
+        array = [1.0, 2.0, 3.0],
+        scalar = 1.0,
+    )
+
+    Yf = ForwardDiff.Dual{Nothing}.(Y, 1.0)
+    Yf .= Yf .^ 2 .+ Y
+    @test all(ForwardDiff.value.(Yf) .== Y .^ 2 .+ Y)
+    @test all(ForwardDiff.partials.(Yf, 1) .== 2 .* Y)
+
+    dual_field = Yf.field_vf
+    dual_field_original_basetype = similar(Y.field_vf, eltype(dual_field))
+    @test eltype(dual_field_original_basetype) === eltype(dual_field)
+    @test eltype(parent(dual_field_original_basetype)) === Float64
+    @test eltype(parent(dual_field)) === ForwardDiff.Dual{Nothing, Float64, 1}
+
+    object_that_contains_Yf = (; Yf)
+    @test axes(deepcopy(Yf).field_vf) === space_vf
+    @test axes(deepcopy(object_that_contains_Yf).Yf.field_vf) === space_vf
 end
