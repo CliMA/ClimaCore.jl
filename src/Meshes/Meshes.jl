@@ -10,7 +10,14 @@ export EquispacedRectangleMesh,
     AbstractWarp,
     AbstractSphereWarp,
     EquiangularSphereWarp,
-    EquidistantSphereWarp
+    EquidistantSphereWarp,
+    ConformalSphereWarp,
+    equiangular_sphere_warp,
+    equiangular_sphere_unwarp,
+    equidistant_sphere_warp,
+    equidistant_sphere_unwarp,
+    conformal_sphere_warp,
+    conformal_sphere_unwarp
 
 import ..Domains:
     Domains, IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
@@ -38,6 +45,7 @@ abstract type AbstractSphereWarp <: AbstractWarp end
 struct NoWarp <: AbstractWarp end
 struct EquiangularSphereWarp <: AbstractSphereWarp end
 struct EquidistantSphereWarp <: AbstractSphereWarp end
+struct ConformalSphereWarp <: AbstractSphereWarp end
 
 include("interval.jl")
 
@@ -82,11 +90,6 @@ function Base.show(io::IO, mesh::EquispacedRectangleMesh)
     print(io, mesh.domain)
 end
 
-#struct EquiangularCubedSphereMesh{FT} <: AbstractMesh{FT}
-#    domain::SphereDomain{FT}
-#    n::Int64
-#end
-
 """
     Mesh2D{I,IA2D,FT,FTA2D} <: AbstractMesh{FT}
 
@@ -98,8 +101,8 @@ embedded in a higher dimensional space.
                 v4            f3           v3
                   o------------------------o
                   |                        |	  face    vertices
-                  |       <----------      |             
-                  |                 |      |		f1 =>  v1 v2 
+                  |       <----------      |
+                  |                 |      |		f1 =>  v1 v2
                f4 |                 |      | f2     f2 =>  v2 v3
                   |                 |      |		f3 =>  v3 v4
                   |                 |      |        f4 =>  v4 v1
@@ -204,11 +207,11 @@ Mesh2D(
     elem_faces,
 )
 
+# implementations
+include("tensorproductmesh.jl")
 include("box_mesh.jl")
 include("warp_cube_to_sphere.jl")
 include("sphere_mesh.jl")
 
-# implementations
-include("tensorproductmesh.jl")
 
 end # module
