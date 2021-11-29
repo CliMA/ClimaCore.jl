@@ -797,86 +797,91 @@ Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 Column levels (V) are contiguous for every element nodal point (I)
 for each datatype `S` struct field (F), for each 1D mesh element slab (H).
 """
-struct VIFH{S, Ni, A} <: Data1DX{S, Ni}
+struct KVIFH{S, Ni, Nk, A} <: Data1DX{S, Ni}
     array::A
 end
+const VIFH{S, Ni, A} = KVIFH{S,Ni,1,A}
 
-function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
-    @assert size(array, 2) == Ni
+function KVIFH{S, Ni, Nk}(array::AbstractArray{T, 5}) where {S, Ni, Nk,T}
+    @assert size(array, 1) == Nk
+    @assert size(array, 3) == Ni
     check_basetype(T, S)
-    VIFH{S, Ni, typeof(array)}(array)
+    KVIFH{S, Ni, Nk, typeof(array)}(array)
 end
 
-function replace_basetype(data::VIFH{S, Ni}, ::Type{T}) where {S, Ni, T}
+function replace_basetype(data::KVIFH{S, Ni, Nk}, ::Type{T}) where {S, Ni, Nk,T}
     array = parent(data)
     S′ = replace_basetype(eltype(array), T, S)
-    return VIFH{S′, Ni}(similar(array, T))
+    return KVIFH{S′, Ni, Nk}(similar(array, T))
 end
 
-Base.copy(data::VIFH{S, Ni}) where {S, Ni} = VIFH{S, Ni}(copy(parent(data)))
+Base.copy(data::KVIFH{S, Ni, Nk}) where {S, Ni, Nk} = KVIFH{S, Ni, Nk}(copy(parent(data)))
 
-function Base.size(data::VIFH{<:Any, Ni}) where {Ni}
-    Nv = size(parent(data), 1)
-    Nh = size(parent(data), 4)
-    return (Ni, 1, 1, Nv, Nh)
+function Base.size(data::KVIFH{<:Any, Ni, Nk}) where {Ni, Nk}
+    Nv = size(parent(data), 2)
+    Nh = size(parent(data), 5)
+    return (Ni, 1, Nk, Nv, Nh)
 end
 
-function Base.length(data::VIFH)
-    size(parent(data), 1) * size(parent(data), 4)
+function Base.length(data::KVIFH)
+    Nv = size(parent(data), 2)
+    Nh = size(parent(data), 5)
+    return Nv * Nh
 end
 
 @generated function _property_view(
-    data::VIFH{S, Ni, A},
+    data::KVIFH{S, Ni, Nk, A},
     ::Val{Idx},
-) where {S, Ni, A, Idx}
+) where {S, Ni, Nk, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIFH{$SS, $Ni}(
-        @inbounds view(parent(data), :, :, $field_byterange, :)
+    return :(KVIFH{$SS, $Ni, $Nk}(
+        @inbounds view(parent(data), :, :, :, $field_byterange, :)
     ))
 end
 
-@inline function Base.getproperty(data::VIFH{S, Ni}, i::Integer) where {S, Ni}
+@inline function Base.getproperty(data::KVIFH{S, Ni, Nk}, i::Integer) where {S, Ni, Nk}
     array = parent(data)
     T = eltype(array)
     SS = fieldtype(S, i)
     offset = fieldtypeoffset(T, S, i)
     nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes), :)
-    VIFH{SS, Ni}(dataview)
+    dataview = @inbounds view(array, :, :, :, (offset + 1):(offset + nbytes), :)
+    KVIFH{SS, Ni, Nk}(dataview)
 end
 
-@inline function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
+@inline function slab(data::KVIFH{S, Ni, Nk}, k, v, h) where {S, Ni, Nk}
     @boundscheck (
-        1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 4)
+        1 <= k <= Nk && 1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 4)
     ) || throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), v, :, :, h)
+    dataview = @inbounds view(parent(data), k, v, :, :, h)
     IF{S, Ni}(dataview)
+end
+@inline function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
+    slab(data, 1, v, h)
 end
 
 @inline function column(data::VIFH{S, Ni}, i, h) where {S, Ni}
-    @boundscheck (1 <= i <= Ni && 1 <= h <= size(parent(data), 4)) ||
+    @boundscheck begin
+        Nh = size(parent(data), 5)
+        (1 <= i <= Ni && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), :, i, :, h)
+    end
+    dataview = @inbounds view(parent(data), 1, :, i, :, h)
     VF{S}(dataview)
 end
 
 @inline function column(data::VIFH{S, Ni}, i, j, h) where {S, Ni}
-    @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= size(parent(data), 4)) ||
+    @boundscheck begin
+        Nh = size(parent(data), 5)
+        (1 <= i <= Ni && j == 1 && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), :, i, :, h)
+    end
+    dataview = @inbounds view(parent(data), 1, :, i, :, h)
     VF{S}(dataview)
-end
-
-@propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)
-    data[I[1], I[4]]
-end
-
-@propagate_inbounds function Base.setindex!(data::VIFH, val, I::CartesianIndex)
-    data[I[1], I[4]] = val
 end
 
 

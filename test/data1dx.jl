@@ -11,22 +11,22 @@ import ClimaCore.DataLayouts: VIFH, slab, column
 
         # construct a data object with 10 cells in vertical and
         # 10 elements in horizontal with 4 nodal points per element in horizontal
-        array = rand(FT, Nv, Ni, 3, Nh)
+        array = rand(FT, 1, Nv, Ni, 3, Nh)
 
         data = VIFH{S, Ni}(array)
         sum(x -> x[2], data)
 
-        @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
-        @test getfield(data.:2, :array) == @view(array[:, :, 3:3, :])
+        @test getfield(data.:1, :array) == @view(array[:, :, :, 1:2, :])
+        @test getfield(data.:2, :array) == @view(array[:, :, :, 3:3, :])
 
         @test size(data) == (Ni, 1, 1, Nv, Nh)
 
         # test tuple assignment on columns
         val = (Complex{FT}(-1.0, -2.0), FT(-3.0))
         column(data, 1, 1)[1] = val
-        @test array[1, 1, 1, 1] == -1.0
-        @test array[1, 1, 2, 1] == -2.0
-        @test array[1, 1, 3, 1] == -3.0
+        @test array[1, 1, 1, 1, 1] == -1.0
+        @test array[1, 1, 1, 2, 1] == -2.0
+        @test array[1, 1, 1, 3, 1] == -3.0
 
         # test value of assing tuple on slab
         sdata = slab(data, 1, 1)
@@ -34,8 +34,8 @@ import ClimaCore.DataLayouts: VIFH, slab, column
 
         # sum of all the first field elements
         @test sum(data.:1) ≈
-              Complex{FT}(sum(array[:, :, 1, :]), sum(array[:, :, 2, :]))
-        @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :])
+              Complex{FT}(sum(array[:, :, :, 1, :]), sum(array[:, :, :, 2, :]))
+        @test sum(x -> x[2], data) ≈ sum(array[:, :, :, 3, :])
     end
 end
 
@@ -45,7 +45,7 @@ end
     Nh = 2 # number of elements
 
     S = Tuple{Complex{Float64}, Float64}
-    array = zeros(Float64, Nv, Ni, 3, Nh)
+    array = zeros(Float64, 1, Nv, Ni, 3, Nh)
     data = VIFH{S, Ni}(array)
 
     @test_throws BoundsError slab(data, -1, -1)
@@ -71,7 +71,7 @@ end
     SA = (a = 1.0, b = 2.0)
     SB = (c = 1.0, d = 2.0)
 
-    array = zeros(Float64, Nv, Ni, 2, Nh)
+    array = zeros(Float64, 1, Nv, Ni, 2, Nh)
     data = VIFH{typeof(SA), Ni}(array)
 
     cdata = column(data, 1, 1)
@@ -86,7 +86,7 @@ end
 
 @testset "broadcasting between VIFH data object + scalars" begin
     FT = Float64
-    data1 = ones(FT, 2, 2, 2, 2)
+    data1 = ones(FT, 1, 2, 2, 2, 2)
     S = Complex{Float64}
     data1 = VIFH{S, 2}(data1)
     res = data1 .+ 1
