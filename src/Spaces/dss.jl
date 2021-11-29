@@ -25,6 +25,7 @@ dss_transform(
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
 
+
 function dss_transform(
     arg::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
@@ -72,8 +73,8 @@ function dss_1d!(
     src,
     local_geometry_data,
     htopology::Topologies.AbstractTopology,
-    Nq::Integer,
-    Nv::Integer = 1,
+    Nq::Int,
+    Nv::Int = 1,
 )
     idx1 = CartesianIndex(1, 1, 1, 1, 1)
     idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
@@ -118,8 +119,8 @@ function dss_2d!(
     src,
     local_geometry_data,
     topology::Topologies.AbstractTopology,
-    Nq::Integer,
-    Nv::Integer = 1,
+    Nq::Int,
+    Nv::Int = 1,
 )
     # TODO: generalize to extruded domains by returning a cartesian index?
     # iterate over the interior faces for each element of the mesh
@@ -196,13 +197,14 @@ function horizontal_dss!(dest, src, space::AbstractSpace)
         hspace = space
     end
     htopology = hspace.topology
-    Nq = Quadratures.degrees_of_freedom(hspace.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(hspace.quadrature_style)::Int
     if hspace isa SpectralElementSpace1D
         dss_1d!(dest, src, local_geometry_data(space), htopology, Nq, Nv)
     elseif hspace isa SpectralElementSpace2D
         dss_2d!(dest, src, local_geometry_data(space), htopology, Nq, Nv)
     end
 end
+
 
 horizontal_dss!(data, space::AbstractSpace) =
     horizontal_dss!(data, data, space::AbstractSpace)

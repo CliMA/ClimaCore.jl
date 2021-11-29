@@ -1,5 +1,6 @@
 using Base: operator_associativity
 
+
 # Order of tests is intended to reflect dependency order of functionality
 include("recursive.jl")
 include("data1d.jl")
@@ -15,6 +16,7 @@ include("quadrature.jl")
 include("spaces.jl")
 include("field.jl")
 include("spectraloperators.jl")
+include("spectralspaces_opt.jl")
 include("diffusion2d.jl")
 include("fdspaces.jl")
 include("fdspaces_opt.jl")

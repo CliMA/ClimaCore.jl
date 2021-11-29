@@ -232,10 +232,10 @@ The return type when taking the divergence of a field of `V`.
 
 Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
 """
-divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
+@inline divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
 
 # this isn't quite right: it only is true when the Christoffel symbols are zero
-divergence_result_type(
+@inline divergence_result_type(
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
 ) where {FT, A1, A2 <: LocalAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     AxisVector{FT, A2, SVector{S2, FT}}
@@ -247,11 +247,14 @@ The return type when taking the gradient along dimension `I` of a field `V`.
 
 Required for statically infering the result type of the gradient operation for `AxisVector` subtypes.
     """
-function gradient_result_type(::Val{I}, ::Type{V}) where {I, V <: Number}
+@inline function gradient_result_type(
+    ::Val{I},
+    ::Type{V},
+) where {I, V <: Number}
     N = length(I)
     AxisVector{V, CovariantAxis{I}, SVector{N, V}}
 end
-function gradient_result_type(
+@inline function gradient_result_type(
     ::Val{I},
     ::Type{V},
 ) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
@@ -266,28 +269,37 @@ The return type when taking the curl along dimensions `I` of a field of eltype `
 
 Required for statically infering the result type of the curl operation for `AxisVector` subtypes.
 """
-curl_result_type(::Val{(1, 2)}, ::Type{Covariant12Vector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Covariant12Vector{FT}},
+) where {FT} = Contravariant3Vector{FT}
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Covariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant2Vector{FT}
-curl_result_type(::Val{(3,)}, ::Type{Covariant12Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(3,)},
+    ::Type{Covariant12Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
     Contravariant2Vector{FT}
-curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
+@inline curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
     Contravariant1Vector{FT}
 
-
 # these are only true in 2D
-curl_result_type(::Val{(1, 2)}, ::Type{Contravariant12Vector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Contravariant12Vector{FT}},
+) where {FT} = Contravariant3Vector{FT}
+@inline curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
     Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{Contravariant3Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Contravariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
     Contravariant12Vector{FT}
 
 
