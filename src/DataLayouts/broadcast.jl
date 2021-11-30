@@ -132,6 +132,14 @@ end
 )
     Ref(slab(bc, h)[i])
 end
+@propagate_inbounds function column(
+    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
+    i,
+    j,
+    h,
+)
+    Ref(slab(bc, h)[i])
+end
 
 @propagate_inbounds function column(
     bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},

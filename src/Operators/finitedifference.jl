@@ -2106,13 +2106,25 @@ function Base.Broadcast.materialize!(
     )
 end
 
+
+unwrap_ref(r::Ref) = r[]
+unwrap_ref(r) = r
+
+@inline function column_op(f::DivergenceF2C, inds...)
+    DivergenceF2C(map(bc -> column_bc(bc, inds...), f.bcs))
+end
+@inline column_bc(bc::SetValue, inds...) =
+    SetValue(unwrap_ref(column(bc.val, inds...)))
+
+
 @inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractStencilStyle}
-    _args = column_args(bc.args, inds...)
-    _axes = column(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+    col_f = column_op(bc.f, inds...)
+    col_args = column_args(bc.args, inds...)
+    col_axes = column(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{Style}(col_f, col_args, col_axes)
 end
 
 function Base.similar(
