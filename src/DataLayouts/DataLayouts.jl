@@ -650,7 +650,7 @@ end
 end
 
 @inline function Base.getindex(data::VF{S}, v::Integer) where {S}
-    @boundscheck (1 <= v <= length(parent(data))) ||
+    @boundscheck 1 <= v <= size(parent(data), 1) ||
                  throw(BoundsError(data, (v,)))
     dataview = @inbounds view(parent(data), v, :)
     @inbounds get_struct(dataview, S)
