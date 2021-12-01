@@ -126,7 +126,7 @@ function linkfig(figpath, alt = "")
 end
 
 # Set up discretization
-ne = 13 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
+ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
 Nq = 4
 
 domain = Domains.SphereDomain(R)
@@ -393,7 +393,7 @@ rhs!(dydt, y0, (f = f, h_s = h_s), 0.0)
 
 # Solve the ODE
 dt = 9 * 60
-T = 86400 * 15
+T = 86400 * 2
 
 prob = ODEProblem(rhs!, y0, (0.0, T), (f = f, h_s = h_s))
 sol = solve(
@@ -509,9 +509,13 @@ else # In the non steady-state cases, we only plot the latest output of the dyna
 end
 
 times = 0:dt:T
-Sol =  Array{Fields.Field}(undef, length(times))
+Sol_h =  Array{Fields.Field}(undef, length(times))
+Sol_vort =  Array{Fields.Field}(undef, length(times))
+curl = Operators.Curl()
 for t in 1:div(T, dt)+1
-    Sol[t] = sol.u[t].h
+    Sol_h[t] = sol.u[t].h
+    Sol_vort[t] = curl.(sol.u[t])
 end
 using ClimaCoreVTK
-writevtk(joinpath(path, "sphere_series"), times, Sol)
+# writevtk(joinpath(path, "height"), times, Sol_h)
+writevtk(joinpath(path, "vorticity"), times, Sol_vort)
