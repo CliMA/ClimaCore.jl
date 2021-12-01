@@ -209,4 +209,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/advect_end.png", "Advect End Simulation")
+linkfig(
+    relpath(joinpath(path, "advect_end.png"), joinpath(@__DIR__, "../..")),
+    "Advect End Simulation",
+)

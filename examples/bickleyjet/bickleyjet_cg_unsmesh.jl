@@ -131,10 +131,10 @@ mkpath(path)
 anim = Plots.@animate for u in sol.u
     Plots.plot(u.ρθ, clim = (-1, 1))
 end
-Plots.mp4(anim, joinpath(path, "tracer_uns2dmesh.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
-Plots.png(Plots.plot(Es), joinpath(path, "energy_uns2dmesh.png"))
+Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
 
 function linkfig(figpath, alt = "")
@@ -146,4 +146,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/energy_uns2dmesh.png", "Total Energy")
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)

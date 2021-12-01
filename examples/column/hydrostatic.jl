@@ -209,4 +209,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/hydrostatic_end.png", "Hydrostatic End")
+linkfig(
+    "examples/column/output/$(dirname)/hydrostatic_end.png",
+    "Hydrostatic End",
+)

@@ -204,7 +204,7 @@ function rhs!(dY, Y, _, t)
     Yfρ = @. If(Yc.ρ)
 
     ### HYPERVISCOSITY
-    # 1) compute hyperviscosity coefficients 
+    # 1) compute hyperviscosity coefficients
     @. dYc.ρθ = hdiv(hgrad(θ))
     @. dYc.ρuₕ = hdiv(hgrad(uₕ))
     @. dρw = hdiv(hgrad(w))
@@ -245,7 +245,7 @@ function rhs!(dY, Y, _, t)
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
-    ### UPWIND FLUX CORRECTION 
+    ### UPWIND FLUX CORRECTION
     upwind_correction = true
     if upwind_correction
         @. dYc.ρ += fcc(w, Yc.ρ)

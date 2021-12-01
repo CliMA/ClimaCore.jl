@@ -324,4 +324,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/hydrostatic_end.png", "Hydrostatic End")
+linkfig(
+    relpath(joinpath(path, "hydrostatic_end.png"), joinpath(@__DIR__, "../..")),
+    "Hydrostatic End",
+)

@@ -96,4 +96,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/wave_end.png", "Wave End")
+linkfig(
+    relpath(joinpath(path, "wave_end.png"), joinpath(@__DIR__, "../..")),
+    "Wave End",
+)
