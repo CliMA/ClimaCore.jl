@@ -154,6 +154,9 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig(
-    "output/$(dirname)/advect_diffusion_end.png",
+    relpath(
+        joinpath(path, "advect_diffusion_end.png"),
+        joinpath(@__DIR__, "../.."),
+    ),
     "Advection-Diffusion End Simulation",
 )

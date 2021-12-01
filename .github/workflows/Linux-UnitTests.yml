@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['1.6', '1.7-nightly']
+        julia-version: ['1.6', '1.7']
 
     env:
       CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
