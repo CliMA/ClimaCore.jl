@@ -297,7 +297,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "bubble"
+dirname = "bubble_2d"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 

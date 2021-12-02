@@ -102,7 +102,7 @@ function init_dry_rising_bubble_3d(x, y, z)
     ρ = p / R_d / T # density
     ρθ = ρ * θ # potential temperature density
 
-    # Horizontal momentum defined on cell centers 
+    # Horizontal momentum defined on cell centers
     return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVVector(0.0, 0.0))
 end
 
@@ -184,7 +184,7 @@ function rhs!(dY, Y, _, t)
     Yfρ = @. If(Yc.ρ)
 
     ### HYPERVISCOSITY
-    # 1) compute hyperviscosity coefficients 
+    # 1) compute hyperviscosity coefficients
     @. dYc.ρθ = hdiv(hgrad(θ))
     @. dYc.ρuₕ = hdiv(hgrad(uₕ))
     @. dρw = hdiv(hgrad(w))
@@ -213,7 +213,6 @@ function rhs!(dY, Y, _, t)
         ),
     )
     @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
-    # -------------------> 
 
     # vertical momentum
     @. dρw +=
@@ -226,7 +225,7 @@ function rhs!(dY, Y, _, t)
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
-    ### UPWIND FLUX CORRECTION 
+    ### UPWIND FLUX CORRECTION
     upwind_correction = true
     if upwind_correction
         @. dYc.ρ += fcc(w, Yc.ρ)
@@ -274,11 +273,12 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 );
 
-ENV["GKSwstype"] = "nul"
-#import Plots
-#Plots.GRBackend()
+# TODO: visualization artifacts
 
-#dirname = "bubble_3d"
-#path = joinpath(@__DIR__, "output", dirname)
-#mkpath(path)
-#TODO: Slab plots + VTK output support for 3D domains
+# ENV["GKSwstype"] = "nul"
+# import Plots
+# Plots.GRBackend()
+
+# dirname = "bubble_3d"
+# path = joinpath(@__DIR__, "output", dirname)
+# mkpath(path)
