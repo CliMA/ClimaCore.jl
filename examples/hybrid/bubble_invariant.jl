@@ -105,21 +105,12 @@ end
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-Yc = map(coords) do coord
-    bubble = init_dry_rising_bubble_2d(coord.x, coord.z)
-    bubble
-end
+Yc = map(coord -> init_dry_rising_bubble_2d(coord.x, coord.z), coords)
+uₕ = map(_ -> Geometry.Covariant1Vector(0.0), coords)
+w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
+Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-ρw = map(face_coords) do coord
-    Geometry.WVector(0.0)
-end;
-
-Y = Fields.FieldVector(
-    Yc = Yc,
-    ρuₕ = Yc.ρ .* Ref(Geometry.UVector(0.0)),
-    ρw = ρw,
-)
-
+#=
 function energy(Yc, ρu, z)
     ρ = Yc.ρ
     ρθ = Yc.ρθ
@@ -135,7 +126,7 @@ function combine_momentum(ρuₕ, ρw)
 end
 function center_momentum(Y)
     If2c = Operators.InterpolateF2C()
-    combine_momentum.(Y.ρuₕ, If2c.(Y.ρw))
+    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
 end
 function total_energy(Y)
     ρ = Y.Yc.ρ
@@ -147,51 +138,116 @@ end
 
 energy_0 = total_energy(Y)
 mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
+=#
 
-function rhs!(dY, Y, _, t)
-    ρuₕ = Y.ρuₕ
-    ρw = Y.ρw
-    Yc = Y.Yc
-    dYc = dY.Yc
-    dρuₕ = dY.ρuₕ
-    dρw = dY.ρw
+function rhs_invariant!(dY, Y, _, t)
 
-    # spectral horizontal operators
+    cρ = Y.Yc.ρ # scalar on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant1Vector on centers
+    cρθ = Y.Yc.ρθ
+
+    dρ = dY.Yc.ρ
+    dw = dY.w
+    duₕ = dY.uₕ
+    dρθ = dY.Yc.ρθ
+
+
+    # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33
+
     hdiv = Operators.Divergence()
+    hwdiv = Operators.Divergence()
     hgrad = Operators.Gradient()
-    hwdiv = Operators.WeakDivergence()
-    hwgrad = Operators.WeakGradient()
+    hwgrad = Operators.Gradient()
 
-    # vertical FD operators with BC's
-    vdivf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(0.0)),
-        top = Operators.SetValue(Geometry.WVector(0.0)),
-    )
-    vvdivc2f = Operators.DivergenceC2F(
-        bottom = Operators.SetDivergence(Geometry.WVector(0.0)),
-        top = Operators.SetDivergence(Geometry.WVector(0.0)),
-    )
-    uvdivf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(
-            Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0),
-        ),
-        top = Operators.SetValue(Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0)),
-    )
-    If = Operators.InterpolateC2F(
+    dρ .= 0 .* cρ
+
+    ### HYPERVISCOSITY
+    # 1) compute hyperviscosity coefficients
+
+    χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ)) # we store χθ in dρθ
+    χuₕ = @. duₕ = hwgrad(hdiv(cuₕ)) # curl-curl term is zero in 1D horizontal
+
+    Spaces.weighted_dss!(dρθ)
+    Spaces.weighted_dss!(duₕ)
+
+    κ₄ = 100.0 # m^4/s
+    @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
+    @. duₕ = -κ₄ * hwgrad(hdiv(χuₕ)) # curl-curl term is zero in 1D horizontal
+
+    # 1) Mass conservation
+    If2c = Operators.InterpolateF2C()
+    Ic2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    Ic = Operators.InterpolateF2C()
-    ∂ = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(0.0)),
-        top = Operators.SetValue(Geometry.WVector(0.0)),
+    cw = If2c.(fw)
+    fuₕ = Ic2f.(cuₕ)
+    cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
+
+    dw .= fw .* 0
+
+    # 1.a) horizontal divergence
+    dρ .-= hdiv.(cρ .* (cuw))
+
+    # 1.b) vertical divergence
+    vdivf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    ∂f = Operators.GradientC2F()
-    ∂c = Operators.GradientF2C()
-    B = Operators.SetBoundaryOperator(
-        bottom = Operators.SetValue(Geometry.WVector(0.0)),
-        top = Operators.SetValue(Geometry.WVector(0.0)),
+    # we want the total u³ at the boundary to be zero: we can either constrain
+    # both to be zero, or allow one to be non-zero and set the other to be its
+    # negation
+
+    # explicit part
+    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    # implicit part
+    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+
+    # 2) Momentum equation
+
+    # curl term
+    hcurl = Operators.Curl()
+    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+    vcurlc2f = Operators.CurlC2F(
+        bottom = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
+        top = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
     )
+    #cω³ = hcurl.(cu) # zero because we're only in 1D: we can leave this off for the bubble
+    fω¹² = hcurl.(fw) # Contravariant2Vector / Contravariant12Vector
+    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant2Vector / Contravariant12Vector
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    fu¹² =
+        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ))) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(fw))
+    @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
+    @. duₕ -= If2c(fω¹² × fu³)
+
+    # Needed for 3D:
+    #cu¹² = Contravariant12Vector.(cu)
+    #@. du += cω³ × cu¹²
+
+    cp = @. pressure(cρθ)
+    @. duₕ -= hgrad(cp) / cρ
+    vgradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+    )
+    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+
+    cE = @. (norm(cuw)^2) / 2 + Φ(coords.z)
+    @. duₕ -= hgrad(cE)
+    @. dw -= vgradc2f(cE)
+
+    # 3) potential temperature
+
+    @. dρθ -= hdiv(cuw * Yc.ρθ)
+    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
+    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 
     fcc = Operators.FluxCorrectionC2C(
         bottom = Operators.Extrapolate(),
@@ -202,97 +258,30 @@ function rhs!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-    uₕ = @. ρuₕ / Yc.ρ
-    w = @. ρw / If(Yc.ρ)
-    wc = @. Ic(ρw) / Yc.ρ
-    p = @. pressure(Yc.ρθ)
-    θ = @. Yc.ρθ / Yc.ρ
-    Yfρ = @. If(Yc.ρ)
+    @. dρ += fcc(fw, cρ)
+    @. dρθ += fcc(fw, cρθ)
+    # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
-    ### HYPERVISCOSITY
-    # 1) compute hyperviscosity coefficients
-    @. dYc.ρθ = hdiv(hgrad(θ))
-    @. dρuₕ = hdiv(hgrad(uₕ))
-    @. dρw = hdiv(hgrad(w))
-    Spaces.weighted_dss!(dYc)
-    Spaces.weighted_dss!(dρuₕ)
-    Spaces.weighted_dss!(dρw)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
 
-    κ₄ = 100.0 # m^4/s
-    @. dYc.ρθ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρθ))
-    @. dρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dρuₕ))
-    @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
-    # density
-    @. dYc.ρ = -∂(ρw)
-    @. dYc.ρ -= hdiv(ρuₕ)
-
-    # potential temperature
-    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
-    @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
-
-    # horizontal momentum
-    Ih = Ref(
-        Geometry.Axis2Tensor(
-            (Geometry.UAxis(), Geometry.UAxis()),
-            @SMatrix [1.0]
-        ),
-    )
-    @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
-    @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
-
-    # vertical momentum
-    @. dρw +=
-        B(
-            Geometry.transform(
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
-        ) + fcf(wc, ρw)
-    uₕf = @. If(ρuₕ / Yc.ρ) # requires boundary conditions
-    @. dρw -= hdiv(uₕf ⊗ ρw)
-
-    ### UPWIND FLUX CORRECTION
-    upwind_correction = true
-    if upwind_correction
-        @. dYc.ρ += fcc(w, Yc.ρ)
-        @. dYc.ρθ += fcc(w, Yc.ρθ)
-        @. dρuₕ += fcc(w, ρuₕ)
-        @. dρw += fcf(wc, ρw)
-    end
-
-    ### DIFFUSION
-    κ₂ = 0.0 # m^2/s
-    #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(ρuₕ / Yc.ρ)))
-    #  1b) vertical div of vertical grad of horiz momentun
-    @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / Yc.ρ)))
-
-    #  1c) horizontal div of horizontal grad of vert momentum
-    @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
-    #  1d) vertical div of vertical grad of vert momentun
-    @. dρw += vvdivc2f(κ₂ * (Yc.ρ * ∂c(ρw / Yfρ)))
-
-    #  2a) horizontal div of horizontal grad of potential temperature
-    @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
-    #  2b) vertical div of vertial grad of potential temperature
-    @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
-
-    Spaces.weighted_dss!(dYc)
-    Spaces.weighted_dss!(dρuₕ)
-    Spaces.weighted_dss!(dρw)
     return dY
 end
 
+
+
 dYdt = similar(Y);
-rhs!(dYdt, Y, nothing, 0.0);
+rhs_invariant!(dYdt, Y, nothing, 0.0);
+
 
 
 # run!
 using OrdinaryDiffEq
 Δt = 0.025
-prob = ODEProblem(rhs!, Y, (0.0, 500.0))
-sol = solve(
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 500.0))
+sol_invariant = solve(
     prob,
     SSPRK33(),
     dt = Δt,
@@ -305,33 +294,31 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dirname = "bubble_2d"
+dirname = "bubble_invariant"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 # post-processing
 import Plots
-anim = Plots.@animate for u in sol.u
+anim = Plots.@animate for u in sol_invariant.u
     Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
 end
 Plots.mp4(anim, joinpath(path, "theta.mp4"), fps = 20)
 
+import Plots
+anim = Plots.@animate for u in sol_invariant.u
+    Plots.plot(u.Yc.ρ)
+end
+Plots.mp4(anim, joinpath(path, "rho.mp4"), fps = 20)
+
+
 If2c = Operators.InterpolateF2C()
-anim = Plots.@animate for u in sol.u
-    Plots.plot(If2c.(u.ρw) ./ u.Yc.ρ)
+anim = Plots.@animate for u in sol_invariant.u
+    Plots.plot(Geometry.WVector.(Geometry.Covariant13Vector.(If2c.(u.w))))
 end
 Plots.mp4(anim, joinpath(path, "vel_w.mp4"), fps = 20)
 
-anim = Plots.@animate for u in sol.u
-    Plots.plot(u.ρuₕ ./ u.Yc.ρ)
+anim = Plots.@animate for u in sol_invariant.u
+    Plots.plot(Geometry.UVector.(Geometry.Covariant13Vector.(u.uₕ)))
 end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
-
-Es = [total_energy(u) for u in sol.u]
-Mass = [sum(u.Yc.ρ) for u in sol.u]
-
-Plots.png(
-    Plots.plot((Es .- energy_0) ./ energy_0),
-    joinpath(path, "energy.png"),
-)
-Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))

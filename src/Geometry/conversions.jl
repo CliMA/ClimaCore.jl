@@ -405,10 +405,26 @@ _cross(
     local_geometry::LocalGeometry,
 ) = local_geometry.J * Covariant3Vector(x.u¹ * y.u² - x.u² * y.u¹)
 _cross(
+    x::Contravariant2Vector,
+    y::Contravariant1Vector,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * Covariant3Vector(-x.u² * y.u¹)
+_cross(
     x::Contravariant12Vector,
     y::Contravariant3Vector,
     local_geometry::LocalGeometry,
 ) = local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+_cross(
+    x::Contravariant3Vector,
+    y::Contravariant12Vector,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+
+_cross(
+    x::Contravariant2Vector,
+    y::Contravariant3Vector,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * Covariant1Vector(x.u² * y.u³)
 
 
 _cross(u::CartesianVector, v::CartesianVector, ::LocalGeometry) =

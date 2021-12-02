@@ -240,6 +240,14 @@ struct SetDivergence{S} <: BoundaryCondition
 end
 
 """
+    SetCurl(val)
+
+Set the divergence at the boundary to be `val`.
+"""
+struct SetCurl{S} <: BoundaryCondition
+    val::S
+end
+"""
     Extrapolate()
 
 Set the value at the boundary to be the same as the closest interior point.
@@ -263,7 +271,7 @@ return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
     error("Boundary `$bc_type` is not supported for operator `$op_type`")
 
 boundary_width(op::FiniteDifferenceOperator, bc::BoundaryCondition) =
-    invalid_boundary_condition_error(typeof(bc), typeof(op))
+    invalid_boundary_condition_error(typeof(op), typeof(bc))
 
 get_boundary(
     op::FiniteDifferenceOperator,
@@ -1844,6 +1852,13 @@ function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
     u₋ = getidx(arg, loc, idx - half)
     local_geometry = Geometry.LocalGeometry(space, idx)
     return fd3_curl(u, u₋, local_geometry.J / 2)
+end
+boundary_width(::CurlC2F, ::SetCurl) = 1
+function stencil_left_boundary(::CurlC2F, bc::SetCurl, loc, idx, arg)
+    return bc.val
+end
+function stencil_right_boundary(::CurlC2F, bc::SetCurl, loc, idx, arg)
+    return bc.val
 end
 
 boundary_width(obj, loc) = 0
