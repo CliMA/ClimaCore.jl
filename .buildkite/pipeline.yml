@@ -252,12 +252,23 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid"
-    key: "cpu_rising_bubble_hybrid"
+  - label: ":computer: Rising Bubble 2D hybrid"
+    key: "cpu_rising_bubble_2d_hybrid"
     command:
-      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_2d.jl"
     artifact_paths:
-      - "examples/hybrid/output/bubble/*"
+      - "examples/hybrid/output/bubble_2d/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble 3D hybrid"
+    key: "cpu_rising_bubble_3d_hybrid"
+    command:
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_3d.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble_3d/*"
     agents:
       config: cpu
       queue: central
