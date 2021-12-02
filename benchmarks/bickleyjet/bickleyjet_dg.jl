@@ -119,10 +119,9 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
 end
 
 function volume!(dydt, y, (parameters,), t)
-    F = flux.(y, Ref(parameters))
-    # TODO: get this to work
-    #   F = Base.Broadcast.broadcasted(flux, y, Ref(parameters))
-    Operators.slab_weak_divergence!(dydt, F)
+    div = Operators.WeakDivergence()
+    rparameters = Ref(parameters)
+    @. dydt = -(div(flux(y, rparameters)))
     return dydt
 end
 
