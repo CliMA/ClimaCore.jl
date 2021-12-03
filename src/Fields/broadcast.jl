@@ -19,8 +19,8 @@ Base.Broadcast.BroadcastStyle(::Type{Field{V, M}}) where {V, M} =
 
 Base.Broadcast.BroadcastStyle(
     ::Base.Broadcast.AbstractArrayStyle{0},
-    b::AbstractFieldStyle,
-) = b
+    fs::AbstractFieldStyle,
+) = fs
 
 Base.Broadcast.broadcastable(field::Field) = field
 
@@ -253,7 +253,6 @@ function Base.Broadcast.broadcasted(
     )
 end
 
-
 function Base.Broadcast.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
@@ -261,6 +260,7 @@ function Base.Broadcast.copyto!(
     copyto!(Fields.field_values(field), bc)
     return field
 end
+
 function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
     copyto!(
         field,
