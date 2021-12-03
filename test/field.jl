@@ -3,6 +3,7 @@ using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
+
 using LinearAlgebra: norm
 using ForwardDiff
 
@@ -58,6 +59,7 @@ end
     res = field.re .+ 1
     @test parent(Fields.field_values(res)) ==
           Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
+
 end
 
 @testset "Broadcasting interception for tuple-valued fields" begin
@@ -76,6 +78,10 @@ end
     @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()
     @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
     @test norm(nt_field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+
+    # test scalar asignment
+    nt_field.a .= 0.0
+    @test sum(nt_field.a) == 0.0
 end
 
 @testset "Special case handling for broadcased norm to pass through space local geometry" begin
