@@ -2113,9 +2113,16 @@ unwrap_ref(r) = r
 @inline function column_op(f::DivergenceF2C, inds...)
     DivergenceF2C(map(bc -> column_bc(bc, inds...), f.bcs))
 end
-@inline column_bc(bc::SetValue, inds...) =
-    SetValue(unwrap_ref(column(bc.val, inds...)))
 
+@inline function column_op(f::InterpolateC2F, inds...)
+    InterpolateC2F(map(bc -> column_bc(bc, inds...), f.bcs))
+end
+@inline function column_bc(bc::SetValue, inds...)
+    SetValue(unwrap_ref(column(bc.val, inds...)))
+end
+@inline function column_bc(bc::Extrapolate, inds...)
+    bc
+end
 
 @inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
