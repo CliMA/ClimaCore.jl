@@ -319,7 +319,9 @@ end
     DS = typeof(DataStyle(typeof(dest)))
     return copyto!(
         dest,
-        Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
+        Base.Broadcast.instantiate(
+            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
+        ),
     )
 end
 

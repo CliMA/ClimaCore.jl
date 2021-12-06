@@ -153,6 +153,18 @@ end
     _getproperty(data, Val{name}())
 end
 
+#= Generic function impl fallback
+@noinline function error_invalid_fieldname(@nospecialize(S::Type), name::Symbol)
+    error("Invalid field name $(name) for type $(S)")
+end
+
+@inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
+   i = findfirst(isequal(name), fieldnames(S))
+   i === nothing && error_invalid_fieldname(S, name)
+   getproperty(data, i)
+end
+=#
+
 # ==================
 # Data3D DataLayout
 # ==================
