@@ -1,22 +1,31 @@
 using Test
 using ClimaCore.DataLayouts
 using StaticArrays
-using ClimaCore.DataLayouts: get_struct, set_struct!, basetype
+using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!
 
-@testset "basetype" begin
-    @test basetype(Float64) === Float64
-    @test basetype(Float32) === Float32
-    @test basetype(Complex{Float64}) === Float64
-    @test basetype(Complex{Float32}) === Float32
+@testset "check_basetype" begin
+    @test_throws Exception check_basetype(Real, Float64)
+    @test_throws Exception check_basetype(Float64, Real)
 
-    @test basetype(Float64, Complex{Float64}) === Float64
-    @test basetype(Tuple{Float64, Complex{Float64}}) === Float64
-    @test basetype(typeof((a = 1.0, b = (2.0, 3.0, 4.0)))) === Float64
-    @test basetype(typeof(SA[1.0 2.0; 3.0 4.0])) === Float64
+    @test isnothing(check_basetype(Float64, Float64))
+    @test isnothing(check_basetype(Float64, Complex{Float64}))
 
-    @test_throws Exception basetype(Int)
-    @test_throws Exception basetype(Tuple{Float32, Float64})
-    @test_throws Exception basetype(typeof((a = 1, b = (2.0, 3.0))))
+    @test_throws Exception check_basetype(Float32, Float64)
+    @test_throws Exception check_basetype(Float64, Complex{Float32})
+
+    @test isnothing(check_basetype(Float64, Tuple{}))
+    @test isnothing(check_basetype(Tuple{}, Tuple{}))
+    @test_throws Exception check_basetype(Tuple{}, Float64)
+
+    @test isnothing(check_basetype(Int, Tuple{Int, Complex{Int}}))
+    @test isnothing(check_basetype(Float64, typeof(SA[1.0 2.0; 3.0 4.0])))
+
+    S = typeof((a = ((1.0, 2.0f0), (3.0, 4.0f0)), b = (5.0, 6.0f0)))
+    @test isnothing(check_basetype(Tuple{Float64, Float32}, S))
+
+    S = typeof(((), (1.0 + 2.0im, NamedTuple()), 3.0 + 4.0im, ()))
+    @test isnothing(check_basetype(Float64, S))
+    @test isnothing(check_basetype(Complex{Float64}, S))
 end
 
 @testset "get_struct / set_struct!" begin
@@ -29,9 +38,10 @@ end
 end
 
 @testset "IJFH" begin
-    Nij = 2
+    Nij = 2 # number of nodal points
+    Nh = 2 # number of elements
     S = Tuple{Complex{Float64}, Float64}
-    array = rand(Nij, Nij, 3, 2)
+    array = rand(Nij, Nij, 3, Nh)
     data = IJFH{S, 2}(array)
     @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
     data_slab = slab(data, 1)
@@ -52,6 +62,25 @@ end
     @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :]) atol = 10eps()
 end
 
+@testset "IJFH boundscheck" begin
+    Nij = 1 # number of nodal points
+    Nh = 2 # number of elements
+    S = Tuple{Complex{Float64}, Float64}
+    array = zeros(Float64, Nij, Nij, 3, 2)
+    data = IJFH{S, Nij}(array)
+
+    @test_throws BoundsError slab(data, -1)
+    @test_throws BoundsError slab(data, 3)
+    @test_throws BoundsError slab(data, 1, -1)
+    @test_throws BoundsError slab(data, 1, 3)
+
+    # 2D Slab boundscheck
+    sdata = slab(data, 1)
+    @test_throws BoundsError sdata[-1, 1]
+    @test_throws BoundsError sdata[1, -1]
+    @test_throws BoundsError sdata[2, 1]
+    @test_throws BoundsError sdata[1, 2]
+end
 
 @testset "IJFH type safety" begin
     Nij = 2 # number of nodal points per element

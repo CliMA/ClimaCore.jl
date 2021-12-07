@@ -191,4 +191,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/ekman_end.png", "ekman End")
+linkfig(
+    relpath(joinpath(path, "ekman_end.png"), joinpath(@__DIR__, "../..")),
+    "Ekman End",
+)

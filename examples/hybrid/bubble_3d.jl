@@ -21,12 +21,14 @@ using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
 # set up function space
-function hvspace_2D(
+function hvspace_3D(
     xlim = (-π, π),
+    ylim = (-π, π),
     zlim = (0, 4π),
-    helem = 10,
-    velem = 50,
-    npoly = 4,
+    xelem = 4,
+    yelem = 1,
+    zelem = 16,
+    npoly = 3,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -34,18 +36,20 @@ function hvspace_2D(
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-    horzdomain = Domains.IntervalDomain(
+    horzdomain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
-        periodic = true,
+        Geometry.YPoint{FT}(ylim[1])..Geometry.YPoint{FT}(ylim[2]),
+        x1periodic = true,
+        x2periodic = true,
     )
-    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-    horztopology = Topologies.IntervalTopology(horzmesh)
+    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, xelem, yelem)
+    horztopology = Topologies.GridTopology(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
@@ -53,9 +57,8 @@ function hvspace_2D(
     return (hv_center_space, hv_face_space)
 end
 
-# set up rhs!
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
-#hv_center_space, hv_face_space = hvspace_2D((-500,500),(0,30000), 5, 30)
+# set up 3D domain - doubly periodic box
+hv_center_space, hv_face_space = hvspace_3D((-500, 500), (-500, 500), (0, 1000))
 
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
@@ -76,12 +79,13 @@ end
 Φ(z) = grav * z
 
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-function init_dry_rising_bubble_2d(x, z)
+function init_dry_rising_bubble_3d(x, y, z)
     x_c = 0.0
+    y_c = 0.0
     z_c = 350.0
     r_c = 250.0
     θ_b = 300.0
-    θ_c = 0.5
+    θ_c = 0.0
     cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
@@ -98,23 +102,25 @@ function init_dry_rising_bubble_2d(x, z)
     ρ = p / R_d / T # density
     ρθ = ρ * θ # potential temperature density
 
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVector(0.0))
+    # Horizontal momentum defined on cell centers
+    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVVector(0.0, 0.0))
 end
 
 # initial conditions
-coords = Fields.coordinate_field(hv_center_space);
-face_coords = Fields.coordinate_field(hv_face_space);
+coords = Fields.coordinate_field(hv_center_space)
+face_coords = Fields.coordinate_field(hv_face_space)
 
 Yc = map(coords) do coord
-    bubble = init_dry_rising_bubble_2d(coord.x, coord.z)
+    bubble = init_dry_rising_bubble_3d(coord.x, coord.y, coord.z)
     bubble
-end;
+end
 
+# Vertical momentum defined on cell faces
 ρw = map(face_coords) do coord
     Geometry.WVector(0.0)
 end;
 
-Y = Fields.FieldVector(Yc = Yc, ρw = ρw);
+Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
 
 function rhs!(dY, Y, _, t)
     ρw = Y.ρw
@@ -139,13 +145,11 @@ function rhs!(dY, Y, _, t)
     )
     uvdivf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(
-            Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0),
+            Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
         ),
-        top = Operators.SetValue(Geometry.WVector(0.0) ⊗ Geometry.UVector(0.0)),
-    )
-    If_bc = Operators.InterpolateC2F(
-        bottom = Operators.SetValue(Geometry.UVector(0.0)),
-        top = Operators.SetValue(Geometry.UVector(0.0)),
+        top = Operators.SetValue(
+            Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
+        ),
     )
     If = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -172,45 +176,43 @@ function rhs!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-
-
-    # 1) compute hyperviscosity coefficients
-    #
-    @. dYc.ρ = hdiv(hgrad(Yc.ρ))
-    @. dYc.ρθ = hdiv(hgrad(Yc.ρθ))
-    @. dYc.ρuₕ = hdiv(hgrad(Yc.ρuₕ))
-    @. dρw = hdiv(hgrad(ρw))
-    Spaces.weighted_dss!(dYc)
-
-    κ = 10.0
-    @. dYc.ρ = κ * hdiv(hgrad(dYc.ρ))
-    @. dYc.ρθ = κ * hdiv(hgrad(dYc.ρθ))
-    @. dYc.ρuₕ = κ * hdiv(hgrad(dYc.ρuₕ))
-    @. dρw = κ * hdiv(hgrad(dρw))
-
     uₕ = @. Yc.ρuₕ / Yc.ρ
     w = @. ρw / If(Yc.ρ)
     wc = @. Ic(ρw) / Yc.ρ
     p = @. pressure(Yc.ρθ)
+    θ = @. Yc.ρθ / Yc.ρ
+    Yfρ = @. If(Yc.ρ)
+
+    ### HYPERVISCOSITY
+    # 1) compute hyperviscosity coefficients
+    @. dYc.ρθ = hdiv(hgrad(θ))
+    @. dYc.ρuₕ = hdiv(hgrad(uₕ))
+    @. dρw = hdiv(hgrad(w))
+    Spaces.weighted_dss!(dYc)
+    Spaces.weighted_dss!(dρw)
+
+    κ₄ = 100.0 # m^4/s
+    @. dYc.ρθ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρθ))
+    @. dYc.ρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρuₕ))
+    @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
     # density
-    @. dYc.ρ += -∂(ρw) + fcc(w, Yc.ρ)
+    @. dYc.ρ = -∂(ρw)
     @. dYc.ρ -= hdiv(Yc.ρuₕ)
 
     # potential temperature
-    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ))) + fcc(w, Yc.ρθ)
+    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
     @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
 
-    # horizontal momentum
+    # Horizontal momentum
+    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     Ih = Ref(
         Geometry.Axis2Tensor(
-            (Geometry.UAxis(), Geometry.UAxis()),
-            @SMatrix [1.0]
+            (Geometry.UVAxis(), Geometry.UVAxis()),
+            @SMatrix [1.0 0.0; 0.0 1.0]
         ),
     )
-    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If_bc(uₕ)) + fcc(w, Yc.ρuₕ)
     @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
-
 
     # vertical momentum
     @. dρw +=
@@ -220,34 +222,34 @@ function rhs!(dY, Y, _, t)
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
         ) + fcf(wc, ρw)
-    uₕf = @. If_bc(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
+    uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
-    # 3) diffusion
-    #=
-    κ = 10.0 # m^2/s
+    ### UPWIND FLUX CORRECTION
+    upwind_correction = true
+    if upwind_correction
+        @. dYc.ρ += fcc(w, Yc.ρ)
+        @. dYc.ρθ += fcc(w, Yc.ρθ)
+        @. dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+        @. dρw += fcf(wc, ρw)
+    end
 
-    Yfρ = @. If(Yc.ρ)
-
+    ### DIFFUSION
+    κ₂ = 0.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dYc.ρuₕ += hdiv(κ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
-
+    @. dYc.ρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
     #  1b) vertical div of vertical grad of horiz momentun
-    @. dYc.ρuₕ += uvdivf2c(κ * (Yfρ * ∂f(Yc.ρuₕ / Yc.ρ)))
+    @. dYc.ρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(Yc.ρuₕ / Yc.ρ)))
 
     #  1c) horizontal div of horizontal grad of vert momentum
-    @. dρw += hdiv(κ * (Yfρ * hgrad(ρw / Yfρ)))
-
+    @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
     #  1d) vertical div of vertical grad of vert momentun
-    @. dρw += vvdivc2f(κ * (Yc.ρ * ∂c(ρw / Yfρ)))
+    @. dρw += vvdivc2f(κ₂ * (Yc.ρ * ∂c(ρw / Yfρ)))
 
-    # 2a) horizontal div of horizontal grad of potential temperature
-    @. dYc.ρθ += hdiv(κ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
-
-    # 2b) vertical div of vertial grad of potential temperature
-    @. dYc.ρθ += ∂(κ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
-    =#
-
+    #  2a) horizontal div of horizontal grad of potential temperature
+    @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
+    #  2b) vertical div of vertial grad of potential temperature
+    @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
@@ -260,8 +262,8 @@ rhs!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.03
-prob = ODEProblem(rhs!, Y, (0.0, 200.0))
+Δt = 0.05
+prob = ODEProblem(rhs!, Y, (0.0, 1.0))
 sol = solve(
     prob,
     SSPRK33(),
@@ -271,17 +273,12 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 );
 
-ENV["GKSwstype"] = "nul"
-import Plots
-Plots.GRBackend()
+# TODO: visualization artifacts
 
-dirname = "bubble"
-path = joinpath(@__DIR__, "output", dirname)
-mkpath(path)
+# ENV["GKSwstype"] = "nul"
+# import Plots
+# Plots.GRBackend()
 
-# post-processing
-import Plots
-anim = Plots.@animate for u in sol.u
-    Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
-end
-Plots.mp4(anim, joinpath(path, "bubble.mp4"), fps = 20)
+# dirname = "bubble_3d"
+# path = joinpath(@__DIR__, "output", dirname)
+# mkpath(path)

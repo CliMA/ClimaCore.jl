@@ -145,4 +145,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/energy.png", "Total Energy")
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)

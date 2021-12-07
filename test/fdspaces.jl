@@ -1,5 +1,6 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
+using JET
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
@@ -422,6 +423,7 @@ end
     err_grad_cos_f2 = zeros(FT, length(n_elems_seq))
     err_div_sin_f = zeros(FT, length(n_elems_seq))
     err_div_cos_f = zeros(FT, length(n_elems_seq))
+    err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
 
     for (k, n) in enumerate(n_elems_seq)
@@ -490,6 +492,13 @@ end
         )
         divcosᶠ = divᶠ¹.(Geometry.WVector.(cos.(centers)))
 
+        curlᶠ = Operators.CurlC2F(
+            left = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+            right = Operators.SetValue(Geometry.Covariant1Vector(zero(FT))),
+        )
+        curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(centers)))
+
+
         Δh[k] = cs.face_local_geometry.J[1]
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
@@ -502,6 +511,8 @@ end
         err_div_cos_f[k] = norm(
             divcosᶠ .- (Geometry.WVector.(.-sin.(faces))).components.data.:1,
         )
+        err_curl_sin_f[k] =
+            norm(curlsinᶠ .- Geometry.Contravariant2Vector.(cos.(faces)))
     end
 
     # GradientF2C conv, with f(z) = sin(z)
@@ -518,6 +529,8 @@ end
     conv_div_sin_f = convergence_rate(err_div_sin_f, Δh)
     # DivergenceC2F conv, with f(z) = cos(z), SetDivergence
     conv_div_cos_f = convergence_rate(err_div_cos_f, Δh)
+    # CurlC2F with f(z) = sin(z), SetValue
+    conv_curl_sin_f = convergence_rate(err_curl_sin_f, Δh)
 
     # GradientF2C conv, with f(z) = sin(z)
     @test err_grad_sin_c[3] ≤ err_grad_sin_c[2] ≤ err_grad_sin_c[1] ≤ 0.1
@@ -525,7 +538,6 @@ end
     @test conv_grad_sin_c[2] ≈ 2 atol = 0.1
     @test conv_grad_sin_c[3] ≈ 2 atol = 0.1
     @test conv_grad_sin_c[1] ≤ conv_grad_sin_c[2] ≤ conv_grad_sin_c[3]
-
 
     # DivergenceF2C conv, with f(z) = sin(z)
     @test err_div_sin_c[3] ≤ err_div_sin_c[2] ≤ err_div_sin_c[1] ≤ 0.1
@@ -566,4 +578,70 @@ end
     @test conv_div_cos_f[3] ≈ 2 atol = 0.1
     @test conv_div_cos_f[1] ≤ conv_div_cos_f[2] ≤ conv_div_cos_f[3]
 
+    # CurlC2F with f(z) = sin(z), SetValue
+    @test err_curl_sin_f[3] ≤ err_curl_sin_f[2] ≤ err_curl_sin_f[1] ≤ 0.1
+    @test conv_curl_sin_f[1] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[2] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[3] ≈ 2 atol = 0.1
+    @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
+end
+
+@testset "Biased interpolation" begin
+    FT = Float64
+    n_elems = 10
+
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(pi);
+        boundary_tags = (:bottom, :top),
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
+
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+    zc = getproperty(Fields.coordinate_field(cs), :z)
+    zf = getproperty(Fields.coordinate_field(fs), :z)
+
+    function field_wrapper(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+
+    field_vars() = (; y = FT(0))
+
+    cfield = field_wrapper(cs, field_vars())
+    ffield = field_wrapper(fs, field_vars())
+
+    cy = cfield.y
+    fy = ffield.y
+
+    cyp = parent(cy)
+    fyp = parent(fy)
+
+    # C2F biased operators
+    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = LBC2F(cy)
+    fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
+    @test all(fy_ref .== fyp)
+
+    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = RBC2F(cy)
+    fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
+    @test all(fy_ref .== fyp)
+
+    # F2C biased operators
+    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = LBF2C(fy)
+    cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
+
+    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = RBF2C(fy)
+    cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
 end

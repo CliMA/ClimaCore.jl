@@ -231,11 +231,11 @@ transform(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = transform(ato, v)
 The return type when taking the divergence of a field of `V`.
 
 Required for statically infering the result type of the divergence operation for `AxisVector` subtypes.
-    """
-divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
+"""
+@inline divergence_result_type(::Type{V}) where {V <: AxisVector} = eltype(V)
 
 # this isn't quite right: it only is true when the Christoffel symbols are zero
-divergence_result_type(
+@inline divergence_result_type(
     ::Type{Axis2Tensor{FT, Tuple{A1, A2}, S}},
 ) where {FT, A1, A2 <: LocalAxis, S <: StaticMatrix{S1, S2}} where {S1, S2} =
     AxisVector{FT, A2, SVector{S2, FT}}
@@ -247,11 +247,14 @@ The return type when taking the gradient along dimension `I` of a field `V`.
 
 Required for statically infering the result type of the gradient operation for `AxisVector` subtypes.
     """
-function gradient_result_type(::Val{I}, ::Type{V}) where {I, V <: Number}
+@inline function gradient_result_type(
+    ::Val{I},
+    ::Type{V},
+) where {I, V <: Number}
     N = length(I)
     AxisVector{V, CovariantAxis{I}, SVector{N, V}}
 end
-function gradient_result_type(
+@inline function gradient_result_type(
     ::Val{I},
     ::Type{V},
 ) where {I, V <: Geometry.AxisVector{T, A, SVector{N, T}}} where {T, A, N}
@@ -266,29 +269,43 @@ The return type when taking the curl along dimensions `I` of a field of eltype `
 
 Required for statically infering the result type of the curl operation for `AxisVector` subtypes.
 """
-curl_result_type(::Val{(1, 2)}, ::Type{Covariant12Vector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{Covariant3Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Covariant12Vector{FT}},
+) where {FT} = Contravariant3Vector{FT}
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Covariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
+    Contravariant2Vector{FT}
+@inline curl_result_type(
+    ::Val{(3,)},
+    ::Type{Covariant12Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(3,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
+    Contravariant2Vector{FT}
+@inline curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
+    Contravariant1Vector{FT}
 
 # these are only true in 2D
-curl_result_type(::Val{(1, 2)}, ::Type{Contravariant12Vector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Contravariant12Vector{FT}},
+) where {FT} = Contravariant3Vector{FT}
+@inline curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
     Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
-    Contravariant3Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{Contravariant3Vector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Contravariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
+@inline curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
     Contravariant12Vector{FT}
 
 
 _norm_sqr(x, local_geometry) = sum(x -> _norm_sqr(x, local_geometry), x)
 _norm_sqr(x::Number, local_geometry) = LinearAlgebra.norm_sqr(x)
 _norm_sqr(x::AbstractArray, local_geometry) = LinearAlgebra.norm_sqr(x)
-
-function _norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry)
-    LinearAlgebra.norm_sqr(u.u³)
-end
 
 function _norm_sqr(uᵢ::CovariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
@@ -297,6 +314,20 @@ end
 function _norm_sqr(uᵢ::ContravariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
+
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1,)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(3,)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1, 3)}) =
+    LinearAlgebra.norm_sqr(u.u²)
+
+_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1,)}) =
+    LinearAlgebra.norm_sqr(u.u³)
+_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
+    LinearAlgebra.norm_sqr(u.u³)
+
+
 
 _norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
 

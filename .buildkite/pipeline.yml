@@ -1,5 +1,5 @@
 env:
-  JULIA_VERSION: "1.6.2"
+  JULIA_VERSION: "1.7.0"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
 
@@ -33,6 +33,9 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - label: "init :flower_playing_cards:"
     key: "init_gpu_env"
@@ -57,14 +60,17 @@ steps:
       config: gpu
       queue: central
       slurm_ntasks: 1
+      slurm_cpus_per_task: 8
       slurm_gres: "gpu:1"
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
 
   - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
-      - "julia --color=yes --project=test test/runtests.jl"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
     agents:
       config: cpu
       queue: central
@@ -74,7 +80,7 @@ steps:
     key: "gpu_unittests"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --project=test test/runtests.jl CUDA"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
     agents:
       config: gpu
       queue: central
@@ -246,12 +252,23 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid"
-    key: "cpu_rising_bubble_hybrid"
+  - label: ":computer: Rising Bubble 2D hybrid"
+    key: "cpu_rising_bubble_2d_hybrid"
     command:
-      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble.jl"
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_2d.jl"
     artifact_paths:
-      - "examples/hybrid/output/bubble/*"
+      - "examples/hybrid/output/bubble_2d/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble 3D hybrid"
+    key: "cpu_rising_bubble_3d_hybrid"
+    command:
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_3d.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble_3d/*"
     agents:
       config: cpu
       queue: central
@@ -323,6 +340,50 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha60"
+    key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact alpha60"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha60/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha0"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha30"
+    key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
+    command:
+      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability alpha30"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha30/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
     key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
     command:
@@ -344,28 +405,3 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
-  - label: ":flower_playing_cards: Bickley jet DG"
-    key: "benchmark_bickleyjet_dg"
-    command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/core_vs_ref.jl"
-    artifact_paths:
-      - "benchmarks/bickleyjet/*.png"
-    agents:
-      config: gpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_gres: "gpu:1"
-
-  - label: ":computer: :fast_forward: Bickley jet DG reference thread scaling"
-    key: "cpu_benchmark_bickleyjet_dg_thread_scaling"
-    command:
-      - "julia --color=yes --project=benchmarks/bickleyjet benchmarks/bickleyjet/ref_thread_scaling.jl"
-    artifact_paths:
-      - "benchmarks/bickleyjet/*.png"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_cpus_per_task: 16
-      slurm_exclusive: ""

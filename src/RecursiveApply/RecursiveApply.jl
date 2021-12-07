@@ -7,7 +7,37 @@ To extend to another type `T`, define `RecursiveApply.rmap(fn, args::T...)`
 """
 module RecursiveApply
 
-export ⊞, ⊠, ⊟
+export ⊞, ⊠, ⊟, tuplemap
+
+"""
+    tuplemap(fn::Function, tup)
+
+A simpler `map` impl for mapping function `fn` a tuple argument `tup`
+"""
+@inline function tuplemap(fn::F, tup::Tuple) where {F}
+    N = length(tup)
+    ntuple(Val(N)) do I
+        Base.@_inline_meta
+        @inbounds elem = tup[I]
+        fn(elem)
+    end
+end
+
+"""
+    tuplemap(fn::Function, tup1, tup2)
+
+A simpler `map` impl for mapping function `fn` over `tup1`, `tup2` tuple arguments
+"""
+@inline function tuplemap(fn::F, tup1::Tuple, tup2::Tuple) where {F}
+    N1 = length(tup1)
+    N2 = length(tup2)
+    ntuple(Val(min(N1, N2))) do I
+        Base.@_inline_meta
+        @inbounds elem1 = tup1[I]
+        @inbounds elem2 = tup2[I]
+        fn(elem1, elem2)
+    end
+end
 
 """
     rmap(fn, X...)
@@ -16,8 +46,9 @@ Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple) where {F} = map(x -> rmap(fn, x), X)
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} = map((x, y) -> rmap(fn, x, y), X, Y)
+rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
+    tuplemap((x, y) -> rmap(fn, x, y), X, Y)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
@@ -30,7 +61,7 @@ The return type of `rmap(fn, X::T)`.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
 rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    Tuple{map(fn, tuple(T.parameters...))...}
+    Tuple{tuplemap(fn, tuple(T.parameters...))...}
 rmaptype(
     fn::F,
     ::Type{T},
