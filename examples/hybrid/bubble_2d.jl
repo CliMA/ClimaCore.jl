@@ -241,7 +241,7 @@ function rhs!(dY, Y, _, t)
                 Geometry.WAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
-        ) + fcf(wc, ρw)
+        )
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
