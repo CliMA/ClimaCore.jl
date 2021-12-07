@@ -2107,6 +2107,7 @@ function Base.Broadcast.materialize!(
 end
 
 
+column_op(f::F, inds...) where {F} = f
 
 for Op in [
     AdvectionC2C,
