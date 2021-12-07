@@ -2107,18 +2107,47 @@ function Base.Broadcast.materialize!(
 end
 
 
+
+for Op in [
+    AdvectionC2C,
+    AdvectionF2F,
+    FluxCorrectionC2C,
+    FluxCorrectionF2F,
+    UpwindBiasedProductC2F,
+    SetBoundaryOperator,
+    CurlC2F,
+    DivergenceC2F,
+    DivergenceF2C,
+    GradientC2F,
+    GradientF2C,
+    InterpolateC2F,
+    InterpolateF2C,
+    LeftBiasedC2F,
+    LeftBiasedF2C,
+    RightBiasedC2F,
+    RightBiasedF2C,
+    WeightedInterpolateC2F,
+    WeightedInterpolateF2C,
+]
+    @eval begin
+        @inline function column_op(f::$Op, inds...)
+            $Op(map(bc -> column_bc(bc, inds...), f.bcs))
+        end
+    end
+end
+
+# work around the fact that
+#  column(::SpectralElementField, inds...) returns a Ref
+#  column(::Real, inds...) returns a Real
+# not sure what is best here...
 unwrap_ref(r::Ref) = r[]
 unwrap_ref(r) = r
-
-@inline function column_op(f::DivergenceF2C, inds...)
-    DivergenceF2C(map(bc -> column_bc(bc, inds...), f.bcs))
-end
-
-@inline function column_op(f::InterpolateC2F, inds...)
-    InterpolateC2F(map(bc -> column_bc(bc, inds...), f.bcs))
-end
-@inline function column_bc(bc::SetValue, inds...)
-    SetValue(unwrap_ref(column(bc.val, inds...)))
+for BC in [SetValue, SetGradient, SetDivergence]
+    @eval begin
+        @inline function column_bc(bc::$BC, inds...)
+            $BC(unwrap_ref(column(bc.val, inds...)))
+        end
+    end
 end
 @inline function column_bc(bc::Extrapolate, inds...)
     bc
