@@ -27,11 +27,11 @@ jobs:
         filters: |
           julia_file_change:
             - added|modified: '**.jl'
- 
+
     - uses: julia-actions/setup-julia@latest
       if: steps.filter.outputs.julia_file_change == 'true'
       with:
-        version: 1.6
+        version: 1.7
 
     - name: Apply JuliaFormatter
       if: steps.filter.outputs.julia_file_change == 'true'

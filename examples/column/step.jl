@@ -213,6 +213,14 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig(
-    "output/$(dirname)/advect_step_function_end.png",
+    "examples/column/output/$(dirname)/advect_step_function_end.png",
+    "Advect End Simulation",
+)
+
+linkfig(
+    relpath(
+        joinpath(path, "advect_step_function_end.png"),
+        joinpath(@__DIR__, "../.."),
+    ),
     "Advect End Simulation",
 )

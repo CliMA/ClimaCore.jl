@@ -53,6 +53,7 @@ Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
     DataStyle(D)
 
 # precedence rules
+
 # scalars are broadcast over the data object
 Base.Broadcast.BroadcastStyle(
     ::Base.Broadcast.AbstractArrayStyle{0},
@@ -315,6 +316,23 @@ function Base.mapreduce(
     end
 end
 
+# broadcasting scalar assignment
+# Performance optimization for the common identity scalar case: dest .= val
+@inline function Base.copyto!(
+    dest::AbstractData,
+    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
+)
+    # TODO: we can write an optimized fill! method here that directly computes offsets for set_struct!
+    # for now fallback to the default implementation
+    DS = typeof(DataStyle(typeof(dest)))
+    return copyto!(
+        dest,
+        Base.Broadcast.instantiate(
+            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
+        ),
+    )
+end
+
 function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
@@ -404,18 +422,4 @@ function Base.copyto!(
         copyto!(col_dest, col_bc)
     end
     return dest
-end
-
-# broadcasting scalar assignment
-function Base.Broadcast.materialize!(
-    ::DS,
-    dest,
-    bc::Base.Broadcast.Broadcasted{Style},
-) where {DS <: DataStyle, Style}
-    return copyto!(
-        dest,
-        Base.Broadcast.instantiate(
-            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
-        ),
-    )
 end

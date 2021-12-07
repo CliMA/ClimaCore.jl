@@ -86,4 +86,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/heat_end.png", "Heat End Simulation")
+linkfig(
+    relpath(joinpath(path, "heat_end.png"), joinpath(@__DIR__, "../..")),
+    "Heat End Simulation",
+)

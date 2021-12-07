@@ -178,13 +178,13 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
     #
-    Nh = Topologies.nlocalelems(y)
+    wdiv = Operators.WeakDivergence()
 
-    F = flux.(y, Ref(parameters))
-    dydt .= Operators.slab_weak_divergence(F)
+    local_geometry_field = Fields.local_geometry_field(y)
+
+    dydt .= wdiv.(flux.(y, Ref(parameters))) .* (.-(local_geometry_field.WJ))
 
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
-
     Operators.add_numerical_flux_boundary!(
         dydt,
         y,
@@ -197,14 +197,12 @@ function rhs!(dydt, y, (parameters, numflux), t)
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
     dydt_data .= rdiv.(dydt_data, space.local_geometry.WJ)
-
     M = Spaces.Quadratures.cutoff_filter_matrix(
         Float64,
         space.quadrature_style,
         3,
     )
     Operators.tensor_product!(dydt_data, M)
-
     return dydt
 end
 
@@ -250,4 +248,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/energy.png", "Total Energy")
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)

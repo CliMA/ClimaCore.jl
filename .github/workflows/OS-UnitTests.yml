@@ -27,7 +27,7 @@ jobs:
 
     - name: Checkout
       uses: actions/checkout@v2.2.0
-    
+
     # Setup a filter and only run if src/ test/ folder content changes
     # or project depedencies
     - uses: dorny/paths-filter@v2
@@ -45,7 +45,7 @@ jobs:
       uses: julia-actions/setup-julia@latest
       if: steps.filter.outputs.run_test == 'true'
       with:
-        version: 1.6
+        version: 1.7
 
     - name: Cache artifacts
       uses: actions/cache@v1
@@ -53,7 +53,7 @@ jobs:
       env:
         cache-name: cache-artifacts
       with:
-        path: ~/.julia/artifacts 
+        path: ~/.julia/artifacts
         key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
         restore-keys: |
           ${{ runner.os }}-test-${{ env.cache-name }}-
