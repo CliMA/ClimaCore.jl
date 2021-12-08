@@ -25,9 +25,9 @@ using ClimaCore.Geometry
 
 function warp_agnesi_peak(
     coord;
-    a = 500
+    a = 100,
 )
-    8 * a^3 / (coord.x^2 + 4 * a^2)
+    return 8 * a^3 / (coord.x^2 + 4 * a^2)
 end
 
 function warp_schar(
@@ -77,13 +77,16 @@ function hvspace_2D(
 
     # Apply warp
     z_surface = warp_fn.(Fields.coordinate_field(hspace))
-    vspace = Spaces.ExtrudedFiniteDifferenceSpace(
+    f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
         z_surface,
         Topographies.LinearAdaption(),
     )
-    return (hspace,vspace)
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(
+                                                        f_space
+                                                       )
+    return (c_space,f_space)
 end
 
 import Plots
@@ -96,18 +99,16 @@ mkpath(path)
 (cspace,fspace)= hvspace_2D((-1000, 1000), (0, 5000), 10, 50, 4, 
                             stretch=Meshes.Uniform(), warp_fn=warp_agnesi_peak)
 coords = Fields.coordinate_field(cspace)
-face_coords = Fields.coordinate_field(fspace)
 x = coords.x
-z = face_coords.z
+z = coords.z
 p1 = plot(z)
 Plots.png(p1, joinpath(path, "warp_agnesi"))
 
 #(cspace,fspace)= hvspace_2D((-5000, 5000), (0, 5000), 20, 50, 4, 
 #                            stretch=Meshes.Uniform(), warp_fn= warp_schar)
 #coords = Fields.coordinate_field(cspace)
-#face_coords = Fields.coordinate_field(fspace)
-#x = coords.x
-#z = face_coords.z
+x = coords.x
+z = coords.z
 #p2 = plot(z)
 #Plots.png(p2, joinpath(path, "warp_schar"))
 ## set up rhs!
