@@ -94,12 +94,12 @@ function pressure(ρθ)
 end
 
 Φ(z) = grav * z
-function rayleigh_sponge(z; 
-                         z_sponge=900.0, 
-                         z_max=1200.0, 
+function rayleigh_sponge(z;
+                         z_sponge=900.0,
+                         z_max=1200.0,
                          α = 1.0,  # Relaxation timescale
-                         τ = 0.5,  
-                         γ = 2.0) 
+                         τ = 0.5,
+                         γ = 2.0)
     if z >= z_sponge
         r = (z - z_sponge) / (z_max - z_sponge)
         β_sponge = α * sinpi(τ * r)^γ
@@ -109,7 +109,7 @@ function rayleigh_sponge(z;
     end
 end
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 
+# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section
 function init_agnesi_2d(x, z)
     θ₀ = 250.0
     cp_d = C_p
@@ -125,8 +125,8 @@ function init_agnesi_2d(x, z)
     ρθ  = @. ρ * θ
     ρuₕ = @. ρ * Geometry.UVector(20.0)
 
-    return (ρ = ρ, 
-            ρθ = ρθ, 
+    return (ρ = ρ,
+            ρθ = ρθ,
             ρuₕ = ρuₕ)
 end
 
@@ -134,12 +134,12 @@ end
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-#Yc = map(coords) do coord
-#    agnesi = init_agnesi_2d(coord.x, coord.z)
-#    agnesi
-#end
+Yc = map(coords) do coord
+    agnesi = init_agnesi_2d(coord.x, coord.z)
+    agnesi
+end
 
-Yc = init_agnesi_2d(coords.x, coords.z)
+#Yc = init_agnesi_2d(coords.x, coords.z)
 
 ρw = map(face_coords) do coord
     Geometry.WVector(0.0)
@@ -272,7 +272,7 @@ function rhs!(dY, Y, _, t)
                 Geometry.WAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
-        ) 
+        )
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
@@ -301,7 +301,7 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
     #  2b) vertical div of vertial grad of potential temperature
     @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
-    
+
     # sponge
     β = @. rayleigh_sponge(coords.z)
     @. dYc.ρuₕ -= β * Yc.ρuₕ

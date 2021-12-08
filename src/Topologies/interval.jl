@@ -30,7 +30,7 @@ function Base.show(io::IO, topology::IntervalTopology)
     print(io, "IntervalTopology on ", topology.mesh)
 end
 
-
+boundaries(topology::IntervalTopology) = topology.boundaries
 domain(topology::IntervalTopology) = topology.mesh.domain
 nlocalelems(topology::IntervalTopology) = length(topology.mesh.faces) - 1
 

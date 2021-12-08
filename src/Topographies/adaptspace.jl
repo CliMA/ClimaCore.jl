@@ -8,6 +8,14 @@ struct TerrainWarpedIntervalTopology{T <: Topologies.IntervalTopology} <:
     topology::T
 end
 
+Topologies.domain(warped_topology::TerrainWarpedIntervalTopology) =
+    Topologies.domain(warped_topology.topology)
+
+Topologies.boundaries(warped_topology::TerrainWarpedIntervalTopology) =
+    Topologies.boundaries(warped_topology.topology)
+
+Topologies.nlocalelems(warped_topology::TerrainWarpedIntervalTopology) =
+    Topologies.nlocalelems(warped_topology.topology)
 
 function adapt_space!(
     space::Spaces.ExtrudedFiniteDifferenceSpace,

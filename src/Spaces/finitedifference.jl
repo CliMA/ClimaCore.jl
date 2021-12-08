@@ -10,7 +10,7 @@ struct CellFace <: Staggering end
 
 struct FiniteDifferenceSpace{
     S <: Staggering,
-    T <: Topologies.AbstractTopology,
+    T <: Topologies.AbstractIntervalTopology,
     GG,
     LG,
 } <: AbstractFiniteDifferenceSpace
@@ -21,9 +21,8 @@ struct FiniteDifferenceSpace{
     face_local_geometry::LG
 end
 
-# TODO: make the column topologies with terrian work with a generic abstract supertype
 function FiniteDifferenceSpace{S}(
-    topology::Topologies.AbstractTopology,
+    topology::Topologies.AbstractIntervalTopology,
 ) where {S <: Staggering}
     global_geometry = Geometry.CartesianGlobalGeometry()
     mesh = topology.mesh
@@ -130,7 +129,7 @@ local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
 
 left_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.topology.boundaries)[1]
+    propertynames(Topologies.boundaries(space.topology))[1]
 
 right_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.topology.boundaries)[2]
+    propertynames(Topologies.boundaries(space.topology))[2]

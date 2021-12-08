@@ -290,5 +290,4 @@ function Spaces.weighted_dss!(field::Field)
     return field
 end
 
-
 end # module
