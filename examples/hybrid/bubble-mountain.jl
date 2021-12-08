@@ -25,7 +25,7 @@ using ClimaCore.Geometry
 
 function warp_agnesi_peak(
     coord;
-    a = 100,
+    a = 500,
 )
     return 8 * a^3 / (coord.x^2 + 4 * a^2)
 end
@@ -33,12 +33,11 @@ end
 function warp_schar(
     coord;
     a = 250, ## Half-width parameter [m]
-    h₀ = 100, ## Peak height [m]
+    h₀ = 500, ## Peak height [m]
     λ = 100, ## Wavelength
 )
-    x, y = coord.x, coord.y
-    r = sqrt(x^2 + y^2)
-    h_star = 1#abs(x) <= a ? h₀ * (cospi((x) / 2a))^2 : 0
+    x = coord.x
+    h_star = abs(x) <= a ? h₀ * (cospi((x) / 2a))^2 : 0
     h = h_star * (cospi(x / λ))^2
     return h
 end
@@ -96,19 +95,19 @@ dirname = "warp_demo"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-(cspace,fspace)= hvspace_2D((-1000, 1000), (0, 5000), 10, 50, 4, 
-                            stretch=Meshes.Uniform(), warp_fn=warp_agnesi_peak)
+(cspace,fspace)= hvspace_2D((-500, 500), (0, 2000), 10, 50, 4, 
+                            stretch=Meshes.Uniform(), warp_fn=warp_schar)
 coords = Fields.coordinate_field(cspace)
 x = coords.x
 z = coords.z
 p1 = plot(z)
 Plots.png(p1, joinpath(path, "warp_agnesi"))
 
-#(cspace,fspace)= hvspace_2D((-5000, 5000), (0, 5000), 20, 50, 4, 
-#                            stretch=Meshes.Uniform(), warp_fn= warp_schar)
-#coords = Fields.coordinate_field(cspace)
+(cspace,fspace)= hvspace_2D((-500, 500), (0, 2000), 20, 50, 4, 
+                            stretch=Meshes.Uniform(), warp_fn= warp_schar)
+coords = Fields.coordinate_field(cspace)
 x = coords.x
 z = coords.z
-#p2 = plot(z)
-#Plots.png(p2, joinpath(path, "warp_schar"))
+p2 = plot(z)
+Plots.png(p2, joinpath(path, "warp_schar"))
 ## set up rhs!
