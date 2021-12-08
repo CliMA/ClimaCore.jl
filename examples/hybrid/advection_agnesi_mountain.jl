@@ -79,6 +79,7 @@ function hvspace_2D(
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
     return (c_space,f_space)
 end
+
 # set up function space
 # set up rhs!
 (hv_center_space, hv_face_space) = hvspace_2D((-500, 500), (0, 1000), 10, 20, 4;
@@ -96,18 +97,19 @@ end
 function rayleigh_sponge(z; 
                          z_sponge=900.0, 
                          z_max=1200.0, 
-                         α = 1.0, 
-                         γ = 2.0)
+                         α = 1.0,  # Relaxation timescale
+                         τ = 0.5,  
+                         γ = 2.0) 
     if z >= z_sponge
         r = (z - z_sponge) / (z_max - z_sponge)
-        β_sponge = α * sinpi(0.5*r)^γ
+        β_sponge = α * sinpi(τ * r)^γ
         return β_sponge
     else
         return eltype(z)(0)
     end
 end
 
-# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
+# Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 
 function init_agnesi_2d(x, z)
     θ₀ = 250.0
     cp_d = C_p
@@ -118,7 +120,7 @@ function init_agnesi_2d(x, z)
 
     𝒩 = @. g / sqrt(cp_d * θ₀)
     π_exner = @. exp(-g * z / (cp_d * θ₀))
-    θ = @. θ₀ * exp(𝒩^2 * z / g)
+    θ = @. θ₀ * exp(𝒩 ^2 * z / g)
     ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d/R_d)
     ρθ  = @. ρ * θ
     ρuₕ = @. ρ * Geometry.UVector(20.0)
@@ -352,4 +354,3 @@ anim = Plots.@animate for u in sol.u
     Plots.plot(u.Yc.ρuₕ ./ u.Yc.ρ, clim = (-2, 2))
 end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
-
