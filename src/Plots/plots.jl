@@ -1,5 +1,6 @@
 import UnicodePlots
 import RecipesBase
+import TriplotBase
 
 function UnicodePlots.heatmap(
     field::Fields.SpectralElementField2D;
@@ -139,6 +140,9 @@ RecipesBase.@recipe function f(space::Spaces.SpectralElementSpace2D;)
 
     (x1coord, x2coord)
 end
+
+
+
 
 RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     coord_field = Fields.coordinate_field(space)
@@ -290,16 +294,39 @@ RecipesBase.@recipe function f(
     (unfolded_panels)
 end
 
+function triangulate(Ni, Nv, Nh)
+    L = LinearIndices((1:Nv, 1:Ni))
+    I = vec([
+        (t == 1 ? L[v, i] : L[v + 1, i]) + Nv * Ni * (h - 1) for t in 1:2,
+        v in 1:(Nv - 1), i in 1:(Ni - 1), h in 1:Nh
+    ])
+    J = vec([
+        (t == 1 ? L[v + 1, i] : L[v + 1, i + 1]) + Nv * Ni * (h - 1) for
+        t in 1:2, v in 1:(Nv - 1), i in 1:(Ni - 1), h in 1:Nh
+    ])
+    K = vec([
+        (t == 1 ? L[v, i + 1] : L[v, i + 1]) + Nv * Ni * (h - 1) for
+        t in 1:2, v in 1:(Nv - 1), i in 1:(Ni - 1), h in 1:Nh
+    ])
+    return hcat(I, J, K)'
+end
+
+function triangulate(field::Fields.ExtrudedFiniteDifferenceField)
+    field_data = Fields.field_values(field)
+    Ni, Nj, _, Nv, Nh = size(field_data)
+    @assert Nj == 1 "triangulation only defined for 1D extruded fields"
+    return triangulate(Ni, Nv, Nh)
+end
+
 RecipesBase.@recipe function f(
     field::Fields.ExtrudedFiniteDifferenceField;
     hinterpolate = 0,
+    ncolors = 256,
 )
     data = Fields.field_values(field)
     Ni, Nj, _, Nv, Nh = size(data)
 
     space = axes(field)
-    hmesh = Spaces.topology(space).mesh
-
     #TODO: assumes VIFH layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
 
@@ -309,17 +336,33 @@ RecipesBase.@recipe function f(
 
     if hinterpolate ≥ 1
         Nu = hinterpolate
-        M_hcoord = Operators.matrix_interpolate(hcoord_field, Nu)
-        M_data = Operators.matrix_interpolate(field, Nu)
+        uquad = Spaces.Quadratures.ClosedUniform{Nu}()
+        M_hcoord = Operators.matrix_interpolate(hcoord_field, uquad)
+        M_vcoord = Operators.matrix_interpolate(vcoord_field, uquad)
+        M_data = Operators.matrix_interpolate(field, uquad)
 
-        hcoord = vec(M_hcoord[1, :])
-        vcoord = vec(parent(vcoord_field)[:, 1, 1, 1])
-        data = M_data
+        hcoord_data = vec(M_hcoord)
+        vcoord_data = vec(M_vcoord)
+        data = vec(M_data)
+        triangles = triangulate(Nu, Nv, Nh)
     else
-        hcoord = vec(parent(hcoord_field)[1, :, 1, :])
-        vcoord = vec(parent(vcoord_field)[:, 1, 1, 1])
-        data = reshape(parent(data), (Nv, Ni * Nh))
+        hcoord_data = vec(parent(hcoord_field))
+        vcoord_data = vec(parent(vcoord_field))
+        data = vec(parent(data))
+        triangles = triangulate(Ni, Nv, Nh)
     end
+    cmap = range(extrema(data)..., length = ncolors)
+
+    z = TriplotBase.tripcolor(
+        hcoord_data,
+        vcoord_data,
+        data,
+        triangles,
+        cmap;
+        bg = NaN,
+        px = length(hcoord_data),
+        py = length(vcoord_data),
+    )
 
     # set the plot attributes
     seriestype := :heatmap
@@ -328,7 +371,8 @@ RecipesBase.@recipe function f(
     yguide --> "$(coord_symbols[2])"
     seriescolor --> :balance
 
-    (hcoord, vcoord, data)
+    # some plots backends need coordinates in sorted order
+    (sort(hcoord_data), sort(vcoord_data), z')
 end
 
 
