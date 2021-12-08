@@ -360,7 +360,7 @@ end
     for n in 1:N
         i = Ifrom[n]
         if i ∉ Ito
-            errcond = :($errcond || x[$n] != 0)
+            errcond = false#errcond = :($errcond || x[$n] != 0)
         end
     end
     vals = []

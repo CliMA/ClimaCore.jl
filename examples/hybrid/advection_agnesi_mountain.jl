@@ -213,10 +213,15 @@ function rhs!(dY, Y, _, t)
     )
     ∂f = Operators.GradientC2F()
     ∂c = Operators.GradientF2C()
-    B = Operators.SetBoundaryOperator(
+    BW = Operators.SetBoundaryOperator(
         bottom = Operators.SetValue(Geometry.WVector(0.0)),
         top = Operators.SetValue(Geometry.WVector(0.0)),
     )
+    BU = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.UVector(0.0)),
+        top = Operators.SetValue(Geometry.UVector(0.0)),
+    )
+
 
     fcc = Operators.FluxCorrectionC2C(
         bottom = Operators.Extrapolate(),
@@ -262,17 +267,26 @@ function rhs!(dY, Y, _, t)
             @SMatrix [1.0]
         ),
     )
-    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
+    @. dYc.ρuₕ -= uvdivf2c(ρw ⊗ If(uₕ))
     @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
     @. dρw +=
-        B(
-            Geometry.transform(
+        BW(
+            Geometry.transform( # project
                 Geometry.WAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
         )
+    #=
+    hcomp_vertical_momentum = @. BU(
+            Geometry.transform( # project
+                Geometry.UAxis(),
+                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
+            ),
+        )
+    @. dYc.ρuₕ += Ic(hcomp_vertical_momentum)
+
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
@@ -315,7 +329,7 @@ end
 dYdt = similar(Y);
 rhs!(dYdt, Y, nothing, 0.0);
 
-
+#=
 # run!
 using OrdinaryDiffEq
 Δt = 0.025
@@ -354,3 +368,4 @@ anim = Plots.@animate for u in sol.u
     Plots.plot(u.Yc.ρuₕ ./ u.Yc.ρ, clim = (-2, 2))
 end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
+=#
