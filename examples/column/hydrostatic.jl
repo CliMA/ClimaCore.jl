@@ -99,11 +99,12 @@ w = Geometry.WVector.(zeros(FT, fspace))
 Y_init = copy(Yc)
 w_init = copy(w)
 
-Y = (Yc, w)
-
 function tendency!(dY, Y, _, t)
-    (Yc, w) = Y.x
-    (dYc, dw) = dY.x
+    Yc = Y.Yc
+    w = Y.w
+
+    dYc = dY.Yc
+    dw = dY.w
 
     If = Operators.InterpolateC2F()
     ∂ = Operators.DivergenceF2C(
@@ -123,10 +124,7 @@ function tendency!(dY, Y, _, t)
     return dY
 end
 
-
-using RecursiveArrayTools
-
-Y = ArrayPartition(Yc, w)
+Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0
@@ -162,7 +160,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ρ",
         label = "T=0",
     )
-    sub_plt1 = Plots.plot!(sub_plt1, parent(u.x[1].ρ), z_centers, label = "T")
+    sub_plt1 = Plots.plot!(sub_plt1, parent(u.Yc.ρ), z_centers, label = "T")
 
     sub_plt2 = Plots.plot(
         parent(w_init),
@@ -172,7 +170,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ω",
         label = "T=0",
     )
-    sub_plt2 = Plots.plot!(sub_plt2, parent(u.x[2]), z_faces, label = "T")
+    sub_plt2 = Plots.plot!(sub_plt2, parent(u.w), z_faces, label = "T")
 
     sub_plt3 = Plots.plot(
         parent(Y_init.ρθ),
@@ -181,7 +179,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ρθ",
         label = "T=0",
     )
-    sub_plt3 = Plots.plot!(sub_plt3, parent(u.x[1].ρθ), z_centers, label = "T")
+    sub_plt3 = Plots.plot!(sub_plt3, parent(u.Yc.ρθ), z_centers, label = "T")
 
     return Plots.plot(
         sub_plt1,

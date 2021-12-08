@@ -1,6 +1,6 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-import ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore.Geometry, LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -115,6 +115,7 @@ Y = Fields.FieldVector(Yc = Yc, w = w)
 function tendency!(dY, Y, _, t)
     Yc = Y.Yc
     w = Y.w
+
     dYc = dY.Yc
     dw = dY.w
 
