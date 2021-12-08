@@ -93,41 +93,51 @@ function pressure(ρθ)
 end
 
 Φ(z) = grav * z
+function rayleigh_sponge(z; 
+                         z_sponge=900.0, 
+                         z_max=1200.0, 
+                         α = 1.0, 
+                         γ = 2.0)
+    if z >= z_sponge
+        r = (z - z_sponge) / (z_max - z_sponge)
+        β_sponge = α * sinpi(0.5*r)^γ
+        return β_sponge
+    else
+        return eltype(z)(0)
+    end
+end
 
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 function init_dry_rising_bubble_2d(x, z)
-    x_c = 0.0
-    z_c = 350.0
-    r_c = 250.0
-    θ_b = 300.0
-    θ_c = 0.5
+    θ₀ = 250.0
     cp_d = C_p
     cv_d = C_v
-    p_0 = MSLP
+    p₀ = MSLP
     g = grav
+    γ = cp_d / cv_d
 
-    # auxiliary quantities
-    r = sqrt((x - x_c)^2 + (z - z_c)^2)
-    θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0 # potential temperature perturbation
+    𝒩 = @. g / sqrt(cp_d * θ₀)
+    π_exner = @. exp(-g * z / (cp_d * θ₀))
+    θ = @. θ₀ * exp(𝒩^2 * z / g)
+    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d/R_d)
+    ρθ  = @. ρ * θ
+    ρuₕ = @. ρ * Geometry.UVector(20.0)
 
-    θ = θ_b + θ_p # potential temperature
-    π_exn = 1.0 - g * z / cp_d / θ # exner function
-    T = π_exn * θ # temperature
-    p = p_0 * π_exn^(cp_d / R_d) # pressure
-    ρ = p / R_d / T # density
-    ρθ = ρ * θ # potential temperature density
-
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVector(0.0))
+    return (ρ = ρ, 
+            ρθ = ρθ, 
+            ρuₕ = ρuₕ)
 end
 
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-Yc = map(coords) do coord
-    bubble = init_dry_rising_bubble_2d(coord.x, coord.z)
-    bubble
-end
+#Yc = map(coords) do coord
+#    bubble = init_dry_rising_bubble_2d(coord.x, coord.z)
+#    bubble
+#end
+
+Yc = init_dry_rising_bubble_2d(coords.x, coords.z)
 
 ρw = map(face_coords) do coord
     Geometry.WVector(0.0)
@@ -135,33 +145,33 @@ end;
 
 Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
 
-function energy(Yc, ρu, z)
-    ρ = Yc.ρ
-    ρθ = Yc.ρθ
-    u = ρu / ρ
-    kinetic = ρ * norm(u)^2 / 2
-    potential = z * grav * ρ
-    internal = C_v * pressure(ρθ) / R_d
-    return kinetic + potential + internal
-end
-function combine_momentum(ρuₕ, ρw)
-    Geometry.transform(Geometry.UWAxis(), ρuₕ) +
-    Geometry.transform(Geometry.UWAxis(), ρw)
-end
-function center_momentum(Y)
-    If2c = Operators.InterpolateF2C()
-    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
-end
-function total_energy(Y)
-    ρ = Y.Yc.ρ
-    ρu = center_momentum(Y)
-    ρθ = Y.Yc.ρθ
-    z = Fields.coordinate_field(axes(ρ)).z
-    sum(energy.(Yc, ρu, z))
-end
+#function energy(Yc, ρu, z)
+#    ρ = Yc.ρ
+#    ρθ = Yc.ρθ
+#    u = ρu / ρ
+#    kinetic = ρ * norm(u)^2 / 2
+#    potential = z * grav * ρ
+#    internal = C_v * pressure(ρθ) / R_d
+#    return kinetic + potential + internal
+#end
+#function combine_momentum(ρuₕ, ρw)
+#    Geometry.transform(Geometry.UWAxis(), ρuₕ) +
+#    Geometry.transform(Geometry.UWAxis(), ρw)
+#end
+#function center_momentum(Y)
+#    If2c = Operators.InterpolateF2C()
+#    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
+#end
+#function total_energy(Y)
+#    ρ = Y.Yc.ρ
+#    ρu = center_momentum(Y)
+#    ρθ = Y.Yc.ρθ
+#    z = Fields.coordinate_field(axes(ρ)).z
+#    sum(energy.(Yc, ρu, z))
+#end
 
-energy_0 = total_energy(Y)
-mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
+#energy_0 = total_energy(Y)
+#mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
 
 function rhs!(dY, Y, _, t)
     ρw = Y.ρw
@@ -289,6 +299,11 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
     #  2b) vertical div of vertial grad of potential temperature
     @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
+    
+    # sponge
+    β = @. rayleigh_sponge(coords.z)
+    @. dYc.ρuₕ -= β * Yc.ρuₕ
+    @. dρw -= If(β) * ρw
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
