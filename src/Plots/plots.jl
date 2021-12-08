@@ -336,11 +336,13 @@ RecipesBase.@recipe function f(
 
     if hinterpolate ≥ 1
         Nu = hinterpolate
-        M_hcoord = Operators.matrix_interpolate(hcoord_field, Nu)
-        M_data = Operators.matrix_interpolate(field, Nu)
+        uquad = Spaces.Quadratures.ClosedUniform{Nu}()
+        M_hcoord = Operators.matrix_interpolate(hcoord_field, uquad)
+        M_vcoord = Operators.matrix_interpolate(vcoord_field, uquad)
+        M_data = Operators.matrix_interpolate(field, uquad)
 
         hcoord_data = vec(M_hcoord)
-        vcoord_data = vec(parent(vcoord_field))
+        vcoord_data = vec(M_vcoord)
         data = vec(M_data)
         triangles = triangulate(Nu, Nv, Nh)
     else
@@ -349,8 +351,8 @@ RecipesBase.@recipe function f(
         data = vec(parent(data))
         triangles = triangulate(Ni, Nv, Nh)
     end
-
     cmap = range(extrema(data)..., length = ncolors)
+
     z = TriplotBase.tripcolor(
         hcoord_data,
         vcoord_data,

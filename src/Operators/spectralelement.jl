@@ -1223,7 +1223,7 @@ end
 
 function matrix_interpolate(
     field::Fields.ExtrudedFiniteDifferenceField,
-    Q_interp::Quadratures.Uniform{Nu},
+    Q_interp::Union{Quadratures.Uniform{Nu}, Quadratures.ClosedUniform{Nu}},
 ) where {Nu}
     S = eltype(field)
     space = axes(field)
