@@ -271,6 +271,8 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
+
+    # vertical component of vertical momentum
     @. dρw +=
         BW(
             Geometry.transform( # project
@@ -278,15 +280,16 @@ function rhs!(dY, Y, _, t)
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
         )
-    #=
-    hcomp_vertical_momentum = @. BU(
+
+    # horizontal component of vertical momentum
+    @. dYc.ρuₕ += @. Ic(BU(
             Geometry.transform( # project
                 Geometry.UAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ),
-        )
-    @. dYc.ρuₕ += Ic(hcomp_vertical_momentum)
+        ))
 
+    # vertical component of horizontal momentum
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
