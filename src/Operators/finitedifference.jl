@@ -1951,7 +1951,8 @@ function getidx(
 )
     op = bc.f
     space = axes(bc)
-    if idx < left_idx(space) + boundary_width(bc, loc)
+    if has_boundary(bc.f, loc) &&
+       idx < left_idx(space) + boundary_width(bc, loc)
         stencil_left_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
@@ -1966,7 +1967,8 @@ function getidx(
 )
     op = bc.f
     space = axes(bc)
-    if idx > (right_idx(space) - boundary_width(bc, loc))
+    if has_boundary(bc.f, loc) &&
+       idx > (right_idx(space) - boundary_width(bc, loc))
         stencil_right_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
