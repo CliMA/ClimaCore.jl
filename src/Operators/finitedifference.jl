@@ -2148,6 +2148,12 @@ function apply_stencil!(field_out, bc)
     lw = left_interor_window_idx(bc, space, lbw)
     ri = right_idx(space)
     rw = right_interor_window_idx(bc, space, rbw)
+    if !(typeof(ri) == typeof(rw))
+        error("oops")
+    end
+    if !(typeof(li) == typeof(lw))
+        error("oops")
+    end
     @assert li <= lw <= rw <= ri
     for idx in li:(lw - 1)
         setidx!(field_out, idx, getidx(bc, lbw, idx))
