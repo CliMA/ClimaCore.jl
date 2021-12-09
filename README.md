@@ -1,7 +1,5 @@
 # ClimaCore.jl
 
-CliMA model dycore
-
 |||
 |---------------------:|:----------------------------------------------|
 | **Docs Build**       | [![docs build][docs-bld-img]][docs-bld-url]   |
@@ -32,3 +30,29 @@ CliMA model dycore
 
 [zenodo-img]: https://zenodo.org/badge/356355994.svg
 [zenodo-url]: https://zenodo.org/badge/latestdoi/356355994
+
+The Climate Modelling Alliance ([CliMA](https://clima.caltech.edu/)) project is developing a full Earth System Model (ESM), entirely in the high-level, dynamic [Julia](https://julialang.org/) language. The main goal of the project is to build an ESM that automatically learns from diverse data sources to produce accurate climate predictions with quantified uncertainties. The CliMA model has been developed to target both CPU and GPU architectures, using a common codebase. ClimaCore.jl constitutes the dynamical core (_dycore_), providing discretization tools to solve the governing equations describing the different components of the ESM.
+ClimaCore.jl's high-level application programming interface (API) facilitates modularity and composition of differential operators and the definition of flexible discretizations. This, in turn, is coupled with the low-level API that supports different data layouts, specialized implementations and flexible models for threading, to better face high-performance optimization, data storage, and scalability challenges on modern HPC ecosystems.
+
+## Technical aims and current support
+* Support both Large Eddy Simulation (LES) and General Circulation Model (GCM) configurations.
+* Limit number of languages (ideally one: currently, Julia).
+* A suite of tools for constructing spatial compatible discretizations.
+* Horizontal spectral elements:
+    - Supports both Continuous (SEM) and Discontinuous Galerkin (DG-SEM) discretizations.
+* Flexible choice of vertical discretization (currently staggered Finite Differences, potentially Finite Volumes)
+* Support for different geometric vector types and coordinate systems: Covariant and Contravariant vectors for curvilinear, non-orthogonal systems; Cartesian vectors for Eucledean spaces; and UVVectors for lat-long grids.
+* `Field` abstraction:
+    - Scalar, vector or struct-valued
+    - Stores values, geometry, and mesh information
+    - Flexible memory layouts: Array-of-Structs (AoS), Struct-of-Arrays (SoA),Array-of-Struct-of-Arrays (AoSoA)
+    - Useful overloads: `sum` (integral), `norm`, etc.
+    - Compatible with [`DifferentialEquations.jl`](https://diffeq.sciml.ai/stable/) time steppers.
+* Composable operators via broadcasting: Apply a function element-wise to an array; Scalar values are broadcast over arrays Fusion of multiple operations; Can be specialized for custom functions or argument types (e.g. `CuArray` compiles and applies a custom CUDA kernel).
+* Operators (`grad`, `div`, `interpolate`) are “pseudo-functions”: Act like functions when broadcasted over a `Field`; Fuse operators and function calls.
+* Add element node sizes dimensions to type domain
+    - i.e. specialize on polynomial degree
+    - important for GPU kernel performance.
+* Flexible memory layouts allow for flexible threading models (upcoming):
+    - CPU thread over elements
+    - GPU thread over nodes.
