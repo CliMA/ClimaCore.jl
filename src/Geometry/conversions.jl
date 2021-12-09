@@ -93,7 +93,6 @@ contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
 Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
-
 # required for curl-curl
 covariant3(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
     contravariant3(u, local_geometry)
