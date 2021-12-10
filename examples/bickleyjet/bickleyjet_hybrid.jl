@@ -286,14 +286,13 @@ function rhs!(dY, Y, (parameters, numflux), t)
     # horizontal momentum
     @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     # vertical momentum
-    @. dρw +=
-        B(
-            Geometry.transform(
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z, rparams)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
-        )
-
+#    @. dρw +=
+#        B(
+#            Geometry.transform(
+#                Geometry.WAxis(),
+#                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z, rparams)),
+#            ) - vvdivc2f(Ic(ρw ⊗ w)),
+#        )
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     upwind_correction = false
     if upwind_correction
@@ -343,7 +342,7 @@ end
 Y = Fields.FieldVector(Yc = Y_center, ρw = ρw)
 dY = similar(Y)
 test = rhs!(dY,Y,(parameters,numflux), 0.0)
-dt = 0.0001
+dt = 0.000000000001
 timeend = dt*2
 # Solve the ODE operator
 prob = ODEProblem(rhs!, Y, (0.0, timeend), (parameters, numflux))
