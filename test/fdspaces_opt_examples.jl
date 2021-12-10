@@ -138,9 +138,6 @@ if VERSION >= v"1.7.0"
             end
             @test p == 0
 
-            # TODO: should we open an issue about this?
-            # ∇c = Operators.DivergenceF2C() # re-defining results in ~18KiB allocs above
-
             ##### C2F
             # wvec = Geometry.WVector # cannot re-define, otherwise many allocations
 
@@ -179,6 +176,68 @@ if VERSION >= v"1.7.0"
                 top = Operators.SetDivergence(0),
             ),
         )
+
+        function alloc_test_redefined_operators()
+            ∇c = Operators.DivergenceF2C()
+            wvec = Geometry.WVector
+            # Compile first
+            @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            p = @allocated begin
+                @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            end
+            @test_broken p == 0
+            c∇closure1() =
+                @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            c∇closure1()
+            p = @allocated begin
+                c∇closure1()
+            end
+            @test_broken p == 0
+
+            # Now simply repeat above:
+            ∇c = Operators.DivergenceF2C()
+            wvec = Geometry.WVector
+            # Compile first
+            @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            p = @allocated begin
+                @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            end
+            @test_broken p == 0
+            c∇closure2() =
+                @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+            c∇closure2()
+            p = @allocated begin
+                c∇closure2()
+            end
+            @test_broken p == 0
+        end
+        alloc_test_redefined_operators()
+
+        function alloc_test_operators_in_loops()
+            for i in 1:3
+                wvec = Geometry.WVector
+                bcval = i * 2
+                bcs = (;
+                    bottom = Operators.SetValue(wvec(bcval)),
+                    top = Operators.SetValue(wvec(bcval)),
+                )
+                ∇c = Operators.DivergenceF2C(; bcs...)
+                # Compile first
+                @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+                p = @allocated begin
+                    @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+                end
+                @test p == 0
+                c∇closure() =
+                    @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
+                c∇closure()
+                p = @allocated begin
+                    c∇closure()
+                end
+                @test p == 0
+            end
+        end
+        alloc_test_operators_in_loops()
 
         function alloc_test_nested_expressions_1()
 
