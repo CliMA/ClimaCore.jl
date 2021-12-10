@@ -33,7 +33,7 @@ const parameters = (
     c = 2,
     g = 10,
     R_d = 287.058,
-    C_p = 1004.7030000000002,
+    C_p = 1004.703,
     C_v = 717.645
    )
 
@@ -107,7 +107,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
 
     ρ⁻, ρuₕ⁻, ρθ⁻ = y⁻.ρ, y⁻.ρuₕ, y⁻.ρθ
     ρ⁺, ρuₕ⁺, ρθ⁺ = y⁺.ρ, y⁺.ρuₕ, y⁺.ρθ
-
+  
     u⁻ = ρuₕ⁻ / ρ⁻
     θ⁻ = ρθ⁻ / ρ⁻
     uₙ⁻ = u⁻' * n
@@ -214,23 +214,22 @@ function roeflux_f(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     rmap(f -> f' * n, Favg) ⊞ Δf
 end
 
-
 numflux = roeflux
 
 function rhs!(dY, Y, (parameters, numflux), t)
 
-    rparams = Ref(parameters)
-  
     # Unpack Staggered Fields @unpack
     ρw = Y.ρw # Face variables
     Yc = Y.Yc # Center Variables
     dYc = dY.Yc # Center Tendencies
     dρw = dY.ρw # Face Tendencies
 
+    rparams = Ref(parameters)
+
     # Horizontal Flux/Source Contributions
     wdiv = Operators.WeakDivergence()
-    local_geometry_field_c = Fields.local_geometry_field(Yc.ρ) # Concerned with Center Variables
-    local_geometry_field_f = Fields.local_geometry_field(ρw) # Concerned with Center Variables
+    local_geometry_field_c = Fields.local_geometry_field(Yc.ρ)
+    local_geometry_field_f = Fields.local_geometry_field(ρw)
     dYc .= wdiv.(flux.(Yc, rparams)) .* (.-(local_geometry_field_c.WJ))
     Operators.add_numerical_flux_internal_horizontal!(numflux, dYc, Yc, parameters)
     
@@ -275,10 +274,9 @@ function rhs!(dY, Y, (parameters, numflux), t)
     uₕ = @. Yc.ρuₕ / Yc.ρ
     w = @. ρw / If(Yc.ρ)
     wc = @. Ic(ρw) / Yc.ρ
-    p = pressure.(Yc.ρθ,rparams)
+    p = @. pressure(Yc.ρθ,rparams)
     θ = @. Yc.ρθ / Yc.ρ
     Yfρ = @. If(Yc.ρ)
-
     # density
     @. dYc.ρ -= ∂(ρw)
     # potential temperature
@@ -286,13 +284,13 @@ function rhs!(dY, Y, (parameters, numflux), t)
     # horizontal momentum
     @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     # vertical momentum
-#    @. dρw +=
-#        B(
-#            Geometry.transform(
-#                Geometry.WAxis(),
-#                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z, rparams)),
-#            ) - vvdivc2f(Ic(ρw ⊗ w)),
-#        )
+    #@. dρw +=
+    #    B(
+    #        Geometry.transform(
+    #            Geometry.WAxis(),
+    #            -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z, rparams)),
+    #        ) - vvdivc2f(Ic(ρw ⊗ w)),
+    #    )
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     upwind_correction = false
     if upwind_correction
@@ -342,8 +340,8 @@ end
 Y = Fields.FieldVector(Yc = Y_center, ρw = ρw)
 dY = similar(Y)
 test = rhs!(dY,Y,(parameters,numflux), 0.0)
-dt = 0.000000000001
-timeend = dt*2
+dt = eps(eltype(Y))
+timeend = dt*3
 # Solve the ODE operator
 prob = ODEProblem(rhs!, Y, (0.0, timeend), (parameters, numflux))
 sol = solve(
