@@ -33,18 +33,19 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 
 
 # Spectral Element Field
+const SpectralElementField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.AbstractSpectralElementSpace}
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
 
-const SpectralElementField1D{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
-
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
-
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
-
 const CenterFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -55,12 +56,10 @@ const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
-
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
-
 const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -98,8 +97,10 @@ Base.length(field::Fields.Field) = 1
 slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
-column(field::Field, inds...) =
+column(field::ExtrudedFiniteDifferenceField, inds...) =
     Field(column(field_values(field), inds...), column(axes(field), inds...))
+column(field::SpectralElementField, inds...) =
+    column(field_values(field), inds...)
 
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}

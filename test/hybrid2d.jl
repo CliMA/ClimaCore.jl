@@ -148,11 +148,10 @@ end
 
     hv_center_space, hv_face_space = hvspace_2D(xlim = (-1, 1), zlim = (-1, 1))
 
-    function divergence(f)
 
-        divuf = Fields.FieldVector(h = zeros(eltype(f), hv_center_space))
-        h = f.h
-        dh = divuf.h
+
+
+    function divergence(h, bottom_flux)
 
         # vertical advection no inflow at bottom
         # and outflow at top
@@ -160,47 +159,45 @@ end
             top = Operators.Extrapolate(),
             bottom = Operators.Extrapolate(),
         )
-        divf2c = Operators.DivergenceF2C()
+        divf2c =
+            Operators.DivergenceF2C(bottom = Operators.SetValue(bottom_flux))
         # only upward component of divergence
-        @. dh = divf2c(Ic2f(h) * Geometry.WVector(1.0))
+        dh = @. divf2c(Ic2f(h))
 
         # only horizontal component of divergence
         hdiv = Operators.Divergence()
-        @. dh += hdiv(h * Geometry.UVector(1.0)) # add the two components for full divergence +=
+        @. dh += hdiv(h) # add the two components for full divergence +=
         Spaces.weighted_dss!(dh)
 
-        return divuf
+        return dh
     end
 
-    # A horizontal Gaussian blob, centered at (-x_0, -z_0),
+
+    # A horizontal Gaussian blob, centered at (x_0, z_0),
     # with `a` the height of the blob and σ the standard deviation
-    function h_blob(x_0, z_0, a = 1.0, σ = 0.2)
-        coords = Fields.coordinate_field(hv_center_space)
-        f = map(coords) do coord
-            a * exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))
-        end
+    h_blob(x, z, x_0, z_0, a = 1.0, σ = 0.2) =
+        a * exp(-((x - x_0)^2 + (z - z_0)^2) / (2 * σ^2))
 
-        return f
-    end
-
-    # Spatial derivative of a horizontal Gaussian blob, centered at (-x_0, -z_0),
+    # Spatial gradient of a horizontal Gaussian blob, centered at (x_0, z_0),
     # with `a` the height of the blob and σ the standard deviation
-    function div_h_blob(x_0, z_0, a = 1.0, σ = 0.2)
-        coords = Fields.coordinate_field(hv_center_space)
-        div_uf = map(coords) do coord
-            -a * (exp(-((coord.x + x_0)^2 + (coord.z + z_0)^2) / (2 * σ^2))) /
-            (σ^2) * ((coord.x + x_0) + (coord.z + z_0))
-        end
+    ∇h_blob(x, z, x_0, z_0, a = 1.0, σ = 0.2) =
+        -a * (exp(-((x - x_0)^2 + (z - z_0)^2) / (2 * σ^2))) / (σ^2) *
+        Geometry.UWVector(x - x_0, z - z_0)
 
-        return div_uf
-    end
+    ccoords = Fields.coordinate_field(hv_center_space)
+    bcoords = Fields.coordinate_field(hv_center_space.horizontal_space)
 
-    f = Fields.FieldVector(h = h_blob(0.5, 0.5))
+    h =
+        h_blob.(ccoords.x, ccoords.z, -0.5, -0.5) .*
+        Ref(Geometry.UWVector(1.0, 1.0))
+    bottom_flux =
+        h_blob.(bcoords.x, -1.0, -0.5, -0.5) .* Ref(Geometry.UWVector(1.0, 1.0))
+    exact_divh =
+        Ref(Geometry.UWVector(1.0, 1.0)') .*
+        ∇h_blob.(ccoords.x, ccoords.z, -0.5, -0.5)
 
-    divuf = divergence(f)
-    exact_divuf = div_h_blob(0.5, 0.5)
-
-    @test norm(exact_divuf .- divuf.h) ≤ 5e-2
+    divh = divergence(h, bottom_flux)
+    exact_divuf = @test norm(exact_divh .- divh) ≤ 5e-2
 end
 
 

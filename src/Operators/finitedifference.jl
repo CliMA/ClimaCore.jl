@@ -2126,13 +2126,62 @@ function Base.Broadcast.materialize!(
     )
 end
 
+
+column_op(f::F, inds...) where {F} = f
+
+for Op in [
+    AdvectionC2C,
+    AdvectionF2F,
+    FluxCorrectionC2C,
+    FluxCorrectionF2F,
+    UpwindBiasedProductC2F,
+    SetBoundaryOperator,
+    CurlC2F,
+    DivergenceC2F,
+    DivergenceF2C,
+    GradientC2F,
+    GradientF2C,
+    InterpolateC2F,
+    InterpolateF2C,
+    LeftBiasedC2F,
+    LeftBiasedF2C,
+    RightBiasedC2F,
+    RightBiasedF2C,
+    WeightedInterpolateC2F,
+    WeightedInterpolateF2C,
+]
+    @eval begin
+        @inline function column_op(f::$Op, inds...)
+            $Op(map(bc -> column_bc(bc, inds...), f.bcs))
+        end
+    end
+end
+
+# work around the fact that
+#  column(::SpectralElementField, inds...) returns a Ref
+#  column(::Real, inds...) returns a Real
+# not sure what is best here...
+unwrap_ref(r::Ref) = r[]
+unwrap_ref(r) = r
+for BC in [SetValue, SetGradient, SetDivergence]
+    @eval begin
+        @inline function column_bc(bc::$BC, inds...)
+            $BC(unwrap_ref(column(bc.val, inds...)))
+        end
+    end
+end
+@inline function column_bc(bc::Extrapolate, inds...)
+    bc
+end
+
 @inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractStencilStyle}
-    _args = column_args(bc.args, inds...)
-    _axes = column(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+    col_f = column_op(bc.f, inds...)
+    col_args = column_args(bc.args, inds...)
+    col_axes = column(axes(bc), inds...)
+    Base.Broadcast.Broadcasted{Style}(col_f, col_args, col_axes)
 end
 
 #TODO: the optimizer dies with column broadcast expressions over a certain complexity
