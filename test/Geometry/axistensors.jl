@@ -87,6 +87,51 @@ end
     )
 end
 
+@testset "project" begin
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant1Vector(2.0),
+    ) == Geometry.Covariant12Vector(2.0, 0.0)
+
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant12Vector(2.0, 2.0),
+    ) == Geometry.Covariant12Vector(2.0, 2.0)
+
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant123Vector(2.0, 2.0, 0.0),
+    ) == Geometry.Covariant12Vector(2.0, 2.0)
+
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant123Vector(2.0, 2.0, 1.0),
+    ) == Geometry.Covariant12Vector(2.0, 2.0)
+
+
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant13Vector(2.0, 0.0),
+    ) == Geometry.Covariant12Vector(2.0, 0.0)
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant13Vector(2.0, 2.0),
+    ) == Geometry.Covariant12Vector(2.0, 0.0)
+
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant1Vector(2.0) * Geometry.Cartesian1Vector(1.0)',
+    ) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant13Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)',
+    ) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+    @test Geometry.project(
+        Geometry.Covariant12Axis(),
+        Geometry.Covariant13Vector(2.0, 2.0) * Geometry.Cartesian1Vector(1.0)',
+    ) == Geometry.Covariant12Vector(2.0, 0.0) * Geometry.Cartesian1Vector(1.0)'
+end
+
 
 @testset "cross product" begin
     M = @SMatrix [
