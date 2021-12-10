@@ -36,7 +36,7 @@ dir = mktempdir()
             (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α))
         end for α in times
     ]
-    writevtk(joinpath(dir, "sphere_series"), times, A)
+    writevtk(joinpath(dir, "sphere_series"), times, (A = A,))
 
 end
 
