@@ -26,7 +26,7 @@ const parameters = (
     g = 10,
 )
 
-numflux_name = get(ARGS, 1, "rusanov")
+numflux_name = get(ARGS, 1, "roe")
 boundary_name = get(ARGS, 2, "")
 
 domain = Domains.RectangleDomain(
@@ -37,15 +37,14 @@ domain = Domains.RectangleDomain(
     x2boundary = boundary_name != "noslip" ? nothing : (:south, :north),
 )
 
-n1, n2 = 16, 16
-Nq = 4
-Nqh = 7
+n1, n2 = 16,16
+Nq = 1
+Nqh = 1
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Spaces.Quadratures.GL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-
-Iquad = Spaces.Quadratures.GLL{Nqh}()
+Iquad = Spaces.Quadratures.GL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
@@ -143,13 +142,11 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     w5 = abs(uₙ) * (Δρθ - θ * Δp * c⁻²)
 
     # fluxes!!!
-
     fluxᵀn_ρ = (w1 + w2 + w3) * 0.5
     fluxᵀn_ρu =
         (w1 * (u - c * n) + w2 * (u + c * n) + w3 * u + w4 * (Δu - Δuₙ * n)) *
         0.5
     fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
-
     Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
     rmap(f -> f' * n, Favg) ⊞ Δf
 end
@@ -165,44 +162,10 @@ end
 
 function rhs!(dydt, y, (parameters, numflux), t)
 
-    # ϕ' K' W J K dydt =  -ϕ' K' I' [DH' WH JH flux.(I K y)]
-    #  =>   K dydt = - K inv(K' WJ K) K' I' [DH' WH JH flux.(I K y)]
-
-    # where:
-    #  ϕ = test function
-    #  K = DSS scatter (i.e. duplicates points at element boundaries)
-    #  K y = stored input vector (with duplicated values)
-    #  I = interpolation to higher-order space
-    #  D = derivative operator
-    #  H = suffix for higher-order space operations
-    #  W = Quadrature weights
-    #  J = Jacobian determinant of the transformation `ξ` to `x`
-    #
     wdiv = Operators.WeakDivergence()
-
     local_geometry_field = Fields.local_geometry_field(y)
-
     dydt .= wdiv.(flux.(y, Ref(parameters))) .* (.-(local_geometry_field.WJ))
-
     Operators.add_numerical_flux_internal!(numflux, dydt, y, parameters)
-    Operators.add_numerical_flux_boundary!(
-        dydt,
-        y,
-        parameters,
-    ) do normal, (y⁻, parameters)
-        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ = y⁻.ρθ)
-        numflux(normal, (y⁻, parameters), (y⁺, parameters))
-    end
-
-    # 6. Solve for final result
-    dydt_data = Fields.field_values(dydt)
-    dydt_data .= rdiv.(dydt_data, space.local_geometry.WJ)
-    M = Spaces.Quadratures.cutoff_filter_matrix(
-        Float64,
-        space.quadrature_style,
-        3,
-    )
-    Operators.tensor_product!(dydt_data, M)
     return dydt
 end
 
@@ -210,7 +173,7 @@ dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+prob = ODEProblem(rhs!, y0, (0.0, 1000.0), (parameters, numflux))
 sol = solve(
     prob,
     SSPRK33(),

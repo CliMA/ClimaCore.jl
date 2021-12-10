@@ -63,6 +63,53 @@ function add_numerical_flux_internal!(fn, dydt, args...)
     end
 end
 
+function add_numerical_flux_internal_horizontal!(fn, dydt, args...)
+    space = axes(dydt)
+    horizontal_space = space.horizontal_space
+    Nq = Spaces.Quadratures.degrees_of_freedom(space.horizontal_space.quadrature_style)
+    topology = space.horizontal_space.topology
+    nlevels = Spaces.nlevels(space)
+
+    for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
+        enumerate(Topologies.interior_faces(topology))
+        for level in 1:nlevels
+          internal_surface_geometry_slab =
+              slab(horizontal_space.internal_surface_geometry, iface)
+
+          arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), level, elem⁻), args)
+          arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), level, elem⁺), args)
+
+          dydt_slab⁻ = slab(Fields.field_values(dydt), level, elem⁻)
+          dydt_slab⁺ = slab(Fields.field_values(dydt), level, elem⁺)
+          
+          @assert dydt_slab⁻ isa DataSlab1D
+          @assert dydt_slab⁺ isa DataSlab1D
+
+          for q in 1:Nq
+              sgeom⁻ = internal_surface_geometry_slab[q]
+
+              i⁻, = Topologies.face_node_index(face⁻, Nq, q, false)
+              i⁺, = Topologies.face_node_index(face⁺, Nq, q, reversed)
+
+              numflux⁻ = fn(
+                  sgeom⁻.normal,
+                  map(
+                      slab -> slab isa DataSlab1D ? slab[i⁻] : slab,
+                      arg_slabs⁻,
+                  ),
+                  map(
+                      slab -> slab isa DataSlab1D ? slab[i⁺] : slab,
+                      arg_slabs⁺,
+                  ),
+              )
+
+              dydt_slab⁻[i⁻] = dydt_slab⁻[i⁻] ⊟ (sgeom⁻.sWJ ⊠ numflux⁻)
+              dydt_slab⁺[i⁺] = dydt_slab⁺[i⁺] ⊞ (sgeom⁻.sWJ ⊠ numflux⁻)
+          end
+      end
+    end
+end
+
 """
     CentralNumericalFlux(fluxfn)
 

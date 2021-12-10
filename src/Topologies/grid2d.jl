@@ -1,3 +1,13 @@
+
+"""
+    Grid1DTopology{M <: Mesh1D} <: AbstractTopology
+
+An unstructured 1D conformal mesh of elements.
+"""
+struct Grid1DTopology{M} <: AbstractTopology
+    mesh::M
+end
+
 """
     Grid2DTopology{M <: Mesh2D} <: AbstractTopology
 
@@ -63,6 +73,17 @@ function opposing_face(topology::Grid2DTopology, elem::Integer, face::Integer)
 end
 
 # InteriorFaceIterator
+function Base.length(fiter::InteriorFaceIterator{T}) where {T <: Grid1DTopology}
+    topology = fiter.topology
+    mesh = topology.mesh
+    loc = findfirst(mesh.boundary_tags .== 0) # interior tag is 0
+    if isnothing(loc)
+        return 0
+    else
+        error("Not defined for aperiodic meshes")
+    end
+end
+
 function Base.length(fiter::InteriorFaceIterator{T}) where {T <: Grid2DTopology}
     topology = fiter.topology
     mesh = topology.mesh

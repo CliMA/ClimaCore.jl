@@ -30,15 +30,15 @@ domain = Domains.RectangleDomain(
     x2periodic = true,
 )
 
-n1, n2 = 16, 16
-Nq = 4
-Nqh = 7
+n1, n2 = 16,16
+Nq = 2
+Nqh = 2
 mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
 grid_topology = Topologies.GridTopology(mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Spaces.Quadratures.GL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-Iquad = Spaces.Quadratures.GLL{Nqh}()
+Iquad = Spaces.Quadratures.GL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
@@ -110,7 +110,7 @@ rhs!(dydt, y0, nothing, 0.0)
 
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+prob = ODEProblem(rhs!, y0, (0.0, 400.0))
 sol = solve(
     prob,
     SSPRK33(),
