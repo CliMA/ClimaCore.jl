@@ -99,10 +99,16 @@ w_init = copy(w)
 # Y = (Yc, w)
 
 function tendency!(dY, Y, _, t)
-    (Yc, w) = Y.x
-    (dYc, dw) = dY.x
+    Yc = Y.Yc
+    w = Y.w
 
-    UnPack.@unpack ρ, uv, ρθ = Yc
+    dYc = dY.Yc
+    dw = dY.w
+
+    ρ = Yc.ρ
+    uv = Yc.uv
+    ρθ = Yc.ρθ
+
     dρ = dYc.ρ
     duv = dYc.uv
     dρθ = dYc.ρθ
@@ -166,7 +172,7 @@ end
 using LinearAlgebra
 using RecursiveArrayTools
 
-Y = ArrayPartition(Yc, w)
+Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0 / 100.0
@@ -207,7 +213,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get u component of uv vector
     sub_plt1 = Plots.plot!(
         sub_plt1,
-        parent(u.x[1].uv.components.data.:1),
+        parent(u.Yc.uv.components.data.:1),
         z_centers,
         label = "Comp",
     )
@@ -226,12 +232,10 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get v component of uv vector
     sub_plt2 = Plots.plot!(
         sub_plt2,
-        parent(u.x[1].uv.components.data.:2),
+        parent(u.Yc.uv.components.data.:2),
         z_centers,
         label = "Comp",
     )
-
-
     return Plots.plot(
         sub_plt1,
         sub_plt2,
@@ -257,4 +261,10 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/hydrostatic_ekman_end.png", "ekman end")
+linkfig(
+    relpath(
+        joinpath(path, "hydrostatic_ekman_end.png"),
+        joinpath(@__DIR__, "../.."),
+    ),
+    "ekman end",
+)

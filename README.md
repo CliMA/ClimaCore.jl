@@ -10,6 +10,7 @@ CliMA model dycore
 | **Buildkite CI**     | [![buildkite ci][buildkite-ci-img]][buildkite-ci-url] |
 | **Code Coverage**    | [![codecov][codecov-img]][codecov-url]        |
 | **Bors enabled**     | [![bors][bors-img]][bors-url]                 |
+| **DOI**              | [![zenodo][zenodo-img]][zenodo-url]           |
 
 [docs-bld-img]: https://github.com/CliMA/ClimaCore.jl/workflows/Documentation/badge.svg
 [docs-bld-url]: https://github.com/CliMA/ClimaCore.jl/actions?query=workflow%3ADocumentation
@@ -28,3 +29,6 @@ CliMA model dycore
 
 [bors-img]: https://bors.tech/images/badge_small.svg
 [bors-url]: https://app.bors.tech/repositories/32973
+
+[zenodo-img]: https://zenodo.org/badge/356355994.svg
+[zenodo-url]: https://zenodo.org/badge/latestdoi/356355994

@@ -1,6 +1,6 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-import ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore.Geometry, LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -66,14 +66,16 @@ w = Geometry.WVector.(zeros(Float64, fspace))
 Y_init = copy(Yc)
 w_init = copy(w)
 
-# Y = (Yc, w)
-
 function tendency!(dY, Y, _, t)
+    Yc = Y.Yc
+    w = Y.w
 
-    (Yc, w) = Y.x
-    (dYc, dw) = dY.x
+    dYc = dY.Yc
+    dw = dY.w
 
-    UnPack.@unpack u, v = Yc
+    u = Yc.u
+    v = Yc.v
+
     du = dYc.u
     dv = dYc.v
 
@@ -101,15 +103,13 @@ function tendency!(dY, Y, _, t)
     gradc2f = Operators.GradientC2F(top = bcs_top)
     divf2c = Operators.DivergenceF2C(bottom = bcs_bottom)
     @. dv = divf2c(ν * gradc2f(v)) - f * (u - ug) - A(w, v)   # Eq. 4.9
-
-
     return dY
 end
 
 using LinearAlgebra
 using RecursiveArrayTools
 
-Y = ArrayPartition(Yc, w)
+Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 2.0
@@ -148,8 +148,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "u",
         label = "Ref",
     )
-    sub_plt1 =
-        Plots.plot!(sub_plt1, parent(u.x[1].u), z_centers, label = "Comp")
+    sub_plt1 = Plots.plot!(sub_plt1, parent(u.Yc.u), z_centers, label = "Comp")
 
     v_ref =
         vg .+
@@ -162,9 +161,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
         xlabel = "v",
         label = "Ref",
     )
-    sub_plt2 =
-        Plots.plot!(sub_plt2, parent(u.x[1].v), z_centers, label = "Comp")
-
+    sub_plt2 = Plots.plot!(sub_plt2, parent(u.Yc.v), z_centers, label = "Comp")
 
     return Plots.plot(
         sub_plt1,
@@ -191,4 +188,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/ekman_end.png", "ekman End")
+linkfig(
+    relpath(joinpath(path, "ekman_end.png"), joinpath(@__DIR__, "../..")),
+    "Ekman End",
+)

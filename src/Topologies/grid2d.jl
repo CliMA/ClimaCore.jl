@@ -46,10 +46,10 @@ function opposing_face(topology::Grid2DTopology, elem::Integer, face::Integer)
     face_neighbors = topology.mesh.face_neighbors
     fc = topology.mesh.elem_faces[elem, face]
 
-    if face_neighbors[fc, 1] == elem
+    if face_neighbors[fc, 1] == elem && face_neighbors[fc, 2] == face
         opelem = face_neighbors[fc, 3]
         opface = face_neighbors[fc, 4]
-    elseif face_neighbors[fc, 3] == elem
+    elseif face_neighbors[fc, 3] == elem && face_neighbors[fc, 4] == face
         opelem = face_neighbors[fc, 1]
         opface = face_neighbors[fc, 2]
     else
@@ -179,11 +179,11 @@ end
 
 function Base.iterate(
     viter::VertexIterator{T},
-    uvertno = 1,
+    uvertno::Int = 1,
 ) where {T <: Grid2DTopology}
     topology = viter.topology
     nuverts = length(viter.topology.mesh.unique_verts)
-    if uvertno > 0 && uvertno ≤ nuverts
+    if 1 ≤ uvertno ≤ nuverts
         return Vertex(topology, uvertno), uvertno + 1
     else
         return nothing
@@ -198,7 +198,10 @@ function Base.length(vertex::Vertex{T}) where {T <: Grid2DTopology}
     return div(offset[vtno + 1] - offset[vtno], 2)
 end
 
-function Base.iterate(vertex::Vertex{T}, iterno = 1) where {T <: Grid2DTopology}
+function Base.iterate(
+    vertex::Vertex{T},
+    iterno::Int = 1,
+) where {T <: Grid2DTopology}
     # iterator of (element, vertnum) that share global vertex
     mesh = vertex.topology.mesh
     vtno = vertex.num

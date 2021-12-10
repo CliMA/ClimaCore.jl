@@ -1,6 +1,6 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-import ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore.Geometry, LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -33,13 +33,14 @@ zc = Fields.coordinate_field(cspace)
 u = sin.(zc.z)
 p = Geometry.WVector.(zeros(Float64, fspace))
 
-using RecursiveArrayTools
-
-Y = ArrayPartition(u, p)
+Y = Fields.FieldVector(u = u, p = p)
 
 function tendency!(dY, Y, _, t)
-    (u, p) = Y.x
-    (du, dp) = dY.x
+    u = Y.u
+    p = Y.p
+
+    du = dY.u
+    dp = dY.p
 
     ∂f = Operators.GradientC2F(
         left = Operators.SetValue(0.0),
@@ -54,7 +55,6 @@ function tendency!(dY, Y, _, t)
 end
 
 @show tendency!(similar(Y), Y, nothing, 0.0)
-
 
 # Solve the ODE operator
 Δt = 0.01
@@ -78,12 +78,12 @@ path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u
-    Plots.plot(u.x[1], xlim = (-1, 1), label = "u", legend = true)
+    Plots.plot(u.u, xlim = (-1, 1), label = "u", legend = true)
 end
 Plots.mp4(anim, joinpath(path, "wave.mp4"), fps = 10)
 
 Plots.png(
-    Plots.plot(sol.u[end].x[1], label = "u", legend = true),
+    Plots.plot(sol.u[end].u, label = "u", legend = true),
     joinpath(path, "wave_end.png"),
 )
 
@@ -96,4 +96,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/wave_end.png", "Wave End")
+linkfig(
+    relpath(joinpath(path, "wave_end.png"), joinpath(@__DIR__, "../..")),
+    "Wave End",
+)

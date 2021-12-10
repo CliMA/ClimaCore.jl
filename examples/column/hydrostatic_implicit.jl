@@ -1,6 +1,6 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-import ClimaCore.Geometry, LinearAlgebra, UnPack
+import ClimaCore.Geometry, LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -115,6 +115,7 @@ Y = Fields.FieldVector(Yc = Yc, w = w)
 function tendency!(dY, Y, _, t)
     Yc = Y.Yc
     w = Y.w
+
     dYc = dY.Yc
     dw = dY.w
 
@@ -324,4 +325,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig("output/$(dirname)/hydrostatic_end.png", "Hydrostatic End")
+linkfig(
+    relpath(joinpath(path, "hydrostatic_end.png"), joinpath(@__DIR__, "../..")),
+    "Hydrostatic End",
+)

@@ -53,79 +53,88 @@ Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
     DataStyle(D)
 
 # precedence rules
+
 # scalars are broadcast over the data object
 Base.Broadcast.BroadcastStyle(
     ::Base.Broadcast.AbstractArrayStyle{0},
     ds::DataStyle,
 ) = ds
 
-Base.Broadcast.BroadcastStyle(::VFStyle{A}, ::IFHStyle{Ni, A}) where {Ni, A} =
-    VIFHStyle{Ni, A}()
+Base.Broadcast.BroadcastStyle(
+    ::VFStyle{A1},
+    ::IFHStyle{Ni, A2},
+) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A},
-    ::IJFHStyle{Nij, A},
-) where {Nij, A} = VIJFHStyle{Nij, A}()
-
-Base.Broadcast.BroadcastStyle(::VFStyle{A}, ::VIFHStyle{Ni, A}) where {Ni, A} =
-    VIFHStyle{Ni, A}()
+    ::VFStyle{A1},
+    ::IJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A},
-    ::VIJFHStyle{Nij, A},
-) where {Nij, A} = VIJFHStyle{Nij, A}()
+    ::VFStyle{A1},
+    ::VIFHStyle{Ni, A2},
+) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::IFHStyle{Ni, A},
-    ::VIFHStyle{Ni, A},
-) where {Ni, A} = VIFHStyle{Ni, A}()
+    ::VFStyle{A1},
+    ::VIJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::IJFHStyle{Nij, A},
-    ::VIJFHStyle{Nij, A},
-) where {Nij, A} = VIJFHStyle{Nij, A}()
+    ::IFHStyle{Ni, A1},
+    ::VIFHStyle{Ni, A2},
+) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::IJFHStyle{Nij, A1},
+    ::VIJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
-function slab(
+@inline function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Ni, DS <: Union{Data1DStyle{Ni}, Data1DXStyle{Ni}}}
-    args = map(arg -> slab(arg, inds...), bc.args)
-    axes = (SOneTo(Ni),)
-    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, args, axes)
+    _args = slab_args(bc.args, inds...)
+    _axes = (SOneTo(Ni),)
+    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
 end
 
-function slab(
+@inline function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Nij, DS <: Union{Data2DStyle{Nij}, Data2DXStyle{Nij}}}
-    args = map(arg -> slab(arg, inds...), bc.args)
-    axes = (SOneTo(Nij), SOneTo(Nij))
-    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, args, axes)
+    _args = slab_args(bc.args, inds...)
+    _axes = (SOneTo(Nij), SOneTo(Nij))
+    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
-    args = map(arg -> column(arg, inds...), bc.args)
-    axes = nothing
-    Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, args, axes)
+    _args = column_args(bc.args, inds...)
+    _axes = nothing
+    Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {DS <: DataColumnStyle}
     bc
 end
 
-function column(bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}}, i, h)
+@propagate_inbounds function column(
+    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
+    i,
+    h,
+)
     Ref(slab(bc, h)[i])
 end
 
-function column(
+@propagate_inbounds function column(
     bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},
     i,
     j,
@@ -210,10 +219,12 @@ function Base.mapreduce(
         Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
     },
 ) where {F, Op, Nij, A}
-    # mapreduce across slabs
+    # mapreduce across DataSlab2D
     _, _, _, _, Nh = size(bc)
     mapreduce(op, 1:Nh) do h
-        mapreduce(fn, op, slab(bc, h))
+        Base.@_inline_meta
+        slabview = @inbounds slab(bc, h)
+        mapreduce(fn, op, slabview)
     end
 end
 
@@ -222,23 +233,32 @@ function Base.mapreduce(
     op::Op,
     bc::Union{IFH{<:Any, Ni, A}, Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}},
 ) where {F, Op, Ni, A}
+    # mapreduce across DataSlab1D
     _, _, _, _, Nh = size(bc)
     mapreduce(op, 1:Nh) do h
-        mapreduce(fn, op, slab(bc, h))
+        Base.@_inline_meta
+        slabview = @inbounds slab(bc, h)
+        mapreduce(fn, op, slabview)
     end
 end
 
 function Base.mapreduce(fn::F, op::Op, bc::IJF{S, Nij}) where {F, Op, S, Nij}
+    # mapreduce across DataSlab2D nodes
     mapreduce(op, Iterators.product(1:Nij, 1:Nij)) do (i, j)
+        Base.@_inline_meta
         idx = CartesianIndex(i, j, 1, 1, 1)
-        fn(bc[idx])
+        node = @inbounds bc[idx]
+        fn(node)
     end
 end
 
 function Base.mapreduce(fn::F, op::Op, bc::IF{S, Ni}) where {F, Op, S, Ni}
+    # mapreduce across DataSlab1D nodes
     mapreduce(op, 1:Ni) do i
+        Base.@_inline_meta
         idx = CartesianIndex(i, 1, 1, 1, 1)
-        fn(bc[idx])
+        node = @inbounds bc[idx]
+        fn(node)
     end
 end
 
@@ -247,10 +267,13 @@ function Base.mapreduce(
     op::Op,
     bc::Union{VF{<:Any, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {F, Op, A}
+    # mapreduce across DataColumn levels
     _, _, _, Nv, _ = size(bc)
     mapreduce(op, 1:Nv) do v
+        Base.@_inline_meta
         idx = CartesianIndex(1, 1, 1, v, 1)
-        fn(bc[idx])
+        level = @inbounds bc[idx]
+        fn(level)
     end
 end
 
@@ -262,7 +285,9 @@ function Base.mapreduce(
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
-        mapreduce(fn, op, column(bc, i, h))
+        Base.@_inline_meta
+        columnview = @inbounds column(bc, i, h)
+        mapreduce(fn, op, columnview)
     end
 end
 
@@ -277,8 +302,27 @@ function Base.mapreduce(
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
-        mapreduce(fn, op, column(bc, i, j, h))
+        Base.@_inline_meta
+        columnview = @inbounds column(bc, i, j, h)
+        mapreduce(fn, op, columnview)
     end
+end
+
+# broadcasting scalar assignment
+# Performance optimization for the common identity scalar case: dest .= val
+@inline function Base.copyto!(
+    dest::AbstractData,
+    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
+)
+    # TODO: we can write an optimized fill! method here that directly computes offsets for set_struct!
+    # for now fallback to the default implementation
+    DS = typeof(DataStyle(typeof(dest)))
+    return copyto!(
+        dest,
+        Base.Broadcast.instantiate(
+            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
+        ),
+    )
 end
 
 function Base.copyto!(
@@ -286,7 +330,7 @@ function Base.copyto!(
     bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
 ) where {S, Nij, A}
     _, _, _, _, Nh = size(bc)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
         copyto!(slab_dest, slab_bc)
@@ -299,7 +343,7 @@ function Base.copyto!(
     bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}},
 ) where {S, Ni, A}
     _, _, _, _, Nh = size(bc)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
         copyto!(slab_dest, slab_bc)
@@ -307,7 +351,8 @@ function Base.copyto!(
     return dest
 end
 
-function Base.copyto!(
+# inline inner slab(::DataSlab2D) copy
+@inline function Base.copyto!(
     dest::IJF{S, Nij},
     bc::Union{IJF{S, Nij, A}, Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}},
 ) where {S, Nij, A}
@@ -318,7 +363,8 @@ function Base.copyto!(
     return dest
 end
 
-function Base.copyto!(
+# inline inner slab(::DataSlab1D) copy
+@inline function Base.copyto!(
     dest::IF{S, Ni},
     bc::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -329,7 +375,8 @@ function Base.copyto!(
     return dest
 end
 
-function Base.copyto!(
+# inline inner column(::DataColumn) copy
+@inline function Base.copyto!(
     dest::VF{S},
     bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {S, A}
@@ -367,18 +414,4 @@ function Base.copyto!(
         copyto!(col_dest, col_bc)
     end
     return dest
-end
-
-# broadcasting scalar assignment
-function Base.Broadcast.materialize!(
-    ::DS,
-    dest,
-    bc::Base.Broadcast.Broadcasted{Style},
-) where {DS <: DataStyle, Style}
-    return copyto!(
-        dest,
-        Base.Broadcast.instantiate(
-            Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
-        ),
-    )
 end

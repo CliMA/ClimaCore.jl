@@ -46,8 +46,8 @@ end
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
         Geometry.YPoint{FT}(-2)..Geometry.YPoint{FT}(8),
-        x1periodic = true,
-        x2periodic = true,
+        x1boundary = (:bottom, :top),
+        x2boundary = (:left, :right),
     )
     mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
     topology = Topologies.GridTopology(mesh)
@@ -72,149 +72,291 @@ end
 @testset "Finite Volume Remapping" begin
     quad = Spaces.Quadratures.GL{1}() # FV specification
 
-    @testset "Aligned Grids Different Resolutions" begin
-        domain = Domains.RectangleDomain(
-            Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-            Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
-            x1boundary = (:bottom, :top),
-            x2boundary = (:left, :right),
-        )
+    @testset "1D Domains" begin
+        @testset "Aligned Intervals Different Resolutions" begin
+            domain = Domains.IntervalDomain(
+                Geometry.XPoint(0.0)..Geometry.XPoint(1.0),
+                boundary_tags = (:left, :right),
+            )
 
-        m1, n1 = 2, 2
-        mesh1 = Meshes.EquispacedRectangleMesh(domain, m1, n1)
-        source_topo = Topologies.GridTopology(mesh1)
-        source = Spaces.SpectralElementSpace2D(source_topo, quad)
+            n1 = 4
+            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
+            source_topo = Topologies.IntervalTopology(mesh1)
+            source = Spaces.SpectralElementSpace1D(source_topo, quad)
 
-        m2, n2 = 3, 3
-        mesh2 = Meshes.EquispacedRectangleMesh(domain, m2, n2)
-        target_topo = Topologies.GridTopology(mesh2)
-        target = Spaces.SpectralElementSpace2D(target_topo, quad)
+            n2 = 2
+            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
+            target_topo = Topologies.IntervalTopology(mesh2)
+            target = Spaces.SpectralElementSpace1D(target_topo, quad)
 
-        @test local_weights(source) ≈ ones(4, 1)
-        @test local_weights(target) ≈ (2 / 3)^2 * ones(9, 1)
+            @test local_weights(source) ≈ 0.25 * ones(4, 1)
+            @test local_weights(target) ≈ 0.5 * ones(2, 1)
 
-        # create remapping operator from 2x2 to 3x3 grid
-        R = LinearRemap(target, source)
-        R_true = [
-            1.0 0.0 0.0 0.0
-            0.5 0.5 0.0 0.0
-            0.0 1.0 0.0 0.0
-            0.5 0.0 0.5 0.0
-            0.25 0.25 0.25 0.25
-            0.0 0.5 0.0 0.5
-            0.0 0.0 1.0 0.0
-            0.0 0.0 0.5 0.5
-            0.0 0.0 0.0 1.0
-        ]
+            # create remapping operator from 4-elem to 2-elem interval
+            R = LinearRemap(target, source)
+            R_true = [
+                0.5 0.5 0.0 0.0
+                0.0 0.0 0.5 0.5
+            ]
 
-        @test R.map ≈ R_true
-        @test nnz(R.map) == 16 # check R is sparse
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 4 # check R is sparse
 
-        @test conservative(R)
-        @test consistent(R)
-        @test monotone(R)
+            @test conservative(R)
+            @test consistent(R)
+            @test monotone(R)
 
-        @testset "Scalar Remap Operator Application" begin
-            n = length(source.local_geometry)
-            source_field = Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+            @testset "Scalar Remap Operator Application" begin
+                n = length(source.local_geometry)
+                source_field =
+                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
-            # test consistent remap
-            target_field = remap(R, source_field)
-            @test vec(parent(target_field)) ≈
-                  ones(length(target.local_geometry))
+                # test consistent remap
+                target_field = remap(R, source_field)
+                @test vec(parent(target_field)) ≈
+                      ones(length(target.local_geometry))
 
-            # test simple remap
-            vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
-            remap!(target_field, R, source_field)
-            @test vec(parent(target_field)) ≈
-                  [1.0; 1.5; 2.0; 2.0; 2.5; 3.0; 3.0; 3.5; 4.0]
+                # test simple remap
+                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                remap!(target_field, R, source_field)
+                @test vec(parent(target_field)) ≈ [1.5; 3.5]
+            end
+        end
+
+        @testset "Unaligned Intervals Same Resolution" begin
+            domain1 = Domains.IntervalDomain(
+                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                boundary_tags = (:left, :right),
+            )
+
+            n1 = 3
+            mesh1 = Meshes.IntervalMesh(domain1; nelems = n1)
+            source_topo = Topologies.IntervalTopology(mesh1)
+            source = Spaces.SpectralElementSpace1D(source_topo, quad)
+
+            domain2 = Domains.IntervalDomain(
+                Geometry.XPoint(0.0)..Geometry.XPoint(2.0),
+                boundary_tags = (:left, :right),
+            )
+            n2 = 3
+            mesh2 = Meshes.IntervalMesh(domain2; nelems = n2)
+            target_topo = Topologies.IntervalTopology(mesh2)
+            target = Spaces.SpectralElementSpace1D(target_topo, quad)
+
+            R = LinearRemap(target, source)
+            R_true = spzeros(FT, 3, 3)
+            R_true[1, 2] = 0.5
+            R_true[1, 3] = 0.5
+            R_true[2, 3] = 0.5
+
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 3
+
+            @test !conservative(R)
+            @test !consistent(R)
+            @test !monotone(R)
+        end
+
+        @testset "Concentric Domains of Different Length" begin
+            domain1 = Domains.IntervalDomain(
+                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                boundary_tags = (:left, :right),
+            )
+
+            n1 = 4
+            mesh1 = Meshes.IntervalMesh(domain1; nelems = n1)
+            source_topo = Topologies.IntervalTopology(mesh1)
+            source = Spaces.SpectralElementSpace1D(source_topo, quad)
+
+
+            domain2 = Domains.IntervalDomain(
+                Geometry.XPoint(-.5)..Geometry.XPoint(0.5),
+                boundary_tags = (:left, :right),
+            )
+            n2 = 4
+            mesh2 = Meshes.IntervalMesh(domain2; nelems = n2)
+            target_topo = Topologies.IntervalTopology(mesh2)
+            target = Spaces.SpectralElementSpace1D(target_topo, quad)
+
+            R = LinearRemap(target, source)
+            R_true = spzeros(4, 4)
+            R_true[1, 2] = 1.0
+            R_true[2, 2] = 1.0
+            R_true[3, 3] = 1.0
+            R_true[4, 3] = 1.0
+
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 4
+
+            @test !conservative(R)
+            @test consistent(R)
+            @test monotone(R)
+
+            @testset "Scalar Remap Operator Application" begin
+                n = length(source.local_geometry)
+                source_field =
+                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+
+                # test consistent remap
+                target_field = remap(R, source_field)
+                @test vec(parent(target_field)) ≈
+                      ones(length(target.local_geometry))
+
+                # test simple remap
+                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                remap!(target_field, R, source_field)
+                @test vec(parent(target_field)) ≈ [2.0; 2.0; 3.0; 3.0]
+            end
         end
     end
 
-    @testset "Unaligned Grids Same Resolution" begin
-        domain1 = Domains.RectangleDomain(
-            Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-            Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
-            x1boundary = (:bottom, :top),
-            x2boundary = (:left, :right),
-        )
+    @testset "2D Domains" begin
+        @testset "Aligned Grids Different Resolutions" begin
+            domain = Domains.RectangleDomain(
+                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
 
-        m1, n1 = 2, 2
-        mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
-        source_topo = Topologies.GridTopology(mesh1)
-        source = Spaces.SpectralElementSpace2D(source_topo, quad)
+            m1, n1 = 2, 2
+            mesh1 = Meshes.EquispacedRectangleMesh(domain, m1, n1)
+            source_topo = Topologies.GridTopology(mesh1)
+            source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
-        domain2 = Domains.RectangleDomain(
-            Geometry.XPoint(0.0)..Geometry.XPoint(2.0),
-            Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
-            x1periodic = true,
-            x2periodic = true,
-        )
-        m2, n2 = 2, 2
-        mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
-        target_topo = Topologies.GridTopology(mesh2)
-        target = Spaces.SpectralElementSpace2D(target_topo, quad)
+            m2, n2 = 3, 3
+            mesh2 = Meshes.EquispacedRectangleMesh(domain, m2, n2)
+            target_topo = Topologies.GridTopology(mesh2)
+            target = Spaces.SpectralElementSpace2D(target_topo, quad)
 
-        R = LinearRemap(target, source)
-        R_true = spzeros(FT, 4, 4)
-        R_true[1, 2] = 1.0
-        R_true[3, 4] = 1.0
+            @test local_weights(source) ≈ ones(4, 1)
+            @test local_weights(target) ≈ (2 / 3)^2 * ones(9, 1)
 
-        @test R.map ≈ R_true
-        @test nnz(R.map) == 2
+            # create remapping operator from 2x2 to 3x3 grid
+            R = LinearRemap(target, source)
+            R_true = [
+                1.0 0.0 0.0 0.0
+                0.5 0.5 0.0 0.0
+                0.0 1.0 0.0 0.0
+                0.5 0.0 0.5 0.0
+                0.25 0.25 0.25 0.25
+                0.0 0.5 0.0 0.5
+                0.0 0.0 1.0 0.0
+                0.0 0.0 0.5 0.5
+                0.0 0.0 0.0 1.0
+            ]
 
-        @test !conservative(R)
-        @test !consistent(R)
-        @test !monotone(R)
-    end
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 16 # check R is sparse
 
-    @testset "Concentric Domains of Different Area" begin
-        domain1 = Domains.RectangleDomain(
-            Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-            Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
-            x1boundary = (:bottom, :top),
-            x2boundary = (:left, :right),
-        )
+            @test conservative(R)
+            @test consistent(R)
+            @test monotone(R)
 
-        m1, n1 = 2, 2
-        mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
-        source_topo = Topologies.GridTopology(mesh1)
-        source = Spaces.SpectralElementSpace2D(source_topo, quad)
+            @testset "Scalar Remap Operator Application" begin
+                n = length(source.local_geometry)
+                source_field =
+                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
-        domain2 = Domains.RectangleDomain(
-            Geometry.XPoint(-.5)..Geometry.XPoint(0.5),
-            Geometry.YPoint(-.5)..Geometry.YPoint(0.5),
-            x1periodic = true,
-            x2periodic = true,
-        )
-        m2, n2 = 2, 2
-        mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
-        target_topo = Topologies.GridTopology(mesh2)
-        target = Spaces.SpectralElementSpace2D(target_topo, quad)
+                # test consistent remap
+                target_field = remap(R, source_field)
+                @test vec(parent(target_field)) ≈
+                      ones(length(target.local_geometry))
 
-        R = LinearRemap(target, source)
-        R_true = I
+                # test simple remap
+                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                remap!(target_field, R, source_field)
+                @test vec(parent(target_field)) ≈
+                      [1.0; 1.5; 2.0; 2.0; 2.5; 3.0; 3.0; 3.5; 4.0]
+            end
+        end
 
-        @test R.map ≈ R_true
-        @test nnz(R.map) == 4
+        @testset "Unaligned Grids Same Resolution" begin
+            domain1 = Domains.RectangleDomain(
+                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
 
-        @test !conservative(R)
-        @test consistent(R)
-        @test monotone(R)
+            m1, n1 = 2, 2
+            mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
+            source_topo = Topologies.GridTopology(mesh1)
+            source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
-        @testset "Scalar Remap Operator Application" begin
-            n = length(source.local_geometry)
-            source_field = Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+            domain2 = Domains.RectangleDomain(
+                Geometry.XPoint(0.0)..Geometry.XPoint(2.0),
+                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
+            m2, n2 = 2, 2
+            mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
+            target_topo = Topologies.GridTopology(mesh2)
+            target = Spaces.SpectralElementSpace2D(target_topo, quad)
 
-            # test consistent remap
-            target_field = remap(R, source_field)
-            @test vec(parent(target_field)) ≈
-                  ones(length(target.local_geometry))
+            R = LinearRemap(target, source)
+            R_true = spzeros(FT, 4, 4)
+            R_true[1, 2] = 1.0
+            R_true[3, 4] = 1.0
 
-            # test simple remap
-            vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
-            remap!(target_field, R, source_field)
-            @test vec(parent(target_field)) ≈ [1.0; 2.0; 3.0; 4.0]
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 2
+
+            @test !conservative(R)
+            @test !consistent(R)
+            @test !monotone(R)
+        end
+
+        @testset "Concentric Domains of Different Area" begin
+            domain1 = Domains.RectangleDomain(
+                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
+
+            m1, n1 = 2, 2
+            mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
+            source_topo = Topologies.GridTopology(mesh1)
+            source = Spaces.SpectralElementSpace2D(source_topo, quad)
+
+            domain2 = Domains.RectangleDomain(
+                Geometry.XPoint(-.5)..Geometry.XPoint(0.5),
+                Geometry.YPoint(-.5)..Geometry.YPoint(0.5),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
+            m2, n2 = 2, 2
+            mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
+            target_topo = Topologies.GridTopology(mesh2)
+            target = Spaces.SpectralElementSpace2D(target_topo, quad)
+
+            R = LinearRemap(target, source)
+            R_true = I
+
+            @test R.map ≈ R_true
+            @test nnz(R.map) == 4
+
+            @test !conservative(R)
+            @test consistent(R)
+            @test monotone(R)
+
+            @testset "Scalar Remap Operator Application" begin
+                n = length(source.local_geometry)
+                source_field =
+                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+
+                # test consistent remap
+                target_field = remap(R, source_field)
+                @test vec(parent(target_field)) ≈
+                      ones(length(target.local_geometry))
+
+                # test simple remap
+                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                remap!(target_field, R, source_field)
+                @test vec(parent(target_field)) ≈ [1.0; 2.0; 3.0; 4.0]
+            end
         end
     end
 end
