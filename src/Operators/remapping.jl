@@ -116,14 +116,18 @@ function overlap_weights(target::T, source::S) where {T <: SpectralElementSpace1
             # get interval for quadrature
             min_j, max_j = Geometry.component(vertices_j[1],1), Geometry.component(vertices_j[2],1)
             min_ov, max_ov = max(min_i, min_j), min(max_i, max_j)
+            if max_ov < min_ov
+                continue
+            end
             ξ, w = Quadratures.quadrature_points(FT, QS_t)
             x_ov = FT(0.5) * (min_ov + max_ov) .+ FT(0.5) * (max_ov - min_ov) * ξ
             x_t = FT(0.5) * (min_i + max_i) .+ FT(0.5) * (max_i - min_i) * ξ
 
             I_mat = Quadratures.interpolation_matrix(x_ov, x_t)
             for k in 1:Nq_t
+                idx = 2(i - 1) + k
                 # (integral of basis on overlap) / (reference elem length) * (overlap elem length)
-                J_ov[k, j] = w' * I_mat[:, k] ./ 2 * (max_ov - min_ov)
+                J_ov[idx, j] = w' * I_mat[:, k] ./ 2 * (max_ov - min_ov)
             end
         end
     end
