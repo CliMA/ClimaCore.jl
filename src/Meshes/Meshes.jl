@@ -23,19 +23,25 @@ import ..Domains:
     Domains, IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
 import IntervalSets: ClosedInterval
 import ..Geometry: Geometry
+using SparseArrays
 
 
 """
-    AbstractMesh
+    AbstractMesh{dim}
 
 A `Mesh` is an object which represents how we discretize a domain into elements.
 
 It should be lightweight (i.e. exists on all MPI ranks), e.g for meshes stored
 in a file, it would contain the filename.
 """
-abstract type AbstractMesh{FT} end
+abstract type AbstractMesh{dim} end
+const AbstractMesh1D = AbstractMesh{1}
+const AbstractMesh2D = AbstractMesh{2}
 
-Base.eltype(::AbstractMesh{FT}) where {FT} = FT
+include("common.jl")
+include("cubedsphere.jl")
+
+#=
 
 domain(mesh::AbstractMesh) = getfield(mesh, :domain)
 coordinate_type(mesh::AbstractMesh) = Domains.coordinate_type(domain(mesh))
@@ -212,6 +218,6 @@ include("tensorproductmesh.jl")
 include("box_mesh.jl")
 include("warp_cube_to_sphere.jl")
 include("sphere_mesh.jl")
-
+=#
 
 end # module

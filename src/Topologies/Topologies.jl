@@ -19,10 +19,8 @@ convention:
 module Topologies
 
 import ..Geometry
-import ..Domains: Domains, coordinate_type
-import ..Meshes:
-    Meshes, EquispacedRectangleMesh, Mesh2D, AbstractMesh, TensorProductMesh
-
+#import ..Domains: Domains, coordinate_type
+import ..Meshes
 
 # TODO: seperate types for MPI/non-MPI topologies
 """
@@ -33,6 +31,11 @@ mesh in the horizontal domain.
 """
 abstract type AbstractTopology end
 
+
+include("topology2d.jl")
+
+
+#=
 """
     domain(topology)
 
@@ -173,4 +176,5 @@ include("interval.jl")
 include("grids.jl")
 include("grid2d.jl")
 
+=#
 end # module
