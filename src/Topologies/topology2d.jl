@@ -6,9 +6,13 @@
 
 
 """
-struct Topology2D{M<:Meshes.AbstractMesh{2}} <: AbstractTopology
+struct Topology2D{M<:Meshes.AbstractMesh{2},EO,OI} <: AbstractTopology
+    "mesh on which the topology is constructed"
     mesh::M
-    #coordinates::C
+    "`elemorder[i]` should give the `i`th element"
+    elemorder::EO
+    "the inverse of `elemorder`: `orderindex[elemorder[i]] == i`"
+    orderindex::OI
     internal_faces::Vector{Tuple{Int,Int,Int,Int,Bool}}
     vertices::Vector{Tuple{Int,Int}}
     vertex_offset::Vector{Int}
@@ -45,8 +49,37 @@ function Topology2D(mesh::Meshes.AbstractMesh{2}, elemorder=Meshes.elements(mesh
             end
         end
     end
-    return Topology2D(mesh, internal_faces, vertices, vertex_offset)
+    return Topology2D(mesh, elemorder, orderindex, internal_faces, vertices, vertex_offset)
 end
+
+domain(topology::Topology2D) = topology.mesh.domain
+nlocalelems(topology::Topology2D) = length(elemorder)
+vertex_coordinates(topology::Topology2D, e::Int) =
+    ntuple(4) do vert
+        Meshes.coordinates(topology.mesh, topology.elemorder[e], vert)
+    end
+
+boundaries(topology::Topology2D) = () # TODO
+
+opposing_face(topology::Topology2D, e::Int, face::Int) =
+    Meshes.opposing_face(topology.mesh, topology.elemorder[e], face)
+interior_faces(topology::Topology2D) = topology.internal_faces
+
+function Base.iterate(vertiter::VertexIterator{<:Topology2D}, uvert=1)
+    topology = vertiter.topology
+    if uvert >= length(topology.vertex_offset)
+        return nothing
+    end
+    return VertexIterator(topology, uvert), uvert+1
+end
+function Base.iterate(vertex::Vertex{<:Topology2D}, idx=vertex.topology.vertex_offset[vertex.num])
+    if idx >= vertex.topology.vertex_offset[vertiter.num+1]
+        return nothing
+    end
+    return vertex.topology.vertices[idx], idx+1
+end
+
+
 
 
 #  -

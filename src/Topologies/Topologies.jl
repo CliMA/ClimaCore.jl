@@ -32,10 +32,7 @@ mesh in the horizontal domain.
 abstract type AbstractTopology end
 
 
-include("topology2d.jl")
 
-
-#=
 """
     domain(topology)
 
@@ -171,10 +168,14 @@ struct Vertex{T <: AbstractTopology, V}
 end
 Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
 
+
+include("topology2d.jl")
+
+#=
 # implementations
 include("interval.jl")
 include("grids.jl")
 include("grid2d.jl")
-
 =#
+
 end # module

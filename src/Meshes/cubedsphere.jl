@@ -43,7 +43,7 @@
 """
 abstract type AbstractCubedSphereMesh <: AbstractMesh{2} end
 
-struct EquiangularCubedSphereMesh{S<:SphereDomain} <: AbstractCubedSphereMesh
+struct EquiangularCubedSphereMesh{S <: SphereDomain} <: AbstractCubedSphereMesh
     domain::S
     ne::Int
 end
@@ -105,4 +105,42 @@ function opposing_face(
             (CartesianIndex(ne, y, mod1(panel - 1, 6)), 2, false)
         end
     end
+end
+
+function coordinates(mesh::EquiangularCubedSphereMesh, elem, vert::Integer)
+    FT = typeof(mesh.domain.radius)
+    ξ1 = (vert == 1 || vert == 4) ? FT(-1) : FT(1)
+    ξ2 = (vert == 1 || vert == 2) ? FT(-1) : FT(1)
+    coordinates(mesh, elem, (ξ1, ξ2))
+end
+
+function coordinates(
+    mesh::EquiangularCubedSphereMesh,
+    elem,
+    (ξ1, ξ2)::NTuple{2},
+)
+    radius = mesh.domain.radius
+    ne = mesh.ne
+    x, y, panel = elem.I
+    ξx = (2 * x - ne - 1 + ξ1) / ne
+    ξy = (2 * y - ne - 1 + ξ2) / ne
+    ux = tan(pi * ξx / 4)
+    uy = tan(pi * ξy / 4)
+    ζ0 = radius / sqrt(1 + ux^2 + uy^2)
+    ζx = ux * ζ0
+    ζy = uy * ζ0
+    if panel == 1
+        return Geometry.Cartesian123Point(ζ0, ζx, ζy)
+    elseif panel == 2
+        return Geometry.Cartesian123Point(-ζx, ζ0, ζy)
+    elseif panel == 3
+        return Geometry.Cartesian123Point(-ζx, -ζy, ζ0)
+    elseif panel == 4
+        return Geometry.Cartesian123Point(-ζ0, -ζy, -ζx)
+    elseif panel == 5
+        return Geometry.Cartesian123Point(ζy, -ζ0, -ζx)
+    elseif panel == 6
+        return Geometry.Cartesian123Point(ζy, ζx, -ζ0)
+    end
+    error("invalid index $elem")
 end

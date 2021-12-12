@@ -8,7 +8,7 @@ function Mesh2D(
     warp_type::AbstractSphereWarp,
     ne,
 ) where {FT <: AbstractFloat}
-    radius = domain.radius
+    radius = domain.radiuse
     # map the cube to [-radius, radius],[-radius, radius],[-radius, radius]
     mesh = cube_panel_mesh(domain, warp_type, ne, FT)
     mesh.coordinates .-= FT(0.5)
@@ -27,23 +27,23 @@ end
 This function builds a cube panel mesh with a resolution of `ne` elements along each edge.
 
                v8 (xs,xe,xe)          v7 (xe,xe,xe)
-                 o--------e11---------o       
-                /|                   /|                                   
-               / |                  / |       
-              /  |                 /  |       
-            e12  e8               e10 e7       
-            /    |               /    |       
-           /     |            v6/     |       
-       v5 o--------e9----------o      |       
+                 o--------e11---------o
+                /|                   /|
+               / |                  / |
+              /  |                 /  |
+            e12  e8               e10 e7
+            /    |               /    |
+           /     |            v6/     |
+       v5 o--------e9----------o      |
           |    v4o------e3-----|------o v3 (xe,xe,xs)
-          |     /   o------->  |     / 
-          |    /   /           |    / 
-          e5  e4  /           e6   e2 
-          |  /   /             |  / 
-          | /   /              | / 
-          |/   o               |/ 
-          o--------e1----------o   
-         v1                    v2 
+          |     /   o------->  |     /
+          |    /   /           |    /
+          e5  e4  /           e6   e2
+          |  /   /             |  /
+          | /   /              | /
+          |/   o               |/
+          o--------e1----------o
+         v1                    v2
        (xs,xs,xs)               (xe,xs,xs)
 
        panel 1 => 1 4 3 2
@@ -53,7 +53,7 @@ This function builds a cube panel mesh with a resolution of `ne` elements along 
        panel 5 => 1 2 6 5
        panel 6 => 5 6 7 8
 
-       edge  1 => 1 2 
+       edge  1 => 1 2
        edge  2 => 2 3
        edge  3 => 3 4
        edge  4 => 4 1
@@ -69,11 +69,11 @@ This function builds a cube panel mesh with a resolution of `ne` elements along 
            v8 +---e11---+ v7
               | ^       |
               | |       |
-             e8 ^   3   e7 
+             e8 ^   3   e7
               | |       |
    v8      v4 | o--<-o  | v3      v7        v8
     +---e8----+---e3----+----e7---+---e11---+
-    | ^       | o-->->  | o-->--> | ^       | 
+    | ^       | o-->->  | o-->--> | ^       |
     | |       | |       | |       | |       |
   e12 ^  4   e4 ^  1   e2 ^  2   e10^  6   e12
     | |       | |       | |       | |       |

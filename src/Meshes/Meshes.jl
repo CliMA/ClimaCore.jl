@@ -22,7 +22,7 @@ export EquispacedRectangleMesh,
 import ..Domains:
     Domains, IntervalDomain, RectangleDomain, CubePanelDomain, SphereDomain
 import IntervalSets: ClosedInterval
-import ..Geometry: Geometry
+import ..Geometry
 using SparseArrays
 
 

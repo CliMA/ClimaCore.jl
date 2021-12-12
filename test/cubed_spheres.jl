@@ -35,6 +35,20 @@ end
 
 end
 
+@testset "vertex coordinates" begin
+    mesh = Meshes.EquiangularCubedSphereMesh(Domains.SphereDomain(1.0), 3)
+    for elem in Meshes.elements(mesh)
+        x,y,panel = elem.I
+        for vert = 1:4
+            coord = Meshes.coordinates(mesh, elem, vert)
+            for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
+                @test Meshes.coordinates(mesh, velem, vvert) ≈ coord
+            end
+        end
+    end
+end
+
+
 @testset "face connectivity matrix" begin
     mesh = Meshes.EquiangularCubedSphereMesh(Domains.SphereDomain(1.0), 3)
     M = Meshes.face_connectivity_matrix(mesh)
@@ -70,6 +84,7 @@ end
     end
 
 end
+
 
 
 #=
