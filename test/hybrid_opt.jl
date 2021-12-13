@@ -192,7 +192,6 @@ function opt_DivergenceC2F_SetDivergence(center_field)
     return divᶠ.(Geometry.WVector.(cos.(center_field)))
 end
 
-
 function opt_CurlC2F_SetValue(center_field)
     # DivergenceC2F, SetDivergence
     curlᶠ = Operators.CurlC2F(
@@ -202,9 +201,36 @@ function opt_CurlC2F_SetValue(center_field)
     return curlᶠ.(Geometry.Covariant1Vector.(cos.(center_field)))
 end
 
+function hspace1d(FT)
+    hdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
+        periodic = true,
+    )
+    hmesh = Meshes.IntervalMesh(hdomain, nelems = 3)
+    htopology = Topologies.IntervalTopology(hmesh)
+    Nq = 3
+    quad = Spaces.Quadratures.GLL{Nq}()
+    return Spaces.SpectralElementSpace1D(htopology, quad)
+end
+
+function hspace2d(FT)
+    hdomain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
+        Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+        x1periodic = true,
+        x2periodic = true,
+    )
+    Nq = 3
+    quad = Spaces.Quadratures.GLL{Nq}()
+    hmesh = Meshes.EquispacedRectangleMesh(hdomain, 3, 3)
+    htopology = Topologies.GridTopology(hmesh)
+    return Spaces.SpectralElementSpace2D(htopology, quad)
+end
+
+
 @static if @isdefined(var"@test_opt")
     @testset "Scalar Field ExtrudedFiniteDifferenceSpace" begin
-        for FT in (Float64,)
+        for FT in (Float64,), hspace in (hspace1d(FT), hspace2d(FT))
             vdomain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0.0),
                 Geometry.ZPoint{FT}(pi);
@@ -213,24 +239,8 @@ end
             vmesh = Meshes.IntervalMesh(vdomain; nelems = 16)
             cvspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
 
-            hdomain = Domains.RectangleDomain(
-                Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-                Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
-                x1periodic = true,
-                x2periodic = true,
-            )
-
-            Nq = 3
-            quad = Spaces.Quadratures.GLL{Nq}()
-            hmesh = Meshes.EquispacedRectangleMesh(hdomain, 3, 3)
-            htopology = Topologies.GridTopology(hmesh)
-            hspace = Spaces.SpectralElementSpace2D(htopology, quad)
-
-
             center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, cvspace)
             face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
-
-
 
             faces = getproperty(Fields.coordinate_field(face_space), :z)
             face_values = ones(FT, face_space)
@@ -257,6 +267,7 @@ end
                 faces,
             )
 
+            @test_opt opt_GradientF2C(faces)
             @test_opt opt_GradientF2C(faces)
             @test_opt opt_DivergenceF2C(faces)
 
@@ -304,7 +315,7 @@ end
             )
 
             @test_opt opt_GradientC2F_SetValue(centers)
-            @test_opt opt_GradientC2F_SetGradient(centers)
+            @show opt_GradientC2F_SetGradient(centers)
 
             @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)

@@ -856,7 +856,6 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-
 function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
