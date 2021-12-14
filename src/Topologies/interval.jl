@@ -10,10 +10,12 @@ struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
 end
 
 function IntervalTopology(mesh::Meshes.IntervalMesh)
-    if isnothing(mesh.domain.boundary_tags)
+    if isnothing(mesh.domain.boundary_names)
         boundaries = NamedTuple()
+    elseif mesh.domain.boundary_names[1] == mesh.domain.boundary_names[2]
+        boundaries = NamedTuple{(mesh.domain.boundary_names[1],)}(1,)
     else
-        boundaries = NamedTuple{mesh.domain.boundary_tags}((1, 2))
+        boundaries = NamedTuple{mesh.domain.boundary_names}((1, 2))
     end
     IntervalTopology(mesh, boundaries)
 end

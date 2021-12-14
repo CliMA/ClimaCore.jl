@@ -1,8 +1,6 @@
 using Test
 import ClimaCore: Domains, Meshes, Topologies, Geometry
 using ClimaCore.Meshes:
-    equispaced_rectangular_mesh,
-    cube_panel_mesh,
     AbstractWarp,
     EquidistantSphereWarp,
     EquiangularSphereWarp,

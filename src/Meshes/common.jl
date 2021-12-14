@@ -1,3 +1,7 @@
+boundary_names(mesh::AbstractMesh) = boundary_names(domain(mesh))
+coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
+
+
 """
     Meshes.SharedVertices(mesh, elem, vert)
 
@@ -12,15 +16,17 @@ Base.IteratorSize(::Type{<:SharedVertices}) = Base.SizeUnknown()
 Base.IteratorEltype(::Type{<:SharedVertices}) = Base.HasEltype()
 Base.eltype(::Type{SharedVertices{M, E}}) where {M, E} = Tuple{E, Int}
 
-
 function Base.iterate(vertiter::SharedVertices)
     velem = vertiter.elem
-    vface = vertiter.vert
+    vvert = vertiter.vert
     ccw = false
     # return initial (element, vertex)
-    return (velem, vface), (velem, vface, ccw)
+    return (velem, vvert), (velem, vvert, ccw)
 end
-function Base.iterate(vertiter::SharedVertices, (velem, vface, ccw))
+function Base.iterate(vertiter::SharedVertices, (velem, vvert, ccw))
+    # initially we go clockwise (ccw == false), we go to the face == vert
+    # if ccw, then go to face = vert - 1
+    vface = ccw ? mod1(vvert - 1, 4) : vvert
     if is_boundary_face(vertiter.mesh, velem, vface)
         if ccw
             # have already gone both directions: all done
@@ -28,20 +34,18 @@ function Base.iterate(vertiter::SharedVertices, (velem, vface, ccw))
         end
         # try counter-clockwise
         velem = vertiter.elem
-        vface = mod1(vertiter.vert - 1, 4)
+        vvert = vertiter.vert
         ccw = true
-        return Base.iterate(vertiter, (velem, vface, ccw))
+        return Base.iterate(vertiter, (velem, vvert, ccw))
     end
     opelem, opface, reversed = opposing_face(vertiter.mesh, velem, vface)
     velem = opelem
-    vface = ccw ? mod1(opface - 1, 4) : mod1(opface + 1, 4)
-    if velem == vertiter.elem && vface == vertiter.vert
+    vvert = ccw ? opface : mod1(opface + 1, 4)
+    if velem == vertiter.elem && vvert == vertiter.vert
         # we're back at where we started: all done
-        @assert !ccw
         return nothing
     end
-    vert = ccw ? mod1(vface + 1, 4) : vface
-    return (velem, vert), (velem, vface, ccw)
+    return (velem, vvert), (velem, vvert, ccw)
 end
 
 
@@ -168,4 +172,12 @@ function vertex_connectivity_matrix(
     end
     V = trues(length(I))
     return sparse(I, J, V, m, n)
+end
+
+
+function coordinates(mesh::AbstractMesh2D, elem, vert::Integer)
+    FT = Domains.float_type(domain(mesh))
+    ξ1 = (vert == 1 || vert == 4) ? FT(-1) : FT(1)
+    ξ2 = (vert == 1 || vert == 2) ? FT(-1) : FT(1)
+    coordinates(mesh, elem, (ξ1, ξ2))
 end

@@ -1,5 +1,13 @@
 abstract type AbstractPoint{FT} end
 
+"""
+    float_type(T)
+
+Return the floating point type backing `T`: `T` can either be an object or a type.
+"""
+float_type(::Type{<:AbstractPoint{FT}}) where {FT} = FT
+float_type(::AbstractPoint) where {FT} = FT
+
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract2DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract3DPoint{FT} <: AbstractPoint{FT} end
@@ -122,6 +130,14 @@ Base.:(*)(x::Number, p::AbstractPoint) = p * x
 Base.:(/)(p::T, x::Number) where {T <: AbstractPoint} =
     unionalltype(T)((components(p) / x)...)
 
+function Base.lerpi(
+    j::Integer,
+    d::Integer,
+    a::T,
+    b::T,
+) where {T <: Abstract1DPoint}
+    T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
+end
 function Base.:(==)(p1::T, p2::T) where {T <: AbstractPoint}
     return components(p1) == components(p2)
 end

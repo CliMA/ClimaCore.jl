@@ -139,10 +139,19 @@ end
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
 function SpectralElementSpace2D(topology, quadrature_style)
-    global_geometry = Geometry.CartesianGlobalGeometry()
-    CoordType2D = Topologies.coordinate_type(topology)
+    domain = Topologies.domain(topology)
+    if domain isa Domains.SphereDomain
+        CoordType3D = Topologies.coordinate_type(topology)
+        FT = Geometry.float_type(CoordType3D)
+        CoordType2D = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
+        global_geometry =
+            Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
+    else
+        CoordType2D = Topologies.coordinate_type(topology)
+        FT = Geometry.float_type(CoordType2D)
+        global_geometry = Geometry.CartesianGlobalGeometry()
+    end
     AIdx = Geometry.coordinate_axis(CoordType2D)
-    FT = eltype(CoordType2D)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
@@ -155,32 +164,95 @@ function SpectralElementSpace2D(topology, quadrature_style)
     for elem in 1:nelements
         local_geometry_slab = slab(local_geometry, elem)
         for i in 1:Nq, j in 1:Nq
-            # this hard-codes a bunch of assumptions, and will unnecesarily duplicate data
-            # e.g. where all metric terms are uniform over the space
-            # alternatively: move local_geometry to a different object entirely, to support overintegration
-            # (where the integration is of different order)
-            ξ = SVector(quad_points[i], quad_points[j])
-            x = Geometry.bilinear_interpolate(
-                CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
-                ξ[1],
-                ξ[2],
-            )
-            ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
-                local x
-                x = Geometry.bilinear_interpolate(
-                    CoordType2D.(
-                        Topologies.vertex_coordinates(topology, elem),
-                    ),
+            if domain isa Domains.SphereDomain
+                # compute the coordinate and partial derivative matrices for each quadrature point
+                # Guba (2014))
+                ξ = SVector(quad_points[i], quad_points[j])
+                x = Geometry.spherical_bilinear_interpolate(
+                    CoordType3D.(Topologies.vertex_coordinates(topology, elem),),
+                    ξ[1],
+                    ξ[2],
+                    global_geometry.radius,
+                )
+                u = Geometry.LatLongPoint(x, global_geometry)
+                # [∂x1/∂ξ¹ ∂x1/∂ξ²
+                #  ∂x2/∂ξ¹ ∂x2/∂ξ²
+                #  ∂x3/∂ξ¹ ∂x3/∂ξ²]
+                ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
+                    Geometry.components(
+                        Geometry.spherical_bilinear_interpolate(
+                            CoordType3D.(
+                                Topologies.vertex_coordinates(topology, elem),
+                            ),
+                            ξ[1],
+                            ξ[2],
+                            global_geometry.radius,
+                        ),
+                    )
+                end
+                ϕ = u.lat
+                λ = u.long
+                # [∂u/∂x1 ∂u/∂x2 ∂u/∂x3
+                #  ∂v/∂x1 ∂v/∂x2 ∂v/∂x3]
+                # at the pole we orient u and v by taking the limit approaching
+                # from the line λ == 0
+                ∂u∂x = if ϕ == 90
+                    # north pole => u axis is aligned with x2, v is aligned with -x1
+                    @assert λ == 0
+                    @SMatrix [
+                        0 one(ϕ) 0
+                        -one(ϕ) 0 0
+                    ]
+                elseif ϕ == -90
+                    # south pole => u axis is aligned with x2, v is aligned with x1
+                    @assert λ == 0
+                    @SMatrix [
+                        0 one(ϕ) 0
+                        one(ϕ) 0 0
+                    ]
+                else
+                    #=
+                        # TODO: this might be more stable?
+                        [
+                            -sind(λ) cosd(λ) 0
+                            -sind(ϕ)*cosd(λ) -sind(ϕ)*sind(λ) cosd(ϕ)
+                        ]
+                    =#
+                    @SMatrix [
+                        -sind(λ) cosd(λ) 0
+                        0 0 1/cosd(ϕ)
+                    ]
+                end
+                ∂u∂ξ = ∂u∂x * ∂x∂ξ
+            else
+
+                # this hard-codes a bunch of assumptions, and will unnecesarily duplicate data
+                # e.g. where all metric terms are uniform over the space
+                # alternatively: move local_geometry to a different object entirely, to support overintegration
+                # (where the integration is of different order)
+                ξ = SVector(quad_points[i], quad_points[j])
+                u = Geometry.bilinear_interpolate(
+                    CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
                     ξ[1],
                     ξ[2],
                 )
-                SVector(Geometry.component(x, 1), Geometry.component(x, 2))
+                ∂u∂ξ = ForwardDiff.jacobian(ξ) do ξ
+                    local x
+                    x = Geometry.bilinear_interpolate(
+                        CoordType2D.(
+                            Topologies.vertex_coordinates(topology, elem),
+                        ),
+                        ξ[1],
+                        ξ[2],
+                    )
+                    SVector(Geometry.component(x, 1), Geometry.component(x, 2))
+                end
             end
-            J = det(∂x∂ξ)
+            J = det(∂u∂ξ)
             WJ = J * quad_weights[i] * quad_weights[j]
 
             local_geometry_slab[i, j] = Geometry.LocalGeometry(
-                x,
+                u,
                 J,
                 WJ,
                 Geometry.AxisTensor(
@@ -188,7 +260,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
                         Geometry.LocalAxis{AIdx}(),
                         Geometry.CovariantAxis{AIdx}(),
                     ),
-                    ∂x∂ξ,
+                    ∂u∂ξ,
                 ),
             )
         end
@@ -273,18 +345,13 @@ end
 
 nlevels(space::SpectralElementSpace2D) = 1
 
+#=
 function SpectralElementSpace2D(
     topology::Topologies.Grid2DTopology{
         <:Meshes.Mesh2D{<:Domains.SphereDomain},
     },
     quadrature_style,
 )
-    FT = eltype(topology.mesh)
-    CT = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
-    AIdx = (1, 2)
-    CoordType3D = Topologies.coordinate_type(topology)
-    global_geometry =
-        Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{2, 2, FT, 4}}
@@ -437,15 +504,8 @@ function SpectralElementSpace2D(
     )
     return nothing
 end
-
-const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
-    T,
-} where {
-    T <:
-    Topologies.Grid2DTopology{
-        M,
-    },
-} where {M <: Meshes.Mesh2D{<:Domains.SphereDomain}}
+=#
+const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.AbstractCubedSphereMesh}}
 
 function compute_surface_geometry(
     local_geometry_slab,
