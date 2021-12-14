@@ -3,6 +3,22 @@ coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
 
 
 """
+    i, ξs = split_refcoord(ξ, n)
+
+Given a reference coordinate `ξ` in the interval `[-1, 1]``, divide the interval
+into `n` evenly spaced subintervals, and return the index of the subinterval
+(`i`), and the position in the subinterval (`ξs`), normalized to normalized `[-1, 1]`.
+"""
+function split_refcoord(ξ, n)
+    ξn = ξ * n
+    # we use Julia's range lookup here, which avoids intermediate rounding errors.
+    i = min(searchsortedlast((-n):2:n, ξn), n)
+    ξ = ξn - (2 * i - n - 1)
+    return (i, ξ)
+end
+
+
+"""
     Meshes.SharedVertices(mesh, elem, vert)
 
 An iterator over (element, vertex) pairs that are shared with `(elem,vert)`.
@@ -174,10 +190,27 @@ function vertex_connectivity_matrix(
     return sparse(I, J, V, m, n)
 end
 
+"""
+    Meshes.coordinates(mesh, elem, vert::Int)
+    Meshes.coordinates(mesh, elem, (ξ1, ξ2)::Tuple)
 
+Return the physical coordinates of a point in an element `elem` of `mesh`. The
+position of the point can either be a vertex number `vert` or a pair of coordinates
+`(ξ1, ξ2)` in the reference element.
+"""
 function coordinates(mesh::AbstractMesh2D, elem, vert::Integer)
     FT = Domains.float_type(domain(mesh))
     ξ1 = (vert == 1 || vert == 4) ? FT(-1) : FT(1)
     ξ2 = (vert == 1 || vert == 2) ? FT(-1) : FT(1)
     coordinates(mesh, elem, (ξ1, ξ2))
 end
+
+
+
+"""
+    elem, (ξ1, ξ2) = Meshes.containing_element(mesh::AbstractCubedSphereMesh, coord)
+
+Return the element (`elem`) in `mesh` containing the coordinate `coord`, and the position (`ξ1, ξ2`)
+within the reference element.
+"""
+function containing_element end

@@ -99,12 +99,13 @@ function opposing_face(
 end
 
 """
-    panel_coordinates(panel, ζ0, ζx, ζy)
+    panel_to_coordinates(panel, coord1::Geometry.Cartesian123Point)
 
-Given a point on a sphere (`ζ0, ζx, ζy`) (with reference to panel 1), transform
+Given a point at `coord1` on panel 1 of a sphere, transform
 it to panel `panel`.
 """
-function panel_coordinates(panel::Integer, ζ0, ζx, ζy)
+function panel_to_coordinates(panel::Integer, coord::Geometry.Cartesian123Point)
+    ζ0, ζx, ζy = Geometry.components(coord)
     if panel == 1
         return Geometry.Cartesian123Point(ζ0, ζx, ζy)
     elseif panel == 2
@@ -118,8 +119,35 @@ function panel_coordinates(panel::Integer, ζ0, ζx, ζy)
     elseif panel == 6
         return Geometry.Cartesian123Point(ζy, ζx, -ζ0)
     end
-    error("invalid panel")
+    error("invalid panel $panel")
 end
+
+"""
+    panel, coord1 = coordinates_to_panel(coord::Geometry.Cartesian123Point)
+
+Given a point `coord`, return its panel number (`panel`), and its coordinates in panel 1
+(`coord1`).
+"""
+function coordinates_to_panel(coord::Geometry.Cartesian123Point)
+    maxdim = argmax(abs.(Geometry.components(coord)))
+    if maxdim == 1 && coord.x1 > 0
+        return 1, Geometry.Cartesian123Point(coord.x1, coord.x2, coord.x3)
+    elseif maxdim == 2 && coord.x2 > 0
+        return 2, Geometry.Cartesian123Point(coord.x2, -coord.x1, coord.x3)
+    elseif maxdim == 3 && coord.x3 > 0
+        return 3, Geometry.Cartesian123Point(coord.x3, -coord.x1, -coord.x2)
+    elseif maxdim == 1 && coord.x1 < 0
+        return 4, Geometry.Cartesian123Point(-coord.x1, -coord.x3, -coord.x2)
+    elseif maxdim == 2 && coord.x2 < 0
+        return 5, Geometry.Cartesian123Point(-coord.x2, -coord.x3, coord.x1)
+    elseif maxdim == 3 && coord.x3 < 0
+        return 6, Geometry.Cartesian123Point(-coord.x3, coord.x2, coord.x1)
+    end
+    error("invalid coordinates $x")
+end
+
+
+
 
 """
     EquiangularCubedSphereMesh <: AbstractCubedSphereMesh
@@ -157,10 +185,26 @@ function coordinates(
     ζ0 = radius / hypot(ux, uy, 1)
     ζx = ux * ζ0
     ζy = uy * ζ0
-    panel_coordinates(panel, ζ0, ζx, ζy)
+    panel_to_coordinates(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
 end
 
+function containing_element(
+    mesh::EquiangularCubedSphereMesh,
+    coord::Geometry.Cartesian123Point,
+)
+    ne = mesh.ne
+    panel, coord1 = coordinates_to_panel(coord)
+    ζ0, ζx, ζy = Geometry.components(coord1)
+    ux = ζx / ζ0
+    uy = ζy / ζ0
+    ξx = 4 * atan(ux) / pi
+    ξy = 4 * atan(uy) / pi
 
+    x, ξ1 = split_refcoord(ξx, ne)
+    y, ξ2 = split_refcoord(ξy, ne)
+
+    return CartesianIndex(x, y, panel), (ξ1, ξ2)
+end
 
 """
     EquidistantCubedSphereMesh <: AbstractCubedSphereMesh
@@ -202,8 +246,24 @@ function coordinates(
     ζ0 = radius / hypot(ξx, ξy, 1)
     ζx = ξx * ζ0
     ζy = ξy * ζ0
-    panel_coordinates(panel, ζ0, ζx, ζy)
+    panel_to_coordinates(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
 end
+function containing_element(
+    mesh::EquidistantCubedSphereMesh,
+    coord::Geometry.Cartesian123Point,
+)
+    ne = mesh.ne
+    panel, coord1 = coordinates_to_panel(coord)
+    ζ0, ζx, ζy = Geometry.components(coord1)
+    ξx = ζx / ζ0
+    ξy = ζy / ζ0
+
+    x, ξ1 = split_refcoord(ξx, ne)
+    y, ξ2 = split_refcoord(ξy, ne)
+
+    return CartesianIndex(x, y, panel), (ξ1, ξ2)
+end
+
 
 """
     ConformalCubedSphereMesh <: AbstractCubedSphereMesh
@@ -236,5 +296,27 @@ function coordinates(mesh::ConformalCubedSphereMesh, elem, (ξ1, ξ2)::NTuple{2}
     ξx = (2 * x - ne - 1 + ξ1) / ne
     ξy = (2 * y - ne - 1 + ξ2) / ne
     ζx, ζy, ζ0 = CubedSphere.conformal_cubed_sphere_mapping(ξx, ξy)
-    panel_coordinates(panel, radius * ζ0, radius * ζx, radius * ζy)
+    panel_to_coordinates(
+        panel,
+        Geometry.Cartesian123Point(radius * ζ0, radius * ζx, radius * ζy),
+    )
+end
+function containing_element(
+    mesh::ConformalCubedSphereMesh,
+    coord::Geometry.Cartesian123Point,
+)
+    ne = mesh.ne
+    panel, coord1 = coordinates_to_panel(coord)
+    ζ0, ζx, ζy = Geometry.components(coord1)
+    R = hypot(ζx, ζy, ζ0)
+    ξx, ξy = CubedSphere.conformal_cubed_sphere_inverse_mapping(
+        abs(ζx) / R,
+        abs(ζy) / R,
+        ζ0 / R,
+    )
+
+    x, ξ1 = split_refcoord(copysign(ξx, ζx), ne)
+    y, ξ2 = split_refcoord(copysign(ξy, ζy), ne)
+
+    return CartesianIndex(x, y, panel), (ξ1, ξ2)
 end

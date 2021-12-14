@@ -4,8 +4,7 @@ using CubedSphere, Rotations
     cubed_sphere_warp(::EquiangularSphereWarp, a, b, c)
 
 Given points `(a, b, c)` on the surface of a cube, warp the points out to a
-spherical shell of radius `R` based on the equiangular gnomonic grid proposed by
-[Ronchi1996]
+spherical shell of radius `R` based on
 
 Returns a tuple of (x1, x2, x3), where x1, x2, x3 are the corresponding coordinates on a sphere
 of radius R.
