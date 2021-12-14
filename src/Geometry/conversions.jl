@@ -3,17 +3,11 @@
     ::LocalGeometry,
 ) where {A} = AxisVector(A.instance, SVector(a))
 
-ContravariantVector(u::ContravariantVector, local_geometry::LocalGeometry) = u
-CovariantVector(u::CovariantVector, local_geometry::LocalGeometry) = u
-LocalVector(u::LocalVector, local_geometry::LocalGeometry) = u
-
-# convert contravariant <-> local <-> covariant
-ContravariantVector(u::CovariantVector, local_geometry::LocalGeometry) =
-    ContravariantVector(LocalVector(u, local_geometry), local_geometry)
-CovariantVector(u::ContravariantVector, local_geometry::LocalGeometry) =
-    CovariantVector(LocalVector(u, local_geometry), local_geometry)
-
 # standard conversions
+ContravariantVector(u::ContravariantVector, ::LocalGeometry) = u
+CovariantVector(u::CovariantVector, ::LocalGeometry) = u
+LocalVector(u::LocalVector, ::LocalGeometry) = u
+
 ContravariantVector(
     u::LocalVector{T, I},
     local_geometry::LocalGeometry{I},
@@ -31,41 +25,112 @@ LocalVector(
     local_geometry::LocalGeometry{I},
 ) where {T, I} = local_geometry.∂ξ∂x' * u
 
-# In order to make curls and cross products work in 2D, we define the 3rd
-# dimension to be orthogonal to the exisiting dimensions, and have unit length
-# (so covariant, contravariant and local axes are equal)
-ContravariantVector(
-    u::LocalVector{T, (3,)},
-    local_geometry::LocalGeometry{(1, 2)},
-) where {T} = AxisVector(Contravariant3Axis(), components(u))
-LocalVector(
-    u::ContravariantVector{T, (3,)},
-    local_geometry::LocalGeometry{(1, 2)},
-) where {T} = AxisVector(WAxis(), components(u))
-CovariantVector(
-    u::LocalVector{T, (3,)},
-    local_geometry::LocalGeometry{(1, 2)},
-) where {T} = AxisVector(Covariant3Axis(), components(u))
-LocalVector(
-    u::CovariantVector{T, (3,)},
-    local_geometry::LocalGeometry{(1, 2)},
-) where {T} = AxisVector(WAxis(), components(u))
-
 # Converting to specific dimension types
+(::Type{<:ContravariantVector{<:Any, I}})(
+    u::ContravariantVector{<:Any, I},
+    ::LocalGeometry{I},
+) where {I} = u
+
+(::Type{<:ContravariantVector{<:Any, I}})(
+    u::ContravariantVector,
+    ::LocalGeometry,
+) where {I} = transform(ContravariantAxis{I}(), u)
+
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} =
     transform(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
+
+(::Type{<:CovariantVector{<:Any, I}})(
+    u::CovariantVector{<:Any, I},
+    ::LocalGeometry{I},
+) where {I} = u
+
+(::Type{<:CovariantVector{<:Any, I}})(
+    u::CovariantVector,
+    ::LocalGeometry,
+) where {I} = transform(CovariantAxis{I}(), u)
+
 (::Type{<:CovariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} = transform(CovariantAxis{I}(), CovariantVector(u, local_geometry))
+
+(::Type{<:LocalVector{<:Any, I}})(
+    u::LocalVector{<:Any, I},
+    ::LocalGeometry{I},
+) where {I} = u
+
+(::Type{<:LocalVector{<:Any, I}})(u::LocalVector, ::LocalGeometry) where {I} =
+    transform(LocalAxis{I}(), u)
+
 (::Type{<:LocalVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} = transform(LocalAxis{I}(), LocalVector(u, local_geometry))
 
+# Generic N-axis conversion functions,
+# Convert to specific local geometry dimension then convert vector type
+LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
+    transform(LocalAxis{I}(), transform(CovariantAxis{I}(), u), local_geometry)
+
+LocalVector(
+    u::ContravariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I} = transform(
+    LocalAxis{I}(),
+    transform(ContravariantAxis{I}(), u),
+    local_geometry,
+)
+
+CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
+    transform(CovariantAxis{I}(), transform(LocalAxis{I}(), u), local_geometry)
+
+CovariantVector(
+    u::ContravariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I} = transform(
+    CovariantAxis{I}(),
+    transform(ContravariantAxis{I}(), u),
+    local_geometry,
+)
+
+ContravariantVector(
+    u::LocalVector,
+    local_geometry::LocalGeometry{I},
+) where {I} = transform(
+    ContravariantAxis{I}(),
+    transform(LocalAxis{I}(), u),
+    local_geometry,
+)
+
+ContravariantVector(
+    u::CovariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I} = transform(
+    ContravariantAxis{I}(),
+    transform(CovariantAxis{I}(), u),
+    local_geometry,
+)
+
+# In order to make curls and cross products work in 2D, we define the 3rd
+# dimension to be orthogonal to the exisiting dimensions, and have unit length
+# (so covariant, contravariant and local axes are equal)
+ContravariantVector(u::LocalVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(Contravariant3Axis(), components(u))
+ContravariantVector(u::CovariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(Contravariant3Axis(), components(u))
+
+CovariantVector(u::LocalVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(Covariant3Axis(), components(u))
+CovariantVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(Covariant3Axis(), components(u))
+
+LocalVector(u::CovariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(WAxis(), components(u))
+LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
+    AxisVector(WAxis(), components(u))
 
 
 covariant1(u::AxisVector, local_geometry::LocalGeometry) =
@@ -75,7 +140,6 @@ covariant2(u::AxisVector, local_geometry::LocalGeometry) =
 covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
-# TODO: specialize?
 contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
     transform(Contravariant123Axis(), u, local_geometry).u¹
 contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
@@ -302,9 +366,10 @@ Required for statically infering the result type of the curl operation for `Axis
     Contravariant12Vector{FT}
 
 
-_norm_sqr(x, local_geometry) = sum(x -> _norm_sqr(x, local_geometry), x)
-_norm_sqr(x::Number, local_geometry) = LinearAlgebra.norm_sqr(x)
-_norm_sqr(x::AbstractArray, local_geometry) = LinearAlgebra.norm_sqr(x)
+_norm_sqr(x, local_geometry::LocalGeometry) =
+    sum(x -> _norm_sqr(x, local_geometry), x)
+_norm_sqr(x::Number, ::LocalGeometry) = LinearAlgebra.norm_sqr(x)
+_norm_sqr(x::AbstractArray, ::LocalGeometry) = LinearAlgebra.norm_sqr(x)
 
 function _norm_sqr(uᵢ::CovariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
@@ -314,21 +379,22 @@ function _norm_sqr(uᵢ::ContravariantVector, local_geometry::LocalGeometry)
     LinearAlgebra.norm_sqr(LocalVector(uᵢ, local_geometry))
 end
 
-_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1,)}) =
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1,)}) =
     LinearAlgebra.norm_sqr(u.u²)
-_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(3,)}) =
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(3,)}) =
     LinearAlgebra.norm_sqr(u.u²)
-_norm_sqr(u::Contravariant2Vector, local_geometry::LocalGeometry{(1, 3)}) =
+_norm_sqr(u::Contravariant2Vector, ::LocalGeometry{(1, 3)}) =
     LinearAlgebra.norm_sqr(u.u²)
 
-_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1,)}) =
+_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1,)}) =
     LinearAlgebra.norm_sqr(u.u³)
-_norm_sqr(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
+_norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1, 2)}) =
     LinearAlgebra.norm_sqr(u.u³)
 
 
 
-_norm(u::AxisVector, local_geometry) = sqrt(_norm_sqr(u, local_geometry))
+_norm(u::AxisVector, local_geometry::LocalGeometry) =
+    sqrt(_norm_sqr(u, local_geometry))
 
 _cross(u::AxisVector, v::AxisVector, local_geometry::LocalGeometry) = _cross(
     ContravariantVector(u, local_geometry),
@@ -358,7 +424,7 @@ _cross(
 ) = local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
 
 
-_cross(u::CartesianVector, v::CartesianVector, local_geometry::LocalGeometry) =
+_cross(u::CartesianVector, v::CartesianVector, ::LocalGeometry) =
     LinearAlgebra.cross(u, v)
-_cross(u::LocalVector, v::LocalVector, local_geometry::LocalGeometry) =
+_cross(u::LocalVector, v::LocalVector, ::LocalGeometry) =
     LinearAlgebra.cross(u, v)
