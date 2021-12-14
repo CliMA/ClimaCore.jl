@@ -13,7 +13,7 @@ function IntervalTopology(mesh::Meshes.IntervalMesh)
     if isnothing(mesh.domain.boundary_names)
         boundaries = NamedTuple()
     elseif mesh.domain.boundary_names[1] == mesh.domain.boundary_names[2]
-        boundaries = NamedTuple{(mesh.domain.boundary_names[1],)}(1,)
+        boundaries = NamedTuple{(mesh.domain.boundary_names[1],)}(1)
     else
         boundaries = NamedTuple{mesh.domain.boundary_names}((1, 2))
     end

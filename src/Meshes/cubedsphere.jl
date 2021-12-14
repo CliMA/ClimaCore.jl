@@ -229,16 +229,12 @@ struct ConformalCubedSphereMesh{S <: SphereDomain} <: AbstractCubedSphereMesh
     domain::S
     ne::Int
 end
-function coordinates(
-    mesh::ConformalCubedSphereMesh,
-    elem,
-    (ξ1, ξ2)::NTuple{2},
-)
+function coordinates(mesh::ConformalCubedSphereMesh, elem, (ξ1, ξ2)::NTuple{2})
     radius = mesh.domain.radius
     ne = mesh.ne
     x, y, panel = elem.I
     ξx = (2 * x - ne - 1 + ξ1) / ne
     ξy = (2 * y - ne - 1 + ξ2) / ne
     ζx, ζy, ζ0 = CubedSphere.conformal_cubed_sphere_mapping(ξx, ξy)
-    panel_coordinates(panel, radius*ζ0, radius*ζx, radius*ζy)
+    panel_coordinates(panel, radius * ζ0, radius * ζx, radius * ζy)
 end

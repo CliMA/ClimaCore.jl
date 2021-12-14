@@ -1,11 +1,7 @@
 using Test
 import ClimaCore: Domains, Meshes, Topologies, Geometry
 using ClimaCore.Meshes:
-    AbstractWarp,
-    EquidistantSphereWarp,
-    EquiangularSphereWarp,
-    NoWarp,
-    Mesh2D
+    AbstractWarp, EquidistantSphereWarp, EquiangularSphereWarp, NoWarp, Mesh2D
 using StaticArrays
 using IntervalSets
 

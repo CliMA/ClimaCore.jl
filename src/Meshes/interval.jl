@@ -16,27 +16,30 @@ Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possi
 - [`Uniform()`](@ref)
 - [`ExponentialStretching(H)`](@ref)
 """
-struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <:
-       AbstractMesh1D
+struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <: AbstractMesh1D
     domain::I
     faces::V
 end
 
 domain(mesh::IntervalMesh) = mesh.domain
-nelements(mesh::IntervalMesh) = length(mesh.faces)-1
+nelements(mesh::IntervalMesh) = length(mesh.faces) - 1
 elements(mesh::IntervalMesh) = Base.OneTo(nelements(mesh))
 
-coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) = mesh.faces[elem + vert - 1]
-function coordinates(mesh::IntervalMesh, elem::Integer, (ξ,)::Tuple{T}) where {T}
+coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
+    mesh.faces[elem + vert - 1]
+function coordinates(
+    mesh::IntervalMesh,
+    elem::Integer,
+    (ξ,)::Tuple{T},
+) where {T}
     ca = mesh.faces[elem]
-    cb = mesh.faces[elem+1]
-    Geometry.linear_interpolate((ca,cb), ξ)
+    cb = mesh.faces[elem + 1]
+    Geometry.linear_interpolate((ca, cb), ξ)
 end
 
 function is_boundary_face(mesh::IntervalMesh, elem::Integer, face)
-    !Domains.isperiodic(mesh.domain) && (
-        (elem == 1 && face == 1) || (elem == nelements(mesh) && face == 2)
-    )
+    !Domains.isperiodic(mesh.domain) &&
+        ((elem == 1 && face == 1) || (elem == nelements(mesh) && face == 2))
 end
 
 function boundary_face_name(mesh::IntervalMesh, elem::Integer, face)

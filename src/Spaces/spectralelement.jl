@@ -169,7 +169,9 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 # Guba (2014))
                 ξ = SVector(quad_points[i], quad_points[j])
                 x = Geometry.spherical_bilinear_interpolate(
-                    CoordType3D.(Topologies.vertex_coordinates(topology, elem),),
+                    CoordType3D.(
+                        Topologies.vertex_coordinates(topology, elem),
+                    ),
                     ξ[1],
                     ξ[2],
                     global_geometry.radius,
@@ -232,7 +234,9 @@ function SpectralElementSpace2D(topology, quadrature_style)
                 # (where the integration is of different order)
                 ξ = SVector(quad_points[i], quad_points[j])
                 u = Geometry.bilinear_interpolate(
-                    CoordType2D.(Topologies.vertex_coordinates(topology, elem),),
+                    CoordType2D.(
+                        Topologies.vertex_coordinates(topology, elem),
+                    ),
                     ξ[1],
                     ξ[2],
                 )
@@ -505,7 +509,9 @@ function SpectralElementSpace2D(
     return nothing
 end
 =#
-const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.AbstractCubedSphereMesh}}
+const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
+    <:Topologies.Topology2D{<:Meshes.AbstractCubedSphereMesh},
+}
 
 function compute_surface_geometry(
     local_geometry_slab,
