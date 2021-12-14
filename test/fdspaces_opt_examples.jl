@@ -7,6 +7,15 @@ import ClimaCore.Domains: Geometry
 
 import ClimaCore.Operators: half, PlusHalf
 
+const n_tuples = 3
+
+# Hack we're using in TurbulenceConvection
+# for handling ntuple fields:
+Base.@propagate_inbounds Base.getindex(
+    field::Fields.FiniteDifferenceField,
+    i::Integer,
+) = Base.getproperty(field, i)
+
 if VERSION >= v"1.7.0"
     @testset "FD operator allocation tests" begin
         FT = Float64
@@ -26,8 +35,11 @@ if VERSION >= v"1.7.0"
             return cmv.(Fields.coordinate_field(space))
         end
         field_vars() = (; x = FT(0), y = FT(0), z = FT(0), ϕ = FT(0), ψ = FT(0))
+        ntfield_vars() = (; nt = ntuple(i -> field_vars(), n_tuples))
         cfield = field_wrapper(cs, field_vars())
         ffield = field_wrapper(fs, field_vars())
+        ntcfield = field_wrapper(cs, ntfield_vars())
+        ntffield = field_wrapper(fs, ntfield_vars())
         wvec_glob = Geometry.WVector
 
         cx = cfield.x
@@ -379,6 +391,52 @@ if VERSION >= v"1.7.0"
             @test p == 0
         end
 
+        function alloc_test_nested_expressions_12()
+
+            Ic = Operators.InterpolateF2C()
+            cnt = ntcfield.nt
+            fnt = ntffield.nt
+
+            # Compile first
+            @inbounds for i in 1:n_tuples
+                cnt_i = cnt[i]
+                fnt_i = fnt[i]
+                cxnt = cnt_i.x
+                fxnt = fnt_i.x
+                cynt = cnt_i.y
+                fynt = fnt_i.y
+                cznt = cnt_i.z
+                fznt = fnt_i.z
+                cϕnt = cnt_i.ϕ
+                fϕnt = fnt_i.ϕ
+                cψnt = cnt_i.ψ
+                fψnt = fnt_i.ψ
+                @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
+            end
+
+            @inbounds for i in 1:n_tuples
+                p_i = @allocated begin
+                    cnt_i = cnt[i]
+                    fnt_i = fnt[i]
+                end
+                @test p_i == 0
+                cxnt = cnt_i.x
+                fxnt = fnt_i.x
+                cynt = cnt_i.y
+                fynt = fnt_i.y
+                cznt = cnt_i.z
+                fznt = fnt_i.z
+                cϕnt = cnt_i.ϕ
+                fϕnt = fnt_i.ϕ
+                cψnt = cnt_i.ψ
+                fψnt = fnt_i.ψ
+                p = @allocated begin
+                    @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
+                end
+                @test p == 0
+            end
+        end
+
         alloc_test_nested_expressions_1()
         alloc_test_nested_expressions_2()
         alloc_test_nested_expressions_3()
@@ -390,5 +448,6 @@ if VERSION >= v"1.7.0"
         alloc_test_nested_expressions_9()
         alloc_test_nested_expressions_10()
         alloc_test_nested_expressions_11()
+        alloc_test_nested_expressions_12()
     end
 end
