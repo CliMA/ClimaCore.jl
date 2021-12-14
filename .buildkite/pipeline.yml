@@ -25,6 +25,9 @@ steps:
       - "julia --project=examples/sphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/sphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/3dsphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples/3dsphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -423,6 +426,17 @@ steps:
       - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl rossby_haurwitz"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_rossby_haurwitz_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+      
+  - label: ":computer: 3D deformation flow"
+    key: "cpu_3d_deformation_flow"
+    command:
+      - "julia --color=yes --project=examples/3dsphere examples/3dsphere/deformation_flow.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/deformation_flow/*"
     agents:
       config: cpu
       queue: central
