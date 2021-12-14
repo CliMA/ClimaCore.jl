@@ -145,6 +145,8 @@ end
 function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
+Base.isless(x::T, y::T) where {T <: Abstract1DPoint} =
+    isless(component(x, 1), component(y, 1))
 
 
 """

@@ -27,6 +27,7 @@ elements(mesh::IntervalMesh) = Base.OneTo(nelements(mesh))
 
 coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
     mesh.faces[elem + vert - 1]
+
 function coordinates(
     mesh::IntervalMesh,
     elem::Integer,
@@ -37,6 +38,14 @@ function coordinates(
     Geometry.linear_interpolate((ca, cb), ξ)
 end
 
+function containing_element(mesh::IntervalMesh, coord)
+    i = min(searchsortedlast(mesh.faces, coord), nelements(mesh))
+    lo = Geometry.component(mesh.faces[i], 1)
+    hi = Geometry.component(mesh.faces[i + 1], 1)
+    val = Geometry.component(coord, 1)
+    ξ = ((val - lo) + (val - hi)) / (hi - lo)
+    return i, (ξ,)
+end
 function is_boundary_face(mesh::IntervalMesh, elem::Integer, face)
     !Domains.isperiodic(mesh.domain) &&
         ((elem == 1 && face == 1) || (elem == nelements(mesh) && face == 2))

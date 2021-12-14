@@ -78,6 +78,13 @@ function opposing_face(mesh::RectangleMesh, elem::CartesianIndex{2}, face::Int)
     end
 end
 
+
+function coordinates(mesh::RectangleMesh, elem::CartesianIndex{2}, vert::Int)
+    x1, x2 = elem.I
+    coord1 = coordinates(mesh.intervalmesh1, x1, vert == 1 || vert == 4 ? 1 : 2)
+    coord2 = coordinates(mesh.intervalmesh2, x2, vert == 1 || vert == 2 ? 1 : 2)
+    return Geometry.product_coordinates(coord1, coord2)
+end
 function coordinates(
     mesh::RectangleMesh,
     elem::CartesianIndex{2},
@@ -87,4 +94,12 @@ function coordinates(
     coord1 = coordinates(mesh.intervalmesh1, x1, (ξ1,))
     coord2 = coordinates(mesh.intervalmesh2, x2, (ξ2,))
     return Geometry.product_coordinates(coord1, coord2)
+end
+
+function containing_element(mesh::RectangleMesh, coord)
+    x1, (ξ1,) =
+        containing_element(mesh.intervalmesh1, Geometry.coordinate(coord, 1))
+    x2, (ξ2,) =
+        containing_element(mesh.intervalmesh2, Geometry.coordinate(coord, 2))
+    return CartesianIndex(x1, x2), (ξ1, ξ2)
 end
