@@ -48,8 +48,6 @@ abstract type AbstractCubedSphereMesh <: AbstractMesh2D end
 
 
 domain(mesh::AbstractCubedSphereMesh) = mesh.domain
-nelements(mesh::AbstractCubedSphereMesh) = mesh.ne^2 * 6
-
 elements(mesh::AbstractCubedSphereMesh) =
     CartesianIndices((mesh.ne, mesh.ne, 6))
 

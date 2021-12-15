@@ -14,8 +14,7 @@ function UnicodePlots.heatmap(
 
     space = axes(field)
     mesh = space.topology.mesh
-    n1 = mesh.n1
-    n2 = mesh.n2
+    n1, n2 = size(elements(mesh))
 
     Nu = max(div(width, n1), div(height, n2))
     M = Operators.matrix_interpolate(field, Nu)

@@ -167,8 +167,8 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.GridTopology) = topology.mesh.n1
-nyelems(topology::Topologies.GridTopology) = topology.mesh.n2
+nxelems(topology::Topologies.GridTopology) = size(elements(topology.mesh), 1)
+nyelems(topology::Topologies.GridTopology) = size(elements(topology.mesh), 1)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)

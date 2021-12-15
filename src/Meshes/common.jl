@@ -1,6 +1,7 @@
 boundary_names(mesh::AbstractMesh) = boundary_names(domain(mesh))
 coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
 
+nelements(mesh::AbstractMesh) = length(elements)
 
 """
     i, ξs = split_refcoord(ξ, n)
@@ -63,42 +64,6 @@ function Base.iterate(vertiter::SharedVertices, (velem, vvert, ccw))
     end
     return (velem, vvert), (velem, vvert, ccw)
 end
-
-
-function shared_vertices(mesh::AbstractMesh, elem, vert)
-    vertices = [(elem, vert)]
-    face1 = vert           # vert   -> vert+1
-    face2 = mod1(vert - 1, 4) # vert-1 -> vert
-
-    # iterator state
-    ccw = false
-    velem = elem
-    vface = face1
-    while true
-        if is_boundary_face(mesh, velem, vface) < 0
-            # hit a boundary
-            if ccw
-                # have already gone both directions: we're done
-                return vertices
-            end
-            # go counter-clockwise
-            ccw = true
-            velem = elem
-            vface = face2
-            continue
-        end
-        opelem, opface, reversed = opposing_face(mesh, velem, vface)
-        velem = opelem
-        vface = ccw ? mod1(opface - 1, 4) : mod1(opface + 1, 4)
-        if velem == elem && vface == face1
-            @assert !ccw
-            return vertices
-        end
-        push!(vertices, (velem, ccw ? mod1(vface + 1, 4) : vface))
-    end
-    return vertices
-end
-
 
 
 """
