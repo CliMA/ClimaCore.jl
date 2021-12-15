@@ -172,5 +172,7 @@ Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
 include("interval.jl")
 include("grids.jl")
 include("grid2d.jl")
+include("graphs.jl")
+include("rsb.jl")
 
 end # module
