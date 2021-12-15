@@ -3,8 +3,8 @@
 """
     Topology2D(mesh::AbstractMesh2D, elemorder=Mesh.elements(mesh))
 
-
-
+This is a generic non-distributed topology for 2D meshes. `elemorder` is a
+vector or other linear ordering of the `Mesh.elements(mesh)`.
 """
 struct Topology2D{M <: Meshes.AbstractMesh{2}, EO, OI, BF} <: AbstractTopology
     "mesh on which the topology is constructed"
@@ -13,8 +13,11 @@ struct Topology2D{M <: Meshes.AbstractMesh{2}, EO, OI, BF} <: AbstractTopology
     elemorder::EO
     "the inverse of `elemorder`: `orderindex[elemorder[e]] == e`"
     orderindex::OI
+    "a vector of all unique internal faces, (e, face, o, oface, reversed)"
     internal_faces::Vector{Tuple{Int, Int, Int, Int, Bool}}
+    "the collection of all (e,vert) pairs"
     vertices::Vector{Tuple{Int, Int}}
+    "the index in `vertices` of the first `(e,vert)` pair for all unique vertices"
     vertex_offset::Vector{Int}
     "a NamedTuple of vectors of `(e,face)` "
     boundaries::BF
@@ -62,6 +65,7 @@ function Topology2D(
             end
         end
     end
+    @assert length(vertices) == 4 * length(elemorder) == vertex_offset[end] - 1
     return Topology2D(
         mesh,
         elemorder,
