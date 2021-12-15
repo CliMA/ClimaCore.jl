@@ -4,10 +4,12 @@ using Base: operator_associativity
 # Order of tests is intended to reflect dependency order of functionality
 
 include("recursive.jl")
+
 include("DataLayouts/data1d.jl")
 include("DataLayouts/data2d.jl")
 include("DataLayouts/data1dx.jl")
 include("DataLayouts/data2dx.jl")
+
 include("Geometry/geometry.jl")
 include("Geometry/axistensors.jl")
 
@@ -15,7 +17,8 @@ include("Meshes/rectangle.jl")
 include("Meshes/cubedsphere.jl")
 
 include("Topologies/rectangle.jl")
-#include("grid2d_cs.jl")
+include("Topologies/cubedsphere.jl")
+
 include("quadrature.jl")
 include("spaces.jl")
 include("field.jl")

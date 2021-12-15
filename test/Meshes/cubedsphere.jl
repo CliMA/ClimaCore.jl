@@ -56,18 +56,31 @@ end
 end
 
 @testset "vertex coordinates consistent" begin
-    domain = Domains.SphereDomain(5.0)
-    for mesh in [
-        Meshes.EquiangularCubedSphereMesh(domain, 3),
-        Meshes.EquidistantCubedSphereMesh(domain, 3),
-        Meshes.ConformalCubedSphereMesh(domain, 3),
-    ]
-        for elem in Meshes.elements(mesh)
-            for vert in 1:4
-                coord = Meshes.coordinates(mesh, elem, vert)
-                @test norm(Geometry.components(coord)) ≈ 5.0
-                for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
-                    @test Meshes.coordinates(mesh, velem, vvert) ≈ coord
+    for FT in [Float32, Float64, BigFloat]
+        domain = Domains.SphereDomain(FT(5))
+        if FT == Float64
+            meshes = [
+                Meshes.EquiangularCubedSphereMesh(domain, 3),
+                Meshes.EquidistantCubedSphereMesh(domain, 3),
+                Meshes.ConformalCubedSphereMesh(domain, 3),
+            ]
+        else
+            meshes = [
+                Meshes.EquiangularCubedSphereMesh(domain, 3),
+                Meshes.EquidistantCubedSphereMesh(domain, 3),
+            ]
+        end
+        for mesh in meshes
+            for elem in Meshes.elements(mesh)
+                for vert in 1:4
+                    coord = Meshes.coordinates(mesh, elem, vert)
+                    @test coord isa Geometry.Cartesian123Point{FT}
+                    @test norm(Geometry.components(coord)) ≈ 5 rtol = 3eps(FT)
+                    for (velem, vvert) in
+                        Meshes.SharedVertices(mesh, elem, vert)
+                        @test Meshes.coordinates(mesh, velem, vvert) ≈ coord rtol =
+                            10eps(FT)
+                    end
                 end
             end
         end
@@ -76,31 +89,44 @@ end
 
 
 @testset "vertex coordinate warping / unwarping" begin
-    domain = Domains.SphereDomain(5.0)
-    for mesh in [
-        Meshes.EquiangularCubedSphereMesh(domain, 3),
-        Meshes.EquidistantCubedSphereMesh(domain, 3),
-        Meshes.ConformalCubedSphereMesh(domain, 3),
-    ]
-        for elem in Meshes.elements(mesh)
-            for (ξ1, ξ2) in [(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, -0.5)]
-                coord = Meshes.coordinates(mesh, elem, (ξ1, ξ2))
-                celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
-                @test celem == elem
-                @test cξ1 ≈ ξ1 atol = 100eps()
-                @test cξ2 ≈ ξ2 atol = 100eps()
-            end
+    for FT in [Float32, Float64, BigFloat]
+        domain = Domains.SphereDomain(FT(5))
+        if FT == Float64
+            meshes = [
+                Meshes.EquiangularCubedSphereMesh(domain, 3),
+                Meshes.EquidistantCubedSphereMesh(domain, 3),
+                Meshes.ConformalCubedSphereMesh(domain, 3),
+            ]
+        else
+            meshes = [
+                Meshes.EquiangularCubedSphereMesh(domain, 3),
+                Meshes.EquidistantCubedSphereMesh(domain, 3),
+            ]
+        end
+        for mesh in meshes
+            for elem in Meshes.elements(mesh)
+                for (ξ1, ξ2) in
+                    [(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, -0.5)]
+                    coord = Meshes.coordinates(mesh, elem, (ξ1, ξ2))
+                    @test norm(Geometry.components(coord)) ≈ 5 rtol = 3eps()
+                    celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
+                    @test celem == elem
+                    @test cξ1 ≈ ξ1 atol = 10eps()
+                    @test cξ2 ≈ ξ2 atol = 10eps()
+                end
 
-            for vert in 1:4
-                coord = Meshes.coordinates(mesh, elem, vert)
-                # containing_element should be round trip to give the same coordinates
-                celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
-                @test celem in Meshes.elements(mesh)
-                @test -1 <= cξ1 <= 1
-                @test -1 <= cξ2 <= 1
-                @test cξ1 ≈ 1 || cξ1 ≈ -1
-                @test cξ2 ≈ 1 || cξ2 ≈ -1
-                @test Meshes.coordinates(mesh, celem, (cξ1, cξ2)) ≈ coord
+                for vert in 1:4
+                    coord = Meshes.coordinates(mesh, elem, vert)
+                    # containing_element should be round trip to give the same coordinates
+                    celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
+                    @test celem in Meshes.elements(mesh)
+                    @test -1 <= cξ1 <= 1
+                    @test -1 <= cξ2 <= 1
+                    @test cξ1 ≈ 1 || cξ1 ≈ -1
+                    @test cξ2 ≈ 1 || cξ2 ≈ -1
+                    @test Meshes.coordinates(mesh, celem, (cξ1, cξ2)) ≈ coord rtol =
+                        3eps(FT)
+                end
             end
         end
     end
