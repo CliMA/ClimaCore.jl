@@ -1,7 +1,8 @@
 using Test
 using ClimaCoreVTK
 using IntervalSets
-import ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
+import ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
 
 
 dir = mktempdir()
@@ -36,7 +37,23 @@ dir = mktempdir()
             (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α))
         end for α in times
     ]
-    writevtk(joinpath(dir, "sphere_series"), times, (A = A,))
+    writevtk(joinpath(dir, "sphere_scalar_series"), times, (A = A, B = A))
+
+    U = Array{Fields.Field}(undef, length(times))
+    for t in 1:(div(350, 10) + 1)
+        u = map(coords) do coord
+            u0 = 20.0
+            α0 = 45.0
+            ϕ = coord.lat
+            λ = coord.long
+
+            uu = u0 * (cosd(α0) * cosd(ϕ) + sind(α0) * cosd(λ) * sind(ϕ))
+            uv = -u0 * sind(α0) * sind(λ)
+            Geometry.UVVector(uu, uv)
+        end
+        U[t] = u
+    end
+    writevtk(joinpath(dir, "sphere_vector_series"), times, (U = U,))
 
 end
 

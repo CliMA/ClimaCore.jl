@@ -147,17 +147,17 @@ function writevtk(
 )
     npad = ndigits(length(times); pad = 3)
 
-        paraview_collection(basename) do pvd
-            for (n, time) in enumerate(times)
-                field = NamedTuple(key => val[n] for (key, val) in pairs(fields))
-                pvd[time] = vtk_file(
-                    basename * "_" * string(n, pad = npad),
-                    field,
-                    ispace;
-                    vtkargs...,
-                )
-            end
+    paraview_collection(basename) do pvd
+        for (n, time) in enumerate(times)
+            field = NamedTuple(key => val[n] for (key, val) in pairs(fields))
+            pvd[time] = vtk_file(
+                basename * "_" * string(n, pad = npad),
+                field,
+                ispace;
+                vtkargs...,
+            )
         end
+    end
 end
 
 
