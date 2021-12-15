@@ -67,12 +67,16 @@ Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
     Cartesian123Point(pt.x1, zero(FT), pt.x3)
 
 @pointtype LatLongPoint lat long
+@pointtype LatLongZPoint lat long z
 
 product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
 
 product_coordinates(xyp::XYPoint, zp::ZPoint) =
     XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
+
+product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
+    LatLongZPoint(promote(latlongp.lat, latlongp.long, zp.z)...)
 
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
