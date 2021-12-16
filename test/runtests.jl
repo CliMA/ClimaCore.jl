@@ -18,6 +18,7 @@ include("Meshes/cubedsphere.jl")
 
 include("Topologies/rectangle.jl")
 include("Topologies/cubedsphere.jl")
+include("Topologies/distributed.jl")
 
 include("quadrature.jl")
 include("spaces.jl")
