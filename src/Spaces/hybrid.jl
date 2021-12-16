@@ -64,6 +64,8 @@ local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
 local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
     space.face_local_geometry
 
+# TODO: will need to be defined for distributed
+ghost_geometry_data(space::ExtrudedFiniteDifferenceSpace) = nothing
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_space::V,

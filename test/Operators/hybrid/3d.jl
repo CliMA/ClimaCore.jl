@@ -13,6 +13,9 @@ import ClimaCore:
     Fields,
     Operators
 
+#import ClimaCore.Utilities: half
+#import ClimaCore.DataLayouts: level
+
 @testset "sphere divergence" begin
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -66,7 +69,7 @@ function hvspace_3D(
     horztopology = Topologies.Topology2D(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+    horzspace = Spaces.RectilinearSpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
@@ -78,6 +81,7 @@ end
     hv_center_space, hv_face_space = hvspace_3D()
 
     coord = Fields.coordinate_field(hv_face_space)
+
     @test parent(Fields.field_values(level(coord.x, half))) == parent(
         Fields.field_values(
             Fields.coordinate_field(hv_face_space.horizontal_space).x,

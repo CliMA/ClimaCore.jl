@@ -4,6 +4,7 @@ Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
     Topologies.nlocalelems(Spaces.topology(space))
 
 local_geometry_data(space::AbstractSpectralElementSpace) = space.local_geometry
+ghost_geometry_data(space::AbstractSpectralElementSpace) = space.ghost_geometry
 
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
@@ -114,6 +115,7 @@ struct SpectralElementSpace2D{
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
+    GH,
     D,
     IS,
     BS,
@@ -122,6 +124,7 @@ struct SpectralElementSpace2D{
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
+    ghost_geometry::GH
     dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
@@ -132,7 +135,7 @@ end
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
-function SpectralElementSpace2D(topology, quadrature_style)
+function SpectralElementSpace2D(topology, quadrature_style, comms_ctx = nothing)
     domain = Topologies.domain(topology)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)
@@ -146,50 +149,25 @@ function SpectralElementSpace2D(topology, quadrature_style)
         global_geometry = Geometry.CartesianGlobalGeometry()
     end
     AIdx = Geometry.coordinate_axis(CoordType2D)
-    nelements = Topologies.nlocalelems(topology)
+    nlelems = Topologies.nlocalelems(topology)
+    ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
-    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nelements)
+    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nlelems)
+    ghost_geometry =
+        ngelems > 0 ? DataLayouts.IJFH{LG, Nq}(Array{FT}, ngelems) : nothing
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
-    for e in 1:nelements
+    for e in 1:nlelems
         elem = topology.elemorder[e]
         local_geometry_slab = slab(local_geometry, e)
         for i in 1:Nq, j in 1:Nq
             ξ = SVector(quad_points[i], quad_points[j])
-            if global_geometry isa Geometry.SphericalGlobalGeometry
-                x = Meshes.coordinates(topology.mesh, elem, ξ)
-                u = Geometry.LatLongPoint(x, global_geometry)
-                ∂x∂ξ = Geometry.AxisTensor(
-                    (
-                        Geometry.Cartesian123Axis(),
-                        Geometry.CovariantAxis{AIdx}(),
-                    ),
-                    ForwardDiff.jacobian(ξ) do ξ
-                        Geometry.components(
-                            Meshes.coordinates(topology.mesh, elem, ξ),
-                        )
-                    end,
-                )
-                G = Geometry.local_to_cartesian(global_geometry, u)
-                ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
-            else
-                u = Meshes.coordinates(topology.mesh, elem, ξ)
-                ∂u∂ξ = Geometry.AxisTensor(
-                    (
-                        Geometry.LocalAxis{AIdx}(),
-                        Geometry.CovariantAxis{AIdx}(),
-                    ),
-                    ForwardDiff.jacobian(ξ) do ξ
-                        Geometry.components(
-                            Meshes.coordinates(topology.mesh, elem, ξ),
-                        )
-                    end,
-                )
-            end
+            u, ∂u∂ξ =
+                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
 
@@ -197,9 +175,32 @@ function SpectralElementSpace2D(topology, quadrature_style)
         end
     end
 
+    for e in 1:ngelems
+        elem = topology.elemorder[e]
+        ghost_geometry_slab = slab(ghost_geometry, e)
+        for i in 1:Nq, j in 1:Nq
+            ξ = SVector(quad_points[i], quad_points[j])
+            u, ∂u∂ξ =
+                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
+            J = det(Geometry.components(∂u∂ξ))
+            WJ = J * quad_weights[i] * quad_weights[j]
+
+            ghost_geometry_slab[i, j] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+        end
+    end
+
     # dss_weights = J ./ dss(J)
     dss_weights = copy(local_geometry.J)
-    dss_2d!(dss_weights, local_geometry.J, local_geometry, topology, Nq)
+    dss_2d!(
+        dss_weights,
+        local_geometry.J,
+        local_geometry,
+        ghost_geometry,
+        topology,
+        Nq,
+        1,
+        comms_ctx,
+    )
     dss_weights .= local_geometry.J ./ dss_weights
 
     SG = Geometry.SurfaceGeometry{
@@ -216,8 +217,10 @@ function SpectralElementSpace2D(topology, quadrature_style)
             internal_surface_geometry_slab =
                 slab(internal_surface_geometry, iface)
 
-            local_geometry_slab⁻ = slab(local_geometry, elem⁻)
-            local_geometry_slab⁺ = slab(local_geometry, elem⁺)
+            e⁻ = Topologies.localelemindex(topology, elem⁻)
+            e⁺ = Topologies.localelemindex(topology, elem⁺)
+            local_geometry_slab⁻ = slab(local_geometry, e⁻)
+            local_geometry_slab⁺ = slab(local_geometry, e⁺)
 
             for q in 1:Nq
                 sgeom⁻ = compute_surface_geometry(
@@ -274,6 +277,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
         quadrature_style,
         global_geometry,
         local_geometry,
+        ghost_geometry,
         dss_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
@@ -289,6 +293,43 @@ const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
     <:Topologies.Topology2D{<:Meshes.AbstractCubedSphere},
 }
 
+function compute_local_geometry(
+    global_geometry::Geometry.SphericalGlobalGeometry,
+    topology,
+    elem,
+    ξ,
+    AIdx,
+)
+    x = Meshes.coordinates(topology.mesh, elem, ξ)
+    u = Geometry.LatLongPoint(x, global_geometry)
+    ∂x∂ξ = Geometry.AxisTensor(
+        (Geometry.Cartesian123Axis(), Geometry.CovariantAxis{AIdx}()),
+        ForwardDiff.jacobian(ξ) do ξ
+            Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
+        end,
+    )
+    G = Geometry.local_to_cartesian(global_geometry, u)
+    ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
+
+    return u, ∂u∂ξ
+end
+function compute_local_geometry(
+    global_geometry::Geometry.AbstractGlobalGeometry,
+    topology,
+    elem,
+    ξ,
+    AIdx,
+)
+    u = Meshes.coordinates(topology.mesh, elem, ξ)
+    ∂u∂ξ = Geometry.AxisTensor(
+        (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
+        ForwardDiff.jacobian(ξ) do ξ
+            Geometry.components(Meshes.coordinates(topology.mesh, elem, ξ))
+        end,
+    )
+
+    return u, ∂u∂ξ
+end
 
 function compute_surface_geometry(
     local_geometry_slab,
@@ -349,3 +390,34 @@ function slab(space::AbstractSpectralElementSpace, v, h)
     )
 end
 slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
+
+# XXX: this cannot take `space` as it must be constructed beforehand so
+# that the `space` constructor can do DSS (to compute DSS weights)
+function setup_comms(
+    Context::Type{<:ClimaComms.AbstractCommsContext},
+    topology::Topologies.AbstractDistributedTopology,
+    quad_style::Spaces.Quadratures.QuadratureStyle,
+    Nv,
+    Nf = 2,
+)
+    Ni = Quadratures.degrees_of_freedom(quad_style)
+    Nj = Ni
+    AT = Array # XXX: get this from `space`/`topology`?
+    FT = Geometry.float_type(Topologies.coordinate_type(topology))
+
+    # Determine send and receive buffer dimensions for each neighbor PID
+    # and add the neighbors in the same order as they are stored in
+    # `neighbor_pids`!
+    nbrs = ClimaComms.Neighbor[]
+    for (nidx, npid) in enumerate(Topologies.neighbors(topology))
+        nse = Topologies.nsendelems(topology, nidx)
+        nge = Topologies.nghostelems(topology, nidx)
+        send_dims = (Nv, Ni, Nj, Nf, nse)
+        recv_dims = (Nv, Ni, Nj, Nf, nge)
+        push!(
+            nbrs,
+            ClimaComms.Neighbor(Context, npid, AT, FT, send_dims, recv_dims),
+        )
+    end
+    return Context(nbrs)
+end

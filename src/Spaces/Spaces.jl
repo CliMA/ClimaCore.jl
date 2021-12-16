@@ -14,6 +14,8 @@
 """
 module Spaces
 
+using ClimaComms
+
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
