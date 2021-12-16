@@ -100,7 +100,7 @@ end
         basename::String,
         times,
         fields,
-        [ispace=vtk_space(fields)];
+        [ispace=vtk_space(first(fields))];
         vtkargs...
     )
 
@@ -120,6 +120,39 @@ function writevtk(
             pvd[time] = vtk_file(
                 basename * "_" * string(n, pad = npad),
                 fields[n],
+                ispace;
+                vtkargs...,
+            )
+        end
+    end
+end
+
+"""
+    writevtk(
+        basename::String,
+        times,
+        fields,
+        [ispace=vtk_space(first(first(fields)));
+        vtkargs...
+    )
+
+Write a sequence of NamedTuple fields `fields` at times `times` as a Paraview collection.
+"""
+function writevtk(
+    basename::String,
+    times,
+    fields::NamedTuple,
+    ispace = vtk_space(first(first(fields)));
+    vtkargs...,
+)
+    npad = ndigits(length(times); pad = 3)
+
+    paraview_collection(basename) do pvd
+        for (n, time) in enumerate(times)
+            field = NamedTuple(key => val[n] for (key, val) in pairs(fields))
+            pvd[time] = vtk_file(
+                basename * "_" * string(n, pad = npad),
+                field,
                 ispace;
                 vtkargs...,
             )
