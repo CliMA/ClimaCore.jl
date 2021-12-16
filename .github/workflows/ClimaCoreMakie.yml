@@ -1,15 +1,15 @@
-name: ClimaCoreVTK CI
+name: ClimaCoreMakie CI
 on:
   pull_request:
     paths:
-      - ".github/workflows/ClimaCoreVTK.yml"
-      - "lib/ClimaCoreVTK/**"
+      - ".github/workflows/ClimaCoreMakie.yml"
+      - "lib/ClimaCoreMakie/**"
   push:
     branches:
       - staging
       - trying
 jobs:
-  lib-climacore-vtk:
+  lib-climacore-makie:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -33,7 +33,7 @@ jobs:
         run: |
           using Pkg;
           # dev mono repo versions
-          pkg"dev . lib/ClimaCoreVTK"
+          pkg"dev . lib/ClimaCoreMakie"
       - name: Run the tests
         run: |
-          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreVTK")'
+          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreMakie")'

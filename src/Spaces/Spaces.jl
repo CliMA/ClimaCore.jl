@@ -32,6 +32,7 @@ import .Quadratures
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("hybrid.jl")
+include("triangulation.jl")
 include("dss.jl")
 
 end # module
