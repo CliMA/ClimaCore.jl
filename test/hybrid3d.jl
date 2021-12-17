@@ -49,6 +49,23 @@ function hvspace_3D(
     return (hv_center_space, hv_face_space)
 end
 
+@testset "2D SE, 1D FD Extruded Domain level extraction" begin
+    hv_center_space, hv_face_space = hvspace_3D()
+
+    coord = Fields.coordinate_field(hv_face_space)
+    @test parent(Fields.field_values(level(coord.x, half))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(coord.z, half))) ==
+          parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    ) .* 0
+end
+
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
 
     hv_center_space, hv_face_space = hvspace_3D()
