@@ -130,8 +130,8 @@ ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the 
 Nq = 4
 
 domain = Domains.SphereDomain(R)
-mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), ne)
-grid_topology = Topologies.Grid2DTopology(mesh)
+mesh = Meshes.EquiangularCubedSphere(domain, ne)
+grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

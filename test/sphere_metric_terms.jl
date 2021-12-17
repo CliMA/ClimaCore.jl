@@ -1,6 +1,5 @@
 using LinearAlgebra, IntervalSets, UnPack
 import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry
-import ClimaCore.Meshes: EquiangularSphereWarp, Mesh2D
 
 using Test
 
@@ -10,15 +9,15 @@ using Test
     ne = 4
     Nq = 4
     domain = Domains.SphereDomain(radius)
-    mesh = Mesh2D(domain, EquiangularSphereWarp(), ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, ne)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3
 end
 
-@testset "Volume of a sphere" begin
+@testset "Volume of a spherical shell" begin
     FT = Float64
     radius = FT(128)
     zlim = (0, 1)
@@ -35,8 +34,8 @@ end
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.SphereDomain(radius)
-    horzmesh = Meshes.Mesh2D(horzdomain, Meshes.EquiangularSphereWarp(), helem)
-    horztopology = Topologies.Grid2DTopology(horzmesh)
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
+    horztopology = Topologies.Topology2D(horzmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

@@ -11,8 +11,8 @@ dir = mktempdir()
     R = 6.37122e6
 
     domain = Domains.SphereDomain(R)
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), 6)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, 6)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{5}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = Fields.coordinate_field(space)
@@ -68,8 +68,8 @@ end
 
     n1, n2 = 2, 2
     Nq = 4
-    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

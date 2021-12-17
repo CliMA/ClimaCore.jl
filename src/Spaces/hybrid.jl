@@ -35,7 +35,19 @@ function ExtrudedFiniteDifferenceSpace{S}(
         space.face_local_geometry,
     )
 end
-
+function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(
+        io,
+        space isa CenterExtrudedFiniteDifferenceSpace ?
+        "CenterExtrudedFiniteDifferenceSpace" :
+        "FaceExtrudedFiniteDifferenceSpace",
+        ":",
+    )
+    println(iio, " "^(indent + 2), space.horizontal_space)
+    print(iio, " "^(indent + 2), space.vertical_topology)
+end
 local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_local_geometry
 

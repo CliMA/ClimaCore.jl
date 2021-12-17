@@ -5,7 +5,7 @@ import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimaCore: slab
 import ClimaCore.Operators
 import ClimaCore.Geometry
-using ClimaCore.Meshes: equispaced_rectangular_mesh
+using ClimaCore.Meshes: RectilinearMesh
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -34,8 +34,8 @@ n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
 
-mesh = equispaced_rectangular_mesh(domain, n1, n2)
-grid_topology = Topologies.Grid2DTopology(mesh)
+mesh = RectilinearMesh(domain, n1, n2)
+grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

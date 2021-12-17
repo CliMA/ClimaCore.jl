@@ -40,8 +40,7 @@ rectangle_domain = ClimaCore.Domains.RectangleDomain(
 column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems = 32)
 #----------------------------------------------------------------------------
 
-rectangle_mesh =
-    ClimaCore.Meshes.EquispacedRectangleMesh(rectangle_domain, 16, 16)
+rectangle_mesh = ClimaCore.Meshes.RectilinearMesh(rectangle_domain, 16, 16)
 #----------------------------------------------------------------------------
 
 # ### 1.3 Topologies
@@ -49,7 +48,7 @@ rectangle_mesh =
 # A _topology_ determines the ordering and connections between elements of a mesh
 # - At the moment, this is only required for 2D meshes
 
-rectangle_topology = ClimaCore.Topologies.GridTopology(rectangle_mesh)
+rectangle_topology = ClimaCore.Topologies.Topology2D(rectangle_mesh)
 #----------------------------------------------------------------------------
 
 # ### 1.4 Spaces

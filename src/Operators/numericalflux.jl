@@ -103,7 +103,8 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
     Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
     topology = space.topology
 
-    for (iboundary, boundarytag) in enumerate(Topologies.boundaries(topology))
+    for (iboundary, boundarytag) in
+        enumerate(Topologies.boundary_tags(topology))
         for (iface, (elem⁻, face⁻)) in
             enumerate(Topologies.boundary_faces(topology, boundarytag))
             boundary_surface_geometry_slab =

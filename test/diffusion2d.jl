@@ -23,8 +23,8 @@ using OrdinaryDiffEq
         x2periodic = true,
     )
 
-    mesh = Meshes.EquispacedRectangleMesh(domain, 10, 10)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, 10, 10)
+    grid_topology = Topologies.Topology2D(mesh)
 
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()

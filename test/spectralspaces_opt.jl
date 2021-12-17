@@ -92,10 +92,10 @@ end
 
             Nq = 3
             quad = Spaces.Quadratures.GLL{Nq}()
-            #mesh = Meshes.equispaced_rectangular_mesh(domain, 3, 3)
-            #topology = Topologies.Grid2DTopology(mesh)
-            mesh = Meshes.EquispacedRectangleMesh(domain, 3, 3)
-            topology = Topologies.GridTopology(mesh)
+            #mesh = Meshes.RectilinearMesh(domain, 3, 3)
+            #topology = Topologies.Topology2D(mesh)
+            mesh = Meshes.RectilinearMesh(domain, 3, 3)
+            topology = Topologies.Topology2D(mesh)
             space = Spaces.SpectralElementSpace2D(topology, quad)
             coords = Fields.coordinate_field(space)
 
