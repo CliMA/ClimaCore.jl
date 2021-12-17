@@ -17,8 +17,8 @@ wgrad = Operators.WeakGradient()
     Ne = 5
     Nq = 6
 
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, Ne)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -65,8 +65,8 @@ convergence_rate(err, Δh) =
         Δh = Array{FT}(undef, length(Nes))
 
         for (Ie, Ne) in enumerate(Nes)
-            mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
-            grid_topology = Topologies.Grid2DTopology(mesh)
+            mesh = Meshes.EquiangularCubedSphere(domain, Ne)
+            grid_topology = Topologies.Topology2D(mesh)
 
             quad = Spaces.Quadratures.GLL{Nq}()
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)

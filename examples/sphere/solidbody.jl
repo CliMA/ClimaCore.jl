@@ -77,8 +77,8 @@ Nq = 4
 # h-refinement study
 for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, ne)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

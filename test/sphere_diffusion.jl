@@ -3,7 +3,6 @@ using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry
-import ClimaCore.Meshes: EquiangularSphereWarp, Mesh2D
 using StaticArrays, IntervalSets, LinearAlgebra
 
 @testset "Scalar Poisson problem - ∇⋅∇ = f on the cubed-sphere" begin
@@ -22,8 +21,8 @@ using StaticArrays, IntervalSets, LinearAlgebra
     ne = 8
     Nq = 4
     domain = Domains.SphereDomain(R)
-    mesh = Mesh2D(domain, EquiangularSphereWarp(), ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, ne)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

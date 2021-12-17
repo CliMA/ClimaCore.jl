@@ -16,8 +16,8 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
         x1boundary = (:east, :west),
         x2boundary = (:south, :north),
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -142,8 +142,8 @@ end
         x1periodic = true,
         x2periodic = true,
     )
-    mesh_xy = Meshes.EquispacedRectangleMesh(domain_xy, 10, 10)
-    topology_xy = Topologies.GridTopology(mesh_xy)
+    mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
+    topology_xy = Topologies.Topology2D(mesh_xy)
 
     quad = Spaces.Quadratures.GLL{4}()
 

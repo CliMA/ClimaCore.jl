@@ -1,6 +1,6 @@
 using ..Spaces:
     AbstractSpace, SpectralElementSpace1D, SpectralElementSpace2D, Quadratures
-using ..Topologies: GridTopology, IntervalTopology
+using ..Topologies: Topology2D, IntervalTopology
 using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
@@ -57,8 +57,8 @@ function linear_remap_op(target::AbstractSpace, source::AbstractSpace)
 end
 
 """
-    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace1D{<:GridTopology, Quadratures.GL{1}},
-            S <: SpectralElementSpace1D{<:GridTopology, Quadratures.GL{1}}}
+    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace1D{<:Topology2D, Quadratures.GL{1}},
+            S <: SpectralElementSpace1D{<:Topology2D, Quadratures.GL{1}}}
 
 Computes local weights of the overlap mesh for `source_topo` to `target_topo` topologies.
 
@@ -79,8 +79,8 @@ function overlap_weights(
 end
 
 """
-    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
-            S <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}}}
+    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}},
+            S <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}}}
 
 Computes local weights of the overlap mesh for `source_topo` to `target_topo` topologies.
 
@@ -90,8 +90,8 @@ function overlap_weights(
     target::T,
     source::S,
 ) where {
-    T <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
-    S <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
+    T <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}},
+    S <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}},
 }
     # Calculate element overlap pattern in x-dimension
     # X_ov[i,j] = overlap length along x-dimension between target elem i and source elem j
@@ -167,8 +167,10 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.GridTopology) = topology.mesh.n1
-nyelems(topology::Topologies.GridTopology) = topology.mesh.n2
+nxelems(topology::Topologies.Topology2D) =
+    size(Meshes.elements(topology.mesh), 1)
+nyelems(topology::Topologies.Topology2D) =
+    size(Meshes.elements(topology.mesh), 1)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)

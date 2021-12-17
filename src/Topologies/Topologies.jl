@@ -1,44 +1,27 @@
-"""
-    ClimaCore.Topologies
-
-Objects describing the horizontal connections between elements.
-
-All elements are quadrilaterals, using the following face and vertex numbering
-convention:
-```
-          3
-      4-------3
- ^    |       |
- |  4 |       | 2
-ξ2    |       |
-      1-------2
-          1
-        ξ1-->
-```
-"""
 module Topologies
 
 import ..Geometry
 import ..Domains: Domains, coordinate_type
-import ..Meshes:
-    Meshes, EquispacedRectangleMesh, Mesh2D, AbstractMesh, TensorProductMesh
+import ..Meshes: Meshes, domain
 
-
-# TODO: seperate types for MPI/non-MPI topologies
 """
    AbstractTopology
 
 Subtypes of `AbstractHorizontalTopology` define connectiveness of a
 mesh in the horizontal domain.
+
+# Interfaces
+
+- [`nlocalelems`](@ref)
+- [`vertex_coordinates`](@ref)
+- [`interior_faces`](@ref)
+- [`vertices`](@ref)
+- [`boundary_tags`](@ref)
+- [`boundary_tag`](@ref)
+- [`boundary_faces`](@ref)
+
 """
 abstract type AbstractTopology end
-
-"""
-    domain(topology)
-
-The `domain` underlying the topology.
-"""
-function domain end
 
 coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
 
@@ -128,12 +111,20 @@ struct InteriorFaceIterator{T <: AbstractTopology}
 end
 
 """
-    boundaries(topology)
+    boundary_tags(topology)
 
 A `Tuple` or `NamedTuple` of the boundary tags of the topology. A boundary tag
 is an integer that uniquely identifies a boundary.
 """
-function boundaries end
+function boundary_tags end
+
+"""
+    boundary_tag(topology, name::Symbol)
+
+The boundary tag of the topology for boundary name `name`. A boundary tag
+is an integer that uniquely identifies a boundary.
+"""
+function boundary_tag end
 
 """
     boundary_faces(topology, boundarytag)
@@ -141,14 +132,7 @@ function boundaries end
 An iterator over the faces of `topology` which face the boundary with tag
 `boundarytag`. Each element of the iterator is an `(elem, face)` pair.
 """
-function boundary_faces(topology, boundarytag::Integer)
-    BoundaryFaceIterator(topology, boundarytag)
-end
-
-struct BoundaryFaceIterator{T}
-    topology::T
-    boundary::Int
-end
+function boundary_faces end
 
 """
     vertices(topology)
@@ -168,9 +152,14 @@ struct Vertex{T <: AbstractTopology, V}
 end
 Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
 
-# implementations
+
 include("interval.jl")
-include("grids.jl")
-include("grid2d.jl")
+include("topology2d.jl")
+
+# deprecate
+@deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
+@deprecate GridTopology(mesh) Topology2D(mesh)
+@deprecate Topology2D(mesh) Topology2D(mesh)
+
 
 end # module

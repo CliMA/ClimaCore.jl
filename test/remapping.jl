@@ -2,7 +2,7 @@ using Test
 using ClimaCore:
     Domains, Meshes, Topologies, Geometry, Operators, Spaces, Fields
 using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
-using ClimaCore.Topologies: GridTopology
+using ClimaCore.Topologies: Topology2D
 using ClimaCore.Spaces: AbstractSpace
 using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
@@ -35,7 +35,7 @@ end
 """
 Checks if a linear remapping operator is monotone.
 
-A linear operator `R` is monotone if it is consistent and each element 
+A linear operator `R` is monotone if it is consistent and each element
 `R_{ij} ≥ 0`.
 """
 function monotone(R::LinearRemap)
@@ -49,8 +49,8 @@ end
         x1boundary = (:bottom, :top),
         x2boundary = (:left, :right),
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
-    topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, 1, 1)
+    topology = Topologies.Topology2D(mesh)
     space = Spaces.SpectralElementSpace2D(topology, Spaces.Quadratures.GL{1}())
 
     op = [0.5 0.25 0.0 0.25; 0.0 1.0 0.0 0.0; 0.25 0.25 0.25 0.25]
@@ -220,13 +220,13 @@ end
             )
 
             m1, n1 = 2, 2
-            mesh1 = Meshes.EquispacedRectangleMesh(domain, m1, n1)
-            source_topo = Topologies.GridTopology(mesh1)
+            mesh1 = Meshes.RectilinearMesh(domain, m1, n1)
+            source_topo = Topologies.Topology2D(mesh1)
             source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
             m2, n2 = 3, 3
-            mesh2 = Meshes.EquispacedRectangleMesh(domain, m2, n2)
-            target_topo = Topologies.GridTopology(mesh2)
+            mesh2 = Meshes.RectilinearMesh(domain, m2, n2)
+            target_topo = Topologies.Topology2D(mesh2)
             target = Spaces.SpectralElementSpace2D(target_topo, quad)
 
             @test local_weights(source) ≈ ones(4, 1)
@@ -280,8 +280,8 @@ end
             )
 
             m1, n1 = 2, 2
-            mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
-            source_topo = Topologies.GridTopology(mesh1)
+            mesh1 = Meshes.RectilinearMesh(domain1, m1, n1)
+            source_topo = Topologies.Topology2D(mesh1)
             source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
             domain2 = Domains.RectangleDomain(
@@ -291,8 +291,8 @@ end
                 x2boundary = (:left, :right),
             )
             m2, n2 = 2, 2
-            mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
-            target_topo = Topologies.GridTopology(mesh2)
+            mesh2 = Meshes.RectilinearMesh(domain2, m2, n2)
+            target_topo = Topologies.Topology2D(mesh2)
             target = Spaces.SpectralElementSpace2D(target_topo, quad)
 
             R = LinearRemap(target, source)
@@ -317,8 +317,8 @@ end
             )
 
             m1, n1 = 2, 2
-            mesh1 = Meshes.EquispacedRectangleMesh(domain1, m1, n1)
-            source_topo = Topologies.GridTopology(mesh1)
+            mesh1 = Meshes.RectilinearMesh(domain1, m1, n1)
+            source_topo = Topologies.Topology2D(mesh1)
             source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
             domain2 = Domains.RectangleDomain(
@@ -328,8 +328,8 @@ end
                 x2boundary = (:left, :right),
             )
             m2, n2 = 2, 2
-            mesh2 = Meshes.EquispacedRectangleMesh(domain2, m2, n2)
-            target_topo = Topologies.GridTopology(mesh2)
+            mesh2 = Meshes.RectilinearMesh(domain2, m2, n2)
+            target_topo = Topologies.Topology2D(mesh2)
             target = Spaces.SpectralElementSpace2D(target_topo, quad)
 
             R = LinearRemap(target, source)

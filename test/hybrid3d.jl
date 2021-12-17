@@ -37,8 +37,8 @@ function hvspace_3D(
         x1periodic = true,
         x2periodic = true,
     )
-    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.GridTopology(horzmesh)
+    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    horztopology = Topologies.Topology2D(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

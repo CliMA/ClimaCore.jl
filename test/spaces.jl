@@ -58,8 +58,8 @@ end
         x2periodic = false,
         x2boundary = (:south, :north),
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, 1, 1)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, 1, 1)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -111,8 +111,8 @@ end
         x1boundary = (:west, :east),
         x2boundary = (:south, :north),
     )
-    mesh = Meshes.equispaced_rectangular_mesh(domain, n1, n2)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -191,8 +191,8 @@ end
         x1boundary = (:west, :east),
         x2boundary = (:south, :north),
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)

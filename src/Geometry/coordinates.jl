@@ -1,8 +1,60 @@
+"""
+    AbstractPoint
+
+Represents a point in space.
+
+The following types are supported:
+- `XPoint(x)`
+- `YPoint(y)`
+- `ZPoint(z)`
+- `XYPoint(x, y)`
+- `XZPoint(x, z)`
+- `XYZPoint(x, y, z)`
+- `LatLongPoint(lat, long)`
+- `LatLongZPoint(lat, long, z)`
+- `Cartesian1Point(x1)`
+- `Cartesian2Point(x2)`
+- `Cartesian3Point(x3)`
+- `Cartesian12Point(x1, x2)`
+- `Cartesian13Point(x1, x3)`
+- `Cartesian123Point(x1, x2, x3)`
+"""
 abstract type AbstractPoint{FT} end
+
+"""
+    float_type(T)
+
+Return the floating point type backing `T`: `T` can either be an object or a type.
+"""
+float_type(::Type{<:AbstractPoint{FT}}) where {FT} = FT
+float_type(::AbstractPoint) where {FT} = FT
 
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract2DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract3DPoint{FT} <: AbstractPoint{FT} end
+
+Base.show(io::IO, point::Abstract1DPoint) =
+    print(io, nameof(typeof(point)), "(", component(point, 1), ")")
+Base.show(io::IO, point::Abstract2DPoint) = print(
+    io,
+    nameof(typeof(point)),
+    "(",
+    component(point, 1),
+    ", ",
+    component(point, 2),
+    ")",
+)
+Base.show(io::IO, point::Abstract3DPoint) = print(
+    io,
+    nameof(typeof(point)),
+    "(",
+    component(point, 1),
+    ", ",
+    component(point, 2),
+    ", ",
+    component(point, 3),
+    ")",
+)
 
 """
     @pointtype name fieldname1 ...
@@ -126,6 +178,15 @@ Base.:(*)(x::Number, p::AbstractPoint) = p * x
 Base.:(/)(p::T, x::Number) where {T <: AbstractPoint} =
     unionalltype(T)((components(p) / x)...)
 
+# we add our own method to this so that `BigFloat` coordinate ranges are computed accurately.
+function Base.lerpi(
+    j::Integer,
+    d::Integer,
+    a::T,
+    b::T,
+) where {T <: Abstract1DPoint}
+    T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
+end
 function Base.:(==)(p1::T, p2::T) where {T <: AbstractPoint}
     return components(p1) == components(p2)
 end
@@ -133,6 +194,8 @@ end
 function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
+Base.isless(x::T, y::T) where {T <: Abstract1DPoint} =
+    isless(component(x, 1), component(y, 1))
 
 
 """

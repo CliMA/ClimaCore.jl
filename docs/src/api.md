@@ -12,31 +12,81 @@ DataLayouts.IJFH
 ```
 
 ## Geometry
+
+### Coordinates
 ```@docs
-Geometry.Cartesian12Vector
+Geometry.AbstractPoint
+Geometry.float_type
 ```
 
 ## Domains
 
+### Types
 ```@docs
+Domains.AbstractDomain
 Domains.IntervalDomain
 Domains.RectangleDomain
+Domains.SphereDomain
+```
+
+### Interfaces
+```@docs
+Domains.boundary_names
 ```
 
 ## Meshes
 
+### Mesh types
 ```@docs
+Meshes.AbstractMesh
 Meshes.IntervalMesh
+Meshes.RectilinearMesh
+Meshes.AbstractCubedSphere
+Meshes.EquiangularCubedSphere
+Meshes.EquidistantCubedSphere
+Meshes.ConformalCubedSphere
+```
+
+### Mesh stretching
+```@docs
 Meshes.Uniform
 Meshes.ExponentialStretching
-Meshes.EquispacedRectangleMesh
+```
+
+### Interfaces
+```@docs
+Meshes.domain
+Meshes.elements
+Meshes.nelements
+Meshes.is_boundary_face
+Meshes.boundary_face_name
+Meshes.opposing_face
+Meshes.containing_element
+Meshes.SharedVertices
+Meshes.face_connectivity_matrix
+Meshes.vertex_connectivity_matrix
+Meshes.linearindices
 ```
 
 ## Topologies
 
+### Types
 ```@docs
-Topologies
+Topologies.AbstractTopology
 Topologies.IntervalTopology
+Topologies.Topology2D
+```
+
+### Interfaces
+```@docs
+Topologies.nlocalelems
+Topologies.vertex_coordinates
+Topologies.opposing_face
+Topologies.interior_faces
+Topologies.boundary_tags
+Topologies.boundary_tag
+Topologies.boundary_faces
+Topologies.vertices
 ```
 
 ## Spaces

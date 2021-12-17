@@ -14,18 +14,17 @@ function UnicodePlots.heatmap(
 
     space = axes(field)
     mesh = space.topology.mesh
-    n1 = mesh.n1
-    n2 = mesh.n2
+    n1, n2 = size(elements(mesh))
 
     Nu = max(div(width, n1), div(height, n2))
     M = Operators.matrix_interpolate(field, Nu)
 
     m1, m2 = size(M')
     domain = Meshes.domain(mesh)
-    x1min = Geometry.component(domain.x1x2min, 1)
-    x2min = Geometry.component(domain.x1x2min, 2)
-    x1max = Geometry.component(domain.x1x2max, 1)
-    x2max = Geometry.component(domain.x1x2max, 2)
+    x1min = Geometry.component(domain.interval1.coord_min, 1)
+    x2min = Geometry.component(domain.interval2.coord_min, 1)
+    x1max = Geometry.component(domain.interval1.coord_max, 1)
+    x2max = Geometry.component(domain.interval2.coord_max, 1)
 
     coord_field = Fields.coordinate_field(space)
     coord_symbols = propertynames(coord_field)
@@ -195,10 +194,10 @@ RecipesBase.@recipe function f(
     M = Operators.matrix_interpolate(field, Nu)
 
     domain = Meshes.domain(mesh)
-    x1min = Geometry.component(domain.x1x2min, 1)
-    x2min = Geometry.component(domain.x1x2min, 2)
-    x1max = Geometry.component(domain.x1x2max, 1)
-    x2max = Geometry.component(domain.x1x2max, 2)
+    x1min = Geometry.component(domain.interval1.coord_min, 1)
+    x2min = Geometry.component(domain.interval2.coord_min, 1)
+    x1max = Geometry.component(domain.interval1.coord_max, 1)
+    x2max = Geometry.component(domain.interval2.coord_max, 1)
 
     # our interpolated field is transposed
     x1coord = [Geometry.component(pt, 1) for pt in M_coords[:, 1]]
@@ -225,9 +224,8 @@ RecipesBase.@recipe function f(
     space = axes(field)
     topology = Spaces.topology(space)
     mesh = topology.mesh
-
-    nelem = Topologies.nlocalelems(topology)
-    panel_size = isqrt(div(nelem, 6))
+    nelem = Meshes.nelements(mesh)
+    panel_size = mesh.ne
 
     quad_from = Spaces.quadrature_style(space)
     quad_to = Spaces.Quadratures.Uniform{interpolate}()
@@ -272,6 +270,26 @@ RecipesBase.@recipe function f(
         end
     end
 
+
+    # (px, py, rot) for each panel
+    # px, py are the locations of the panel
+    # rot is number of clockwise rotations (0:3)
+    # https://extranet.gfdl.noaa.gov/~atw/ferret/cubed_sphere/
+    # Equatorial strip, poles connected through the Americas
+    panel_locations =
+        [(4, 2, 0), (1, 2, 0), (3, 3, 2), (2, 2, 1), (3, 2, 1), (3, 1, 1)]
+    for (i, (px, py, rot)) in enumerate(panel_locations)
+        unfolded_panels[pannel_range(py), pannel_range(px)] .= if rot == 0
+            panels[i]
+        elseif rot == 1
+            reverse(transpose(panels[i]), dims = 1)
+        elseif rot == 2
+            reverse(panels[i], dims = (1, 2))
+        else
+            reverse(transpose(panels[i]), dims = 2)
+        end
+    end
+    #=
     unfolded_panels[pannel_range(1), pannel_range(2)] =
         reverse(panels[5], dims = 1)
     unfolded_panels[pannel_range(2), pannel_range(1)] =
@@ -282,7 +300,7 @@ RecipesBase.@recipe function f(
         reverse(panels[6], dims = 2)
     unfolded_panels[pannel_range(3), pannel_range(2)] =
         reverse(panels[3], dims = 2)
-
+    =#
     quad_from_name = Base.typename(typeof(quad_from)).name
     # set the plot attributes
     seriestype := :heatmap

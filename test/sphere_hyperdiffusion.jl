@@ -21,8 +21,8 @@ using SphericalHarmonics
     domain = Domains.SphereDomain(radius)
 
     Ne = 16
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, Ne)
+    grid_topology = Topologies.Topology2D(mesh)
 
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()
