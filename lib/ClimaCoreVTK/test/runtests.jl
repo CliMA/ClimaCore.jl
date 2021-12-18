@@ -66,7 +66,7 @@ end
         x2periodic = true,
     )
 
-    n1, n2 = 2, 2
+    n1, n2 = 4, 4
     Nq = 4
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(mesh)
