@@ -274,6 +274,28 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Rising Bubble hybrid invariant"
+    key: "cpu_rising_bubble_hybrid_invariant"
+    command:
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_invariant.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble_invariant/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble 3D hybrid invariant"
+    key: "cpu_rising_bubble_3d_hybrid_invariant"
+    command:
+      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble3d_invariant.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Solid body CG sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
     command:

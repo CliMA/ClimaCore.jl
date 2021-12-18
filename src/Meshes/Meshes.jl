@@ -108,7 +108,7 @@ include("rectangle.jl")
 include("cubedsphere.jl")
 
 # deprecations
-@deprecate EquispacedRectilinearMesh(args...) RectilinearMesh(args...)
+@deprecate EquispacedRectangleMesh(args...) RectilinearMesh(args...)
 @deprecate equispaced_rectangular_mesh(args...) RectilinearMesh(args...)
 @deprecate TensorProductMesh(args...) RectilinearMesh(args...)
 @deprecate EquiangularSphereWarp() EquiangularCubedSphere

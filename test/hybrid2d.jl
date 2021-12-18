@@ -416,3 +416,67 @@ end
 
     @test norm(curluw_diff) < norm(curluw_ref) * 1e-2
 end
+
+
+@testset "curl-cross" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(xlim = (-pi, pi), zlim = (-pi, pi))
+
+    ccoords = Fields.coordinate_field(hv_center_space)
+    fcoords = Fields.coordinate_field(hv_face_space)
+
+    a = 1.0
+    b = 2.0
+    c = 3.0
+    d = 4.0
+
+    u =
+        Geometry.transform.(
+            Ref(Geometry.Covariant1Axis()),
+            Geometry.UVector.(a .* ccoords.x .+ b .* ccoords.z),
+        )
+    w =
+        Geometry.transform.(
+            Ref(Geometry.Covariant3Axis()),
+            Geometry.WVector.(c .* fcoords.x .+ d .* fcoords.z),
+        )
+
+    curl = Operators.Curl()
+    curlC2F = Operators.CurlC2F(
+        bottom = Operators.SetCurl(Geometry.Contravariant2Vector(b)),
+        top = Operators.SetCurl(Geometry.Contravariant2Vector(b)),
+    )
+
+    curlu = curlC2F.(u)
+    curlw = curl.(w)
+    curluw = curlu .+ curlw
+    @test norm(curluw .- Ref(Geometry.Contravariant2Vector(b - c))) < 1e-10
+
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+
+    fu¹² = Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(u))) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(w))
+
+
+    Geometry.WVector.(Geometry.Covariant13Vector.(curluw .× fu¹²))
+
+    curl_cross =
+        Geometry.UWVector.(
+            Geometry.Covariant13Vector.(curluw .× fu¹²) .+
+            Geometry.Covariant13Vector.(curluw .× fu³),
+        )
+
+    curl_cross_ref =
+        Geometry.UWVector.(
+            (b - c) .* (c .* fcoords.x .+ d .* fcoords.z),
+            .-(b - c) .* (a .* fcoords.x .+ b .* fcoords.z),
+        )
+
+    @test curl_cross ≈ curl_cross_ref rtol = 1e-2
+
+
+end
