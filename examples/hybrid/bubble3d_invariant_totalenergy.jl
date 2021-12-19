@@ -1,5 +1,7 @@
+push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+
 using Test
-using LinearAlgebra
+using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
 import ClimaCore:
     ClimaCore,
@@ -12,39 +14,41 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-
 using ClimaCore.Geometry
 
-import Logging
-import TerminalLoggers
-Logging.global_logger(TerminalLoggers.TerminalLogger())
-# set up function space
-function hvspace_2D(
+using Logging: global_logger
+using TerminalLoggers: TerminalLogger
+global_logger(TerminalLogger())
+
+function hvspace_3D(
     xlim = (-π, π),
+    ylim = (-π, π),
     zlim = (0, 4π),
-    helem = 10,
-    velem = 40,
-    npoly = 4,
+    xelem = 4,
+    yelem = 4,
+    zelem = 16,
+    npoly = 3,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
+        boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]),
-        periodic = true,
+    horzdomain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+        Geometry.YPoint{FT}(ylim[1]) .. Geometry.YPoint{FT}(ylim[2]),
+        x1periodic = true,
+        x2periodic = true,
     )
-    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-    horztopology = Topologies.IntervalTopology(horzmesh)
+    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    horztopology = Topologies.Topology2D(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
@@ -52,9 +56,8 @@ function hvspace_2D(
     return (hv_center_space, hv_face_space)
 end
 
-# set up rhs!
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
-#hv_center_space, hv_face_space = hvspace_2D((-500,500),(0,30000), 5, 30)
+# set up 3D domain - doubly periodic box
+hv_center_space, hv_face_space = hvspace_3D((-500, 500), (-500, 500), (0, 1000))
 
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
@@ -62,21 +65,20 @@ const R_d = 287.058 # R dry (gas constant / mol mass dry air)
 const γ = 1.4 # heat capacity ratio
 const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
 const C_v = R_d / (γ - 1) # heat capacity at constant volume
-const R_m = R_d # moist R, assumed to be dry
-
-function pressure(ρθ)
-    if ρθ >= 0
-        return MSLP * (R_d * ρθ / MSLP)^γ
-    else
-        return NaN
-    end
-end
+const T_0 = 273.16 # triple point temperature
 
 Φ(z) = grav * z
 
+function pressure(ρ, e, uvw, z)
+    I = e - Φ(z) - (norm(uvw)^2) / 2
+    T = I / C_v + T_0
+    return ρ * R_d * T
+end
+
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-function init_dry_rising_bubble_2d(x, z)
+function init_dry_rising_bubble_3d(x, y, z)
     x_c = 0.0
+    y_c = 0.0
     z_c = 350.0
     r_c = 250.0
     θ_b = 300.0
@@ -87,7 +89,7 @@ function init_dry_rising_bubble_2d(x, z)
     g = grav
 
     # auxiliary quantities
-    r = sqrt((x - x_c)^2 + (z - z_c)^2)
+    r = sqrt((x - x_c)^2 + (y - y_c)^2 + (z - z_c)^2)
     θ_p = r < r_c ? 0.5 * θ_c * (1.0 + cospi(r / r_c)) : 0.0 # potential temperature perturbation
 
     θ = θ_b + θ_p # potential temperature
@@ -95,32 +97,35 @@ function init_dry_rising_bubble_2d(x, z)
     T = π_exn * θ # temperature
     p = p_0 * π_exn^(cp_d / R_d) # pressure
     ρ = p / R_d / T # density
-    ρθ = ρ * θ # potential temperature density
+    e = cv_d * (T - T_0) + g * z
+    ρe = ρ * e # total energy
 
-    return (ρ = ρ, ρθ = ρθ)
+    return (ρ = ρ, ρe = ρe)
 end
 
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
 face_coords = Fields.coordinate_field(hv_face_space)
 
-Yc = map(coord -> init_dry_rising_bubble_2d(coord.x, coord.z), coords)
-uₕ = map(_ -> Geometry.Covariant1Vector(0.0), coords)
+Yc = map(coord -> init_dry_rising_bubble_3d(coord.x, coord.y, coord.z), coords)
+uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+
+energy_0 = sum(Y.Yc.ρe)
+mass_0 = sum(Y.Yc.ρ)
 
 function rhs_invariant!(dY, Y, _, t)
 
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
-    cuₕ = Y.uₕ # Covariant1Vector on centers
-    cρθ = Y.Yc.ρθ
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    cρe = Y.Yc.ρe
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
-    dρθ = dY.Yc.ρθ
-
+    dρe = dY.Yc.ρe
 
     # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33
@@ -137,14 +142,24 @@ function rhs_invariant!(dY, Y, _, t)
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
 
-    χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ)) # we store χθ in dρθ
-    χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
-    Spaces.weighted_dss!(dρθ)
+    χe = @. dρe = hwdiv(hgrad(cρe / cρ)) # we store χe in dρe
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+
+
+    Spaces.weighted_dss!(dρe)
     Spaces.weighted_dss!(duₕ)
 
     κ₄ = 100.0 # m^4/s
-    @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
-    @. duₕ = -κ₄ * hwgrad(hdiv(χuₕ))
+    @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
     If2c = Operators.InterpolateF2C()
@@ -154,12 +169,12 @@ function rhs_invariant!(dY, Y, _, t)
     )
     cw = If2c.(fw)
     fuₕ = Ic2f.(cuₕ)
-    cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
 
     dw .= fw .* 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    dρ .-= hdiv.(cρ .* (cuvw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -181,27 +196,34 @@ function rhs_invariant!(dY, Y, _, t)
     hcurl = Operators.Curl()
     # effectively a homogeneous Dirichlet condition on u₁ at the boundary
     vcurlc2f = Operators.CurlC2F(
-        bottom = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
-        top = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
+        bottom = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
+        top = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
     )
-    #cω³ = hcurl.(cu) # zero because we're only in 1D: we can leave this off for the bubble
-    fω¹² = hcurl.(fw) # Contravariant2Vector / Contravariant12Vector
-    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant2Vector / Contravariant12Vector
+    cω³ = hcurl.(cuₕ) # Contravariant3Vector
+    fω¹² = hcurl.(fw) # Contravariant12Vector
+    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
 
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
     fu¹² =
-        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ))) # Contravariant12Vector in 3D
-    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(fw))
+        Geometry.Contravariant12Vector.(
+            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
+        ) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)
 
     # Needed for 3D:
-    #cu¹² = Contravariant12Vector.(cu)
-    #@. du += cω³ × cu¹²
+    @. duₕ -=
+        cω³ × Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    cp = @. pressure(cρθ)
+    ce = @. cρe / cρ
+    #cp = @. pressure(cρ, ce, cuvw, coords.z) #TODO: the pressure function doesn't work (broadcast error)
+    cI = @. ce - Φ(coords.z) - (norm(cuvw)^2) / 2
+    cT = @. cI / C_v + T_0
+    cp = @. cρ * R_d * cT
+
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
         bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
@@ -209,15 +231,15 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + Φ(coords.z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) potential temperature
 
-    @. dρθ -= hdiv(cuw * Yc.ρθ)
-    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
-    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     fcc = Operators.FluxCorrectionC2C(
         bottom = Operators.Extrapolate(),
@@ -229,7 +251,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
 
     @. dρ += fcc(fw, cρ)
-    @. dρθ += fcc(fw, cρθ)
+    @. dρe += fcc(fw, cρe)
     # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
     Spaces.weighted_dss!(dY.Yc)
@@ -240,53 +262,54 @@ function rhs_invariant!(dY, Y, _, t)
     return dY
 end
 
-
-
 dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
-
-
 # run!
 using OrdinaryDiffEq
-Δt = 0.025
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 1.0))
+Δt = 0.050
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0))
 sol_invariant = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 5.0,
+    saveat = 1.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
 
 ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
+import Plots
 Plots.GRBackend()
 
-dirname = "bubble_invariant"
+dirname = "bubble3d_invariant_etot"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 # post-processing
-anim = Plots.@animate for u in sol_invariant.u
-    Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
-end
-Plots.mp4(anim, joinpath(path, "theta.mp4"), fps = 20)
+Es = [sum(Y.Yc.ρe) for u in sol_invariant.u]
+Mass = [sum(u.Yc.ρ) for u in sol_invariant.u]
 
-anim = Plots.@animate for u in sol_invariant.u
-    Plots.plot(u.Yc.ρ)
-end
-Plots.mp4(anim, joinpath(path, "rho.mp4"), fps = 20)
+Plots.png(
+    Plots.plot((Es .- energy_0) ./ energy_0),
+    joinpath(path, "energy.png"),
+)
+Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
 
-
-If2c = Operators.InterpolateF2C()
-anim = Plots.@animate for u in sol_invariant.u
-    Plots.plot(Geometry.WVector.(Geometry.Covariant13Vector.(If2c.(u.w))))
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
 end
-Plots.mp4(anim, joinpath(path, "vel_w.mp4"), fps = 20)
 
-anim = Plots.@animate for u in sol_invariant.u
-    Plots.plot(Geometry.UVector.(Geometry.Covariant13Vector.(u.uₕ)))
-end
-Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)
+linkfig(
+    relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
+    "Mass",
+)
