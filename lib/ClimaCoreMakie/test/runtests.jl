@@ -2,7 +2,12 @@ using Test
 using IntervalSets
 
 import ClimaCore
-import ClimaCoreMakie
+import ClimaCoreMakie: ClimaCoreMakie, Makie
+
+if "CI" in ENV
+    using GLMakie
+    OUTPUT_DIR = mkdir(joinpath(@__DIR__, "output"))
+end
 
 @testset "spectral element 2D cubed-sphere" begin
     R = 6.37122e6
@@ -27,6 +32,10 @@ import ClimaCoreMakie
 
     fig = ClimaCoreMakie.viz(u.components.data.:1)
     @test fig !== nothing
+
+    if "CI" in ENV
+        GLMakie.save(joinpath(OUTPUT_DIR, "2D_cubed_sphere.png"), fig)
+    end
 end
 
 @testset "spectral element rectangle 2D" begin
@@ -52,4 +61,8 @@ end
 
     fig = ClimaCoreMakie.viz(sinxy)
     @test fig !== nothing
+
+    if "CI" in ENV
+        GLMakie.save(joinpath(OUTPUT_DIR, "2D_rectangle.png"), fig)
+    end
 end
