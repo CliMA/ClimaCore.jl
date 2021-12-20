@@ -336,12 +336,12 @@ RecipesBase.@recipe function f(
         hcoord_data = vec(M_hcoord)
         vcoord_data = vec(M_vcoord)
         data = vec(M_data)
-        triangles = hcat(Spaces.triangles(Nu, Nv, Nh)...)'
+        triangles = hcat(Spaces.triangles(Nv, Nu, Nh)...)'
     else
         hcoord_data = vec(parent(hcoord_field))
         vcoord_data = vec(parent(vcoord_field))
         data = vec(parent(data))
-        triangles = hcat(Spaces.triangles(Ni, Nv, Nh)...)'
+        triangles = hcat(Spaces.triangles(Nv, Ni, Nh)...)'
     end
     cmap = range(extrema(data)..., length = ncolors)
 
@@ -352,8 +352,10 @@ RecipesBase.@recipe function f(
         triangles,
         cmap;
         bg = NaN,
-        px = length(hcoord_data),
-        py = length(vcoord_data),
+        # unique number of nodal element coords
+        # (number of nodal values minus number of shared faces)
+        px = (Ni * Nh) - (Nh - 1),
+        py = Nv,
     )
 
     # set the plot attributes
@@ -364,7 +366,7 @@ RecipesBase.@recipe function f(
     seriescolor --> :balance
 
     # some plots backends need coordinates in sorted order
-    (sort(hcoord_data), sort(vcoord_data), z')
+    (sort(unique(hcoord_data)), sort(unique(vcoord_data)), z')
 end
 
 
