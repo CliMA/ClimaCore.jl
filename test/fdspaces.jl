@@ -223,7 +223,7 @@ convergence_rate(err, Δh) =
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
 
         for (k, n) in enumerate(n_elems_seq)
-            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
                 boundary_tags = (:left, :right),
@@ -271,7 +271,7 @@ end
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
 
         for (k, n) in enumerate(n_elems_seq)
-            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
                 boundary_tags = (:left, :right),
@@ -321,7 +321,7 @@ end
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
-            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
                 boundary_tags = (:left, :right),
@@ -372,7 +372,7 @@ end
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
-            interval = Geometry.ZPoint(a)..Geometry.ZPoint(b)
+            interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
                 boundary_tags = (:left, :right),

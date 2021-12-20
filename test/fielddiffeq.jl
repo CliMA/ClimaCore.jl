@@ -8,8 +8,8 @@ using LinearAlgebra, IntervalSets
 
 @testset "DiffEq Solvers" begin
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(-2π)..Geometry.XPoint(2π),
-        Geometry.YPoint(-2π)..Geometry.YPoint(2π),
+        Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
+        Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
         x1periodic = true,
         x2periodic = true,
     )

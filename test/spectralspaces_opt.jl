@@ -84,8 +84,8 @@ end
     @testset "Scalar Field Specctral Element optimizations" begin
         for FT in (Float64,)
             domain = Domains.RectangleDomain(
-                Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-                Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+                Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+                Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
                 x1periodic = true,
                 x2periodic = true,
             )

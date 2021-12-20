@@ -10,7 +10,8 @@ other linear ordering of the `Mesh.elements(mesh)`. `elempid` is a sorted
 vector of the same length as `elemorder`, each element of which contains
 the `pid` of the owning process.
 """
-struct DistributedTopology2D{M <: Meshes.AbstractMesh{2}, EO, OI, EL, PE, BF} <: AbstractTopology
+struct DistributedTopology2D{M <: Meshes.AbstractMesh{2}, EO, OI, EL, PE, BF} <:
+       AbstractTopology
     "mesh on which the topology is constructed"
     mesh::M
     "`elemorder[e]` should give the `e`th element "
@@ -87,12 +88,18 @@ function DistributedTopology2D(
         boundary_name in unique(Meshes.boundary_names(mesh))
     )
 
-    gvert_seen = BitArray(undef, (length(elemorder), 4))
-    fill!(gvert_seen, 0)
+    iface_seen = BitArray(undef, (length(elemorder), 4))
+    fill!(iface_seen, 0)
+    gface_seen = BitArray(undef, (length(elemorder), 4))
+    fill!(gface_seen, 0)
     ivert_seen = BitArray(undef, (length(elemorder), 4))
     fill!(ivert_seen, 0)
+    gvert_seen = BitArray(undef, (length(elemorder), 4))
+    fill!(gvert_seen, 0)
 
     for (e, elem) in enumerate(real_elems)
+        oe = orderindex[elem]
+
         # Determine whether a face is a boundary face, an interior face
         # (the opposing face is of a real element), or a ghost face (the
         # opposing face is of a ghost element). However, we do not
@@ -107,15 +114,16 @@ function DistributedTopology2D(
                     Meshes.opposing_face(mesh, elem, face)
                 oi = orderindex[opelem]
                 if opelem ∈ real_elems # this is doing a linear search through elems: TODO could we improve this?
-                    # TODO: only add if this is a new face
-                    push!(interior_faces, (e, face, oi, opface, reversed))
+                    iface_seen[oe, face] && continue
+                    iface_seen[oe, face] = iface_seen[oi, opface] = true
+                    push!(interior_faces, (oe, face, oi, opface, reversed))
                 else
-                    # TODO: only add if this is a new face
-                    push!(ghost_faces, (e, face, oi, opface, reversed))
+                    gface_seen[oe, face] && continue
+                    gface_seen[oe, face] = gface_seen[oi, opface] = true
+                    push!(ghost_faces, (oe, face, oi, opface, reversed))
                 end
             end
         end
-                    if (oi, opface) < (e, face)
 
         # Determine whether a vertex is an interior or a ghost vertex. For
         # ghost vertices, we record the elements to be sent as well as the
@@ -127,9 +135,9 @@ function DistributedTopology2D(
                 elempid[oi] != pid
             end
                 # one or more elements sharing this vertex are ghost elements
-                gvert_seen[e, vert] && continue
-                gvert_seen[e, vert] = true
-                gvert_group = [(e, vert)]
+                gvert_seen[oe, vert] && continue
+                gvert_seen[oe, vert] = true
+                gvert_group = Tuple{Int, Int}[]
                 for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
                     oi = orderindex[velem]
                     push!(gvert_group, (oi, vvert))
@@ -146,9 +154,9 @@ function DistributedTopology2D(
                 push!(ghost_vertices, sort(gvert_group))
             else
                 # all elements sharing this vertex are real
-                ivert_seen[e, vert] && continue
-                ivert_seen[e, vert] = true
-                ivert_group = [(e, vert)]
+                ivert_seen[oe, vert] && continue
+                ivert_seen[oe, vert] = true
+                ivert_group = Tuple{Int, Int}[]
                 for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
                     oi = orderindex[velem]
                     push!(ivert_group, (oi, vvert))
@@ -158,6 +166,7 @@ function DistributedTopology2D(
             end
         end
     end
+    println("$pid> iv: $interior_vertices")
 
     # build ragged arrays out of the dictionaries
     send_elems_ra = [(k, collect(v)) for (k, v) in send_elems]
@@ -215,8 +224,12 @@ ghost_vertices(topology::DistributedTopology2D) = topology.ghost_vertices
 # to interior vertices for now.
 Base.length(vertiter::VertexIterator{<:DistributedTopology2D}) =
     length(vertiter.topology.interior_vertices)
-Base.eltype(::VertexIterator{T}) where {T <: DistributedTopology2D} = Vertex{T, Int}
-function Base.iterate(vertiter::VertexIterator{<:DistributedTopology2D}, uvert = 1)
+Base.eltype(::VertexIterator{T}) where {T <: DistributedTopology2D} =
+    Vertex{T, Int}
+function Base.iterate(
+    vertiter::VertexIterator{<:DistributedTopology2D},
+    uvert = 1,
+)
     topology = vertiter.topology
     if uvert >= length(topology.interior_vertices)
         return nothing
@@ -227,8 +240,12 @@ end
 # XXX: added `InteriorVertexIterator`
 Base.length(vertiter::InteriorVertexIterator{<:DistributedTopology2D}) =
     length(vertiter.topology.interior_vertices)
-Base.eltype(::InteriorVertexIterator{T}) where {T <: DistributedTopology2D} = Vertex{T, Int}
-function Base.iterate(vertiter::InteriorVertexIterator{<:DistributedTopology2D}, uvert = 1)
+Base.eltype(::InteriorVertexIterator{T}) where {T <: DistributedTopology2D} =
+    Vertex{T, Int}
+function Base.iterate(
+    vertiter::InteriorVertexIterator{<:DistributedTopology2D},
+    uvert = 1,
+)
     topology = vertiter.topology
     if uvert >= length(topology.interior_vertices)
         return nothing
@@ -239,8 +256,12 @@ end
 # XXX: added `GhostVertexIterator`
 Base.length(vertiter::GhostVertexIterator{<:DistributedTopology2D}) =
     length(vertiter.topology.ghost_vertices)
-Base.eltype(::GhostVertexIterator{T}) where {T <: DistributedTopology2D} = Vertex{T, Int}
-function Base.iterate(vertiter::GhostVertexIterator{<:DistributedTopology2D}, uvert = 1)
+Base.eltype(::GhostVertexIterator{T}) where {T <: DistributedTopology2D} =
+    Vertex{T, Int}
+function Base.iterate(
+    vertiter::GhostVertexIterator{<:DistributedTopology2D},
+    uvert = 1,
+)
     topology = vertiter.topology
     if uvert >= length(topology.interior_vertices)
         return nothing
@@ -248,27 +269,24 @@ function Base.iterate(vertiter::GhostVertexIterator{<:DistributedTopology2D}, uv
     return Vertex(topology, uvert), uvert + 1
 end
 
-# XXX: this is broken; can we add `elem` to the `Vertex` struct and use
-# `length(Meshes.SharedVertices(mesh, vertex.elem, vertex.num))`?
 Base.length(vertex::Vertex{<:DistributedTopology2D}) =
-    vertex.topology.vertex_offset[vertex.num + 1] -
-    vertex.topology.vertex_offset[vertex.num]
-Base.eltype(vertex::Vertex{<:DistributedTopology2D}) = eltype(vertex.topology.vertices)
-function Base.iterate(
-    vertex::Vertex{<:DistributedTopology2D},
-    idx = vertex.topology.vertex_offset[vertex.num],
-)
-    if idx >= vertex.topology.vertex_offset[vertex.num + 1]
+    length(vertex.topology.interior_vertices[vertex.num])
+Base.eltype(vertex::Vertex{<:DistributedTopology2D}) =
+    eltype(eltype(vertex.topology.interior_vertices))
+function Base.iterate(vertex::Vertex{<:DistributedTopology2D}, idx = 1)
+    if idx > length(vertex.topology.interior_vertices[vertex.num])
         return nothing
     end
-    return vertex.topology.vertices[idx], idx + 1
+    return vertex.topology.interior_vertices[vertex.num][idx], idx + 1
 end
 
 boundary_names(topology::DistributedTopology2D) = keys(topology.boundaries)
-boundary_tags(topology::DistributedTopology2D) = NamedTuple{boundary_names(topology)}(
-    ntuple(i -> i, length(topology.boundaries)),
-)
+boundary_tags(topology::DistributedTopology2D) =
+    NamedTuple{boundary_names(topology)}(
+        ntuple(i -> i, length(topology.boundaries)),
+    )
 boundary_tag(topology::DistributedTopology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
-boundary_faces(topology::DistributedTopology2D, boundary) = topology.boundaries[boundary]
+boundary_faces(topology::DistributedTopology2D, boundary) =
+    topology.boundaries[boundary]

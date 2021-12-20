@@ -43,8 +43,8 @@ end
 @testset "rectangle" begin
 
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(0)..Geometry.XPoint(2π),
-        Geometry.YPoint(0)..Geometry.YPoint(2π),
+        Geometry.XPoint(0) .. Geometry.XPoint(2π),
+        Geometry.YPoint(0) .. Geometry.YPoint(2π),
         x1periodic = true,
         x2periodic = true,
     )

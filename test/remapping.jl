@@ -44,8 +44,8 @@ end
 
 @testset "Linear Operator Properties" begin
     domain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
-        Geometry.YPoint{FT}(-2)..Geometry.YPoint{FT}(8),
+        Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
+        Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),
         x1boundary = (:bottom, :top),
         x2boundary = (:left, :right),
     )
@@ -75,7 +75,7 @@ end
     @testset "1D Domains" begin
         @testset "Aligned Intervals Different Resolutions" begin
             domain = Domains.IntervalDomain(
-                Geometry.XPoint(0.0)..Geometry.XPoint(1.0),
+                Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
 
@@ -125,7 +125,7 @@ end
 
         @testset "Unaligned Intervals Same Resolution" begin
             domain1 = Domains.IntervalDomain(
-                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
 
@@ -135,7 +135,7 @@ end
             source = Spaces.SpectralElementSpace1D(source_topo, quad)
 
             domain2 = Domains.IntervalDomain(
-                Geometry.XPoint(0.0)..Geometry.XPoint(2.0),
+                Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
                 boundary_tags = (:left, :right),
             )
             n2 = 3
@@ -159,7 +159,7 @@ end
 
         @testset "Concentric Domains of Different Length" begin
             domain1 = Domains.IntervalDomain(
-                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
 
@@ -170,7 +170,7 @@ end
 
 
             domain2 = Domains.IntervalDomain(
-                Geometry.XPoint(-.5)..Geometry.XPoint(0.5),
+                Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
                 boundary_tags = (:left, :right),
             )
             n2 = 4
@@ -213,8 +213,8 @@ end
     @testset "2D Domains" begin
         @testset "Aligned Grids Different Resolutions" begin
             domain = Domains.RectangleDomain(
-                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
@@ -273,8 +273,8 @@ end
 
         @testset "Unaligned Grids Same Resolution" begin
             domain1 = Domains.RectangleDomain(
-                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
@@ -285,8 +285,8 @@ end
             source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
             domain2 = Domains.RectangleDomain(
-                Geometry.XPoint(0.0)..Geometry.XPoint(2.0),
-                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
+                Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
@@ -310,8 +310,8 @@ end
 
         @testset "Concentric Domains of Different Area" begin
             domain1 = Domains.RectangleDomain(
-                Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-                Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
@@ -322,8 +322,8 @@ end
             source = Spaces.SpectralElementSpace2D(source_topo, quad)
 
             domain2 = Domains.RectangleDomain(
-                Geometry.XPoint(-.5)..Geometry.XPoint(0.5),
-                Geometry.YPoint(-.5)..Geometry.YPoint(0.5),
+                Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
+                Geometry.YPoint(-0.5) .. Geometry.YPoint(0.5),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
