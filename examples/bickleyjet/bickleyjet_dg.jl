@@ -30,8 +30,8 @@ numflux_name = get(ARGS, 1, "rusanov")
 boundary_name = get(ARGS, 2, "")
 
 domain = Domains.RectangleDomain(
-    Geometry.XPoint(-2π)..Geometry.XPoint(2π),
-    Geometry.YPoint(-2π)..Geometry.YPoint(2π),
+    Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
+    Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
     x1periodic = true,
     x2periodic = boundary_name != "noslip",
     x2boundary = boundary_name != "noslip" ? nothing : (:south, :north),

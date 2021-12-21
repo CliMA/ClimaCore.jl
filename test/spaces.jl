@@ -9,7 +9,7 @@ import ClimaCore.DataLayouts: IJFH
 @testset "1d domain space" begin
     FT = Float64
     domain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
+        Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         periodic = true,
     )
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
@@ -52,8 +52,8 @@ end
 @testset "1×1 domain space" begin
     FT = Float32
     domain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(-3)..Geometry.XPoint{FT}(5),
-        Geometry.YPoint{FT}(-2)..Geometry.YPoint{FT}(8),
+        Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
+        Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),
         x1periodic = true,
         x2periodic = false,
         x2boundary = (:south, :north),
@@ -104,8 +104,8 @@ end
     FT = Float64
     n1, n2 = 2, 2
     domain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(0)..Geometry.XPoint{FT}(4),
-        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(4),
+        Geometry.XPoint{FT}(0) .. Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0) .. Geometry.YPoint{FT}(4),
         x1periodic = false,
         x2periodic = false,
         x1boundary = (:west, :east),
@@ -184,8 +184,8 @@ end
     n1, n2 = 2, 2
     Nij = 4
     domain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(0)..Geometry.XPoint{FT}(4),
-        Geometry.YPoint{FT}(0)..Geometry.YPoint{FT}(4),
+        Geometry.XPoint{FT}(0) .. Geometry.XPoint{FT}(4),
+        Geometry.YPoint{FT}(0) .. Geometry.YPoint{FT}(4),
         x1periodic = false,
         x2periodic = false,
         x1boundary = (:west, :east),

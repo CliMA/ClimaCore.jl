@@ -39,8 +39,8 @@ function hvspace_3D(
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
-        Geometry.YPoint{FT}(ylim[1])..Geometry.YPoint{FT}(ylim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+        Geometry.YPoint{FT}(ylim[1]) .. Geometry.YPoint{FT}(ylim[2]),
         x1periodic = true,
         x2periodic = true,
     )

@@ -17,8 +17,8 @@ using OrdinaryDiffEq
     FT = Float64
 
     domain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(-π)..Geometry.XPoint{FT}(π),
-        Geometry.YPoint{FT}(-π)..Geometry.YPoint{FT}(π),
+        Geometry.XPoint{FT}(-π) .. Geometry.XPoint{FT}(π),
+        Geometry.YPoint{FT}(-π) .. Geometry.YPoint{FT}(π),
         x1periodic = true,
         x2periodic = true,
     )

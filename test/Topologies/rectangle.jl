@@ -15,8 +15,8 @@ function rectangular_grid(
     x2max = 1.0,
 )
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(x1min)..Geometry.XPoint(x1max),
-        Geometry.YPoint(x2min)..Geometry.YPoint(x2max),
+        Geometry.XPoint(x1min) .. Geometry.XPoint(x1max),
+        Geometry.YPoint(x2min) .. Geometry.YPoint(x2max),
         x1periodic = x1periodic,
         x2periodic = x2periodic,
         x1boundary = x1periodic ? nothing : (:west, :east),

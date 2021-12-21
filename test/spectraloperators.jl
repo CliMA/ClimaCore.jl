@@ -7,8 +7,8 @@ using LinearAlgebra, IntervalSets
 
 FT = Float64
 domain = Domains.RectangleDomain(
-    Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-    Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+    Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+    Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
     x1periodic = true,
     x2periodic = true,
 )
