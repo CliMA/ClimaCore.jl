@@ -445,6 +445,17 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: nonhydrostatic gravity wave"
+    key: "cpu_nonhydrostatic_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/nonhydrostatic_gravity_wave.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/nonhydrostatic_gravity_wave/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: solid body rotation"
     key: "cpu_solid_body_rotation"
