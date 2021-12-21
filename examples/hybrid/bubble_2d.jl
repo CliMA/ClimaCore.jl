@@ -38,7 +38,7 @@ function hvspace_2D(
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)

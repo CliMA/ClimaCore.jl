@@ -20,14 +20,14 @@ using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 # A _domain_ a region of space (think of a mathematical domain).
 
 column_domain = ClimaCore.Domains.IntervalDomain(
-    ClimaCore.Geometry.ZPoint(0.0)..ClimaCore.Geometry.ZPoint(10.0),
+    ClimaCore.Geometry.ZPoint(0.0) .. ClimaCore.Geometry.ZPoint(10.0),
     boundary_tags = (:bottom, :top),
 )
 #----------------------------------------------------------------------------
 
 rectangle_domain = ClimaCore.Domains.RectangleDomain(
-    ClimaCore.Geometry.XPoint(-2π)..ClimaCore.Geometry.XPoint(2π),
-    ClimaCore.Geometry.YPoint(-2π)..ClimaCore.Geometry.YPoint(2π),
+    ClimaCore.Geometry.XPoint(-2π) .. ClimaCore.Geometry.XPoint(2π),
+    ClimaCore.Geometry.YPoint(-2π) .. ClimaCore.Geometry.YPoint(2π),
     x1periodic = true,
     x2periodic = true,
 )

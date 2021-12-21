@@ -203,7 +203,7 @@ end
 
 function hspace1d(FT)
     hdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
+        Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
         periodic = true,
     )
     hmesh = Meshes.IntervalMesh(hdomain, nelems = 3)
@@ -215,8 +215,8 @@ end
 
 function hspace2d(FT)
     hdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-        Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+        Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+        Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
         x1periodic = true,
         x2periodic = true,
     )

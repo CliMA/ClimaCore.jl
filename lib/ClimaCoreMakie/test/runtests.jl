@@ -42,8 +42,8 @@ end
 
 @testset "spectral element rectangle 2D" begin
     domain = ClimaCore.Domains.RectangleDomain(
-        ClimaCore.Geometry.XPoint(0)..ClimaCore.Geometry.XPoint(2π),
-        ClimaCore.Geometry.YPoint(0)..ClimaCore.Geometry.YPoint(2π),
+        ClimaCore.Geometry.XPoint(0) .. ClimaCore.Geometry.XPoint(2π),
+        ClimaCore.Geometry.YPoint(0) .. ClimaCore.Geometry.YPoint(2π),
         x1periodic = true,
         x2periodic = true,
     )

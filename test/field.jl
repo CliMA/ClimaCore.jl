@@ -9,8 +9,8 @@ using ForwardDiff
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(-3.0)..Geometry.XPoint(5.0),
-        Geometry.YPoint(-2.0)..Geometry.YPoint(8.0),
+        Geometry.XPoint(-3.0) .. Geometry.XPoint(5.0),
+        Geometry.YPoint(-2.0) .. Geometry.YPoint(8.0),
         x1periodic = false,
         x2periodic = false,
         x1boundary = (:east, :west),
@@ -123,22 +123,22 @@ end
 
 @testset "FieldVector basetype replacement and deepcopy" begin
     domain_z = Domains.IntervalDomain(
-        Geometry.ZPoint(-1.0)..Geometry.ZPoint(1.0),
+        Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
         periodic = true,
     )
     mesh_z = Meshes.IntervalMesh(domain_z; nelems = 10)
     topology_z = Topologies.IntervalTopology(mesh_z)
 
     domain_x = Domains.IntervalDomain(
-        Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
         periodic = true,
     )
     mesh_x = Meshes.IntervalMesh(domain_x; nelems = 10)
     topology_x = Topologies.IntervalTopology(mesh_x)
 
     domain_xy = Domains.RectangleDomain(
-        Geometry.XPoint(-1.0)..Geometry.XPoint(1.0),
-        Geometry.YPoint(-1.0)..Geometry.YPoint(1.0),
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+        Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
         x1periodic = true,
         x2periodic = true,
     )
