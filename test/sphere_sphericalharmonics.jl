@@ -1,22 +1,8 @@
-# using Legendre
-# # input lat and long in degrees
-
-# function Ylm(l,m,lat,long) 
-# 	return real(
-# 		λlm(l,m,sind(lat)) * exp(im * m * deg2rad(long)),
-# 	)
-# end
-
-using SphericalHarmonics
+using AssociatedLegendrePolynomials
 # input lat and long in degrees
 
 function Ylm(l, m, lat, long)
-    return real(computeYlm(deg2rad(90 - lat), deg2rad(long), lmax = l)[(l, m)])
-end
-
-function Plm(l, m, x)
-    return computePlmx(x, lmax = l)[(l, m)] *
-           sqrt(2 * π * factorial(l + m) / (2 * l + 1) / factorial(l - m))
+    return λlm(l, m, sind(lat)) * cosd(m * long)
 end
 
 # V and W for vector spherical harmonics

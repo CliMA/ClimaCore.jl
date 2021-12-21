@@ -6,18 +6,19 @@ import ClimaCore:
 using StaticArrays, IntervalSets, LinearAlgebra
 
 using OrdinaryDiffEq
-using SphericalHarmonics
+
+include("sphere_sphericalharmonics.jl")
 
 @testset "Scalar biharmonic equation in 2D sphere" begin
-    # - ∇⁴ u(θ,φ) = f(θ,φ)
+    # ∇⁴ u(θ,φ) = f(θ,φ)
     # Please note that (θ,φ) is colatitude and azimuth as in the spherical coordinate system, that
     # correspond to π/2-latitude and longitude on Earth
     # True solution (eigenfunction): u(θ,φ) = Yₗᵐ(θ,φ)
-    # => - ∇⁴ u(θ,φ) = f(θ,φ) = -l^2*(l+1)^2/(radius)^4 * u(θ,φ)
+    # => ∇⁴ u(θ,φ) = f(θ,φ) = l^2*(l+1)^2/(radius)^4 * u(θ,φ)
 
     FT = Float64
 
-    radius = FT(6.37122e6)
+    radius = FT(1)
     domain = Domains.SphereDomain(radius)
 
     Ne = 16
@@ -27,38 +28,18 @@ using SphericalHarmonics
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    coords = Fields.coordinate_field(space)
+
+    l = 7
+    m = 4
 
     # Define eigensolution
-    u = map(Fields.coordinate_field(space)) do coord
-        l = 7
-        m = 4
-        real(
-            computeYlm(deg2rad(90 - coord.lat), deg2rad(coord.long), lmax = l)[(l, m)],
-        )
-    end
+    u = @. Ylm(l, m, coords.lat, coords.long)
 
-
-    function ∇⁴u(space)
-        coords = Fields.coordinate_field(space)
-        ∇⁴u = map(coords) do coord
-            l = 7
-            m = 4
-            -l^2 * (l + 1)^2 / (radius)^4 * real(
-                computeYlm(
-                    deg2rad(90 - coord.lat),
-                    deg2rad(coord.long),
-                    lmax = l,
-                )[(l, m)],
-            )
-        end
-
-        return ∇⁴u
-    end
-
-    function hyperdiffusion(u)
+    function ∇⁴(u)
         grad = Operators.Gradient()
         wdiv = Operators.WeakDivergence()
-        diff = @. -wdiv(grad(u))
+        diff = @. wdiv(grad(u))
         Spaces.weighted_dss!(diff)
 
         hyperdiff = @. wdiv(grad(diff))
@@ -67,10 +48,10 @@ using SphericalHarmonics
     end
 
     # Call the diffusion operator
-    hyperdiff = hyperdiffusion(u)
+    hyperdiff = ∇⁴(u)
 
     # compute the exact solution
-    exact_solution = ∇⁴u(space)
+    exact_solution = @. l^2 * (l + 1)^2 / (radius)^4 * u
 
     @test hyperdiff ≈ exact_solution rtol = 2e-2
 

@@ -40,7 +40,9 @@ include("sphere_gradient.jl")
 include("sphere_divergence.jl")
 include("sphere_curl.jl")
 include("sphere_diffusion.jl")
+include("sphere_diffusion_vec.jl")
 include("sphere_hyperdiffusion.jl")
+include("sphere_hyperdiffusion_vec.jl")
 
 if "CUDA" in ARGS
     include("gpu/cuda.jl")
