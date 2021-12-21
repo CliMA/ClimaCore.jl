@@ -187,6 +187,8 @@ LinearAlgebra.ldiv!(
     A::LinearAlgebra.QRCompactWY,
     b::FieldVector,
 ) = x .= LinearAlgebra.ldiv!(A, Vector(b))
+LinearAlgebra.ldiv!(A::LinearAlgebra.QRCompactWY, x::FieldVector) =
+    x .= LinearAlgebra.ldiv!(A, Vector(x))
 
 LinearAlgebra.ldiv!(x::FieldVector, A::LinearAlgebra.LU, b::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(b))
