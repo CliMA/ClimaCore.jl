@@ -212,12 +212,7 @@ RecipesBase.@recipe function f(
     (x1coord, x2coord, M')
 end
 
-RecipesBase.@recipe function f(
-    field::Fields.CubedSphereSpectralElementField2D;
-    interpolate = 10,
-)
-    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
-
+function _unfolded_pannel_matrix(field, interpolate)
     space = axes(field)
     topology = Spaces.topology(space)
     mesh = topology.mesh
@@ -228,7 +223,6 @@ RecipesBase.@recipe function f(
     quad_to = Spaces.Quadratures.Uniform{interpolate}()
     Imat = Spaces.Quadratures.interpolation_matrix(Float64, quad_to, quad_from)
 
-    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
     dof = interpolate
 
     pannel_range(i) =
@@ -244,11 +238,9 @@ RecipesBase.@recipe function f(
 
     interpolated_data =
         DataLayouts.IJFH{Float64, interpolate}(Array{Float64}, nelem)
-    Operators.tensor_product!(
-        interpolated_data,
-        Fields.field_values(field),
-        Imat,
-    )
+    field_data = Fields.field_values(field)
+
+    Operators.tensor_product!(interpolated_data, field_data, Imat)
 
     # element index ordering defined by a specific layout
     eidx = 1
@@ -266,7 +258,6 @@ RecipesBase.@recipe function f(
             eidx += 1
         end
     end
-
 
     # (px, py, rot) for each panel
     # px, py are the locations of the panel
@@ -298,7 +289,24 @@ RecipesBase.@recipe function f(
     unfolded_panels[pannel_range(3), pannel_range(2)] =
         reverse(panels[3], dims = 2)
     =#
+    return unfolded_panels
+end
+
+RecipesBase.@recipe function f(
+    field::Fields.CubedSphereSpectralElementField2D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    unfolded_panels = _unfolded_pannel_matrix(field, interpolate)
+
+    # construct the title for info about the field space
+    space = axes(field)
+    nelem = Topologies.nlocalelems(Spaces.topology(space))
+    quad_from = Spaces.quadrature_style(space)
+    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
     quad_from_name = Base.typename(typeof(quad_from)).name
+
     # set the plot attributes
     seriestype := :heatmap
     title --> "$nelem $quad_from_name{$dof_in} element space"
@@ -309,18 +317,62 @@ RecipesBase.@recipe function f(
     (unfolded_panels)
 end
 
+RecipesBase.@recipe function f(
+    field::Fields.Field{<:Any, S};
+    level = nothing,
+    hinterpolate = 10,
+) where {
+    S <: Spaces.ExtrudedFiniteDifferenceSpace{
+        <:Any,
+        <:Spaces.CubedSphereSpectralElementSpace2D,
+    },
+}
+    @assert hinterpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    space = axes(field)
+    if level === nothing
+        if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+            level = Utilities.PlusHalf(0)
+        else
+            level = 1
+        end
+    end
+    level_field = Fields.level(field, level)
+    unfolded_panels = _unfolded_pannel_matrix(level_field, hinterpolate)
+
+    # construct the title for info about the field space
+    nlevel = Spaces.nlevels(space)
+    nelem = Topologies.nlocalelems(Spaces.topology(space))
+    quad_from = Spaces.quadrature_style(space)
+    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
+    quad_from_name = Base.typename(typeof(quad_from)).name
+
+    # set the plot attributes
+    seriestype := :heatmap
+    title -->
+    "level $level of $nlevel × $nelem $quad_from_name{$dof_in} element space"
+    xguide --> "panel x1"
+    yguide --> "panel x2"
+    seriescolor --> :balance
+
+    (unfolded_panels)
+end
 
 RecipesBase.@recipe function f(
-    field::Fields.ExtrudedFiniteDifferenceField;
+    field::Fields.Field{<:Any, S};
     hinterpolate = 0,
     ncolors = 256,
-)
+) where {
+    S <: Spaces.ExtrudedFiniteDifferenceSpace{
+        <:Any,
+        <:Spaces.SpectralElementSpace1D,
+    },
+}
     data = Fields.field_values(field)
     Ni, Nj, _, Nv, Nh = size(data)
 
     space = axes(field)
-    #TODO: assumes VIFH layout
-    @assert Nj == 1 "plotting only defined for 1D extruded fields"
+    @assert Nj == 1
 
     coord_symbols = propertynames(Fields.coordinate_field(space))
     hcoord_field = getproperty(Fields.coordinate_field(space), 1)
@@ -368,7 +420,6 @@ RecipesBase.@recipe function f(
     # some plots backends need coordinates in sorted order
     (sort(unique(hcoord_data)), sort(unique(vcoord_data)), z')
 end
-
 
 function play(
     timesteps::Vector;
