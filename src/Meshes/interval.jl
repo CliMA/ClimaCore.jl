@@ -90,7 +90,7 @@ end
     ExponentialStretching(H)
 
 Apply exponential stretching to the domain when constructing elements. `H` is
-the scale height (a typical atmospheric scale height `H ≈ 7.5e3`km).
+the scale height (a typical atmospheric scale height `H ≈ 7.5`km).
 
 For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 ``\\zeta``, where
