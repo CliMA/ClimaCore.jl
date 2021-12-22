@@ -78,6 +78,9 @@ Uniformly-spaced quadrature.
 """
 struct Uniform{Nq} <: QuadratureStyle end
 
+@inline polynomial_degree(::Uniform{Nq}) where {Nq} = Int(Nq - 1)
+@inline degrees_of_freedom(::Uniform{Nq}) where {Nq} = Int(Nq)
+
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
     points = SVector{Nq}(range(-1 + 1 / Nq, step = 2 / Nq, length = Nq))
     weights = SVector{Nq}(ntuple(i -> 2 / Nq, Nq))

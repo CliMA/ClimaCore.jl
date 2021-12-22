@@ -84,7 +84,7 @@ an unstuctured mesh of Lagrange polynomial cells, suitable for passing to
 `vtk_grid`.
 """
 function vtk_cells_lagrange(
-    space::Spaces.SpectralElementSpace2D{
+    gspace::Spaces.SpectralElementSpace2D{
         T,
         Spaces.Quadratures.ClosedUniform{Nq},
     },
@@ -95,7 +95,7 @@ function vtk_cells_lagrange(
         MeshCell(
             VTKCellTypes.VTK_LAGRANGE_QUADRILATERAL,
             ((e - 1) * Nq * Nq) .+ con_map,
-        ) for e in 1:Topologies.nlocalelems(space)
+        ) for e in 1:Topologies.nlocalelems(gspace)
     ]
 end
 
@@ -106,38 +106,90 @@ Construct a vector of `MeshCell` objects representing the elements of `space` as
 an unstuctured mesh of linear cells, suitable for passing to
 `vtk_grid`.
 """
-function vtk_cells_linear(space::Spaces.SpectralElementSpace2D)
-    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
-    nelems = Topologies.nlocalelems(space)
-    N = Nq - 1
+function vtk_cells_linear(gridspace::Spaces.SpectralElementSpace2D)
+    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
+    Nh = Topologies.nlocalelems(gridspace)
+    ind = LinearIndices((1:Nq, 1:Nq, 1:Nh))
+    cells = [
+        MeshCell(
+            VTKCellTypes.VTK_QUAD,
+            (
+                ind[i, j, e],
+                ind[i + 1, j, e],
+                ind[i + 1, j + 1, e],
+                ind[i, j + 1, e],
+            ),
+        ) for i in 1:(Nq - 1), j in 1:(Nq - 1), e in 1:Nh
+    ]
+    return vec(cells)
+end
 
-    M = MeshCell{VTKCellTypes.VTKCellType, Array{Int, 1}}
-    cells = Array{M, 1}(undef, N * N * nelems)
-    ind = LinearIndices((1:Nq, 1:Nq))
-    for e in 1:nelems
-        offset = (e - 1) * Nq * Nq
-        for j in 1:N, i in 1:N
-            cells[i + (j - 1) * N + (e - 1) * N * N] = MeshCell(
-                VTKCellTypes.VTK_PIXEL,
-                offset .+ ind[i:(i + 1), j:(j + 1)][:],
-            )
-        end
-    end
-
-    return cells
+function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
+    Nq = Spaces.Quadratures.degrees_of_freedom(
+        gridspace.horizontal_space.quadrature_style,
+    )
+    Nh = Topologies.nlocalelems(gridspace.horizontal_space)
+    Nv = Spaces.nlevels(gridspace)
+    ind = LinearIndices((1:Nv, 1:Nq, 1:Nh)) # assume VIFH
+    cells = [
+        MeshCell(
+            VTKCellTypes.VTK_QUAD,
+            (
+                ind[v, i, e],
+                ind[v + 1, i, e],
+                ind[v + 1, i + 1, e],
+                ind[v, i + 1, e],
+            ),
+        ) for v in 1:(Nv - 1), i in 1:(Nq - 1), e in 1:Nh
+    ]
+    return vec(cells)
+end
+function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace3D)
+    Nq = Spaces.Quadratures.degrees_of_freedom(
+        gridspace.horizontal_space.quadrature_style,
+    )
+    Nh = Topologies.nlocalelems(gridspace.horizontal_space)
+    Nv = Spaces.nlevels(gridspace)
+    ind = LinearIndices((1:Nv, 1:Nq, 1:Nq, 1:Nh)) # assumes VIJFH
+    cells = [
+        MeshCell(
+            VTKCellTypes.VTK_HEXAHEDRON,
+            (
+                ind[v, i, j, e],
+                ind[v + 1, i, j, e],
+                ind[v + 1, i + 1, j, e],
+                ind[v, i + 1, j, e],
+                ind[v, i, j + 1, e],
+                ind[v + 1, i, j + 1, e],
+                ind[v + 1, i + 1, j + 1, e],
+                ind[v, i + 1, j + 1, e],
+            ),
+        ) for v in 1:(Nv - 1), i in 1:(Nq - 1), j in 1:(Nq - 1), e in 1:Nh
+    ]
+    return vec(cells)
 end
 
 """
-  vtk_space(space::ClimaCore.Spaces.AbstractSpace)
+    vtk_grid_space(space::ClimaCore.Spaces.AbstractSpace)
 
-The space on which the VTK output will be stored.
+The space for the grid used by VTK, for any field on `space`.
 
-[VTK Lagrange elements](https://blog.kitware.com/modeling-arbitrary-order-lagrange-finite-elements-in-the-visualization-toolkit/)
-require nodes be uniformly spaced within the reference element (see
-https://discourse.paraview.org/t/node-positions-of-high-order-lagrange-quadrilateral-cells/7012/3).
-This corresponds to the `ClosedUniform` quadrature rule.
+This generally does two things:
+ - Modifies the horizontal space to use a `ClosedUniform` quadrature rule, which
+   will use equispaced nodal points in the reference element. This is required
+   for using [VTK Lagrange elements](https://blog.kitware.com/modeling-arbitrary-order-lagrange-finite-elements-in-the-visualization-toolkit/)
+   (see [1](https://discourse.paraview.org/t/node-positions-of-high-order-lagrange-quadrilateral-cells/7012/3)).
+ - Modifies the vertical space to be on the faces.
 """
-function vtk_space(space::Spaces.SpectralElementSpace2D)
+function vtk_grid_space(space::Spaces.SpectralElementSpace1D)
+    if space.quadrature_style isa Spaces.Quadratures.ClosedUniform
+        return space
+    end
+    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
+    lagrange_quad = Spaces.Quadratures.ClosedUniform{Nq}()
+    return Spaces.SpectralElementSpace1D(space.topology, lagrange_quad)
+end
+function vtk_grid_space(space::Spaces.SpectralElementSpace2D)
     if space.quadrature_style isa Spaces.Quadratures.ClosedUniform
         return space
     end
@@ -145,7 +197,55 @@ function vtk_space(space::Spaces.SpectralElementSpace2D)
     lagrange_quad = Spaces.Quadratures.ClosedUniform{Nq}()
     return Spaces.SpectralElementSpace2D(space.topology, lagrange_quad)
 end
+function vtk_grid_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace)
+    # this will need to be updated for warped meshes
+    horizontal_space = vtk_grid_space(space.horizontal_space)
+    vertical_space = Spaces.FaceFiniteDifferenceSpace(space.vertical_topology)
+    return Spaces.ExtrudedFiniteDifferenceSpace(
+        horizontal_space,
+        vertical_space,
+    )
+end
+function vtk_grid_space(space::Spaces.CenterExtrudedFiniteDifferenceSpace)
+    return vtk_grid_space(Spaces.FaceExtrudedFiniteDifferenceSpace(space))
+end
 
-vtk_space(field::Fields.Field) = vtk_space(axes(field))
-vtk_space(fields::NamedTuple) = vtk_space(first(fields))
-vtk_space(fieldvec::Fields.FieldVector) = vtk_space(Fields._values(fieldvec))
+vtk_grid_space(field::Fields.Field) = vtk_grid_space(axes(field))
+vtk_grid_space(fields::NamedTuple) = vtk_grid_space(first(fields))
+vtk_grid_space(fieldvec::Fields.FieldVector) =
+    vtk_grid_space(Fields._values(fieldvec))
+
+
+"""
+    vtk_cell_space(gridspace::ClimaCore.Spaces.AbstractSpace)
+
+Construct a space for outputting cell data, when using outputting a grid `gridspace`.
+be stored.
+
+This generally does two things:
+ - Modifies the horizontal space to use a `Uniform` quadrature rule, which
+   will use equispaced nodal points in the reference element (excluding the boundary).
+ - Modifies the vertical space to be on the centers.
+"""
+function vtk_cell_space(gridspace::Spaces.SpectralElementSpace1D)
+    @assert gridspace.quadrature_style isa Spaces.Quadratures.ClosedUniform
+    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
+    quad = Spaces.Quadratures.Uniform{Nq - 1}()
+    return Spaces.SpectralElementSpace1D(gridspace.topology, quad)
+end
+function vtk_cell_space(gridspace::Spaces.SpectralElementSpace2D)
+    @assert gridspace.quadrature_style isa Spaces.Quadratures.ClosedUniform
+    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
+    quad = Spaces.Quadratures.Uniform{Nq - 1}()
+    return Spaces.SpectralElementSpace2D(gridspace.topology, quad)
+end
+function vtk_cell_space(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace)
+    # this will need to be updated for warped meshes
+    horizontal_space = vtk_cell_space(gridspace.horizontal_space)
+    vertical_space =
+        Spaces.CenterFiniteDifferenceSpace(gridspace.vertical_topology)
+    return Spaces.ExtrudedFiniteDifferenceSpace(
+        horizontal_space,
+        vertical_space,
+    )
+end
