@@ -34,7 +34,7 @@ end
     radius = FT(1)
     domain = Domains.SphereDomain(radius)
     mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -77,7 +77,7 @@ convergence_rate(err, Δh) =
 
         for (Ie, Ne) in enumerate(Nes)
             mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
-            grid_topology = Topologies.Grid2DTopology(mesh)
+            grid_topology = Topologies.Topology2D(mesh)
 
             quad = Spaces.Quadratures.GLL{Nq}()
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
