@@ -13,6 +13,31 @@ import ClimaCore:
     Fields,
     Operators
 
+@testset "sphere divergence" begin
+    FT = Float64
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(1.0);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    horzdomain = Domains.SphereDomain(30.0)
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
+    horztopology = Topologies.Topology2D(horzmesh)
+    quad = Spaces.Quadratures.GLL{3 + 1}()
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+    coords = Fields.coordinate_field(hv_center_space)
+    x = Geometry.UVWVector.(cosd.(coords.lat), 0.0, 0.0)
+    div = Operators.Divergence()
+    @test norm(div.(x)) < 2e-2
+end
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),

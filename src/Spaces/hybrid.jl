@@ -152,9 +152,9 @@ function blockmat(
         (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
         SMatrix{3, 3}(
             A[1, 1],
-            A[1, 2],
-            zero(FT),
             A[2, 1],
+            zero(FT),
+            A[1, 2],
             A[2, 2],
             zero(FT),
             zero(FT),
