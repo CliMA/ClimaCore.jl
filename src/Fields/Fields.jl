@@ -1,11 +1,12 @@
 module Fields
 
-import ..slab, ..slab_args, ..column, ..column_args
+import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
+import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
@@ -290,5 +291,16 @@ function Spaces.weighted_dss!(field::Field)
     return field
 end
 
+
+function level(field::CenterExtrudedFiniteDifferenceField, v::Int)
+    hspace = level(axes(field), v)
+    data = level(field_values(field), v)
+    Field(data, hspace)
+end
+function level(field::FaceExtrudedFiniteDifferenceField, v::PlusHalf)
+    hspace = level(axes(field), v)
+    data = level(field_values(field), v.i + 1)
+    Field(data, hspace)
+end
 
 end # module

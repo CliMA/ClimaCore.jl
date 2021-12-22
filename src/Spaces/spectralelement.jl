@@ -30,14 +30,12 @@ struct SpectralElementSpace1D{
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     D,
-    M,
 } <: AbstractSpectralElementSpace
     topology::T
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
-    inverse_mass_matrix::M
 end
 
 function SpectralElementSpace1D(
@@ -89,23 +87,12 @@ function SpectralElementSpace1D(
     dss_1d!(dss_weights, dss_weights, local_geometry, topology, Nq)
     dss_weights = one(FT) ./ dss_weights
 
-    inverse_mass_matrix = copy(local_geometry.WJ)
-    dss_1d!(
-        inverse_mass_matrix,
-        inverse_mass_matrix,
-        local_geometry,
-        topology,
-        Nq,
-    )
-    inverse_mass_matrix = one(FT) ./ inverse_mass_matrix
-
     return SpectralElementSpace1D(
         topology,
         quadrature_style,
         global_geometry,
         local_geometry,
         dss_weights,
-        inverse_mass_matrix,
     )
 end
 

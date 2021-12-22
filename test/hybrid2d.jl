@@ -11,8 +11,10 @@ import ClimaCore:
     Topologies,
     Spaces,
     Fields,
-    Operators
+    Operators,
+    level
 import ClimaCore.Domains.Geometry: ⊗
+import ClimaCore.Utilities: half
 
 function hvspace_2D(;
     xlim = (-π, π),
@@ -62,6 +64,29 @@ end
 # 4) vert_div(V_face): project to Contravariant3, take FD deriv
 
 
+@testset "1D SE, 1D FD Extruded Domain level extraction" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(npoly = 4, velem = 10, helem = 10)
+
+    fcoord = Fields.coordinate_field(hv_face_space)
+    ccoord = Fields.coordinate_field(hv_center_space)
+    @test parent(Fields.field_values(level(fcoord.x, half))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(ccoord.x, 1))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_center_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(fcoord.z, half))) ==
+          parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    ) .* 0
+end
 
 
 @testset "1D SE, 1D FD Extruded Domain matrix interpolation" begin
@@ -78,6 +103,7 @@ end
         @test size(M_face) == (10 + 1, 10 * npoints)
     end
 end
+
 
 @testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
 

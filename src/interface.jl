@@ -37,3 +37,5 @@ function column end
     (column(args[1], inds...), column_args(Base.tail(args), inds...)...)
 @inline column_args(args::Tuple{Any}, inds...) = (column(args[1], inds...),)
 @inline column_args(args::Tuple{}, inds...) = ()
+
+function level end

@@ -17,7 +17,7 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray
 
-import ..slab, ..slab_args, ..column, ..column_args
+import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH
 
 include("struct.jl")
@@ -805,6 +805,14 @@ end
     VF{S}(dataview)
 end
 
+@inline function level(data::VIJFH{S, Nij}, v) where {S, Nij}
+    array = parent(data)
+    Nv = size(array, 1)
+    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
+    dataview = @inbounds view(array, v, :, :, :, :)
+    IJFH{S, Nij}(dataview)
+end
+
 @propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex{5})
     data[I[1], I[2], I[4]]
 end
@@ -923,6 +931,14 @@ end
         (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
     )
     VF{S}(dataview)
+end
+
+@inline function level(data::VIFH{S, Nij}, v) where {S, Nij}
+    array = parent(data)
+    Nv = size(array, 1)
+    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
+    dataview = @inbounds view(array, v, :, :, :)
+    IFH{S, Nij}(dataview)
 end
 
 @propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)

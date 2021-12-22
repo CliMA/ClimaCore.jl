@@ -101,6 +101,54 @@ column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
     column(space.center_local_geometry, i, j, h),
     column(space.face_local_geometry, i, j, h),
 )
+function level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer)
+    horizontal_space = space.horizontal_space
+    if horizontal_space isa SpectralElementSpace1D
+        SpectralElementSpace1D(
+            horizontal_space.topology,
+            horizontal_space.quadrature_style,
+            horizontal_space.global_geometry,
+            level(space.center_local_geometry, v),
+            horizontal_space.dss_weights,
+        )
+    elseif horizontal_space isa SpectralElementSpace2D
+        SpectralElementSpace2D(
+            horizontal_space.topology,
+            horizontal_space.quadrature_style,
+            horizontal_space.global_geometry,
+            level(space.center_local_geometry, v),
+            horizontal_space.dss_weights,
+            horizontal_space.internal_surface_geometry,
+            horizontal_space.boundary_surface_geometries,
+        )
+    else
+        error("Unsupported horizontal space")
+    end
+end
+function level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf)
+    horizontal_space = space.horizontal_space
+    if horizontal_space isa SpectralElementSpace1D
+        SpectralElementSpace1D(
+            horizontal_space.topology,
+            horizontal_space.quadrature_style,
+            horizontal_space.global_geometry,
+            level(space.face_local_geometry, v.i + 1),
+            horizontal_space.dss_weights,
+        )
+    elseif horizontal_space isa SpectralElementSpace2D
+        SpectralElementSpace2D(
+            horizontal_space.topology,
+            horizontal_space.quadrature_style,
+            horizontal_space.global_geometry,
+            level(space.face_local_geometry, v.i + 1),
+            horizontal_space.dss_weights,
+            horizontal_space.internal_surface_geometry,
+            horizontal_space.boundary_surface_geometries,
+        )
+    else
+        error("Unsupported horizontal space")
+    end
+end
 
 nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
     size(space.center_local_geometry, 4)
