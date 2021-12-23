@@ -163,6 +163,8 @@ function rhs_invariant!(dY, Y, _, t)
     hwdiv = Operators.Divergence()
     hgrad = Operators.Gradient()
     hwgrad = Operators.Gradient()
+    hcurl = Operators.Curl()
+    hwcurl = Operators.Curl()
 
     dρ .= 0 .* cρ
 
@@ -170,14 +172,22 @@ function rhs_invariant!(dY, Y, _, t)
     # 1) compute hyperviscosity coefficients
 
     χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ)) # we store χθ in dρθ
-    χuₕ = @. duₕ = hwgrad(hdiv(cuₕ)) # curl-curl term is zero in 1D horizontal
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
 
     Spaces.weighted_dss!(dρθ)
     Spaces.weighted_dss!(duₕ)
 
     κ₄ = 100.0 # m^4/s
     @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
-    @. duₕ = -κ₄ * hwgrad(hdiv(χuₕ)) # curl-curl term is zero in 1D horizontal
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
     If2c = Operators.InterpolateF2C()
