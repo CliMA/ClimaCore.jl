@@ -418,7 +418,7 @@ _cross(
     x::Contravariant3Vector,
     y::Contravariant12Vector,
     local_geometry::LocalGeometry,
-) = local_geometry.J * Covariant12Vector(x.u² * y.u³, -x.u¹ * y.u³)
+) = local_geometry.J * Covariant12Vector(-x.u³ * y.u², x.u³ * y.u¹)
 
 _cross(
     x::Contravariant2Vector,
