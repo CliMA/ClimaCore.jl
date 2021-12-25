@@ -114,7 +114,6 @@ y0 = map(coords) do coord
     ρq2 = ρ(z) * q2
     ρq3 = ρ(z) * q3
     ρq4 = ρ(z) * q4
-    ρq4 = 1.0
 
     return (ρq1 = ρq1, ρq2 = ρq2, ρq3 = ρq3, ρq4 = ρq4)
 end
@@ -230,7 +229,7 @@ q3_error =
 q4_error =
     norm(sol.u[end].ρq4 ./ ρ.(coords.z) .- y0.ρq4 ./ ρ.(coords.z)) /
     norm(y0.ρq4 ./ ρ.(coords.z))
-@test q4_error ≈ 0.0 atol = 0.02
+@test q4_error ≈ 0.0 atol = 0.04
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
