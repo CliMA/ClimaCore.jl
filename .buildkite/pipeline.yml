@@ -441,3 +441,14 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: baroclinic wave"
+    key: "cpu_baroclinic_wave"
+    command:
+      - "julia --color=yes --project=examples/3dsphere examples/3dsphere/baroclinic_wave.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/baroclinic_wave/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
