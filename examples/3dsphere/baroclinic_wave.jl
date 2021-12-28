@@ -23,9 +23,16 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 global_logger(TerminalLogger())
 
-# Baroclinic wave
-# Reference: https://rmets.onlinelibrary.wiley.com/doi/full/10.1002/qj.2241
+# This experiment tests
+#     1) hydrostatic and geostrophic balance;
+#     2) linear instability.
+# - "baroclinic_wave": the defaul simulation, following https://rmets.onlinelibrary.wiley.com/doi/full/10.1002/qj.2241.
+# - "balanced_flow": the same balanced background flow as the baroclinic wave but with zero perturbation.
 
+# test specifications
+const test_name = get(ARGS, 1, "baroclinic_wave") # default test case to run baroclinic wave
+
+# parameters
 const R = 6.371229e6 # radius
 const grav = 9.80616 # gravitational constant
 const Ω = 7.29212e-5 # Earth rotation (radians / sec)
@@ -71,20 +78,27 @@ v(ϕ, z) = 0.0
 c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
 s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
 cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
-δu(λ, ϕ, z) =
-    -16 * V_p / 3 / sqrt(3) *
-    F_z(z) *
-    c3(λ, ϕ) *
-    s1(λ, ϕ) *
-    (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
-    sin(r(λ, ϕ) / R) * cond(λ, ϕ)
-δv(λ, ϕ, z) =
-    16 * V_p / 3 / sqrt(3) *
-    F_z(z) *
-    c3(λ, ϕ) *
-    s1(λ, ϕ) *
-    cosd(ϕ_c) *
-    sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+if test_name == "baroclinic_wave"
+    δu(λ, ϕ, z) =
+        -16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
+        sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    δv(λ, ϕ, z) =
+        16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        cosd(ϕ_c) *
+        sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    const κ₄ = 1.0e16 # m^4/s
+elseif test_name == "balanced_flow"
+    δu(λ, ϕ, z) = 0.0
+    δv(λ, ϕ, z) = 0.0
+    const κ₄ = 0.0
+end
 
 # set up function space
 function sphere_3D(
@@ -201,7 +215,6 @@ function rhs!(dY, Y, _, t)
     Spaces.weighted_dss!(dρe)
     Spaces.weighted_dss!(duₕ)
 
-    κ₄ = 1.0e16 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
     @. duₕ =
         -κ₄ * (
@@ -299,7 +312,11 @@ rhs!(dYdt, Y, nothing, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-time_end = 600
+if test_name == "baroclinic_wave"
+    time_end = 600
+elseif test_name == "balanced_flow"
+    time_end = 3600
+end
 dt = 10
 prob = ODEProblem(rhs!, Y, (0.0, time_end))
 sol = solve(
@@ -312,33 +329,77 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe)
-@info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
-
 # visualization artifacts
-ENV["GKSwstype"] = "nul"
-import Plots
-Plots.GRBackend()
-dirname = "baroclinic_wave"
-path = joinpath(@__DIR__, "output", dirname)
-mkpath(path)
+if test_name == "baroclinic_wave"
+    @info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe)
+    @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    ENV["GKSwstype"] = "nul"
+    import Plots
+    Plots.GRBackend()
+    dirname = "baroclinic_wave"
+    path = joinpath(@__DIR__, "output", dirname)
+    mkpath(path)
+
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
     end
-end
 
-u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
-Plots.png(
-    Plots.plot(u_phy.components.data.:2, level = 3, clim = (-1, 1)),
-    joinpath(path, "v.png"),
-)
-w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
-Plots.png(
-    Plots.plot(w_phy.components.data.:1, level = 3 + half, clim = (-1, 1)),
-    joinpath(path, "w.png"),
-)
+    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+    Plots.png(
+        Plots.plot(u_phy.components.data.:2, level = 3, clim = (-1, 1)),
+        joinpath(path, "v.png"),
+    )
+    w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+    Plots.png(
+        Plots.plot(w_phy.components.data.:1, level = 3 + half, clim = (-1, 1)),
+        joinpath(path, "w.png"),
+    )
+elseif test_name == "balanced_flow"
+    ENV["GKSwstype"] = "nul"
+    import Plots
+    Plots.GRBackend()
+    dirname = "balanced_flow"
+    path = joinpath(@__DIR__, "output", dirname)
+    mkpath(path)
+
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
+    end
+
+    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+    Plots.png(
+        Plots.plot(u_phy.components.data.:1, level = 3),
+        joinpath(path, "u_end.png"),
+    )
+
+    u_err =
+        Geometry.transform.(
+            Ref(Geometry.UVAxis()),
+            sol.u[end].uₕ .- sol.u[1].uₕ,
+        )
+    Plots.png(
+        Plots.plot(u_err.components.data.:1, level = 3, clim = (-1, 1)),
+        joinpath(path, "u_err.png"),
+    )
+
+    w_err = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+    Plots.png(
+        Plots.plot(w_err.components.data.:1, level = 3 + half, clim = (-4, 4)),
+        joinpath(path, "w_err.png"),
+    )
+
+    @test sol.u[end].Yc.ρ ≈ sol.u[1].Yc.ρ rtol = 5e-2
+    @test sol.u[end].Yc.ρe ≈ sol.u[1].Yc.ρe rtol = 5e-2
+    @test sol.u[end].uₕ ≈ sol.u[1].uₕ rtol = 5e-2
+end
