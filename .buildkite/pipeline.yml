@@ -452,3 +452,12 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: solid body rotation"
+    key: "cpu_solid_body_rotation"
+    command:
+      - "julia --color=yes --project=examples/3dsphere examples/3dsphere/solid_body_rotation_3d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
