@@ -461,3 +461,14 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+
+  - label: ":computer: hydrostatically and geostrophically balanced flow"
+    key: "cpu_balanced_flow"
+    command:
+      - "julia --color=yes --project=examples/3dsphere examples/3dsphere/baroclinic_wave.jl balanced_flow"
+    artifact_paths:
+      - "examples/3dsphere/output/balanced_flow/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
