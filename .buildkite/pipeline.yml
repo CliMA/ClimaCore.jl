@@ -460,7 +460,18 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-  
+
+  - label: ":computer: baroclinic wave implicit"
+    key: "cpu_baroclinic_wave_imp"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_etot.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/baroclinic_wave_implicit/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: nonhydrostatic gravity wave"
     key: "cpu_nonhydrostatic_gravity_wave"
     command:
