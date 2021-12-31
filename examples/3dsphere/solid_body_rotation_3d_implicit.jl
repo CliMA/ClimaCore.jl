@@ -174,8 +174,8 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
     )
     # TODO which one
-    @. dw -= vgradc2f(cp) / Ic2f(cρ)
-
+    # @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
 
 
     cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
@@ -292,7 +292,7 @@ function rhs_explicit!(dY, Y, _, t)
     )
     # TODO implicit
     #@. dw -= vgradc2f(cp) / Ic2f(cρ)
-
+    #@. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
 
 
     cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
@@ -317,8 +317,9 @@ function rhs_explicit!(dY, Y, _, t)
     Spaces.weighted_dss!(dY.w)
 
     return dY
-
 end
+
+
 
 function rhs_implicit!(dY, Y, _, t)
     cρ = Y.Yc.ρ # density on centers
@@ -371,27 +372,43 @@ function rhs_implicit!(dY, Y, _, t)
         top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
     )
 
-    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    # @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
     @. dw -= vgradc2f(Φ(c_coords.z))
 
     # 3) ρθ
     # TODO implicit
     @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
 
-    Spaces.weighted_dss!(dY.Yc)
-    Spaces.weighted_dss!(dY.uₕ)
-    Spaces.weighted_dss!(dY.w)
-
     return dY
-
 end
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Mesh setup
+zmax = 30.0e3
+helem = 4
+velem = 15
+npoly = 5
+
 # set up 3D spherical domain and coords
-hv_center_space, hv_face_space = sphere_3D()
+hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), helem, velem, npoly)
 c_coords = Fields.coordinate_field(hv_center_space)
 f_coords = Fields.coordinate_field(hv_face_space)
 
@@ -414,26 +431,99 @@ rhs!(dYdt, Y, nothing, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-T = 3600
-dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, T))
 
-# solve ode
-sol = solve(
+
+
+Test_Type = "Explicit"  # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+
+if Test_Type == "Explicit"
+    T = 3600
+    dt = 5
+    prob = ODEProblem(rhs!, Y, (0.0, T))
+    # solve ode
+    sol = solve(
+        prob,
+        SSPRK33(),
+        dt = dt,
+        saveat = dt,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+elseif Test_Type == "Seim-Explicit"
+    prob = SplitODEProblem(rhs_implicit!, rhs_explicit!, Y, (0.0, T))
+    T = 3600
+    dt = 5
+    # solve ode
+    sol = solve(
+        prob,
+        SSPRK33(),
+        dt = dt,
+        saveat = dt,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+elseif Test_Type == "Implicit-Explicit"
+    T = 3600
+    dt = 5
+
+    ode_algorithm = 
+    J_𝕄ρ_overwrite = 
+
+    use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+    jac_prototype = CustomWRepresentation(
+        velem,
+        helem,
+        npoly,
+        coords,
+        face_coords,
+        use_transform,
+        J_𝕄ρ_overwrite,
+    )
+
+    w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
+
+
+    prob = SplitODEProblem(
+            ODEFunction(
+                rhs_implicit!;
+                w_kwarg...,
+                jac_prototype = jac_prototype,
+                tgrad = (dT, Y, p, t) -> fill!(dT, 0),
+            ),
+            rhs_remainder!,
+            Y,
+            tspan,
+            p,
+        )
+
+    sol = solve(
     prob,
-    SSPRK33(),
-    dt = dt,
-    saveat = dt,
-    progress = true,
+    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10));
+    dt = 25.,
+    reltol = 1e-1,
+    abstol = 1e-6,
     adaptive = false,
+    saveat = 25.,
+    progress = true,
+    progress_steps = 1,
     progress_message = (dt, u, p, t) -> t,
 )
 
+
+else
+    error("Test Type: ", Test_Type, " is not recognized.")
+end
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
 
 @test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
 @test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
+
+@info "maximum vertical velocity is ", maximum(abs.(w_phy.components.data.:1))
+
 @test maximum(abs.(w_phy.components.data.:1)) ≤ 1.0
+
 @test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
 @test norm(sol.u[end].Yc.ρθ) ≈ norm(sol.u[1].Yc.ρθ) rtol = 1e-2
