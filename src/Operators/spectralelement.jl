@@ -351,7 +351,7 @@ J^{-1} \\sum_i D_i J u^i
 where ``D_i`` is the derivative matrix along the ``i``th dimension
 
 ## References
- - Taylor and Fournier (2010), equation 15
+- [Taylor2010](@cite), equation 15
 """
 struct Divergence{I} <: SpectralElementOperator end
 Divergence() = Divergence{()}()
@@ -506,7 +506,6 @@ function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
 end
 
 """
-
     grad = Gradient()
     grad.(f)
 
@@ -523,7 +522,10 @@ Discretely, this can be written in matrix form as
 ```math
 D_i f
 ```
-where ``D_i`` is the derivative matrix along the ``i``th dimension
+where ``D_i`` is the derivative matrix along the ``i``th dimension.
+
+## References
+- [Taylor2010](@cite), equation 16
 """
 struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
@@ -711,6 +713,8 @@ In matrix form, this becomes
 Note that unused dimensions will be dropped: e.g. the 2D curl of a
 `Covariant12Vector`-field will return a `Contravariant3Vector`.
 
+## References
+- [Taylor2010](@cite), equation 17
 """
 struct Curl{I} <: CurlSpectralElementOperator end
 Curl() = Curl{()}()
