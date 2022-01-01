@@ -99,6 +99,8 @@ elseif test_name == "balanced_flow"
     δv(λ, ϕ, z) = 0.0
     const κ₄ = 0.0
 end
+uu(λ, ϕ, z) = u(ϕ, z) + δu(λ, ϕ, z)
+uv(λ, ϕ, z) = v(ϕ, z) + δv(λ, ϕ, z)
 
 # set up function space
 function sphere_3D(
@@ -106,7 +108,7 @@ function sphere_3D(
     zlim = (0, 12.0e3),
     helem = 4,
     zelem = 12,
-    npoly = 3,
+    npoly = 4,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -138,7 +140,7 @@ function pressure(ρ, e, normuvw, z)
 end
 
 # set up 3D domain - doubly periodic box
-hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 6, 10)
+hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 4, 10, 4)
 
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
@@ -147,9 +149,7 @@ face_coords = Fields.coordinate_field(hv_face_space)
 
 function initial_condition(ϕ, λ, z)
     ρ = p(ϕ, z) / R_d / T(ϕ, z)
-    uu = u(ϕ, z) + δu(λ, ϕ, z)
-    uv = v(ϕ, z) + δv(λ, ϕ, z)
-    e = cv_d * (T(ϕ, z) - T_tri) + Φ(z) + (uu^2 + uv^2) / 2
+    e = cv_d * (T(ϕ, z) - T_tri) + Φ(z) + (uu(λ, ϕ, z)^2 + uv(λ, ϕ, z)^2) / 2
     ρe = ρ * e
 
     return (ρ = ρ, ρe = ρe)
@@ -160,11 +160,9 @@ function initial_condition_velocity(local_geometry)
     ϕ = coord.lat
     λ = coord.long
     z = coord.z
-    uu = u(ϕ, z) + δu(λ, ϕ, z)
-    uv = v(ϕ, z) + δv(λ, ϕ, z)
     return Geometry.transform(
         Geometry.Covariant12Axis(),
-        Geometry.UVVector(uu, uv),
+        Geometry.UVVector(uu(λ, ϕ, z), uv(λ, ϕ, z)),
         local_geometry,
     )
 end
@@ -317,7 +315,7 @@ if test_name == "baroclinic_wave"
 elseif test_name == "balanced_flow"
     time_end = 3600
 end
-dt = 10
+dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, time_end))
 sol = solve(
     prob,
