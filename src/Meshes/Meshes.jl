@@ -54,8 +54,8 @@ A subtype of `AbstractMesh` should define the following methods:
 
 The following types/methods are provided by `AbstractMesh`:
 - [`SharedVertices(mesh, elem, vert)`](@ref)
-- [`face_connectivity_matrix(mesh[,elemorder])`]
-- [`vertex_connectivity_matrix(mesh[,elemorder])`]
+- [`face_connectivity_matrix(mesh[,elemorder])`](@ref face_connectivity_matrix)
+- [`vertex_connectivity_matrix(mesh[,elemorder])`](@ref vertex_connectivity_matrix)
 """
 abstract type AbstractMesh{dim} end
 

@@ -1,7 +1,7 @@
 if joinpath(@__DIR__, "..") ∉ LOAD_PATH
     push!(LOAD_PATH, joinpath(@__DIR__, ".."))
 end
-using Documenter, ClimaCore, Literate
+using Documenter, DocumenterCitations, ClimaCore, Literate
 
 format = Documenter.HTML(
     prettyurls = !isempty(get(ENV, "CI", "")),
@@ -34,8 +34,11 @@ for tutorial in TUTORIALS
     )
 end
 
+bib = CitationBibliography(joinpath(@__DIR__, "refs.bib"))
+
 withenv("GKSwstype" => "100") do
     makedocs(
+        bib,
         sitename = "ClimaCore.jl",
         strict = false,
         format = format,
@@ -51,6 +54,7 @@ withenv("GKSwstype" => "100") do
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
             ],
+            "references.md",
         ],
     )
 end
