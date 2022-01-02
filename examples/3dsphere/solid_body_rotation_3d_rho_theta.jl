@@ -8,19 +8,17 @@ using OrdinaryDiffEq:
     Rosenbrock23,
     Rosenbrock32,
     ImplicitEuler,
-    NLNewton
+    NLNewton,
+    KenCarp4
 
 include("solid_body_rotation_3d_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
-# helem = 4
-# velem = 15
-# npoly = 5
+helem = 4
+velem = 15
+npoly = 5
 
-helem = 2
-velem = 10
-npoly = 2
 
 # set up 3D spherical domain and coords
 hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), helem, velem, npoly)
@@ -82,7 +80,7 @@ elseif Test_Type == "Implicit-Explicit"
     T = 300
     dt = 5
 
-    ode_algorithm =  ImplicitEuler
+    ode_algorithm =  KenCarp4
     J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
 
