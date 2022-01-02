@@ -5,43 +5,31 @@ import ClimaCore:
 # P = ρ * R_d * T = ρ * R_d * θ * (P / MSLP)^(R_d / C_p) ==>
 # (P / MSLP)^(1 - R_d / C_p) = R_d / MSLP * ρθ ==>
 # P = MSLP * (R_d / MSLP)^γ * ρθ^γ
-const P_ρθ_factor = MSLP * (R_d / MSLP)^γ
+const P_ρθ_factor = p_0 * (R_d / p_0)^γ
 # P = ρ * R_d * T = ρ * R_d * (ρe_int / ρ / C_v) = (γ - 1) * ρe_int
 const P_ρe_factor = γ - 1
 
-norm_sqr(uₕ, w) =
-    LinearAlgebra.norm_sqr(
-        Geometry.transform(Geometry.UWAxis(), uₕ) +
-        Geometry.transform(Geometry.UWAxis(), w)
-    )
 
-# axes
-const û = Geometry.UAxis
-const ŵ = Geometry.WAxis
 
-# horizontal operators
-const ∇◦ₕ = Operators.Divergence()
-const ∇ₕ = Operators.Gradient()
 
-# vertical operators
-const If = Operators.InterpolateC2F(
-    bottom = Operators.Extrapolate(),
-    top = Operators.Extrapolate(),
-)
-const If_uₕ = Operators.InterpolateC2F(
-    bottom = Operators.SetValue(Geometry.UVector(0.0)),
-    top = Operators.SetValue(Geometry.UVector(0.0)),
-)
-const Ic = Operators.InterpolateF2C()
-const ∇◦ᵥf = Operators.DivergenceC2F()
-const ∇◦ᵥc = Operators.DivergenceF2C()
-const ∇ᵥf = Operators.GradientC2F()
-const B_w = Operators.SetBoundaryOperator(
-    bottom = Operators.SetValue(Geometry.WVector(0.0)),
-    top = Operators.SetValue(Geometry.WVector(0.0)),
-)
+# # vertical operators
+# const If = Operators.InterpolateC2F(
+#     bottom = Operators.Extrapolate(),
+#     top = Operators.Extrapolate(),
+# )
+# const If_uₕ = Operators.InterpolateC2F(
+#     bottom = Operators.SetValue(Geometry.UVector(0.0)),
+#     top = Operators.SetValue(Geometry.UVector(0.0)),
+# )
+# const Ic = Operators.InterpolateF2C()
+# const ∇◦ᵥf = Operators.DivergenceC2F()
+# const ∇◦ᵥc = Operators.DivergenceF2C()
+# const ∇ᵥf = Operators.GradientC2F()
+# const B_w = Operators.SetBoundaryOperator(
+#     bottom = Operators.SetValue(Geometry.WVector(0.0)),
+#     top = Operators.SetValue(Geometry.WVector(0.0)),
+# )
 
-ClimaCore.RecursiveApply.rmul(x::AbstractArray, y::AbstractArray) = x * y
 
 
 struct CustomWRepresentation{T,AT1,AT2,AT3,VT}
@@ -60,8 +48,12 @@ struct CustomWRepresentation{T,AT1,AT2,AT3,VT}
     dtγ_ref::T
 
     # cache for the grid values used to compute the Jacobian
-    Δz::AT1
-    Δz_f::AT1
+    Δξ₃::AT1
+    J::AT1
+    g³³::AT1
+    Δξ₃_f::AT1
+    J_f::AT1
+    g³³_f::AT1
 
     # nonzero blocks of the Jacobian (∂ρₜ/∂𝕄, ∂𝔼ₜ/∂𝕄, ∂𝕄ₜ/∂𝔼, and ∂𝕄ₜ/∂ρ)
     J_ρ𝕄::AT2
@@ -80,8 +72,8 @@ function CustomWRepresentation(
     velem,
     helem,
     npoly,
-    coords,
-    face_coords,
+    center_local_geometry,
+    face_local_geometry,
     transform,
     J_𝕄ρ_overwrite;
     FT = Float64,
@@ -92,13 +84,12 @@ function CustomWRepresentation(
 
     dtγ_ref = Ref(zero(FT))
 
-    # TODO 
-    Δξ₃ = reshape(parent(coords.z), N , M)
-    J = reshape(parent(coords.z), N , M)
-    g³³ = reshape(parent(coords.z), N , M)
-    Δξ₃_f = reshape(parent(face_coords.z), N + 1, M)
-    J_f = reshape(parent(face_coords.z), N + 1, M)
-    g³³_f = reshape(parent(face_coords.z), N + 1, M)
+    J = reshape(parent(center_local_geometry.J), N , M)
+    Δξ₃ = similar(J); fill!(Δξ₃, 1)
+    g³³ = reshape(parent(center_local_geometry.∂x∂ξ)[:,:,:,end,:], N , M)
+    J_f = reshape(parent(face_local_geometry.J), N + 1, M)
+    Δξ₃_f = similar(J_f); fill!(Δξ₃_f, 1)
+    g³³_f = reshape(parent(face_local_geometry.∂x∂ξ)[:,:,:,end,:], N + 1, M)
 
     J_ρ𝕄 = (; d = Array{FT}(undef, N, M), d2 = Array{FT}(undef, N, M))
     J_𝔼𝕄 = (; d = Array{FT}(undef, N, M), d2 = Array{FT}(undef, N, M))
@@ -112,9 +103,9 @@ function CustomWRepresentation(
     )
 
     vals = (;
-        ρ_f = similar(face_coords.z),
-        𝔼_value_f = similar(face_coords.z),
-        P_value = similar(coords.z),
+        ρ_f = similar(J_f),
+        𝔼_value_f = similar(J_f),
+        P_value = similar(J),
     )
 
     CustomWRepresentation{
@@ -277,6 +268,7 @@ function Wfact!(W, Y, p, dtγ, t)
         # ∂P∂𝔼 = reshape(parent(P_value), N, M)
         ∂P∂𝔼 = P_value
         @. ∂P∂𝔼 = (γ * P_ρθ_factor) * ρθ^(γ - 1)
+
         if :ρw in propertynames(Y)
             @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / Δz_f
             @views @. J_𝕄𝔼.d2[1:N - 1, :] = ∂P∂𝔼[1:N - 1, :] / Δz_f
@@ -287,9 +279,9 @@ function Wfact!(W, Y, p, dtγ, t)
             end
         elseif :w in propertynames(Y)
             # TODO check
-            @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ³³_f)
+            @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ³³_f[2:N, :])
             @views @. J_𝕄𝔼.d2[1:N - 1, :] =
-                ∂P∂𝔼[1:N - 1, :] / (ρ_f[2:N, :] * Δξ³³_f)
+                ∂P∂𝔼[1:N - 1, :] / (ρ_f[2:N, :] * Δξ³³_f[2:N, :])
 
             if J_𝕄ρ_overwrite == :grav
                 # TODO check

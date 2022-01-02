@@ -20,6 +20,8 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
+
+
 global_logger(TerminalLogger())
 
 const R = 6.4e6 # radius
@@ -66,7 +68,7 @@ function sphere_3D(
 end
 
 # geopotential
-Φ(z) = grav * z
+gravitational_potential(z) = grav * z
 Π(ρθ) = cp_d * (R_d * ρθ / p_0)^(R_d / cv_d)
 pressure(ρθ) = (ρθ*R_d/p_0)^γ * p_0
 
@@ -174,11 +176,11 @@ function rhs!(dY, Y, _, t)
         top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
     )
     # TODO which one
-    # @. dw -= vgradc2f(cp) / Ic2f(cρ)
-    @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
+    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    # @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
 
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + gravitational_potential(c_coords.z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -199,7 +201,7 @@ end
 
 
 
-function rhs_explicit!(dY, Y, _, t)
+function rhs_remainder!(dY, Y, _, t)
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
@@ -295,7 +297,7 @@ function rhs_explicit!(dY, Y, _, t)
     #@. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
 
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + gravitational_potential(c_coords.z)
     @. duₕ -= hgrad(cE)
 
     # TODO implicit
@@ -374,7 +376,7 @@ function rhs_implicit!(dY, Y, _, t)
 
     # @. dw -= vgradc2f(cp) / Ic2f(cρ)
     @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
-    @. dw -= vgradc2f(Φ(c_coords.z))
+    @. dw -= vgradc2f(gravitational_potential(c_coords.z))
 
     # 3) ρθ
     # TODO implicit
@@ -429,12 +431,20 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, nothing, 0.0)
 
 # run!
-using OrdinaryDiffEq
-# Solve the ODE
+using OrdinaryDiffEq:
+    OrdinaryDiffEq,
+    ODEProblem,
+    ODEFunction,
+    SplitODEProblem,
+    solve,
+    SSPRK33,
+    Rosenbrock23,
+    Rosenbrock32,
+    ImplicitEuler
 
+include("implicit_utils.jl")
 
-
-Test_Type = "Explicit"  # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type = "Implicit-Explicit"   # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
 
 if Test_Type == "Explicit"
     T = 3600
@@ -443,7 +453,7 @@ if Test_Type == "Explicit"
     # solve ode
     sol = solve(
         prob,
-        SSPRK33(),
+        SSPRK33();
         dt = dt,
         saveat = dt,
         progress = true,
@@ -451,13 +461,13 @@ if Test_Type == "Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 elseif Test_Type == "Seim-Explicit"
-    prob = SplitODEProblem(rhs_implicit!, rhs_explicit!, Y, (0.0, T))
+    prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T))
     T = 3600
     dt = 5
     # solve ode
     sol = solve(
         prob,
-        SSPRK33(),
+        SSPRK33();
         dt = dt,
         saveat = dt,
         progress = true,
@@ -465,25 +475,36 @@ elseif Test_Type == "Seim-Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 elseif Test_Type == "Implicit-Explicit"
-    T = 3600
+    T = 10
     dt = 5
 
-    ode_algorithm = 
-    J_𝕄ρ_overwrite = 
-
+    ode_algorithm =  ImplicitEuler
+    J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+
     jac_prototype = CustomWRepresentation(
         velem,
         helem,
         npoly,
-        coords,
-        face_coords,
+        hv_center_space.center_local_geometry, 
+        hv_face_space.face_local_geometry,
         use_transform,
         J_𝕄ρ_overwrite,
     )
 
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
 
+    # setup p
+    P = map(c -> 0., c_coords.z)
+    Φ = @. gravitational_potential(c_coords.z)
+
+    vgradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+    )
+
+    ∇Φ = vgradc2f.(Φ)
+    p = (;P, Φ, ∇Φ)
 
     prob = SplitODEProblem(
             ODEFunction(
@@ -494,18 +515,22 @@ elseif Test_Type == "Implicit-Explicit"
             ),
             rhs_remainder!,
             Y,
-            tspan,
+            (0, T),
             p,
         )
 
     sol = solve(
     prob,
-    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10));
-    dt = 25.,
-    reltol = 1e-1,
-    abstol = 1e-6,
+    dt = dt,
+    # TODO Newton
+    # ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
+    # reltol = 1e-1,
+    # abstol = 1e-6,
+    # TODO Linear
+    ode_algorithm(linsolve = linsolve!);
+    #
+    saveat = dt,
     adaptive = false,
-    saveat = 25.,
     progress = true,
     progress_steps = 1,
     progress_message = (dt, u, p, t) -> t,
