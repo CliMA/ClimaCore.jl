@@ -1,10 +1,50 @@
-import ClimaCore:
-        DataLayouts,
-        Geometry
+push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
-# P = ρ * R_d * T = ρ * R_d * θ * (P / MSLP)^(R_d / C_p) ==>
-# (P / MSLP)^(1 - R_d / C_p) = R_d / MSLP * ρθ ==>
-# P = MSLP * (R_d / MSLP)^γ * ρθ^γ
+using Test
+using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+
+import ClimaCore:
+    ClimaCore,
+    slab,
+    Spaces,
+    Domains,
+    Meshes,
+    Geometry,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    DataLayouts
+
+using ClimaCore.Geometry
+
+using Logging: global_logger
+using TerminalLoggers: TerminalLogger
+using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+
+
+
+global_logger(TerminalLogger())
+
+include("implicit_solver_utils.jl")
+include("ordinary_diff_eq_bug_fixes.jl")
+
+const R = 6.4e6 # radius
+const Ω = 7.2921e-5 # Earth rotation (radians / sec)
+const z_top = 3.0e4 # height position of the model top
+const grav = 9.8 # gravitational constant
+const p_0 = 1e5 # mean sea level pressure
+
+const R_d = 287.058 # R dry (gas constant / mol mass dry air)
+const T_tri = 273.16 # triple point temperature
+const γ = 1.4 # heat capacity ratio
+const cv_d = R_d / (γ - 1)
+const cp_d = R_d * γ / (γ - 1)
+const T_0 = 300 # isothermal atmospheric temperature
+const H = R_d * T_0 / grav # scale height
+# P = ρ * R_d * T = ρ * R_d * θ * (P / p_0)^(R_d / C_p) ==>
+# (P / p_0)^(1 - R_d / C_p) = R_d / p_0 * ρθ ==>
+# P = p_0 * (R_d / p_0)^γ * ρθ^γ
 const P_ρθ_factor = p_0 * (R_d / p_0)^γ
 # P = ρ * R_d * T = ρ * R_d * (ρe_int / ρ / C_v) = (γ - 1) * ρe_int
 const P_ρe_factor = γ - 1
@@ -12,23 +52,265 @@ const P_ρe_factor = γ - 1
 
 
 
-# # vertical operators
-# const If = Operators.InterpolateC2F(
-#     bottom = Operators.Extrapolate(),
-#     top = Operators.Extrapolate(),
-# )
-# const If_uₕ = Operators.InterpolateC2F(
-#     bottom = Operators.SetValue(Geometry.UVector(0.0)),
-#     top = Operators.SetValue(Geometry.UVector(0.0)),
-# )
-# const Ic = Operators.InterpolateF2C()
-# const ∇◦ᵥf = Operators.DivergenceC2F()
-# const ∇◦ᵥc = Operators.DivergenceF2C()
-# const ∇ᵥf = Operators.GradientC2F()
-# const B_w = Operators.SetBoundaryOperator(
-#     bottom = Operators.SetValue(Geometry.WVector(0.0)),
-#     top = Operators.SetValue(Geometry.WVector(0.0)),
-# )
+# geopotential
+gravitational_potential(z) = grav * z
+# Π(ρθ) = cp_d * (R_d * ρθ / p_0)^(R_d / cv_d)
+pressure(ρθ) = (ρθ*R_d/p_0)^γ * p_0
+
+
+
+const hdiv = Operators.Divergence()
+const hwdiv = Operators.Divergence()
+const hgrad = Operators.Gradient()
+const hwgrad = Operators.Gradient()
+const hcurl = Operators.Curl()
+const hwcurl = Operators.Curl() # Operator.WeakCurl()
+const If2c = Operators.InterpolateF2C()
+const Ic2f = Operators.InterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
+const vdivf2c = Operators.DivergenceF2C(
+    top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+    bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+)
+const vcurlc2f = Operators.CurlC2F(
+    bottom = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
+    top = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
+)
+const vgradc2f = Operators.GradientC2F(
+    bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+    top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+)
+
+# initial conditions for density and ρθ
+function init_sbr_thermo(z)
+
+    p = p_0 * exp(-z / H)
+
+    ρ = p / (R_d * T_0)
+
+    θ = T_0*(p_0/p)^(R_d/cp_d)
+
+    return (ρ = ρ, ρθ = ρ*θ)
+end
+
+function rhs!(dY, Y, p, t)
+    @unpack P, Φ, ∇Φ = p
+
+    cρ = Y.Yc.ρ # density on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    cρθ = Y.Yc.ρθ # ρθ on centers
+
+    dρ = dY.Yc.ρ
+    dw = dY.w
+    duₕ = dY.uₕ
+    dρθ = dY.Yc.ρθ
+
+    # # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33 ????????
+
+    dρ .= 0 .* cρ
+    dw .= 0 .* fw
+    duₕ .= 0 .* cuₕ
+    dρθ .= 0 .* cρθ
+
+    # hyperdiffusion not needed in SBR
+
+    # 1) Mass conservation
+
+    cw = If2c.(fw)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+    # 1.a) horizontal divergence
+    dρ .-= hdiv.(cρ .* (cuvw))
+    # 1.b) vertical divergence
+    # explicit part
+    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    # implicit part
+    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+
+    # 2) Momentum equation
+    # curl term
+    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+
+    cω³ = hcurl.(cuₕ) # Contravariant3Vector
+    fω¹² = hcurl.(fw) # Contravariant12Vector
+    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    fu¹² =
+        Geometry.Contravariant12Vector.(
+            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
+        ) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    @. duₕ -= If2c(fω¹² × fu³)
+    # Needed for 3D:
+    @. duₕ -=
+        (f + cω³) ×
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
+    cp = @. pressure(cρθ)
+    @. duₕ -= hgrad(cp) / cρ
+    cK = @. (norm(cuvw)^2) / 2
+    @. duₕ -= hgrad(cK + Φ)
+
+    @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
+    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    @. dw -= (vgradc2f(cK) + ∇Φ)
+
+    # 3) ρθ
+    @. dρθ -= hdiv(cuvw * cρθ)
+    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
+    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
+
+    return dY
+end
+
+
+
+
+function rhs_remainder!(dY, Y, p, t)
+    @info "Remainder part"
+    @unpack P, Φ, ∇Φ = p
+
+    cρ = Y.Yc.ρ # density on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    cρθ = Y.Yc.ρθ # ρθ on centers
+
+    dρ = dY.Yc.ρ
+    dw = dY.w
+    duₕ = dY.uₕ
+    dρθ = dY.Yc.ρθ
+
+    # # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33 ????????
+
+
+
+    dρ .= 0 .* cρ
+    dw .= 0 .* fw
+    duₕ .= 0 .* cuₕ
+    dρθ .= 0 .* cρθ
+
+    # hyperdiffusion not needed in SBR
+
+    # 1) Mass conservation
+    cw = If2c.(fw)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+
+    # 1.a) horizontal divergence
+    dρ .-= hdiv.(cρ .* (cuvw))
+    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    
+    # 2) Momentum equation
+
+    # curl term
+    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+    cω³ = hcurl.(cuₕ) # Contravariant3Vector
+    fω¹² = hcurl.(fw) # Contravariant12Vector
+    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    fu¹² =
+        Geometry.Contravariant12Vector.(
+            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
+        ) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    
+    @. duₕ -= If2c(fω¹² × fu³)
+    # Needed for 3D:
+    @. duₕ -=
+        (f + cω³) ×
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
+    cp = @. pressure(cρθ)
+    @. duₕ -= hgrad(cp) / cρ
+    cK = @. (norm(cuvw)^2) / 2
+    @. duₕ -= hgrad(cK + Φ)
+
+    
+    @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
+    
+    @. dw -= vgradc2f(cK)
+    
+
+
+    # 3) ρθ
+    @. dρθ -= hdiv(cuvw * cρθ)
+    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+
+
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
+
+    return dY
+end
+
+
+
+function rhs_implicit!(dY, Y, p, t)
+    @info "Implicit part"
+    @unpack P, Φ, ∇Φ = p
+
+    cρ = Y.Yc.ρ # density on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    cρθ = Y.Yc.ρθ # ρθ on centers
+
+    dρ = dY.Yc.ρ
+    dw = dY.w
+    duₕ = dY.uₕ
+    dρθ = dY.Yc.ρθ
+
+    # # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33 ????????
+
+    dρ .= 0 .* cρ
+    dw .= 0 .* fw
+    duₕ .= 0 .* cuₕ
+    dρθ .= 0 .* cρθ
+
+    # hyperdiffusion not needed in SBR
+
+    # 1) Mass conservation
+
+    
+
+    # 1.b) vertical divergence
+    # we want the total u³ at the boundary to be zero: we can either constrain
+    # both to be zero, or allow one to be non-zero and set the other to be its
+    # negation
+
+    # TODO implicit
+    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+
+    # 2) Momentum equation
+
+    cp = @. pressure(cρθ)
+    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+    # @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
+    @. dw -= ∇Φ
+
+    # 3) ρθ
+    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
+
+    return dY
+end
+
+
+
+
+
+
 
 
 
@@ -143,6 +425,7 @@ import Base: similar
 Base.similar(cf::CustomWRepresentation{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, Y, p, dtγ, t)
+    @info "construct Wfact!"
     @unpack velem, helem, npoly, dtγ_ref, Δξ₃, J, g³³, Δξ₃_f, J_f, g³³_f, J_ρ𝕄, J_𝔼𝕄, J_𝕄𝔼, J_𝕄ρ,
         J_𝕄ρ_overwrite, vals = W
     @unpack ρ_f, 𝔼_value_f, P_value = vals
@@ -369,6 +652,7 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             b𝕄 = b.w
         end
         
+        @info "start solving Tri-diag"
         N = velem
         # TODO: numbering
         for i in 1:npoly + 1, j in 1:npoly + 1, h in 1:6*helem^2
@@ -391,8 +675,69 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
 
         @. x.Yc.ρuₕ = -b.Yc.ρuₕ
 
+        @info "finish solving Tri-diag"
         if transform
             x .*= dtγ
         end
     end
+end
+
+
+
+
+
+# set up function space
+function sphere_3D(
+    R = 6.4e6,
+    zlim = (0, 30.0e3),
+    helem = 4,
+    zelem = 15,
+    npoly = 5,
+)
+    FT = Float64
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    horzdomain = Domains.SphereDomain(R)
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
+    horztopology = Topologies.Topology2D(horzmesh)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    return (hv_center_space, hv_face_space)
+end
+
+
+
+# temporary FieldVector broadcast and fill patches that speeds up solves by 2-3x
+import Base: copyto!, fill!
+using Base.Broadcast: Broadcasted, broadcasted, BroadcastStyle
+transform_broadcasted(bc::Broadcasted{Fields.FieldVectorStyle}, symb, axes) =
+    Broadcasted(bc.f, map(arg -> transform_broadcasted(arg, symb, axes), bc.args), axes)
+transform_broadcasted(fv::Fields.FieldVector, symb, axes) =
+    parent(getproperty(fv, symb))
+transform_broadcasted(x, symb, axes) = x
+@inline function Base.copyto!(
+    dest::Fields.FieldVector,
+    bc::Broadcasted{Fields.FieldVectorStyle},
+)
+    for symb in propertynames(dest)
+        p = parent(getproperty(dest, symb))
+        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
+    end
+    return dest
+end
+function Base.fill!(a::Fields.FieldVector, x)
+    for symb in propertynames(a)
+        fill!(parent(getproperty(a, symb)), x)
+    end
+    return a
 end
