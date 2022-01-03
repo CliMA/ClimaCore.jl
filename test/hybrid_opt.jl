@@ -315,7 +315,7 @@ end
             )
 
             @test_opt opt_GradientC2F_SetValue(centers)
-            @show opt_GradientC2F_SetGradient(centers)
+            @test_opt opt_GradientC2F_SetGradient(centers)
 
             @test_opt opt_DivergenceC2F_SetValue(centers)
             @test_opt opt_DivergenceC2F_SetDivergence(centers)
