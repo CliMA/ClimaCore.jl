@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
@@ -276,7 +274,7 @@ sol = solve(
 # TODO: visualization artifacts
 
 # ENV["GKSwstype"] = "nul"
-# import Plots
+# import Plots, ClimaCorePlots
 # Plots.GRBackend()
 
 # dirname = "bubble_3d"

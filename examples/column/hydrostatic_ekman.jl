@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
@@ -188,7 +186,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+import Plots, ClimaCorePlots
 Plots.GRBackend()
 
 dirname = "hydrostatic_ekman"

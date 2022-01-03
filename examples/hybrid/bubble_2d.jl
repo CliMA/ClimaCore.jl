@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
@@ -302,7 +300,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+import Plots, ClimaCorePlots
 Plots.GRBackend()
 
 dirname = "bubble_2d"
@@ -310,7 +308,7 @@ path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 # post-processing
-import Plots
+import Plots, ClimaCorePlots
 anim = Plots.@animate for u in sol.u
     Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
 end

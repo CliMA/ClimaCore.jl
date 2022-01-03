@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
@@ -291,7 +289,7 @@ sol_invariant = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+import Plots, ClimaCorePlots
 Plots.GRBackend()
 
 dirname = "bubble_invariant"
@@ -299,13 +297,11 @@ path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 # post-processing
-import Plots
 anim = Plots.@animate for u in sol_invariant.u
     Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
 end
 Plots.mp4(anim, joinpath(path, "theta.mp4"), fps = 20)
 
-import Plots
 anim = Plots.@animate for u in sol_invariant.u
     Plots.plot(u.Yc.ρ)
 end

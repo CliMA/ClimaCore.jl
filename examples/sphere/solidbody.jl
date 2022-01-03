@@ -1,11 +1,9 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimaCore: slab
 import ClimaCore.Operators
 import ClimaCore.Geometry
-import Plots
+import Plots, ClimaCorePlots
 using LinearAlgebra, IntervalSets
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 using Logging: global_logger

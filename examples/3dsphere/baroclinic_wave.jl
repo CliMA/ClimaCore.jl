@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
@@ -333,7 +331,7 @@ if test_name == "baroclinic_wave"
     @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
     ENV["GKSwstype"] = "nul"
-    import Plots
+    import Plots, ClimaCorePlots
     Plots.GRBackend()
     dirname = "baroclinic_wave"
     path = joinpath(@__DIR__, "output", dirname)
@@ -360,7 +358,7 @@ if test_name == "baroclinic_wave"
     )
 elseif test_name == "balanced_flow"
     ENV["GKSwstype"] = "nul"
-    import Plots
+    import Plots, ClimaCorePlots
     Plots.GRBackend()
     dirname = "balanced_flow"
     path = joinpath(@__DIR__, "output", dirname)

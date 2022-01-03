@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
 import ClimaCore: slab
@@ -121,7 +119,7 @@ sol = solve(
 )
 
 ENV["GKSwstype"] = "nul"
-import Plots
+import Plots, ClimaCorePlots
 Plots.GRBackend()
 
 dirname = "cg"
