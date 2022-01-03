@@ -10,21 +10,27 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\")'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/column -e 'using Pkg; Pkg.develop(path=\"lib/ClimaCorePlots\")'"
       - "julia --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.develop(path=\"lib/ClimaCorePlots\")'"
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.develop(path=\"lib/ClimaCorePlots\")'"
       - "julia --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/sphere -e 'using Pkg; Pkg.develop(path=\"lib/ClimaCorePlots\")'"
       - "julia --project=examples/sphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/sphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=examples/3dsphere -e 'using Pkg; Pkg.develop(path=\"lib/ClimaCorePlots\")'"
       - "julia --project=examples/3dsphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples/3dsphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
@@ -430,7 +436,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-      
+
   - label: ":computer: 3D deformation flow"
     key: "cpu_3d_deformation_flow"
     command:
@@ -441,7 +447,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-  
+
   - label: ":computer: baroclinic wave"
     key: "cpu_baroclinic_wave"
     command:
@@ -452,7 +458,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-  
+
   - label: ":computer: solid body rotation"
     key: "cpu_solid_body_rotation"
     command:
