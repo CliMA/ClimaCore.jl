@@ -23,6 +23,16 @@ const CenterExtrudedFiniteDifferenceSpace =
 const FaceExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellFace}
 
+const FaceExtrudedFiniteDifferenceSpace2D =
+    ExtrudedFiniteDifferenceSpace{CellFace, <:SpectralElementSpace1D}
+const FaceExtrudedFiniteDifferenceSpace3D =
+    ExtrudedFiniteDifferenceSpace{CellFace, <:SpectralElementSpace2D}
+const CenterExtrudedFiniteDifferenceSpace2D =
+    ExtrudedFiniteDifferenceSpace{CellCenter, <:SpectralElementSpace1D}
+const CenterExtrudedFiniteDifferenceSpace3D =
+    ExtrudedFiniteDifferenceSpace{CellCenter, <:SpectralElementSpace2D}
+
+
 function ExtrudedFiniteDifferenceSpace{S}(
     space::ExtrudedFiniteDifferenceSpace,
 ) where {S <: Staggering}
