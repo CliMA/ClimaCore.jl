@@ -143,12 +143,12 @@ end
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
     writevtk(
-        joinpath(dir, "hybrid2d_point"),
+        joinpath(dir, "hybrid3d_point"),
         Fields.coordinate_field(fspace);
         basis = :point,
     )
     writevtk(
-        joinpath(dir, "hybrid2d_cell"),
+        joinpath(dir, "hybrid3d_cell"),
         Fields.coordinate_field(cspace);
         basis = :cell,
     )
