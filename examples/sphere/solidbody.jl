@@ -1,14 +1,13 @@
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-import Plots, ClimaCorePlots
-using LinearAlgebra, IntervalSets
+using LinearAlgebra
+
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 """
     convergence_rate(err, Δh)
@@ -49,6 +48,7 @@ end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
+import ClimaCorePlots, Plots
 Plots.GRBackend()
 dirname = "cg_sphere_solidbody_$(test_name)"
 dirname = "$(dirname)_$(test_angle_name)"

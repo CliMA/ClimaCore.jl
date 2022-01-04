@@ -1,5 +1,5 @@
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
@@ -12,12 +12,10 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 # set up function space
 function hvspace_2D(
     xlim = (-π, π),
@@ -30,13 +28,14 @@ function hvspace_2D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]),
+        Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
@@ -289,7 +288,7 @@ sol_invariant = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "bubble_invariant"

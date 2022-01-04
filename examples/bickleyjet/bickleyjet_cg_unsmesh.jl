@@ -1,15 +1,14 @@
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using ClimaCore.Meshes: RectilinearMesh
-using LinearAlgebra, IntervalSets
+using LinearAlgebra
+
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+import ClimaCore.Geometry: ⊗
+
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 FT = Float64
 const parameters = (
@@ -22,17 +21,23 @@ const parameters = (
 )
 
 domain = Domains.RectangleDomain(
-    Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
-    Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
-    x1periodic = true,
-    x2periodic = true,
+    Domains.IntervalDomain(
+        Geometry.XPoint(-2π),
+        Geometry.XPoint(2π),
+        periodic = true,
+    ),
+    Domains.IntervalDomain(
+        Geometry.YPoint(-2π),
+        Geometry.YPoint(2π),
+        periodic = true,
+    ),
 )
 
 n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
 
-mesh = RectilinearMesh(domain, n1, n2)
+mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -41,7 +46,7 @@ Iquad = Spaces.Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
-    @unpack x, y = coord
+    x, y = coord.x, coord.y
     # set initial state
     ρ = p.ρ₀
 
@@ -66,7 +71,7 @@ end
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
 function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
+    ρ, ρu, ρθ = state.ρ, state.ρu, state.ρθ
     u = ρu / ρ
     return (
         ρ = ρu,
@@ -76,7 +81,7 @@ function flux(state, p)
 end
 
 function energy(state, p)
-    @unpack ρ, ρu = state
+    ρ, ρu = state.ρ, state.ρu
     u = ρu / ρ
     return ρ * (u.u^2 + u.v^2) / 2 + p.g * ρ^2 / 2
 end
@@ -119,7 +124,7 @@ sol = solve(
 )
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "cg_unsmesh"

@@ -1,4 +1,3 @@
-import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
     Domains,
@@ -11,10 +10,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const CI = !isnothing(get(ENV, "CI", nothing))
 
 const FT = Float64
@@ -27,7 +25,7 @@ n = 10
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(a),
     Geometry.ZPoint{FT}(b),
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
@@ -62,7 +60,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "heat"

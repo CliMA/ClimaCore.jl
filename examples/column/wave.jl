@@ -11,16 +11,15 @@ import ClimaCore:
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(4pi),
-    boundary_tags = (:left, :right),
+    boundary_names = (:left, :right),
 )
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -68,7 +67,7 @@ sol = solve(
 
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "wave"

@@ -1,4 +1,4 @@
-import ClimaCore.Geometry, LinearAlgebra, UnPack
+using LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -11,9 +11,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
@@ -26,7 +26,7 @@ function heaviside(pt)
     0.5 * (sign(pt.z) + 1)
 end
 
-domain = Domains.IntervalDomain(a, b, boundary_tags = (:left, :right))
+domain = Domains.IntervalDomain(a, b, boundary_names = (:left, :right))
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -149,7 +149,7 @@ sol4 = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots, ClimaCorePlots
+import ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "advect_step_function"
@@ -197,9 +197,6 @@ p = Plots.plot!(sol2.u[end], xlim = (-1, 1), label = "UBP_FC")
 p = Plots.plot!(sol3.u[end], xlim = (-1, 1), label = "C2C")
 p = Plots.plot!(sol4.u[end], xlim = (-1, 1), label = "C2C_FC")
 Plots.png(p, joinpath(path, "all_advect_step_function_end.png"))
-
-
-
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath
