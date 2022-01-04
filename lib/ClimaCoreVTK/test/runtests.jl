@@ -29,6 +29,7 @@ dir = mktempdir()
     end
 
     writevtk(joinpath(dir, "sphere"), (coords = coords, u = u); basis = :point)
+    @test isfile(joinpath(dir, "sphere.vtu"))
 
     times = 0:10:350
     A = [
@@ -38,6 +39,7 @@ dir = mktempdir()
         end for α in times
     ]
     writevtk(joinpath(dir, "sphere_scalar_series"), times, (A = A, B = A))
+    @test isfile(joinpath(dir, "sphere_scalar_series.pvd"))
 
     U = Array{Fields.Field}(undef, length(times))
     for t in 1:(div(350, 10) + 1)
@@ -54,6 +56,7 @@ dir = mktempdir()
         U[t] = u
     end
     writevtk(joinpath(dir, "sphere_vector_series"), times, (U = U,))
+    @test isfile(joinpath(dir, "sphere_vector_series.pvd"))
 
 end
 
@@ -82,6 +85,7 @@ end
     end
 
     writevtk(joinpath(dir, "plane"), (sinxy = sinxy, u = u))
+    @test isfile(joinpath(dir, "plane.vtu"))
 
 end
 
@@ -111,11 +115,13 @@ end
         Fields.coordinate_field(fspace);
         basis = :point,
     )
+    @test isfile(joinpath(dir, "hybrid2d_point.vtu"))
     writevtk(
         joinpath(dir, "hybrid2d_cell"),
         Fields.coordinate_field(cspace);
         basis = :cell,
     )
+    @test isfile(joinpath(dir, "hybrid2d_cell.vtu"))
 end
 
 @testset "hybrid 3d" begin
@@ -147,9 +153,11 @@ end
         Fields.coordinate_field(fspace);
         basis = :point,
     )
+    @test isfile(joinpath(dir, "hybrid3d_point.vtu"))
     writevtk(
         joinpath(dir, "hybrid3d_cell"),
         Fields.coordinate_field(cspace);
         basis = :cell,
     )
+    @test isfile(joinpath(dir, "hybrid3d_cell.vtu"))
 end
