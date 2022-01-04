@@ -327,6 +327,8 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
+times = 0:dt:time_end
+
 # visualization artifacts
 if test_name == "baroclinic_wave"
     @info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe)
@@ -348,16 +350,23 @@ if test_name == "baroclinic_wave"
         end
     end
 
-    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
-    Plots.png(
-        Plots.plot(u_phy.components.data.:2, level = 3, clim = (-1, 1)),
-        joinpath(path, "v.png"),
-    )
-    w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
-    Plots.png(
-        Plots.plot(w_phy.components.data.:1, level = 3 + half, clim = (-1, 1)),
-        joinpath(path, "w.png"),
-    )
+    # u_phi vtk plots
+    u_phy_end = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+    Sol_u_phy =  Array{Fields.Field}(undef, length(times))
+    for t in 1:div(time_end, dt)+1
+        Sol_u_phy[t] = ClimaCore.level((Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[t].uₕ)).components.data.:2, 3)
+    end
+    using ClimaCoreVTK
+    writevtk(joinpath(path, "u_phi"), times, (uϕ = Sol_u_phy,))
+
+    # w_phi vtk plots
+    w_phy_end = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+    Sol_w_phy =  Array{Fields.Field}(undef, length(times))
+    for t in 1:div(time_end, dt)+1
+        Sol_w_phy[t] = ClimaCore.level((Geometry.transform.(Ref(Geometry.WAxis()), sol.u[t].w)).components.data.:1, 3 + half)
+    end
+    writevtk(joinpath(path, "u_w"), times, (uw = Sol_w_phy,))
+
 elseif test_name == "balanced_flow"
     ENV["GKSwstype"] = "nul"
     import Plots
