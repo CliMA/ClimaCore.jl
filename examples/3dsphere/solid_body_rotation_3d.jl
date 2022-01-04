@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
@@ -14,13 +12,13 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
+import ClimaCore.Utilities: half
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
@@ -48,7 +46,7 @@ function sphere_3D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)

@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
@@ -14,13 +12,13 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
+import ClimaCore.Utilities: half
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # 3D deformation flow (DCMIP 2012 Test 1-1)
 # Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.1
@@ -55,7 +53,7 @@ function sphere_3D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
@@ -233,7 +231,7 @@ q4_error =
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 dirname = "deformation_flow"
 path = joinpath(@__DIR__, "output", dirname)

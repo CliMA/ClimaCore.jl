@@ -1,6 +1,6 @@
 ## ClimaCoreMakie
 
-Makie plot infastructure for ClimaCore fields for 2D / 3D visualization.
+Makie plot infrastructure for ClimaCore fields for 2D / 3D visualization.
 
 ### Use ClimaCoreMakie from the ClimaCore parent package
 
@@ -15,17 +15,17 @@ You can now use ClimaCoreMakie in your ClimaCore pkg environment:
 
     julia> using ClimaCoreMakie
 
-To vizualize a clima core object, you fist need to install a Makie backend:
+To visualize a ClimaCore object, you fist need to install a Makie backend:
 
     (@v1.7) pkg> add GLMakie # 3D
     (@v1.7) pkg> add CairoMakie # 2D
-    
+
 Then load in the backend:
 
     julia> using GLMakie
 
 Finally call `viz`:
-	
+
     julia> ClimaCoreMakie.viz(field, ...)
 
 

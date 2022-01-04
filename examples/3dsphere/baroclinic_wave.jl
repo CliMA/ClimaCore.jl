@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
@@ -15,13 +13,12 @@ import ClimaCore:
     Fields,
     Operators
 import ClimaCore.Utilities: half
-using ClimaCore.Geometry
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # This experiment tests
 #     1) hydrostatic and geostrophic balance;
@@ -114,7 +111,7 @@ function sphere_3D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
@@ -333,7 +330,7 @@ if test_name == "baroclinic_wave"
     @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
     ENV["GKSwstype"] = "nul"
-    import Plots
+    using ClimaCorePlots, Plots
     Plots.GRBackend()
     dirname = "baroclinic_wave"
     path = joinpath(@__DIR__, "output", dirname)
@@ -360,7 +357,7 @@ if test_name == "baroclinic_wave"
     )
 elseif test_name == "balanced_flow"
     ENV["GKSwstype"] = "nul"
-    import Plots
+    using ClimaCorePlots, Plots
     Plots.GRBackend()
     dirname = "balanced_flow"
     path = joinpath(@__DIR__, "output", dirname)
