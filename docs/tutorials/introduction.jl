@@ -10,7 +10,8 @@
 #   - staggered finite difference in the vertical
 # - currently under development
 
-using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
+using ClimaCore,
+    ClimaCorePlots, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 #----------------------------------------------------------------------------
 
 # ## 1. Constructing a discretization
