@@ -38,7 +38,7 @@ withenv("GKSwstype" => "100") do
     makedocs(
         bib,
         sitename = "ClimaCore.jl",
-        strict = false,
+        strict = [:example_block],
         format = format,
         checkdocs = :exports,
         clean = true,
