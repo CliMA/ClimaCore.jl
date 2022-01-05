@@ -1,6 +1,7 @@
 module ClimaCore
 
 include("interface.jl")
+include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")
 include("DataLayouts/DataLayouts.jl")
 include("Geometry/Geometry.jl")

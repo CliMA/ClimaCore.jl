@@ -1,0 +1,6 @@
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCoreMakie = "908f55d8-4145-4867-9c14-5dad1a479e4d"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

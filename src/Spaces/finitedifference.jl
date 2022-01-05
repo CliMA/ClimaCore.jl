@@ -21,6 +21,18 @@ struct FiniteDifferenceSpace{
     face_local_geometry::LG
 end
 
+function Base.show(io::IO, space::FiniteDifferenceSpace)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(
+        io,
+        space isa CenterFiniteDifferenceSpace ? "CenterFiniteDifferenceSpace" :
+        "FaceFiniteDifferenceSpace",
+        ":",
+    )
+    print(iio, " "^(indent + 2), space.topology)
+end
+
 function FiniteDifferenceSpace{S}(
     topology::Topologies.AbstractIntervalTopology,
 ) where {S <: Staggering}

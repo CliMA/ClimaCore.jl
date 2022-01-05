@@ -84,18 +84,18 @@ end
     @testset "Scalar Field Specctral Element optimizations" begin
         for FT in (Float64,)
             domain = Domains.RectangleDomain(
-                Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-                Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+                Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+                Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
                 x1periodic = true,
                 x2periodic = true,
             )
 
             Nq = 3
             quad = Spaces.Quadratures.GLL{Nq}()
-            #mesh = Meshes.equispaced_rectangular_mesh(domain, 3, 3)
-            #topology = Topologies.Grid2DTopology(mesh)
-            mesh = Meshes.EquispacedRectangleMesh(domain, 3, 3)
-            topology = Topologies.GridTopology(mesh)
+            #mesh = Meshes.RectilinearMesh(domain, 3, 3)
+            #topology = Topologies.Topology2D(mesh)
+            mesh = Meshes.RectilinearMesh(domain, 3, 3)
+            topology = Topologies.Topology2D(mesh)
             space = Spaces.SpectralElementSpace2D(topology, quad)
             coords = Fields.coordinate_field(space)
 

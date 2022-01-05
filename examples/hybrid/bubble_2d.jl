@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra, StaticArrays
 
 import ClimaCore:
     ClimaCore,
@@ -14,11 +12,11 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
+import ClimaCore.Geometry: ⊗
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # set up function space
 function hvspace_2D(
@@ -32,13 +30,14 @@ function hvspace_2D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]),
+        Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
@@ -98,7 +97,7 @@ function init_dry_rising_bubble_2d(x, z)
     ρ = p / R_d / T # density
     ρθ = ρ * θ # potential temperature density
 
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρ * Geometry.UVector(0.0))
+    return (ρ = ρ, ρθ = ρθ)
 end
 
 # initial conditions
@@ -114,7 +113,11 @@ end
     Geometry.WVector(0.0)
 end;
 
-Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
+Y = Fields.FieldVector(
+    Yc = Yc,
+    ρuₕ = Yc.ρ .* Ref(Geometry.UVector(0.0)),
+    ρw = ρw,
+)
 
 function energy(Yc, ρu, z)
     ρ = Yc.ρ
@@ -131,7 +134,7 @@ function combine_momentum(ρuₕ, ρw)
 end
 function center_momentum(Y)
     If2c = Operators.InterpolateF2C()
-    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
+    combine_momentum.(Y.ρuₕ, If2c.(Y.ρw))
 end
 function total_energy(Y)
     ρ = Y.Yc.ρ
@@ -145,9 +148,11 @@ energy_0 = total_energy(Y)
 mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
 
 function rhs!(dY, Y, _, t)
+    ρuₕ = Y.ρuₕ
     ρw = Y.ρw
     Yc = Y.Yc
     dYc = dY.Yc
+    dρuₕ = dY.ρuₕ
     dρw = dY.ρw
 
     # spectral horizontal operators
@@ -196,7 +201,7 @@ function rhs!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-    uₕ = @. Yc.ρuₕ / Yc.ρ
+    uₕ = @. ρuₕ / Yc.ρ
     w = @. ρw / If(Yc.ρ)
     wc = @. Ic(ρw) / Yc.ρ
     p = @. pressure(Yc.ρθ)
@@ -206,19 +211,20 @@ function rhs!(dY, Y, _, t)
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
     @. dYc.ρθ = hdiv(hgrad(θ))
-    @. dYc.ρuₕ = hdiv(hgrad(uₕ))
+    @. dρuₕ = hdiv(hgrad(uₕ))
     @. dρw = hdiv(hgrad(w))
     Spaces.weighted_dss!(dYc)
+    Spaces.weighted_dss!(dρuₕ)
     Spaces.weighted_dss!(dρw)
 
     κ₄ = 100.0 # m^4/s
     @. dYc.ρθ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρθ))
-    @. dYc.ρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρuₕ))
+    @. dρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dρuₕ))
     @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
     # density
     @. dYc.ρ = -∂(ρw)
-    @. dYc.ρ -= hdiv(Yc.ρuₕ)
+    @. dYc.ρ -= hdiv(ρuₕ)
 
     # potential temperature
     @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
@@ -231,8 +237,8 @@ function rhs!(dY, Y, _, t)
             @SMatrix [1.0]
         ),
     )
-    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
-    @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
+    @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
+    @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
     @. dρw +=
@@ -242,7 +248,7 @@ function rhs!(dY, Y, _, t)
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ) - vvdivc2f(Ic(ρw ⊗ w)),
         ) + fcf(wc, ρw)
-    uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
+    uₕf = @. If(ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     ### UPWIND FLUX CORRECTION
@@ -250,16 +256,16 @@ function rhs!(dY, Y, _, t)
     if upwind_correction
         @. dYc.ρ += fcc(w, Yc.ρ)
         @. dYc.ρθ += fcc(w, Yc.ρθ)
-        @. dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+        @. dρuₕ += fcc(w, ρuₕ)
         @. dρw += fcf(wc, ρw)
     end
 
     ### DIFFUSION
     κ₂ = 0.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dYc.ρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
+    @. dρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(ρuₕ / Yc.ρ)))
     #  1b) vertical div of vertical grad of horiz momentun
-    @. dYc.ρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(Yc.ρuₕ / Yc.ρ)))
+    @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / Yc.ρ)))
 
     #  1c) horizontal div of horizontal grad of vert momentum
     @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
@@ -272,6 +278,7 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
 
     Spaces.weighted_dss!(dYc)
+    Spaces.weighted_dss!(dρuₕ)
     Spaces.weighted_dss!(dρw)
     return dY
 end
@@ -283,18 +290,18 @@ rhs!(dYdt, Y, nothing, 0.0);
 # run!
 using OrdinaryDiffEq
 Δt = 0.025
-prob = ODEProblem(rhs!, Y, (0.0, 50.0))
+prob = ODEProblem(rhs!, Y, (0.0, 500.0))
 sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = 5.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "bubble_2d"
@@ -302,7 +309,7 @@ path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
 # post-processing
-import Plots
+using ClimaCorePlots, Plots
 anim = Plots.@animate for u in sol.u
     Plots.plot(u.Yc.ρθ ./ u.Yc.ρ, clim = (300.0, 300.8))
 end
@@ -310,12 +317,12 @@ Plots.mp4(anim, joinpath(path, "theta.mp4"), fps = 20)
 
 If2c = Operators.InterpolateF2C()
 anim = Plots.@animate for u in sol.u
-    Plots.plot(If2c.(u.ρw) ./ u.Yc.ρ, clim = (-2, 2))
+    Plots.plot(If2c.(u.ρw) ./ u.Yc.ρ)
 end
 Plots.mp4(anim, joinpath(path, "vel_w.mp4"), fps = 20)
 
 anim = Plots.@animate for u in sol.u
-    Plots.plot(u.Yc.ρuₕ ./ u.Yc.ρ, clim = (-2, 2))
+    Plots.plot(u.ρuₕ ./ u.Yc.ρ)
 end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
 

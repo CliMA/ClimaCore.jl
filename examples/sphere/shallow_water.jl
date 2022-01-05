@@ -1,17 +1,14 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using LinearAlgebra, IntervalSets
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+
+import QuadGK
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
-using QuadGK: quadgk
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # This example solves the shallow-water equations on a cubed-sphere manifold.
 # This file contains five test cases:
@@ -109,7 +106,7 @@ end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 dirname = "cg_sphere_shallowwater_$(test_name)"
 dirname = "$(dirname)_$(test_angle_name)"
@@ -130,8 +127,8 @@ ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the 
 Nq = 4
 
 domain = Domains.SphereDomain(R)
-mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), ne)
-grid_topology = Topologies.Grid2DTopology(mesh)
+mesh = Meshes.EquiangularCubedSphere(domain, ne)
+grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
@@ -255,7 +252,8 @@ elseif test_name == steady_state_compact_test_name
             (2 * Ω * sind(γ) + uλprime(γ) * tand(γ) / R) * uλprime(γ) : 0.0
 
         # Set initial state for height field
-        h = h0 - (R / g) * (pi / 180.0) * quadgk(h_int, -90.0, ϕprime)[1]
+        h =
+            h0 - (R / g) * (pi / 180.0) * QuadGK.quadgk(h_int, -90.0, ϕprime)[1]
 
         # Set initial state for velocity field
         uϕ = -(uλprime(ϕprime) * sind(α) * sind(λprime)) / cosd(ϕ)
@@ -309,7 +307,8 @@ elseif test_name == barotropic_instability_test_name
             (2 * Ω * sind(γ) + uλprime(γ) * tand(γ) / R) * uλprime(γ) : 0.0
 
         # Set initial state for height field
-        h = h0 - (R / g) * (pi / 180.0) * quadgk(h_int, -90.0, ϕprime)[1]
+        h =
+            h0 - (R / g) * (pi / 180.0) * QuadGK.quadgk(h_int, -90.0, ϕprime)[1]
 
         if λ > 0.0
             λ -= 360.0

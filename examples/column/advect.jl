@@ -1,6 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
     Domains,
@@ -13,10 +10,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
 a = FT(0.0)
@@ -27,7 +23,7 @@ n = 128
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(a),
     Geometry.ZPoint{FT}(b),
-    boundary_tags = (:left, :right),
+    boundary_names = (:left, :right),
 )
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 
@@ -151,7 +147,7 @@ sol4 = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "advect"

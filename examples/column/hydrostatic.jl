@@ -1,6 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
     Domains,
@@ -13,10 +10,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
@@ -32,7 +28,7 @@ const R_m = FT(R_d) # moist R, assumed to be dry
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(30e3),
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
@@ -99,11 +95,12 @@ w = Geometry.WVector.(zeros(FT, fspace))
 Y_init = copy(Yc)
 w_init = copy(w)
 
-Y = (Yc, w)
-
 function tendency!(dY, Y, _, t)
-    (Yc, w) = Y.x
-    (dYc, dw) = dY.x
+    Yc = Y.Yc
+    w = Y.w
+
+    dYc = dY.Yc
+    dw = dY.w
 
     If = Operators.InterpolateC2F()
     ∂ = Operators.DivergenceF2C(
@@ -123,10 +120,7 @@ function tendency!(dY, Y, _, t)
     return dY
 end
 
-
-using RecursiveArrayTools
-
-Y = ArrayPartition(Yc, w)
+Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0
@@ -144,7 +138,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "hydrostatic"
@@ -162,7 +156,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ρ",
         label = "T=0",
     )
-    sub_plt1 = Plots.plot!(sub_plt1, parent(u.x[1].ρ), z_centers, label = "T")
+    sub_plt1 = Plots.plot!(sub_plt1, parent(u.Yc.ρ), z_centers, label = "T")
 
     sub_plt2 = Plots.plot(
         parent(w_init),
@@ -172,7 +166,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ω",
         label = "T=0",
     )
-    sub_plt2 = Plots.plot!(sub_plt2, parent(u.x[2]), z_faces, label = "T")
+    sub_plt2 = Plots.plot!(sub_plt2, parent(u.w), z_faces, label = "T")
 
     sub_plt3 = Plots.plot(
         parent(Y_init.ρθ),
@@ -181,7 +175,7 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         xlabel = "ρθ",
         label = "T=0",
     )
-    sub_plt3 = Plots.plot!(sub_plt3, parent(u.x[1].ρθ), z_centers, label = "T")
+    sub_plt3 = Plots.plot!(sub_plt3, parent(u.Yc.ρθ), z_centers, label = "T")
 
     return Plots.plot(
         sub_plt1,

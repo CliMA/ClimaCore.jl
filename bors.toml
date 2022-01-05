@@ -2,7 +2,9 @@ status = [
   "test-os (ubuntu-latest)",
   "test-os (windows-latest)",
   "test-os (macos-latest)",
-  "lib-climacorevtk",
+  "lib-climacore-vtk",
+  "lib-climacore-makie",
+  "lib-climacore-plots",
   "buildkite/climacore-ci",
   "format",
   "docbuild"

@@ -11,8 +11,10 @@ import ClimaCore:
     Topologies,
     Spaces,
     Fields,
-    Operators
+    Operators,
+    level
 import ClimaCore.Domains.Geometry: ⊗
+import ClimaCore.Utilities: half
 
 function hvspace_2D(;
     xlim = (-π, π),
@@ -31,7 +33,7 @@ function hvspace_2D(;
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = helem)
@@ -62,6 +64,29 @@ end
 # 4) vert_div(V_face): project to Contravariant3, take FD deriv
 
 
+@testset "1D SE, 1D FD Extruded Domain level extraction" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(npoly = 4, velem = 10, helem = 10)
+
+    fcoord = Fields.coordinate_field(hv_face_space)
+    ccoord = Fields.coordinate_field(hv_center_space)
+    @test parent(Fields.field_values(level(fcoord.x, half))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(ccoord.x, 1))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_center_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(fcoord.z, half))) ==
+          parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    ) .* 0
+end
 
 
 @testset "1D SE, 1D FD Extruded Domain matrix interpolation" begin
@@ -78,6 +103,7 @@ end
         @test size(M_face) == (10 + 1, 10 * npoints)
     end
 end
+
 
 @testset "1D SE, 1D FD Extruded Domain vertical advection operator" begin
 
@@ -415,4 +441,68 @@ end
     curluw_diff = zeroboundary.(curluw .- curluw_ref)
 
     @test norm(curluw_diff) < norm(curluw_ref) * 1e-2
+end
+
+
+@testset "curl-cross" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(xlim = (-pi, pi), zlim = (-pi, pi))
+
+    ccoords = Fields.coordinate_field(hv_center_space)
+    fcoords = Fields.coordinate_field(hv_face_space)
+
+    a = 1.0
+    b = 2.0
+    c = 3.0
+    d = 4.0
+
+    u =
+        Geometry.transform.(
+            Ref(Geometry.Covariant1Axis()),
+            Geometry.UVector.(a .* ccoords.x .+ b .* ccoords.z),
+        )
+    w =
+        Geometry.transform.(
+            Ref(Geometry.Covariant3Axis()),
+            Geometry.WVector.(c .* fcoords.x .+ d .* fcoords.z),
+        )
+
+    curl = Operators.Curl()
+    curlC2F = Operators.CurlC2F(
+        bottom = Operators.SetCurl(Geometry.Contravariant2Vector(b)),
+        top = Operators.SetCurl(Geometry.Contravariant2Vector(b)),
+    )
+
+    curlu = curlC2F.(u)
+    curlw = curl.(w)
+    curluw = curlu .+ curlw
+    @test norm(curluw .- Ref(Geometry.Contravariant2Vector(b - c))) < 1e-10
+
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+
+    fu¹² = Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(u))) # Contravariant12Vector in 3D
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(w))
+
+
+    Geometry.WVector.(Geometry.Covariant13Vector.(curluw .× fu¹²))
+
+    curl_cross =
+        Geometry.UWVector.(
+            Geometry.Covariant13Vector.(curluw .× fu¹²) .+
+            Geometry.Covariant13Vector.(curluw .× fu³),
+        )
+
+    curl_cross_ref =
+        Geometry.UWVector.(
+            (b - c) .* (c .* fcoords.x .+ d .* fcoords.z),
+            .-(b - c) .* (a .* fcoords.x .+ b .* fcoords.z),
+        )
+
+    @test curl_cross ≈ curl_cross_ref rtol = 1e-2
+
+
 end

@@ -130,48 +130,7 @@ interior_indices1 = 1:n
 interior_indices2 = 2:n-1
 ===#
 
-
-"""
-    PlusHalf(i)
-
-Represents `i + 1/2`, but stored as internally as an integer value. Used for
-indexing into staggered finite difference meshes: the convention "half" values
-are indexed at cell faces, whereas centers are indexed at cell centers.
-
-Supports `+`, `-` and inequalities.
-
-See also [`half`](@ref).
-"""
-struct PlusHalf{I <: Integer} <: Real
-    i::I
-end
-PlusHalf{I}(h::PlusHalf{I}) where {I <: Integer} = h
-
-"""
-    const half = PlusHalf(0)
-"""
-const half = PlusHalf(0)
-
-Base.:+(h::PlusHalf) = h
-Base.:-(h::PlusHalf) = PlusHalf(-h.i - one(h.i))
-Base.:+(i::Integer, h::PlusHalf) = PlusHalf(i + h.i)
-Base.:+(h::PlusHalf, i::Integer) = PlusHalf(h.i + i)
-Base.:+(h1::PlusHalf, h2::PlusHalf) = h1.i + h2.i + one(h1.i)
-Base.:-(i::Integer, h::PlusHalf) = PlusHalf(i - h.i - one(h.i))
-Base.:-(h::PlusHalf, i::Integer) = PlusHalf(h.i - i)
-Base.:-(h1::PlusHalf, h2::PlusHalf) = h1.i - h2.i
-
-Base.:<=(h1::PlusHalf, h2::PlusHalf) = h1.i <= h2.i
-Base.:<(h1::PlusHalf, h2::PlusHalf) = h1.i < h2.i
-Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
-Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
-
-Base.convert(::Type{P}, i::Integer) where {P <: PlusHalf} =
-    throw(InexactError(:convert, P, i))
-Base.convert(::Type{I}, h::PlusHalf) where {I <: Integer} =
-    throw(InexactError(:convert, I, h))
-
-Base.step(::AbstractUnitRange{PlusHalf{I}}) where {I} = one(I)
+import ..Utilities: PlusHalf, half
 
 
 left_idx(::Spaces.CenterFiniteDifferenceSpace) = 1
@@ -240,6 +199,14 @@ struct SetDivergence{S} <: BoundaryCondition
 end
 
 """
+    SetCurl(val)
+
+Set the divergence at the boundary to be `val`.
+"""
+struct SetCurl{S} <: BoundaryCondition
+    val::S
+end
+"""
     Extrapolate()
 
 Set the value at the boundary to be the same as the closest interior point.
@@ -263,7 +230,7 @@ return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
     error("Boundary `$bc_type` is not supported for operator `$op_type`")
 
 boundary_width(op::FiniteDifferenceOperator, bc::BoundaryCondition) =
-    invalid_boundary_condition_error(typeof(bc), typeof(op))
+    invalid_boundary_condition_error(typeof(op), typeof(bc))
 
 get_boundary(
     op::FiniteDifferenceOperator,
@@ -1828,8 +1795,8 @@ function stencil_interior(::CurlC2F, loc, idx, arg)
     return fd3_curl(u₊, u₋, local_geometry.J)
 end
 
-
 boundary_width(::CurlC2F, ::SetValue) = 1
+
 function stencil_left_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
     space = axes(arg)
     u₊ = getidx(arg, loc, idx + half)
@@ -1837,6 +1804,7 @@ function stencil_left_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
     return fd3_curl(u₊, u, local_geometry.J / 2)
 end
+
 function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
     space = axes(arg)
     u = bc.val
@@ -1844,75 +1812,99 @@ function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, arg)
     local_geometry = Geometry.LocalGeometry(space, idx)
     return fd3_curl(u, u₋, local_geometry.J / 2)
 end
-
+boundary_width(::CurlC2F, ::SetCurl) = 1
+function stencil_left_boundary(::CurlC2F, bc::SetCurl, loc, idx, arg)
+    return bc.val
+end
+function stencil_right_boundary(::CurlC2F, bc::SetCurl, loc, idx, arg)
+    return bc.val
+end
 
 boundary_width(obj, loc) = 0
 
 boundary_width(bc::Base.Broadcast.Broadcasted{StencilStyle}, loc) =
     has_boundary(bc.f, loc) ? boundary_width(bc.f, get_boundary(bc.f, loc)) : 0
 
-function left_interor_window_idx(
+@inline function left_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     _,
     loc::LeftBoundaryWindow,
 )
     space = axes(bc)
     widths = stencil_interior_width(bc.f)
-    arg_idxs = tuplemap(
-        (arg, width) -> left_interor_window_idx(arg, space, loc) - width[1],
-        bc.args,
-        widths,
+    args_idx = _left_interior_window_idx_args(bc.args, space, loc)
+    args_idx_widths = tuplemap((arg, width) -> arg - width[1], args_idx, widths)
+    return max(
+        max(args_idx_widths...),
+        left_idx(space) + boundary_width(bc, loc),
     )
-    return max(max(arg_idxs...), left_idx(space) + boundary_width(bc, loc))
 end
 
-function right_interor_window_idx(
+@inline function right_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
     _,
     loc::RightBoundaryWindow,
 )
     space = axes(bc)
     widths = stencil_interior_width(bc.f)
-    arg_idxs = tuplemap(
-        (arg, width) ->
-            right_interor_window_idx(arg, space, loc) - width[2],
-        bc.args,
-        widths,
-    )
-    return min(min(arg_idxs...), right_idx(space) - boundary_width(bc, loc))
+    args_idx = _right_interior_window_idx_args(bc.args, space, loc)
+    args_widths = tuplemap((arg, width) -> arg - width[2], args_idx, widths)
+    return min(min(args_widths...), right_idx(space) - boundary_width(bc, loc))
 end
 
-function left_interor_window_idx(
+@inline _left_interior_window_idx_args(args::Tuple, space, loc) = (
+    left_interior_window_idx(args[1], space, loc),
+    _left_interior_window_idx_args(Base.tail(args), space, loc)...,
+)
+@inline _left_interior_window_idx_args(args::Tuple{Any}, space, loc) =
+    (left_interior_window_idx(args[1], space, loc),)
+@inline _left_interior_window_idx_args(args::Tuple{}, space, loc) = ()
+
+@inline function left_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
     _,
     loc::LeftBoundaryWindow,
 )
     space = axes(bc)
-    arg_idxs =
-        tuplemap(arg -> left_interor_window_idx(arg, space, loc), bc.args)
+    arg_idxs = _left_interior_window_idx_args(bc.args, space, loc)
     maximum(arg_idxs)
 end
 
-function right_interor_window_idx(
+@inline _right_interior_window_idx_args(args::Tuple, space, loc) = (
+    right_interior_window_idx(args[1], space, loc),
+    _right_interior_window_idx_args(Base.tail(args), space, loc)...,
+)
+@inline _right_interior_window_idx_args(args::Tuple{Any}, space, loc) =
+    (right_interior_window_idx(args[1], space, loc),)
+@inline _right_interior_window_idx_args(args::Tuple{}, space, loc) = ()
+
+@inline function right_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
     _,
     loc::RightBoundaryWindow,
 )
     space = axes(bc)
-    arg_idxs =
-        tuplemap(arg -> right_interor_window_idx(arg, space, loc), bc.args)
+    arg_idxs = _right_interior_window_idx_args(bc.args, space, loc)
     minimum(arg_idxs)
 end
 
-function left_interor_window_idx(field::Field, _, loc::LeftBoundaryWindow)
+@inline function left_interior_window_idx(
+    field::Field,
+    _,
+    loc::LeftBoundaryWindow,
+)
     left_idx(axes(field))
 end
 
-function right_interor_window_idx(field::Field, _, loc::RightBoundaryWindow)
+@inline function right_interior_window_idx(
+    field::Field,
+    _,
+    loc::RightBoundaryWindow,
+)
     right_idx(axes(field))
 end
 
-function left_interor_window_idx(
+@inline function left_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{Style},
     _,
     loc::LeftBoundaryWindow,
@@ -1920,7 +1912,7 @@ function left_interor_window_idx(
     left_idx(axes(bc))
 end
 
-function right_interor_window_idx(
+@inline function right_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{Style},
     _,
     loc::RightBoundaryWindow,
@@ -1928,11 +1920,11 @@ function right_interor_window_idx(
     right_idx(axes(bc))
 end
 
-function left_interor_window_idx(_, space, loc::LeftBoundaryWindow)
+@inline function left_interior_window_idx(_, space, loc::LeftBoundaryWindow)
     left_idx(space)
 end
 
-function right_interor_window_idx(_, space, loc::RightBoundaryWindow)
+@inline function right_interior_window_idx(_, space, loc::RightBoundaryWindow)
     right_idx(space)
 end
 
@@ -1951,7 +1943,8 @@ function getidx(
 )
     op = bc.f
     space = axes(bc)
-    if idx < left_idx(space) + boundary_width(bc, loc)
+    if has_boundary(bc.f, loc) &&
+       idx < left_idx(space) + boundary_width(bc, loc)
         stencil_left_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
@@ -1966,7 +1959,8 @@ function getidx(
 )
     op = bc.f
     space = axes(bc)
-    if idx > (right_idx(space) - boundary_width(bc, loc))
+    if has_boundary(bc.f, loc) &&
+       idx > (right_idx(space) - boundary_width(bc, loc))
         stencil_right_boundary(op, get_boundary(op, loc), loc, idx, bc.args...)
     else
         # fallback to interior stencil
@@ -2115,6 +2109,19 @@ end
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
+#TODO: the optimizer dies with column broadcast expressions over a certain complexity
+if VERSION >= v"1.7.0"
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(column)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(column_args)
+            m.recursion_relation = dont_limit
+        end
+    end
+end
+
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{S},
     ::Type{Eltype},
@@ -2143,9 +2150,9 @@ function apply_stencil!(field_out, bc)
     lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
     rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
     li = left_idx(space)
-    lw = left_interor_window_idx(bc, space, lbw)
+    lw = left_interior_window_idx(bc, space, lbw)::typeof(li)
     ri = right_idx(space)
-    rw = right_interor_window_idx(bc, space, rbw)
+    rw = right_interior_window_idx(bc, space, rbw)::typeof(ri)
     @assert li <= lw <= rw <= ri
     for idx in li:(lw - 1)
         setidx!(field_out, idx, getidx(bc, lbw, idx))

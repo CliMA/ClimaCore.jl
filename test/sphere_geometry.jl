@@ -1,7 +1,6 @@
 using LinearAlgebra, IntervalSets, UnPack
 import ClimaCore:
     Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields
-import ClimaCore.Meshes: EquiangularSphereWarp, Mesh2D
 
 using Test
 
@@ -30,8 +29,8 @@ end
         radius = FT(3)
 
         domain = Domains.SphereDomain(radius)
-        mesh = Mesh2D(domain, EquiangularSphereWarp(), Ne)
-        grid_topology = Topologies.Grid2DTopology(mesh)
+        mesh = Meshes.EquiangularCubedSphere(domain, Ne)
+        grid_topology = Topologies.Topology2D(mesh)
         quad = Spaces.Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

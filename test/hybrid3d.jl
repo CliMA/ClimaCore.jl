@@ -13,6 +13,31 @@ import ClimaCore:
     Fields,
     Operators
 
+@testset "sphere divergence" begin
+    FT = Float64
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(1.0);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    horzdomain = Domains.SphereDomain(30.0)
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
+    horztopology = Topologies.Topology2D(horzmesh)
+    quad = Spaces.Quadratures.GLL{3 + 1}()
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+    coords = Fields.coordinate_field(hv_center_space)
+    x = Geometry.UVWVector.(cosd.(coords.lat), 0.0, 0.0)
+    div = Operators.Divergence()
+    @test norm(div.(x)) < 2e-2
+end
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
@@ -32,13 +57,13 @@ function hvspace_3D(
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
-        Geometry.YPoint{FT}(ylim[1])..Geometry.YPoint{FT}(ylim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+        Geometry.YPoint{FT}(ylim[1]) .. Geometry.YPoint{FT}(ylim[2]),
         x1periodic = true,
         x2periodic = true,
     )
-    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.GridTopology(horzmesh)
+    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    horztopology = Topologies.Topology2D(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
@@ -47,6 +72,23 @@ function hvspace_3D(
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
     return (hv_center_space, hv_face_space)
+end
+
+@testset "2D SE, 1D FD Extruded Domain level extraction" begin
+    hv_center_space, hv_face_space = hvspace_3D()
+
+    coord = Fields.coordinate_field(hv_face_space)
+    @test parent(Fields.field_values(level(coord.x, half))) == parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    )
+    @test parent(Fields.field_values(level(coord.z, half))) ==
+          parent(
+        Fields.field_values(
+            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+        ),
+    ) .* 0
 end
 
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin

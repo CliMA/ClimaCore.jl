@@ -7,8 +7,8 @@ using LinearAlgebra, IntervalSets
 
 FT = Float64
 domain = Domains.RectangleDomain(
-    Geometry.XPoint{FT}(-pi)..Geometry.XPoint{FT}(pi),
-    Geometry.YPoint{FT}(-pi)..Geometry.YPoint{FT}(pi);
+    Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
+    Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
     x1periodic = true,
     x2periodic = true,
 )
@@ -16,13 +16,13 @@ domain = Domains.RectangleDomain(
 Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
 
-grid_mesh = Meshes.EquispacedRectangleMesh(domain, 17, 16)
-grid_topology = Topologies.GridTopology(grid_mesh)
+grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
+grid_topology = Topologies.Topology2D(grid_mesh)
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 grid_coords = Fields.coordinate_field(grid_space)
 
-ts_mesh = Meshes.TensorProductMesh(domain, 17, 16)
-ts_topology = Topologies.GridTopology(ts_mesh)
+ts_mesh = Meshes.RectilinearMesh(domain, 17, 16)
+ts_topology = Topologies.Topology2D(ts_mesh)
 ts_space = Spaces.SpectralElementSpace2D(ts_topology, quad)
 ts_coords = Fields.coordinate_field(ts_space)
 

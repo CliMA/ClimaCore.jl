@@ -8,16 +8,16 @@ using LinearAlgebra, IntervalSets
 
 @testset "DiffEq Solvers" begin
     domain = Domains.RectangleDomain(
-        Geometry.XPoint(-2π)..Geometry.XPoint(2π),
-        Geometry.YPoint(-2π)..Geometry.YPoint(2π),
+        Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
+        Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
         x1periodic = true,
         x2periodic = true,
     )
 
     n1, n2 = 3, 4
     Nq = 4
-    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-    grid_topology = Topologies.GridTopology(mesh)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

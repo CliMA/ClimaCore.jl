@@ -14,8 +14,8 @@
 """
 module Spaces
 
-import ..slab
-import ..column
+import ..slab, ..column, ..level
+import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 
@@ -32,6 +32,7 @@ import .Quadratures
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("hybrid.jl")
+include("triangulation.jl")
 include("dss.jl")
 
 end # module

@@ -1,6 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
     Domains,
@@ -15,9 +14,9 @@ import ClimaCore.Geometry: ⊗
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
@@ -42,7 +41,7 @@ const d = sqrt(2 * ν / f)
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(L);
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
@@ -99,10 +98,16 @@ w_init = copy(w)
 # Y = (Yc, w)
 
 function tendency!(dY, Y, _, t)
-    (Yc, w) = Y.x
-    (dYc, dw) = dY.x
+    Yc = Y.Yc
+    w = Y.w
 
-    UnPack.@unpack ρ, uv, ρθ = Yc
+    dYc = dY.Yc
+    dw = dY.w
+
+    ρ = Yc.ρ
+    uv = Yc.uv
+    ρθ = Yc.ρθ
+
     dρ = dYc.ρ
     duv = dYc.uv
     dρθ = dYc.ρθ
@@ -163,10 +168,7 @@ function tendency!(dY, Y, _, t)
     return dY
 end
 
-using LinearAlgebra
-using RecursiveArrayTools
-
-Y = ArrayPartition(Yc, w)
+Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
 
 Δt = 1.0 / 100.0
@@ -182,7 +184,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "hydrostatic_ekman"
@@ -207,7 +209,7 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get u component of uv vector
     sub_plt1 = Plots.plot!(
         sub_plt1,
-        parent(u.x[1].uv.components.data.:1),
+        parent(u.Yc.uv.components.data.:1),
         z_centers,
         label = "Comp",
     )
@@ -226,12 +228,10 @@ function ekman_plot(u; title = "", size = (1024, 600))
     # get v component of uv vector
     sub_plt2 = Plots.plot!(
         sub_plt2,
-        parent(u.x[1].uv.components.data.:2),
+        parent(u.Yc.uv.components.data.:2),
         z_centers,
         label = "Comp",
     )
-
-
     return Plots.plot(
         sub_plt1,
         sub_plt2,

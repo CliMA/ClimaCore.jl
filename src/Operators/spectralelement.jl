@@ -351,7 +351,7 @@ J^{-1} \\sum_i D_i J u^i
 where ``D_i`` is the derivative matrix along the ``i``th dimension
 
 ## References
- - Taylor and Fournier (2010), equation 15
+- [Taylor2010](@cite), equation 15
 """
 struct Divergence{I} <: SpectralElementOperator end
 Divergence() = Divergence{()}()
@@ -506,7 +506,6 @@ function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
 end
 
 """
-
     grad = Gradient()
     grad.(f)
 
@@ -523,7 +522,10 @@ Discretely, this can be written in matrix form as
 ```math
 D_i f
 ```
-where ``D_i`` is the derivative matrix along the ``i``th dimension
+where ``D_i`` is the derivative matrix along the ``i``th dimension.
+
+## References
+- [Taylor2010](@cite), equation 16
 """
 struct Gradient{I} <: SpectralElementOperator end
 Gradient() = Gradient{()}()
@@ -711,6 +713,8 @@ In matrix form, this becomes
 Note that unused dimensions will be dropped: e.g. the 2D curl of a
 `Covariant12Vector`-field will return a `Contravariant3Vector`.
 
+## References
+- [Taylor2010](@cite), equation 17
 """
 struct Curl{I} <: CurlSpectralElementOperator end
 Curl() = Curl{()}()
@@ -855,7 +859,6 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
-
 
 function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
@@ -1212,8 +1215,7 @@ function matrix_interpolate(
     topology = Spaces.topology(space)
     quadrature_style = Spaces.quadrature_style(space)
     mesh = topology.mesh
-    n1 = mesh.n1
-    n2 = mesh.n2
+    n1, n2 = size(Meshes.elements(mesh))
     interp_data =
         DataLayouts.IH1JH2{S, Nu}(Matrix{S}(undef, (Nu * n1, Nu * n2)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
@@ -1223,7 +1225,7 @@ end
 
 function matrix_interpolate(
     field::Fields.ExtrudedFiniteDifferenceField,
-    Q_interp::Quadratures.Uniform{Nu},
+    Q_interp::Union{Quadratures.Uniform{Nu}, Quadratures.ClosedUniform{Nu}},
 ) where {Nu}
     S = eltype(field)
     space = axes(field)
