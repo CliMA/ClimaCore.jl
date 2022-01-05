@@ -29,10 +29,7 @@ const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
 const C_v = R_d / (γ - 1) # heat capacity at constant volume
 const R_m = R_d # moist R, assumed to be dry
 
-function warp_agnesi_peak(
-    coord;
-    a = 100,
-)
+function warp_agnesi_peak(coord; a = 100)
     8 * a^3 / (coord.x^2 + 4 * a^2)
 end
 
@@ -58,7 +55,7 @@ function hvspace_2D(
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
     # build horizontal mesh information
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
 
@@ -77,13 +74,20 @@ function hvspace_2D(
         Topographies.LinearAdaption(),
     )
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
-    return (c_space,f_space)
+    return (c_space, f_space)
 end
 
 # set up function space
 # set up rhs!
-(hv_center_space, hv_face_space) = hvspace_2D((-500, 500), (0, 1000), 10, 20, 4;
-                                            stretch = Meshes.Uniform(), warp_fn=warp_agnesi_peak)
+(hv_center_space, hv_face_space) = hvspace_2D(
+    (-500, 500),
+    (0, 1000),
+    10,
+    20,
+    4;
+    stretch = Meshes.Uniform(),
+    warp_fn = warp_agnesi_peak,
+)
 
 function pressure(ρθ)
     if ρθ >= 0
@@ -94,12 +98,14 @@ function pressure(ρθ)
 end
 
 Φ(z) = grav * z
-function rayleigh_sponge(z;
-                         z_sponge=900.0,
-                         z_max=1200.0,
-                         α = 1.0,  # Relaxation timescale
-                         τ = 0.5,
-                         γ = 2.0)
+function rayleigh_sponge(
+    z;
+    z_sponge = 900.0,
+    z_max = 1200.0,
+    α = 1.0,  # Relaxation timescale
+    τ = 0.5,
+    γ = 2.0,
+)
     if z >= z_sponge
         r = (z - z_sponge) / (z_max - z_sponge)
         β_sponge = α * sinpi(τ * r)^γ
@@ -120,14 +126,12 @@ function init_agnesi_2d(x, z)
 
     𝒩 = @. g / sqrt(cp_d * θ₀)
     π_exner = @. exp(-g * z / (cp_d * θ₀))
-    θ = @. θ₀ * exp(𝒩 ^2 * z / g)
-    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d/R_d)
-    ρθ  = @. ρ * θ
+    θ = @. θ₀ * exp(𝒩^2 * z / g)
+    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d / R_d)
+    ρθ = @. ρ * θ
     ρuₕ = @. ρ * Geometry.UVector(20.0)
 
-    return (ρ = ρ,
-            ρθ = ρθ,
-            ρuₕ = ρuₕ)
+    return (ρ = ρ, ρθ = ρθ, ρuₕ = ρuₕ)
 end
 
 # initial conditions
@@ -273,21 +277,22 @@ function rhs!(dY, Y, _, t)
     # vertical momentum
 
     # vertical component of vertical momentum
-    @. dρw +=
-        BW(
-            Geometry.transform( # project
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
-        )
+    @. dρw += BW(
+        Geometry.transform( # project
+            Geometry.WAxis(),
+            -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
+        ) - vvdivc2f(Ic(ρw ⊗ w)),
+    )
 
     # horizontal component of vertical momentum
-    @. dYc.ρuₕ += @. Ic(BU(
+    @. dYc.ρuₕ += @. Ic(
+        BU(
             Geometry.transform( # project
                 Geometry.UAxis(),
                 -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
             ),
-        ))
+        ),
+    )
 
     # vertical component of horizontal momentum
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions

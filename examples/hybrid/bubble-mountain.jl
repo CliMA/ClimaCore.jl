@@ -23,10 +23,7 @@ using ClimaCore.Geometry
 # the topography warp linearly relaxes to the top of the domain,
 # other choices for relaxation functions may be applied. 
 
-function warp_agnesi_peak(
-    coord;
-    a = 500,
-)
+function warp_agnesi_peak(coord; a = 500)
     return 8 * a^3 / (coord.x^2 + 4 * a^2)
 end
 
@@ -64,7 +61,7 @@ function hvspace_2D(
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
     # build horizontal mesh information
     horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
         periodic = true,
     )
 
@@ -82,10 +79,8 @@ function hvspace_2D(
         z_surface,
         Topographies.LinearAdaption(),
     )
-    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(
-                                                        f_space
-                                                       )
-    return (c_space,f_space)
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
+    return (c_space, f_space)
 end
 
 import Plots
@@ -95,16 +90,30 @@ dirname = "warp_demo"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
-(cspace,fspace)= hvspace_2D((-500, 500), (0, 2000), 10, 50, 4, 
-                            stretch=Meshes.Uniform(), warp_fn=warp_schar)
+(cspace, fspace) = hvspace_2D(
+    (-500, 500),
+    (0, 2000),
+    10,
+    50,
+    4,
+    stretch = Meshes.Uniform(),
+    warp_fn = warp_schar,
+)
 coords = Fields.coordinate_field(cspace)
 x = coords.x
 z = coords.z
 p1 = plot(z)
 Plots.png(p1, joinpath(path, "warp_agnesi"))
 
-(cspace,fspace)= hvspace_2D((-500, 500), (0, 2000), 20, 50, 4, 
-                            stretch=Meshes.Uniform(), warp_fn= warp_schar)
+(cspace, fspace) = hvspace_2D(
+    (-500, 500),
+    (0, 2000),
+    20,
+    50,
+    4,
+    stretch = Meshes.Uniform(),
+    warp_fn = warp_schar,
+)
 coords = Fields.coordinate_field(cspace)
 x = coords.x
 z = coords.z
