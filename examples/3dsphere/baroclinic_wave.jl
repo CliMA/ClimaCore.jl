@@ -294,6 +294,16 @@ function rhs!(dY, Y, _, t)
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
+    # 4) flux correction
+    fcc = Operators.FluxCorrectionC2C(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    @. dρ += fcc(fw, cρ)
+    @. dρe += fcc(fw, cρe)
+    # @. duₕ += fcc(cw, cρ*uₕ)/cρ
+
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
     Spaces.weighted_dss!(dY.w)
