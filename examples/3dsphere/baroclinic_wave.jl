@@ -302,7 +302,7 @@ function rhs!(dY, Y, _, t)
 
     @. dρ += fcc(fw, cρ)
     @. dρe += fcc(fw, cρe)
-    # @. duₕ += fcc(cw, cρ*uₕ)/cρ
+    # @. duₕ += fcc(cw, cρ*cuₕ)/cρ
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
