@@ -8,7 +8,13 @@ CurrentModule = ClimaCore
 
 ```@docs
 DataLayouts
+DataLayouts.IF
+DataLayouts.IJF
+DataLayouts.VF
+DataLayouts.IFH
 DataLayouts.IJFH
+DataLayouts.VIFH
+DataLayouts.VIJFH
 ```
 
 ## Geometry
@@ -117,5 +123,6 @@ Spaces.Quadratures.orthonormal_poly
 
 ```@docs
 RecursiveApply
+RecursiveApply.tuplemap
 ```
 
