@@ -1,6 +1,13 @@
 [deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCoreMakie = "908f55d8-4145-4867-9c14-5dad1a479e4d"
+ClimaCorePlots = "cf7c7e5a-b407-4c48-9047-11a94a308626"
+ClimaCoreVTK = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"

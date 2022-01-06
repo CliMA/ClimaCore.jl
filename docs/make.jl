@@ -1,7 +1,5 @@
-if joinpath(@__DIR__, "..") ∉ LOAD_PATH
-    push!(LOAD_PATH, joinpath(@__DIR__, ".."))
-end
-using Documenter, DocumenterCitations, ClimaCore, Literate
+using Documenter, DocumenterCitations, Literate
+using ClimaCore, ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots
 
 format = Documenter.HTML(
     prettyurls = !isempty(get(ENV, "CI", "")),
@@ -40,12 +38,12 @@ withenv("GKSwstype" => "100") do
     makedocs(
         bib,
         sitename = "ClimaCore.jl",
-        strict = false,
+        strict = [:example_block],
         format = format,
         checkdocs = :exports,
         clean = true,
         doctest = true,
-        modules = [ClimaCore],
+        modules = [ClimaCore, ClimaCoreVTK, ClimaCorePlots, ClimaCoreMakie],
         pages = Any[
             "Home" => "index.md",
             "API" => "api.md",
@@ -54,6 +52,7 @@ withenv("GKSwstype" => "100") do
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
             ],
+            "Libraries" => [joinpath("lib", "ClimaCoreVTK.md")],
             "references.md",
         ],
     )
