@@ -1,16 +1,12 @@
-using Documenter, DocumenterCitations, Literate
-using ClimaCore, ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots
-
-format = Documenter.HTML(
-    prettyurls = !isempty(get(ENV, "CI", "")),
-    collapselevel = 1,
-)
+import Documenter, DocumenterCitations, Literate
+import ClimaCore, ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
 end
 
 rm(joinpath(@__DIR__, "src", "tutorials"), force = true, recursive = true)
+
 function preprocess_markdown(input)
     line1, rest = split(input, '\n', limit = 2)
     string(
@@ -32,10 +28,17 @@ for tutorial in TUTORIALS
     )
 end
 
-bib = CitationBibliography(joinpath(@__DIR__, "refs.bib"))
+withenv("GKSwstype" => "nul") do
 
-withenv("GKSwstype" => "100") do
-    makedocs(
+    bib =
+        DocumenterCitations.CitationBibliography(joinpath(@__DIR__, "refs.bib"))
+
+    format = Documenter.HTML(
+        prettyurls = !isempty(get(ENV, "CI", "")),
+        collapselevel = 1,
+    )
+
+    Documenter.makedocs(
         bib,
         sitename = "ClimaCore.jl",
         strict = [:example_block],
@@ -58,7 +61,7 @@ withenv("GKSwstype" => "100") do
     )
 end
 
-deploydocs(
+Documenter.deploydocs(
     repo = "github.com/CliMA/ClimaCore.jl.git",
     target = "build",
     push_preview = true,
