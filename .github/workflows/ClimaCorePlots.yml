@@ -35,6 +35,7 @@ jobs:
         continue-on-error: true
         env:
           GKSwstype: nul
+          CI_OUTPUT_DIR: output
         run: >
           julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCorePlots")'
           && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV

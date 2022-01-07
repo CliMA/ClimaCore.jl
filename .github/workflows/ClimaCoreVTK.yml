@@ -28,6 +28,9 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      - name: Install Paraview
+        run: |
+          sudo apt-get update && sudo apt-get -y install paraview python3-paraview
       - name: Install Julia dependencies
         shell: julia --project=monorepo {0}
         run: |
@@ -35,5 +38,23 @@ jobs:
           # dev mono repo versions
           pkg"dev . lib/ClimaCoreVTK"
       - name: Run the tests
-        run: |
+        env:
+          CI_OUTPUT_DIR: output
+        run: >
           julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreVTK")'
+          && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
+      - name: Render the VTK images
+        run: >
+          for f in lib/ClimaCoreVTK/test/output/*.vtu;
+          do
+            xvfb-run -a pvpython lib/ClimaCoreVTK/paraview/renderimage.py "$f" "$f.png";
+          done
+      - name: Upload test Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: climacore-vtk-output
+          path: |
+            lib/ClimaCoreVTK/test/output/*.png
+      - name: Fail after artifacts if tests failed
+        if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
+        run: exit 1

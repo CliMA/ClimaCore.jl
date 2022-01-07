@@ -4,8 +4,8 @@ using IntervalSets
 import ClimaCore:
     Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
 
-
-dir = mktempdir()
+OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
+mkpath(joinpath(OUTPUT_DIR, "series"))
 
 @testset "sphere" begin
     R = 6.37122e6
@@ -28,8 +28,12 @@ dir = mktempdir()
         Geometry.UVVector(uu, uv)
     end
 
-    writevtk(joinpath(dir, "sphere"), (coords = coords, u = u); basis = :point)
-    @test isfile(joinpath(dir, "sphere.vtu"))
+    writevtk(
+        joinpath(OUTPUT_DIR, "sphere"),
+        (coords = coords, u = u);
+        basis = :point,
+    )
+    @test isfile(joinpath(OUTPUT_DIR, "sphere.vtu"))
 
     times = 0:10:350
     A = [
@@ -38,8 +42,18 @@ dir = mktempdir()
             (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α))
         end for α in times
     ]
-    writevtk(joinpath(dir, "sphere_scalar_series"), times, (A = A, B = A))
-    @test isfile(joinpath(dir, "sphere_scalar_series.pvd"))
+    writevtk(
+        joinpath(OUTPUT_DIR, "series", "sphere_scalar_series"),
+        times,
+        (A = A, B = A),
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(OUTPUT_DIR, "series", "sphere_scalar_series_$(istr).vtu"),
+        )
+    end
+    @test isfile(joinpath(OUTPUT_DIR, "series", "sphere_scalar_series.pvd"))
 
     U = Array{Fields.Field}(undef, length(times))
     for t in 1:(div(350, 10) + 1)
@@ -55,9 +69,18 @@ dir = mktempdir()
         end
         U[t] = u
     end
-    writevtk(joinpath(dir, "sphere_vector_series"), times, (U = U,))
-    @test isfile(joinpath(dir, "sphere_vector_series.pvd"))
-
+    writevtk(
+        joinpath(OUTPUT_DIR, "series", "sphere_vector_series"),
+        times,
+        (U = U,),
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(OUTPUT_DIR, "series", "sphere_vector_series_$(istr).vtu"),
+        )
+    end
+    @test isfile(joinpath(OUTPUT_DIR, "series", "sphere_vector_series.pvd"))
 end
 
 @testset "rectangle" begin
@@ -84,8 +107,8 @@ end
         Geometry.UVVector(-coord.y, coord.x)
     end
 
-    writevtk(joinpath(dir, "plane"), (sinxy = sinxy, u = u))
-    @test isfile(joinpath(dir, "plane.vtu"))
+    writevtk(joinpath(OUTPUT_DIR, "plane"), (sinxy = sinxy, u = u))
+    @test isfile(joinpath(OUTPUT_DIR, "plane.vtu"))
 
 end
 
@@ -111,17 +134,17 @@ end
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
     writevtk(
-        joinpath(dir, "hybrid2d_point"),
+        joinpath(OUTPUT_DIR, "hybrid2d_point"),
         Fields.coordinate_field(fspace);
         basis = :point,
     )
-    @test isfile(joinpath(dir, "hybrid2d_point.vtu"))
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid2d_point.vtu"))
     writevtk(
-        joinpath(dir, "hybrid2d_cell"),
+        joinpath(OUTPUT_DIR, "hybrid2d_cell"),
         Fields.coordinate_field(cspace);
         basis = :cell,
     )
-    @test isfile(joinpath(dir, "hybrid2d_cell.vtu"))
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid2d_cell.vtu"))
 end
 
 @testset "hybrid 3d" begin
@@ -149,15 +172,15 @@ end
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
     writevtk(
-        joinpath(dir, "hybrid3d_point"),
+        joinpath(OUTPUT_DIR, "hybrid3d_point"),
         Fields.coordinate_field(fspace);
         basis = :point,
     )
-    @test isfile(joinpath(dir, "hybrid3d_point.vtu"))
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid3d_point.vtu"))
     writevtk(
-        joinpath(dir, "hybrid3d_cell"),
+        joinpath(OUTPUT_DIR, "hybrid3d_cell"),
         Fields.coordinate_field(cspace);
         basis = :cell,
     )
-    @test isfile(joinpath(dir, "hybrid3d_cell.vtu"))
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid3d_cell.vtu"))
 end
