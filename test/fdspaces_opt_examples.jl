@@ -16,6 +16,9 @@ Base.@propagate_inbounds Base.getindex(
     i::Integer,
 ) = Base.getproperty(field, i)
 
+a_bcs(::Type{FT}, i::Int) where {FT} =
+    (; bottom = Operators.SetValue(FT(0)), top = Operators.Extrapolate())
+
 if VERSION >= v"1.7.0"
     @testset "FD operator allocation tests" begin
         FT = Float64
@@ -437,6 +440,62 @@ if VERSION >= v"1.7.0"
             end
         end
 
+        function alloc_test_nested_expressions_13(::Type{FT}) where {FT}
+
+            Ic = Operators.InterpolateF2C()
+            cnt = ntcfield.nt
+            fnt = ntffield.nt
+            wvec = Geometry.WVector
+
+            adv_bcs = (;
+                bottom = Operators.SetValue(wvec(FT(0))),
+                top = Operators.SetValue(wvec(FT(0))),
+            )
+            LBC = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(FT(0)))
+            zero_bcs = (;
+                bottom = Operators.SetValue(FT(0)),
+                top = Operators.SetValue(FT(0)),
+            )
+            I0f = Operators.InterpolateC2F(; zero_bcs...)
+            ∇f = Operators.DivergenceC2F(; adv_bcs...)
+
+            # Compile first
+            @inbounds for i in 1:n_tuples
+                cnt_i = cnt[i]
+                fnt_i = fnt[i]
+                cxnt = cnt_i.x
+                fxnt = fnt_i.x
+                fynt = fnt_i.y
+                a_up_bcs = a_bcs(FT, i)
+                Iaf1 = Operators.InterpolateC2F(; a_up_bcs...)
+                @. fynt =
+                    -(∇f(wvec(LBC(Iaf1(cxnt) * fx * fxnt * fxnt)))) +
+                    (fx * Iaf1(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
+                    (fx * Iaf1(cxnt) * I0f(cϕ)) +
+                    fψ
+            end
+
+            @inbounds for i in 1:n_tuples
+                cnt_i = cnt[i]
+                fnt_i = fnt[i]
+                cxnt = cnt_i.x
+                fxnt = fnt_i.x
+                fynt = fnt_i.y
+                #! format: off
+                p_i = @allocated begin
+                    a_up_bcs = a_bcs(FT, i)
+                    Iaf2 = Operators.InterpolateC2F(; a_up_bcs...)
+                    @. fynt =
+                        -(∇f(wvec(LBC(Iaf2(cxnt) * fx * fxnt * fxnt)))) +
+                        (fx * Iaf2(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
+                        (fx * Iaf2(cxnt) * I0f(cϕ)) +
+                        fψ
+                end
+                #! format: on
+                @test_broken p_i == 0
+            end
+        end
+
         alloc_test_nested_expressions_1()
         alloc_test_nested_expressions_2()
         alloc_test_nested_expressions_3()
@@ -449,5 +508,6 @@ if VERSION >= v"1.7.0"
         alloc_test_nested_expressions_10()
         alloc_test_nested_expressions_11()
         alloc_test_nested_expressions_12()
+        alloc_test_nested_expressions_13(FT)
     end
 end
