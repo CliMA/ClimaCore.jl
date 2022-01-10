@@ -175,6 +175,8 @@ steps:
       - "julia --color=yes --project=examples examples/column/hydrostatic_implicit.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic_implicit/*"
+    soft_fail:
+      - exit_status: 1
     agents:
       config: cpu
       queue: central
