@@ -4,12 +4,10 @@ using IntervalSets
 import ClimaCore
 import ClimaCoreMakie: ClimaCoreMakie, Makie
 
-running_CI() = !isempty(get(ENV, "CI", ""))
-
-if running_CI()
+if haskey(ENV, "CI")
     using GLMakie
-    OUTPUT_DIR = mkdir(joinpath(@__DIR__, "output"))
 end
+OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "spectral element 2D cubed-sphere" begin
     R = 6.37122e6
@@ -35,9 +33,9 @@ end
     fig = ClimaCoreMakie.viz(u.components.data.:1)
     @test fig !== nothing
 
-    if running_CI()
-        GLMakie.save(joinpath(OUTPUT_DIR, "2D_cubed_sphere.png"), fig)
-    end
+    fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere.png")
+    GLMakie.save(fig_png, fig)
+    @test isfile(fig_png)
 end
 
 @testset "spectral element rectangle 2D" begin
@@ -64,7 +62,7 @@ end
     fig = ClimaCoreMakie.viz(sinxy)
     @test fig !== nothing
 
-    if running_CI()
-        GLMakie.save(joinpath(OUTPUT_DIR, "2D_rectangle.png"), fig)
-    end
+    fig_png = joinpath(OUTPUT_DIR, "2D_rectangle.png")
+    GLMakie.save(fig_png, fig)
+    @test isfile(fig_png)
 end

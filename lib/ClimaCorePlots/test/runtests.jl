@@ -1,3 +1,4 @@
+ENV["GKSwstype"] = "nul"
 using Test
 using IntervalSets
 
@@ -6,12 +7,7 @@ import Plots
 import ClimaCore
 import ClimaCorePlots
 
-running_CI() = !isempty(get(ENV, "CI", ""))
-
-if running_CI()
-    ENV["GKSwstype"] = "nul"
-    OUTPUT_DIR = mkdir(joinpath(@__DIR__, "output"))
-end
+OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "spectral element 2D cubed-sphere" begin
     R = 6.37122e6
@@ -37,9 +33,9 @@ end
     field_fig = Plots.plot(u.components.data.:1)
     @test field_fig !== nothing
 
-    if running_CI()
-        Plots.png(field_fig, joinpath(OUTPUT_DIR, "2D_cubed_sphere_field.png"))
-    end
+    fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere_field.png")
+    Plots.png(field_fig, fig_png)
+    @test isfile(fig_png)
 end
 
 @testset "spectral element rectangle 2D" begin
@@ -69,10 +65,12 @@ end
     field_fig = Plots.plot(sinxy)
     @test field_fig !== nothing
 
-    if running_CI()
-        Plots.png(space_fig, joinpath(OUTPUT_DIR, "2D_rectangle_space.png"))
-        Plots.png(field_fig, joinpath(OUTPUT_DIR, "2D_rectangle_field.png"))
-    end
+    space_png = joinpath(OUTPUT_DIR, "2D_rectangle_space.png")
+    field_png = joinpath(OUTPUT_DIR, "2D_rectangle_field.png")
+    Plots.png(space_fig, space_png)
+    Plots.png(field_fig, field_png)
+    @test isfile(space_png)
+    @test isfile(field_png)
 end
 
 @testset "hybrid finite difference / spectral element 2D" begin
@@ -115,14 +113,10 @@ end
     zcoords_fig = Plots.plot(coords.z)
     @test zcoords_fig !== nothing
 
-    if running_CI()
-        Plots.png(
-            xcoords_fig,
-            joinpath(OUTPUT_DIR, "hybrid_xcoords_center_field.png"),
-        )
-        Plots.png(
-            zcoords_fig,
-            joinpath(OUTPUT_DIR, "hybrid_zcoords_center_field.png"),
-        )
-    end
+    xcoords_png = joinpath(OUTPUT_DIR, "hybrid_xcoords_center_field.png")
+    zcoords_png = joinpath(OUTPUT_DIR, "hybrid_zcoords_center_field.png")
+    Plots.png(xcoords_fig, xcoords_png)
+    Plots.png(zcoords_fig, zcoords_png)
+    @test isfile(xcoords_png)
+    @test isfile(zcoords_png)
 end
