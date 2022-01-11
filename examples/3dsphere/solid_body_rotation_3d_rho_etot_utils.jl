@@ -13,19 +13,14 @@ import ClimaCore:
     Topologies,
     Spaces,
     Fields,
-    Operators,
-    DataLayouts
-
+    Operators
 using ClimaCore.Geometry
 
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-
-
 global_logger(TerminalLogger())
-
 
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
@@ -37,7 +32,7 @@ const R_d = 287.058 # R dry (gas constant / mol mass dry air)
 const T_tri = 273.16 # triple point temperature
 const γ = 1.4 # heat capacity ratio
 const cv_d = R_d / (γ - 1)
-const cp_d = R_d * γ / (γ - 1)
+
 const T_0 = 300 # isothermal atmospheric temperature
 const H = R_d * T_0 / grav # scale height
 # P = ρ * R_d * T = ρ * R_d * θ * (P / p_0)^(R_d / C_p) ==>
@@ -47,13 +42,15 @@ const P_ρθ_factor = p_0 * (R_d / p_0)^γ
 # P = ρ * R_d * T = ρ * R_d * (ρe_int / ρ / C_v) = (γ - 1) * ρe_int
 const P_ρe_factor = γ - 1
 
-
-
-
 # geopotential
 gravitational_potential(z) = grav * z
-# Π(ρθ) = cp_d * (R_d * ρθ / p_0)^(R_d / cv_d)
-pressure(ρθ) = (ρθ*R_d/p_0)^γ * p_0
+
+# pressure
+function pressure(ρ, e_tot, normuvw, z)
+    I = e_tot - gravitational_potential(z) - normuvw^2 / 2
+    T = I / cv_d + T_tri
+    return ρ * R_d * T
+end
 
 
 
@@ -81,54 +78,70 @@ const vgradc2f = Operators.GradientC2F(
     top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
 )
 
-# initial conditions for density and ρθ
+# initial conditions for density and total energy
 function init_sbr_thermo(z)
 
     p = p_0 * exp(-z / H)
+    ρ = 1 / R_d / T_0 * p
 
-    ρ = p / (R_d * T_0)
+    T = p / ρ / R_d
 
-    θ = T_0*(p_0/p)^(R_d/cp_d)
+    e = cv_d * (T - T_tri) + gravitational_potential(z)
+    ρe_tot = ρ * e
 
-    return (ρ = ρ, ρθ = ρ*θ)
+    return (ρ = ρ, ρe_tot = ρe_tot)
 end
 
 function rhs!(dY, Y, p, t)
+
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
-    cρθ = Y.Yc.ρθ # ρθ on centers
+    cρe_tot = Y.Yc.ρe_tot # total energy on centers
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
-    dρθ = dY.Yc.ρθ
+    dρe_tot = dY.Yc.ρe_tot
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
 
+    # hdiv = Operators.Divergence()
+    # hwdiv = Operators.Divergence()
+    # hgrad = Operators.Gradient()
+    # hwgrad = Operators.Gradient()
+    # hcurl = Operators.Curl()
+    # hwcurl = Operators.Curl() # Operator.WeakCurl()
+
     dρ .= 0 .* cρ
     dw .= 0 .* fw
     duₕ .= 0 .* cuₕ
-    dρθ .= 0 .* cρθ
+    dρe_tot .= 0 .* cρe_tot
 
     # hyperdiffusion not needed in SBR
 
     # 1) Mass conservation
-
     cw = If2c.(fw)
     cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+
     # 1.a) horizontal divergence
     dρ .-= hdiv.(cρ .* (cuvw))
-    # 1.b) vertical divergence
+
+
+    # we want the total u³ at the boundary to be zero: we can either constrain
+    # both to be zero, or allow one to be non-zero and set the other to be its
+    # negation
+
     # explicit part
     dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
     # implicit part
     dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
 
     # 2) Momentum equation
+
     # curl term
     # effectively a homogeneous Dirichlet condition on u₁ at the boundary
 
@@ -144,64 +157,61 @@ function rhs!(dY, Y, p, t)
             Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
         ) # Contravariant12Vector in 3D
     fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    
     @. duₕ -= If2c(fω¹² × fu³)
+
     # Needed for 3D:
     @. duₕ -=
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
-    cp = @. pressure(cρθ)
+
+    ce_tot = @. cρe_tot / cρ
+    cp = @. pressure(cρ, ce_tot, norm(cuvw), c_coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + Φ
+
     @. duₕ -= hgrad(cp) / cρ
-    cK = @. (norm(cuvw)^2) / 2
-    @. duₕ -= hgrad(cK + Φ)
+    @. duₕ -= hgrad(cE)
 
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
-    @. dw -= (vgradc2f(cK) + ∇Φ)
+    @. dw -= vgradc2f(cE)
 
-    # 3) ρθ
-    @. dρθ -= hdiv(cuvw * cρθ)
-    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
-    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+    # 3) total energy
+
+    @. dρe_tot -= hdiv(cuvw * cρe_tot)
+    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * cρe_tot))
+    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
     Spaces.weighted_dss!(dY.w)
 
     return dY
+
 end
 
 
-
-
 function rhs_remainder!(dY, Y, p, t)
-    # @info "Remainder part"
+
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
-    cρθ = Y.Yc.ρθ # ρθ on centers
+    cρe_tot = Y.Yc.ρe_tot # total energy on centers
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
-    dρθ = dY.Yc.ρθ
-
-
-    # uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), cuₕ)
-    # w_phy = Geometry.transform.(Ref(Geometry.WAxis()), fw)
-    # @info "maximum vertical velocity is w, u_h", maximum(abs.(w_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:2))
-
+    dρe_tot = dY.Yc.ρe_tot
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
 
-
-
     dρ .= 0 .* cρ
     dw .= 0 .* fw
     duₕ .= 0 .* cuₕ
-    dρθ .= 0 .* cρθ
+    dρe_tot .= 0 .* cρe_tot
 
     # hyperdiffusion not needed in SBR
 
@@ -212,11 +222,12 @@ function rhs_remainder!(dY, Y, p, t)
     # 1.a) horizontal divergence
     dρ .-= hdiv.(cρ .* (cuvw))
     dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
-    
+
     # 2) Momentum equation
 
     # curl term
     # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+
     cω³ = hcurl.(cuₕ) # Contravariant3Vector
     fω¹² = hcurl.(fw) # Contravariant12Vector
     fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
@@ -235,86 +246,72 @@ function rhs_remainder!(dY, Y, p, t)
     @. duₕ -=
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
-    cp = @. pressure(cρθ)
-    @. duₕ -= hgrad(cp) / cρ
+
+    ce_tot = @. cρe_tot / cρ
+    cp = @. pressure(cρ, ce_tot, norm(cuvw), c_coords.z)
     cK = @. (norm(cuvw)^2) / 2
+
+    @. duₕ -= hgrad(cp) / cρ
     @. duₕ -= hgrad(cK + Φ)
 
-    
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
-    
+    # @. dw -= vgradc2f(cp) / Ic2f(cρ)
     @. dw -= vgradc2f(cK)
-    
 
+    # 3) total energy
 
-    # 3) ρθ
-    @. dρθ -= hdiv(cuvw * cρθ)
-    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
-
+    @. dρe_tot -= hdiv(cuvw * cρe_tot)
+    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * cρe_tot))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
     Spaces.weighted_dss!(dY.w)
 
     return dY
+
 end
 
 
-
 function rhs_implicit!(dY, Y, p, t)
-    # @info "Implicit part"
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
-    cρθ = Y.Yc.ρθ # ρθ on centers
+    cρe_tot = Y.Yc.ρe_tot # total energy on centers
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
-    dρθ = dY.Yc.ρθ
+    dρe_tot = dY.Yc.ρe_tot
 
-    # # 0) update w at the bottom
-    # fw = -g^31 cuₕ/ g^33 ????????
+
 
     dρ .= 0 .* cρ
     dw .= 0 .* fw
     duₕ .= 0 .* cuₕ
-    dρθ .= 0 .* cρθ
+    dρe_tot .= 0 .* cρe_tot
 
     # hyperdiffusion not needed in SBR
 
-    # 1) Mass conservation
-
-    
-
-    # 1.b) vertical divergence
-    # we want the total u³ at the boundary to be zero: we can either constrain
-    # both to be zero, or allow one to be non-zero and set the other to be its
-    # negation
-
-    # TODO implicit
+    # implicit part
     dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
 
     # 2) Momentum equation
+    cw = If2c.(fw)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
 
-    cp = @. pressure(cρθ)
+    ce_tot = @. cρe_tot / cρ
+    cp = @. pressure(cρ, ce_tot, norm(cuvw), c_coords.z)
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
-    # @. dw -= R_d/cv_d * Ic2f(Π(cρθ)) * vgradc2f(cρθ) / Ic2f(cρ)
     @. dw -= ∇Φ
 
-    # 3) ρθ
-    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
+    # 3) total energy
+    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot))
+
 
     return dY
+
 end
 
-
-
 include("solid_body_rotation_3d_implicit.jl")
-
-
-
-
-

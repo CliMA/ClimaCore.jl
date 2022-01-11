@@ -11,7 +11,7 @@ using OrdinaryDiffEq:
     NLNewton,
     KenCarp4
 
-include("solid_body_rotation_3d_rho_theta_utils.jl")
+include("solid_body_rotation_3d_rho_etot_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
@@ -40,7 +40,7 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 dYdt = similar(Y)
 
 
-Test_Type = "Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type = "Implicit-Explicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
 
 # setup p
 P = map(c -> 0., c_coords.z)
@@ -49,7 +49,7 @@ P = map(c -> 0., c_coords.z)
 p = (;P, Φ, ∇Φ)
 
 if Test_Type == "Explicit"
-    T = 300
+    T = 3600
     dt = 5
     prob = ODEProblem(rhs!, Y, (0.0, T), p)
     # solve ode
@@ -63,7 +63,7 @@ if Test_Type == "Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 elseif Test_Type == "Seim-Explicit"
-    T = 86400
+    T = 3600
     dt = 5
 
     prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), p)
@@ -83,7 +83,7 @@ elseif Test_Type == "Implicit-Explicit"
     dt = 300
 
     ode_algorithm =  ImplicitEuler
-    J_𝕄ρ_overwrite = :none
+    J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.), f_coords)
@@ -148,4 +148,4 @@ w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
 @test maximum(abs.(w_phy.components.data.:1)) ≤ 1.0
 
 @test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-@test norm(sol.u[end].Yc.ρθ) ≈ norm(sol.u[1].Yc.ρθ) rtol = 1e-2
+@test norm(sol.u[end].Yc.ρe_tot) ≈ norm(sol.u[1].Yc.ρe_tot) rtol = 1e-2
