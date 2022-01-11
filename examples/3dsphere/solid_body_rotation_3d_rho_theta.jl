@@ -11,7 +11,7 @@ using OrdinaryDiffEq:
     NLNewton,
     KenCarp4
 
-include("solid_body_rotation_3d_utils.jl")
+include("solid_body_rotation_3d_rho_theta_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
@@ -49,7 +49,7 @@ P = map(c -> 0., c_coords.z)
 p = (;P, Φ, ∇Φ)
 
 if Test_Type == "Explicit"
-    T = 300
+    T = 86400
     dt = 5
     prob = ODEProblem(rhs!, Y, (0.0, T), p)
     # solve ode
@@ -63,9 +63,11 @@ if Test_Type == "Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 elseif Test_Type == "Seim-Explicit"
-    prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), p)
-    T = 300
+    T = 86400
     dt = 5
+
+    prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), p)
+    
     # solve ode
     sol = solve(
         prob,
@@ -77,12 +79,15 @@ elseif Test_Type == "Seim-Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 elseif Test_Type == "Implicit-Explicit"
-    T = 300
-    dt = 5
+    T = 86400
+    dt = 300
 
     ode_algorithm =  KenCarp4
     J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+    # TODO
+    𝕄 = map(c -> Geometry.WVector(0.), f_coords)
+    p = (; ρw = similar(𝕄), p...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -97,7 +102,7 @@ elseif Test_Type == "Implicit-Explicit"
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
 
     
-    @info "Start IMEX"
+
     prob = SplitODEProblem(
             ODEFunction(
                 rhs_implicit!;
@@ -115,11 +120,11 @@ elseif Test_Type == "Implicit-Explicit"
     prob,
     dt = dt,
     # TODO Newton
-    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
-    reltol = 1e-1,
-    abstol = 1e-6,
+    # ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
+    # reltol = 1e-1,
+    # abstol = 1e-6,
     # TODO Linear
-    # ode_algorithm(linsolve = linsolve!);
+    ode_algorithm(linsolve = linsolve!);
     #
     saveat = dt,
     adaptive = false,

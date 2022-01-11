@@ -26,8 +26,8 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 global_logger(TerminalLogger())
 
-include("implicit_solver_utils.jl")
-include("ordinary_diff_eq_bug_fixes.jl")
+include("../implicit_solver_utils.jl")
+include("../ordinary_diff_eq_bug_fixes.jl")
 
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
@@ -176,7 +176,7 @@ end
 
 
 function rhs_remainder!(dY, Y, p, t)
-    @info "Remainder part"
+    # @info "Remainder part"
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
@@ -258,7 +258,7 @@ end
 
 
 function rhs_implicit!(dY, Y, p, t)
-    @info "Implicit part"
+    # @info "Implicit part"
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
@@ -425,7 +425,7 @@ import Base: similar
 Base.similar(cf::CustomWRepresentation{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, Y, p, dtγ, t)
-    @info "construct Wfact!"
+    # @info "construct Wfact!"
     @unpack velem, helem, npoly, dtγ_ref, Δξ₃, J, g³³, Δξ₃_f, J_f, g³³_f, J_ρ𝕄, J_𝔼𝕄, J_𝕄𝔼, J_𝕄ρ,
         J_𝕄ρ_overwrite, vals = W
     @unpack ρ_f, 𝔼_value_f, P_value = vals
@@ -455,7 +455,8 @@ function Wfact!(W, Y, p, dtγ, t)
     P = arr_c(P)
     Φ = arr_c(Φ)
     ρ = arr_c(Y.Yc.ρ)
-    ρuₕ = arr_c(Y.Yc.ρuₕ)
+    # ρuₕ = arr_c(Y.Yc.ρuₕ)
+    # uₕ = arr_c(Y.uₕ)
     if :ρθ in propertynames(Y.Yc)
         ρθ = arr_c(Y.Yc.ρθ)
     elseif :ρe_tot in propertynames(Y.Yc)
@@ -483,8 +484,8 @@ function Wfact!(W, Y, p, dtγ, t)
         #     ∂(∂ρ[n]/∂t)/∂w[n] = ρ_f[n] / Δz[n]
         #     ∂(∂ρ[n]/∂t)/∂w[n + 1] = -ρ_f[n + 1] / Δz[n]
         # TODO check 
-        @views @. J_ρ𝕄.d = ρ_f[1:N, :] * J_f[1:N, :] * g³³_f[1:N, :] / (J * Δξ³)
-        @views @. J_ρ𝕄.d2 = -ρ_f[2:N + 1, :] * J_f[2:N + 1, :] * g³³_f[2:N + 1, :] / (J * Δξ³)
+        @views @. J_ρ𝕄.d = ρ_f[1:N, :] * J_f[1:N, :] * g³³_f[1:N, :] / (J * Δξ₃)
+        @views @. J_ρ𝕄.d2 = -ρ_f[2:N + 1, :] * J_f[2:N + 1, :] * g³³_f[2:N + 1, :] / (J * Δξ₃)
     end
 
     # dY.Yc.𝔼 = -∇◦ᵥc(Y.𝕄 * 𝔼_value_f) ==>
@@ -535,8 +536,8 @@ function Wfact!(W, Y, p, dtγ, t)
     end
     # 𝔼_value_f = reshape(parent(𝔼_value_f), N + 1, M)
     # TODO check
-    @views @. J_𝔼𝕄.d = 𝔼_value_f[1:N, :] * J_f[1:N, :] * g³³_f[1:N, :] / (J * Δξ³)
-    @views @. J_𝔼𝕄.d2 = -𝔼_value_f[2:N + 1, :] * J_f[2:N + 1, :] * g³³_f[2:N + 1, :] / (J * Δξ³)
+    @views @. J_𝔼𝕄.d = 𝔼_value_f[1:N, :] * J_f[1:N, :] * g³³_f[1:N, :] / (J * Δξ₃)
+    @views @. J_𝔼𝕄.d2 = -𝔼_value_f[2:N + 1, :] * J_f[2:N + 1, :] * g³³_f[2:N + 1, :] / (J * Δξ₃)
 
     # dY.𝕄 = B_w(...) ==>
     # ∂𝕄[1]/∂t = ∂𝕄[N + 1]/∂t = 0 ==>
@@ -562,9 +563,9 @@ function Wfact!(W, Y, p, dtγ, t)
             end
         elseif :w in propertynames(Y)
             # TODO check
-            @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ³³_f[2:N, :])
+            @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
             @views @. J_𝕄𝔼.d2[1:N - 1, :] =
-                ∂P∂𝔼[1:N - 1, :] / (ρ_f[2:N, :] * Δξ³³_f[2:N, :])
+                ∂P∂𝔼[1:N - 1, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
 
             if J_𝕄ρ_overwrite == :grav
                 # TODO check
@@ -652,30 +653,30 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             b𝕄 = b.w
         end
         
-        @info "start solving Tri-diag"
+        # @info "start solving Tri-diag"
         N = velem
         # TODO: numbering
         for i in 1:npoly + 1, j in 1:npoly + 1, h in 1:6*helem^2
             m = (h - 1) * (npoly + 1)^2 + (j-1)*(npoly + 1) + i
             schur_solve!(
-                reshape(parent(Spaces.column(xρ, i, j, 1, h)), N),
-                reshape(parent(Spaces.column(x𝔼, i, j, 1, h)), N),
-                reshape(parent(Spaces.column(x𝕄, i, j, 1, h)), N + 1),
+                reshape(parent(Spaces.column(xρ, i, j, h)), N),
+                reshape(parent(Spaces.column(x𝔼, i, j, h)), N),
+                reshape(parent(Spaces.column(x𝕄, i, j, h)), N + 1),
                 hacky_view(J_ρ𝕄, m, true, N, N + 1),
                 hacky_view(J_𝔼𝕄, m, true, N, N + 1),
                 hacky_view(J_𝕄ρ, m, false, N + 1, N),
                 hacky_view(J_𝕄𝔼, m, false, N + 1, N),
-                reshape(parent(Spaces.column(bρ, i, j, 1, h)), N),
-                reshape(parent(Spaces.column(b𝔼, i, j, 1, h)), N),
-                reshape(parent(Spaces.column(b𝕄, i, j, 1, h)), N + 1),
+                reshape(parent(Spaces.column(bρ, i, j, h)), N),
+                reshape(parent(Spaces.column(b𝔼, i, j, h)), N),
+                reshape(parent(Spaces.column(b𝕄, i, j, h)), N + 1),
                 dtγ,
                 S,
             )
         end
 
-        @. x.Yc.ρuₕ = -b.Yc.ρuₕ
+        @. x.uₕ = -b.uₕ
 
-        @info "finish solving Tri-diag"
+        # @info "finish solving Tri-diag"
         if transform
             x .*= dtγ
         end
