@@ -185,9 +185,9 @@ function rhs!(dY, Y, _, t)
 
     # 3) total energy
 
-    @. dρe -= hdiv(cuvw * cρe)
-    @. dρe -= vdivf2c(fw * Ic2f(cρe))
-    @. dρe -= vdivf2c(Ic2f(cuₕ * cρe))
+    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
