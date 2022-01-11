@@ -120,3 +120,73 @@ end
     @test isfile(xcoords_png)
     @test isfile(zcoords_png)
 end
+
+@testset "hybrid finite difference / spectral element 3D" begin
+    FT = Float64
+    xelem = 10
+    yelem = 5
+    velem = 40
+    npoly = 4
+
+    vertdomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.ZPoint{FT}(0),
+        ClimaCore.Geometry.ZPoint{FT}(1000);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    xdomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.XPoint{FT}(-500) ..
+        ClimaCore.Geometry.XPoint{FT}(500),
+        periodic = true,
+    )
+    ydomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.YPoint{FT}(-100) ..
+        ClimaCore.Geometry.YPoint{FT}(100),
+        periodic = true,
+    )
+
+    horzdomain = ClimaCore.Domains.RectangleDomain(xdomain, ydomain)
+    horzmesh = ClimaCore.Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    horztopology = ClimaCore.Topologies.Topology2D(horzmesh)
+
+    quad = ClimaCore.Spaces.Quadratures.GLL{npoly + 1}()
+    horzspace = ClimaCore.Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(
+        horzspace,
+        vert_center_space,
+    )
+    hv_face_space =
+        ClimaCore.Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+
+    coords = ClimaCore.Fields.coordinate_field(hv_center_space)
+
+    xcoords_fig = Plots.plot(coords.x, slice = (:, 0.0, :))
+    @test xcoords_fig !== nothing
+
+    ycoords_fig = Plots.plot(coords.y, slice = (0.0, :, :))
+    @test ycoords_fig !== nothing
+
+    xzcoords_fig = Plots.plot(coords.z, slice = (:, 0.0, :))
+    @test xzcoords_fig !== nothing
+
+    yzcoords_fig = Plots.plot(coords.z, slice = (0.0, :, :))
+    @test yzcoords_fig !== nothing
+
+    xcoords_png = joinpath(OUTPUT_DIR, "hybrid_xcoords_center_field.png")
+    ycoords_png = joinpath(OUTPUT_DIR, "hybrid_ycoords_center_field.png")
+    xzcoords_png = joinpath(OUTPUT_DIR, "hybrid_xzcoords_center_field.png")
+    yzcoords_png = joinpath(OUTPUT_DIR, "hybrid_yzcoords_center_field.png")
+
+    Plots.png(xcoords_fig, xcoords_png)
+    Plots.png(ycoords_fig, ycoords_png)
+    Plots.png(xzcoords_fig, xzcoords_png)
+    Plots.png(yzcoords_fig, yzcoords_png)
+
+    @test isfile(xcoords_png)
+    @test isfile(ycoords_png)
+    @test isfile(xzcoords_png)
+    @test isfile(yzcoords_png)
+end

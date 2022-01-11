@@ -95,6 +95,7 @@ end
 
 @pointtype XYPoint x y
 @pointtype XZPoint x z
+@pointtype YZPoint y z
 
 @pointtype XYZPoint x y z
 
@@ -123,6 +124,7 @@ Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
 
 product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
+product_coordinates(yp::YPoint, zp::ZPoint) = YZPoint(promote(yp.y, zp.z)...)
 
 product_coordinates(xyp::XYPoint, zp::ZPoint) =
     XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
@@ -149,6 +151,11 @@ _coordinate_type(::Type{XZPoint{FT}}, ::Val{1}) where {FT} = XPoint{FT}
 _coordinate_type(::Type{XZPoint{FT}}, ::Val{2}) where {FT} = ZPoint{FT}
 _coordinate(p::XZPoint, ::Val{1}) = XPoint(p.x)
 _coordinate(p::XZPoint, ::Val{2}) = ZPoint(p.z)
+
+_coordinate_type(::Type{YZPoint{FT}}, ::Val{1}) where {FT} = YPoint{FT}
+_coordinate_type(::Type{YZPoint{FT}}, ::Val{2}) where {FT} = ZPoint{FT}
+_coordinate(p::YZPoint, ::Val{1}) = YPoint(p.x)
+_coordinate(p::YZPoint, ::Val{2}) = ZPoint(p.z)
 
 _coordinate_type(::Type{XYZPoint{FT}}, ::Val{1}) where {FT} = XPoint{FT}
 _coordinate_type(::Type{XYZPoint{FT}}, ::Val{2}) where {FT} = YPoint{FT}

@@ -195,6 +195,26 @@ end
 function blockmat(
     a::Geometry.Axis2Tensor{
         FT,
+        Tuple{Geometry.VAxis, Geometry.Covariant2Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.VWAxis(), Geometry.Covariant23Axis()),
+        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
+    )
+end
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
         Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
         SMatrix{2, 2, FT, 4},
     },
