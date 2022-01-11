@@ -40,7 +40,7 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 dYdt = similar(Y)
 
 
-Test_Type =  "Implicit-Explicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type =  "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
 
 # setup p
 P = map(c -> 0., c_coords.z)
@@ -62,7 +62,7 @@ if Test_Type == "Explicit"
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-elseif Test_Type == "Seim-Explicit"
+elseif Test_Type == "Semi-Explicit"
     T = 3600
     dt = 5
 
@@ -78,9 +78,64 @@ elseif Test_Type == "Seim-Explicit"
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-elseif Test_Type == "Implicit-Explicit"
-    T = 86400
+
+elseif Test_Type == "Implicit"
+    T = 1000
     dt = 100
+
+    ode_algorithm =  Rosenbrock23
+    J_𝕄ρ_overwrite = :grav
+    use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+    # TODO
+    𝕄 = map(c -> Geometry.WVector(0.), f_coords)
+    p = (; ρw = similar(𝕄), p...)
+
+    jac_prototype = CustomWRepresentation(
+        velem,
+        helem,
+        npoly,
+        hv_center_space.center_local_geometry, 
+        hv_face_space.face_local_geometry,
+        use_transform,
+        J_𝕄ρ_overwrite,
+    )
+
+    w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
+
+    
+
+    prob = ODEProblem(
+            ODEFunction(
+                rhs!;
+                w_kwarg...,
+                jac_prototype = jac_prototype,
+                tgrad = (dT, Y, p, t) -> fill!(dT, 0),
+            ),
+            Y,
+            (0, T),
+            p,
+        )
+
+    sol = solve(
+    prob,
+    dt = dt,
+    # TODO Newton
+    ode_algorithm(linsolve = linsolve!),
+    reltol = 1e-1,
+    abstol = 1e-6,
+    # TODO Linear
+    # ode_algorithm(linsolve = linsolve!);
+    #
+    saveat = dt,
+    adaptive = false,
+    # progress = true,
+    # progress_steps = 1,
+    # progress_message = (dt, u, p, t) -> t,
+)
+
+elseif Test_Type == "Implicit-Explicit"
+    T = 3600
+    dt = 5
 
     ode_algorithm =  ImplicitEuler
     J_𝕄ρ_overwrite = :none
@@ -120,11 +175,11 @@ elseif Test_Type == "Implicit-Explicit"
     prob,
     dt = dt,
     # TODO Newton
-    # ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
-    # reltol = 1e-1,
-    # abstol = 1e-6,
+    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 1)),
+    reltol = 1e-1,
+    abstol = 1e-6,
     # TODO Linear
-    ode_algorithm(linsolve = linsolve!);
+    # ode_algorithm(linsolve = linsolve!);
     #
     saveat = dt,
     adaptive = false,

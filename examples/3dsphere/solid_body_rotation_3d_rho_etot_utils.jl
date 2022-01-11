@@ -93,7 +93,6 @@ function init_sbr_thermo(z)
 end
 
 function rhs!(dY, Y, p, t)
-
     @unpack P, Φ, ∇Φ = p
 
     cρ = Y.Yc.ρ # density on centers
@@ -177,7 +176,6 @@ function rhs!(dY, Y, p, t)
     @. dw -= vgradc2f(cE)
 
     # 3) total energy
-
 
     @. dρe_tot -= hdiv(cuvw * (cρe_tot + cp))
     @. dρe_tot -= vdivf2c(Ic2f(cuₕ * (cρe_tot + cp)))

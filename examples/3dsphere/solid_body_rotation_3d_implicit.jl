@@ -114,7 +114,7 @@ import Base: similar
 Base.similar(cf::CustomWRepresentation{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, Y, p, dtγ, t)
-    # @info "construct Wfact!"
+    @info t
     @unpack velem, helem, npoly, dtγ_ref, Δξ₃, J, g³³, Δξ₃_f, J_f, g³³_f, J_ρ𝕄, J_𝔼𝕄, J_𝕄𝔼, J_𝕄ρ,
         J_𝕄ρ_overwrite, vals = W
     @unpack ρ_f, 𝔼_value_f, P_value = vals
@@ -154,10 +154,9 @@ function Wfact!(W, Y, p, dtγ, t)
 
     # ρuₕ = arr_c(Y.Yc.ρuₕ)
     # uₕ = arr_c(Y.uₕ)
-    uₕ₁ = arr_c(uₕ.components.data.:1)
-    uₕ₂ = arr_c(uₕ.components.data.:2)
-
-    @info  "TODO : ", maximum(uₕ₁ ), maximum(uₕ₂ )
+    # uₕ₁ = arr_c(uₕ.components.data.:1)
+    # uₕ₂ = arr_c(uₕ.components.data.:2)
+    # @info  "TODO : ", maximum(uₕ₁ ), maximum(uₕ₂ )
 
     if :ρθ in propertynames(Y.Yc)
         ρθ = arr_c(Y.Yc.ρθ)
@@ -316,7 +315,7 @@ function Wfact!(W, Y, p, dtγ, t)
 
                     ∂P∂ρ = w_c = P_value
                     interp_c!(w_c, w)
-                    @. ∂P∂ρ = P_ρe_factor * (-Φ - cK + cv_d*T_tri) / 2.
+                    @. ∂P∂ρ = P_ρe_factor * (-Φ - cK + cv_d*T_tri) 
                     @views @. J_𝕄ρ.d[2:N, :] +=
                         -∂P∂ρ[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
                     @views @. J_𝕄ρ.d2[1:N - 1, :] +=
@@ -377,14 +376,8 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             )
         end
 
-        # @info "w: rhs: ", norm(b.w)
-        # @info "ρ: rhs: ", norm(b.Yc.ρ)
-        # @info "ρe_tot: rhs: ", norm(b.Yc.ρe_tot)
-
-
-        # @info "w: after solving: ", norm(x.w)
-        # @info "ρ: after solving: ", norm(x.Yc.ρ)
-        # @info "ρe_tot: after solving: ", norm(x.Yc.ρe_tot)
+        @info "b norms: ", norm(bρ), norm(b𝔼), norm(b𝕄)
+        @info "x norms: ", norm(xρ), norm(x𝔼), norm(x𝕄)
 
         @. x.uₕ = -b.uₕ
 
