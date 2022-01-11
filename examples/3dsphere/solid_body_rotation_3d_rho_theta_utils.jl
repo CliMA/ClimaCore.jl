@@ -189,6 +189,12 @@ function rhs_remainder!(dY, Y, p, t)
     duₕ = dY.uₕ
     dρθ = dY.Yc.ρθ
 
+
+    # uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), cuₕ)
+    # w_phy = Geometry.transform.(Ref(Geometry.WAxis()), fw)
+    # @info "maximum vertical velocity is w, u_h", maximum(abs.(w_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:2))
+
+
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
 

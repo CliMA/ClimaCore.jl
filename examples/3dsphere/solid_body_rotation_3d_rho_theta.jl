@@ -17,7 +17,7 @@ include("solid_body_rotation_3d_rho_theta_utils.jl")
 zmax = 30.0e3
 helem = 4
 velem = 15
-npoly = 5
+npoly = 4
 
 
 # set up 3D spherical domain and coords
@@ -49,7 +49,7 @@ P = map(c -> 0., c_coords.z)
 p = (;P, Φ, ∇Φ)
 
 if Test_Type == "Explicit"
-    T = 86400
+    T = 300
     dt = 5
     prob = ODEProblem(rhs!, Y, (0.0, T), p)
     # solve ode
@@ -82,7 +82,7 @@ elseif Test_Type == "Implicit-Explicit"
     T = 86400
     dt = 300
 
-    ode_algorithm =  KenCarp4
+    ode_algorithm =  ImplicitEuler
     J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
