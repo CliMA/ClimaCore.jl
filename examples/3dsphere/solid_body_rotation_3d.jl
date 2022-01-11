@@ -189,6 +189,16 @@ function rhs!(dY, Y, _, t)
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
+    # 4) flux correction
+    fcc = Operators.FluxCorrectionC2C(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    @. dρ += fcc(fw, cρ)
+    @. dρe += fcc(fw, cρe)
+    # @. duₕ += fcc(fw, cρ*cuₕ)/cρ
+
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
     Spaces.weighted_dss!(dY.w)
@@ -221,7 +231,7 @@ rhs!(dYdt, Y, nothing, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-T = 3600
+T = 3600 * 24
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, T))
 
