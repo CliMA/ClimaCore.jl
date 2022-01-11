@@ -128,6 +128,8 @@ function Wfact!(W, Y, p, dtγ, t)
     # Rewriting in terms of parent arrays.
     N = size(parent(Y.Yc.ρ), 1)
     M = length(parent(Y.Yc.ρ)) ÷ N
+
+    
     arr_c(field) = reshape(parent(field), N, M)
     arr_f(field) = reshape(parent(field), N + 1, M)
     function interp_f!(dest_f, src_c)
@@ -144,10 +146,19 @@ function Wfact!(W, Y, p, dtγ, t)
     P = arr_c(P)
     Φ = arr_c(Φ)
     ρ = arr_c(Y.Yc.ρ)
+
+
+    # TODO this can be optimized
+    cuvw = Geometry.Covariant123Vector.(Y.uₕ) .+ Geometry.Covariant123Vector.(If2c.(Y.w))
+    cK = arr_c(@. (norm(cuvw)^2) / 2) 
+
     # ρuₕ = arr_c(Y.Yc.ρuₕ)
     # uₕ = arr_c(Y.uₕ)
     uₕ₁ = arr_c(uₕ.components.data.:1)
     uₕ₂ = arr_c(uₕ.components.data.:2)
+
+    @info  "TODO : ", maximum(uₕ₁ ), maximum(uₕ₂ )
+
     if :ρθ in propertynames(Y.Yc)
         ρθ = arr_c(Y.Yc.ρθ)
     elseif :ρe_tot in propertynames(Y.Yc)
@@ -217,7 +228,7 @@ function Wfact!(W, Y, p, dtγ, t)
             # )
             w_c = P_value
             interp_c!(w_c, w)
-            @. P = P_ρe_factor * (ρe_tot - ρ * (Φ + (uₕ₁^2 + uₕ₂^2 + w_c^2) / 2.))
+            @. P = P_ρe_factor * (ρe_tot - ρ * (Φ + cK ) + ρ*cv_d*T_tri)
             # dY.Yc.ρe_tot = -∇◦ᵥc(Y.w * If(Y.Yc.ρe_tot + P))
             # @. 𝔼_value_f = If(Y.Yc.ρe_tot + P)
             ρh = P_value
@@ -305,7 +316,7 @@ function Wfact!(W, Y, p, dtγ, t)
 
                     ∂P∂ρ = w_c = P_value
                     interp_c!(w_c, w)
-                    @. ∂P∂ρ = P_ρe_factor * (-Φ - uₕ₁^2 - uₕ₂^2 - w_c^2) / 2.
+                    @. ∂P∂ρ = P_ρe_factor * (-Φ - cK + cv_d*T_tri) / 2.
                     @views @. J_𝕄ρ.d[2:N, :] +=
                         -∂P∂ρ[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
                     @views @. J_𝕄ρ.d2[1:N - 1, :] +=
@@ -365,6 +376,15 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
                 S,
             )
         end
+
+        # @info "w: rhs: ", norm(b.w)
+        # @info "ρ: rhs: ", norm(b.Yc.ρ)
+        # @info "ρe_tot: rhs: ", norm(b.Yc.ρe_tot)
+
+
+        # @info "w: after solving: ", norm(x.w)
+        # @info "ρ: after solving: ", norm(x.Yc.ρ)
+        # @info "ρe_tot: after solving: ", norm(x.Yc.ρe_tot)
 
         @. x.uₕ = -b.uₕ
 

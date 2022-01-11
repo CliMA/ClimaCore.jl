@@ -40,7 +40,7 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 dYdt = similar(Y)
 
 
-Test_Type = "Implicit-Explicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type =  "Implicit-Explicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
 
 # setup p
 P = map(c -> 0., c_coords.z)
@@ -80,10 +80,10 @@ elseif Test_Type == "Seim-Explicit"
     )
 elseif Test_Type == "Implicit-Explicit"
     T = 86400
-    dt = 300
+    dt = 100
 
     ode_algorithm =  ImplicitEuler
-    J_𝕄ρ_overwrite = :grav
+    J_𝕄ρ_overwrite = :none
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.), f_coords)

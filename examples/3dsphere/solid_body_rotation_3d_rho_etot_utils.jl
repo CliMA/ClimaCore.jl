@@ -178,9 +178,10 @@ function rhs!(dY, Y, p, t)
 
     # 3) total energy
 
-    @. dρe_tot -= hdiv(cuvw * cρe_tot)
-    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * cρe_tot))
-    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot))
+
+    @. dρe_tot -= hdiv(cuvw * (cρe_tot + cp))
+    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * (cρe_tot + cp)))
+    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot + cp))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
@@ -212,6 +213,12 @@ function rhs_remainder!(dY, Y, p, t)
     dw .= 0 .* fw
     duₕ .= 0 .* cuₕ
     dρe_tot .= 0 .* cρe_tot
+
+
+    # uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), cuₕ)
+    # w_phy = Geometry.transform.(Ref(Geometry.WAxis()), fw)
+    # @info "maximum vertical velocity is w, u_h", maximum(abs.(w_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:2))
+
 
     # hyperdiffusion not needed in SBR
 
@@ -260,8 +267,8 @@ function rhs_remainder!(dY, Y, p, t)
 
     # 3) total energy
 
-    @. dρe_tot -= hdiv(cuvw * cρe_tot)
-    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * cρe_tot))
+    @. dρe_tot -= hdiv(cuvw * (cρe_tot+cp))
+    @. dρe_tot -= vdivf2c(Ic2f(cuₕ * (cρe_tot+cp)))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
@@ -285,6 +292,11 @@ function rhs_implicit!(dY, Y, p, t)
     duₕ = dY.uₕ
     dρe_tot = dY.Yc.ρe_tot
 
+    # uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), cuₕ)
+    # w_phy = Geometry.transform.(Ref(Geometry.WAxis()), fw)
+    # @info "maximum vertical velocity is w, u_h", maximum(abs.(w_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:2))
+
+
 
 
     dρ .= 0 .* cρ
@@ -307,7 +319,7 @@ function rhs_implicit!(dY, Y, p, t)
     @. dw -= ∇Φ
 
     # 3) total energy
-    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot))
+    @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot + cp))
 
 
     return dY
