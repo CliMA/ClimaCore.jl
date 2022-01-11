@@ -136,7 +136,7 @@ function pressure(ρ, e, normuvw, z)
     return ρ * R_d * T
 end
 
-# set up 3D domain - doubly periodic box
+# set up 3D domain - spherical shell
 hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 4, 10, 4)
 
 # initial conditions
@@ -288,11 +288,11 @@ function rhs!(dY, Y, _, t)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
-    # 3) potential temperature
+    # 3) total energy
 
-    @. dρe -= hdiv(cuvw * cρe)
-    @. dρe -= vdivf2c(fw * Ic2f(cρe))
-    @. dρe -= vdivf2c(Ic2f(cuₕ * cρe))
+    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
