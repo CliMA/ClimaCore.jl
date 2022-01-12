@@ -14,6 +14,10 @@ steps:
       - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
+      - "julia --project=perf -e 'using Pkg; Pkg.develop(path=\".\")'"
+      - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=perf -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
       - "julia --project=examples -e 'using Pkg; Pkg.develop([Pkg.PackageSpec(path=\".\"),
                                                               Pkg.PackageSpec(path=\"lib/ClimaCorePlots\")])'"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
@@ -461,6 +465,17 @@ steps:
       - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl balanced_flow"
     artifact_paths:
       - "examples/3dsphere/output/balanced_flow/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket: Allocations analysis"
+    key: "cpu_allocations"
+    command:
+      - "julia --color=yes --project=perf perf/allocs.jl"
+    artifact_paths:
+      - "perf/allocations_output/*"
     agents:
       config: cpu
       queue: central

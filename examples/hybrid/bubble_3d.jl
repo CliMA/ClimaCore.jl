@@ -270,6 +270,9 @@ rhs!(dYdt, Y, nothing, 0.0);
 using OrdinaryDiffEq
 Δt = 0.05
 prob = ODEProblem(rhs!, Y, (0.0, 1.0))
+
+haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
+
 sol = solve(
     prob,
     SSPRK33(),
