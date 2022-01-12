@@ -138,7 +138,7 @@ boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
 
 function neighboring_elements(topology::Topology2D, elem)
 
-    # Each elem in a Topology2D will have at most 8 neighboring elements
+    # Each interior elem in a Topology2D will have 8 neighboring elements
     #
     #    o------o------o------o
     #    |      |      |      |
