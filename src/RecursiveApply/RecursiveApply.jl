@@ -15,12 +15,7 @@ export ⊞, ⊠, ⊟, tuplemap
 A simpler `map` impl for mapping function `fn` a tuple argument `tup`
 """
 @inline function tuplemap(fn::F, tup::Tuple) where {F}
-    N = length(tup)
-    ntuple(Val(N)) do I
-        Base.@_inline_meta
-        @inbounds elem = tup[I]
-        fn(elem)
-    end
+    map(fn, tup)
 end
 
 """
