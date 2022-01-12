@@ -10,13 +10,14 @@ using OrdinaryDiffEq:
     ImplicitEuler,
     NLNewton,
     KenCarp4
+import ClimaCore.Utilities: half
 
-include("solid_body_rotation_3d_rho_etot_utils.jl")
+include("baroclinic_wave_rho_theta_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
 helem = 4
-velem = 15
+velem = 10
 npoly = 4
 
 
@@ -24,6 +25,7 @@ npoly = 4
 hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), helem, velem, npoly)
 c_coords = Fields.coordinate_field(hv_center_space)
 f_coords = Fields.coordinate_field(hv_face_space)
+local_geometries = Fields.local_geometry_field(hv_center_space)
 
 # Coriolis
 const f = @. Geometry.Contravariant3Vector(
@@ -31,8 +33,11 @@ const f = @. Geometry.Contravariant3Vector(
 )
 
 # set up initial condition
-Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
+Yc = map(coord -> initial_condition(coord.lat, coord.long, coord.z), c_coords)
+uₕ = map(
+    local_geometry -> initial_condition_velocity(local_geometry),
+    local_geometries,
+)
 w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
@@ -40,7 +45,7 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 dYdt = similar(Y)
 
 
-Test_Type =  "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type = "Implicit"    # "Explicit" # "Semi-Explicit"  "Implicit-Explicit"
 
 # setup p
 P = map(c -> 0., c_coords.z)
@@ -80,8 +85,8 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 1000
-    dt = 100
+    T = 86400 * 6
+    dt = 300
 
     ode_algorithm =  Rosenbrock23
     J_𝕄ρ_overwrite = :grav
@@ -126,19 +131,18 @@ elseif Test_Type == "Implicit"
     # TODO Linear
     # ode_algorithm(linsolve = linsolve!);
     #
-    saveat = dt,
+    saveat = dt * 12,
     adaptive = false,
-    # progress = true,
-    # progress_steps = 1,
-    # progress_message = (dt, u, p, t) -> t,
+    progress = true,
+    progress_steps = 1,
+    progress_message = (dt, u, p, t) -> t,
 )
-
 elseif Test_Type == "Implicit-Explicit"
     T = 3600
-    dt = 5
+    dt = 300
 
     ode_algorithm =  ImplicitEuler
-    J_𝕄ρ_overwrite = :none
+    J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.), f_coords)
@@ -175,11 +179,11 @@ elseif Test_Type == "Implicit-Explicit"
     prob,
     dt = dt,
     # TODO Newton
-    ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 1)),
-    reltol = 1e-1,
-    abstol = 1e-6,
+    # ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
+    # reltol = 1e-1,
+    # abstol = 1e-6,
     # TODO Linear
-    # ode_algorithm(linsolve = linsolve!);
+    ode_algorithm(linsolve = linsolve!);
     #
     saveat = dt,
     adaptive = false,
@@ -192,15 +196,9 @@ elseif Test_Type == "Implicit-Explicit"
 else
     error("Test Type: ", Test_Type, " is not recognized.")
 end
-uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+
+@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρθ)
+@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].Yc.ρθ)
+
+u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
-
-@test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
-@test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
-
-@info "maximum vertical velocity is ", maximum(abs.(w_phy.components.data.:1))
-
-@test maximum(abs.(w_phy.components.data.:1)) ≤ 1.0
-
-@test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-@test norm(sol.u[end].Yc.ρe_tot) ≈ norm(sol.u[1].Yc.ρe_tot) rtol = 1e-2

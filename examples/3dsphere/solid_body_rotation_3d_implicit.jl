@@ -114,7 +114,7 @@ import Base: similar
 Base.similar(cf::CustomWRepresentation{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, Y, p, dtγ, t)
-    @info t
+    # @info t
     @unpack velem, helem, npoly, dtγ_ref, Δξ₃, J, g³³, Δξ₃_f, J_f, g³³_f, J_ρ𝕄, J_𝔼𝕄, J_𝕄𝔼, J_𝕄ρ,
         J_𝕄ρ_overwrite, vals = W
     @unpack ρ_f, 𝔼_value_f, P_value = vals
@@ -376,8 +376,8 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             )
         end
 
-        @info "b norms: ", norm(bρ), norm(b𝔼), norm(b𝕄)
-        @info "x norms: ", norm(xρ), norm(x𝔼), norm(x𝕄)
+        # @info "b norms: ", norm(bρ), norm(b𝔼), norm(b𝕄)
+        # @info "x norms: ", norm(xρ), norm(x𝔼), norm(x𝕄)
 
         @. x.uₕ = -b.uₕ
 
