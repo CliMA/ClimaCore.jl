@@ -33,7 +33,7 @@ cubed-sphere mesh has 6 panels, laid out as follows:
 :   Panel 6   :
 ```
 
-This is the same panel ordering used by the (though we use 1-based
+This is the same panel ordering used by the S2 Geometry library (though we use 1-based
 instead of 0-based numering).
 
 Elements are indexed by a `CartesianIndex{3}` object, where the components are:
@@ -166,7 +166,7 @@ end
 """
     EquiangularCubedSphere <: AbstractCubedSphere
 
-An equiangular gnomonic mesh proposed by [Ronchi1996]
+An equiangular gnomonic mesh proposed by [Ronchi1996](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 # Constructors
@@ -175,23 +175,25 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 Constuct an `EquiangularCubedSphere` on `domain` with `ne` elements across
 each panel.
-
-# References
-- The "Cubed Sphere": A New Method for the Solution of Partial Differential Equations in Spherical Geometry
-  C. RONCHI, R. IACONO, AND P. S. PAOLUCCI JOURNAL OF COMPUTATIONAL PHYSICS 124, 93–114 (1996)
 """
 struct EquiangularCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
     domain::S
     ne::Int
 end
+
+# not yet provided by Base Julia
+# https://github.com/JuliaLang/julia/issues/28943
+# this appears to be more accurate than tan(pi * x)
+tanpi(x) = sinpi(x) / cospi(x)
+
 function coordinates(mesh::EquiangularCubedSphere, elem, (ξ1, ξ2)::NTuple{2})
     radius = mesh.domain.radius
     ne = mesh.ne
     x, y, panel = elem.I
     ξx = (2 * x - ne - 1 + ξ1) / ne
     ξy = (2 * y - ne - 1 + ξ2) / ne
-    ux = tan(pi * ξx / 4)
-    uy = tan(pi * ξy / 4)
+    ux = tanpi(ξx / 4)
+    uy = tanpi(ξy / 4)
     ζ0 = radius / hypot(ux, uy, 1)
     ζx = ux * ζ0
     ζy = uy * ζ0
@@ -219,7 +221,7 @@ end
 """
     EquidistantCubedSphere <: AbstractCubedSphere
 
-An equidistant gnomonic mesh outlined in [Rancic1996] and [Nair2005].
+An equidistant gnomonic mesh outlined in [Rancic1996](@cite) and [Nair2005](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 # Constructors
@@ -228,16 +230,6 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 Constuct an `EquidistantCubedSphere` on `domain` with `ne` elements across
 each panel.
-
-# References
-
-- A global shallow-water model using an expanded spherical cube: Gnomonic versus
-  conformal coordinates Rančić M., Purser R. J., Mesinger F.
-  https://doi.org/10.1002/qj.49712253209
-
-- A Discontinuous Galerkin Transport Scheme on the Cubed Sphere Ramachandran D.
-  Nair, Stephen J. Thomas, and Richard D. Loft https://doi.org/10.1175/MWR2890.1
-
 """
 struct EquidistantCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
     domain::S
@@ -274,7 +266,7 @@ end
 """
     ConformalCubedSphere <: AbstractCubedSphere
 
-A conformal mesh outlined in [Rancic1996] and [Nair2005]
+A conformal mesh outlined in [Rancic1996](@cite).
 Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 # Constructors
@@ -283,13 +275,6 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 Constuct an `ConformalCubedSphere` on `domain` with `ne` elements across
 each panel.
-
-# References
-- A global shallow-water model using an expanded spherical cube: Gnomonic
-  versus conformal coordinates
-  Rančić M., Purser R. J., Mesinger F.
-  https://doi.org/10.1002/qj.49712253209
-
 """
 struct ConformalCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
     domain::S

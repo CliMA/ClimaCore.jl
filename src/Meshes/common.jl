@@ -1,6 +1,11 @@
 boundary_names(mesh::AbstractMesh) = boundary_names(domain(mesh))
 coordinate_type(mesh::AbstractMesh) = coordinate_type(domain(mesh))
 
+"""
+    nelements(mesh::AbstractMesh)
+
+The number of elements in the mesh.
+"""
 nelements(mesh::AbstractMesh) = length(elements(mesh))
 
 """

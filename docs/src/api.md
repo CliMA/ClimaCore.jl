@@ -8,7 +8,13 @@ CurrentModule = ClimaCore
 
 ```@docs
 DataLayouts
+DataLayouts.IF
+DataLayouts.IJF
+DataLayouts.VF
+DataLayouts.IFH
 DataLayouts.IJFH
+DataLayouts.VIFH
+DataLayouts.VIJFH
 ```
 
 ## Geometry
@@ -61,6 +67,7 @@ Meshes.nelements
 Meshes.is_boundary_face
 Meshes.boundary_face_name
 Meshes.opposing_face
+Meshes.coordinates
 Meshes.containing_element
 Meshes.SharedVertices
 Meshes.face_connectivity_matrix
@@ -93,18 +100,29 @@ Topologies.vertices
 
 ```@docs
 Spaces
-Spaces.Quadratures.degrees_of_freedom
+```
+
+### Quadratures
+
+
+```@docs
+Spaces.Quadratures.QuadratureStyle
+Spaces.Quadratures.GLL
 Spaces.Quadratures.GL
 Spaces.Quadratures.Uniform
-Spaces.Quadratures.quadrature_points
-Spaces.Quadratures.GLL
+Spaces.Quadratures.degrees_of_freedom
 Spaces.Quadratures.polynomial_degree
-Spaces.Quadratures.QuadratureStyle
+Spaces.Quadratures.quadrature_points
+Spaces.Quadratures.barycentric_weights
+Spaces.Quadratures.interpolation_matrix
+Spaces.Quadratures.differentiation_matrix
+Spaces.Quadratures.orthonormal_poly
 ```
 
 ## RecursiveApply
 
 ```@docs
 RecursiveApply
+RecursiveApply.tuplemap
 ```
 

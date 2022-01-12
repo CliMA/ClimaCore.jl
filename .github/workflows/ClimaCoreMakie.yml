@@ -34,6 +34,8 @@ jobs:
           julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCoreMakie")'
       - name: Run the tests
         continue-on-error: true
+        env:
+            CI_OUTPUT_DIR: output
         run: >
           DISPLAY=:0 xvfb-run -s '-screen 0 1024x768x24' julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreMakie")'
           && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV

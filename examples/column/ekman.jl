@@ -1,6 +1,4 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-import ClimaCore.Geometry, LinearAlgebra
+using LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -13,9 +11,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
@@ -39,7 +37,7 @@ const d = sqrt(2 * ν / f)
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(L);
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
@@ -106,8 +104,6 @@ function tendency!(dY, Y, _, t)
     return dY
 end
 
-using LinearAlgebra
-using RecursiveArrayTools
 
 Y = Fields.FieldVector(Yc = Yc, w = w)
 dY = tendency!(similar(Y), Y, nothing, 0.0)
@@ -126,7 +122,7 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "ekman"

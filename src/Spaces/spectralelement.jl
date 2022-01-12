@@ -269,61 +269,67 @@ function SpectralElementSpace2D(topology, quadrature_style)
     }
     interior_faces = Topologies.interior_faces(topology)
 
-    internal_surface_geometry =
-        DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
-    for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
-        enumerate(interior_faces)
-        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
+    if quadrature_style isa Quadratures.GLL
+        internal_surface_geometry =
+            DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
+        for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
+            enumerate(interior_faces)
+            internal_surface_geometry_slab =
+                slab(internal_surface_geometry, iface)
 
-        local_geometry_slab⁻ = slab(local_geometry, elem⁻)
-        local_geometry_slab⁺ = slab(local_geometry, elem⁺)
+            local_geometry_slab⁻ = slab(local_geometry, elem⁻)
+            local_geometry_slab⁺ = slab(local_geometry, elem⁺)
 
-        for q in 1:Nq
-            sgeom⁻ = compute_surface_geometry(
-                local_geometry_slab⁻,
-                quad_weights,
-                face⁻,
-                q,
-                false,
-            )
-            sgeom⁺ = compute_surface_geometry(
-                local_geometry_slab⁺,
-                quad_weights,
-                face⁺,
-                q,
-                reversed,
-            )
+            for q in 1:Nq
+                sgeom⁻ = compute_surface_geometry(
+                    local_geometry_slab⁻,
+                    quad_weights,
+                    face⁻,
+                    q,
+                    false,
+                )
+                sgeom⁺ = compute_surface_geometry(
+                    local_geometry_slab⁺,
+                    quad_weights,
+                    face⁺,
+                    q,
+                    reversed,
+                )
 
-            @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
-            @assert sgeom⁻.normal ≈ -sgeom⁺.normal
+                @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
+                @assert sgeom⁻.normal ≈ -sgeom⁺.normal
 
-            internal_surface_geometry_slab[q] = sgeom⁻
-        end
-    end
-
-    boundary_surface_geometries =
-        map(Topologies.boundary_tags(topology)) do boundarytag
-            boundary_faces = Topologies.boundary_faces(topology, boundarytag)
-            boundary_surface_geometry =
-                DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
-            for (iface, (elem, face)) in enumerate(boundary_faces)
-                boundary_surface_geometry_slab =
-                    slab(boundary_surface_geometry, iface)
-                local_geometry_slab = slab(local_geometry, elem)
-                for q in 1:Nq
-                    boundary_surface_geometry_slab[q] =
-                        compute_surface_geometry(
-                            local_geometry_slab,
-                            quad_weights,
-                            face,
-                            q,
-                            false,
-                        )
-                end
+                internal_surface_geometry_slab[q] = sgeom⁻
             end
-            boundary_surface_geometry
         end
 
+        boundary_surface_geometries =
+            map(Topologies.boundary_tags(topology)) do boundarytag
+                boundary_faces =
+                    Topologies.boundary_faces(topology, boundarytag)
+                boundary_surface_geometry =
+                    DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
+                for (iface, (elem, face)) in enumerate(boundary_faces)
+                    boundary_surface_geometry_slab =
+                        slab(boundary_surface_geometry, iface)
+                    local_geometry_slab = slab(local_geometry, elem)
+                    for q in 1:Nq
+                        boundary_surface_geometry_slab[q] =
+                            compute_surface_geometry(
+                                local_geometry_slab,
+                                quad_weights,
+                                face,
+                                q,
+                                false,
+                            )
+                    end
+                end
+                boundary_surface_geometry
+            end
+    else
+        internal_surface_geometry = nothing
+        boundary_surface_geometries = nothing
+    end
     return SpectralElementSpace2D(
         topology,
         quadrature_style,

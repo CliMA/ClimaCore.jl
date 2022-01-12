@@ -1,16 +1,13 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using LinearAlgebra, IntervalSets
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
@@ -23,10 +20,16 @@ const parameters = (
 )
 
 domain = Domains.RectangleDomain(
-    Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
-    Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
-    x1periodic = true,
-    x2periodic = true,
+    Domains.IntervalDomain(
+        Geometry.XPoint(-2π),
+        Geometry.XPoint(2π),
+        periodic = true,
+    ),
+    Domains.IntervalDomain(
+        Geometry.YPoint(-2π),
+        Geometry.YPoint(2π),
+        periodic = true,
+    ),
 )
 
 n1, n2 = 16, 16
@@ -38,7 +41,7 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
-    @unpack x, y = coord
+    x, y = coord.x, coord.y
     # set initial state
     ρ = p.ρ₀
 
@@ -65,7 +68,7 @@ end
 y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
 function energy(state, p, local_geometry)
-    @unpack ρ, u = state
+    ρ, u = state.ρ, state.u
     return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
 end
 
@@ -74,8 +77,8 @@ function total_energy(y, parameters)
 end
 
 function rhs!(dydt, y, _, t)
-
-    @unpack D₄, g = parameters
+    D₄ = parameters.D₄
+    g = parameters.g
 
     sdiv = Operators.Divergence()
     wdiv = Operators.WeakDivergence()
@@ -121,7 +124,7 @@ sol = solve(
 )
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "cg_invariant_hypervisc"

@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
@@ -15,13 +13,12 @@ import ClimaCore:
     Fields,
     Operators
 import ClimaCore.Utilities: half
-using ClimaCore.Geometry
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # This experiment tests
 #     1) hydrostatic and geostrophic balance;
@@ -99,6 +96,8 @@ elseif test_name == "balanced_flow"
     δv(λ, ϕ, z) = 0.0
     const κ₄ = 0.0
 end
+uu(λ, ϕ, z) = u(ϕ, z) + δu(λ, ϕ, z)
+uv(λ, ϕ, z) = v(ϕ, z) + δv(λ, ϕ, z)
 
 # set up function space
 function sphere_3D(
@@ -106,13 +105,13 @@ function sphere_3D(
     zlim = (0, 12.0e3),
     helem = 4,
     zelem = 12,
-    npoly = 3,
+    npoly = 4,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
@@ -137,8 +136,8 @@ function pressure(ρ, e, normuvw, z)
     return ρ * R_d * T
 end
 
-# set up 3D domain - doubly periodic box
-hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 6, 10)
+# set up 3D domain - spherical shell
+hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 4, 10, 4)
 
 # initial conditions
 coords = Fields.coordinate_field(hv_center_space)
@@ -147,9 +146,7 @@ face_coords = Fields.coordinate_field(hv_face_space)
 
 function initial_condition(ϕ, λ, z)
     ρ = p(ϕ, z) / R_d / T(ϕ, z)
-    uu = u(ϕ, z) + δu(λ, ϕ, z)
-    uv = v(ϕ, z) + δv(λ, ϕ, z)
-    e = cv_d * (T(ϕ, z) - T_tri) + Φ(z) + (uu^2 + uv^2) / 2
+    e = cv_d * (T(ϕ, z) - T_tri) + Φ(z) + (uu(λ, ϕ, z)^2 + uv(λ, ϕ, z)^2) / 2
     ρe = ρ * e
 
     return (ρ = ρ, ρe = ρe)
@@ -160,11 +157,9 @@ function initial_condition_velocity(local_geometry)
     ϕ = coord.lat
     λ = coord.long
     z = coord.z
-    uu = u(ϕ, z) + δu(λ, ϕ, z)
-    uv = v(ϕ, z) + δv(λ, ϕ, z)
     return Geometry.transform(
         Geometry.Covariant12Axis(),
-        Geometry.UVVector(uu, uv),
+        Geometry.UVVector(uu(λ, ϕ, z), uv(λ, ϕ, z)),
         local_geometry,
     )
 end
@@ -293,11 +288,11 @@ function rhs!(dY, Y, _, t)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
-    # 3) potential temperature
+    # 3) total energy
 
-    @. dρe -= hdiv(cuvw * cρe)
-    @. dρe -= vdivf2c(fw * Ic2f(cρe))
-    @. dρe -= vdivf2c(Ic2f(cuₕ * cρe))
+    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
@@ -317,7 +312,7 @@ if test_name == "baroclinic_wave"
 elseif test_name == "balanced_flow"
     time_end = 3600
 end
-dt = 10
+dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, time_end))
 sol = solve(
     prob,
@@ -335,7 +330,7 @@ if test_name == "baroclinic_wave"
     @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
     ENV["GKSwstype"] = "nul"
-    import Plots
+    using ClimaCorePlots, Plots
     Plots.GRBackend()
     dirname = "baroclinic_wave"
     path = joinpath(@__DIR__, "output", dirname)
@@ -362,7 +357,7 @@ if test_name == "baroclinic_wave"
     )
 elseif test_name == "balanced_flow"
     ENV["GKSwstype"] = "nul"
-    import Plots
+    using ClimaCorePlots, Plots
     Plots.GRBackend()
     dirname = "balanced_flow"
     path = joinpath(@__DIR__, "output", dirname)

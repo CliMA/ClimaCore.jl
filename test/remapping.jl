@@ -360,3 +360,105 @@ end
         end
     end
 end
+
+@testset "Finite Volume <-> Spectral Elements Remapping" begin
+
+    @testset "1D Domains" begin
+        domain = Domains.IntervalDomain(
+            Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
+            boundary_tags = (:left, :right),
+        )
+
+        @testset "Single aligned elements" begin
+            quad1 = Spaces.Quadratures.GL{1}() # FV specification
+            n1 = 1
+            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
+            topo1 = Topologies.IntervalTopology(mesh1)
+            fv_space = Spaces.SpectralElementSpace1D(topo1, quad1)
+
+            @test local_weights(fv_space) ≈ (1 / n1) * ones(n1, 1)
+
+            for nq2 in [2, 5, 10]
+
+                quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
+                n2 = 1
+                mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
+                topo2 = Topologies.IntervalTopology(mesh2)
+                se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
+
+                _, w = Spaces.Quadratures.quadrature_points(FT, quad2)
+                @test local_weights(se_space) ≈ w ./ 2
+
+                # FV -> SE
+                R = LinearRemap(se_space, fv_space)
+                R_true = ones(nq2, 1)
+                @test R.map ≈ R_true
+                @test nnz(R.map) == nq2
+
+                @test conservative(R)
+                @test consistent(R)
+                @test monotone(R)
+
+                # SE -> FV
+                R = LinearRemap(fv_space, se_space)
+                R_true = local_weights(se_space)'
+                @test R.map ≈ R_true
+                @test nnz(R.map) == nq2
+
+                @test conservative(R)
+                @test consistent(R)
+                @test monotone(R)
+            end
+        end
+
+        @testset "Multiple elements" begin
+            quad1 = Spaces.Quadratures.GL{1}() # FV specification
+            n1 = 2
+            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
+            topo1 = Topologies.IntervalTopology(mesh1)
+            fv_space = Spaces.SpectralElementSpace1D(topo1, quad1)
+
+            nq2 = 2
+            quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
+            n2 = 3
+            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
+            topo2 = Topologies.IntervalTopology(mesh2)
+            se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
+
+            # FV -> SE
+            R = LinearRemap(se_space, fv_space)
+            @test nnz(R.map) == 8
+            @test conservative(R)
+            @test consistent(R)
+            @test monotone(R)
+
+            # SE -> FV
+            R = LinearRemap(fv_space, se_space)
+            @test nnz(R.map) == 8
+            @test conservative(R)
+            @test consistent(R)
+            @test monotone(R)
+
+            nq2 = 3
+            quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
+            n2 = 3
+            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
+            topo2 = Topologies.IntervalTopology(mesh2)
+            se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
+
+            # FV -> SE
+            R = LinearRemap(se_space, fv_space)
+            @test nnz(R.map) == 12
+            @test conservative(R)
+            @test consistent(R)
+            @test !monotone(R)
+
+            # SE -> FV
+            R = LinearRemap(fv_space, se_space)
+            @test nnz(R.map) == 12
+            @test conservative(R)
+            @test consistent(R)
+            @test !monotone(R)
+        end
+    end
+end

@@ -1,16 +1,14 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using LinearAlgebra, IntervalSets
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+import ClimaCore.Geometry: ⊗
+
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 
 const parameters = (
@@ -22,12 +20,17 @@ const parameters = (
     g = 10,
 )
 
-
 domain = Domains.RectangleDomain(
-    Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
-    Geometry.YPoint(-2π) .. Geometry.YPoint(2π),
-    x1periodic = true,
-    x2periodic = true,
+    Domains.IntervalDomain(
+        Geometry.XPoint(-2π),
+        Geometry.XPoint(2π),
+        periodic = true,
+    ),
+    Domains.IntervalDomain(
+        Geometry.YPoint(-2π),
+        Geometry.YPoint(2π),
+        periodic = true,
+    ),
 )
 
 n1, n2 = 16, 16
@@ -42,7 +45,7 @@ Iquad = Spaces.Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
-    @unpack x, y = coord
+    x, y = coord.x, coord.y
     # set initial state
     ρ = p.ρ₀
 
@@ -66,20 +69,20 @@ end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 
-function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
+function flux(state, param)
+    ρ, ρu, ρθ = state.ρ, state.ρu, state.ρθ
     u = ρu / ρ
     return (
         ρ = ρu,
-        ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * LinearAlgebra.I),
+        ρu = ((ρu ⊗ u) + (param.g * ρ^2 / 2) * LinearAlgebra.I),
         ρθ = ρθ * u,
     )
 end
 
-function energy(state, p)
-    @unpack ρ, ρu = state
+function energy(state, param)
+    ρ, ρu = state.ρ, state.ρu
     u = ρu / ρ
-    return ρ * (u.u^2 + u.v^2) / 2 + p.g * ρ^2 / 2
+    return ρ * (u.u^2 + u.v^2) / 2 + param.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
@@ -121,7 +124,7 @@ sol = solve(
 )
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
 dirname = "cg"

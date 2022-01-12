@@ -1,15 +1,15 @@
-name: ClimaCoreVTK CI
+name: ClimaCorePlots CI
 on:
   pull_request:
     paths:
-      - ".github/workflows/ClimaCoreVTK.yml"
-      - "lib/ClimaCoreVTK/**"
+      - ".github/workflows/ClimaCorePlots.yml"
+      - "lib/ClimaCorePlots/**"
   push:
     branches:
       - staging
       - trying
 jobs:
-  lib-climacore-vtk:
+  lib-climacore-plots:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -28,33 +28,23 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
-      - name: Install Paraview
-        run: |
-          sudo apt-get update && sudo apt-get -y install paraview python3-paraview
       - name: Install Julia dependencies
-        shell: julia --project=monorepo {0}
-        run: |
-          using Pkg;
-          # dev mono repo versions
-          pkg"dev . lib/ClimaCoreVTK"
+        run: >
+          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCorePlots")'
       - name: Run the tests
+        continue-on-error: true
         env:
+          GKSwstype: nul
           CI_OUTPUT_DIR: output
         run: >
-          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreVTK")'
+          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCorePlots")'
           && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
-      - name: Render the VTK images
-        run: >
-          for f in lib/ClimaCoreVTK/test/output/*.vtu;
-          do
-            xvfb-run -a pvpython lib/ClimaCoreVTK/paraview/renderimage.py "$f" "$f.png";
-          done
       - name: Upload test Artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: climacore-vtk-output
+          name: climacore-plots-output
           path: |
-            lib/ClimaCoreVTK/test/output/*.png
+            lib/ClimaCorePlots/test/output
       - name: Fail after artifacts if tests failed
         if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
         run: exit 1

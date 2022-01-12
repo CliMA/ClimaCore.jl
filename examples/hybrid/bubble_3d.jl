@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra, StaticArrays
 
 import ClimaCore:
     ClimaCore,
@@ -14,39 +12,47 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
+import ClimaCore.Geometry: ⊗
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # set up function space
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
     zlim = (0, 4π),
     xelem = 4,
-    yelem = 1,
+    yelem = 4,
     zelem = 16,
     npoly = 3,
 )
     FT = Float64
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-    horzdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
-        Geometry.YPoint{FT}(ylim[1]) .. Geometry.YPoint{FT}(ylim[2]),
-        x1periodic = true,
-        x2periodic = true,
+    xdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(xlim[1]),
+        Geometry.XPoint{FT}(xlim[2]),
+        periodic = true,
     )
+    ydomain = Domains.IntervalDomain(
+        Geometry.YPoint{FT}(ylim[1]),
+        Geometry.YPoint{FT}(ylim[2]),
+        periodic = true,
+    )
+
+    horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
     horztopology = Topologies.Topology2D(horzmesh)
+
+    zdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelem)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
@@ -276,7 +282,7 @@ sol = solve(
 # TODO: visualization artifacts
 
 # ENV["GKSwstype"] = "nul"
-# import Plots
+# using ClimaCorePlots, Plots
 # Plots.GRBackend()
 
 # dirname = "bubble_3d"
