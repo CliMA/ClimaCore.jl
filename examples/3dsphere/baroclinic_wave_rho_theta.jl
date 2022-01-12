@@ -86,8 +86,8 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400 * 10
-    dt = 100
+    T = 86400 * 4 + 43200
+    dt = 300
 
     ode_algorithm =  Rosenbrock23
     J_𝕄ρ_overwrite = :grav
@@ -218,7 +218,7 @@ anim = Plots.@animate for sol1 in sol.u
     v = u_phy.components.data.:2
     w = w_phy.components.data.:1
     #vort = curl_phy.components.data.:1
-    Plots.plot(w, level=3 + half, clim=(-1, 1))
+    Plots.plot(v, level=3, clim=(-6, 6))
 end
 
 Plots.mp4(anim, "tmp.mp4", fps=2)

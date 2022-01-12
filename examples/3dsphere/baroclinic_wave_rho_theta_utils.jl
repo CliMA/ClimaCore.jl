@@ -20,7 +20,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
-const test_name = "baroclinic_wave"
+const test_name = "balanced_flow"
 
 # parameters
 const R = 6.371229e6 # radius
@@ -91,7 +91,7 @@ if test_name == "baroclinic_wave"
 elseif test_name == "balanced_flow"
     δu(λ, ϕ, z) = 0.0
     δv(λ, ϕ, z) = 0.0
-    const κ₄ = 0.0
+    const κ₄ = 1.0e17
 end
 uu(λ, ϕ, z) = u(ϕ, z) + δu(λ, ϕ, z)
 uv(λ, ϕ, z) = v(ϕ, z) + δv(λ, ϕ, z)
