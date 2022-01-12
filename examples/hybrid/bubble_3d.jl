@@ -27,7 +27,7 @@ function hvspace_3D(
     xelem = 4,
     yelem = 4,
     zelem = 16,
-    npoly = 3,
+    npoly = 4,
 )
     FT = Float64
 
@@ -91,7 +91,7 @@ function init_dry_rising_bubble_3d(x, y, z)
     z_c = 350.0
     r_c = 250.0
     θ_b = 300.0
-    θ_c = 0.0
+    θ_c = 0.5
     cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
@@ -127,6 +127,35 @@ end
 end;
 
 Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
+
+function energy(Yc, ρu, z)
+    ρ = Yc.ρ
+    ρθ = Yc.ρθ
+    u = ρu / ρ
+    kinetic = ρ * norm(u)^2 / 2
+    potential = z * grav * ρ
+    internal = C_v * pressure(ρθ) / R_d
+    return kinetic + potential + internal
+end
+function combine_momentum(ρuₕ, ρw)
+    Geometry.transform(Geometry.UVWAxis(), ρuₕ) +
+    Geometry.transform(Geometry.UVWAxis(), ρw)
+end
+function center_momentum(Y)
+    If2c = Operators.InterpolateF2C()
+    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
+end
+function total_energy(Y)
+    ρ = Y.Yc.ρ
+    ρu = center_momentum(Y)
+    ρθ = Y.Yc.ρθ
+    z = Fields.coordinate_field(axes(ρ)).z
+    sum(energy.(Yc, ρu, z))
+end
+
+energy_0 = total_energy(Y)
+mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
+theta_0 = sum(Yc.ρθ)
 
 function rhs!(dY, Y, _, t)
     ρw = Y.ρw
@@ -221,13 +250,12 @@ function rhs!(dY, Y, _, t)
     @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
-    @. dρw +=
-        B(
-            Geometry.transform(
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
-        ) + fcf(wc, ρw)
+    @. dρw += B(
+        Geometry.transform(
+            Geometry.WAxis(),
+            -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
+        ) - vvdivc2f(Ic(ρw ⊗ w)),
+    )
     uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
@@ -277,17 +305,52 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = 50.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
 
-# TODO: visualization artifacts
+ENV["GKSwstype"] = "nul"
+import Plots
+Plots.GRBackend()
 
-# ENV["GKSwstype"] = "nul"
-# using ClimaCorePlots, Plots
-# Plots.GRBackend()
+dirname = "bubble_3d"
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
 
-# dirname = "bubble_3d"
-# path = joinpath(@__DIR__, "output", dirname)
-# mkpath(path)
+# post-processing
+Es = [total_energy(u) for u in sol.u]
+Mass = [sum(u.Yc.ρ) for u in sol.u]
+Theta = [sum(u.Yc.ρθ) for u in sol.u]
+
+Plots.png(
+    Plots.plot((Es .- energy_0) ./ energy_0),
+    joinpath(path, "energy.png"),
+)
+Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
+Plots.png(
+    Plots.plot((Theta .- theta_0) ./ theta_0),
+    joinpath(path, "rho_theta.png"),
+)
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)
+linkfig(
+    relpath(joinpath(path, "rho_theta.png"), joinpath(@__DIR__, "../..")),
+    "Potential Temperature",
+)
+linkfig(
+    relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
+    "Mass",
+)

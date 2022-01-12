@@ -117,35 +117,35 @@ uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-#=
-function energy(Yc, ρu, z)
-    ρ = Yc.ρ
-    ρθ = Yc.ρθ
-    u = ρu / ρ
-    kinetic = ρ * norm(u)^2 / 2
-    potential = z * grav * ρ
-    internal = C_v * pressure(ρθ) / R_d
-    return kinetic + potential + internal
+function energy(ρ, ρθ, ρu, z)
+    u = ρu ./ ρ
+    kinetic = ρ .* norm(u)^2 ./ 2
+    potential = z .* grav .* ρ
+    internal = C_v .* pressure.(ρθ) ./ R_d
+    return kinetic .+ potential .+ internal
 end
 function combine_momentum(ρuₕ, ρw)
-    Geometry.transform(Geometry.UWAxis(), ρuₕ) +
-    Geometry.transform(Geometry.UWAxis(), ρw)
+    Geometry.transform(Geometry.Covariant123Axis(), ρuₕ) +
+    Geometry.transform(Geometry.Covariant123Axis(), ρw)
 end
 function center_momentum(Y)
     If2c = Operators.InterpolateF2C()
-    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
+    ρ = Y.Yc.ρ
+    ρuₕ = ρ .* Y.uₕ
+    ρw = ρ .* If2c.(Y.w)
+    combine_momentum.(ρuₕ, ρw)
 end
 function total_energy(Y)
     ρ = Y.Yc.ρ
     ρu = center_momentum(Y)
     ρθ = Y.Yc.ρθ
     z = Fields.coordinate_field(axes(ρ)).z
-    sum(energy.(Yc, ρu, z))
+    sum(energy(ρ, ρθ, ρu, z))
 end
 
 energy_0 = total_energy(Y)
 mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
-=#
+theta_0 = sum(Yc.ρθ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
 
 function rhs_invariant!(dY, Y, _, t)
 
@@ -298,9 +298,9 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.025
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 100.0))
-sol_invariant = solve(
+Δt = 0.050
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 1.0))
+sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
@@ -309,12 +309,45 @@ sol_invariant = solve(
     progress_message = (dt, u, p, t) -> t,
 );
 
-# TODO: visualization artifacts
+ENV["GKSwstype"] = "nul"
+import Plots
+Plots.GRBackend()
 
-# ENV["GKSwstype"] = "nul"
-# using ClimaCorePlots, Plots
-# Plots.GRBackend()
+dirname = "bubble_3d_invariant"
+path = joinpath(@__DIR__, "output", dirname)
+mkpath(path)
 
-# dirname = "bubble3d_invariant"
-# path = joinpath(@__DIR__, "output", dirname)
-# mkpath(path)
+# post-processing
+Es = [total_energy(u) for u in sol.u]
+Mass = [sum(u.Yc.ρ) for u in sol.u]
+Theta = [sum(u.Yc.ρθ) for u in sol.u]
+
+Plots.png(
+    Plots.plot((Es .- energy_0) ./ energy_0),
+    joinpath(path, "energy.png"),
+)
+
+Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
+Plots.png(Plots.plot((Theta .- theta_0) ./ theta_0), joinpath(path, ".png"))
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)
+linkfig(
+    relpath(joinpath(path, "rho_theta.png"), joinpath(@__DIR__, "../..")),
+    "Potential Temperature",
+)
+linkfig(
+    relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
+    "Mass",
+)
