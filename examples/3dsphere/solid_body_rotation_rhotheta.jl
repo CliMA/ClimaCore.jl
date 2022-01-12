@@ -20,6 +20,12 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+FT = Float64
+
+const n_vert = 10
+const n_horz = 4
+const p_horz = 5
+
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
 const z_top = 3.0e4 # height position of the model top
@@ -68,10 +74,12 @@ end
 Φ(z) = grav * z
 
 # pressure
-function pressure(ρ, e, normuvw, z)
-    I = e - Φ(z) - normuvw^2 / 2
-    T = I / cv_d + T_tri
-    return ρ * R_d * T
+function pressure(ρθ)
+    if ρθ >= 0
+        return p_0 * (R_d * ρθ / p_0)^γ
+    else
+        return NaN
+    end
 end
 
 # initial conditions for density and total energy
@@ -91,12 +99,12 @@ function rhs!(dY, Y, _, t)
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
-    cρe = Y.Yc.ρe # total energy on centers
+    cρθ = Y.Yc.ρθ # total energy on centers
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
-    dρe = dY.Yc.ρe
+    dρθ = dY.Yc.ρθ
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
@@ -111,7 +119,7 @@ function rhs!(dY, Y, _, t)
     dρ .= 0 .* cρ
     dw .= 0 .* fw
     duₕ .= 0 .* cuₕ
-    dρe .= 0 .* cρe
+    dρθ .= 0 .* cρθ
 
     # hyperdiffusion not needed in SBR
 
@@ -169,8 +177,7 @@ function rhs!(dY, Y, _, t)
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce = @. cρe / cρ
-    cp = @. pressure(cρ, ce, norm(cuvw), c_coords.z)
+    cp = @. pressure(cρθ)
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
@@ -183,11 +190,11 @@ function rhs!(dY, Y, _, t)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
-    # 3) total energy
+    # 3) potential temperature
 
-    @. dρe -= hdiv(cuvw * (cρe + cp))
-    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
-    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
+    @. dρθ -= hdiv(cuvw * cρθ)
+    @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
+    @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
@@ -198,7 +205,7 @@ function rhs!(dY, Y, _, t)
 end
 
 # set up 3D spherical domain and coords
-hv_center_space, hv_face_space = sphere_3D()
+hv_center_space, hv_face_space = sphere_3D(R, (0, z_top), n_horz, n_vert, p_horz)
 c_coords = Fields.coordinate_field(hv_center_space)
 f_coords = Fields.coordinate_field(hv_face_space)
 
@@ -212,60 +219,62 @@ zc_vec = parent(c_coords.z) |> unique
 
 N = length(zc_vec)
 ρ = zeros(Float64, N)
-w = zeros(Float64, N+1)
+p = zeros(Float64, N)
 ρθ = zeros(Float64, N)
 
 for i = 1:N
     var = init_sbr_thermo(zc_vec[i])
     ρ[i]  = var.ρ
     ρθ[i] = var.ρθ
+    p[i] = pressure(ρθ[i])
 end
 
-Π(ρθ) = cp_d * (R_d * ρθ / p_0)^(R_d / cv_d)
-function discrete_hydrostatic_balance!(ρ, w, ρθ, Δz::FT, _grav::FT, Π::Function)
+function discrete_hydrostatic_balance!(ρ, p, dz, grav)
     for i in 1:(length(ρ) - 1)
-        ρ[i + 1] =
-            ρθ[i + 1] /
-            (-2 * _grav / ((Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz) - ρθ[i] / ρ[i])
+        ρ[i + 1] =  - ρ[i] - 2 * ( p[i+1] - p[i] ) / dz / grav
     end
 end
 
-discrete_hydrostatic_balance!(ρ, w, ρθ, 30e3/15.0, grav, Π)
+# discrete_hydrostatic_balance!(ρ, w, ρθ, 30e3/15.0, grav, Π)
+discrete_hydrostatic_balance!(ρ, p, z_top/n_vert, grav)
 
-
-# set up initial condition
+# set up initial condition: not discretely balanced; only a place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-# uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
-# w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
-# Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+# put the dicretely balanced ρ and ρθ into Yc
+parent(Yc.ρ) .=  ρ  # Yc.ρ is a VIJFH layout
+parent(Yc.ρθ) .= ρθ
 
-# # initialize tendency
-# dYdt = similar(Y)
-# # set up rhs
-# rhs!(dYdt, Y, nothing, 0.0)
+uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
+w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
+Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-# # run!
-# using OrdinaryDiffEq
-# # Solve the ODE
-# T = 3600
-# dt = 5
-# prob = ODEProblem(rhs!, Y, (0.0, T))
+# initialize tendency
+dYdt = similar(Y)
+# set up rhs
+rhs!(dYdt, Y, nothing, 0.0)
 
-# # solve ode
-# sol = solve(
-#     prob,
-#     SSPRK33(),
-#     dt = dt,
-#     saveat = dt,
-#     progress = true,
-#     adaptive = false,
-#     progress_message = (dt, u, p, t) -> t,
-# )
+# run!
+using OrdinaryDiffEq
+# Solve the ODE
+dt = 5
+T = 3600
+prob = ODEProblem(rhs!, Y, (0.0, T))
 
-# uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
-# w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+# solve ode
+sol = solve(
+    prob,
+    SSPRK33(),
+    dt = dt,
+    saveat = dt,
+    progress = true,
+    adaptive = false,
+    progress_message = (dt, u, p, t) -> t,
+)
 
-# @test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
-# @test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
-# @test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-# @test norm(sol.u[end].Yc.ρe) ≈ norm(sol.u[1].Yc.ρe) rtol = 1e-2
+uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+
+@test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
+@test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
+@test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
+@test norm(sol.u[end].Yc.ρθ) ≈ norm(sol.u[1].Yc.ρθ) rtol = 1e-2

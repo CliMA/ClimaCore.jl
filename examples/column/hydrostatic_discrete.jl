@@ -15,6 +15,9 @@ import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
+const z_top = FT(30e3)
+const n_vert = 30
+
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
 const MSLP = FT(1e5) # mean sea level pressure
 const grav = FT(9.8) # gravitational constant
@@ -24,14 +27,13 @@ const C_p = FT(R_d * γ / (γ - 1)) # heat capacity at constant pressure
 const C_v = FT(R_d / (γ - 1)) # heat capacit at constant volume
 const R_m = FT(R_d) # moist R, assumed to be dry
 
-
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
-    Geometry.ZPoint{FT}(30e3),
+    Geometry.ZPoint{FT}(z_top),
     boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
-mesh = Meshes.IntervalMesh(domain; nelems = 30)
+mesh = Meshes.IntervalMesh(domain; nelems = n_vert)
 
 cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
@@ -69,13 +71,8 @@ end
 Π(ρθ) = C_p * (R_d * ρθ / MSLP)^(R_m / C_v)
 Φ(z) = grav * z
 
-function discrete_hydrostatic_balance!(ρ, w, ρθ, Δz::FT, _grav::FT, Π::Function)
-    # compute θ such that
-    #   I(θ)[i+1/2] = -g / ∂f(Π(ρθ))
-    # discretely, then set
-    #   ρ = ρθ/θ
+function discrete_hydrostatic_balance!(ρ, ρθ, Δz::FT, _grav::FT, Π::Function)
     for i in 1:(length(ρ) - 1)
-        #  ρ[i+1] = ρθ[i+1]/(-2Δz*_grav/(Π(ρθ[i+1]) - Π(ρθ[i])) - ρθ[i]/ρ[i])
         ρ[i + 1] =
             ρθ[i + 1] /
             (-2 * _grav / ((Π(ρθ[i + 1]) - Π(ρθ[i])) / Δz) - ρθ[i] / ρ[i])
@@ -88,7 +85,6 @@ zc_vec = parent(zc)
 
 N = length(zc_vec)
 ρ = zeros(Float64, N)
-w = zeros(Float64, N+1)
 ρθ = zeros(Float64, N)
 
 for i = 1:N
@@ -97,12 +93,11 @@ for i = 1:N
     ρθ[i] = var.ρθ
 end
 
-discrete_hydrostatic_balance!(ρ, w, ρθ, 30e3/30.0, grav, Π)
+discrete_hydrostatic_balance!(ρ, ρθ, z_top/n_vert, grav, Π)
 
 Yc = decaying_temperature_profile.(zc.z)
 parent(Yc.ρ) .= ρ
 parent(Yc.ρθ) .= ρθ
-
 w = Geometry.WVector.(zeros(FT, fspace))
 
 Y_init = copy(Yc)
@@ -154,7 +149,7 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "hydrostatic"
+dirname = "hydrostatic_discretely_balanced"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 
@@ -175,7 +170,6 @@ function hydrostatic_plot(u; title = "", size = (1024, 600))
         parent(w_init),
         z_faces,
         marker = :circle,
-        xlim = (-0.2, 0.2),
         xlabel = "ω",
         label = "T=0",
     )
