@@ -87,7 +87,7 @@ if test_name == "baroclinic_wave"
         s1(λ, ϕ) *
         cosd(ϕ_c) *
         sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
-    const κ₄ = 1.0e16 # m^4/s
+    const κ₄ = 1.0e17 # m^4/s
 elseif test_name == "balanced_flow"
     δu(λ, ϕ, z) = 0.0
     δv(λ, ϕ, z) = 0.0
@@ -167,7 +167,25 @@ function rhs!(dY, Y, p, t)
     duₕ .= 0 .* cuₕ
     dρθ .= 0 .* cρθ
 
-    # hyperdiffusion not needed in SBR
+    ### HYPERVISCOSITY
+    # 1) compute hyperviscosity coefficients
+
+    χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ))
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+
+    Spaces.weighted_dss!(dρθ)
+    Spaces.weighted_dss!(duₕ)
+
+    @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
 
@@ -256,7 +274,25 @@ function rhs_remainder!(dY, Y, p, t)
     duₕ .= 0 .* cuₕ
     dρθ .= 0 .* cρθ
 
-    # hyperdiffusion not needed in SBR
+    ### HYPERVISCOSITY
+    # 1) compute hyperviscosity coefficients
+
+    χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ))
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+
+    Spaces.weighted_dss!(dρθ)
+    Spaces.weighted_dss!(duₕ)
+
+    @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
     cw = If2c.(fw)

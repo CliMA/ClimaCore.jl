@@ -85,7 +85,7 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400 * 6
+    T = 86400 * 10
     dt = 300
 
     ode_algorithm =  Rosenbrock23
@@ -202,3 +202,20 @@ end
 
 u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+
+using ClimaCorePlots, Plots
+
+anim = Plots.@animate for sol1 in sol.u
+    uₕ = sol1.uₕ
+    w = sol1.w
+    cw = If2c.(w)
+    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), uₕ)
+    w_phy = Geometry.transform.(Ref(Geometry.WAxis()), w)
+    u = u_phy.components.data.:1
+    v = u_phy.components.data.:2
+    w = w_phy.components.data.:1
+    #vort = curl_phy.components.data.:1
+    Plots.plot(v, level=3, clim=(-4, 4))
+end
+
+Plots.mp4(anim, "tmp.mp4", fps=1)
