@@ -249,8 +249,38 @@ end
         Geometry.LatLongPoint(-90.0, -180.0),
         global_geom,
     ) == Geometry.Cartesian123Point(0.0, 0.0, -2.0)
-
 end
+
+
+@testset "LatLongZ -> Cartesian coordinate conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(2.0, 0.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, 0.0, 3.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(5.0, 0.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, 90.0, 3.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, 5.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, -90.0, 3.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(0.0, -5.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, 180.0, 3.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-5.0, 0.0, 0.0)
+    @test Geometry.CartesianPoint(
+        Geometry.LatLongZPoint(0.0, -180.0, 3.0),
+        global_geom,
+    ) == Geometry.Cartesian123Point(-5.0, 0.0, 0.0)
+end
+
 
 @testset "Cartesian -> LatLong coordinate conversions" begin
     global_geom = Geometry.SphericalGlobalGeometry(2.0)
@@ -353,6 +383,36 @@ end
         Geometry.Cartesian123Point(-0.0, -0.0, -2.0),
         global_geom,
     ) == Geometry.LatLongPoint(-90.0, 0.0)
+end
+
+
+@testset "Cartesian -> LatLongZ coordinate conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(2.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 0.0, 0.0)
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(5.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 0.0, 3.0)
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(0.0, 2.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 90.0, 0.0)
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(0.0, 5.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 90.0, 3.0)
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(-2.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 180.0, 0.0)
+    @test Geometry.LatLongZPoint(
+        Geometry.Cartesian123Point(-5.0, 0.0, 0.0),
+        global_geom,
+    ) == Geometry.LatLongZPoint(0.0, 180.0, 3.0)
 end
 
 
