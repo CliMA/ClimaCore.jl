@@ -69,6 +69,10 @@ all_cases = [
         joinpath(pkg_dir, "examples", "sphere", "shallow_water.jl"),
         "barotropic_instability",
     ),
+    (
+        joinpath(pkg_dir, "examples", "3dsphere", "solid_body_rotation_3d.jl"),
+        "",
+    ),
 ]
 
 # only one case for exhaustive alloc analysis
