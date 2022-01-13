@@ -100,6 +100,7 @@ function rhs!(dY, Y, _, t)
     dw = dY.w
     duₕ = dY.uₕ
     dρe = dY.Yc.ρe
+    z = c_coords.z
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
@@ -173,7 +174,7 @@ function rhs!(dY, Y, _, t)
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
     ce = @. cρe / cρ
-    cp = @. pressure(cρ, ce, norm(cuvw), c_coords.z)
+    cp = @. pressure(cρ, ce, norm(cuvw), z)
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
@@ -182,7 +183,7 @@ function rhs!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 

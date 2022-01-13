@@ -120,6 +120,8 @@ function rhs_invariant!(dY, Y, _, t)
     dw = dY.w
     duₕ = dY.uₕ
     dρθ = dY.Yc.ρθ
+    ρθ = Yc.ρθ
+    z = coords.z
 
 
     # 0) update w at the bottom
@@ -209,13 +211,13 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(coords.z)
+    cE = @. (norm(cuw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
     # 3) potential temperature
 
-    @. dρθ -= hdiv(cuw * Yc.ρθ)
+    @. dρθ -= hdiv(cuw * ρθ)
     @. dρθ -= vdivf2c(fw * Ic2f(cρθ))
     @. dρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 
