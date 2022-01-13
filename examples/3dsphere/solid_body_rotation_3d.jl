@@ -24,7 +24,7 @@ FT = Float64
 
 const n_vert = 10
 const n_horz = 4
-const p_horz = 5
+const p_horz = 4
 
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
@@ -90,18 +90,6 @@ function init_sbr_thermo(z)
     ρe = ρ * e
 
     return (ρ = ρ, ρe = ρe)
-end
-
-function init_sbr_thermo_θ(z)
-
-    p = p_0 * exp(-z / H)
-    ρ = 1 / R_d / T_0 * p
-
-    θ = T_0 * (p_0/p)^(R_d/cp_d)
-
-    ρθ = ρ * θ
-
-    return (ρ = ρ, ρθ = ρθ)
 end
 
 function rhs!(dY, Y, _, t)
@@ -230,28 +218,17 @@ zc_vec = parent(c_coords.z) |> unique
 N = length(zc_vec)
 ρ = zeros(Float64, N)
 p = zeros(Float64, N)
-ρθ = zeros(Float64, N)
-ρe_old = zeros(Float64, N)
-ρe_new = zeros(Float64, N)
+ρe = zeros(Float64, N)
 
-function pressureθ(ρθ)
-    if ρθ >= 0
-        return p_0 * (R_d * ρθ / p_0)^γ
-    else
-        return NaN
-    end
-end
-
+# compute ρ, ρe, p from analytical formula; not discretely balanced
 for i = 1:N
-    var = init_sbr_thermo_θ(zc_vec[i])
-    ρ[i]  = var.ρ
-    ρθ[i] = var.ρθ
-    p[i] = pressureθ(ρθ[i])
-
     var = init_sbr_thermo(zc_vec[i])
-    ρe_old[i] = var.ρe
+    ρ[i]  = var.ρ
+    ρe[i] = var.ρe
+    p[i] = pressure(ρ[i], ρe[i]/ρ[i], 0.0, zc_vec[i])
 end
-ρ_old = copy(ρ)
+
+ρ_ana = copy(ρ) # keep a copy for analytical ρ which will be used in correction ρe
 
 function discrete_hydrostatic_balance!(ρ, p, dz, grav)
     for i in 1:(length(ρ) - 1)
@@ -260,18 +237,20 @@ function discrete_hydrostatic_balance!(ρ, p, dz, grav)
 end
 
 discrete_hydrostatic_balance!(ρ, p, z_top/n_vert, grav) 
-# now ρ, p, and ρθ in discrete hydrostatic balance; and satisfies eos
-# only need to compute ρe from them
+# now ρ (after correction) and p (computed from analytical relation) are in discrete hydrostatic balance
+# only need to correct ρe without changing ρ and p, i.e., keep ρT unchanged before vs after the correction on ρ 
+ρe = @. ρe + (ρ - ρ_ana) * Φ(zc_vec) - (ρ - ρ_ana) * cv_d * T_tri
 
-ρe_new = @. ρe_old + (ρ - ρ_old) * Φ(zc_vec) - (ρ - ρ_old) * cv_d * T_tri# * ( cv_d * (T - T_tri) + Φ(zc_vec) + 0.0)
+# Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work, 
+#       however, it is not as accurate as the above correction
 
-# set up initial condition: not discretely balanced; only a place holder
+# set up initial condition: not discretely balanced; only create a Field as a place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-# put the dicretely balanced ρ and ρθ into Yc
+# put the dicretely balanced ρ and ρe into Yc
 parent(Yc.ρ) .=  ρ  # Yc.ρ is a VIJFH layout
-parent(Yc.ρe) .= ρe_new
+parent(Yc.ρe) .= ρe
 
-
+# initialize velocity: at rest
 uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
@@ -284,7 +263,7 @@ rhs!(dYdt, Y, nothing, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-T = 10 #3600
+T = 3600
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, T))
 
