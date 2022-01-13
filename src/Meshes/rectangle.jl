@@ -96,18 +96,34 @@ end
 function coordinates(
     mesh::RectilinearMesh,
     elem::CartesianIndex{2},
-    (ξ1, ξ2)::NTuple{2},
+    (ξ1, ξ2)::StaticArrays.SVector{2},
 )
     x1, x2 = elem.I
-    coord1 = coordinates(mesh.intervalmesh1, x1, (ξ1,))
-    coord2 = coordinates(mesh.intervalmesh2, x2, (ξ2,))
+    coord1 = coordinates(mesh.intervalmesh1, x1, StaticArrays.SVector(ξ1))
+    coord2 = coordinates(mesh.intervalmesh2, x2, StaticArrays.SVector(ξ2))
     return Geometry.product_coordinates(coord1, coord2)
 end
 
 function containing_element(mesh::RectilinearMesh, coord)
-    x1, (ξ1,) =
-        containing_element(mesh.intervalmesh1, Geometry.coordinate(coord, 1))
-    x2, (ξ2,) =
-        containing_element(mesh.intervalmesh2, Geometry.coordinate(coord, 2))
-    return CartesianIndex(x1, x2), (ξ1, ξ2)
+    x1 = containing_element(mesh.intervalmesh1, Geometry.coordinate(coord, 1))
+    x2 = containing_element(mesh.intervalmesh2, Geometry.coordinate(coord, 2))
+    return CartesianIndex(x1, x2)
+end
+function reference_coordinates(
+    mesh::RectilinearMesh,
+    elem::CartesianIndex{2},
+    coord,
+)
+    x1, x2 = elem.I
+    ξ1, = reference_coordinates(
+        mesh.intervalmesh1,
+        x1,
+        Geometry.coordinate(coord, 1),
+    )
+    ξ2, = reference_coordinates(
+        mesh.intervalmesh2,
+        x2,
+        Geometry.coordinate(coord, 2),
+    )
+    return StaticArrays.SVector(ξ1, ξ2)
 end

@@ -2,7 +2,7 @@ module Topologies
 
 import ..Geometry
 import ..Domains: Domains, coordinate_type
-import ..Meshes: Meshes, domain
+import ..Meshes: Meshes, domain, coordinates
 
 """
    AbstractTopology

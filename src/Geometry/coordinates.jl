@@ -240,6 +240,60 @@ function bilinear_interpolate(
     VV(c...)
 end
 
+
+"""
+    bilinear_invert(cc::NTuple{4, V}) where {V<:SVector{2}}
+
+Solve find `ξ1` and `ξ2` such that
+
+    bilinear_interpolate(coords, ξ1, ξ2) == 0
+
+See also [`bilinear_interpolate`](@ref).
+"""
+function bilinear_invert(vert_coords::NTuple{4, V}) where {V <: SVector{2}}
+    # 1) express as 2 equations
+    #  ca' * M * [1,ξ1,ξ2,ξ1*ξ2] == 0
+    #  cb' * M * [1,ξ1,ξ2,ξ1*ξ2] == 0
+    ca = SVector(map(v -> v[1], vert_coords))
+    cb = SVector(map(v -> v[2], vert_coords))
+    M = @SMatrix [
+        1 -1 -1 1
+        1 1 -1 -1
+        1 1 1 1
+        1 -1 1 -1
+    ]
+
+    # 2) get into the form
+    #  a1 + a2 * ξ1 + a3 * ξ2 + a4 * ξ1 * ξ2 == 0  (A)
+    #  b1 + b2 * ξ1 + b3 * ξ2 + b4 * ξ1 * ξ2 == 0  (B)
+    (a1, a2, a3, a4) = M' * ca
+    (b1, b2, b3, b4) = M' * cb
+
+    # 3) rearrange (A):
+    #   -(a1 + a3*ξ2) = ξ1 * (a2 + a4*ξ2)
+    # 4) multiply (B) by (a2 + a4*ξ2), and eliminate ξ1
+    #    b1 * (a2 + a4*ξ2) - b2 * (a1 + a3*ξ2) + b3 * (a2 + a4*ξ2) * ξ2 - b4 * (a1 + a3*ξ2) * ξ2 == 0
+    # 5) collect coefficients of powers of ξ2
+    c0 = b1 * a2 - b2 * a1
+    c1 = b1 * a4 - b2 * a3 + b3 * a2 - b4 * a1
+    c2 = b3 * a4 - b4 * a3
+    # 6) solve quadratic equation
+    Δ = c1 * c1 - 4 * c2 * c0
+    if c1 >= 0
+        ξ2a = (-c1 - sqrt(Δ)) / (2 * c2)
+        ξ2b = 2 * c0 / (-c1 - sqrt(Δ))
+    else
+        ξ2a = 2 * c0 / (-c1 + sqrt(Δ))
+        ξ2b = (-c1 + sqrt(Δ)) / (2 * c2)
+    end
+    # 7) find which solution is smallest in magnitude (closest to the interval [-1,1]):
+    ξ2 = abs(ξ2a) < abs(ξ2b) ? ξ2a : ξ2b
+    # 8) solve for ξ1
+    ξ1 = -(a1 + a3 * ξ2) / (a2 + a4 * ξ2)
+    return SVector(ξ1, ξ2)
+end
+
+
 """
     interpolate(coords::NTuple{2}, ξ1)
 

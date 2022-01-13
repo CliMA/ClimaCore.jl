@@ -1,6 +1,6 @@
 using ClimaCore: Geometry, Domains, Meshes
 using Test
-using SparseArrays, LinearAlgebra
+using StaticArrays, SparseArrays, LinearAlgebra
 
 
 @testset "opposing face" begin
@@ -37,7 +37,7 @@ end
     end
 end
 
-@testset "panel_to_coordinates" begin
+@testset "panel mappings" begin
     for coord1 in [
         Geometry.Cartesian123Point(1.0, 0.0, 0.0),
         Geometry.Cartesian123Point(1.0, sqrt(0.5), 0.0),
@@ -45,12 +45,9 @@ end
         Geometry.Cartesian123Point(1.0, sqrt(0.5), -sqrt(0.5)),
     ]
         for panel in 1:6
-            @test Meshes.coordinates_to_panel(
-                Meshes.panel_to_coordinates(panel, coord1),
-            )[1] == panel
-            @test Meshes.coordinates_to_panel(
-                Meshes.panel_to_coordinates(panel, coord1),
-            )[2] ≈ coord1
+            coord = Meshes.to_panel(panel, coord1)
+            @test Meshes.containing_panel(coord) == panel
+            @test Meshes.from_panel(panel, coord) == coord1
         end
     end
 end
@@ -96,42 +93,129 @@ end
                 Meshes.EquiangularCubedSphere(domain, 3),
                 Meshes.EquidistantCubedSphere(domain, 3),
                 Meshes.ConformalCubedSphere(domain, 3),
+                Meshes.EquiangularCubedSphere(domain, 3, Meshes.IntrinsicMap()),
+                Meshes.EquidistantCubedSphere(domain, 3, Meshes.IntrinsicMap()),
+                Meshes.ConformalCubedSphere(domain, 3, Meshes.IntrinsicMap()),
             ]
         else
             meshes = [
                 Meshes.EquiangularCubedSphere(domain, 3),
                 Meshes.EquidistantCubedSphere(domain, 3),
+                Meshes.EquiangularCubedSphere(domain, 3, Meshes.IntrinsicMap()),
+                Meshes.EquidistantCubedSphere(domain, 3, Meshes.IntrinsicMap()),
             ]
         end
         for mesh in meshes
             for elem in Meshes.elements(mesh)
-                for (ξ1, ξ2) in
-                    [(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, -0.5)]
-                    coord = Meshes.coordinates(mesh, elem, (ξ1, ξ2))
-                    @test norm(Geometry.components(coord)) ≈ 5 rtol = 3eps()
-                    celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
-                    @test celem == elem
-                    @test cξ1 ≈ ξ1 atol = 10eps()
-                    @test cξ2 ≈ ξ2 atol = 10eps()
+                for ξ in [
+                    FT.(SVector(0.0, 0.0)),
+                    FT.(SVector(0.0, 0.5)),
+                    FT.(SVector(0.5, 0.0)),
+                    FT.(SVector(0.5, -0.5)),
+                ]
+                    coord = Meshes.coordinates(mesh, elem, ξ)
+                    @test coord isa Geometry.Cartesian123Point{FT}
+                    @test norm(Geometry.components(coord)) ≈ 5 rtol = 3eps(FT)
+                    @test Meshes.containing_element(mesh, coord) == elem
+                    @test Meshes.reference_coordinates(mesh, elem, coord) ≈ ξ atol =
+                        10eps(FT)
                 end
 
                 for vert in 1:4
                     coord = Meshes.coordinates(mesh, elem, vert)
                     # containing_element should be round trip to give the same coordinates
-                    celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
+                    celem = Meshes.containing_element(mesh, coord)
                     @test celem in Meshes.elements(mesh)
-                    @test -1 <= cξ1 <= 1
-                    @test -1 <= cξ2 <= 1
-                    @test cξ1 ≈ 1 || cξ1 ≈ -1
-                    @test cξ2 ≈ 1 || cξ2 ≈ -1
-                    @test Meshes.coordinates(mesh, celem, (cξ1, cξ2)) ≈ coord rtol =
-                        3eps(FT)
+                    cξ = Meshes.reference_coordinates(mesh, celem, coord)
+                    @test Geometry.components(
+                        Meshes.coordinates(mesh, celem, cξ),
+                    ) ≈ Geometry.components(coord) rtol = 3eps(FT)
+
+                    cξ = Meshes.reference_coordinates(mesh, elem, coord)
+                    @test cξ[1] ≈ (vert in (1, 4) ? -1 : +1)
+                    @test cξ[2] ≈ (vert in (1, 2) ? -1 : +1)
                 end
             end
         end
     end
 end
 
+@testset "handling of zero signs: even-numbered elements" begin
+    # this doesn't work for conformal mappings
+    domain = Domains.SphereDomain(5.0)
+    meshes = [
+        Meshes.EquiangularCubedSphere(domain, 4),
+        Meshes.EquidistantCubedSphere(domain, 4),
+        Meshes.EquiangularCubedSphere(domain, 4, Meshes.IntrinsicMap()),
+        Meshes.EquidistantCubedSphere(domain, 4, Meshes.IntrinsicMap()),
+    ]
+    for mesh in meshes
+        @test Meshes.coordinates(mesh, CartesianIndex(2, 1, 1), 2).x2 === -0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(2, 1, 1), 3).x2 === -0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(3, 1, 1), 1).x2 === +0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(3, 1, 1), 4).x2 === +0.0
+
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(2, 1, 1),
+            SVector(1.0, 0.5),
+        ).x2 === -0.0
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(3, 1, 1),
+            SVector(-1.0, 0.5),
+        ).x2 === +0.0
+
+        @test Meshes.coordinates(mesh, CartesianIndex(1, 2, 1), 3).x3 === -0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(1, 2, 1), 4).x3 === -0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(1, 3, 1), 1).x3 === +0.0
+        @test Meshes.coordinates(mesh, CartesianIndex(1, 3, 1), 2).x3 === +0.0
+
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(1, 2, 1),
+            SVector(0.5, 1.0),
+        ).x3 === -0.0
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(1, 3, 1),
+            SVector(0.5, -1.0),
+        ).x3 === +0.0
+
+    end
+end
+
+@testset "handling of zero signs: odd-numbered elements" begin
+    # currently this only works when using the IntrinsicMap
+    domain = Domains.SphereDomain(5.0)
+    meshes = [
+        Meshes.EquiangularCubedSphere(domain, 3, Meshes.IntrinsicMap()),
+        Meshes.EquidistantCubedSphere(domain, 3, Meshes.IntrinsicMap()),
+    ]
+    for mesh in meshes
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(2, 1, 1),
+            SVector(-0.0, 0.5),
+        ).x2 === -0.0
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(2, 1, 1),
+            SVector(+0.0, 0.5),
+        ).x2 === +0.0
+
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(1, 2, 1),
+            SVector(0.5, -0.0),
+        ).x3 === -0.0
+        @test Meshes.coordinates(
+            mesh,
+            CartesianIndex(1, 2, 1),
+            SVector(0.5, +0.0),
+        ).x3 === +0.0
+    end
+end
 
 @testset "face connectivity matrix" begin
     mesh = Meshes.EquiangularCubedSphere(Domains.SphereDomain(1.0), 3)

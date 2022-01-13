@@ -708,3 +708,42 @@ end
         Geometry.LatLongPoint(-90.0, 0.0),
     ) == Geometry.Cartesian123Vector(0.0, 0.0, -1.0)
 end
+
+@testset "Cartesian -> UVW spherical vector conversions" begin
+    global_geom = Geometry.SphericalGlobalGeometry(2.0)
+
+    # north pole
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.UVWVector(1.0, 0.0, 0.0)
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(-1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(0.0, 0.0, 1.0),
+        global_geom,
+        Geometry.LatLongPoint(90.0, 0.0),
+    ) == Geometry.UVWVector(0.0, 0.0, 1.0)
+
+    # south pole
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(0.0, 1.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.UVWVector(1.0, 0.0, 0.0)
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(1.0, 0.0, 0.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.UVWVector(0.0, 1.0, 0.0)
+    @test Geometry.LocalVector(
+        Geometry.Cartesian123Vector(0.0, 0.0, -1.0),
+        global_geom,
+        Geometry.LatLongPoint(-90.0, 0.0),
+    ) == Geometry.UVWVector(0.0, 0.0, 1.0)
+
+end

@@ -244,7 +244,7 @@ function _slice_along(field, coord)
     end
 
     # get the elment offset given the axis slice
-    slice_h, _ = ClimaCore.Meshes.containing_element(hmesh_slice, coord)
+    slice_h = ClimaCore.Meshes.containing_element(hmesh_slice, coord)
     hidx = axis == 1 ? linear_idx[slice_h, 1] : linear_idx[1, slice_h]
 
     # find the node idx we want to slice along the given axis element

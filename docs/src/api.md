@@ -53,6 +53,15 @@ Meshes.EquidistantCubedSphere
 Meshes.ConformalCubedSphere
 ```
 
+### Local element map
+
+```@docs
+Meshes.LocalElementMap
+Meshes.LocalElementMap
+Meshes.IntrinsicMap
+Meshes.NormalizedBilinearMap
+```
+
 ### Mesh stretching
 ```@docs
 Meshes.Uniform
@@ -69,6 +78,7 @@ Meshes.boundary_face_name
 Meshes.opposing_face
 Meshes.coordinates
 Meshes.containing_element
+Meshes.reference_coordinates
 Meshes.SharedVertices
 Meshes.face_connectivity_matrix
 Meshes.vertex_connectivity_matrix

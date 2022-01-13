@@ -161,17 +161,38 @@ CartesianVector(
     global_geometry,
     local_geometry.coordinates,
 )
-function CartesianVector(
-    u::UVWVector,
+function local_to_cartesian(
     ::SphericalGlobalGeometry,
-    coord::LatLongPoint,
+    coord::Union{LatLongPoint, LatLongZPoint},
 )
     ϕ = coord.lat
     λ = coord.long
+    sinλ = sind(λ)
+    cosλ = cosd(λ)
+    sinϕ = sind(ϕ)
+    cosϕ = cosd(ϕ)
     G = @SMatrix [
-        -sind(λ) -sind(ϕ)*cosd(λ) cosd(λ)*cosd(ϕ)
-        cosd(λ) -sind(ϕ)*sind(λ) sind(λ)*cosd(ϕ)
-        0 cosd(ϕ) sind(ϕ)
+        -sinλ -cosλ*sinϕ cosλ*cosϕ
+        cosλ -sinλ*sinϕ sinλ*cosϕ
+        0 cosϕ sinϕ
     ]
-    AxisVector(Cartesian123Axis(), G * Geometry.components(u))
+    AxisTensor((Cartesian123Axis(), UVWAxis()), G)
+end
+
+
+function CartesianVector(
+    u::UVWVector,
+    geom::SphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    G * u
+end
+function LocalVector(
+    u::Cartesian123Vector,
+    geom::SphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    G' * u
 end

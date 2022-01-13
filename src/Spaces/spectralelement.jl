@@ -155,112 +155,45 @@ function SpectralElementSpace2D(topology, quadrature_style)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
-    for elem in 1:nelements
-        local_geometry_slab = slab(local_geometry, elem)
+    for e in 1:nelements
+        elem = topology.elemorder[e]
+        local_geometry_slab = slab(local_geometry, e)
         for i in 1:Nq, j in 1:Nq
-            if domain isa Domains.SphereDomain
-                # compute the coordinate and partial derivative matrices for each quadrature point
-                # Guba (2014))
-                ξ = SVector(quad_points[i], quad_points[j])
-                x = Geometry.spherical_bilinear_interpolate(
-                    CoordType3D.(
-                        Topologies.vertex_coordinates(topology, elem),
-                    ),
-                    ξ[1],
-                    ξ[2],
-                    global_geometry.radius,
-                )
+            ξ = SVector(quad_points[i], quad_points[j])
+            if global_geometry isa Geometry.SphericalGlobalGeometry
+                x = Meshes.coordinates(topology.mesh, elem, ξ)
                 u = Geometry.LatLongPoint(x, global_geometry)
-                # [∂x1/∂ξ¹ ∂x1/∂ξ²
-                #  ∂x2/∂ξ¹ ∂x2/∂ξ²
-                #  ∂x3/∂ξ¹ ∂x3/∂ξ²]
-                ∂x∂ξ = ForwardDiff.jacobian(ξ) do ξ
-                    Geometry.components(
-                        Geometry.spherical_bilinear_interpolate(
-                            CoordType3D.(
-                                Topologies.vertex_coordinates(topology, elem),
-                            ),
-                            ξ[1],
-                            ξ[2],
-                            global_geometry.radius,
-                        ),
-                    )
-                end
-                ϕ = u.lat
-                λ = u.long
-                # [∂u/∂x1 ∂u/∂x2 ∂u/∂x3
-                #  ∂v/∂x1 ∂v/∂x2 ∂v/∂x3]
-                # at the pole we orient u and v by taking the limit approaching
-                # from the line λ == 0
-                ∂u∂x = if ϕ == 90
-                    # north pole => u axis is aligned with x2, v is aligned with -x1
-                    @assert λ == 0
-                    @SMatrix [
-                        0 one(ϕ) 0
-                        -one(ϕ) 0 0
-                    ]
-                elseif ϕ == -90
-                    # south pole => u axis is aligned with x2, v is aligned with x1
-                    @assert λ == 0
-                    @SMatrix [
-                        0 one(ϕ) 0
-                        one(ϕ) 0 0
-                    ]
-                else
-                    #=
-                        # TODO: this might be more stable?
-                        [
-                            -sind(λ) cosd(λ) 0
-                            -sind(ϕ)*cosd(λ) -sind(ϕ)*sind(λ) cosd(ϕ)
-                        ]
-                    =#
-                    @SMatrix [
-                        -sind(λ) cosd(λ) 0
-                        0 0 1/cosd(ϕ)
-                    ]
-                end
-                ∂u∂ξ = ∂u∂x * ∂x∂ξ
-            else
-
-                # this hard-codes a bunch of assumptions, and will unnecesarily duplicate data
-                # e.g. where all metric terms are uniform over the space
-                # alternatively: move local_geometry to a different object entirely, to support overintegration
-                # (where the integration is of different order)
-                ξ = SVector(quad_points[i], quad_points[j])
-                u = Geometry.bilinear_interpolate(
-                    CoordType2D.(
-                        Topologies.vertex_coordinates(topology, elem),
+                ∂x∂ξ = Geometry.AxisTensor(
+                    (
+                        Geometry.Cartesian123Axis(),
+                        Geometry.CovariantAxis{AIdx}(),
                     ),
-                    ξ[1],
-                    ξ[2],
+                    ForwardDiff.jacobian(ξ) do ξ
+                        Geometry.components(
+                            Meshes.coordinates(topology.mesh, elem, ξ),
+                        )
+                    end,
                 )
-                ∂u∂ξ = ForwardDiff.jacobian(ξ) do ξ
-                    local x
-                    x = Geometry.bilinear_interpolate(
-                        CoordType2D.(
-                            Topologies.vertex_coordinates(topology, elem),
-                        ),
-                        ξ[1],
-                        ξ[2],
-                    )
-                    SVector(Geometry.component(x, 1), Geometry.component(x, 2))
-                end
-            end
-            J = det(∂u∂ξ)
-            WJ = J * quad_weights[i] * quad_weights[j]
-
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(
-                u,
-                J,
-                WJ,
-                Geometry.AxisTensor(
+                G = Geometry.local_to_cartesian(global_geometry, u)
+                ∂u∂ξ = Geometry.project(Geometry.LocalAxis{AIdx}(), G' * ∂x∂ξ)
+            else
+                u = Meshes.coordinates(topology.mesh, elem, ξ)
+                ∂u∂ξ = Geometry.AxisTensor(
                     (
                         Geometry.LocalAxis{AIdx}(),
                         Geometry.CovariantAxis{AIdx}(),
                     ),
-                    ∂u∂ξ,
-                ),
-            )
+                    ForwardDiff.jacobian(ξ) do ξ
+                        Geometry.components(
+                            Meshes.coordinates(topology.mesh, elem, ξ),
+                        )
+                    end,
+                )
+            end
+            J = det(Geometry.components(∂u∂ξ))
+            WJ = J * quad_weights[i] * quad_weights[j]
+
+            local_geometry_slab[i, j] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
         end
     end
 

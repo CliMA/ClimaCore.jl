@@ -9,20 +9,21 @@ The number of elements in the mesh.
 nelements(mesh::AbstractMesh) = length(elements(mesh))
 
 """
-    i, ξs = split_refcoord(ξ, n)
+    i = refindex(ϕ, n)
 
-Given a reference coordinate `ξ` in the interval `[-1, 1]``, divide the interval
+Given a reference coordinate `ϕ` in the interval `[-1, 1]``, divide the interval
 into `n` evenly spaced subintervals, and return the index of the subinterval
-(`i`), and the position in the subinterval (`ξs`), normalized to normalized `[-1, 1]`.
+(`i`), and the position in the subinterval (`ϕs`), normalized to normalized `[-1, 1]`.
 """
-function split_refcoord(ξ, n)
-    ξn = ξ * n
+function refindex(ϕ, n)
+    ϕn = ϕ * n
     # we use Julia's range lookup here, which avoids intermediate rounding errors.
-    i = min(searchsortedlast((-n):2:n, ξn), n)
-    ξ = ξn - (2 * i - n - 1)
-    return (i, ξ)
+    return min(searchsortedlast((-n):2:n, ϕn), n)
 end
-
+function refcoord(ϕ, n, i)
+    ϕn = ϕ * n
+    return ϕn - (2 * i - n - 1)
+end
 
 """
     Meshes.SharedVertices(mesh, elem, vert)
@@ -162,11 +163,11 @@ end
 
 """
     Meshes.coordinates(mesh, elem, vert::Int)
-    Meshes.coordinates(mesh, elem, (ξ1, ξ2)::Tuple)
+    Meshes.coordinates(mesh, elem, ξ::SVector)
 
 Return the physical coordinates of a point in an element `elem` of `mesh`. The
-position of the point can either be a vertex number `vert` or a pair of coordinates
-`(ξ1, ξ2)` in the reference element.
+position of the point can either be a vertex number `vert` or the coordinates
+`ξ` in the reference element.
 """
 function coordinates(mesh::AbstractMesh2D, elem, vert::Integer)
     FT = Domains.float_type(domain(mesh))
@@ -178,9 +179,21 @@ end
 
 
 """
-    elem, (ξ1, ξ2) = Meshes.containing_element(mesh::AbstractCubedSphere, coord)
+    elem = Meshes.containing_element(mesh::AbstractMesh, coord)
 
-Return the element (`elem`) in `mesh` containing the coordinate `coord`, and the position (`ξ1, ξ2`)
-within the reference element.
+The element `elem` in `mesh` containing the coordinate `coord`. If the
+coordinate falls on the boundary between two or more elements, an arbitrary
+element is chosen.
 """
 function containing_element end
+
+"""
+    ξ = Meshes.reference_coordinates(mesh::AbstractMesh, elem, coord)
+
+An `SVector` of coordinates in the reference element such that
+
+    Meshes.coordinates(mesh, elem, ξ) == coord
+
+This can be used for interpolation to a specific point.
+"""
+function reference_coordinates end
