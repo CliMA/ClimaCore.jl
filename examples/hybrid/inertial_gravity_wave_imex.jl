@@ -5,7 +5,7 @@ ode_algorithm = KenCarp4
 prob = inertial_gravity_wave_prob(;
     𝔼_var = :ρθ,
     𝕄_var = :ρw,
-    helem = 75,
+    helem = 10,
     velem = 10,
     npoly = 4,
     is_large_domain = true,
@@ -13,6 +13,7 @@ prob = inertial_gravity_wave_prob(;
     is_imex = true,
     tspan = (0., 10000.),
     J_𝕄ρ_overwrite = :none,
+    is_3D = true,
 )
 
 sol = solve(
