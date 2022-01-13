@@ -38,7 +38,7 @@ A simpler `map` impl for mapping function `fn` over `tup1`, `tup2` tuple argumen
 @inline function tuplemap(fn::F, tup1::Tuple, tup2::Tuple) where {F}
     N1 = length(tup1)
     N2 = length(tup2)
-    ntuple(min(N1, N2))) do I
+    ntuple(min(N1, N2)) do I
         Base.@_inline_meta
         @inbounds elem1 = tup1[I]
         @inbounds elem2 = tup2[I]
