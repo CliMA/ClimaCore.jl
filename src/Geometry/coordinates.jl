@@ -27,7 +27,7 @@ abstract type AbstractPoint{FT} end
 Return the floating point type backing `T`: `T` can either be an object or a type.
 """
 float_type(::Type{<:AbstractPoint{FT}}) where {FT} = FT
-float_type(::AbstractPoint) where {FT} = FT
+float_type(::AbstractPoint{FT}) where {FT} = FT
 
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract2DPoint{FT} <: AbstractPoint{FT} end
