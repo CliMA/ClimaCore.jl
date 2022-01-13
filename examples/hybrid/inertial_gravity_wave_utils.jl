@@ -97,11 +97,11 @@ function init_inertial_gravity_wave_ρθ_2D(x, z, A)
     ρ = p_ref / ((p_ref / p_0)^(R_d / cp_d) * R_d * θ)
     ρθ = ρ * θ
 
-    return (ρ = ρ, ρθ = ρθ, uₕ = Geometry.UVector(0.))
+    return (ρ = ρ, ρθ = ρθ, uₕ = Geometry.Covariant1Vector(0.))
 end
 function init_inertial_gravity_wave_ρθ_3D(x, y, z, A)
     Yc = init_inertial_gravity_wave_ρθ_2D(x, z, A)
-    return (ρ = Yc.ρ, ρθ = Yc.ρθ, uₕ = Geometry.UVVector(0., 0.))
+    return (ρ = Yc.ρ, ρθ = Yc.ρθ, uₕ = Geometry.Covariant12Vector(0., 0.))
 end
 function ρθ_to_ρe_tot(Yc, Φ)
     ρe_tot = (P_ρθ_factor * Yc.ρθ^γ) / P_ρe_factor + Yc.ρ * Φ
@@ -133,18 +133,18 @@ function inertial_gravity_wave_prob(;
     face_coords = Fields.coordinate_field(face_space)
 
     ρuₕ = is_3D ?
-        map(c -> Geometry.UVVector(0., 0.), coords) :
-        map(c -> Geometry.UVector(0.), coords)
+        map(c -> Geometry.Covariant12Vector(0., 0.), coords) :
+        map(c -> Geometry.Covariant1Vector(0.), coords)
     uₕ_f = is_3D ?
-        map(c -> Geometry.UVVector(0., 0.), face_coords) :
-        map(c -> Geometry.UVector(0.), face_coords)
+        map(c -> Geometry.Covariant12Vector(0., 0.), face_coords) :
+        map(c -> Geometry.Covariant1Vector(0.), face_coords)
     P = map(c -> 0., coords)
     Φ = map(c -> gravitational_potential(c.z), coords)
     ∇ᵥf_Φ = Operators.GradientC2F(
         bottom = Operators.SetValue(gravitational_potential(0.)),
         top = Operators.SetValue(gravitational_potential(zmax)),
     )
-    ∇Φ = @. Geometry.transform(ŵ(), ∇ᵥf_Φ(Φ))
+    ∇Φ = @. ∇ᵥf_Φ(Φ)
     p = (; coords, face_coords, ρuₕ, uₕ_f, P, Φ, ∇Φ)
 
     Yc = is_3D ?
@@ -155,7 +155,7 @@ function inertial_gravity_wave_prob(;
     elseif 𝔼_var != :ρθ
         throw(ArgumentError("Invalid 𝔼_var $𝔼_var (must be :ρθ or :ρe_tot)"))
     end
-    𝕄 = map(c -> Geometry.WVector(0.), face_coords)
+    𝕄 = map(c -> Geometry.Covariant3Vector(0.), face_coords)
 
     if !(J_𝕄ρ_overwrite in (:none, :grav, :pres))
         throw(ArgumentError(string(
