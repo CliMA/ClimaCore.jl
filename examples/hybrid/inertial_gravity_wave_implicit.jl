@@ -22,9 +22,9 @@ sol = solve(
     dt = 5.,
     adaptive = false,
     saveat = 10.,
-    # progress = true,
-    # progress_steps = 1,
-    # progress_message = (dt, u, p, t) -> t,
+    progress = true,
+    progress_steps = 1,
+    progress_message = (dt, u, p, t) -> t,
 )
 
 inertial_gravity_wave_plots(sol, "large_domain_w_rosenbrock23_5s_1000s")

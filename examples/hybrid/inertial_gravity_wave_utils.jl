@@ -97,15 +97,15 @@ function init_inertial_gravity_wave_ρθ_2D(x, z, A)
     ρ = p_ref / ((p_ref / p_0)^(R_d / cp_d) * R_d * θ)
     ρθ = ρ * θ
 
-    return (ρ = ρ, ρθ = ρθ, ρuₕ = Geometry.UVector(0.))
+    return (ρ = ρ, ρθ = ρθ, uₕ = Geometry.UVector(0.))
 end
 function init_inertial_gravity_wave_ρθ_3D(x, y, z, A)
     Yc = init_inertial_gravity_wave_ρθ_2D(x, z, A)
-    return (ρ = Yc.ρ, ρθ = Yc.ρθ, ρuₕ = Geometry.UVVector(0., 0.))
+    return (ρ = Yc.ρ, ρθ = Yc.ρθ, uₕ = Geometry.UVVector(0., 0.))
 end
 function ρθ_to_ρe_tot(Yc, Φ)
     ρe_tot = (P_ρθ_factor * Yc.ρθ^γ) / P_ρe_factor + Yc.ρ * Φ
-    return (ρ = Yc.ρ, ρe_tot = ρe_tot, ρuₕ = Yc.ρuₕ)
+    return (ρ = Yc.ρ, ρe_tot = ρe_tot, uₕ = Yc.uₕ)
 end
 
 using OrdinaryDiffEq
@@ -132,7 +132,7 @@ function inertial_gravity_wave_prob(;
     coords = Fields.coordinate_field(space)
     face_coords = Fields.coordinate_field(face_space)
 
-    uₕ = is_3D ?
+    ρuₕ = is_3D ?
         map(c -> Geometry.UVVector(0., 0.), coords) :
         map(c -> Geometry.UVector(0.), coords)
     uₕ_f = is_3D ?
@@ -145,7 +145,7 @@ function inertial_gravity_wave_prob(;
         top = Operators.SetValue(gravitational_potential(zmax)),
     )
     ∇Φ = @. Geometry.transform(ŵ(), ∇ᵥf_Φ(Φ))
-    p = (; coords, face_coords, uₕ, uₕ_f, P, Φ, ∇Φ)
+    p = (; coords, face_coords, ρuₕ, uₕ_f, P, Φ, ∇Φ)
 
     Yc = is_3D ?
         map(c -> init_inertial_gravity_wave_ρθ_3D(c.x, c.y, c.z, A), coords) :
