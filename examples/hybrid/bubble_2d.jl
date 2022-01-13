@@ -294,7 +294,7 @@ prob = ODEProblem(rhs!, Y, (0.0, 500.0))
 
 haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
 
-sol = solve(
+sol = @timev solve(
     prob,
     SSPRK33(),
     dt = Δt,
