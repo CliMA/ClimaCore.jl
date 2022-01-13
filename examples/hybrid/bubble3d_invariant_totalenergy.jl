@@ -126,6 +126,7 @@ function rhs_invariant!(dY, Y, _, t)
     dw = dY.w
     duₕ = dY.uₕ
     dρe = dY.Yc.ρe
+    z = coords.z
 
     # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33
@@ -219,8 +220,8 @@ function rhs_invariant!(dY, Y, _, t)
         cω³ × Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
     ce = @. cρe / cρ
-    #cp = @. pressure(cρ, ce, cuvw, coords.z) #TODO: the pressure function doesn't work (broadcast error)
-    cI = @. ce - Φ(coords.z) - (norm(cuvw)^2) / 2
+    #cp = @. pressure(cρ, ce, cuvw, z) #TODO: the pressure function doesn't work (broadcast error)
+    cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
     cT = @. cI / C_v + T_0
     cp = @. cρ * R_d * cT
 
@@ -231,7 +232,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 

@@ -154,6 +154,10 @@ function rhs!(dY, Y, _, t)
     dYc = dY.Yc
     dρuₕ = dY.ρuₕ
     dρw = dY.ρw
+    ρ = Yc.ρ
+    ρθ = Yc.ρθ
+    dρθ = dYc.ρθ
+    dρ = dYc.ρ
 
     # spectral horizontal operators
     hdiv = Operators.Divergence()
@@ -201,16 +205,16 @@ function rhs!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-    uₕ = @. ρuₕ / Yc.ρ
-    w = @. ρw / If(Yc.ρ)
-    wc = @. Ic(ρw) / Yc.ρ
-    p = @. pressure(Yc.ρθ)
-    θ = @. Yc.ρθ / Yc.ρ
-    Yfρ = @. If(Yc.ρ)
+    uₕ = @. ρuₕ / ρ
+    w = @. ρw / If(ρ)
+    wc = @. Ic(ρw) / ρ
+    p = @. pressure(ρθ)
+    θ = @. ρθ / ρ
+    Yfρ = @. If(ρ)
 
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
-    @. dYc.ρθ = hdiv(hgrad(θ))
+    @. dρθ = hdiv(hgrad(θ))
     @. dρuₕ = hdiv(hgrad(uₕ))
     @. dρw = hdiv(hgrad(w))
     Spaces.weighted_dss!(dYc)
@@ -218,17 +222,17 @@ function rhs!(dY, Y, _, t)
     Spaces.weighted_dss!(dρw)
 
     κ₄ = 100.0 # m^4/s
-    @. dYc.ρθ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρθ))
-    @. dρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dρuₕ))
+    @. dYc.ρθ = -κ₄ * hdiv(ρ * hgrad(dρθ))
+    @. dρuₕ = -κ₄ * hdiv(ρ * hgrad(dρuₕ))
     @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
     # density
-    @. dYc.ρ = -∂(ρw)
-    @. dYc.ρ -= hdiv(ρuₕ)
+    @. dρ = -∂(ρw)
+    @. dρ -= hdiv(ρuₕ)
 
     # potential temperature
-    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
-    @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
+    @. dρθ += -(∂(ρw * If(ρθ / ρ)))
+    @. dρθ -= hdiv(uₕ * ρθ)
 
     # horizontal momentum
     Ih = Ref(
@@ -241,21 +245,20 @@ function rhs!(dY, Y, _, t)
     @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
+    z = coords.z
     @. dρw +=
         B(
-            Geometry.transform(
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
+            Geometry.transform(Geometry.WAxis(), -(∂f(p)) - If(ρ) * ∂f(Φ(z))) -
+            vvdivc2f(Ic(ρw ⊗ w)),
         ) + fcf(wc, ρw)
-    uₕf = @. If(ρuₕ / Yc.ρ) # requires boundary conditions
+    uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     ### UPWIND FLUX CORRECTION
     upwind_correction = true
     if upwind_correction
-        @. dYc.ρ += fcc(w, Yc.ρ)
-        @. dYc.ρθ += fcc(w, Yc.ρθ)
+        @. dρ += fcc(w, ρ)
+        @. dρθ += fcc(w, ρθ)
         @. dρuₕ += fcc(w, ρuₕ)
         @. dρw += fcf(wc, ρw)
     end
@@ -263,19 +266,19 @@ function rhs!(dY, Y, _, t)
     ### DIFFUSION
     κ₂ = 0.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(ρuₕ / Yc.ρ)))
+    @. dρuₕ += hdiv(κ₂ * (ρ * hgrad(ρuₕ / ρ)))
     #  1b) vertical div of vertical grad of horiz momentun
-    @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / Yc.ρ)))
+    @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / ρ)))
 
     #  1c) horizontal div of horizontal grad of vert momentum
     @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
     #  1d) vertical div of vertical grad of vert momentun
-    @. dρw += vvdivc2f(κ₂ * (Yc.ρ * ∂c(ρw / Yfρ)))
+    @. dρw += vvdivc2f(κ₂ * (ρ * ∂c(ρw / Yfρ)))
 
     #  2a) horizontal div of horizontal grad of potential temperature
-    @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
+    @. dYc.ρθ += hdiv(κ₂ * (ρ * hgrad(ρθ / ρ)))
     #  2b) vertical div of vertial grad of potential temperature
-    @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
+    @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(ρθ / ρ)))
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρuₕ)
