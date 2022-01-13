@@ -173,6 +173,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column Hydrostatic Balance Eq with discretely balanced initial condition"
+    key: "cpu_column_hydrostatic_discrete"
+    command:
+      - "julia --color=yes --project=examples examples/column/hydrostatic_discrete.jl"
+    artifact_paths:
+      - "examples/column/output/hydrostatic_discrete/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Column Hydrostatic Balance Eq - implicit"
     key: "cpu_column_hydrostatic_implicit"
     command:
