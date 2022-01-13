@@ -235,7 +235,6 @@ function discrete_hydrostatic_balance!(ρ, p, dz, grav)
     end
 end
 
-# discrete_hydrostatic_balance!(ρ, w, ρθ, 30e3/15.0, grav, Π)
 discrete_hydrostatic_balance!(ρ, p, z_top/n_vert, grav)
 
 # set up initial condition: not discretely balanced; only a place holder
@@ -257,7 +256,7 @@ rhs!(dYdt, Y, nothing, 0.0)
 using OrdinaryDiffEq
 # Solve the ODE
 dt = 5
-T = 3600
+T = 3600 * 24 * 5
 prob = ODEProblem(rhs!, Y, (0.0, T))
 
 # solve ode
@@ -265,14 +264,24 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = dt,
-    saveat = dt,
+    saveat = 3600 * 12, #dt,
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
 )
 
+outfile = "/central/scratch/jiahe/ClimaCore/test_sbr/sbr-out_he-"*string(horz_elem)*"_hp-"*string(horz_poly)*"_ve"*string(vert_elem)*".jld2" 
+
+using JLD2, FileIO
+jldsave(
+    outfile, sol = sol, t = t, horz_elem = horz_elem,
+    vert_elem = vert_elem, horz_poly = horz_poly
+    )
+
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+
+
 
 @test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
 @test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11

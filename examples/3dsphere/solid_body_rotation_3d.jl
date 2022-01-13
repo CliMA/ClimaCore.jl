@@ -20,6 +20,12 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+FT = Float64
+
+const n_vert = 10
+const n_horz = 4
+const p_horz = 5
+
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
 const z_top = 3.0e4 # height position of the model top
@@ -30,6 +36,7 @@ const R_d = 287.058 # R dry (gas constant / mol mass dry air)
 const T_tri = 273.16 # triple point temperature
 const γ = 1.4 # heat capacity ratio
 const cv_d = R_d / (γ - 1)
+const cp_d = R_d + cv_d
 
 const T_0 = 300 # isothermal atmospheric temperature
 const H = R_d * T_0 / grav # scale height
@@ -79,12 +86,22 @@ function init_sbr_thermo(z)
     p = p_0 * exp(-z / H)
     ρ = 1 / R_d / T_0 * p
 
-    T = p / ρ / R_d
-
-    e = cv_d * (T - T_tri) + Φ(z)
+    e = cv_d * (T_0 - T_tri) + Φ(z)
     ρe = ρ * e
 
     return (ρ = ρ, ρe = ρe)
+end
+
+function init_sbr_thermo_θ(z)
+
+    p = p_0 * exp(-z / H)
+    ρ = 1 / R_d / T_0 * p
+
+    θ = T_0 * (p_0/p)^(R_d/cp_d)
+
+    ρθ = ρ * θ
+
+    return (ρ = ρ, ρθ = ρθ)
 end
 
 function rhs!(dY, Y, _, t)
@@ -198,7 +215,7 @@ function rhs!(dY, Y, _, t)
 end
 
 # set up 3D spherical domain and coords
-hv_center_space, hv_face_space = sphere_3D()
+hv_center_space, hv_face_space = sphere_3D(R, (0, z_top), n_horz, n_vert, p_horz)
 c_coords = Fields.coordinate_field(hv_center_space)
 f_coords = Fields.coordinate_field(hv_face_space)
 
@@ -207,8 +224,54 @@ const f = @. Geometry.Contravariant3Vector(
     Geometry.WVector(2 * Ω * sind(c_coords.lat)),
 )
 
-# set up initial condition
+# discrete hydrostatic profile
+zc_vec = parent(c_coords.z) |> unique
+
+N = length(zc_vec)
+ρ = zeros(Float64, N)
+p = zeros(Float64, N)
+ρθ = zeros(Float64, N)
+ρe_old = zeros(Float64, N)
+ρe_new = zeros(Float64, N)
+
+function pressureθ(ρθ)
+    if ρθ >= 0
+        return p_0 * (R_d * ρθ / p_0)^γ
+    else
+        return NaN
+    end
+end
+
+for i = 1:N
+    var = init_sbr_thermo_θ(zc_vec[i])
+    ρ[i]  = var.ρ
+    ρθ[i] = var.ρθ
+    p[i] = pressureθ(ρθ[i])
+
+    var = init_sbr_thermo(zc_vec[i])
+    ρe_old[i] = var.ρe
+end
+ρ_old = copy(ρ)
+
+function discrete_hydrostatic_balance!(ρ, p, dz, grav)
+    for i in 1:(length(ρ) - 1)
+        ρ[i + 1] =  - ρ[i] - 2 * ( p[i+1] - p[i] ) / dz / grav
+    end
+end
+
+discrete_hydrostatic_balance!(ρ, p, z_top/n_vert, grav) 
+# now ρ, p, and ρθ in discrete hydrostatic balance; and satisfies eos
+# only need to compute ρe from them
+
+ρe_new = @. ρe_old + (ρ - ρ_old) * Φ(zc_vec) - (ρ - ρ_old) * cv_d * T_tri# * ( cv_d * (T - T_tri) + Φ(zc_vec) + 0.0)
+
+# set up initial condition: not discretely balanced; only a place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
+# put the dicretely balanced ρ and ρθ into Yc
+parent(Yc.ρ) .=  ρ  # Yc.ρ is a VIJFH layout
+parent(Yc.ρe) .= ρe_new
+
+
 uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
@@ -221,7 +284,7 @@ rhs!(dYdt, Y, nothing, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-T = 3600
+T = 10 #3600
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, T))
 
