@@ -2,7 +2,6 @@ if !("." in LOAD_PATH)
     push!(LOAD_PATH, ".")
 end
 import Coverage
-import Plots
 
 # Track allocations in ClimaCore.jl plus all _direct_ dependencies
 exhaustive = "exhaustive=true" in ARGS
@@ -90,7 +89,7 @@ for (case, args) in all_cases
         error("Not yet supported")
     else
         run(
-            `julia --project=examples/ --track-allocation=all perf/allocs_per_case.jl $args`,
+            `$(Base.julia_cmd()) --project=examples/ --track-allocation=all perf/allocs_per_case.jl $args`,
         )
     end
 
@@ -111,18 +110,30 @@ end
 
 @info "Post-processing allocations"
 
+const PKG_ORG = "https://github.com/CliMA"
 const PKG_NAME = "ClimaCore.jl"
 
-function plot_allocs(
+function format_locid(locid)
+    relpth, lineno = split(locid, ':')
+    if !exhaustive && "BUILDKITE" in ENV && ENV["BUILDKITE"] == "true"
+        return join(
+            [PKG_ORG, PKG_NAME, "blob", ENV["BUILDKITE_COMMIT"], relpth],
+            '/',
+        ) * "#$(lineno)"
+    end
+    return join([PKG_NAME, locid], '/')
+end
+
+function print_allocs(
     folder,
     case_name,
     allocs_per_case,
     script_args,
     n_unique_bytes,
 )
-    p = Plots.plot()
     case_name_args =
         script_args == "" ? case_name : case_name * "_$(script_args)"
+
     @info "Allocations for $case_name_args"
 
     function filename_only(fn)
@@ -132,14 +143,15 @@ function plot_allocs(
         fn = replace(fn, "\\" => "/") # for windows...
         splitby = PKG_NAME
         if occursin(splitby, fn)
-            fn = PKG_NAME * last(split(fn, splitby))
+            fn = last(split(fn, splitby))
         end
         splitby = "climacore-ci/"
         if occursin(splitby, fn)
-            fn = PKG_NAME * last(split(fn, splitby))
+            fn = last(split(fn, splitby))
         end
         return fn
     end
+
     function compile_pkg(fn, linenumber)
         c1 = endswith(filename_only(fn), PKG_NAME)
         c2 = linenumber == 1
@@ -149,65 +161,33 @@ function plot_allocs(
     filter!(x -> x.bytes ≠ 0, allocs_per_case)
     filter!(x -> !compile_pkg(x.filename, x.linenumber), allocs_per_case)
 
-    for alloc in allocs_per_case
-        println(alloc)
-    end
-    println("Number of allocating sites: $(length(allocs_per_case))")
-    case_bytes = getproperty.(allocs_per_case, :bytes)[end:-1:1]
-    case_filename = getproperty.(allocs_per_case, :filename)[end:-1:1]
-    case_linenumber = getproperty.(allocs_per_case, :linenumber)[end:-1:1]
+    case_bytes = reverse(getproperty.(allocs_per_case, :bytes))
+    case_filename = reverse(getproperty.(allocs_per_case, :filename))
+    case_linenumber = reverse(getproperty.(allocs_per_case, :linenumber))
+
     all_bytes = Int[]
-    filenames = String[]
-    linenumbers = Int[]
     loc_ids = String[]
+
     for (bytes, filename, linenumber) in
         zip(case_bytes, case_filename, case_linenumber)
         compile_pkg(filename, linenumber) && continue # Skip loading module
-        loc_id = "$(filename_only(filename))" * "$linenumber"
+        loc_id = "$(filename_only(filename)):$(linenumber)"
         if !(bytes in all_bytes) && !(loc_id in loc_ids)
             push!(all_bytes, bytes)
-            push!(filenames, filename)
-            push!(linenumbers, linenumber)
             push!(loc_ids, loc_id)
             if length(all_bytes) ≥ n_unique_bytes
                 break
             end
         end
     end
-
-    all_bytes = all_bytes ./ 10^3
-    max_bytes = maximum(all_bytes)
-    @info "$case_name_args: $all_bytes"
-    xtick_name(filename, linenumber) = "$filename, line number: $linenumber"
-    markershape = (:square, :hexagon, :circle, :star, :utriangle, :dtriangle)
-    for (bytes, filename, linenumber) in zip(all_bytes, filenames, linenumbers)
-        label = xtick_name(filename_only(filename), linenumber)
-        Plots.plot!(
-            [0],
-            [bytes];
-            seriestype = :scatter,
-            label = label,
-            markershape = markershape[1],
-            markersize = 1 + bytes / max_bytes * 10,
-        )
-        markershape = (markershape[end], markershape[1:(end - 1)]...)
+    all_kbytes = map(b -> div(b, 10^3), all_bytes)
+    println("Number of allocating sites: $(length(all_kbytes))")
+    open(joinpath(folder, "$case_name_args" * ".csv"), "w") do fh
+        for (kb, loc) in zip(all_kbytes, loc_ids)
+            println("$kb\t|\t$(format_locid(loc))")
+            println(fh, "$kb,$loc")
+        end
     end
-    p1 = Plots.plot!(
-        ylabel = "Allocations (KB)",
-        title = case_name_args,
-        legendfontsize = 6,
-    )
-    n_subset = min(length(allocs_per_case) - 1, 100)
-    subset_allocs_per_case = allocs_per_case[end:-1:(end - n_subset)]
-    p2 = Plots.plot(
-        1:length(subset_allocs_per_case),
-        getproperty.(subset_allocs_per_case, :bytes) ./ 1000;
-        xlabel = "i-th allocating line (truncated and sorted)",
-        ylabel = "Allocations (KB)",
-        markershape = :circle,
-    )
-    Plots.plot(p1, p2, layout = Plots.grid(2, 1))
-    Plots.savefig(joinpath(folder, "allocations_$case_name_args.png"))
 end
 
 folder =
@@ -217,7 +197,7 @@ mkpath(folder)
 
 @info "Allocated bytes for single tendency per case:"
 for (case, args) in all_cases
-    plot_allocs(
+    print_allocs(
         folder,
         first(split(basename(case), ".jl")),
         allocs[case],
