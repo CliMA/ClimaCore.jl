@@ -186,7 +186,7 @@ end
 end
 
 @testset "hybrid 3d sphere" begin
-    R = 6.37122e6
+    R = 100.0
 
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, 4)
