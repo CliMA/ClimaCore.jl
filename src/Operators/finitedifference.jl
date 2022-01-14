@@ -2073,12 +2073,10 @@ Base.Broadcast._broadcast_getindex_eltype(
 ) = eltype(bc)
 
 # check that inferred output field space is equal to dest field space
-@noinline inferred_stencil_spaces_error(
-    dest_space_type::Type,
-    result_space_type::Type,
-) = error(
-    "dest space `$dest_space_type` is not the same instance as the inferred broadcasted result space `$result_space_type`",
+inferred_stencil_spaces_error(::Type{A}, ::Type{B}) = error(
+    "dest space `$A` is not the same instance as the inferred broadcasted result space `$B`",
 )
+inferred_stencil_spaces_error(::T, ::T) where {T} = nothing
 
 function Base.Broadcast.materialize!(
     ::Base.Broadcast.BroadcastStyle,
@@ -2086,11 +2084,9 @@ function Base.Broadcast.materialize!(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
-    if result_space !== dest_space
-        # TODO: we pass the types here to avoid stack copying data
-        # but this could lead to a confusing error message (same space type but different instances)
-        inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
-    end
+    # TODO: we pass the types here to avoid stack copying data
+    # but this could lead to a confusing error message (same space type but different instances)
+    inferred_stencil_spaces_error(dest_space, result_space)
     # the default Base behavior is to instantiate a Broadcasted object with the same axes as the dest
     return copyto!(
         dest,
