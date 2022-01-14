@@ -93,7 +93,10 @@ end
     array = zeros(Float64, Nij, Nij, 2, Nh)
     data = IJFH{typeof(SA), Nij}(array)
     data_slab = slab(data, 1)
-    data_slab[1, 1] = SA
+    ret = begin
+        data_slab[1, 1] = SA
+    end
+    @test ret === SA
     @test data_slab[1, 1] isa typeof(SA)
     @test_throws MethodError data_slab[1, 1] = SB
 end
