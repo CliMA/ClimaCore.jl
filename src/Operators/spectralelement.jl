@@ -224,6 +224,13 @@ end
 
 # 1D get/set node
 
+# Recursively call get_node() on broadcast arguments in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline node_args(args::Tuple, inds...) =
+    (get_node(args[1], inds...), node_args(Base.tail(args), inds...)...)
+@inline node_args(args::Tuple{Any}, inds...) = (get_node(args[1], inds...),)
+@inline node_args(args::Tuple{}, inds...) = ()
+
 # 1D intermediate slab data types
 Base.@propagate_inbounds function get_node(v::MVector, i)
     v[i]
@@ -242,11 +249,7 @@ Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
 end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i)
-    args = tuplemap(bc.args) do arg
-        Base.@_propagate_inbounds_meta
-        get_node(arg, i)
-    end
-    bc.f(args...)
+    bc.f(node_args(bc.args, i)...)
 end
 
 Base.@propagate_inbounds set_node!(field::Fields.SlabField1D, i, val) =
@@ -270,11 +273,7 @@ Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
 end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
-    args = tuplemap(bc.args) do arg
-        Base.@_propagate_inbounds_meta
-        get_node(arg, i, j)
-    end
-    bc.f(args...)
+    bc.f(node_args(bc.args, i, j)...)
 end
 
 Base.@propagate_inbounds function set_node!(
