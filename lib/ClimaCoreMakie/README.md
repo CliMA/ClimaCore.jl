@@ -34,7 +34,7 @@ Finally call `viz`:
     cd ClimaCore/lib/ClimaCoreMakie
 
     # Add ClimaCore to subpackage environment
-    julia --project -e 'using Pkg; Pkg.develop(path="../../")
+    julia --project -e 'using Pkg; Pkg.develop(path="../../")'
 
     # Instantiate ClimaCoreMakie project environment
     julia --project -e 'using Pkg; Pkg.instantiate()'

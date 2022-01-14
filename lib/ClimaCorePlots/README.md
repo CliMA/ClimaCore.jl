@@ -36,7 +36,7 @@ Consult the Plots.jl documentation for more information regarding setting attrib
     cd ClimaCore/lib/ClimaCorePlots
 
     # Add ClimaCore to subpackage environment
-    julia --project -e 'using Pkg; Pkg.develop(path="../../")
+    julia --project -e 'using Pkg; Pkg.develop(path="../../")'
 
     # Instantiate ClimaCorePlots project environment
     julia --project -e 'using Pkg; Pkg.instantiate()'

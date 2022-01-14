@@ -21,7 +21,7 @@ You can now use ClimaCoreVTK in your ClimaCore pkg environment:
     cd ClimaCore/lib/ClimaCoreVTK
 
     # Add ClimaCore to subpackage environment
-    julia --project -e 'using Pkg; Pkg.develop("../../")
+    julia --project -e 'using Pkg; Pkg.develop(path="../../")'
 
     # Instantiate ClimaCoreVTK project environment
     julia --project -e 'using Pkg; Pkg.instantiate()'
