@@ -87,7 +87,7 @@ function init_sbr_thermo(z)
     e = cv_d * (T_0 - T_tri) + Φ(z)
     ρe = ρ * e
 
-    return (ρ = ρ, ρe = ρe)
+    return (ρ = ρ, ρe = ρe, p = p)
 end
 
 function rhs!(dY, Y, _, t)
@@ -249,39 +249,65 @@ Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
 parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJFH layout
 parent(Yc.ρe) .= ρe
 
-# initialize velocity: at rest
-uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
-w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
-Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
-
-# initialize tendency
-dYdt = similar(Y)
-# set up rhs
-rhs!(dYdt, Y, nothing, 0.0)
-
-# run!
-using OrdinaryDiffEq
-# Solve the ODE
-T = 3600
-dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, T))
-
-# solve ode
-sol = solve(
-    prob,
-    SSPRK33(),
-    dt = dt,
-    saveat = dt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, p, t) -> t,
+Yc2 = map(coord -> init_sbr_thermo(coord.z), c_coords)
+vgradc2f = Operators.GradientC2F(
+    bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
 )
 
-uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
-w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+If2c = Operators.InterpolateF2C()
+cp = Yc2.p
+fρ =  @. -vgradc2f(cp).components.data.:1 / vgradc2f(Φ(c_coords.z)).components.data.:1
+cρ = If2c.(fρ)
 
-@test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
-@test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
-@test maximum(abs.(w_phy |> parent)) ≤ 1e-11
-@test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-@test norm(sol.u[end].Yc.ρe) ≈ norm(sol.u[1].Yc.ρe) rtol = 1e-2
+#  cp =   (1)
+#  (2)
+
+# N levels
+# 1) given cp
+# 2) solve for cρ : vgradc2f(cp) / Ic2f(cρ) + vgradc2f(Φ(c_coords.z)) == 0 
+#   (a) fρ = - vgradc2f(cp) / vgradc2f(Φ(c_coords.z))  # N-1 values: values at boundary are undefined
+#   (b) find cρ such that Ic2f(cρ) = fρ  # N unknowns: need an extra constraint on cρ; e.g. choose cρ[1] 
+#       ρ[i + 1] = -ρ[i] - 2 * (p[i + 1] - p[i]) / dz / grav
+# 3) solve for ce: @. pressure(cρ, ce, norm(cuvw), c_coords.z) == cp
+
+
+
+# pressure(z=0) = p_0,  i = 1/2
+
+# # initialize velocity: at rest
+# uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
+# w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
+# Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+
+# # initialize tendency
+# dYdt = similar(Y)
+# # set up rhs
+# rhs!(dYdt, Y, nothing, 0.0)
+
+# # run!
+# using OrdinaryDiffEq
+# # Solve the ODE
+# T = 3600
+# dt = 5
+# prob = ODEProblem(rhs!, Y, (0.0, T))
+
+# # solve ode
+# sol = solve(
+#     prob,
+#     SSPRK33(),
+#     dt = dt,
+#     saveat = dt,
+#     progress = true,
+#     adaptive = false,
+#     progress_message = (dt, u, p, t) -> t,
+# )
+
+# uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+# w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
+
+# @test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
+# @test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
+# @test maximum(abs.(w_phy |> parent)) ≤ 1e-11
+# @test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
+# @test norm(sol.u[end].Yc.ρe) ≈ norm(sol.u[1].Yc.ρe) rtol = 1e-2
