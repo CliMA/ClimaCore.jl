@@ -206,7 +206,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 )),
             )
         end
-        push!(ex.args, :(return nothing))
+        push!(ex.args, :(return val))
         return ex
     else
         Base.@_propagate_inbounds_meta
@@ -217,7 +217,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 offset + fieldtypeoffset(T, S, i),
             )
         end
-        return nothing
+        return val
     end
 end
 
@@ -227,6 +227,7 @@ end
     offset,
 ) where {S}
     array[offset + 1] = val
+    val
 end
 
 @inline function set_struct!(array, val)

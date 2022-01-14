@@ -48,7 +48,10 @@ end
     array = zeros(Float64, Nv, 2)
     data = VF{typeof(SA)}(array)
 
-    data[1] = SA
+    ret = begin
+        data[1] = SA
+    end
+    @test ret === SA
     @test data[1] isa typeof(SA)
     @test_throws MethodError data[1] = SB
 end

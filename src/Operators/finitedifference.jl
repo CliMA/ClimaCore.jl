@@ -2037,14 +2037,14 @@ function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx)
 end
 
 # setidx! methods for copyto!
-function setidx!(bc::Fields.CenterFiniteDifferenceField, idx::Integer, val)
-    field_data = Fields.field_values(bc)
+function setidx!(field::Fields.CenterFiniteDifferenceField, idx::Integer, val)
+    field_data = Fields.field_values(field)
     field_data[idx] = val
     val
 end
 
-function setidx!(bc::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
-    field_data = Fields.field_values(bc)
+function setidx!(field::Fields.FaceFiniteDifferenceField, idx::PlusHalf, val)
+    field_data = Fields.field_values(field)
     field_data[idx.i + 1] = val
     val
 end
