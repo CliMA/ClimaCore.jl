@@ -184,3 +184,31 @@ end
     )
     @test isfile(joinpath(OUTPUT_DIR, "hybrid3d_cell.vtu"))
 end
+
+@testset "hybrid 3d sphere" begin
+    R = 100.0
+
+    hdomain = Domains.SphereDomain(R)
+    hmesh = Meshes.EquiangularCubedSphere(hdomain, 4)
+    htopology = Topologies.Topology2D(hmesh)
+    quad = Spaces.Quadratures.GLL{5}()
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+
+
+    vdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0),
+        Geometry.ZPoint(20.0),
+        boundary_names = (:bottom, :top),
+    )
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = 20)
+    vtopology = Topologies.IntervalTopology(vmesh)
+    vspace = Spaces.FaceFiniteDifferenceSpace(vtopology)
+
+    fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
+    writevtk(
+        joinpath(OUTPUT_DIR, "hybrid_sphere_point"),
+        Fields.coordinate_field(fspace);
+        basis = :point,
+    )
+end

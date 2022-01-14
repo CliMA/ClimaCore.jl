@@ -103,6 +103,24 @@ function LatLongPoint(pt::Cartesian123Point, ::SphericalGlobalGeometry)
     LatLongPoint(ϕ, λ)
 end
 
+
+function CartesianPoint(pt::LatLongZPoint, global_geom::SphericalGlobalGeometry)
+    r = global_geom.radius
+    z = pt.z
+    x1 = (r + z) * cosd(pt.long) * cosd(pt.lat)
+    x2 = (r + z) * sind(pt.long) * cosd(pt.lat)
+    x3 = (r + z) * sind(pt.lat)
+    Cartesian123Point(x1, x2, x3)
+end
+function LatLongZPoint(
+    pt::Cartesian123Point,
+    global_geom::SphericalGlobalGeometry,
+)
+    llpt = LatLongPoint(pt, global_geom)
+    z = hypot(pt.x1, pt.x2, pt.x3) - global_geom.radius
+    LatLongZPoint(llpt.lat, llpt.long, z)
+end
+
 """
     great_circle_distance(pt1::LatLongPoint, pt2::LatLongPoint, global_geometry::SphericalGlobalGeometry)
 
