@@ -124,10 +124,12 @@ function energy(ρ, ρθ, ρu, z)
     internal = C_v .* pressure.(ρθ) ./ R_d
     return kinetic .+ potential .+ internal
 end
+
 function combine_momentum(ρuₕ, ρw)
     Geometry.transform(Geometry.Covariant123Axis(), ρuₕ) +
     Geometry.transform(Geometry.Covariant123Axis(), ρw)
 end
+
 function center_momentum(Y)
     If2c = Operators.InterpolateF2C()
     ρ = Y.Yc.ρ
@@ -135,6 +137,7 @@ function center_momentum(Y)
     ρw = ρ .* If2c.(Y.w)
     combine_momentum.(ρuₕ, ρw)
 end
+
 function total_energy(Y)
     ρ = Y.Yc.ρ
     ρu = center_momentum(Y)
@@ -289,12 +292,8 @@ function rhs_invariant!(dY, Y, _, t)
     return dY
 end
 
-
-
 dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
-
-
 
 # run!
 using OrdinaryDiffEq
@@ -310,12 +309,31 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "bubble_3d_invariant"
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+dirname = "bubble3d_invariant"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
+
+# slice along the center XZ axis
+Plots.png(
+    Plots.plot(
+        sol.u[end].Yc.ρθ ./ sol.u[end].Yc.ρ,
+        slice = (:, 0.0, :),
+        clim = (300.0, 300.8),
+    ),
+    joinpath(path, "theta_end.png"),
+)
 
 # post-processing
 Es = [total_energy(u) for u in sol.u]
@@ -327,18 +345,16 @@ Plots.png(
     joinpath(path, "energy.png"),
 )
 
+Plots.png(
+    Plots.plot((Theta .- theta_0) ./ theta_0),
+    joinpath(path, "rho_theta.png"),
+)
 Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
-Plots.png(Plots.plot((Theta .- theta_0) ./ theta_0), joinpath(path, ".png"))
 
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
-
+linkfig(
+    relpath(joinpath(path, "theta_end.png"), joinpath(@__DIR__, "../..")),
+    "Theta end",
+)
 linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
     "Total Energy",

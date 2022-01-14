@@ -98,6 +98,9 @@ end
 
 nlevels(space::SpectralElementSpace1D) = 1
 
+const IntervalSpectralElementSpace1D =
+    SpectralElementSpace1D{<:Topologies.IntervalTopology{<:Meshes.IntervalMesh}}
+
 """
     SpectralElementSpace2D <: AbstractSpace
 
@@ -343,9 +346,13 @@ end
 
 nlevels(space::SpectralElementSpace2D) = 1
 
+const RectilinearSpectralElementSpace2D =
+    SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.RectilinearMesh}}
+
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
     <:Topologies.Topology2D{<:Meshes.AbstractCubedSphere},
 }
+
 
 function compute_surface_geometry(
     local_geometry_slab,
