@@ -90,7 +90,7 @@ elseif Test_Type == "Implicit"
     dt = 400
 
     ode_algorithm =  Rosenbrock23
-    J_𝕄ρ_overwrite = :grav
+    J_𝕄ρ_overwrite = :none
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.), f_coords)
@@ -108,7 +108,8 @@ elseif Test_Type == "Implicit"
 
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
 
-    
+    # using DiffEqOperators
+    # Base.strides(::ClimaCore.Fields.FieldVector) = (1,)
 
     prob = ODEProblem(
             ODEFunction(
@@ -118,13 +119,14 @@ elseif Test_Type == "Implicit"
                 tgrad = (dT, Y, p, t) -> fill!(dT, 0),
             ),
             Y,
-            (0, T),
+            (0.0, T),
             p,
         )
 
     sol = solve(
     prob,
     dt = dt,
+    # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
     # TODO Newton
     ode_algorithm(linsolve = linsolve!),
     reltol = 1e-1,
