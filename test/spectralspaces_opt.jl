@@ -53,6 +53,22 @@ function opt_WeakDivergence(field)
     return wdiv.(field)
 end
 
+function opt_ScalarDSS(field)
+    grad = opt_Gradient(field)
+    Spaces.weighted_dss!(grad)
+    return grad
+end
+
+function opt_VectorDss_Curl(field)
+    return Spaces.weighted_dss!(opt_Curl(field))
+end
+
+function opt_VectorDss_DivGrad(field)
+    sdiv = Operators.Divergence()
+    wgrad = Operators.WeakGradient()
+    return Spaces.weighted_dss!(@. wgrad(sdiv(field)))
+end
+
 function opt_ScalarHyperdiffusion(field)
     grad = Operators.Gradient()
     wdiv = Operators.WeakDivergence()
@@ -79,10 +95,37 @@ function opt_VectorHyperdiffusion(field)
     return ∇⁴field
 end
 
+@static if @isdefined(var"@test_opt")
+
+    function test_operators(field, vfield)
+        @test_opt opt_Gradient(field)
+        opt_WeakGradient(field)
+
+        @test_opt opt_Curl(vfield)
+        @test_opt opt_WeakCurl(vfield)
+        @test_opt opt_CurlCurl(vfield)
+
+        @test_opt opt_Divergence(vfield)
+        @test_opt opt_WeakDivergence(vfield)
+
+        @test_opt opt_ScalarDSS(field)
+        @test_opt opt_VectorDss_Curl(vfield)
+        @test_opt opt_VectorDss_DivGrad(vfield)
+
+        @test_opt opt_ScalarHyperdiffusion(field)
+
+        # TODO: Work on getting vector hyperdiffusion to optimize
+        # after curl operator changes
+        #@test_opt opt_VectorHyperdiffusion(vfield)
+    end
+
+end
+
 # Test that Julia ia able to optimize spectral element operations v1.7+
 @static if @isdefined(var"@test_opt")
-    @testset "Scalar Field Specctral Element optimizations" begin
-        for FT in (Float64,)
+
+    @testset "Spectral Element 2D Field optimizations" begin
+        for FT in (Float64, Float32)
             domain = Domains.RectangleDomain(
                 Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
                 Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
@@ -92,11 +135,11 @@ end
 
             Nq = 3
             quad = Spaces.Quadratures.GLL{Nq}()
-            #mesh = Meshes.RectilinearMesh(domain, 3, 3)
-            #topology = Topologies.Topology2D(mesh)
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
+
             topology = Topologies.Topology2D(mesh)
             space = Spaces.SpectralElementSpace2D(topology, quad)
+
             coords = Fields.coordinate_field(space)
 
             field = ones(FT, space)
@@ -118,20 +161,59 @@ end
             R = Operators.Restrict(space)
             @test_opt opt_Restrict(R, Ifield)
 
-            @test_opt opt_Gradient(field)
-            @test_opt opt_WeakGradient(field)
+            test_operators(field, vfield)
+        end
+    end
 
-            @test_opt opt_Curl(vfield)
-            @test_opt opt_WeakCurl(vfield)
-            @test_opt opt_CurlCurl(vfield)
+    @testset "Spectral Element 3D Hybrid Field optimizations" begin
+        for FT in (Float64, Float32)
+            xelem = 3
+            yelem = 3
+            velem = 5
+            npoly = 3
 
-            @test_opt opt_Divergence(vfield)
-            @test_opt opt_WeakDivergence(vfield)
+            vertdomain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(0),
+                Geometry.ZPoint{FT}(1000);
+                boundary_tags = (:bottom, :top),
+            )
+            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
+            vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-            @test_opt opt_ScalarHyperdiffusion(field)
-            # TODO: Work on getting vector hyperdiffusion to optimize
-            # after curl operator changes
-            #@test_opt opt_VectorHyperdiffusion(vfield)
+            xdomain = Domains.IntervalDomain(
+                Geometry.XPoint{FT}(-500) .. Geometry.XPoint{FT}(500),
+                periodic = true,
+            )
+            ydomain = Domains.IntervalDomain(
+                Geometry.YPoint{FT}(-100) .. Geometry.YPoint{FT}(100),
+                periodic = true,
+            )
+
+            horzdomain = Domains.RectangleDomain(xdomain, ydomain)
+            horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+            horztopology = Topologies.Topology2D(horzmesh)
+
+            quad = Spaces.Quadratures.GLL{npoly + 1}()
+            horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+            hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(
+                horzspace,
+                vert_center_space,
+            )
+            hv_face_space =
+                Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+
+            for space in (hv_center_space, hv_face_space)
+                coords = Fields.coordinate_field(space)
+                field = ones(FT, space)
+                vfield =
+                    Geometry.UVWVector.(
+                        sin.(coords.x .+ 2 .* coords.y),
+                        cos.(3 .* coords.x .+ 4 .* coords.y),
+                        zero(FT),
+                    )
+                test_operators(field, vfield)
+            end
         end
     end
 end
