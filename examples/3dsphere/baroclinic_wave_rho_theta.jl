@@ -86,7 +86,7 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400 * 4 + 43200
+    T = 86400 * 10
     dt = 300
 
     ode_algorithm =  Rosenbrock23

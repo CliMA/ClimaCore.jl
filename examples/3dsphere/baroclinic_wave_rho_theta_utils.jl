@@ -20,7 +20,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
-const test_name = "balanced_flow"
+const test_name = "baroclinic_wave"
 
 # parameters
 const R = 6.371229e6 # radius
@@ -102,11 +102,11 @@ gravitational_potential(z) = grav * z
 pressure(ρθ) = (ρθ*R_d/p_0)^γ * p_0
 
 const hdiv = Operators.Divergence()
-const hwdiv = Operators.Divergence()
+const hwdiv = Operators.WeakDivergence()
 const hgrad = Operators.Gradient()
-const hwgrad = Operators.Gradient()
+const hwgrad = Operators.WeakGradient()
 const hcurl = Operators.Curl()
-const hwcurl = Operators.Curl() # Operator.WeakCurl()
+const hwcurl = Operators.WeakCurl() # Operator.WeakCurl()
 const If2c = Operators.InterpolateF2C()
 const Ic2f = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
