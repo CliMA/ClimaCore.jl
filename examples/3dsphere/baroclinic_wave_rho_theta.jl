@@ -86,8 +86,8 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400 * 10
-    dt = 300
+    T = 86400 * 30
+    dt = 400
 
     ode_algorithm =  Rosenbrock23
     J_𝕄ρ_overwrite = :grav
@@ -132,7 +132,7 @@ elseif Test_Type == "Implicit"
     # TODO Linear
     # ode_algorithm(linsolve = linsolve!);
     #
-    saveat = dt * 36,
+    saveat = dt * 9 * 12,
     adaptive = false,
     progress = true,
     progress_steps = 1,
@@ -221,4 +221,4 @@ anim = Plots.@animate for sol1 in sol.u
     Plots.plot(v, level=3, clim=(-6, 6))
 end
 
-Plots.mp4(anim, "tmp.mp4", fps=2)
+Plots.mp4(anim, "tmp.mp4", fps=5)
