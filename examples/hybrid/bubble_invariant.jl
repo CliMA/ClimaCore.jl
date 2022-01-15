@@ -128,11 +128,10 @@ function rhs_invariant!(dY, Y, _, t)
     # fw = -g^31 cuₕ/ g^33
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.Divergence()
+    hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.Gradient()
+    hwgrad = Operators.WeakGradient()
     hcurl = Operators.Curl()
-    hwcurl = Operators.Curl()
 
     dρ .= 0 .* cρ
 
