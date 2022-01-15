@@ -468,6 +468,34 @@ WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
+function apply_slab(op::WeakDivergence{(1,)}, slab_space, _, slab_data)
+    slab_local_geometry = Spaces.local_geometry_data(slab_space)
+    FT = Spaces.undertype(slab_space)
+    QS = Spaces.quadrature_style(slab_space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(slab_data))
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
+    @inbounds for i in 1:Nq
+        local_geometry = slab_local_geometry[i]
+        WJv¹ =
+            local_geometry.WJ ⊠ RecursiveApply.rmap(
+                v -> Geometry.contravariant1(v, local_geometry),
+                get_node(slab_data, i),
+            )
+        for ii in 1:Nq
+            out[ii] = out[ii] ⊞ (D[i, ii] ⊠ WJv¹)
+        end
+    end
+    @inbounds for i in 1:Nq
+        local_geometry = slab_local_geometry[i]
+        out[i] = RecursiveApply.rdiv(out[i], ⊟(local_geometry.WJ))
+    end
+    return SVector(out)
+end
+
 function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)

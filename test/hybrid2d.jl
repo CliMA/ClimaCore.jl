@@ -506,3 +506,20 @@ end
 
 
 end
+
+@testset "2D hybrid hyperdiffusion" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(xlim = (-pi, pi), zlim = (-pi, pi))
+
+    coords = Fields.coordinate_field(hv_center_space)
+    k = 2
+    y = @. sin(k * coords.x)
+    ∇⁴y_ref = @. k^4 * sin(k * coords.x)
+
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    χ = Spaces.weighted_dss!(@. wdiv(grad(y)))
+    ∇⁴y = Spaces.weighted_dss!(@. wdiv(grad(χ)))
+
+    @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
+end
