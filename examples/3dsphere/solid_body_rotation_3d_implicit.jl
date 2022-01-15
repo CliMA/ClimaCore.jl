@@ -114,11 +114,11 @@ import Base: similar
 Base.similar(cf::CustomWRepresentation{T,AT}) where {T, AT} = cf
 
 function Wfact!(W, Y, p, dtγ, t)
-    @info "Y norms: ", norm(Y.Yc.ρ), norm(Y.Yc.ρe_tot), norm(Y.w)
-    if t != 0
-        return
-    end
-    @info "evaluating Wfact!"
+    # @info "Y norms: ", norm(Y.Yc.ρ), norm(Y.Yc.ρe_tot), norm(Y.w)
+    # if t != 0
+    #     return
+    # end
+    # @info "evaluating Wfact!"
 
     @unpack velem, helem, npoly, dtγ_ref, Δξ₃, J, g³³, Δξ₃_f, J_f, g³³_f, J_ρ𝕄, J_𝔼𝕄, J_𝕄𝔼, J_𝕄ρ,
         J_𝕄ρ_overwrite, vals = W

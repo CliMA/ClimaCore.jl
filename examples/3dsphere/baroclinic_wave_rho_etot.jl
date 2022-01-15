@@ -10,6 +10,8 @@ using OrdinaryDiffEq:
     ImplicitEuler,
     NLNewton,
     KenCarp4
+import ClimaCore.Utilities: half
+using JLD2
 
 include("baroclinic_wave_rho_etot_utils.jl")
 
@@ -84,8 +86,8 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400.0
-    dt = 300.0
+    T = 86400.0 * 6
+    dt = 400.0
 
     ode_algorithm =  Rosenbrock23
     J_𝕄ρ_overwrite = :none
@@ -132,7 +134,7 @@ elseif Test_Type == "Implicit"
     # TODO Linear
     # ode_algorithm(linsolve = linsolve!);
     #
-    saveat = dt,
+    saveat = dt * 9 * 6,
     adaptive = false,
     progress = true,
     progress_steps = 1,
@@ -198,8 +200,28 @@ elseif Test_Type == "Implicit-Explicit"
 else
     error("Test Type: ", Test_Type, " is not recognized.")
 end
-uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
+
+jldsave("output.jld2", sol = sol.u, coords = c_coords)
+
+u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
 
 @info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe_tot)
-@info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe_tot)
+@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].Yc.ρe_tot)
+
+using ClimaCorePlots, Plots
+
+anim = Plots.@animate for sol1 in sol.u
+    uₕ = sol1.uₕ
+    w = sol1.w
+    cw = If2c.(w)
+    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), uₕ)
+    w_phy = Geometry.transform.(Ref(Geometry.WAxis()), w)
+    u = u_phy.components.data.:1
+    v = u_phy.components.data.:2
+    w = w_phy.components.data.:1
+    #vort = curl_phy.components.data.:1
+    Plots.plot(v, level=3, clim=(-6, 6))
+end
+
+Plots.mp4(anim, "tmp.mp4", fps=5)
