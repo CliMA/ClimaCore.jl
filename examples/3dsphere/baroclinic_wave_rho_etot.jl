@@ -11,12 +11,12 @@ using OrdinaryDiffEq:
     NLNewton,
     KenCarp4
 
-include("solid_body_rotation_3d_rho_etot_utils.jl")
+include("baroclinic_wave_rho_etot_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
 helem = 4
-velem = 15
+velem = 10
 npoly = 4
 
 
@@ -24,6 +24,7 @@ npoly = 4
 hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), helem, velem, npoly)
 c_coords = Fields.coordinate_field(hv_center_space)
 f_coords = Fields.coordinate_field(hv_face_space)
+local_geometries = Fields.local_geometry_field(hv_center_space)
 
 # Coriolis
 const f = @. Geometry.Contravariant3Vector(
@@ -31,8 +32,11 @@ const f = @. Geometry.Contravariant3Vector(
 )
 
 # set up initial condition
-Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
+Yc = map(coord -> initial_condition(coord.lat, coord.long, coord.z), c_coords)
+uₕ = map(
+    local_geometry -> initial_condition_velocity(local_geometry),
+    local_geometries,
+)
 w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
@@ -197,12 +201,5 @@ end
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
 
-@test maximum(abs.(uₕ_phy.components.data.:1)) ≤ 1e-11
-@test maximum(abs.(uₕ_phy.components.data.:2)) ≤ 1e-11
-
-@info "maximum vertical velocity is ", maximum(abs.(w_phy.components.data.:1))
-
-@test maximum(abs.(w_phy.components.data.:1)) ≤ 1.0
-
-@test norm(sol.u[end].Yc.ρ) ≈ norm(sol.u[1].Yc.ρ) rtol = 1e-2
-@test norm(sol.u[end].Yc.ρe_tot) ≈ norm(sol.u[1].Yc.ρe_tot) rtol = 1e-2
+@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe_tot)
+@info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe_tot)

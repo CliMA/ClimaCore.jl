@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra, UnPack
 
 import ClimaCore:
     ClimaCore,
@@ -14,27 +12,86 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
-const R = 6.4e6 # radius
-const Ω = 7.2921e-5 # Earth rotation (radians / sec)
-const z_top = 3.0e4 # height position of the model top
-const grav = 9.8 # gravitational constant
-const p_0 = 1e5 # mean sea level pressure
+# test specifications
+const test_name = "baroclinic_wave"
 
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const T_tri = 273.16 # triple point temperature
+# parameters
+const R = 6.371229e6 # radius
+const grav = 9.80616 # gravitational constant
+const Ω = 7.29212e-5 # Earth rotation (radians / sec)
+const R_d = 287.0 # R dry (gas constant / mol mass dry air)
+const κ = 2 / 7 # kappa
 const γ = 1.4 # heat capacity ratio
-const cv_d = R_d / (γ - 1)
+const cp_d = R_d / κ # heat capacity at constant pressure
+const cv_d = cp_d - R_d # heat capacity at constant volume
+const p_0 = 1.0e5 # reference pressure
+const k = 3
+const T_e = 310 # temperature at the equator
+const T_p = 240 # temperature at the pole
+const T_0 = 0.5 * (T_e + T_p)
+const T_tri = 273.16 # triple point temperature
+const Γ = 0.005
+const A = 1 / Γ
+const B = (T_0 - T_p) / T_0 / T_p
+const C = 0.5 * (k + 2) * (T_e - T_p) / T_e / T_p
+const b = 2
+const H = R_d * T_0 / grav
+const z_t = 15.0e3
+const λ_c = 20.0
+const ϕ_c = 40.0
+const d_0 = R / 6
+const V_p = 1.0
 
-const T_0 = 300 # isothermal atmospheric temperature
-const H = R_d * T_0 / grav # scale height
+τ_z_1(z) = exp(Γ * z / T_0)
+τ_z_2(z) = 1 - 2 * (z / b / H)^2
+τ_z_3(z) = exp(-(z / b / H)^2)
+τ_1(z) = 1 / T_0 * τ_z_1(z) + B * τ_z_2(z) * τ_z_3(z)
+τ_2(z) = C * τ_z_2(z) * τ_z_3(z)
+τ_int_1(z) = A * (τ_z_1(z) - 1) + B * z * τ_z_3(z)
+τ_int_2(z) = C * z * τ_z_3(z)
+F_z(z) = (1 - 3 * (z / z_t)^2 + 2 * (z / z_t)^3) * (z ≤ z_t)
+I_T(ϕ) = cosd(ϕ)^k - k / (k + 2) * (cosd(ϕ))^(k + 2)
+temp(ϕ, z) = (τ_1(z) - τ_2(z) * I_T(ϕ))^(-1)
+pres(ϕ, z) = p_0 * exp(-grav / R_d * (τ_int_1(z) - τ_int_2(z) * I_T(ϕ)))
+r(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c))
+U(ϕ, z) =
+    grav * k / R * τ_int_2(z) * temp(ϕ, z) * (cosd(ϕ)^(k - 1) - cosd(ϕ)^(k + 1))
+u(ϕ, z) = -Ω * R * cosd(ϕ) + sqrt((Ω * R * cosd(ϕ))^2 + R * cosd(ϕ) * U(ϕ, z))
+v(ϕ, z) = 0.0
+c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
+s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
+cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
+if test_name == "baroclinic_wave"
+    δu(λ, ϕ, z) =
+        -16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
+        sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    δv(λ, ϕ, z) =
+        16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        cosd(ϕ_c) *
+        sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    const κ₄ = 1.0e16 # m^4/s
+elseif test_name == "balanced_flow"
+    δu(λ, ϕ, z) = 0.0
+    δv(λ, ϕ, z) = 0.0
+    const κ₄ = 0.0
+end
+uu(λ, ϕ, z) = u(ϕ, z) + δu(λ, ϕ, z)
+uv(λ, ϕ, z) = v(ϕ, z) + δv(λ, ϕ, z)
+
 # P = ρ * R_d * T = ρ * R_d * θ * (P / p_0)^(R_d / C_p) ==>
 # (P / p_0)^(1 - R_d / C_p) = R_d / p_0 * ρθ ==>
 # P = p_0 * (R_d / p_0)^γ * ρθ^γ
@@ -55,11 +112,11 @@ end
 
 
 const hdiv = Operators.Divergence()
-const hwdiv = Operators.Divergence()
+const hwdiv = Operators.WeakDivergence()
 const hgrad = Operators.Gradient()
-const hwgrad = Operators.Gradient()
+const hwgrad = Operators.WeakGradient()
 const hcurl = Operators.Curl()
-const hwcurl = Operators.Curl() # Operator.WeakCurl()
+const hwcurl = Operators.WeakCurl()
 const If2c = Operators.InterpolateF2C()
 const Ic2f = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
@@ -79,17 +136,25 @@ const vgradc2f = Operators.GradientC2F(
 )
 
 # initial conditions for density and total energy
-function init_sbr_thermo(z)
+function initial_condition(ϕ, λ, z)
+    ρ = pres(ϕ, z) / R_d / temp(ϕ, z)
+    e = cv_d * (temp(ϕ, z) - T_tri) + gravitational_potential(z) + (uu(λ, ϕ, z)^2 + uv(λ, ϕ, z)^2) / 2
+    ρe = ρ * e
 
-    p = p_0 * exp(-z / H)
-    ρ = 1 / R_d / T_0 * p
+    return (ρ = ρ, ρe_tot = ρe)
+end
 
-    T = p / ρ / R_d
-
-    e = cv_d * (T - T_tri) + gravitational_potential(z)
-    ρe_tot = ρ * e
-
-    return (ρ = ρ, ρe_tot = ρe_tot)
+# initial conditions for velocity
+function initial_condition_velocity(local_geometry)
+    coord = local_geometry.coordinates
+    ϕ = coord.lat
+    λ = coord.long
+    z = coord.z
+    return Geometry.transform(
+        Geometry.Covariant12Axis(),
+        Geometry.UVVector(uu(λ, ϕ, z), uv(λ, ϕ, z)),
+        local_geometry,
+    )
 end
 
 function rhs!(dY, Y, p, t)
@@ -120,7 +185,24 @@ function rhs!(dY, Y, p, t)
     duₕ .= 0 .* cuₕ
     dρe_tot .= 0 .* cρe_tot
 
-    # hyperdiffusion not needed in SBR
+    # 1) compute hyperviscosity coefficients
+
+    χe_tot = @. dρe_tot = hwdiv(hgrad(cρe_tot / cρ))
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(hcurl(cuₕ)),
+        )
+
+    Spaces.weighted_dss!(dρe_tot)
+    Spaces.weighted_dss!(duₕ)
+
+    @. dρe_tot = -κ₄ * hwdiv(cρ * hgrad(χe_tot))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(hcurl(χuₕ)),
+            )
+        )
 
     # 1) Mass conservation
     cw = If2c.(fw)
@@ -218,7 +300,24 @@ function rhs_remainder!(dY, Y, p, t)
     # @info "maximum vertical velocity is w, u_h", maximum(abs.(w_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:1)), maximum(abs.(uₕ_phy.components.data.:2))
 
 
-    # hyperdiffusion not needed in SBR
+    # 1) compute hyperviscosity coefficients
+
+    χe_tot = @. dρe_tot = hwdiv(hgrad(cρe_tot / cρ))
+    χuₕ = @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(hcurl(cuₕ)),
+        )
+
+    Spaces.weighted_dss!(dρe_tot)
+    Spaces.weighted_dss!(duₕ)
+
+    @. dρe_tot = -κ₄ * hwdiv(cρ * hgrad(χe_tot))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(hcurl(χuₕ)),
+            )
+        )
 
     # 1) Mass conservation
     cw = If2c.(fw)
