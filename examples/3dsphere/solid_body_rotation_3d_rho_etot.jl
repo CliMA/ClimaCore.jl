@@ -80,8 +80,8 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 1000.0
-    dt = 1.0
+    T = 86400.0
+    dt = 300.0
 
     ode_algorithm =  Rosenbrock23
     J_𝕄ρ_overwrite = :none
@@ -102,20 +102,15 @@ elseif Test_Type == "Implicit"
 
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
 
-    using DiffEqOperators
-    Base.strides(::ClimaCore.Fields.FieldVector) = (1,)
+    # using DiffEqOperators
+    # Base.strides(::ClimaCore.Fields.FieldVector) = (1,)
 
     prob = ODEProblem(
-            # ODEFunction(
-            #     rhs!;
-            #     w_kwarg...,
-            #     jac_prototype = jac_prototype,
-            #     tgrad = (dT, Y, p, t) -> fill!(dT, 0),
-            # ),
             ODEFunction(
                 rhs!;
-                jac_prototype = JacVecOperator(rhs!, Y, p, 0.0; autodiff = false),
-                # tgrad = (dT, Y, p, t) -> fill!(dT, 0.0),
+                w_kwarg...,
+                jac_prototype = jac_prototype,
+                tgrad = (dT, Y, p, t) -> fill!(dT, 0),
             ),
             Y,
             (0.0, T),
@@ -125,9 +120,9 @@ elseif Test_Type == "Implicit"
     sol = solve(
     prob,
     dt = dt,
-    OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
+    # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
     # TODO Newton
-    # ode_algorithm(linsolve = linsolve!),
+    ode_algorithm(linsolve = linsolve!),
     reltol = 1e-1,
     abstol = 1e-6,
     # TODO Linear
