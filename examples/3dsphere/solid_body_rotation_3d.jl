@@ -20,6 +20,8 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+include("utils/ref_state.jl")
+
 const n_vert = 10
 const n_horz = 4
 const p_horz = 4
@@ -212,43 +214,13 @@ const f = @. Geometry.Contravariant3Vector(
     Geometry.WVector(2 * Ω * sind(c_coords.lat)),
 )
 
-# discrete hydrostatic profile
-zc_vec = parent(c_coords.z) |> unique
+# reference state in discrete hydrostatic balance
+ref_state = calc_ref_state(c_coords, isothermal_profile)
 
-N = length(zc_vec)
-ρ = zeros(Float64, N)
-p = zeros(Float64, N)
-ρe = zeros(Float64, N)
-
-# compute ρ, ρe, p from analytical formula; not discretely balanced
-for i in 1:N
-    var = init_sbr_thermo(zc_vec[i])
-    ρ[i] = var.ρ
-    ρe[i] = var.ρe
-    p[i] = pressure(ρ[i], ρe[i] / ρ[i], 0.0, zc_vec[i])
-end
-
-ρ_ana = copy(ρ) # keep a copy for analytical ρ which will be used in correction ρe
-
-function discrete_hydrostatic_balance!(ρ, p, dz, grav)
-    for i in 1:(length(ρ) - 1)
-        ρ[i + 1] = -ρ[i] - 2 * (p[i + 1] - p[i]) / dz / grav
-    end
-end
-
-discrete_hydrostatic_balance!(ρ, p, z_top / n_vert, grav)
-# now ρ (after correction) and p (computed from analytical relation) are in discrete hydrostatic balance
-# only need to correct ρe without changing ρ and p, i.e., keep ρT unchanged before vs after the correction on ρ 
-ρe = @. ρe + (ρ - ρ_ana) * Φ(zc_vec) - (ρ - ρ_ana) * cv_d * T_tri
-
-# Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work, 
-#       however, it is not as accurate as the above correction
-
-# set up initial condition: not discretely balanced; only create a Field as a place holder
+# initialize ρ and ρe from ref_state
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
-# put the dicretely balanced ρ and ρe into Yc
-parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJFH layout
-parent(Yc.ρe) .= ρe
+Yc.ρ .= ref_state.ρ
+Yc.ρe .= ref_state.ρe
 
 # initialize velocity: at rest
 uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
