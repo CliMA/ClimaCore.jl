@@ -90,7 +90,7 @@ if test_name == "baroclinic_wave"
         s1(λ, ϕ) *
         cosd(ϕ_c) *
         sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
-    const κ₄ = 1.0e16 # m^4/s
+    const κ₄ = 1.0e17 # m^4/s
 elseif test_name == "balanced_flow"
     δu(λ, ϕ, z) = 0.0
     δv(λ, ϕ, z) = 0.0
@@ -191,11 +191,11 @@ function rhs!(dY, Y, _, t)
     # fw = -g^31 cuₕ/ g^33
 
     hdiv = Operators.Divergence()
-    hwdiv = Operators.Divergence()
+    hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
-    hwgrad = Operators.Gradient()
+    hwgrad = Operators.WeakGradient()
     hcurl = Operators.Curl()
-    hwcurl = Operators.Curl()
+    hwcurl = Operators.WeakCurl()
 
     dρ .= 0 .* cρ
 
@@ -204,20 +204,15 @@ function rhs!(dY, Y, _, t)
 
     χe = @. dρe = hwdiv(hgrad(cρe / cρ))
     χuₕ = @. duₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-        )
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(cuₕ)))
 
     Spaces.weighted_dss!(dρe)
     Spaces.weighted_dss!(duₕ)
 
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
     @. duₕ =
-        -κ₄ * (
-            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
-                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
-            )
-        )
+        -κ₄ *
+        (hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(χuₕ))))
 
     # 1) Mass conservation
     If2c = Operators.InterpolateF2C()

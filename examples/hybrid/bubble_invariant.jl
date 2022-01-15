@@ -132,7 +132,6 @@ function rhs_invariant!(dY, Y, _, t)
     hgrad = Operators.Gradient()
     hwgrad = Operators.Gradient()
     hcurl = Operators.Curl()
-    hwcurl = Operators.Curl()
 
     dρ .= 0 .* cρ
 
