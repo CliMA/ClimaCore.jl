@@ -92,24 +92,45 @@ end
 # 	end
 # end
 
+# function discrete_hydrostatic_balance!(lnp, Tv, zc, grav)
+# 	for i in 1:(length(lnp)-1)
+# 		lnp[i+1] = lnp[i] - grav * (zc[i+1]-zc[i]) / R_d / Tv[i+1]
+# 	end
+# end
+
+# function discrete_hydrostatic_balance!(p, ρ, zc, grav)
+# 	for i in 1:(length(p)-1)
+# 		p[i+1] = p[i] - 0.5 * (ρ[i+1]+ρ[i]) * grav * (zc[i+1]-zc[i])
+# 	end
+# end
+
+# function calc_ref_state(c_coords, f_coords, profile::Function)
 function calc_ref_state(c_coords, profile::Function)
 	zc_vec = parent(c_coords.z) |> unique
+	# zf_vec = parent(f_coords.z) |> unique
 
 	N = length(zc_vec)
+	
 	ρ = zeros(Float64, N)
 	p = zeros(Float64, N)
-	Tv = zeros(Float64, N)
+	Tvc = zeros(Float64, N)
+	Tvf = zeros(Float64, N+1)
 
 	for i in 1:N
 		var = profile(zc_vec[i])
 		ρ[i] = var.ρ
 		p[i] = var.p
-		Tv[i] = var.Tv
+		Tvc[i] = var.Tv
 	end
 
-	discrete_hydrostatic_balance!(ρ, Tv, zc_vec, grav)
-	ρe = @. ρ * cv_d * (Tv - T_tri) + ρ * Φ(zc_vec)
-	p = @. ρ * R_d * Tv
+	# for i in 1:N+1
+	# 	var = profile(zf_vec[i])
+	# 	Tvf[i] = var.Tv
+	# end
+	
+	discrete_hydrostatic_balance!(ρ, Tvc, zc_vec, grav)
+	ρe = @. ρ * cv_d * (Tvc - T_tri) + ρ * Φ(zc_vec)
+	p = @. ρ * R_d * Tvc
 
 	# discrete_hydrostatic_balance!(ρ, p, zc_vec, grav)
 	# ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec)
@@ -125,6 +146,15 @@ function calc_ref_state(c_coords, profile::Function)
 	# ρ = @. p/R_d/Tv
 	# ρe = @. ρ * cv_d * (Tv - T_tri) + ρ * Φ(zc_vec)
 
+	# lnp = log.(p)
+	# discrete_hydrostatic_balance!(lnp, Tvf, zc_vec, grav)
+	# p = exp.(lnp)
+	# ρ = @. p/R_d/Tvc	
+	# ρe = @. ρ * cv_d * (Tvc - T_tri) + ρ * Φ(zc_vec)
+
+	# discrete_hydrostatic_balance!(p, ρ, zc_vec, grav)
+	# Tvc = @. p/ρ/R_d
+	# ρe = @. ρ * cv_d * (Tvc-T_tri) + ρ * Φ(zc_vec)	
 
 	ref_ρ = map(_ -> 0.0, c_coords)
 	ref_ρe = map(_ -> 0.0, c_coords)
