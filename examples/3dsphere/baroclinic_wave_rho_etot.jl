@@ -86,7 +86,7 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400.0 * 6
+    T = 86400.0 * 30
     dt = 400.0
 
     ode_algorithm =  Rosenbrock23
@@ -134,7 +134,7 @@ elseif Test_Type == "Implicit"
     # TODO Linear
     # ode_algorithm(linsolve = linsolve!);
     #
-    saveat = dt * 9 * 6,
+    saveat = dt * 9 * 12,
     adaptive = false,
     progress = true,
     progress_steps = 1,
