@@ -61,28 +61,70 @@ function isothermal_profile(z)
     return (ρ = ρ, p = p, Tv = T_0)
 end
 
+# NOTE !!!!!!!!!!!!!!!!!!!!
+# I've tried all the following ways and this is the one 
+# that produces smoothed profiles and maintains discrete hydrostatic balance
 function discrete_hydrostatic_balance!(ρ, Tv, zc, grav)
     for i in 1:(length(ρ) - 1)
         ρ[i + 1] = ρ[i] * (R_d*Tv[i] - grav*(zc[i+1]-zc[i])/2) / (R_d*Tv[i+1]+grav*(zc[i+1]-zc[i])/2)
     end
 end
 
+# function discrete_hydrostatic_balance!(ρ, p, zc, grav)
+#     for i in 1:(length(ρ) - 1)
+#         ρ[i + 1] = -ρ[i] - 2 * (p[i + 1] - p[i]) / (zc[i+1]-zc[i]) / grav
+#     end
+# end
+
+# function discrete_hydrostatic_balance!(lnp, Tv, zc, grav)
+# 	for i in 1:(length(lnp)-1)
+# 		lnp[i+1] = lnp[i] - grav * (zc[i+1]-zc[i]) / R_d * 0.5 * (1/Tv[i+1]+1/Tv[i])
+# 		# lnp[i+1] = lnp[i] - grav * (zc[i+1]-zc[i]) / R_d * 2 / (Tv[i+1]+Tv[i])
+# 	end
+# end
+
+# function discrete_hydrostatic_balance!(Tv, lnp, zc, grav)
+# 	for i in 1:(length(Tv)-1)
+# 		# Tv[i+1] = -Tv[i] - 2*grav/R_d*(zc[i+1]-zc[i])/(lnp[i+1]-lnp[i])
+# 		Tv[i+1] = 1 / (
+# 			- 1/Tv[i] - (lnp[i+1]-lnp[i])/(zc[i+1]-zc[i])*R_d/0.5/grav
+# 		)
+# 	end
+# end
+
 function calc_ref_state(c_coords, profile::Function)
 	zc_vec = parent(c_coords.z) |> unique
 
 	N = length(zc_vec)
 	ρ = zeros(Float64, N)
+	p = zeros(Float64, N)
 	Tv = zeros(Float64, N)
 
 	for i in 1:N
 		var = profile(zc_vec[i])
 		ρ[i] = var.ρ
+		p[i] = var.p
 		Tv[i] = var.Tv
 	end
-	discrete_hydrostatic_balance!(ρ, Tv, zc_vec, grav)
 
+	discrete_hydrostatic_balance!(ρ, Tv, zc_vec, grav)
 	ρe = @. ρ * cv_d * (Tv - T_tri) + ρ * Φ(zc_vec)
 	p = @. ρ * R_d * Tv
+
+	# discrete_hydrostatic_balance!(ρ, p, zc_vec, grav)
+	# ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec)
+
+	# lnp = log.(p)
+	# discrete_hydrostatic_balance!(lnp, Tv, zc_vec, grav)
+	# p = exp.(lnp)
+	# ρ = @. p/R_d/Tv
+	# ρe = @. ρ * cv_d * (Tv - T_tri) + ρ * Φ(zc_vec)
+
+	# lnp = log.(p)
+	# discrete_hydrostatic_balance!(Tv, lnp, zc_vec, grav)
+	# ρ = @. p/R_d/Tv
+	# ρe = @. ρ * cv_d * (Tv - T_tri) + ρ * Φ(zc_vec)
+
 
 	ref_ρ = map(_ -> 0.0, c_coords)
 	ref_ρe = map(_ -> 0.0, c_coords)

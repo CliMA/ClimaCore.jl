@@ -52,8 +52,8 @@ hv_center_space, hv_face_space =
     sphere_3D(R, (0, z_top), n_horz, n_vert, p_horz)
 c_coords = Fields.coordinate_field(hv_center_space)
 
-# ref_profile = calc_ref_state(c_coords, isothermal_profile)
-ref_profile = calc_ref_state(c_coords, decaying_temperature_profile)
+ref_profile = calc_ref_state(c_coords, isothermal_profile)
+# ref_profile = calc_ref_state(c_coords, decaying_temperature_profile)
 
 # Plots
 zc_vec = parent(c_coords.z) |> unique
@@ -63,6 +63,7 @@ zc_vec = parent(c_coords.z) |> unique
 p = unique(parent(ref_profile.p))
 
 T = @. (ρe/ρ - Φ(zc_vec)) / cv_d + T_tri
+# T = @. p/R_d/ρ 
 
 using Plots
 
