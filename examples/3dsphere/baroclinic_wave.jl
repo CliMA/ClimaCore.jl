@@ -175,7 +175,7 @@ uₕ = map(
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-function rhs!(dY, Y, _, t)
+function rhs!(dY, Y, params, t)
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
@@ -185,6 +185,7 @@ function rhs!(dY, Y, _, t)
     dw = dY.w
     duₕ = dY.uₕ
     dρe = dY.Yc.ρe
+    coords = params.coords
     z = coords.z
 
     # 0) update w at the bottom
@@ -314,7 +315,8 @@ elseif test_name == "balanced_flow"
     time_end = 3600
 end
 dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, time_end))
+params = (; coords)
+prob = ODEProblem(rhs!, Y, (0.0, time_end), params)
 
 integrator = OrdinaryDiffEq.init(
     prob,
