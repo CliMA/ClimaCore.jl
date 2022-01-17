@@ -292,7 +292,7 @@ rhs!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.025
+Δt = 0.03
 prob = ODEProblem(rhs!, Y, (0.0, 500.0))
 
 haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
@@ -301,7 +301,7 @@ sol = @timev solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 5.0,
+    saveat = 25.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
