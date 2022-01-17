@@ -318,15 +318,37 @@ end
 The return type when taking the curl along dimensions `I` of a field of eltype `V`, defined on dimensions `L`
 
 Required for statically infering the result type of the curl operation for `AxisVector` subtypes.
+Curl is only defined for `CovariantVector`` field input types.
+
+| Input Vector | Operator direction | Curl output vector |
+| ------------ | ------------------ | -------------- |
+|  Covariant12Vector | (1,2) | Contravariant3Vector |
+|  Covariant3Vector | (1,2) | Contravariant12Vector |
+|  Covariant123Vector | (1,2) | Contravariant123Vector |
+|  Covariant1Vector | (1,) | Contravariant1Vector |
+|  Covariant2Vector | (1,) | Contravariant3Vector |
+|  Covariant3Vector | (1,) | Contravariant2Vector |
+|  Covariant12Vector | (3,) | Contravariant12Vector |
+|  Covariant1Vector | (3,) | Contravariant2Vector |
+|  Covariant2Vector | (3,) | Contravariant1Vector |
+|  Covariant3Vector | (3,) | Contravariant3Vector |
 """
+@inline curl_result_type(
+    ::Val{(1, 2)},
+    ::Type{Covariant3Vector{FT}},
+) where {FT} = Contravariant12Vector{FT}
 @inline curl_result_type(
     ::Val{(1, 2)},
     ::Type{Covariant12Vector{FT}},
 ) where {FT} = Contravariant3Vector{FT}
 @inline curl_result_type(
     ::Val{(1, 2)},
-    ::Type{Covariant3Vector{FT}},
-) where {FT} = Contravariant12Vector{FT}
+    ::Type{Covariant123Vector{FT}},
+) where {FT} = Contravariant123Vector{FT}
+@inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
+    Contravariant1Vector{FT}
+@inline curl_result_type(::Val{(1,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
+    Contravariant3Vector{FT}
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant2Vector{FT}
 @inline curl_result_type(
@@ -337,21 +359,8 @@ Required for statically infering the result type of the curl operation for `Axis
     Contravariant2Vector{FT}
 @inline curl_result_type(::Val{(3,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
     Contravariant1Vector{FT}
-
-# these are only true in 2D
-@inline curl_result_type(
-    ::Val{(1, 2)},
-    ::Type{Contravariant12Vector{FT}},
-) where {FT} = Contravariant3Vector{FT}
-@inline curl_result_type(::Val{(1, 2)}, ::Type{UVVector{FT}}) where {FT} =
+@inline curl_result_type(::Val{(3,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
-@inline curl_result_type(
-    ::Val{(1, 2)},
-    ::Type{Contravariant3Vector{FT}},
-) where {FT} = Contravariant12Vector{FT}
-@inline curl_result_type(::Val{(1, 2)}, ::Type{WVector{FT}}) where {FT} =
-    Contravariant12Vector{FT}
-
 
 _norm_sqr(x, local_geometry::LocalGeometry) =
     sum(x -> _norm_sqr(x, local_geometry), x)

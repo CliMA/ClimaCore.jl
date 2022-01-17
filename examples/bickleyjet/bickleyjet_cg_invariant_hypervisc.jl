@@ -88,14 +88,19 @@ function rhs!(dydt, y, _, t)
     wcurl = Operators.WeakCurl()
 
     # compute hyperviscosity first
-    @. dydt.u = wgrad(sdiv(y.u)) - Geometry.Covariant12Vector(wcurl(curl(y.u)))
+    @. dydt.u =
+        wgrad(sdiv(y.u)) -
+        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ))
 
     Spaces.weighted_dss!(dydt)
 
     @. dydt.u =
-        -D₄ *
-        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
+        -D₄ * (
+            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            )
+        )
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 
     # add in pieces

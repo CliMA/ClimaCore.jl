@@ -25,20 +25,21 @@ dss_transform(
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
 
-
 function dss_transform(
     arg::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
 )
     ax = axes(local_geometry.∂x∂ξ, 1)
     axfrom = axes(arg, 1)
-    # TODO: make this consistent
+    # TODO: make this consistent for 2D / 3D
+    # 2D domain axis (1,2) horizontal curl
     if ax isa Geometry.UVAxis && (
         axfrom isa Geometry.Covariant3Axis ||
         axfrom isa Geometry.Contravariant3Axis
     )
         return arg
     end
+    # 2D domain axis (1,3) curl
     if ax isa Geometry.UWAxis && (
         axfrom isa Geometry.Covariant2Axis ||
         axfrom isa Geometry.Contravariant2Axis

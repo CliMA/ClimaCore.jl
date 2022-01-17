@@ -78,21 +78,23 @@ function opt_ScalarHyperdiffusion(field)
 end
 
 function opt_VectorHyperdiffusion(field)
-    curl = Operators.Curl()
+    scurl = Operators.Curl()
     wcurl = Operators.WeakCurl()
 
     sdiv = Operators.Divergence()
     wgrad = Operators.WeakGradient()
 
     χ = Spaces.weighted_dss!(
-        @. Geometry.UVVector(wgrad(sdiv(field))) -
-           Geometry.UVVector(wcurl(Geometry.Covariant3Vector(curl(field))))
+        @. wgrad(sdiv(field)) - Geometry.Covariant12Vector(
+            wcurl(Geometry.Covariant3Vector(scurl(field))),
+        )
     )
-    ∇⁴field = Spaces.weighted_dss!(
-        @. Geometry.UVVector(wgrad(sdiv(χ))) -
-           Geometry.UVVector(wcurl(Geometry.Covariant3Vector(curl(χ))))
+    ∇⁴ = Spaces.weighted_dss!(
+        @. wgrad(sdiv(χ)) - Geometry.Covariant12Vector(
+            wcurl(Geometry.Covariant3Vector(scurl(χ))),
+        )
     )
-    return ∇⁴field
+    return ∇⁴
 end
 
 @static if @isdefined(var"@test_opt")
@@ -113,12 +115,8 @@ end
         @test_opt opt_VectorDss_DivGrad(vfield)
 
         @test_opt opt_ScalarHyperdiffusion(field)
-
-        # TODO: Work on getting vector hyperdiffusion to optimize
-        # after curl operator changes
-        #@test_opt opt_VectorHyperdiffusion(vfield)
+        @test_opt opt_VectorHyperdiffusion(vfield)
     end
-
 end
 
 # Test that Julia ia able to optimize spectral element operations v1.7+

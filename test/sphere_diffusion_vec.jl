@@ -33,15 +33,15 @@ end
 
     radius = FT(1)
     domain = Domains.SphereDomain(radius)
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
+    mesh = Meshes.EquiangularCubedSphere(domain, Ne)
     grid_topology = Topologies.Topology2D(mesh)
 
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = Fields.coordinate_field(space)
 
-    # compute vector spherical harmonics (VSH) as the gradient of scalar spherical harmonics 
-    # eigenfunction properties of VSH: ∇² VSH(l,m) = -l(l+1) VSH(l,m) 
+    # compute vector spherical harmonics (VSH) as the gradient of scalar spherical harmonics
+    # eigenfunction properties of VSH: ∇² VSH(l,m) = -l(l+1) VSH(l,m)
     VSH_local = map(coords) do coord
         Geometry.UVVector(VSH(l, m, coord.lat, coord.long)...)
     end
@@ -76,7 +76,7 @@ convergence_rate(err, Δh) =
         Δh = Array{FT}(undef, length(Nes))
 
         for (Ie, Ne) in enumerate(Nes)
-            mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), Ne)
+            mesh = Meshes.EquiangularCubedSphere(domain, Ne)
             grid_topology = Topologies.Topology2D(mesh)
 
             quad = Spaces.Quadratures.GLL{Nq}()

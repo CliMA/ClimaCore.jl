@@ -117,7 +117,7 @@ end
             )
 
         curl = Operators.Curl()
-        curlv = curl.(v)
+        curlv = curl.(Geometry.Covariant12Vector.(v))
         Spaces.weighted_dss!(curlv)
         curlv_ref =
             Geometry.Contravariant3Vector.(
@@ -147,7 +147,12 @@ end
             2 .* sin.(coords.x .+ 2 .* coords.y)
 
         curl = Operators.Curl()
-        curlcurlv = curl.(curl.(v))
+        curlcurlv =
+            curl.(
+                Geometry.Covariant3Vector.(
+                    curl.(Geometry.Covariant12Vector.(v)),
+                ),
+            )
         Spaces.weighted_dss!(curlcurlv)
 
         @test Geometry.UVVector.(curlcurlv) ≈
@@ -175,7 +180,13 @@ end
         curl = Operators.Curl()
         wcurl = Operators.WeakCurl()
         curlcurlv =
-            Geometry.UVVector.(wcurl.(Geometry.Covariant3Vector.(curl.(v))),)
+            Geometry.UVVector.(
+                wcurl.(
+                    Geometry.Covariant3Vector.(
+                        curl.(Geometry.Covariant12Vector.(v)),
+                    ),
+                ),
+            )
         Spaces.weighted_dss!(curlcurlv)
 
         @test curlcurlv ≈ Geometry.UVVector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
@@ -192,7 +203,7 @@ end
             )
 
         wcurl = Operators.WeakCurl()
-        curlv = wcurl.(v)
+        curlv = wcurl.(Geometry.Covariant12Vector.(v))
         Spaces.weighted_dss!(curlv)
         curlv_ref =
             .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
@@ -305,12 +316,22 @@ end
         wgrad = Operators.WeakGradient()
 
         χ = Spaces.weighted_dss!(
-            @. Geometry.UVVector(wgrad(sdiv(y))) -
-               Geometry.UVVector(wcurl(Geometry.Covariant3Vector(curl(y))))
+            @. Geometry.UVVector(wgrad(sdiv(y))) - Geometry.UVVector(
+                wcurl(
+                    Geometry.Covariant3Vector(
+                        curl(Geometry.Covariant12Vector(y)),
+                    ),
+                ),
+            )
         )
         ∇⁴y = Spaces.weighted_dss!(
-            @. Geometry.UVVector(wgrad(sdiv(χ))) -
-               Geometry.UVVector(wcurl(Geometry.Covariant3Vector(curl(χ))))
+            @. Geometry.UVVector(wgrad(sdiv(χ))) - Geometry.UVVector(
+                wcurl(
+                    Geometry.Covariant3Vector(
+                        curl(Geometry.Covariant12Vector(χ)),
+                    ),
+                ),
+            )
         )
 
         @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
