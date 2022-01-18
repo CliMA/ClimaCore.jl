@@ -180,7 +180,9 @@ function rhs_invariant!(dY, Y, _, t)
 
     χθ = @. dρθ = hwdiv(hgrad(cρθ / cρ)) # we store χθ in dρθ
     χuₕ = @. duₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(cuₕ)))
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
 
     Spaces.weighted_dss!(dρθ)
     Spaces.weighted_dss!(duₕ)
@@ -188,8 +190,11 @@ function rhs_invariant!(dY, Y, _, t)
     κ₄ = 100.0 # m^4/s
     @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
     @. duₕ =
-        -κ₄ *
-        (hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(χuₕ))))
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
     If2c = Operators.InterpolateF2C()

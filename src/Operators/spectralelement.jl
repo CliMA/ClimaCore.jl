@@ -146,7 +146,6 @@ function Base.Broadcast.materialize(sbc::SpectralBroadcasted)
 end
 
 function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
-    data_out = Fields.field_values(field_out)
     space = axes(field_out)
     Nv = Spaces.nlevels(space)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
@@ -709,7 +708,10 @@ abstract type CurlSpectralElementOperator <: SpectralElementOperator end
     curl = Curl()
     curl.(u)
 
-Computes the per-element spectral (strong) curl of a vector field ``u``.
+Computes the per-element spectral (strong) curl of a covariant vector field ``u``.
+
+Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVector`,
+as then the `Curl` is independent of the local metric tensor.
 
 The curl of a vector field ``u`` is a vector field with contravariant components
 ```math
@@ -750,72 +752,6 @@ Curl{()}(space) = Curl{operator_axes(space)}()
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
-    slab_local_geometry = Spaces.local_geometry_data(slab_space)
-    FT = Spaces.undertype(slab_space)
-    QS = Spaces.quadrature_style(slab_space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    D = Quadratures.differentiation_matrix(FT, QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_data))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
-    if RT <: Geometry.Contravariant3Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            v₁ = Geometry.covariant1(
-                get_node(slab_data, i, j),
-                slab_local_geometry[i, j],
-            )
-            for jj in 1:Nq
-                D₂v₁ = D[jj, j] ⊠ v₁
-                out[i, jj] =
-                    out[i, jj] ⊞ Geometry.Contravariant3Vector(
-                        ⊟(D₂v₁),
-                        slab_local_geometry[i, jj],
-                    )
-            end
-            v₂ = Geometry.covariant2(
-                get_node(slab_data, i, j),
-                slab_local_geometry[i, j],
-            )
-            for ii in 1:Nq
-                D₁v₂ = D[ii, i] ⊠ v₂
-                out[ii, j] =
-                    out[ii, j] ⊞ Geometry.Contravariant3Vector(
-                        D₁v₂,
-                        slab_local_geometry[ii, j],
-                    )
-            end
-        end
-    elseif RT <: Geometry.Contravariant12Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            v₃ = Geometry.covariant3(
-                get_node(slab_data, i, j),
-                slab_local_geometry[i, j],
-            )
-            for ii in 1:Nq
-                D₁v₃ = D[ii, i] ⊠ v₃
-                out[ii, j] =
-                    out[ii, j] ⊞
-                    Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
-            end
-            for jj in 1:Nq
-                D₂v₃ = D[jj, j] ⊠ v₃
-                out[i, jj] =
-                    out[i, jj] ⊞
-                    Geometry.Contravariant12Vector(D₂v₃, zero(D₂v₃))
-            end
-        end
-    else
-        error("invalid return type: $RT")
-    end
-    @inbounds for j in 1:Nq, i in 1:Nq
-        local_geometry = slab_local_geometry[i, j]
-        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
-    end
-    return SMatrix(out)
-end
-
 function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
@@ -847,11 +783,82 @@ function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
+function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
+    slab_local_geometry = Spaces.local_geometry_data(slab_space)
+    FT = Spaces.undertype(slab_space)
+    QS = Spaces.quadrature_style(slab_space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(slab_data))
+    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
+    # input data is a Covariant12Vector field
+    if RT <: Geometry.Contravariant3Vector
+        @inbounds for j in 1:Nq, i in 1:Nq
+            v₁ = Geometry.covariant1(
+                get_node(slab_data, i, j),
+                slab_local_geometry[i, j],
+            )
+            for jj in 1:Nq
+                D₂v₁ = D[jj, j] ⊠ v₁
+                out[i, jj] =
+                    out[i, jj] ⊞ Geometry.Contravariant3Vector(
+                        ⊟(D₂v₁),
+                        slab_local_geometry[i, jj],
+                    )
+            end
+            v₂ = Geometry.covariant2(
+                get_node(slab_data, i, j),
+                slab_local_geometry[i, j],
+            )
+            for ii in 1:Nq
+                D₁v₂ = D[ii, i] ⊠ v₂
+                out[ii, j] =
+                    out[ii, j] ⊞ Geometry.Contravariant3Vector(
+                        D₁v₂,
+                        slab_local_geometry[ii, j],
+                    )
+            end
+        end
+        # input data is a Covariant3Vector field
+    elseif RT <: Geometry.Contravariant12Vector
+        @inbounds for j in 1:Nq, i in 1:Nq
+            v₃ = Geometry.covariant3(
+                get_node(slab_data, i, j),
+                slab_local_geometry[i, j],
+            )
+            for ii in 1:Nq
+                D₁v₃ = D[ii, i] ⊠ v₃
+                out[ii, j] =
+                    out[ii, j] ⊞
+                    Geometry.Contravariant12Vector(zero(D₁v₃), ⊟(D₁v₃))
+            end
+            for jj in 1:Nq
+                D₂v₃ = D[jj, j] ⊠ v₃
+                out[i, jj] =
+                    out[i, jj] ⊞
+                    Geometry.Contravariant12Vector(D₂v₃, zero(D₂v₃))
+            end
+        end
+    else
+        error("invalid return type: $RT")
+    end
+    @inbounds for j in 1:Nq, i in 1:Nq
+        local_geometry = slab_local_geometry[i, j]
+        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
+    end
+    return SMatrix(out)
+end
+
 """
     wcurl = WeakCurl()
     wcurl.(u)
 
-Computes the "weak curl" on each element of a vector field `u`.
+Computes the "weak curl" on each element of a covariant vector field `u`.
+
+Note: The vector field ``u`` needs to be excliclty converted to a `CovaraintVector`,
+as then the `WeakCurl` is independent of the local metric tensor.
 
 This is defined as the vector field ``\\theta \\in \\mathcal{V}_0`` such that
 for all ``\\phi \\in \\mathcal{V}_0``
@@ -887,6 +894,41 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
+function apply_slab(op::WeakCurl{(1,)}, slab_space, _, slab_data)
+    slab_local_geometry = Spaces.local_geometry_data(slab_space)
+    FT = Spaces.undertype(slab_space)
+    QS = Spaces.quadrature_style(slab_space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    # allocate temp output
+    RT = operator_return_eltype(op, eltype(slab_data))
+    out = StaticArrays.MVector{Nq, RT}(undef)
+    DataLayouts._mzero!(out, FT)
+    # input data is a Covariant3Vector field
+    if RT <: Geometry.Contravariant2Vector
+        @inbounds for i in 1:Nq
+            local_geometry = slab_local_geometry[i]
+            W = local_geometry.WJ / local_geometry.J
+            Wv₃ =
+                W ⊠ Geometry.covariant3(
+                    get_node(slab_data, i),
+                    slab_local_geometry[i],
+                )
+            for ii in 1:Nq
+                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
+                out[ii] = out[ii] ⊞ Geometry.Contravariant2Vector(⊟(Dᵀ₁Wv₃))
+            end
+        end
+    else
+        error("invalid return type: $RT")
+    end
+    @inbounds for i in 1:Nq
+        local_geometry = slab_local_geometry[i]
+        out[i] = RecursiveApply.rdiv(out[i], local_geometry.WJ)
+    end
+    return SVector(out)
+end
+
 function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
@@ -897,6 +939,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     RT = operator_return_eltype(op, eltype(slab_data))
     out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
     DataLayouts._mzero!(out, FT)
+    # input data is a Covariant12Vector field
     if RT <: Geometry.Contravariant3Vector
         @inbounds for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i, j]
@@ -928,6 +971,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
                     )
             end
         end
+        # input data is a Covariant3Vector field
     elseif RT <: Geometry.Contravariant12Vector
         @inbounds for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i, j]

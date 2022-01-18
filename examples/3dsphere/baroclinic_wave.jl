@@ -204,15 +204,20 @@ function rhs!(dY, Y, _, t)
 
     χe = @. dρe = hwdiv(hgrad(cρe / cρ))
     χuₕ = @. duₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(cuₕ)))
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
 
     Spaces.weighted_dss!(dρe)
     Spaces.weighted_dss!(duₕ)
 
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
     @. duₕ =
-        -κ₄ *
-        (hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(hwcurl(hcurl(χuₕ))))
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
 
     # 1) Mass conservation
     If2c = Operators.InterpolateF2C()

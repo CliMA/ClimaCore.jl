@@ -201,9 +201,9 @@ end
 """
     SetCurl(val)
 
-Set the divergence at the boundary to be `val`.
+Set the curl at the boundary to be `val`.
 """
-struct SetCurl{S} <: BoundaryCondition
+struct SetCurl{S <: Geometry.ContravariantVector} <: BoundaryCondition
     val::S
 end
 """
@@ -1766,6 +1766,8 @@ The following boundary conditions are supported:
   C(v)[\\tfrac{1}{2}]^1 = -\\frac{2}{J[i]} (v_2[1] - (v₀)_2)
   C(v)[\\tfrac{1}{2}]^2 = \\frac{2}{J[i]} (v_1[1] - (v₀)_1)
   ```
+- [`SetCurl(v⁰)`](@ref): enforce the curl operator output at the boundary to be
+  the contravariant vector `v⁰`.
 """
 struct CurlC2F{BC} <: CurlFiniteDifferenceOperator
     bcs::BC
@@ -1780,12 +1782,14 @@ return_space(::CurlC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
 
 stencil_interior_width(::CurlC2F) = ((-half, half),)
 
-fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, J) =
-    Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
 fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, J) =
     Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) / J)
 fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, J) =
     Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) / J)
+fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, J) =
+    Geometry.Contravariant3Vector(zero(eltype(J)))
+fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, J) =
+    Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
 
 function stencil_interior(::CurlC2F, loc, idx, arg)
     space = axes(arg)
