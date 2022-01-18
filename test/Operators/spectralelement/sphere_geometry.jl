@@ -4,11 +4,7 @@ import ClimaCore:
 
 using Test
 
-
-
 using StaticArrays, LinearAlgebra
-
-
 
 function rotational_field(space, α0 = 45.0)
     coords = Fields.coordinate_field(space)
