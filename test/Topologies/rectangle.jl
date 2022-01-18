@@ -77,6 +77,45 @@ end
     end
 end
 
+@testset "neighboring element tests" begin
+
+    @testset "1×1 element quad mesh with 1 periodic boundary" begin
+        topology = rectangular_grid(1, 1, true, false)
+        @test Topologies.neighboring_elements(topology, 1) ==
+              [0, 1, 0, 1, 0, 0, 0, 0]
+    end
+
+    @testset "1×1 element quad mesh with non-periodic boundaries" begin
+        topology = rectangular_grid(1, 1, false, false)
+        @test Topologies.neighboring_elements(topology, 1) ==
+              [0, 0, 0, 0, 0, 0, 0, 0]
+    end
+
+    @testset "2×2 element quad mesh with periodic boundaries" begin
+        topology = rectangular_grid(2, 2, true, true)
+        @test Topologies.neighboring_elements(topology, 1) ==
+              [3, 2, 3, 2, 4, 4, 4, 4]
+        @test Topologies.neighboring_elements(topology, 2) ==
+              [4, 1, 4, 1, 3, 3, 3, 3]
+        @test Topologies.neighboring_elements(topology, 3) ==
+              [1, 4, 1, 4, 2, 2, 2, 2]
+        @test Topologies.neighboring_elements(topology, 4) ==
+              [2, 3, 2, 3, 1, 1, 1, 1]
+    end
+
+    @testset "2×2 element quad mesh with non-periodic boundaries" begin
+        topology = rectangular_grid(2, 2, false, false)
+        @test Topologies.neighboring_elements(topology, 1) ==
+              [0, 2, 3, 0, 0, 4, 0, 0]
+        @test Topologies.neighboring_elements(topology, 2) ==
+              [0, 0, 4, 1, 0, 0, 3, 0]
+        @test Topologies.neighboring_elements(topology, 3) ==
+              [1, 4, 0, 0, 2, 0, 0, 0]
+        @test Topologies.neighboring_elements(topology, 4) ==
+              [2, 0, 0, 3, 0, 0, 0, 1]
+    end
+end
+
 @testset "simple rectangular mesh interior faces iterator" begin
 
     @testset "1×1 element quad mesh with all periodic boundries" begin

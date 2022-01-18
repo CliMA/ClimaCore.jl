@@ -132,3 +132,62 @@ boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
 boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
+
+function neighboring_elements(topology::Topology2D, elem)
+
+    # Each elem in a Topology2D will have at most 8 neighboring elements
+    #
+    #    o------o------o------o
+    #    |      |      |      |
+    #    |      |      |      |
+    #    o------o------o------o
+    #    |      |      |      |
+    #    |      |      |      |
+    #    o------o------o------o
+    #    |      |      |      |
+    #    |      |      |      |
+    #    o------o------o------o
+    #
+    #
+    # Except for corner elements of the cube (they will have 7)
+    #
+    #    o------o------o------o
+    #    |      |      |      |
+    #    |      |      |      |
+    #    o------o------o------o
+    #    |      |      |      |
+    #    |      |      |      |
+    #    o------o------o------o
+    #    |      |      |   ^
+    #    |      |      | < these two faces are the same at a cube corner
+    #    o------o------o
+
+    neigh_elems = Array{Int}(undef, 8)
+    op_faces = Array{Int}(undef, 8)
+    # First find the cross elements
+    for f in 1:4
+        (opelem, opface, _) = opposing_face(topology, elem, f)
+        # We look to the right of opface. Hence, subtract -1 from opface
+        opface = mod1(opface - 1, 4)
+        op_faces[f] = opface
+        neigh_elems[f] = opelem
+    end
+
+    for e in 1:4
+        # If the element is at a boundary, we don't want to check its opposing element and return a 0 elem index
+        if neigh_elems[e] == 0
+            opelem = 0
+        else
+            # Given an element in the cross element, check the opposing on the right/top/left/bottom
+            (opelem, _, _) =
+                opposing_face(topology, neigh_elems[e], op_faces[e])
+            # If the opposing element is already in the list of neighboring elements, we are at a cube corner and we return a 0 elem index
+            if opelem ∈ neigh_elems[1:4]
+                opelem = 0
+            end
+        end
+        neigh_elems[e + 4] = opelem
+    end
+
+    return neigh_elems
+end
