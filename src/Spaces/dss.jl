@@ -2,30 +2,31 @@ import ..Topologies
 using ..RecursiveApply
 
 
-function dss_transform(arg, local_geometry)
+@inline function dss_transform(arg, local_geometry)
     RecursiveApply.rmap(arg) do x
+        Base.@_inline_meta
         dss_transform(x, local_geometry)
     end
 end
-dss_transform(arg::Number, local_geometry) = arg
-dss_transform(
+@inline dss_transform(arg::Number, local_geometry) = arg
+@inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.CartesianAxis}}},
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
-dss_transform(
+@inline dss_transform(
     arg::Geometry.CartesianVector,
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
-dss_transform(
+@inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.LocalAxis}}},
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
-dss_transform(
+@inline dss_transform(
     arg::Geometry.LocalVector,
     local_geometry::Geometry.LocalGeometry,
 ) where {T, N} = arg
 
-function dss_transform(
+@inline function dss_transform(
     arg::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
 )
@@ -49,18 +50,19 @@ function dss_transform(
     Geometry.transform(ax, arg, local_geometry)
 end
 
-function dss_untransform(refarg, targ, local_geometry)
+@inline function dss_untransform(refarg, targ, local_geometry)
     RecursiveApply.rmap(refarg, targ) do rx, tx
+        Base.@_inline_meta
         dss_untransform(rx, tx, local_geometry)
     end
 end
-dss_untransform(refarg::Number, targ, local_geometry) = targ
-dss_untransform(
+@inline dss_untransform(refarg::Number, targ, local_geometry) = targ
+@inline dss_untransform(
     refarg::T,
     targ::T,
     local_geometry::Geometry.LocalGeometry,
 ) where {T <: Geometry.AxisTensor} = targ
-function dss_untransform(
+@inline function dss_untransform(
     refarg::Geometry.AxisTensor,
     targ::Geometry.AxisTensor,
     local_geometry::Geometry.LocalGeometry,
