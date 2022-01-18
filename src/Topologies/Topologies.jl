@@ -16,6 +16,7 @@ mesh in the horizontal domain.
 - [`vertex_coordinates`](@ref)
 - [`interior_faces`](@ref)
 - [`vertices`](@ref)
+- [`neighboring_elements`](@ref)
 - [`boundary_tags`](@ref)
 - [`boundary_tag`](@ref)
 - [`boundary_faces`](@ref)
@@ -109,6 +110,13 @@ end
 struct InteriorFaceIterator{T <: AbstractTopology}
     topology::T
 end
+
+"""
+    neighboring_elements(topology, elem)
+
+The list of neighboring elements of element `elem` in `topology`.
+"""
+function neighboring_elements end
 
 """
     boundary_tags(topology)

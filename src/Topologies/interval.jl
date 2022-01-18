@@ -35,7 +35,7 @@ function opposing_face(topology::IntervalTopology, elem, face)
     n = length(topology.mesh.faces) - 1
     if face == 1
         if elem == 1
-            if isempty(mesh.boundaries) # periodic
+            if isempty(topology.mesh.boundaries) # periodic
                 opelem = n
             else
                 return (0, 1, false)
@@ -46,7 +46,7 @@ function opposing_face(topology::IntervalTopology, elem, face)
         opface = 2
     else
         if elem == n
-            if isempty(mesh.boundaries) # periodic
+            if isempty(topology.mesh.boundaries) # periodic
                 opelem = 1
             else
                 return (0, 2, false)
@@ -77,4 +77,10 @@ function Base.iterate(fiter::InteriorFaceIterator{<:IntervalTopology}, i = 1)
     else
         return nothing
     end
+end
+
+function neighboring_elements(topology::IntervalTopology, elem)
+    (opelem_1, _, _) = opposing_face(topology, elem, 1)
+    (opelem_2, _, _) = opposing_face(topology, elem, 2)
+    return (opelem_1, opelem_2)
 end
