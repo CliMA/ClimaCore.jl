@@ -64,11 +64,11 @@ end
 # NOTE !!!!!!!!!!!!!!!!!!!!
 # I've tried all the following ways and this is the one 
 # that produces smoothed profiles and maintains discrete hydrostatic balance
-function discrete_hydrostatic_balance!(ρ, Tv, zc, grav)
-    for i in 1:(length(ρ) - 1)
-        ρ[i + 1] = ρ[i] * (R_d*Tv[i] - grav*(zc[i+1]-zc[i])/2) / (R_d*Tv[i+1]+grav*(zc[i+1]-zc[i])/2)
-    end
-end
+# function discrete_hydrostatic_balance!(ρ, Tv, zc, grav)
+#     for i in 1:(length(ρ) - 1)
+#         ρ[i + 1] = ρ[i] * (R_d*Tv[i] - grav*(zc[i+1]-zc[i])/2) / (R_d*Tv[i+1]+grav*(zc[i+1]-zc[i])/2)
+#     end
+# end
 
 # function discrete_hydrostatic_balance!(ρ, p, zc, grav)
 #     for i in 1:(length(ρ) - 1)
@@ -104,6 +104,12 @@ end
 # 	end
 # end
 
+function discrete_hydrostatic_balance!(p, ρ, zc, grav)
+	for i in (length(p)-1):-1:1
+		p[i] = p[i+1] + 0.5 * (ρ[i+1]+ρ[i]) * grav * (zc[i+1]-zc[i])
+	end
+end
+
 # function calc_ref_state(c_coords, f_coords, profile::Function)
 function calc_ref_state(c_coords, profile::Function)
 	zc_vec = parent(c_coords.z) |> unique
@@ -128,9 +134,9 @@ function calc_ref_state(c_coords, profile::Function)
 	# 	Tvf[i] = var.Tv
 	# end
 	
-	discrete_hydrostatic_balance!(ρ, Tvc, zc_vec, grav)
-	ρe = @. ρ * cv_d * (Tvc - T_tri) + ρ * Φ(zc_vec)
-	p = @. ρ * R_d * Tvc
+	# discrete_hydrostatic_balance!(ρ, Tvc, zc_vec, grav)
+	# ρe = @. ρ * cv_d * (Tvc - T_tri) + ρ * Φ(zc_vec)
+	# p = @. ρ * R_d * Tvc
 
 	# discrete_hydrostatic_balance!(ρ, p, zc_vec, grav)
 	# ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec)
@@ -154,7 +160,11 @@ function calc_ref_state(c_coords, profile::Function)
 
 	# discrete_hydrostatic_balance!(p, ρ, zc_vec, grav)
 	# Tvc = @. p/ρ/R_d
-	# ρe = @. ρ * cv_d * (Tvc-T_tri) + ρ * Φ(zc_vec)	
+	# ρe = @. ρ * cv_d * (Tvc-T_tri) + ρ * Φ(zc_vec)
+	
+	discrete_hydrostatic_balance!(p, ρ, zc_vec, grav)
+	Tvc = @. p/ρ/R_d
+	ρe = @. ρ * cv_d * (Tvc-T_tri) + ρ * Φ(zc_vec)
 
 	ref_ρ = map(_ -> 0.0, c_coords)
 	ref_ρe = map(_ -> 0.0, c_coords)
