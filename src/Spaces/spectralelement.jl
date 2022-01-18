@@ -12,7 +12,10 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(space)), ":")
-    println(iio, " "^(indent + 2), space.topology)
+    if hasfield(typeof(space), :topology)
+        # some reduced spaces (like slab space) do not have topology
+        println(iio, " "^(indent + 2), space.topology)
+    end
     print(iio, " "^(indent + 2), space.quadrature_style)
 end
 
@@ -412,3 +415,4 @@ function slab(space::AbstractSpectralElementSpace, v, h)
         slab(space.local_geometry, v, h),
     )
 end
+slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
