@@ -122,22 +122,22 @@ end
         for elem in Meshes.elements(mesh)
             for (ξ1, ξ2) in [(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, -0.5)]
                 coord = Meshes.coordinates(mesh, elem, (ξ1, ξ2))
-                celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
-                @test celem == elem
-                @test cξ1 ≈ ξ1 atol = 100eps()
-                @test cξ2 ≈ ξ2 atol = 100eps()
+                @test Meshes.containing_element(mesh, coord) == elem
+                @test Meshes.reference_coordinates(mesh, elem, coord) ≈
+                      SVector(ξ1, ξ2) atol = 100eps()
             end
 
             for vert in 1:4
                 coord = Meshes.coordinates(mesh, elem, vert)
                 # containing_element should be round trip to give the same coordinates
-                celem, (cξ1, cξ2) = Meshes.containing_element(mesh, coord)
+                celem = Meshes.containing_element(mesh, coord)
                 @test celem in Meshes.elements(mesh)
-                @test -1 <= cξ1 <= 1
-                @test -1 <= cξ2 <= 1
-                @test cξ1 ≈ 1 || cξ1 ≈ -1
-                @test cξ2 ≈ 1 || cξ2 ≈ -1
-                @test Meshes.coordinates(mesh, celem, (cξ1, cξ2)) ≈ coord
+                cξ = Meshes.reference_coordinates(mesh, celem, coord)
+                @test -1 <= cξ[1] <= 1
+                @test -1 <= cξ[2] <= 1
+                @test abs(cξ[1]) ≈ 1
+                @test abs(cξ[2]) ≈ 1
+                @test Meshes.coordinates(mesh, celem, cξ) ≈ coord
             end
         end
     end

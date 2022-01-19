@@ -36,21 +36,24 @@ coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
 function coordinates(
     mesh::IntervalMesh,
     elem::Integer,
-    (ξ,)::Tuple{T},
-) where {T}
+    (ξ1,)::StaticArrays.SVector{1},
+)
     ca = mesh.faces[elem]
     cb = mesh.faces[elem + 1]
-    Geometry.linear_interpolate((ca, cb), ξ)
+    Geometry.linear_interpolate((ca, cb), ξ1)
 end
 
 function containing_element(mesh::IntervalMesh, coord)
-    i = min(searchsortedlast(mesh.faces, coord), nelements(mesh))
-    lo = Geometry.component(mesh.faces[i], 1)
-    hi = Geometry.component(mesh.faces[i + 1], 1)
-    val = Geometry.component(coord, 1)
-    ξ = ((val - lo) + (val - hi)) / (hi - lo)
-    return i, (ξ,)
+    return min(searchsortedlast(mesh.faces, coord), nelements(mesh))
 end
+function reference_coordinates(mesh::IntervalMesh, elem::Integer, coord)
+    lo = Geometry.component(mesh.faces[elem], 1)
+    hi = Geometry.component(mesh.faces[elem + 1], 1)
+    val = Geometry.component(coord, 1)
+    ξ1 = ((val - lo) + (val - hi)) / (hi - lo)
+    return StaticArrays.SVector(ξ1)
+end
+
 function is_boundary_face(mesh::IntervalMesh, elem::Integer, face)
     !Domains.isperiodic(mesh.domain) &&
         ((elem == 1 && face == 1) || (elem == nelements(mesh) && face == 2))

@@ -51,6 +51,32 @@ Subtypes should have the following fields:
 """
 abstract type AbstractCubedSphere <: AbstractMesh2D end
 
+"""
+    LocalElementMap
+
+An abstract type of mappings from the reference element to a physical domain.
+"""
+abstract type LocalElementMap end
+
+"""
+    IntrinsicMap()
+
+This [`LocalElementMap`](@ref) uses the intrinsic mapping of the cubed sphere to
+map the reference element to the physical domain.
+"""
+struct IntrinsicMap <: LocalElementMap end
+
+"""
+    NormalizedBilinearMap()
+
+The [`LocalElementMap`](@ref) for meshes on spherical domains of
+[Guba2014](@cite). It uses bilinear interpolation between the Cartesian
+coordinates of the element vertices, then normalizes the result to lie on the
+sphere.
+"""
+struct NormalizedBilinearMap <: LocalElementMap end
+
+
 Base.show(io::IO, mesh::AbstractCubedSphere) = print(
     io,
     mesh.ne,
@@ -113,12 +139,12 @@ function opposing_face(
 end
 
 """
-    panel_to_coordinates(panel, coord1::Geometry.Cartesian123Point)
+    to_panel(panel, coord1::Geometry.Cartesian123Point)
 
 Given a point at `coord1` on panel 1 of a sphere, transform
 it to panel `panel`.
 """
-function panel_to_coordinates(panel::Integer, coord::Geometry.Cartesian123Point)
+function to_panel(panel::Integer, coord::Geometry.Cartesian123Point)
     ζ0, ζx, ζy = Geometry.components(coord)
     if panel == 1
         return Geometry.Cartesian123Point(ζ0, ζx, ζy)
@@ -137,27 +163,162 @@ function panel_to_coordinates(panel::Integer, coord::Geometry.Cartesian123Point)
 end
 
 """
-    panel, coord1 = coordinates_to_panel(coord::Geometry.Cartesian123Point)
+    panel = cubedspherepanel(coord::Geometry.Cartesian123Point)
 
-Given a point `coord`, return its panel number (`panel`), and its coordinates in panel 1
+Given a point `coord`, return its panel number (an integer between 1 and 6).
+"""
+function containing_panel(coord::Geometry.Cartesian123Point)
+    maxdim = argmax(abs.(Geometry.components(coord)))
+    if maxdim == 1
+        return coord.x1 > 0 ? 1 : 4
+    elseif maxdim == 2
+        return coord.x2 > 0 ? 2 : 5
+    elseif maxdim == 3
+        return coord.x3 > 0 ? 3 : 6
+    end
+    error("invalid coordinates")
+end
+
+"""
+    coord1 = from_panel(panel::Int, coord::Geometry.Cartesian123Point)
+
+Given a point `coord` and its panel number `panel`, return its coordinates in panel 1
 (`coord1`).
 """
-function coordinates_to_panel(coord::Geometry.Cartesian123Point)
-    maxdim = argmax(abs.(Geometry.components(coord)))
-    if maxdim == 1 && coord.x1 > 0
-        return 1, Geometry.Cartesian123Point(coord.x1, coord.x2, coord.x3)
-    elseif maxdim == 2 && coord.x2 > 0
-        return 2, Geometry.Cartesian123Point(coord.x2, -coord.x1, coord.x3)
-    elseif maxdim == 3 && coord.x3 > 0
-        return 3, Geometry.Cartesian123Point(coord.x3, -coord.x1, -coord.x2)
-    elseif maxdim == 1 && coord.x1 < 0
-        return 4, Geometry.Cartesian123Point(-coord.x1, -coord.x3, -coord.x2)
-    elseif maxdim == 2 && coord.x2 < 0
-        return 5, Geometry.Cartesian123Point(-coord.x2, -coord.x3, coord.x1)
-    elseif maxdim == 3 && coord.x3 < 0
-        return 6, Geometry.Cartesian123Point(-coord.x3, coord.x2, coord.x1)
+function from_panel(panel::Int, coord::Geometry.Cartesian123Point)
+    if panel == 1
+        return Geometry.Cartesian123Point(coord.x1, coord.x2, coord.x3)
+    elseif panel == 2
+        return Geometry.Cartesian123Point(coord.x2, -coord.x1, coord.x3)
+    elseif panel == 3
+        return Geometry.Cartesian123Point(coord.x3, -coord.x1, -coord.x2)
+    elseif panel == 4
+        return Geometry.Cartesian123Point(-coord.x1, -coord.x3, -coord.x2)
+    elseif panel == 5
+        return Geometry.Cartesian123Point(-coord.x2, -coord.x3, coord.x1)
+    elseif panel == 6
+        return Geometry.Cartesian123Point(-coord.x3, coord.x2, coord.x1)
     end
-    error("invalid coordinates $x")
+    error("invalid panel")
+end
+
+function coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    vert::Integer,
+)
+    FT = typeof(mesh.domain.radius)
+    ne = mesh.ne
+    x, y, panel = elem.I
+    # ϕx, ϕy ∈ [-1,1] are the "panel coordinates" of the vertex
+    # we arrange this calculation carefully so that if zero, the sign is
+    # consistent with other vertices of the element. this makes it easier to
+    # deal with branch cuts (e.g. when plotting on lat/long axes)
+
+    if (vert == 1 || vert == 4)
+        ϕx = FT(2 * (x - 1) - ne) / ne
+    else
+        ϕx = -FT(ne - 2 * x) / ne
+    end
+    if (vert == 1 || vert == 2)
+        ϕy = FT(2 * (y - 1) - ne) / ne
+    else
+        ϕy = -FT(ne - 2 * y) / ne
+    end
+    return _coordinates(mesh, ϕx, ϕy, panel)
+end
+coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    ξ::StaticArrays.SVector{2},
+) = coordinates(mesh, elem, ξ, mesh.localelementmap)
+
+function coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    (ξ1, ξ2)::StaticArrays.SVector{2},
+    ::IntrinsicMap,
+)
+    FT = typeof(mesh.domain.radius)
+    ne = mesh.ne
+    x, y, panel = elem.I
+    # again, we want to arrange the calculation carefully so that signed zeros are correct
+    # - if isodd(ne) and ϕx == 0, then ξ1 == 0, and should have the same sign
+    ϕx = (ξ1 - FT(ne + 1 - 2 * x)) / ne
+    ϕy = (ξ2 - FT(ne + 1 - 2 * y)) / ne
+    # - if iseven(ne) and ϕx == 0, then ξ1 == +/-1, and should have the _opposite_ sign
+    if iseven(ne)
+        if ϕx == 0
+            ϕx = copysign(ϕx, -ξ1)
+        end
+        if ϕy == 0
+            ϕy = copysign(ϕy, -ξ2)
+        end
+    end
+    return _coordinates(mesh, ϕx, ϕy, panel)
+end
+function coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    (ξ1, ξ2)::StaticArrays.SVector{2},
+    ::NormalizedBilinearMap,
+)
+    radius = mesh.domain.radius
+    c1, c2, c3, c4 = ntuple(v -> coordinates(mesh, elem, v), 4)
+    c = Geometry.bilinear_interpolate((c1, c2, c3, c4), ξ1, ξ2)
+    return c * (radius / LinearAlgebra.norm(Geometry.components(c)))
+end
+
+function containing_element(
+    mesh::AbstractCubedSphere,
+    coord::Geometry.Cartesian123Point,
+)
+    ne = mesh.ne
+    panel = containing_panel(coord)
+    ϕx, ϕy = _inv_coordinates(mesh, coord, panel)
+
+    x = refindex(ϕx, ne)
+    y = refindex(ϕy, ne)
+    return CartesianIndex(x, y, panel)
+end
+
+reference_coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    coord::Geometry.Cartesian123Point,
+) = reference_coordinates(mesh, elem, coord, mesh.localelementmap)
+
+function reference_coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    coord::Geometry.Cartesian123Point,
+    ::IntrinsicMap,
+)
+    x, y, panel = elem.I
+    ne = mesh.ne
+    ϕx, ϕy = _inv_coordinates(mesh, coord, panel)
+
+    ξ1 = refcoord(ϕx, ne, x)
+    ξ2 = refcoord(ϕy, ne, y)
+    return StaticArrays.SVector(ξ1, ξ2)
+end
+function reference_coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    coord::Geometry.Cartesian123Point,
+    ::NormalizedBilinearMap,
+)
+    panel = elem[3]
+    # convert everything to panel 1: this ensures x1 is non-zero
+    cc = ntuple(v -> from_panel(panel, coordinates(mesh, elem, v)), 4)
+    ζ0, ζx, ζy = Geometry.components(from_panel(panel, coord))
+    # by taking the ratio of the components, we remove the normalization
+    # constant.
+    ux = ζx / ζ0
+    uy = ζy / ζ0
+    return Geometry.bilinear_invert(
+        map(c -> StaticArrays.SVector(c.x2 - ux * c.x1, c.x3 - uy * c.x1), cc),
+    )
 end
 
 
@@ -171,51 +332,47 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
 # Constructors
 
-    EquiangularCubedSphere(domain::Domains.SphereDomain, ne::Integer)
+    EquiangularCubedSphere(
+        domain::Domains.SphereDomain,
+        ne::Integer,
+        localelementmap=NormalizedBilinearMap()
+        )
 
 Constuct an `EquiangularCubedSphere` on `domain` with `ne` elements across
 each panel.
 """
-struct EquiangularCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
+struct EquiangularCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
+       AbstractCubedSphere
     domain::S
     ne::Int
+    localelementmap::E
 end
+EquiangularCubedSphere(domain::SphereDomain, ne::Int) =
+    EquiangularCubedSphere(domain, ne, NormalizedBilinearMap())
 
 # not yet provided by Base Julia
 # https://github.com/JuliaLang/julia/issues/28943
 # this appears to be more accurate than tan(pi * x)
 tanpi(x) = sinpi(x) / cospi(x)
+atanpi(x) = atan(x) / pi
 
-function coordinates(mesh::EquiangularCubedSphere, elem, (ξ1, ξ2)::NTuple{2})
+function _coordinates(mesh::EquiangularCubedSphere, ϕx, ϕy, panel)
     radius = mesh.domain.radius
-    ne = mesh.ne
-    x, y, panel = elem.I
-    ξx = (2 * x - ne - 1 + ξ1) / ne
-    ξy = (2 * y - ne - 1 + ξ2) / ne
-    ux = tanpi(ξx / 4)
-    uy = tanpi(ξy / 4)
+    ux = tanpi(ϕx / 4)
+    uy = tanpi(ϕy / 4)
     ζ0 = radius / hypot(ux, uy, 1)
     ζx = ux * ζ0
     ζy = uy * ζ0
-    panel_to_coordinates(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
+    to_panel(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
 end
-
-function containing_element(
-    mesh::EquiangularCubedSphere,
-    coord::Geometry.Cartesian123Point,
-)
-    ne = mesh.ne
-    panel, coord1 = coordinates_to_panel(coord)
+function _inv_coordinates(mesh::EquiangularCubedSphere, coord, panel)
+    coord1 = from_panel(panel, coord)
     ζ0, ζx, ζy = Geometry.components(coord1)
     ux = ζx / ζ0
     uy = ζy / ζ0
-    ξx = 4 * atan(ux) / pi
-    ξy = 4 * atan(uy) / pi
-
-    x, ξ1 = split_refcoord(ξx, ne)
-    y, ξ2 = split_refcoord(ξy, ne)
-
-    return CartesianIndex(x, y, panel), (ξ1, ξ2)
+    ϕx = 4 * atanpi(ux)
+    ϕy = 4 * atanpi(uy)
+    return ϕx, ϕy
 end
 
 """
@@ -231,35 +388,28 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 Constuct an `EquidistantCubedSphere` on `domain` with `ne` elements across
 each panel.
 """
-struct EquidistantCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
+struct EquidistantCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
+       AbstractCubedSphere
     domain::S
     ne::Int
+    localelementmap::E
 end
-function coordinates(mesh::EquidistantCubedSphere, elem, (ξ1, ξ2)::NTuple{2})
+EquidistantCubedSphere(domain::SphereDomain, ne::Int) =
+    EquidistantCubedSphere(domain, ne, NormalizedBilinearMap())
+
+function _coordinates(mesh::EquidistantCubedSphere, ϕx, ϕy, panel)
     radius = mesh.domain.radius
-    ne = mesh.ne
-    x, y, panel = elem.I
-    ξx = (2 * x - ne - 1 + ξ1) / ne
-    ξy = (2 * y - ne - 1 + ξ2) / ne
-    ζ0 = radius / hypot(ξx, ξy, 1)
-    ζx = ξx * ζ0
-    ζy = ξy * ζ0
-    panel_to_coordinates(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
+    ζ0 = radius / hypot(ϕx, ϕy, 1)
+    ζx = ϕx * ζ0
+    ζy = ϕy * ζ0
+    to_panel(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
 end
-function containing_element(
-    mesh::EquidistantCubedSphere,
-    coord::Geometry.Cartesian123Point,
-)
-    ne = mesh.ne
-    panel, coord1 = coordinates_to_panel(coord)
+function _inv_coordinates(mesh::EquidistantCubedSphere, coord, panel)
+    coord1 = from_panel(panel, coord)
     ζ0, ζx, ζy = Geometry.components(coord1)
-    ξx = ζx / ζ0
-    ξy = ζy / ζ0
-
-    x, ξ1 = split_refcoord(ξx, ne)
-    y, ξ2 = split_refcoord(ξy, ne)
-
-    return CartesianIndex(x, y, panel), (ξ1, ξ2)
+    ϕx = ζx / ζ0
+    ϕy = ζy / ζ0
+    return ϕx, ϕy
 end
 
 
@@ -276,38 +426,33 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 Constuct an `ConformalCubedSphere` on `domain` with `ne` elements across
 each panel.
 """
-struct ConformalCubedSphere{S <: SphereDomain} <: AbstractCubedSphere
+struct ConformalCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:
+       AbstractCubedSphere
     domain::S
     ne::Int
+    localelementmap::E
 end
-function coordinates(mesh::ConformalCubedSphere, elem, (ξ1, ξ2)::NTuple{2})
+ConformalCubedSphere(domain::SphereDomain, ne::Int) =
+    ConformalCubedSphere(domain, ne, NormalizedBilinearMap())
+
+function _coordinates(mesh::ConformalCubedSphere, ϕx, ϕy, panel)
     radius = mesh.domain.radius
-    ne = mesh.ne
-    x, y, panel = elem.I
-    ξx = (2 * x - ne - 1 + ξ1) / ne
-    ξy = (2 * y - ne - 1 + ξ2) / ne
-    ζx, ζy, ζ0 = CubedSphere.conformal_cubed_sphere_mapping(ξx, ξy)
-    panel_to_coordinates(
-        panel,
-        Geometry.Cartesian123Point(radius * ζ0, radius * ζx, radius * ζy),
-    )
+    nζx, nζy, nζ0 = CubedSphere.conformal_cubed_sphere_mapping(ϕx, ϕy)
+    ζ0 = radius * nζ0
+    ζx = radius * nζx
+    ζy = radius * nζy
+    to_panel(panel, Geometry.Cartesian123Point(ζ0, ζx, ζy))
 end
-function containing_element(
-    mesh::ConformalCubedSphere,
-    coord::Geometry.Cartesian123Point,
-)
-    ne = mesh.ne
-    panel, coord1 = coordinates_to_panel(coord)
+function _inv_coordinates(mesh::ConformalCubedSphere, coord, panel)
+    coord1 = from_panel(panel, coord)
     ζ0, ζx, ζy = Geometry.components(coord1)
     R = hypot(ζx, ζy, ζ0)
-    ξx, ξy = CubedSphere.conformal_cubed_sphere_inverse_mapping(
+    absϕx, absϕy = CubedSphere.conformal_cubed_sphere_inverse_mapping(
         abs(ζx) / R,
         abs(ζy) / R,
         ζ0 / R,
     )
-
-    x, ξ1 = split_refcoord(copysign(ξx, ζx), ne)
-    y, ξ2 = split_refcoord(copysign(ξy, ζy), ne)
-
-    return CartesianIndex(x, y, panel), (ξ1, ξ2)
+    ϕx = copysign(absϕx, ζx)
+    ϕy = copysign(absϕy, ζy)
+    return ϕx, ϕy
 end

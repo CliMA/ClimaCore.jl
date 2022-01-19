@@ -11,7 +11,8 @@ import ..Domains:
     boundary_names,
     coordinate_type
 import ..Geometry
-import SparseArrays, CubedSphere
+import SparseArrays, CubedSphere, LinearAlgebra, StaticArrays
+
 
 
 """
@@ -122,6 +123,11 @@ include("cubedsphere.jl")
 @deprecate Mesh2D(domain::RectangleDomain, x1c, x2c) RectilinearMesh(
     IntervalMesh(domain.interval1, x1c),
     IntervalMesh(domain.interval2, x2c),
+)
+@deprecate coordinates(mesh::AbstractMesh, elem, ξ::NTuple) coordinates(
+    mesh,
+    elem,
+    StaticArrays.SVector(ξ),
 )
 
 end # module

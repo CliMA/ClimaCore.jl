@@ -80,9 +80,11 @@ end
 
 domain(topology::Topology2D) = domain(topology.mesh)
 nlocalelems(topology::Topology2D) = length(topology.elemorder)
+coordinates(topology::Topology2D, e::Int, arg) =
+    coordinates(topology.mesh, topology.elemorder[e], arg)
 vertex_coordinates(topology::Topology2D, e::Int) =
     ntuple(4) do vert
-        Meshes.coordinates(topology.mesh, topology.elemorder[e], vert)
+        coordinates(topology, e, vert)
     end
 
 

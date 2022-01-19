@@ -3,7 +3,7 @@ module Geometry
 using ..RecursiveApply
 import LinearAlgebra
 
-import StaticArrays: SVector
+using StaticArrays
 
 export ⊗
 
