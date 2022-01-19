@@ -51,12 +51,12 @@ Test_Type = "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # 
 P = map(c -> 0.0, c_coords.z)
 Φ = @. gravitational_potential(c_coords.z)
 ∇Φ = vgradc2f.(Φ)
-p = (; P, Φ, ∇Φ)
+parameters = (; P, Φ, ∇Φ)
 
 if Test_Type == "Explicit"
     T = 3600
     dt = 5
-    prob = ODEProblem(rhs!, Y, (0.0, T), p)
+    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
     # solve ode
     sol = solve(
         prob,
@@ -65,13 +65,14 @@ if Test_Type == "Explicit"
         saveat = dt,
         progress = true,
         adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
+        progress_message = (dt, u, parameters, t) -> t,
     )
 elseif Test_Type == "Semi-Explicit"
     T = 3600
     dt = 5
 
-    prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), p)
+    prob =
+        SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), parameters)
 
     # solve ode
     sol = solve(
@@ -81,7 +82,7 @@ elseif Test_Type == "Semi-Explicit"
         saveat = dt,
         progress = true,
         adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
+        progress_message = (dt, u, parameters, t) -> t,
     )
 
 elseif Test_Type == "Implicit"
@@ -93,7 +94,7 @@ elseif Test_Type == "Implicit"
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
-    p = (; ρw = similar(𝕄), p...)
+    parameters = (; ρw = similar(𝕄), parameters...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -115,11 +116,11 @@ elseif Test_Type == "Implicit"
             rhs!;
             w_kwarg...,
             jac_prototype = jac_prototype,
-            tgrad = (dT, Y, p, t) -> fill!(dT, 0),
+            tgrad = (dT, Y, parameters, t) -> fill!(dT, 0),
         ),
         Y,
         (0.0, T),
-        p,
+        parameters,
     )
 
     haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
@@ -139,7 +140,7 @@ elseif Test_Type == "Implicit"
         adaptive = false,
         progress = true,
         progress_steps = 1,
-        progress_message = (dt, u, p, t) -> t,
+        progress_message = (dt, u, parameters, t) -> t,
     )
 
 elseif Test_Type == "Implicit-Explicit"
@@ -151,7 +152,7 @@ elseif Test_Type == "Implicit-Explicit"
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
-    p = (; ρw = similar(𝕄), p...)
+    parameters = (; ρw = similar(𝕄), parameters...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -172,12 +173,12 @@ elseif Test_Type == "Implicit-Explicit"
             rhs_implicit!;
             w_kwarg...,
             jac_prototype = jac_prototype,
-            tgrad = (dT, Y, p, t) -> fill!(dT, 0),
+            tgrad = (dT, Y, parameters, t) -> fill!(dT, 0),
         ),
         rhs_remainder!,
         Y,
         (0, T),
-        p,
+        parameters,
     )
 
     sol = solve(
@@ -194,7 +195,7 @@ elseif Test_Type == "Implicit-Explicit"
         adaptive = false,
         progress = true,
         progress_steps = 1,
-        progress_message = (dt, u, p, t) -> t,
+        progress_message = (dt, u, parameters, t) -> t,
     )
 
 
