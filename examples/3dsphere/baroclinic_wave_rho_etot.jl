@@ -122,6 +122,8 @@ elseif Test_Type == "Implicit"
         p,
     )
 
+    haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
+
     sol = solve(
         prob,
         dt = dt,
