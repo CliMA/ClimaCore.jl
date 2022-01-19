@@ -12,14 +12,13 @@ using OrdinaryDiffEq:
     KenCarp4
 import ClimaCore.Utilities: half
 
-include("baroclinic_wave_rho_etot_utils.jl")
+include("baroclinic_wave_rho_theta_utils.jl")
 
 # Mesh setup
 zmax = 30.0e3
 helem = 4
 velem = 10
 npoly = 4
-
 
 # set up 3D spherical domain and coords
 hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), helem, velem, npoly)
@@ -44,8 +43,7 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 # initialize tendency
 dYdt = similar(Y)
 
-
-Test_Type = "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # "Explicit" # "Seim-Explicit"  "Implicit-Explicit"
+Test_Type = "Implicit"    # "Explicit" # "Semi-Explicit"  "Implicit-Explicit"
 
 # setup p
 P = map(c -> 0.0, c_coords.z)
@@ -85,11 +83,11 @@ elseif Test_Type == "Semi-Explicit"
     )
 
 elseif Test_Type == "Implicit"
-    T = 86400.0 * 10
-    dt = 400.0
+    T = 86400 * 10
+    dt = 400
 
     ode_algorithm = Rosenbrock23
-    J_𝕄ρ_overwrite = :none
+    J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
@@ -106,9 +104,6 @@ elseif Test_Type == "Implicit"
     )
 
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
-
-    # using DiffEqOperators
-    # Base.strides(::ClimaCore.Fields.FieldVector) = (1,)
 
     prob = ODEProblem(
         ODEFunction(
@@ -118,16 +113,13 @@ elseif Test_Type == "Implicit"
             tgrad = (dT, Y, p, t) -> fill!(dT, 0),
         ),
         Y,
-        (0.0, T),
+        (0, T),
         p,
     )
-
-    haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
 
     sol = solve(
         prob,
         dt = dt,
-        # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
         # TODO Newton
         ode_algorithm(linsolve = linsolve!),
         reltol = 1e-1,
@@ -135,19 +127,18 @@ elseif Test_Type == "Implicit"
         # TODO Linear
         # ode_algorithm(linsolve = linsolve!);
         #
-        saveat = dt * 9 * 12,
+        saveat = dt * 36,
         adaptive = false,
         progress = true,
         progress_steps = 1,
         progress_message = (dt, u, p, t) -> t,
     )
-
 elseif Test_Type == "Implicit-Explicit"
     T = 3600
-    dt = 5
+    dt = 300
 
     ode_algorithm = ImplicitEuler
-    J_𝕄ρ_overwrite = :none
+    J_𝕄ρ_overwrite = :grav
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
@@ -164,8 +155,6 @@ elseif Test_Type == "Implicit-Explicit"
     )
 
     w_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
-
-
 
     prob = SplitODEProblem(
         ODEFunction(
@@ -184,11 +173,11 @@ elseif Test_Type == "Implicit-Explicit"
         prob,
         dt = dt,
         # TODO Newton
-        ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 1)),
-        reltol = 1e-1,
-        abstol = 1e-6,
+        # ode_algorithm(linsolve = linsolve!, nlsolve = NLNewton(; max_iter = 10)),
+        # reltol = 1e-1,
+        # abstol = 1e-6,
         # TODO Linear
-        # ode_algorithm(linsolve = linsolve!);
+        ode_algorithm(linsolve = linsolve!);
         #
         saveat = dt,
         adaptive = false,
@@ -197,14 +186,12 @@ elseif Test_Type == "Implicit-Explicit"
         progress_message = (dt, u, p, t) -> t,
     )
 
-
 else
     error("Test Type: ", Test_Type, " is not recognized.")
 end
 
-
-@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe_tot)
-@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].Yc.ρe_tot)
+@info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρθ)
+@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].Yc.ρθ)
 
 using ClimaCorePlots, Plots
 ENV["GKSwstype"] = "nul"
@@ -216,7 +203,7 @@ anim = Plots.@animate for sol1 in sol.u
     Plots.plot(v, level = 3, clim = (-6, 6))
 end
 
-dirname = "baroclinic_wave_rho_etot_implicit"
+dirname = "baroclinic_wave_rho_theta_implicit"
 path = joinpath(@__DIR__, "output", dirname)
 mkpath(path)
 Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)

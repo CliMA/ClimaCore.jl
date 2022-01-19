@@ -461,12 +461,23 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave implicit"
-    key: "cpu_baroclinic_wave_imp"
+  - label: ":computer: baroclinic wave rho etot implicit"
+    key: "cpu_baroclinic_wave_rho_etot_imp"
     command:
       - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_etot.jl"
     artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave_implicit/*"
+      - "examples/3dsphere/output/baroclinic_wave_rho_etot_implicit/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: baroclinic wave rho theta implicit"
+    key: "cpu_baroclinic_wave_rho_theta_imp"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_theta.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/baroclinic_wave_rho_theta_implicit/*"
     agents:
       config: cpu
       queue: central
