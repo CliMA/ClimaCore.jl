@@ -17,6 +17,9 @@ using ..RecursiveApply
 include("spectralelement.jl")
 include("numericalflux.jl")
 include("finitedifference.jl")
+include("stencilcoefs.jl")
+include("operator2stencil.jl")
+include("pointwisestencil.jl")
 include("remapping.jl")
 
 end # module

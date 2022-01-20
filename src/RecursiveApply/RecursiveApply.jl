@@ -80,6 +80,7 @@ const ⊠ = rmul
 
 Recursively add elements of `X` and `Y`.
 """
+radd(X) = X
 radd(X, Y) = rmap(+, X, Y)
 radd(w::Number, X) = rmap(x -> w + x, X)
 radd(X, w::Number) = rmap(x -> x + w, X)

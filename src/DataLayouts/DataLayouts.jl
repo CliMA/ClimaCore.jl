@@ -118,7 +118,7 @@ abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 
 # Generic AbstractData methods
 
-Base.eltype(::AbstractData{S}) where {S} = S
+Base.eltype(::Type{<:AbstractData{S}}) where {S} = S
 @inline function Base.propertynames(::AbstractData{S}) where {S}
     filter(name -> sizeof(fieldtype(S, name)) > 0, fieldnames(S))
 end

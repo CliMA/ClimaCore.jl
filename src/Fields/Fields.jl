@@ -89,7 +89,7 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 
-Base.eltype(field::Field) = eltype(field_values(field))
+Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
 Base.parent(field::Field) = parent(field_values(field))
 
 # to play nice with DifferentialEquations; may want to revisit this
