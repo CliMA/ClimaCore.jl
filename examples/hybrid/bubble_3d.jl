@@ -304,7 +304,9 @@ using OrdinaryDiffEq
 Δt = 0.05
 prob = ODEProblem(rhs!, Y, (0.0, 1.0))
 
-haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
 
 sol = @timev solve(
     prob,
