@@ -1,0 +1,8 @@
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
+NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
