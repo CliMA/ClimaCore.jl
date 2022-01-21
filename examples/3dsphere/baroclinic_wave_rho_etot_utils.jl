@@ -158,8 +158,8 @@ function initial_condition_velocity(local_geometry)
     )
 end
 
-function rhs!(dY, Y, p, t)
-    @unpack P, Φ, ∇Φ = p
+function rhs!(dY, Y, parameters, t)
+    @unpack P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, χuₕ, cp, cE = parameters
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
@@ -170,6 +170,8 @@ function rhs!(dY, Y, p, t)
     dw = dY.w
     duₕ = dY.uₕ
     dρe_tot = dY.Yc.ρe_tot
+    z = c_coords.z
+    dYc = dY.Yc
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
@@ -182,10 +184,11 @@ function rhs!(dY, Y, p, t)
     # 0) compute hyperviscosity coefficients
 
     χe_tot = @. dρe_tot = hwdiv(hgrad(cρe_tot / cρ))
-    χuₕ = @. duₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-        )
+    @. χuₕ =
+        duₕ =
+            hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+            )
 
     Spaces.weighted_dss!(dρe_tot)
     Spaces.weighted_dss!(duₕ)
@@ -199,38 +202,36 @@ function rhs!(dY, Y, p, t)
         )
 
     # 1) Mass conservation
-    cw = If2c.(fw)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+    @. cw = If2c(fw)
+    @. cuvw = Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(cw)
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuvw))
+    @. dρ -= hdiv(cρ * (cuvw))
 
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
 
     # explicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    @. dρ -= vdivf2c(Ic2f(cρ * cuₕ))
     # implicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    @. dρ -= vdivf2c(Ic2f(cρ) * fw)
 
     # 2) Momentum equation
 
     # curl term
     # effectively a homogeneous Dirichlet condition on u₁ at the boundary
 
-    cω³ = hcurl.(cuₕ) # Contravariant3Vector
-    fω¹² = hcurl.(fw) # Contravariant12Vector
-    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
+    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
 
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
-    fu¹² =
-        Geometry.Contravariant12Vector.(
-            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
-        ) # Contravariant12Vector in 3D
-    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    @. fu¹² =
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(cuₕ))) # Contravariant12Vector in 3D
+    @. fu³ = Geometry.Contravariant3Vector(Geometry.Covariant123Vector(fw))
 
     @. duₕ -= If2c(fω¹² × fu³)
 
@@ -239,9 +240,8 @@ function rhs!(dY, Y, p, t)
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce_tot = @. cρe_tot / cρ
-    cp = @. pressure(cρ, ce_tot, norm(cuvw), c_coords.z)
-    cE = @. (norm(cuvw)^2) / 2 + Φ
+    @. cp = pressure(cρ, cρe_tot / cρ, norm(cuvw), z)
+    @. cE = (norm(cuvw)^2) / 2 + Φ
 
     @. duₕ -= hgrad(cp) / cρ
     @. duₕ -= hgrad(cE)
@@ -256,9 +256,9 @@ function rhs!(dY, Y, p, t)
     @. dρe_tot -= vdivf2c(Ic2f(cuₕ * (cρe_tot + cp)))
     @. dρe_tot -= vdivf2c(fw * Ic2f(cρe_tot + cp))
 
-    Spaces.weighted_dss!(dY.Yc)
-    Spaces.weighted_dss!(dY.uₕ)
-    Spaces.weighted_dss!(dY.w)
+    Spaces.weighted_dss!(dYc)
+    Spaces.weighted_dss!(duₕ)
+    Spaces.weighted_dss!(dw)
 
     return dY
 
