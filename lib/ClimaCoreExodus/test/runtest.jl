@@ -4,6 +4,7 @@ using NCDatasets
 using TempestRemap_jll
 using Test 
 using IntervalSets
+using ClimaCoreExodus
 
 using Plots             
 function plot_flatmesh(Psi,nelem)
@@ -18,7 +19,6 @@ end
 
 dir = mktempdir(".")
 
-include("../src/ClimaCoreExodus.jl")
 
 @testset "mesh coordinates ClimaCore > TempestRemap" begin
     """
@@ -52,27 +52,22 @@ end
     regrid fv CS generated in CC
     """
     # input mesh
-    nq = 4
     ne_i = 20
-    R = 1 # unit sphere 
+    R = 1.0 # unit sphere 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i) # ne×ne×6 
     grid_topology = ClimaCore.Topologies.Topology2D(mesh)
     nc_name_in = dir*"/test_in.nc"
     write_exodus_identical(nc_name_in, grid_topology)
 
-    # generate fake input data (replace with CC variable; NB this requires write_exodus_identical() above)
-    nc_name_data_in = dir*"/Psi_in.nc"
-    run(`$(GenerateTestData_exe()) --mesh $nc_name_in --test 1 --out $nc_name_data_in`) # var: Psi
-
     # output mesh
     ne_o = 3
-    R = 1 
+    R = 1.0 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o) # ne×ne×6 
     grid_topology = ClimaCore.Topologies.Topology2D(mesh)
     nc_name_out = dir*"/test_out.nc"
-    write_exodus_identical(nc_name_out, grid_topology)
+    write_exodus_general(nc_name_out, grid_topology)
 
     # overlap mesh
     nc_name_ol = dir*"/test_ol.g"
@@ -81,6 +76,10 @@ end
     # map weights 
     nc_name_wgt = dir*"/test_wgt.g"
     run(`$(TempestRemap_jll.GenerateOfflineMap_exe()) --in_mesh $nc_name_in --out_mesh $nc_name_out --ov_mesh $nc_name_ol --in_np 1 --out_map $nc_name_wgt`) # FV > FV, parallelized sparse matrix multiply (SparseMatrix.h)
+
+    # generate fake input data (replace with CC variable; NB this requires write_exodus_identical() above)
+    nc_name_data_in = dir*"/Psi_in.nc"
+    run(`$(GenerateTestData_exe()) --mesh $nc_name_in --test 1 --out $nc_name_data_in`) # var: Psi
 
     # apply map (this to be done by CC at each timestep)
     nc_name_data_out = dir*"/Psi_out.nc"
@@ -107,13 +106,13 @@ end
     # png(dir*"/out.png")
 
 end    
-
+#=
 @testset "regrid fe" begin
 
     # input mesh
     nq = 5
     ne_i = 20
-    R = 1 # unit sphere 
+    R = 1.0 # unit sphere 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i) # ne×ne×6 
     grid_topology = ClimaCore.Topologies.Topology2D(mesh)
@@ -127,7 +126,7 @@ end
 
     # output mesh
     ne_o = 3
-    R = 1 
+    R = 1.0 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o) # ne×ne×6 
     grid_topology = ClimaCore.Topologies.Topology2D(mesh)
@@ -169,7 +168,7 @@ end
     # u = u.components.data.:1
     # u_vals=getfield(u, :values) #IJFH : 4,4,1,1,216
 end
-    
+    =#
 # run(`$(TempestRemap_jll.GenerateCSMesh_exe()) --res 64 --alt --file $nc_name_in`)
 # run(`$(TempestRemap_jll.GenerateRLLMesh_exe()) --lon 256 --lat 128 --file $nc_name_out`)
 # run(`$(TempestRemap_jll.GenerateOverlapMesh_exe()) --a $nc_name_in --b $nc_name_out --out $nc_name_ol`)

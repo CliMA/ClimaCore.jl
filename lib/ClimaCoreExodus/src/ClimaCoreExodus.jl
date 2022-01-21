@@ -1,4 +1,6 @@
-#module ClimaCoreExodus
+module ClimaCoreExodus
+
+export write_exodus_identical, write_exodus_general
 
 import ClimaCore
 using ClimaCore: Geometry, Meshes, Domains, Topologies
@@ -8,7 +10,7 @@ using IntervalSets
 
 include("map_mesh_helper.jl")
 
-function write_exodus_identical(filename, topology::Topologies.Topology2D)
+function write_exodus_identical(filename::AbstractString, topology::Topologies.Topology2D)
     """
     generates a mesh that is identical to TempestRemap
     """
@@ -91,10 +93,11 @@ function write_exodus_identical(filename, topology::Topologies.Topology2D)
     close(dts)
 end
 
-function write_exodus_general(filename, topology::Topologies.Topology2D)
+function write_exodus_general(filename, topology::Topologies.Topology2D; normalize_coordinates=true)
     """
-    generates a mesh that is identical to TempestRemap
+    generates a mesh that is not identical to TempestRemap
     """
+    #=
     mesh = topology.mesh
     ne = topology.mesh.ne
 
@@ -110,24 +113,41 @@ function write_exodus_general(filename, topology::Topologies.Topology2D)
             end
         end
     end 
+    =#
+
+    nelem = Topologies.nlocalelems(topology)
+    nvert = length(Topologies.vertices(topology))
+    connect1 = Array{Int32}(undef, (4, nelem)) # array of unique vertex indices for each element
+    coord = Array{Float64}(undef, (nvert, 3))  # array of coordinates for each unique vertex
+    for (uv, vertex) in enumerate(Topologies.vertices(topology))
+        for (e,v) in vertex
+            connect1[v,e] = uv
+        end
+        (e,v) = first(vertex)
+        c = Geometry.components(Meshes.coordinates(topology, e, v))
+        if normalize_coordinates
+            c = c ./ norm(c)
+        end
+        coord[uv,:] .= c
+    end
 
     # produce connectivity tensor which maps Exodus unique nodes onto the face-wise indices 
-    connect1_v_fnn, connect1_f_n_n_v = calc_connect1(ne) # tempest map from unique
-    connect1_4tr = Int32.(connect1_v_fnn)
+    # connect1_v_fnn, connect1_f_n_n_v = calc_connect1(ne) # tempest map from unique
+    # connect1_4tr = Int32.(connect1_v_fnn)
 
     # reorder coord_on_tfaces (4 x 54) in the same order as tempest unique nodes (56 x 3)
-    coord_4tr = f2u_coord(connect1_f_n_n_v, coord_f_n_n_v_x, ne) # = coord in tempest
+    # coord_4tr = f2u_coord(connect1_f_n_n_v, coord_f_n_n_v_x, ne) # = coord in tempest
 
     len_string = 33
     len_line = 81
     four = 4
     time_step = 0
     num_dim = 3
-    num_nodes = Int32((ne * ne * 6 * 4 - 3 * 8) / 4 + 8 )
-    num_elem = Int32(ne * ne * 6)
+    num_nodes = nvert # Int32((ne * ne * 6 * 4 - 3 * 8) / 4 + 8 )
+    num_elem = nelem # Int32(ne * ne * 6)
     num_qa_rec = 1
     num_el_blk = 1
-    num_el_in_blk1 = Int32(ne * ne * 6)
+    num_el_in_blk1 = nelem # Int32(ne * ne * 6)
     num_nod_per_el1 = 4
     num_att_in_blk1 = 1
 
@@ -168,8 +188,8 @@ function write_exodus_general(filename, topology::Topologies.Topology2D)
     var_edge_type1 = defVar(dts, "edge_type1", Int32, ("num_nod_per_el1","num_el_in_blk1")) # tempest specific
     var_coord = defVar(dts, "coord", Float64, ("num_nodes","num_dim"))
 
-    var_coord[:,:] =  coord_4tr[:,:]
-    var_connect1[:,:] = connect1_4tr[:,:]
+    var_coord[:,:] = coord
+    var_connect1[:,:] = connect1
     var_coor_names[1,:] = [only("x"),only("y"),only("z")]
     var_eb_prop1[:] = Int32(1)
     var_eb_status[:] = Int32(1)
@@ -271,7 +291,7 @@ end
 
 #     close(dts)
 # end
-# #end # module
+end # module
 
 # TODO (though most likely won't need this)
 # - expand to more blocks for MPI / easier storage  

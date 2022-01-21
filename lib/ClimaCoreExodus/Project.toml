@@ -1,3 +1,8 @@
+name = "ClimaCoreExodus"
+uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
+version = "0.1.0"
+
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
