@@ -9,6 +9,27 @@ import ClimaCorePlots
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
+@testset "spectral element 1D" begin
+    domain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.XPoint(0.0) .. ClimaCore.Geometry.XPoint(π),
+        boundary_tags = (:left, :right),
+    )
+    mesh = ClimaCore.Meshes.IntervalMesh(domain; nelems = 5)
+    grid_topology = ClimaCore.Topologies.IntervalTopology(mesh)
+    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    space = ClimaCore.Spaces.SpectralElementSpace1D(grid_topology, quad)
+    coords = ClimaCore.Fields.coordinate_field(space)
+
+    u = sin.(π .* coords.x)
+
+    field_fig = Plots.plot(u)
+    @test field_fig !== nothing
+
+    fig_png = joinpath(OUTPUT_DIR, "1D_field.png")
+    Plots.png(field_fig, fig_png)
+    @test isfile(fig_png)
+end
+
 @testset "spectral element 2D cubed-sphere" begin
     R = 6.37122e6
 

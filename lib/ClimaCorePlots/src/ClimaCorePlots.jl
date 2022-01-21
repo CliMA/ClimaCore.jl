@@ -13,6 +13,53 @@ import ClimaCore:
     Topologies,
     Spaces
 
+using StaticArrays
+
+RecipesBase.@recipe function f(
+    field::Fields.SpectralElementField1D;
+    interpolate = 10,
+)
+    @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
+
+    # compute the interpolated data to plot
+    space = axes(field)
+    topology = Spaces.topology(space)
+    nelems = Topologies.nlocalelems(space)
+    QS = Spaces.quadrature_style(space)
+    quad_name = Base.typename(typeof(QS)).name
+    Nq = Spaces.Quadratures.degrees_of_freedom(QS)
+    Nu = max(interpolate, Nq)
+    coord_field = Fields.coordinate_field(space)
+
+    lagrange_quad = Spaces.Quadratures.ClosedUniform{Nu}()
+    dataspace = Spaces.SpectralElementSpace1D(space.topology, lagrange_quad)
+    interp = Operators.Interpolate(dataspace)
+    ifield = interp.(field)
+
+    coords = vec(parent(Fields.coordinate_field(ifield).x))
+    data = vec(parent(Fields.field_values(ifield)))
+
+    # NaN injection element boundaries
+    r = range(1, nelems + 1, length(coords) + 1)
+    xcoords = [coords[1]]
+    xdata = [data[1]]
+    for k in 2:(length(r) - 1)
+        if floor(r[k - 1]) != floor(r[k]) # check this.
+            push!(xcoords, NaN)
+            push!(xdata, NaN)
+        end
+        push!(xcoords, coords[k])
+        push!(xdata, data[k])
+    end
+
+    # set the plot attributes
+    coord_symbols = propertynames(coord_field)
+    seriestype := :path
+    xguide --> "$(coord_symbols[1])"
+    label --> "$nelems $quad_name{$Nq} element space"
+
+    (xcoords, xdata)
+end
 
 RecipesBase.@recipe function f(space::Spaces.SpectralElementSpace2D;)
     quad = Spaces.quadrature_style(space)
