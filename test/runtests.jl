@@ -13,6 +13,7 @@ include("DataLayouts/data2dx.jl")
 include("Geometry/geometry.jl")
 include("Geometry/axistensors.jl")
 
+include("Meshes/interval.jl")
 include("Meshes/rectangle.jl")
 include("Meshes/cubedsphere.jl")
 
