@@ -51,7 +51,7 @@ Test_Type = "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # 
 P = map(c -> 0.0, c_coords.z)
 Φ = @. gravitational_potential(c_coords.z)
 ∇Φ = vgradc2f.(Φ)
-p = (; P, Φ, ∇Φ)
+parameters = (; P, Φ, ∇Φ)
 
 if Test_Type == "Explicit"
     T = 3600
@@ -93,7 +93,7 @@ elseif Test_Type == "Implicit"
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
-    p = (; ρw = similar(𝕄), p...)
+    parameters = (; ρw = similar(𝕄), parameters...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -119,10 +119,13 @@ elseif Test_Type == "Implicit"
         ),
         Y,
         (0.0, T),
-        p,
+        parameters,
     )
 
-    haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
+    if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+        throw(:exit_profile)
+    end
+
 
     sol = solve(
         prob,

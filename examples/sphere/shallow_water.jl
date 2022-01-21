@@ -178,7 +178,7 @@ end
 
 # Set initial condition
 if test_name == rossby_haurwitz_test_name
-    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
         ϕ = coord.lat
         λ = coord.long
@@ -213,7 +213,7 @@ if test_name == rossby_haurwitz_test_name
         return (h = h, u = u)
     end
 elseif test_name == steady_state_compact_test_name
-    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
 
         ϕ = coord.lat
@@ -282,7 +282,7 @@ elseif test_name == steady_state_compact_test_name
         return (h = h, u = u)
     end
 elseif test_name == barotropic_instability_test_name
-    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
 
         ϕ = coord.lat
@@ -332,7 +332,7 @@ elseif test_name == barotropic_instability_test_name
         return (h = h, u = u)
     end
 else # steady-state and mountain test cases share the same form of fields
-    y0 = map(Fields.local_geometry_field(space)) do local_geometry
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
 
         ϕ = coord.lat
@@ -354,7 +354,7 @@ else # steady-state and mountain test cases share the same form of fields
     end
 end
 
-function rhs!(dydt, y, parameters, t)
+function rhs!(dYdt, y, parameters, t)
     f = parameters.f
     h_s = parameters.h_s
 
@@ -366,42 +366,45 @@ function rhs!(dydt, y, parameters, t)
     wcurl = Operators.WeakCurl()
 
     # Compute hyperviscosity first
-    @. dydt.h = wdiv(grad(y.h))
-    @. dydt.u =
+    @. dYdt.h = wdiv(grad(y.h))
+    @. dYdt.u =
         wgrad(div(y.u)) -
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
 
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dYdt)
 
-    @. dydt.h = -D₄ * wdiv(grad(dydt.h))
-    @. dydt.u =
+    @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
+    @. dYdt.u =
         -D₄ * (
-            wgrad(div(dydt.u)) - Geometry.Covariant12Vector(
-                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
             )
         )
 
     # Add in pieces
     @. begin
-        dydt.h += -wdiv(y.h * y.u)
-        dydt.u +=
+        dYdt.h += -wdiv(y.h * y.u)
+        dYdt.u +=
             -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) + y.u × (f + curl(y.u))
     end
-    Spaces.weighted_dss!(dydt)
-    return dydt
+    Spaces.weighted_dss!(dYdt)
+    return dYdt
 end
 
 # Set up RHS function
-dydt = similar(y0)
-rhs!(dydt, y0, (f = f, h_s = h_s), 0.0)
+dYdt = similar(Y)
+parameters = (; f = f, h_s = h_s)
+rhs!(dYdt, Y, parameters, 0.0)
 
 # Solve the ODE
 dt = 9 * 60
 T = 86400 * 2
 
-prob = ODEProblem(rhs!, y0, (0.0, T), (f = f, h_s = h_s))
+prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 
-haskey(ENV, "CI_PERF_SKIP_RUN") && exit() # for performance analysis
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
 
 sol = @timev solve(
     prob,
@@ -415,20 +418,20 @@ sol = @timev solve(
 
 @info "Test case: $(test_name)"
 @info "  with α: $(test_angle_name)"
-@info "Solution L₂ norm at time t = 0: ", norm(y0.h)
+@info "Solution L₂ norm at time t = 0: ", norm(Y.h)
 @info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].h)
-@info "Fluid volume at time t = 0: ", sum(y0.h)
+@info "Fluid volume at time t = 0: ", sum(Y.h)
 @info "Fluid volume at time t = $(T): ", sum(sol.u[end].h)
 
 if test_name == steady_state_test_name ||
    test_name == steady_state_compact_test_name
     # In these cases, we use the IC as the reference exact solution
-    @info "L₁ error at T = $(T): ", norm(sol.u[end].h .- y0.h, 1)
-    @info "L₂ error at T = $(T): ", norm(sol.u[end].h .- y0.h)
-    @info "L∞ error at T = $(T): ", norm(sol.u[end].h .- y0.h, Inf)
+    @info "L₁ error at T = $(T): ", norm(sol.u[end].h .- Y.h, 1)
+    @info "L₂ error at T = $(T): ", norm(sol.u[end].h .- Y.h)
+    @info "L∞ error at T = $(T): ", norm(sol.u[end].h .- Y.h, Inf)
     # Pointwise final L₂ error
     Plots.png(
-        Plots.plot(sol.u[end].h .- y0.h),
+        Plots.plot(sol.u[end].h .- Y.h),
         joinpath(path, "final_height_L2_error.png"),
     )
     linkfig(
@@ -441,7 +444,7 @@ if test_name == steady_state_test_name ||
     # Height errors over time
     relL1err = Array{Float64}(undef, div(T, dt))
     for t in 1:div(T, dt)
-        relL1err[t] = norm(sol.u[t].h .- y0.h, 1) / norm(y0.h, 1)
+        relL1err[t] = norm(sol.u[t].h .- Y.h, 1) / norm(Y.h, 1)
     end
     Plots.png(
         Plots.plot(
@@ -463,7 +466,7 @@ if test_name == steady_state_test_name ||
 
     relL2err = Array{Float64}(undef, div(T, dt))
     for t in 1:div(T, dt)
-        relL2err[t] = norm(sol.u[t].h .- y0.h) / norm(y0.h)
+        relL2err[t] = norm(sol.u[t].h .- Y.h) / norm(Y.h)
     end
     Plots.png(
         Plots.plot(
@@ -485,7 +488,7 @@ if test_name == steady_state_test_name ||
 
     RelLInferr = Array{Float64}(undef, div(T, dt))
     for t in 1:div(T, dt)
-        RelLInferr[t] = norm(sol.u[t].h .- y0.h, Inf) / norm(y0.h, Inf)
+        RelLInferr[t] = norm(sol.u[t].h .- Y.h, Inf) / norm(Y.h, Inf)
     end
     Plots.png(
         Plots.plot(
