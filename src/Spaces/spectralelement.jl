@@ -137,7 +137,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)
         FT = Geometry.float_type(CoordType3D)
-        #FT = Float64
         CoordType2D = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
         global_geometry =
             Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)

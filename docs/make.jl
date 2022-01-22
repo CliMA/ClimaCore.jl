@@ -55,7 +55,10 @@ withenv("GKSwstype" => "nul") do
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
             ],
-            "Libraries" => [joinpath("lib", "ClimaCoreVTK.md")],
+            "Libraries" => [
+                joinpath("lib", "ClimaCoreVTK.md"),
+                joinpath("lib", "ClimaCoreTempestRemap.md"),
+            ],
             "references.md",
         ],
     )
