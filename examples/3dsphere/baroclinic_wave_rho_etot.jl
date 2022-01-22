@@ -51,7 +51,18 @@ Test_Type = "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # 
 P = map(c -> 0.0, c_coords.z)
 Φ = @. gravitational_potential(c_coords.z)
 ∇Φ = vgradc2f.(Φ)
-parameters = (; P, Φ, ∇Φ)
+cuvw = Geometry.Covariant123Vector.(Y.uₕ)
+cw = If2c.(Y.w)
+cω³ = hcurl.(Y.uₕ)
+fω¹² = hcurl.(Y.w)
+fu¹² =
+    Geometry.Contravariant12Vector.(Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)),)
+fu³ = @. Geometry.Contravariant3Vector(Geometry.Covariant123Vector(Y.w))
+χuₕ = hwgrad.(hdiv.(Y.uₕ))
+cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe_tot / Y.Yc.ρ, norm(cuvw), c_coords.z)
+cE = @. (norm(cuvw)^2) / 2 + Φ
+
+parameters = (; P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, χuₕ, cp, cE)
 
 if Test_Type == "Explicit"
     T = 3600
