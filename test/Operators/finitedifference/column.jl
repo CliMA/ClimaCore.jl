@@ -5,7 +5,7 @@ import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 
 import ClimaCore.Operators: half, PlusHalf
-#=
+
 @testset "PlusHalf" begin
     @test half + 0 == half
     @test half < half + 1
@@ -195,7 +195,7 @@ end
         @test face_sum.b ≈ FT(pi)
     end
 end
-=#
+
 """
     convergence_rate(err, Δh)
 

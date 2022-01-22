@@ -69,12 +69,9 @@ end
     prob = ODEProblem(ODEFunction(f!), copy(y), (0.0, 1.0), 0.1)
     sol = solve(prob, SSPRK22(), dt = 0.01)
 
-    #TODO: this is broken as of DiffEq v6.4.2
-    @test_broken begin
-        sol = solve(prob, ImplicitEuler(), reltol = 1e-6)
-        y1 = similar(y)
-        y1 .= y .* exp(0.1)
+    sol = solve(prob, ImplicitEuler(), reltol = 1e-6)
+    y1 = similar(y)
+    y1 .= y .* exp(0.1)
 
-        norm(sol[end] .- y1) <= 1e-4 * norm(y1)
-    end
+    @test norm(sol[end] .- y1) <= 1e-4 * norm(y1)
 end
