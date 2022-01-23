@@ -159,19 +159,19 @@ function initial_condition_velocity(local_geometry)
 end
 
 function rhs!(dY, Y, parameters, t)
-    @unpack P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, χuₕ, cp, cE = parameters
+    @unpack P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE = parameters
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
     cρe_tot = Y.Yc.ρe_tot # total energy on centers
+    dYc = dY.Yc
 
     dρ = dY.Yc.ρ
     dw = dY.w
     duₕ = dY.uₕ
     dρe_tot = dY.Yc.ρe_tot
     z = c_coords.z
-    dYc = dY.Yc
 
     # # 0) update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
@@ -183,12 +183,14 @@ function rhs!(dY, Y, parameters, t)
 
     # 0) compute hyperviscosity coefficients
 
-    χe_tot = @. dρe_tot = hwdiv(hgrad(cρe_tot / cρ))
-    @. χuₕ =
-        duₕ =
-            hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-                hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-            )
+    @. dρe_tot = hwdiv(hgrad(cρe_tot / cρ))
+    χe_tot = dρe_tot # create alias for dρe_tot
+
+    @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+    χuₕ = duₕ # create alias for duₕ
 
     Spaces.weighted_dss!(dρe_tot)
     Spaces.weighted_dss!(duₕ)

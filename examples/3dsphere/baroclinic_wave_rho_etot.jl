@@ -58,11 +58,10 @@ fω¹² = hcurl.(Y.w)
 fu¹² =
     Geometry.Contravariant12Vector.(Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)),)
 fu³ = @. Geometry.Contravariant3Vector(Geometry.Covariant123Vector(Y.w))
-χuₕ = hwgrad.(hdiv.(Y.uₕ))
 cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe_tot / Y.Yc.ρ, norm(cuvw), c_coords.z)
 cE = @. (norm(cuvw)^2) / 2 + Φ
 
-parameters = (; P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, χuₕ, cp, cE)
+parameters = (; P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE)
 
 if Test_Type == "Explicit"
     T = 3600
@@ -138,7 +137,7 @@ elseif Test_Type == "Implicit"
     end
 
 
-    sol = solve(
+    sol = @timev solve(
         prob,
         dt = dt,
         # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
