@@ -159,7 +159,8 @@ function initial_condition_velocity(local_geometry)
 end
 
 function rhs!(dY, Y, parameters, t)
-    @unpack P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE = parameters
+    @unpack P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE, c_coords =
+        parameters
 
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
