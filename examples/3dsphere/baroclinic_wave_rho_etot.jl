@@ -61,7 +61,7 @@ fu³ = @. Geometry.Contravariant3Vector(Geometry.Covariant123Vector(Y.w))
 cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe_tot / Y.Yc.ρ, norm(cuvw), c_coords.z)
 cE = @. (norm(cuvw)^2) / 2 + Φ
 
-parameters = (; P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE)
+parameters = (; P, Φ, ∇Φ, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE, c_coords)
 
 if Test_Type == "Explicit"
     T = 3600
