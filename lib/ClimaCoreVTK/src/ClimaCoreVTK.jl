@@ -24,6 +24,7 @@ function WriteVTK.vtk_grid(
     basename::String,
     gridspace::Spaces.AbstractSpace;
     basis,
+    latlong = false,
     vtkargs...,
 )
 
@@ -32,19 +33,34 @@ function WriteVTK.vtk_grid(
     else
         cells = vtk_cells_linear(gridspace)
     end
-    cart_coords =
-        Geometry.Cartesian123Point.(
-            Fields.coordinate_field(gridspace),
-            Ref(gridspace.global_geometry),
+    if latlong
+        coords = Fields.coordinate_field(gridspace)
+        if eltype(coords) <: Geometry.LatLongPoint
+            coord_vecs = (vec(parent(coords.long)), vec(parent(coords.lat)))
+        elseif eltype(coords) <: Geometry.LatLongZPoint
+            coord_vecs = (
+                vec(parent(coords.long)),
+                vec(parent(coords.lat)),
+                vec(parent(coords.z)),
+            )
+        else
+            error(
+                "latlong=true only works for fields with LatLongPoint or LatLongZPoint coordinates",
+            )
+        end
+    else
+        coords =
+            Geometry.Cartesian123Point.(
+                Fields.coordinate_field(gridspace),
+                Ref(gridspace.global_geometry),
+            )
+        coord_vecs = (
+            vec(parent(coords.x1)),
+            vec(parent(coords.x2)),
+            vec(parent(coords.x3)),
         )
-    return vtk_grid(
-        basename,
-        vec(parent(cart_coords.x1)),
-        vec(parent(cart_coords.x2)),
-        vec(parent(cart_coords.x3)),
-        cells;
-        vtkargs...,
-    )
+    end
+    return vtk_grid(basename, coord_vecs..., cells; vtkargs...)
 end
 
 function vtk_file(
@@ -67,6 +83,7 @@ end
         basename::String,
         fields;
         basis=:cell,
+        latlong=false,
         vtkargs...
     )
 
@@ -84,6 +101,12 @@ The `basis` keyword option determines the type of cells used to write.:
 - `:lagrange`: output values at Lagrange nodes (valid only for spectral element
   spaces), using Use VTK Lagrange cells to accurately represent high-order
   elements.
+
+The `latlong=true` keyword option will output a spherical or spherical shell
+domain using the Mercator projection, with longitude along the x-axis, latitude
+along the y-axis, and altitude along the z-axis (if applicable). Note this
+currently only displays correctly if the number of elements across the cubed
+sphere face is even.
 
 Any additional keyword arguments are passed to
 [`WriteVTK.vtk_grid`](https://jipolanco.github.io/WriteVTK.jl/stable/grids/syntax/#Supported-options).

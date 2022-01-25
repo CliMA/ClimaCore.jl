@@ -34,6 +34,13 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         basis = :point,
     )
     @test isfile(joinpath(OUTPUT_DIR, "sphere.vtu"))
+    writevtk(
+        joinpath(OUTPUT_DIR, "sphere_latlong"),
+        (coords = coords,);
+        latlong = true,
+        basis = :point,
+    )
+    @test isfile(joinpath(OUTPUT_DIR, "sphere_latlong.vtu"))
 
     times = 0:10:350
     A = [
@@ -211,4 +218,13 @@ end
         Fields.coordinate_field(fspace);
         basis = :point,
     )
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid_sphere_point.vtu"))
+
+    writevtk(
+        joinpath(OUTPUT_DIR, "hybrid_sphere_point_latlong"),
+        Fields.coordinate_field(fspace);
+        latlong = true,
+        basis = :point,
+    )
+    @test isfile(joinpath(OUTPUT_DIR, "hybrid_sphere_point_latlong.vtu"))
 end
