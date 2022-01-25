@@ -132,12 +132,7 @@ elseif Test_Type == "Implicit"
         parameters,
     )
 
-    if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
-        throw(:exit_profile)
-    end
-
-
-    sol = @timev solve(
+    integrator = OrdinaryDiffEq.init(
         prob,
         dt = dt,
         # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
@@ -154,6 +149,12 @@ elseif Test_Type == "Implicit"
         progress_steps = 1,
         progress_message = (dt, u, p, t) -> t,
     )
+
+    if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+        throw(:exit_profile)
+    end
+
+    sol = @timev OrdinaryDiffEq.solve!(integrator)
 
 elseif Test_Type == "Implicit-Explicit"
     T = 3600
