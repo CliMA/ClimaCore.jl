@@ -136,6 +136,7 @@ component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
 ncomponents(p::AbstractPoint) = nfields(p)
+ncomponents(::Type{P}) where {P <: AbstractPoint} = fieldcount(P)
 components(p::AbstractPoint) =
     SVector(ntuple(i -> component(p, i), ncomponents(p)))
 
