@@ -18,8 +18,6 @@ steps:
       - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=perf -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples -e 'using Pkg; Pkg.develop([Pkg.PackageSpec(path=\".\"),
-                                                              Pkg.PackageSpec(path=\"lib/ClimaCorePlots\")])'"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
 

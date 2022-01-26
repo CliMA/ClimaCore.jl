@@ -9,17 +9,13 @@
 
 ### Use ClimaCore Examples from the ClimaCore parent package
 
+Instantiate the examples environment (this will download and install the necessary packages)
+
     cd ClimaCore
-    julia --project=examples
+    julia --project=examples -e 'using Pkg; Pkg.instantiate()'
 
-Activate the Pkg repl mode and dev the ClimaCore repo and ClimaCorePlots packages into the examples project environment:
-
-    (examples) pkg> dev . lib/ClimaCorePlots
-    (examples) pkg> instantiate
-
-Or alternatively:
-
-    julia --project=examples -e 'using Pkg; Pkg.develop([Pkg.PackageSpec(path="."), Pkg.PackageSpec(path="lib/ClimaCorePlots")])'
+The default Manifest.toml uses [`Pkg.develop`](https://pkgdocs.julialang.org/v1/api/#Pkg.develop)
+to track the current versions of ClimaCore.jl and subpackages in the `lib` directory.
 
 You can now execute the examples in the example projects, and ClimaCore changes will be tracked in the env:
 
