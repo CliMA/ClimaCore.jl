@@ -14,14 +14,20 @@ catch err
     end
 end
 
-if @isdefined parameters
-    rhs!(dYdt, Y, parameters, 0.0) # compile first
+if @isdefined integrator
+    OrdinaryDiffEq.step!(integrator) # compile first
     Profile.clear_malloc_data()
-    rhs!(dYdt, Y, parameters, 0.0)
+    OrdinaryDiffEq.step!(integrator)
 else
-    rhs!(dYdt, Y, nothing, 0.0) # compile first
-    Profile.clear_malloc_data()
-    rhs!(dYdt, Y, nothing, 0.0)
+    if @isdefined parameters
+        rhs!(dYdt, Y, parameters, 0.0) # compile first
+        Profile.clear_malloc_data()
+        rhs!(dYdt, Y, parameters, 0.0)
+    else
+        rhs!(dYdt, Y, nothing, 0.0) # compile first
+        Profile.clear_malloc_data()
+        rhs!(dYdt, Y, nothing, 0.0)
+    end
 end
 
 # Quit julia (which generates .mem files), then call

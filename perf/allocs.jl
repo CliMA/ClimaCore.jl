@@ -1,14 +1,23 @@
 import Pkg
 Pkg.develop(path = ".")
 
-# Track allocations in ClimaCore.jl plus all _direct_ dependencies
-exhaustive = "exhaustive=true" in ARGS
-@show exhaustive
+# Track allocations in ClimaCore.jl plus some important dependencies:
 
 import ClimaCore
+import SciMLBase
+import DiffEqBase
+import OrdinaryDiffEq
+import DiffEqOperators
 
 mod_dir(x) = dirname(dirname(pathof(x)))
 pkg_dir = mod_dir(ClimaCore)
+dirs_to_monitor = [
+    pkg_dir,
+    mod_dir(SciMLBase),
+    mod_dir(DiffEqBase),
+    mod_dir(OrdinaryDiffEq),
+    mod_dir(DiffEqOperators),
+]
 
 # (filename, ARGs passed to script)
 #! format: off
@@ -22,21 +31,14 @@ all_cases = [
 ]
 #! format: on
 
-# only one case for exhaustive alloc analysis
-all_cases = if exhaustive
-    [(joinpath(pkg_dir, "examples", "hybrid", "bubble_2d.jl"), "")]
-else
-    all_cases
-end
-
 import ReportMetrics
 
 for (case, args) in all_cases
     ENV["ALLOCATION_CASE_NAME"] = case
     ReportMetrics.report_allocs(;
         job_name = "$(basename(case)) $args",
-        run_cmd = `$(Base.julia_cmd()) --project=examples/ --track-allocation=all perf/allocs_per_case.jl $args`,
-        dirs_to_monitor = [pkg_dir],
+        run_cmd = `$(Base.julia_cmd()) --project=perf/ --track-allocation=all perf/allocs_per_case.jl $args`,
+        dirs_to_monitor = dirs_to_monitor,
         n_unique_allocs = 20,
         process_filename = function process_fn(fn)
             fn = "ClimaCore.jl/" * last(split(fn, "climacore-ci/"))
