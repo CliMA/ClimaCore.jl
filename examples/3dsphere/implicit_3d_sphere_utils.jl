@@ -40,14 +40,15 @@ struct CustomWRepresentation{T, AT1, AT2, AT3, VT}
 end
 
 function CustomWRepresentation(
-    velem,
-    helem,
-    npoly,
+    velem::Int,
+    helem::Int,
+    npoly::Int,
     center_local_geometry,
     face_local_geometry,
-    transform,
-    J_𝕄ρ_overwrite;
+    transform::Bool,
+    J_𝕄ρ_overwrite::Symbol;
     FT = Float64,
+    Y,
 )
     N = velem
     # cubed sphere
@@ -75,8 +76,15 @@ function CustomWRepresentation(
         Array{FT}(undef, N),
     )
 
-    vals =
-        (; ρ_f = similar(J_f), 𝔼_value_f = similar(J_f), P_value = similar(J))
+    cuvw =
+        Geometry.Covariant123Vector.(Y.uₕ) .+
+        Geometry.Covariant123Vector.(If2c.(Y.w))
+    vals = (;
+        ρ_f = similar(J_f),
+        𝔼_value_f = similar(J_f),
+        P_value = similar(J),
+        cuvw,
+    )
 
     CustomWRepresentation{
         typeof(dtγ_ref),
@@ -130,7 +138,7 @@ function Wfact!(W, Y, p, dtγ, t)
     J_𝕄ρ,
     J_𝕄ρ_overwrite,
     vals = W
-    @unpack ρ_f, 𝔼_value_f, P_value = vals
+    @unpack ρ_f, 𝔼_value_f, P_value, cuvw = vals
     @unpack P, Φ, ∇Φ = p
     N = velem
     M = 6 * helem^2 * (npoly + 1)^2
@@ -146,12 +154,16 @@ function Wfact!(W, Y, p, dtγ, t)
     arr_c(field) = reshape(parent(field), N, M)
     arr_f(field) = reshape(parent(field), N + 1, M)
     function interp_f!(dest_f, src_c)
-        @views @. dest_f[2:N, :] = (src_c[1:(N - 1), :] + src_c[2:N, :]) / 2.0
-        @views @. dest_f[1, :] = dest_f[2, :]
-        @views @. dest_f[N + 1, :] = dest_f[N, :]
+        @inbounds begin
+            @views @. dest_f[2:N, :] = (src_c[1:(N - 1), :] + src_c[2:N, :]) / 2
+            @views @. dest_f[1, :] = dest_f[2, :]
+            @views @. dest_f[N + 1, :] = dest_f[N, :]
+        end
     end
     function interp_c!(dest_c, src_f)
-        @views @. dest_c = (src_f[1:N, :] + src_f[2:(N + 1), :]) / 2.0
+        @inbounds begin
+            @views @. dest_c = (src_f[1:N, :] + src_f[2:(N + 1), :]) / 2
+        end
     end
     ρ_f = arr_f(ρ_f)
     𝔼_value_f = arr_f(𝔼_value_f)
@@ -162,9 +174,10 @@ function Wfact!(W, Y, p, dtγ, t)
 
 
     # TODO this can be optimized
-    cuvw =
-        Geometry.Covariant123Vector.(Y.uₕ) .+
-        Geometry.Covariant123Vector.(If2c.(Y.w))
+    Yuₕ = Y.uₕ
+    Yw = Y.w
+    @. cuvw =
+        Geometry.Covariant123Vector(Yuₕ) + Geometry.Covariant123Vector(If2c(Yw))
     cK = arr_c(@. (norm(cuvw)^2) / 2)
 
     # ρuₕ = arr_c(Y.Yc.ρuₕ)
@@ -189,8 +202,8 @@ function Wfact!(W, Y, p, dtγ, t)
         # ∂ρ[n]/∂t = (ρw[n] - ρw[n + 1]) / Δz[n] ==>
         #     ∂(∂ρ[n]/∂t)/∂ρw[n] = 1 / Δz[n]
         #     ∂(∂ρ[n]/∂t)/∂ρw[n + 1] = -1 / Δz[n]
-        @. J_ρ𝕄.d = 1.0 / Δz
-        @. J_ρ𝕄.d2 = -1.0 / Δz
+        @. J_ρ𝕄.d = 1 / Δz
+        @. J_ρ𝕄.d2 = -1 / Δz
     elseif :w in propertynames(Y)
         # @. ρ_f = If(Y.Yc.ρ)
         # ρ_f = reshape(parent(ρ_f), N + 1, M)
@@ -231,7 +244,7 @@ function Wfact!(W, Y, p, dtγ, t)
             # )
             ρw_c = P_value
             interp_c!(ρw_c, ρw)
-            @. P = P_ρe_factor * (ρe_tot - ρ * Φ - (ρuₕ^2 + ρw_c^2) / (2.0 * ρ))
+            @. P = P_ρe_factor * (ρe_tot - ρ * Φ - (ρuₕ^2 + ρw_c^2) / (2 * ρ))
             # dY.Yc.ρe_tot = -∇◦ᵥc(Y.ρw * If((Y.Yc.ρe_tot + P) / Y.Yc.ρ))
             # @. 𝔼_value_f = If((Y.Yc.ρe_tot + P) / Y.Yc.ρ)
             h = P_value
@@ -266,87 +279,92 @@ function Wfact!(W, Y, p, dtγ, t)
     #     ∂(∂𝕄[N + 1]/∂t)/∂ρ[N] = ∂(∂𝕄[N + 1]/∂t)/∂𝔼[N] = 0
     @. J_𝕄ρ.d[1, :] = J_𝕄𝔼.d[1, :] = J_𝕄ρ.d2[N, :] = J_𝕄𝔼.d2[N, :] = 0.0
 
-    if :ρθ in propertynames(Y.Yc)
-        # ∂P/∂𝔼 = γ * P_ρθ_factor * Y.Yc.ρθ^(γ - 1)
-        # ∂P/∂ρ = 0
-        # @. P_value = (γ * P_ρθ_factor) * Y.Yc.ρθ^(γ - 1)
-        # ∂P∂𝔼 = reshape(parent(P_value), N, M)
-        ∂P∂𝔼 = P_value
-        @. ∂P∂𝔼 = (γ * P_ρθ_factor) * ρθ^(γ - 1)
+    @inbounds begin
+        if :ρθ in propertynames(Y.Yc)
+            # ∂P/∂𝔼 = γ * P_ρθ_factor * Y.Yc.ρθ^(γ - 1)
+            # ∂P/∂ρ = 0
+            # @. P_value = (γ * P_ρθ_factor) * Y.Yc.ρθ^(γ - 1)
+            # ∂P∂𝔼 = reshape(parent(P_value), N, M)
+            ∂P∂𝔼 = P_value
+            @. ∂P∂𝔼 = (γ * P_ρθ_factor) * ρθ^(γ - 1)
 
-        if :ρw in propertynames(Y)
-            @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / Δz_f
-            @views @. J_𝕄𝔼.d2[1:(N - 1), :] = ∂P∂𝔼[1:(N - 1), :] / Δz_f
+            if :ρw in propertynames(Y)
+                @views @. J_𝕄𝔼.d[2:N, :] = -∂P∂𝔼[2:N, :] / Δz_f
+                @views @. J_𝕄𝔼.d2[1:(N - 1), :] = ∂P∂𝔼[1:(N - 1), :] / Δz_f
 
-            if J_𝕄ρ_overwrite == :none
+                if J_𝕄ρ_overwrite == :none
+                    @views @. J_𝕄ρ.d[2:N, :] =
+                        J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / 2
+                end
+            elseif :w in propertynames(Y)
+                # TODO check
+                @views @. J_𝕄𝔼.d[2:N, :] =
+                    -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+                @views @. J_𝕄𝔼.d2[1:(N - 1), :] =
+                    ∂P∂𝔼[1:(N - 1), :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+
+                if J_𝕄ρ_overwrite == :grav
+                    # TODO check
+                    @views @. J_𝕄ρ.d[2:N, :] =
+                        J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / (2 * ρ_f[2:N, :])
+                elseif J_𝕄ρ_overwrite == :none
+                    # @. P = P_ρθ_factor * Y.Yc.ρθ^γ
+                    # P = reshape(parent(P), N, M)
+                    # TODO check
+                    @. P = P_ρθ_factor * ρθ^γ
+                    @views @. J_𝕄ρ.d[2:N, :] =
+                        J_𝕄ρ.d2[1:(N - 1), :] =
+                            (P[2:N, :] - P[1:(N - 1), :]) /
+                            (2 * ρ_f[2:N, :]^2 * Δξ₃_f[2:N, :])
+                end
+            end
+        elseif :ρe_tot in propertynames(Y.Yc)
+            # ∂P/∂𝔼 = P_ρe_factor
+            if :ρw in propertynames(Y)
+                @. J_𝕄𝔼.d[2:N, :] = -P_ρe_factor / Δz_f
+                @. J_𝕄𝔼.d2[1:(N - 1), :] = P_ρe_factor / Δz_f
+
+                # ∂P/∂ρ = P_ρe_factor *
+                #     (-Φ + norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ^2))
                 @views @. J_𝕄ρ.d[2:N, :] =
                     J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / 2.0
-            end
-        elseif :w in propertynames(Y)
-            # TODO check
-            @views @. J_𝕄𝔼.d[2:N, :] =
-                -∂P∂𝔼[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
-            @views @. J_𝕄𝔼.d2[1:(N - 1), :] =
-                ∂P∂𝔼[1:(N - 1), :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
-
-            if J_𝕄ρ_overwrite == :grav
-                # TODO check
-                @views @. J_𝕄ρ.d[2:N, :] =
-                    J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / (2.0 * ρ_f[2:N, :])
-            elseif J_𝕄ρ_overwrite == :none
-                # @. P = P_ρθ_factor * Y.Yc.ρθ^γ
-                # P = reshape(parent(P), N, M)
-                # TODO check
-                @. P = P_ρθ_factor * ρθ^γ
-                @views @. J_𝕄ρ.d[2:N, :] =
-                    J_𝕄ρ.d2[1:(N - 1), :] =
-                        (P[2:N, :] - P[1:(N - 1), :]) /
-                        (2.0 * ρ_f[2:N, :]^2 * Δξ₃_f[2:N, :])
-            end
-        end
-    elseif :ρe_tot in propertynames(Y.Yc)
-        # ∂P/∂𝔼 = P_ρe_factor
-        if :ρw in propertynames(Y)
-            @. J_𝕄𝔼.d[2:N, :] = -P_ρe_factor / Δz_f
-            @. J_𝕄𝔼.d2[1:(N - 1), :] = P_ρe_factor / Δz_f
-
-            # ∂P/∂ρ = P_ρe_factor *
-            #     (-Φ + norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ^2))
-            @views @. J_𝕄ρ.d[2:N, :] = J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / 2.0
-            if J_𝕄ρ_overwrite == :none
-                # @. P_value = P_ρe_factor *
-                #     (-Φ + norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ^2))
-                # ∂P∂ρ = reshape(parent(P_value), N, M)
-                ∂P∂ρ = ρw_c = P_value
-                interp_c!(ρw_c, ρw)
-                @. ∂P∂ρ = P_ρe_factor * (-Φ + (ρuₕ^2 + ρw_c^2) / (2.0 * ρ^2))
-                @views @. J_𝕄ρ.d[2:N, :] += -∂P∂ρ[2:N, :] / Δz_f
-                @views @. J_𝕄ρ.d2[1:(N - 1), :] += ∂P∂ρ[1:(N - 1), :] / Δz_f
-            end
-        elseif :w in propertynames(Y)
-            @views @. J_𝕄𝔼.d[2:N, :] =
-                -P_ρe_factor / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
-            @views @. J_𝕄𝔼.d2[1:(N - 1), :] =
-                P_ρe_factor / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
-
-            if J_𝕄ρ_overwrite == :grav
-                @views @. J_𝕄ρ.d[2:N, :] =
-                    J_𝕄ρ.d2[1:(N - 1), :] = -∇Φ[2:N, :] / (2.0 * ρ_f[2:N, :])
-            elseif J_𝕄ρ_overwrite == :none || J_𝕄ρ_overwrite == :pres
-                # P = reshape(parent(P), N, M)
-                @views @. J_𝕄ρ.d[2:N, :] =
-                    J_𝕄ρ.d2[1:(N - 1), :] =
-                        (P[2:N, :] - P[1:(N - 1), :]) /
-                        (2.0 * ρ_f[2:N, :]^2 * Δξ₃_f[2:N, :])
                 if J_𝕄ρ_overwrite == :none
+                    # @. P_value = P_ρe_factor *
+                    #     (-Φ + norm_sqr(Y.Yc.ρuₕ, Ic(Y.ρw)) / (2. * Y.Yc.ρ^2))
+                    # ∂P∂ρ = reshape(parent(P_value), N, M)
+                    ∂P∂ρ = ρw_c = P_value
+                    interp_c!(ρw_c, ρw)
+                    @. ∂P∂ρ =
+                        P_ρe_factor * (-Φ + (ρuₕ^2 + ρw_c^2) / (2.0 * ρ^2))
+                    @views @. J_𝕄ρ.d[2:N, :] += -∂P∂ρ[2:N, :] / Δz_f
+                    @views @. J_𝕄ρ.d2[1:(N - 1), :] += ∂P∂ρ[1:(N - 1), :] / Δz_f
+                end
+            elseif :w in propertynames(Y)
+                @views @. J_𝕄𝔼.d[2:N, :] =
+                    -P_ρe_factor / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+                @views @. J_𝕄𝔼.d2[1:(N - 1), :] =
+                    P_ρe_factor / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
 
-                    ∂P∂ρ = w_c = P_value
-                    interp_c!(w_c, w)
-                    @. ∂P∂ρ = P_ρe_factor * (-Φ - cK + cv_d * T_tri)
-                    @views @. J_𝕄ρ.d[2:N, :] +=
-                        -∂P∂ρ[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
-                    @views @. J_𝕄ρ.d2[1:(N - 1), :] +=
-                        ∂P∂ρ[1:(N - 1), :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+                if J_𝕄ρ_overwrite == :grav
+                    @views @. J_𝕄ρ.d[2:N, :] =
+                        J_𝕄ρ.d2[1:(N - 1), :] =
+                            -∇Φ[2:N, :] / (2.0 * ρ_f[2:N, :])
+                elseif J_𝕄ρ_overwrite == :none || J_𝕄ρ_overwrite == :pres
+                    # P = reshape(parent(P), N, M)
+                    @views @. J_𝕄ρ.d[2:N, :] =
+                        J_𝕄ρ.d2[1:(N - 1), :] =
+                            (P[2:N, :] - P[1:(N - 1), :]) /
+                            (2.0 * ρ_f[2:N, :]^2 * Δξ₃_f[2:N, :])
+                    if J_𝕄ρ_overwrite == :none
+
+                        ∂P∂ρ = w_c = P_value
+                        interp_c!(w_c, w)
+                        @. ∂P∂ρ = P_ρe_factor * (-Φ - cK + cv_d * T_tri)
+                        @views @. J_𝕄ρ.d[2:N, :] +=
+                            -∂P∂ρ[2:N, :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+                        @views @. J_𝕄ρ.d2[1:(N - 1), :] +=
+                            ∂P∂ρ[1:(N - 1), :] / (ρ_f[2:N, :] * Δξ₃_f[2:N, :])
+                    end
                 end
             end
         end

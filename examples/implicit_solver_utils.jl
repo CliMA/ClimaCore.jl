@@ -35,7 +35,7 @@ import Base: size, getindex, setindex!
 size(A::GeneralBidiagonal) = (A.nrows, A.ncols)
 function getindex(A::GeneralBidiagonal, i::Int, j::Int)
     @boundscheck 1 <= i <= A.nrows && 1 <= j <= A.ncols
-    if i == j
+    @inbounds if i == j
         return A.d[i]
     elseif A.isUpper && j == i + 1
         return A.d2[i]
@@ -47,7 +47,7 @@ function getindex(A::GeneralBidiagonal, i::Int, j::Int)
 end
 function setindex!(A::GeneralBidiagonal, v, i::Int, j::Int)
     @boundscheck 1 <= i <= A.nrows && 1 <= j <= A.ncols
-    if i == j
+    @inbounds if i == j
         A.d[i] = v
     elseif A.isUpper && j == i + 1
         A.d2[i] = v
@@ -107,7 +107,7 @@ function mul!(
             C[nd + 1] = α * A.d2[nd] * B[nd] + β * C[nd + 1]
         end
     end
-    C[(nd2 + 2):end] .= zero(eltype(C))
+    @inbounds C[(nd2 + 2):end] .= zero(eltype(C))
     return C
 end
 function mul!(
@@ -198,9 +198,9 @@ function mul!(
         @views @. C.du[1:nd2] = α * A.d[1:nd2] * B.d2 + β * C.du[1:nd2]
         @views @. C.dl[1:nd2] = α * A.d2 * B.d[1:nd2] + β * C.dl[1:nd2]
     end
-    C.d[(nd2 + 2):end] .= zero(eltype(C))
-    C.du[(nd2 + 1):end] .= zero(eltype(C))
-    C.dl[(nd2 + 1):end] .= zero(eltype(C))
+    @inbounds C.d[(nd2 + 2):end] .= zero(eltype(C))
+    @inbounds C.du[(nd2 + 1):end] .= zero(eltype(C))
+    @inbounds C.dl[(nd2 + 1):end] .= zero(eltype(C))
     return C
 end
 #=
