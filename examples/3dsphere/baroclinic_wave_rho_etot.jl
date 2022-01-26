@@ -119,6 +119,7 @@ elseif Test_Type == "Implicit"
 
     # using DiffEqOperators
     # Base.strides(::ClimaCore.Fields.FieldVector) = (1,)
+    t_span = (0.0, T)
 
     prob = ODEProblem(
         ODEFunction(
@@ -128,7 +129,7 @@ elseif Test_Type == "Implicit"
             tgrad = (dT, Y, p, t) -> fill!(dT, 0),
         ),
         Y,
-        (0.0, T),
+        t_span,
         parameters,
     )
 
@@ -143,7 +144,9 @@ elseif Test_Type == "Implicit"
         # TODO Linear
         # ode_algorithm(linsolve = linsolve!);
         #
-        saveat = dt * 9 * 12,
+        save_positions = (false, false),
+        save_start = false,
+        saveat = last(t_span),
         adaptive = false,
         progress = true,
         progress_steps = 1,
