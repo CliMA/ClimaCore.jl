@@ -53,16 +53,16 @@ by both element index and nodal order within the element.
 """
 function linear_remap_op(target::AbstractSpace, source::AbstractSpace)
     J = 1.0 ./ local_weights(target) # workaround for julia #26561
-    W = overlap_weights(target, source)
+    W = overlap(target, source)
     return W .* J
 end
 
 """
-    overlap_weights(target, source)
+    overlap(target, source)
 
 Computes local weights of the overlap mesh for `source` to `target` spaces.
 """
-function overlap_weights(
+function overlap(
     target::T,
     source::S,
 ) where {
@@ -81,7 +81,7 @@ function overlap_weights(
     source::S,
 ) where {
     T <: SpectralElementSpace1D{<:IntervalTopology},
-    S <: SpectralElementSpace1D{<:IntervalTopology, Quadratures.GL{1}},
+    S <: SpectralElementSpace1D{<:IntervalTopology},
 }
     FT = Spaces.undertype(source)
     target_topo = Spaces.topology(target)
@@ -109,35 +109,55 @@ function overlap_weights(
             if max_ov <= min_ov
                 continue
             end
-            ξ, w = Quadratures.quadrature_points(FT, QS_t)
+
+            # use smaller order for overlap quadrature
+            ξ_s, w_s = Quadratures.quadrature_points(FT, QS_s)
+            ξ_t, w_t = Quadratures.quadrature_points(FT, QS_t)
             x_ov =
-                FT(0.5) * (min_ov + max_ov) .+ FT(0.5) * (max_ov - min_ov) * ξ
-            x_t = FT(0.5) * (min_i + max_i) .+ FT(0.5) * (max_i - min_i) * ξ
+                FT(0.5) * (min_ov + max_ov) .+ FT(0.5) * (max_ov - min_ov) * ξ_t
+            w = w_t
+            x_t = FT(0.5) * (min_i + max_i) .+ FT(0.5) * (max_i - min_i) * ξ_t
+            x_s = FT(0.5) * (min_j + max_j) .+ FT(0.5) * (max_j - min_j) * ξ_s
 
             # column k of I_mat gives the k-th target basis function defined on the overlap element
-            I_mat = Quadratures.interpolation_matrix(x_ov, x_t)
+            I_mat_t = Quadratures.interpolation_matrix(x_ov, x_t)
+            I_mat_s = Quadratures.interpolation_matrix(x_ov, x_s)
+
             for k in 1:Nq_t
-                idx = Nq_t * (i - 1) + k # global nodal index
-                # (integral of basis on overlap) / (reference elem length * overlap elem length)
-                J_ov[idx, j] = w' * I_mat[:, k] ./ 2 * (max_ov - min_ov)
+                targ_idx = Nq_t * (i - 1) + k # global nodal index
+                for l in 1:Nq_s
+                    src_idx = Nq_s * (j - 1) + l
+                    # (integral of src_basis * tgt_basis on overlap) / (reference elem length * overlap elem length)
+                    J_ov[targ_idx, src_idx] =
+                        (w' * (I_mat_t[:, k] .* I_mat_s[:, l])) ./ 2 *
+                        (max_ov - min_ov)
+                end
             end
         end
     end
     return J_ov
 end
 
-function overlap_weights(
+function overlap(
     target::T,
     source::S,
 ) where {
-    T <: SpectralElementSpace1D{<:IntervalTopology, Quadratures.GL{1}},
+    T <: SpectralElementSpace1D{<:IntervalTopology},
     S <: SpectralElementSpace1D{<:IntervalTopology},
 }
-    J_ov = overlap_weights(source, target)
-    return J_ov'
+    QS_t = Spaces.quadrature_style(target)
+    QS_s = Spaces.quadrature_style(source)
+    Nq_t = Quadratures.degrees_of_freedom(QS_t)
+    Nq_s = Quadratures.degrees_of_freedom(QS_s)
+    if Nq_t >= Nq_s
+        return overlap_weights(target, source)
+    else
+        J_ov = overlap_weights(source, target)
+        return J_ov'
+    end
 end
 
-function overlap_weights(
+function overlap(
     target::T,
     source::S,
 ) where {

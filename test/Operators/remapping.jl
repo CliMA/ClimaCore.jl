@@ -3,11 +3,43 @@ using ClimaCore:
     Domains, Meshes, Topologies, Geometry, Operators, Spaces, Fields
 using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
 using ClimaCore.Topologies: Topology2D
-using ClimaCore.Spaces: AbstractSpace
+using ClimaCore.Spaces: AbstractSpace, Quadratures
 using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
 
 FT = Float64
+
+function se_space(domain::Domains.IntervalDomain, nq, nelems = 1)
+    quad = Quadratures.GLL{nq}()
+    mesh = Meshes.IntervalMesh(domain; nelems = nelems)
+    topo = Topologies.IntervalTopology(mesh)
+    space = Spaces.SpectralElementSpace1D(topo, quad)
+    return space
+end
+
+function se_space(domain::Domains.RectangleDomain, nq, nxelems = 1, nyelems = 1)
+    quad = Quadratures.GLL{nq}()
+    mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
+    topology = Topologies.Topology2D(mesh)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    return space
+end
+
+function fv_space(domain::Domains.IntervalDomain, nelems = 1)
+    quad = Quadratures.GL{1}()
+    mesh = Meshes.IntervalMesh(domain; nelems = nelems)
+    topo = Topologies.IntervalTopology(mesh)
+    space = Spaces.SpectralElementSpace1D(topo, quad)
+    return space
+end
+
+function fv_space(domain::Domains.RectangleDomain, nxelems = 1, nyelems = 1)
+    quad = Quadratures.GL{1}()
+    mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
+    topology = Topologies.Topology2D(mesh)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    return space
+end
 
 """
 Checks if a linear remapping operator is conservative.
@@ -49,9 +81,7 @@ end
         x1boundary = (:bottom, :top),
         x2boundary = (:left, :right),
     )
-    mesh = Meshes.RectilinearMesh(domain, 1, 1)
-    topology = Topologies.Topology2D(mesh)
-    space = Spaces.SpectralElementSpace2D(topology, Spaces.Quadratures.GL{1}())
+    space = fv_space(domain)
 
     op = [0.5 0.25 0.0 0.25; 0.0 1.0 0.0 0.0; 0.25 0.25 0.25 0.25]
     R = LinearRemap(space, space, op)
@@ -69,9 +99,7 @@ end
     @test !monotone(R)
 end
 
-@testset "Finite Volume Remapping" begin
-    quad = Spaces.Quadratures.GL{1}() # FV specification
-
+@testset "Finite Volume <-> Finite Volume Remapping" begin
     @testset "1D Domains" begin
         @testset "Aligned Intervals Different Resolutions" begin
             domain = Domains.IntervalDomain(
@@ -79,15 +107,8 @@ end
                 boundary_tags = (:left, :right),
             )
 
-            n1 = 4
-            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
-            source_topo = Topologies.IntervalTopology(mesh1)
-            source = Spaces.SpectralElementSpace1D(source_topo, quad)
-
-            n2 = 2
-            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
-            target_topo = Topologies.IntervalTopology(mesh2)
-            target = Spaces.SpectralElementSpace1D(target_topo, quad)
+            source = fv_space(domain, 4)
+            target = fv_space(domain, 2)
 
             @test local_weights(source) ≈ 0.25 * ones(4, 1)
             @test local_weights(target) ≈ 0.5 * ones(2, 1)
@@ -128,20 +149,13 @@ end
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
-
-            n1 = 3
-            mesh1 = Meshes.IntervalMesh(domain1; nelems = n1)
-            source_topo = Topologies.IntervalTopology(mesh1)
-            source = Spaces.SpectralElementSpace1D(source_topo, quad)
+            source = fv_space(domain1, 3)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
                 boundary_tags = (:left, :right),
             )
-            n2 = 3
-            mesh2 = Meshes.IntervalMesh(domain2; nelems = n2)
-            target_topo = Topologies.IntervalTopology(mesh2)
-            target = Spaces.SpectralElementSpace1D(target_topo, quad)
+            target = fv_space(domain2, 3)
 
             R = LinearRemap(target, source)
             R_true = spzeros(FT, 3, 3)
@@ -162,21 +176,13 @@ end
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
-
-            n1 = 4
-            mesh1 = Meshes.IntervalMesh(domain1; nelems = n1)
-            source_topo = Topologies.IntervalTopology(mesh1)
-            source = Spaces.SpectralElementSpace1D(source_topo, quad)
-
+            source = fv_space(domain1, 4)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
                 boundary_tags = (:left, :right),
             )
-            n2 = 4
-            mesh2 = Meshes.IntervalMesh(domain2; nelems = n2)
-            target_topo = Topologies.IntervalTopology(mesh2)
-            target = Spaces.SpectralElementSpace1D(target_topo, quad)
+            target = fv_space(domain2, 4)
 
             R = LinearRemap(target, source)
             R_true = spzeros(4, 4)
@@ -219,15 +225,8 @@ end
                 x2boundary = (:left, :right),
             )
 
-            m1, n1 = 2, 2
-            mesh1 = Meshes.RectilinearMesh(domain, m1, n1)
-            source_topo = Topologies.Topology2D(mesh1)
-            source = Spaces.SpectralElementSpace2D(source_topo, quad)
-
-            m2, n2 = 3, 3
-            mesh2 = Meshes.RectilinearMesh(domain, m2, n2)
-            target_topo = Topologies.Topology2D(mesh2)
-            target = Spaces.SpectralElementSpace2D(target_topo, quad)
+            source = fv_space(domain, 2, 2)
+            target = fv_space(domain, 3, 3)
 
             @test local_weights(source) ≈ ones(4, 1)
             @test local_weights(target) ≈ (2 / 3)^2 * ones(9, 1)
@@ -278,11 +277,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-
-            m1, n1 = 2, 2
-            mesh1 = Meshes.RectilinearMesh(domain1, m1, n1)
-            source_topo = Topologies.Topology2D(mesh1)
-            source = Spaces.SpectralElementSpace2D(source_topo, quad)
+            source = fv_space(domain1, 2, 2)
 
             domain2 = Domains.RectangleDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
@@ -290,10 +285,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            m2, n2 = 2, 2
-            mesh2 = Meshes.RectilinearMesh(domain2, m2, n2)
-            target_topo = Topologies.Topology2D(mesh2)
-            target = Spaces.SpectralElementSpace2D(target_topo, quad)
+            target = fv_space(domain2, 2, 2)
 
             R = LinearRemap(target, source)
             R_true = spzeros(FT, 4, 4)
@@ -315,11 +307,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-
-            m1, n1 = 2, 2
-            mesh1 = Meshes.RectilinearMesh(domain1, m1, n1)
-            source_topo = Topologies.Topology2D(mesh1)
-            source = Spaces.SpectralElementSpace2D(source_topo, quad)
+            source = fv_space(domain1, 2, 2)
 
             domain2 = Domains.RectangleDomain(
                 Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
@@ -327,10 +315,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            m2, n2 = 2, 2
-            mesh2 = Meshes.RectilinearMesh(domain2, m2, n2)
-            target_topo = Topologies.Topology2D(mesh2)
-            target = Spaces.SpectralElementSpace2D(target_topo, quad)
+            target = fv_space(domain2, 2, 2)
 
             R = LinearRemap(target, source)
             R_true = I
@@ -370,40 +355,34 @@ end
         )
 
         @testset "Single aligned elements" begin
-            quad1 = Spaces.Quadratures.GL{1}() # FV specification
-            n1 = 1
-            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
-            topo1 = Topologies.IntervalTopology(mesh1)
-            fv_space = Spaces.SpectralElementSpace1D(topo1, quad1)
+            space1 = fv_space(domain)
 
-            @test local_weights(fv_space) ≈ (1 / n1) * ones(n1, 1)
+            @test local_weights(space1) ≈ ones(1)
 
-            for nq2 in [2, 5, 10]
+            for nq in [2, 5, 10]
+                space2 = se_space(domain, nq)
 
-                quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
-                n2 = 1
-                mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
-                topo2 = Topologies.IntervalTopology(mesh2)
-                se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
-
-                _, w = Spaces.Quadratures.quadrature_points(FT, quad2)
-                @test local_weights(se_space) ≈ w ./ 2
+                _, w = Spaces.Quadratures.quadrature_points(
+                    FT,
+                    Quadratures.GLL{nq}(),
+                )
+                @test local_weights(space2) ≈ w ./ 2
 
                 # FV -> SE
-                R = LinearRemap(se_space, fv_space)
-                R_true = ones(nq2, 1)
+                R = LinearRemap(space2, space1)
+                R_true = ones(nq, 1)
                 @test R.map ≈ R_true
-                @test nnz(R.map) == nq2
+                @test nnz(R.map) == nq
 
                 @test conservative(R)
                 @test consistent(R)
                 @test monotone(R)
 
                 # SE -> FV
-                R = LinearRemap(fv_space, se_space)
-                R_true = local_weights(se_space)'
+                R = LinearRemap(space1, space2)
+                R_true = local_weights(space2)'
                 @test R.map ≈ R_true
-                @test nnz(R.map) == nq2
+                @test nnz(R.map) == nq
 
                 @test conservative(R)
                 @test consistent(R)
@@ -412,53 +391,104 @@ end
         end
 
         @testset "Multiple elements" begin
-            quad1 = Spaces.Quadratures.GL{1}() # FV specification
-            n1 = 2
-            mesh1 = Meshes.IntervalMesh(domain; nelems = n1)
-            topo1 = Topologies.IntervalTopology(mesh1)
-            fv_space = Spaces.SpectralElementSpace1D(topo1, quad1)
-
-            nq2 = 2
-            quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
-            n2 = 3
-            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
-            topo2 = Topologies.IntervalTopology(mesh2)
-            se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
+            space1 = fv_space(domain, 2)
+            space2 = se_space(domain, 2, 3)
 
             # FV -> SE
-            R = LinearRemap(se_space, fv_space)
+            R = LinearRemap(space2, space1)
             @test nnz(R.map) == 8
             @test conservative(R)
             @test consistent(R)
             @test monotone(R)
 
             # SE -> FV
-            R = LinearRemap(fv_space, se_space)
+            R = LinearRemap(space1, space2)
             @test nnz(R.map) == 8
             @test conservative(R)
             @test consistent(R)
             @test monotone(R)
 
-            nq2 = 3
-            quad2 = Spaces.Quadratures.GLL{nq2}() # Spectral
-            n2 = 3
-            mesh2 = Meshes.IntervalMesh(domain; nelems = n2)
-            topo2 = Topologies.IntervalTopology(mesh2)
-            se_space = Spaces.SpectralElementSpace1D(topo2, quad2)
+            space2 = se_space(domain, 3, 3)
 
             # FV -> SE
-            R = LinearRemap(se_space, fv_space)
+            R = LinearRemap(space2, space1)
             @test nnz(R.map) == 12
             @test conservative(R)
             @test consistent(R)
             @test !monotone(R)
 
             # SE -> FV
-            R = LinearRemap(fv_space, se_space)
+            R = LinearRemap(space1, space2)
             @test nnz(R.map) == 12
             @test conservative(R)
             @test consistent(R)
             @test !monotone(R)
+        end
+    end
+end
+
+@testset "Spectral Elements <-> Spectral Elements Remapping" begin
+
+    @testset "1D Domains" begin
+        domain = Domains.IntervalDomain(
+            Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
+            boundary_tags = (:left, :right),
+        )
+
+        @testset "Single aligned elements" begin
+
+            for nq1 in [3, 5, 9]
+                space1 = se_space(domain, nq1)
+
+                _, w = Spaces.Quadratures.quadrature_points(
+                    FT,
+                    Quadratures.GLL{nq1}(),
+                )
+                @test local_weights(space1) ≈ w ./ 2
+
+                for nq2 in [2, 4, 10]
+                    space2 = se_space(domain, nq2)
+
+                    _, w = Spaces.Quadratures.quadrature_points(
+                        FT,
+                        Quadratures.GLL{nq2}(),
+                    )
+                    @test local_weights(space2) ≈ w ./ 2
+
+                    # SE1 -> SE2
+                    R = LinearRemap(space2, space1)
+                    @test count(!isapprox(0; atol = sqrt(eps(FT))), R.map) ==
+                          (max(nq1, nq2) - 2) * min(nq1, nq2) + 2
+
+                    @test conservative(R)
+                    @test consistent(R)
+
+                    # SE2 -> SE1
+                    R = LinearRemap(space1, space2)
+                    @test count(!isapprox(0; atol = sqrt(eps(FT))), R.map) ==
+                          (max(nq1, nq2) - 2) * min(nq1, nq2) + 2
+
+                    @test conservative(R)
+                    @test consistent(R)
+                end
+            end
+        end
+
+        @testset "Multiple elements" begin
+            space1 = se_space(domain, 3, 2)
+            space2 = se_space(domain, 2, 3)
+
+            # SE1 -> SE2
+            R = LinearRemap(space2, space1)
+            @test count(!isapprox(0; atol = sqrt(eps(FT))), R.map) == 22
+            @test conservative(R)
+            @test consistent(R)
+
+            # SE2 -> SE1
+            R = LinearRemap(space1, space2)
+            @test count(!isapprox(0; atol = sqrt(eps(FT))), R.map) == 22
+            @test conservative(R)
+            @test consistent(R)
         end
     end
 end
