@@ -140,15 +140,15 @@ function Wfact!(W, Y, p, dtγ, t)
     vals = W
     @unpack ρ_f, 𝔼_value_f, P_value, cuvw = vals
     @unpack P, Φ, ∇Φ = p
-    N = velem
-    M = 6 * helem^2 * (npoly + 1)^2
+    N0 = velem
+    M0 = 6 * helem^2 * (npoly + 1)^2
     # ∇Φ = ∂Φ/∂ξ³
-    ∇Φ = reshape(parent(∇Φ), N + 1, M)
+    ∇Φ = reshape(parent(∇Φ), N0 + 1, M0)
     dtγ_ref[] = dtγ
 
     # Rewriting in terms of parent arrays.
-    N = size(parent(Y.Yc.ρ), 1)
-    M = length(parent(Y.Yc.ρ)) ÷ N
+    N::Int = size(parent(Y.Yc.ρ), 1)
+    M::Int = length(parent(Y.Yc.ρ)) ÷ N
 
 
     arr_c(field) = reshape(parent(field), N, M)
