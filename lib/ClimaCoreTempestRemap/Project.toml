@@ -13,7 +13,7 @@ TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-julia = "1.6"
+julia = "1.7"
 ClimaCore = "0.6"
 NCDatasets = "0.11"
 PkgVersion = "0.1"
