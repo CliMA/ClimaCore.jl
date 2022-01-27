@@ -83,12 +83,18 @@ Base.Broadcast.broadcasted(
 Base.eltype(sbc::SpectralBroadcasted) =
     operator_return_eltype(sbc.op, tuplemap(eltype, sbc.args)...)
 
+@inline instantiate_args(args::Tuple) =
+    (Base.Broadcast.instantiate(args[1]), instantiate_args(Base.tail(args))...)
+@inline instantiate_args(args::Tuple{Any}) =
+    (Base.Broadcast.instantiate(args[1]),)
+@inline instantiate_args(::Tuple{}) = ()
+
 function Base.Broadcast.instantiate(
     sbc::SpectralBroadcasted{Style},
 ) where {Style}
     op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
-    args = tuplemap(Base.Broadcast.instantiate, sbc.args)
+    args = instantiate_args(sbc.args)
     # axes: same logic as Broadcasted
     if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
         axes = Base.axes(sbc)
@@ -109,7 +115,7 @@ function Base.Broadcast.instantiate(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
     # recursively instantiate the arguments to allocate intermediate work arrays
-    args = tuplemap(Base.Broadcast.instantiate, bc.args)
+    args = instantiate_args(bc.args)
     # axes: same logic as Broadcasted
     if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
         axes = Base.Broadcast.combine_axes(args...)

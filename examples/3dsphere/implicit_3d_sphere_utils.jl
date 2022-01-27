@@ -456,30 +456,6 @@ function sphere_3D(
     return (hv_center_space, hv_face_space)
 end
 
-
-
-# temporary FieldVector broadcast and fill patches that speeds up solves by 2-3x
-import Base: copyto!, fill!
-using Base.Broadcast: Broadcasted, broadcasted, BroadcastStyle
-transform_broadcasted(bc::Broadcasted{Fields.FieldVectorStyle}, symb, axes) =
-    Broadcasted(
-        bc.f,
-        map(arg -> transform_broadcasted(arg, symb, axes), bc.args),
-        axes,
-    )
-transform_broadcasted(fv::Fields.FieldVector, symb, axes) =
-    parent(getproperty(fv, symb))
-transform_broadcasted(x, symb, axes) = x
-@inline function Base.copyto!(
-    dest::Fields.FieldVector,
-    bc::Broadcasted{Fields.FieldVectorStyle},
-)
-    for symb in propertynames(dest)
-        p = parent(getproperty(dest, symb))
-        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
-    end
-    return dest
-end
 function Base.fill!(a::Fields.FieldVector, x)
     for symb in propertynames(a)
         fill!(parent(getproperty(a, symb)), x)
