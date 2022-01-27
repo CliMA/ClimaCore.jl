@@ -316,11 +316,7 @@ end
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, time_end))
 
-if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
-    throw(:exit_profile)
-end
-
-sol = @timev solve(
+integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = dt,
@@ -329,6 +325,12 @@ sol = @timev solve(
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
 )
+
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
+
+sol = @timev OrdinaryDiffEq.solve!(integrator)
 
 # visualization artifacts
 if test_name == "baroclinic_wave"

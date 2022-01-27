@@ -295,11 +295,7 @@ using OrdinaryDiffEq
 Δt = 0.03
 prob = ODEProblem(rhs!, Y, (0.0, 500.0))
 
-if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
-    throw(:exit_profile)
-end
-
-sol = @timev solve(
+integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = Δt,
@@ -307,6 +303,12 @@ sol = @timev solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
+
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
+
+sol = @timev OrdinaryDiffEq.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
