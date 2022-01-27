@@ -101,6 +101,27 @@ end
     @test_throws MethodError data_slab[1, 1] = SB
 end
 
+@testset "2D slab broadcasting" begin
+    Nij = 2 # number of nodal points
+    Nh = 2 # number of elements
+    S1 = Float64
+    S2 = Float32
+    array1 = ones(S1, Nij, Nij, 1, Nh)
+    data1 = IJFH{S1, Nij}(array1)
+
+    array2 = ones(S2, Nij, Nij, 1, Nh)
+    data2 = IJFH{S2, Nij}(array2)
+
+    for h in 1:Nh
+        slab1 = slab(data1, h)
+        slab2 = slab(data2, h)
+
+        res = slab1 .+ slab2
+        slab1 .= res .+ slab2
+    end
+    @test all(v -> v == S1(3), parent(data1))
+end
+
 @testset "broadcasting between data object + scalars" begin
     FT = Float64
     data1 = ones(FT, 2, 2, 2, 2)

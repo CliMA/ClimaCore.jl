@@ -97,26 +97,36 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-slab(field::Field, inds...) =
-    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
-column(field::Field, inds...) =
-    Field(column(field_values(field), inds...), column(axes(field), inds...))
-
+# Methods for Slab and Column fields
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
 const SlabField1D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab1D}
+} where {
+    V <: DataLayouts.DataSlab1D,
+    S <: Spaces.SpectralElementSpaceSlab1D,
+}
 
 const SlabField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab2D}
+} where {
+    V <: DataLayouts.DataSlab2D,
+    S <: Spaces.SpectralElementSpaceSlab2D,
+}
 
-Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
+const ColumnField{V, S} =
+    Field{V, S} where {V <: DataLayouts.DataColumn, S <: Spaces.AbstractSpace}
+
+slab(field::Field, inds...) =
+    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+
+column(field::Field, inds...) =
+    Field(column(field_values(field), inds...), column(axes(field), inds...))
 
 # nice printing
 # follow x-array like printing?
@@ -159,7 +169,6 @@ end
 Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 Base.similar(field::Field, ::Type{T}) where {T} =
     Field(similar(field_values(field), T), axes(field))
-
 
 # fields on different spaces
 function Base.similar(field::Field, space_to::AbstractSpace)
