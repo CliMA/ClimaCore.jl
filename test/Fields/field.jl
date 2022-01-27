@@ -59,7 +59,6 @@ end
     res = field.re .+ 1
     @test parent(Fields.field_values(res)) ==
           Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
-
 end
 
 @testset "Broadcasting interception for tuple-valued fields" begin

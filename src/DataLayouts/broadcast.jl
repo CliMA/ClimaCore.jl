@@ -61,6 +61,19 @@ Base.Broadcast.BroadcastStyle(
 ) = ds
 
 Base.Broadcast.BroadcastStyle(
+    ::IFStyle{Ni, A1},
+    ::IFStyle{Ni, A2},
+) where {Ni, A1, A2} = IFStyle{Ni, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::IJFStyle{Nij, A1},
+    ::IJFStyle{Nij, A2},
+) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(::VFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
+    VFStyle{promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
     ::VFStyle{A1},
     ::IFHStyle{Ni, A2},
 ) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
