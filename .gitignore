@@ -32,5 +32,6 @@ docs/src/tutorials/
 
 
 *.gif
+*.gz
 *.mp4
 *.png
