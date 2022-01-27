@@ -91,7 +91,7 @@ function rhs!(dydt, y, _, t)
     @. dydt.u =
         wgrad(sdiv(y.u)) -
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
-    @. dydt.ρθ = wdiv(grad(y.ρθ))
+    @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
     Spaces.weighted_dss!(dydt)
 
@@ -101,7 +101,7 @@ function rhs!(dydt, y, _, t)
                 wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
             )
         )
-    @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
+    @. dydt.ρθ = -D₄ * wdiv(y.ρ * grad(dydt.ρθ))
 
     # add in pieces
     @. begin
