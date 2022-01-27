@@ -167,6 +167,18 @@ function Base.similar(
     error("Cannot construct FieldVector")
 end
 
+@inline function Base.copyto!(
+    dest::FV,
+    src::FV,
+) where {FV <: Fields.FieldVector}
+    for symb in propertynames(dest)
+        pd = parent(getproperty(dest, symb))
+        ps = parent(getproperty(src, symb))
+        copyto!(pd, ps)
+    end
+    return dest
+end
+
 Base.mapreduce(f, op, fv::FieldVector) =
     mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv))
 
