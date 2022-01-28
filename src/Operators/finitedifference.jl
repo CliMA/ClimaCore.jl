@@ -2141,10 +2141,12 @@ function Base.copyto!(
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)
-    for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        column_field_out = column(field_out, i, j, h)
-        column_bc = column(bc, i, j, h)
-        apply_stencil!(column_field_out, column_bc)
+    Threads.@threads for h in 1:Nh
+        @inbounds for j in 1:Nj, i in 1:Ni
+            column_field_out = column(field_out, i, j, h)
+            column_bc = column(bc, i, j, h)
+            apply_stencil!(column_field_out, column_bc)
+        end
     end
     return field_out
 end
