@@ -3,18 +3,31 @@ import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry
 
 using Test
 
-@testset "Surface area of a sphere" begin
+@testset "Sphere" begin
     FT = Float64
     radius = FT(3)
     ne = 4
     Nq = 4
     domain = Domains.SphereDomain(radius)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.Topology2D(mesh)
+    topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
 
+    # surface area
     @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3
+
+    # vertices with multiplicity 3
+    nn3 = 8 # corners of cube
+    # vertices with multiplicity 4
+    nn4 = 6 * ne^2 - 6 # (6*ne^2*4 - 8*3)/4
+    # internal nodes on edges: multiplicity 2
+    nn2 = 6 * ne^2 * (Nq - 2) * 2
+    # total nodes
+    nn = 6 * ne^2 * Nq^2
+    # unique nodes
+    @test length(collect(Spaces.unique_nodes(space))) ==
+          nn - nn2 - 2 * nn3 - 3 * nn4
 end
 
 @testset "Volume of a spherical shell" begin
