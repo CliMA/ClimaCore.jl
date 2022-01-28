@@ -14,13 +14,18 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 
-Base.Broadcast.BroadcastStyle(::Type{Field{V, M}}) where {V, M} =
+Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(DataStyle(V))
 
 Base.Broadcast.BroadcastStyle(
     ::Base.Broadcast.AbstractArrayStyle{0},
     fs::AbstractFieldStyle,
 ) = fs
+
+Base.Broadcast.BroadcastStyle(
+    ::FieldStyle{DS1},
+    ::FieldStyle{DS2},
+) where {DS1, DS2} = FieldStyle(Base.Broadcast.BroadcastStyle(DS1(), DS2()))
 
 Base.Broadcast.broadcastable(field::Field) = field
 
