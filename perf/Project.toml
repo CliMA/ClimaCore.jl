@@ -2,6 +2,7 @@
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+ChromeProfileFormat = "b19f0eae-10f4-4ff0-9df2-b48cd85f6b2e"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 ClimaCorePlots = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 Coverage = "a2441757-f6aa-5fb2-8edb-039e3f45d037"

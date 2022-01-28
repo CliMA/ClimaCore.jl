@@ -1,8 +1,8 @@
 import Pkg
-Pkg.develop(path = ".")
+Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
 
-mod_dir(x) = dirname(dirname(pathof(x)))
 import Profile
+mod_dir(x) = dirname(dirname(pathof(x)))
 
 ENV["CI_PERF_SKIP_RUN"] = true # we only need haskey(ENV, "CI_PERF_SKIP_RUN") == true
 
@@ -28,6 +28,15 @@ prof = Profile.@profile begin
     end
 end
 
-import PProf
-PProf.pprof()
-# http://localhost:57599/ui/flamegraph?tf
+if !isempty(get(ENV, "CI_PERF_CPUPROFILE", ""))
+    import ChromeProfileFormat
+    output_path =
+        mkpath(get(ENV, "CI_OUTPUT_DIR", joinpath(@__DIR__, "output")))
+    testname = splitext(splitdir(filename)[end])[1]
+    cpufile = joinpath(output_path, testname * ".cpuprofile")
+    ChromeProfileFormat.save_cpuprofile(cpufile)
+else
+    import PProf
+    PProf.pprof()
+    # http://localhost:57599/ui/flamegraph?tf
+end

@@ -101,6 +101,8 @@ function Base.getindex(fv::FieldVector, bidx::BlockArrays.BlockIndex{1})
     X = fv[BlockArrays.block(bidx)]
     X[bidx.α...]
 end
+
+# TODO: drop support for this
 Base.getindex(fv::FieldVector, i::Integer) =
     getindex(fv, BlockArrays.findblockindex(axes(fv, 1), i))
 
@@ -108,9 +110,9 @@ function Base.setindex!(fv::FieldVector, val, bidx::BlockArrays.BlockIndex{1})
     X = fv[BlockArrays.block(bidx)]
     X[bidx.α...] = val
 end
+# TODO: drop support for this
 Base.setindex!(fv::FieldVector, val, i::Integer) =
     setindex!(fv, val, BlockArrays.findblockindex(axes(fv, 1), i))
-
 
 Base.similar(fv::FieldVector{T}) where {T} =
     FieldVector{T}(map(similar, _values(fv)))
@@ -167,14 +169,46 @@ function Base.similar(
     error("Cannot construct FieldVector")
 end
 
-@inline function Base.copyto!(
-    dest::FV,
-    src::FV,
-) where {FV <: Fields.FieldVector}
+@inline function Base.copyto!(dest::FV, src::FV) where {FV <: FieldVector}
     for symb in propertynames(dest)
         pd = parent(getproperty(dest, symb))
         ps = parent(getproperty(src, symb))
         copyto!(pd, ps)
+    end
+    return dest
+end
+
+# Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline transform_bc_args(args::Tuple, inds...) = (
+    transform_broadcasted(args[1], inds...),
+    transform_bc_args(Base.tail(args), inds...)...,
+)
+@inline transform_bc_args(args::Tuple{Any}, inds...) =
+    (transform_broadcasted(args[1], inds...),)
+@inline transform_bc_args(args::Tuple{}, inds...) = ()
+
+function transform_broadcasted(
+    bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
+    symb,
+    axes,
+)
+    Base.Broadcast.Broadcasted(
+        bc.f,
+        transform_bc_args(bc.args, symb, axes),
+        axes,
+    )
+end
+transform_broadcasted(fv::FieldVector, symb, axes) =
+    parent(getfield(_values(fv), symb))
+transform_broadcasted(x, symb, axes) = x
+Base.@propagate_inbounds function Base.copyto!(
+    dest::FieldVector,
+    bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
+)
+    for symb in propertynames(dest)
+        p = parent(getfield(_values(dest), symb))
+        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
     end
     return dest
 end
