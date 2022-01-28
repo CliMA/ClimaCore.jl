@@ -5,7 +5,7 @@ export write_exodus
 import ClimaCore
 using ClimaCore: Geometry, Meshes, Domains, Topologies
 
-using NCDatasets, Dates, PkgVersion, LinearAlgebra
+using NCDatasets, Dates, PkgVersion, LinearAlgebra, TempestRemap_jll
 
 
 """
@@ -147,6 +147,32 @@ function write_exodus(
         var_edge_type1[:, :] .= 0
         nothing
     end
+end
+
+
+function rll_mesh(filename::String; nlat = 90, nlong = round(Int, nlat * 1.6))
+    run(
+        `$(TempestRemap_jll.GenerateRLLMesh_exe()) --lon $nlong --lat $nlat --file $filename`,
+    )
+end
+function overlap_mesh(outfile::String, mesh_a::String, mesh_b::String)
+    run(
+        `$(TempestRemap_jll.GenerateOverlapMesh_exe()) --a $mesh_a --b $mesh_b --out $outfile`,
+    )
+end
+function remap_file(
+    outfile::String,
+    src_mesh::String,
+    dest_mesh::String,
+    overlap_mesh::String;
+    kwargs...,
+)
+    cmd =
+        `$(TempestRemap_jll.GenerateOfflineMap_exe()) --in_mesh $src_mesh --out_mesh $dest_mesh --ov_mesh $overlap_mesh --out_map $outfile`
+    for (k, v) in kwargs
+        append!(cmd.exec, [string("--", k), string(v)])
+    end
+    run(cmd)
 end
 
 
