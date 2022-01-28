@@ -1,8 +1,7 @@
 import Pkg
-Pkg.develop(path = ".")
+Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
 
 # Track allocations in ClimaCore.jl plus some important dependencies:
-
 import ClimaCore
 import SciMLBase
 import DiffEqBase

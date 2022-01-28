@@ -512,17 +512,6 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":rocket: Allocations analysis"
-    key: "cpu_allocations"
-    command:
-      - "julia --color=yes --project=perf perf/allocs.jl"
-    artifact_paths:
-      - "perf/allocations_output/*"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-
   - label: ":computer: dry held-suarez rho etot implicit"
     key: "cpu_held_suarez_rho_etot_imp"
     command:
@@ -540,6 +529,32 @@ steps:
       - "julia --color=yes --project=examples examples/3dsphere/held_suarez_rho_theta.jl"
     artifact_paths:
       - "examples/3dsphere/output/held_suarez_rho_theta_implicit/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Allocations analysis"
+    key: "cpu_allocations"
+    command:
+      - "julia --color=yes --project=perf perf/allocs.jl"
+    artifact_paths:
+      - "perf/allocations_output/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Flamegraph profile"
+    key: "cpu_flamegraph"
+    depends_on: "cpu_allocations"
+    allow_dependency_failure: true
+    env:
+      CI_PERF_CPUPROFILE: "true"
+    command:
+      - "julia --color=yes --project=perf perf/flame.jl"
+    artifact_paths:
+      - "perf/output/*.cpuprofile"
     agents:
       config: cpu
       queue: central

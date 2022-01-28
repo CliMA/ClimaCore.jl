@@ -13,8 +13,8 @@ import ClimaCore:
     Fields,
     Operators
 
-#import ClimaCore.Utilities: half
-#import ClimaCore.DataLayouts: level
+import ClimaCore.Utilities: half
+import ClimaCore.DataLayouts: level
 
 @testset "sphere divergence" begin
     FT = Float64
@@ -69,7 +69,7 @@ function hvspace_3D(
     horztopology = Topologies.Topology2D(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.RectilinearSpectralElementSpace2D(horztopology, quad)
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)

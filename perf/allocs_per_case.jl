@@ -1,6 +1,6 @@
 # Launch with `julia --project --track-allocation=user`
 import Pkg
-Pkg.develop(path = ".")
+Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
 
 import Profile
 
@@ -14,24 +14,6 @@ catch err
     end
 end
 
-if @isdefined integrator
-    OrdinaryDiffEq.step!(integrator) # compile first
-    Profile.clear_malloc_data()
-    OrdinaryDiffEq.step!(integrator)
-else
-    if @isdefined parameters
-        rhs!(dYdt, Y, parameters, 0.0) # compile first
-        Profile.clear_malloc_data()
-        rhs!(dYdt, Y, parameters, 0.0)
-    else
-        rhs!(dYdt, Y, nothing, 0.0) # compile first
-        Profile.clear_malloc_data()
-        rhs!(dYdt, Y, nothing, 0.0)
-    end
-end
-
-# Quit julia (which generates .mem files), then call
-#=
-import Coverage
-allocs = Coverage.analyze_malloc("src")
-=#
+OrdinaryDiffEq.step!(integrator) # compile first
+Profile.clear_malloc_data()
+OrdinaryDiffEq.step!(integrator)

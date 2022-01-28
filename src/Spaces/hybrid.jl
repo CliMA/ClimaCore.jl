@@ -129,6 +129,7 @@ function level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer)
             horizontal_space.quadrature_style,
             horizontal_space.global_geometry,
             level(space.center_local_geometry, v),
+            nothing, # TODO: fix for Distributed: should be level(space.center_ghost_geometry)
             horizontal_space.dss_weights,
             horizontal_space.internal_surface_geometry,
             horizontal_space.boundary_surface_geometries,
@@ -153,6 +154,7 @@ function level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf)
             horizontal_space.quadrature_style,
             horizontal_space.global_geometry,
             level(space.face_local_geometry, v.i + 1),
+            nothing, # TODO: fix for Distributed: should be level(space.face_ghost_geometry)
             horizontal_space.dss_weights,
             horizontal_space.internal_surface_geometry,
             horizontal_space.boundary_surface_geometries,

@@ -264,12 +264,7 @@ T = 3600
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, T))
 
-if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
-    throw(:exit_profile)
-end
-
-# solve ode
-sol = solve(
+integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = dt,
@@ -278,6 +273,13 @@ sol = solve(
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
 )
+
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
+
+# solve ode
+sol = @timev OrdinaryDiffEq.solve!(integrator)
 
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)

@@ -391,6 +391,7 @@ function slab(space::AbstractSpectralElementSpace, v, h)
 end
 slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
 
+
 # XXX: this cannot take `space` as it must be constructed beforehand so
 # that the `space` constructor can do DSS (to compute DSS weights)
 function setup_comms(
@@ -420,4 +421,98 @@ function setup_comms(
         )
     end
     return Context(nbrs)
+end
+"""
+    unique_nodes(space::SpectralElementField2D)
+
+An iterator over the unique nodes of `space`. Each node is represented by the
+first `(e, (i,j))` triple.
+
+This function is experimental, and may change in future.
+"""
+unique_nodes(space::SpectralElementSpace2D) = UniqueNodeIterator(space)
+
+struct UniqueNodeIterator{S}
+    space::S
+end
+function Base.length(iter::UniqueNodeIterator{<:SpectralElementSpace2D})
+    space = iter.space
+    topology = space.topology
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+
+    nelem = Topologies.nlocalelems(topology)
+    nvert = length(Topologies.vertices(topology))
+    nface_interior = length(Topologies.interior_faces(topology))
+    if isempty(Topologies.boundary_tags(topology))
+        nface_boundary = 0
+    else
+        nface_boundary = sum(Topologies.boundary_tags(topology)) do tag
+            length(Topologies.boundary_faces(topology, tag))
+        end
+    end
+    return nelem * (Nq - 2)^2 +
+           nvert +
+           nface_interior * (Nq - 2) +
+           nface_boundary * (Nq - 2)
+end
+Base.iterate(::UniqueNodeIterator{<:SpectralElementSpace2D}) =
+    ((1, 1), 1), ((1, 1), 1)
+function Base.iterate(
+    iter::UniqueNodeIterator{<:SpectralElementSpace2D},
+    ((i, j), e),
+)
+    space = iter.space
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    while true
+        # find next node
+        i += 1
+        if i > Nq
+            i = 1
+            j += 1
+        end
+        if j > Nq
+            j = 1
+            e += 1
+        end
+        if e > Topologies.nlocalelems(space) # we're done
+            return nothing
+        end
+        # check if this node has been seen
+        # this assumes we don't have any shared vertices that are connected in a diagonal order,
+        # e.g.
+        #  1 | 3
+        #  --+--
+        #  4 | 2
+        # we could check this by walking along the vertices as we go
+        # this also doesn't deal with the case where eo == e
+        if j == 1
+            # face 1
+            eo, _, _ = Topologies.opposing_face(space.topology, e, 1)
+            if 0 < eo < e
+                continue
+            end
+        end
+        if i == Nq
+            # face 2
+            eo, _, _ = Topologies.opposing_face(space.topology, e, 2)
+            if 0 < eo < e
+                continue
+            end
+        end
+        if j == Nq
+            # face 3
+            eo, _, _ = Topologies.opposing_face(space.topology, e, 3)
+            if 0 < eo < e
+                continue
+            end
+        end
+        if i == 1
+            # face 4
+            eo, _, _ = Topologies.opposing_face(space.topology, e, 4)
+            if 0 < eo < e
+                continue
+            end
+        end
+        return ((i, j), e), ((i, j), e)
+    end
 end

@@ -40,14 +40,15 @@ const ϕ_c = 0.0 # initial latitude of tracers
 const z_c = 5.0e3 # initial altitude of tracers
 const R_t = R / 2 # horizontal half-width of tracers
 const Z_t = 1000.0 # vertical half-width of tracers
+const κ₄ = 1.0e16 # hyperviscosity
 
 # set up function space
 function sphere_3D(
     R = 6.37122e6,
     zlim = (0, 12.0e3),
-    helem = 6,
+    helem = 4,
     zelem = 12,
-    npoly = 3,
+    npoly = 4,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -81,7 +82,7 @@ r1(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - 
 r2(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c2))
 
 p(z) = p_0 * exp(-z / H)
-ρ(z) = p(z) / R_d / T_0
+ρ_ref(z) = p(z) / R_d / T_0
 
 y0 = map(coords) do coord
     z = coord.z
@@ -108,12 +109,12 @@ y0 = map(coords) do coord
     end
     q4 = 1 - 3 / 10 * (q1 + q2 + q3)
 
-    ρq1 = ρ(z) * q1
-    ρq2 = ρ(z) * q2
-    ρq3 = ρ(z) * q3
-    ρq4 = ρ(z) * q4
+    ρq1 = ρ_ref(z) * q1
+    ρq2 = ρ_ref(z) * q2
+    ρq3 = ρ_ref(z) * q3
+    ρq4 = ρ_ref(z) * q4
 
-    return (ρq1 = ρq1, ρq2 = ρq2, ρq3 = ρq3, ρq4 = ρq4)
+    return (ρ = ρ_ref(z), ρq1 = ρq1, ρq2 = ρq2, ρq3 = ρq3, ρq4 = ρq4)
 end
 
 function rhs!(dydt, y, (coords, face_coords), t)
@@ -142,20 +143,24 @@ function rhs!(dydt, y, (coords, face_coords), t)
     uu = @. ua + ud
     uv = @. k * sind(2 * λp) * cosd(ϕ) * cos(pi * t / τ)
     ω = @. ω_0 * sind(λpf) * cosd(ϕf) * cos(2 * pi * t / τ) * sp
-    uw = @. -ω / ρ(zf) / grav
+    uw = @. -ω / ρ_ref(zf) / grav
 
     uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
     w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
 
+    ρ = y.ρ
     ρq1 = y.ρq1
     ρq2 = y.ρq2
     ρq3 = y.ρq3
     ρq4 = y.ρq4
 
+    dρ = dydt.ρ
     dρq1 = dydt.ρq1
     dρq2 = dydt.ρq2
     dρq3 = dydt.ρq3
     dρq4 = dydt.ρq4
+
+    dρ .= 0 .* ρ
 
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
@@ -167,23 +172,43 @@ function rhs!(dydt, y, (coords, face_coords), t)
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
     hdiv = Operators.Divergence()
+    hwdiv = Operators.WeakDivergence()
+    hgrad = Operators.Gradient()
+
+    ### HYPERVISCOSITY
+
+    χq1 = @. dρq1 = hwdiv(hgrad(ρq1 / ρ))
+    Spaces.weighted_dss!(dρq1)
+    @. dρq1 = -κ₄ * hwdiv(ρ * hgrad(χq1))
+
+    χq2 = @. dρq2 = hwdiv(hgrad(ρq2 / ρ))
+    Spaces.weighted_dss!(dρq2)
+    @. dρq2 = -κ₄ * hwdiv(ρ * hgrad(χq2))
+
+    χq3 = @. dρq3 = hwdiv(hgrad(ρq3 / ρ))
+    Spaces.weighted_dss!(dρq3)
+    @. dρq3 = -κ₄ * hwdiv(ρ * hgrad(χq3))
+
+    χq4 = @. dρq4 = hwdiv(hgrad(ρq4 / ρ))
+    Spaces.weighted_dss!(dρq4)
+    @. dρq4 = -κ₄ * hwdiv(ρ * hgrad(χq4))
 
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
-    @. dρq1 = -hdiv(cuvw * ρq1)
+    @. dρq1 -= hdiv(cuvw * ρq1)
     @. dρq1 -= vdivf2c(w * Ic2f(ρq1))
     @. dρq1 -= vdivf2c(Ic2f(uₕ * ρq1))
 
-    @. dρq2 = -hdiv(cuvw * ρq2)
+    @. dρq2 -= hdiv(cuvw * ρq2)
     @. dρq2 -= vdivf2c(w * Ic2f(ρq2))
     @. dρq2 -= vdivf2c(Ic2f(uₕ * ρq2))
 
-    @. dρq3 = -hdiv(cuvw * ρq3)
+    @. dρq3 -= hdiv(cuvw * ρq3)
     @. dρq3 -= vdivf2c(w * Ic2f(ρq3))
     @. dρq3 -= vdivf2c(Ic2f(uₕ * ρq3))
 
-    @. dρq4 = -hdiv(cuvw * ρq4)
+    @. dρq4 -= hdiv(cuvw * ρq4)
     @. dρq4 -= vdivf2c(w * Ic2f(ρq4))
     @. dρq4 -= vdivf2c(Ic2f(uₕ * ρq4))
 
@@ -210,24 +235,24 @@ sol = solve(
 )
 
 q1_error =
-    norm(sol.u[end].ρq1 ./ ρ.(coords.z) .- y0.ρq1 ./ ρ.(coords.z)) /
-    norm(y0.ρq1 ./ ρ.(coords.z))
-@test q1_error ≈ 0.0 atol = 0.9
+    norm(sol.u[end].ρq1 ./ ρ_ref.(coords.z) .- y0.ρq1 ./ ρ_ref.(coords.z)) /
+    norm(y0.ρq1 ./ ρ_ref.(coords.z))
+@test q1_error ≈ 0.0 atol = 0.7
 
 q2_error =
-    norm(sol.u[end].ρq2 ./ ρ.(coords.z) .- y0.ρq2 ./ ρ.(coords.z)) /
-    norm(y0.ρq2 ./ ρ.(coords.z))
-@test q2_error ≈ 0.0 atol = 0.04
+    norm(sol.u[end].ρq2 ./ ρ_ref.(coords.z) .- y0.ρq2 ./ ρ_ref.(coords.z)) /
+    norm(y0.ρq2 ./ ρ_ref.(coords.z))
+@test q2_error ≈ 0.0 atol = 0.03
 
 q3_error =
-    norm(sol.u[end].ρq3 ./ ρ.(coords.z) .- y0.ρq3 ./ ρ.(coords.z)) /
-    norm(y0.ρq3 ./ ρ.(coords.z))
-@test q3_error ≈ 0.0 atol = 0.6
+    norm(sol.u[end].ρq3 ./ ρ_ref.(coords.z) .- y0.ρq3 ./ ρ_ref.(coords.z)) /
+    norm(y0.ρq3 ./ ρ_ref.(coords.z))
+@test q3_error ≈ 0.0 atol = 0.4
 
 q4_error =
-    norm(sol.u[end].ρq4 ./ ρ.(coords.z) .- y0.ρq4 ./ ρ.(coords.z)) /
-    norm(y0.ρq4 ./ ρ.(coords.z))
-@test q4_error ≈ 0.0 atol = 0.04
+    norm(sol.u[end].ρq4 ./ ρ_ref.(coords.z) .- y0.ρq4 ./ ρ_ref.(coords.z)) /
+    norm(y0.ρq4 ./ ρ_ref.(coords.z))
+@test q4_error ≈ 0.0 atol = 0.03
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
@@ -248,7 +273,7 @@ end
 
 Plots.png(
     Plots.plot(
-        sol.u[trunc(Int, end / 2)].ρq3 ./ ρ.(coords.z),
+        sol.u[trunc(Int, end / 2)].ρq3 ./ ρ_ref.(coords.z),
         level = 5,
         clim = (-1, 1),
     ),
@@ -256,6 +281,6 @@ Plots.png(
 )
 
 Plots.png(
-    Plots.plot(sol.u[end].ρq3 ./ ρ.(coords.z), level = 5, clim = (-1, 1)),
+    Plots.plot(sol.u[end].ρq3 ./ ρ_ref.(coords.z), level = 5, clim = (-1, 1)),
     joinpath(path, "q3_12day.png"),
 )
