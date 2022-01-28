@@ -1,6 +1,6 @@
 # Launch with `julia --project --track-allocation=user`
 import Pkg
-Pkg.develop(path = ".")
+Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
 
 import Profile
 
