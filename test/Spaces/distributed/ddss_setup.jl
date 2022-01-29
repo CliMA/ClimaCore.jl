@@ -1,5 +1,4 @@
 using Logging
-using Printf
 using Test
 
 import ClimaCore:
@@ -9,8 +8,6 @@ using ClimaComms
 using ClimaCommsMPI
 const Context = ClimaCommsMPI.MPICommsContext
 const pid, nprocs = ClimaComms.init(Context)
-
-puts(s...) = ccall(:puts, Cint, (Cstring,), string("$(pid)> ", s...))
 
 # log output only from root process
 logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
@@ -49,14 +46,4 @@ function distributed_space(
     space = Spaces.SpectralElementSpace2D(topology, quad, comms_ctx)
 
     return (space, comms_ctx)
-end
-
-function show_elements(Nq, y, nel)
-    for el in 1:nel
-        s = @sprintf "element %d: %s" el repr(
-            "text/plain",
-            reshape(parent(y)[:, :, 1, el], Nq, Nq),
-        )
-        puts(s)
-    end
 end
