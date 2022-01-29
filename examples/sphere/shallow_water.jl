@@ -109,9 +109,9 @@ end
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "cg_sphere_shallowwater_$(test_name)"
-dirname = "$(dirname)_$(test_angle_name)"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "cg_sphere_shallowwater_$(test_name)"
+dir = "$(dir)_$(test_angle_name)"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 function linkfig(figpath, alt = "")

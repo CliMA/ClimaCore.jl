@@ -257,8 +257,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "hydrostatic_implicit"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "hydrostatic_implicit"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 z_centers = parent(Fields.coordinate_field(cspace))

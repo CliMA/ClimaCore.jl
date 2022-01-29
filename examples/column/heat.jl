@@ -63,8 +63,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "heat"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "heat"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u

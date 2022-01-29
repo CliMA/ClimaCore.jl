@@ -152,8 +152,8 @@ ENV["GKSwstype"] = "nul"
 import ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "advect_step_function"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "advect_step_function"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol1.u
@@ -208,7 +208,7 @@ function linkfig(figpath, alt = "")
 end
 
 linkfig(
-    "examples/column/output/$(dirname)/advect_step_function_end.png",
+    "examples/column/output/$(dir)/advect_step_function_end.png",
     "Advect End Simulation",
 )
 

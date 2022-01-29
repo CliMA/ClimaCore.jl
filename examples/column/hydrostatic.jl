@@ -141,8 +141,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "hydrostatic"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "hydrostatic"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 z_centers = parent(Fields.coordinate_field(cspace))
@@ -203,7 +203,4 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig(
-    "examples/column/output/$(dirname)/hydrostatic_end.png",
-    "Hydrostatic End",
-)
+linkfig("examples/column/output/$(dir)/hydrostatic_end.png", "Hydrostatic End")

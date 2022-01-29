@@ -206,7 +206,7 @@ anim = Plots.@animate for sol1 in sol.u
     Plots.plot(v, level = 10, clim = (-6, 6))
 end
 
-dirname = "held_suarez_rho_theta_implicit"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "held_suarez_rho_theta_implicit"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)

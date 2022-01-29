@@ -314,8 +314,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "bubble_2d"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "bubble_2d"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 # post-processing

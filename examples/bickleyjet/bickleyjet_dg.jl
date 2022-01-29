@@ -231,11 +231,11 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "dg_$(numflux_name)"
+dir = "dg_$(numflux_name)"
 if boundary_name != ""
-    dirname = "$(dirname)_$(boundary_name)"
+    dir = "$(dir)_$(boundary_name)"
 end
-path = joinpath(@__DIR__, "output", dirname)
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u
