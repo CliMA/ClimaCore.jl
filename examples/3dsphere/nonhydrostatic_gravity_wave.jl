@@ -268,8 +268,8 @@ sol = solve(
 # ENV["GKSwstype"] = "nul"
 # using ClimaCorePlots, Plots
 # Plots.GRBackend()
-# dirname = "nonhydrostatic_gravity_wave"
-# path = joinpath(@__DIR__, "output", dirname)
+# dir = "nonhydrostatic_gravity_wave"
+# path = joinpath(@__DIR__, "output", dir)
 # mkpath(path)
 
 # function linkfig(figpath, alt = "")

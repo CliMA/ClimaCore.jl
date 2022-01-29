@@ -102,8 +102,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "advect_diffusion"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "advect_diffusion"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for (nt, u) in enumerate(sol.u)

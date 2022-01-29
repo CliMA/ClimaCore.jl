@@ -1,5 +1,5 @@
-import Pkg
-Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
+EXAMPLE_DIR = joinpath(dirname(@__DIR__), "examples")
+EXAMPLE_DIR in LOAD_PATH || pushfirst!(LOAD_PATH, EXAMPLE_DIR)
 
 # Track allocations in ClimaCore.jl plus some important dependencies:
 import ClimaCore
@@ -9,9 +9,8 @@ import OrdinaryDiffEq
 import DiffEqOperators
 
 mod_dir(x) = dirname(dirname(pathof(x)))
-pkg_dir = mod_dir(ClimaCore)
 dirs_to_monitor = [
-    pkg_dir,
+    dirname(@__DIR__),
     mod_dir(SciMLBase),
     mod_dir(DiffEqBase),
     mod_dir(OrdinaryDiffEq),
@@ -21,12 +20,12 @@ dirs_to_monitor = [
 # (filename, ARGs passed to script)
 #! format: off
 all_cases = [
-    (joinpath(pkg_dir, "examples", "hybrid", "bubble_2d.jl"), ""),
-    (joinpath(pkg_dir, "examples", "hybrid", "bubble_3d.jl"), ""),
-    (joinpath(pkg_dir, "examples", "3dsphere", "baroclinic_wave.jl"), "baroclinic_wave"),
-    (joinpath(pkg_dir, "examples", "sphere", "shallow_water.jl"), "barotropic_instability"),
-    (joinpath(pkg_dir, "examples", "3dsphere", "solid_body_rotation_3d.jl"), ""),
-    (joinpath(pkg_dir, "examples", "3dsphere", "baroclinic_wave_rho_etot.jl"), ""),
+    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_2d.jl"), ""),
+    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_3d.jl"), ""),
+    (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave.jl"), "baroclinic_wave"),
+    (joinpath(EXAMPLE_DIR, "sphere", "shallow_water.jl"), "barotropic_instability"),
+    (joinpath(EXAMPLE_DIR, "3dsphere", "solid_body_rotation_3d.jl"), ""),
+    (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave_rho_etot.jl"), ""),
 ]
 #! format: on
 

@@ -230,7 +230,7 @@ anim = Plots.@animate for sol1 in sol.u
     Plots.plot(v, level = 3, clim = (-6, 6))
 end
 
-dirname = "baroclinic_wave_rho_etot_implicit"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "baroclinic_wave_rho_etot_implicit"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)

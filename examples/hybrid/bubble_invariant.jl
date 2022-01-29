@@ -265,8 +265,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "bubble_invariant"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "bubble_invariant"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 # post-processing

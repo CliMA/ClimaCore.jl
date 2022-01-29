@@ -132,8 +132,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "cg_invariant_hypervisc"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "cg_invariant_hypervisc"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u

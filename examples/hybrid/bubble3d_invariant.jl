@@ -321,8 +321,8 @@ function linkfig(figpath, alt = "")
     end
 end
 
-dirname = "bubble3d_invariant"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "bubble3d_invariant"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 # slice along the center XZ axis

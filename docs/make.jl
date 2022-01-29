@@ -1,5 +1,6 @@
 import Documenter, DocumenterCitations, Literate
-import ClimaCore, ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots
+import ClimaCore,
+    ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots, ClimaCoreTempestRemap
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
@@ -46,7 +47,13 @@ withenv("GKSwstype" => "nul") do
         checkdocs = :exports,
         clean = true,
         doctest = true,
-        modules = [ClimaCore, ClimaCoreVTK, ClimaCorePlots, ClimaCoreMakie],
+        modules = [
+            ClimaCore,
+            ClimaCoreVTK,
+            ClimaCorePlots,
+            ClimaCoreMakie,
+            ClimaCoreTempestRemap,
+        ],
         pages = Any[
             "Home" => "index.md",
             "API" => "api.md",

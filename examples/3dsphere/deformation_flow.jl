@@ -258,8 +258,8 @@ q4_error =
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "deformation_flow"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "deformation_flow"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 function linkfig(figpath, alt = "")

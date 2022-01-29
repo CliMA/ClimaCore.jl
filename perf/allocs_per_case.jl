@@ -1,6 +1,6 @@
 # Launch with `julia --project --track-allocation=user`
-import Pkg
-Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
+EXAMPLE_DIR = joinpath(dirname(@__DIR__), "examples")
+EXAMPLE_DIR in LOAD_PATH || pushfirst!(LOAD_PATH, EXAMPLE_DIR)
 
 import Profile
 

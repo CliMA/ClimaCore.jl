@@ -70,8 +70,8 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "wave"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "wave"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u

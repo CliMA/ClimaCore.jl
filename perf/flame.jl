@@ -1,16 +1,14 @@
-import Pkg
-Pkg.develop(path = abspath(joinpath(@__DIR__, "..")))
+EXAMPLE_DIR = joinpath(dirname(@__DIR__), "examples")
+EXAMPLE_DIR in LOAD_PATH || pushfirst!(LOAD_PATH, EXAMPLE_DIR)
 
 import Profile
-mod_dir(x) = dirname(dirname(pathof(x)))
 
 ENV["CI_PERF_SKIP_RUN"] = true # we only need haskey(ENV, "CI_PERF_SKIP_RUN") == true
 
 import ClimaCore
-pkg_dir = mod_dir(ClimaCore)
 
-filename = joinpath(pkg_dir, "examples", "hybrid", "bubble_2d.jl")
-# filename = joinpath(pkg_dir, "examples", "3dsphere", "baroclinic_wave_rho_etot.jl")
+filename = joinpath(EXAMPLE_DIR, "hybrid", "bubble_2d.jl")
+# filename = joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave_rho_etot.jl")
 
 try
     include(filename)
