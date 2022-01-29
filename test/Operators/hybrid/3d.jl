@@ -13,6 +13,9 @@ import ClimaCore:
     Fields,
     Operators
 
+import ClimaCore.Utilities: half
+import ClimaCore.DataLayouts: level
+
 @testset "sphere divergence" begin
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -78,6 +81,7 @@ end
     hv_center_space, hv_face_space = hvspace_3D()
 
     coord = Fields.coordinate_field(hv_face_space)
+
     @test parent(Fields.field_values(level(coord.x, half))) == parent(
         Fields.field_values(
             Fields.coordinate_field(hv_face_space.horizontal_space).x,

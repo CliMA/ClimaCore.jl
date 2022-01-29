@@ -300,6 +300,10 @@ function Spaces.weighted_dss!(field::Field)
     Spaces.weighted_dss!(field_values(field), axes(field))
     return field
 end
+function Spaces.weighted_dss!(field::Field, comms_ctx)
+    Spaces.weighted_dss!(field_values(field), axes(field), comms_ctx)
+    return field
+end
 
 
 function level(field::CenterExtrudedFiniteDifferenceField, v::Int)

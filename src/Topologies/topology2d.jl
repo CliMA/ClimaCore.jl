@@ -79,14 +79,15 @@ function Topology2D(
 end
 
 domain(topology::Topology2D) = domain(topology.mesh)
+nelems(topology::Topology2D) = nlocalelems(topology)
 nlocalelems(topology::Topology2D) = length(topology.elemorder)
+localelemindex(topology::Topology2D, elem) = topology.orderindex[elem]
 coordinates(topology::Topology2D, e::Int, arg) =
     coordinates(topology.mesh, topology.elemorder[e], arg)
 vertex_coordinates(topology::Topology2D, e::Int) =
     ntuple(4) do vert
         coordinates(topology, e, vert)
     end
-
 
 function opposing_face(topology::Topology2D, e::Int, face::Int)
     mesh = topology.mesh
