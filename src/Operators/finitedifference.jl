@@ -2141,7 +2141,7 @@ function Base.copyto!(
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)
-    Threads.@threads for h in 1:Nh
+    Polyester.@batch for h in 1:Nh
         @inbounds for j in 1:Nj, i in 1:Ni
             column_field_out = column(field_out, i, j, h)
             column_bc = column(bc, i, j, h)

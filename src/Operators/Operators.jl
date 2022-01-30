@@ -1,6 +1,6 @@
 module Operators
 
-import LinearAlgebra
+import LinearAlgebra, Polyester
 
 using StaticArrays
 

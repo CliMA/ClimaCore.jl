@@ -15,9 +15,12 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 module DataLayouts
 
 import Base: Base, @propagate_inbounds
+
 import StaticArrays: SOneTo, MArray
+import Polyester
 
 import ..slab, ..slab_args, ..column, ..column_args, ..level
+
 export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH
 
 include("struct.jl")

@@ -417,7 +417,7 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nij},
-    bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
+    bc::VIJFH{S, Nij, A},
 ) where {S, Nij, A}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest)
@@ -425,6 +425,21 @@ function Base.copyto!(
         col_dest = column(dest, i, j, h)
         col_bc = column(bc, i, j, h)
         copyto!(col_dest, col_bc)
+    end
+    return dest
+end
+function Base.copyto!(
+    dest::VIJFH{S, Nij},
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
+) where {S, Nij, A}
+    # copy contiguous columns
+    _, _, _, _, Nh = size(dest)
+    Polyester.@batch for h in 1:Nh
+        @inbounds for j in 1:Nij, i in 1:Nij
+            col_dest = column(dest, i, j, h)
+            col_bc = column(bc, i, j, h)
+            copyto!(col_dest, col_bc)
+        end
     end
     return dest
 end

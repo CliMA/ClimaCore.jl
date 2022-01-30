@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.7.0"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -136,7 +136,11 @@ uuid = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 version = "0.1.0"
 
 [[deps.ClimaCore]]
+<<<<<<< HEAD
 deps = ["Adapt", "BlockArrays", "CUDA", "ClimaComms", "CubedSphere", "DiffEqBase", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "IntervalSets", "LinearAlgebra", "RecursiveArrayTools", "RootSolvers", "Rotations", "SparseArrays", "Static", "StaticArrays", "Statistics", "UnPack"]
+=======
+deps = ["Adapt", "BlockArrays", "CUDA", "ClimaComms", "CubedSphere", "DiffEqBase", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "IntervalSets", "LinearAlgebra", "Polyester", "RecursiveArrayTools", "RootSolvers", "Rotations", "SparseArrays", "Static", "StaticArrays", "UnPack"]
+>>>>>>> 4ea7738 (try polyester threading runtime)
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 version = "0.7.0"

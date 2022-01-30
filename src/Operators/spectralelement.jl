@@ -155,7 +155,7 @@ function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     space = axes(field_out)
     Nv = Spaces.nlevels(space)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
-    Threads.@threads for h in 1:Nh
+    Polyester.@batch for h in 1:Nh
         @inbounds for v in 1:Nv
             slab_out = slab(field_out, v, h)
             out_slab_space = slab(axes(sbc), v, h)
