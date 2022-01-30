@@ -329,10 +329,10 @@ uuid = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
 version = "1.0.3"
 
 [[deps.DiffRules]]
-deps = ["LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
-git-tree-sha1 = "9bc5dac3c8b6706b58ad5ce24cffd9861f07c94f"
+deps = ["IrrationalConstants", "LogExpFunctions", "NaNMath", "Random", "SpecialFunctions"]
+git-tree-sha1 = "84083a5136b6abf426174a58325ffd159dd6d94f"
 uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
-version = "1.9.0"
+version = "1.9.1"
 
 [[deps.Distances]]
 deps = ["LinearAlgebra", "SparseArrays", "Statistics", "StatsAPI"]
@@ -346,9 +346,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-git-tree-sha1 = "5863b0b10512ed4add2b5ec07e335dc6121065a5"
+git-tree-sha1 = "38bcc22b6e358e88a7715ad0db446dfd3a4fea47"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.41"
+version = "0.25.43"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -607,9 +607,9 @@ version = "1.0.2"
 
 [[deps.HDF5_jll]]
 deps = ["Artifacts", "JLLWrappers", "LibCURL_jll", "Libdl", "OpenSSL_jll", "Pkg", "Zlib_jll"]
-git-tree-sha1 = "fd83fa0bde42e01952757f01149dd968c06c4dba"
+git-tree-sha1 = "bab67c0d1c4662d2c4be8c6007751b0b6111de5c"
 uuid = "0234f1f7-429e-5d53-9886-15a909be8d59"
-version = "1.12.0+1"
+version = "1.12.1+0"
 
 [[deps.HTTP]]
 deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
@@ -931,9 +931,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[deps.LinearSolve]]
 deps = ["ArrayInterface", "DocStringExtensions", "IterativeSolvers", "KLU", "Krylov", "KrylovKit", "LinearAlgebra", "RecursiveFactorization", "Reexport", "Requires", "SciMLBase", "Setfield", "SparseArrays", "SuiteSparse", "UnPack"]
-git-tree-sha1 = "c954090c0a7327a52beccf984610cd505b18d6ce"
+git-tree-sha1 = "a050cd5581a204eeda3ad13c1d2aabdc3c451b4e"
 uuid = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
-version = "1.11.0"
+version = "1.11.1"
 
 [[deps.Literate]]
 deps = ["Base64", "IOCapture", "JSON", "REPL"]
@@ -1068,9 +1068,9 @@ version = "0.3.7"
 
 [[deps.NetCDF_jll]]
 deps = ["Artifacts", "HDF5_jll", "JLLWrappers", "LibCURL_jll", "LibSSH2_jll", "Libdl", "MbedTLS_jll", "Pkg", "Zlib_jll", "nghttp2_jll"]
-git-tree-sha1 = "0cf4d1bf2ef45156aed85c9ac5f8c7e697d9288c"
+git-tree-sha1 = "03af9979e5f60b7ac42a428a5beb5282ffec45ca"
 uuid = "7243133f-43d8-5620-bbf4-c2c921802cf3"
-version = "400.702.400+0"
+version = "400.802.101+0"
 
 [[deps.Netpbm]]
 deps = ["FileIO", "ImageCore"]
@@ -1574,9 +1574,9 @@ version = "0.10.13"
 
 [[deps.TempestRemap_jll]]
 deps = ["Artifacts", "HDF5_jll", "JLLWrappers", "Libdl", "NetCDF_jll", "OpenBLAS32_jll", "Pkg", "libblastrampoline_jll"]
-git-tree-sha1 = "b974197615c1de59b24b585cc0d02392a88479f4"
+git-tree-sha1 = "17d1140b2258e767aceb8a2060742a218fea161d"
 uuid = "8573a8c5-1df0-515e-a024-abad257ee284"
-version = "2.1.2+1"
+version = "2.1.2+2"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
