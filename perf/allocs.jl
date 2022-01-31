@@ -8,13 +8,12 @@ import DiffEqBase
 import OrdinaryDiffEq
 import DiffEqOperators
 
-mod_dir(x) = dirname(dirname(pathof(x)))
 dirs_to_monitor = [
-    dirname(@__DIR__),
-    mod_dir(SciMLBase),
-    mod_dir(DiffEqBase),
-    mod_dir(OrdinaryDiffEq),
-    mod_dir(DiffEqOperators),
+    pkgdir(ClimaCore),
+    pkgdir(SciMLBase),
+    pkgdir(DiffEqBase),
+    pkgdir(OrdinaryDiffEq),
+    pkgdir(DiffEqOperators),
 ]
 
 # (filename, ARGs passed to script)
