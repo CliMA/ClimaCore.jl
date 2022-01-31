@@ -13,6 +13,7 @@ import ClimaCore:
     Fields,
     Operators
 import ClimaCore.Utilities: half
+import UnPack
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -174,8 +175,24 @@ uₕ = map(
 )
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+const If2c = Operators.InterpolateF2C()
+const Ic2f = Operators.InterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
 
-function rhs!(dY, Y, _, t)
+cuvw = Geometry.Covariant123Vector.(Y.uₕ)
+cω³ = Operators.Curl().(Y.uₕ)
+fω¹² = Operators.Curl().(Y.w)
+fu¹² =
+    Geometry.Contravariant12Vector.(Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)))
+fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(Y.w))
+cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe / Y.Yc.ρ, norm(cuvw), coords.z)
+cE = @. (norm(cuvw)^2) / 2 + Φ(coords.z)
+parameters = (; cuvw, cω³, fω¹², fu¹², fu³, cp, cE, coords)
+
+function rhs!(dY, Y, parameters, t)
+    UnPack.@unpack cuvw, cω³, fω¹², fu¹², fu³, cp, cE, coords = parameters
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
@@ -197,16 +214,18 @@ function rhs!(dY, Y, _, t)
     hcurl = Operators.Curl()
     hwcurl = Operators.WeakCurl()
 
-    dρ .= 0 .* cρ
+    @. dρ = 0 * cρ
 
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
 
-    χe = @. dρe = hwdiv(hgrad(cρe / cρ))
-    χuₕ = @. duₕ =
+    @. dρe = hwdiv(hgrad(cρe / cρ))
+    χe = dρe
+    @. duₕ =
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
+    χuₕ = duₕ
 
     Spaces.weighted_dss!(dρe)
     Spaces.weighted_dss!(duₕ)
@@ -220,18 +239,13 @@ function rhs!(dY, Y, _, t)
         )
 
     # 1) Mass conservation
-    If2c = Operators.InterpolateF2C()
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    cw = If2c.(fw)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+    @. cuvw =
+        Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
 
-    dw .= fw .* 0
+    @. dw = fw * 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuvw))
+    @. dρ -= hdiv(cρ * (cuvw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -243,9 +257,9 @@ function rhs!(dY, Y, _, t)
     # negation
 
     # explicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    @. dρ -= vdivf2c(Ic2f(cρ * cuₕ))
     # implicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    @. dρ -= vdivf2c(Ic2f(cρ) * fw)
 
     # 2) Momentum equation
 
@@ -255,18 +269,16 @@ function rhs!(dY, Y, _, t)
         bottom = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
         top = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
     )
-    cω³ = hcurl.(cuₕ) # Contravariant3Vector
-    fω¹² = hcurl.(fw) # Contravariant12Vector
-    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
+    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
 
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
-    fu¹² =
-        Geometry.Contravariant12Vector.(
-            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
-        ) # Contravariant12Vector in 3D
-    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    @. fu¹² =
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(cuₕ))) # Contravariant12Vector in 3D
+    @. fu³ = Geometry.Contravariant3Vector(Geometry.Covariant123Vector(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)
 
@@ -275,8 +287,7 @@ function rhs!(dY, Y, _, t)
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce = @. cρe / cρ
-    cp = @. pressure(cρ, ce, norm(cuvw), z)
+    @. cp = pressure(cρ, cρe / cρ, norm(cuvw), z)
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
@@ -285,7 +296,7 @@ function rhs!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(z)
+    @. cE = (norm(cuvw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -303,24 +314,24 @@ function rhs!(dY, Y, _, t)
 end
 
 dYdt = similar(Y)
-rhs!(dYdt, Y, nothing, 0.0)
+rhs!(dYdt, Y, parameters, 0.0)
 
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
 if test_name == "baroclinic_wave"
-    time_end = 600
+    time_end = 86400.0 * 0.3
 elseif test_name == "balanced_flow"
     time_end = 3600
 end
 dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, time_end))
+prob = ODEProblem(rhs!, Y, (0.0, time_end), parameters)
 
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = dt,
-    saveat = dt,
+    saveat = 200 * dt,
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
@@ -332,40 +343,26 @@ end
 
 sol = @timev OrdinaryDiffEq.solve!(integrator)
 
+using ClimaCorePlots, Plots
+ENV["GKSwstype"] = "nul"
 # visualization artifacts
 if test_name == "baroclinic_wave"
     @info "Solution L₂ norm at time t = 0: ", norm(Y.Yc.ρe)
     @info "Solution L₂ norm at time t = $(time_end): ", norm(sol.u[end].Yc.ρe)
 
-    ENV["GKSwstype"] = "nul"
-    using ClimaCorePlots, Plots
-    Plots.GRBackend()
-    dirname = "baroclinic_wave"
-    path = joinpath(@__DIR__, "output", dirname)
-    mkpath(path)
-
-    function linkfig(figpath, alt = "")
-        # buildkite-agent upload figpath
-        # link figure in logs if we are running on CI
-        if get(ENV, "BUILDKITE", "") == "true"
-            artifact_url = "artifact://$figpath"
-            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-        end
+    anim = Plots.@animate for sol1 in sol.u
+        uₕ = sol1.uₕ
+        uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), uₕ)
+        v = uₕ_phy.components.data.:2
+        Plots.plot(v, level = 3, clim = (-6, 6))
     end
 
-    u_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
-    Plots.png(
-        Plots.plot(u_phy.components.data.:2, level = 3, clim = (-1, 1)),
-        joinpath(path, "v.png"),
-    )
-    w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)
-    Plots.png(
-        Plots.plot(w_phy.components.data.:1, level = 3 + half, clim = (-1, 1)),
-        joinpath(path, "w.png"),
-    )
+    dir = "baroclinic_wave"
+    path = joinpath(@__DIR__, "output", dir)
+    mkpath(path)
+    Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)
+
 elseif test_name == "balanced_flow"
-    ENV["GKSwstype"] = "nul"
-    using ClimaCorePlots, Plots
     Plots.GRBackend()
     dirname = "balanced_flow"
     path = joinpath(@__DIR__, "output", dirname)
