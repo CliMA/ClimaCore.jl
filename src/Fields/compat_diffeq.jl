@@ -1,4 +1,4 @@
-import DiffEqBase, RecursiveArrayTools, Static
+import DiffEqBase, RecursiveArrayTools, Static, ArrayInterface
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions
@@ -87,8 +87,29 @@ end
 end
 
 
-# Play nice with DiffEq ArrayPartition
+# Have Fields play nice with DiffEq
+DiffEqBase.recursive_length(field::Field) = 1
 DiffEqBase.UNITLESS_ABS2(field::Field) =
     sum(DiffEqBase.UNITLESS_ABS2, parent(field))
-DiffEqBase.recursive_length(field::Field) = 1
 DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))
+
+# Have FieldVectors play nice with DiffEq
+DiffEqBase.recursive_length(fv::FieldVector) = 1
+
+function DiffEqBase.UNITLESS_ABS2(fv::FieldVector)
+    mapreduce(f -> DiffEqBase.UNITLESS_ABS2(parent(f)), +, Fields._values(fv))
+end
+
+function DiffEqBase.NAN_CHECK(fv::FieldVector)
+    any(Fields._values(fv)) do f
+        DiffEqBase.NAN_CHECK(parent(f))
+    end
+end
+
+# implicit solver overloads
+function ArrayInterface.zeromatrix(fv::FieldVector{T}) where {T}
+    vaxis = first(axes(fv))
+    zeroblocked = BlockArrays.PseudoBlockMatrix{T}(undef, vaxis, vaxis)
+    fill!(zeroblocked, zero(T))
+    return zeroblocked
+end

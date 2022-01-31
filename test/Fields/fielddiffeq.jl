@@ -25,21 +25,24 @@ using LinearAlgebra, IntervalSets
     # dy/dt = [-y[2], y[1]]
 
     f(x, t) = (c = cos(x.x + x.y + t), s = sin(x.x + x.y + t))
-    function dfdt(y, _, t)
-        broadcast(y -> (c = -y.s, s = y.c), y)
+
+    function dfdt(Y, _, t)
+        broadcast(y -> (c = -y.s, s = y.c), Y.testfield)
     end
-    function dfdt!(dydt, y, _, t)
-        broadcast!(y -> (c = -y.s, s = y.c), dydt, y)
+    function dfdt!(dYdt, Y, _, t)
+        broadcast!(y -> (c = -y.s, s = y.c), dYdt.testfield, Y.testfield)
     end
 
     y0 = f.(Fields.coordinate_field(space), 0.0)
     y1 = f.(Fields.coordinate_field(space), 1.0)
 
+    Y = Fields.FieldVector(testfield = y0)
+
     # Solve the ODE operator
-    prob = ODEProblem(dfdt!, y0, (0.0, 1.0))
+    prob = ODEProblem(dfdt!, Y, (0.0, 1.0))
     sol = solve(prob, Tsit5(), reltol = 1e-6)
 
-    @test norm(sol(1.0) .- y1) <= 1e-6 * norm(y1)
+    @test norm(sol(1.0).testfield .- y1) <= 1e-6 * norm(y1)
 end
 
 # implicit solvers

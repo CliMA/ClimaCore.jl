@@ -1,5 +1,8 @@
 module Fields
 
+# Must be explicitly imported to be extended
+import Base: ==
+
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
@@ -233,11 +236,10 @@ local_geometry_field(space::AbstractSpace) =
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
 
-
 include("broadcast.jl")
 include("mapreduce.jl")
-include("compat_diffeq.jl")
 include("fieldvector.jl")
+include("compat_diffeq.jl")
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1

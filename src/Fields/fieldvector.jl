@@ -1,6 +1,5 @@
 import BlockArrays
 
-
 """
     FieldVector
 
@@ -69,6 +68,11 @@ end
 
 _values(fv::FieldVector) = getfield(fv, :values)
 
+# This is needed as part of the OrdinaryDiffEq interface
+==(fv1::FieldVector, fv2::FieldVector) = (_values(fv1) == _values(fv2))
+==(fv::FieldVector, arr::AbstractArray) = false
+==(arr::AbstractArray, fv::FieldVector) = false
+
 """
     backing_array(x)
 
@@ -89,19 +93,21 @@ end
     x .= value
 end
 
-
 BlockArrays.blockaxes(fv::FieldVector) =
     (BlockArrays.BlockRange(1:length(_values(fv))),)
 Base.axes(fv::FieldVector) =
     (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
 
-Base.getindex(fv::FieldVector, block::BlockArrays.Block{1}) =
+function Base.getindex(fv::FieldVector, block::BlockArrays.Block{1})
     backing_array(_values(fv)[block.n...])
+end
+
 function Base.getindex(fv::FieldVector, bidx::BlockArrays.BlockIndex{1})
     X = fv[BlockArrays.block(bidx)]
     X[bidx.α...]
 end
 
+#=
 # TODO: drop support for this
 Base.getindex(fv::FieldVector, i::Integer) =
     getindex(fv, BlockArrays.findblockindex(axes(fv, 1), i))
@@ -113,6 +119,7 @@ end
 # TODO: drop support for this
 Base.setindex!(fv::FieldVector, val, i::Integer) =
     setindex!(fv, val, BlockArrays.findblockindex(axes(fv, 1), i))
+=#
 
 Base.similar(fv::FieldVector{T}) where {T} =
     FieldVector{T}(map(similar, _values(fv)))
