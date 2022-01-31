@@ -264,20 +264,26 @@ function rhs_invariant!(dY, Y, _, t)
 end
 
 dYdt = similar(Y);
-rhs_invariant!(dYdt, Y, nothing, 0.0);
+rhs_invariant!(dYdt, Y, parameters, 0.0);
 
 # run!
 using OrdinaryDiffEq
 Δt = 0.050
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0))
-sol_invariant = solve(
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0), parameters)
+integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = 10.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
+
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
+
+sol_invariant = @timev OrdinaryDiffEq.solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots
