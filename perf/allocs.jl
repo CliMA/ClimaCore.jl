@@ -23,7 +23,6 @@ all_cases = [
     (joinpath(EXAMPLE_DIR, "hybrid", "bubble_3d.jl"), ""),
     (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave.jl"), "baroclinic_wave"),
     (joinpath(EXAMPLE_DIR, "sphere", "shallow_water.jl"), "barotropic_instability"),
-    (joinpath(EXAMPLE_DIR, "3dsphere", "solid_body_rotation_3d.jl"), ""),
     (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave_rho_etot.jl"), ""),
 ]
 #! format: on

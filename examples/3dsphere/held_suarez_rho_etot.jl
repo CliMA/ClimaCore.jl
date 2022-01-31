@@ -52,12 +52,12 @@ Test_Type = "Implicit" # "Implicit" #"Seim-Explicit"  #"Implicit-Explicit"    # 
 P = map(c -> 0.0, c_coords.z)
 Φ = @. gravitational_potential(c_coords.z)
 ∇Φ = vgradc2f.(Φ)
-p = (; P, Φ, ∇Φ, c_coords, zmax, z_D)
+parameters = (; P, Φ, ∇Φ, c_coords, zmax, z_D)
 
 if Test_Type == "Explicit"
     T = 3600
     dt = 5
-    prob = ODEProblem(rhs!, Y, (0.0, T), p)
+    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
     # solve ode
     sol = solve(
         prob,
@@ -72,7 +72,8 @@ elseif Test_Type == "Semi-Explicit"
     T = 3600
     dt = 5
 
-    prob = SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), p)
+    prob =
+        SplitODEProblem(rhs_implicit!, rhs_remainder!, Y, (0.0, T), parameters)
 
     # solve ode
     sol = solve(
@@ -89,15 +90,15 @@ elseif Test_Type == "Implicit"
     nday = 10 #300 10 days for ci but need a atable run for longer, e.g., 1200 days
     T = 86400.0 * nday
     dt = 400.0
-    p = (; p..., dt = dt)
-    # p = (; p..., Ycopy = copy(Y)) # for debug purposes only
+    parameters = (; parameters..., dt = dt)
+    # parameters = (; parameters..., Ycopy = copy(Y)) # for debug purposes only
 
     ode_algorithm = Rosenbrock23
     J_𝕄ρ_overwrite = :none
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
-    p = (; ρw = similar(𝕄), p...)
+    parameters = (; ρw = similar(𝕄), parameters...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -123,10 +124,10 @@ elseif Test_Type == "Implicit"
         ),
         Y,
         (0.0, T),
-        p,
+        parameters,
     )
 
-    sol = solve(
+    integrator = OrdinaryDiffEq.init(
         prob,
         dt = dt,
         # OrdinaryDiffEq.TRBDF2(linsolve = OrdinaryDiffEq.LinSolveGMRES()),
@@ -144,6 +145,12 @@ elseif Test_Type == "Implicit"
         progress_message = (dt, u, p, t) -> t,
     )
 
+    if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+        throw(:exit_profile)
+    end
+
+    sol = @timev OrdinaryDiffEq.solve!(integrator)
+
 elseif Test_Type == "Implicit-Explicit"
     T = 3600
     dt = 5
@@ -153,7 +160,7 @@ elseif Test_Type == "Implicit-Explicit"
     use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
     # TODO
     𝕄 = map(c -> Geometry.WVector(0.0), f_coords)
-    p = (; ρw = similar(𝕄), p...)
+    parameters = (; ρw = similar(𝕄), parameters...)
 
     jac_prototype = CustomWRepresentation(
         velem,
@@ -179,7 +186,7 @@ elseif Test_Type == "Implicit-Explicit"
         rhs_remainder!,
         Y,
         (0, T),
-        p,
+        parameters,
     )
 
     sol = solve(

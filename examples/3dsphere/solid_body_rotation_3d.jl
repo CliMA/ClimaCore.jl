@@ -13,6 +13,7 @@ import ClimaCore:
     Fields,
     Operators
 import ClimaCore.Utilities: half
+import UnPack
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -90,7 +91,8 @@ function init_sbr_thermo(z)
     return (ρ = ρ, ρe = ρe)
 end
 
-function rhs!(dY, Y, _, t)
+function rhs!(dY, Y, parameters, t)
+    UnPack.@unpack c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE = parameters
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
@@ -109,10 +111,10 @@ function rhs!(dY, Y, _, t)
     hgrad = Operators.Gradient()
     hcurl = Operators.Curl()
 
-    dρ .= 0 .* cρ
-    dw .= 0 .* fw
-    duₕ .= 0 .* cuₕ
-    dρe .= 0 .* cρe
+    @. dρ = 0 * cρ
+    @. dw = 0 * fw
+    @. duₕ = 0 * cuₕ
+    @. dρe = 0 * cρe
 
     # hyperdiffusion not needed in SBR
 
@@ -122,11 +124,12 @@ function rhs!(dY, Y, _, t)
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    cw = If2c.(fw)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+    @. cw = If2c(fw)
+    @. cuvw =
+        Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuvw))
+    @. dρ -= hdiv(cρ * (cuvw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -138,9 +141,9 @@ function rhs!(dY, Y, _, t)
     # negation
 
     # explicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    @. dρ -= vdivf2c(Ic2f(cρ * cuₕ))
     # implicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    @. dρ -= vdivf2c(Ic2f(cρ) * fw)
 
     # 2) Momentum equation
 
@@ -150,18 +153,16 @@ function rhs!(dY, Y, _, t)
         bottom = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
         top = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
     )
-    cω³ = hcurl.(cuₕ) # Contravariant3Vector
-    fω¹² = hcurl.(fw) # Contravariant12Vector
-    fω¹² .+= vcurlc2f.(cuₕ) # Contravariant12Vector
+    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
 
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
-    fu¹² =
-        Geometry.Contravariant12Vector.(
-            Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
-        ) # Contravariant12Vector in 3D
-    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    @. fu¹² =
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(cuₕ))) # Contravariant12Vector in 3D
+    @. fu³ = Geometry.Contravariant3Vector(Geometry.Covariant123Vector(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)
 
@@ -170,8 +171,7 @@ function rhs!(dY, Y, _, t)
         (f + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce = @. cρe / cρ
-    cp = @. pressure(cρ, ce, norm(cuvw), z)
+    @. cp = pressure(cρ, cρe / cρ, norm(cuvw), z)
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
@@ -180,7 +180,7 @@ function rhs!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuvw)^2) / 2 + Φ(z)
+    @. cE = (norm(cuvw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -252,17 +252,35 @@ uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), c_coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), f_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
+cuvw = Geometry.Covariant123Vector.(Y.uₕ)
+If2c = Operators.InterpolateF2C()
+hcurl = Operators.Curl()
+Ic2f = Operators.InterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
+
+cw = If2c.(Y.w)
+cω³ = hcurl.(Y.uₕ)
+fω¹² = hcurl.(Y.w)
+fu¹² =
+    @. Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(Y.uₕ)))
+fu³ = @. Geometry.Contravariant3Vector(Geometry.Covariant123Vector(Y.w))
+cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe / Y.Yc.ρ, norm(cuvw), c_coords.z)
+cE = @. (norm(cuvw)^2) / 2 + Φ(c_coords.z)
+
+parameters = (; c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE)
 # initialize tendency
 dYdt = similar(Y)
 # set up rhs
-rhs!(dYdt, Y, nothing, 0.0)
+rhs!(dYdt, Y, parameters, 0.0)
 
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
 T = 3600
 dt = 5
-prob = ODEProblem(rhs!, Y, (0.0, T))
+prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 
 integrator = OrdinaryDiffEq.init(
     prob,
