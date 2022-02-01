@@ -126,7 +126,7 @@ end
     for h in 1:Topologies.nlocalelems(htopo)
         sol_column_field = ClimaCore.column(sol.u[end], 1, 1, h)
         ref_column_field = ClimaCore.column(U, 1, 1, h)
-        @test norm(sol_column_field .- ref_column_field) ≤ 5e-2
+        @test sol_column_field ≈ ref_column_field rtol = 0.6
     end
 end
 
@@ -157,7 +157,7 @@ end
     prob = ODEProblem(rhs!, U, (0.0, 2π))
     sol = solve(prob, SSPRK33(), dt = Δt)
 
-    @test norm(U .- sol.u[end]) ≤ 5e-5
+    @test U ≈ sol.u[end] rtol = 1e-6
 end
 
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve diagonally" begin
@@ -220,5 +220,5 @@ end
     sol = solve(prob, SSPRK33(), dt = Δt)
 
     h_end = h_init(0.5 - t_end, 0.5 - t_end, 0.5 - t_end)
-    @test norm(h_end .- sol.u[end].h) ≤ 8e2
+    @test h_end ≈ sol.u[end].h rtol = 0.5
 end
