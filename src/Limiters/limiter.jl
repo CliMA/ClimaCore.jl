@@ -3,8 +3,8 @@
 
 Arguments:
 - `ρq`: tracer density Field, where `q` denotes tracer concentration per unit mass
-- `ρ: fluid density Field
-- `min_ρq: Array of min(ρq) per element
+- `ρ`: fluid density Field
+- `min_ρq`: Array of min(ρq) per element
 - `max_ρq`: Array of max(ρq) per element
 - `rtol`: relative tolerance needed to solve element-wise optimization problem
 
@@ -33,19 +33,23 @@ function quasimonotone_limiter!(
     FT = Spaces.undertype(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     n_elems = length(min_ρq)
-    q = zeros(axes(Fields.slab(ρ, 1)))
-    ρ_wJ = zeros(axes(Fields.slab(ρ, 1)))
+    slab_space = axes(Fields.slab(ρ, 1))
+    q_data = Fields.field_values(zeros(slab_space))
+    ρ_wJ_data = Fields.field_values(zeros(slab_space))
 
     # Traverse elements
     for e in 1:n_elems
         ρ_e_slab = Fields.slab(ρ, e)
         ρq_e_slab = Fields.slab(ρq, e)
+        ρ_e_data = Fields.field_values(ρ_e_slab)
+        ρq_e_data = Fields.field_values(ρq_e_slab)
         # Compute ρ's and ρq's masses over an element e
         ρ_e_mass = sum(ρ_e_slab)
         ρq_e_mass = sum(ρq_e_slab)
 
         # This should never happen, but if it does, don't limit
-        if ρ_e_mass <= 0
+        if ρ_e_mass <= zero(FT)
+            error("Negative elemental mass!")
             continue
         end
 
@@ -62,18 +66,14 @@ function quasimonotone_limiter!(
 
         local_geometry_slab = Fields.slab(space.local_geometry, e)
 
-        q = ρq_e_slab ./ ρ_e_slab
+        q_data .= ρq_e_data ./ ρ_e_data
 
         # Weighted least squares problem iteration loop
         for iter in 1:(Nq * Nq - 1)
-            mass_change = 0.0
+            mass_change = zero(FT)
             # Iterate over quadrature points
             for j in 1:Nq, i in 1:Nq
-                ρ_wJ_data = Fields.todata(ρ_wJ)
-                q_data = Fields.todata(q)
-                ρ_wJ_data[i, j] =
-                    local_geometry_slab[i, j].WJ .*
-                    Fields.todata(ρ_e_slab)[i, j]
+                ρ_wJ_data[i, j] = local_geometry_slab[i, j].WJ .* ρ_e_data[i, j]
                 # Compute the error tolerance and project q into the
                 # upper and lower bounds
                 if q_data[i, j] > max_ρq[e]
@@ -92,20 +92,17 @@ function quasimonotone_limiter!(
                 break
             end
 
-            weights_sum = 0.0
+            weights_sum = zero(FT)
 
             # If the change was positive, the removed mass is added
             if mass_change > 0
                 # Iterate over quadrature points
                 for j in 1:Nq, i in 1:Nq
-                    ρ_wJ_data = Fields.todata(ρ_wJ)
-                    q_data = Fields.todata(q)
                     if q_data[i, j] < max_ρq[e]
                         weights_sum += ρ_wJ_data[i, j]
                     end
                 end
                 for j in 1:Nq, i in 1:Nq
-                    q_data = Fields.todata(q)
                     if q_data[i, j] < max_ρq[e]
                         q_data[i, j] += mass_change / weights_sum
                     end
@@ -113,20 +110,18 @@ function quasimonotone_limiter!(
             else # If the change was negative, the added mass is removed
                 # Iterate over quadrature points
                 for j in 1:Nq, i in 1:Nq
-                    ρ_wJ_data = Fields.todata(ρ_wJ)
-                    q_data = Fields.todata(q)
                     if q_data[i, j] > min_ρq[e]
                         weights_sum += ρ_wJ_data[i, j]
                     end
                 end
                 for j in 1:Nq, i in 1:Nq
-                    q_data = Fields.todata(q)
                     if q_data[i, j] > min_ρq[e]
                         q_data[i, j] += mass_change / weights_sum
                     end
                 end
             end
         end
-        ρq_e_slab .= q .* ρ_e_slab
+        ρq_e_data .= q_data .* ρ_e_data
     end
+    return ρq
 end

@@ -271,6 +271,11 @@ for (k, ne) in enumerate(ne_seq)
         Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
         joinpath(path, "final_q.png"),
     )
+
+    anim = Plots.@animate for u in sol.u
+        Plots.plot(u.ρq ./ u.ρ)
+    end
+    Plots.mp4(anim, joinpath(path, "q_anim.mp4"), fps = 1)
 end
 
 # Print convergence rate info
