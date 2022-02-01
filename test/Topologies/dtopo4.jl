@@ -36,7 +36,7 @@ function distributed_grid(
         x1boundary = x1periodic ? nothing : (:west, :east),
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
-    mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
     return Topologies.DistributedTopology2D(mesh, Context)
 end
 

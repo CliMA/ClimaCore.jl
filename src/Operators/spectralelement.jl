@@ -151,21 +151,56 @@ function Base.Broadcast.materialize(sbc::SpectralBroadcasted)
     copy(Base.Broadcast.instantiate(sbc))
 end
 
+Base.@propagate_inbounds function _inner_copyto!(
+    field_out::Field,
+    sbc::SpectralBroadcasted,
+    v::Integer,
+    h::Integer,
+)
+    slab_out = slab(field_out, v, h)
+    out_slab_space = slab(axes(sbc), v, h)
+    in_slab_space = slab(input_space(sbc), v, h)
+    _slab_args = _apply_slab_args(slab_args(sbc.args, v, h), v, h)
+    copy_slab!(
+        slab_out,
+        apply_slab(sbc.op, out_slab_space, in_slab_space, _slab_args...),
+    )
+end
+
+function _serial_copyto!(
+    field_out::Field,
+    sbc::SpectralBroadcasted,
+    Nv::Int,
+    Nh::Int,
+)
+    @inbounds for h in 1:Nh, v in 1:Nv
+        _inner_copyto!(field_out, sbc, v, h)
+    end
+    return field_out
+end
+
+function _threaded_copyto!(
+    field_out::Field,
+    sbc::SpectralBroadcasted,
+    Nv::Int,
+    Nh::Int,
+)
+    Threads.@threads for h in 1:Nh
+        @inbounds for v in 1:Nv
+            _inner_copyto!(field_out, sbc, v, h)
+        end
+    end
+    return field_out
+end
+
 function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     space = axes(field_out)
     Nv = Spaces.nlevels(space)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
-    @inbounds for h in 1:Nh, v in 1:Nv
-        slab_out = slab(field_out, v, h)
-        out_slab_space = slab(axes(sbc), v, h)
-        in_slab_space = slab(input_space(sbc), v, h)
-        _slab_args = _apply_slab_args(slab_args(sbc.args, v, h), v, h)
-        copy_slab!(
-            slab_out,
-            apply_slab(sbc.op, out_slab_space, in_slab_space, _slab_args...),
-        )
+    if enable_threading()
+        return _threaded_copyto!(field_out, sbc, Nv, Nh)
     end
-    return field_out
+    return _serial_copyto!(field_out, sbc, Nv, Nh)
 end
 
 function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)

@@ -21,6 +21,10 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+# Enable threading for the baroclinic wave example
+import ClimaCore: enable_threading
+enable_threading() = true
+
 # This experiment tests
 #     1) hydrostatic and geostrophic balance;
 #     2) linear instability.

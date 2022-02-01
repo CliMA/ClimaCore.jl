@@ -452,12 +452,13 @@ steps:
   - label: ":computer: baroclinic wave"
     key: "cpu_baroclinic_wave"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl"
+      - "julia --threads=4 --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl"
     artifact_paths:
       - "examples/3dsphere/output/baroclinic_wave/*"
     agents:
       config: cpu
       queue: central
+      slurm_cpus_per_task: 4
       slurm_ntasks: 1
 
   - label: ":computer: baroclinic wave rho etot implicit"
