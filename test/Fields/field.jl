@@ -5,6 +5,7 @@ import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
 
 using LinearAlgebra: norm
+using Statistics: mean
 using ForwardDiff
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
@@ -34,9 +35,16 @@ end
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
-    @test norm(field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
-    @test norm(field, 1) ≈ norm(Complex(1.0, 1.0)) * 8.0 * 10.0 rtol = 10eps()
+    @test mean(field) ≈ Complex(1.0, 1.0) rtol = 10eps()
+    @test mean(x -> 3.0, field) ≈ 3 rtol = 10eps()
+    @test norm(field) ≈ sqrt(2.0) rtol = 10eps()
+    @test norm(field, 1) ≈ norm(Complex(1.0, 1.0)) rtol = 10eps()
     @test norm(field, Inf) ≈ norm(Complex(1.0, 1.0)) rtol = 10eps()
+    @test norm(field; normalize = false) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+    @test norm(field, 1; normalize = false) ≈
+          norm(Complex(1.0, 1.0)) * 8.0 * 10.0 rtol = 10eps()
+    @test norm(field, Inf; normalize = false) ≈ norm(Complex(1.0, 1.0)) rtol =
+        10eps()
 
     @test extrema(real, field) == (1.0, 1.0)
 
@@ -88,7 +96,7 @@ end
     @test nt_sum isa NamedTuple{(:a, :b), Tuple{Float64, Float64}}
     @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()
     @test nt_sum.b ≈ 8.0 * 10.0 rtol = 10eps()
-    @test norm(nt_field) ≈ sqrt(2.0 * 8.0 * 10.0) rtol = 10eps()
+    @test norm(nt_field) ≈ sqrt(2.0) rtol = 10eps()
 
     # test scalar asignment
     nt_field.a .= 0.0

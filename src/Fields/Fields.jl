@@ -10,7 +10,7 @@ import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
-import LinearAlgebra
+import LinearAlgebra, Statistics
 
 """
     Field(values, space)
@@ -190,6 +190,12 @@ function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
     return dest
 end
 
+
+"""
+    zeros(space::AbstractSpace)
+
+Construct a field on `space` that is zero everywhere.
+"""
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
     data = parent(field)
@@ -198,6 +204,11 @@ function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
 end
 Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
+"""
+    ones(space::AbstractSpace)
+
+Construct a field on `space` that is one everywhere.
+"""
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
     data = parent(field)
