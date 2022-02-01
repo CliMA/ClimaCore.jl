@@ -17,7 +17,7 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 
 import StaticArrays: SOneTo, MArray
-import Polyester
+import Folds
 
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 

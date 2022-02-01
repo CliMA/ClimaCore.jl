@@ -10,6 +10,7 @@ import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
+import Folds
 import LinearAlgebra
 
 """

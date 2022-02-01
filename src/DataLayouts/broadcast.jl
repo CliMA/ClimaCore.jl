@@ -307,19 +307,31 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{
-        VIJFH{<:Any, Nij, A},
-        Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
-    },
+    source::VIJFH{<:Any, Nij, A}
+) where {F, Op, Nij, A}
+    # mapreduce across columns
+    _, _, _, _, Nh = size(source)
+    mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
+        Base.@_inline_meta
+        columnview = @inbounds column(source, i, j, h)
+        mapreduce(fn, op, columnview)
+    end
+end
+
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}
 ) where {F, Op, Nij, A}
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
-    mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
+    Folds.mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
         Base.@_inline_meta
         columnview = @inbounds column(bc, i, j, h)
         mapreduce(fn, op, columnview)
     end
 end
+
 
 # broadcasting scalar assignment
 # Performance optimization for the common identity scalar case: dest .= val
@@ -434,7 +446,7 @@ function Base.copyto!(
 ) where {S, Nij, A}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest)
-    Polyester.@batch for h in 1:Nh
+    Folds.map(1:Nh) do h
         @inbounds for j in 1:Nij, i in 1:Nij
             col_dest = column(dest, i, j, h)
             col_bc = column(bc, i, j, h)

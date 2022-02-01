@@ -1,7 +1,6 @@
 module Operators
 
-import LinearAlgebra, Polyester
-
+import LinearAlgebra, Folds
 using StaticArrays
 
 import ..slab, ..slab_args, ..column, ..column_args
