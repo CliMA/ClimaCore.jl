@@ -95,9 +95,10 @@ end
 
 BlockArrays.blockaxes(fv::FieldVector) =
     (BlockArrays.BlockRange(1:length(_values(fv))),)
+
 Base.axes(fv::FieldVector) =
     (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
-
+#=
 function Base.getindex(fv::FieldVector, block::BlockArrays.Block{1})
     backing_array(_values(fv)[block.n...])
 end
@@ -107,7 +108,6 @@ function Base.getindex(fv::FieldVector, bidx::BlockArrays.BlockIndex{1})
     X[bidx.α...]
 end
 
-#=
 # TODO: drop support for this
 Base.getindex(fv::FieldVector, i::Integer) =
     getindex(fv, BlockArrays.findblockindex(axes(fv, 1), i))
@@ -120,7 +120,6 @@ end
 Base.setindex!(fv::FieldVector, val, i::Integer) =
     setindex!(fv, val, BlockArrays.findblockindex(axes(fv, 1), i))
 =#
-
 Base.similar(fv::FieldVector{T}) where {T} =
     FieldVector{T}(map(similar, _values(fv)))
 Base.similar(fv::FieldVector{T}, ::Type{T}) where {T} =
@@ -157,11 +156,11 @@ Base.Broadcast.BroadcastStyle(
 Base.Broadcast.BroadcastStyle(
     fs::FieldVectorStyle,
     as::Base.Broadcast.DefaultArrayStyle,
-) = as
+) = fs
 Base.Broadcast.BroadcastStyle(
     fs::FieldVectorStyle,
     as::Base.Broadcast.AbstractArrayStyle,
-) = as
+) = fs
 
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
@@ -184,6 +183,51 @@ end
     end
     return dest
 end
+
+@inline function Base.copyto!(dest::AbstractArray, bc::Base.Broadcast.Broadcasted{Nothing})
+    @show typeof(dest)
+    @show typeof(bc)
+    axes(dest) == axes(bc) || Base.Broadcast.throwdm(axes(dest), axes(bc))
+    # Performance optimization: broadcast!(identity, dest, A) is equivalent to copyto!(dest, A) if indices match
+    if bc.f === identity && bc.args isa Tuple{AbstractArray} # only a single input argument to broadcast!
+        A = bc.args[1]
+        if axes(dest) == axes(A)
+            return copyto!(dest, A)
+        end
+    end
+    bc′ = Base.Broadcast.preprocess(dest, bc)
+    # Performance may vary depending on whether `@inbounds` is placed outside the
+    # for loop or not. (cf. https://github.com/JuliaLang/julia/issues/38086)
+    @inbounds for I in eachindex(bc′)
+        dest[I] = bc′[I]
+    end
+    return dest
+end
+
+@inline function Base.copyto!(dest::SubArray{T, 1, V}, bc::Base.Broadcast.Broadcasted{Nothing}) where {T, V <: BlockArrays.PseudoBlockVector{T}}
+    args = transform_bc_args(bc.args, nothing, nothing)
+
+end
+# Specialize this method if all you want to do is specialize on typeof(dest)
+@inline function Base.copyto!(dest::BlockArrays.PseudoBlockVector, bc::Base.Broadcast.Broadcasted{Nothing})
+    if bc.f == identity && bc.args isa Tuple{FieldVector}
+        fv = bc.args[1]
+        if BlockArrays.blockaxes(dest) == BlockArrays.blockaxes(fv)
+            copyto!(dest, fv)
+        end
+    end
+    error("In materalizing the computed jacobian PseudoBlockVector")
+end
+
+function Base.copyto!(
+    J::BlockArrays.PseudoBlockVector,
+    fv::FieldVector)
+    @inbounds for (i, K) in enumerate(BlockArrays.blockaxes(J)[1])
+        copyto!(view(J, K), parent(_values(fv)[i]))
+    end
+    J
+end
+
 
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
@@ -232,6 +276,13 @@ Base.all(f, fv::FieldVector) = all(x -> all(f, backing_array(x)), _values(fv))
 Base.all(f::Function, fv::FieldVector) =
     all(x -> all(f, backing_array(x)), _values(fv))
 Base.all(fv::FieldVector) = all(identity, fv)
+
+function Base.fill!(fv::FieldVector, val)
+    for symb in propertynames(fv)
+        fill!(parent(getfield(_values(fv), symb)), val)
+    end
+    fv
+end
 
 # TODO: figure out a better way to handle these
 # https://github.com/JuliaArrays/BlockArrays.jl/issues/185

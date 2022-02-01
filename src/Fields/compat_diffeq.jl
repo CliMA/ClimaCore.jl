@@ -94,7 +94,7 @@ DiffEqBase.UNITLESS_ABS2(field::Field) =
 DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))
 
 # Have FieldVectors play nice with DiffEq
-DiffEqBase.recursive_length(fv::FieldVector) = 1
+#DiffEqBase.recursive_length(fv::FieldVector) = 1
 
 function DiffEqBase.UNITLESS_ABS2(fv::FieldVector)
     mapreduce(f -> DiffEqBase.UNITLESS_ABS2(parent(f)), +, Fields._values(fv))
@@ -108,8 +108,8 @@ end
 
 # implicit solver overloads
 function ArrayInterface.zeromatrix(fv::FieldVector{T}) where {T}
-    vaxis = first(axes(fv))
-    zeroblocked = BlockArrays.PseudoBlockMatrix{T}(undef, vaxis, vaxis)
-    fill!(zeroblocked, zero(T))
-    return zeroblocked
+    blocksize = BlockArrays.blocksizes(fv)[1]
+    zm = BlockArrays.PseudoBlockArray{T}(undef, blocksize, blocksize)
+    fill!(zm, zero(T))
+    return zm
 end

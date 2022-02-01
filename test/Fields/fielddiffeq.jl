@@ -5,7 +5,7 @@ import ClimaCore:
     ClimaCore, Domains, Topologies, Meshes, Geometry, Fields, Spaces
 using LinearAlgebra, IntervalSets
 
-
+#=
 @testset "DiffEq Solvers" begin
     domain = Domains.RectangleDomain(
         Geometry.XPoint(-2π) .. Geometry.XPoint(2π),
@@ -44,6 +44,7 @@ using LinearAlgebra, IntervalSets
 
     @test norm(sol(1.0).testfield .- y1) <= 1e-6 * norm(y1)
 end
+=#
 
 # implicit solvers
 # require use of FieldVector
@@ -59,22 +60,25 @@ end
     # y(z, t) = z*exp(α*t)
     # dydt(z, t) = α*y(t)
     zcenters = Fields.coordinate_field(center_space).z
-    y = Fields.FieldVector(z = zcenters)
+    Y = Fields.FieldVector(z = zcenters)
 
-    function f!(dydt, y, α, t)
-        dydt.z .= α .* y.z
+    @show axes(Y.z)
+
+    function f!(dYdt, Y, α, t)
+        dYdt.z .= α .* Y.z
     end
 
-    function f_jac!(J, y, α, t)
+    function f_jac!(J, Y, α, t)
+        @show axes(J)
         copyto!(J, α * LinearAlgebra.I)
     end
 
-    prob = ODEProblem(ODEFunction(f!), copy(y), (0.0, 1.0), 0.1)
+    prob = ODEProblem(ODEFunction(f!), copy(Y), (0.0, 1.0), 0.1)
     sol = solve(prob, SSPRK22(), dt = 0.01)
 
     sol = solve(prob, ImplicitEuler(), reltol = 1e-6)
-    y1 = similar(y)
-    y1 .= y .* exp(0.1)
+    Y1 = similar(Y)
+    Y1.z .= Y.z .* exp(0.1)
 
-    @test norm(sol[end] .- y1) <= 1e-4 * norm(y1)
+    @test norm(sol[end].z .- Y1.z) <= 1e-4 * norm(Y1.z)
 end
