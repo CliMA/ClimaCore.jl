@@ -17,7 +17,7 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray
 
-import ..slab, ..slab_args, ..column, ..column_args, ..level
+import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH
 
 include("struct.jl")
