@@ -2,12 +2,28 @@ using LinearAlgebra
 
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
-
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-import Logging
-import TerminalLoggers
-Logging.global_logger(TerminalLoggers.TerminalLogger())
+using Logging
+
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+if usempi
+    using ClimaComms
+    using ClimaCommsMPI
+    const Context = ClimaCommsMPI.MPICommsContext
+    const pid, nprocs = ClimaComms.init(Context)
+
+    # log output only from root process
+    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    atexit() do
+        global_logger(prev_logger)
+    end
+else
+    import TerminalLoggers
+    global_logger(TerminalLoggers.TerminalLogger())
+end
 
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
@@ -31,14 +47,21 @@ domain = Domains.RectangleDomain(
         periodic = true,
     ),
 )
-
 n1, n2 = 16, 16
 Nq = 4
-mesh = Meshes.RectilinearMesh(domain, n1, n2)
-grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
-space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-
+mesh = Meshes.RectilinearMesh(domain, n1, n2)
+if usempi
+    grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+    Nf = 4
+    Nv = 1
+    comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+else
+    comms_ctx = nothing
+    grid_topology = Topologies.Topology2D(mesh)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+end
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     x, y = coord.x, coord.y
@@ -93,7 +116,7 @@ function rhs!(dydt, y, _, t)
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dydt, comms_ctx)
 
     @. dydt.u =
         -D₄ * (
@@ -109,16 +132,16 @@ function rhs!(dydt, y, _, t)
         dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dydt, comms_ctx)
     return dydt
 end
 
-
 dydt = similar(y0)
-rhs!(dydt, y0, nothing, 0.0)
 
+rhs!(dydt, y0, nothing, 0.0)
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+
 sol = solve(
     prob,
     SSPRK33(),
@@ -127,6 +150,10 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )
+
+if usempi
+    exit()
+end
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
