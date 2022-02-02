@@ -135,6 +135,14 @@ _deepcopy_internal(x::Field, stackdict::IdDict) =
 Base.deepcopy_internal(fv::FieldVector{T}, stackdict::IdDict) where {T} =
     FieldVector{T}(map(x -> _deepcopy_internal(x, stackdict), _values(fv)))
 
+#=
+In certain cases (e.g., temporal refinement studies), users
+may want to create deep copies of `FieldVector`s / `Fields`
+to ensure exactly the same initial conditions for all trajectories.
+=#
+Base.deepcopy_internal(x::Field, stackdict::IdDict) =
+    Field(Base.deepcopy_internal(field_values(x), stackdict), axes(x))
+
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
 Base.Broadcast.BroadcastStyle(::Type{<:FieldVector}) = FieldVectorStyle()
