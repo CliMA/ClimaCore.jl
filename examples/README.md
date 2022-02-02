@@ -20,7 +20,7 @@ to track the current versions of ClimaCore.jl and subpackages in the `lib` direc
 You can now execute the examples in the example projects, and ClimaCore changes will be tracked in the env:
 
     julia --project=examples
-    julia> include(examples/bickleyjet/bickleyjet_cg.jl)
+    julia> include("examples/bickleyjet/bickleyjet_cg.jl")
 
 Or alternatively:
 
