@@ -363,6 +363,39 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Solid body CG sphere limiter cosine bells"
+    key: "cpu_solidbody_cg_sphere_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_cosine_bells/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere limiter Gaussian bells"
+    key: "cpu_solidbody_cg_sphere_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl gaussian_bells"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_gaussian_bells/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere limiter cylinders"
+    key: "cpu_solidbody_cg_sphere_limiter_cylinders"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl cylinders"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_cylinders/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Steady-state shallow water 2D CG sphere alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_alpha0"
     command:
