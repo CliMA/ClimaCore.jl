@@ -34,6 +34,8 @@ const r0 = R / 2     # bells radius
 const D₄ = 6.6e14    # hyperdiffusion coefficient
 const u0 = 2 * pi * R / (86400 * 12)
 const T = 86400 * 12 # simulation period in seconds (12 days)
+const n_steps = 1200
+const dt = T / n_steps
 const centers = [
     Geometry.LatLongPoint(0.0, rad2deg(5 * pi / 6) - 180.0),
     Geometry.LatLongPoint(0.0, rad2deg(7 * pi / 6) - 180.0),
@@ -126,7 +128,7 @@ for (k, ne) in enumerate(ne_seq)
                 q = 0.1
             end
         elseif test_name == gaussian_test_name
-            q = 0.95 * (exp(-5.0 * (rd[1] / r0)^2) + exp(-5.0 * (rd[2] / r0)^2))
+            q = 0.95 * (exp(-(rd[1] / r0)^2) + exp(-(rd[2] / r0)^2))
         else # default test case, cosine bells
             if rd[1] < r0
                 q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
@@ -228,7 +230,6 @@ for (k, ne) in enumerate(ne_seq)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
-    dt = T / 1200
     end_time = T
     prob = ODEProblem(f!, y0, (0.0, end_time), parameters)
     sol = solve(
@@ -240,15 +241,13 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    L1err[k] =
-        norm(
-            (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-            1,
-        ) / norm(ones(space), 1)
-    L2err[k] =
-        norm(
-            (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        ) / norm(ones(space))
+    L1err[k] = norm(
+        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
+        1,
+    )
+    L2err[k] = norm(
+        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
+    )
     Linferr[k] = norm(
         (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
         Inf,
@@ -260,22 +259,17 @@ for (k, ne) in enumerate(ne_seq)
     @info "Number of elements per cube panel: $(ne) x $(ne)"
     @info "Number of quadrature points per element: $(Nq) x $(Nq) (p = $(Nq-1))"
     @info "Time step dt = $(dt) (s)"
-    @info "Tracer concentration norm at t = 0: ", norm(y0.ρq ./ y0.ρ)
-    @info "Tracer concentration norm at t = $(end_time): ",
+    @info "Tracer concentration norm at t = 0 (s): ", norm(y0.ρq ./ y0.ρ)
+    @info "Tracer concentration norm at $(n_steps) time steps, t = $(end_time) (s): ",
     norm(sol.u[end].ρq ./ sol.u[end].ρ)
-    @info "L₁ error at t = $(end_time): ", L1err[k]
-    @info "L₂ error at t = $(end_time): ", L2err[k]
-    @info "L∞ error at t = $(end_time): ", Linferr[k]
+    @info "L₁ error at $(n_steps) time steps, t = $(end_time) (s): ", L1err[k]
+    @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
+    @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 
     Plots.png(
         Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
         joinpath(path, "final_q.png"),
     )
-
-    anim = Plots.@animate for u in sol.u
-        Plots.plot(u.ρq ./ u.ρ)
-    end
-    Plots.mp4(anim, joinpath(path, "q_anim.mp4"), fps = 1)
 end
 
 # Print convergence rate info
