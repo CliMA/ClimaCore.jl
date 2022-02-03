@@ -124,6 +124,12 @@ end
     @test Y.k.y === y
     @test Y.k.z === z
 
+    @test deepcopy(Y).u !== u
+    @test deepcopy(Y).k.x !== x
+    @test deepcopy(Y).k.y !== y
+
+    @test getfield(deepcopy(Y).u, :space) === space
+
     Y1 = 2 .* Y
     @test parent(Y1.u) == 2 .* parent(u)
     @test parent(Y1.k.x) == 2 .* parent(x)
