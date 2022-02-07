@@ -6,7 +6,7 @@ import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf
+import ..Utilities: PlusHalf, Cent
 
 using ..RecursiveApply
 
@@ -327,5 +327,60 @@ function level(field::FaceExtrudedFiniteDifferenceField, v::PlusHalf)
     data = level(field_values(field), v.i + 1)
     Field(data, hspace)
 end
+
+#=
+Defining `getindex` here is required to differentiate between
+ - `getindex` to get the i-th n-tuple field
+ - `getindex` to get the k-th vertical cell center
+=#
+Base.@propagate_inbounds Base.getindex(
+    field::FiniteDifferenceField,
+    i::Integer,
+) = Base.getproperty(field, i)
+
+Base.@propagate_inbounds Base.getindex(
+    field::CenterFiniteDifferenceField,
+    i::Cent,
+) = Base.getindex(field_values(field), i.i)
+Base.@propagate_inbounds Base.setindex!(
+    field::CenterFiniteDifferenceField,
+    v,
+    i::Cent,
+) = Base.setindex!(field_values(field), v, i.i)
+
+Base.@propagate_inbounds Base.getindex(
+    field::FaceFiniteDifferenceField,
+    i::PlusHalf,
+) = Base.getindex(field_values(field), i.i)
+Base.@propagate_inbounds Base.setindex!(
+    field::FaceFiniteDifferenceField,
+    v,
+    i::PlusHalf,
+) = Base.setindex!(field_values(field), v, i.i)
+
+Base.@propagate_inbounds Base.getindex(
+    field::FaceFiniteDifferenceField,
+    ::Cent,
+) = error("Attempting to getindex with a center index (Cent) into a Face field")
+Base.@propagate_inbounds Base.getindex(
+    field::CenterFiniteDifferenceField,
+    ::PlusHalf,
+) = error(
+    "Attempting to getindex with a face index (PlusHalf) into a Center field",
+)
+
+Base.@propagate_inbounds Base.setindex!(
+    field::FaceFiniteDifferenceField,
+    v,
+    ::Cent,
+) = error("Attempting to setindex with a center index (Cent) into a Face field")
+Base.@propagate_inbounds Base.setindex!(
+    field::CenterFiniteDifferenceField,
+    v,
+    ::PlusHalf,
+) = error(
+    "Attempting to setindex with a face index (PlusHalf) into a Center field",
+)
+
 
 end # module
