@@ -276,6 +276,39 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Advection CG plane limiter cosine bells"
+    key: "cpu_advection_cg_plane_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cosine_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter Gaussian bells"
+    key: "cpu_advection_cg_plane_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl gaussian_bells"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_gaussian_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter cylinders"
+    key: "cpu_advection_cg_plane_limiter_cylinders"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl cylinders"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cylinders_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Rising Bubble 2D hybrid"
     key: "cpu_rising_bubble_2d_hybrid"
     command:
