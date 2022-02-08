@@ -146,6 +146,18 @@ function great_circle_distance(
     )
 end
 
+"""
+    euclidean_distance(pt1::XYPoint, pt2::XYPoint)
+
+Compute the 2D or 3D Euclidean distance between `pt1` and `pt2`.
+"""
+function euclidean_distance(
+    pt1::T,
+    pt2::T,
+) where {T <: Union{XPoint, YPoint, ZPoint, XYPoint, XZPoint, XYZPoint}}
+    return hypot((components(pt1) .- components(pt2))...)
+end
+
 # vectors
 CartesianVector(
     u::CartesianVector,
