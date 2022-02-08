@@ -1,0 +1,11 @@
+name = "ClimaCoreCatalyst"
+uuid = "7b8e25ce-cb96-43d6-8137-b2a8944bc88a"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
+version = "0.1.0"
+
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+
+[compat]
+ClimaCore = "0.7"
+julia = "1.7"

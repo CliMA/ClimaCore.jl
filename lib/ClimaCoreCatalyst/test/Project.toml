@@ -1,0 +1,3 @@
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
