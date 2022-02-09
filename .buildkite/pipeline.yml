@@ -496,35 +496,27 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave"
-    key: "cpu_baroclinic_wave"
+  - label: ":computer: baroclinic wave (ρe)"
+    key: "cpu_baroclinic_wave_rho_e"
     command:
-      - "julia --threads=4 --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave/*"
-    agents:
-      config: cpu
-      queue: central
-      slurm_cpus_per_task: 4
-      slurm_ntasks: 1
-
-  - label: ":computer: baroclinic wave rho etot implicit"
-    key: "cpu_baroclinic_wave_rho_etot_imp"
-    command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_etot.jl"
-    artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave_rho_etot_implicit/*"
+      - "examples/3dsphere/output/baroclinic_wave_ρe/*"
+    env:
+      TEST_NAME: "baroclinic_wave_ρe"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave rho theta implicit"
-    key: "cpu_baroclinic_wave_rho_theta_imp"
+  - label: ":computer: baroclinic wave (ρθ)"
+    key: "cpu_baroclinic_wave_rho_theta"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_theta.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave_rho_theta_implicit/*"
+      - "examples/3dsphere/output/baroclinic_wave_ρθ/*"
+    env:
+      TEST_NAME: "baroclinic_wave_ρθ"
     agents:
       config: cpu
       queue: central
@@ -550,34 +542,40 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: hydrostatically and geostrophically balanced flow"
-    key: "cpu_balanced_flow"
+  - label: ":computer: hydrostatically and geostrophically balanced flow (ρe)"
+    key: "cpu_balanced_flow_rho_e"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl balanced_flow"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/balanced_flow/*"
+      - "examples/3dsphere/output/balanced_flow_ρe/*"
+    env:
+      TEST_NAME: "balanced_flow_ρe"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez rho etot implicit"
-    key: "cpu_held_suarez_rho_etot_imp"
+  - label: ":computer: dry held-suarez (ρe)"
+    key: "cpu_held_suarez_rho_e"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/held_suarez_rho_etot.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/held_suarez_rho_etot_implicit/*"
+      - "examples/3dsphere/output/held_suarez_ρe/*"
+    env:
+      TEST_NAME: "held_suarez_ρe"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez rho theta implicit"
-    key: "cpu_held_suarez_rho_theta_imp"
+  - label: ":computer: dry held-suarez (ρθ)"
+    key: "cpu_held_suarez_rho_theta"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/held_suarez_rho_theta.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/held_suarez_rho_theta_implicit/*"
+      - "examples/3dsphere/output/held_suarez_ρθ/*"
+    env:
+      TEST_NAME: "held_suarez_ρθ"
     agents:
       config: cpu
       queue: central
