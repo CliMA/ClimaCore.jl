@@ -1,7 +1,7 @@
 name = "ClimaCoreTempestRemap"
 uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
