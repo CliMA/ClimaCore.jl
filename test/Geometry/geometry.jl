@@ -575,6 +575,66 @@ end
 
 end
 
+@testset "1D XPoint Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.XPoint(one(FT))
+        pt_2 = Geometry.XPoint(zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
+@testset "1D YPoint Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.YPoint(one(FT))
+        pt_2 = Geometry.YPoint(zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
+@testset "1D ZPoint Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.ZPoint(one(FT))
+        pt_2 = Geometry.ZPoint(zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
+@testset "2D XYPoint Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.XYPoint(one(FT), one(FT))
+        pt_2 = Geometry.XYPoint(zero(FT), zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
+@testset "2D XZPoint Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.XZPoint(one(FT), one(FT))
+        pt_2 = Geometry.XZPoint(zero(FT), zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
+@testset "3D Euclidean distance" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_1 = Geometry.XYZPoint(one(FT), one(FT), one(FT))
+        pt_2 = Geometry.XYZPoint(zero(FT), zero(FT), zero(FT))
+        @test Geometry.euclidean_distance(pt_1, pt_2) ≈
+              hypot((Geometry.components(pt_1) .- Geometry.components(pt_2))...) rtol =
+            2eps()
+    end
+end
+
 @testset "UVW -> Cartesian spherical vector conversions" begin
     global_geom = Geometry.SphericalGlobalGeometry(2.0)
 
