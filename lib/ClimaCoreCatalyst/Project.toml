@@ -5,6 +5,8 @@ version = "0.1.0"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ParaviewCatalyst = "0fa3a46a-29f8-4c04-a671-08df7e71e505"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 
 [compat]
 ClimaCore = "0.7"

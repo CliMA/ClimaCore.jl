@@ -6,7 +6,7 @@ if haskey(ENV, "CI")
 end
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
-@testset "spectral element 2D cubed-sphere" begin
+@testset "static spectral element 2D cubed-sphere" begin
     R = 6.37122e6
 
     domain = ClimaCore.Domains.SphereDomain(R)
@@ -29,7 +29,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     # TODO: add tests
 end
 
-@testset "spectral element rectangle 2D" begin
+@testset "static spectral element rectangle 2D" begin
     domain = ClimaCore.Domains.RectangleDomain(
         ClimaCore.Geometry.XPoint(0) .. ClimaCore.Geometry.XPoint(2π),
         ClimaCore.Geometry.YPoint(0) .. ClimaCore.Geometry.YPoint(2π),

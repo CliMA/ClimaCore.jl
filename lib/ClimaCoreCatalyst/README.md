@@ -1,7 +1,7 @@
 ## ClimaCoreCatalyst
 
-ClimaCore [Paraview Catalyst](https://www.paraview.org/in-situ/) adaptor 
-for visualizing ClimaCore fields in-situ.  
+ClimaCore [Paraview Catalyst](https://www.paraview.org/in-situ/)
+adaptor for visualizing ClimaCore field data in-situ.
 
 **Note:** Needs Paraview v5.10+
 
