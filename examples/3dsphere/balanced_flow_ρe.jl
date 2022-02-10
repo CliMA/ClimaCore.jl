@@ -64,3 +64,70 @@ function postprocessing(sol, path)
     @test sol.u[end].Yc.ρe ≈ sol.u[1].Yc.ρe rtol = 5e-2
     @test sol.u[end].uₕ ≈ sol.u[1].uₕ rtol = 5e-2
 end
+
+function debug_nc(saved_Ys, nlat, nlon, path, c_local_geometry, f_local_geometry, Nq)
+    ### First step: save the data on cg nodal points to ncfile
+    # create the debug nc file
+    datafile_cc = joinpath(path,"debug-rho_etot.nc")
+    nc = NCDataset(datafile_cc, "c")
+
+    # get spaces from local geometries
+    cspace = Fields.axes(c_local_geometry)
+    fspace = Fields.axes(f_local_geometry)
+
+    # define space coords in nc file
+    def_space_coord(nc, cspace)
+
+    # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
+    nc_time = def_time_coord(nc)
+
+    # vars
+    nc_rho = defVar(nc, "rho", Float64, cspace, ("time",))
+    nc_etot = defVar(nc, "etot", Float64, cspace, ("time",))
+    nc_u = defVar(nc, "u", Float64, cspace, ("time",))
+    nc_v = defVar(nc, "v", Float64, cspace, ("time",))
+
+    # loop over time
+    for i = 1:length(saved_Ys)
+        nc_time[i] = i
+
+        # scalar fields
+        Yc = saved_Ys[i].Yc
+        # covariant vector -> UVVector
+        uv = Geometry.UVVector.(saved_Ys[i].uₕ)
+
+        # save data to nc
+        nc_rho[:,i] = Yc.ρ
+        nc_etot[:,i] = Yc.ρe ./ Yc.ρ
+        nc_u[:,i] = uv.components.data.:1
+        nc_v[:,i] = uv.components.data.:2
+    end
+    close(nc)
+
+    ### Second step: use Tempest to remap onto regular lon/lat grid
+    # get horizontal space from center space
+    hspace = cspace.horizontal_space
+
+    # write out our cubed sphere mesh
+    meshfile_cc = joinpath(path,"mesh_cubedsphere.g")
+    write_exodus(meshfile_cc, hspace.topology)
+
+    meshfile_rll = joinpath(path,"mesh_rll.g")
+    rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
+
+    meshfile_overlap = joinpath(path, "mesh_overlap.g")
+    overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
+
+    weightfile = joinpath(path,"remap_weights.nc")
+    remap_weights(
+        weightfile,
+        meshfile_cc,
+        meshfile_rll,
+        meshfile_overlap;
+        in_type = "cgll",
+        in_np = Nq,
+    )
+
+    datafile_rll = joinpath(path, "debug-rho_etot_rll.nc")
+    apply_remap(datafile_rll, datafile_cc, weightfile, ["rho", "etot", "u", "v"])
+end
