@@ -3,6 +3,8 @@ using LinearAlgebra
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
+import ClimaCoreCatalyst: ClimaCoreCatalyst, CatalystCallback
+
 import QuadGK
 import OrdinaryDiffEq
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
@@ -10,6 +12,11 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+import MPI
+MPI.Init()
+
+ClimaCoreCatalyst.initialize()
 
 # This example solves the shallow-water equations on a cubed-sphere manifold.
 # This file contains five test cases:
@@ -48,7 +55,7 @@ const g = 9.80616
 const D₄ = 1.0e16 # hyperdiffusion coefficient
 
 # Test case specifications
-const test_name = get(ARGS, 1, "steady_state") # default test case to run
+const test_name = get(ARGS, 1, "barotropic_instability") # default test case to run
 const test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
 const steady_state_test_name = "steady_state"
 const steady_state_compact_test_name = "steady_state_compact"
@@ -407,6 +414,7 @@ integrator = OrdinaryDiffEq.init(
     SSPRK33(),
     dt = dt,
     saveat = dt,
+    callback = CatalystCallback(dt),
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,

@@ -2,6 +2,7 @@
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCommsMPI = "5f86816e-8b66-43b2-912e-75384f99de49"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCoreCatalyst = "7b8e25ce-cb96-43d6-8137-b2a8944bc88a"
 ClimaCorePlots = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 DiffEqOperators = "9fdde737-9c7f-55bf-ade8-46b3f136cc48"

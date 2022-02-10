@@ -5,10 +5,78 @@ import SciMLBase
 import ClimaCore: ClimaCore, Fields, Geometry, Operators, Spaces, Topologies
 import ParaviewCatalyst: ParaviewCatalyst, Conduit, ConduitNode
 
-function execute(fields)
+export CatalystCallback
+
+# Adapted from DiffEqCallbacks PeriodicCallback to use only SciMLBase primitives
+struct CatalystCallbackAffect{dT,Ref1,Ref2}
+    Δt::dT
+    t0::Ref1
+    index::Ref2
+end
+
+function (S::CatalystCallbackAffect)(integrator)
+    (; Δt, t0, index) = S
+
+    ClimaCoreCatalyst.execute(integrator.u, time = integrator.t, cycle = index[])
+
+    tstops = integrator.opts.tstops
+    tnew = t0[] + (index[] + 1) * Δt
+    tstops = integrator.opts.tstops
+    tdir_tnew = integrator.tdir * tnew
+    for i in length(tstops) : -1 : 1
+        if tdir_tnew < tstops.valtree[i]
+            index[] += 1
+            SciMLBase.add_tstop!(integrator, tnew)
+            break
+        end
+    end
+end
+
+function CatalystCallback(Δt::Number;
+                          initial_affect = true, # call before any time integration
+                          initialize = (cb,u,t,integrator) -> SciMLBase.u_modified!(integrator, initial_affect),
+                          kwargs...)
+
+    # Value of `t` at which `f` should be called next:
+    t0 = Ref(typemax(Δt))
+    index = Ref(0)
+    condition = function (u, t, integrator)
+        t == (t0[] + index[] * Δt)
+    end
+    # Call f, update tnext, and make sure we stop at the new tnext
+    affect! = CatalystCallbackAffect(Δt, t0, index)
+    # Initialization: first call to `f` should be *before* any time steps have been taken:
+    initialize_periodic = function (c, u, t, integrator)
+        @assert integrator.tdir == sign(Δt)
+        initialize(c, u, t, integrator)
+        t0[] = t
+        if initial_affect
+            index[] = 0
+            affect!(integrator)
+        else
+            index[] = 1
+            SciMLBase.add_tstop!(integrator, t0[] + Δt)
+        end
+    end
+    return SciMLBase.DiscreteCallback(condition, affect!; initialize = initialize_periodic, kwargs...)
+end
+
+function initialize(;libpath=nothing)
+    if libpath === nothing 
+        @warn "if you are on anything other than Jakes personal lapatop need to supply a catalyst libpath"
+    end
+    # TODO: check initialization state and no-op if already initialized (easier for REPL)
+    ParaviewCatalyst.catalyst_initialize(;libpath)
+end
+
+# stub
+viz(fields) = execute(fields)
+
+function execute(fields; time = 0.0, timestep = 0, cycle = 0)
     ConduitNode() do node
-        node["catalyst/state/timestep"] = 0
-        node["catalyst/state/time"] = 0.0
+        node["catalyst/state/timestep"] = timestep
+        node["catalyst/state/time"] = time
+        node["catalyst/state/cycle"] = cycle
         node["catalyst/channels/input/type"] = "mesh"
         ConduitNode() do mesh_node
             node["catalyst/channels/input/data"] = conduit_mesh(mesh_node, fields)
@@ -18,7 +86,7 @@ function execute(fields)
 end
 
 function conduit_mesh(node::ConduitNode, fields)
-    # add mesh coordinate and topology info
+    # add mesh coordinate and topology info given element face vertices
     fspace = element_face_space(fields)
     add_mesh_coordsets!(node, fspace)
     add_mesh_topologies!(node, fspace)
@@ -73,7 +141,7 @@ function add_mesh_fields!(node::ConduitNode, ::Type{T}, prefix, fields, centersp
         if !isempty(prefix)
             name = prefix * "." * name
         end
-        add_mesh_fields!(node, name, getproperty(field, i), centerspace)
+        add_mesh_fields!(node, name, getproperty(fields, i), centerspace)
     end
 end
 
@@ -85,6 +153,7 @@ function add_mesh_fields!(node::ConduitNode, ::Type{<:Real}, name, field, center
     node["fields/$name/topology"] = "mesh"
     node["fields/$name/association"] = "element"
     node["fields/$name/type"] = "scalar"
+    # TODO: zero copy field views set_external!(node, path, pointer...)
     node["fields/$name/values"] = Array(parent(ifield))
     return node
 end
@@ -97,6 +166,7 @@ function add_mesh_fields!(node::ConduitNode, ::Type{<:Geometry.AxisVector}, name
     node["fields/$name/topology"] = "mesh"
     node["fields/$name/association"] = "element"
     node["fields/$name/type"] = "vector"
+    # TODO: zero copy reshaped arrays set_external!(node, path, pointer...)
     node["fields/$name/values/u"] = Array(parent(ifield.components.data.:1))
     node["fields/$name/values/v"] = Array(parent(ifield.components.data.:2))
     node["fields/$name/values/w"] = Array(parent(ifield.components.data.:3))
@@ -121,6 +191,8 @@ function element_vertex_connectivity(space::Spaces.SpectralElementSpace2D)
     return ("quad", connection)
 end
 
+#TODO: add the hexs
+
 function element_vertex_connectivity(space::Spaces.FaceExtrudedFiniteDifferenceSpace)
     horizontal_space = space.horizontal_space
     Nq = Spaces.Quadratures.degrees_of_freedom(
@@ -129,6 +201,8 @@ function element_vertex_connectivity(space::Spaces.FaceExtrudedFiniteDifferenceS
     Nh = Topologies.nlocalelems(horizontal_space)
     Nv = Spaces.nlevels(space)
     ind = LinearIndices((1:Nv, 1:Nq, 1:Nh))
+    # TODO: we probably don't have to materialize the vector, we can add an iterator if
+    # the conduit api was extended to support a lightweight ref to the data memoryspace?
     connection = Vector{Int}(undef, Nh * (Nq - 1) * (Nv - 1) * 4)
     # mesh blueprint assumes VTK vertex winding convention
     for e in 1:Nh, i in 1:(Nq - 1), v in 1:(Nv - 1)
@@ -138,6 +212,7 @@ function element_vertex_connectivity(space::Spaces.FaceExtrudedFiniteDifferenceS
         connection[vidx + 4] = ind[v, i + 1, e]
         vidx += 4
     end
+    # TODO: dont do this
     connection .-= 1
     return ("quad", connection)
 end

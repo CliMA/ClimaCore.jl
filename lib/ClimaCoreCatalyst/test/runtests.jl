@@ -6,6 +6,10 @@ if haskey(ENV, "CI")
 end
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
+# TODO: figure out how to test this?
+# we can use the catalyst stub implmentation I think to write out the raw data + replay but that
+# takes a bit more conduit API work (for the read bits)
+
 @testset "static spectral element 2D cubed-sphere" begin
     R = 6.37122e6
 
