@@ -8,12 +8,12 @@ driver_values(FT) = (;
     velem = 10,
     helem = 4,
     npoly = 4,
-    tmax = FT(60 * 60),
-    dt = FT(5.0),
-    ode_algorithm = OrdinaryDiffEq.SSPRK33,
+    tmax = FT(60 * 60 * 24 * 1000),
+    dt = FT(300.0), #FT(5.0),
+    ode_algorithm = OrdinaryDiffEq.Rosenbrock23, #OrdinaryDiffEq.SSPRK33,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :constant_P, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
-    save_every_n_steps = 10,
+    save_every_n_steps = 2160,
     additional_solver_kwargs = (;), # e.g., reltol, abstol, etc.
 )
 

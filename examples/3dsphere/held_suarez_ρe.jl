@@ -1,19 +1,29 @@
 using ClimaCorePlots, Plots
+using DiffEqCallbacks
 
 include("baroclinic_wave_utilities.jl")
+
+function cb(Y, t, integrator)
+    saved_Ys = integrator.p.saved_Ys
+    N_saved = length(saved_Ys)
+    for i in 1:(N_saved - 1)
+        saved_Ys[i] .= saved_Ys[i + 1]
+    end
+    saved_Ys[N_saved] .= Y
+end
 
 driver_values(FT) = (;
     zmax = FT(30.0e3),
     velem = 10,
     helem = 4,
     npoly = 4,
-    tmax = FT(60 * 60 * 24 * 10),
+    tmax = FT(60 * 60 * 24 * 1000),
     dt = FT(500.0),
     ode_algorithm = OrdinaryDiffEq.Rosenbrock23,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :constant_P, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
-    save_every_n_steps = 10,
-    additional_solver_kwargs = (;), # e.g., reltol, abstol, etc.
+    save_every_n_steps = 2160,
+    additional_solver_kwargs = (; callback = FunctionCallingCallback(cb)), # e.g., reltol, abstol, etc.
 )
 
 initial_condition(local_geometry) =
@@ -25,6 +35,7 @@ remaining_cache_values(Y, dt) = merge(
     baroclinic_wave_cache_values(Y, dt),
     held_suarez_cache_values(Y, dt),
     final_adjustments_cache_values(Y, dt; use_rayleigh_sponge = false),
+    (; saved_Ys = [copy(Y) for _ in 1:100]),
 )
 
 function remaining_tendency!(dY, Y, p, t)
