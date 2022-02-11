@@ -186,6 +186,14 @@ end
     return dest
 end
 
+@inline function Base.fill!(fv::FV, val::Real) where {FV <: FieldVector}
+    for symb in propertynames(fv)
+        fvp = parent(getproperty(fv, symb))
+        fill!(fvp, val)
+    end
+    return fv
+end
+
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
 @inline transform_bc_args(args::Tuple, inds...) = (
