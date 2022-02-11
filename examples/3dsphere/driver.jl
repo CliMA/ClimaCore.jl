@@ -95,3 +95,14 @@ path = joinpath(@__DIR__, "output", test_name)
 mkpath(path)
 
 postprocessing(sol, path)
+
+# if solve! crashes after some simulation time, the following help save the debugging file
+# debug_nc(
+#     p.saved_Ys, 
+#     90, 
+#     180, 
+#     "output/hs-debug/", 
+#     center_local_geometry, 
+#     face_local_geometry, 
+#     npoly+1
+# )
