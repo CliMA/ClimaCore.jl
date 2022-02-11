@@ -17,7 +17,7 @@ driver_values(FT) = (;
     velem = 10,
     helem = 4,
     npoly = 4,
-    tmax = FT(60 * 60 * 24 * 1000),
+    tmax = FT(60 * 60 * 24 * 1200),
     dt = FT(400.0),
     ode_algorithm = OrdinaryDiffEq.Rosenbrock23,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :exact, ∂𝕄ₜ∂ρ_mode = :exact),
@@ -34,7 +34,7 @@ remaining_cache_values(Y, dt) = merge(
     baroclinic_wave_cache_values(Y, dt),
     held_suarez_cache_values(Y, dt),
     final_adjustments_cache_values(Y, dt; use_rayleigh_sponge = false),
-    (; saved_Ys = [copy(Y) for _ in 1:100]),
+    (; saved_Ys = [copy(Y) for _ in 1:1000]),
 )
 
 function remaining_tendency!(dY, Y, p, t)

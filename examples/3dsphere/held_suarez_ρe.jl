@@ -17,12 +17,12 @@ driver_values(FT) = (;
     velem = 10,
     helem = 4,
     npoly = 4,
-    tmax = FT(60 * 60 * 24 * 1000),
+    tmax = FT(60 * 60 * 24 * 1200),
     dt = FT(500.0),
     ode_algorithm = OrdinaryDiffEq.Rosenbrock23,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :constant_P, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
-    save_every_n_steps = 2160,
+    save_every_n_steps = 1728,
     additional_solver_kwargs = (; callback = FunctionCallingCallback(cb)), # e.g., reltol, abstol, etc.
 )
 
@@ -35,7 +35,7 @@ remaining_cache_values(Y, dt) = merge(
     baroclinic_wave_cache_values(Y, dt),
     held_suarez_cache_values(Y, dt),
     final_adjustments_cache_values(Y, dt; use_rayleigh_sponge = false),
-    (; saved_Ys = [copy(Y) for _ in 1:100]),
+    (; saved_Ys = [copy(Y) for _ in 1:1000]),
 )
 
 function remaining_tendency!(dY, Y, p, t)
@@ -62,4 +62,77 @@ function postprocessing(sol, path)
         Plots.plot(v, level = 3, clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)
+end
+
+
+function debug_nc(saved_Ys, nlat, nlon, path, c_local_geometry, f_local_geometry, Nq)
+    ### First step: save the data on cg nodal points to ncfile
+    # create the debug nc file
+    datafile_cc = joinpath(path,"debug-rho_etot.nc")
+    nc = NCDataset(datafile_cc, "c")
+
+    # get spaces from local geometries
+    cspace = Fields.axes(c_local_geometry)
+    fspace = Fields.axes(f_local_geometry)
+
+    # define space coords in nc file
+    def_space_coord(nc, cspace)
+
+    # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
+    nc_time = def_time_coord(nc)
+
+    # vars
+    nc_rho = defVar(nc, "rho", Float64, cspace, ("time",))
+    nc_etot = defVar(nc, "etot", Float64, cspace, ("time",))
+    nc_u = defVar(nc, "u", Float64, cspace, ("time",))
+    nc_v = defVar(nc, "v", Float64, cspace, ("time",))
+
+    # loop over time
+    for i = 1:length(saved_Ys)
+        nc_time[i] = i
+
+        # scalar fields
+        Yc = saved_Ys[i].Yc
+        # covariant vector -> UVVector
+        uv = Geometry.UVVector.(saved_Ys[i].uₕ)
+
+        # save data to nc
+        nc_rho[:,i] = Yc.ρ
+        nc_etot[:,i] = Yc.ρe ./ Yc.ρ
+        nc_u[:,i] = uv.components.data.:1
+        nc_v[:,i] = uv.components.data.:2
+
+        # interpolate w to center
+
+        # pressure
+        nc_p[:,i] = pressure(cρ, cρe / cρ, norm(cuvw), z)
+    end
+    close(nc)
+
+    ### Second step: use Tempest to remap onto regular lon/lat grid
+    # get horizontal space from center space
+    hspace = cspace.horizontal_space
+
+    # write out our cubed sphere mesh
+    meshfile_cc = joinpath(path,"mesh_cubedsphere.g")
+    write_exodus(meshfile_cc, hspace.topology)
+
+    meshfile_rll = joinpath(path,"mesh_rll.g")
+    rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
+
+    meshfile_overlap = joinpath(path, "mesh_overlap.g")
+    overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
+
+    weightfile = joinpath(path,"remap_weights.nc")
+    remap_weights(
+        weightfile,
+        meshfile_cc,
+        meshfile_rll,
+        meshfile_overlap;
+        in_type = "cgll",
+        in_np = Nq,
+    )
+
+    datafile_rll = joinpath(path, "debug-rho_etot_rll.nc")
+    apply_remap(datafile_rll, datafile_cc, weightfile, ["rho", "etot", "u", "v"])
 end
