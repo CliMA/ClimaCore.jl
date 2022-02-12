@@ -127,22 +127,6 @@ Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
 
-# Ensure that Field axes are preserved when FieldVectors are deepcopied and when
-# objects that contain FieldVectors are deepcopied.
-_deepcopy_internal(x, stackdict::IdDict) = Base.deepcopy_internal(x, stackdict)
-_deepcopy_internal(x::Field, stackdict::IdDict) =
-    Field(Base.deepcopy_internal(field_values(x), stackdict), axes(x))
-Base.deepcopy_internal(fv::FieldVector{T}, stackdict::IdDict) where {T} =
-    FieldVector{T}(map(x -> _deepcopy_internal(x, stackdict), _values(fv)))
-
-#=
-In certain cases (e.g., temporal refinement studies), users
-may want to create deep copies of `FieldVector`s / `Fields`
-to ensure exactly the same initial conditions for all trajectories.
-=#
-Base.deepcopy_internal(x::Field, stackdict::IdDict) =
-    Field(Base.deepcopy_internal(field_values(x), stackdict), axes(x))
-
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
 Base.Broadcast.BroadcastStyle(::Type{<:FieldVector}) = FieldVectorStyle()
@@ -210,7 +194,7 @@ end
 transform_broadcasted(fv::FieldVector, symb, axes) =
     parent(getfield(_values(fv), symb))
 transform_broadcasted(x, symb, axes) = x
-Base.@propagate_inbounds function Base.copyto!(
+@inline function Base.copyto!(
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
 )
@@ -220,6 +204,19 @@ Base.@propagate_inbounds function Base.copyto!(
     end
     return dest
 end
+
+@inline function Base.copyto!(
+    dest::FieldVector,
+    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
+)
+    for symb in propertynames(dest)
+        p = parent(getfield(_values(dest), symb))
+        copyto!(p, bc)
+    end
+    return dest
+end
+
+Base.fill!(dest::FieldVector, value) = dest .= value
 
 Base.mapreduce(f, op, fv::FieldVector) =
     mapreduce(x -> mapreduce(f, op, backing_array(x)), op, _values(fv))

@@ -11,7 +11,7 @@ driver_values(FT) = (;
     tmax = FT(60 * 60),
     dt = FT(5.0),
     ode_algorithm = OrdinaryDiffEq.SSPRK33,
-    jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :constant_P, ∂𝕄ₜ∂ρ_mode = :exact),
+    jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :no_∂P∂K, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
     save_every_n_steps = 10,
     additional_solver_kwargs = (;), # e.g., reltol, abstol, etc.
