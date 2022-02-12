@@ -186,11 +186,8 @@ end
     return dest
 end
 
-@inline function Base.fill!(fv::FV, val::Real) where {FV <: FieldVector}
-    for symb in propertynames(fv)
-        fvp = parent(getproperty(fv, symb))
-        fill!(fvp, val)
-    end
+@inline function Base.fill!(fv::FV, val) where {FV <: FieldVector}
+    fv .= val
     return fv
 end
 
