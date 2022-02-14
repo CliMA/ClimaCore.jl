@@ -18,5 +18,6 @@ function runmpi(file; ntasks = 1)
 end
 
 runmpi(joinpath(@__DIR__, "distributed", "ddss2.jl"), ntasks = 2)
-#runmpi(joinpath(@__DIR__, "distributed", "ddss3.jl"), ntasks = 3)
-#runmpi(joinpath(@__DIR__, "distributed", "ddss4.jl"), ntasks = 4)
+runmpi(joinpath(@__DIR__, "distributed", "ddss3.jl"), ntasks = 3)
+runmpi(joinpath(@__DIR__, "distributed", "ddss4.jl"), ntasks = 4)
+runmpi(joinpath(@__DIR__, "distributed", "gather4.jl"), ntasks = 4)

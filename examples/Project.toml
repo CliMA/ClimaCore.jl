@@ -1,4 +1,5 @@
 [deps]
+BlockArrays = "8e7c35d0-a365-5155-bbbb-fb81a777f24e"
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCommsMPI = "5f86816e-8b66-43b2-912e-75384f99de49"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
