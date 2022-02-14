@@ -94,6 +94,10 @@ function implicit_tendency!(Yₜ, Y, p, t)
 
     Yₜ.uₕ .= Ref(zero(eltype(uₕ)))
 
+    Space.weighted_dss!(Yₜ.Yc)
+    Space.weighted_dss!(Yₜ.uₕ)
+    Space.weighted_dss!(Yₜ.w)
+
     return Yₜ
 end
 
@@ -211,6 +215,11 @@ function Wfact!(W, Y, p, dtγ, t)
             @. ∂𝕄ₜ∂ρ = to_scalar_coefs(∇ᵥΦ / Iᶠ(ρ) * Iᶠ_stencil(one(ρ)))
         end
     end
+
+    Spaces.weighted_dss!(∂ρₜ∂𝕄)
+    Spaces.weighted_dss!(∂𝔼ₜ∂𝕄)
+    Spaces.weighted_dss!(∂𝕄ₜ∂𝔼)
+    Spaces.weighted_dss!(∂𝕄ₜ∂ρ)
 
     if W.test
         # Checking every column takes too long, so just check one.
