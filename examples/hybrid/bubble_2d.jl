@@ -246,11 +246,10 @@ function rhs!(dY, Y, _, t)
 
     # vertical momentum
     z = coords.z
-    @. dρw +=
-        B(
-            Geometry.transform(Geometry.WAxis(), -(∂f(p)) - If(ρ) * ∂f(Φ(z))) -
-            vvdivc2f(Ic(ρw ⊗ w)),
-        ) + fcf(wc, ρw)
+    @. dρw += B(
+        Geometry.transform(Geometry.WAxis(), -(∂f(p)) - If(ρ) * ∂f(Φ(z))) -
+        vvdivc2f(Ic(ρw ⊗ w)),
+    )
     uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
