@@ -4,6 +4,10 @@ import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
+import ClimaCoreCatalyst: ParaviewCatalyst, CatalystCallback
+import MPI; MPI.Init()
+ParaviewCatalyst.catalyst_initialize()
+
 using Logging
 
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
@@ -147,6 +151,7 @@ sol = solve(
     SSPRK33(),
     dt = 0.02,
     saveat = 1.0,
+    callback = CatalystCallback(1.0), 
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 )
@@ -154,7 +159,7 @@ sol = solve(
 if usempi
     exit()
 end
-
+#=
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
@@ -185,3 +190,4 @@ linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
     "Total Energy",
 )
+=#
