@@ -57,6 +57,12 @@ function postprocessing(sol, path)
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].Yc.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].Yc.ρe))"
 
+    anim = Plots.@animate for Y in sol.u
+        v = Geometry.UVVector.(Y.uₕ).components.data.:2
+        Plots.plot(v, level = 3, clim = (-3, 3))
+    end
+    Plots.mp4(anim, joinpath(path, "v.mp4"), fps = 5)
+
     u_end = Geometry.UVVector.(sol.u[end].uₕ).components.data.:1
     Plots.png(Plots.plot(u_end, level = 3), joinpath(path, "u_end.png"))
 
