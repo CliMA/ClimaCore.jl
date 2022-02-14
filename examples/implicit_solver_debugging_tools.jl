@@ -5,7 +5,17 @@ using ClimaCore: Spaces, Operators
 
 get_var(obj, ::Tuple{}) = obj
 get_var(obj, tup::Tuple) = get_var(getproperty(obj, tup[1]), Base.tail(tup))
-function exact_column_jacobian(rhs_implicit!, Y, p, t, i, j, h, Y_name, Yₜ_name)
+function exact_column_jacobian_block(
+    implicit_tendency!,
+    Y,
+    p,
+    t,
+    i,
+    j,
+    h,
+    Yₜ_name,
+    Y_name,
+)
     T = eltype(Y)
     Y_var = get_var(Y, Y_name)
     Y_var_vert_space = Spaces.column(axes(Y_var), i, j, h)
@@ -19,7 +29,7 @@ function exact_column_jacobian(rhs_implicit!, Y, p, t, i, j, h, Y_name, Yₜ_nam
         parent(Spaces.level(Yᴰ_var, level)) .+= ith_ε(level - bot_level + 1)
     foreach(set_level_εs!, bot_level:top_level)
     Yₜᴰ = similar(Yᴰ)
-    rhs_implicit!(Yₜᴰ, Yᴰ, p, t)
+    implicit_tendency!(Yₜᴰ, Yᴰ, p, t)
     col = Spaces.column(get_var(Yₜᴰ, Yₜ_name), i, j, h)
     return vcat(map(dual -> [dual.partials.values...]', parent(col))...)
 end

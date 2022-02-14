@@ -160,10 +160,10 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
 
         if A.test && Operators.bandwidths(eltype(∂𝔼ₜ∂𝕄)) == (-half, half)
             Ni, Nj, _, Nv, Nh = size(Spaces.local_geometry_data(axes(xρ)))
+            ∂Yₜ∂Y = Array{Float64}(undef, 3 * Nv + 1, 3 * Nv + 1)
+            ΔY = Array{Float64}(undef, 3 * Nv + 1)
+            ΔΔY = Array{Float64}(undef, 3 * Nv + 1)
             for h in 1:Nh, j in 1:Nj, i in 1:Ni
-                ∂Yₜ∂Y = Array{Float64}(undef, 3 * Nv + 1, 3 * Nv + 1)
-                ΔΔY = Array{Float64}(undef, 3 * Nv + 1)
-                ΔY = Array{Float64}(undef, 3 * Nv + 1)
                 ∂Yₜ∂Y .= 0.0
                 ∂Yₜ∂Y[1:Nv, (2 * Nv + 1):(3 * Nv + 1)] .=
                     column_matrix(∂ρₜ∂𝕄, i, j, h)
@@ -173,13 +173,13 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
                     column_matrix(∂𝕄ₜ∂ρ, i, j, h)
                 ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), (Nv + 1):(2 * Nv)] .=
                     column_matrix(∂𝕄ₜ∂𝔼, i, j, h)
-                ΔΔY[1:Nv] .= column_vector(bρ, i, j, h)
-                ΔΔY[(Nv + 1):(2 * Nv)] .= column_vector(b𝔼, i, j, h)
-                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(b𝕄, i, j, h)
                 ΔY[1:Nv] .= column_vector(xρ, i, j, h)
                 ΔY[(Nv + 1):(2 * Nv)] .= column_vector(x𝔼, i, j, h)
                 ΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(x𝕄, i, j, h)
-                @assert (-LinearAlgebra.I + dtγ * ∂Yₜ∂Y) \ ΔΔY ≈ ΔY
+                ΔΔY[1:Nv] .= column_vector(bρ, i, j, h)
+                ΔΔY[(Nv + 1):(2 * Nv)] .= column_vector(b𝔼, i, j, h)
+                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(b𝕄, i, j, h)
+                @assert (-LinearAlgebra.I + dtγ * ∂Yₜ∂Y) * ΔY ≈ ΔΔY
             end
         end
 
