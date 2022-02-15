@@ -78,19 +78,3 @@ function postprocessing(sol, path)
     Plots.mp4(anim, joinpath(path, "T.mp4"), fps = 5)
 end
 
-# geopotential
-gravitational_potential(z) = grav * z
-
-#temperature
-function temperature(ρ, e_tot, normuvw, Φ)
-    I = e_tot - Φ - normuvw^2 / 2
-    T = I / cv_d + T_tri
-    return T 
-end
-
-# pressure
-function pressure(ρ, e_tot, normuvw, z)
-    I = e_tot - gravitational_potential(z) - normuvw^2 / 2
-    T = I / cv_d + T_tri
-    return ρ * R_d * T
-end
