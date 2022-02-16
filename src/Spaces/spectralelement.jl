@@ -160,9 +160,11 @@ function SpectralElementSpace2D(topology, quadrature_style, comms_ctx = nothing)
         ngelems > 0 ? DataLayouts.IJFH{LG, Nq}(Array{FT}, ngelems) : nothing
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
-
+    local_elem_order =
+        topology isa Topologies.DistributedTopology2D ? topology.local_elems :
+        topology.elemorder
     for e in 1:nlelems
-        elem = topology.elemorder[e]
+        elem = local_elem_order[e]
         local_geometry_slab = slab(local_geometry, e)
         for i in 1:Nq, j in 1:Nq
             ξ = SVector(quad_points[i], quad_points[j])
@@ -174,18 +176,29 @@ function SpectralElementSpace2D(topology, quadrature_style, comms_ctx = nothing)
             local_geometry_slab[i, j] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
         end
     end
+    if topology isa Topologies.DistributedTopology2D
+        ghost_elems = topology.ghost_elems
+        e = 1
+        for nbr in 1:length(ghost_elems)
+            for elem in ghost_elems[nbr]
+                ghost_geometry_slab = slab(ghost_geometry, e)
+                for i in 1:Nq, j in 1:Nq
+                    ξ = SVector(quad_points[i], quad_points[j])
+                    u, ∂u∂ξ = compute_local_geometry(
+                        global_geometry,
+                        topology,
+                        elem,
+                        ξ,
+                        AIdx,
+                    )
+                    J = det(Geometry.components(∂u∂ξ))
+                    WJ = J * quad_weights[i] * quad_weights[j]
 
-    for e in 1:ngelems
-        elem = topology.elemorder[e]
-        ghost_geometry_slab = slab(ghost_geometry, e)
-        for i in 1:Nq, j in 1:Nq
-            ξ = SVector(quad_points[i], quad_points[j])
-            u, ∂u∂ξ =
-                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
-            J = det(Geometry.components(∂u∂ξ))
-            WJ = J * quad_weights[i] * quad_weights[j]
-
-            ghost_geometry_slab[i, j] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                    ghost_geometry_slab[i, j] =
+                        Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                end
+                e += 1
+            end
         end
     end
 

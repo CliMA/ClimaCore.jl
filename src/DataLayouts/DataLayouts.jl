@@ -16,6 +16,7 @@ module DataLayouts
 
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray
+import ClimaComms
 
 import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH
@@ -313,6 +314,19 @@ end
     dataview = @inbounds view(parent(data), :, :, :, h)
     IJF{S, Nij}(dataview)
 end
+
+function gather(
+    ctx::ClimaComms.AbstractCommsContext,
+    data::IJFH{S, Nij},
+) where {S, Nij}
+    gatherdata = ClimaComms.gather(ctx, parent(data))
+    if ClimaComms.iamroot(ctx)
+        IJFH{S, Nij}(gatherdata)
+    else
+        nothing
+    end
+end
+
 
 # ==================
 # Data1D DataLayout
