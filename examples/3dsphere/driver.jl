@@ -1,3 +1,8 @@
+if !haskey(ENV, "BUILDKITE")
+    import Pkg
+    Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
+end
+
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
@@ -9,7 +14,7 @@ using OrdinaryDiffEq
 
 const FT = Float64
 
-default_test_name = "baroclinic_wave_ρe"
+default_test_name = "balanced_flow_rhotheta"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 ################################################################################
