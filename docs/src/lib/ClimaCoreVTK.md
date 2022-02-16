@@ -10,6 +10,7 @@ ClimaCoreVTK.jl provides functionality for writing ClimaCore fields to VTK files
 
 ```@docs
 writevtk
+writepvd
 ```
 
 # Internal functions
