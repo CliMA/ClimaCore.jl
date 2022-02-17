@@ -78,6 +78,14 @@ if ode_algorithm <: Union{
             (; alg_kwargs, nlsolve = NLNewton(; max_iter = max_newton_iters))
     end
 end
+
+mkpath(joinpath(@__DIR__, "checkpoints"))
+saver = SaveJLD2(
+    joinpath(@__DIR__, "checkpoints", test_name),
+    dt * save_every_n_steps,
+    0.0,
+)
+
 integrator = OrdinaryDiffEq.init(
     problem,
     ode_algorithm(; alg_kwargs...);
@@ -86,8 +94,21 @@ integrator = OrdinaryDiffEq.init(
     adaptive = false,
     progress = true,
     progress_steps = 1,
+    callback = DiscreteCallback(saver, integrator -> nothing),
     additional_solver_kwargs...,
 )
+
+if haskey(ENV, "RESTART_FILE")
+    Yr, t = load(ENV["RESTART_FILE"], "u", "t")
+    set_t!(integrator, t)
+    saver.next_t = t
+    Y = Fields.FieldVector(
+        Yc = Fields.Field(Fields.field_values(Yr.Yc), axes(Y.Yc)),
+        uₕ = Fields.Field(Fields.field_values(Yr.uₕ), axes(Y.uₕ)),
+        w = Fields.Field(Fields.field_values(Yr.w), axes(Y.w)),
+    )
+    set_u!(integrator, Y)
+end
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)

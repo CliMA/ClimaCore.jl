@@ -1,5 +1,6 @@
 using LinearAlgebra
 using LinearAlgebra: norm_sqr
+using JLD2
 
 using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Operators, Spaces, Fields
@@ -269,4 +270,20 @@ function Wfact!(W, Y, p, dtγ, t)
             # highest value seen so far for ρθ is ~0.02
         end
     end
+end
+
+
+mutable struct SaveJLD2
+    fileprefix::String
+    Δt::Float64
+    next_t::Float64
+end
+function (saver::SaveJLD2)(u, t, integrator)
+    if t >= saver.next_t
+        saver.next_t += saver.Δt
+        filename =
+            saver.fileprefix * "_" * string(round(Int, t), pad = 10) * ".jld2"
+        jldsave(filename; u = u, t = t)
+    end
+    return false
 end
