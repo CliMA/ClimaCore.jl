@@ -153,11 +153,23 @@ path = "../lib/ClimaCorePlots"
 uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 version = "0.2.0"
 
+[[deps.ClimaCoreVTK]]
+deps = ["ClimaCore", "WriteVTK"]
+git-tree-sha1 = "474e29684fd90cc4d939faa59926587627e2499f"
+uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
+version = "0.5.0"
+
 [[deps.CloseOpenIntervals]]
 deps = ["ArrayInterface", "Static"]
 git-tree-sha1 = "03dc838350fbd448fca0b99285ed4d60fc229b72"
 uuid = "fb6a15b2-703c-40df-9091-08a04967cfa9"
 version = "0.1.5"
+
+[[deps.CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
 
 [[deps.ColorSchemes]]
 deps = ["ColorTypes", "Colors", "FixedPointNumbers", "Random"]
@@ -747,6 +759,12 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
+[[deps.LightXML]]
+deps = ["Libdl", "XML2_jll"]
+git-tree-sha1 = "e129d9391168c677cd4800f5c0abb1ed8cb3794f"
+uuid = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
+version = "0.9.0"
+
 [[deps.LineSearches]]
 deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "Printf"]
 git-tree-sha1 = "f27132e551e959b3667d8c93eae90973225032dd"
@@ -1303,6 +1321,12 @@ git-tree-sha1 = "97e999be94a7147d0609d0b9fc9feca4bf24d76b"
 uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.15"
 
+[[deps.TranscodingStreams]]
+deps = ["Random", "Test"]
+git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
+uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
+version = "0.9.6"
+
 [[deps.TreeViews]]
 deps = ["Test"]
 git-tree-sha1 = "8d0d7a3fe2f30d6a7f833a5f19f7c7a5b396eae6"
@@ -1371,6 +1395,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "66d72dc6fcc86352f01676e8f0f698562e60510f"
 uuid = "2381bf8a-dfd0-557d-9999-79630e7b1b91"
 version = "1.23.0+0"
+
+[[deps.WriteVTK]]
+deps = ["Base64", "CodecZlib", "FillArrays", "LightXML", "TranscodingStreams"]
+git-tree-sha1 = "84f63db4568bc352423594d8211fee91091637b7"
+uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+version = "1.14.1"
 
 [[deps.XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "Zlib_jll"]
