@@ -652,3 +652,12 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+
+  - label: ":rocket::computer: Benchmark step!"
+    key: "cpu_benchmark"
+    command:
+      - "julia --color=yes --project=perf perf/benchmark.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
