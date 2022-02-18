@@ -32,7 +32,7 @@ convergence_rate(err, Δh) =
 const R = 6.37122e6  # sphere radius
 const r0 = R / 2     # bells radius
 const ρ₀ = 1.0       # air density
-const D₄ = 6.6e14    # hyperdiffusion coefficient
+const D₄ = 0.0    # hyperdiffusion coefficient
 const u0 = 2 * pi * R / (86400 * 12)
 const T = 86400 * 12 # simulation period in seconds (12 days)
 const n_steps = 1200
@@ -52,7 +52,7 @@ const limiter_tol = 5e-14
 ENV["GKSwstype"] = "nul"
 import ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "cg_sphere_solidbody_limiter_$(test_name)"
+dirname = "cg_sphere_solidbody_limiter_$(test_name)_ne20_p6"
 
 if lim_flag == false
     dirname = "$(dirname)_no_lim"
@@ -75,12 +75,12 @@ end
 
 # Set up spatial discretization
 FT = Float64
-ne_seq = (5, 10, 20)
+ne_seq = (20,)
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq))
-Nq = 4
+Nq = 7
 
 # h-refinement study
 for (k, ne) in enumerate(ne_seq)
@@ -238,7 +238,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         SSPRK33(stage_callback!),
         dt = dt,
-        saveat = 5 * dt,
+        saveat = 10 * dt,
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
@@ -268,9 +268,18 @@ for (k, ne) in enumerate(ne_seq)
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 
-    Plots.png(
-        Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
-        joinpath(path, "final_q.png"),
+    times = 0:5*dt:end_time
+    Sol_q =  Array{Fields.Field}(undef, length(times))
+    for tt in 1:length(times)
+        Sol_q[tt] = sol.u[tt].ρq ./ sol.u[tt].ρ
+    end
+    using ClimaCoreVTK
+    writevtk(
+        joinpath(path, "sphere_lat_long"),
+        times,
+        (q = Sol_q,);
+        latlong = true,
+        basis = :point,
     )
 end
 
