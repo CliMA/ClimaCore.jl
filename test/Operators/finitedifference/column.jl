@@ -644,3 +644,49 @@ end
     cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
     @test all(cy_ref .== cyp)
 end
+
+@testset "Center -> Center Advection" begin
+
+    function advection(c, f, cs)
+        adv = zeros(eltype(f), cs)
+        A = Operators.AdvectionC2C(
+            bottom = Operators.SetValue(0.0),
+            top = Operators.Extrapolate(),
+        )
+        return @. adv = A(c, f)
+    end
+
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    err = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(4π);
+            boundary_tags = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        # advective velocity
+        c = Geometry.WVector.(ones(Float64, fs),)
+        # scalar-valued field to be advected
+        f = sin.(Fields.coordinate_field(cs).z)
+
+        # Call the advection operator
+        adv = advection(c, f, cs)
+
+        Δh[k] = cs.face_local_geometry.J[1]
+        err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
+    end
+    # AdvectionC2C convergence rate
+    conv_adv_c2c = convergence_rate(err, Δh)
+    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
+end
