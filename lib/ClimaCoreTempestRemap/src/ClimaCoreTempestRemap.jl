@@ -13,5 +13,6 @@ using NCDatasets, Dates, PkgVersion, LinearAlgebra, TempestRemap_jll
 include("netcdf.jl")
 include("exodus.jl")
 include("wrappers.jl")
+include("connectivity.jl")
 
 end # module
