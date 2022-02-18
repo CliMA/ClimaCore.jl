@@ -268,19 +268,20 @@ for (k, ne) in enumerate(ne_seq)
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 
-    times = 0:5*dt:end_time
-    Sol_q =  Array{Fields.Field}(undef, length(times))
-    for tt in 1:length(times)
-        Sol_q[tt] = sol.u[tt].ρq ./ sol.u[tt].ρ
-    end
     using ClimaCoreVTK
-    writevtk(
-        joinpath(path, "sphere_lat_long"),
-        times,
-        (q = Sol_q,);
-        latlong = true,
-        basis = :point,
+    using WriteVTK
+    paraview_collection(joinpath(path, "sphere_lat_long")) do pvd
+        n = 0
+        for (time, u) in zip(0:10*dt:end_time, sol.u)
+            n += 1
+            pvd[time] = ClimaCoreVTK.vtk_file(
+                joinpath(path, "sphere_lat_long") * "_" * string(n, pad = 3),
+                (q = u.ρq ./ u.ρ,),
+                latlong = true,
+                basis = :point,
     )
+        end
+    end
 end
 
 # Print convergence rate info
