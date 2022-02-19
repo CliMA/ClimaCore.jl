@@ -187,6 +187,7 @@ end
 
 function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     @unpack cχθ, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
+    point_type = eltype(Fields.local_geometry_field(axes(Y.Yc)).coordinates)
 
     cρ = Y.Yc.ρ # density on centers
     cρθ = Y.Yc.ρθ # potential temperature on centers
@@ -199,20 +200,28 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     # Hyperdiffusion
 
     @. cχθ = hwdiv(hgrad(cρθ / cρ))
-    @. cχuₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-        )
+    if point_type <: Geometry.Abstract3DPoint
+        @. cχuₕ =
+            hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+            )
+    else
+        @. cχuₕ = Geometry.Covariant12Vector(hwgrad(hdiv(cuₕ)))
+    end
     Spaces.weighted_dss!(cχθ)
     Spaces.weighted_dss!(cχuₕ)
 
     @. dY.Yc.ρθ -= κ₄ * hwdiv(cρ * hgrad(cχθ))
-    @. dY.uₕ -=
-        κ₄ * (
-            hwgrad(hdiv(cχuₕ)) - Geometry.Covariant12Vector(
-                hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
+    if point_type <: Geometry.Abstract3DPoint
+        @. dY.uₕ -=
+            κ₄ * (
+                hwgrad(hdiv(cχuₕ)) - Geometry.Covariant12Vector(
+                    hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
+                )
             )
-        )
+    else
+        @. dY.uₕ -= Geometry.Covariant12Vector(κ₄ * hwgrad(hdiv(cχuₕ)))
+    end
 
     # Mass conservation
 
@@ -225,9 +234,13 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     # Momentum conservation
 
     # curl term
-    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
-    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
-    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    if point_type <: Geometry.Abstract3DPoint
+        @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+        @. fω¹² = hcurl(fw) # Contravariant12Vector
+    else
+        cω³ .= Ref(zero(eltype(cω³)))
+        @. fω¹² = Geometry.Contravariant12Vector(hcurl(fw))
+    end
     @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
 
     # cross product
@@ -246,8 +259,13 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     @. cK = norm_sqr(cuvw) / 2
     @. cp = pressure(cρθ)
 
-    @. dY.uₕ -= hgrad(cp) / cρ
-    @. dY.uₕ -= hgrad(cK + cΦ)
+    if point_type <: Geometry.Abstract3DPoint
+        @. dY.uₕ -= hgrad(cp) / cρ
+        @. dY.uₕ -= hgrad(cK + cΦ)
+    else
+        @. dY.uₕ -= Geometry.Covariant12Vector(hgrad(cp) / cρ)
+        @. dY.uₕ -= Geometry.Covariant12Vector(hgrad(cK + cΦ))
+    end
 
     @. dY.w -= fω¹² × fu¹² # Covariant3Vector on faces
     @. dY.w -= vgradc2f(cK)
@@ -260,6 +278,7 @@ end
 
 function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     @unpack cχe, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
+    point_type = eltype(Fields.local_geometry_field(axes(Y.Yc)).coordinates)
 
     cρ = Y.Yc.ρ # density on centers
     cρe = Y.Yc.ρe # total energy on centers
@@ -272,20 +291,28 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     # Hyperdiffusion
 
     @. cχe = hwdiv(hgrad(cρe / cρ))
-    @. cχuₕ =
-        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-        )
+    if point_type <: Geometry.Abstract3DPoint
+        @. cχuₕ =
+            hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+            )
+    else
+        @. cχuₕ = Geometry.Covariant12Vector(hwgrad(hdiv(cuₕ)))
+    end
     Spaces.weighted_dss!(cχe)
     Spaces.weighted_dss!(cχuₕ)
 
     @. dY.Yc.ρe -= κ₄ * hwdiv(cρ * hgrad(cχe))
-    @. dY.uₕ -=
-        κ₄ * (
-            hwgrad(hdiv(cχuₕ)) - Geometry.Covariant12Vector(
-                hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
+    if point_type <: Geometry.Abstract3DPoint
+        @. dY.uₕ -=
+            κ₄ * (
+                hwgrad(hdiv(cχuₕ)) - Geometry.Covariant12Vector(
+                    hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
+                )
             )
-        )
+    else
+        @. dY.uₕ -= Geometry.Covariant12Vector(κ₄ * hwgrad(hdiv(cχuₕ)))
+    end
 
     # Mass conservation
 
@@ -298,9 +325,13 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     # Momentum conservation
 
     # curl term
-    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
-    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
-    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    if point_type <: Geometry.Abstract3DPoint
+        @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+        @. fω¹² = hcurl(fw) # Contravariant12Vector
+    else
+        cω³ .= Ref(zero(eltype(cω³)))
+        @. fω¹² = Geometry.Contravariant12Vector(hcurl(fw))
+    end
     @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
 
     # cross product
@@ -319,8 +350,13 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     @. cK = norm_sqr(cuvw) / 2
     @. cp = pressure(cρ, cρe / cρ, cK, cΦ)
 
-    @. dY.uₕ -= hgrad(cp) / cρ
-    @. dY.uₕ -= hgrad(cK + cΦ)
+    if point_type <: Geometry.Abstract3DPoint
+        @. dY.uₕ -= hgrad(cp) / cρ
+        @. dY.uₕ -= hgrad(cK + cΦ)
+    else
+        @. dY.uₕ -= Geometry.Covariant12Vector(hgrad(cp) / cρ)
+        @. dY.uₕ -= Geometry.Covariant12Vector(hgrad(cK + cΦ))
+    end
 
     @. dY.w -= fω¹² × fu¹² # Covariant3Vector on faces
     @. dY.w -= vgradc2f(cK)
