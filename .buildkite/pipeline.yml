@@ -331,8 +331,8 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid invariant"
-    key: "cpu_rising_bubble_hybrid_invariant"
+  - label: ":computer: Rising Bubble hybrid invariant potential temperature"
+    key: "cpu_rising_bubble_hybrid_invariant_rho_theta"
     command:
       - "julia --color=yes --project=examples examples/hybrid/bubble_invariant.jl"
     artifact_paths:
@@ -341,13 +341,35 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble hybrid invariant total energy"
+    key: "cpu_rising_bubble_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble2d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble2d_invariant_etot/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: Rising Bubble 3D hybrid invariant"
-    key: "cpu_rising_bubble_3d_hybrid_invariant"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_potential_temperature"
     command:
       - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant.jl"
     artifact_paths:
       - "examples/hybrid/output/bubble3d_invariant/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble 3D hybrid invariant total energy"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant_etot/*"
     agents:
       config: cpu
       queue: central
