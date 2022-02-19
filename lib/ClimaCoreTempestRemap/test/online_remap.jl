@@ -5,6 +5,8 @@ using TempestRemap_jll
 using Test
 using ClimaCoreTempestRemap
 
+include("../src/connectivity.jl")
+
 OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "online remap 2D sphere data" begin
@@ -41,34 +43,64 @@ OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     field_o = similar(field_i, space_o, eltype(field_i))
     
     # initialize the remap operator
-    RemapInfo = LinearTempestRemap(field_o, field_i, map, col, row)
+    RemapInfo = LinearTempestRemap(map, col, row)
     
     # apply the remap
-    remap!(RemapInfo)
-
-
-    # offline map apply for comparison
+    remap!(field_o, field_i, RemapInfo)
 
     ## write test data for offline map apply for comparison
     datafile_in = joinpath(OUTPUT_DIR, "data_in.nc")
-    NCDataset(datafile_cc, "c") do nc
-        def_space_coord(nc, space)
+    
+    NCDataset(datafile_in, "c") do nc
+        def_space_coord(nc, space_i)
         nc_time = def_time_coord(nc)
 
         # nc_xlat = defVar(nc, "xlat", Float64, space)
-        nc_sinlong = defVar(nc, "sinlong", Float64, space, ("time",))
+        nc_sinlong = defVar(nc, "sinlong", Float64, space_i, ("time",))
 
-        nc_time[:] = time[:]
+        # nc_time[:] = time[:]
         # nc_xlat[:] = xlat[:]
-        nc_sinlong[:] = field_i[:]
+        nc_sinlong[:, 1] = field_i
 
         nothing
     end
     
-    ## offline map apply for comparison
+    ## for test below, apply offline map, read in the resulting field and reshape it to the IJFH format 
     datafile_out = joinpath(OUTPUT_DIR, "data_out.nc")
-    apply_remap(datafile_out, datafile_in, weightfile, vars)
+    apply_remap(datafile_out, datafile_in, weightfile, ["sinlong"])
 
-    #@test Array(nc_rll["xlat"]) ≈ ones(nlon) * lats' rtol = 0.1
+    ds_wt = NCDataset(datafile_out,"r")
+    field_o_offline = ds_wt["sinlong"][:][:,1]
+    close(ds_wt)
+
+    field_o_offline = Float64.(field_o_offline)
+    field_o_offline_reshaped = project_unique_to_IJFH(field_o_offline, nq_o, ne_o)
+
+    err = maximum(sqrt.((field_o_offline_reshaped[:,:,1,:,:] - parent(field_o)) .^ 2))
+
+    @test err < 1e-6
+
 end
+
+# using Plots
+# function plot_flatmesh(Psi,nelem)
+#     plots = []
+#     tiltes = ["Eq1" "Eq2" "Eq3" "Eq4" "Po1" "Po2"]
+#     for f in collect(1:1:6)
+#         Psi_reshape = reshape(Psi[(f-1)*nelem^2+1:f*nelem^2],(nelem,nelem))
+
+#         push!(plots, contourf(Psi_reshape))
+#     end
+#     plot(plots..., layout = (6), title = tiltes )
+# end
+
+# plot_flatmesh(parent(field_i)[1,1,1,:],ne_i)
+# png(joinpath(OUTPUT_DIR,"in.png"))
+
+# plot_flatmesh(parent(field_o)[1,1,1,:],ne_o)
+# png(joinpath(OUTPUT_DIR,"out.png"))
+
+# plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
+# png(joinpath(OUTPUT_DIR,"out_offline.png"))
+
 

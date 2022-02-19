@@ -1,3 +1,5 @@
+import ClimaCore.DataLayouts: IJFH
+
 """ 
     get_cc_gll_connect(ne_i::Int, nq::Int)
 loop through CC GLL points and generate GLL connectivity matrix
@@ -74,7 +76,6 @@ function get_cc_gll_connect(ne_i::Int, nq::Int)
                             else
                                 ui = findfirst(isequal((x,y,z)), coords)
                                 connect[nq_x, nq_y, (f-1)*ne_i^2 + (e_y-1)*ne_i + e_x]  = ui
-                                println(ui)
                             end     
                         end
                         if f in [5]
@@ -125,7 +126,6 @@ function get_cc_gll_connect(ne_i::Int, nq::Int)
     return (coords, node_ct, connect)
 end
 
-
 """
     project_IJFH_to_unique_nodes
 
@@ -145,12 +145,12 @@ function project_IJFH_to_unique(var::ClimaCore.DataLayouts.IJFH)
  end
 unwrap_cc_coord(coord) = [coord[1] , coord[2], coord[3]]
 
-
 """
     project_unique_nodes_to_IJFH(var::Vector, nq::Int, ne::Int)
 
 transform a vector that follows the order of the Tempest unique GLL nodes to an IJFH data array
 """
+
 function project_unique_to_IJFH(var::Vector, nq::Int, ne::Int)
     num_elem = ne^2 * 6
     _, _, connect = get_cc_gll_connect(ne, nq)
@@ -172,9 +172,7 @@ end
 
 stores info on the TempestRemap map and the source and target data
 """
-struct LinearTempestRemap{T, S, M, C} # make consistent with / move to regridding.jl
-    target::T
-    source::S
+struct LinearTempestRemap{M, C} # make consistent with / move to regridding.jl
     map::M # linear mapping operator
     col::C # source indices mapping source GLL nodes to each overlap grid point
     row::C # target indices mapping source GLL nodes to each overlap grid point
@@ -185,21 +183,9 @@ end
 
 applies the remapping
 """
-# function remap!(target, R, source)
-#     map, col, row = (R.map, R.col, R.row)
-#     @assert size(map) == size(col) == size(row)
+function remap!(target, source, R)
 
-#     for (i, wt) in enumerate(map) # could resize to matrix and do matrix multiply?
-#         target[row[i]] += wt * source[col[i]]
-#     end
-
-# end
-function remap!(R)
-
-    target, source, map, col, row = (R.target, R.source, R.map, R.col, R.row)
-    
-    target, source, map, col, row = (RemapInfo.target, RemapInfo.source, RemapInfo.map, RemapInfo.col, RemapInfo.row)
-
+    map, col, row = (R.map, R.col, R.row)
     @assert size(map) == size(col) == size(row)
 
     source_unique = project_IJFH_to_unique(getfield(source,:values)) # maybe can operate on fields?
@@ -214,7 +200,10 @@ function remap!(R)
         target_unique[row[i]] += wt * source_unique[col[i]]
     end
 
-    target .= project_unique_to_IJFH(target_unique, nq_t, ne_t)
+    data_target = project_unique_to_IJFH(target_unique, nq_t, ne_t)
+    space_target = axes(target)
+
+    target .= Fields.Field(IJFH{eltype(target), nq_t}(data_target[:,:,1,:,:]), space_target)
 end
 
 
@@ -226,6 +215,7 @@ offline generation of remapping weights using TempestRemap
 function generate_map(remap_weights_filename::String, topology_source, topology_target, nq_source, nq_target)
 
     OUTPUT_DIR = dirname(remap_weights_filename)
+
     # write meshes
     meshfile_cc_source = joinpath(OUTPUT_DIR, "mesh_cc_source.g")
     write_exodus(meshfile_cc_source, topology_source)
