@@ -158,13 +158,20 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::Integer,
 )
+    if Topologies.isperiodic(space.topology)
+        idx = mod1(idx, length(space))
+    end
     space.center_local_geometry[idx]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Spaces.FiniteDifferenceSpace,
     idx::PlusHalf,
 )
-    space.face_local_geometry[idx.i + 1]
+    i = idx.i + 1
+    if Topologies.isperiodic(space.topology)
+        i = mod1(i, length(space))
+    end
+    space.face_local_geometry[i]
 end
 
 abstract type BoundaryCondition end
@@ -1854,6 +1861,10 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     idx::Integer,
 )
     field_data = Fields.field_values(bc)
+    space = axes(bc)
+    if Topologies.isperiodic(space.topology)
+        idx = mod1(idx, length(space))
+    end
     return field_data[idx]
 end
 
@@ -1863,7 +1874,12 @@ end
     idx::PlusHalf,
 )
     field_data = Fields.field_values(bc)
-    return field_data[idx.i + 1]
+    space = axes(bc)
+    i = idx.i + 1
+    if Topologies.isperiodic(space.topology)
+        i = mod1(i, length(space))
+    end
+    return field_data[i]
 end
 
 # unwap boxed scalars
@@ -2044,21 +2060,27 @@ end
 
 function apply_stencil!(field_out, bc)
     space = axes(bc)
-    lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-    rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-    li = left_idx(space)
-    lw = left_interior_window_idx(bc, space, lbw)::typeof(li)
-    ri = right_idx(space)
-    rw = right_interior_window_idx(bc, space, rbw)::typeof(ri)
-    @assert li <= lw <= rw <= ri
-    for idx in li:(lw - 1)
-        setidx!(field_out, idx, getidx(bc, lbw, idx))
-    end
-    for idx in lw:rw
-        setidx!(field_out, idx, getidx(bc, Interior(), idx))
-    end
-    for idx in (rw + 1):ri
-        setidx!(field_out, idx, getidx(bc, rbw, idx))
+    if Topologies.isperiodic(space.topology)
+        for idx in left_idx(space):(left_idx(space) + length(space) - 1)
+            setidx!(field_out, idx, getidx(bc, Interior(), idx))
+        end
+    else
+        lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+        rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+        li = left_idx(space)
+        lw = left_interior_window_idx(bc, space, lbw)::typeof(li)
+        ri = right_idx(space)
+        rw = right_interior_window_idx(bc, space, rbw)::typeof(ri)
+        @assert li <= lw <= rw <= ri
+        for idx in li:(lw - 1)
+            setidx!(field_out, idx, getidx(bc, lbw, idx))
+        end
+        for idx in lw:rw
+            setidx!(field_out, idx, getidx(bc, Interior(), idx))
+        end
+        for idx in (rw + 1):ri
+            setidx!(field_out, idx, getidx(bc, rbw, idx))
+        end
     end
     return field_out
 end

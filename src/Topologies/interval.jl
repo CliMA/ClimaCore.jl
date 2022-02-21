@@ -10,7 +10,7 @@ struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
 end
 
 function IntervalTopology(mesh::Meshes.IntervalMesh)
-    if isnothing(mesh.domain.boundary_names)
+    if Domains.isperiodic(mesh.domain)
         boundaries = NamedTuple()
     elseif mesh.domain.boundary_names[1] == mesh.domain.boundary_names[2]
         boundaries = NamedTuple{(mesh.domain.boundary_names[1],)}(1)
@@ -19,6 +19,9 @@ function IntervalTopology(mesh::Meshes.IntervalMesh)
     end
     IntervalTopology(mesh, boundaries)
 end
+
+isperiodic(topology::IntervalTopology) =
+    Domains.isperiodic(topology.mesh.domain)
 
 function Base.show(io::IO, topology::IntervalTopology)
     print(io, "IntervalTopology on ", topology.mesh)
@@ -35,7 +38,7 @@ function opposing_face(topology::IntervalTopology, elem, face)
     n = length(topology.mesh.faces) - 1
     if face == 1
         if elem == 1
-            if isempty(topology.mesh.boundaries) # periodic
+            if isperiodic(topology)
                 opelem = n
             else
                 return (0, 1, false)
@@ -46,7 +49,7 @@ function opposing_face(topology::IntervalTopology, elem, face)
         opface = 2
     else
         if elem == n
-            if isempty(topology.mesh.boundaries) # periodic
+            if isperiodic(topology)
                 opelem = 1
             else
                 return (0, 2, false)

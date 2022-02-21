@@ -46,8 +46,8 @@ function FiniteDifferenceSpace{S}(
     FT = eltype(CT)
     face_coordinates = collect(mesh.faces)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
-    nface = length(face_coordinates)
-    ncent = nface - 1
+    nface = length(face_coordinates) - Topologies.isperiodic(topology)
+    ncent = length(face_coordinates) - 1
     center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
     face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
     for i in 1:ncent
@@ -76,10 +76,21 @@ function FiniteDifferenceSpace{S}(
         coord = Geometry.component(face_coordinates[i], 1)
         if i == 1
             # bottom face
-            coord⁺ = Geometry.component(face_coordinates[2], 1)
-            J = coord⁺ - coord
-            WJ = J / 2
-        elseif i == nface
+            if Topologies.isperiodic(topology)
+                Δcoord⁺ =
+                    Geometry.component(face_coordinates[2], 1) -
+                    Geometry.component(face_coordinates[1], 1)
+                Δcoord⁻ =
+                    Geometry.component(face_coordinates[end], 1) -
+                    Geometry.component(face_coordinates[end - 1], 1)
+                J = (Δcoord⁺ + Δcoord⁻) / 2
+                WJ = J
+            else
+                coord⁺ = Geometry.component(face_coordinates[2], 1)
+                J = coord⁺ - coord
+                WJ = J / 2
+            end
+        elseif !Topologies.isperiodic(topology) && i == nface
             # top face
             coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
             J = coord - coord⁻
