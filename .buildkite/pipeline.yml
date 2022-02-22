@@ -375,6 +375,19 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: MPI Rising Bubble 3D hybrid invariant total energy"
+    key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_total_energy"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/bickleyjet/output/bubble3d_invariant_totalenergy/*"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 4
+
   - label: ":computer: Solid body CG sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
     command:

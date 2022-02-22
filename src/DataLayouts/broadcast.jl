@@ -24,6 +24,9 @@ abstract type DataSlab2DStyle{Nij} <: DataStyle end
 struct IJFStyle{Nij, A} <: DataSlab2DStyle{Nij} end
 DataStyle(::Type{IJF{S, Nij, A}}) where {S, Nij, A} =
     IJFStyle{Nij, parent_array_type(A)}()
+sourcetype(::IJFStyle{Nij, A}) where {Nij, A} = IJF{eltype(A), Nij, A}
+basetype(::IJFStyle{Nij, A}) where {Nij, A} = Base.eltype(A)
+basetype(::IJF{S, Nij, A}) where {S, Nij, A} = S
 
 abstract type Data2DStyle{Nij} <: DataStyle end
 struct IJFHStyle{Nij, A} <: Data2DStyle{Nij} end
