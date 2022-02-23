@@ -91,10 +91,9 @@ function ExtrudedFiniteDifferenceSpace(
             horizontal_space.local_geometry,
             vertical_space.face_local_geometry,
         )
-    if horizontal_space.ghost_geometry === nothing
-        center_ghost_geometry = nothing
-        face_ghost_geometry = nothing
-    else
+
+    if horizontal_space isa SpectralElementSpace2D &&
+       horizontal_space.ghost_geometry !== nothing
         center_ghost_geometry =
             product_geometry.(
                 horizontal_space.ghost_geometry,
@@ -105,6 +104,9 @@ function ExtrudedFiniteDifferenceSpace(
                 horizontal_space.ghost_geometry,
                 vertical_space.face_local_geometry,
             )
+    else
+        center_ghost_geometry = nothing
+        face_ghost_geometry = nothing
     end
     return ExtrudedFiniteDifferenceSpace(
         staggering,
