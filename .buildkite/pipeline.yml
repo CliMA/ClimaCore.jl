@@ -380,13 +380,13 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
     artifact_paths:
-      - "examples/bickleyjet/output/bubble3d_invariant_totalenergy/*"
+      - "examples/hybrid/output/bubble3d_invariant_etot/*"
     env:
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
       config: cpu
       queue: central
-      slurm_ntasks: 4
+      slurm_ntasks: 2
 
   - label: ":computer: Solid body CG sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
