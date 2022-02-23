@@ -12,31 +12,25 @@ export ⊞, ⊠, ⊟, tuplemap
 """
     tuplemap(fn::Function, tup)
 
-A simpler `map` impl for mapping function `fn` a tuple argument `tup`
+A `map` impl for mapping function `fn` a tuple argument `tup`
+
+Currently just calls `Base.map` behind the scenes but is left 
+stubbed out for potential specialization in the future.
 """
 @inline function tuplemap(fn::F, tup::Tuple) where {F}
-    N = length(tup)
-    ntuple(Val(N)) do I
-        Base.@_inline_meta
-        @inbounds elem = tup[I]
-        fn(elem)
-    end
+    map(fn, tup)
 end
 
 """
     tuplemap(fn::Function, tup1, tup2)
 
-A simpler `map` impl for mapping function `fn` over `tup1`, `tup2` tuple arguments
+A `map` impl for mapping function `fn` over `tup1`, `tup2` tuple arguments.
+
+Currently just calls `Base.map` behind the scenes but is left 
+stubbed out for potential specialization in the future.
 """
 @inline function tuplemap(fn::F, tup1::Tuple, tup2::Tuple) where {F}
-    N1 = length(tup1)
-    N2 = length(tup2)
-    ntuple(Val(min(N1, N2))) do I
-        Base.@_inline_meta
-        @inbounds elem1 = tup1[I]
-        @inbounds elem2 = tup2[I]
-        fn(elem1, elem2)
-    end
+    map(fn, tup1, tup2)
 end
 
 """
@@ -86,6 +80,7 @@ const ⊠ = rmul
 
 Recursively add elements of `X` and `Y`.
 """
+radd(X) = X
 radd(X, Y) = rmap(+, X, Y)
 radd(w::Number, X) = rmap(x -> w + x, X)
 radd(X, w::Number) = rmap(x -> x + w, X)

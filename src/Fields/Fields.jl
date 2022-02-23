@@ -1,15 +1,16 @@
 module Fields
 
-import ..slab, ..slab_args, ..column, ..column_args
+import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
+import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
-import LinearAlgebra
+import LinearAlgebra, Statistics
 
 """
     Field(values, space)
@@ -71,6 +72,7 @@ const CubedSphereSpectralElementField2D{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
 
+
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)
 
@@ -86,7 +88,7 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline Base.getproperty(field::Field, name::Integer) =
     Field(getproperty(field_values(field), name), axes(field))
 
-Base.eltype(field::Field) = eltype(field_values(field))
+Base.eltype(::Type{<:Field{V}}) where {V} = eltype(V)
 Base.parent(field::Field) = parent(field_values(field))
 
 # to play nice with DifferentialEquations; may want to revisit this
@@ -94,28 +96,40 @@ Base.parent(field::Field) = parent(field_values(field))
 Base.size(field::Field) = ()
 Base.length(field::Fields.Field) = 1
 
-slab(field::Field, inds...) =
-    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
-
 column(field::ExtrudedFiniteDifferenceField, inds...) =
     Field(column(field_values(field), inds...), column(axes(field), inds...))
 column(field::SpectralElementField, inds...) =
     column(field_values(field), inds...)
+Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
+# Methods for Slab and Column fields
 const SlabField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab}
 
 const SlabField1D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab1D}
+} where {
+    V <: DataLayouts.DataSlab1D,
+    S <: Spaces.SpectralElementSpaceSlab1D,
+}
 
 const SlabField2D{V, S} = Field{
     V,
     S,
-} where {V <: AbstractData, S <: Spaces.SpectralElementSpaceSlab2D}
+} where {
+    V <: DataLayouts.DataSlab2D,
+    S <: Spaces.SpectralElementSpaceSlab2D,
+}
 
-Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
+const ColumnField{V, S} =
+    Field{V, S} where {V <: DataLayouts.DataColumn, S <: Spaces.AbstractSpace}
+
+slab(field::Field, inds...) =
+    Field(slab(field_values(field), inds...), slab(axes(field), inds...))
+
+column(field::Field, inds...) =
+    Field(column(field_values(field), inds...), column(axes(field), inds...))
 
 # nice printing
 # follow x-array like printing?
@@ -159,7 +173,6 @@ Base.similar(field::Field) = Field(similar(field_values(field)), axes(field))
 Base.similar(field::Field, ::Type{T}) where {T} =
     Field(similar(field_values(field), T), axes(field))
 
-
 # fields on different spaces
 function Base.similar(field::Field, space_to::AbstractSpace)
     similar(field, space_to, eltype(field))
@@ -174,12 +187,21 @@ end
 
 Base.copy(field::Field) = Field(copy(field_values(field)), axes(field))
 
+Base.deepcopy_internal(field::Field, stackdict::IdDict) =
+    Field(Base.deepcopy_internal(field_values(field), stackdict), axes(field))
+
 function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
     @assert axes(dest) == axes(src)
     copyto!(field_values(dest), field_values(src))
     return dest
 end
 
+
+"""
+    zeros(space::AbstractSpace)
+
+Construct a field on `space` that is zero everywhere.
+"""
 function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
     data = parent(field)
@@ -188,6 +210,11 @@ function Base.zeros(::Type{FT}, space::AbstractSpace) where {FT}
 end
 Base.zeros(space::AbstractSpace) = zeros(Spaces.undertype(space), space)
 
+"""
+    ones(space::AbstractSpace)
+
+Construct a field on `space` that is one everywhere.
+"""
 function Base.ones(::Type{FT}, space::AbstractSpace) where {FT}
     field = Field(FT, space)
     data = parent(field)
@@ -290,6 +317,21 @@ function Spaces.weighted_dss!(field::Field)
     Spaces.weighted_dss!(field_values(field), axes(field))
     return field
 end
+function Spaces.weighted_dss!(field::Field, comms_ctx)
+    Spaces.weighted_dss!(field_values(field), axes(field), comms_ctx)
+    return field
+end
 
+
+function level(field::CenterExtrudedFiniteDifferenceField, v::Int)
+    hspace = level(axes(field), v)
+    data = level(field_values(field), v)
+    Field(data, hspace)
+end
+function level(field::FaceExtrudedFiniteDifferenceField, v::PlusHalf)
+    hspace = level(axes(field), v)
+    data = level(field_values(field), v.i + 1)
+    Field(data, hspace)
+end
 
 end # module

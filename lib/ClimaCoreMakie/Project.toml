@@ -1,0 +1,13 @@
+name = "ClimaCoreMakie"
+uuid = "908f55d8-4145-4867-9c14-5dad1a479e4d"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
+version = "0.2.0"
+
+[deps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[compat]
+ClimaCore = "0.7"
+Makie = "0.15"
+julia = "1.7"

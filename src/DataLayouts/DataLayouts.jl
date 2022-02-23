@@ -14,10 +14,11 @@ indexes the underlying array as `[i,j,k,f,v,h]`
 """
 module DataLayouts
 
-import Base: @propagate_inbounds
+import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray
+import ClimaComms
 
-import ..slab, ..slab_args, ..column, ..column_args
+import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH
 
 include("struct.jl")
@@ -118,7 +119,7 @@ abstract type Data3D{S, Nij, Nk} <: AbstractData{S} end
 
 # Generic AbstractData methods
 
-Base.eltype(::AbstractData{S}) where {S} = S
+Base.eltype(::Type{<:AbstractData{S}}) where {S} = S
 @inline function Base.propertynames(::AbstractData{S}) where {S}
     filter(name -> sizeof(fieldtype(S, name)) > 0, fieldnames(S))
 end
@@ -313,6 +314,19 @@ end
     dataview = @inbounds view(parent(data), :, :, :, h)
     IJF{S, Nij}(dataview)
 end
+
+function gather(
+    ctx::ClimaComms.AbstractCommsContext,
+    data::IJFH{S, Nij},
+) where {S, Nij}
+    gatherdata = ClimaComms.gather(ctx, parent(data))
+    if ClimaComms.iamroot(ctx)
+        IJFH{S, Nij}(gatherdata)
+    else
+        nothing
+    end
+end
+
 
 # ==================
 # Data1D DataLayout
@@ -769,20 +783,48 @@ end
     VIJFH{SS, Nij}(dataview)
 end
 
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function slab(data::VIJFH{S, Nij}, v, h) where {S, Nij}
-    @boundscheck (
-        1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 5)
-    ) || throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), v, :, :, :, h)
+    array = parent(data)
+    Nv = size(array, 1)
+    Nh = size(array, 5)
+    @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
+                 throw(BoundsError(data, (v, h)))
+    Nf = size(array, 4)
+    dataview = @inbounds SubArray(
+        array,
+        (
+            v,
+            Base.Slice(Base.OneTo(Nij)),
+            Base.Slice(Base.OneTo(Nij)),
+            Base.Slice(Base.OneTo(Nf)),
+            h,
+        ),
+    )
     IJF{S, Nij}(dataview)
 end
 
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function column(data::VIJFH{S, Nij}, i, j, h) where {S, Nij}
-    @boundscheck (
-        1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= size(parent(data), 5)
-    ) || throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), :, i, j, :, h)
+    array = parent(data)
+    Nh = size(array, 5)
+    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= Nh) ||
+                 throw(BoundsError(data, (i, j, h)))
+    Nv = size(array, 1)
+    Nf = size(array, 4)
+    dataview = @inbounds SubArray(
+        array,
+        (Base.Slice(Base.OneTo(Nv)), i, j, Base.Slice(Base.OneTo(Nf)), h),
+    )
     VF{S}(dataview)
+end
+
+@inline function level(data::VIJFH{S, Nij}, v) where {S, Nij}
+    array = parent(data)
+    Nv = size(array, 1)
+    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
+    dataview = @inbounds view(array, v, :, :, :, :)
+    IJFH{S, Nij}(dataview)
 end
 
 @propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex{5})
@@ -861,26 +903,56 @@ end
     VIFH{SS, Ni}(dataview)
 end
 
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function slab(data::VIFH{S, Ni}, v, h) where {S, Ni}
-    @boundscheck (
-        1 <= v <= size(parent(data), 1) && 1 <= h <= size(parent(data), 4)
-    ) || throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), v, :, :, h)
+    array = parent(data)
+    Nv = size(array, 1)
+    Nh = size(array, 4)
+    @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
+                 throw(BoundsError(data, (v, h)))
+    Nf = size(array, 3)
+    dataview = @inbounds SubArray(
+        array,
+        (v, Base.Slice(Base.OneTo(Ni)), Base.Slice(Base.OneTo(Nf)), h),
+    )
     IF{S, Ni}(dataview)
 end
 
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function column(data::VIFH{S, Ni}, i, h) where {S, Ni}
-    @boundscheck (1 <= i <= Ni && 1 <= h <= size(parent(data), 4)) ||
+    array = parent(data)
+    Nh = size(array, 4)
+    @boundscheck (1 <= i <= Ni && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), :, i, :, h)
+    Nv = size(array, 1)
+    Nf = size(array, 3)
+    dataview = @inbounds SubArray(
+        array,
+        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
+    )
     VF{S}(dataview)
 end
 
 @inline function column(data::VIFH{S, Ni}, i, j, h) where {S, Ni}
-    @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= size(parent(data), 4)) ||
+    array = parent(data)
+    Nh = size(array, 4)
+    @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), :, i, :, h)
+    Nv = size(array, 1)
+    Nf = size(array, 3)
+    dataview = @inbounds SubArray(
+        array,
+        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
+    )
     VF{S}(dataview)
+end
+
+@inline function level(data::VIFH{S, Nij}, v) where {S, Nij}
+    array = parent(data)
+    Nv = size(array, 1)
+    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
+    dataview = @inbounds view(array, v, :, :, :)
+    IFH{S, Nij}(dataview)
 end
 
 @propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)

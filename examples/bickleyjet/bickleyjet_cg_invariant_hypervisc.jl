@@ -1,16 +1,36 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-using LinearAlgebra, IntervalSets
+import ClimaCore:
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    DataLayouts
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+using Logging
+#ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+if usempi
+    using ClimaComms
+    using ClimaCommsMPI
+    const Context = ClimaCommsMPI.MPICommsContext
+    const pid, nprocs = ClimaComms.init(Context)
+
+    # log output only from root process
+    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    atexit() do
+        global_logger(prev_logger)
+    end
+else
+    import TerminalLoggers
+    global_logger(TerminalLoggers.TerminalLogger())
+end
 
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
@@ -23,22 +43,38 @@ const parameters = (
 )
 
 domain = Domains.RectangleDomain(
-    Geometry.XPoint(-2π)..Geometry.XPoint(2π),
-    Geometry.YPoint(-2π)..Geometry.YPoint(2π),
-    x1periodic = true,
-    x2periodic = true,
+    Domains.IntervalDomain(
+        Geometry.XPoint(-2π),
+        Geometry.XPoint(2π),
+        periodic = true,
+    ),
+    Domains.IntervalDomain(
+        Geometry.YPoint(-2π),
+        Geometry.YPoint(2π),
+        periodic = true,
+    ),
 )
-
 n1, n2 = 16, 16
 Nq = 4
-mesh = Meshes.EquispacedRectangleMesh(domain, n1, n2)
-grid_topology = Topologies.GridTopology(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
-space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+mesh = Meshes.RectilinearMesh(domain, n1, n2)
+if usempi
+    grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+    global_grid_topology = Topologies.Topology2D(mesh)
+    Nf = 4
+    Nv = 1
+    comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+    global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
+else
+    comms_ctx = nothing
+    grid_topology = Topologies.Topology2D(mesh)
+    global_space = space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+end
 
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
-    @unpack x, y = coord
+    x, y = coord.x, coord.y
     # set initial state
     ρ = p.ρ₀
 
@@ -65,17 +101,13 @@ end
 y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
 function energy(state, p, local_geometry)
-    @unpack ρ, u = state
+    ρ, u = state.ρ, state.u
     return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
 end
 
-function total_energy(y, parameters)
-    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(space)))
-end
-
 function rhs!(dydt, y, _, t)
-
-    @unpack D₄, g = parameters
+    D₄ = parameters.D₄
+    g = parameters.g
 
     sdiv = Operators.Divergence()
     wdiv = Operators.WeakDivergence()
@@ -85,15 +117,20 @@ function rhs!(dydt, y, _, t)
     wcurl = Operators.WeakCurl()
 
     # compute hyperviscosity first
-    @. dydt.u = wgrad(sdiv(y.u)) - Geometry.Covariant12Vector(wcurl(curl(y.u)))
-    @. dydt.ρθ = wdiv(grad(y.ρθ))
+    @. dydt.u =
+        wgrad(sdiv(y.u)) -
+        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+    @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dydt, comms_ctx)
 
     @. dydt.u =
-        -D₄ *
-        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
-    @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
+        -D₄ * (
+            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            )
+        )
+    @. dydt.ρθ = -D₄ * wdiv(y.ρ * grad(dydt.ρθ))
 
     # add in pieces
     @. begin
@@ -101,16 +138,16 @@ function rhs!(dydt, y, _, t)
         dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dydt, comms_ctx)
     return dydt
 end
 
-
 dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
-
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+#prob = ODEProblem(rhs!, y0, (0.0, 2.0))
+
 sol = solve(
     prob,
     SSPRK33(),
@@ -120,33 +157,53 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
-ENV["GKSwstype"] = "nul"
-import Plots
-Plots.GRBackend()
-
-dirname = "cg_invariant_hypervisc"
-path = joinpath(@__DIR__, "output", dirname)
-mkpath(path)
-
-anim = Plots.@animate for u in sol.u
-    Plots.plot(u.ρθ, clim = (-1, 1))
-end
-Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
-
-Es = [total_energy(u, parameters) for u in sol.u]
-
-Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
-
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+sol_global = []
+if usempi
+    for sol_step in sol.u
+        sol_step_values_global =
+            DataLayouts.gather(comms_ctx, Fields.field_values(sol_step))
+        if ClimaComms.iamroot(Context)
+            sol_step_global = Fields.Field(sol_step_values_global, global_space)
+            push!(sol_global, sol_step_global)
+        end
     end
 end
 
-linkfig(
-    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
-    "Total Energy",
-)
+ENV["GKSwstype"] = "nul"
+using ClimaCorePlots, Plots
+Plots.GRBackend()
+dir = "cg_invariant_hypervisc"
+path = joinpath(@__DIR__, "output", dir)
+mkpath(path)
+solution = usempi ? sol_global : sol.u
+
+function total_energy(y, parameters)
+    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(global_space)))
+end
+
+if !usempi || (usempi && ClimaComms.iamroot(Context))
+    anim = Plots.@animate for u in solution
+        Plots.plot(u.ρθ, clim = (-1, 1))
+    end
+    Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+
+    Es = [total_energy(u, parameters) for u in solution]
+
+    Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
+    end
+
+    linkfig(
+        relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+        "Total Energy",
+    )
+end
+
+usempi && exit()

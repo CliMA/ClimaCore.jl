@@ -1,6 +1,6 @@
 using ..Spaces:
     AbstractSpace, SpectralElementSpace1D, SpectralElementSpace2D, Quadratures
-using ..Topologies: GridTopology, IntervalTopology
+using ..Topologies: Topology2D, IntervalTopology
 using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
@@ -35,7 +35,7 @@ end
 """
     remap!(target_field::Field, R::LinearRemap, source_field::Field)
 
-Applies the remapping operator `R` to `source_field`. After the call `target_field` contains the solution.
+Applies the remapping operator `R` to `source_field` and stores the solution in `target_field`.
 """
 function remap!(target_field::Field, R::LinearRemap, source_field::Field)
     mul!(vec(parent(target_field)), R.map, vec(parent(source_field)))
@@ -45,26 +45,24 @@ end
 """
     linear_remap_op(target::AbstractSpace, source::AbstractSpace)
 
-Computes linear remapping operator `R` for remapping from `source_topo` to `target_topo` topologies.
+Computes linear remapping operator `R` for remapping from `source` to `target` spaces.
 
-Entry `R_{ij}` gives the contribution weight to the target element `i` from overlapping source
-element `j`.
+Entry `R_{ij}` gives the contribution weight to the target node `i` from
+source node `j`; nodes are indexed by their global position, determined
+by both element index and nodal order within the element.
 """
 function linear_remap_op(target::AbstractSpace, source::AbstractSpace)
     J = 1.0 ./ local_weights(target) # workaround for julia #26561
-    W = overlap_weights(target, source)
+    W = overlap(target, source)
     return W .* J
 end
 
 """
-    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace1D{<:GridTopology, Quadratures.GL{1}},
-            S <: SpectralElementSpace1D{<:GridTopology, Quadratures.GL{1}}}
+    overlap(target, source)
 
-Computes local weights of the overlap mesh for `source_topo` to `target_topo` topologies.
-
-Returns sparse matrix `W` where entry `W_{ij}` gives the area that target element `i` overlaps source element `j`.
+Computes local weights of the overlap mesh for `source` to `target` spaces.
 """
-function overlap_weights(
+function overlap(
     target::T,
     source::S,
 ) where {
@@ -78,20 +76,93 @@ function overlap_weights(
     return X_ov
 end
 
-"""
-    overlap_weights(target::T, source::S) where {T <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
-            S <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}}}
-
-Computes local weights of the overlap mesh for `source_topo` to `target_topo` topologies.
-
-Returns sparse matrix `W` where entry `W_{ij}` gives the area that target element `i` overlaps source element `j`.
-"""
 function overlap_weights(
     target::T,
     source::S,
 ) where {
-    T <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
-    S <: SpectralElementSpace2D{<:GridTopology, Quadratures.GL{1}},
+    T <: SpectralElementSpace1D{<:IntervalTopology},
+    S <: SpectralElementSpace1D{<:IntervalTopology},
+}
+    FT = Spaces.undertype(source)
+    target_topo = Spaces.topology(target)
+    source_topo = Spaces.topology(source)
+    nelems_t = Topologies.nlocalelems(target)
+    nelems_s = Topologies.nlocalelems(source)
+    QS_t = Spaces.quadrature_style(target)
+    QS_s = Spaces.quadrature_style(source)
+    Nq_t = Quadratures.degrees_of_freedom(QS_t)
+    Nq_s = Quadratures.degrees_of_freedom(QS_s)
+    J_ov = spzeros(nelems_t * Nq_t, nelems_s * Nq_s)
+
+    # Calculate element overlap pattern
+    # X_ov[i,j] = overlap length between target elem i and source elem j
+    for i in 1:nelems_t
+        vertices_i = Topologies.vertex_coordinates(target_topo, i)
+        min_i, max_i = Geometry.component(vertices_i[1], 1),
+        Geometry.component(vertices_i[2], 1)
+        for j in 1:nelems_s # elems coincide w nodes in FV source
+            vertices_j = Topologies.vertex_coordinates(source_topo, j)
+            # get interval for quadrature
+            min_j, max_j = Geometry.component(vertices_j[1], 1),
+            Geometry.component(vertices_j[2], 1)
+            min_ov, max_ov = max(min_i, min_j), min(max_i, max_j)
+            if max_ov <= min_ov
+                continue
+            end
+
+            # use smaller order for overlap quadrature
+            ξ_s, w_s = Quadratures.quadrature_points(FT, QS_s)
+            ξ_t, w_t = Quadratures.quadrature_points(FT, QS_t)
+            x_ov =
+                FT(0.5) * (min_ov + max_ov) .+ FT(0.5) * (max_ov - min_ov) * ξ_t
+            w = w_t
+            x_t = FT(0.5) * (min_i + max_i) .+ FT(0.5) * (max_i - min_i) * ξ_t
+            x_s = FT(0.5) * (min_j + max_j) .+ FT(0.5) * (max_j - min_j) * ξ_s
+
+            # column k of I_mat gives the k-th target basis function defined on the overlap element
+            I_mat_t = Quadratures.interpolation_matrix(x_ov, x_t)
+            I_mat_s = Quadratures.interpolation_matrix(x_ov, x_s)
+
+            for k in 1:Nq_t
+                targ_idx = Nq_t * (i - 1) + k # global nodal index
+                for l in 1:Nq_s
+                    src_idx = Nq_s * (j - 1) + l
+                    # (integral of src_basis * tgt_basis on overlap) / (reference elem length * overlap elem length)
+                    J_ov[targ_idx, src_idx] =
+                        (w' * (I_mat_t[:, k] .* I_mat_s[:, l])) ./ 2 *
+                        (max_ov - min_ov)
+                end
+            end
+        end
+    end
+    return J_ov
+end
+
+function overlap(
+    target::T,
+    source::S,
+) where {
+    T <: SpectralElementSpace1D{<:IntervalTopology},
+    S <: SpectralElementSpace1D{<:IntervalTopology},
+}
+    QS_t = Spaces.quadrature_style(target)
+    QS_s = Spaces.quadrature_style(source)
+    Nq_t = Quadratures.degrees_of_freedom(QS_t)
+    Nq_s = Quadratures.degrees_of_freedom(QS_s)
+    if Nq_t >= Nq_s
+        return overlap_weights(target, source)
+    else
+        J_ov = overlap_weights(source, target)
+        return J_ov'
+    end
+end
+
+function overlap(
+    target::T,
+    source::S,
+) where {
+    T <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}},
+    S <: SpectralElementSpace2D{<:Topology2D, Quadratures.GL{1}},
 }
     # Calculate element overlap pattern in x-dimension
     # X_ov[i,j] = overlap length along x-dimension between target elem i and source elem j
@@ -167,8 +238,10 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.GridTopology) = topology.mesh.n1
-nyelems(topology::Topologies.GridTopology) = topology.mesh.n2
+nxelems(topology::Topologies.Topology2D) =
+    size(Meshes.elements(topology.mesh), 1)
+nyelems(topology::Topologies.Topology2D) =
+    size(Meshes.elements(topology.mesh), 1)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)
@@ -186,13 +259,7 @@ associated basis function.
 """
 function local_weights(space::AbstractSpace)
     wj = space.local_geometry.WJ
-    FT = eltype(wj)
-    n = length(wj)
-    J = zeros(FT, n, 1)
-    for i in 1:n
-        J[i] = slab_value(wj, i)
-    end
-    return J
+    return vec(parent(wj))
 end
 
 slab_value(data::DataLayouts.IJFH, i) = slab(data, i)[1, 1]

@@ -1,5 +1,7 @@
 env:
-  JULIA_VERSION: "1.7.0"
+  JULIA_VERSION: "1.7.1"
+  MPICH_VERSION: "4.0.0"
+  OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
 
@@ -10,20 +12,16 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\")'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples/column -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/column -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "julia --project=perf -e 'using Pkg; Pkg.develop(path=\".\")'"
+      - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=perf -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
-
-      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/hybrid -e 'using Pkg; Pkg.precompile(;strict=true)'"
-
-      - "julia --project=examples/sphere -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples/sphere -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
@@ -66,7 +64,7 @@ steps:
       JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
-
+ 
   - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
@@ -90,7 +88,7 @@ steps:
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
     command:
-      - "julia --color=yes --project=examples/column examples/column/heat.jl"
+      - "julia --color=yes --project=examples examples/column/heat.jl"
     artifact_paths:
       - "examples/column/output/heat/*"
     agents:
@@ -101,7 +99,7 @@ steps:
   - label: ":computer: Column Advection Step Eq"
     key: "cpu_column_step_advect"
     command:
-      - "julia --color=yes --project=examples/column examples/column/step.jl"
+      - "julia --color=yes --project=examples examples/column/step.jl"
     artifact_paths:
       - "examples/column/output/advect_step_function/*"
     agents:
@@ -112,7 +110,7 @@ steps:
   - label: ":computer: Column Advection Eq"
     key: "cpu_column_advect"
     command:
-      - "julia --color=yes --project=examples/column examples/column/advect.jl"
+      - "julia --color=yes --project=examples examples/column/advect.jl"
     artifact_paths:
       - "examples/column/output/advect/*"
     agents:
@@ -123,7 +121,7 @@ steps:
   - label: ":computer: Column Advection Diffusion Eq"
     key: "cpu_column_advect_diff"
     command:
-      - "julia --color=yes --project=examples/column examples/column/advect_diffusion.jl"
+      - "julia --color=yes --project=examples examples/column/advect_diffusion.jl"
     artifact_paths:
       - "examples/column/output/advect_diffusion/*"
     agents:
@@ -134,7 +132,7 @@ steps:
   - label: ":computer: Column Ekman Eq"
     key: "cpu_column_ekman"
     command:
-      - "julia --color=yes --project=examples/column examples/column/ekman.jl"
+      - "julia --color=yes --project=examples examples/column/ekman.jl"
     artifact_paths:
       - "examples/column/output/ekman/*"
     agents:
@@ -145,7 +143,7 @@ steps:
   - label: ":computer: Column Hydrostatic Ekman Eq"
     key: "cpu_column_hydrostatic_ekman"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic_ekman.jl"
+      - "julia --color=yes --project=examples examples/column/hydrostatic_ekman.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic_ekman/*"
     agents:
@@ -156,7 +154,7 @@ steps:
   - label: ":computer: Column Wave Eq"
     key: "cpu_column_wave"
     command:
-      - "julia --color=yes --project=examples/column examples/column/wave.jl"
+      - "julia --color=yes --project=examples examples/column/wave.jl"
     artifact_paths:
       - "examples/column/output/wave/*"
     agents:
@@ -167,9 +165,20 @@ steps:
   - label: ":computer: Column Hydrostatic Balance Eq"
     key: "cpu_column_hydrostatic"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic.jl"
+      - "julia --color=yes --project=examples examples/column/hydrostatic.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Hydrostatic Balance Eq with discretely balanced initial condition"
+    key: "cpu_column_hydrostatic_discrete"
+    command:
+      - "julia --color=yes --project=examples examples/column/hydrostatic_discrete.jl"
+    artifact_paths:
+      - "examples/column/output/hydrostatic_discrete/*"
     agents:
       config: cpu
       queue: central
@@ -178,9 +187,11 @@ steps:
   - label: ":computer: Column Hydrostatic Balance Eq - implicit"
     key: "cpu_column_hydrostatic_implicit"
     command:
-      - "julia --color=yes --project=examples/column examples/column/hydrostatic_implicit.jl"
+      - "julia --color=yes --project=examples examples/column/hydrostatic_implicit.jl"
     artifact_paths:
       - "examples/column/output/hydrostatic_implicit/*"
+    soft_fail:
+      - exit_status: 1
     agents:
       config: cpu
       queue: central
@@ -189,7 +200,7 @@ steps:
   - label: ":computer: Bickley jet CG"
     key: "cpu_bickleyjet_cg"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg.jl"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg/*"
     agents:
@@ -200,7 +211,7 @@ steps:
   - label: ":computer: Bickley jet CG unstructured mesh"
     key: "cpu_bickleyjet_cg_unsmesh"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_unsmesh.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_unsmesh/*"
     agents:
@@ -211,7 +222,7 @@ steps:
   - label: ":computer: Bickley jet CG vector invariant hyperviscosity"
     key: "cpu_bickleyjet_cg_invariant_hypervisc"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
     agents:
@@ -219,10 +230,23 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: MPI Bickley jet CG vector invariant hyperviscosity"
+    key: "cpu_mpi_bickleyjet_cg_invariant_hypervisc"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+    artifact_paths:
+      - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 4
+
   - label: ":computer: Bickley jet DG rusanov"
     key: "cpu_bickleyjet_dg_rusanov"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl rusanov"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_dg.jl rusanov"
     artifact_paths:
       - "examples/bickleyjet/output/dg_rusanov/*"
     agents:
@@ -233,7 +257,7 @@ steps:
   - label: ":computer: Bickley jet DG roe"
     key: "cpu_bickleyjet_dg_roe"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_dg.jl roe"
     artifact_paths:
       - "examples/bickleyjet/output/dg_roe/*"
     agents:
@@ -244,9 +268,42 @@ steps:
   - label: ":computer: Bickley jet DG roe noslip"
     key: "cpu_bickleyjet_dg_roe_noslip"
     command:
-      - "julia --color=yes --project=examples/bickleyjet examples/bickleyjet/bickleyjet_dg.jl roe noslip"
+      - "julia --color=yes --project=examples examples/bickleyjet/bickleyjet_dg.jl roe noslip"
     artifact_paths:
       - "examples/bickleyjet/output/dg_roe_noslip/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter cosine bells"
+    key: "cpu_advection_cg_plane_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cosine_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter Gaussian bells"
+    key: "cpu_advection_cg_plane_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl gaussian_bells"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_gaussian_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter cylinders"
+    key: "cpu_advection_cg_plane_limiter_cylinders"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl cylinders"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cylinders_D0/*"
     agents:
       config: cpu
       queue: central
@@ -255,7 +312,7 @@ steps:
   - label: ":computer: Rising Bubble 2D hybrid"
     key: "cpu_rising_bubble_2d_hybrid"
     command:
-      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_2d.jl"
+      - "julia --color=yes --project=examples examples/hybrid/bubble_2d.jl"
     artifact_paths:
       - "examples/hybrid/output/bubble_2d/*"
     agents:
@@ -266,9 +323,53 @@ steps:
   - label: ":computer: Rising Bubble 3D hybrid"
     key: "cpu_rising_bubble_3d_hybrid"
     command:
-      - "julia --color=yes --project=examples/hybrid examples/hybrid/bubble_3d.jl"
+      - "julia --color=yes --project=examples examples/hybrid/bubble_3d.jl"
     artifact_paths:
       - "examples/hybrid/output/bubble_3d/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble hybrid invariant potential temperature"
+    key: "cpu_rising_bubble_hybrid_invariant_rho_theta"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble_invariant.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble_invariant/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble hybrid invariant total energy"
+    key: "cpu_rising_bubble_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble2d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble2d_invariant_etot/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Rising Bubble 3D hybrid invariant"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_potential_temperature"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble 3D hybrid invariant total energy"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant_etot/*"
     agents:
       config: cpu
       queue: central
@@ -277,7 +378,7 @@ steps:
   - label: ":computer: Solid body CG sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl"
+      - "julia --color=yes --project=examples examples/sphere/solidbody.jl"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha0/*"
     agents:
@@ -288,7 +389,7 @@ steps:
   - label: ":computer: Solid body CG sphere cosine bell alpha45"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl cosine_bell alpha45"
+      - "julia --color=yes --project=examples examples/sphere/solidbody.jl cosine_bell alpha45"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_cosine_bell_alpha45/*"
     agents:
@@ -299,7 +400,7 @@ steps:
   - label: ":computer: Solid body CG sphere gaussian bell alpha0"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl gaussian_bell"
+      - "julia --color=yes --project=examples examples/sphere/solidbody.jl gaussian_bell"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha0/*"
     agents:
@@ -310,9 +411,42 @@ steps:
   - label: ":computer: Solid body CG sphere gaussian bell alpha45"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/solidbody.jl gaussian_bell alpha45"
+      - "julia --color=yes --project=examples examples/sphere/solidbody.jl gaussian_bell alpha45"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_solidbody_gaussian_bell_alpha45/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere limiter cosine bells"
+    key: "cpu_solidbody_cg_sphere_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_cosine_bells/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere limiter Gaussian bells"
+    key: "cpu_solidbody_cg_sphere_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl gaussian_bells"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_gaussian_bells/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Solid body CG sphere limiter cylinders"
+    key: "cpu_solidbody_cg_sphere_limiter_cylinders"
+    command:
+      - "julia --color=yes --project=examples examples/sphere/opt_limiters_solidbody.jl cylinders"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_solidbody_limiter_cylinders/*"
     agents:
       config: cpu
       queue: central
@@ -321,7 +455,7 @@ steps:
   - label: ":computer: Steady-state shallow water 2D CG sphere alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha0/*"
     agents:
@@ -332,7 +466,7 @@ steps:
   - label: ":computer: Steady-state shallow water 2D CG sphere alpha45"
     key: "cpu_shallowwater_2d_cg_sphere_alpha45"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state alpha45"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state alpha45"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_steady_state_alpha45/*"
     agents:
@@ -343,7 +477,7 @@ steps:
   - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state_compact"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha0/*"
     agents:
@@ -354,7 +488,7 @@ steps:
   - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha60"
     key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl steady_state_compact alpha60"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state_compact alpha60"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_steady_state_compact_alpha60/*"
     agents:
@@ -365,7 +499,7 @@ steps:
   - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
     agents:
@@ -376,7 +510,7 @@ steps:
   - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl barotropic_instability alpha30"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability alpha30"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha30/*"
     agents:
@@ -387,7 +521,7 @@ steps:
   - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
     key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl mountain"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl mountain"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_mountain_alpha0/*"
     agents:
@@ -398,9 +532,153 @@ steps:
   - label: ":computer: Rossby Haurwitz 2D CG sphere"
     key: "cpu_rossbyhaurwitz_2d_cg_sphere"
     command:
-      - "julia --color=yes --project=examples/sphere examples/sphere/shallow_water.jl rossby_haurwitz"
+      - "julia --color=yes --project=examples examples/sphere/shallow_water.jl rossby_haurwitz"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_rossby_haurwitz_alpha0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: 3D deformation flow"
+    key: "cpu_3d_deformation_flow"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/deformation_flow.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/deformation_flow/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: baroclinic wave (ρe)"
+    key: "cpu_baroclinic_wave_rho_e"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/baroclinic_wave_rhoe/*"
+    env:
+      TEST_NAME: "baroclinic_wave_rhoe"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: baroclinic wave (ρθ)"
+    key: "cpu_baroclinic_wave_rho_theta"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/baroclinic_wave_rhotheta/*"
+    env:
+      TEST_NAME: "baroclinic_wave_rhotheta"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: nonhydrostatic gravity wave"
+    key: "cpu_nonhydrostatic_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/nonhydrostatic_gravity_wave.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/nonhydrostatic_gravity_wave/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: solid body rotation"
+    key: "cpu_solid_body_rotation"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/solid_body_rotation_3d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: hydrostatically and geostrophically balanced flow (ρe)"
+    key: "cpu_balanced_flow_rho_e"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/balanced_flow_rhoe/*"
+    env:
+      TEST_NAME: "balanced_flow_rhoe"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: hydrostatically and geostrophically balanced flow (ρθ)"
+    key: "cpu_balanced_flow_rho_theta"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/balanced_flow_rhotheta/*"
+    env:
+      TEST_NAME: "balanced_flow_rhotheta"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: dry held-suarez (ρe)"
+    key: "cpu_held_suarez_rho_e"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/held_suarez_rhoe/*"
+    env:
+      TEST_NAME: "held_suarez_rhoe"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: dry held-suarez (ρθ)"
+    key: "cpu_held_suarez_rho_theta"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/held_suarez_rhotheta/*"
+    env:
+      TEST_NAME: "held_suarez_rhotheta"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Allocations analysis"
+    key: "cpu_allocations"
+    command:
+      - "julia --color=yes --project=perf perf/allocs.jl"
+    artifact_paths:
+      - "perf/allocations_output/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Flamegraph profile"
+    key: "cpu_flamegraph"
+    depends_on: "cpu_allocations"
+    allow_dependency_failure: true
+    env:
+      CI_PERF_CPUPROFILE: "true"
+    command:
+      - "julia --color=yes --project=perf perf/flame.jl"
+    artifact_paths:
+      - "perf/output/*.cpuprofile"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Benchmark step!"
+    key: "cpu_benchmark"
+    command:
+      - "julia --color=yes --project=perf perf/benchmark.jl"
     agents:
       config: cpu
       queue: central

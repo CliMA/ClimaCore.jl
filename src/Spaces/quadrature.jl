@@ -78,6 +78,9 @@ Uniformly-spaced quadrature.
 """
 struct Uniform{Nq} <: QuadratureStyle end
 
+@inline polynomial_degree(::Uniform{Nq}) where {Nq} = Int(Nq - 1)
+@inline degrees_of_freedom(::Uniform{Nq}) where {Nq} = Int(Nq)
+
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
     points = SVector{Nq}(range(-1 + 1 / Nq, step = 2 / Nq, length = Nq))
     weights = SVector{Nq}(ntuple(i -> 2 / Nq, Nq))
@@ -109,15 +112,15 @@ end
 
 
 """
-    barycentric_weights(x::AbstractVector)
+    barycentric_weights(x::SVector{Nq}) where {Nq}
 
 The barycentric weights associated with the array of point locations `x`:
 
 ```math
-w[i] = \\frac{1}{\\prod_{j \\ne i} (x[i] - x[j])
+w_j = \\frac{1}{\\prod_{k \\ne j} (x_i - x_j)}
 ```
-Reference:
-  - [Berrut2004](@cite) equation 3.2
+
+See [Berrut2004](@cite), equation 3.2.
 """
 function barycentric_weights(r::SVector{Nq, T}) where {Nq, T}
     SVector{Nq}(ntuple(Nq) do i
@@ -137,6 +140,21 @@ end
     barycentric_weights(quadrature_points(FT, quadstyle())[1])
 end
 
+"""
+    interpolation_matrix(x::SVector, r::SVector{Nq})
+
+The matrix which interpolates the Lagrange polynomial of degree `Nq-1` through
+the points `r`, to points `x`. The matrix coefficients are computed using the
+Barycentric formula of [Berrut2004](@cite), section 4:
+```math
+I_{ij} = \\begin{cases}
+1 & \\text{if } x_i = r_j, \\\\
+0 & \\text{if } x_i = r_k \\text{ for } k \\ne j, \\\\
+\\frac{\\displaystyle \\frac{w_j}{x_i - r_j}}{\\displaystyle \\sum_k \\frac{w_k}{x_i - r_k}} & \\text{otherwise,}
+\\end{cases}
+```
+where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref).
+"""
 function interpolation_matrix(
     points_to::SVector{Nto},
     points_from::SVector{Nfrom},
@@ -177,7 +195,7 @@ end
 """
     V = orthonormal_poly(points, quad)
 
-`V[i,j]` contains the `j-1`th Legendre polynomial evaluated at `points[i]`.
+`V_{ij}` contains the `j-1`th Legendre polynomial evaluated at `points[i]`.
 i.e. it is the mapping from the modal to the nodal representation.
 """
 function orthonormal_poly(
@@ -211,26 +229,23 @@ function cutoff_filter_matrix(
 end
 
 """
-    differentiation_matrix(r::SVector{Nq, T},
-                           wb=barycentric_weights(r)::SVector{Nq,T}) where {Nq, T}
+    differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}
 
-The spectral differentiation matrix for a polynomial of degree `Nq` - 1 defined on the
-points `r` with associated barycentric weights `wb`.
+The spectral differentiation matrix for the Lagrange polynomial of degree `Nq-1`
+interpolating at points `r`.
 
+The matrix coefficients are computed using the [Berrut2004](@cite), section 9.3:
 ```math
-D_{i,j} = \\begin{cases}
-    \\frac{w_j / w_i}{x_i - x_j} \\text{ if } i \\ne j \\\\
-    -\\sum_{k \\ne j} D_{k,j} \\text{ if } i = j
+D_{ij} = \\begin{cases}
+    \\displaystyle
+    \\frac{w_j}{w_i (x_i - x_j)} &\\text{ if } i \\ne j \\\\
+    -\\sum_{k \\ne j} D_{kj} &\\text{ if } i = j
 \\end{cases}
 ```
-
-Reference:
- - [Berrut2004](@cite),#https://people.maths.ox.ac.uk/trefethen/barycentric.pdf
+where ``w_j`` are the barycentric weights, see [`barycentric_weights`](@ref).
 """
-function differentiation_matrix(
-    r::SVector{Nq, T},
-    wb = barycentric_weights(r)::SVector{Nq, T},
-) where {Nq, T}
+function differentiation_matrix(r::SVector{Nq, T}) where {Nq, T}
+    wb = barycentric_weights(r)
     SMatrix{Nq, Nq, T, Nq * Nq}(
         begin
             if i == j
@@ -247,6 +262,13 @@ function differentiation_matrix(
         end for j in 1:Nq, i in 1:Nq
     )
 end
+
+"""
+    differentiation_matrix(FT, quadstyle::QuadratureStyle)
+
+The spectral differentiation matrix at the quadrature points of `quadstyle`,
+using floating point types `FT`.
+"""
 @generated function differentiation_matrix(
     ::Type{FT},
     quadstyle::QuadratureStyle,

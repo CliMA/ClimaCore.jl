@@ -87,6 +87,8 @@ Returns the parent array type underlying any wrapper types, with all
 dimensionality information removed.
 """
 parent_array_type(::Type{<:Array{T}}) where {T} = Array{T}
+parent_array_type(::Type{<:MArray{S, T, N, L}}) where {S, T, N, L} =
+    MArray{S, T}
 parent_array_type(::Type{<:SubArray{T, N, A}}) where {T, N, A} =
     parent_array_type(A)
 
@@ -98,6 +100,18 @@ both the element types and the array types themselves.
 """
 promote_parent_array_type(::Type{Array{T1}}, ::Type{Array{T2}}) where {T1, T2} =
     Array{promote_type(T1, T2)}
+promote_parent_array_type(
+    ::Type{MArray{S, T1}},
+    ::Type{MArray{S, T2}},
+) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+promote_parent_array_type(
+    ::Type{MArray{S, T1}},
+    ::Type{Array{T2}},
+) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
+promote_parent_array_type(
+    ::Type{Array{T1}},
+    ::Type{MArray{S, T2}},
+) where {S, T1, T2} = MArray{S, promote_type(T1, T2)}
 
 """
     StructArrays.bypass_constructor(T, args)
@@ -206,7 +220,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 )),
             )
         end
-        push!(ex.args, :(return nothing))
+        push!(ex.args, :(return val))
         return ex
     else
         Base.@_propagate_inbounds_meta
@@ -217,7 +231,7 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
                 offset + fieldtypeoffset(T, S, i),
             )
         end
-        return nothing
+        return val
     end
 end
 
@@ -227,6 +241,7 @@ end
     offset,
 ) where {S}
     array[offset + 1] = val
+    val
 end
 
 @inline function set_struct!(array, val)

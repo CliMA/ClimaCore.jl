@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        julia-version: ['1.6', '1.7']
+        julia-version: ['1.7', 'nightly']
 
     env:
       CLIMATEMACHINE_SETTINGS_FIX_RNG_SEED: "true"
@@ -72,3 +72,4 @@ jobs:
         TEST_MODULES: ${{ matrix.test-modules }}
       run: |
         julia --color=yes --check-bounds=yes --project=test test/runtests.jl
+      continue-on-error: ${{ matrix.version == 'nightly' }}
