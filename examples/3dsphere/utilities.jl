@@ -8,13 +8,13 @@ include("../ordinary_diff_eq_bug_fixes.jl")
 include("../schur_complement_W.jl")
 
 const R = 6.371229e6    # Earth's radius
-const grav = 9.80616    # Earth's gravitational acceleration
+# const grav = 9.80616    # Earth's gravitational acceleration
 const Ω = 7.29212e-5    # Earth's rotation rate (radians / sec)
-const R_d = 287.0       # dry specific gas constant (R / molar mass of dry air)
-const κ = 2 / 7         # kappa
+# const R_d = 287.0       # dry specific gas constant (R / molar mass of dry air)
+# const κ = 2 / 7         # kappa
 const γ = 1.4           # heat capacity ratio
-const cp_d = R_d / κ    # heat capacity at constant pressure
-const cv_d = cp_d - R_d # heat capacity at constant volume
+# const cp_d = R_d / κ    # heat capacity at constant pressure
+# const cv_d = cp_d - R_d # heat capacity at constant volume
 const T_tri = 273.16    # triple point temperature
 const p_0 = 1.0e5       # reference pressure
 

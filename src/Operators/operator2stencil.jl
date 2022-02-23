@@ -1,24 +1,66 @@
-# Note: The stencils constructed by Operator2Stencil are linear transformations,
-# rather than affine transformations. Therefore, they do not account for constant
-# values added by boundary conditions.
+# If op is a linear Operator, then, for any Field a, there is some matrix of
+# coefficients C such that op.(a)[i] = ∑_j C[i, j] * a[j]. Operator2Stencil(op)
+# is an operator for which Operator2Stencil(op).(a) is a Field of StencilCoefs;
+# when it is interpreted as a matrix, this Field has the property that
+# Operator2Stencil(op).(a)[i, j] = C[i, j] * a[j]. More specifically,
+# Operator2Stencil(op).(a)[i] is a StencilCoefs object that stores the tuple
+# (C[i, i+lbw] a[i+lbw], C[i, i+lbw+1] a[i+lbw+1], ..., C[i, i+ubw] a[i+ubw]),
+# where (lbw, ubw) are the bandwidths of op (that is, the bandwidths of C).
 
-# Note: This file only implements Operator2Stencil for F2C and C2F operators.
-# Other operators can be added if needed.
+# This property can be used to find Jacobian matrices. If we let b = op.(f.(a)),
+# where op is a linear Operator and f is a Function (or an object that acts like
+# a Function), then b[i] = ∑_j C[i, j] * f(a[j]). If f has a derivative f′, then
+# the Jacobian matrix of b with respect to a is given by
+# (∂b/∂a)[i, j] =
+#   ∂(b[i])/∂(a[j]) =
+#   C[i, j] * f′(a[j]) =
+#   Operator2Stencil(op).(f′.(a))[i, j].
+# This means that ∂b/∂a = Operator2Stencil(op).(f′.(a)).
+
+# More generally, we can have b = op2.(f2.(op1.(f1.(a)))), where op1 is either a
+# single Operator or a composition of multiple Operators and Functions. If
+# op1.(a)[i] = ∑_j C1[i, j] * a[j] and op2.(a)[i] = ∑_k C2[i, k] * a[k], then
+# b[i] =
+#   ∑_k C2[i, k] * f2(op1.(f1.(a))[k]) =
+#   ∑_k C2[i, k] * f2(∑_j C1[k, j] * f1(a[j])).
+# Let stencil_op1 = Operator2Stencil(op1), stencil_op2 = Operator2Stencil(op2).
+# We then find that the Jacobian matrix of b with respect to a is given by
+# (∂b/∂a)[i, j] =
+#   ∂(b[i])/∂(a[j]) =
+#   ∑_k C2[i, k] * f2′(op1.(f1.(a))[k]) * C1[k, j] * f1′(a[j]) =
+#   ∑_k stencil_op2.(f2′.(op1.(f1.(a))))[i, k] * stencil_op1.(f1′.(a))[k, j] =
+#   ComposeStencils().(
+#     stencil_op2.(f2′.(op1.(f1.(a)))),
+#     stencil_op1.(f1′.(a))
+#   )[i, j].
+# This means that
+# ∂b/∂a =
+#   ComposeStencils().(stencil_op2.(f2′.(op1.(f1.(a)))), stencil_op1.(f1′.(a))).
+
+# The stencils constructed by Operator2Stencil do not account for nonzero values
+# added by boundary conditions. To account for these values, stencils would need
+# to encode affine transormations, rather than linear ones. That is, they would
+# have to encode Operators fo the form op.(a)[i] = ∑_j C[i, j] * a[j] + C′[i].
+
+# Similarly, Operator2Stencil does not support any WeightedInterpolationOperator
+# because such an Operator is not linear with respect to its first argument.
+
+# Operator2Stencil currently only supports Operators that are F2C or C2F with
+# respect to their first arguments. Other operators can be added if needed.
 
 struct Operator2Stencil{O <: FiniteDifferenceOperator} <:
        FiniteDifferenceOperator
     op::O
 end
 
-bidiagonal_extrapolate_error(op_type::Type) = throw(
+extrapolation_increases_bandwidth_error(op_type::Type) = throw(
     ArgumentError(
         "Operator2Stencil currently only supports operators whose stencils \
         have identical bandwidths in the interior and on the boundary of the \
-        domain. So, it cannot be used with the `$(op_type.name.wrapper)` \
-        operator with an `Extrapolate` boundary condition, since the \
-        corresponding stencil has bandwidths of (-half, half) in the interior \
-        and either (-half, 1+half), (-(1+half), half), or (-(1+half), 1+half) \
-        on the boundary.",
+        domain. So, it cannot be applied to the `$op_type` operator with an \
+        `Extrapolate` boundary condition, since the corresponding stencil's \
+        bandwidth on the boundary is larger than its bandwidth in the interior \
+        by 1.",
     ),
 )
 
@@ -33,7 +75,7 @@ get_boundary(op::Operator2Stencil, bw::RightBoundaryWindow{name}) where {name} =
     get_boundary(op.op, bw)
 
 function return_eltype(op::Operator2Stencil, args...)
-    lbw, ubw = stencil_interior_width(op.op, args...)[end]
+    lbw, ubw = stencil_interior_width(op.op, args...)[1]
     N = ubw - lbw + 1
     return StencilCoefs{lbw, ubw, NTuple{N, return_eltype(op.op, args...)}}
 end
@@ -150,139 +192,174 @@ stencil_right_boundary(
 
 
 function stencil_interior(
-    ::Operator2Stencil{<:Union{WeightedInterpolateF2C, WeightedInterpolateC2F}},
+    ::Operator2Stencil{<:AdvectionC2C},
     loc,
     idx,
-    weight,
+    velocity,
     arg,
 )
-    w⁻ = getidx(weight, loc, idx - half)
-    w⁺ = getidx(weight, loc, idx + half)
-    a⁻ = getidx(arg, loc, idx - half)
-    a⁺ = getidx(arg, loc, idx + half)
-    denominator = 2 ⊠ (w⁻ ⊞ w⁺)
-    val⁻ = RecursiveApply.rdiv(w⁻ ⊠ a⁻, denominator)
-    val⁺ = RecursiveApply.rdiv(w⁺ ⊠ a⁺, denominator)
+    space = axes(arg)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    θ⁻ = getidx(arg, loc, idx - 1)
+    θ = getidx(arg, loc, idx)
+    θ⁺ = getidx(arg, loc, idx + 1)
+    val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
+    val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
-    ::Operator2Stencil{<:WeightedInterpolateC2F},
+    ::Operator2Stencil{<:AdvectionC2C},
     bc::SetValue,
     loc,
     idx,
-    weight,
+    velocity,
     arg,
 )
-    T = eltype(arg)
-    return StencilCoefs{-half, half}((nan(T), zero(T)))
+    space = axes(arg)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    θ⁻ = bc.val
+    θ = getidx(arg, loc, idx)
+    θ⁺ = getidx(arg, loc, idx + 1)
+    val⁻ = w³⁻ ⊠ (θ ⊟ θ⁻)
+    val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
+    return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_right_boundary(
-    ::Operator2Stencil{<:WeightedInterpolateC2F},
+    ::Operator2Stencil{<:AdvectionC2C},
     bc::SetValue,
     loc,
     idx,
-    weight,
+    velocity,
     arg,
 )
-    T = eltype(arg)
-    return StencilCoefs{-half, half}((zero(T), nan(T)))
+    space = axes(arg)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    θ⁻ = getidx(arg, loc, idx - 1)
+    θ = getidx(arg, loc, idx)
+    θ⁺ = bc.val
+    val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
+    val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
+    return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
-    ::Operator2Stencil{<:WeightedInterpolateC2F},
-    bc::Union{SetGradient, Extrapolate},
+    ::Operator2Stencil{<:AdvectionC2C},
+    bc::Extrapolate,
     loc,
     idx,
-    weight,
+    velocity,
     arg,
 )
-    val⁺ = getidx(arg, loc, idx + half)
-    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
+    space = axes(arg)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    θ = getidx(arg, loc, idx)
+    θ⁺ = getidx(arg, loc, idx + 1)
+    val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
+    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
-    ::Operator2Stencil{<:WeightedInterpolateC2F},
-    bc::Union{SetGradient, Extrapolate},
+    ::Operator2Stencil{<:AdvectionC2C},
+    bc::Extrapolate,
     loc,
     idx,
-    weight,
+    velocity,
     arg,
 )
-    val⁻ = getidx(arg, loc, idx - half)
-    return StencilCoefs{-half, half}((val⁻, nan(val⁻)))
+    space = axes(arg)
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
+    )
+    θ = getidx(arg, loc, idx)
+    θ⁻ = getidx(arg, loc, idx - 1)
+    val⁻ = w³⁻ ⊠ (θ ⊟ θ⁻)
+    return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 
 
 function stencil_interior(
-    ::Operator2Stencil{<:UpwindBiasedProductC2F},
+    ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
     loc,
     idx,
     velocity,
     arg,
 )
     space = axes(arg)
-    a⁻ = getidx(arg, loc, idx - half)
-    a⁺ = getidx(arg, loc, idx + half)
-    vᶠ = Geometry.contravariant3(
-        getidx(velocity, loc, idx),
-        Geometry.LocalGeometry(space, idx),
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
     )
-    product⁻ = RecursiveApply.rdiv((vᶠ ⊞ RecursiveApply.rmap(abs, vᶠ)) ⊠ a⁻, 2)
-    product⁺ = RecursiveApply.rdiv((vᶠ ⊟ RecursiveApply.rmap(abs, vᶠ)) ⊠ a⁺, 2)
-    val⁻ = Geometry.Contravariant3Vector(product⁻)
-    val⁺ = Geometry.Contravariant3Vector(product⁺)
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
+    )
+    θ⁻ = getidx(arg, loc, idx - 1)
+    θ = getidx(arg, loc, idx)
+    θ⁺ = getidx(arg, loc, idx + 1)
+    val⁻ = ⊟(abs(w³⁻) ⊠ (θ ⊟ θ⁻))
+    val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
-    ::Operator2Stencil{<:UpwindBiasedProductC2F},
-    bc::SetValue,
+    ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
+    bc::Extrapolate,
     loc,
     idx,
     velocity,
     arg,
 )
     space = axes(arg)
-    a⁺ = getidx(arg, loc, idx + half)
-    vᶠ = Geometry.contravariant3(
-        getidx(velocity, loc, idx),
-        Geometry.LocalGeometry(space, idx),
+    w³⁺ = Geometry.contravariant3(
+        getidx(velocity, loc, idx + half),
+        Geometry.LocalGeometry(space, idx + half),
     )
-    product⁺ = RecursiveApply.rdiv((vᶠ ⊟ RecursiveApply.rmap(abs, vᶠ)) ⊠ a⁺, 2)
-    val⁺ = Geometry.Contravariant3Vector(product⁺)
-    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
+    θ = getidx(arg, loc, idx)
+    θ⁺ = getidx(arg, loc, idx + 1)
+    val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
+    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
-    ::Operator2Stencil{<:UpwindBiasedProductC2F},
-    bc::SetValue,
+    ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
+    bc::Extrapolate,
     loc,
     idx,
     velocity,
     arg,
 )
+
     space = axes(arg)
-    a⁻ = getidx(arg, loc, idx - half)
-    vᶠ = Geometry.contravariant3(
-        getidx(velocity, loc, idx),
-        Geometry.LocalGeometry(space, idx),
+    w³⁻ = Geometry.contravariant3(
+        getidx(velocity, loc, idx - half),
+        Geometry.LocalGeometry(space, idx - half),
     )
-    product⁻ = RecursiveApply.rdiv((vᶠ ⊞ RecursiveApply.rmap(abs, vᶠ)) ⊠ a⁻, 2)
-    val⁻ = Geometry.Contravariant3Vector(product⁻)
-    return StencilCoefs{-half, half}((val⁻, nan(val⁻)))
+    θ⁻ = getidx(arg, loc, idx - 1)
+    θ = getidx(arg, loc, idx)
+    val⁻ = ⊟(abs(w³⁻) ⊠ (θ ⊟ θ⁻))
+    return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
-stencil_left_boundary(
-    ::Operator2Stencil{<:UpwindBiasedProductC2F},
-    bc::Extrapolate,
-    loc,
-    idx,
-    velocity,
-    arg,
-) = bidiagonal_extrapolate_error(UpwindBiasedProductC2F)
-stencil_right_boundary(
-    ::Operator2Stencil{<:UpwindBiasedProductC2F},
-    bc::Extrapolate,
-    loc,
-    idx,
-    velocity,
-    arg,
-) = bidiagonal_extrapolate_error(UpwindBiasedProductC2F)
 
 
 function stencil_interior(
@@ -321,14 +398,14 @@ stencil_left_boundary(
     loc,
     idx,
     arg,
-) = bidiagonal_extrapolate_error(GradientF2C)
+) = extrapolation_increases_bandwidth_error(GradientF2C)
 stencil_right_boundary(
     ::Operator2Stencil{<:GradientF2C},
     bc::Extrapolate,
     loc,
     idx,
     arg,
-) = bidiagonal_extrapolate_error(GradientF2C)
+) = extrapolation_increases_bandwidth_error(GradientF2C)
 function stencil_left_boundary(
     ::Operator2Stencil{<:GradientC2F},
     bc::SetValue,
@@ -429,14 +506,14 @@ stencil_left_boundary(
     loc,
     idx,
     arg,
-) = bidiagonal_extrapolate_error(DivergenceF2C)
+) = extrapolation_increases_bandwidth_error(DivergenceF2C)
 stencil_right_boundary(
     ::Operator2Stencil{<:DivergenceF2C},
     bc::Extrapolate,
     loc,
     idx,
     arg,
-) = bidiagonal_extrapolate_error(DivergenceF2C)
+) = extrapolation_increases_bandwidth_error(DivergenceF2C)
 function stencil_left_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
     bc::SetValue,

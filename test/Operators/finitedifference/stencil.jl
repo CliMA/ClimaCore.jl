@@ -1,73 +1,49 @@
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra
 using Random: seed!
 
-import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
-import ClimaCore.Domains: Geometry
+using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
+using ClimaCore: Operators
 
-# If op is a linear Operator, then, for any Field a, there is some matrix of
-# coefficients C such that op.(a)[i] = ∑_j C[i, j] * a[j]. Operator2Stencil(op)
-# is an operator for which Operator2Stencil(op).(a) is a Field of StencilCoefs;
-# when it is interpreted as a matrix, this Field has the property that
-# Operator2Stencil(op).(a)[i, j] = C[i, j] * a[j]. More specifically,
-# Operator2Stencil(op).(a)[i] is a StencilCoefs object that stores the tuple
-# (C[i, i+lbw] a[i+lbw], C[i, i+lbw+1] a[i+lbw+1], ..., C[i, i+ubw] a[i+ubw]),
-# where (lbw, ubw) are the bandwidths of op (that is, the bandwidths of C).
+# Let stencil_op1 = Operator2Stencil(op1), stencil_op2 = Operator2Stencil(op2),
+# apply = ApplyStencil(), and compose = ComposeStencils().
 
-# This property can be used to find Jacobian matrices. If we let b = op.(f.(a)),
-# where op is a linear Operator and f is a Function (or an object that acts like
-# a Function), then b[i] = ∑_j C[i, j] * f(a[j]). If f has a derivative f′, then
-# the Jacobian matrix of b with respect to a is given by
-# (∂b/∂a)[i, j] =
-#   ∂(b[i])/∂(a[j]) =
-#   C[i, j] * f′(a[j]) =
-#   Operator2Stencil(op).(f′.(a))[i, j].
-# This means that ∂b/∂a = Operator2Stencil(op).(f′.(a)).
+# op1.(a)[i] = ∑_j C[i, j] * a[j]                                            ==>
+# op1.(a1 .* a0)[i] =
+#   ∑_j C[i, j] * a1[j] * a0[j] =
+#   ∑_j stencil_op1.(a1)[i, j] * a0[j] =
+#   apply.(stencil_op1.(a1), a0)[i]                                          ==>
+# op1.(a1 .* a0) = apply.(stencil_op1.(a1), a0)
 
-# More generally, we can have b = op2.(f2.(op1.(f1.(a)))), where op1 is either a
-# single Operator or a composition of multiple Operators and Functions. If
-# op1.(a)[i] = ∑_j C1[i, j] * a[j] and op2.(a)[i] = ∑_k C2[i, k] * a[k], then
-# b[i] =
-#   ∑_k C2[i, k] * f2(op1.(f1.(a))[k]) =
-#   ∑_k C2[i, k] * f2(∑_j C1[k, j] * f1(a[j])).
-# Let stencil_op1 = Operator2Stencil(op1), stencil_op2 = Operator2Stencil(op2).
-# We then find that the Jacobian matrix of b with respect to a is given by
-# (∂b/∂a)[i, j] =
-#   ∂(b[i])/∂(a[j]) =
-#   ∑_k C2[i, k] * f2′(op1.(f1.(a))[k]) * C1[k, j] * f1′(a[j]) =
-#   ∑_k stencil_op2.(f2′.(op1.(f1.(a))))[i, k] * stencil_op1.(f1′.(a))[k, j] =
-#   ComposeStencils().(stencil_op2.(f2′.(op1.(f1.(a)))), stencil_op1.(f1′.(a)))[i, j].
-# This means that
-# ∂b/∂a =
-#   ComposeStencils().(stencil_op2.(f2′.(op1.(f1.(a)))), stencil_op1.(f1′.(a))).
-
-# op.(a)[i] = ∑_j C[i, j] * a[j]                                             ==>
-# op.(b .* a)[i] =
-#   ∑_j C[i, j] * b[j] * a[j] =
-#   ∑_j Operator2Stencil(op).(b)[i, j] * a[j] =
-#   ApplyStencil().(Operator2Stencil(op).(b), a)[i]                          ==>
-# op.(b .* a) = ApplyStencil().(Operator2Stencil(op).(b), a)
-
-# Let stencil_op1 = Operator2Stencil(op1), stencil_op2 = Operator2Stencil(op2).
 # op1.(a)[i] = ∑_j C1[i, j] * a[j] and op2.(a)[i] = ∑_k C2[i, k] * a[k]      ==>
-# op2.(c .* op1.(b .* a))[i] =
-#   ∑_k C2[i, k] * c[k] * op1.(b .* a)[k] =
-#   ∑_k C2[i, k] * c[k] * (∑_j C1[k, j] * b[j] * a[j]) =
-#   ∑_j (∑_k C2[i, k] * c[k] * C1[k, j] * b[j]) * a[j] =
-#   ∑_j (∑_k stencil_op2.(c)[i, k] * stencil_op1.(b)[k, j]) * a[j] =
-#   ∑_j ComposeStencils().(stencil_op2.(c), stencil_op1.(b))[i, j] * a[j] =
-#   ApplyStencil().(ComposeStencils().(stencil_op2.(c), stencil_op1.(b)), a)[i]
-#                                                                            ==>
-# op2.(c .* op1.(b .* a)) =
-#   ApplyStencil().(ComposeStencils().(stencil_op2.(c), stencil_op1.(b)), a)
+# op2.(a2 .* op1.(a1 .* a0))[i] =
+#   ∑_k C2[i, k] * a2[k] * op1.(a1 .* a0)[k] =
+#   ∑_k C2[i, k] * a2[k] * (∑_j C1[k, j] * a1[j] * a0[j]) =
+#   ∑_j (∑_k C2[i, k] * a2[k] * C1[k, j] * a1[j]) * a0[j] =
+#   ∑_j (∑_k stencil_op2.(a2)[i, k] * stencil_op1.(a1)[k, j]) * a0[j] =
+#   ∑_j compose.(stencil_op2.(a2), stencil_op1.(a1))[i, j] * a0[j] =
+#   apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)[i]              ==>
+# op2.(a2 .* op1.(a1 .* a0)) =
+#   apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+
+struct CurriedTwoArgOperator{O, A}
+    op::O
+    arg2::A
+end
+
+Base.Broadcast.broadcasted(op::CurriedTwoArgOperator, arg1) =
+    Base.Broadcast.broadcasted(op.op, arg1, op.arg2)
+
+Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
+    CurriedTwoArgOperator(Operators.Operator2Stencil(op.op), op.arg2)
 
 @testset "Pointwise Stencil Construction/Composition/Application" begin
-    seed!(1) # Ensure reproducibility.
+    seed!(1) # ensures reproducibility
 
     for FT in (Float32, Float64)
         radius = FT(1e7)
         zmax = FT(1e4)
-        velem = helem = npoly = 4
+        helem = npoly = 2
+        velem = 4
 
         hdomain = Domains.SphereDomain(radius)
         hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
@@ -85,64 +61,154 @@ import ClimaCore.Domains: Geometry
 
         # TODO: Replace this with a space that includes topography.
         center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
-        face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
+        center_coords = Fields.coordinate_field(center_space)
+        face_coords = Fields.coordinate_field(
+            Spaces.FaceExtrudedFiniteDifferenceSpace(center_space),
+        )
 
-        rand_scalar = (_...) -> rand(FT)
-        rand_vector = (_...) -> Geometry.UVWVector(rand(FT), rand(FT), rand(FT))
-        scalar_c = map(rand_scalar, Fields.coordinate_field(center_space))
-        scalar_f = map(rand_scalar, Fields.coordinate_field(face_space))
-        vector_c = map(rand_vector, Fields.coordinate_field(center_space))
-        vector_f = map(rand_vector, Fields.coordinate_field(face_space))
+        # We can't use non-zero non-extrapolation BCs because Operator2Stencil
+        # does not account for them (it only handles linear transformations).
+        zero_scalar = Operators.SetValue(zero(FT))
+        zero_vector = Operators.SetValue(Geometry.Covariant3Vector(zero(FT)))
+        zero_grad = Operators.SetGradient(Geometry.Covariant3Vector(zero(FT)))
+        zero_div = Operators.SetDivergence(zero(FT))
+        zero_curl = Operators.SetCurl(Geometry.Contravariant3Vector(zero(FT)))
+        extrap = Operators.Extrapolate()
 
-        # single-argument operations
-        input_agnostic_ops = (
+        # `C` denotes "center" and `F` denotes "face"
+        # `S` denotes "scalar" and `V` denotes "vector"
+
+        rand_scalar(coord) = randn(Geometry.float_type(coord))
+        rand_vector(coord) =
+            Geometry.Covariant3Vector(randn(Geometry.float_type(coord)))
+        a_CS = map(rand_scalar, center_coords)
+        a_FS = map(rand_scalar, face_coords)
+        a_CV = map(rand_vector, center_coords)
+        a_FV = map(rand_vector, face_coords)
+
+        ops_F2C_⍰2⍰ = (
             Operators.InterpolateF2C(),
-            Operators.InterpolateC2F(
-                bottom = Operators.Extrapolate(),
-                top = Operators.Extrapolate(),
-            ),
             Operators.LeftBiasedF2C(),
             Operators.RightBiasedF2C(),
         )
-        scalar_only_ops = (
-            Operators.InterpolateC2F(
-                bottom = Operators.SetValue(rand_scalar()),
-                top = Operators.SetValue(rand_scalar()),
+        ops_C2F_⍰2⍰ = (
+            Operators.InterpolateC2F(bottom = extrap, top = extrap),
+        )
+        ops_F2C_S2S = (
+            ops_F2C_⍰2⍰...,
+            Operators.LeftBiasedF2C(bottom = zero_scalar),
+            Operators.RightBiasedF2C(top = zero_scalar),
+        )
+        ops_C2F_S2S = (
+            ops_C2F_⍰2⍰...,
+            Operators.InterpolateC2F(bottom = zero_scalar, top = zero_scalar),
+            Operators.InterpolateC2F(bottom = zero_grad, top = zero_grad),
+            Operators.LeftBiasedC2F(bottom = zero_scalar),
+            Operators.RightBiasedC2F(top = zero_scalar),
+        )
+        ops_F2C_V2V = (
+            ops_F2C_⍰2⍰...,
+            Operators.LeftBiasedF2C(bottom = zero_vector),
+            Operators.RightBiasedF2C(top = zero_vector),
+            CurriedTwoArgOperator(
+                Operators.AdvectionC2C(bottom = zero_vector, top = zero_vector),
+                a_CV,
             ),
-            Operators.InterpolateC2F(
-                bottom = Operators.SetGradient(rand_vector()),
-                top = Operators.SetGradient(rand_vector()),
+            CurriedTwoArgOperator(
+                Operators.AdvectionC2C(bottom = extrap, top = extrap),
+                a_CV,
             ),
-            Operators.LeftBiasedF2C(
-                bottom = Operators.SetValue(rand_scalar()),
-            ),
-            Operators.LeftBiasedC2F(
-                bottom = Operators.SetValue(rand_scalar()),
-            ),
-            Operators.RightBiasedF2C(
-                top = Operators.SetValue(rand_scalar()),
-            ),
-            Operators.RightBiasedC2F(
-                top = Operators.SetValue(rand_scalar()),
+            CurriedTwoArgOperator(
+                Operators.FluxCorrectionC2C(bottom = extrap, top = extrap),
+                a_CV,
             ),
         )
-        vector_only_ops = (
-            Operators.InterpolateC2F(
-                bottom = Operators.SetValue(rand_vector()),
-                top = Operators.SetValue(rand_vector()),
+        ops_C2F_V2V = (
+            ops_C2F_⍰2⍰...,
+            Operators.InterpolateC2F(bottom = zero_vector, top = zero_vector),
+            Operators.LeftBiasedC2F(bottom = zero_vector),
+            Operators.RightBiasedC2F(top = zero_vector),
+            CurriedTwoArgOperator(
+                Operators.FluxCorrectionF2F(bottom = extrap, top = extrap),
+                a_FV,
             ),
-            Operators.LeftBiasedF2C(
-                bottom = Operators.SetValue(rand_vector()),
-            ),
-            Operators.LeftBiasedC2F(
-                bottom = Operators.SetValue(rand_vector()),
-            ),
-            Operators.RightBiasedF2C(
-                top = Operators.SetValue(rand_vector()),
-            ),
-            Operators.RightBiasedC2F(
-                top = Operators.SetValue(rand_vector()),
-            ),
+            Operators.CurlC2F(bottom = zero_vector, top = zero_vector),
+            Operators.CurlC2F(bottom = zero_curl, top = zero_curl),
         )
+        ops_F2C_S2V = (
+            Operators.GradientF2C(),
+            Operators.GradientF2C(bottom = zero_scalar, top = zero_scalar),
+        )
+        ops_C2F_S2V = (
+            Operators.GradientC2F(bottom = zero_scalar, top = zero_scalar),
+            Operators.GradientC2F(bottom = zero_grad, top = zero_grad),
+        )
+        ops_F2C_V2S = (
+            CurriedTwoArgOperator(
+                Operators.AdvectionC2C(bottom = zero_scalar, top = zero_scalar),
+                a_CS,
+            ),
+            CurriedTwoArgOperator(
+                Operators.AdvectionC2C(bottom = extrap, top = extrap),
+                a_CS,
+            ),
+            CurriedTwoArgOperator(
+                Operators.FluxCorrectionC2C(bottom = extrap, top = extrap),
+                a_CS,
+            ),
+            Operators.DivergenceF2C(),
+            Operators.DivergenceF2C(bottom = zero_vector, top = zero_vector),
+        )
+        ops_C2F_V2S = (
+            CurriedTwoArgOperator(
+                Operators.FluxCorrectionF2F(bottom = extrap, top = extrap),
+                a_FS,
+            ),
+            Operators.DivergenceC2F(bottom = zero_vector, top = zero_vector),
+            Operators.DivergenceC2F(bottom = zero_div, top = zero_div),
+        )
+
+        # TODO: Make these cases work.
+        for (a, op) in (
+            (a_FS, Operators.GradientF2C(bottom = extrap, top = extrap)),
+            (a_FV, Operators.DivergenceF2C(bottom = extrap, top = extrap)),
+        )
+            @test_throws ArgumentError Operators.Operator2Stencil(op).(a)
+        end
+
+        apply = Operators.ApplyStencil()
+        compose = Operators.ComposeStencils()
+        for (a0, a1, op1s) in (
+            (a_FS, a_FS, (ops_F2C_S2S..., ops_F2C_S2V...)),
+            (a_CS, a_CS, (ops_C2F_S2S..., ops_C2F_S2V...)),
+            (a_FS, a_FV, (ops_F2C_V2V..., ops_F2C_V2S...)),
+            (a_CS, a_CV, (ops_C2F_V2V..., ops_C2F_V2S...)),
+        )
+            for op1 in op1s
+                stencil_op1 = Operators.Operator2Stencil(op1)
+                tested_value = apply.(stencil_op1.(a1), a0)
+                @test tested_value ≈ op1.(a1 .* a0) atol = 1e-6
+            end
+        end
+        for (a0, a1, a2, op1s, op2s) in (
+            (a_FS, a_FS, a_CS, ops_F2C_S2S, (ops_C2F_S2S..., ops_C2F_S2V...)),
+            (a_CS, a_CS, a_FS, ops_C2F_S2S, (ops_F2C_S2S..., ops_F2C_S2V...)),
+            (a_FS, a_FS, a_CV, ops_F2C_S2S, (ops_C2F_V2V..., ops_C2F_V2S...)),
+            (a_CS, a_CS, a_FV, ops_C2F_S2S, (ops_F2C_V2V..., ops_F2C_V2S...)),
+            (a_FS, a_FV, a_CS, ops_F2C_V2S, (ops_C2F_S2S..., ops_C2F_S2V...)),
+            (a_CS, a_CV, a_FS, ops_C2F_V2S, (ops_F2C_S2S..., ops_F2C_S2V...)),
+            (a_FS, a_FV, a_CV, ops_F2C_V2S, (ops_C2F_V2V..., ops_C2F_V2S...)),
+            (a_CS, a_CV, a_FV, ops_C2F_V2S, (ops_F2C_V2V..., ops_F2C_V2S...)),
+        )
+            for op1 in op1s
+                for op2 in op2s
+                    stencil_op1 = Operators.Operator2Stencil(op1)
+                    stencil_op2 = Operators.Operator2Stencil(op2)
+                    tested_value =
+                        apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+                    @test tested_value ≈ op2.(a2 .* op1.(a1 .* a0)) atol = 1e-6
+                end
+            end
+        end
     end
 end
