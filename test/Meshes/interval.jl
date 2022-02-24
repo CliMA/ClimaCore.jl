@@ -3,12 +3,24 @@ using SparseArrays
 
 import ClimaCore: ClimaCore, Domains, Meshes, Geometry
 
-function unit_intervalmesh(; stretching = nothing, nelems = 20)
-    dom = ClimaCore.Domains.IntervalDomain(
-        ClimaCore.Geometry.ZPoint(0.0),
-        ClimaCore.Geometry.ZPoint(1.0),
-        boundary_names = (:left, :right),
-    )
+function unit_intervalmesh(;
+    stretching = nothing,
+    nelems = 20,
+    periodic = false,
+)
+    if periodic
+        dom = ClimaCore.Domains.IntervalDomain(
+            ClimaCore.Geometry.ZPoint(0.0),
+            ClimaCore.Geometry.ZPoint(1.0);
+            periodic = true,
+        )
+    else
+        dom = ClimaCore.Domains.IntervalDomain(
+            ClimaCore.Geometry.ZPoint(0.0),
+            ClimaCore.Geometry.ZPoint(1.0),
+            boundary_names = (:left, :right),
+        )
+    end
     if stretching !== nothing
         return ClimaCore.Meshes.IntervalMesh(dom, stretching, nelems = nelems)
     else
@@ -36,6 +48,38 @@ end
     @test Meshes.boundary_face_name(mesh, 2, 1) === nothing
     @test Meshes.is_boundary_face(mesh, 2, 2) == true
     @test Meshes.boundary_face_name(mesh, 2, 2) == :right
+
+    @test_throws BoundsError Meshes.coordinates(mesh, 0, 1)
+    @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
+    @test Meshes.coordinates(mesh, 2, 2) == Geometry.ZPoint(1.0)
+    @test_throws BoundsError Meshes.coordinates(mesh, 2, 3)
+    @test_throws BoundsError Meshes.coordinates(mesh, 3, 3)
+end
+
+
+@testset "IntervalMesh periodic" begin
+    for nelems in (-1, 0)
+        @test_throws ArgumentError unit_intervalmesh(
+            nelems = nelems,
+            periodic = true,
+        )
+    end
+    for nelems in (1, 3)
+        mesh = unit_intervalmesh(nelems = nelems, periodic = true)
+        @test length(mesh.faces) == nelems + 1 # number of faces is +1 elements
+        @test Meshes.nelements(mesh) == nelems
+        @test Meshes.elements(mesh) == UnitRange(1, nelems)
+    end
+    mesh = unit_intervalmesh(nelems = 2, periodic = true)
+    @test Meshes.domain(mesh) isa Domains.IntervalDomain
+    @test Meshes.is_boundary_face(mesh, 1, 1) == false
+    @test Meshes.boundary_face_name(mesh, 1, 1) == nothing
+    @test Meshes.is_boundary_face(mesh, 1, 2) == false
+    @test Meshes.boundary_face_name(mesh, 1, 2) === nothing
+    @test Meshes.is_boundary_face(mesh, 2, 1) == false
+    @test Meshes.boundary_face_name(mesh, 2, 1) === nothing
+    @test Meshes.is_boundary_face(mesh, 2, 2) == false
+    @test Meshes.boundary_face_name(mesh, 2, 2) == nothing
 
     @test_throws BoundsError Meshes.coordinates(mesh, 0, 1)
     @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)

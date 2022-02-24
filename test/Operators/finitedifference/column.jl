@@ -87,6 +87,54 @@ end
     end
 end
 
+
+@testset "Scalar Field FiniteDifferenceSpaces - periodic" begin
+    for FT in (Float32, Float64)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(2pi);
+            periodic = true,
+        )
+        @test eltype(domain) === Geometry.ZPoint{FT}
+
+        mesh = Meshes.IntervalMesh(domain; nelems = 16)
+
+        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+
+        @test sum(ones(FT, center_space)) ≈ 2pi
+        @test sum(ones(FT, face_space)) ≈ 2pi
+
+        sinz_c = sin.(Fields.coordinate_field(center_space).z)
+        cosz_c = cos.(Fields.coordinate_field(center_space).z)
+        @test sum(sinz_c) ≈ FT(0.0) atol = 1e-2
+
+        sinz_f = sin.(Fields.coordinate_field(face_space).z)
+        cosz_f = cos.(Fields.coordinate_field(face_space).z)
+        @test sum(sinz_f) ≈ FT(0.0) atol = 1e-2
+
+        ∇ᶜ = Operators.GradientF2C()
+        ∂sin = Geometry.WVector.(∇ᶜ.(sinz_f))
+        @test ∂sin ≈ Geometry.WVector.(cosz_c) atol = 1e-2
+
+        divᶜ = Operators.DivergenceF2C()
+        ∂sin = divᶜ.(Geometry.WVector.(sinz_f))
+        @test ∂sin ≈ cosz_c atol = 1e-2
+
+        ∇ᶠ = Operators.GradientC2F()
+        ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
+        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-1
+
+        ∇ᶠ = Operators.GradientC2F()
+        ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
+        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2
+
+        # test that broadcasting into incorrect field space throws an error
+        empty_centers = zeros(FT, center_space)
+        @test_throws Exception empty_centers .= ∇ᶠ.(cos.(centers))
+    end
+end
+
 @testset "Test composed stencils" begin
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
