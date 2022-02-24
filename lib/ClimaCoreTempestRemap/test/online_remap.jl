@@ -39,11 +39,16 @@ OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     weightfile = joinpath(OUTPUT_DIR, "remap_data.nc")
     map, col, row = generate_map(weightfile, topology_i, topology_o, nq_i, nq_o)
 
+    # get connectivity for projections from ClimaCore Fields to Tempest sparse matrix
+    _, n_gll_i, connect_i = get_cc_gll_connect(ne_i, nq_i)
+    _, n_gll_o, connect_o = get_cc_gll_connect(ne_o, nq_o)
+
+    # initialize the remap operator
+    RemapInfo = LinearTempestRemap(map, col, row, nq_i, ne_i, n_gll_i, connect_i, nq_o, ne_o, n_gll_o, connect_o )
+
+    # generate test data in the Field format
     field_i = sind.(Fields.coordinate_field(space_i).long)
     field_o = similar(field_i, space_o, eltype(field_i))
-    
-    # initialize the remap operator
-    RemapInfo = LinearTempestRemap(map, col, row)
     
     # apply the remap
     remap!(field_o, field_i, RemapInfo)
@@ -74,7 +79,7 @@ OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     close(ds_wt)
 
     field_o_offline = Float64.(field_o_offline)
-    field_o_offline_reshaped = project_unique_to_IJFH(field_o_offline, nq_o, ne_o)
+    field_o_offline_reshaped = project_sparse_to_IJFH(field_o_offline, connect_o, nq_o, ne_o)
 
     err = maximum(sqrt.((field_o_offline_reshaped[:,:,1,:,:] - parent(field_o)) .^ 2))
 
@@ -103,4 +108,10 @@ end
 # plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
 # png(joinpath(OUTPUT_DIR,"out_offline.png"))
 
+#=
+using BenchmarkTools
+@btime remap! > 1.398 s (65163 allocations: 1.55 GiB)
 
+@btime  apply_remap > 53.477 ms (304 allocations: 19.78 KiB)
+
+=#
