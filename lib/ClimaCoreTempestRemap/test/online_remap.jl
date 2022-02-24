@@ -7,7 +7,7 @@ using ClimaCoreTempestRemap
 
 include("../src/connectivity.jl")
 
-OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
+OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "online remap 2D sphere data" begin
 
@@ -87,31 +87,34 @@ OUTPUT_DIR = "."#mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 end
 
-# using Plots
-# function plot_flatmesh(Psi,nelem)
-#     plots = []
-#     tiltes = ["Eq1" "Eq2" "Eq3" "Eq4" "Po1" "Po2"]
-#     for f in collect(1:1:6)
-#         Psi_reshape = reshape(Psi[(f-1)*nelem^2+1:f*nelem^2],(nelem,nelem))
-
-#         push!(plots, contourf(Psi_reshape))
-#     end
-#     plot(plots..., layout = (6), title = tiltes )
-# end
-
-# plot_flatmesh(parent(field_i)[1,1,1,:],ne_i)
-# png(joinpath(OUTPUT_DIR,"in.png"))
-
-# plot_flatmesh(parent(field_o)[1,1,1,:],ne_o)
-# png(joinpath(OUTPUT_DIR,"out.png"))
-
-# plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
-# png(joinpath(OUTPUT_DIR,"out_offline.png"))
-
 #=
-using BenchmarkTools
-@btime remap! > 1.398 s (65163 allocations: 1.55 GiB)
+using Plots
+function plot_flatmesh(Psi,nelem)
+    plots = []
+    tiltes = ["Eq1" "Eq2" "Eq3" "Eq4" "Po1" "Po2"]
+    for f in collect(1:1:6)
+        Psi_reshape = reshape(Psi[(f-1)*nelem^2+1:f*nelem^2],(nelem,nelem))
 
-@btime  apply_remap > 53.477 ms (304 allocations: 19.78 KiB)
+        push!(plots, contourf(Psi_reshape))
+    end
+    plot(plots..., layout = (6), title = tiltes )
+end
+
+plot_flatmesh(parent(field_i)[1,1,1,:],ne_i)
+png(joinpath(OUTPUT_DIR,"in.png"))
+
+plot_flatmesh(parent(field_o)[1,1,1,:],ne_o)
+png(joinpath(OUTPUT_DIR,"out.png"))
+
+plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
+png(joinpath(OUTPUT_DIR,"out_offline.png"))
+
+
+using BenchmarkTools
+@btime  apply_remap --> 53.477 ms (304 allocations: 19.78 KiB)
+@btime remap! --> 1.398 s (65163 allocations: 1.55 GiB)
+@btime remap!(Simon_fix) --> 363.599 μs (623 allocations: 150.81 KiB) 
+
+
 
 =#

@@ -123,6 +123,9 @@ function get_cc_gll_connect(ne_i::Int, nq::Int)
             end
         end
     end
+    # coords = cartesian coordinates
+    # node_ct = number of unique nodes = (ne_t^2 * 6 * (nq_t-1)*(nq_t-1))  - (8*3 ) / 4 + 8
+    # connect[i,j,e] = unique node index of node (i,j) in element e
     return (coords, node_ct, connect)
 end
 
@@ -134,13 +137,15 @@ transform an IJFH data array to a vector that follows the order of the Tempest s
 function project_IJFH_to_sparse(var::ClimaCore.DataLayouts.IJFH, connect, node_ct)
     nq = size(var)[1]
     ne = Int(sqrt(size(var)[end] / 6))
-    # map(x ->  getindex(view(parent(var)[:,:,1,:]),unwrap_cc_coord(findfirst(isequal(x), connect))...), collect(1:1:node_ct)) # doesn't work if not subarray...
     sparse = zeros(node_ct)
-    for x in collect(1:1:node_ct)
-        sparse[x] = getindex(parent(var)[:,:,1,:],unwrap_cc_coord(findfirst(isequal(x), connect))...)
+    for ne = 1:size(connect,3), j = 1:size(connect,2), i = 1:size(connect,1)
+        u = Int64(connect[i,j,ne])
+        if sparse[u] == 0
+            sparse[u] = parent(var)[i,j,1,ne]
+        end
     end
     return sparse
- end
+end
 unwrap_cc_coord(coord) = [coord[1] , coord[2], coord[3]]
 
 """
@@ -194,9 +199,9 @@ function remap!(target, source, R)
     @assert size(map) == size(col) == size(row)
 
     source_sparse = project_IJFH_to_sparse(getfield(source,:values,), R.connect_s, R.ngll_s) # maybe can operate on fields?
-    target_sparse = zeros(Int(R.ngll_t))  # ngll_t = (ne_t^2 * 6 * (nq_t-1)*(nq_t-1))  - (8*3 ) / 4 + 8
+    target_sparse = zeros(Int(R.ngll_t))  
 
-    for (i, wt) in enumerate(map) # could resize to matrix and do matrix multiply?
+    for (i, wt) in enumerate(map) 
         target_sparse[row[i]] += wt * source_sparse[col[i]]
     end
 
