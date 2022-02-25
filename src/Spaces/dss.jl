@@ -201,10 +201,7 @@ function dss_2d!(
         @assert comms_ctx !== nothing
     end
     pid = ClimaComms.mypid(comms_ctx)
-
-    # determine the element type
-    src_slab = slab(src, 1, 1)
-    src_elt = eltype(src_slab)
+    elt = eltype(dest)
 
     # prepare send buffers from send elements
     for nbr_idx in 1:Topologies.nneighbors(topology)
@@ -214,9 +211,8 @@ function dss_2d!(
             for sendelem in topology.send_elems[nbr_idx]
                 sidx = Topologies.localelemindex(topology, sendelem)
                 src_slab = slab(src, level, sidx)
-                dest_slab = DataLayouts.IJF{src_elt, Nq}(
-                    view(sbuf, level, :, :, :, senum),
-                )
+                dest_slab =
+                    DataLayouts.IJF{elt, Nq}(view(sbuf, level, :, :, :, senum))
                 copyto!(dest_slab, src_slab)
                 senum += 1
             end
@@ -325,7 +321,7 @@ function dss_2d!(
             # this neighbor and use it to find the slab we want
             gei = findfirst(ge -> ge == elem2, topology.ghost_elems[nbr_idx])
             src_slab2 =
-                DataLayouts.IJF{src_elt, Nq}(view(rbuf, level, :, :, :, gei))
+                DataLayouts.IJF{elt, Nq}(view(rbuf, level, :, :, :, gei))
 
             # unlike the ghost elements, the geometry data is not organized
             # by neighbor so we must compute the correct index into it
@@ -382,7 +378,7 @@ function dss_2d!(
                         ge -> ge == elem,
                         topology.ghost_elems[nbr_idx],
                     )
-                    src_slab = DataLayouts.IJF{src_elt, Nq}(
+                    src_slab = DataLayouts.IJF{elt, Nq}(
                         view(rbuf, level, :, :, :, gei),
                     )
                     geomei = gei
@@ -456,21 +452,19 @@ weighted_dss!(dest, src, space::AbstractSpace) = horizontal_dss!(
 )
 
 function weighted_dss!(dest, src, space::AbstractSpace, comms_ctx)
-    weighted_src = src .⊠ space.dss_weights
+    weighted_src = Base.Broadcast.broadcasted(⊠, src, space.dss_weights)
     horizontal_dss!(dest, weighted_src, space, comms_ctx)
 end
 
-weighted_dss!(
+function weighted_dss!(
     dest,
     src,
     space::ExtrudedFiniteDifferenceSpace,
     comms_ctx = nothing,
-) = horizontal_dss!(
-    dest,
-    Base.Broadcast.broadcasted(⊠, src, space.horizontal_space.dss_weights),
-    space,
-    comms_ctx,
 )
-
+    weighted_src =
+        Base.Broadcast.broadcasted(⊠, src, space.horizontal_space.dss_weights)
+    horizontal_dss!(dest, weighted_src, space, comms_ctx)
+end
 weighted_dss!(data, space::AbstractSpace, comms_ctx = nothing) =
     weighted_dss!(data, data, space, comms_ctx)

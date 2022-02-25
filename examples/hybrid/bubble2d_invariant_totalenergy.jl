@@ -285,7 +285,7 @@ end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
 
 # post-processing
-Es = [sum(Y.Yc.ρe) for u in sol.u]
+Es = [sum(u.Yc.ρe) for u in sol.u]
 Mass = [sum(u.Yc.ρ) for u in sol.u]
 
 Plots.png(
