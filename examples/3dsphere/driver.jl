@@ -1,8 +1,3 @@
-if !haskey(ENV, "BUILDKITE")
-    import Pkg
-    Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
-end
-
 using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
