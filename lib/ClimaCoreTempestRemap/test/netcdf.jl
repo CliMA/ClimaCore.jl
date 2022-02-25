@@ -7,7 +7,7 @@ using ClimaCoreTempestRemap
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
-@testset "write remap sphere data" begin
+@testset "write remap sphere data $node_type" for node_type in ["cgll", "dgll"]
     # generate CC mesh
     ne = 4
     R = 5.0
@@ -26,7 +26,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     # write data
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
-        def_space_coord(nc, space)
+        def_space_coord(nc, space; type = node_type)
         nc_time = def_time_coord(nc)
 
         nc_xlat = defVar(nc, "xlat", Float64, space)
@@ -54,7 +54,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         meshfile_cc,
         meshfile_rll,
         meshfile_overlap;
-        in_type = "cgll",
+        in_type = node_type,
         in_np = Nq,
     )
 
@@ -73,7 +73,8 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     end
 end
 
-@testset "write remap 3d sphere data" begin
+@testset "write remap 3d sphere data $node_type" for node_type in
+                                                     ["cgll", "dgll"]
     # generate CC mesh
     ne = 4
     R = 1000.0
@@ -103,8 +104,8 @@ end
     # write data
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
-        def_space_coord(nc, hvspace)
-        def_space_coord(nc, fhvspace)
+        def_space_coord(nc, hvspace; type = node_type)
+        def_space_coord(nc, fhvspace; type = node_type)
 
         nc_xlat = defVar(nc, "xlat", Float64, hvspace)
         nc_xz = defVar(nc, "xz", Float64, hvspace)
@@ -130,7 +131,7 @@ end
         meshfile_cc,
         meshfile_rll,
         meshfile_overlap;
-        in_type = "cgll",
+        in_type = node_type,
         in_np = Nq,
     )
 

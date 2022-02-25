@@ -435,11 +435,18 @@ function setup_comms(
     end
     return Context(nbrs)
 end
+
+function all_nodes(space::SpectralElementSpace2D)
+    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    nelem = Topologies.nlocalelems(space.topology)
+    Iterators.product(Iterators.product(1:Nq, 1:Nq), 1:nelem)
+end
+
 """
     unique_nodes(space::SpectralElementField2D)
 
 An iterator over the unique nodes of `space`. Each node is represented by the
-first `(e, (i,j))` triple.
+first `((i,j), e)` triple.
 
 This function is experimental, and may change in future.
 """
