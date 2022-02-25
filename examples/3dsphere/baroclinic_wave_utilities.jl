@@ -266,12 +266,22 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     cuₕ = Y.uₕ # Covariant12Vector on centers
     fw = Y.w # Covariant3Vector on faces
 
+    @. cuvw =
+        Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
+
+    @. cK = norm_sqr(cuvw) / 2
+    @. cp = pressure(cρ, cρe / cρ, cK, cΦ)
+
     # Update w at the bottom
     # fw = -g^31 cuₕ/ g^33 ????????
 
     # Hyperdiffusion
+    ce = @. cρe / cρ
+    ch_tot = @. ce + cp / cρ
 
-    @. cχe = hwdiv(hgrad(cρe / cρ))
+    # Total enthalpy
+
+    @. cχe = hwdiv(hgrad(ch_tot))
     @. cχuₕ =
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
@@ -288,9 +298,6 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
         )
 
     # Mass conservation
-
-    @. cuvw =
-        Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
 
     @. dY.Yc.ρ -= hdiv(cρ * cuvw)
     @. dY.Yc.ρ -= vdivf2c(Ic2f(cρ * cuₕ))
@@ -316,8 +323,6 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
         (cf + cω³) ×
         Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    @. cK = norm_sqr(cuvw) / 2
-    @. cp = pressure(cρ, cρe / cρ, cK, cΦ)
 
     @. dY.uₕ -= hgrad(cp) / cρ
     @. dY.uₕ -= hgrad(cK + cΦ)

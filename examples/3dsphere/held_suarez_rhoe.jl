@@ -8,7 +8,7 @@ driver_values(FT) = (;
     helem = 4,
     npoly = 4,
     tmax = FT(60 * 60 * 24 * 10),
-    dt = FT(500.0),
+    dt = FT(400.0),
     ode_algorithm = OrdinaryDiffEq.Rosenbrock23,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :no_∂P∂K, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,

@@ -176,10 +176,24 @@ function rhs_invariant!(dY, Y, _, t)
 
     dρ .= 0 .* cρ
 
+    If2c = Operators.InterpolateF2C()
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    cw = If2c.(fw)
+    fuₕ = Ic2f.(cuₕ)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+
+    ce = @. cρe / cρ
+    cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
+    cT = @. cI / C_v + T_0
+    cp = @. cρ * R_d * cT
+
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
-
-    χe = @. dρe = hwdiv(hgrad(cρe / cρ)) # we store χe in dρe
+    ch_tot = @. ce + cp / cρ
+    χe = @. dρe = hwdiv(hgrad(ch_tot)) # we store χe in dρe
     χuₕ = @. duₕ =
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
@@ -197,14 +211,6 @@ function rhs_invariant!(dY, Y, _, t)
         )
 
     # 1) Mass conservation
-    If2c = Operators.InterpolateF2C()
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
 
     dw .= fw .* 0
 
@@ -253,11 +259,6 @@ function rhs_invariant!(dY, Y, _, t)
     @. duₕ -=
         cω³ × Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce = @. cρe / cρ
-    #cp = @. pressure(cρ, ce, cuvw, z) #TODO: the pressure function doesn't work (broadcast error)
-    cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
-    cT = @. cI / C_v + T_0
-    cp = @. cρ * R_d * cT
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
