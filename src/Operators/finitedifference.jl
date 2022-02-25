@@ -2004,7 +2004,7 @@ end
 # not sure what is best here...
 unwrap_ref(r::Ref) = r[]
 unwrap_ref(r) = r
-for BC in [SetValue, SetGradient, SetDivergence]
+for BC in [SetValue, SetGradient, SetDivergence, SetCurl]
     @eval begin
         @inline function column_bc(bc::$BC, inds...)
             $BC(unwrap_ref(column(bc.val, inds...)))
