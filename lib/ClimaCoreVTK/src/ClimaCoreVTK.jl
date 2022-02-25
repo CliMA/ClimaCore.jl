@@ -117,18 +117,18 @@ function writevtk(basename::String, fields; vtkargs...)
 end
 
 """
-    writevtk(
+    writepvd(
         basename::String,
         times,
         fields;
         vtkargs...
     )
 
-Write a sequence of fields at `times` as a Paraview collection.
+Write a sequence of fields at `times` as a Paraview collection (.pvd) file, along with VTK files.
 
 `fields` can be either be an iterable collection of fields, or a `NamedTuple` of collections.
 """
-function writevtk(basename::String, times, fields; vtkargs...)
+function writepvd(basename::String, times, fields; vtkargs...)
     npad = ndigits(length(times); pad = 3)
 
     paraview_collection(basename) do pvd
@@ -141,7 +141,7 @@ function writevtk(basename::String, times, fields; vtkargs...)
         end
     end
 end
-function writevtk(basename::String, times, fields::NamedTuple, vtkargs...)
+function writepvd(basename::String, times, fields::NamedTuple; vtkargs...)
     npad = ndigits(length(times); pad = 3)
 
     paraview_collection(basename) do pvd
@@ -155,6 +155,13 @@ function writevtk(basename::String, times, fields::NamedTuple, vtkargs...)
         end
     end
 end
+
+Base.@deprecate writevtk(basename::String, times, fields; vtkargs...) writepvd(
+    basename,
+    times,
+    fields;
+    vtkargs...,
+)
 
 
 end # module
