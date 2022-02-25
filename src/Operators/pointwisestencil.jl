@@ -336,7 +336,7 @@ end
 struct ApplyStencil <: PointwiseStencilOperator end
 
 # TODO: This is not correct for the same reason as the other 2-arg FD operators.
-return_eltype(::ApplyStencil, stencil, arg) = eltype(arg)
+return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
@@ -344,7 +344,8 @@ function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx)
     coefs = getidx(stencil, loc, idx)
     lbw = bandwidths(eltype(stencil))[1]
     i_func = i -> coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i)
-    return ⊞(map(i_func, i_vals)...)
+    return length(i_vals) == 0 ? zero(eltype(eltype(stencil))) :
+           ⊞(map(i_func, i_vals)...)
 end
 
 function stencil_interior(::ApplyStencil, loc, idx, stencil, arg)
@@ -426,7 +427,7 @@ function compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
         i -> coefs1[i - lbw1 + 1] ⊠ getidx(stencil2, loc, idx + i)[j - i + lbw1]
     function j_func(j)
         i_vals = i_vals_tuple[j]
-        return length(i_vals) == 0 ? nan(eltype(eltype(stencil1))) :
+        return length(i_vals) == 0 ? zero(eltype(eltype(stencil1))) :
                return ⊞(map(i_func_at_j(j), i_vals)...)
     end
     return StencilCoefs{lbw, ubw}(map(j_func, j_vals))
@@ -444,7 +445,7 @@ function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
         )
     function j_func(j)
         i_vals = i_vals_tuple[j]
-        return length(i_vals) == 0 ? nan(eltype(eltype(stencil1_T))) :
+        return length(i_vals) == 0 ? zero(eltype(eltype(stencil1_T))) :
                :(⊞($(map(i_func_at_j(j), i_vals)...)))
     end
     result_expr = :(StencilCoefs{$lbw, $ubw}(($(map(j_func, j_vals)...),)))
