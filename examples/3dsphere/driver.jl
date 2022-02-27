@@ -25,6 +25,18 @@ else
     test_name = default_test_name
 end
 
+ENV["GKSwstype"] = "nul"
+path = joinpath(@__DIR__, "output", test_name)
+mkpath(path)
+
+if haskey(ENV, "OUTPUT_DIR")
+    output_dir = ENV["OUTPUT_DIR"]
+    mkpath(output_dir)
+else
+    output_dir = path
+end
+
+
 include("utilities.jl")
 include("$test_name.jl")
 
@@ -42,9 +54,20 @@ additional_solver_kwargs = driver_values(FT)
 
 center_local_geometry, face_local_geometry =
     local_geometry_fields(FT, zmax, velem, helem, npoly)
-Yc = map(initial_condition, center_local_geometry)
-uₕ = map(initial_condition_velocity, center_local_geometry)
-w = map(_ -> Geometry.Covariant3Vector(FT(0.0)), face_local_geometry)
+
+if haskey(ENV, "RESTART_INFILE")
+    data_restart = jldopen(ENV["RESTART_INFILE"])
+    Yc = data_restart["uend"].Yc
+    uₕ = data_restart["uend"].uₕ
+    w = data_restart["uend"].w
+    const tend = data_restart["tend"]
+else
+    Yc = map(initial_condition, center_local_geometry)
+    uₕ = map(initial_condition_velocity, center_local_geometry)
+    w = map(_ -> Geometry.Covariant3Vector(FT(0.0)), face_local_geometry)
+    const tend = FT(0)
+end
+
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 p = merge(implicit_cache_values(Y, dt), remaining_cache_values(Y, dt))
 
@@ -94,9 +117,5 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 sol = @timev OrdinaryDiffEq.solve!(integrator)
-
-ENV["GKSwstype"] = "nul"
-path = joinpath(@__DIR__, "output", test_name)
-mkpath(path)
 
 postprocessing(sol, path)

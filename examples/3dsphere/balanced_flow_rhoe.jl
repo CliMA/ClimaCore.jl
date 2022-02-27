@@ -1,7 +1,11 @@
 using Test
 using ClimaCorePlots, Plots
+using DiffEqCallbacks
+using JLD2
 
 include("baroclinic_wave_utilities.jl")
+
+jld2_callback = PeriodicCallback(output_writer, 864000; initial_affect = true)
 
 driver_values(FT) = (;
     zmax = FT(30.0e3),
@@ -14,7 +18,7 @@ driver_values(FT) = (;
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :no_∂P∂K, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
     save_every_n_steps = 10,
-    additional_solver_kwargs = (;), # e.g., reltol, abstol, etc.
+    additional_solver_kwargs = (; callback = jld2_callback), # e.g., reltol, abstol, etc.
 )
 
 initial_condition(local_geometry) =
@@ -29,7 +33,7 @@ remaining_cache_values(Y, dt) = merge(
 
 function remaining_tendency!(dY, Y, p, t)
     dY .= zero(eltype(dY))
-    baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄ = 0.0)
+    baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄ = 2.0e17)
     final_adjustments!(
         dY,
         Y,
