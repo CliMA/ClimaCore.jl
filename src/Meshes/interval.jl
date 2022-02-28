@@ -169,8 +169,8 @@ function IntervalMesh(
     # we use linearization
     # hₛ ≈ -dz_surface / zₜ / log(1 - 1/nelems)
     # to approx bracket the lower / upper bounds of root sol
-    guess₋ = -dz_surface / zₜ / log(1 - (1 / (nelems - 1)))
-    guess₊ = -dz_surface / zₜ / log(1 - (1 / (nelems + 1)))
+    guess₋ = -dz_surface / zₜ / log(1 - FT(1 / (nelems - 1)))
+    guess₊ = -dz_surface / zₜ / log(1 - FT(1 / (nelems + 1)))
     hₛsol = RootSolvers.find_zero(
         find_surface,
         RootSolvers.SecantMethod(guess₋, guess₊),
@@ -189,8 +189,8 @@ function IntervalMesh(
     # we use the linearization
     # hₜ ≈ (zₜ - dz_top) / zₜ / log(nelem)
     # to approx braket the lower, upper bounds of root sol
-    guess₋ = ((zₜ - zₛ) - dz_top) / zₜ / log(nelems + 1)
-    guess₊ = ((zₜ - zₛ) - dz_top) / zₜ / log(nelems - 1)
+    guess₋ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems + 1))
+    guess₊ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems - 1))
     hₜsol = RootSolvers.find_zero(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
