@@ -1,5 +1,7 @@
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 ChromeProfileFormat = "b19f0eae-10f4-4ff0-9df2-b48cd85f6b2e"
 PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
 Profile = "9abbd945-dff8-562f-b5e8-e1ebf5ef1b79"
 ReportMetrics = "c1654acf-408b-4272-96ce-66c258df8a6c"
+URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"

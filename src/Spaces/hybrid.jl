@@ -8,6 +8,7 @@ struct ExtrudedFiniteDifferenceSpace{
     T <: Topologies.IntervalTopology,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
+    LGG,
 } <: AbstractSpace
     staggering::S
     horizontal_space::H
@@ -15,6 +16,8 @@ struct ExtrudedFiniteDifferenceSpace{
     global_geometry::GG
     center_local_geometry::LG
     face_local_geometry::LG
+    center_ghost_geometry::LGG
+    face_ghost_geometry::LGG
 end
 
 const CenterExtrudedFiniteDifferenceSpace =
@@ -43,6 +46,8 @@ function ExtrudedFiniteDifferenceSpace{S}(
         space.global_geometry,
         space.center_local_geometry,
         space.face_local_geometry,
+        space.center_ghost_geometry,
+        space.face_ghost_geometry,
     )
 end
 function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
@@ -65,7 +70,10 @@ local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
     space.face_local_geometry
 
 # TODO: will need to be defined for distributed
-ghost_geometry_data(space::ExtrudedFiniteDifferenceSpace) = nothing
+ghost_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
+    space.center_ghost_geometry
+ghost_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
+    space.face_ghost_geometry
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_space::V,
@@ -83,6 +91,23 @@ function ExtrudedFiniteDifferenceSpace(
             horizontal_space.local_geometry,
             vertical_space.face_local_geometry,
         )
+
+    if horizontal_space isa SpectralElementSpace2D &&
+       horizontal_space.ghost_geometry !== nothing
+        center_ghost_geometry =
+            product_geometry.(
+                horizontal_space.ghost_geometry,
+                vertical_space.center_local_geometry,
+            )
+        face_ghost_geometry =
+            product_geometry.(
+                horizontal_space.ghost_geometry,
+                vertical_space.face_local_geometry,
+            )
+    else
+        center_ghost_geometry = nothing
+        face_ghost_geometry = nothing
+    end
     return ExtrudedFiniteDifferenceSpace(
         staggering,
         horizontal_space,
@@ -90,6 +115,8 @@ function ExtrudedFiniteDifferenceSpace(
         global_geometry,
         center_local_geometry,
         face_local_geometry,
+        center_ghost_geometry,
+        face_ghost_geometry,
     )
     return nothing
 end

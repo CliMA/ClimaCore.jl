@@ -1,11 +1,18 @@
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    DataLayouts
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
-
+ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms
@@ -53,15 +60,18 @@ quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 if usempi
     grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+    global_grid_topology = Topologies.Topology2D(mesh)
     Nf = 4
     Nv = 1
     comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+    global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 else
     comms_ctx = nothing
     grid_topology = Topologies.Topology2D(mesh)
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    global_space = space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 end
+
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     x, y = coord.x, coord.y
@@ -93,10 +103,6 @@ y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 function energy(state, p, local_geometry)
     ρ, u = state.ρ, state.u
     return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
-end
-
-function total_energy(y, parameters)
-    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(space)))
 end
 
 function rhs!(dydt, y, _, t)
@@ -137,10 +143,10 @@ function rhs!(dydt, y, _, t)
 end
 
 dydt = similar(y0)
-
 rhs!(dydt, y0, nothing, 0.0)
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
+#prob = ODEProblem(rhs!, y0, (0.0, 2.0))
 
 sol = solve(
     prob,
@@ -151,37 +157,53 @@ sol = solve(
     progress_message = (dt, u, p, t) -> t,
 )
 
+sol_global = []
 if usempi
-    exit()
+    for sol_step in sol.u
+        sol_step_values_global =
+            DataLayouts.gather(comms_ctx, Fields.field_values(sol_step))
+        if ClimaComms.iamroot(Context)
+            sol_step_global = Fields.Field(sol_step_values_global, global_space)
+            push!(sol_global, sol_step_global)
+        end
+    end
 end
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-
 dir = "cg_invariant_hypervisc"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
+solution = usempi ? sol_global : sol.u
 
-anim = Plots.@animate for u in sol.u
-    Plots.plot(u.ρθ, clim = (-1, 1))
+function total_energy(y, parameters)
+    sum(energy.(y, Ref(parameters), Fields.local_geometry_field(global_space)))
 end
-Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
 
-Es = [total_energy(u, parameters) for u in sol.u]
-
-Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
-
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+if !usempi || (usempi && ClimaComms.iamroot(Context))
+    anim = Plots.@animate for u in solution
+        Plots.plot(u.ρθ, clim = (-1, 1))
     end
+    Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+
+    Es = [total_energy(u, parameters) for u in solution]
+
+    Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
+    end
+
+    linkfig(
+        relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+        "Total Energy",
+    )
 end
 
-linkfig(
-    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
-    "Total Energy",
-)
+usempi && exit()

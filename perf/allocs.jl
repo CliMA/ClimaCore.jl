@@ -19,20 +19,21 @@ dirs_to_monitor = [
 # (filename, ARGs passed to script)
 #! format: off
 all_cases = [
-    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_2d.jl"), ""),
-    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_3d.jl"), ""),
-    (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave.jl"), "baroclinic_wave"),
-    (joinpath(EXAMPLE_DIR, "sphere", "shallow_water.jl"), "barotropic_instability"),
-    (joinpath(EXAMPLE_DIR, "3dsphere", "baroclinic_wave_rho_etot.jl"), ""),
+    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_2d.jl"), "", ""),
+    (joinpath(EXAMPLE_DIR, "hybrid", "bubble_3d.jl"), "", ""),
+    (joinpath(EXAMPLE_DIR, "sphere", "shallow_water.jl"), "barotropic_instability", ""),
+    (joinpath(EXAMPLE_DIR, "3dsphere", "driver.jl"), "", "baroclinic_wave_rhoe"),
+    (joinpath(EXAMPLE_DIR, "3dsphere", "driver.jl"), "", "baroclinic_wave_rhotheta"),
 ]
 #! format: on
 
 import ReportMetrics
 
-for (case, args) in all_cases
+for (case, args, test_name) in all_cases
     ENV["ALLOCATION_CASE_NAME"] = case
+    ENV["TEST_NAME"] = test_name
     ReportMetrics.report_allocs(;
-        job_name = "$(basename(case)) $args",
+        job_name = "$(test_name == "" ? basename(case) : test_name) $args",
         run_cmd = `$(Base.julia_cmd()) --project=perf/ --track-allocation=all perf/allocs_per_case.jl $args`,
         dirs_to_monitor = dirs_to_monitor,
         n_unique_allocs = 20,

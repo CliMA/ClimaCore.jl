@@ -64,7 +64,7 @@ steps:
       JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
-
+ 
   - label: ":computer: unit tests"
     key: "cpu_unittests"
     command:
@@ -276,6 +276,39 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Advection CG plane limiter cosine bells"
+    key: "cpu_advection_cg_plane_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cosine_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter Gaussian bells"
+    key: "cpu_advection_cg_plane_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl gaussian_bells"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_gaussian_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Advection CG plane limiter cylinders"
+    key: "cpu_advection_cg_plane_limiter_cylinders"
+    command:
+      - "julia --color=yes --project=examples examples/plane/limiters_advection.jl cylinders"
+    artifact_paths:
+      - "examples/plane/output/plane_advection_limiter_cylinders_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Rising Bubble 2D hybrid"
     key: "cpu_rising_bubble_2d_hybrid"
     command:
@@ -298,8 +331,8 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid invariant"
-    key: "cpu_rising_bubble_hybrid_invariant"
+  - label: ":computer: Rising Bubble hybrid invariant potential temperature"
+    key: "cpu_rising_bubble_hybrid_invariant_rho_theta"
     command:
       - "julia --color=yes --project=examples examples/hybrid/bubble_invariant.jl"
     artifact_paths:
@@ -308,9 +341,20 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble hybrid invariant total energy"
+    key: "cpu_rising_bubble_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble2d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble2d_invariant_etot/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: Rising Bubble 3D hybrid invariant"
-    key: "cpu_rising_bubble_3d_hybrid_invariant"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_potential_temperature"
     command:
       - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant.jl"
     artifact_paths:
@@ -319,6 +363,30 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Rising Bubble 3D hybrid invariant total energy"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant_etot/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: MPI Rising Bubble 3D hybrid invariant total energy"
+    key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_total_energy"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/bubble3d_invariant_totalenergy.jl"
+    artifact_paths:
+      - "examples/hybrid/output/bubble3d_invariant_etot/*"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 2
 
   - label: ":computer: Solid body CG sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
@@ -496,35 +564,27 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave"
-    key: "cpu_baroclinic_wave"
+  - label: ":computer: baroclinic wave (ρe)"
+    key: "cpu_baroclinic_wave_rho_e"
     command:
-      - "julia --threads=4 --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave/*"
-    agents:
-      config: cpu
-      queue: central
-      slurm_cpus_per_task: 4
-      slurm_ntasks: 1
-
-  - label: ":computer: baroclinic wave rho etot implicit"
-    key: "cpu_baroclinic_wave_rho_etot_imp"
-    command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_etot.jl"
-    artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave_rho_etot_implicit/*"
+      - "examples/3dsphere/output/baroclinic_wave_rhoe/*"
+    env:
+      TEST_NAME: "baroclinic_wave_rhoe"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave rho theta implicit"
-    key: "cpu_baroclinic_wave_rho_theta_imp"
+  - label: ":computer: baroclinic wave (ρθ)"
+    key: "cpu_baroclinic_wave_rho_theta"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave_rho_theta.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/baroclinic_wave_rho_theta_implicit/*"
+      - "examples/3dsphere/output/baroclinic_wave_rhotheta/*"
+    env:
+      TEST_NAME: "baroclinic_wave_rhotheta"
     agents:
       config: cpu
       queue: central
@@ -550,34 +610,53 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: hydrostatically and geostrophically balanced flow"
-    key: "cpu_balanced_flow"
+  - label: ":computer: hydrostatically and geostrophically balanced flow (ρe)"
+    key: "cpu_balanced_flow_rho_e"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/baroclinic_wave.jl balanced_flow"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/balanced_flow/*"
+      - "examples/3dsphere/output/balanced_flow_rhoe/*"
+    env:
+      TEST_NAME: "balanced_flow_rhoe"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: hydrostatically and geostrophically balanced flow (ρθ)"
+    key: "cpu_balanced_flow_rho_theta"
+    command:
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
+    artifact_paths:
+      - "examples/3dsphere/output/balanced_flow_rhotheta/*"
+    env:
+      TEST_NAME: "balanced_flow_rhotheta"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez rho etot implicit"
-    key: "cpu_held_suarez_rho_etot_imp"
+  - label: ":computer: dry held-suarez (ρe)"
+    key: "cpu_held_suarez_rho_e"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/held_suarez_rho_etot.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/held_suarez_rho_etot_implicit/*"
+      - "examples/3dsphere/output/held_suarez_rhoe/*"
+    env:
+      TEST_NAME: "held_suarez_rhoe"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez rho theta implicit"
-    key: "cpu_held_suarez_rho_theta_imp"
+  - label: ":computer: dry held-suarez (ρθ)"
+    key: "cpu_held_suarez_rho_theta"
     command:
-      - "julia --color=yes --project=examples examples/3dsphere/held_suarez_rho_theta.jl"
+      - "julia --color=yes --project=examples examples/3dsphere/driver.jl"
     artifact_paths:
-      - "examples/3dsphere/output/held_suarez_rho_theta_implicit/*"
+      - "examples/3dsphere/output/held_suarez_rhotheta/*"
+    env:
+      TEST_NAME: "held_suarez_rhotheta"
     agents:
       config: cpu
       queue: central
@@ -604,6 +683,15 @@ steps:
       - "julia --color=yes --project=perf perf/flame.jl"
     artifact_paths:
       - "perf/output/*.cpuprofile"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Benchmark step!"
+    key: "cpu_benchmark"
+    command:
+      - "julia --color=yes --project=perf perf/benchmark.jl"
     agents:
       config: cpu
       queue: central

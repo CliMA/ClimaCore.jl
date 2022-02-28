@@ -42,7 +42,7 @@ end
 
 
 """
-    def_space_coord(nc::NCDataset, space::Spaces.AbstractSpace; type = "cgll")
+    def_space_coord(nc::NCDataset, space::Spaces.AbstractSpace; type = "dgll")
 
 Add spatial dimensions for `space` in the NetCDF dataset `nc`, compatible with
 the type used by [`remap_weights`](@ref).
@@ -52,14 +52,16 @@ If a compatible dimension already exists, it will be reused.
 function def_space_coord(
     nc::NCDataset,
     space::Spaces.SpectralElementSpace2D;
-    type = "cgll",
+    type = "dgll",
 )
     if type == "cgll"
         nodes = Spaces.unique_nodes(space)
-        ncol = length(nodes)
+    elseif type == "dgll"
+        nodes = Spaces.all_nodes(space)
     else
         error("Unsupported type: $type")
     end
+    ncol = length(nodes)
 
     if haskey(nc, "lon")
         # dimension already exists: check correct size
@@ -166,7 +168,7 @@ end
 function def_space_coord(
     nc::NCDataset,
     space::Spaces.ExtrudedFiniteDifferenceSpace{S};
-    type = "cgll",
+    type = "dgll",
 ) where {S <: Spaces.Staggering}
     hvar = def_space_coord(nc, space.horizontal_space; type = type)
     vvar = def_space_coord(
@@ -254,11 +256,11 @@ function Base.setindex!(
     nc = NCDataset(var)
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(space)
+    elseif nc.attrib["node_type"] == "dgll"
+        nodes = Spaces.all_nodes(space)
     else
-        error("node_type not supported")
+        error("unsupported node type")
     end
-
-    nodes = Spaces.unique_nodes(space)
     data = Fields.field_values(field)
     for (col, ((i, j), e)) in enumerate(nodes)
         var[col, extraidx...] = slab(data, e)[i, j]
@@ -276,8 +278,10 @@ function Base.setindex!(
     hspace = space.horizontal_space
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(hspace)
+    elseif nc.attrib["node_type"] == "dgll"
+        nodes = Spaces.all_nodes(hspace)
     else
-        error("node_type not supported")
+        error("unsupported node type")
     end
     data = Fields.field_values(field)
     for (col, ((i, j), h)) in enumerate(nodes)

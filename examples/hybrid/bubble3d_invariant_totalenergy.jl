@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
@@ -11,14 +9,33 @@ import ClimaCore:
     Meshes,
     Geometry,
     Topologies,
+    DataLayouts,
     Spaces,
     Fields,
     Operators
 using ClimaCore.Geometry
+using Logging
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+if usempi
+    using ClimaComms
+    using ClimaCommsMPI
+    const Context = ClimaCommsMPI.MPICommsContext
+    const pid, nprocs = ClimaComms.init(Context)
+    if pid == 1
+        println("parallel run with $nprocs processes")
+    end
+    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    atexit() do
+        global_logger(prev_logger)
+    end
+else
+    using Logging: global_logger
+    using TerminalLoggers: TerminalLogger
+    global_logger(TerminalLogger())
+end
 
 function hvspace_3D(
     xlim = (-π, π),
@@ -27,7 +44,8 @@ function hvspace_3D(
     xelem = 4,
     yelem = 4,
     zelem = 16,
-    npoly = 3,
+    npoly = 3;
+    usempi = false,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -44,20 +62,32 @@ function hvspace_3D(
         x1periodic = true,
         x2periodic = true,
     )
-    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
-
+    Nv = Meshes.nelements(vertmesh)
+    Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    if usempi
+        horztopology = Topologies.DistributedTopology2D(horzmesh, Context)
+        comms_ctx_center =
+            Spaces.setup_comms(Context, horztopology, quad, Nv, Nf_center)
+        comms_ctx_face =
+            Spaces.setup_comms(Context, horztopology, quad, Nv + 1, Nf_face)
+    else
+        horztopology = Topologies.Topology2D(horzmesh)
+        comms_ctx_center = nothing
+        comms_ctx_face = nothing
+    end
+    horzspace =
+        Spaces.SpectralElementSpace2D(horztopology, quad, comms_ctx_center)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
+    return (hv_center_space, hv_face_space, comms_ctx_center, comms_ctx_face)
 end
-
 # set up 3D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_3D((-500, 500), (-500, 500), (0, 1000))
+hv_center_space, hv_face_space, comms_ctx_center, comms_ctx_face =
+    hvspace_3D((-500, 500), (-500, 500), (0, 1000), usempi = usempi)
 
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
@@ -112,8 +142,14 @@ uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-energy_0 = sum(Y.Yc.ρe)
-mass_0 = sum(Y.Yc.ρ)
+energy_0 =
+    usempi ? ClimaComms.reduce(comms_ctx_center, sum(Y.Yc.ρe), +) : sum(Y.Yc.ρe)
+mass_0 =
+    usempi ? ClimaComms.reduce(comms_ctx_center, sum(Y.Yc.ρ), +) : sum(Y.Yc.ρ)
+
+if !usempi || (usempi && ClimaComms.iamroot(Context))
+    @show (energy_0, mass_0)
+end
 
 function rhs_invariant!(dY, Y, _, t)
 
@@ -140,18 +176,30 @@ function rhs_invariant!(dY, Y, _, t)
 
     dρ .= 0 .* cρ
 
+    If2c = Operators.InterpolateF2C()
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    cw = If2c.(fw)
+    fuₕ = Ic2f.(cuₕ)
+    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+
+    ce = @. cρe / cρ
+    cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
+    cT = @. cI / C_v + T_0
+    cp = @. cρ * R_d * cT
+
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
-
-    χe = @. dρe = hwdiv(hgrad(cρe / cρ)) # we store χe in dρe
+    ch_tot = @. ce + cp / cρ
+    χe = @. dρe = hwdiv(hgrad(ch_tot)) # we store χe in dρe
     χuₕ = @. duₕ =
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
-
-
-    Spaces.weighted_dss!(dρe)
-    Spaces.weighted_dss!(duₕ)
+    Spaces.weighted_dss!(dρe, comms_ctx_center)
+    Spaces.weighted_dss!(duₕ, comms_ctx_center)
 
     κ₄ = 100.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -163,14 +211,6 @@ function rhs_invariant!(dY, Y, _, t)
         )
 
     # 1) Mass conservation
-    If2c = Operators.InterpolateF2C()
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
 
     dw .= fw .* 0
 
@@ -219,11 +259,6 @@ function rhs_invariant!(dY, Y, _, t)
     @. duₕ -=
         cω³ × Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
 
-    ce = @. cρe / cρ
-    #cp = @. pressure(cρ, ce, cuvw, z) #TODO: the pressure function doesn't work (broadcast error)
-    cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
-    cT = @. cI / C_v + T_0
-    cp = @. cρ * R_d * cT
 
     @. duₕ -= hgrad(cp) / cρ
     vgradc2f = Operators.GradientC2F(
@@ -255,21 +290,18 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe += fcc(fw, cρe)
     # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
-    Spaces.weighted_dss!(dY.Yc)
-    Spaces.weighted_dss!(dY.uₕ)
-    Spaces.weighted_dss!(dY.w)
-
-
+    Spaces.weighted_dss!(dY.Yc, comms_ctx_center)
+    Spaces.weighted_dss!(dY.uₕ, comms_ctx_center)
+    Spaces.weighted_dss!(dY.w, comms_ctx_face)
     return dY
 end
 
 dYdt = similar(Y);
-rhs_invariant!(dYdt, Y, parameters, 0.0);
-
+rhs_invariant!(dYdt, Y, nothing, 0.0);
 # run!
 using OrdinaryDiffEq
 Δt = 0.050
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0), parameters)
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0))
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
@@ -285,6 +317,25 @@ end
 
 sol_invariant = @timev OrdinaryDiffEq.solve!(integrator)
 
+FT = Float64
+Es = FT[]
+Mass = FT[]
+if usempi
+    for sol_step in sol_invariant.u
+        Es_step = ClimaComms.reduce(comms_ctx_center, sum(sol_step.Yc.ρe), +)
+        Mass_step = ClimaComms.reduce(comms_ctx_center, sum(sol_step.Yc.ρ), +)
+        if ClimaComms.iamroot(Context)
+            push!(Es, Es_step)
+            push!(Mass, Mass_step)
+        end
+    end
+else
+    for sol_step in sol_invariant.u
+        push!(Es, sum(sol_step.Yc.ρe))
+        push!(Mass, sum(sol_step.Yc.ρ))
+    end
+end
+
 ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
@@ -293,30 +344,34 @@ dir = "bubble3d_invariant_etot"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-# post-processing
-Es = [sum(Y.Yc.ρe) for u in sol_invariant.u]
-Mass = [sum(u.Yc.ρ) for u in sol_invariant.u]
+if !usempi || (usempi && ClimaComms.iamroot(Context))
+    # post-processing
+    Plots.png(
+        Plots.plot((Es .- energy_0) ./ energy_0),
+        joinpath(path, "energy.png"),
+    )
+    Plots.png(
+        Plots.plot((Mass .- mass_0) ./ mass_0),
+        joinpath(path, "mass.png"),
+    )
 
-Plots.png(
-    Plots.plot((Es .- energy_0) ./ energy_0),
-    joinpath(path, "energy.png"),
-)
-Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
-
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    function linkfig(figpath, alt = "")
+        # buildkite-agent upload figpath
+        # link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
     end
+
+    linkfig(
+        relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+        "Total Energy",
+    )
+    linkfig(
+        relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
+        "Mass",
+    )
 end
 
-linkfig(
-    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
-    "Total Energy",
-)
-linkfig(
-    relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
-    "Mass",
-)
+usempi && exit()
