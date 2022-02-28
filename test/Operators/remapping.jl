@@ -9,36 +9,35 @@ using IntervalSets, LinearAlgebra, SparseArrays
 
 FT = Float64
 
-function se_space(domain::Domains.IntervalDomain, nq, nelems = 1)
-    quad = Quadratures.GLL{nq}()
+function make_space(domain::Domains.IntervalDomain, nq, nelems = 1)
+    nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.IntervalMesh(domain; nelems = nelems)
     topo = Topologies.IntervalTopology(mesh)
     space = Spaces.SpectralElementSpace1D(topo, quad)
     return space
 end
 
-function se_space(domain::Domains.RectangleDomain, nq, nxelems = 1, nyelems = 1)
-    quad = Quadratures.GLL{nq}()
+function make_space(
+    domain::Domains.RectangleDomain,
+    nq,
+    nxelems = 1,
+    nyelems = 1,
+)
+    nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
     topology = Topologies.Topology2D(mesh)
     space = Spaces.SpectralElementSpace2D(topology, quad)
     return space
 end
 
-function fv_space(domain::Domains.IntervalDomain, nelems = 1)
-    quad = Quadratures.GL{1}()
-    mesh = Meshes.IntervalMesh(domain; nelems = nelems)
-    topo = Topologies.IntervalTopology(mesh)
-    space = Spaces.SpectralElementSpace1D(topo, quad)
-    return space
+function sparsity_pattern(R::SparseMatrixCSC)
+    droptol!(R, sqrt(eps(eltype(R))))
+    I, J, _ = findnz(R)
+    return I, J
 end
 
-function fv_space(domain::Domains.RectangleDomain, nxelems = 1, nyelems = 1)
-    quad = Quadratures.GL{1}()
-    mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
-    topology = Topologies.Topology2D(mesh)
-    space = Spaces.SpectralElementSpace2D(topology, quad)
-    return space
+function sparsity_pattern(R::LinearRemap)
+    sparsity_pattern(R.map)
 end
 
 """
@@ -46,6 +45,8 @@ Checks if a linear remapping operator is conservative.
 
 A linear operator `R` is conservative the local weight of each element in the
 source mesh is distributed conservatively amongst the target mesh elements.
+
+See [Ullrich2015](@cite) eq. 9.
 """
 function conservative(R::LinearRemap)
     Jt = local_weights(R.target)
@@ -57,6 +58,8 @@ end
 Checks if a linear remapping operator is consistent.
 
 A linear operator `R` is consistent if all its rows sum to one.
+
+See [Ullrich2015](@cite) eq. 12.
 """
 function consistent(R::LinearRemap)
     row_sums = sum(R.map, dims = 2)
@@ -69,9 +72,26 @@ Checks if a linear remapping operator is monotone.
 
 A linear operator `R` is monotone if it is consistent and each element
 `R_{ij} ≥ 0`.
+
+See [Ullrich2015](@cite) eq. 14.
 """
 function monotone(R::LinearRemap)
     consistent(R) && all(i -> i >= 0, R.map)
+end
+
+function operator_size(R)
+    QS_t = Spaces.quadrature_style(R.target)
+    QS_s = Spaces.quadrature_style(R.source)
+    Nq_t = Quadratures.degrees_of_freedom(QS_t)
+    Nq_s = Quadratures.degrees_of_freedom(QS_s)
+    nelems_s = Topologies.nlocalelems(Spaces.topology(R.source))
+    nelems_t = Topologies.nlocalelems(Spaces.topology(R.target))
+    return (Nq_t^2 * nelems_t, Nq_s^2 * nelems_s)
+end
+
+function test_identity(space)
+    R = LinearRemap(space, space)
+    @test R.map ≈ I
 end
 
 @testset "Linear Operator Properties" begin
@@ -81,7 +101,7 @@ end
         x1boundary = (:bottom, :top),
         x2boundary = (:left, :right),
     )
-    space = fv_space(domain)
+    space = make_space(domain, 1)
 
     op = [0.5 0.25 0.0 0.25; 0.0 1.0 0.0 0.0; 0.25 0.25 0.25 0.25]
     R = LinearRemap(space, space, op)
@@ -99,6 +119,28 @@ end
     @test !monotone(R)
 end
 
+@testset "Identity Operator" begin
+    domain1D = Domains.IntervalDomain(
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+        boundary_tags = (:left, :right),
+    )
+    domain2D = Domains.RectangleDomain(
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+        Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
+        x1boundary = (:bottom, :top),
+        x2boundary = (:left, :right),
+    )
+    test_identity(make_space(domain1D, 1, 1))
+    test_identity(make_space(domain1D, 1, 8))
+    test_identity(make_space(domain2D, 1, 5, 5))
+    test_identity(make_space(domain2D, 1, 5, 8))
+
+    test_identity(make_space(domain1D, 3, 1))
+    test_identity(make_space(domain1D, 3, 5))
+    test_identity(make_space(domain2D, 5, 5, 5))
+    test_identity(make_space(domain2D, 5, 8, 3))
+end
+
 @testset "Finite Volume <-> Finite Volume Remapping" begin
     @testset "1D Domains" begin
         @testset "Aligned Intervals Different Resolutions" begin
@@ -107,8 +149,8 @@ end
                 boundary_tags = (:left, :right),
             )
 
-            source = fv_space(domain, 4)
-            target = fv_space(domain, 2)
+            source = make_space(domain, 1, 4)
+            target = make_space(domain, 1, 2)
 
             @test local_weights(source) ≈ 0.25 * ones(4, 1)
             @test local_weights(target) ≈ 0.5 * ones(2, 1)
@@ -149,13 +191,13 @@ end
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
-            source = fv_space(domain1, 3)
+            source = make_space(domain1, 1, 3)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
                 boundary_tags = (:left, :right),
             )
-            target = fv_space(domain2, 3)
+            target = make_space(domain2, 1, 3)
 
             R = LinearRemap(target, source)
             R_true = spzeros(FT, 3, 3)
@@ -176,13 +218,13 @@ end
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 boundary_tags = (:left, :right),
             )
-            source = fv_space(domain1, 4)
+            source = make_space(domain1, 1, 4)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
                 boundary_tags = (:left, :right),
             )
-            target = fv_space(domain2, 4)
+            target = make_space(domain2, 1, 4)
 
             R = LinearRemap(target, source)
             R_true = spzeros(4, 4)
@@ -217,7 +259,7 @@ end
     end
 
     @testset "2D Domains" begin
-        @testset "Aligned Grids Different Resolutions" begin
+        @testset "Aligned Grids" begin
             domain = Domains.RectangleDomain(
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
@@ -225,8 +267,8 @@ end
                 x2boundary = (:left, :right),
             )
 
-            source = fv_space(domain, 2, 2)
-            target = fv_space(domain, 3, 3)
+            source = make_space(domain, 1, 2, 2)
+            target = make_space(domain, 1, 3, 3)
 
             @test local_weights(source) ≈ ones(4, 1)
             @test local_weights(target) ≈ (2 / 3)^2 * ones(9, 1)
@@ -270,14 +312,14 @@ end
             end
         end
 
-        @testset "Unaligned Grids Same Resolution" begin
+        @testset "Unaligned Grids" begin
             domain1 = Domains.RectangleDomain(
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
                 Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            source = fv_space(domain1, 2, 2)
+            source = make_space(domain1, 1, 2, 2)
 
             domain2 = Domains.RectangleDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
@@ -285,7 +327,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            target = fv_space(domain2, 2, 2)
+            target = make_space(domain2, 1, 2, 2)
 
             R = LinearRemap(target, source)
             R_true = spzeros(FT, 4, 4)
@@ -307,7 +349,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            source = fv_space(domain1, 2, 2)
+            source = make_space(domain1, 1, 2, 2)
 
             domain2 = Domains.RectangleDomain(
                 Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
@@ -315,7 +357,7 @@ end
                 x1boundary = (:bottom, :top),
                 x2boundary = (:left, :right),
             )
-            target = fv_space(domain2, 2, 2)
+            target = make_space(domain2, 1, 2, 2)
 
             R = LinearRemap(target, source)
             R_true = I
@@ -355,12 +397,12 @@ end
         )
 
         @testset "Single aligned elements" begin
-            space1 = fv_space(domain)
+            space1 = make_space(domain, 1)
 
             @test local_weights(space1) ≈ ones(1)
 
             for nq in [2, 5, 10]
-                space2 = se_space(domain, nq)
+                space2 = make_space(domain, nq)
 
                 _, w = Spaces.Quadratures.quadrature_points(
                     FT,
@@ -391,8 +433,8 @@ end
         end
 
         @testset "Multiple elements" begin
-            space1 = fv_space(domain, 2)
-            space2 = se_space(domain, 2, 3)
+            space1 = make_space(domain, 1, 2)
+            space2 = make_space(domain, 2, 3)
 
             # FV -> SE
             R = LinearRemap(space2, space1)
@@ -408,7 +450,7 @@ end
             @test consistent(R)
             @test monotone(R)
 
-            space2 = se_space(domain, 3, 3)
+            space2 = make_space(domain, 3, 3)
 
             # FV -> SE
             R = LinearRemap(space2, space1)
@@ -425,6 +467,35 @@ end
             @test !monotone(R)
         end
     end
+
+    @testset "2D Domains" begin
+        @testset "Aligned Grids" begin
+            domain = Domains.RectangleDomain(
+                Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+                Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
+                x1boundary = (:bottom, :top),
+                x2boundary = (:left, :right),
+            )
+
+            space1 = make_space(domain, 2, 1, 1)
+            space2 = make_space(domain, 1, 2, 2)
+
+            # SE -> FV
+            R = LinearRemap(space2, space1)
+            # R_true = []
+
+            # @test R.map ≈ R_true
+            @test nnz(R.map) == 16
+
+            @test conservative(R)
+            @test consistent(R)
+
+            # FV -> SE
+            R = LinearRemap(space1, space2)
+            @test conservative(R)
+            @test consistent(R)
+        end
+    end
 end
 
 @testset "Spectral Elements <-> Spectral Elements Remapping" begin
@@ -438,7 +509,7 @@ end
         @testset "Single aligned elements" begin
 
             for nq1 in [3, 5, 9]
-                space1 = se_space(domain, nq1)
+                space1 = make_space(domain, nq1)
 
                 _, w = Spaces.Quadratures.quadrature_points(
                     FT,
@@ -447,7 +518,7 @@ end
                 @test local_weights(space1) ≈ w ./ 2
 
                 for nq2 in [2, 4, 10]
-                    space2 = se_space(domain, nq2)
+                    space2 = make_space(domain, nq2)
 
                     _, w = Spaces.Quadratures.quadrature_points(
                         FT,
@@ -475,8 +546,8 @@ end
         end
 
         @testset "Multiple elements" begin
-            space1 = se_space(domain, 3, 2)
-            space2 = se_space(domain, 2, 3)
+            space1 = make_space(domain, 3, 2)
+            space2 = make_space(domain, 2, 3)
 
             # SE1 -> SE2
             R = LinearRemap(space2, space1)
@@ -489,6 +560,168 @@ end
             @test count(!isapprox(0; atol = sqrt(eps(FT))), R.map) == 22
             @test conservative(R)
             @test consistent(R)
+        end
+    end
+
+    @testset "2D Domains" begin
+        domain = Domains.RectangleDomain(
+            Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+            Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
+            x1boundary = (:bottom, :top),
+            x2boundary = (:left, :right),
+        )
+
+        @testset "Single aligned elements" begin
+
+            nq1 = 2
+            space1 = make_space(domain, nq1)
+            nq2 = 3
+            space2 = make_space(domain, nq2)
+
+            # SE1 -> SE2
+            @test Operators.x_overlap(space2, space1) ==
+                  Operators.y_overlap(space2, space1)
+            R = LinearRemap(space2, space1)
+
+            I_true = [1, 2, 4, 5, 2, 3, 5, 6, 4, 5, 7, 8, 5, 6, 8, 9] # row
+            J_true = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4] # col
+            @test (I_true, J_true) == sparsity_pattern(R)
+            @test size(R.map) == operator_size(R)
+
+            @test conservative(R)
+            @test consistent(R)
+
+            # SE2 -> SE1
+            R = LinearRemap(space1, space2)
+            @test size(R.map) == operator_size(R)
+
+            @test conservative(R)
+            @test consistent(R)
+        end
+
+        @testset "Multiple elements" begin
+            @testset "Aligned Elements" begin
+                nq1 = 2
+                space1 = make_space(domain, 2, 2, 2)
+                nq2 = 3
+                space2 = make_space(domain, 3, 2, 2)
+
+                # SE1 -> SE2
+                @test Operators.x_overlap(space2, space1) ==
+                      Operators.y_overlap(space2, space1)
+                R = LinearRemap(space2, space1)
+
+                I_true = [1, 2, 4, 5, 2, 3, 5, 6, 4, 5, 7, 8, 5, 6, 8, 9]
+                I_true = [
+                    I_true...,
+                    (nq2^2) .+ I_true...,
+                    (nq2^2 * 2) .+ I_true...,
+                    (nq2^2 * 3) .+ I_true...,
+                ]
+                J_true = [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4]
+                J_true = [
+                    J_true...,
+                    (nq1^2) .+ J_true...,
+                    (nq1^2 * 2) .+ J_true...,
+                    (nq1^2 * 3) .+ J_true...,
+                ]
+                @test (I_true, J_true) == sparsity_pattern(R)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                # SE2 -> SE1
+                R = LinearRemap(space1, space2)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+            end
+
+            @testset "Unaligned Elements" begin
+                # Square element layout
+                nq1 = 2
+                nq2 = 2
+                space1 = make_space(domain, nq1, 2, 2)
+                space2 = make_space(domain, nq2, 3, 3)
+
+                Xov = Operators.x_overlap(space2, space1)
+                Yov = Operators.y_overlap(space2, space1)
+                @test Xov == Yov
+                I_true = [1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6]
+                J_true = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]
+                @test sparsity_pattern(Xov) == (I_true, J_true)
+
+                # SE1 -> SE2
+                R = LinearRemap(space2, space1)
+                #! format: off
+                I_true = [1, 2, 3, 4, 5, 7, 13, 14, 17,
+                          2, 4, 5, 6, 7, 8, 14, 17, 18,
+                          3, 4, 7, 13, 14, 15, 16, 17, 19,
+                          4, 7, 8, 14, 16, 17, 18, 19, 20,
+                ]
+                J_true = [1, 1, 1, 1, 1, 1, 1, 1, 1,
+                          2, 2, 2, 2, 2, 2, 2, 2, 2,
+                          3, 3, 3, 3, 3, 3, 3, 3, 3,
+                          4, 4, 4, 4, 4, 4, 4, 4, 4,
+                ]
+                #! format: on
+                I_true = [
+                    I_true...,
+                    (nq2^2) .+ I_true...,
+                    (nq2^2 * 3) .+ I_true...,
+                    (nq2^2 * 4) .+ I_true...,
+                ]
+                J_true = [
+                    J_true...,
+                    (nq1^2) .+ J_true...,
+                    (nq1^2 * 2) .+ J_true...,
+                    (nq1^2 * 3) .+ J_true...,
+                ]
+                @test sparsity_pattern(R) == (I_true, J_true)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                # SE2 -> SE1
+                R = LinearRemap(space1, space2)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                # Rectangular element layout
+                space1 = make_space(domain, 2, 2, 3)
+                space2 = make_space(domain, 2, 3, 2)
+
+                Xov = Operators.x_overlap(space2, space1)
+                Yov = Operators.y_overlap(space2, space1)
+                @test Xov == Yov'
+
+                # SE1 -> SE2
+                R = LinearRemap(space2, space1)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                # SE2 -> SE1
+                R = LinearRemap(space1, space2)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                # Differing higher orders
+                space1 = make_space(domain, 5, 4, 3)
+                space2 = make_space(domain, 8, 5, 8)
+
+                R = LinearRemap(space2, space1)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+
+                R = LinearRemap(space1, space2)
+                @test size(R.map) == operator_size(R)
+                @test conservative(R)
+                @test consistent(R)
+            end
         end
     end
 end
