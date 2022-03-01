@@ -44,6 +44,7 @@ include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl")
 include("Operators/finitedifference/column.jl")
 include("Operators/finitedifference/opt.jl")
 include("Operators/finitedifference/opt_examples.jl")
+include("Operators/finitedifference/stencil_operations.jl")
 
 include("Operators/hybrid/2d.jl")
 include("Operators/hybrid/3d.jl")
