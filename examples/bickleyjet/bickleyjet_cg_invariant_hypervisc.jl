@@ -12,7 +12,7 @@ import ClimaCore:
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
+ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms
@@ -58,6 +58,7 @@ n1, n2 = 16, 16
 Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
+@show "here; usempi = $usempi"
 if usempi
     grid_topology = Topologies.DistributedTopology2D(mesh, Context)
     global_grid_topology = Topologies.Topology2D(mesh)
@@ -146,7 +147,6 @@ dydt = similar(y0)
 rhs!(dydt, y0, nothing, 0.0)
 # Solve the ODE operator
 prob = ODEProblem(rhs!, y0, (0.0, 80.0))
-#prob = ODEProblem(rhs!, y0, (0.0, 2.0))
 
 sol = solve(
     prob,

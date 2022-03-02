@@ -422,16 +422,14 @@ function setup_comms(
     # Determine send and receive buffer dimensions for each neighbor PID
     # and add the neighbors in the same order as they are stored in
     # `neighbor_pids`!
-    nbrs = ClimaComms.Neighbor[]
+    nbrs = Dict{Int, ClimaComms.Neighbor}()
     for (nidx, npid) in enumerate(Topologies.neighbors(topology))
         nse = Topologies.nsendelems(topology, nidx)
         nge = Topologies.nghostelems(topology, nidx)
         send_dims = (Nv, Ni, Nj, Nf, nse)
         recv_dims = (Nv, Ni, Nj, Nf, nge)
-        push!(
-            nbrs,
-            ClimaComms.Neighbor(Context, npid, AT, FT, send_dims, recv_dims),
-        )
+        nbrs[npid] =
+            ClimaComms.Neighbor(Context, npid, AT, FT, send_dims, recv_dims)
     end
     return Context(nbrs)
 end

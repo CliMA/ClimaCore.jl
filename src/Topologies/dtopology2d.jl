@@ -32,6 +32,8 @@ struct DistributedTopology2D{
     localorderindex::LO
     "the PIDs of neighboring processes"
     neighbor_pids::Vector{Int}
+    "local idx of neighboring processes"
+    neighbor_pid_idx::Dict{Int, Int}
     "the elements that must be sent to neighboring processes"
     send_elems::NE
     "ghost elements, i.e. those received from neighboring processes"
@@ -237,6 +239,11 @@ function DistributedTopology2D(
     send_elems_ra = [sort(collect(elemset)) for elemset in send_elems]
     ghost_elems_ra = [sort(collect(elemset)) for elemset in ghost_elems]
 
+    neighbor_pid_idx = Dict{Int, Int}()
+    for (i, neighbor_pid) in enumerate(neighbor_pids)
+        neighbor_pid_idx[neighbor_pid] = i
+    end
+
     return DistributedTopology2D(
         mesh,
         elemorder,
@@ -245,6 +252,7 @@ function DistributedTopology2D(
         local_elems,
         localorderindex,
         neighbor_pids,
+        neighbor_pid_idx,
         send_elems_ra,
         ghost_elems_ra,
         collect(interior_faces),

@@ -205,7 +205,8 @@ function dss_2d!(
 
     # prepare send buffers from send elements
     for nbr_idx in 1:Topologies.nneighbors(topology)
-        sbuf = ClimaComms.send_stage(ClimaComms.neighbors(comms_ctx)[nbr_idx])
+        neighproc = comms_ctx.neighbor_pids[nbr_idx]
+        sbuf = ClimaComms.send_stage(comms_ctx.neighbors[neighproc])
         for level in 1:Nv
             senum = 1
             for sendelem in topology.send_elems[nbr_idx]
@@ -307,11 +308,10 @@ function dss_2d!(
         # find the index of the neighbor in global order that owns element 2
         elem2 = topology.elemorder[e2]
         opid = topology.elempid[e2]
-        nbr_idx =
-            findfirst(npid -> npid == opid, Topologies.neighbors(topology))
+        nbr_idx = topology.neighbor_pid_idx[opid]
 
         # get the receive buffer for this neighbor
-        rbuf = ClimaComms.recv_stage(ClimaComms.neighbors(comms_ctx)[nbr_idx])
+        rbuf = ClimaComms.recv_stage(comms_ctx.neighbors[opid])
 
         for level in 1:Nv
             src_slab1 = slab(src, level, lei)
@@ -367,13 +367,8 @@ function dss_2d!(
                     geometry_slab = slab(local_geometry_data, level, lei)
                 else
                     elem = topology.elemorder[e]
-                    nbr_idx = findfirst(
-                        npid -> npid == opid,
-                        Topologies.neighbors(topology),
-                    )
-                    rbuf = ClimaComms.recv_stage(
-                        ClimaComms.neighbors(comms_ctx)[nbr_idx],
-                    )
+                    nbr_idx = topology.neighbor_pid_idx[opid]
+                    rbuf = ClimaComms.recv_stage(comms_ctx.neighbors[opid])
                     gei = findfirst(
                         ge -> ge == elem,
                         topology.ghost_elems[nbr_idx],
