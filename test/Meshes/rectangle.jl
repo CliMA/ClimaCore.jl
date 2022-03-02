@@ -1,5 +1,6 @@
 using ClimaCore: Domains, Meshes, Geometry
 using Test
+using StaticArrays
 using SparseArrays
 
 
