@@ -12,7 +12,7 @@ import ClimaCore:
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
+#ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms

@@ -40,6 +40,26 @@ function distributed_grid(
     return Topologies.DistributedTopology2D(mesh, Context)
 end
 
+function strip_extra_gface_info(gfacesin)
+    gfacesout = Tuple{Int, Int, Int, Int, Bool}[]
+    for gfaces in gfacesin
+        push!(gfacesout, gfaces[1:5])
+    end
+    return gfacesout
+end
+
+function strip_extra_gvert_info(gvertsin)
+    gvertsout = Vector{Tuple{Int, Int}}[]
+    for verts in gvertsin
+        gvert_group = Tuple{Int, Int}[]
+        for (e, vertex_num, _, _) in verts
+            push!(gvert_group, (e, vertex_num))
+        end
+        push!(gvertsout, gvert_group)
+    end
+    return gvertsout
+end
+
 #=
  _ _ _ _
 |_|_|_|_|
@@ -51,6 +71,7 @@ end
     dtopo = distributed_grid(4, 4, false, false)
     ifaces = sort(collect(Topologies.interior_faces(dtopo)))
     gfaces = sort(collect(Topologies.ghost_faces(dtopo)))
+    gfacesout = strip_extra_gface_info(gfaces)
     passed = 0
     if pid == 1
         if length(ifaces) == 3
@@ -63,7 +84,7 @@ end
         if length(gfaces) == 4
             passed += 1
         end
-        if gfaces == sort([
+        if gfacesout == sort([
             (1, 3, 5, 1, true),
             (2, 3, 6, 1, true),
             (3, 3, 7, 1, true),
@@ -82,7 +103,7 @@ end
         if length(gfaces) == 8
             passed += 1
         end
-        if gfaces == sort([
+        if gfacesout == sort([
             (5, 1, 1, 3, true),
             (5, 3, 9, 1, true),
             (6, 1, 2, 3, true),
@@ -108,7 +129,7 @@ end
         if length(gfaces) == 8
             passed += 1
         end
-        if gfaces == sort([
+        if gfacesout == sort([
             (9, 1, 5, 3, true),
             (9, 3, 13, 1, true),
             (10, 1, 6, 3, true),
@@ -134,7 +155,7 @@ end
         if length(gfaces) == 4
             passed += 1
         end
-        if gfaces == sort([
+        if gfacesout == sort([
             (13, 1, 9, 3, true),
             (14, 1, 10, 3, true),
             (15, 1, 11, 3, true),
@@ -158,6 +179,7 @@ end
     dtopo = distributed_grid(2, 2, false, false)
     ivs = collect(Topologies.interior_vertices(dtopo))
     gvs = sort(collect(Topologies.ghost_vertices(dtopo)))
+    gvsout = strip_extra_gvert_info(gvs)
     passed = 0
     if pid == 1
         if length(ivs) == 1
@@ -169,7 +191,7 @@ end
         if length(gvs) == 3
             passed += 1
         end
-        if gvs == [
+        if gvsout == [
             [(1, 2), (2, 1)],
             [(1, 3), (2, 4), (3, 2), (4, 1)],
             [(1, 4), (3, 1)],
@@ -186,7 +208,7 @@ end
         if length(gvs) == 3
             passed += 1
         end
-        if gvs == [
+        if gvsout == [
             [(1, 2), (2, 1)],
             [(1, 3), (2, 4), (3, 2), (4, 1)],
             [(2, 3), (4, 2)],
@@ -203,7 +225,7 @@ end
         if length(gvs) == 3
             passed += 1
         end
-        if gvs == [
+        if gvsout == [
             [(1, 3), (2, 4), (3, 2), (4, 1)],
             [(1, 4), (3, 1)],
             [(3, 3), (4, 4)],
@@ -220,7 +242,7 @@ end
         if length(gvs) == 3
             passed += 1
         end
-        if gvs == [
+        if gvsout == [
             [(1, 3), (2, 4), (3, 2), (4, 1)],
             [(2, 3), (4, 2)],
             [(3, 3), (4, 4)],

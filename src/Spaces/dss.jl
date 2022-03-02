@@ -299,16 +299,12 @@ function dss_2d!(
     # and `elem2` is remote
     #  - potentially change to:
     #   (localelemnumber, face1, nbr_idx, gei, face2)
-    for (e1, face1, e2, face2, reversed) in Topologies.ghost_faces(topology)
+
+    for (e1, face1, e2, face2, reversed, opid, nbr_idx, gei) in
+        Topologies.ghost_faces(topology)
 
         # this is the local index for global order element 1
         lei = topology.localorderindex[e1]
-
-        # find the index of the neighbor in global order that owns element 2
-        elem2 = topology.elemorder[e2]
-        opid = topology.elempid[e2]
-        nbr_idx =
-            findfirst(npid -> npid == opid, Topologies.neighbors(topology))
 
         # get the receive buffer for this neighbor
         rbuf = ClimaComms.recv_stage(ClimaComms.neighbors(comms_ctx)[nbr_idx])
@@ -317,9 +313,6 @@ function dss_2d!(
             src_slab1 = slab(src, level, lei)
             local_geometry_slab1 = slab(local_geometry_data, level, lei)
 
-            # find the index of this element in the ghost elements for
-            # this neighbor and use it to find the slab we want
-            gei = findfirst(ge -> ge == elem2, topology.ghost_elems[nbr_idx])
             src_slab2 =
                 DataLayouts.IJF{elt, Nq}(view(rbuf, level, :, :, :, gei))
 
@@ -358,7 +351,7 @@ function dss_2d!(
     for verts in Topologies.ghost_vertices(topology)
         for level in 1:Nv
             # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, verts) do (e, vertex_num)
+            sum_data = mapreduce(⊞, verts) do (e, vertex_num, nbr_idx, gei)
                 i, j = Topologies.vertex_node_index(vertex_num, Nq)
                 opid = topology.elempid[e]
                 if opid == pid
@@ -367,16 +360,8 @@ function dss_2d!(
                     geometry_slab = slab(local_geometry_data, level, lei)
                 else
                     elem = topology.elemorder[e]
-                    nbr_idx = findfirst(
-                        npid -> npid == opid,
-                        Topologies.neighbors(topology),
-                    )
                     rbuf = ClimaComms.recv_stage(
                         ClimaComms.neighbors(comms_ctx)[nbr_idx],
-                    )
-                    gei = findfirst(
-                        ge -> ge == elem,
-                        topology.ghost_elems[nbr_idx],
                     )
                     src_slab = DataLayouts.IJF{elt, Nq}(
                         view(rbuf, level, :, :, :, gei),
