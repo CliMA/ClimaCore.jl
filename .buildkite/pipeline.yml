@@ -65,94 +65,325 @@ steps:
 
   - wait
 
-  - group: ":computer: unit tests"
-    key: "Unit tests"
-    steps:
-      agents:
-        config: cpu
-        queue: central
-        slurm_ntasks: 1
+  - label: "Unit test: recursive"
+    key: "recursive"
+    command: "julia --color=yes --check-bounds=yes --project=test test/recursive.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
-        - label: recursive
-          command: "julia --color=yes --check-bounds=yes --project=test test/recursive.jl"
-        - label: DataLayouts_data1d
-          command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1d.jl"
-        - label: DataLayouts_data2d
-          command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2d.jl"
-        - label: DataLayouts_data1dx
-          command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1dx.jl"
-        - label: DataLayouts_data2dx
-          command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2dx.jl"
-        - label: Geometry_geometry
-          command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/geometry.jl"
-        - label: Geometry_axistensors
-          command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/axistensors.jl"
-        - label: Meshes_interval
-          command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/interval.jl"
-        - label: Meshes_rectangle
-          command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/rectangle.jl"
-        - label: Meshes_cubedsphere
-          command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/cubedsphere.jl"
-        - label: Topologies_rectangle
-          command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle.jl"
-        - label: Topologies_cubedsphere
-          command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/cubedsphere.jl"
-        - label: Topologies_distributed
-          command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/distributed.jl"
-        - label: Spaces_quadrature
-          command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/quadrature.jl"
-        - label: Spaces_spaces
-          command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
-        - label: Spaces_sphere
-          command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/sphere.jl"
-        - label: Spaces_distributed
-          command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed.jl"
-        - label: Fields_field
-          command: "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
-        - label: Fields_fielddiffeq
-          command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
-        - label: Operators_spectralelement_rectilinear
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear.jl"
-        - label: Operators_spectralelement_opt
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/opt.jl"
-        - label: Operators_spectralelement_diffusion2d
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/diffusion2d.jl"
-        - label: Operators_spectralelement_sphere_geometry
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry.jl"
-        - label: Operators_spectralelement_sphere_gradient
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_gradient.jl"
-        - label: Operators_spectralelement_sphere_divergence
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_divergence.jl"
-        - label: Operators_spectralelement_sphere_curl
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_curl.jl"
-        - label: Operators_spectralelement_sphere_diffusion
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion.jl"
-        - label: Operators_spectralelement_sphere_diffusion_vec
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion_vec.jl"
-        - label: Operators_spectralelement_sphere_hyperdiffusion
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion.jl"
-        - label: Operators_spectralelement_sphere_hyperdiffusion_vec
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
-        - label: Operators_finitedifference_column
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/column.jl"
-        - label: Operators_finitedifference_opt
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt.jl"
-        - label: Operators_finitedifference_opt_examples
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_examples.jl"
-        - label: Operators_finitedifference_implicit_stencils
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl"
-        - label: Operators_finitedifference_opt_implicit_stencils
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_implicit_stencils.jl"
-        - label: Operators_hybrid_2d
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/2d.jl"
-        - label: Operators_hybrid_3d
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
-        - label: Operators_hybrid_opt
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/opt.jl"
-        - label: Operators_remapping
-          command: "julia --color=yes --check-bounds=yes --project=test test/Operators/remapping.jl"
-        - label: Limiters_limiter
-          command: "julia --color=yes --check-bounds=yes --project=test test/Limiters/limiter.jl"
+  - label: "Unit test: DataLayouts_data1d"
+    key: "datalayouts_data1d"
+    command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: DataLayouts_data2d"
+    key: "datalayouts_data2d"
+    command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: DataLayouts_data1dx"
+    key: "datalayouts_data1dx"
+    command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1dx.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: DataLayouts_data2dx"
+    key: "datalayouts_data2dx"
+    command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2dx.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Geometry_geometry"
+    key: "geometry_geometry"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/geometry.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Geometry_axistensors"
+    key: "geometry_axistensors"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/axistensors.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Meshes_interval"
+    key: "meshes_interval"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/interval.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Meshes_rectangle"
+    key: "meshes_rectangle"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/rectangle.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Meshes_cubedsphere"
+    key: "meshes_cubedsphere"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/cubedsphere.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Topologies_rectangle"
+    key: "topologies_rectangle"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Topologies_cubedsphere"
+    key: "topologies_cubedsphere"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/cubedsphere.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Topologies_distributed"
+    key: "topologies_distributed"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/distributed.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Spaces_quadrature"
+    key: "spaces_quadrature"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/quadrature.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Spaces_spaces"
+    key: "spaces_spaces"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Spaces_sphere"
+    key: "spaces_sphere"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/sphere.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Spaces_distributed"
+    key: "spaces_distributed"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Fields_field"
+    key: "fields_field"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Fields_fielddiffeq"
+    key: "fields_fielddiffeq"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_rectilinear"
+    key: "operators_spectralelement_rectilinear"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_opt"
+    key: "operators_spectralelement_opt"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/opt.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_diffusion2d"
+    key: "operators_spectralelement_diffusion2d"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/diffusion2d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_geometry"
+    key: "operators_spectralelement_sphere_geometry"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_gradient"
+    key: "operators_spectralelement_sphere_gradient"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_gradient.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_divergence"
+    key: "operators_spectralelement_sphere_divergence"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_divergence.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_curl"
+    key: "operators_spectralelement_sphere_curl"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_curl.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_diffusion"
+    key: "operators_spectralelement_sphere_diffusion"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_diffusion_vec"
+    key: "operators_spectralelement_sphere_diffusion_vec"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion_vec.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_hyperdiffusion"
+    key: "operators_spectralelement_sphere_hyperdiffusion"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_spectralelement_sphere_hyperdiffusion_vec"
+    key: "operators_spectralelement_sphere_hyperdiffusion_vec"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_finitedifference_column"
+    key: "operators_finitedifference_column"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/column.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_finitedifference_opt"
+    key: "operators_finitedifference_opt"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_finitedifference_opt_examples"
+    key: "operators_finitedifference_opt_examples"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_examples.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_finitedifference_implicit_stencils"
+    key: "operators_finitedifference_implicit_stencils"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_finitedifference_opt_implicit_stencils"
+    key: "operators_finitedifference_opt_implicit_stencils"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_implicit_stencils.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_hybrid_2d"
+    key: "operators_hybrid_2d"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/2d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_hybrid_3d"
+    key: "operators_hybrid_3d"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_hybrid_opt"
+    key: "operators_hybrid_opt"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/opt.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Operators_remapping"
+    key: "operators_remapping"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Operators/remapping.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: "Unit test: Limiters_limiter"
+    key: "limiters_limiter"
+    command: "julia --color=yes --check-bounds=yes --project=test test/Limiters/limiter.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
