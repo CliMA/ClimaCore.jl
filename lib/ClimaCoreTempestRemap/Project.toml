@@ -5,6 +5,7 @@ version = "0.2.0"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+ClimaCorePlots = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
@@ -19,3 +20,6 @@ NCDatasets = "0.11"
 PkgVersion = "0.1"
 TempestRemap_jll = "2.1.2"
 julia = "1.7"
+
+[extras]
+CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"

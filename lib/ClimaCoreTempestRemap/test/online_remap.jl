@@ -4,15 +4,16 @@ using NCDatasets
 using TempestRemap_jll
 using Test
 using ClimaCoreTempestRemap
+using LinearAlgebra
 
-include("../src/connectivity.jl")
+#include("../src/connectivity.jl")
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "online remap 2D sphere data" begin
 
-    # domain 
-    R = 1.0 # unit sphere 
+    # domain
+    R = 1.0 # unit sphere
     domain = ClimaCore.Domains.SphereDomain(R)
 
     # source grid params
@@ -20,42 +21,47 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     nq_i = 3
 
     # target grid params
-    ne_o = 5  
-    nq_o = 3   
+    ne_o = 5
+    nq_o = 3
 
     # construct source mesh
-    mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i) 
+    mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i)
     topology_i = ClimaCore.Topologies.Topology2D(mesh_i)
     space_i = Spaces.SpectralElementSpace2D(topology_i, Spaces.Quadratures.GLL{nq_i}())
     coords_i = Fields.coordinate_field(space_i)
 
     # construct target mesh
-    mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o) 
+    mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o)
     topology_o = ClimaCore.Topologies.Topology2D(mesh_o)
     space_o = Spaces.SpectralElementSpace2D(topology_o, Spaces.Quadratures.GLL{nq_o}())
     coords_o = Fields.coordinate_field(space_o)
 
-    # use TempestRemap to generate map weights
-    weightfile = joinpath(OUTPUT_DIR, "remap_data.nc")
-    map, col, row = generate_map(weightfile, topology_i, topology_o, nq_i, nq_o)
 
+    #=
     # get connectivity for projections from ClimaCore Fields to Tempest sparse matrix
     _, n_gll_i, connect_i = get_cc_gll_connect(ne_i, nq_i)
     _, n_gll_o, connect_o = get_cc_gll_connect(ne_o, nq_o)
-
+    =#
     # initialize the remap operator
-    RemapInfo = LinearTempestRemap(map, col, row, nq_i, ne_i, n_gll_i, connect_i, nq_o, ne_o, n_gll_o, connect_o )
 
     # generate test data in the Field format
     field_i = sind.(Fields.coordinate_field(space_i).long)
     field_o = similar(field_i, space_o, eltype(field_i))
-    
+
+    # use TempestRemap to generate map weights
+    R = ClimaCoreTempestRemap.generate_map(space_o, space_i)
     # apply the remap
-    remap!(field_o, field_i, RemapInfo)
+    ClimaCoreTempestRemap.remap!(field_o, field_i, R)
+
+    # reference
+    field_ref = sind.(Fields.coordinate_field(space_o).long)
+    @test field_ref ≈ field_o atol=0.02
+
+
 
     ## write test data for offline map apply for comparison
     datafile_in = joinpath(OUTPUT_DIR, "data_in.nc")
-    
+
     NCDataset(datafile_in, "c") do nc
         def_space_coord(nc, space_i)
         nc_time = def_time_coord(nc)
@@ -69,8 +75,8 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
         nothing
     end
-    
-    ## for test below, apply offline map, read in the resulting field and reshape it to the IJFH format 
+
+    ## for test below, apply offline map, read in the resulting field and reshape it to the IJFH format
     datafile_out = joinpath(OUTPUT_DIR, "data_out.nc")
     apply_remap(datafile_out, datafile_in, weightfile, ["sinlong"])
 
@@ -113,7 +119,7 @@ png(joinpath(OUTPUT_DIR,"out_offline.png"))
 using BenchmarkTools
 @btime  apply_remap --> 53.477 ms (304 allocations: 19.78 KiB)
 @btime remap! --> 1.398 s (65163 allocations: 1.55 GiB)
-@btime remap!(Simon_fix) --> 363.599 μs (623 allocations: 150.81 KiB) 
+@btime remap!(Simon_fix) --> 363.599 μs (623 allocations: 150.81 KiB)
 
 
 
