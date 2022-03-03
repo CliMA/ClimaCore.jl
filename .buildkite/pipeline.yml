@@ -374,6 +374,39 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Density current 2D hybrid invariant total energy"
+    key: "cpu_density_current_2d_hybrid_invariant_total_energy"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/density_current_2dinvariant_rhoe.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/dc_invariant_etot/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Density current 2D hybrid invariant potential temperature"
+    key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/density_current_2dinvariant_rhotheta.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/dc_rhotheta/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+  
+  - label: ":computer: Density current 2D hybrid conservative form potential temperature"
+    key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/density_current_2d_flux_form.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/dc_fluxform/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: MPI Rising Bubble 3D hybrid invariant total energy"
     key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_total_energy"
