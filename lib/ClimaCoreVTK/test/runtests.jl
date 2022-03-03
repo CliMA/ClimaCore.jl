@@ -34,6 +34,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         basis = :point,
     )
     @test isfile(joinpath(OUTPUT_DIR, "sphere.vtu"))
+
     writevtk(
         joinpath(OUTPUT_DIR, "sphere_latlong"),
         (coords = coords,);
@@ -76,6 +77,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         end
         U[t] = u
     end
+
     writevtk(
         joinpath(OUTPUT_DIR, "series", "sphere_vector_series"),
         times,
@@ -88,6 +90,38 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         )
     end
     @test isfile(joinpath(OUTPUT_DIR, "series", "sphere_vector_series.pvd"))
+
+    writevtk(
+        joinpath(OUTPUT_DIR, "series", "sphere_latlong_scalar_series"),
+        times,
+        (A = A,);
+        latlong = true,
+        basis = :point,
+    )
+    @test isfile(
+        joinpath(OUTPUT_DIR, "series", "sphere_latlong_scalar_series.pvd"),
+    )
+
+    writevtk(
+        joinpath(OUTPUT_DIR, "series", "sphere_latlong_vector_series"),
+        times,
+        (U = U,);
+        latlong = true,
+        basis = :point,
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(
+                OUTPUT_DIR,
+                "series",
+                "sphere_latlong_vector_series_$(istr).vtu",
+            ),
+        )
+    end
+    @test isfile(
+        joinpath(OUTPUT_DIR, "series", "sphere_latlong_vector_series.pvd"),
+    )
 end
 
 @testset "rectangle" begin
