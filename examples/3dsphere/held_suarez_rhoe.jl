@@ -1,6 +1,10 @@
 using ClimaCorePlots, Plots
+using DiffEqCallbacks
+using JLD2
 
 include("baroclinic_wave_utilities.jl")
+
+jld2_callback = PeriodicCallback(output_writer, 864000; initial_affect = true)
 
 driver_values(FT) = (;
     zmax = FT(30.0e3),
@@ -12,8 +16,8 @@ driver_values(FT) = (;
     ode_algorithm = OrdinaryDiffEq.Rosenbrock23,
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :no_∂P∂K, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
-    save_every_n_steps = 10,
-    additional_solver_kwargs = (;), # e.g., reltol, abstol, etc.
+    save_every_n_steps = 216,
+    additional_solver_kwargs = (; callback = jld2_callback), # e.g., reltol, abstol, etc.
 )
 
 initial_condition(local_geometry) =
