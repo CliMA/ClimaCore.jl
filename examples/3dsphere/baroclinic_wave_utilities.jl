@@ -259,6 +259,81 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     @. dY.Yc.ρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 end
 
+function held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
+    @unpack cχθ, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
+
+    cρ = Y.Yc.ρ # density on centers
+    cρθ = Y.Yc.ρθ # potential temperature on centers
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    fw = Y.w # Covariant3Vector on faces
+
+    # Update w at the bottom
+    # fw = -g^31 cuₕ/ g^33 ????????
+
+    # Hyperdiffusion: ρ, ρθ, uₕ
+    @. cχθ = hwdiv(hgrad(cρθ))
+    @. cχρ = hwdiv(hgrad(cρ))
+    @. cχuₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+    Spaces.weighted_dss!(cχθ)
+    Spaces.weighted_dss!(cχuₕ)
+    Spaces.weighted_dss!(cχρ)
+
+    @. dY.Yc.ρθ -= κ₄ * hwdiv(hgrad(cχθ))
+    @. dY.Yc.ρ -= κ₄ * hwdiv(hgrad(cχρ))
+    @. dY.uₕ -=
+        κ₄ * (
+            hwgrad(hdiv(cχuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
+            )
+        )
+
+    # Mass conservation
+
+    @. cuvw =
+        Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
+
+    @. dY.Yc.ρ -= hdiv(cρ * cuvw)
+    @. dY.Yc.ρ -= vdivf2c(Ic2f(cρ * cuₕ))
+
+    # Momentum conservation
+
+    # curl term
+    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    @. fu¹² =
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(cuₕ)))
+    @. fu³ = Geometry.Contravariant3Vector(Geometry.Covariant123Vector(fw))
+
+    @. dY.uₕ -= If2c(fω¹² × fu³)
+    # Needed for 3D:
+    @. dY.uₕ -=
+        (cf + cω³) ×
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
+
+    @. cK = norm_sqr(cuvw) / 2
+    @. cp = pressure(cρθ)
+
+    @. dY.uₕ -= hgrad(cp) / cρ
+    @. dY.uₕ -= hgrad(cK + cΦ)
+
+    @. dY.w -= fω¹² × fu¹² # Covariant3Vector on faces
+    @. dY.w -= vgradc2f(cK)
+
+    # Energy conservation
+
+    @. dY.Yc.ρθ -= hdiv(cuvw * cρθ)
+    @. dY.Yc.ρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+end
+
 function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
     @unpack cχe, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
 
