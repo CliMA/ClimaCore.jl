@@ -4,8 +4,8 @@
 Arguments:
 - `ρq`: tracer density Field, where `q` denotes tracer concentration per unit mass
 - `ρ`: fluid density Field
-- `min_ρq`: Array of min(ρq) per element
-- `max_ρq`: Array of max(ρq) per element
+- `min_ρq`: Matrix of min(ρq) per element, per level: shape [horz_n_elems, vert_n_elems]
+- `max_ρq`: Matrix of max(ρq) per element, per level: shape [horz_n_elems, vert_n_elems]
 - `rtol`: relative tolerance needed to solve element-wise optimization problem
 
 This limiter is inspired by the one presented in Guba et al [GubaOpt2014](@cite).
@@ -29,99 +29,113 @@ function quasimonotone_limiter!(
     max_ρq;
     rtol,
 )
-    space = axes(ρ)
+    if ndims(min_ρq) == 1
+        space = axes(ρ)
+    else
+        space = axes(ρ).horizontal_space
+    end
+
+    # Initialize temp variables
     FT = Spaces.undertype(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    n_elems = length(min_ρq)
-    slab_space = axes(Fields.slab(ρ, 1))
-    q_data = Fields.field_values(zeros(slab_space))
+    horz_n_elems = size(min_ρq, 1)
+    vert_n_elems = size(min_ρq, 2)
+    slab_space = axes(Fields.slab(ρ, 1, 1))
+    q_he_data = Fields.field_values(zeros(slab_space))
     ρ_wJ_data = Fields.field_values(zeros(slab_space))
 
-    # Traverse elements
-    for e in 1:n_elems
-        ρ_e_slab = Fields.slab(ρ, e)
-        ρq_e_slab = Fields.slab(ρq, e)
-        ρ_e_data = Fields.field_values(ρ_e_slab)
-        ρq_e_data = Fields.field_values(ρq_e_slab)
-        # Compute ρ's and ρq's masses over an element e
-        ρ_e_mass = sum(ρ_e_slab)
-        ρq_e_mass = sum(ρq_e_slab)
+    # Traverse vertical levels
+    for ve in 1:vert_n_elems
+        ρ_level_mass = sum(Fields.slab(ρ, ve))
+        ρq_level_mass = sum(Fields.slab(ρq, ve))
+        # On each level, traverse horizontal elements
+        for he in 1:horz_n_elems
+            ρ_he_slab = Fields.slab(ρ, ve, he)
+            ρq_he_slab = Fields.slab(ρq, ve, he)
+            ρ_he_data = Fields.field_values(ρ_he_slab)
+            ρq_he_data = Fields.field_values(ρq_he_slab)
+            # Compute ρ's and ρq's masses over an horizontal element e
+            ρ_he_mass = sum(ρ_he_slab)
+            ρq_he_mass = sum(ρq_he_slab)
 
-        # This should never happen, but if it does, don't limit
-        if ρ_e_mass <= zero(FT)
-            error("Negative elemental mass!")
-            continue
-        end
-
-        # Relax constraints to ensure limiter has a solution:
-        # This is only needed if running with the SSP CFL>1 or
-        # due to roundoff errors.
-        if ρq_e_mass < min_ρq[e] * ρ_e_mass
-            min_ρq[e] = ρq_e_mass / ρ_e_mass
-        end
-
-        if ρq_e_mass > max_ρq[e] * ρ_e_mass
-            max_ρq[e] = ρq_e_mass / ρ_e_mass
-        end
-
-        local_geometry_slab = Fields.slab(space.local_geometry, e)
-
-        q_data .= ρq_e_data ./ ρ_e_data
-
-        # Weighted least squares problem iteration loop
-        for iter in 1:(Nq * Nq - 1)
-            mass_change = zero(FT)
-            # Iterate over quadrature points
-            for j in 1:Nq, i in 1:Nq
-                ρ_wJ_data[i, j] = local_geometry_slab[i, j].WJ .* ρ_e_data[i, j]
-                # Compute the error tolerance and project q into the
-                # upper and lower bounds
-                if q_data[i, j] > max_ρq[e]
-                    mass_change += (q_data[i, j] - max_ρq[e]) * ρ_wJ_data[i, j]
-                    q_data[i, j] = max_ρq[e]
-                elseif q_data[i, j] < min_ρq[e]
-                    mass_change -= (min_ρq[e] - q_data[i, j]) * ρ_wJ_data[i, j]
-                    q_data[i, j] = min_ρq[e]
-                end
+            # This should never happen, but if it does, don't limit
+            if ρ_he_mass <= zero(FT)
+                error("Negative elemental mass!")
             end
 
-            # By this projection of q to the upper/lower bounds, we
-            # have introduced a mass_change. Check if we are within the chosen
-            # tolerance
-            if abs(mass_change) <= rtol * abs(ρq_e_mass)
-                break
+            # Relax constraints to ensure limiter has a solution:
+            # This is only needed if running with the SSP CFL>1 or
+            # due to roundoff errors.
+            if ρq_he_mass < min_ρq[he, ve] * ρ_he_mass
+                min_ρq[he, ve] = ρq_he_mass / ρ_he_mass
             end
 
-            weights_sum = zero(FT)
+            if ρq_he_mass > max_ρq[he, ve] * ρ_he_mass
+                max_ρq[he, ve] = ρq_he_mass / ρ_he_mass
+            end
 
-            # If the change was positive, the removed mass is added
-            if mass_change > 0
+            local_geometry_slab = Fields.slab(space.local_geometry, he)
+
+            q_he_data .= ρq_he_data ./ ρ_he_data
+
+            # Weighted least squares problem iteration loop
+            for iter in 1:(Nq * Nq - 1)
+                mass_change = zero(FT)
                 # Iterate over quadrature points
                 for j in 1:Nq, i in 1:Nq
-                    if q_data[i, j] < max_ρq[e]
-                        weights_sum += ρ_wJ_data[i, j]
+                    ρ_wJ_data[i, j] =
+                        local_geometry_slab[i, j].WJ * ρ_he_data[i, j]
+                    # Compute the error tolerance and project q into the
+                    # upper and lower bounds
+                    if q_he_data[i, j] > max_ρq[he, ve]
+                        mass_change +=
+                            (q_he_data[i, j] - max_ρq[he, ve]) * ρ_wJ_data[i, j]
+                        q_he_data[i, j] = max_ρq[he, ve]
+                    elseif q_he_data[i, j] < min_ρq[he, ve]
+                        mass_change -=
+                            (min_ρq[he, ve] - q_he_data[i, j]) * ρ_wJ_data[i, j]
+                        q_he_data[i, j] = min_ρq[he, ve]
                     end
                 end
-                for j in 1:Nq, i in 1:Nq
-                    if q_data[i, j] < max_ρq[e]
-                        q_data[i, j] += mass_change / weights_sum
-                    end
+
+                # By this projection of q to the upper/lower bounds, we
+                # have introduced a mass_change. Check if we are within the chosen
+                # tolerance
+                if abs(mass_change) <= rtol * abs(ρq_he_mass)
+                    break
                 end
-            else # If the change was negative, the added mass is removed
-                # Iterate over quadrature points
-                for j in 1:Nq, i in 1:Nq
-                    if q_data[i, j] > min_ρq[e]
-                        weights_sum += ρ_wJ_data[i, j]
+
+                weights_sum = zero(FT)
+
+                # If the change was positive, the removed mass is added
+                if mass_change > 0
+                    # Iterate over quadrature points
+                    for j in 1:Nq, i in 1:Nq
+                        if q_he_data[i, j] < max_ρq[he, ve]
+                            weights_sum += ρ_wJ_data[i, j]
+                        end
                     end
-                end
-                for j in 1:Nq, i in 1:Nq
-                    if q_data[i, j] > min_ρq[e]
-                        q_data[i, j] += mass_change / weights_sum
+                    for j in 1:Nq, i in 1:Nq
+                        if q_he_data[i, j] < max_ρq[he, ve]
+                            q_he_data[i, j] += mass_change / weights_sum
+                        end
+                    end
+                else # If the change was negative, the added mass is removed
+                    # Iterate over quadrature points
+                    for j in 1:Nq, i in 1:Nq
+                        if q_he_data[i, j] > min_ρq[he, ve]
+                            weights_sum += ρ_wJ_data[i, j]
+                        end
+                    end
+                    for j in 1:Nq, i in 1:Nq
+                        if q_he_data[i, j] > min_ρq[he, ve]
+                            q_he_data[i, j] += mass_change / weights_sum
+                        end
                     end
                 end
             end
-        end
-        ρq_e_data .= q_data .* ρ_e_data
-    end
+            ρq_he_data .= q_he_data .* ρ_he_data
+        end # end of horz elem loop
+    end # end of vert level loop
     return ρq
 end

@@ -240,7 +240,7 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters = (quad = quad, space = space, min_Q = min_Q, max_Q = max_Q)
+    parameters = (space = space, min_Q = min_Q, max_Q = max_Q)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
