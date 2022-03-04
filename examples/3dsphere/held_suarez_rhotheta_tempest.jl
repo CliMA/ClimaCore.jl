@@ -17,7 +17,7 @@ driver_values(FT) = (;
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :exact, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
     save_every_n_steps = 216,
-    additional_solver_kwargs = (; callback = jld2_callback), # e.g., reltol, abstol, etc.
+    additional_solver_kwargs = (;), # callback = jld2_callback), 
 )
 
 initial_condition(local_geometry) = initial_condition_ρθ(local_geometry)
@@ -32,13 +32,7 @@ remaining_cache_values(Y, dt) = merge(
 
 function remaining_tendency!(dY, Y, p, t)
     dY .= zero(eltype(dY))
-    held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(
-        dY,
-        Y,
-        p,
-        t;
-        κ₄ = 2.0e17,
-    )
+    held_suarez_ρθ_tempest_remaining_tendency!(dY, Y, p, t; κ₄ = 2.0e17)
     held_suarez_forcing!(dY, Y, p, t)
     final_adjustments!(
         dY,

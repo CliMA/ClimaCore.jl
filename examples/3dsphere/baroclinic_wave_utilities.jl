@@ -138,6 +138,7 @@ function baroclinic_wave_cache_values(Y, dt)
         (; cχe = Fields.Field(FT, center_space))
     return (;
         cχ_energy_named_tuple...,
+        cχρ = Fields.Field(FT, center_space),
         cχuₕ = Fields.Field(Geometry.Covariant12Vector{FT}, center_space),
         cuvw = Fields.Field(Geometry.Covariant123Vector{FT}, center_space),
         cω³ = Fields.Field(Geometry.Contravariant3Vector{FT}, center_space),
@@ -204,6 +205,7 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
+
     Spaces.weighted_dss!(cχθ)
     Spaces.weighted_dss!(cχuₕ)
 
@@ -259,8 +261,8 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     @. dY.Yc.ρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
 end
 
-function held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
-    @unpack cχθ, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
+function held_suarez_ρθ_tempest_remaining_tendency!(dY, Y, p, t; κ₄)
+    @unpack cχρ, cχθ, cχuₕ, cuvw, cω³, fω¹², fu¹², fu³, cf, cK, cp, cΦ = p
 
     cρ = Y.Yc.ρ # density on centers
     cρθ = Y.Yc.ρθ # potential temperature on centers
@@ -277,9 +279,14 @@ function held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(dY, Y, p, t
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
+    # treat w as a scalar for the purposes of applying Hyperdiffusion
+    fws = fw.components.data.:1
+    fχw = @. hwdiv(hgrad(fws))
+
     Spaces.weighted_dss!(cχθ)
     Spaces.weighted_dss!(cχuₕ)
     Spaces.weighted_dss!(cχρ)
+    Spaces.weighted_dss!(fχw)
 
     @. dY.Yc.ρθ -= κ₄ * hwdiv(hgrad(cχθ))
     @. dY.Yc.ρ -= κ₄ * hwdiv(hgrad(cχρ))
@@ -289,6 +296,8 @@ function held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(dY, Y, p, t
                 hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
             )
         )
+    dfws = dY.w.components.data.:1
+    @. dfws -= κ₄ * hwdiv(hgrad(fχw))
 
     # Mass conservation
 
@@ -362,6 +371,7 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
+
     Spaces.weighted_dss!(cχe)
     Spaces.weighted_dss!(cχuₕ)
 
