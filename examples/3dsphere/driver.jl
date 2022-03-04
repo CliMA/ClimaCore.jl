@@ -14,7 +14,7 @@ using OrdinaryDiffEq
 
 const FT = Float64
 
-default_test_name = "balanced_flow_rhotheta"
+default_test_name = "baroclinic_wave_rhoe"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 ################################################################################

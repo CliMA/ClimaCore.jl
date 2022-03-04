@@ -32,13 +32,7 @@ remaining_cache_values(Y, dt) = merge(
 
 function remaining_tendency!(dY, Y, p, t)
     dY .= zero(eltype(dY))
-    held_suarez_ρθ_hyperdiffusion_ρ_ρθ_remaining_tendency!(
-        dY,
-        Y,
-        p,
-        t;
-        κ₄ = 2.0e17,
-    )
+    held_suarez_ρθ_tempest_remaining_tendency!(dY, Y, p, t; κ₄ = 2.0e17)
     held_suarez_forcing!(dY, Y, p, t)
     final_adjustments!(
         dY,
