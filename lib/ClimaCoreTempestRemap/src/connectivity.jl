@@ -10,8 +10,8 @@ struct LinearMap{S,T,W,I} # make consistent with / move to regridding.jl
     source_space::S
     target_space::T
     weights::W # remapping weights
-    col::I # source linear indices
-    row::I # target linear indices
+    source_idxs::I # source indices
+    target_idxs::I # target indices
 end
 
 """
@@ -28,14 +28,10 @@ function remap!(target::IJFH{S,Nqt}, source::IJFH{S,Nqs}, R::LinearMap) where {S
 
     # ideally we would use the tempestremap dgll (redundant node) representation
     # unfortunately, this doesn't appear to work quite as well as the cgll
-
-    # we need to be able to look up the index
-    source_idxs = collect(Spaces.unique_nodes(R.source_space))
-    target_idxs = collect(Spaces.unique_nodes(R.target_space))
-
-    for (r,c,wt) = zip(R.row, R.col, R.weights)
-        (is,js), es = source_idxs[c]
-        (it,jt), et = target_idxs[r]
+    f = 1
+    for (source_idx, target_idx, wt) = zip(R.source_idxs, R.target_idxs, R.weights)
+        (is,js), es = source_idx
+        (it,jt), et = target_idx
         for f = 1:Nf
             target_array[it,jt,f,et] += wt * source_array[is,js,f,es]
         end
@@ -49,6 +45,7 @@ function remap!(target::Fields.Field, source::Fields.Field, R::LinearMap)
     # it will set the redundant nodes to zero
     remap!(Fields.field_values(target), Fields.field_values(source), R)
     # we can make the redundant nodes the same by applying the unweighted dss
+    # we could get rid of this if we added the redundant nodes to the matrix
     Spaces.horizontal_dss!(target)
     return target
 end
@@ -89,5 +86,9 @@ function generate_map(
         (Array(ds_wt["S"]), Array(ds_wt["col"]), Array(ds_wt["row"]))
     end
 
-    return LinearMap(source_space, target_space, weights, col, row)
+    # we need to be able to look up the index
+    source_unique_idxs = collect(Spaces.unique_nodes(source_space))
+    target_unique_idxs = collect(Spaces.unique_nodes(target_space))
+
+    return LinearMap(source_space, target_space, weights, source_unique_idxs[col], target_unique_idxs[row])
 end

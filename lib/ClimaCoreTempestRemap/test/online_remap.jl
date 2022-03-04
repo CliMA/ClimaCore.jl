@@ -51,7 +51,8 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     # use TempestRemap to generate map weights
     R = ClimaCoreTempestRemap.generate_map(space_o, space_i)
     # apply the remap
-    ClimaCoreTempestRemap.remap!(field_o, field_i, R)
+
+
 
     # reference
     field_ref = sind.(Fields.coordinate_field(space_o).long)
