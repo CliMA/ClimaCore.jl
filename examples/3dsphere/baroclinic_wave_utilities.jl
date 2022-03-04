@@ -206,13 +206,8 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
 
-    # treat w as a scalar for the purposes of applying Hyperdiffusion
-    fws = fw.components.data.:1
-    fχw = @. hwdiv(hgrad(fws))
-
     Spaces.weighted_dss!(cχθ)
     Spaces.weighted_dss!(cχuₕ)
-    Spaces.weighted_dss!(fχw)
 
     @. dY.Yc.ρθ -= κ₄ * hwdiv(cρ * hgrad(cχθ))
     @. dY.uₕ -=
@@ -221,8 +216,6 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
                 hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
             )
         )
-    dfws = dY.w.components.data.:1
-    @. dfws -= κ₄ * hwdiv(hgrad(fχw))
 
     # Mass conservation
 
@@ -378,13 +371,9 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
-    # treat w as a scalar for the purposes of applying Hyperdiffusion
-    fws = fw.components.data.:1
-    fχw = @. hwdiv(hgrad(fws))
 
     Spaces.weighted_dss!(cχe)
     Spaces.weighted_dss!(cχuₕ)
-    Spaces.weighted_dss!(fχw)
 
     @. dY.Yc.ρe -= κ₄ * hwdiv(cρ * hgrad(cχe))
     @. dY.uₕ -=
@@ -393,8 +382,6 @@ function baroclinic_wave_ρe_remaining_tendency!(dY, Y, p, t; κ₄)
                 hwcurl(Geometry.Covariant3Vector(hcurl(cχuₕ))),
             )
         )
-    dfws = dY.w.components.data.:1
-    @. dfws -= κ₄ * hwdiv(hgrad(fχw))
 
     # Mass conservation
 

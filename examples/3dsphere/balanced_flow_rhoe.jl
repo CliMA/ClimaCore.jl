@@ -18,7 +18,7 @@ driver_values(FT) = (;
     jacobian_flags = (; ∂𝔼ₜ∂𝕄_mode = :no_∂P∂K, ∂𝕄ₜ∂ρ_mode = :exact),
     max_newton_iters = 2,
     save_every_n_steps = 10,
-    additional_solver_kwargs = (; callback = jld2_callback), # e.g., reltol, abstol, etc.
+    additional_solver_kwargs = (;), # callback = jld2_callback), 
 )
 
 initial_condition(local_geometry) =
