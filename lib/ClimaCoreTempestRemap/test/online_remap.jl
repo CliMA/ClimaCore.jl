@@ -79,7 +79,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     close(ds_wt)
 
     field_o_offline = Float64.(field_o_offline)
-    field_o_offline_reshaped = project_sparse_to_IJFH(field_o_offline, connect_o, nq_o, ne_o)
+    field_o_offline_reshaped =  project_sparse_to_IJFH(field_o_offline, connect_o, nq_o, ne_o) 
 
     err = maximum(sqrt.((field_o_offline_reshaped[:,:,1,:,:] - parent(field_o)) .^ 2))
 
@@ -87,6 +87,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 end
 
+using LinearAlgebra
 #=
 using Plots
 function plot_flatmesh(Psi,nelem)
@@ -109,6 +110,16 @@ png(joinpath(OUTPUT_DIR,"out.png"))
 plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
 png(joinpath(OUTPUT_DIR,"out_offline.png"))
 
+# ] dev ../ClimaCorePlots
+
+offline = similar(field_o) 
+parent(offline) .= field_o_offline_reshaped[:,:,1,:,:]
+
+heatmap(field_o .- offline)
+
+field_ref = sind.(Fields.coordinate_field(space_o).long)
+norm(field_ref .- field_o)
+heatmap(field_ref .- field_o)
 
 using BenchmarkTools
 @btime  apply_remap --> 53.477 ms (304 allocations: 19.78 KiB)

@@ -161,13 +161,15 @@ function project_sparse_to_IJFH(var::Vector, connect, nq::Int, ne::Int)
     for e in collect(1:1:num_elem)
         for nq_y in collect(1:1:nq) 
             for nq_x in collect(1:1:nq) 
-                c = connect[nq_y, nq_x, e]
+                c = connect[nq_x, nq_y, e]
                 out[nq_x,nq_y,1,1,e] = var[Int(c)]
             end
         end
     end
     return out
 end
+
+
 
 """
     LinearTempestRemap{T, S, M, C}
