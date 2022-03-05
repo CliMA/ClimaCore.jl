@@ -1,16 +1,13 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
+using LinearAlgebra
 
-using ClimaCore.Geometry, LinearAlgebra, UnPack
-import ClimaCore: slab, Fields, Domains, Topologies, Meshes, Spaces
-import ClimaCore: slab
-import ClimaCore.Operators
-import ClimaCore.Geometry
-import Plots
-using LinearAlgebra, IntervalSets
+import ClimaCore:
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 """
     convergence_rate(err, Δh)
@@ -51,10 +48,11 @@ end
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
+import ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "cg_sphere_solidbody_$(test_name)"
-dirname = "$(dirname)_$(test_angle_name)"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "cg_sphere_solidbody_$(test_name)"
+dir = "$(dir)_$(test_angle_name)"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 function linkfig(figpath, alt = "")
@@ -77,8 +75,8 @@ Nq = 4
 # h-refinement study
 for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
-    mesh = Meshes.Mesh2D(domain, Meshes.EquiangularSphereWarp(), ne)
-    grid_topology = Topologies.Grid2DTopology(mesh)
+    mesh = Meshes.EquiangularCubedSphere(domain, ne)
+    grid_topology = Topologies.Topology2D(mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

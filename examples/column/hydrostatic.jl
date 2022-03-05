@@ -1,6 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-import ClimaCore.Geometry, LinearAlgebra, UnPack
 import ClimaCore:
     Fields,
     Domains,
@@ -13,10 +10,9 @@ import ClimaCore:
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
 # https://github.com/CliMA/CLIMAParameters.jl/blob/master/src/Planet/planet_parameters.jl#L5
@@ -32,7 +28,7 @@ const R_m = FT(R_d) # moist R, assumed to be dry
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(30e3),
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
@@ -142,11 +138,11 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "hydrostatic"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "hydrostatic"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 z_centers = parent(Fields.coordinate_field(cspace))
@@ -207,7 +203,4 @@ function linkfig(figpath, alt = "")
     end
 end
 
-linkfig(
-    "examples/column/output/$(dirname)/hydrostatic_end.png",
-    "Hydrostatic End",
-)
+linkfig("examples/column/output/$(dir)/hydrostatic_end.png", "Hydrostatic End")

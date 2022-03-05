@@ -1,6 +1,4 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-import ClimaCore.Geometry, LinearAlgebra
+using LinearAlgebra
 import ClimaCore:
     Fields,
     Domains,
@@ -20,10 +18,9 @@ using OrdinaryDiffEq:
     Rosenbrock23,
     ImplicitEuler
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-using LinearAlgebra
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const FT = Float64
 
@@ -40,7 +37,7 @@ const R_m = R_d # moist R, assumed to be dry
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(30e3),
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
@@ -257,11 +254,11 @@ sol = solve(
 );
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "hydrostatic_implicit"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "hydrostatic_implicit"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 z_centers = parent(Fields.coordinate_field(cspace))

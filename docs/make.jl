@@ -1,18 +1,13 @@
-if joinpath(@__DIR__, "..") ∉ LOAD_PATH
-    push!(LOAD_PATH, joinpath(@__DIR__, ".."))
-end
-using Documenter, ClimaCore, Literate
-
-format = Documenter.HTML(
-    prettyurls = !isempty(get(ENV, "CI", "")),
-    collapselevel = 1,
-)
+import Documenter, DocumenterCitations, Literate
+import ClimaCore,
+    ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots, ClimaCoreTempestRemap
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
 end
 
 rm(joinpath(@__DIR__, "src", "tutorials"), force = true, recursive = true)
+
 function preprocess_markdown(input)
     line1, rest = split(input, '\n', limit = 2)
     string(
@@ -34,15 +29,31 @@ for tutorial in TUTORIALS
     )
 end
 
-withenv("GKSwstype" => "100") do
-    makedocs(
+withenv("GKSwstype" => "nul") do
+
+    bib =
+        DocumenterCitations.CitationBibliography(joinpath(@__DIR__, "refs.bib"))
+
+    format = Documenter.HTML(
+        prettyurls = !isempty(get(ENV, "CI", "")),
+        collapselevel = 1,
+    )
+
+    Documenter.makedocs(
+        bib,
         sitename = "ClimaCore.jl",
-        strict = false,
+        strict = [:example_block],
         format = format,
         checkdocs = :exports,
         clean = true,
         doctest = true,
-        modules = [ClimaCore],
+        modules = [
+            ClimaCore,
+            ClimaCoreVTK,
+            ClimaCorePlots,
+            ClimaCoreMakie,
+            ClimaCoreTempestRemap,
+        ],
         pages = Any[
             "Home" => "index.md",
             "API" => "api.md",
@@ -51,11 +62,16 @@ withenv("GKSwstype" => "100") do
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
             ],
+            "Libraries" => [
+                joinpath("lib", "ClimaCoreVTK.md"),
+                joinpath("lib", "ClimaCoreTempestRemap.md"),
+            ],
+            "references.md",
         ],
     )
 end
 
-deploydocs(
+Documenter.deploydocs(
     repo = "github.com/CliMA/ClimaCore.jl.git",
     target = "build",
     push_preview = true,

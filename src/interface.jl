@@ -1,6 +1,19 @@
 # Toplevel interface functions for recurisve broadcast expressions
 
 """
+    enable_threading()
+
+By default returns `false` signifying threading is disabled.
+Enable the threading runtime by redefining the method at the toplevel your experiment file:
+
+    import ClimaCore: enable_threading
+    enable_threading() = true
+
+and running julia with `julia --nthreads=N ...`
+"""
+enable_threading() = false
+
+"""
     slab(data::AbstractData, h::Integer)
 
 A "pancake" view into an underlying
@@ -37,3 +50,5 @@ function column end
     (column(args[1], inds...), column_args(Base.tail(args), inds...)...)
 @inline column_args(args::Tuple{Any}, inds...) = (column(args[1], inds...),)
 @inline column_args(args::Tuple{}, inds...) = ()
+
+function level end

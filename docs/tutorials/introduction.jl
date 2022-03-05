@@ -10,7 +10,8 @@
 #   - staggered finite difference in the vertical
 # - currently under development
 
-using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
+using ClimaCore,
+    ClimaCorePlots, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 #----------------------------------------------------------------------------
 
 # ## 1. Constructing a discretization
@@ -20,14 +21,14 @@ using ClimaCore, LinearAlgebra, IntervalSets, UnPack, Plots, OrdinaryDiffEq
 # A _domain_ a region of space (think of a mathematical domain).
 
 column_domain = ClimaCore.Domains.IntervalDomain(
-    ClimaCore.Geometry.ZPoint(0.0)..ClimaCore.Geometry.ZPoint(10.0),
+    ClimaCore.Geometry.ZPoint(0.0) .. ClimaCore.Geometry.ZPoint(10.0),
     boundary_tags = (:bottom, :top),
 )
 #----------------------------------------------------------------------------
 
 rectangle_domain = ClimaCore.Domains.RectangleDomain(
-    ClimaCore.Geometry.XPoint(-2π)..ClimaCore.Geometry.XPoint(2π),
-    ClimaCore.Geometry.YPoint(-2π)..ClimaCore.Geometry.YPoint(2π),
+    ClimaCore.Geometry.XPoint(-2π) .. ClimaCore.Geometry.XPoint(2π),
+    ClimaCore.Geometry.YPoint(-2π) .. ClimaCore.Geometry.YPoint(2π),
     x1periodic = true,
     x2periodic = true,
 )
@@ -40,8 +41,7 @@ rectangle_domain = ClimaCore.Domains.RectangleDomain(
 column_mesh = ClimaCore.Meshes.IntervalMesh(column_domain, nelems = 32)
 #----------------------------------------------------------------------------
 
-rectangle_mesh =
-    ClimaCore.Meshes.EquispacedRectangleMesh(rectangle_domain, 16, 16)
+rectangle_mesh = ClimaCore.Meshes.RectilinearMesh(rectangle_domain, 16, 16)
 #----------------------------------------------------------------------------
 
 # ### 1.3 Topologies
@@ -49,7 +49,7 @@ rectangle_mesh =
 # A _topology_ determines the ordering and connections between elements of a mesh
 # - At the moment, this is only required for 2D meshes
 
-rectangle_topology = ClimaCore.Topologies.GridTopology(rectangle_mesh)
+rectangle_topology = ClimaCore.Topologies.Topology2D(rectangle_mesh)
 #----------------------------------------------------------------------------
 
 # ### 1.4 Spaces
@@ -140,9 +140,9 @@ norm(sinx) ## L² norm
 #
 # A *vector field* is a field with vector-valued quantity, i.e. at every point in space, you have a vector.
 #
-# However one of the key requirements of ClimaCore is to support vectors specified in curvilinear or non-Cartesian coordinates. We will discuss this in a bit further, but for now, you can define a 2-dimensional vector field using `Geometry.Cartesian12Vector`:
+# However one of the key requirements of ClimaCore is to support vectors specified in curvilinear or non-Cartesian coordinates. We will discuss this in a bit further, but for now, you can define a 2-dimensional vector field using `Geometry.UVVector`:
 
-v = ClimaCore.Geometry.Cartesian12Vector.(coord.y, .-coord.x)
+v = ClimaCore.Geometry.UVVector.(coord.y, .-coord.x)
 #----------------------------------------------------------------------------
 
 # ## 2. Operators
@@ -171,13 +171,13 @@ plot(∇sinx.components.data.:1, clim = (-1, 1))
 # ```
 # where $(\xi^1,\xi^2)$ are the coordinates in the *reference element*: a square $[-1,1]^2$.
 #
-# This can be converted to a Cartesian basis by multiplying by the partial derivative matrix
+# This can be converted to a local orthogonal basis by multiplying by the partial derivative matrix
 # ```math
 # \frac{\partial \xi}{\partial x}
 # ```
-# This can be done calling `ClimaCore.Geometry.CartesianVector:
+# This can be done calling `ClimaCore.Geometry.LocalVector:
 
-∇sinx_cart = ClimaCore.Geometry.CartesianVector.(∇sinx)
+∇sinx_cart = ClimaCore.Geometry.LocalVector.(∇sinx)
 #----------------------------------------------------------------------------
 
 plot(∇sinx_cart.components.data.:1, clim = (-1, 1))
@@ -186,7 +186,7 @@ plot(∇sinx_cart.components.data.:1, clim = (-1, 1))
 plot(∇sinx_cart.components.data.:2, clim = (-1, 1))
 #----------------------------------------------------------------------------
 
-∇sinx_ref = ClimaCore.Geometry.Cartesian12Vector.(cos.(x), 0.0)
+∇sinx_ref = ClimaCore.Geometry.UVVector.(cos.(x), 0.0)
 norm(∇sinx_cart .- ∇sinx_ref)
 #----------------------------------------------------------------------------
 
@@ -262,10 +262,7 @@ gradf2c = ClimaCore.Operators.GradientF2C()
 ∇cosz = gradf2c.(cosz)
 #----------------------------------------------------------------------------
 
-plot(
-    ClimaCore.Geometry.CartesianVector.(∇cosz).components.data.:1,
-    ylim = (0, 10),
-)
+plot(map(x -> x.w, ClimaCore.Geometry.WVector.(∇cosz)), ylim = (0, 10))
 #----------------------------------------------------------------------------
 
 # **Center to face gradient**
@@ -310,16 +307,13 @@ sinz = sin.(column_center_coords.z)
 gradc2f = ClimaCore.Operators.GradientC2F(
     bottom = ClimaCore.Operators.SetValue(sin(0.0)),
     top = ClimaCore.Operators.SetGradient(
-        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
+        ClimaCore.Geometry.WVector(cos(10.0)),
     ),
 )
 ∇sinz = gradc2f.(sinz)
 #----------------------------------------------------------------------------
 
-plot(
-    ClimaCore.Geometry.CartesianVector.(∇sinz).components.data.:1,
-    ylim = (0, 10),
-)
+plot(map(x -> x.w, ClimaCore.Geometry.WVector.(∇sinz)), ylim = (0, 10))
 #----------------------------------------------------------------------------
 
 # As before, multiple operators (or functions) can be fused together with broadcasting.
@@ -346,12 +340,8 @@ sinz = sin.(column_center_coords.z)
 ## we don't need to specify boundaries, as the stencil won't reach that far
 gradc2f = ClimaCore.Operators.GradientC2F()
 divf2c = ClimaCore.Operators.DivergenceF2C(
-    bottom = ClimaCore.Operators.SetValue(
-        ClimaCore.Geometry.Cartesian3Vector(cos(0.0)),
-    ),
-    top = ClimaCore.Operators.SetValue(
-        ClimaCore.Geometry.Cartesian3Vector(cos(10.0)),
-    ),
+    bottom = ClimaCore.Operators.SetValue(ClimaCore.Geometry.WVector(cos(0.0))),
+    top = ClimaCore.Operators.SetValue(ClimaCore.Geometry.WVector(cos(10.0))),
 )
 ∇∇sinz = divf2c.(gradc2f.(sinz))
 #----------------------------------------------------------------------------
@@ -387,9 +377,7 @@ y0 = zeros(column_center_space)
 function heat_fd_tendency!(dydt, y, α, t)
     gradc2f = ClimaCore.Operators.GradientC2F(
         bottom = ClimaCore.Operators.SetValue(1.0),
-        top = ClimaCore.Operators.SetGradient(
-            ClimaCore.Geometry.Cartesian3Vector(0.0),
-        ),
+        top = ClimaCore.Operators.SetGradient(ClimaCore.Geometry.WVector(0.0)),
     )
     divf2c = ClimaCore.Operators.DivergenceF2C()
     ## the @. macro "dots" the whole expression
@@ -482,7 +470,7 @@ function init_state(local_geometry, p)
     u₂′ = -p.k * ϕ * sin(p.k * x) * cos(p.k * y)
 
     u = Geometry.Covariant12Vector(
-        Geometry.Cartesian12Vector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
+        Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
         local_geometry,
     )
 
@@ -523,8 +511,11 @@ function shallow_water_tendency!(dydt, y, _, t)
     ClimaCore.Spaces.weighted_dss!(dydt)
 
     @. dydt.u =
-        -D₄ *
-        (wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(wcurl(curl(dydt.u))))
+        -D₄ * (
+            wgrad(sdiv(dydt.u)) - Geometry.Covariant12Vector(
+                wcurl(Geometry.Covariant3Vector(curl(dydt.u))),
+            )
+        )
     @. dydt.ρθ = -D₄ * wdiv(grad(dydt.ρθ))
 
     ## comute rest of tendency

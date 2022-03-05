@@ -1,7 +1,5 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using LinearAlgebra, StaticArrays
 
 import ClimaCore:
     ClimaCore,
@@ -14,39 +12,47 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
-using ClimaCore.Geometry
+import ClimaCore.Geometry: ⊗
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # set up function space
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
     zlim = (0, 4π),
     xelem = 4,
-    yelem = 1,
+    yelem = 4,
     zelem = 16,
-    npoly = 3,
+    npoly = 4,
 )
     FT = Float64
-    vertdomain = Domains.IntervalDomain(
+
+    xdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(xlim[1]),
+        Geometry.XPoint{FT}(xlim[2]),
+        periodic = true,
+    )
+    ydomain = Domains.IntervalDomain(
+        Geometry.YPoint{FT}(ylim[1]),
+        Geometry.YPoint{FT}(ylim[2]),
+        periodic = true,
+    )
+
+    horzdomain = Domains.RectangleDomain(xdomain, ydomain)
+    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
+    horztopology = Topologies.Topology2D(horzmesh)
+
+    zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
-
-    horzdomain = Domains.RectangleDomain(
-        Geometry.XPoint{FT}(xlim[1])..Geometry.XPoint{FT}(xlim[2]),
-        Geometry.YPoint{FT}(ylim[1])..Geometry.YPoint{FT}(ylim[2]),
-        x1periodic = true,
-        x2periodic = true,
-    )
-    horzmesh = Meshes.EquispacedRectangleMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.GridTopology(horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
@@ -85,7 +91,7 @@ function init_dry_rising_bubble_3d(x, y, z)
     z_c = 350.0
     r_c = 250.0
     θ_b = 300.0
-    θ_c = 0.0
+    θ_c = 0.5
     cp_d = C_p
     cv_d = C_v
     p_0 = MSLP
@@ -122,11 +128,46 @@ end;
 
 Y = Fields.FieldVector(Yc = Yc, ρw = ρw)
 
+function energy(Yc, ρu, z)
+    ρ = Yc.ρ
+    ρθ = Yc.ρθ
+    u = ρu / ρ
+    kinetic = ρ * norm(u)^2 / 2
+    potential = z * grav * ρ
+    internal = C_v * pressure(ρθ) / R_d
+    return kinetic + potential + internal
+end
+function combine_momentum(ρuₕ, ρw)
+    Geometry.transform(Geometry.UVWAxis(), ρuₕ) +
+    Geometry.transform(Geometry.UVWAxis(), ρw)
+end
+function center_momentum(Y)
+    If2c = Operators.InterpolateF2C()
+    combine_momentum.(Y.Yc.ρuₕ, If2c.(Y.ρw))
+end
+function total_energy(Y)
+    ρ = Y.Yc.ρ
+    ρu = center_momentum(Y)
+    ρθ = Y.Yc.ρθ
+    z = Fields.coordinate_field(axes(ρ)).z
+    sum(energy.(Yc, ρu, z))
+end
+
+energy_0 = total_energy(Y)
+mass_0 = sum(Yc.ρ) # Computes ∫ρ∂Ω such that quadrature weighting is accounted for.
+theta_0 = sum(Yc.ρθ)
+
 function rhs!(dY, Y, _, t)
     ρw = Y.ρw
     Yc = Y.Yc
     dYc = dY.Yc
     dρw = dY.ρw
+    ρ = Yc.ρ
+    ρuₕ = Yc.ρuₕ
+    ρθ = Yc.ρθ
+    dρθ = dYc.ρθ
+    dρuₕ = dYc.ρuₕ
+    dρ = dYc.ρ
 
     # spectral horizontal operators
     hdiv = Operators.Divergence()
@@ -176,70 +217,68 @@ function rhs!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-    uₕ = @. Yc.ρuₕ / Yc.ρ
-    w = @. ρw / If(Yc.ρ)
-    wc = @. Ic(ρw) / Yc.ρ
-    p = @. pressure(Yc.ρθ)
-    θ = @. Yc.ρθ / Yc.ρ
-    Yfρ = @. If(Yc.ρ)
+    uₕ = @. ρuₕ / ρ
+    w = @. ρw / If(ρ)
+    wc = @. Ic(ρw) / ρ
+    p = @. pressure(ρθ)
+    θ = @. ρθ / ρ
+    Yfρ = @. If(ρ)
 
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
-    @. dYc.ρθ = hdiv(hgrad(θ))
-    @. dYc.ρuₕ = hdiv(hgrad(uₕ))
+    @. dρθ = hdiv(hgrad(θ))
+    @. dρuₕ = hdiv(hgrad(uₕ))
     @. dρw = hdiv(hgrad(w))
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
 
     κ₄ = 100.0 # m^4/s
-    @. dYc.ρθ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρθ))
-    @. dYc.ρuₕ = -κ₄ * hdiv(Yc.ρ * hgrad(dYc.ρuₕ))
+    @. dρθ = -κ₄ * hdiv(ρ * hgrad(dρθ))
+    @. dρuₕ = -κ₄ * hdiv(ρ * hgrad(dρuₕ))
     @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
     # density
-    @. dYc.ρ = -∂(ρw)
-    @. dYc.ρ -= hdiv(Yc.ρuₕ)
+    @. dρ = -∂(ρw)
+    @. dρ -= hdiv(ρuₕ)
 
     # potential temperature
-    @. dYc.ρθ += -(∂(ρw * If(Yc.ρθ / Yc.ρ)))
-    @. dYc.ρθ -= hdiv(uₕ * Yc.ρθ)
+    @. dρθ += -(∂(ρw * If(ρθ / ρ)))
+    @. dρθ -= hdiv(uₕ * ρθ)
 
     # Horizontal momentum
-    @. dYc.ρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
+    @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
     Ih = Ref(
         Geometry.Axis2Tensor(
             (Geometry.UVAxis(), Geometry.UVAxis()),
             @SMatrix [1.0 0.0; 0.0 1.0]
         ),
     )
-    @. dYc.ρuₕ -= hdiv(Yc.ρuₕ ⊗ uₕ + p * Ih)
+    @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
 
     # vertical momentum
-    @. dρw +=
-        B(
-            Geometry.transform(
-                Geometry.WAxis(),
-                -(∂f(p)) - If(Yc.ρ) * ∂f(Φ(coords.z)),
-            ) - vvdivc2f(Ic(ρw ⊗ w)),
-        ) + fcf(wc, ρw)
-    uₕf = @. If(Yc.ρuₕ / Yc.ρ) # requires boundary conditions
+    z = coords.z
+    @. dρw += B(
+        Geometry.transform(Geometry.WAxis(), -(∂f(p)) - If(ρ) * ∂f(Φ(z))) -
+        vvdivc2f(Ic(ρw ⊗ w)),
+    )
+    uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
     @. dρw -= hdiv(uₕf ⊗ ρw)
 
     ### UPWIND FLUX CORRECTION
     upwind_correction = true
     if upwind_correction
-        @. dYc.ρ += fcc(w, Yc.ρ)
-        @. dYc.ρθ += fcc(w, Yc.ρθ)
-        @. dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+        @. dρ += fcc(w, ρ)
+        @. dρθ += fcc(w, ρθ)
+        @. dρuₕ += fcc(w, ρuₕ)
         @. dρw += fcf(wc, ρw)
     end
 
     ### DIFFUSION
     κ₂ = 0.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dYc.ρuₕ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρuₕ / Yc.ρ)))
+    @. dρuₕ += hdiv(κ₂ * (ρ * hgrad(ρuₕ / ρ)))
     #  1b) vertical div of vertical grad of horiz momentun
-    @. dYc.ρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(Yc.ρuₕ / Yc.ρ)))
+    @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / ρ)))
 
     #  1c) horizontal div of horizontal grad of vert momentum
     @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
@@ -247,9 +286,9 @@ function rhs!(dY, Y, _, t)
     @. dρw += vvdivc2f(κ₂ * (Yc.ρ * ∂c(ρw / Yfρ)))
 
     #  2a) horizontal div of horizontal grad of potential temperature
-    @. dYc.ρθ += hdiv(κ₂ * (Yc.ρ * hgrad(Yc.ρθ / Yc.ρ)))
+    @. dρθ += hdiv(κ₂ * (Yc.ρ * hgrad(ρθ / ρ)))
     #  2b) vertical div of vertial grad of potential temperature
-    @. dYc.ρθ += ∂(κ₂ * (Yfρ * ∂f(Yc.ρθ / Yc.ρ)))
+    @. dρθ += ∂(κ₂ * (Yfρ * ∂f(ρθ / ρ)))
 
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρw)
@@ -264,21 +303,62 @@ rhs!(dYdt, Y, nothing, 0.0);
 using OrdinaryDiffEq
 Δt = 0.05
 prob = ODEProblem(rhs!, Y, (0.0, 1.0))
-sol = solve(
+integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = 50.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
 
-# TODO: visualization artifacts
+if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+    throw(:exit_profile)
+end
 
-# ENV["GKSwstype"] = "nul"
-# import Plots
-# Plots.GRBackend()
+sol = @timev OrdinaryDiffEq.solve!(integrator)
 
-# dirname = "bubble_3d"
-# path = joinpath(@__DIR__, "output", dirname)
-# mkpath(path)
+ENV["GKSwstype"] = "nul"
+import Plots
+Plots.GRBackend()
+
+dir = "bubble_3d"
+path = joinpath(@__DIR__, "output", dir)
+mkpath(path)
+
+# post-processing
+Es = [total_energy(u) for u in sol.u]
+Mass = [sum(u.Yc.ρ) for u in sol.u]
+Theta = [sum(u.Yc.ρθ) for u in sol.u]
+
+Plots.png(
+    Plots.plot((Es .- energy_0) ./ energy_0),
+    joinpath(path, "energy.png"),
+)
+Plots.png(Plots.plot((Mass .- mass_0) ./ mass_0), joinpath(path, "mass.png"))
+Plots.png(
+    Plots.plot((Theta .- theta_0) ./ theta_0),
+    joinpath(path, "rho_theta.png"),
+)
+
+function linkfig(figpath, alt = "")
+    # buildkite-agent upload figpath
+    # link figure in logs if we are running on CI
+    if get(ENV, "BUILDKITE", "") == "true"
+        artifact_url = "artifact://$figpath"
+        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+    end
+end
+
+linkfig(
+    relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
+    "Total Energy",
+)
+linkfig(
+    relpath(joinpath(path, "rho_theta.png"), joinpath(@__DIR__, "../..")),
+    "Potential Temperature",
+)
+linkfig(
+    relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
+    "Mass",
+)

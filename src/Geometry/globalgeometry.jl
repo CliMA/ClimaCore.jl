@@ -103,6 +103,24 @@ function LatLongPoint(pt::Cartesian123Point, ::SphericalGlobalGeometry)
     LatLongPoint(ϕ, λ)
 end
 
+
+function CartesianPoint(pt::LatLongZPoint, global_geom::SphericalGlobalGeometry)
+    r = global_geom.radius
+    z = pt.z
+    x1 = (r + z) * cosd(pt.long) * cosd(pt.lat)
+    x2 = (r + z) * sind(pt.long) * cosd(pt.lat)
+    x3 = (r + z) * sind(pt.lat)
+    Cartesian123Point(x1, x2, x3)
+end
+function LatLongZPoint(
+    pt::Cartesian123Point,
+    global_geom::SphericalGlobalGeometry,
+)
+    llpt = LatLongPoint(pt, global_geom)
+    z = hypot(pt.x1, pt.x2, pt.x3) - global_geom.radius
+    LatLongZPoint(llpt.lat, llpt.long, z)
+end
+
 """
     great_circle_distance(pt1::LatLongPoint, pt2::LatLongPoint, global_geometry::SphericalGlobalGeometry)
 
@@ -128,6 +146,18 @@ function great_circle_distance(
     )
 end
 
+"""
+    euclidean_distance(pt1::XYPoint, pt2::XYPoint)
+
+Compute the 2D or 3D Euclidean distance between `pt1` and `pt2`.
+"""
+function euclidean_distance(
+    pt1::T,
+    pt2::T,
+) where {T <: Union{XPoint, YPoint, ZPoint, XYPoint, XZPoint, XYZPoint}}
+    return hypot((components(pt1) .- components(pt2))...)
+end
+
 # vectors
 CartesianVector(
     u::CartesianVector,
@@ -143,17 +173,38 @@ CartesianVector(
     global_geometry,
     local_geometry.coordinates,
 )
-function CartesianVector(
-    u::UVWVector,
+function local_to_cartesian(
     ::SphericalGlobalGeometry,
-    coord::LatLongPoint,
+    coord::Union{LatLongPoint, LatLongZPoint},
 )
     ϕ = coord.lat
     λ = coord.long
+    sinλ = sind(λ)
+    cosλ = cosd(λ)
+    sinϕ = sind(ϕ)
+    cosϕ = cosd(ϕ)
     G = @SMatrix [
-        -sind(λ) -sind(ϕ)*cosd(λ) cosd(λ)*cosd(ϕ)
-        cosd(λ) -sind(ϕ)*sind(λ) sind(λ)*cosd(ϕ)
-        0 cosd(ϕ) sind(ϕ)
+        -sinλ -cosλ*sinϕ cosλ*cosϕ
+        cosλ -sinλ*sinϕ sinλ*cosϕ
+        0 cosϕ sinϕ
     ]
-    AxisVector(Cartesian123Axis(), G * Geometry.components(u))
+    AxisTensor((Cartesian123Axis(), UVWAxis()), G)
+end
+
+
+function CartesianVector(
+    u::UVWVector,
+    geom::SphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    G * u
+end
+function LocalVector(
+    u::Cartesian123Vector,
+    geom::SphericalGlobalGeometry,
+    coord::Union{LatLongPoint, LatLongZPoint},
+)
+    G = local_to_cartesian(geom, coord)
+    G' * u
 end

@@ -1,5 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
 import ClimaCore.Geometry, LinearAlgebra
 import ClimaCore:
     Fields,
@@ -13,16 +11,15 @@ import ClimaCore:
 
 using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
-
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
 const FT = Float64
 
 domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
     Geometry.ZPoint{FT}(4pi),
-    boundary_tags = (:left, :right),
+    boundary_names = (:left, :right),
 )
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
 
@@ -70,11 +67,11 @@ sol = solve(
 
 
 ENV["GKSwstype"] = "nul"
-import Plots
+using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dirname = "wave"
-path = joinpath(@__DIR__, "output", dirname)
+dir = "wave"
+path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u

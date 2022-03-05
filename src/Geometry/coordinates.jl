@@ -1,8 +1,60 @@
+"""
+    AbstractPoint
+
+Represents a point in space.
+
+The following types are supported:
+- `XPoint(x)`
+- `YPoint(y)`
+- `ZPoint(z)`
+- `XYPoint(x, y)`
+- `XZPoint(x, z)`
+- `XYZPoint(x, y, z)`
+- `LatLongPoint(lat, long)`
+- `LatLongZPoint(lat, long, z)`
+- `Cartesian1Point(x1)`
+- `Cartesian2Point(x2)`
+- `Cartesian3Point(x3)`
+- `Cartesian12Point(x1, x2)`
+- `Cartesian13Point(x1, x3)`
+- `Cartesian123Point(x1, x2, x3)`
+"""
 abstract type AbstractPoint{FT} end
+
+"""
+    float_type(T)
+
+Return the floating point type backing `T`: `T` can either be an object or a type.
+"""
+float_type(::Type{<:AbstractPoint{FT}}) where {FT} = FT
+float_type(::AbstractPoint{FT}) where {FT} = FT
 
 abstract type Abstract1DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract2DPoint{FT} <: AbstractPoint{FT} end
 abstract type Abstract3DPoint{FT} <: AbstractPoint{FT} end
+
+Base.show(io::IO, point::Abstract1DPoint) =
+    print(io, nameof(typeof(point)), "(", component(point, 1), ")")
+Base.show(io::IO, point::Abstract2DPoint) = print(
+    io,
+    nameof(typeof(point)),
+    "(",
+    component(point, 1),
+    ", ",
+    component(point, 2),
+    ")",
+)
+Base.show(io::IO, point::Abstract3DPoint) = print(
+    io,
+    nameof(typeof(point)),
+    "(",
+    component(point, 1),
+    ", ",
+    component(point, 2),
+    ", ",
+    component(point, 3),
+    ")",
+)
 
 """
     @pointtype name fieldname1 ...
@@ -43,6 +95,7 @@ end
 
 @pointtype XYPoint x y
 @pointtype XZPoint x z
+@pointtype YZPoint y z
 
 @pointtype XYZPoint x y z
 
@@ -67,17 +120,23 @@ Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
     Cartesian123Point(pt.x1, zero(FT), pt.x3)
 
 @pointtype LatLongPoint lat long
+@pointtype LatLongZPoint lat long z
 
 product_coordinates(xp::XPoint, yp::YPoint) = XYPoint(promote(xp.x, yp.y)...)
 product_coordinates(xp::XPoint, zp::ZPoint) = XZPoint(promote(xp.x, zp.z)...)
+product_coordinates(yp::YPoint, zp::ZPoint) = YZPoint(promote(yp.y, zp.z)...)
 
 product_coordinates(xyp::XYPoint, zp::ZPoint) =
     XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
+
+product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
+    LatLongZPoint(promote(latlongp.lat, latlongp.long, zp.z)...)
 
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
 ncomponents(p::AbstractPoint) = nfields(p)
+ncomponents(::Type{P}) where {P <: AbstractPoint} = fieldcount(P)
 components(p::AbstractPoint) =
     SVector(ntuple(i -> component(p, i), ncomponents(p)))
 
@@ -93,6 +152,11 @@ _coordinate_type(::Type{XZPoint{FT}}, ::Val{1}) where {FT} = XPoint{FT}
 _coordinate_type(::Type{XZPoint{FT}}, ::Val{2}) where {FT} = ZPoint{FT}
 _coordinate(p::XZPoint, ::Val{1}) = XPoint(p.x)
 _coordinate(p::XZPoint, ::Val{2}) = ZPoint(p.z)
+
+_coordinate_type(::Type{YZPoint{FT}}, ::Val{1}) where {FT} = YPoint{FT}
+_coordinate_type(::Type{YZPoint{FT}}, ::Val{2}) where {FT} = ZPoint{FT}
+_coordinate(p::YZPoint, ::Val{1}) = YPoint(p.x)
+_coordinate(p::YZPoint, ::Val{2}) = ZPoint(p.z)
 
 _coordinate_type(::Type{XYZPoint{FT}}, ::Val{1}) where {FT} = XPoint{FT}
 _coordinate_type(::Type{XYZPoint{FT}}, ::Val{2}) where {FT} = YPoint{FT}
@@ -122,6 +186,15 @@ Base.:(*)(x::Number, p::AbstractPoint) = p * x
 Base.:(/)(p::T, x::Number) where {T <: AbstractPoint} =
     unionalltype(T)((components(p) / x)...)
 
+# we add our own method to this so that `BigFloat` coordinate ranges are computed accurately.
+function Base.lerpi(
+    j::Integer,
+    d::Integer,
+    a::T,
+    b::T,
+) where {T <: Abstract1DPoint}
+    T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
+end
 function Base.:(==)(p1::T, p2::T) where {T <: AbstractPoint}
     return components(p1) == components(p2)
 end
@@ -129,6 +202,8 @@ end
 function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
+Base.isless(x::T, y::T) where {T <: Abstract1DPoint} =
+    isless(component(x, 1), component(y, 1))
 
 
 """
@@ -165,6 +240,60 @@ function bilinear_interpolate(
     c = bilinear_interpolate(map(components, coords), ξ1, ξ2)
     VV(c...)
 end
+
+
+"""
+    bilinear_invert(cc::NTuple{4, V}) where {V<:SVector{2}}
+
+Solve find `ξ1` and `ξ2` such that
+
+    bilinear_interpolate(coords, ξ1, ξ2) == 0
+
+See also [`bilinear_interpolate`](@ref).
+"""
+function bilinear_invert(vert_coords::NTuple{4, V}) where {V <: SVector{2}}
+    # 1) express as 2 equations
+    #  ca' * M * [1,ξ1,ξ2,ξ1*ξ2] == 0
+    #  cb' * M * [1,ξ1,ξ2,ξ1*ξ2] == 0
+    ca = SVector(map(v -> v[1], vert_coords))
+    cb = SVector(map(v -> v[2], vert_coords))
+    M = @SMatrix [
+        1 -1 -1 1
+        1 1 -1 -1
+        1 1 1 1
+        1 -1 1 -1
+    ]
+
+    # 2) get into the form
+    #  a1 + a2 * ξ1 + a3 * ξ2 + a4 * ξ1 * ξ2 == 0  (A)
+    #  b1 + b2 * ξ1 + b3 * ξ2 + b4 * ξ1 * ξ2 == 0  (B)
+    (a1, a2, a3, a4) = M' * ca
+    (b1, b2, b3, b4) = M' * cb
+
+    # 3) rearrange (A):
+    #   -(a1 + a3*ξ2) = ξ1 * (a2 + a4*ξ2)
+    # 4) multiply (B) by (a2 + a4*ξ2), and eliminate ξ1
+    #    b1 * (a2 + a4*ξ2) - b2 * (a1 + a3*ξ2) + b3 * (a2 + a4*ξ2) * ξ2 - b4 * (a1 + a3*ξ2) * ξ2 == 0
+    # 5) collect coefficients of powers of ξ2
+    c0 = b1 * a2 - b2 * a1
+    c1 = b1 * a4 - b2 * a3 + b3 * a2 - b4 * a1
+    c2 = b3 * a4 - b4 * a3
+    # 6) solve quadratic equation
+    Δ = c1 * c1 - 4 * c2 * c0
+    if c1 >= 0
+        ξ2a = (-c1 - sqrt(Δ)) / (2 * c2)
+        ξ2b = 2 * c0 / (-c1 - sqrt(Δ))
+    else
+        ξ2a = 2 * c0 / (-c1 + sqrt(Δ))
+        ξ2b = (-c1 + sqrt(Δ)) / (2 * c2)
+    end
+    # 7) find which solution is smallest in magnitude (closest to the interval [-1,1]):
+    ξ2 = abs(ξ2a) < abs(ξ2b) ? ξ2a : ξ2b
+    # 8) solve for ξ1
+    ξ1 = -(a1 + a3 * ξ2) / (a2 + a4 * ξ2)
+    return SVector(ξ1, ξ2)
+end
+
 
 """
     interpolate(coords::NTuple{2}, ξ1)

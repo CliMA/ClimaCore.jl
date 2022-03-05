@@ -60,6 +60,33 @@ Base.Broadcast.BroadcastStyle(
     ds::DataStyle,
 ) = ds
 
+Base.Broadcast.BroadcastStyle(::VFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
+    VFStyle{promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::IFStyle{Ni, A1},
+    ::IFStyle{Ni, A2},
+) where {Ni, A1, A2} = IFStyle{Ni, promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::IFHStyle{Ni, A1},
+    ::IFHStyle{Ni, A2},
+) where {Ni, A1, A2} = IFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::VIFHStyle{Ni, A1},
+    ::VIFHStyle{Ni, A2},
+) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::IJFStyle{Nij, A1},
+    ::IJFStyle{Nij, A2},
+) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::IJFHStyle{Nij, A1},
+    ::IJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::VIJFHStyle{Nij, A1},
+    ::VIJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+
 Base.Broadcast.BroadcastStyle(
     ::VFStyle{A1},
     ::IFHStyle{Ni, A2},
@@ -396,7 +423,7 @@ end
     return dest
 end
 
-function Base.copyto!(
+function _serial_copyto!(
     dest::VIFH{S, Ni},
     bc::Union{VIFH{S, Ni, A}, Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
 ) where {S, Ni, A}
@@ -410,7 +437,41 @@ function Base.copyto!(
     return dest
 end
 
+function _threaded_copyto!(
+    dest::VIFH{S, Ni},
+    bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
+) where {S, Ni, A}
+    _, _, _, _, Nh = size(dest)
+    # parallelize over elements
+    Threads.@threads for h in 1:Nh
+        # copy contiguous columns
+        @inbounds for i in 1:Ni
+            col_dest = column(dest, i, h)
+            col_bc = column(bc, i, h)
+            copyto!(col_dest, col_bc)
+        end
+    end
+    return dest
+end
+
 function Base.copyto!(
+    dest::VIFH{S, Ni},
+    source::VIFH{S, Ni, A},
+) where {S, Ni, A}
+    return _serial_copyto!(dest, source)
+end
+
+function Base.copyto!(
+    dest::VIFH{S, Ni},
+    bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
+) where {S, Ni, A}
+    if enable_threading()
+        return _threaded_copyto!(dest, bc)
+    end
+    return _serial_copyto!(dest, bc)
+end
+
+function _serial_copyto!(
     dest::VIJFH{S, Nij},
     bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
 ) where {S, Nij, A}
@@ -422,4 +483,38 @@ function Base.copyto!(
         copyto!(col_dest, col_bc)
     end
     return dest
+end
+
+function _threaded_copyto!(
+    dest::VIJFH{S, Nij},
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
+) where {S, Nij, A}
+    _, _, _, _, Nh = size(dest)
+    # parallelize over elements
+    Threads.@threads for h in 1:Nh
+        # copy contiguous columns
+        @inbounds for j in 1:Nij, i in 1:Nij
+            col_dest = column(dest, i, j, h)
+            col_bc = column(bc, i, j, h)
+            copyto!(col_dest, col_bc)
+        end
+    end
+    return dest
+end
+
+function Base.copyto!(
+    dest::VIJFH{S, Nij},
+    source::VIJFH{S, Nij, A},
+) where {S, Nij, A}
+    return _serial_copyto!(dest, source)
+end
+
+function Base.copyto!(
+    dest::VIJFH{S, Nij},
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
+) where {S, Nij, A}
+    if enable_threading()
+        return _threaded_copyto!(dest, bc)
+    end
+    return _serial_copyto!(dest, bc)
 end
