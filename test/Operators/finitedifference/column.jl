@@ -683,108 +683,108 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
-# @testset "Biased interpolation" begin
-#     FT = Float64
-#     n_elems = 10
+@testset "Biased interpolation" begin
+    FT = Float64
+    n_elems = 10
 
-#     domain = Domains.IntervalDomain(
-#         Geometry.ZPoint{FT}(0.0),
-#         Geometry.ZPoint{FT}(pi);
-#         boundary_tags = (:bottom, :top),
-#     )
-#     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(pi);
+        boundary_tags = (:bottom, :top),
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
 
-#     cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-#     fs = Spaces.FaceFiniteDifferenceSpace(cs)
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-#     zc = getproperty(Fields.coordinate_field(cs), :z)
-#     zf = getproperty(Fields.coordinate_field(fs), :z)
+    zc = getproperty(Fields.coordinate_field(cs), :z)
+    zf = getproperty(Fields.coordinate_field(fs), :z)
 
-#     function field_wrapper(space, nt::NamedTuple)
-#         cmv(z) = nt
-#         return cmv.(Fields.coordinate_field(space))
-#     end
+    function field_wrapper(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
 
-#     field_vars() = (; y = FT(0))
+    field_vars() = (; y = FT(0))
 
-#     cfield = field_wrapper(cs, field_vars())
-#     ffield = field_wrapper(fs, field_vars())
+    cfield = field_wrapper(cs, field_vars())
+    ffield = field_wrapper(fs, field_vars())
 
-#     cy = cfield.y
-#     fy = ffield.y
+    cy = cfield.y
+    fy = ffield.y
 
-#     cyp = parent(cy)
-#     fyp = parent(fy)
+    cyp = parent(cy)
+    fyp = parent(fy)
 
-#     # C2F biased operators
-#     LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
-#     @. cy = cos(zc)
-#     @. fy = LBC2F(cy)
-#     fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
-#     @test all(fy_ref .== fyp)
+    # C2F biased operators
+    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = LBC2F(cy)
+    fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
+    @test all(fy_ref .== fyp)
 
-#     RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
-#     @. cy = cos(zc)
-#     @. fy = RBC2F(cy)
-#     fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
-#     @test all(fy_ref .== fyp)
+    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. fy = RBC2F(cy)
+    fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
+    @test all(fy_ref .== fyp)
 
-#     # F2C biased operators
-#     LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
-#     @. cy = cos(zc)
-#     @. cy = LBF2C(fy)
-#     cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
-#     @test all(cy_ref .== cyp)
+    # F2C biased operators
+    LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = LBF2C(fy)
+    cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
 
-#     RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
-#     @. cy = cos(zc)
-#     @. cy = RBF2C(fy)
-#     cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
-#     @test all(cy_ref .== cyp)
-# end
+    RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
+    @. cy = cos(zc)
+    @. cy = RBF2C(fy)
+    cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
+    @test all(cy_ref .== cyp)
+end
 
-# @testset "Center -> Center Advection" begin
+@testset "Center -> Center Advection" begin
 
-#     function advection(c, f, cs)
-#         adv = zeros(eltype(f), cs)
-#         A = Operators.AdvectionC2C(
-#             bottom = Operators.SetValue(0.0),
-#             top = Operators.Extrapolate(),
-#         )
-#         return @. adv = A(c, f)
-#     end
+    function advection(c, f, cs)
+        adv = zeros(eltype(f), cs)
+        A = Operators.AdvectionC2C(
+            bottom = Operators.SetValue(0.0),
+            top = Operators.Extrapolate(),
+        )
+        return @. adv = A(c, f)
+    end
 
-#     FT = Float64
-#     n_elems_seq = 2 .^ (5, 6, 7, 8)
-#     err = zeros(FT, length(n_elems_seq))
-#     Δh = zeros(FT, length(n_elems_seq))
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    err = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
 
-#     for (k, n) in enumerate(n_elems_seq)
-#         domain = Domains.IntervalDomain(
-#             Geometry.ZPoint{FT}(0.0),
-#             Geometry.ZPoint{FT}(4π);
-#             boundary_tags = (:bottom, :top),
-#         )
-#         mesh = Meshes.IntervalMesh(domain; nelems = n)
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(0.0),
+            Geometry.ZPoint{FT}(4π);
+            boundary_tags = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-#         cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-#         fs = Spaces.FaceFiniteDifferenceSpace(cs)
+        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-#         # advective velocity
-#         c = Geometry.WVector.(ones(Float64, fs),)
-#         # scalar-valued field to be advected
-#         f = sin.(Fields.coordinate_field(cs).z)
+        # advective velocity
+        c = Geometry.WVector.(ones(Float64, fs),)
+        # scalar-valued field to be advected
+        f = sin.(Fields.coordinate_field(cs).z)
 
-#         # Call the advection operator
-#         adv = advection(c, f, cs)
+        # Call the advection operator
+        adv = advection(c, f, cs)
 
-#         Δh[k] = cs.face_local_geometry.J[1]
-#         err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
-#     end
-#     # AdvectionC2C convergence rate
-#     conv_adv_c2c = convergence_rate(err, Δh)
-#     @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-#     @test conv_adv_c2c[1] ≈ 2 atol = 0.1
-#     @test conv_adv_c2c[2] ≈ 2 atol = 0.1
-#     @test conv_adv_c2c[3] ≈ 2 atol = 0.1
-# end
+        Δh[k] = cs.face_local_geometry.J[1]
+        err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
+    end
+    # AdvectionC2C convergence rate
+    conv_adv_c2c = convergence_rate(err, Δh)
+    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
+end
