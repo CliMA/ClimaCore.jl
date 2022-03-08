@@ -303,7 +303,7 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 1.0,
+    saveat = Δt,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
@@ -366,4 +366,19 @@ linkfig(
 linkfig(
     relpath(joinpath(path, "mass.png"), joinpath(@__DIR__, "../..")),
     "Mass",
+)
+
+# VTK plot
+using ClimaCoreVTK
+time_end = 1.0
+times = 0:Δt:time_end
+Theta_times = Array{Fields.Field}(undef, length(times))
+for tt in 1:Int(div(time_end, Δt))
+    Theta_times[tt] = sol.u[tt].Yc.ρθ ./ sol.u[tt].Yc.ρ
+end
+writevtk(
+    joinpath(path, "theta"),
+    times,
+    (θ = Theta_times,);
+    basis = :cell,
 )
