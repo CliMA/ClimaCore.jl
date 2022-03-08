@@ -37,6 +37,7 @@ InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
 UpwindBiasedProductC2F
+Upwind3rdOrderBiasedProductC2F
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
