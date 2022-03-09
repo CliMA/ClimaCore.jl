@@ -39,11 +39,11 @@ struct DistributedTopology2D{
     "a vector of all unique interior faces, (e, face, o, oface, reversed)"
     interior_faces::Vector{Tuple{Int, Int, Int, Int, Bool}}
     "a vector of all ghost faces, (e, face, o, oface, reversed)"
-    ghost_faces::Vector{Tuple{Int, Int, Int, Int, Bool}}
+    ghost_faces::Vector{Tuple{Int, Int, Int, Int, Bool, Int, Int, Int}}
     "the collection of local (e,vert) pairs"
     interior_vertices::Vector{Vector{Tuple{Int, Int}}}
     "the collection of ghost (e,vert) pairs"
-    ghost_vertices::Vector{Vector{Tuple{Int, Int}}}
+    ghost_vertices::Vector{Vector{Tuple{Int, Int, Int, Int}}}
     "a NamedTuple of vectors of `(e,face)` "
     boundaries::BF
 end
@@ -111,9 +111,9 @@ function DistributedTopology2D(
     send_elems = Set{EO}[]
     ghost_elems = Set{EO}[]
     interior_faces = Set{Tuple{Int, Int, Int, Int, Bool}}() # faces which both sides are local
-    ghost_faces = Set{Tuple{Int, Int, Int, Int, Bool}}() # faces in which one side is local, one side is ghost
+    ghost_faces = Set{Tuple{Int, Int, Int, Int, Bool, Int, Int, Int}}() # faces in which one side is local, one side is ghost
     interior_vertices = Vector{Tuple{Int, Int}}[]
-    ghost_vertices = Vector{Tuple{Int, Int}}[]
+    ghost_vertices_init = Vector{Tuple{Int, Int}}[]
     boundaries = NamedTuple(
         boundary_name => Tuple{Int, Int}[] for
         boundary_name in unique(Meshes.boundary_names(mesh))
@@ -130,32 +130,6 @@ function DistributedTopology2D(
 
     for (e, elem) in enumerate(local_elems)
         oe = orderindex[elem]
-
-        # Determine whether a face is a boundary face, an interior face
-        # (the opposing face is of a local element), or a ghost face (the
-        # opposing face is of a ghost element). However, we do not
-        # determine the set of ghost elements (or the set of elements to
-        # send) here, but when dealing with vertices (below).
-        for face in 1:4
-            if Meshes.is_boundary_face(mesh, elem, face)
-                boundary_name = Meshes.boundary_face_name(mesh, elem, face)
-                push!(boundaries[boundary_name], (e, face))
-            else
-                opelem, opface, reversed =
-                    Meshes.opposing_face(mesh, elem, face)
-                oi = orderindex[opelem]
-                if elempid[oi] == pid
-                    iface_seen[oe, face] && continue
-                    iface_seen[oe, face] = iface_seen[oi, opface] = true
-                    push!(interior_faces, (oe, face, oi, opface, reversed))
-                else
-                    gface_seen[oe, face] && continue
-                    gface_seen[oe, face] = gface_seen[oi, opface] = true
-                    push!(ghost_faces, (oe, face, oi, opface, reversed))
-                end
-            end
-        end
-
         # Determine whether a vertex is an interior or a ghost vertex. For
         # ghost vertices, we record the elements to be sent, the elements
         # to be received (ghost elements) and other information to ease DSS.
@@ -177,11 +151,11 @@ function DistributedTopology2D(
                 nbr_idxs = Set{Int}()
                 for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
                     oi = orderindex[velem]
+                    # identify the owner of this element
+                    opid = elempid[oi]
                     push!(gvert_group, (oi, vvert))
                     gvert_seen[oi, vvert] = true
 
-                    # identify the owner of this element
-                    opid = elempid[oi]
                     if opid != pid
                         # find the index into neighbor_pids for the owner and
                         # add it if not present
@@ -197,8 +171,8 @@ function DistributedTopology2D(
                         push!(nbr_idxs, nbr_idx)
                     end
                 end
-                # push the neighbors of this vertex element
-                push!(ghost_vertices, sort(gvert_group))
+
+                push!(ghost_vertices_init, sort(gvert_group))
 
                 # record the `send_elems` and `ghost_elems`; this must be
                 # done in a second pass to avoid missing elements
@@ -236,6 +210,60 @@ function DistributedTopology2D(
 
     send_elems_ra = [sort(collect(elemset)) for elemset in send_elems]
     ghost_elems_ra = [sort(collect(elemset)) for elemset in ghost_elems]
+
+    for (e, elem) in enumerate(local_elems)
+        oe = orderindex[elem]
+        # Determine whether a face is a boundary face, an interior face
+        # (the opposing face is of a local element), or a ghost face (the
+        # opposing face is of a ghost element). However, we do not
+        # determine the set of ghost elements (or the set of elements to
+        # send) here, but when dealing with vertices (below).
+        for face in 1:4
+            if Meshes.is_boundary_face(mesh, elem, face)
+                boundary_name = Meshes.boundary_face_name(mesh, elem, face)
+                push!(boundaries[boundary_name], (e, face))
+            else
+                opelem, opface, reversed =
+                    Meshes.opposing_face(mesh, elem, face)
+                oi = orderindex[opelem]
+                opid = elempid[oi]
+                if opid == pid
+                    iface_seen[oe, face] && continue
+                    iface_seen[oe, face] = iface_seen[oi, opface] = true
+                    push!(interior_faces, (oe, face, oi, opface, reversed))
+                else
+                    gface_seen[oe, face] && continue
+                    gface_seen[oe, face] = gface_seen[oi, opface] = true
+                    nbr_idx = find_neighbor(opid)
+                    # find the index of the neighbor in global order that owns element 2
+                    elem2 = elemorder[oi]
+                    gei = findfirst(ge -> ge == elem2, ghost_elems_ra[nbr_idx])
+                    push!(
+                        ghost_faces,
+                        (oe, face, oi, opface, reversed, opid, nbr_idx, gei),
+                    )
+                end
+            end
+        end
+    end
+
+    ghost_vertices = Vector{Tuple{Int, Int, Int, Int}}[]
+    for verts in ghost_vertices_init
+        gvert_group = Tuple{Int, Int, Int, Int}[]
+        for (e, vertex_num) in verts
+            opid = elempid[e]
+            nbr_idx = find_neighbor(opid)
+            if nbr_idx == nothing
+                nbr_idx = -1
+            end
+            elem = elemorder[e]
+            gei =
+                nbr_idx == -1 ? -1 :
+                findfirst(ge -> ge == elem, ghost_elems_ra[nbr_idx])
+            push!(gvert_group, (e, vertex_num, nbr_idx, gei))
+        end
+        push!(ghost_vertices, gvert_group)
+    end
 
     return DistributedTopology2D(
         mesh,
