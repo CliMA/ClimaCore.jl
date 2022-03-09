@@ -6,9 +6,34 @@ using Test
 using ClimaCoreTempestRemap
 using LinearAlgebra
 
-#include("../src/connectivity.jl")
-
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
+
+"""
+    reshape_sparse_to_field!(field, in_array, R)
+
+reshapes and broadcasts a sparse matrix data array (e.g., output from TempestRemap) into a Field object
+"""
+function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
+    field_array = parent(field)
+
+    fill!(field_array, zero(eltype(field_array)))
+    Nf = size(field_array, 3)
+
+    f = 1
+    for (
+        source_idx,
+        target_idx,
+        row,
+    ) in zip(R.source_idxs, R.target_idxs, R.row)
+        (it, jt), et = target_idx
+        for f in 1:Nf
+            field_array[it, jt, f, et] = in_array[row]
+        end
+    end
+    # broadcast to the redundant nodes using unweighted dss
+    Spaces.horizontal_dss!(field)
+    return field
+end
 
 @testset "online remap 2D sphere data" begin
 
@@ -18,7 +43,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
     # source grid params
     ne_i = 20 # #elements
-    nq_i = 3
+    nq_i = 3 # polynomial order for SE discretization
 
     # target grid params
     ne_o = 5
@@ -27,53 +52,46 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     # construct source mesh
     mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i)
     topology_i = ClimaCore.Topologies.Topology2D(mesh_i)
-    space_i = Spaces.SpectralElementSpace2D(topology_i, Spaces.Quadratures.GLL{nq_i}())
+    space_i = Spaces.SpectralElementSpace2D(
+        topology_i,
+        Spaces.Quadratures.GLL{nq_i}(),
+    )
     coords_i = Fields.coordinate_field(space_i)
 
     # construct target mesh
     mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o)
     topology_o = ClimaCore.Topologies.Topology2D(mesh_o)
-    space_o = Spaces.SpectralElementSpace2D(topology_o, Spaces.Quadratures.GLL{nq_o}())
+    space_o = Spaces.SpectralElementSpace2D(
+        topology_o,
+        Spaces.Quadratures.GLL{nq_o}(),
+    )
     coords_o = Fields.coordinate_field(space_o)
-
-
-    #=
-    # get connectivity for projections from ClimaCore Fields to Tempest sparse matrix
-    _, n_gll_i, connect_i = get_cc_gll_connect(ne_i, nq_i)
-    _, n_gll_o, connect_o = get_cc_gll_connect(ne_o, nq_o)
-    =#
-    # initialize the remap operator
 
     # generate test data in the Field format
     field_i = sind.(Fields.coordinate_field(space_i).long)
     field_o = similar(field_i, space_o, eltype(field_i))
 
     # use TempestRemap to generate map weights
-    R = ClimaCoreTempestRemap.generate_map(space_o, space_i)
+    weightfile = tempname()
+    R = ClimaCoreTempestRemap.generate_map(
+        space_o,
+        space_i,
+        weightfile = weightfile,
+    )
+
     # apply the remap
+    ClimaCoreTempestRemap.remap!(field_o, field_i, R)
 
+    # TEST_1: error between our `apply!` in ClimaCoe and `apply_remap` in TempestRemap
 
-
-    # reference
-    field_ref = sind.(Fields.coordinate_field(space_o).long)
-    @test field_ref ≈ field_o atol=0.02
-
-
-
-    ## write test data for offline map apply for comparison
+    # write test data for offline map apply for comparison
     datafile_in = joinpath(OUTPUT_DIR, "data_in.nc")
 
     NCDataset(datafile_in, "c") do nc
         def_space_coord(nc, space_i)
         nc_time = def_time_coord(nc)
-
-        # nc_xlat = defVar(nc, "xlat", Float64, space)
         nc_sinlong = defVar(nc, "sinlong", Float64, space_i, ("time",))
-
-        # nc_time[:] = time[:]
-        # nc_xlat[:] = xlat[:]
         nc_sinlong[:, 1] = field_i
-
         nothing
     end
 
@@ -81,47 +99,42 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     datafile_out = joinpath(OUTPUT_DIR, "data_out.nc")
     apply_remap(datafile_out, datafile_in, weightfile, ["sinlong"])
 
-    ds_wt = NCDataset(datafile_out,"r")
-    field_o_offline = ds_wt["sinlong"][:][:,1]
+    ds_wt = NCDataset(datafile_out, "r")
+    offline_outarray = ds_wt["sinlong"][:][:, 1]
     close(ds_wt)
+    offline_outarray = Float64.(offline_outarray)
 
-    field_o_offline = Float64.(field_o_offline)
-    field_o_offline_reshaped = project_sparse_to_IJFH(field_o_offline, connect_o, nq_o, ne_o)
+    offline_field = similar(field_o)
+    reshape_sparse_to_field!(offline_field, offline_outarray, R)
 
-    err = maximum(sqrt.((field_o_offline_reshaped[:,:,1,:,:] - parent(field_o)) .^ 2))
+    error_1 = maximum(sqrt.((offline_field .- field_o) .^ 2))
 
-    @test err < 1e-6
+    @test error_1 < 1e-6
+
+    # TEST_2: error compared to the analytical solution
+
+    # reference
+    field_ref = sind.(Fields.coordinate_field(space_o).long)
+    @test field_ref ≈ field_o atol = 0.1
+
+    # OTHER VIZ TESTS: can be performed manually using commented code below 
 
 end
+
 
 #=
 using Plots
-function plot_flatmesh(Psi,nelem)
-    plots = []
-    tiltes = ["Eq1" "Eq2" "Eq3" "Eq4" "Po1" "Po2"]
-    for f in collect(1:1:6)
-        Psi_reshape = reshape(Psi[(f-1)*nelem^2+1:f*nelem^2],(nelem,nelem))
+using ClimaCorePlots
+heatmap(field_ref)
+heatmap(field_o)
 
-        push!(plots, contourf(Psi_reshape))
-    end
-    plot(plots..., layout = (6), title = tiltes )
-end
+field_ref = sind.(Fields.coordinate_field(space_o).long)
+norm(field_ref .- field_o)
+heatmap(field_ref .- field_o)
 
-plot_flatmesh(parent(field_i)[1,1,1,:],ne_i)
-png(joinpath(OUTPUT_DIR,"in.png"))
-
-plot_flatmesh(parent(field_o)[1,1,1,:],ne_o)
-png(joinpath(OUTPUT_DIR,"out.png"))
-
-plot_flatmesh(parent(field_o_offline_reshaped)[1,1,1,1,:],ne_o)
-png(joinpath(OUTPUT_DIR,"out_offline.png"))
-
+heatmap(offline_field .- field_o)
 
 using BenchmarkTools
-@btime  apply_remap --> 53.477 ms (304 allocations: 19.78 KiB)
-@btime remap! --> 1.398 s (65163 allocations: 1.55 GiB)
-@btime remap!(Simon_fix) --> 363.599 μs (623 allocations: 150.81 KiB)
-
-
-
+@btime ClimaCoreTempestRemap.remap!(field_o, field_i, R)
+128.883 ms (2589602 allocations: 68.91 MiB)
 =#

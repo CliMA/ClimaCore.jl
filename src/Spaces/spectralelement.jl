@@ -450,7 +450,7 @@ struct UniqueNodeIterator{S}
 end
 
 Base.eltype(iter::UniqueNodeIterator{<:SpectralElementSpace2D}) =
-    Tuple{Tuple{Int,Int}, Int}
+    Tuple{Tuple{Int, Int}, Int}
 
 function Base.length(iter::UniqueNodeIterator{<:SpectralElementSpace2D})
     space = iter.space
