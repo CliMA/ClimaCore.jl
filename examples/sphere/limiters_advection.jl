@@ -52,7 +52,7 @@ const limiter_tol = 5e-14
 ENV["GKSwstype"] = "nul"
 import ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "cg_sphere_solidbody_limiter_$(test_name)"
+dirname = "cg_sphere_advection_limiter_$(test_name)"
 
 if lim_flag == false
     dirname = "$(dirname)_no_lim"
@@ -227,8 +227,7 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters =
-        (quad = quad, space = space, min_Q = min_Q, max_Q = max_Q, T = T)
+    parameters = (space = space, min_Q = min_Q, max_Q = max_Q, T = T)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
