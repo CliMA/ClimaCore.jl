@@ -28,7 +28,7 @@ const Δθ_z = FT(10)
 const T_equator = FT(315)
 const T_min = FT(200)
 const σ_b = FT(7 / 10)
-const z_D = FT(25.0e3)
+const z_D = FT(15.0e3)
 
 # Helper functions
 τ_z_1(z) = exp(Γ * z / T_0)
@@ -171,13 +171,7 @@ function final_adjustments_cache_values(Y, dt; use_rayleigh_sponge)
         cαₘ = @. ifelse(center_coordinates.z > z_D, 1 / (20 * dt), FT(0.0))
         zmax = maximum(Fields.local_geometry_field(face_space).coordinates.z)
         cβ = @. cαₘ * sin(π / 2 * (center_coordinates.z - z_D) / (zmax - z_D))^2
-        cuₕ_ref = @. Geometry.Covariant12Vector(
-            Geometry.UVVector(
-                u(center_coordinates.lat, center_coordinates.z),
-                FT(0.0),
-            ),
-        )
-        return (; cβ, cuₕ_ref)
+        return (; cβ)
     else
         return (;)
     end
@@ -465,8 +459,9 @@ function final_adjustments!(
     end
 
     if use_rayleigh_sponge
-        @unpack cβ, cuₕ_ref = p
-        @. dY.uₕ -= cβ * (Y.uₕ - cuₕ_ref)
+        @unpack cβ = p
+        @. dY.uₕ -= cβ * Y.uₕ
+        @. dY.w -= cβ * Y.w
     end
 
     Spaces.weighted_dss!(dY.Yc)
