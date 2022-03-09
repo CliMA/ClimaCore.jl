@@ -1,13 +1,16 @@
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 name = "ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
-authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.5.0"
+version = "0.6.0"
+
+[compat]
+ClimaCore = "0.7, 0.8"
+WriteVTK = "1.11"
+julia = "1.7"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
-[compat]
-ClimaCore = "0.7"
-WriteVTK = "1.11"
-julia = "1.7"
+[extras]
+CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
