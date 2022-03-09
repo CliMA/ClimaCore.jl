@@ -223,7 +223,7 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
         Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
 
     @. dY.Yc.ρ -= hdiv(cρ * cuvw)
-    @. dY.Yc.ρ -= vdivf2c(Ic2f(cρ * cuₕ))
+    @. dY.Yc.ρ -= vdivf2c(Ic2f(cρ) * Ic2f(cuₕ))
 
     # Momentum conservation
 
@@ -258,7 +258,7 @@ function baroclinic_wave_ρθ_remaining_tendency!(dY, Y, p, t; κ₄)
     # Energy conservation
 
     @. dY.Yc.ρθ -= hdiv(cuvw * cρθ)
-    @. dY.Yc.ρθ -= vdivf2c(Ic2f(cuₕ * cρθ))
+    @. dY.Yc.ρθ -= vdivf2c(Ic2f(cuₕ) * Ic2f(cρθ))
 end
 
 function held_suarez_ρθ_tempest_remaining_tendency!(dY, Y, p, t; κ₄)
