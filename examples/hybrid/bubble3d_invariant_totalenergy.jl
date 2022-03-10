@@ -15,7 +15,7 @@ import ClimaCore:
     Operators
 using ClimaCore.Geometry
 using Logging
-
+#ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms

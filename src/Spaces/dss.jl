@@ -429,17 +429,12 @@ end
 horizontal_dss!(data, space::AbstractSpace, comms_ctx = nothing) =
     horizontal_dss!(data, data, space::AbstractSpace, comms_ctx)
 
-weighted_dss!(dest, src, space::AbstractSpace) = horizontal_dss!(
+weighted_dss!(dest, src, space::AbstractSpace, comms_ctx = nothing) = horizontal_dss!(
     dest,
     Base.Broadcast.broadcasted(⊠, src, space.dss_weights),
     space,
     comms_ctx,
 )
-
-function weighted_dss!(dest, src, space::AbstractSpace, comms_ctx)
-    weighted_src = Base.Broadcast.broadcasted(⊠, src, space.dss_weights)
-    horizontal_dss!(dest, weighted_src, space, comms_ctx)
-end
 
 function weighted_dss!(
     dest,
@@ -447,9 +442,7 @@ function weighted_dss!(
     space::ExtrudedFiniteDifferenceSpace,
     comms_ctx = nothing,
 )
-    weighted_src =
-        Base.Broadcast.broadcasted(⊠, src, space.horizontal_space.dss_weights)
-    horizontal_dss!(dest, weighted_src, space, comms_ctx)
+    horizontal_dss!(dest, Base.Broadcast.broadcasted(⊠, src, space.horizontal_space.dss_weights), space, comms_ctx)
 end
 weighted_dss!(data, space::AbstractSpace, comms_ctx = nothing) =
     weighted_dss!(data, data, space, comms_ctx)
