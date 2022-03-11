@@ -172,7 +172,7 @@ end
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
                 source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                    Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -243,7 +243,7 @@ end
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
                 source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                    Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -297,7 +297,7 @@ end
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
                 source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                    Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -372,7 +372,7 @@ end
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
                 source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                    Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
