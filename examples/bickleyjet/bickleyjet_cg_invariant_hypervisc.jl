@@ -205,5 +205,3 @@ if !usempi || (usempi && ClimaComms.iamroot(Context))
         "Total Energy",
     )
 end
-
-usempi && exit()
