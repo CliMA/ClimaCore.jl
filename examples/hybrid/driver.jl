@@ -14,7 +14,7 @@ using OrdinaryDiffEq
 
 const FT = Float64
 
-default_test_name = "baroclinic_wave_rhoe"
+default_test_name = "sphere/baroclinic_wave_rhoe"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 ################################################################################
@@ -24,9 +24,10 @@ if haskey(ENV, "TEST_NAME")
 else
     test_name = default_test_name
 end
+test_dir, test_file_name = split(test_name, '/')
 
 ENV["GKSwstype"] = "nul"
-path = joinpath(@__DIR__, "output", test_name)
+path = joinpath(@__DIR__, test_dir, "output", test_file_name)
 mkpath(path)
 
 if haskey(ENV, "OUTPUT_DIR")
@@ -36,9 +37,8 @@ else
     output_dir = path
 end
 
-
-include("utilities.jl")
-include("$test_name.jl")
+include("staggered_nonhydrostatic_model.jl")
+include(joinpath(test_dir, "$test_file_name.jl"))
 
 @unpack zmax,
 velem,
