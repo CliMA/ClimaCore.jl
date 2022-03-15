@@ -1419,6 +1419,11 @@ Compute the gradient of a face-valued field `x`, returning a center-valued
 G(x)[i]^3 = x[i+\\tfrac{1}{2}] - x[i-\\tfrac{1}{2}]
 ```
 
+We note that the usual division factor ``1 / \\Delta z`` that appears in a first-order
+finite difference operator is accounted for in the `LocalVector` basis. Hence, users
+need to cast the output of the `GradientF2C` to a `UVector`, `VVector` or `WVector`,
+according to the type of domain on which the operator is defined.
+
 The following boundary conditions are supported:
  - by default, the value of `x` at the boundary face will be used.
  - [`SetValue(x₀)`](@ref): calculate the gradient assuming the value at the
