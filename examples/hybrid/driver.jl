@@ -11,11 +11,30 @@ import ClimaCore: enable_threading
 enable_threading() = true
 
 using OrdinaryDiffEq
+using DiffEqCallbacks
+using JLD2
 
 const FT = Float64
-
 default_test_name = "sphere/baroclinic_wave_rhoe"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
+
+# Definitions that are specific to each test:
+space = nothing
+t_end = nothing
+dt = nothing
+dt_save_to_sol = FT(0) # 0 means don't save to sol
+dt_save_to_disk = FT(0) # 0 means don't save to disk
+ode_algorithm = OrdinaryDiffEq.SSPRK33
+jacobian_flags = (;) # only required by implicit ODE algorithms
+max_newton_iters = 10 # only required by ODE algorithms that use Newton's method
+show_progress_bar = false
+additional_callbacks = () # e.g., printing diagnostic information
+additional_solver_kwargs = (;) # e.g., abstol and reltol
+initial_condition(local_geometry) = nothing
+initial_condition_velocity(local_geometry) = nothing
+postprocessing(sol, p, output_dir) = nothing
+# Values set to `nothing` must be overwritten in every test file; other values
+# may optionally be overwritten.
 
 ################################################################################
 
@@ -26,88 +45,97 @@ else
 end
 test_dir, test_file_name = split(test_name, '/')
 
-ENV["GKSwstype"] = "nul"
-path = joinpath(@__DIR__, test_dir, "output", test_file_name)
-mkpath(path)
-
-if haskey(ENV, "OUTPUT_DIR")
-    output_dir = ENV["OUTPUT_DIR"]
-    mkpath(output_dir)
-else
-    output_dir = path
-end
-
 include("staggered_nonhydrostatic_model.jl")
 include(joinpath(test_dir, "$test_file_name.jl"))
 
-@unpack zmax,
-velem,
-helem,
-npoly,
-tmax,
-dt,
-ode_algorithm,
-jacobian_flags, # relevant for implicit/IMEX ODE algorithms
-max_newton_iters, # relevant for ODE algorithms that use Newton's method
-save_every_n_steps,
-additional_solver_kwargs = driver_values(FT)
-
-center_local_geometry, face_local_geometry =
-    local_geometry_fields(FT, zmax, velem, helem, npoly)
-
-if haskey(ENV, "RESTART_INFILE")
-    data_restart = jldopen(ENV["RESTART_INFILE"])
-    Yc = data_restart["uend"].Yc
-    uₕ = data_restart["uend"].uₕ
-    w = data_restart["uend"].w
-    const tend = data_restart["tend"]
+if haskey(ENV, "RESTART_FILE")
+    restart_data = jldopen(ENV["RESTART_FILE"])
+    t_start = restart_data["t"]
+    Y = restart_data["Y"]
+    close(restart_data)
+    center_local_geometry = Fields.local_geometry_field(Y.Yc)
+    face_local_geometry = Fields.local_geometry_field(Y.w)
 else
-    Yc = map(initial_condition, center_local_geometry)
-    uₕ = map(initial_condition_velocity, center_local_geometry)
-    w = map(_ -> Geometry.Covariant3Vector(FT(0.0)), face_local_geometry)
-    const tend = FT(0)
+    t_start = FT(0)
+    center_local_geometry, face_local_geometry = local_geometry_fields(space)
+    Y = Fields.FieldVector(
+        Yc = map(initial_condition, center_local_geometry),
+        uₕ = map(initial_condition_velocity, center_local_geometry),
+        w = map(_ -> Geometry.Covariant3Vector(FT(0.0)), face_local_geometry),
+    )
 end
-
-Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 p = merge(implicit_cache_values(Y, dt), remaining_cache_values(Y, dt))
 
-use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
-W_kwarg = use_transform ? (; Wfact_t = Wfact!) : (; Wfact = Wfact!)
-W = SchurComplementW(Y, use_transform, jacobian_flags, test_implicit_solver)
-problem = SplitODEProblem(
-    ODEFunction(
-        implicit_tendency!;
-        W_kwarg...,
-        jac_prototype = W,
-        tgrad = (dY, Y, p, t) -> (dY .= zero(eltype(dY))),
-    ),
-    remaining_tendency!,
-    Y,
-    (FT(0.0), tmax),
-    p,
-)
-
-alg_kwargs = (;)
 if ode_algorithm <: Union{
     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
     OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
 }
-    alg_kwargs = (; alg_kwargs..., linsolve = linsolve!)
+    use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+    W = SchurComplementW(Y, use_transform, jacobian_flags, test_implicit_solver)
+    jac_kwargs =
+        use_transform ? (; jac_prototype = W, Wfact_t = Wfact!) :
+        (; jac_prototype = W, Wfact = Wfact!)
+
+    alg_kwargs = (; linsolve = linsolve!)
     if ode_algorithm <: Union{
         OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
         OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
     }
         alg_kwargs =
-            (; alg_kwargs, nlsolve = NLNewton(; max_iter = max_newton_iters))
+            (; alg_kwargs..., nlsolve = NLNewton(; max_iter = max_newton_iters))
     end
+else
+    jac_kwargs = alg_kwargs = (;)
 end
+
+if haskey(ENV, "OUTPUT_DIR")
+    output_dir = ENV["OUTPUT_DIR"]
+else
+    output_dir = joinpath(@__DIR__, test_dir, "output", test_file_name)
+end
+mkpath(output_dir)
+
+function make_save_to_disk(output_dir, test_file_name)
+    function save_to_disk(integrator)
+        day = floor(Int, integrator.t / (60 * 60 * 24))
+        @info "Saving prognostic variables to JLD2 file on day $day"
+        output_file = joinpath(output_dir, "$(test_file_name)_day$day.jld2")
+        jldsave(output_file; t = integrator.t, Y = integrator.u)
+        return nothing
+    end
+    return save_to_disk
+end
+if dt_save_to_disk == 0
+    saving_callback = nothing
+else
+    saving_callback = PeriodicCallback(
+        make_save_to_disk(output_dir, test_file_name),
+        dt_save_to_disk;
+        initial_affect = true,
+    )
+end
+callback = CallbackSet(saving_callback, additional_callbacks...)
+
+problem = SplitODEProblem(
+    ODEFunction(
+        implicit_tendency!;
+        jac_kwargs...,
+        tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
+    ),
+    remaining_tendency!,
+    Y,
+    (t_start, t_end),
+    p,
+)
 integrator = OrdinaryDiffEq.init(
     problem,
     ode_algorithm(; alg_kwargs...);
+    saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
+    callback = callback,
     dt = dt,
-    saveat = dt * save_every_n_steps,
     adaptive = false,
-    progress = false,
+    progress = show_progress_bar,
+    progress_steps = 1,
     additional_solver_kwargs...,
 )
 
@@ -115,6 +143,8 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
+@info "Running `$test_name`"
 sol = @timev OrdinaryDiffEq.solve!(integrator)
 
-postprocessing(sol, path)
+ENV["GKSwstype"] = "nul" # avoid displaying plots
+postprocessing(sol, p, output_dir)
