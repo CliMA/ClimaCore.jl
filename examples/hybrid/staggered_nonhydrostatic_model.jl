@@ -5,7 +5,7 @@ using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Operators, Spaces, Fields
 
 include("../ordinary_diff_eq_bug_fixes.jl")
-include("../schur_complement_W.jl")
+include("schur_complement_W.jl")
 
 const R = 6.371229e6    # Earth's radius
 const grav = 9.80616    # Earth's gravitational acceleration

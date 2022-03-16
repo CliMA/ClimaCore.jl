@@ -7,7 +7,7 @@ ENV["CI_PERF_SKIP_RUN"] = true # we only need haskey(ENV, "CI_PERF_SKIP_RUN") ==
 
 import ClimaCore
 
-filename = joinpath(EXAMPLE_DIR, "3dsphere", "driver.jl")
+filename = joinpath(EXAMPLE_DIR, "hybrid", "driver.jl")
 
 try
     include(filename)

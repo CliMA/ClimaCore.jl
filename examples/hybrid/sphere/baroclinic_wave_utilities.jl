@@ -471,18 +471,10 @@ end
 
 # Periodic Callback for output
 function output_writer(integrator)
-    savefile = joinpath(
-        output_dir,
-        test_name *
-        "_Day" *
-        string(Int(floor((integrator.t + tend) / 3600 / 24))) *
-        ".jld2",
-    )
-    @info "Saving JLD2 with prognostic vars at Day " *
-          string(Int(floor((integrator.t + tend) / 3600 / 24))) *
-          " seconds"
+    day = floor(Int, (integrator.t + tend) / 3600 / 24)
+    @info "Saving JLD2 with prognostic vars at Day $day"
     JLD2.jldsave(
-        savefile,
+        joinpath(output_dir, "$(test_file_name)_day$day.jld2"),
         uend = integrator.u,
         tend = integrator.t + tend,
         clg = center_local_geometry,

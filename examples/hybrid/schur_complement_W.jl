@@ -3,7 +3,7 @@ using LinearAlgebra: Tridiagonal, lu!, ldiv!
 using ClimaCore: Spaces, Fields, Operators
 using ClimaCore.Utilities: half
 
-include("implicit_solver_debugging_tools.jl")
+include("../implicit_solver_debugging_tools.jl")
 
 const compose = Operators.ComposeStencils()
 const apply = Operators.ApplyStencil()
