@@ -4,7 +4,9 @@ using LinearAlgebra: norm_sqr
 using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Operators, Spaces, Fields
 
+include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
+include("../common_spaces.jl")
 include("schur_complement_W.jl")
 
 const R = 6.371229e6    # Earth's radius
@@ -20,29 +22,6 @@ const p_0 = 1.0e5       # reference pressure
 
 pressure(ρθ) = p_0 * (ρθ * R_d / p_0)^γ
 pressure(ρ, e, K, Φ) = ρ * R_d * ((e - K - Φ) / cv_d + T_tri)
-
-function local_geometry_fields(FT, zmax, velem, helem, npoly)
-    vdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zero(FT)),
-        Geometry.ZPoint{FT}(zmax);
-        boundary_tags = (:bottom, :top),
-    )
-    vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
-
-    hdomain = Domains.SphereDomain(R)
-    hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-    htopology = Topologies.Topology2D(hmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
-
-    center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
-    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
-    return (
-        Fields.local_geometry_field(center_space),
-        Fields.local_geometry_field(face_space),
-    )
-end
 
 const Iᶜ = Operators.InterpolateF2C()
 const Iᶠ = Operators.InterpolateC2F(

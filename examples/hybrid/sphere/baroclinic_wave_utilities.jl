@@ -1,5 +1,4 @@
 using LinearAlgebra: ×, norm
-using JLD2
 
 # General parameters
 const k = 3
@@ -467,18 +466,4 @@ function final_adjustments!(
     Spaces.weighted_dss!(dY.Yc)
     Spaces.weighted_dss!(dY.uₕ)
     Spaces.weighted_dss!(dY.w)
-end
-
-# Periodic Callback for output
-function output_writer(integrator)
-    day = floor(Int, (integrator.t + tend) / 3600 / 24)
-    @info "Saving JLD2 with prognostic vars at Day $day"
-    JLD2.jldsave(
-        joinpath(output_dir, "$(test_file_name)_day$day.jld2"),
-        uend = integrator.u,
-        tend = integrator.t + tend,
-        clg = center_local_geometry,
-        flg = face_local_geometry,
-    )
-    return nothing
 end
