@@ -161,6 +161,47 @@ Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
 covariant3(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
     contravariant3(u, local_geometry)
 
+# workarounds for using a Covariant12Vector/Covariant123Vector in a UW space:
+function LocalVector(
+    vector::CovariantVector{<:Any, (1, 2, 3)},
+    local_geometry::LocalGeometry{(1, 3)},
+)
+    u₁, v, u₃ = components(vector)
+    vector2 = Covariant13Vector(u₁, u₃)
+    u, w = components(transform(LocalAxis{(1, 3)}(), vector2, local_geometry))
+    return UVWVector(u, v, w)
+end
+function contravariant1(
+    vector::CovariantVector{<:Any, (1, 2, 3)},
+    local_geometry::LocalGeometry{(1, 3)},
+)
+    u₁, _, u₃ = components(vector)
+    vector2 = Covariant13Vector(u₁, u₃)
+    return transform(Contravariant13Axis(), vector2, local_geometry).u¹
+end
+function contravariant3(
+    vector::CovariantVector{<:Any, (1, 2)},
+    local_geometry::LocalGeometry{(1, 3)},
+)
+    u₁, _ = components(vector)
+    vector2 = Covariant13Vector(u₁, zero(u₁))
+    return transform(Contravariant13Axis(), vector2, local_geometry).u³
+end
+function ContravariantVector(
+    vector::CovariantVector{<:Any, (1, 2)},
+    local_geometry::LocalGeometry{(1, 3)},
+)
+    u₁, v = components(vector)
+    vector2 = Covariant1Vector(u₁)
+    vector3 = transform(
+        ContravariantAxis{(1, 3)}(),
+        transform(CovariantAxis{(1, 3)}(), vector2),
+        local_geometry,
+    )
+    u¹, u³ = components(vector3)
+    return Contravariant123Vector(u¹, v, u³)
+end
+
 """
     transform(axis, V[, local_geometry])
 

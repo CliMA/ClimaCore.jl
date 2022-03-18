@@ -46,6 +46,18 @@ end
     )
         return arg
     end
+    # workaround for using a Covariant12Vector in a UW space
+    if ax isa Geometry.UWAxis && axfrom isa Geometry.Covariant12Axis
+        # return Geometry.transform(Geometry.UVWAxis(), arg, local_geometry)
+        u₁, v = Geometry.components(arg)
+        uw_vector = Geometry.transform(
+            Geometry.UWAxis(),
+            Geometry.Covariant13Vector(u₁, zero(u₁)),
+            local_geometry,
+        )
+        u, w = Geometry.components(uw_vector)
+        return Geometry.UVWVector(u, v, w)
+    end
     Geometry.transform(ax, arg, local_geometry)
 end
 
@@ -67,6 +79,20 @@ end
     local_geometry::Geometry.LocalGeometry,
 )
     ax = axes(refarg, 1)
+    # workaround for using a Covariant12Vector in a UW space
+    if (
+        axes(local_geometry.∂x∂ξ, 1) isa Geometry.UWAxis &&
+        ax isa Geometry.Covariant12Axis
+    )
+        u, u₂, w = Geometry.components(targ)
+        u₁_vector = Geometry.transform(
+            Geometry.Covariant1Axis(),
+            Geometry.UWVector(u, w),
+            local_geometry,
+        )
+        u₁, = Geometry.components(u₁_vector)
+        return Geometry.Covariant12Vector(u₁, u₂)
+    end
     Geometry.transform(ax, targ, local_geometry)
 end
 

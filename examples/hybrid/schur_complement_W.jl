@@ -1,4 +1,4 @@
-using LinearAlgebra: Tridiagonal, lu!, ldiv!
+using LinearAlgebra
 
 using ClimaCore: Spaces, Fields, Operators
 using ClimaCore.Utilities: half
@@ -6,7 +6,7 @@ using ClimaCore.Utilities: half
 const compose = Operators.ComposeStencils()
 const apply = Operators.ApplyStencil()
 
-struct SchurComplementW{F, T, J1, J2, J3, S, A}
+struct SchurComplementW{F, FT, J1, J2, J3, S, A}
     # whether this struct is used to compute Wfact_t or Wfact
     transform::Bool
 
@@ -14,13 +14,13 @@ struct SchurComplementW{F, T, J1, J2, J3, S, A}
     flags::F
 
     # reference to dtγ, which is specified by the ODE solver
-    dtγ_ref::T
+    dtγ_ref::FT
 
-    # nonzero blocks of the Jacobian (∂ρₜ/∂𝕄, ∂𝔼ₜ/∂𝕄, ∂𝕄ₜ/∂𝔼, and ∂𝕄ₜ/∂ρ)
-    ∂ρₜ∂𝕄::J1
-    ∂𝔼ₜ∂𝕄::J2
-    ∂𝕄ₜ∂𝔼::J3
-    ∂𝕄ₜ∂ρ::J3
+    # nonzero blocks of the Jacobian
+    ∂ᶜρₜ∂ᶠ𝕄::J1
+    ∂ᶜ𝔼ₜ∂ᶠ𝕄::J2
+    ∂ᶠ𝕄ₜ∂ᶜ𝔼::J3
+    ∂ᶠ𝕄ₜ∂ᶜρ::J3
 
     # cache for the Schur complement linear solve
     S::S
@@ -33,23 +33,23 @@ end
 function SchurComplementW(Y, transform, flags, test = false)
     FT = eltype(Y)
     dtγ_ref = Ref(zero(FT))
-    center_space = axes(Y.Yc.ρ)
-    face_space = axes(Y.w)
+    center_space = axes(Y.c)
+    face_space = axes(Y.f)
 
     # TODO: Automate this.
     J1_eltype = Operators.StencilCoefs{-half, half, NTuple{2, FT}}
     J2_eltype =
-        flags.∂𝔼ₜ∂𝕄_mode == :exact && :ρe in propertynames(Y.Yc) ?
+        flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact && :ρe in propertynames(Y.c) ?
         Operators.StencilCoefs{-(1 + half), 1 + half, NTuple{4, FT}} : J1_eltype
-    ∂ρₜ∂𝕄 = Fields.Field(J1_eltype, center_space)
-    ∂𝔼ₜ∂𝕄 = Fields.Field(J2_eltype, center_space)
-    ∂𝕄ₜ∂𝔼 = Fields.Field(J1_eltype, face_space)
-    ∂𝕄ₜ∂ρ = Fields.Field(J1_eltype, face_space)
+    ∂ᶜρₜ∂ᶠ𝕄 = Fields.Field(J1_eltype, center_space)
+    ∂ᶜ𝔼ₜ∂ᶠ𝕄 = Fields.Field(J2_eltype, center_space)
+    ∂ᶠ𝕄ₜ∂ᶜ𝔼 = Fields.Field(J1_eltype, face_space)
+    ∂ᶠ𝕄ₜ∂ᶜρ = Fields.Field(J1_eltype, face_space)
 
     # TODO: Automate this.
     S_eltype = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
-    S = similar(Y.w, S_eltype)
-    N = Spaces.nlevels(axes(Y.w))
+    S = Fields.Field(S_eltype, face_space)
+    N = Spaces.nlevels(face_space)
     S_column_array = Tridiagonal(
         Array{FT}(undef, N - 1),
         Array{FT}(undef, N),
@@ -59,19 +59,19 @@ function SchurComplementW(Y, transform, flags, test = false)
     SchurComplementW{
         typeof(flags),
         typeof(dtγ_ref),
-        typeof(∂ρₜ∂𝕄),
-        typeof(∂𝔼ₜ∂𝕄),
-        typeof(∂𝕄ₜ∂ρ),
+        typeof(∂ᶜρₜ∂ᶠ𝕄),
+        typeof(∂ᶜ𝔼ₜ∂ᶠ𝕄),
+        typeof(∂ᶠ𝕄ₜ∂ᶜρ),
         typeof(S),
         typeof(S_column_array),
     }(
         transform,
         flags,
         dtγ_ref,
-        ∂ρₜ∂𝕄,
-        ∂𝔼ₜ∂𝕄,
-        ∂𝕄ₜ∂𝔼,
-        ∂𝕄ₜ∂ρ,
+        ∂ᶜρₜ∂ᶠ𝕄,
+        ∂ᶜ𝔼ₜ∂ᶠ𝕄,
+        ∂ᶠ𝕄ₜ∂ᶜ𝔼,
+        ∂ᶠ𝕄ₜ∂ᶜρ,
         S,
         S_column_array,
         test,
@@ -84,9 +84,9 @@ end
 Base.similar(w::SchurComplementW) = w
 
 #=
-A = [-I         0          dtγ ∂ρₜ∂𝕄;
-     0          -I         dtγ ∂𝔼ₜ∂𝕄;
-     dtγ ∂𝕄ₜ∂ρ  dtγ ∂𝕄ₜ∂𝔼  -I       ]
+A = [-I           0            dtγ ∂ᶜρₜ∂ᶠ𝕄;
+     0            -I           dtγ ∂ᶜ𝔼ₜ∂ᶠ𝕄;
+     dtγ ∂ᶠ𝕄ₜ∂ᶜρ  dtγ ∂ᶠ𝕄ₜ∂ᶜ𝔼  -I         ] =
     [-I   0    A13;
      0    -I   A23;
      A31  A32  -I ]
@@ -106,85 +106,90 @@ Note: The matrix S = -I + A31 A13 + A32 A23 is the "Schur complement" of
 =#
 function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
     function _linsolve!(x, A, b, update_matrix = false; kwargs...)
-        @unpack dtγ_ref, ∂ρₜ∂𝕄, ∂𝔼ₜ∂𝕄, ∂𝕄ₜ∂𝔼, ∂𝕄ₜ∂ρ, S, S_column_array = A
+        (; dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, S, S_column_array) = A
         dtγ = dtγ_ref[]
 
-        xρ = x.Yc.ρ
-        bρ = b.Yc.ρ
-        if :ρθ in propertynames(x.Yc)
-            x𝔼 = x.Yc.ρθ
-            b𝔼 = b.Yc.ρθ
-        elseif :ρe in propertynames(x.Yc)
-            x𝔼 = x.Yc.ρe
-            b𝔼 = b.Yc.ρe
+        xᶜρ = x.c.ρ
+        bᶜρ = b.c.ρ
+        if :ρθ in propertynames(x.c)
+            xᶜ𝔼 = x.c.ρθ
+            bᶜ𝔼 = b.c.ρθ
+        elseif :ρe in propertynames(x.c)
+            xᶜ𝔼 = x.c.ρe
+            bᶜ𝔼 = b.c.ρe
+        elseif :ρe_int in propertynames(x.c)
+            xᶜ𝔼 = x.c.ρe_int
+            bᶜ𝔼 = b.c.ρe_int
         end
-        if :ρw in propertynames(x)
-            x𝕄 = x.ρw.components.data.:1
-            b𝕄 = b.ρw.components.data.:1
-        elseif :w in propertynames(x)
-            x𝕄 = x.w.components.data.:1
-            b𝕄 = b.w.components.data.:1
+        if :ρw in propertynames(x.f)
+            xᶠ𝕄 = x.f.ρw.components.data.:1
+            bᶠ𝕄 = b.f.ρw.components.data.:1
+        elseif :w in propertynames(x.f)
+            xᶠ𝕄 = x.f.w.components.data.:1
+            bᶠ𝕄 = b.f.w.components.data.:1
         end
 
         # TODO: Extend LinearAlgebra.I to work with stencil fields.
-        T = eltype(eltype(S))
-        I = Ref(Operators.StencilCoefs{-1, 1}((zero(T), one(T), zero(T))))
-        if Operators.bandwidths(eltype(∂𝔼ₜ∂𝕄)) != (-half, half)
-            str = "The linear solver cannot yet be run with the given ∂𝔼ₜ/∂𝕄 \
-                block, since it has more than 2 diagonals. Setting ∂𝔼ₜ/∂𝕄 = 0 \
-                for the Schur complement computation. Consider changing the \
-                jacobian_mode or the energy variable."
+        FT = eltype(eltype(S))
+        I = Ref(Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))))
+        if Operators.bandwidths(eltype(∂ᶜ𝔼ₜ∂ᶠ𝕄)) != (-half, half)
+            str = "The linear solver cannot yet be run with the given ∂ᶜ𝔼ₜ/∂ᶠ𝕄 \
+                block, since it has more than 2 diagonals. So, ∂ᶜ𝔼ₜ/∂ᶠ𝕄 will \
+                be set to 0 for the Schur complement computation. Consider \
+                changing the ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode or the energy variable."
             @warn str maxlog = 1
-            @. S = -I + dtγ^2 * compose(∂𝕄ₜ∂ρ, ∂ρₜ∂𝕄)
+            @. S = -I + dtγ^2 * compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         else
-            @. S = -I + dtγ^2 * (compose(∂𝕄ₜ∂ρ, ∂ρₜ∂𝕄) + compose(∂𝕄ₜ∂𝔼, ∂𝔼ₜ∂𝕄))
+            @. S =
+                -I +
+                dtγ^2 * (compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) + compose(∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶜ𝔼ₜ∂ᶠ𝕄))
         end
 
-        @. x𝕄 = b𝕄 + dtγ * (apply(∂𝕄ₜ∂ρ, bρ) + apply(∂𝕄ₜ∂𝔼, b𝔼))
+        @. xᶠ𝕄 = bᶠ𝕄 + dtγ * (apply(∂ᶠ𝕄ₜ∂ᶜρ, bᶜρ) + apply(∂ᶠ𝕄ₜ∂ᶜ𝔼, bᶜ𝔼))
 
         # TODO: Do this with stencil_solve!.
-        Ni, Nj, _, _, Nh = size(Spaces.local_geometry_data(axes(xρ)))
+        Ni, Nj, _, _, Nh = size(Spaces.local_geometry_data(axes(xᶜρ)))
         for h in 1:Nh, j in 1:Nj, i in 1:Ni
-            x𝕄_column_view = parent(Spaces.column(x𝕄, i, j, h))
+            xᶠ𝕄_column_view = parent(Spaces.column(xᶠ𝕄, i, j, h))
             S_column = Spaces.column(S, i, j, h)
             @views S_column_array.dl .= parent(S_column.coefs.:1)[2:end]
             S_column_array.d .= parent(S_column.coefs.:2)
             @views S_column_array.du .= parent(S_column.coefs.:3)[1:(end - 1)]
-            ldiv!(lu!(S_column_array), x𝕄_column_view)
+            ldiv!(lu!(S_column_array), xᶠ𝕄_column_view)
         end
 
-        @. xρ = -bρ + dtγ * apply(∂ρₜ∂𝕄, x𝕄)
-        @. x𝔼 = -b𝔼 + dtγ * apply(∂𝔼ₜ∂𝕄, x𝕄)
+        @. xᶜρ = -bᶜρ + dtγ * apply(∂ᶜρₜ∂ᶠ𝕄, xᶠ𝕄)
+        @. xᶜ𝔼 = -bᶜ𝔼 + dtγ * apply(∂ᶜ𝔼ₜ∂ᶠ𝕄, xᶠ𝕄)
 
-        if A.test && Operators.bandwidths(eltype(∂𝔼ₜ∂𝕄)) == (-half, half)
-            Ni, Nj, _, Nv, Nh = size(Spaces.local_geometry_data(axes(xρ)))
-            ∂Yₜ∂Y = Array{Float64}(undef, 3 * Nv + 1, 3 * Nv + 1)
-            ΔY = Array{Float64}(undef, 3 * Nv + 1)
-            ΔΔY = Array{Float64}(undef, 3 * Nv + 1)
+        if A.test && Operators.bandwidths(eltype(∂ᶜ𝔼ₜ∂ᶠ𝕄)) == (-half, half)
+            Ni, Nj, _, Nv, Nh = size(Spaces.local_geometry_data(axes(xᶜρ)))
+            ∂Yₜ∂Y = Array{FT}(undef, 3 * Nv + 1, 3 * Nv + 1)
+            ΔY = Array{FT}(undef, 3 * Nv + 1)
+            ΔΔY = Array{FT}(undef, 3 * Nv + 1)
             for h in 1:Nh, j in 1:Nj, i in 1:Ni
                 ∂Yₜ∂Y .= 0.0
                 ∂Yₜ∂Y[1:Nv, (2 * Nv + 1):(3 * Nv + 1)] .=
-                    column_matrix(∂ρₜ∂𝕄, i, j, h)
+                    column_matrix(∂ᶜρₜ∂ᶠ𝕄, i, j, h)
                 ∂Yₜ∂Y[(Nv + 1):(2 * Nv), (2 * Nv + 1):(3 * Nv + 1)] .=
-                    column_matrix(∂𝔼ₜ∂𝕄, i, j, h)
+                    column_matrix(∂ᶜ𝔼ₜ∂ᶠ𝕄, i, j, h)
                 ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), 1:Nv] .=
-                    column_matrix(∂𝕄ₜ∂ρ, i, j, h)
+                    column_matrix(∂ᶠ𝕄ₜ∂ᶜρ, i, j, h)
                 ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), (Nv + 1):(2 * Nv)] .=
-                    column_matrix(∂𝕄ₜ∂𝔼, i, j, h)
-                ΔY[1:Nv] .= column_vector(xρ, i, j, h)
-                ΔY[(Nv + 1):(2 * Nv)] .= column_vector(x𝔼, i, j, h)
-                ΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(x𝕄, i, j, h)
-                ΔΔY[1:Nv] .= column_vector(bρ, i, j, h)
-                ΔΔY[(Nv + 1):(2 * Nv)] .= column_vector(b𝔼, i, j, h)
-                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(b𝕄, i, j, h)
+                    column_matrix(∂ᶠ𝕄ₜ∂ᶜ𝔼, i, j, h)
+                ΔY[1:Nv] .= column_vector(xᶜρ, i, j, h)
+                ΔY[(Nv + 1):(2 * Nv)] .= column_vector(xᶜ𝔼, i, j, h)
+                ΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(xᶠ𝕄, i, j, h)
+                ΔΔY[1:Nv] .= column_vector(bᶜρ, i, j, h)
+                ΔΔY[(Nv + 1):(2 * Nv)] .= column_vector(bᶜ𝔼, i, j, h)
+                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(bᶠ𝕄, i, j, h)
                 @assert (-LinearAlgebra.I + dtγ * ∂Yₜ∂Y) * ΔY ≈ ΔΔY
             end
         end
 
-        if :ρuₕ in propertynames(x)
-            @. x.ρuₕ = -b.ρuₕ
-        elseif :uₕ in propertynames(x)
-            @. x.uₕ = -b.uₕ
+        if :ρuₕ in propertynames(x.c)
+            @. x.c.ρuₕ = -b.c.ρuₕ
+        elseif :uₕ in propertynames(x.c)
+            @. x.c.uₕ = -b.c.uₕ
         end
 
         if A.transform
