@@ -14,27 +14,24 @@ using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
-const FT = Float64
 default_test_name = "sphere/baroclinic_wave_rhoe"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 # Definitions that are specific to each test:
 space = nothing
-t_end = nothing
-dt = nothing
-dt_save_to_sol = FT(0) # 0 means don't save to sol
-dt_save_to_disk = FT(0) # 0 means don't save to disk
+t_end = 0
+dt = 0
+dt_save_to_sol = 0 # 0 means don't save to sol
+dt_save_to_disk = 0 # 0 means don't save to disk
 ode_algorithm = OrdinaryDiffEq.SSPRK33
 jacobian_flags = (;) # only required by implicit ODE algorithms
 max_newton_iters = 10 # only required by ODE algorithms that use Newton's method
 show_progress_bar = false
 additional_callbacks = () # e.g., printing diagnostic information
 additional_solver_kwargs = (;) # e.g., abstol and reltol
-initial_condition(local_geometry) = nothing
-initial_condition_velocity(local_geometry) = nothing
+center_initial_condition(local_geometry) = (;)
+face_initial_condition(local_geometry) = (;)
 postprocessing(sol, p, output_dir) = nothing
-# Values set to `nothing` must be overwritten in every test file; other values
-# may optionally be overwritten.
 
 ################################################################################
 
@@ -44,8 +41,6 @@ else
     test_name = default_test_name
 end
 test_dir, test_file_name = split(test_name, '/')
-
-include("staggered_nonhydrostatic_model.jl")
 include(joinpath(test_dir, "$test_file_name.jl"))
 
 if haskey(ENV, "RESTART_FILE")
@@ -53,18 +48,17 @@ if haskey(ENV, "RESTART_FILE")
     t_start = restart_data["t"]
     Y = restart_data["Y"]
     close(restart_data)
-    center_local_geometry = Fields.local_geometry_field(Y.Yc)
-    face_local_geometry = Fields.local_geometry_field(Y.w)
+    ᶜlocal_geometry = Fields.local_geometry_field(Y.c)
+    ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    center_local_geometry, face_local_geometry = local_geometry_fields(space)
+    ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
     Y = Fields.FieldVector(
-        Yc = map(initial_condition, center_local_geometry),
-        uₕ = map(initial_condition_velocity, center_local_geometry),
-        w = map(_ -> Geometry.Covariant3Vector(FT(0.0)), face_local_geometry),
+        c = map(center_initial_condition, ᶜlocal_geometry),
+        f = map(face_initial_condition, ᶠlocal_geometry),
     )
 end
-p = merge(implicit_cache_values(Y, dt), remaining_cache_values(Y, dt))
+p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt)
 
 if ode_algorithm <: Union{
     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,

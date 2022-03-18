@@ -340,7 +340,7 @@ ENV["GKSwstype"] = "nul"
 import Plots
 Plots.GRBackend()
 
-dir = "bubble3d_invariant_etot"
+dir = "bubble_3d_invariant_rhoe"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 

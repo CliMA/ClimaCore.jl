@@ -16,7 +16,7 @@ dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(0) # 0 means don't save to disk
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
-jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
+jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
@@ -30,11 +30,11 @@ function additional_tendency!(Yₜ, Y, p, t)
 end
 
 center_initial_condition(local_geometry) =
-    center_initial_condition(local_geometry, Val(:ρe))
+    center_initial_condition(local_geometry, Val(:ρe_int))
 
 function postprocessing(sol, p, output_dir)
-    @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
-    @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"
+    @info "L₂ norm of ρe_int at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe_int))"
+    @info "L₂ norm of ρe_int at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe_int))"
 
     anim = Plots.@animate for Y in sol.u
         ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2

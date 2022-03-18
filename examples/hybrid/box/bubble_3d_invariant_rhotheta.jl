@@ -321,7 +321,7 @@ function linkfig(figpath, alt = "")
     end
 end
 
-dir = "bubble3d_invariant"
+dir = "bubble_3d_invariant_rhotheta"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 

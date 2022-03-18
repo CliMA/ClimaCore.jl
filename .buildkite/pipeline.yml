@@ -309,67 +309,67 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble 2D hybrid"
-    key: "cpu_rising_bubble_2d_hybrid"
+  - label: ":computer: Rising Bubble 2D hybrid (ρθ)"
+    key: "cpu_rising_bubble_2d_hybrid_rhotheta"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d.jl"
+      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_rhotheta.jl"
     artifact_paths:
-      - "examples/hybrid/plane/output/bubble_2d/*"
+      - "examples/hybrid/plane/output/bubble_2d_rhotheta/*"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble 3D hybrid"
-    key: "cpu_rising_bubble_3d_hybrid"
+  - label: ":computer: Rising Bubble 3D hybrid (ρθ)"
+    key: "cpu_rising_bubble_3d_hybrid_rhotheta"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d.jl"
+      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_rhotheta.jl"
     artifact_paths:
-      - "examples/hybrid/box/output/bubble_3d/*"
+      - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid invariant potential temperature"
-    key: "cpu_rising_bubble_hybrid_invariant_rho_theta"
+  - label: ":computer: Rising Bubble 2D hybrid invariant (ρθ)"
+    key: "cpu_rising_bubble_2d_hybrid_invariant_rhotheta"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant.jl"
+      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant_rhotheta.jl"
     artifact_paths:
-      - "examples/hybrid/plane/output/bubble_2d_invariant/*"
+      - "examples/hybrid/plane/output/bubble_2d_invariant_rhotheta/*"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble hybrid invariant total energy"
-    key: "cpu_rising_bubble_hybrid_invariant_total_energy"
+  - label: ":computer: Rising Bubble 2D hybrid invariant (ρe)"
+    key: "cpu_rising_bubble_2d_hybrid_invariant_rhoe"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant_totalenergy.jl"
+      - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant_rhoe.jl"
     artifact_paths:
-      - "examples/hybrid/plane/output/bubble_2d_invariant_etot/*"
+      - "examples/hybrid/plane/output/bubble_2d_invariant_rhoe/*"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble 3D hybrid invariant"
-    key: "cpu_rising_bubble_3d_hybrid_invariant_potential_temperature"
+  - label: ":computer: Rising Bubble 3D hybrid invariant (ρθ)"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_rhotheta"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant.jl"
+      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhotheta.jl"
     artifact_paths:
-      - "examples/hybrid/box/output/bubble_3d_invariant/*"
+      - "examples/hybrid/box/output/bubble_3d_invariant_rhotheta/*"
     agents:
       config: cpu
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rising Bubble 3D hybrid invariant total energy"
-    key: "cpu_rising_bubble_3d_hybrid_invariant_total_energy"
+  - label: ":computer: Rising Bubble 3D hybrid invariant (ρe)"
+    key: "cpu_rising_bubble_3d_hybrid_invariant_rhoe"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_totalenergy.jl"
+      - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
     artifact_paths:
-      - "examples/hybrid/box/output/bubble_3d_invariant_etot/*"
+      - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
     agents:
       config: cpu
       queue: central
@@ -408,12 +408,12 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: MPI Rising Bubble 3D hybrid invariant total energy"
-    key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_total_energy"
+  - label: ":computer: MPI Rising Bubble 3D hybrid invariant (ρe)"
+    key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_rhoe"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_totalenergy.jl"
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
     artifact_paths:
-      - "examples/hybrid/box/output/bubble_3d_invariant_etot/*"
+      - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
     env:
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
@@ -690,6 +690,32 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta/*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: dry held-suarez (ρe_int)"
+    key: "cpu_held_suarez_rho_e_int"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_rhoe_int/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhoe_int"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: inertial gravity wave"
+    key: "cpu_inertial_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/inertial_gravity_wave/*"
+    env:
+      TEST_NAME: "plane/inertial_gravity_wave"
     agents:
       config: cpu
       queue: central

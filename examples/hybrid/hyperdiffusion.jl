@@ -1,0 +1,72 @@
+hyperdiffusion_cache(
+    ᶜlocal_geometry,
+    ᶠlocal_geometry;
+    κ₄ = FT(0),
+    use_tempest_mode = false,
+) = merge(
+    (;
+        ᶜχ = similar(ᶜlocal_geometry, FT),
+        ᶜχuₕ = similar(ᶜlocal_geometry, Geometry.Covariant12Vector{FT}),
+        κ₄,
+        use_tempest_mode,
+    ),
+    use_tempest_mode ? (; ᶠχw_data = similar(ᶠlocal_geometry, FT)) : (;),
+)
+
+function hyperdiffusion_tendency!(Yₜ, Y, p, t)
+    ᶜρ = Y.c.ρ
+    ᶜuₕ = Y.c.uₕ
+    (; ᶜp, ᶜχ, ᶜχuₕ, κ₄, use_tempest_mode) = p # assume that ᶜp has been updated
+    point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+
+    if use_tempest_mode
+        @. ᶜχ = wdivₕ(gradₕ(ᶜρ)) # ᶜχρ
+        Spaces.weighted_dss!(ᶜχ)
+        @. Yₜ.c.ρ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+
+        if :ρθ in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ)) # ᶜχρθ
+            Spaces.weighted_dss!(ᶜχ)
+            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+        else
+            error("use_tempest_mode must be false when not using ρθ")
+        end
+
+        (; ᶠχw_data) = p
+        @. ᶠχw_data = wdivₕ(gradₕ(Y.f.w.components.data.:1))
+        Spaces.weighted_dss!(ᶠχw_data)
+        @. Yₜ.f.w.components.data.:1 -= κ₄ * wdivₕ(gradₕ(ᶠχw_data))
+    else
+        if :ρθ in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ / ᶜρ)) # ᶜχθ
+            Spaces.weighted_dss!(ᶜχ)
+            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        elseif :ρe in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe + ᶜp) / ᶜρ)) # ᶜχe
+            Spaces.weighted_dss!(ᶜχ)
+            @. Yₜ.c.ρe -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        elseif :ρe_int in propertynames(Y.c)
+            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe_int + ᶜp) / ᶜρ)) # ᶜχe_int
+            Spaces.weighted_dss!(ᶜχ)
+            @. Yₜ.c.ρe_int -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+        end
+    end
+
+    if point_type <: Geometry.Abstract3DPoint
+        @. ᶜχuₕ =
+            wgradₕ(divₕ(ᶜuₕ)) - Geometry.Covariant12Vector(
+                wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜuₕ))),
+            )
+        Spaces.weighted_dss!(ᶜχuₕ)
+        @. Yₜ.c.uₕ -=
+            κ₄ * (
+                wgradₕ(divₕ(ᶜχuₕ)) - Geometry.Covariant12Vector(
+                    wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜχuₕ))),
+                )
+            )
+    elseif point_type <: Geometry.Abstract2DPoint
+        @. ᶜχuₕ = Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜuₕ)))
+        Spaces.weighted_dss!(ᶜχuₕ)
+        @. Yₜ.c.uₕ -= κ₄ * Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜχuₕ)))
+    end
+end
