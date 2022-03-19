@@ -72,8 +72,6 @@ get_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
 
 function default_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜcoord = ᶜlocal_geometry.coordinates
-    ᶜΦ = @. grav * ᶜcoord.z
-    ᶠgradᵥᶜΦ = @. ᶠgradᵥ(ᶜΦ)
     if eltype(ᶜcoord) <: Geometry.LatLongZPoint
         ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
     else
@@ -83,14 +81,17 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     return (;
         ᶜuvw = similar(ᶜlocal_geometry, Geometry.Covariant123Vector{FT}),
         ᶜK = similar(ᶜlocal_geometry, FT),
-        ᶜΦ,
-        ᶠgradᵥᶜΦ,
+        ᶜΦ = grav .* ᶜcoord.z,
         ᶜp = similar(ᶜlocal_geometry, FT),
         ᶜω³ = similar(ᶜlocal_geometry, Geometry.Contravariant3Vector{FT}),
         ᶠω¹² = similar(ᶠlocal_geometry, Geometry.Contravariant12Vector{FT}),
         ᶠu¹² = similar(ᶠlocal_geometry, Geometry.Contravariant12Vector{FT}),
         ᶠu³ = similar(ᶠlocal_geometry, Geometry.Contravariant3Vector{FT}),
         ᶜf,
+        ∂ᶜK∂ᶠw_data = similar(
+            ᶜlocal_geometry,
+            Operators.StencilCoefs{-half, half, NTuple{2, FT}},
+        ),
     )
 end
 
@@ -100,14 +101,17 @@ function implicit_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
-    (; ᶜΦ, ᶠgradᵥᶜΦ, ᶜp) = p
+    (; ᶜK, ᶜΦ, ᶜp) = p
 
     # Used for automatically computing the Jacobian ∂Yₜ/∂Y. Currently requires
     # allocation because the cache is stored separately from Y, which means that
     # similar(Y, <:Dual) doesn't allocate an appropriate cache for computing Yₜ.
     if eltype(Y) <: Dual
+        ᶜK = similar(ᶜK)
         ᶜp = similar(ᶜρ)
     end
+
+    @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
 
     @. Yₜ.c.ρ = -(ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw))
 
@@ -117,12 +121,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
         @. Yₜ.c.ρθ = -(ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw))
     elseif :ρe in propertynames(Y.c)
         ᶜρe = Y.c.ρe
-        @. ᶜp = pressure_ρe(
-            ᶜρe,
-            norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2,
-            ᶜΦ,
-            ᶜρ,
-        )
+        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
         @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
     elseif :ρe_int in propertynames(Y.c)
         ᶜρe_int = Y.c.ρe_int
@@ -137,7 +136,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
 
     Yₜ.c.uₕ .= Ref(zero(eltype(Yₜ.c.uₕ)))
 
-    @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥᶜΦ)
+    @. Yₜ.f.w = -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥ(ᶜK + ᶜΦ))
 
     # TODO: Add flux correction to the Jacobian
     # @. Yₜ.c.ρ += ᶜFC(ᶠw, ᶜρ)
@@ -231,7 +230,7 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
             Geometry.Covariant12Vector(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
     end
 
-    @. Yₜ.f.w -= ᶠω¹² × ᶠu¹² + ᶠgradᵥ(ᶜK) # TODO: put grad in implicit_tendency
+    @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
 end
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
@@ -242,16 +241,35 @@ Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} 
     T(axes(T), S(one(T′)))
 
 function Wfact!(W, Y, p, dtγ, t)
-    (; flags, dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ) = W
+    (; flags, dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶠ𝕄ₜ∂ᶠ𝕄) = W
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
-    (; ᶜK, ᶜΦ, ᶠgradᵥᶜΦ, ᶜp) = p
+    (; ᶜK, ᶜΦ, ᶜp, ∂ᶜK∂ᶠw_data) = p
 
     dtγ_ref[] = dtγ
 
     # If we let ᶠw_data = ᶠw.components.data.:1 and ᶠw_unit = one.(ᶠw), then
     # ᶠw == ᶠw_data .* ᶠw_unit. The Jacobian blocks involve ᶠw_data, not ᶠw.
+    ᶠw_data = ᶠw.components.data.:1
+
+    # ᶜinterp(ᶠw) =
+    #     ᶜinterp(ᶠw)_data * ᶜinterp(ᶠw)_unit =
+    #     ᶜinterp(ᶠw_data) * ᶜinterp(ᶠw)_unit
+    # norm_sqr(ᶜinterp(ᶠw)) =
+    #     norm_sqr(ᶜinterp(ᶠw_data) * ᶜinterp(ᶠw)_unit) =
+    #     ᶜinterp(ᶠw_data)^2 * norm_sqr(ᶜinterp(ᶠw)_unit)
+    # ᶜK =
+    #     norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2 =
+    #     norm_sqr(ᶜuₕ) / 2 + norm_sqr(ᶜinterp(ᶠw)) / 2 =
+    #     norm_sqr(ᶜuₕ) / 2 + ᶜinterp(ᶠw_data)^2 * norm_sqr(ᶜinterp(ᶠw)_unit) / 2
+    # ∂(ᶜK)/∂(ᶠw_data) =
+    #     ∂(ᶜK)/∂(ᶜinterp(ᶠw_data)) * ∂(ᶜinterp(ᶠw_data))/∂(ᶠw_data) =
+    #     ᶜinterp(ᶠw_data) * norm_sqr(ᶜinterp(ᶠw)_unit) * ᶜinterp_stencil(1)
+    @. ∂ᶜK∂ᶠw_data =
+        ᶜinterp(ᶠw_data) *
+        norm_sqr(one(ᶜinterp(ᶠw))) *
+        ᶜinterp_stencil(one(ᶠw_data))
 
     # ᶜρₜ = -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠw)
     # ∂(ᶜρₜ)/∂(ᶠw_data) = -ᶜdivᵥ_stencil(ᶠinterp(ᶜρ) * ᶠw_unit)
@@ -273,18 +291,6 @@ function Wfact!(W, Y, p, dtγ, t)
         @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
         @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
 
-        # ᶜinterp(ᶠw) =
-        #     ᶜinterp(ᶠw)_data * ᶜinterp(ᶠw)_unit =
-        #     ᶜinterp(ᶠw_data) * ᶜinterp(ᶠw)_unit
-        # norm_sqr(ᶜinterp(ᶠw)) =
-        #     norm_sqr(ᶜinterp(ᶠw_data) * ᶜinterp(ᶠw)_unit) =
-        #     ᶜinterp(ᶠw_data)^2 * norm_sqr(ᶜinterp(ᶠw)_unit)
-        # ᶜK =
-        #     norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2 =
-        #     norm_sqr(ᶜuₕ) / 2 + norm_sqr(ᶜinterp(ᶠw)) / 2 =
-        #     norm_sqr(ᶜuₕ) / 2 +
-        #         ᶜinterp(ᶠw_data)^2 * norm_sqr(ᶜinterp(ᶠw)_unit) / 2
-
         if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
             # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
             # ∂(ᶜρeₜ)/∂(ᶠw_data) =
@@ -295,21 +301,12 @@ function Wfact!(W, Y, p, dtγ, t)
             # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) = ᶠinterp_stencil(1)
             # ∂(ᶜp)/∂(ᶠw_data) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw_data)
             # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
-            # ∂(ᶜK)/∂(ᶠw_data) =
-            #     ∂(ᶜK)/∂(ᶜinterp(ᶠw_data)) * ∂(ᶜinterp(ᶠw_data))/∂(ᶠw_data)
-            # ∂(ᶜK)/∂(ᶜinterp(ᶠw_data)) =
-            #     ᶜinterp(ᶠw_data) * norm_sqr(ᶜinterp(ᶠw)_unit)
-            # ∂(ᶜinterp(ᶠw_data))/∂(ᶠw_data) = ᶜinterp_stencil(1)
-            ᶠw_data = ᶠw.components.data.:1
             @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
                 -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw))) - compose(
                     ᶜdivᵥ_stencil(ᶠw),
                     compose(
                         ᶠinterp_stencil(one(ᶜp)),
-                        -(ᶜρ * R_d / cv_d) *
-                        ᶜinterp(ᶠw_data) *
-                        norm_sqr(one(ᶜinterp(ᶠw))) *
-                        ᶜinterp_stencil(one(ᶠw_data)),
+                        -(ᶜρ * R_d / cv_d) * ∂ᶜK∂ᶠw_data,
                     ),
                 )
         elseif flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
@@ -331,10 +328,8 @@ function Wfact!(W, Y, p, dtγ, t)
         #     -ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) +
         #     ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
         # ∂(ᶜρe_intₜ)/∂(ᶠw_data) =
-        #     -ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw_unit) +
-        #     ᶜinterp_stencil(
-        #         dot(ᶠgradᵥ(ᶜp),
-        #         Geometry.Contravariant3Vector(ᶠw_unit)),
+        #     -ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw_unit) + ᶜinterp_stencil(
+        #         dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw_unit)),
         #     )
         @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
             -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * one(ᶠw))) + ᶜinterp_stencil(
@@ -342,8 +337,9 @@ function Wfact!(W, Y, p, dtγ, t)
             )
     end
 
-    # To convert ∂(ᶠwₜ)/∂(ᶜ𝔼) to ∂(ᶠw_data)ₜ/∂(ᶜ𝔼), we must extract the third
-    # component of each vector-valued stencil coefficient.
+    # To convert ∂(ᶠwₜ)/∂(ᶜ𝔼) to ∂(ᶠw_data)ₜ/∂(ᶜ𝔼) and ∂(ᶠwₜ)/∂(ᶠw_data) to
+    # ∂(ᶠw_data)ₜ/∂(ᶠw_data), we must extract the third component of each
+    # vector-valued stencil coefficient.
     to_scalar_coefs(vector_coefs) =
         map(vector_coef -> vector_coef.u₃, vector_coefs)
 
@@ -352,9 +348,8 @@ function Wfact!(W, Y, p, dtγ, t)
     if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode != :exact && flags.∂ᶠ𝕄ₜ∂ᶜρ_mode != :gradΦ_shenanigans
         error("∂ᶠ𝕄ₜ∂ᶜρ_mode must be :exact or :gradΦ_shenanigans")
     end
-
     if :ρθ in propertynames(Y.c)
-        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
         # ∂(ᶠwₜ)/∂(ᶜρθ) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρθ)
         # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
         # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρθ) =
@@ -365,7 +360,7 @@ function Wfact!(W, Y, p, dtγ, t)
         )
 
         if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
             # ∂(ᶠwₜ)/∂(ᶜρ) = ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
             # ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) = ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2
             # ∂(ᶠinterp(ᶜρ))/∂(ᶜρ) = ᶠinterp_stencil(1)
@@ -373,14 +368,16 @@ function Wfact!(W, Y, p, dtγ, t)
                 ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2 * ᶠinterp_stencil(one(ᶜρ)),
             )
         elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :gradΦ_shenanigans
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ′) - ᶠgradᵥᶜΦ / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ),
-            # where ᶜρ′ = ᶜρ but we approximate ∂(ᶜρ′)/∂(ᶜρ) = 0
+            # ᶠwₜ = (
+            #     -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ′) -
+            #     ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ)
+            # ), where ᶜρ′ = ᶜρ but we approximate ∂(ᶜρ′)/∂(ᶜρ) = 0
             @. ∂ᶠ𝕄ₜ∂ᶜρ = to_scalar_coefs(
-                -(ᶠgradᵥᶜΦ) / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
+                -(ᶠgradᵥ(ᶜΦ)) / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
             )
         end
     elseif :ρe in propertynames(Y.c)
-        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
         # ∂(ᶠwₜ)/∂(ᶜρe) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe)
         # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
         # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe) = ᶠgradᵥ_stencil(R_d / cv_d)
@@ -389,7 +386,7 @@ function Wfact!(W, Y, p, dtγ, t)
         )
 
         if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
             # ∂(ᶠwₜ)/∂(ᶜρ) =
             #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) +
             #     ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
@@ -404,17 +401,19 @@ function Wfact!(W, Y, p, dtγ, t)
                 ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2 * ᶠinterp_stencil(one(ᶜρ)),
             )
         elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :gradΦ_shenanigans
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp′) / ᶠinterp(ᶜρ′) - ᶠgradᵥᶜΦ / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ),
-            # where ᶜρ′ = ᶜρ but we approximate ∂ᶜρ′/∂ᶜρ = 0, and where ᶜp′ = ᶜp
-            # but with ᶜK = 0
+            # ᶠwₜ = (
+            #     -ᶠgradᵥ(ᶜp′) / ᶠinterp(ᶜρ′) -
+            #     ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ)
+            # ), where ᶜρ′ = ᶜρ but we approximate ∂ᶜρ′/∂ᶜρ = 0, and where
+            # ᶜp′ = ᶜp but with ᶜK = 0
             @. ∂ᶠ𝕄ₜ∂ᶜρ = to_scalar_coefs(
                 -1 / ᶠinterp(ᶜρ) *
                 ᶠgradᵥ_stencil(R_d * (-(ᶜΦ) / cv_d + T_tri)) -
-                ᶠgradᵥᶜΦ / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
+                ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
             )
         end
     elseif :ρe_int in propertynames(Y.c)
-        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+        # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
         # ∂(ᶠwₜ)/∂(ᶜρe_int) = ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe_int)
         # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
         # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρe_int) = ᶠgradᵥ_stencil(R_d / cv_d)
@@ -423,7 +422,7 @@ function Wfact!(W, Y, p, dtγ, t)
         )
 
         if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥᶜΦ
+            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
             # ∂(ᶠwₜ)/∂(ᶜρ) =
             #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜρ) +
             #     ∂(ᶠwₜ)/∂(ᶠinterp(ᶜρ)) * ∂(ᶠinterp(ᶜρ))/∂(ᶜρ)
@@ -436,13 +435,43 @@ function Wfact!(W, Y, p, dtγ, t)
                 ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ)^2 * ᶠinterp_stencil(one(ᶜρ)),
             )
         elseif flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :gradΦ_shenanigans
-            # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ′) - ᶠgradᵥᶜΦ / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ),
-            # where ᶜp′ = ᶜp but we approximate ∂ᶜρ′/∂ᶜρ = 0
+            # ᶠwₜ = (
+            #     -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ′) -
+            #     ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ′) * ᶠinterp(ᶜρ)
+            # ), where ᶜp′ = ᶜp but we approximate ∂ᶜρ′/∂ᶜρ = 0
             @. ∂ᶠ𝕄ₜ∂ᶜρ = to_scalar_coefs(
                 -1 / ᶠinterp(ᶜρ) * ᶠgradᵥ_stencil(R_d * T_tri * one(ᶜρe_int)) -
-                ᶠgradᵥᶜΦ / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
+                ᶠgradᵥ(ᶜΦ) / ᶠinterp(ᶜρ) * ᶠinterp_stencil(one(ᶜρ)),
             )
         end
+    end
+
+    # ᶠwₜ = -ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) - ᶠgradᵥ(ᶜK + ᶜΦ)
+    # ∂(ᶠwₜ)/∂(ᶠw_data) =
+    #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶠw_dataₜ) +
+    #     ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜK + ᶜΦ)) * ∂(ᶠgradᵥ(ᶜK + ᶜΦ))/∂(ᶠw_dataₜ) =
+    #     (
+    #         ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) * ∂(ᶠgradᵥ(ᶜp))/∂(ᶜK) +
+    #         ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜK + ᶜΦ)) * ∂(ᶠgradᵥ(ᶜK + ᶜΦ))/∂(ᶜK)
+    #     ) * ∂(ᶜK)/∂(ᶠw_dataₜ)
+    # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
+    # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜK) =
+    #     ᶜ𝔼_name == :ρe ? ᶠgradᵥ_stencil(-ᶜρ * R_d / cv_d) : 0
+    # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜK + ᶜΦ)) = -1
+    # ∂(ᶠgradᵥ(ᶜK + ᶜΦ))/∂(ᶜK) = ᶠgradᵥ_stencil(1)
+    # ∂(ᶜK)/∂(ᶠw_data) =
+    #     ᶜinterp(ᶠw_data) * norm_sqr(ᶜinterp(ᶠw)_unit) * ᶜinterp_stencil(1)
+    if :ρθ in propertynames(Y.c) || :ρe_int in propertynames(Y.c)
+        @. ∂ᶠ𝕄ₜ∂ᶠ𝕄 =
+            to_scalar_coefs(compose(-1 * ᶠgradᵥ_stencil(one(ᶜK)), ∂ᶜK∂ᶠw_data))
+    elseif :ρe in propertynames(Y.c)
+        @. ∂ᶠ𝕄ₜ∂ᶠ𝕄 = to_scalar_coefs(
+            compose(
+                -1 / ᶠinterp(ᶜρ) * ᶠgradᵥ_stencil(-(ᶜρ * R_d / cv_d)) +
+                -1 * ᶠgradᵥ_stencil(one(ᶜK)),
+                ∂ᶜK∂ᶠw_data,
+            ),
+        )
     end
 
     if W.test
