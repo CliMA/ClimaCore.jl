@@ -4,9 +4,7 @@ using IntervalSets
 import ClimaCore
 import ClimaCoreMakie: ClimaCoreMakie, Makie
 
-if haskey(ENV, "CI")
-    using GLMakie
-end
+using GLMakie
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "spectral element 2D cubed-sphere" begin
