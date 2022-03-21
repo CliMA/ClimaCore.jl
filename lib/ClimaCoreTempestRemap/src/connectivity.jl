@@ -10,8 +10,12 @@ struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     source_space::S
     target_space::T
     weights::W # remapping weights
-    source_idxs::I # source indices
-    target_idxs::I # target indices
+    source_idxs_i::I # source indices
+    source_idxs_j::I # source indices
+    source_idxs_e::I # source indices
+    target_idxs_i::I # target indices
+    target_idxs_j::I # target indices
+    target_idxs_e::I # target indices
     col::V
     row::V
 end
@@ -34,13 +38,15 @@ function remap!(
 
     # ideally we would use the tempestremap dgll (redundant node) representation
     # unfortunately, this doesn't appear to work quite as well as the cgll
-    f = 1
-    for (source_idx, target_idx, wt) in
-        zip(R.source_idxs, R.target_idxs, R.weights)
-        (is, js), es = source_idx
-        (it, jt), et = target_idx
+    
+    # for (source_idx, target_idx, wt) in
+    #     zip(R.source_idxs, R.target_idxs, R.weights)
+    for n in collect(1:length(R.weights))
+        wt = view(R.weights,n)
+        is, js, es = (view(R.source_idxs_i,n), view(R.source_idxs_j,n), view(R.source_idxs_e,n))
+        it, jt, et = (view(R.target_idxs_i,n), view(R.target_idxs_j,n), view(R.target_idxs_e,n))
         for f in 1:Nf
-            target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
+            target_array[it, jt, f, et] += wt * view(source_array, is, js, f, es)[1]
         end
     end
     return target
@@ -97,15 +103,27 @@ function generate_map(
     end
 
     # we need to be able to look up the indices of unique nodes
-    source_unique_idxs = collect(Spaces.unique_nodes(source_space))
-    target_unique_idxs = collect(Spaces.unique_nodes(target_space))
+
+    source_unique_idxs = collect(Spaces.unique_nodes(source_space))[col]
+    target_unique_idxs = collect(Spaces.unique_nodes(target_space))[row]
+
+    source_unique_idxs_i = map(x -> source_unique_idxs[x][1][1],collect(1:length(source_unique_idxs)))
+    source_unique_idxs_j = map(x -> source_unique_idxs[x][1][2],collect(1:length(source_unique_idxs)))
+    source_unique_idxs_e = map(x -> source_unique_idxs[x][2],collect(1:length(source_unique_idxs)))
+    target_unique_idxs_i = map(x -> target_unique_idxs[x][1][1],collect(1:length(target_unique_idxs)))
+    target_unique_idxs_j = map(x -> target_unique_idxs[x][1][2],collect(1:length(target_unique_idxs)))
+    target_unique_idxs_e = map(x -> target_unique_idxs[x][2],collect(1:length(target_unique_idxs)))
 
     return LinearMap(
         source_space,
         target_space,
         weights,
-        source_unique_idxs[col],
-        target_unique_idxs[row],
+        source_unique_idxs_i,
+        source_unique_idxs_j,
+        source_unique_idxs_e,
+        target_unique_idxs_i,
+        target_unique_idxs_j,
+        target_unique_idxs_e,
         col,
         row,
     )
