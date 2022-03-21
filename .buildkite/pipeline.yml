@@ -326,6 +326,39 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: 3D Box limiters advection cosine bells"
+    key: "cpu_box_advection_limiter_cosine_bells"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl"
+    artifact_paths:
+      - "examples/hybrid/box/output/box_advection_limiter_cosine_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: 3D Box limiters advection Gaussian bells"
+    key: "cpu_box_advection_limiter_gaussian_bells"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl gaussian_bells"
+    artifact_paths:
+      - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: 3D Box limiters advection slotted spheres"
+    key: "cpu_box_advection_limiter_slotted_spheres"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl slotted_spheres"
+    artifact_paths:
+      - "examples/hybrid/box/output/box_advection_limiter_slotted_spheres_D0/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Rising Bubble 2D hybrid (ρθ)"
     key: "cpu_rising_bubble_2d_hybrid_rhotheta"
     command:
@@ -402,7 +435,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-  
+
   - label: ":computer: Density current 2D hybrid invariant total energy (topography mesh interface)"
     key: "cpu_density_current_2d_hybrid_invariant_total_energy_no-warp_topography"
     command:

@@ -34,8 +34,18 @@ withenv("GKSwstype" => "nul") do
     bib =
         DocumenterCitations.CitationBibliography(joinpath(@__DIR__, "refs.bib"))
 
+    mathengine = Documenter.MathJax(
+        Dict(
+            :TeX => Dict(
+                :equationNumbers => Dict(:autoNumber => "AMS"),
+                :Macros => Dict(),
+            ),
+        ),
+    )
+
     format = Documenter.HTML(
         prettyurls = !isempty(get(ENV, "CI", "")),
+        mathengine = mathengine,
         collapselevel = 1,
     )
 
@@ -64,6 +74,7 @@ withenv("GKSwstype" => "nul") do
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
             ],
+            "Examples" => "examples.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
