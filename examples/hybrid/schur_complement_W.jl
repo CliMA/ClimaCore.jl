@@ -6,7 +6,7 @@ using ClimaCore.Utilities: half
 const compose = Operators.ComposeStencils()
 const apply = Operators.ApplyStencil()
 
-struct SchurComplementW{F, FT, J1, J2, J3, S, A}
+struct SchurComplementW{F, FT, J1, J2, J3, J4, S, A}
     # whether this struct is used to compute Wfact_t or Wfact
     transform::Bool
 
@@ -21,6 +21,7 @@ struct SchurComplementW{F, FT, J1, J2, J3, S, A}
     ∂ᶜ𝔼ₜ∂ᶠ𝕄::J2
     ∂ᶠ𝕄ₜ∂ᶜ𝔼::J3
     ∂ᶠ𝕄ₜ∂ᶜρ::J3
+    ∂ᶠ𝕄ₜ∂ᶠ𝕄::J4
 
     # cache for the Schur complement linear solve
     S::S
@@ -37,14 +38,16 @@ function SchurComplementW(Y, transform, flags, test = false)
     face_space = axes(Y.f)
 
     # TODO: Automate this.
-    J1_eltype = Operators.StencilCoefs{-half, half, NTuple{2, FT}}
-    J2_eltype =
+    J_eltype1 = Operators.StencilCoefs{-half, half, NTuple{2, FT}}
+    J_eltype2 =
         flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact && :ρe in propertynames(Y.c) ?
-        Operators.StencilCoefs{-(1 + half), 1 + half, NTuple{4, FT}} : J1_eltype
-    ∂ᶜρₜ∂ᶠ𝕄 = Fields.Field(J1_eltype, center_space)
-    ∂ᶜ𝔼ₜ∂ᶠ𝕄 = Fields.Field(J2_eltype, center_space)
-    ∂ᶠ𝕄ₜ∂ᶜ𝔼 = Fields.Field(J1_eltype, face_space)
-    ∂ᶠ𝕄ₜ∂ᶜρ = Fields.Field(J1_eltype, face_space)
+        Operators.StencilCoefs{-(1 + half), 1 + half, NTuple{4, FT}} : J_eltype1
+    J_eltype3 = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
+    ∂ᶜρₜ∂ᶠ𝕄 = Fields.Field(J_eltype1, center_space)
+    ∂ᶜ𝔼ₜ∂ᶠ𝕄 = Fields.Field(J_eltype2, center_space)
+    ∂ᶠ𝕄ₜ∂ᶜ𝔼 = Fields.Field(J_eltype1, face_space)
+    ∂ᶠ𝕄ₜ∂ᶜρ = Fields.Field(J_eltype1, face_space)
+    ∂ᶠ𝕄ₜ∂ᶠ𝕄 = Fields.Field(J_eltype3, face_space)
 
     # TODO: Automate this.
     S_eltype = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
@@ -62,6 +65,7 @@ function SchurComplementW(Y, transform, flags, test = false)
         typeof(∂ᶜρₜ∂ᶠ𝕄),
         typeof(∂ᶜ𝔼ₜ∂ᶠ𝕄),
         typeof(∂ᶠ𝕄ₜ∂ᶜρ),
+        typeof(∂ᶠ𝕄ₜ∂ᶠ𝕄),
         typeof(S),
         typeof(S_column_array),
     }(
@@ -72,6 +76,7 @@ function SchurComplementW(Y, transform, flags, test = false)
         ∂ᶜ𝔼ₜ∂ᶠ𝕄,
         ∂ᶠ𝕄ₜ∂ᶜ𝔼,
         ∂ᶠ𝕄ₜ∂ᶜρ,
+        ∂ᶠ𝕄ₜ∂ᶠ𝕄,
         S,
         S_column_array,
         test,
@@ -84,29 +89,30 @@ end
 Base.similar(w::SchurComplementW) = w
 
 #=
-A = [-I           0            dtγ ∂ᶜρₜ∂ᶠ𝕄;
-     0            -I           dtγ ∂ᶜ𝔼ₜ∂ᶠ𝕄;
-     dtγ ∂ᶠ𝕄ₜ∂ᶜρ  dtγ ∂ᶠ𝕄ₜ∂ᶜ𝔼  -I         ] =
-    [-I   0    A13;
-     0    -I   A23;
-     A31  A32  -I ]
+A = [-I           0            dtγ ∂ᶜρₜ∂ᶠ𝕄    ;
+     0            -I           dtγ ∂ᶜ𝔼ₜ∂ᶠ𝕄    ;
+     dtγ ∂ᶠ𝕄ₜ∂ᶜρ  dtγ ∂ᶠ𝕄ₜ∂ᶜ𝔼  dtγ ∂ᶠ𝕄ₜ∂ᶠ𝕄 - I] =
+    [-I   0    A13    ;
+     0    -I   A23    ;
+     A31  A32  A33 - I]
 b = [b1; b2; b3]
 x = [x1; x2; x3]
 Solving A x = b:
     -x1 + A13 x3 = b1 ==> x1 = -b1 + A13 x3  (1)
     -x2 + A23 x3 = b2 ==> x2 = -b2 + A23 x3  (2)
-    A31 x1 + A32 x2 - x3 = b3  (3)
+    A31 x1 + A32 x2 + (A33 - I) x3 = b3  (3)
 Substitute (1) and (2) into (3):
-    A31 (-b1 + A13 x3) + A32 (-b2 + A23 x3) - x3 = b3 ==>
-    (-I + A31 A13 + A32 A23) x3 = b3 + A31 b1 + A32 b2 ==>
-    x3 = (-I + A31 A13 + A32 A23) \ (b3 + A31 b1 + A32 b2)
+    A31 (-b1 + A13 x3) + A32 (-b2 + A23 x3) + (A33 - I) x3 = b3 ==>
+    (A31 A13 + A32 A23 + A33 - I) x3 = b3 + A31 b1 + A32 b2 ==>
+    x3 = (A31 A13 + A32 A23 + A33 - I) \ (b3 + A31 b1 + A32 b2)
 Finally, use (1) and (2) to get x1 and x2.
-Note: The matrix S = -I + A31 A13 + A32 A23 is the "Schur complement" of
+Note: The matrix S = A31 A13 + A32 A23 + A33 - I is the "Schur complement" of
 [-I 0; 0 -I] (the top-left 4 blocks) in A.
 =#
 function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
     function _linsolve!(x, A, b, update_matrix = false; kwargs...)
-        (; dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, S, S_column_array) = A
+        (; dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶠ𝕄ₜ∂ᶠ𝕄) = A
+        (; S, S_column_array) = A
         dtγ = dtγ_ref[]
 
         xᶜρ = x.c.ρ
@@ -138,11 +144,12 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
                 be set to 0 for the Schur complement computation. Consider \
                 changing the ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode or the energy variable."
             @warn str maxlog = 1
-            @. S = -I + dtγ^2 * compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+            @. S = dtγ^2 * compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) + dtγ * ∂ᶠ𝕄ₜ∂ᶠ𝕄 - I
         else
             @. S =
-                -I +
-                dtγ^2 * (compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) + compose(∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶜ𝔼ₜ∂ᶠ𝕄))
+                dtγ^2 * compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) +
+                dtγ^2 * compose(∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶜ𝔼ₜ∂ᶠ𝕄) +
+                dtγ * ∂ᶠ𝕄ₜ∂ᶠ𝕄 - I
         end
 
         @. xᶠ𝕄 = bᶠ𝕄 + dtγ * (apply(∂ᶠ𝕄ₜ∂ᶜρ, bᶜρ) + apply(∂ᶠ𝕄ₜ∂ᶜ𝔼, bᶜ𝔼))
