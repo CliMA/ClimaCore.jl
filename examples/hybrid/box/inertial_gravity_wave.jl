@@ -44,7 +44,7 @@ npoly, xelem = 1, Int(xmax / Δx) # max small-scale dt = 1.5
 # npoly, xelem = 4, Int(xmax / (Δx * (4 + 1))) # max small-scale dt = 0.8
 
 # Animation-related values
-animation_duration = FT(10)
+animation_duration = FT(5)
 fps = 2
 
 # Values required for driver
