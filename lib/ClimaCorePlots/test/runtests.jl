@@ -59,6 +59,62 @@ end
     @test isfile(fig_png)
 end
 
+@testset "spectral element 3D extruded cubed-sphere" begin
+    FT = Float64
+    R = 6.37122e6
+    velem = 40
+
+    horz_domain = ClimaCore.Domains.SphereDomain(R)
+    horz_mesh = ClimaCore.Meshes.EquiangularCubedSphere(horz_domain, 6)
+    horz_grid_topology = ClimaCore.Topologies.Topology2D(horz_mesh)
+    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    horz_space =
+        ClimaCore.Spaces.SpectralElementSpace2D(horz_grid_topology, quad)
+
+    vertdomain = ClimaCore.Domains.IntervalDomain(
+        ClimaCore.Geometry.ZPoint{FT}(0),
+        ClimaCore.Geometry.ZPoint{FT}(1000);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(
+        horz_space,
+        vert_center_space,
+    )
+    coords = ClimaCore.Fields.coordinate_field(hv_center_space)
+
+    u = map(coords) do coord
+        u0 = 20.0
+        α0 = 45.0
+        ϕ = coord.lat
+        λ = coord.long
+        z = coord.z
+
+        uu = u0 * (cosd(α0) * cosd(ϕ) + sind(α0) * cosd(λ) * sind(ϕ))
+        uv = -u0 * sind(α0) * sind(λ)
+        uw = z
+        ClimaCore.Geometry.UVWVector(uu, uv, uw)
+    end
+
+    v_field_level3_fig = Plots.plot(u.components.data.:2, level = 3)
+    @test v_field_level3_fig !== nothing
+
+    w_field_level10_fig = Plots.plot(u.components.data.:3, level = 10)
+    @test w_field_level10_fig !== nothing
+
+    v_field_level3_fig_png =
+        joinpath(OUTPUT_DIR, "3D_cubed_sphere_v_field_level3.png")
+    Plots.png(v_field_level3_fig, v_field_level3_fig_png)
+    @test isfile(v_field_level3_fig_png)
+
+    w_field_level10_fig_png =
+        joinpath(OUTPUT_DIR, "3D_cubed_sphere_w_field_level10.png")
+    Plots.png(w_field_level10_fig, w_field_level10_fig_png)
+    @test isfile(w_field_level10_fig_png)
+end
+
 @testset "spectral element rectangle 2D" begin
     domain = ClimaCore.Domains.RectangleDomain(
         ClimaCore.Geometry.XPoint(0) .. ClimaCore.Geometry.XPoint(2π),
