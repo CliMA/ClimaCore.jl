@@ -127,7 +127,7 @@ end
     Nq = 4
     mesh = ClimaCore.Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = ClimaCore.Topologies.Topology2D(mesh)
-    #quad = ClimaCore.Spaces.Quadratures.GLL{Nq}()
+
     quad = ClimaCore.Spaces.Quadratures.ClosedUniform{Nq + 1}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
