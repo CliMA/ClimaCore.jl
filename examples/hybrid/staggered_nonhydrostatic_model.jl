@@ -155,9 +155,9 @@ end
 function remaining_tendency!(Yₜ, Y, p, t)
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
-    additional_tendency!(Yₜ, Y, p, t)
-    Spaces.weighted_dss!(Yₜ.c)
-    Spaces.weighted_dss!(Yₜ.f)
+    additional_tendency!(Yₜ, Y, p, t, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.c, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.f, comms_ctx)
     return Yₜ
 end
 

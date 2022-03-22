@@ -2,10 +2,29 @@ if !haskey(ENV, "BUILDKITE")
     import Pkg
     Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
 end
+#ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
-using Logging: global_logger
-using TerminalLoggers: TerminalLogger
-global_logger(TerminalLogger())
+using Logging
+if usempi
+    using ClimaComms
+    using ClimaCommsMPI
+    const Context = ClimaCommsMPI.MPICommsContext
+    const pid, nprocs = ClimaComms.init(Context)
+    if pid == 1
+        println("parallel run with $nprocs processes")
+    end
+    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    atexit() do
+        global_logger(prev_logger)
+    end
+else
+    using Logging: global_logger
+    using TerminalLoggers: TerminalLogger
+    global_logger(TerminalLogger())
+end
 
 import ClimaCore: enable_threading
 enable_threading() = true
@@ -32,7 +51,6 @@ additional_solver_kwargs = (;) # e.g., abstol and reltol
 center_initial_condition(local_geometry) = (;)
 face_initial_condition(local_geometry) = (;)
 postprocessing(sol, p, output_dir) = nothing
-
 ################################################################################
 
 if haskey(ENV, "TEST_NAME")
@@ -52,7 +70,9 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
+    #ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
+    ᶜlocal_geometry, ᶠlocal_geometry =
+        local_geometry_fields(hv_center_space, hv_face_space)
     Y = Fields.FieldVector(
         c = map(center_initial_condition, ᶜlocal_geometry),
         f = map(face_initial_condition, ᶠlocal_geometry),
@@ -109,7 +129,6 @@ else
     )
 end
 callback = CallbackSet(saving_callback, additional_callbacks...)
-
 problem = SplitODEProblem(
     ODEFunction(
         implicit_tendency!;
@@ -140,5 +159,9 @@ end
 @info "Running `$test_name`"
 sol = @timev OrdinaryDiffEq.solve!(integrator)
 
+#@show typeof(sol.u)
+#@show typeof(sol.u[1])
+#@show typeof(sol.u[1].c)
+#@show typeof(sol.u[1].f)
 ENV["GKSwstype"] = "nul" # avoid displaying plots
-postprocessing(sol, p, output_dir)
+postprocessing(sol, p, output_dir, usempi)
