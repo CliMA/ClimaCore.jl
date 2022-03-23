@@ -33,14 +33,7 @@ using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
-#default_test_name = "sphere/baroclinic_wave_rhoe"
-#default_test_name = "sphere/baroclinic_wave_rhotheta"
-#default_test_name = "sphere/balanced_flow_rhoe"
-#default_test_name = "sphere/balanced_flow_rhotheta"
-#default_test_name = "sphere/held_suarez_rhoe"
-#default_test_name = "sphere/held_suarez_rhoe_int"
-#default_test_name = "sphere/held_suarez_rhotheta"
-default_test_name = "sphere/held_suarez_rhotheta_tempest"
+default_test_name = "sphere/baroclinic_wave_rhoe"
 
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
