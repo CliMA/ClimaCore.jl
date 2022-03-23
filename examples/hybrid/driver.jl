@@ -34,7 +34,10 @@ using DiffEqCallbacks
 using JLD2
 
 #default_test_name = "sphere/baroclinic_wave_rhoe"
-default_test_name = "sphere/baroclinic_wave_rhotheta"
+#default_test_name = "sphere/baroclinic_wave_rhotheta"
+#default_test_name = "sphere/balanced_flow_rhoe"
+default_test_name = "sphere/balanced_flow_rhotheta"
+
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 # Definitions that are specific to each test:
