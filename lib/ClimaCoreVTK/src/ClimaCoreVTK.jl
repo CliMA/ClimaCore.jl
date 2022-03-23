@@ -3,7 +3,7 @@
 
 module ClimaCoreVTK
 
-export writevtk
+export writevtk, writepvd
 
 using WriteVTK
 import ClimaCore: Fields, Geometry, Spaces, Topologies, Operators
