@@ -85,8 +85,3 @@ function local_geometry_fields(space::ExtrudedSpace)
         Fields.local_geometry_field(face_space),
     )
 end
-
-local_geometry_fields(
-    cspace::Spaces.CenterExtrudedFiniteDifferenceSpace,
-    fspace::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = (Fields.local_geometry_field(cspace), Fields.local_geometry_field(fspace))

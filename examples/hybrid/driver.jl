@@ -2,7 +2,7 @@ if !haskey(ENV, "BUILDKITE")
     import Pkg
     Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
 end
-#ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
+ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
 using Logging
@@ -33,7 +33,8 @@ using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
-default_test_name = "sphere/baroclinic_wave_rhoe"
+#default_test_name = "sphere/baroclinic_wave_rhoe"
+default_test_name = "sphere/baroclinic_wave_rhotheta"
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 # Definitions that are specific to each test:
@@ -70,9 +71,10 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    #ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
     ᶜlocal_geometry, ᶠlocal_geometry =
-        local_geometry_fields(hv_center_space, hv_face_space)
+        Fields.local_geometry_field(hv_center_space),
+        Fields.local_geometry_field(hv_face_space)
+
     Y = Fields.FieldVector(
         c = map(center_initial_condition, ᶜlocal_geometry),
         f = map(face_initial_condition, ᶠlocal_geometry),
