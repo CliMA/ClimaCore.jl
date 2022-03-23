@@ -5,6 +5,13 @@ include("baroclinic_wave_utilities.jl")
 
 const sponge = false
 
+const T_init = 315
+const scale_height = R_d * T_init / grav
+temp(ϕ, z) = T_init
+pres(ϕ, z) = p_0 * exp(-z / scale_height)
+u(ϕ, z) = FT(0.0)
+δu(λ, ϕ, z) = rand(FT) * FT(0.01)
+δv(λ, ϕ, z) = rand(FT) * FT(0.01)
 # Variables required for driver.jl (modify as needed)
 space = ExtrudedSpace(;
     zmax = FT(30e3),
