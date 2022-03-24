@@ -144,12 +144,12 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
     @. ᶜσ = ᶜp / p_0
     @. ᶜheight_factor = max(0, (ᶜσ - σ_b) / (1 - σ_b))
     @. ᶜΔρT =
-        (k_a + (k_s - k_a) * ᶜheight_factor * cos(ᶜφ)^4) *
+        (k_a + (k_s - k_a) * ᶜheight_factor) *
         Y.c.ρ *
         ( # ᶜT - ᶜT_equil
             ᶜp / (Y.c.ρ * R_d) - max(
                 T_min,
-                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ) * cos(ᶜφ)^2) *
+                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ)) *
                 ᶜσ^(R_d / cp_d),
             )
         )

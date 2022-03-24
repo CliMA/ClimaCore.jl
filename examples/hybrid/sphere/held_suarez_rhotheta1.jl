@@ -7,11 +7,14 @@ const sponge = false
 
 const T_init = 315
 const scale_height = R_d * T_init / grav
-temp(ϕ, z) = T_init
-pres(ϕ, z) = p_0 * exp(-z / scale_height)
+const lapse_rate = FT(-0.008)
+#temp(ϕ, z) = T_init + rand(FT) * FT(0.1) * (z < 5000)
+#pres(ϕ, z) = p_0 * exp(-z / scale_height)
+temp(ϕ, z) = T_init + lapse_rate * z + rand(FT) * FT(0.1) * (z < 5000)
+pres(ϕ, z) = p_0 * (1 + lapse_rate / T_init * z)^(-grav / R_d / lapse_rate)
 u(ϕ, z) = FT(0.0)
-δu(λ, ϕ, z) = rand(FT) * FT(0.01)
-δv(λ, ϕ, z) = rand(FT) * FT(0.01)
+δu(λ, ϕ, z) = FT(0.0)
+δv(λ, ϕ, z) = FT(0.0)
 # Variables required for driver.jl (modify as needed)
 space = ExtrudedSpace(;
     zmax = FT(30e3),
