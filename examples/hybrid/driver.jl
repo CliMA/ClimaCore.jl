@@ -1,7 +1,3 @@
-if !haskey(ENV, "BUILDKITE")
-    import Pkg
-    Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
-end
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
