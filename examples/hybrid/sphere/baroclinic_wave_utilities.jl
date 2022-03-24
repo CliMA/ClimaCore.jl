@@ -52,7 +52,7 @@ const σ_b = FT(7 / 10)
 τ_int_1(z) = A * (τ_z_1(z) - 1) + B * z * τ_z_3(z)
 τ_int_2(z) = C * z * τ_z_3(z)
 F_z(z) = (1 - 3 * (z / z_t)^2 + 2 * (z / z_t)^3) * (z ≤ z_t)
-I_T(ϕ) = cosd(ϕ)^k - k / (k + 2) * (cosd(ϕ))^(k + 2)
+I_T(ϕ) = cosd(ϕ)^k - k * (cosd(ϕ))^(k + 2) / (k + 2)
 temp(ϕ, z) = (τ_1(z) - τ_2(z) * I_T(ϕ))^(-1)
 pres(ϕ, z) = p_0 * exp(-grav / R_d * (τ_int_1(z) - τ_int_2(z) * I_T(ϕ)))
 θ(ϕ, z) = temp(ϕ, z) * (p_0 / pres(ϕ, z))^κ
@@ -60,19 +60,19 @@ r(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - �
 U(ϕ, z) =
     grav * k / R * τ_int_2(z) * temp(ϕ, z) * (cosd(ϕ)^(k - 1) - cosd(ϕ)^(k + 1))
 u(ϕ, z) = -Ω * R * cosd(ϕ) + sqrt((Ω * R * cosd(ϕ))^2 + R * cosd(ϕ) * U(ϕ, z))
-v(ϕ, z) = 0.0
+v(ϕ, z) = zero(z)
 c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
 s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
 cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
 δu(λ, ϕ, z) =
-    -16 * V_p / 3 / sqrt(3) *
+    -16 * V_p / 3 / sqrt(FT(3)) *
     F_z(z) *
     c3(λ, ϕ) *
     s1(λ, ϕ) *
     (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
     sin(r(λ, ϕ) / R) * cond(λ, ϕ)
 δv(λ, ϕ, z) =
-    16 * V_p / 3 / sqrt(3) *
+    16 * V_p / 3 / sqrt(FT(3)) *
     F_z(z) *
     c3(λ, ϕ) *
     s1(λ, ϕ) *
