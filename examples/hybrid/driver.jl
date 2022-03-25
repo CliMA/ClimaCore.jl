@@ -1,4 +1,3 @@
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
 using Logging
@@ -23,7 +22,7 @@ else
 end
 
 import ClimaCore: enable_threading
-enable_threading() = true
+enable_threading() = false
 
 using OrdinaryDiffEq
 using DiffEqCallbacks
@@ -49,6 +48,8 @@ center_initial_condition(local_geometry) = (;)
 face_initial_condition(local_geometry) = (;)
 postprocessing(sol, p, output_dir) = nothing
 ################################################################################
+
+const FT = get(ENV, "FLOAT_TYPE", "Float64") == "Float32" ? Float32 : Float64
 
 if haskey(ENV, "TEST_NAME")
     test_name = ENV["TEST_NAME"]

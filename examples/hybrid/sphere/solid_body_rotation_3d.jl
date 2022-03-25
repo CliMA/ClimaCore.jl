@@ -235,10 +235,10 @@ end
 
 discrete_hydrostatic_balance!(ρ, p, z_top / n_vert, grav)
 # now ρ (after correction) and p (computed from analytical relation) are in discrete hydrostatic balance
-# only need to correct ρe without changing ρ and p, i.e., keep ρT unchanged before vs after the correction on ρ 
+# only need to correct ρe without changing ρ and p, i.e., keep ρT unchanged before vs after the correction on ρ
 ρe = @. ρe + (ρ - ρ_ana) * Φ(zc_vec) - (ρ - ρ_ana) * cv_d * T_tri
 
-# Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work, 
+# Note: In princile, ρe = @. cv_d * p /R_d - ρ * cv_d * T_tri + ρ * Φ(zc_vec) should work,
 #       however, it is not as accurate as the above correction
 
 # set up initial condition: not discretely balanced; only create a Field as a place holder

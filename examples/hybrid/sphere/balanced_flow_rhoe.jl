@@ -2,7 +2,6 @@ using Test
 using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
-const FT = Float64
 include("baroclinic_wave_utilities.jl")
 
 const sponge = false
