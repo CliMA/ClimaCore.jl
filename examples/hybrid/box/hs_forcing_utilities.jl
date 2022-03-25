@@ -9,23 +9,8 @@ const Ω = FT(0.0)
 const f = FT(0.0)
 include("../staggered_nonhydrostatic_model.jl")
 
-# Constants required for balanced flow and baroclinic wave initial conditions
-const R = FT(6.371229e6)
-const k = 3
-const T_e = FT(310) # temperature at the equator
-const T_p = FT(240) # temperature at the pole
-const T_0 = FT(0.5) * (T_e + T_p)
-const Γ = FT(0.005)
-const A = 1 / Γ
-const B = (T_0 - T_p) / T_0 / T_p
-const C = FT(0.5) * (k + 2) * (T_e - T_p) / T_e / T_p
-const b = 2
-const H = R_d * T_0 / grav
-const z_t = FT(15e3)
-const λ_c = FT(20)
-const ϕ_c = FT(40)
-const d_0 = R / 6
-const V_p = FT(1)
+# Constants required for space
+const domain_width = FT(1.92e7)
 
 # Constants required for Rayleigh sponge layer
 const z_D = FT(15e3)
@@ -48,9 +33,9 @@ const σ_b = FT(7 / 10)
 const T_init = 315
 const scale_height = R_d * T_init / grav
 const lapse_rate = FT(-0.008)
-temp(z) = T_init + lapse_rate * z + rand(FT) * FT(0.1) * (z < 5000)
+temp(x, y, z) = T_init + lapse_rate * z + rand(FT) * FT(0.1) * (z < 5000)
 pres(z) = p_0 * (1 + lapse_rate / T_init * z)^(-grav / R_d / lapse_rate)
-θ(z) = temp(z) * (p_0 / pres(z))^κ
+θ(x, y, z) = temp(x, y, z) * (p_0 / pres(z))^κ
 u(z) = 0.0
 v(z) = 0.0
 
@@ -59,18 +44,18 @@ function center_initial_condition(
     ᶜ𝔼_name
 )
     (; x, y, z) = local_geometry.coordinates
-    ρ = pres(z) / R_d / temp(z)
+    ρ = pres(z) / R_d / temp(x, y, z)
     uₕ = Geometry.Covariant12Vector(Geometry.UVVector(u(z), v(z)), local_geometry)
     if ᶜ𝔼_name === Val(:ρθ)
-        ρθ = ρ * θ(z)
+        ρθ = ρ * θ(x, y, z)
         return (; ρ, ρθ, uₕ)
     elseif ᶜ𝔼_name === Val(:ρe)
         ρe =
             ρ *
-            (cv_d * (temp(z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
+            (cv_d * (temp(x, y, z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
         return (; ρ, ρe, uₕ)
     elseif ᶜ𝔼_name === Val(:ρe_int)
-        ρe_int = ρ * cv_d * (temp(z) - T_tri)
+        ρe_int = ρ * cv_d * (temp(x, y, z) - T_tri)
         return (; ρ, ρe_int, uₕ)
     end
 end
