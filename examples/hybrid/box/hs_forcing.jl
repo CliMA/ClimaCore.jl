@@ -1,27 +1,22 @@
 using ClimaCorePlots, Plots
+import ClimaCore: level
 
 const FT = Float64
-include("baroclinic_wave_utilities.jl")
+include("hs_forcing_utilities.jl")
 
 const sponge = false
 
-const T_init = 315
-const scale_height = R_d * T_init / grav
-const lapse_rate = FT(-0.008)
 #temp(ϕ, z) = T_init + rand(FT) * FT(0.1) * (z < 5000)
 #pres(ϕ, z) = p_0 * exp(-z / scale_height)
-temp(ϕ, z) = T_init + lapse_rate * z + rand(FT) * FT(0.1) * (z < 5000)
-pres(ϕ, z) = p_0 * (1 + lapse_rate / T_init * z)^(-grav / R_d / lapse_rate)
-u(ϕ, z) = FT(0.0)
-δu(λ, ϕ, z) = FT(0.0)
-δv(λ, ϕ, z) = FT(0.0)
+
 # Variables required for driver.jl (modify as needed)
-space = ExtrudedSpace(;
+space =
+    ExtrudedSpace(;
     zmax = FT(30e3),
     zelem = 10,
-    hspace = CubedSphere(; radius = R, helem = 4, npoly = 4),
+    hspace = PeriodicRectangle(; xmax=2.4e7, ymax=2.4e7, xelem=10, yelem=4, npoly=4)
 )
-t_end = FT(60 * 60 * 24 * 1200)
+t_end = FT(60 * 60 * 24)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
@@ -48,7 +43,7 @@ function postprocessing(sol, p, output_dir)
 
     anim = Plots.@animate for Y in sol.u
         ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2
-        Plots.plot(ᶜv, level = 3, clim = (-6, 6))
+        Plots.plot(level(ᶜv, 3), clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
 end

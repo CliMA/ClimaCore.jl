@@ -6,6 +6,7 @@ const κ = FT(2 / 7)
 const T_tri = FT(273.16)
 const grav = FT(9.80616)
 const Ω = FT(0.0)
+const f = FT(0.0)
 include("../staggered_nonhydrostatic_model.jl")
 
 # Constants required for balanced flow and baroclinic wave initial conditions
@@ -44,66 +45,32 @@ const σ_b = FT(7 / 10)
 ## Initial conditions
 ##
 
-τ_z_1(z) = exp(Γ * z / T_0)
-τ_z_2(z) = 1 - 2 * (z / b / H)^2
-τ_z_3(z) = exp(-(z / b / H)^2)
-τ_1(z) = 1 / T_0 * τ_z_1(z) + B * τ_z_2(z) * τ_z_3(z)
-τ_2(z) = C * τ_z_2(z) * τ_z_3(z)
-τ_int_1(z) = A * (τ_z_1(z) - 1) + B * z * τ_z_3(z)
-τ_int_2(z) = C * z * τ_z_3(z)
-F_z(z) = (1 - 3 * (z / z_t)^2 + 2 * (z / z_t)^3) * (z ≤ z_t)
-I_T(ϕ) = cosd(ϕ)^k - k / (k + 2) * (cosd(ϕ))^(k + 2)
-temp(ϕ, z) = (τ_1(z) - τ_2(z) * I_T(ϕ))^(-1)
-pres(ϕ, z) = p_0 * exp(-grav / R_d * (τ_int_1(z) - τ_int_2(z) * I_T(ϕ)))
-θ(ϕ, z) = temp(ϕ, z) * (p_0 / pres(ϕ, z))^κ
-r(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c))
-U(ϕ, z) =
-    grav * k / R * τ_int_2(z) * temp(ϕ, z) * (cosd(ϕ)^(k - 1) - cosd(ϕ)^(k + 1))
-u(ϕ, z) = -Ω * R * cosd(ϕ) + sqrt((Ω * R * cosd(ϕ))^2 + R * cosd(ϕ) * U(ϕ, z))
-v(ϕ, z) = 0.0
-c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
-s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
-cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
-δu(λ, ϕ, z) =
-    -16 * V_p / 3 / sqrt(3) *
-    F_z(z) *
-    c3(λ, ϕ) *
-    s1(λ, ϕ) *
-    (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
-    sin(r(λ, ϕ) / R) * cond(λ, ϕ)
-δv(λ, ϕ, z) =
-    16 * V_p / 3 / sqrt(3) *
-    F_z(z) *
-    c3(λ, ϕ) *
-    s1(λ, ϕ) *
-    cosd(ϕ_c) *
-    sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+const T_init = 315
+const scale_height = R_d * T_init / grav
+const lapse_rate = FT(-0.008)
+temp(z) = T_init + lapse_rate * z + rand(FT) * FT(0.1) * (z < 5000)
+pres(z) = p_0 * (1 + lapse_rate / T_init * z)^(-grav / R_d / lapse_rate)
+θ(z) = temp(z) * (p_0 / pres(z))^κ
+u(z) = 0.0
+v(z) = 0.0
 
 function center_initial_condition(
     local_geometry,
-    ᶜ𝔼_name;
-    is_balanced_flow = false,
+    ᶜ𝔼_name
 )
-    (; lat, long, z) = local_geometry.coordinates
-    ρ = pres(lat, z) / R_d / temp(lat, z)
-    u₀ = u(lat, z)
-    v₀ = v(lat, z)
-    if !is_balanced_flow
-        u₀ += δu(long, lat, z)
-        v₀ += δv(long, lat, z)
-    end
-    uₕ_local = Geometry.UVVector(u₀, v₀)
-    uₕ = Geometry.Covariant12Vector(uₕ_local, local_geometry)
+    (; x, y, z) = local_geometry.coordinates
+    ρ = pres(z) / R_d / temp(z)
+    uₕ = Geometry.Covariant12Vector(Geometry.UVVector(u(z), v(z)), local_geometry)
     if ᶜ𝔼_name === Val(:ρθ)
-        ρθ = ρ * θ(lat, z)
+        ρθ = ρ * θ(z)
         return (; ρ, ρθ, uₕ)
     elseif ᶜ𝔼_name === Val(:ρe)
         ρe =
             ρ *
-            (cv_d * (temp(lat, z) - T_tri) + norm_sqr(uₕ_local) / 2 + grav * z)
+            (cv_d * (temp(z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
         return (; ρ, ρe, uₕ)
     elseif ᶜ𝔼_name === Val(:ρe_int)
-        ρe_int = ρ * cv_d * (temp(lat, z) - T_tri)
+        ρe_int = ρ * cv_d * (temp(z) - T_tri)
         return (; ρ, ρe_int, uₕ)
     end
 end
@@ -135,7 +102,7 @@ held_suarez_cache(ᶜlocal_geometry) = (;
     ᶜσ = similar(ᶜlocal_geometry, FT),
     ᶜheight_factor = similar(ᶜlocal_geometry, FT),
     ᶜΔρT = similar(ᶜlocal_geometry, FT),
-    ᶜφ = deg2rad.(ᶜlocal_geometry.coordinates.lat),
+    ᶜφ = deg2rad.(ᶜlocal_geometry.coordinates.y),
 )
 
 function held_suarez_tendency!(Yₜ, Y, p, t)
@@ -149,7 +116,7 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
         ( # ᶜT - ᶜT_equil
             ᶜp / (Y.c.ρ * R_d) - max(
                 T_min,
-                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ)) *
+                (T_equator - ΔT_y - Δθ_z * log(ᶜσ)) *
                 ᶜσ^(R_d / cp_d),
             )
         )
