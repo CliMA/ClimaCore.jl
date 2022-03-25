@@ -1,5 +1,7 @@
 # Field iterator
 
+import StaticArrays
+
 """
     property_chains
 
@@ -41,10 +43,57 @@ function flattened_property_chains!(prop_chains, f::Field, pc = ())
     end
 end
 
-function single_field(f::Union{Field, FieldVector}, prop_chain)
+function isa_12_covariant_field(
+    f::Type{CF},
+) where {
+    FT,
+    T,
+    CF <: Geometry.AxisTensor{
+        FT,
+        1,
+        Tuple{Geometry.CovariantAxis{(1, 2)}},
+        StaticArrays.SVector{2, FT},
+    },
+}
+    return true
+end
+isa_12_covariant_field(f) = false
+function isa_3_covariant_field(
+    f::Type{CF},
+) where {
+    FT,
+    T,
+    CF <: Geometry.AxisTensor{
+        FT,
+        1,
+        Tuple{Geometry.CovariantAxis{(3,)}},
+        StaticArrays.SVector{1, FT},
+    },
+}
+    return true
+end
+isa_3_covariant_field(f) = false
+
+transform_field(x::FieldVector) = x
+function transform_field(x)
+    if isa_12_covariant_field(eltype(x))
+        return Geometry.UVVector.(x)
+    elseif isa_3_covariant_field(eltype(x))
+        return Geometry.WVector.(x)
+    else
+        return x
+    end
+end
+
+function single_field(
+    f::Union{Field, FieldVector},
+    prop_chain,
+    transform = transform_field,
+)
     var = f
-    for prop in prop_chain
-        var = getproperty(var, prop)
+    for pn in prop_chain
+        var = getproperty(var, pn)
+        var = transform(var)
     end
     return var
 end
