@@ -14,9 +14,9 @@ space =
     ExtrudedSpace(;
     zmax = FT(30e3),
     zelem = 10,
-    hspace = PeriodicRectangle(; xmax=2.4e7, ymax=2.4e7, xelem=10, yelem=4, npoly=4)
+    hspace = PeriodicRectangle(; xmax=2.4e7, ymax=2.4e7, xelem=10, yelem=10, npoly=4)
 )
-t_end = FT(60 * 60 * 24)
+t_end = FT(60 * 60 * 24 * 1200)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
