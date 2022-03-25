@@ -1,0 +1,41 @@
+name: ClimaCoreTables CI
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ClimaCoreTables.yml"
+      - "lib/ClimaCoreTables/**"
+  push:
+    branches:
+      - staging
+      - trying
+jobs:
+  lib-climacore-tables:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1.7'
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - name: Install Julia dependencies
+        shell: julia --project=monorepo {0}
+        run: |
+          using Pkg;
+          # dev mono repo versions
+          pkg"dev . lib/ClimaCoreTables"
+      - name: Run the tests
+        env:
+          CI_OUTPUT_DIR: output
+        run: >
+          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreTables")'
