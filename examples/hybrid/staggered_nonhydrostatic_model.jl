@@ -2,9 +2,6 @@ using LinearAlgebra: ×, norm, norm_sqr, dot
 
 using ClimaCore: Operators, Fields
 
-include("../implicit_solver_debugging_tools.jl")
-include("../ordinary_diff_eq_bug_fixes.jl")
-include("../common_spaces.jl")
 include("schur_complement_W.jl")
 include("hyperdiffusion.jl")
 
@@ -65,12 +62,12 @@ pressure_ρθ(ρθ) = p_0 * (ρθ * R_d / p_0)^γ
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 pressure_ρe_int(ρe_int, ρ) = R_d * (ρe_int / cv_d + ρ * T_tri)
 
-get_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    default_cache(ᶜlocal_geometry, ᶠlocal_geometry),
+get_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx, dt) = merge(
+    default_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
 )
 
-function default_cache(ᶜlocal_geometry, ᶠlocal_geometry)
+function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx)
     ᶜcoord = ᶜlocal_geometry.coordinates
     if eltype(ᶜcoord) <: Geometry.LatLongZPoint
         ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
@@ -92,6 +89,7 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry)
             ᶜlocal_geometry,
             Operators.StencilCoefs{-half, half, NTuple{2, FT}},
         ),
+        comms_ctx,
     )
 end
 
@@ -154,9 +152,9 @@ end
 function remaining_tendency!(Yₜ, Y, p, t)
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
-    additional_tendency!(Yₜ, Y, p, t, comms_ctx)
-    Spaces.weighted_dss!(Yₜ.c, comms_ctx)
-    Spaces.weighted_dss!(Yₜ.f, comms_ctx)
+    additional_tendency!(Yₜ, Y, p, t)
+    Spaces.weighted_dss!(Yₜ.c, p.comms_ctx)
+    Spaces.weighted_dss!(Yₜ.f, p.comms_ctx)
     return Yₜ
 end
 

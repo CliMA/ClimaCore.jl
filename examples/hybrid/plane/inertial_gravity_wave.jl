@@ -20,9 +20,9 @@ const f = is_small_scale ? FT(0) : 2 * sin(π / 4) * 2π / FT(86164.09)
 include("../staggered_nonhydrostatic_model.jl")
 
 # Additional constants required for inertial gravity wave initial condition
-const zmax = FT(10e3)
-const xmax = is_small_scale ? FT(300e3) : FT(6000e3)
-const xmid = is_small_scale ? FT(100e3) : FT(3000e3)
+z_max = FT(10e3)
+const x_max = is_small_scale ? FT(300e3) : FT(6000e3)
+const x_mid = is_small_scale ? FT(100e3) : FT(3000e3)
 const d = is_small_scale ? FT(5e3) : FT(100e3)
 const u₀ = is_small_scale ? FT(20) : FT(0)
 const v₀ = FT(0)
@@ -37,17 +37,16 @@ const ρₛ = p_0 / (R_d * T₀)        # air density at surface
 # TODO: Loop over all domain setups used in reference paper
 const Δx = is_small_scale ? FT(1e3) : FT(20e3)
 const Δz = is_small_scale ? Δx / 2 : Δx / 40
-zelem = Int(zmax / Δz)
-npoly, xelem = 1, Int(xmax / Δx) # max small-scale dt = 1.5
-# npoly, xelem = 4, Int(xmax / (Δx * (4 + 1))) # max small-scale dt = 0.8
+z_elem = Int(z_max / Δz)
+npoly, x_elem = 1, Int(x_max / Δx) # max small-scale dt = 1.5
+# npoly, x_elem = 4, Int(x_max / (Δx * (4 + 1))) # max small-scale dt = 0.8
 
 # Animation-related values
 animation_duration = FT(5)
 fps = 2
 
-# Values required for driver
-space =
-    ExtrudedSpace(; zmax, zelem, hspace = PeriodicLine(; xmax, xelem, npoly))
+# Additional values required for driver
+horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
 dt = is_small_scale ? FT(1.5) : FT(20)
 dt_save_to_sol = t_end / (animation_duration * fps)
@@ -71,7 +70,7 @@ if is_discrete_hydrostatic_balance
 else
     p₀(z) = p_0 * exp(-δ * z)
 end
-Tb_init(x, z) = ΔT * exp(-(x - xmid)^2 / d^2) * sin(π * z / zmax)
+Tb_init(x, z) = ΔT * exp(-(x - x_mid)^2 / d^2) * sin(π * z / z_max::FT)
 T′_init(x, z) = Tb_init(x, z) * exp(δ * z / 2)
 
 function center_initial_condition(local_geometry)
@@ -95,7 +94,7 @@ end
 face_initial_condition(local_geometry) =
     (; w = Geometry.Covariant3Vector(FT(0)))
 
-function postprocessing(sol, p, output_dir)
+function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
     ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
     lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
@@ -107,11 +106,11 @@ function postprocessing(sol, p, output_dir)
             Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) -
                T₀
     elseif ᶜ𝔼_name == :ρe
-        T′ =
-            Y -> begin
-                @. p.ᶜK = norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
-                @. (Y.c.ρe / Y.c.ρ - p.ᶜK - p.ᶜΦ) / cv_d + T_tri - T₀
-            end
+        T′ = Y -> begin
+            ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+            ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
+            @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
+        end
     elseif ᶜ𝔼_name == :ρe_int
         T′ = Y -> @. Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
     end
@@ -173,24 +172,24 @@ function norm_strings(var, var_lin, p)
     )
 end
 
-# min_λx = 2 * (xmax / xelem) / upsampling_factor # this should include npoly
-# min_λz = 2 * (zmax / zelem) / upsampling_factor
-# min_λx = 2 * π / max_kx = xmax / max_ikx
-# min_λz = 2 * π / max_kz = 2 * zmax / max_ikz
-# max_ikx = xmax / min_λx = upsampling_factor * xelem / 2
-# max_ikz = 2 * zmax / min_λz = upsampling_factor * zelem
+# min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
+# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
+# min_λx = 2 * π / max_kx = x_max / max_ikx
+# min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
+# max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
+# max_ikz = 2 * z_max / min_λz = upsampling_factor * z_elem
 function ρfb_init_coefs(
     upsampling_factor = 3,
-    max_ikx = upsampling_factor * xelem ÷ 2,
-    max_ikz = upsampling_factor * zelem,
+    max_ikx = upsampling_factor * x_elem ÷ 2,
+    max_ikz = upsampling_factor * z_elem,
 )
     # upsampled coordinates (more upsampling gives more accurate coefficients)
-    space = ExtrudedSpace(;
-        zmax,
-        zelem = upsampling_factor * zelem,
-        hspace = PeriodicLine(; xmax, xelem = upsampling_factor * xelem, npoly),
-    )
-    ᶜlocal_geometry, _ = local_geometry_fields(space)
+    horizontal_mesh =
+        periodic_line_mesh(; x_max, x_elem = upsampling_factor * x_elem)
+    h_space = make_horizontal_space(horizontal_mesh, npoly)
+    center_space, _ =
+        make_hybrid_spaces(h_space, z_max, upsampling_factor * z_elem)
+    ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶜx = ᶜlocal_geometry.coordinates.x
     ᶜz = ᶜlocal_geometry.coordinates.z
 
@@ -211,15 +210,15 @@ function ρfb_init_coefs(
     ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     ᶜintegrand = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     unit_integral = 2 * sum(one.(ᶜρb_init))
-    # Since the coefficients are for a modified domain of height 2 * zmax, the
+    # Since the coefficients are for a modified domain of height 2 * z_max, the
     # unit integral over the domain must be multiplied by 2 to ensure correct
     # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
     # the "true" domain, so the integral of ᶜintegrand should not be modified.
     @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
         ikz in (-max_ikz):max_ikz
 
-        kx = 2 * π / xmax * ikx
-        kz = 2 * π / (2 * zmax) * ikz
+        kx = 2 * π / x_max * ikx
+        kz = 2 * π / (2 * z_max) * ikz
         @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
         @. ᶜintegrand = ᶜρb_init / ᶜfourier_factor
         ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
@@ -291,8 +290,8 @@ function linear_solution!(Y, lin_cache, t)
     ᶠwb .= FT(0)
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
     for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
-        kx = 2 * π / xmax * ikx
-        kz = 2 * π / (2 * zmax) * ikz
+        kx = 2 * π / x_max * ikx
+        kz = 2 * π / (2 * z_max) * ikz
 
         # Fourier coefficient of ᶜρb_init (for current kx and kz)
         ρfb_init = ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1]
