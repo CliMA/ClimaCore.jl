@@ -210,3 +210,50 @@ end
     @test axes(deepcopy(Yf).field_vf) === space_vf
     @test axes(deepcopy(object_that_contains_Yf).Yf.field_vf) === space_vf
 end
+
+@testset "Scalar field iterator" begin
+    space = spectral_space_2D()
+    u = Geometry.Covariant12Vector.(ones(space), ones(space))
+    x = Fields.coordinate_field(space)
+    y = [1.0, 2.0, 3.0]
+    z = 1.0
+    Y = Fields.FieldVector(u = u, k = (x = x, y = y, z = z))
+
+    prop_chains = Fields.property_chains(Y)
+    @test length(prop_chains) == 6
+    @test prop_chains[1] == (:u, :components, :data, 1)
+    @test prop_chains[2] == (:u, :components, :data, 2)
+    @test prop_chains[3] == (:k, :x, :x)
+    @test prop_chains[4] == (:k, :x, :y)
+    @test prop_chains[5] == (:k, :y)
+    @test prop_chains[6] == (:k, :z)
+
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+    FT = Float64
+    nt =
+        (; x = FT(0), y = FT(0), tup = ntuple(i -> (; a = FT(1), b = FT(1)), 2))
+    Y = FieldFromNamedTuple(space, nt)
+
+    prop_chains = Fields.property_chains(Y)
+    @test prop_chains[1] == (:x,)
+    @test prop_chains[2] == (:y,)
+    @test prop_chains[3] == (:tup, 1, :a)
+    @test prop_chains[4] == (:tup, 1, :b)
+    @test prop_chains[5] == (:tup, 2, :a)
+    @test prop_chains[6] == (:tup, 2, :b)
+
+    @test Fields.single_field(Y, prop_chains[1]) === Y.x
+    @test Fields.single_field(Y, prop_chains[2]) === Y.y
+    @test Fields.single_field(Y, prop_chains[3]) === getproperty(Y.tup, 1).a
+    @test Fields.single_field(Y, prop_chains[4]) === getproperty(Y.tup, 1).b
+    @test Fields.single_field(Y, prop_chains[5]) === getproperty(Y.tup, 2).a
+    @test Fields.single_field(Y, prop_chains[6]) === getproperty(Y.tup, 2).b
+
+    for (i, (var, prop_chain)) in enumerate(Fields.field_iterator(Y))
+        @test prop_chains[i] == prop_chain
+        @test var === Fields.single_field(Y, prop_chain)
+    end
+end
