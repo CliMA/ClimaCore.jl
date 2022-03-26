@@ -160,6 +160,134 @@ function remaining_tendency!(Yₜ, Y, p, t)
     return Yₜ
 end
 
+function hyperdiffusion_flux_form_tendency_ρθ!(dY, Y, p, t)
+    (; κ₄, divergence_damping_factor, use_tempest_mode) = p
+    # Prognostics
+    ρ = Y.ρ
+    ρuₕ = Y.ρuₕ
+    ρw = Y.ρw
+    ρθ = Y.ρθ
+
+    # Tendencies
+    dρuₕ = dY.ρuₕ
+    dρw = dY.ρw
+    dρθ = dY.ρθ
+    dρ = dY.ρ
+
+    @. dρθ = hwdiv(hgrad(θ))
+    @. dρuₕ = hwdiv(hgrad(uₕ))
+    @. dρw = hwdiv(hgrad(w))
+    
+    Spaces.weighted_dss!(dρuₕ)
+    Spaces.weighted_dss!(dρw)
+    Spaces.weighted_dss!(dρθ)
+
+    @. dρθ = -κ₄ * hwdiv(ρ * hgrad(dρθ))
+    @. dρuₕ = -κ₄ * hwdiv(ρ * hgrad(dρuₕ))
+    @. dρw = -κ₄ * hwdiv(Yfρ * hgrad(dρw))
+end
+
+function conservative_form_tendency_ρθ!(dY, Y, p, t)
+    # Prognostics
+    ρ = Y.ρ
+    ρuₕ = Y.ρuₕ
+    ρw = Y.ρw
+    ρθ = Y.ρθ
+
+    # Tendencies
+    dρ = dY.ρ
+    dρuₕ = dY.ρuₕ
+    dρw = dY.ρw
+    dρθ = dY.ρθ
+
+    # spectral horizontal operators
+    hdiv = Operators.Divergence()
+    hgrad = Operators.Gradient()
+    hwdiv = Operators.WeakDivergence()
+    hwgrad = Operators.WeakGradient()
+
+    # vertical FD operators with BC's
+    vdivf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
+    )
+    vvdivc2f = Operators.DivergenceC2F(
+        bottom = Operators.SetDivergence(Geometry.WVector(0.0)),
+        top = Operators.SetDivergence(Geometry.WVector(0.0)),
+    )
+    uvdivf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(
+            Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
+        ),
+        top = Operators.SetValue(
+            Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
+        ),
+    )
+    If = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    Ic = Operators.InterpolateF2C()
+    ∂ = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
+    )
+    ∂f = Operators.GradientC2F()
+    ∂c = Operators.GradientF2C()
+    B = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(Geometry.WVector(0.0)),
+        top = Operators.SetValue(Geometry.WVector(0.0)),
+    )
+
+    fcc = Operators.FluxCorrectionC2C(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    fcf = Operators.FluxCorrectionF2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    uₕ = @. ρuₕ / ρ
+    w = @. ρw / If(ρ)
+    wc = @. Ic(ρw) / ρ
+    p = @. pressure(ρθ)
+    θ = @. ρθ / ρ
+    Yfρ = @. If(ρ)
+
+    # density
+    @. dρ = -∂(ρw)
+    @. dρ -= hdiv(ρuₕ)
+
+    # potential temperature
+    @. dρθ += -(∂(ρw * If(ρθ / ρ)))
+    @. dρθ -= hdiv(uₕ * ρθ)
+
+    # Horizontal momentum
+    @. dρuₕ += -uvdivf2c(ρw ⊗ If(uₕ))
+    Ih = Ref(
+        Geometry.Axis2Tensor(
+            (Geometry.UVAxis(), Geometry.UVAxis()),
+            @SMatrix [1.0 0.0; 0.0 1.0]
+        ),
+    )
+    @. dρuₕ -= hdiv(ρuₕ ⊗ uₕ + p * Ih)
+
+    # vertical momentum
+    z = coords.z
+    @. dρw += B(
+        Geometry.transform(Geometry.WAxis(), -(∂f(p)) - If(ρ) * ∂f(Φ(z))) -
+        vvdivc2f(Ic(ρw ⊗ w)),
+    )
+    uₕf = @. If(ρuₕ / ρ) # requires boundary conditions
+    @. dρw -= hdiv(uₕf ⊗ ρw)
+    
+    Spaces.weighted_dss!(dρ)
+    Spaces.weighted_dss!(dρuₕ)
+    Spaces.weighted_dss!(dρw)
+    Spaces.weighted_dss!(dρθ)
+end
+
 function default_remaining_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
