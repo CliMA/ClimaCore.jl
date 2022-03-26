@@ -5,6 +5,9 @@ include("baroclinic_wave_utilities.jl")
 
 const sponge = false
 
+δu(λ, ϕ, z) = 0.0
+δv(λ, ϕ, z) = 0.0
+
 # Variables required for driver.jl (modify as needed)
 space = ExtrudedSpace(;
     zmax = FT(30e3),

@@ -5,7 +5,7 @@ const R_d = FT(287.0)
 const κ = FT(2 / 7)
 const T_tri = FT(273.16)
 const grav = FT(9.80616)
-const Ω = FT(0.0)
+const Ω = FT(7.29212e-5)
 include("../staggered_nonhydrostatic_model.jl")
 
 # Constants required for balanced flow and baroclinic wave initial conditions
@@ -34,8 +34,8 @@ const day = FT(3600 * 24)
 const k_a = 1 / (40 * day)
 const k_f = 1 / day
 const k_s = 1 / (4 * day)
-const ΔT_y = FT(0)
-const Δθ_z = FT(-5)
+const ΔT_y = FT(60)
+const Δθ_z = FT(10)
 const T_equator = FT(315)
 const T_min = FT(200)
 const σ_b = FT(7 / 10)
@@ -52,7 +52,7 @@ const σ_b = FT(7 / 10)
 τ_int_1(z) = A * (τ_z_1(z) - 1) + B * z * τ_z_3(z)
 τ_int_2(z) = C * z * τ_z_3(z)
 F_z(z) = (1 - 3 * (z / z_t)^2 + 2 * (z / z_t)^3) * (z ≤ z_t)
-I_T(ϕ) = cosd(ϕ)^k - k / (k + 2) * (cosd(ϕ))^(k + 2)
+I_T(ϕ) = cosd(ϕ)^k - k * (cosd(ϕ))^(k + 2) / (k + 2)
 temp(ϕ, z) = (τ_1(z) - τ_2(z) * I_T(ϕ))^(-1)
 pres(ϕ, z) = p_0 * exp(-grav / R_d * (τ_int_1(z) - τ_int_2(z) * I_T(ϕ)))
 θ(ϕ, z) = temp(ϕ, z) * (p_0 / pres(ϕ, z))^κ
@@ -60,19 +60,19 @@ r(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - �
 U(ϕ, z) =
     grav * k / R * τ_int_2(z) * temp(ϕ, z) * (cosd(ϕ)^(k - 1) - cosd(ϕ)^(k + 1))
 u(ϕ, z) = -Ω * R * cosd(ϕ) + sqrt((Ω * R * cosd(ϕ))^2 + R * cosd(ϕ) * U(ϕ, z))
-v(ϕ, z) = 0.0
+v(ϕ, z) = zero(z)
 c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
 s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
 cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
 δu(λ, ϕ, z) =
-    -16 * V_p / 3 / sqrt(3) *
+    -16 * V_p / 3 / sqrt(FT(3)) *
     F_z(z) *
     c3(λ, ϕ) *
     s1(λ, ϕ) *
     (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
     sin(r(λ, ϕ) / R) * cond(λ, ϕ)
 δv(λ, ϕ, z) =
-    16 * V_p / 3 / sqrt(3) *
+    16 * V_p / 3 / sqrt(FT(3)) *
     F_z(z) *
     c3(λ, ϕ) *
     s1(λ, ϕ) *
@@ -144,12 +144,12 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
     @. ᶜσ = ᶜp / p_0
     @. ᶜheight_factor = max(0, (ᶜσ - σ_b) / (1 - σ_b))
     @. ᶜΔρT =
-        (k_a + (k_s - k_a) * ᶜheight_factor) *
+        (k_a + (k_s - k_a) * ᶜheight_factor * cos(ᶜφ)^4) *
         Y.c.ρ *
         ( # ᶜT - ᶜT_equil
             ᶜp / (Y.c.ρ * R_d) - max(
                 T_min,
-                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ)) *
+                (T_equator - ΔT_y * sin(ᶜφ)^2 - Δθ_z * log(ᶜσ) * cos(ᶜφ)^2) *
                 ᶜσ^(R_d / cp_d),
             )
         )

@@ -9,9 +9,6 @@ const Ω = FT(0.0)
 const f = FT(0.0)
 include("../staggered_nonhydrostatic_model.jl")
 
-# Constants required for space
-const domain_width = FT(1.92e7)
-
 # Constants required for Rayleigh sponge layer
 const z_D = FT(15e3)
 
