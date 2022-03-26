@@ -7,8 +7,8 @@ include("hs_forcing_utilities.jl")
 const sponge = false
 const domain_width = FT(1.92e7)
 
-#temp(x, y, z) = 
-#    T_init + lapse_rate*z + 0.1*(sin(30*pi*x/domain_width)+2*sin(31*pi*y/domain_width)) * (z < 5000)
+temp(x, y, z) = 
+    T_init + lapse_rate*z + 0.1*(sin(120*pi*x/domain_width)+2*sin(121*pi*y/domain_width)) * (z < 5000)
 
 # Variables required for driver.jl (modify as needed)
 space =
