@@ -59,6 +59,7 @@ withenv("GKSwstype" => "nul") do
             "Introduction" => "intro.md",
             "API" => "api.md",
             "Operators" => "operators.md",
+            "Developer docs" => ["Performance tips" => "performance_tips.md"],
             "Tutorials" => [
                 joinpath("tutorials", tutorial * ".md") for
                 tutorial in TUTORIALS
