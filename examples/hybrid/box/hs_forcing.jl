@@ -1,18 +1,21 @@
 using ClimaCorePlots, Plots
+import ClimaCore: level
 
 const FT = Float64
-include("baroclinic_wave_utilities.jl")
+include("hs_forcing_utilities.jl")
 
 const sponge = false
+const domain_width = FT(1.92e7)
 
-δu(λ, ϕ, z) = 0.0
-δv(λ, ϕ, z) = 0.0
+temp(x, y, z) = 
+    T_init + lapse_rate*z + 0.1*(sin(120*pi*x/domain_width)+2*sin(121*pi*y/domain_width)) * (z < 5000)
 
 # Variables required for driver.jl (modify as needed)
-space = ExtrudedSpace(;
+space =
+    ExtrudedSpace(;
     zmax = FT(30e3),
     zelem = 10,
-    hspace = CubedSphere(; radius = R, helem = 4, npoly = 4),
+    hspace = PeriodicRectangle(; xmax=domain_width, ymax=domain_width, xelem=8, yelem=8, npoly=4)
 )
 t_end = FT(60 * 60 * 24 * 1200)
 dt = FT(400)
@@ -41,7 +44,7 @@ function postprocessing(sol, p, output_dir)
 
     anim = Plots.@animate for Y in sol.u
         ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2
-        Plots.plot(ᶜv, level = 3, clim = (-6, 6))
+        Plots.plot(level(ᶜv, 3), clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
 end

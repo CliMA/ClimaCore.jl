@@ -113,6 +113,7 @@ function make_save_to_disk(output_dir, test_file_name)
         day = floor(Int, integrator.t / (60 * 60 * 24))
         @info "Saving prognostic variables to JLD2 file on day $day"
         output_file = joinpath(output_dir, "$(test_file_name)_day$day.jld2")
+        #output_file = joinpath(output_dir, "$(test_file_name)_day$day."*string(integrator.t - day*3600*24)*".jld2")
         jldsave(output_file; t = integrator.t, Y = integrator.u)
         return nothing
     end
