@@ -7,6 +7,7 @@ const T_tri = FT(273.16)
 const grav = FT(9.80616)
 const Ω = FT(0.0)
 const f = FT(0.0)
+const flux_form = true
 include("../staggered_nonhydrostatic_model.jl")
 
 # Constants required for Rayleigh sponge layer
@@ -40,24 +41,49 @@ function center_initial_condition(
     local_geometry,
     ᶜ𝔼_name
 )
-    (; x, y, z) = local_geometry.coordinates
-    ρ = pres(z) / R_d / temp(x, y, z)
-    uₕ = Geometry.Covariant12Vector(Geometry.UVVector(u(z), v(z)), local_geometry)
-    if ᶜ𝔼_name === Val(:ρθ)
-        ρθ = ρ * θ(x, y, z)
-        return (; ρ, ρθ, uₕ)
-    elseif ᶜ𝔼_name === Val(:ρe)
-        ρe =
-            ρ *
-            (cv_d * (temp(x, y, z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
-        return (; ρ, ρe, uₕ)
-    elseif ᶜ𝔼_name === Val(:ρe_int)
-        ρe_int = ρ * cv_d * (temp(x, y, z) - T_tri)
-        return (; ρ, ρe_int, uₕ)
+  if flux_form 
+      (; x, y, z) = local_geometry.coordinates
+      ρ = pres(z) / R_d / temp(x, y, z)
+      #ρuₕ = @. ρ * Geometry.Covariant12Vector(Geometry.UVVector(u(z), v(z)), local_geometry)
+      ρuₕ = @. ρ * Geometry.UVVector(u(z), v(z))
+      if ᶜ𝔼_name === Val(:ρθ)
+          ρθ = ρ * θ(x, y, z)
+          return (; ρ, ρθ, ρuₕ)
+     # elseif ᶜ𝔼_name === Val(:ρe)
+     #     ρe =
+     #         ρ *
+     #         (cv_d * (temp(x, y, z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
+     #     return (; ρ, ρe, ρuₕ)
+     # elseif ᶜ𝔼_name === Val(:ρe_int)
+     #     ρe_int = ρ * cv_d * (temp(x, y, z) - T_tri)
+     #     return (; ρ, ρe_int, ρuₕ)
+      end
+  else
+      (; x, y, z) = local_geometry.coordinates
+      ρ = pres(z) / R_d / temp(x, y, z)
+      uₕ = Geometry.Covariant12Vector(Geometry.UVVector(u(z), v(z)), local_geometry)
+      if ᶜ𝔼_name === Val(:ρθ)
+          ρθ = ρ * θ(x, y, z)
+          return (; ρ, ρθ, uₕ)
+      elseif ᶜ𝔼_name === Val(:ρe)
+          ρe =
+              ρ *
+              (cv_d * (temp(x, y, z) - T_tri) + norm_sqr(uₕ) / 2 + grav * z)
+          return (; ρ, ρe, uₕ)
+      elseif ᶜ𝔼_name === Val(:ρe_int)
+          ρe_int = ρ * cv_d * (temp(x, y, z) - T_tri)
+          return (; ρ, ρe_int, uₕ)
+      end
     end
 end
-face_initial_condition(local_geometry) =
-    (; w = Geometry.Covariant3Vector(FT(0)))
+
+if flux_form 
+    face_initial_condition(local_geometry) =
+        (; ρw = Geometry.WVector(FT(0)))
+else
+    face_initial_condition(local_geometry) =
+        (; w = Geometry.Covariant3Vector(FT(0)))
+end
 
 ##
 ## Additional tendencies
@@ -76,8 +102,13 @@ end
 
 function rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     (; ᶜβ, ᶠβ) = p
-    @. Yₜ.c.uₕ -= ᶜβ * Y.c.uₕ
-    @. Yₜ.f.w -= ᶠβ * Y.f.w
+    if flux_form 
+        @. Yₜ.c.ρuₕ -= ᶜβ * Y.c.ρuₕ
+        @. Yₜ.f.ρw -= ᶠβ * Y.f.ρw
+    else
+        @. Yₜ.c.uₕ -= ᶜβ * Y.c.uₕ
+        @. Yₜ.f.w -= ᶠβ * Y.f.w
+    end
 end
 
 held_suarez_cache(ᶜlocal_geometry) = (;
@@ -102,8 +133,11 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
                 ᶜσ^(R_d / cp_d),
             )
         )
-
-    @. Yₜ.c.uₕ -= (k_f * ᶜheight_factor) * Y.c.uₕ
+    if flux_form 
+        @. Yₜ.c.ρuₕ -= Y.c.ρ * (k_f * ᶜheight_factor) * Y.c.uₕ
+    else
+        @. Yₜ.c.uₕ -= (k_f * ᶜheight_factor) * Y.c.uₕ
+    end
     if :ρθ in propertynames(Y.c)
         @. Yₜ.c.ρθ -= ᶜΔρT * (p_0 / ᶜp)^κ
     elseif :ρe in propertynames(Y.c)

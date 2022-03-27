@@ -17,12 +17,19 @@ space =
     zelem = 10,
     hspace = PeriodicRectangle(; xmax=domain_width, ymax=domain_width, xelem=8, yelem=8, npoly=4)
 )
+
 t_end = FT(60 * 60 * 24 * 1200)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
-dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
-ode_algorithm = OrdinaryDiffEq.Rosenbrock23
-jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
+#dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
+dt_save_to_disk = FT(0) # 0 means don't save to disk
+#ode_algorithm = OrdinaryDiffEq.Rosenbrock23
+ode_algorithm = OrdinaryDiffEq.SSPRK33
+if flux_form
+  jacobian_flags = (;)
+else
+  jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
+end
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
@@ -30,9 +37,15 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     held_suarez_cache(ᶜlocal_geometry),
 )
 function additional_tendency!(Yₜ, Y, p, t)
+  if flux_form
+    hyperdiffusion_conservative_tendency!(Yₜ, Y, p, t)
+    sponge && rayleigh_conservative_sponge_tendency!(Yₜ, Y, p, t)
+    held_suarez_tendency!(Yₜ, Y, p, t)
+  else
     hyperdiffusion_tendency!(Yₜ, Y, p, t)
     sponge && rayleigh_sponge_tendency!(Yₜ, Y, p, t)
     held_suarez_tendency!(Yₜ, Y, p, t)
+  end
 end
 
 center_initial_condition(local_geometry) =

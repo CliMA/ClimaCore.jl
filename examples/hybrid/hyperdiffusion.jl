@@ -16,64 +16,91 @@ hyperdiffusion_cache(
 )
 
 function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
-    ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
-    (; ᶜp, ᶜχ, ᶜχuₕ) = p # assume that ᶜp has been updated
-    (; κ₄, divergence_damping_factor, use_tempest_mode) = p
-    point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+  if flux_form
+      (; κ₄, divergence_damping_factor, use_tempest_mode) = p
+      # Prognostics
+      ρ = Y.c.ρ
+      ρuₕ = Y.c.ρuₕ
+      ρw = Y.f.ρw
+      ρθ = Y.c.ρθ
 
-    if use_tempest_mode
-        @. ᶜχ = wdivₕ(gradₕ(ᶜρ)) # ᶜχρ
-        Spaces.weighted_dss!(ᶜχ, comms_ctx)
-        @. Yₜ.c.ρ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+      # Tendencies
+      dρ = dY.c.ρ
+      dρuₕ = dY.c.ρuₕ
+      dρw = dY.f.ρw
+      dρθ = dY.c.ρθ
 
-        if :ρθ in propertynames(Y.c)
-            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ)) # ᶜχρθ
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
-            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
-        else
-            error("use_tempest_mode must be false when not using ρθ")
-        end
+      @. dρθ = hwdiv(gradₕ(θ))
+      @. dρuₕ = hwdiv(gradₕ(uₕ))
+      @. dρw = hwdiv(gradₕ(w))
+      
+      Spaces.weighted_dss!(dρuₕ)
+      Spaces.weighted_dss!(dρw)
+      Spaces.weighted_dss!(dρθ)
 
-        (; ᶠχw_data) = p
-        @. ᶠχw_data = wdivₕ(gradₕ(Y.f.w.components.data.:1))
-        Spaces.weighted_dss!(ᶠχw_data, comms_ctx)
-        @. Yₜ.f.w.components.data.:1 -= κ₄ * wdivₕ(gradₕ(ᶠχw_data))
-    else
-        if :ρθ in propertynames(Y.c)
-            @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ / ᶜρ)) # ᶜχθ
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
-            @. Yₜ.c.ρθ -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
-        elseif :ρe in propertynames(Y.c)
-            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe + ᶜp) / ᶜρ)) # ᶜχe
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
-            @. Yₜ.c.ρe -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
-        elseif :ρe_int in propertynames(Y.c)
-            @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe_int + ᶜp) / ᶜρ)) # ᶜχe_int
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
-            @. Yₜ.c.ρe_int -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
-        end
-    end
+      @. Yₜ.c.ρθ = -κ₄ * hwdiv(ρ * gradₕ(dρθ))
+      @. Yₜ.c.ρuₕ = -κ₄ * hwdiv(ρ * gradₕ(dρuₕ))
+      @. Yₜ.f.dρw = -κ₄ * hwdiv(ᶠinterp(ρ) * gradₕ(dρw))
+  else
+      ᶜρ = Y.c.ρ
+      ᶜuₕ = Y.c.uₕ
+      (; ᶜp, ᶜχ, ᶜχuₕ) = p # assume that ᶜp has been updated
+      (; κ₄, divergence_damping_factor, use_tempest_mode) = p
+      point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
 
-    if point_type <: Geometry.Abstract3DPoint
-        @. ᶜχuₕ =
-            wgradₕ(divₕ(ᶜuₕ)) - Geometry.Covariant12Vector(
-                wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜuₕ))),
-            )
-        Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
-        @. Yₜ.c.uₕ -=
-            κ₄ * (
-                divergence_damping_factor * wgradₕ(divₕ(ᶜχuₕ)) -
-                Geometry.Covariant12Vector(
-                    wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜχuₕ))),
-                )
-            )
-    elseif point_type <: Geometry.Abstract2DPoint
-        @. ᶜχuₕ = Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜuₕ)))
-        Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
-        @. Yₜ.c.uₕ -=
-            κ₄ *
-            divergence_damping_factor *
-            Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜχuₕ)))
+      if use_tempest_mode
+          @. ᶜχ = wdivₕ(gradₕ(ᶜρ)) # ᶜχρ
+          Spaces.weighted_dss!(ᶜχ, comms_ctx)
+          @. Yₜ.c.ρ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+
+          if :ρθ in propertynames(Y.c)
+              @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ)) # ᶜχρθ
+              Spaces.weighted_dss!(ᶜχ, comms_ctx)
+              @. Yₜ.c.ρθ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
+          else
+              error("use_tempest_mode must be false when not using ρθ")
+          end
+
+          (; ᶠχw_data) = p
+          @. ᶠχw_data = wdivₕ(gradₕ(Y.f.w.components.data.:1))
+          Spaces.weighted_dss!(ᶠχw_data, comms_ctx)
+          @. Yₜ.f.w.components.data.:1 -= κ₄ * wdivₕ(gradₕ(ᶠχw_data))
+      else
+          if :ρθ in propertynames(Y.c)
+              @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ / ᶜρ)) # ᶜχθ
+              Spaces.weighted_dss!(ᶜχ, comms_ctx)
+              @. Yₜ.c.ρθ -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+          elseif :ρe in propertynames(Y.c)
+              @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe + ᶜp) / ᶜρ)) # ᶜχe
+              Spaces.weighted_dss!(ᶜχ, comms_ctx)
+              @. Yₜ.c.ρe -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+          elseif :ρe_int in propertynames(Y.c)
+              @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe_int + ᶜp) / ᶜρ)) # ᶜχe_int
+              Spaces.weighted_dss!(ᶜχ, comms_ctx)
+              @. Yₜ.c.ρe_int -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
+          end
+      end
+
+      if point_type <: Geometry.Abstract3DPoint
+          @. ᶜχuₕ =
+              wgradₕ(divₕ(ᶜuₕ)) - Geometry.Covariant12Vector(
+                  wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜuₕ))),
+              )
+          Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
+          @. Yₜ.c.uₕ -=
+              κ₄ * (
+                  divergence_damping_factor * wgradₕ(divₕ(ᶜχuₕ)) -
+                  Geometry.Covariant12Vector(
+                      wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜχuₕ))),
+                  )
+              )
+      elseif point_type <: Geometry.Abstract2DPoint
+          @. ᶜχuₕ = Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜuₕ)))
+          Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
+          @. Yₜ.c.uₕ -=
+              κ₄ *
+              divergence_damping_factor *
+              Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜχuₕ)))
+      end
     end
 end
