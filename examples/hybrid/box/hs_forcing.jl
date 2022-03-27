@@ -7,8 +7,8 @@ include("hs_forcing_utilities.jl")
 const sponge = false
 const domain_width = FT(1.92e7)
 
-temp(x, y, z) = 
-    T_init + lapse_rate*z + 0.1*(sin(120*pi*x/domain_width)+2*sin(121*pi*y/domain_width)) * (z < 5000)
+#temp(x, y, z) = 
+#    T_init + lapse_rate*z + 0.1*(sin(120*pi*x/domain_width)+2*sin(121*pi*y/domain_width)) * (z < 5000)
 
 # Variables required for driver.jl (modify as needed)
 space =
@@ -18,14 +18,14 @@ space =
     hspace = PeriodicRectangle(; xmax=domain_width, ymax=domain_width, xelem=8, yelem=8, npoly=4)
 )
 t_end = FT(60 * 60 * 24 * 1200)
-dt = FT(400)
+dt = FT(200)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
+    hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17), divergence_damping_factor = FT(4)),
     sponge ? rayleigh_sponge_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) : (;),
     held_suarez_cache(ᶜlocal_geometry),
 )
