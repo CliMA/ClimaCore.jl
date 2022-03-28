@@ -100,6 +100,9 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
   if flux_form
+    # Running with explicit solvers only for now -  
+    # It seems by default the implicit tendency function is always called ? 
+    # FIXME 
     return Yₜ
   else
     ᶜρ = Y.c.ρ
