@@ -38,7 +38,7 @@ additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
 )
 function additional_tendency!(Yₜ, Y, p, t)
   if flux_form
-    hyperdiffusion_conservative_tendency!(Yₜ, Y, p, t)
+    hyperdiffusion_tendency!(Yₜ, Y, p, t)
     sponge && rayleigh_conservative_sponge_tendency!(Yₜ, Y, p, t)
     held_suarez_tendency!(Yₜ, Y, p, t)
   else

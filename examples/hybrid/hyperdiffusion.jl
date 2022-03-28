@@ -20,27 +20,31 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
       (; κ₄, divergence_damping_factor, use_tempest_mode) = p
       # Prognostics
       ρ = Y.c.ρ
+      ᶠρ = @. ᶠinterp(ρ)
       ρuₕ = Y.c.ρuₕ
       ρw = Y.f.ρw
       ρθ = Y.c.ρθ
+      θ = @. ρθ / ρ
+      uₕ = @. ρuₕ / ρ
+      w = @. ρw / ᶠρ
 
       # Tendencies
-      dρ = dY.c.ρ
-      dρuₕ = dY.c.ρuₕ
-      dρw = dY.f.ρw
-      dρθ = dY.c.ρθ
+      dρ = Yₜ.c.ρ
+      dρuₕ = Yₜ.c.ρuₕ
+      dρw = Yₜ.f.ρw
+      dρθ = Yₜ.c.ρθ
 
-      @. dρθ = hwdiv(gradₕ(θ))
-      @. dρuₕ = hwdiv(gradₕ(uₕ))
-      @. dρw = hwdiv(gradₕ(w))
+      @. dρθ = wdivₕ(gradₕ(θ))
+      @. dρuₕ = wdivₕ(gradₕ(uₕ))
+      @. dρw = wdivₕ(gradₕ(w))
       
       Spaces.weighted_dss!(dρuₕ)
       Spaces.weighted_dss!(dρw)
       Spaces.weighted_dss!(dρθ)
 
-      @. Yₜ.c.ρθ = -κ₄ * hwdiv(ρ * gradₕ(dρθ))
-      @. Yₜ.c.ρuₕ = -κ₄ * hwdiv(ρ * gradₕ(dρuₕ))
-      @. Yₜ.f.dρw = -κ₄ * hwdiv(ᶠinterp(ρ) * gradₕ(dρw))
+      @. Yₜ.c.ρuₕ = -κ₄ * wdivₕ(ρ * gradₕ(dρuₕ))
+      @. Yₜ.f.ρw = -κ₄ * wdivₕ(ᶠρ * gradₕ(dρw))
+      @. Yₜ.c.ρθ = -κ₄ * wdivₕ(ρ * gradₕ(dρθ))
   else
       ᶜρ = Y.c.ρ
       ᶜuₕ = Y.c.uₕ

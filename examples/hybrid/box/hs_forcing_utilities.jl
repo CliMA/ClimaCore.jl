@@ -134,7 +134,7 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
             )
         )
     if flux_form 
-        @. Yₜ.c.ρuₕ -= Y.c.ρ * (k_f * ᶜheight_factor) * Y.c.uₕ
+        @. Yₜ.c.ρuₕ -= (k_f * ᶜheight_factor) * Y.c.ρuₕ
     else
         @. Yₜ.c.uₕ -= (k_f * ᶜheight_factor) * Y.c.uₕ
     end
