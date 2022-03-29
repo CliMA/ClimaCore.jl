@@ -965,15 +965,6 @@ end
     IFH{S, Nij}(dataview)
 end
 
-@propagate_inbounds function Base.getindex(data::VIFH, I::CartesianIndex)
-    data[I[1], I[4]]
-end
-
-@propagate_inbounds function Base.setindex!(data::VIFH, val, I::CartesianIndex)
-    data[I[1], I[4]] = val
-end
-
-
 # =========================================
 # Special DataLayouts for regular gridding
 # =========================================

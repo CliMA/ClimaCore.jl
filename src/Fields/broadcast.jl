@@ -230,7 +230,22 @@ function Base.Broadcast.broadcasted(
         local_geometry_field(space),
     )
 end
-
+function Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::typeof(Geometry.project),
+    arg1,
+    arg2,
+)
+    space = Fields.axes(arg2)
+    # wrap in a Field so that the axes line up correctly (it just get's unwraped so effectively a no-op)
+    Base.Broadcast.broadcasted(
+        fs,
+        Geometry.project,
+        arg1,
+        arg2,
+        local_geometry_field(space),
+    )
+end
 
 function Base.Broadcast.broadcasted(
     fs::AbstractFieldStyle,

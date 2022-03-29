@@ -10,7 +10,7 @@ struct CellFace <: Staggering end
 
 struct FiniteDifferenceSpace{
     S <: Staggering,
-    T <: Topologies.IntervalTopology,
+    T <: Topologies.AbstractIntervalTopology,
     GG,
     LG,
 } <: AbstractFiniteDifferenceSpace
@@ -30,7 +30,7 @@ function Base.show(io::IO, space::FiniteDifferenceSpace)
         "FaceFiniteDifferenceSpace",
         ":",
     )
-    print(iio, " "^(indent + 2), space.topology)
+    print(iio, " "^(indent + 2), Spaces.topology(space))
 end
 
 function FiniteDifferenceSpace{S}(
@@ -143,6 +143,7 @@ end
 
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
+topology(space::FiniteDifferenceSpace) = space.topology
 nlevels(space::FiniteDifferenceSpace) = length(space)
 
 local_geometry_data(space::CenterFiniteDifferenceSpace) =
@@ -151,8 +152,12 @@ local_geometry_data(space::CenterFiniteDifferenceSpace) =
 local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
 
-left_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.topology.boundaries)[1]
+function left_boundary_name(space::FiniteDifferenceSpace)
+    boundaries = Topologies.boundaries(Spaces.topology(space))
+    propertynames(boundaries)[1]
+end
 
-right_boundary_name(space::FiniteDifferenceSpace) =
-    propertynames(space.topology.boundaries)[2]
+function right_boundary_name(space::FiniteDifferenceSpace)
+    boundaries = Topologies.boundaries(Spaces.topology(space))
+    propertynames(boundaries)[2]
+end

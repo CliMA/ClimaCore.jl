@@ -13,6 +13,8 @@ mesh in the horizontal domain.
 # Interfaces
 
 - [`nelems`](@ref)
+- [`domain`](@ref)
+- [`mesh`](@ref)
 - [`nlocalelems`](@ref)
 - [`nneighbors`](@ref)
 - [`nsendelems`](@ref)
@@ -38,6 +40,20 @@ abstract type AbstractTopology end
 abstract type AbstractDistributedTopology <: AbstractTopology end
 
 coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
+
+"""
+    domain(topology)
+
+Returns the domain of the `topology` from the underlying `mesh`
+"""
+function domain end
+
+"""
+    mesh(topology)
+
+Returns the mesh underlying the `topology`
+"""
+function mesh end
 
 """
     nelems(topology)
@@ -263,7 +279,7 @@ An iterator over the faces of `topology` which face the boundary with tag
 """
 function boundary_faces end
 
-
+# Topologies API implementations
 include("interval.jl")
 include("topology2d.jl")
 include("dtopology2d.jl")
@@ -272,6 +288,5 @@ include("dtopology2d.jl")
 @deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
 @deprecate GridTopology(mesh) Topology2D(mesh)
 @deprecate Topology2D(mesh) Topology2D(mesh)
-
 
 end # module

@@ -23,7 +23,6 @@ RecipesBase.@recipe function f(
 
     # compute the interpolated data to plot
     space = axes(field)
-    topology = Spaces.topology(space)
     nelems = Topologies.nlocalelems(space)
     QS = Spaces.quadrature_style(space)
     quad_name = Base.typename(typeof(QS)).name
@@ -196,6 +195,10 @@ function _slice_triplot(field, hinterpolate, ncolors)
     Ni, Nj, _, Nv, Nh = size(data)
 
     space = axes(field)
+    htopology = Spaces.topology(space.horizontal_space)
+    hdomain = Topologies.domain(htopology)
+    vdomain = Topologies.domain(space.vertical_topology)
+
     @assert Nj == 1
 
     hcoord_field = getproperty(Fields.coordinate_field(space), 1)
@@ -220,20 +223,27 @@ function _slice_triplot(field, hinterpolate, ncolors)
     end
     cmap = range(extrema(data)..., length = ncolors)
 
-    z = TriplotBase.tripcolor(
+    # unique number of nodal element coords
+    # (number of nodal values minus number of shared faces)
+    Px = (Ni * Nh) - (Nh - 1)
+    Py = Nv
+    cdata = TriplotBase.tripcolor(
         hcoord_data,
         vcoord_data,
         data,
         triangles,
         cmap;
         bg = NaN,
-        # unique number of nodal element coords
-        # (number of nodal values minus number of shared faces)
-        px = (Ni * Nh) - (Nh - 1),
-        py = Nv,
+        px = Px,
+        py = Py,
     )
-    # some plots backends need coordinates in sorted order
-    return (sort(unique(hcoord_data)), sort(unique(vcoord_data)), z')
+    domain_xmin = Geometry.component(hdomain.coord_min, 1)
+    domain_xmax = Geometry.component(hdomain.coord_max, 1)
+    domain_ymin = Geometry.component(vdomain.coord_min, 1)
+    domain_ymax = Geometry.component(vdomain.coord_max, 1)
+    cx_coords = range(start = domain_xmin, stop = domain_xmax, length = Px)
+    cy_coords = range(start = domain_ymin, stop = domain_ymax, length = Py)
+    return (cx_coords, cy_coords, cdata')
 end
 
 # 2D hybrid plot
