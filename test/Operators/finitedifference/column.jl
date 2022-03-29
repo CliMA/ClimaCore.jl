@@ -633,7 +633,7 @@ end
     @test conv_curl_sin_f[1] ≤ conv_curl_sin_f[2] ≤ conv_curl_sin_f[3]
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C (uniform)" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) periodic mesh" begin
     FT = Float64
     n_elems_seq = 2 .^ (5, 6, 7, 8)
 
@@ -675,7 +675,57 @@ end
     # Check convergence rate
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
 
-    # GradientF2C conv, with f(z) = sin(z)
+    # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
+    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-4
+    @test conv_adv_wc[1] ≈ 3 atol = 0.1
+    @test conv_adv_wc[2] ≈ 3 atol = 0.1
+    @test conv_adv_wc[3] ≈ 3 atol = 0.1
+    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
+end
+
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) non-periodic mesh" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+
+    err_adv_wc = zeros(FT, length(n_elems_seq))
+
+    Δh = zeros(FT, length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+
+        # Upwind3rdOrderBiasedProductC2F Center -> Face operator
+        # Unitary, constant advective velocity
+        w = Geometry.WVector.(ones(fs))
+        # c = sin(z), scalar field defined at the centers
+        c = sin.(centers)
+
+        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
+        fluxsinᶠ = fluxᶠ.(w, c)
+
+        divf2c = Operators.DivergenceF2C()
+        adv_wc = divf2c.(fluxsinᶠ)
+
+        Δh[k] = cs.face_local_geometry.J[1]
+        # Errors
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+
+    end
+
+    # Check convergence rate
+    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+
+    # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
     @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-4
     @test conv_adv_wc[1] ≈ 3 atol = 0.1
     @test conv_adv_wc[2] ≈ 3 atol = 0.1

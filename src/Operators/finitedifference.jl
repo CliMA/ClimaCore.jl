@@ -783,6 +783,7 @@ end
 
 stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
+
 function stencil_interior(::UpwindBiasedProductC2F, loc, idx, velocity, arg)
     space = axes(arg)
     a⁻ = stencil_interior(LeftBiasedC2F(), loc, idx, arg)
@@ -795,6 +796,7 @@ function stencil_interior(::UpwindBiasedProductC2F, loc, idx, velocity, arg)
 end
 
 boundary_width(::UpwindBiasedProductC2F, ::SetValue, velocity, arg) = 1
+
 function stencil_left_boundary(
     ::UpwindBiasedProductC2F,
     bc::SetValue,
@@ -813,6 +815,7 @@ function stencil_left_boundary(
     )
     return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, aᴸᴮ, a⁺))
 end
+
 function stencil_right_boundary(
     ::UpwindBiasedProductC2F,
     bc::SetValue,
@@ -833,6 +836,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::UpwindBiasedProductC2F, ::Extrapolate, velocity, arg) = 1
+
 function stencil_left_boundary(
     op::UpwindBiasedProductC2F,
     ::Extrapolate,
@@ -845,6 +849,7 @@ function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(space)
     stencil_interior(op, loc, idx + 1, velocity, arg)
 end
+
 function stencil_right_boundary(
     op::UpwindBiasedProductC2F,
     ::Extrapolate,
@@ -927,9 +932,8 @@ function stencil_interior(
     )
 end
 
-boundary_width(::Upwind3rdOrderBiasedProductC2F, ::SetValue, velocity, arg) = 2
+boundary_width(::Upwind3rdOrderBiasedProductC2F, ::SetValue, velocity, arg) = 3
 
-# TODO: Need to fix BCs. Currently only periodic supported.
 function stencil_left_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::SetValue,
@@ -941,9 +945,10 @@ function stencil_left_boundary(
     space = axes(arg)
     @assert idx == left_face_boundary_idx(space)
     aᴸᴮ = bc.val
-    a⁻ = stencil_interior(LeftBiasedC2F(), loc, idx, arg)
+    a⁻⁻ = aᴸᴮ
     a⁺ = stencil_interior(RightBiasedC2F(), loc, idx, arg)
     a⁺⁺ = stencil_interior(RightBiasedC2F(), loc, idx + 1, arg)
+
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx),
         Geometry.LocalGeometry(space, idx),
@@ -953,7 +958,6 @@ function stencil_left_boundary(
     )
 end
 
-# TODO: Need to fix BCs. Currently only periodic supported.
 function stencil_right_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::SetValue,
@@ -966,21 +970,20 @@ function stencil_right_boundary(
     @assert idx == right_face_boundary_idx(space)
     a⁻ = stencil_interior(LeftBiasedC2F(), loc, idx, arg)
     a⁻⁻ = stencil_interior(LeftBiasedC2F(), loc, idx - 1, arg)
-    a⁺ = stencil_interior(RightBiasedC2F(), loc, idx, arg)
     aᴿᴮ = bc.val
+    a⁺⁺ = aᴿᴮ
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx),
         Geometry.LocalGeometry(space, idx),
     )
     return Geometry.Contravariant3Vector(
-        upwind_3rdorder_biased_product(vᶠ, a⁻⁻, a⁻, a⁺, aᴿᴮ),
+        upwind_3rdorder_biased_product(vᶠ, a⁻, a⁻⁻, aᴿᴮ, a⁺⁺),
     )
 end
 
 boundary_width(::Upwind3rdOrderBiasedProductC2F, ::Extrapolate, velocity, arg) =
-    2
+    1
 
-# TODO: Need to fix BCs. Currently only periodic supported.
 function stencil_left_boundary(
     op::Upwind3rdOrderBiasedProductC2F,
     ::Extrapolate,
@@ -991,10 +994,9 @@ function stencil_left_boundary(
 )
     space = axes(arg)
     @assert idx == left_face_boundary_idx(space)
-    stencil_interior(op, loc, idx + 2, velocity, arg)
+    stencil_interior(op, loc, idx + 1, velocity, arg)
 end
 
-# TODO: Need to fix BCs. Currently only periodic supported.
 function stencil_right_boundary(
     op::Upwind3rdOrderBiasedProductC2F,
     ::Extrapolate,
@@ -1005,7 +1007,7 @@ function stencil_right_boundary(
 )
     space = axes(arg)
     @assert idx == right_face_boundary_idx(space)
-    stencil_interior(op, loc, idx - 2, velocity, arg)
+    stencil_interior(op, loc, idx - 1, velocity, arg)
 end
 
 """
