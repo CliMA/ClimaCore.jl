@@ -7,6 +7,7 @@ using Logging: global_logger
 using TerminalLoggers: TerminalLogger
 global_logger(TerminalLogger())
 
+using ClimaCore: Operators
 import ClimaCore: enable_threading
 enable_threading() = true
 
@@ -54,8 +55,8 @@ else
     t_start = FT(0)
     ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
     Y = Fields.FieldVector(
-        c = map(center_initial_condition, ᶜlocal_geometry),
-        f = map(face_initial_condition, ᶠlocal_geometry),
+        c = Spaces.weighted_dss!(map(center_initial_condition, ᶜlocal_geometry)),
+	f = Spaces.weighted_dss!(map(face_initial_condition, ᶠlocal_geometry)),
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt)
