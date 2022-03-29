@@ -1,4 +1,5 @@
 using LinearAlgebra: ×, norm, norm_sqr, dot
+using StaticArrays
 
 using ClimaCore: Operators, Fields
 
@@ -98,6 +99,12 @@ end
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
+  if flux_form
+    # Running with explicit solvers only for now -  
+    # It seems by default the implicit tendency function is always called ? 
+    # FIXME 
+    return Yₜ
+  else
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -149,88 +156,180 @@ function implicit_tendency!(Yₜ, Y, p, t)
     # end
 
     return Yₜ
+  end
 end
 
 function remaining_tendency!(Yₜ, Y, p, t)
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
-    additional_tendency!(Yₜ, Y, p, t, comms_ctx)
-    Spaces.weighted_dss!(Yₜ.c, comms_ctx)
-    Spaces.weighted_dss!(Yₜ.f, comms_ctx)
+    additional_tendency!(Yₜ, Y, p, t)#, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.c)#, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.f)#, comms_ctx)
     return Yₜ
 end
 
 function default_remaining_tendency!(Yₜ, Y, p, t)
-    ᶜρ = Y.c.ρ
-    ᶜuₕ = Y.c.uₕ
-    ᶠw = Y.f.w
-    (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
-    point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+    if flux_form 
+      
+      (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
+      # Prognostics
+      ρ = Y.c.ρ
+      ρuₕ = Y.c.ρuₕ
+      ρw = Y.f.ρw
+      ρθ = Y.c.ρθ
 
-    @. ᶜuvw = C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))
-    @. ᶜK = norm_sqr(ᶜuvw) / 2
+      # Tendencies
+      dρ = Yₜ.c.ρ
+      dρuₕ = Yₜ.c.ρuₕ
+      dρw = Yₜ.f.ρw
+      dρθ = Yₜ.c.ρθ
 
-    # Mass conservation
+      # vertical FD operators with BC's
+      vdivf2c = Operators.DivergenceF2C(
+          bottom = Operators.SetValue(Geometry.WVector(0.0)),
+          top = Operators.SetValue(Geometry.WVector(0.0)),
+      )
+      vvdivc2f = Operators.DivergenceC2F(
+          bottom = Operators.SetDivergence(Geometry.WVector(0.0)),
+          top = Operators.SetDivergence(Geometry.WVector(0.0)),
+      )
+      uvdivf2c = Operators.DivergenceF2C(
+          bottom = Operators.SetValue(
+              Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
+          ),
+          top = Operators.SetValue(
+              Geometry.WVector(0.0) ⊗ Geometry.UVVector(0.0, 0.0),
+          ),
+      )
+      ∂ = Operators.DivergenceF2C(
+          bottom = Operators.SetValue(Geometry.WVector(0.0)),
+          top = Operators.SetValue(Geometry.WVector(0.0)),
+      )
+      ∂f = Operators.GradientC2F()
+      ∂c = Operators.GradientF2C()
+      B = Operators.SetBoundaryOperator(
+          bottom = Operators.SetValue(Geometry.WVector(0.0)),
+          top = Operators.SetValue(Geometry.WVector(0.0)),
+      )
 
-    @. Yₜ.c.ρ -= divₕ(ᶜρ * ᶜuvw)
-    @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
+      fcc = Operators.FluxCorrectionC2C(
+          bottom = Operators.Extrapolate(),
+          top = Operators.Extrapolate(),
+      )
+      fcf = Operators.FluxCorrectionF2F(
+          bottom = Operators.Extrapolate(),
+          top = Operators.Extrapolate(),
+      )
 
-    # Energy conservation
+      uₕ = @. ρuₕ / ρ
+      w = @. ρw / ᶠinterp(ρ)
+      wc = @. ᶜinterp(ρw) / ρ
+      p = @. pressure_ρθ(ρθ)
+      θ = @. ρθ / ρ
+      Yfρ = @. ᶠinterp(ρ)
 
-    if :ρθ in propertynames(Y.c)
-        ᶜρθ = Y.c.ρθ
-        @. ᶜp = pressure_ρθ(ᶜρθ)
-        @. Yₜ.c.ρθ -= divₕ(ᶜρθ * ᶜuvw)
-        @. Yₜ.c.ρθ -= ᶜdivᵥ(ᶠinterp(ᶜρθ * ᶜuₕ))
-    elseif :ρe in propertynames(Y.c)
-        ᶜρe = Y.c.ρe
-        @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-        @. Yₜ.c.ρe -= divₕ((ᶜρe + ᶜp) * ᶜuvw)
-        @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
-    elseif :ρe_int in propertynames(Y.c)
-        ᶜρe_int = Y.c.ρe_int
-        @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
-        if point_type <: Geometry.Abstract3DPoint
-            @. Yₜ.c.ρe_int -=
-                divₕ((ᶜρe_int + ᶜp) * ᶜuvw) -
-                dot(gradₕ(ᶜp), Geometry.Contravariant12Vector(ᶜuₕ))
-        else
-            @. Yₜ.c.ρe_int -=
-                divₕ((ᶜρe_int + ᶜp) * ᶜuvw) -
-                dot(gradₕ(ᶜp), Geometry.Contravariant1Vector(ᶜuₕ))
-        end
-        @. Yₜ.c.ρe_int -= ᶜdivᵥ(ᶠinterp((ᶜρe_int + ᶜp) * ᶜuₕ))
-        # or, equivalently,
-        # @. Yₜ.c.ρe_int -= divₕ(ᶜρe_int * ᶜuvw) + ᶜp * divₕ(ᶜuvw)
-        # @. Yₜ.c.ρe_int -=
-        #     ᶜdivᵥ(ᶠinterp(ᶜρe_int * ᶜuₕ)) + ᶜp * ᶜdivᵥ(ᶠinterp(ᶜuₕ))
+      # density
+      @. dρ = -∂(ρw)
+      @. dρ -= wdivₕ(ρuₕ)
+
+      # potential temperature
+      @. dρθ += -(∂(ρw * ᶠinterp(ρθ / ρ)))
+      @. dρθ -= wdivₕ(uₕ * ρθ)
+
+      # Horizontal momentum
+      @. dρuₕ += -uvdivf2c(ρw ⊗ ᶠinterp(uₕ))
+      Ih = Ref(
+          Geometry.Axis2Tensor(
+              (Geometry.UVAxis(), Geometry.UVAxis()),
+              @SMatrix [1.0 0.0; 0.0 1.0]
+          ),
+      )
+      @. dρuₕ -= wdivₕ(ρuₕ ⊗ uₕ + p * Ih)
+
+      # vertical momentum
+      @. dρw += B(
+          Geometry.transform(Geometry.WAxis(), -(∂f(p)) - ᶠinterp(ρ) * ∂f(ᶜΦ)) -
+          vvdivc2f(ᶜinterp(ρw ⊗ w)),
+      )
+      uₕf = @. ᶠinterp(ρuₕ / ρ) # requires boundary conditions
+      @. dρw -= wdivₕ(uₕf ⊗ ρw)
+      
+      Spaces.weighted_dss!(dρ)
+      Spaces.weighted_dss!(dρuₕ)
+      Spaces.weighted_dss!(dρw)
+      Spaces.weighted_dss!(dρθ)
+    else
+      ᶜρ = Y.c.ρ
+      ᶜuₕ = Y.c.uₕ
+      ᶠw = Y.f.w
+      (; ᶜuvw, ᶜK, ᶜΦ, ᶜp, ᶜω³, ᶠω¹², ᶠu¹², ᶠu³, ᶜf) = p
+      point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
+
+      @. ᶜuvw = C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))
+      @. ᶜK = norm_sqr(ᶜuvw) / 2
+
+      # Mass conservation
+
+      @. Yₜ.c.ρ -= divₕ(ᶜρ * ᶜuvw)
+      @. Yₜ.c.ρ -= ᶜdivᵥ(ᶠinterp(ᶜρ * ᶜuₕ))
+
+      # Energy conservation
+
+      if :ρθ in propertynames(Y.c)
+          ᶜρθ = Y.c.ρθ
+          @. ᶜp = pressure_ρθ(ᶜρθ)
+          @. Yₜ.c.ρθ -= divₕ(ᶜρθ * ᶜuvw)
+          @. Yₜ.c.ρθ -= ᶜdivᵥ(ᶠinterp(ᶜρθ * ᶜuₕ))
+      elseif :ρe in propertynames(Y.c)
+          ᶜρe = Y.c.ρe
+          @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
+          @. Yₜ.c.ρe -= divₕ((ᶜρe + ᶜp) * ᶜuvw)
+          @. Yₜ.c.ρe -= ᶜdivᵥ(ᶠinterp((ᶜρe + ᶜp) * ᶜuₕ))
+      elseif :ρe_int in propertynames(Y.c)
+          ᶜρe_int = Y.c.ρe_int
+          @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
+          if point_type <: Geometry.Abstract3DPoint
+              @. Yₜ.c.ρe_int -=
+                  divₕ((ᶜρe_int + ᶜp) * ᶜuvw) -
+                  dot(gradₕ(ᶜp), Geometry.Contravariant12Vector(ᶜuₕ))
+          else
+              @. Yₜ.c.ρe_int -=
+                  divₕ((ᶜρe_int + ᶜp) * ᶜuvw) -
+                  dot(gradₕ(ᶜp), Geometry.Contravariant1Vector(ᶜuₕ))
+          end
+          @. Yₜ.c.ρe_int -= ᶜdivᵥ(ᶠinterp((ᶜρe_int + ᶜp) * ᶜuₕ))
+          # or, equivalently,
+          # @. Yₜ.c.ρe_int -= divₕ(ᶜρe_int * ᶜuvw) + ᶜp * divₕ(ᶜuvw)
+          # @. Yₜ.c.ρe_int -=
+          #     ᶜdivᵥ(ᶠinterp(ᶜρe_int * ᶜuₕ)) + ᶜp * ᶜdivᵥ(ᶠinterp(ᶜuₕ))
+      end
+
+      # Momentum conservation
+
+      if point_type <: Geometry.Abstract3DPoint
+          @. ᶜω³ = curlₕ(ᶜuₕ)
+          @. ᶠω¹² = curlₕ(ᶠw)
+      elseif point_type <: Geometry.Abstract2DPoint
+          ᶜω³ .= Ref(zero(eltype(ᶜω³)))
+          @. ᶠω¹² = Geometry.Contravariant12Vector(curlₕ(ᶠw))
+      end
+      @. ᶠω¹² += ᶠcurlᵥ(ᶜuₕ)
+
+      # TODO: Modify to account for topography
+      @. ᶠu¹² = Geometry.Contravariant12Vector(ᶠinterp(ᶜuₕ))
+      @. ᶠu³ = Geometry.Contravariant3Vector(ᶠw)
+
+      @. Yₜ.c.uₕ -=
+          ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × Geometry.Contravariant12Vector(ᶜuₕ)
+      if point_type <: Geometry.Abstract3DPoint
+          @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
+      elseif point_type <: Geometry.Abstract2DPoint
+          @. Yₜ.c.uₕ -=
+              Geometry.Covariant12Vector(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
+      end
+
+      @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
     end
-
-    # Momentum conservation
-
-    if point_type <: Geometry.Abstract3DPoint
-        @. ᶜω³ = curlₕ(ᶜuₕ)
-        @. ᶠω¹² = curlₕ(ᶠw)
-    elseif point_type <: Geometry.Abstract2DPoint
-        ᶜω³ .= Ref(zero(eltype(ᶜω³)))
-        @. ᶠω¹² = Geometry.Contravariant12Vector(curlₕ(ᶠw))
-    end
-    @. ᶠω¹² += ᶠcurlᵥ(ᶜuₕ)
-
-    # TODO: Modify to account for topography
-    @. ᶠu¹² = Geometry.Contravariant12Vector(ᶠinterp(ᶜuₕ))
-    @. ᶠu³ = Geometry.Contravariant3Vector(ᶠw)
-
-    @. Yₜ.c.uₕ -=
-        ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × Geometry.Contravariant12Vector(ᶜuₕ)
-    if point_type <: Geometry.Abstract3DPoint
-        @. Yₜ.c.uₕ -= gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ)
-    elseif point_type <: Geometry.Abstract2DPoint
-        @. Yₜ.c.uₕ -=
-            Geometry.Covariant12Vector(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
-    end
-
-    @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
 end
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
