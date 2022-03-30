@@ -3,7 +3,7 @@
 
 module ClimaCoreVTK
 
-export writevtk, writepvd
+export writevtk
 
 using WriteVTK
 import ClimaCore: Fields, Geometry, Spaces, Topologies, Operators
@@ -97,7 +97,7 @@ Write `fields` to as an unstructured mesh VTK file named `$(basename).vtu`.
 The `basis` keyword option determines the type of cells used to write.:
 - `:cell` (default): output values at cell centers (interpolating where
   necessary).
-- `:point`: output values at cell vertices.
+- `:point` (default): output values at cell vertices.
 - `:lagrange`: output values at Lagrange nodes (valid only for spectral element
   spaces), using Use VTK Lagrange cells to accurately represent high-order
   elements.

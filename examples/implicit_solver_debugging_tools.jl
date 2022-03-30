@@ -34,23 +34,42 @@ function exact_column_jacobian_block(
     return vcat(map(dual -> [dual.partials.values...]', parent(col))...)
 end
 
-# Note: These only work for scalar stencils.
-vector_column(arg, i, j, h) = parent(Spaces.column(arg, i, j, h))
-function matrix_column(stencil, stencil_input_space, i, j, h)
-    lbw, ubw = Operators.bandwidths(eltype(stencil))
-    coefs_column = Spaces.column(stencil, i, j, h).coefs
-    row_space = axes(coefs_column)
-    lrow = Operators.left_idx(row_space)
-    rrow = Operators.right_idx(row_space)
-    num_rows = rrow - lrow + 1
-    col_space = Spaces.column(stencil_input_space, i, j, h)
-    lcol = Operators.left_idx(col_space)
-    rcol = Operators.right_idx(col_space)
-    num_cols = rcol - lcol + 1
-    diag_key_value(diag) =
-        (diag + lrow - lcol) => view(
-            parent(getproperty(coefs_column, diag - lbw + 1)),
-            (max(lrow, lcol - diag):min(rrow, rcol - diag)) .- (lrow - 1),
-        )
-    return spdiagm(num_rows, num_cols, map(diag_key_value, lbw:ubw)...)
+# TODO: This only works for scalar stencils.
+function column_matrix(stencil, i, j, h)
+    column_stencil = Spaces.column(stencil, i, j, h)
+
+    space = axes(column_stencil)
+    n_rows = Spaces.nlevels(space)
+
+    lbw, ubw = Operators.bandwidths(eltype(column_stencil))
+    n_diags = ubw - lbw + 1
+
+    # We can only infer the the argument space's axes from NaNs in the stencil.
+    loc = Operators.Interior()
+    isnt_left_boundary_row(i_row) =
+        !isnan(Operators.getidx(column_stencil, loc, i_row)[1])
+    isnt_right_boundary_row(i_row) =
+        !isnan(Operators.getidx(column_stencil, loc, i_row)[n_diags])
+    indices = Operators.left_idx(space):Operators.right_idx(space)
+    i_first_interior_row = findfirst(isnt_left_boundary_row, indices)
+    i_last_interior_row = findlast(isnt_right_boundary_row, indices)
+
+    n_cols = i_last_interior_row - i_first_interior_row + n_diags
+
+    function diag_key_value(i_diag)
+        start_index = max(i_first_interior_row - (i_diag - 1), 1)
+        end_index = min(i_last_interior_row + (n_diags - i_diag), n_rows)
+        array = parent(getproperty(column_stencil.coefs, i_diag))
+        @assert length(array) == size(array, 1)
+        return (i_diag - i_first_interior_row) =>
+            view(array, start_index:end_index)
+    end
+
+    return spdiagm(n_rows, n_cols, ntuple(diag_key_value, n_diags)...)
+end
+
+function column_vector(arg, i, j, h)
+    array = parent(Spaces.column(arg, i, j, h))
+    @assert length(array) == size(array, 1)
+    return array
 end

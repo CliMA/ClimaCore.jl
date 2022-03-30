@@ -423,7 +423,7 @@ Uses the element indexing convention of [`AbstractCubedSphere`](@ref).
 
     ConformalCubedSphere(domain::Domains.SphereDomain, ne::Integer)
 
-Constuct a `ConformalCubedSphere` on `domain` with `ne` elements across
+Constuct an `ConformalCubedSphere` on `domain` with `ne` elements across
 each panel.
 """
 struct ConformalCubedSphere{S <: SphereDomain, E <: LocalElementMap} <:

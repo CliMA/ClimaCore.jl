@@ -1,36 +1,21 @@
-usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
-
-using Logging
-if usempi
-    using ClimaComms
-    using ClimaCommsMPI
-    const Context = ClimaCommsMPI.MPICommsContext
-    const pid, nprocs = ClimaComms.init(Context)
-    if pid == 1
-        println("parallel run with $nprocs processes")
-    end
-    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
-
-    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
-    atexit() do
-        global_logger(prev_logger)
-    end
-else
-    using Logging: global_logger
-    using TerminalLoggers: TerminalLogger
-    global_logger(TerminalLogger())
+if !haskey(ENV, "BUILDKITE")
+    import Pkg
+    Pkg.develop(Pkg.PackageSpec(; path = dirname(dirname(@__DIR__))))
 end
+
+using Logging: global_logger
+using TerminalLoggers: TerminalLogger
+global_logger(TerminalLogger())
 
 using ClimaCore: Operators
 import ClimaCore: enable_threading
-enable_threading() = false
+enable_threading() = true
 
 using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
 default_test_name = "sphere/baroclinic_wave_rhoe"
-
 test_implicit_solver = false # makes solver extremely slow when set to `true`
 
 # Definitions that are specific to each test:
@@ -48,9 +33,8 @@ additional_solver_kwargs = (;) # e.g., abstol and reltol
 center_initial_condition(local_geometry) = (;)
 face_initial_condition(local_geometry) = (;)
 postprocessing(sol, p, output_dir) = nothing
-################################################################################
 
-const FT = get(ENV, "FLOAT_TYPE", "Float64") == "Float32" ? Float32 : Float64
+################################################################################
 
 if haskey(ENV, "TEST_NAME")
     test_name = ENV["TEST_NAME"]
@@ -69,10 +53,7 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    ᶜlocal_geometry, ᶠlocal_geometry =
-        Fields.local_geometry_field(hv_center_space),
-        Fields.local_geometry_field(hv_face_space)
-
+    ᶜlocal_geometry, ᶠlocal_geometry = local_geometry_fields(space)
     Y = Fields.FieldVector(
         c = Spaces.weighted_dss!(map(center_initial_condition, ᶜlocal_geometry)),
 	f = Spaces.weighted_dss!(map(face_initial_condition, ᶠlocal_geometry)),
@@ -130,6 +111,7 @@ else
     )
 end
 callback = CallbackSet(saving_callback, additional_callbacks...)
+
 problem = SplitODEProblem(
     ODEFunction(
         implicit_tendency!;
@@ -160,9 +142,5 @@ end
 @info "Running `$test_name`"
 sol = @timev OrdinaryDiffEq.solve!(integrator)
 
-#@show typeof(sol.u)
-#@show typeof(sol.u[1])
-#@show typeof(sol.u[1].c)
-#@show typeof(sol.u[1].f)
 ENV["GKSwstype"] = "nul" # avoid displaying plots
-postprocessing(sol, p, output_dir, usempi)
+postprocessing(sol, p, output_dir)

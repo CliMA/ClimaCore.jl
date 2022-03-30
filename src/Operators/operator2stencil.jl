@@ -107,7 +107,7 @@ function stencil_left_boundary(
     arg,
 )
     T = eltype(arg)
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((nan(T), zero(T)))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
@@ -117,7 +117,7 @@ function stencil_right_boundary(
     arg,
 )
     T = eltype(arg)
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((zero(T), nan(T)))
 end
 function stencil_left_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
@@ -127,7 +127,7 @@ function stencil_left_boundary(
     arg,
 )
     val⁺ = getidx(arg, loc, idx + half)
-    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
+    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:InterpolateC2F},
@@ -137,7 +137,7 @@ function stencil_right_boundary(
     arg,
 )
     val⁻ = getidx(arg, loc, idx - half)
-    return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
+    return StencilCoefs{-half, half}((val⁻, nan(val⁻)))
 end
 
 
@@ -151,12 +151,19 @@ function stencil_interior(
     return StencilCoefs{-half, -half}((val⁻,))
 end
 stencil_left_boundary(
-    ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiasedC2F}},
+    ::Operator2Stencil{<:LeftBiasedF2C},
     bc::SetValue,
     loc,
     idx,
     arg,
 ) = StencilCoefs{-half, -half}((zero(eltype(arg)),))
+stencil_left_boundary(
+    ::Operator2Stencil{<:LeftBiasedC2F},
+    bc::SetValue,
+    loc,
+    idx,
+    arg,
+) = StencilCoefs{-half, -half}((nan(eltype(arg)),))
 
 
 function stencil_interior(
@@ -169,12 +176,19 @@ function stencil_interior(
     return StencilCoefs{half, half}((val⁺,))
 end
 stencil_right_boundary(
-    ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiasedC2F}},
+    ::Operator2Stencil{<:RightBiasedF2C},
     bc::SetValue,
     loc,
     idx,
     arg,
 ) = StencilCoefs{half, half}((zero(eltype(arg)),))
+stencil_right_boundary(
+    ::Operator2Stencil{<:RightBiasedC2F},
+    bc::SetValue,
+    loc,
+    idx,
+    arg,
+) = StencilCoefs{half, half}((nan(eltype(arg)),))
 
 
 function stencil_interior(
@@ -400,7 +414,7 @@ function stencil_left_boundary(
     arg,
 )
     val⁺ = Geometry.Covariant3Vector(2) ⊗ getidx(arg, loc, idx + half)
-    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
+    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:GradientC2F},
@@ -420,7 +434,7 @@ function stencil_left_boundary(
     arg,
 )
     T = Geometry.gradient_result_type(Val((3,)), eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((nan(T), zero(T)))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:GradientC2F},
@@ -430,7 +444,7 @@ function stencil_right_boundary(
     arg,
 )
     T = Geometry.gradient_result_type(Val((3,)), eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((zero(T), nan(T)))
 end
 
 
@@ -514,7 +528,7 @@ function stencil_left_boundary(
     )
     J = Geometry.LocalGeometry(space, idx).J
     val⁺ = RecursiveApply.rdiv(Ju³⁺, J / 2)
-    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
+    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
@@ -530,7 +544,7 @@ function stencil_right_boundary(
     )
     J = Geometry.LocalGeometry(space, idx).J
     val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J / 2))
-    return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
+    return StencilCoefs{-half, half}((val⁻, nan(val⁻)))
 end
 function stencil_left_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
@@ -540,7 +554,7 @@ function stencil_left_boundary(
     arg,
 )
     T = Geometry.divergence_result_type(eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((nan(T), zero(T)))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:DivergenceC2F},
@@ -550,7 +564,7 @@ function stencil_right_boundary(
     arg,
 )
     T = Geometry.divergence_result_type(eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((zero(T), nan(T)))
 end
 
 # Evaluate fd3_curl(u, zero(u), J).
@@ -583,7 +597,7 @@ function stencil_left_boundary(
     u₊ = getidx(arg, loc, idx + half)
     J = Geometry.LocalGeometry(space, idx).J
     val⁺ = fd3_curl⁺(u₊, J / 2)
-    return StencilCoefs{-half, half}((zero(val⁺), val⁺))
+    return StencilCoefs{-half, half}((nan(val⁺), val⁺))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:CurlC2F},
@@ -596,7 +610,7 @@ function stencil_right_boundary(
     u₋ = getidx(arg, loc, idx - half)
     J = Geometry.LocalGeometry(space, idx).J
     val⁻ = ⊟(fd3_curl⁺(u₋, J))
-    return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
+    return StencilCoefs{-half, half}((val⁻, nan(val⁻)))
 end
 function stencil_left_boundary(
     ::Operator2Stencil{<:CurlC2F},
@@ -606,7 +620,7 @@ function stencil_left_boundary(
     arg,
 )
     T = Geometry.curl_result_type(Val((3,)), eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((nan(T), zero(T)))
 end
 function stencil_right_boundary(
     ::Operator2Stencil{<:CurlC2F},
@@ -616,5 +630,5 @@ function stencil_right_boundary(
     arg,
 )
     T = Geometry.curl_result_type(Val((3,)), eltype(arg))
-    return StencilCoefs{-half, half}((zero(T), zero(T)))
+    return StencilCoefs{-half, half}((zero(T), nan(T)))
 end

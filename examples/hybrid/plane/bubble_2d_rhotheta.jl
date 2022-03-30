@@ -213,17 +213,18 @@ function rhs!(dY, Y, _, t)
     Yfρ = @. If(ρ)
 
     ### HYPERVISCOSITY
-    @. dρθ = hwdiv(hgrad(θ))
-    @. dρuₕ = hwdiv(hgrad(uₕ))
-    @. dρw = hwdiv(hgrad(w))
+    # 1) compute hyperviscosity coefficients
+    @. dρθ = hdiv(hgrad(θ))
+    @. dρuₕ = hdiv(hgrad(uₕ))
+    @. dρw = hdiv(hgrad(w))
     Spaces.weighted_dss!(dYc)
     Spaces.weighted_dss!(dρuₕ)
     Spaces.weighted_dss!(dρw)
 
     κ₄ = 100.0 # m^4/s
-    @. dρθ = -κ₄ * hwdiv(ρ * hgrad(dρθ))
-    @. dρuₕ = -κ₄ * hwdiv(ρ * hgrad(dρuₕ))
-    @. dρw = -κ₄ * hwdiv(Yfρ * hgrad(dρw))
+    @. dρθ = -κ₄ * hdiv(ρ * hgrad(dρθ))
+    @. dρuₕ = -κ₄ * hdiv(ρ * hgrad(dρuₕ))
+    @. dρw = -κ₄ * hdiv(Yfρ * hgrad(dρw))
 
     # density
     @. dρ = -∂(ρw)
@@ -264,17 +265,17 @@ function rhs!(dY, Y, _, t)
     ### DIFFUSION
     κ₂ = 0.0 # m^2/s
     #  1a) horizontal div of horizontal grad of horiz momentun
-    @. dρuₕ += hwdiv(κ₂ * (ρ * hgrad(ρuₕ / ρ)))
+    @. dρuₕ += hdiv(κ₂ * (ρ * hgrad(ρuₕ / ρ)))
     #  1b) vertical div of vertical grad of horiz momentun
     @. dρuₕ += uvdivf2c(κ₂ * (Yfρ * ∂f(ρuₕ / ρ)))
 
     #  1c) horizontal div of horizontal grad of vert momentum
-    @. dρw += hwdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
+    @. dρw += hdiv(κ₂ * (Yfρ * hgrad(ρw / Yfρ)))
     #  1d) vertical div of vertical grad of vert momentun
     @. dρw += vvdivc2f(κ₂ * (ρ * ∂c(ρw / Yfρ)))
 
     #  2a) horizontal div of horizontal grad of potential temperature
-    @. dρθ += hwdiv(κ₂ * (ρ * hgrad(ρθ / ρ)))
+    @. dρθ += hdiv(κ₂ * (ρ * hgrad(ρθ / ρ)))
     #  2b) vertical div of vertial grad of potential temperature
     @. dρθ += ∂(κ₂ * (Yfρ * ∂f(ρθ / ρ)))
 

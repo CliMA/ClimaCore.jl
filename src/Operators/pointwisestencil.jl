@@ -412,7 +412,7 @@ end
 
 function get_i_vals_tuple(i_vals_at_j, stencil1, stencil2)
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    return ntuple(j -> i_vals_at_j(j), ubw - lbw + 1)
+    return ntuple(j -> i_vals_at_j(j), (ubw - lbw + 1))
 end
 
 # TODO: Optimize this so that the generated version is unnecessary. This is
@@ -426,9 +426,9 @@ function compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
     function j_func(j)
         i_vals = i_vals_tuple[j]
         return length(i_vals) == 0 ? zero(eltype(eltype(stencil1))) :
-               mapreduce(i_func_at_j(j), ⊞, i_vals)
+               return mapreduce(i_func_at_j(j), ⊞, i_vals)
     end
-    return StencilCoefs{lbw, ubw}(ntuple(j -> j_func(j), ubw - lbw + 1))
+    return StencilCoefs{lbw, ubw}(ntuple(j -> j_func(j), (ubw - lbw + 1)))
 end
 
 function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
@@ -446,7 +446,7 @@ function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
                :($(mapreduce(i_func_at_j(j), ⊞, i_vals)))
     end
     result_expr =
-        :(StencilCoefs{$lbw, $ubw}($(ntuple(j -> j_func(j), ubw - lbw + 1))))
+        :(StencilCoefs{$lbw, $ubw}($(ntuple(j -> j_func(j), (ubw - lbw + 1)))))
     return :($coefs_expr; return $result_expr)
 end
 

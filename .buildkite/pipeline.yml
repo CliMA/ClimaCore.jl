@@ -9,30 +9,23 @@ steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
-      - echo "--- Instantiate project"
-
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate test"
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\")'"
       - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate perf"
       - "julia --project=perf -e 'using Pkg; Pkg.develop(path=\".\")'"
       - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=perf -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate examples"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate benchmarks"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate status"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -381,7 +374,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
+  
   - label: ":computer: Density current 2D hybrid invariant total energy"
     key: "cpu_density_current_2d_hybrid_invariant_total_energy"
     command:
@@ -392,7 +385,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
+  
   - label: ":computer: Density current 2D hybrid invariant potential temperature"
     key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
     command:
@@ -403,7 +396,7 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
+  
   - label: ":computer: Density current 2D hybrid conservative form potential temperature"
     key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"
     command:
@@ -617,34 +610,6 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Float32 baroclinic wave (ρe)"
-    key: "cpu_baroclinic_wave_rho_e_float32"
-    command:
-      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
-    artifact_paths:
-      - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/*"
-    env:
-      TEST_NAME: "sphere/baroclinic_wave_rhoe"
-      FLOAT_TYPE: "Float32"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-
-  - label: ":computer: MPI baroclinic wave (ρe)"
-    key: "cpu_mpi_baroclinic_wave_rho_e"
-    command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
-    artifact_paths:
-      - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/*"
-    env:
-      CLIMACORE_DISTRIBUTED: "MPI"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 2
-
-
   - label: ":computer: baroclinic wave (ρθ)"
     key: "cpu_baroclinic_wave_rho_theta"
     command:
@@ -730,20 +695,6 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Float32 dry held-suarez (ρθ)"
-    key: "cpu_float32_held_suarez_rho_theta"
-    command:
-      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
-    artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_rhotheta/*"
-    env:
-      TEST_NAME: "sphere/held_suarez_rhotheta"
-      FLOAT_TYPE: "Float32"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-
   - label: ":computer: dry held-suarez (ρe_int)"
     key: "cpu_held_suarez_rho_e_int"
     command:
@@ -757,18 +708,18 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-#  - label: ":computer: inertial gravity wave"
-#    key: "cpu_inertial_gravity_wave"
-#    command:
-#      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
-#    artifact_paths:
-#      - "examples/hybrid/plane/output/inertial_gravity_wave/*"
-#    env:
-#      TEST_NAME: "plane/inertial_gravity_wave"
-#    agents:
-#      config: cpu
-#      queue: central
-#      slurm_ntasks: 1
+  - label: ":computer: inertial gravity wave"
+    key: "cpu_inertial_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/inertial_gravity_wave/*"
+    env:
+      TEST_NAME: "plane/inertial_gravity_wave"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":rocket::computer: Allocations analysis"
     key: "cpu_allocations"

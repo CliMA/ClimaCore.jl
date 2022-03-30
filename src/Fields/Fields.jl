@@ -252,7 +252,6 @@ include("broadcast.jl")
 include("mapreduce.jl")
 include("compat_diffeq.jl")
 include("fieldvector.jl")
-include("field_iterator.jl")
 
 function interpcoord(elemrange, x::Real)
     n = length(elemrange) - 1

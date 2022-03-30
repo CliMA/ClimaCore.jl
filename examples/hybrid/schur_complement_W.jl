@@ -174,23 +174,21 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
             ΔY = Array{FT}(undef, 3 * Nv + 1)
             ΔΔY = Array{FT}(undef, 3 * Nv + 1)
             for h in 1:Nh, j in 1:Nj, i in 1:Ni
-                ∂Yₜ∂Y .= zero(FT)
+                ∂Yₜ∂Y .= 0.0
                 ∂Yₜ∂Y[1:Nv, (2 * Nv + 1):(3 * Nv + 1)] .=
-                    matrix_column(∂ᶜρₜ∂ᶠ𝕄, axes(x.f), i, j, h)
+                    column_matrix(∂ᶜρₜ∂ᶠ𝕄, i, j, h)
                 ∂Yₜ∂Y[(Nv + 1):(2 * Nv), (2 * Nv + 1):(3 * Nv + 1)] .=
-                    matrix_column(∂ᶜ𝔼ₜ∂ᶠ𝕄, axes(x.f), i, j, h)
+                    column_matrix(∂ᶜ𝔼ₜ∂ᶠ𝕄, i, j, h)
                 ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), 1:Nv] .=
-                    matrix_column(∂ᶠ𝕄ₜ∂ᶜρ, axes(x.c), i, j, h)
+                    column_matrix(∂ᶠ𝕄ₜ∂ᶜρ, i, j, h)
                 ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), (Nv + 1):(2 * Nv)] .=
-                    matrix_column(∂ᶠ𝕄ₜ∂ᶜ𝔼, axes(x.c), i, j, h)
-                ∂Yₜ∂Y[(2 * Nv + 1):(3 * Nv + 1), (2 * Nv + 1):(3 * Nv + 1)] .=
-                    matrix_column(∂ᶠ𝕄ₜ∂ᶠ𝕄, axes(x.f), i, j, h)
-                ΔY[1:Nv] .= vector_column(xᶜρ, i, j, h)
-                ΔY[(Nv + 1):(2 * Nv)] .= vector_column(xᶜ𝔼, i, j, h)
-                ΔY[(2 * Nv + 1):(3 * Nv + 1)] .= vector_column(xᶠ𝕄, i, j, h)
-                ΔΔY[1:Nv] .= vector_column(bᶜρ, i, j, h)
-                ΔΔY[(Nv + 1):(2 * Nv)] .= vector_column(bᶜ𝔼, i, j, h)
-                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= vector_column(bᶠ𝕄, i, j, h)
+                    column_matrix(∂ᶠ𝕄ₜ∂ᶜ𝔼, i, j, h)
+                ΔY[1:Nv] .= column_vector(xᶜρ, i, j, h)
+                ΔY[(Nv + 1):(2 * Nv)] .= column_vector(xᶜ𝔼, i, j, h)
+                ΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(xᶠ𝕄, i, j, h)
+                ΔΔY[1:Nv] .= column_vector(bᶜρ, i, j, h)
+                ΔΔY[(Nv + 1):(2 * Nv)] .= column_vector(bᶜ𝔼, i, j, h)
+                ΔΔY[(2 * Nv + 1):(3 * Nv + 1)] .= column_vector(bᶠ𝕄, i, j, h)
                 @assert (-LinearAlgebra.I + dtγ * ∂Yₜ∂Y) * ΔY ≈ ΔΔY
             end
         end
