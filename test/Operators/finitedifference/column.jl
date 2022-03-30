@@ -6,6 +6,7 @@ import ClimaCore.Domains: Geometry
 
 import ClimaCore.Operators: half, PlusHalf
 
+
 @testset "PlusHalf" begin
     @test half + 0 == half
     @test half < half + 1
@@ -667,9 +668,9 @@ end
         adv_wc = divf2c.(fluxsinᶠ)
 
         Δh[k] = cs.face_local_geometry.J[1]
-        # Errors
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
 
+        # Error
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
     end
 
     # Check convergence rate
@@ -683,7 +684,63 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform) non-periodic mesh" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+
+    err_adv_wc = zeros(FT, length(n_elems_seq))
+
+    Δh = zeros(FT, length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            boundary_tags = (:bottom, :top),
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+
+        # Upwind3rdOrderBiasedProductC2F Center -> Face operator
+        # Unitary, constant advective velocity
+        w = Geometry.WVector.(ones(fs))
+        # c = sin(z), scalar field defined at the centers
+        Δz = FT(2pi / n)
+        c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
+        s = sin.(centers)
+
+        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+            bottom = Operators.FirstOrderOneSided(),
+            top = Operators.FirstOrderOneSided(),
+        )
+
+        divf2c = Operators.DivergenceF2C(
+            bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
+            top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
+        )
+
+        adv_wc = divf2c.(fluxᶠ.(w, c))
+
+        Δh[k] = cs.face_local_geometry.J[1]
+
+        # Error
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+    end
+
+    # Check convergence rate
+    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+    # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
+    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.2
+    @test conv_adv_wc[1] ≈ 0.5 atol = 0.2
+    @test conv_adv_wc[2] ≈ 0.5 atol = 0.1
+    @test conv_adv_wc[3] ≈ 0.5 atol = 0.1
+end
+
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (5, 6, 7, 8)
 
@@ -710,11 +767,16 @@ end
         # c = sin(z), scalar field defined at the centers
         c = sin.(centers)
 
-        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F()
-        fluxsinᶠ = fluxᶠ.(w, c)
+        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+            bottom = Operators.ThirdOrderOneSided(),
+            top = Operators.ThirdOrderOneSided(),
+        )
 
-        divf2c = Operators.DivergenceF2C()
-        adv_wc = divf2c.(fluxsinᶠ)
+        divf2c = Operators.DivergenceF2C(
+            bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
+            top = Operators.SetValue(Geometry.WVector(FT(0.0))),
+        )
+        adv_wc = divf2c.(fluxᶠ.(w, c))
 
         Δh[k] = cs.face_local_geometry.J[1]
         # Errors
@@ -724,13 +786,11 @@ end
 
     # Check convergence rate
     conv_adv_wc = convergence_rate(err_adv_wc, Δh)
-
     # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-4
-    @test conv_adv_wc[1] ≈ 3 atol = 0.1
-    @test conv_adv_wc[2] ≈ 3 atol = 0.1
-    @test conv_adv_wc[3] ≈ 3 atol = 0.1
-    @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
+    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-1
+    @test conv_adv_wc[1] ≈ 2.5 atol = 0.1
+    @test conv_adv_wc[2] ≈ 2.5 atol = 0.1
+    @test conv_adv_wc[3] ≈ 2.5 atol = 0.1
 end
 
 @testset "Biased interpolation" begin
