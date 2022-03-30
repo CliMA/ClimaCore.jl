@@ -17,7 +17,7 @@ space =
     zelem = 10,
     hspace = PeriodicRectangle(; xmax=domain_width, ymax=domain_width, xelem=8, yelem=8, npoly=4)
 )
-t_end = FT(60 * 60 * 24 * 1200)
+t_end = FT(60 * 60 * 24 * 5000)
 dt = FT(400)
 dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(60 * 60 * 24 * 10) # 0 means don't save to disk
