@@ -327,7 +327,6 @@ function gather(
     end
 end
 
-
 # ==================
 # Data1D DataLayout
 # ==================
@@ -839,6 +838,17 @@ end
     data[I[1], I[2], I[4]] = val
 end
 
+function gather(
+    ctx::ClimaComms.AbstractCommsContext,
+    data::VIJFH{S, Nij},
+) where {S, Nij}
+    gatherdata = ClimaComms.gather(ctx, parent(data))
+    if ClimaComms.iamroot(ctx)
+        VIJFH{S, Nij}(gatherdata)
+    else
+        nothing
+    end
+end
 # ======================
 # Data1DX DataLayout
 # ======================

@@ -107,7 +107,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
     # allocation because the cache is stored separately from Y, which means that
     # similar(Y, <:Dual) doesn't allocate an appropriate cache for computing Yₜ.
     if eltype(Y) <: Dual
-        ᶜK = similar(ᶜK)
+        ᶜK = similar(ᶜρ)
         ᶜp = similar(ᶜρ)
     end
 
@@ -154,9 +154,9 @@ end
 function remaining_tendency!(Yₜ, Y, p, t)
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
-    additional_tendency!(Yₜ, Y, p, t)
-    Spaces.weighted_dss!(Yₜ.c)
-    Spaces.weighted_dss!(Yₜ.f)
+    additional_tendency!(Yₜ, Y, p, t, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.c, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.f, comms_ctx)
     return Yₜ
 end
 
@@ -485,21 +485,23 @@ function Wfact!(W, Y, p, dtγ, t)
             ᶜ𝔼_name = :ρe_int
         end
         args = (implicit_tendency!, Y, p, t, i, j, h)
-        @assert column_matrix(∂ᶜρₜ∂ᶠ𝕄, i, j, h) ==
+        @assert matrix_column(∂ᶜρₜ∂ᶠ𝕄, axes(Y.f), i, j, h) ==
                 exact_column_jacobian_block(args..., (:c, :ρ), (:f, :w))
-        @assert column_matrix(∂ᶠ𝕄ₜ∂ᶜ𝔼, i, j, h) ≈
+        @assert matrix_column(∂ᶠ𝕄ₜ∂ᶜ𝔼, axes(Y.c), i, j, h) ≈
                 exact_column_jacobian_block(args..., (:f, :w), (:c, ᶜ𝔼_name))
-        ∂ᶜ𝔼ₜ∂ᶠ𝕄_approx = column_matrix(∂ᶜ𝔼ₜ∂ᶠ𝕄, i, j, h)
+        @assert matrix_column(∂ᶠ𝕄ₜ∂ᶠ𝕄, axes(Y.f), i, j, h) ≈
+                exact_column_jacobian_block(args..., (:f, :w), (:f, :w))
+        ∂ᶜ𝔼ₜ∂ᶠ𝕄_approx = matrix_column(∂ᶜ𝔼ₜ∂ᶠ𝕄, axes(Y.f), i, j, h)
         ∂ᶜ𝔼ₜ∂ᶠ𝕄_exact =
             exact_column_jacobian_block(args..., (:c, ᶜ𝔼_name), (:f, :w))
-        if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
+        if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
             @assert ∂ᶜ𝔼ₜ∂ᶠ𝕄_approx ≈ ∂ᶜ𝔼ₜ∂ᶠ𝕄_exact
         else
             err = norm(∂ᶜ𝔼ₜ∂ᶠ𝕄_approx .- ∂ᶜ𝔼ₜ∂ᶠ𝕄_exact) / norm(∂ᶜ𝔼ₜ∂ᶠ𝕄_exact)
             @assert err < 1e-6
             # Note: the highest value seen so far is ~3e-7 (only applies to ρe)
         end
-        ∂ᶠ𝕄ₜ∂ᶜρ_approx = column_matrix(∂ᶠ𝕄ₜ∂ᶜρ, i, j, h)
+        ∂ᶠ𝕄ₜ∂ᶜρ_approx = matrix_column(∂ᶠ𝕄ₜ∂ᶜρ, axes(Y.c), i, j, h)
         ∂ᶠ𝕄ₜ∂ᶜρ_exact = exact_column_jacobian_block(args..., (:f, :w), (:c, :ρ))
         if flags.∂ᶠ𝕄ₜ∂ᶜρ_mode == :exact
             @assert ∂ᶠ𝕄ₜ∂ᶜρ_approx ≈ ∂ᶠ𝕄ₜ∂ᶜρ_exact

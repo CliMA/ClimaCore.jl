@@ -12,7 +12,7 @@ mesh in the horizontal domain.
 
 # Interfaces
 
-- [`nelems'](@ref)
+- [`nelems`](@ref)
 - [`nlocalelems`](@ref)
 - [`nneighbors`](@ref)
 - [`nsendelems`](@ref)

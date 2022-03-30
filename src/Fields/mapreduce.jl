@@ -76,7 +76,7 @@ functions for which the p-th power of the absolute value is Lebesgue integrable,
 ```math
 \\| v \\|_p = \\left( \\int_\\Omega |v|^p d \\Omega \\right)^{1/p}
 ```
-where ``|v|`` is defined to be the absolute value if ``v` is a scalar-valued Field, or the 2-norm
+where ``|v|`` is defined to be the absolute value if ``v`` is a scalar-valued Field, or the 2-norm
 if it is a vector-valued Field or composite Field (see [LinearAlgebra.norm](https://docs.julialang.org/en/v1/stdlib/LinearAlgebra/#LinearAlgebra.norm)).
 Similar to `sum` and `mean`, in an `AbstractSpectralElementSpace`, this is computed by
 summation of the field values multiplied by the Jacobian determinants and quadrature weights.

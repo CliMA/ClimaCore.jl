@@ -393,6 +393,7 @@ end
 
 function _unfolded_pannel_matrix(field, interpolate)
     space = axes(field)
+    FT = Spaces.undertype(space)
     topology = Spaces.topology(space)
     mesh = topology.mesh
     nelem = Meshes.nelements(mesh)
@@ -400,7 +401,7 @@ function _unfolded_pannel_matrix(field, interpolate)
 
     quad_from = Spaces.quadrature_style(space)
     quad_to = Spaces.Quadratures.Uniform{interpolate}()
-    Imat = Spaces.Quadratures.interpolation_matrix(Float64, quad_to, quad_from)
+    Imat = Spaces.Quadratures.interpolation_matrix(FT, quad_to, quad_from)
 
     dof = interpolate
 
@@ -415,8 +416,7 @@ function _unfolded_pannel_matrix(field, interpolate)
     # TODO: inefficient memory wise, but good enough for now
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
-    interpolated_data =
-        DataLayouts.IJFH{Float64, interpolate}(Array{Float64}, nelem)
+    interpolated_data = DataLayouts.IJFH{FT, interpolate}(Array{FT}, nelem)
     field_data = Fields.field_values(field)
 
     Operators.tensor_product!(interpolated_data, field_data, Imat)

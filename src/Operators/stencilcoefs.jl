@@ -3,8 +3,8 @@
 # The bandwidths are stored as type parameters to avoid allocating unnecessary
 # memory and to ensure that all the StencilCoefs in a Field have identical
 # bandwidths.
-# By convention, coefficients outside the matrix represented by a Field of
-# StencilCoefs should be set to NaN (or, rather, nan(T) for coefficient type T).
+# For simplicity, coefficients outside the matrix represented by a Field of
+# StencilCoefs can be set to 0 (or, rather, zero(T) for coefficient type T).
 struct StencilCoefs{lbw, ubw, C <: Tuple}
     coefs::C
 end
@@ -101,15 +101,3 @@ for op in (:+, :-, :*, :/, :÷, :\, :^, :%)
         ($op)(a, b::StencilCoefs) = map(c -> ($op)(a, c), b)
     end
 end
-
-##
-## Utilities
-##
-
-# Computes the equivalent of NaN for the type T. Similar to zero(T).
-nan(::T) where {T} = nan(T)
-nan(::Type{T}) where {T <: Number} = T(NaN)
-nan(::Type{T}) where {S, T′, N, L, T <: SArray{S, T′, N, L}} =
-    T(ntuple(_ -> nan(T′), Val(L)))
-nan(::Type{T}) where {T′, N, A, S, T <: Geometry.AxisTensor{T′, N, A, S}} =
-    T(axes(T), nan(S))
