@@ -638,6 +638,7 @@ steps:
     artifact_paths:
       - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/*"
     env:
+      TEST_NAME: "sphere/baroclinic_wave_rhoe"
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
       config: cpu
@@ -757,18 +758,18 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-#  - label: ":computer: inertial gravity wave"
-#    key: "cpu_inertial_gravity_wave"
-#    command:
-#      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
-#    artifact_paths:
-#      - "examples/hybrid/plane/output/inertial_gravity_wave/*"
-#    env:
-#      TEST_NAME: "plane/inertial_gravity_wave"
-#    agents:
-#      config: cpu
-#      queue: central
-#      slurm_ntasks: 1
+  - label: ":computer: inertial gravity wave"
+    key: "cpu_inertial_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/inertial_gravity_wave/*"
+    env:
+      TEST_NAME: "plane/inertial_gravity_wave"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":rocket::computer: Allocations analysis"
     key: "cpu_allocations"

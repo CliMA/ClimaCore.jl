@@ -19,7 +19,7 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     (; ᶜp, ᶜχ, ᶜχuₕ) = p # assume that ᶜp has been updated
-    (; κ₄, divergence_damping_factor, use_tempest_mode) = p
+    (; comms_ctx, κ₄, divergence_damping_factor, use_tempest_mode) = p
     point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
 
     if use_tempest_mode

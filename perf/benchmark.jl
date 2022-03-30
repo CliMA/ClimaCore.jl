@@ -8,6 +8,7 @@ ENV["CI_PERF_SKIP_RUN"] = true # we only need haskey(ENV, "CI_PERF_SKIP_RUN") ==
 import ClimaCore
 
 filename = joinpath(EXAMPLE_DIR, "hybrid", "driver.jl")
+ENV["TEST_NAME"] = "sphere/baroclinic_wave_rhoe"
 
 try
     include(filename)

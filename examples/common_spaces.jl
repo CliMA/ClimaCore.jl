@@ -1,87 +1,81 @@
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces
 
-abstract type Space{FT} end
-
-Base.@kwdef struct PeriodicLine{FT} <: Space{FT}
-    xmax::FT
-    xelem::Int
-    npoly::Int
-end
-
-Base.@kwdef struct PeriodicRectangle{FT} <: Space{FT}
-    xmax::FT
-    ymax::FT
-    xelem::Int
-    yelem::Int
-    npoly::Int
-end
-
-Base.@kwdef struct CubedSphere{FT} <: Space{FT}
-    radius::FT
-    helem::Int # number of elements along side of each panel (6 panels in total)
-    npoly::Int
-end
-
-Base.@kwdef struct ExtrudedSpace{FT, S <: Space{FT}} <: Space{FT}
-    zmax::FT
-    zelem::Int
-    hspace::S
-end
-
-function make_space((; xmax, xelem, npoly)::PeriodicLine)
+function periodic_line_mesh(; x_max, x_elem)
     domain = Domains.IntervalDomain(
-        Geometry.XPoint(zero(xmax)),
-        Geometry.XPoint(xmax);
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
         periodic = true,
     )
-    mesh = Meshes.IntervalMesh(domain; nelems = xelem)
-    topology = Topologies.IntervalTopology(mesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    return Spaces.SpectralElementSpace1D(topology, quad)
+    return Meshes.IntervalMesh(domain; nelems = x_elem)
 end
 
-function make_space((; xmax, ymax, xelem, yelem, npoly)::PeriodicRectangle)
-    xdomain = Domains.IntervalDomain(
-        Geometry.XPoint(zero(xmax)),
-        Geometry.XPoint(xmax);
+function periodic_rectangle_mesh(; x_max, y_max, x_elem, y_elem)
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
         periodic = true,
     )
-    ydomain = Domains.IntervalDomain(
-        Geometry.YPoint(zero(ymax)),
-        Geometry.YPoint(ymax);
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(zero(y_max)),
+        Geometry.YPoint(y_max);
         periodic = true,
     )
-    domain = Domains.RectangleDomain(xdomain, ydomain)
-    mesh = Meshes.RectilinearMesh(domain, xelem, yelem)
-    topology = Topologies.Topology2D(mesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    return Spaces.SpectralElementSpace2D(topology, quad)
+    domain = Domains.RectangleDomain(x_domain, y_domain)
+    return Meshes.RectilinearMesh(domain, x_elem, y_elem)
 end
 
-function make_space((; radius, helem, npoly)::CubedSphere)
+# h_elem is the number of elements per side of every panel (6 panels in total)
+function cubed_sphere_mesh(; radius, h_elem)
     domain = Domains.SphereDomain(radius)
-    mesh = Meshes.EquiangularCubedSphere(domain, helem)
-    topology = Topologies.Topology2D(mesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    return Spaces.SpectralElementSpace2D(topology, quad)
+    return Meshes.EquiangularCubedSphere(domain, h_elem)
 end
 
-function make_space((; zmax, zelem, hspace)::ExtrudedSpace)
-    vdomain = Domains.IntervalDomain(
-        Geometry.ZPoint(zero(zmax)),
-        Geometry.ZPoint(zmax);
+function make_horizontal_space(mesh, npoly)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    if mesh isa Meshes.AbstractMesh1D
+        topology = Topologies.IntervalTopology(mesh)
+        space = Spaces.SpectralElementSpace1D(topology, quad)
+    elseif mesh isa Meshes.AbstractMesh2D
+        topology = Topologies.Topology2D(mesh)
+        space = Spaces.SpectralElementSpace2D(topology, quad)
+    end
+    return space
+end
+
+function make_distributed_horizontal_space(
+    mesh,
+    npoly,
+    Context,
+    nlevels,
+    max_field_element_size,
+)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    if mesh isa Meshes.AbstractMesh1D
+        error("Distributed mode does not work with 1D horizontal spaces.")
+    elseif mesh isa Meshes.AbstractMesh2D
+        topology = Topologies.DistributedTopology2D(mesh, Context)
+        comms_ctx = Spaces.setup_comms(
+            Context,
+            topology,
+            quad,
+            nlevels,
+            max_field_element_size,
+        )
+        space = Spaces.SpectralElementSpace2D(topology, quad, comms_ctx)
+    end
+    return space, comms_ctx
+end
+
+function make_hybrid_spaces(h_space, z_max, z_elem)
+    z_domain = Domains.IntervalDomain(
+        Geometry.ZPoint(zero(z_max)),
+        Geometry.ZPoint(z_max);
         boundary_tags = (:bottom, :top),
     )
-    vmesh = Meshes.IntervalMesh(vdomain, nelems = zelem)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
-    return Spaces.ExtrudedFiniteDifferenceSpace(make_space(hspace), vspace)
-end
-
-function local_geometry_fields(space::ExtrudedSpace)
-    center_space = make_space(space)
+    z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
+    z_topology = Topologies.IntervalTopology(z_mesh)
+    z_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
+    center_space = Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_space)
     face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
-    return (
-        Fields.local_geometry_field(center_space),
-        Fields.local_geometry_field(face_space),
-    )
+    return center_space, face_space
 end
