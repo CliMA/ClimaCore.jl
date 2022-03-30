@@ -120,6 +120,8 @@ Topologies.Topology2D
 
 ### Interfaces
 ```@docs
+Topologies.domain
+Topologies.mesh
 Topologies.nlocalelems
 Topologies.vertex_coordinates
 Topologies.opposing_face

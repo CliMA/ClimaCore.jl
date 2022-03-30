@@ -24,6 +24,7 @@ include("Topologies/distributed.jl")
 include("Spaces/quadrature.jl")
 include("Spaces/spaces.jl")
 include("Spaces/sphere.jl")
+include("Spaces/terrain_warp.jl")
 include("Spaces/distributed.jl")
 
 include("Fields/field.jl")

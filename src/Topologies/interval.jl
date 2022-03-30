@@ -1,10 +1,11 @@
-# at the moment, this only serves the purpose of putting the boundary tags into type space.
+abstract type AbstractIntervalTopology <: AbstractTopology end
+
 """
     IntervalTopology(mesh::IntervalMesh)
 
 A sequential topology on an [`Meshes.IntervalMesh`](@ref).
 """
-struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractTopology
+struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractIntervalTopology
     mesh::M
     boundaries::B
 end
@@ -20,22 +21,39 @@ function IntervalTopology(mesh::Meshes.IntervalMesh)
     IntervalTopology(mesh, boundaries)
 end
 
-isperiodic(topology::IntervalTopology) =
-    Domains.isperiodic(topology.mesh.domain)
+isperiodic(topology::AbstractIntervalTopology) =
+    Domains.isperiodic(Topologies.domain(topology))
 
-function Base.show(io::IO, topology::IntervalTopology)
-    print(io, "IntervalTopology on ", topology.mesh)
+function Base.show(io::IO, topology::AbstractIntervalTopology)
+    print(io, "IntervalTopology on ", Topologies.mesh(topology))
 end
 
+function mesh(topology::AbstractIntervalTopology)
+    getfield(topology, :mesh)
+end
 
-domain(topology::IntervalTopology) = topology.mesh.domain
-nlocalelems(topology::IntervalTopology) = length(topology.mesh.faces) - 1
+function boundaries(topology::AbstractIntervalTopology)
+    getfield(topology, :boundaries)
+end
 
-vertex_coordinates(topology::IntervalTopology, elem) =
-    (topology.mesh.faces[elem], topology.mesh.faces[elem + 1])
+function domain(topology::AbstractIntervalTopology)
+    mesh = Topologies.mesh(topology)
+    Meshes.domain(mesh)
+end
 
-function opposing_face(topology::IntervalTopology, elem, face)
-    n = length(topology.mesh.faces) - 1
+function nlocalelems(topology::AbstractIntervalTopology)
+    mesh = Topologies.mesh(topology)
+    length(mesh.faces) - 1
+end
+
+function vertex_coordinates(topology::AbstractIntervalTopology, elem)
+    mesh = Topologies.mesh(topology)
+    (mesh.faces[elem], mesh.faces[elem + 1])
+end
+
+function opposing_face(topology::AbstractIntervalTopology, elem, face)
+    mesh = Topologies.mesh(topology)
+    n = length(mesh.faces) - 1
     if face == 1
         if elem == 1
             if isperiodic(topology)
@@ -60,19 +78,25 @@ function opposing_face(topology::IntervalTopology, elem, face)
     return (opelem, opface, false)
 end
 
-function Base.length(fiter::InteriorFaceIterator{<:IntervalTopology})
+function Base.length(fiter::InteriorFaceIterator{<:AbstractIntervalTopology})
     topology = fiter.topology
-    if isempty(topology.boundaries)
-        length(topology.mesh.faces) - 1
+    mesh = Topologies.mesh(topology)
+    periodic = isempty(topology.boundaries)
+    if periodic
+        length(mesh.faces) - 1
     else
-        length(topology.mesh.faces) - 2
+        length(mesh.faces) - 2
     end
 end
 
-function Base.iterate(fiter::InteriorFaceIterator{<:IntervalTopology}, i = 1)
+function Base.iterate(
+    fiter::InteriorFaceIterator{<:AbstractIntervalTopology},
+    i = 1,
+)
     topology = fiter.topology
-    periodic = isempty(topology.boundaries)
-    n = length(topology.mesh.faces) - 1
+    mesh = Topologies.mesh(topology)
+    periodic = isempty(Topologies.boundaries(topology))
+    n = length(mesh.faces) - 1
     if i < n
         return (i + 1, 1, i, 2, false), i + 1
     elseif i == n && periodic
@@ -82,7 +106,7 @@ function Base.iterate(fiter::InteriorFaceIterator{<:IntervalTopology}, i = 1)
     end
 end
 
-function neighboring_elements(topology::IntervalTopology, elem)
+function neighboring_elements(topology::AbstractIntervalTopology, elem)
     (opelem_1, _, _) = opposing_face(topology, elem, 1)
     (opelem_2, _, _) = opposing_face(topology, elem, 2)
     return (opelem_1, opelem_2)
