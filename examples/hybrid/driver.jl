@@ -146,6 +146,8 @@ if ode_algorithm <: Union{
     end
 else
     jac_kwargs = alg_kwargs = (;)
+    alg_kwargs = (; linsolve = linsolve!)
+
 end
 
 if haskey(ENV, "OUTPUT_DIR")

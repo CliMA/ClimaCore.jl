@@ -159,6 +159,14 @@ path = "../lib/ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 version = "0.6.0"
 
+[[deps.ClimaTimeSteppers]]
+deps = ["CUDA", "DiffEqBase", "KernelAbstractions", "LinearAlgebra", "MPI", "SciMLBase", "StaticArrays"]
+git-tree-sha1 = "2812417049572623a02d5144b8685a0cc45d07f6"
+repo-rev = "main"
+repo-url = "https://github.com/CliMA/ClimaTimeSteppers.jl"
+uuid = "595c0a79-7f3d-439a-bc5a-b232dc3bde79"
+version = "0.1.0"
+
 [[deps.CloseOpenIntervals]]
 deps = ["ArrayInterface", "Static"]
 git-tree-sha1 = "f576084239e6bdf801007c80e27e2cc2cd963fe0"
