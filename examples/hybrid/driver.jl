@@ -58,6 +58,7 @@ const FT = get(ENV, "FLOAT_TYPE", "Float64") == "Float32" ? Float32 : Float64
 
 include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
+include("../custom_ode_algorithms.jl")
 include("../common_spaces.jl")
 
 if haskey(ENV, "TEST_NAME")
