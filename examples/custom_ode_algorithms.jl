@@ -33,16 +33,17 @@ function oswaldsBagOfTableaus(algname)
     if algname == :SSPKnoth
         Alpha = [0 0 0; 1 0 0; 1/4 1/4 0]
         Gamma = [1 0 0; 0 1 0; -3/4 -3/4 1]
-        B = [1/6, 1/6, 2/3]
+        B = [1 / 6; 1 / 6; 2 / 3]
     elseif algname == :RK3_H
         Alpha = [0 0 0; 1/3 0 0; 0 1/2 0]
         γ = (3 + sqrt(3)) / 6
-        Gamma = [γ 0 0; (1 - 12γ^2)/(-9 + 36γ) γ 0; (-1/4 + 2γ) (1/4 - 3γ) γ]
-        B = [0, 0, 1]
+        Gamma =
+            [γ 0 0; (1 - 12γ^2)/(-9 + 36γ) γ 0; (-(1 / 4)+2γ) ((1 / 4)-3γ) γ]
+        B = [0; 0; 1]
     elseif algname == :RODAS
         Alpha = [0 0 0 0; 0 0 0 0; 1 0 0 0; 3/4 -1/4 1/2 0]
         Gamma = [1/2 0 0 0; 1 1/2 0 0; -1/4 -1/4 1/2 0; 1/12 1/12 -2/3 1/2]
-        B = [5/6, -1/6, -1/6, 1/2]
+        B = [5 / 6; -1 / 6; -1 / 6; 1 / 2]
     elseif algname == :TSROSWSANDU3
         Alpha = [
             0 0 0
@@ -62,17 +63,17 @@ function oswaldsBagOfTableaus(algname)
     elseif algname == :TROSWLASSP3P4S2C
         Alpha = [0 0 0 0; 1/2 0 0 0; 1/2 1/2 0 0; 1/6 1/6 1/6 0]
         Gamma = [1/2 0 0 0; 0 3/4 0 0; -2/3 -23/9 2/9 0; 1/18 65/108 -2/27 0]
-        B = [1/6, 1/6, 1/6, 1/2]
+        B = [1 / 6; 1 / 6; 1 / 6; 1 / 2]
     elseif algname == :ROSAMF
         Alpha = [0 0; 2/3 0]
         γ = (2 + sqrt(3)) / 6
-        Gamma = [γ 0; (-4/3 * γ) γ]
-        B = [1/4, 3/4]
+        Gamma = [γ 0; -(4 / 3)γ γ]
+        B = [1 / 4; 3 / 4]
     elseif algname == :ROS2
         Alpha = [0 0; 2/3 0]
-        γ = (1/2 + sqrt(3)) / 6
-        Gamma = [γ 0; (-4/3 * γ) γ]
-        B = [1/4, 3/4]
+        γ = (1 / 2 + sqrt(3)) / 6
+        Gamma = [γ 0; -(4 / 3)γ γ]
+        B = [1 / 4; 3 / 4]
     end
     Bhat = B # Bhat does not matter, since the algorithm is not adaptive
     a, C, b, btilde, d, c = _transformtab(Alpha, Gamma, B, Bhat) # ignore btilde
@@ -105,7 +106,7 @@ macro make_ode_algorithm(algnameexpr)
     performstepexpr = gen_perform_step(tabmask, cachename, n_normalstep)
     expr = quote
         struct $algname{CS, AD, F, FDT, ST} <:
-                OrdinaryDiffEqRosenbrockAlgorithm{CS, AD, FDT, ST}
+               OrdinaryDiffEqRosenbrockAlgorithm{CS, AD, FDT, ST}
             linsolve::F
         end
         $algname(;
@@ -120,7 +121,9 @@ macro make_ode_algorithm(algnameexpr)
             typeof(linsolve),
             diff_type,
             _unwrap_val(standardtag),
-        }(linsolve)
+        }(
+            linsolve,
+        )
         $tabstructexpr
         $tabexpr
         $constcacheexpr
