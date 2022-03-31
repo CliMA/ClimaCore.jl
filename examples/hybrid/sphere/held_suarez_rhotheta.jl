@@ -16,14 +16,6 @@ dt_save_to_sol = FT(60 * 60 * 24)
 dt_save_to_disk = FT(0) # 0 means don't save to disk
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
 jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
-additional_callbacks = (
-    PeriodicCallback(
-        int -> map(f -> Spaces.weighted_dss!(f), Fields._values(int.u)),
-        dt;
-        initial_affect = true,
-    ),
-) # e.g., printing diagnostic information
-
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
