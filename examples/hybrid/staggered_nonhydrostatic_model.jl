@@ -62,12 +62,20 @@ pressure_ρθ(ρθ) = p_0 * (ρθ * R_d / p_0)^γ
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 pressure_ρe_int(ρe_int, ρ) = R_d * (ρe_int / cv_d + ρ * T_tri)
 
-get_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx, dt) = merge(
-    default_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx),
+get_cache(
+    ᶜlocal_geometry,
+    ᶠlocal_geometry,
+    additional_cache,
+    additional_tendency!,
+    comms_ctx,
+    dt,
+) = merge(
+    default_cache(ᶜlocal_geometry, ᶠlocal_geometry),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
+    (; additional_tendency!, comms_ctx),
 )
 
-function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx)
+function default_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜcoord = ᶜlocal_geometry.coordinates
     if eltype(ᶜcoord) <: Geometry.LatLongZPoint
         ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
@@ -89,11 +97,8 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx)
             ᶜlocal_geometry,
             Operators.StencilCoefs{-half, half, NTuple{2, FT}},
         ),
-        comms_ctx,
     )
 end
-
-additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
@@ -150,11 +155,12 @@ function implicit_tendency!(Yₜ, Y, p, t)
 end
 
 function remaining_tendency!(Yₜ, Y, p, t)
+    (; additional_tendency!, comms_ctx) = p
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
     additional_tendency!(Yₜ, Y, p, t)
-    Spaces.weighted_dss!(Yₜ.c, p.comms_ctx)
-    Spaces.weighted_dss!(Yₜ.f, p.comms_ctx)
+    Spaces.weighted_dss!(Yₜ.c, comms_ctx)
+    Spaces.weighted_dss!(Yₜ.f, comms_ctx)
     return Yₜ
 end
 
@@ -230,8 +236,6 @@ function default_remaining_tendency!(Yₜ, Y, p, t)
 
     @. Yₜ.f.w -= ᶠω¹² × ᶠu¹²
 end
-
-additional_tendency!(Yₜ, Y, p, t) = nothing
 
 # Allow one() to be called on vectors.
 Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
@@ -454,7 +458,7 @@ function Wfact!(W, Y, p, dtγ, t)
     #     ) * ∂(ᶜK)/∂(ᶠw_dataₜ)
     # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜp)) = -1 / ᶠinterp(ᶜρ)
     # ∂(ᶠgradᵥ(ᶜp))/∂(ᶜK) =
-    #     ᶜ𝔼_name == :ρe ? ᶠgradᵥ_stencil(-ᶜρ * R_d / cv_d) : 0
+    #     𝔼_name == :ρe ? ᶠgradᵥ_stencil(-ᶜρ * R_d / cv_d) : 0
     # ∂(ᶠwₜ)/∂(ᶠgradᵥ(ᶜK + ᶜΦ)) = -1
     # ∂(ᶠgradᵥ(ᶜK + ᶜΦ))/∂(ᶜK) = ᶠgradᵥ_stencil(1)
     # ∂(ᶜK)/∂(ᶠw_data) =
@@ -476,22 +480,22 @@ function Wfact!(W, Y, p, dtγ, t)
         # Checking every column takes too long, so just check one.
         i, j, h = 1, 1, 1
         if :ρθ in propertynames(Y.c)
-            ᶜ𝔼_name = :ρθ
+            𝔼_name = :ρθ
         elseif :ρe in propertynames(Y.c)
-            ᶜ𝔼_name = :ρe
+            𝔼_name = :ρe
         elseif :ρe_int in propertynames(Y.c)
-            ᶜ𝔼_name = :ρe_int
+            𝔼_name = :ρe_int
         end
         args = (implicit_tendency!, Y, p, t, i, j, h)
         @assert matrix_column(∂ᶜρₜ∂ᶠ𝕄, axes(Y.f), i, j, h) ==
                 exact_column_jacobian_block(args..., (:c, :ρ), (:f, :w))
         @assert matrix_column(∂ᶠ𝕄ₜ∂ᶜ𝔼, axes(Y.c), i, j, h) ≈
-                exact_column_jacobian_block(args..., (:f, :w), (:c, ᶜ𝔼_name))
+                exact_column_jacobian_block(args..., (:f, :w), (:c, 𝔼_name))
         @assert matrix_column(∂ᶠ𝕄ₜ∂ᶠ𝕄, axes(Y.f), i, j, h) ≈
                 exact_column_jacobian_block(args..., (:f, :w), (:f, :w))
         ∂ᶜ𝔼ₜ∂ᶠ𝕄_approx = matrix_column(∂ᶜ𝔼ₜ∂ᶠ𝕄, axes(Y.f), i, j, h)
         ∂ᶜ𝔼ₜ∂ᶠ𝕄_exact =
-            exact_column_jacobian_block(args..., (:c, ᶜ𝔼_name), (:f, :w))
+            exact_column_jacobian_block(args..., (:c, 𝔼_name), (:f, :w))
         if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
             @assert ∂ᶜ𝔼ₜ∂ᶠ𝕄_approx ≈ ∂ᶜ𝔼ₜ∂ᶠ𝕄_exact
         else

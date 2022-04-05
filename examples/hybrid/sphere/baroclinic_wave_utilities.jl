@@ -1,5 +1,4 @@
 # Constants required by "staggered_nonhydrostatic_model.jl"
-# const FT = ? # specified in each test file
 const p_0 = FT(1.0e5)
 const R_d = FT(287.0)
 const κ = FT(2 / 7)
@@ -79,36 +78,45 @@ cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
     cosd(ϕ_c) *
     sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
 
-function center_initial_condition(
-    local_geometry,
-    ᶜ𝔼_name;
-    is_balanced_flow = false,
-)
-    (; lat, long, z) = local_geometry.coordinates
-    ρ = pres(lat, z) / R_d / temp(lat, z)
-    u₀ = u(lat, z)
-    v₀ = v(lat, z)
-    if !is_balanced_flow
-        u₀ += δu(long, lat, z)
-        v₀ += δv(long, lat, z)
+function make_center_initial_condition(𝔼_name, is_balanced_flow = false)
+    uₕ_local_balanced(lat, long, z) = (u(lat, z), v(lat, z))
+    uₕ_local_perturbed(lat, long, z) =
+        (u(lat, z) + δu(long, lat, z), v(lat, z) + δv(long, lat, z))
+    uₕ_local_func = is_balanced_flow ? uₕ_local_balanced : uₕ_local_perturbed
+
+    ρθ_kwarg(lat, z, ρ, uₕ_local) = (; ρθ = ρ * θ(lat, z))
+    ρe_kwarg(lat, z, ρ, uₕ_local) = (;
+        ρe = ρ * (
+            cv_d * (temp(lat, z) - T_tri) + norm_sqr(uₕ_local) / 2 + grav * z
+        ),
+    )
+    ρe_int_kwarg(lat, z, ρ, uₕ_local) =
+        (; ρe_int = ρ * cv_d * (temp(lat, z) - T_tri))
+    if 𝔼_name == :ρθ
+        𝔼_kwarg_func = ρθ_kwarg
+    elseif 𝔼_name == :ρe
+        𝔼_kwarg_func = ρe_kwarg
+    elseif 𝔼_name == :ρe_int
+        𝔼_kwarg_func = ρe_int_kwarg
+    else
+        error("Unrecognized energy variable name :$𝔼_name")
     end
-    uₕ_local = Geometry.UVVector(u₀, v₀)
-    uₕ = Geometry.Covariant12Vector(uₕ_local, local_geometry)
-    if ᶜ𝔼_name === Val(:ρθ)
-        ρθ = ρ * θ(lat, z)
-        return (; ρ, ρθ, uₕ)
-    elseif ᶜ𝔼_name === Val(:ρe)
-        ρe =
-            ρ *
-            (cv_d * (temp(lat, z) - T_tri) + norm_sqr(uₕ_local) / 2 + grav * z)
-        return (; ρ, ρe, uₕ)
-    elseif ᶜ𝔼_name === Val(:ρe_int)
-        ρe_int = ρ * cv_d * (temp(lat, z) - T_tri)
-        return (; ρ, ρe_int, uₕ)
+
+    function center_initial_condition(local_geometry)
+        (; lat, long, z) = local_geometry.coordinates
+        ρ = pres(lat, z) / R_d / temp(lat, z)
+        uₕ_local = Geometry.UVVector(uₕ_local_func(lat, long, z)...)
+        uₕ = Geometry.Covariant12Vector(uₕ_local, local_geometry)
+        return (; ρ, 𝔼_kwarg_func(lat, z, ρ, uₕ_local)..., uₕ)
     end
+    return center_initial_condition
 end
-face_initial_condition(local_geometry) =
-    (; w = Geometry.Covariant3Vector(FT(0)))
+
+function make_face_initial_condition()
+    face_initial_condition(local_geometry) =
+        (; w = Geometry.Covariant3Vector(FT(0)))
+    return face_initial_condition
+end
 
 ##
 ## Additional tendencies
@@ -162,4 +170,31 @@ function held_suarez_tendency!(Yₜ, Y, p, t)
     elseif :ρe_int in propertynames(Y.c)
         @. Yₜ.c.ρe_int -= ᶜΔρT * cv_d
     end
+end
+
+function make_additional_cache(
+    sponge = false,
+    held_suarez_forcing = false;
+    hyperdiffusion_kwargs...,
+)
+    additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
+        hyperdiffusion_cache(
+            ᶜlocal_geometry,
+            ᶠlocal_geometry;
+            hyperdiffusion_kwargs...,
+        ),
+        sponge ?
+        rayleigh_sponge_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) : (;),
+        held_suarez_forcing ? held_suarez_cache(ᶜlocal_geometry) : (;),
+    )
+    return additional_cache
+end
+
+function make_additional_tendency(sponge = false, held_suarez_forcing = false)
+    function additional_tendency!(Yₜ, Y, p, t)
+        hyperdiffusion_tendency!(Yₜ, Y, p, t)
+        sponge && rayleigh_sponge_tendency!(Yₜ, Y, p, t)
+        held_suarez_forcing && held_suarez_tendency!(Yₜ, Y, p, t)
+    end
+    return additional_tendency!
 end

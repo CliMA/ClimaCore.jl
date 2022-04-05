@@ -4,32 +4,27 @@ using ClimaCore.DataLayouts
 
 include("baroclinic_wave_utilities.jl")
 
-const sponge = false
+sponge = false
 
-# Variables required for driver.jl (modify as needed)
-horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = 4)
-npoly = 4
-z_max = FT(30e3)
-z_elem = 10
-t_end = FT(60 * 60)
-dt = FT(5)
-dt_save_to_sol = FT(50)
-dt_save_to_disk = FT(0) # 0 means don't save to disk
-ode_algorithm = OrdinaryDiffEq.SSPRK33
+setups = [
+    HybridDriverSetup(;
+        additional_cache = make_additional_cache(sponge; κ₄ = FT(2e17)),
+        additional_tendency! = make_additional_tendency(sponge),
+        center_initial_condition = make_center_initial_condition(:ρe, true),
+        face_initial_condition = make_face_initial_condition(),
+        horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = 4),
+        npoly = 4,
+        z_max = FT(30e3),
+        z_elem = 10,
+        t_end = FT(60 * 60),
+        dt = FT(5),
+        dt_save_to_sol = FT(50),
+        ode_algorithm = SSPRK33,
+    ),
+]
 
-additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
-    hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
-    sponge ? rayleigh_sponge_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) : (;),
-)
-function additional_tendency!(Yₜ, Y, p, t)
-    hyperdiffusion_tendency!(Yₜ, Y, p, t)
-    sponge && rayleigh_sponge_tendency!(Yₜ, Y, p, t)
-end
-
-center_initial_condition(local_geometry) =
-    center_initial_condition(local_geometry, Val(:ρe); is_balanced_flow = true)
-
-function postprocessing(sol, output_dir)
+function postprocessing(sols, output_dir)
+    sol = sols[1]
     @info "L₂ norm of ρe at t = $(sol.t[1]): $(norm(sol.u[1].c.ρe))"
     @info "L₂ norm of ρe at t = $(sol.t[end]): $(norm(sol.u[end].c.ρe))"
 
