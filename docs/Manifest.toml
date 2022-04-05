@@ -179,25 +179,25 @@ version = "0.9.0"
 deps = ["ClimaCore", "Makie"]
 path = "../lib/ClimaCoreMakie"
 uuid = "908f55d8-4145-4867-9c14-5dad1a479e4d"
-version = "0.2.1"
+version = "0.2.2"
 
 [[deps.ClimaCorePlots]]
 deps = ["ClimaCore", "RecipesBase", "StaticArrays", "TriplotBase"]
 path = "../lib/ClimaCorePlots"
 uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
-version = "0.2.1"
+version = "0.2.2"
 
 [[deps.ClimaCoreTempestRemap]]
 deps = ["ClimaCore", "Dates", "LinearAlgebra", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]
 path = "../lib/ClimaCoreTempestRemap"
 uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
-version = "0.3.0"
+version = "0.3.1"
 
 [[deps.ClimaCoreVTK]]
 deps = ["ClimaCore", "WriteVTK"]
 path = "../lib/ClimaCoreVTK"
 uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
-version = "0.6.0"
+version = "0.7.0"
 
 [[deps.CloseOpenIntervals]]
 deps = ["ArrayInterface", "Static"]
