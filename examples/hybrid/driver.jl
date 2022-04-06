@@ -54,7 +54,7 @@ using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
-const FT = get(ENV, "FLOAT_TYPE", "Float64") == "Float32" ? Float32 : Float64
+const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
@@ -148,7 +148,8 @@ end
 if haskey(ENV, "OUTPUT_DIR")
     output_dir = ENV["OUTPUT_DIR"]
 else
-    output_dir = joinpath(@__DIR__, test_dir, "output", test_file_name)
+    output_dir =
+        joinpath(@__DIR__, test_dir, "output", test_file_name, string(FT))
 end
 mkpath(output_dir)
 
