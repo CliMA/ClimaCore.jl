@@ -54,7 +54,7 @@ using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
 
-const FT = get(ENV, "FLOAT_TYPE", "Float64") == "Float32" ? Float32 : Float64
+const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 
 include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
@@ -120,9 +120,6 @@ else
         c = center_initial_condition.(ᶜlocal_geometry),
         f = face_initial_condition.(ᶠlocal_geometry),
     )
-    # apply dss in case the initial conditions are discontinuous across elements
-    Spaces.weighted_dss!(Y.c, comms_ctx)
-    Spaces.weighted_dss!(Y.f, comms_ctx)
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, comms_ctx, dt)
 
@@ -153,12 +150,19 @@ end
 if haskey(ENV, "OUTPUT_DIR")
     output_dir = ENV["OUTPUT_DIR"]
 else
-    output_dir = joinpath(@__DIR__, test_dir, "output", test_file_name)
+    output_dir =
+        joinpath(@__DIR__, test_dir, "output", test_file_name, string(FT))
 end
 mkpath(output_dir)
 
-function make_save_to_disk(output_dir, test_file_name, is_distributed)
-    function save_to_disk(integrator)
+function make_dss_func(comms_ctx)
+    _dss!(x::Fields.Field) = Spaces.weighted_dss!(x, comms_ctx)
+    _dss!(::Any) = nothing
+    dss_func(Y, t, integrator) = foreach(_dss!, Fields._values(Y))
+    return dss_func
+end
+function make_save_to_disk_func(output_dir, test_file_name, is_distributed)
+    function save_to_disk_func(integrator)
         day = floor(Int, integrator.t / (60 * 60 * 24))
         @info "Saving prognostic variables to JLD2 file on day $day"
         suffix = is_distributed ? "_pid$pid.jld2" : ".jld2"
@@ -166,18 +170,25 @@ function make_save_to_disk(output_dir, test_file_name, is_distributed)
         jldsave(output_file; t = integrator.t, Y = integrator.u)
         return nothing
     end
-    return save_to_disk
+    return save_to_disk_func
 end
+
+dss_func = make_dss_func(comms_ctx)
+save_to_disk_func =
+    make_save_to_disk_func(output_dir, test_file_name, is_distributed)
+
+dss_callback = FunctionCallingCallback(dss_func, func_start = true)
 if dt_save_to_disk == 0
-    saving_callback = nothing
+    save_to_disk_callback = nothing
 else
-    saving_callback = PeriodicCallback(
-        make_save_to_disk(output_dir, test_file_name, is_distributed),
+    save_to_disk_callback = PeriodicCallback(
+        save_to_disk_func,
         dt_save_to_disk;
         initial_affect = true,
     )
 end
-callback = CallbackSet(saving_callback, additional_callbacks...)
+callback =
+    CallbackSet(dss_callback, save_to_disk_callback, additional_callbacks...)
 
 problem = SplitODEProblem(
     ODEFunction(

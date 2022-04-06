@@ -10,7 +10,6 @@ const ᶜ𝔼_name = :ρe
 const is_discrete_hydrostatic_balance = true # `false` causes large oscillations
 
 # Constants required by "staggered_nonhydrostatic_model.jl"
-const FT = Float64
 const p_0 = FT(1.0e5)
 const R_d = FT(287.0)
 const κ = FT(2 / 7)
