@@ -20,8 +20,6 @@ using OrdinaryDiffEq
 
 default_additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 default_additional_tendency!(Yₜ, Y, p, t) = nothing
-default_center_initial_condition(local_geometry) = (;)
-default_face_initial_condition(local_geometry) = (;)
 
 # TODO: Add parameter specification to HybridDriverSetup, and get default
 # parameter values using ClimaParameters.
@@ -31,17 +29,17 @@ Base.@kwdef struct HybridDriverSetup{AC, AT, CIC, FIC, HM, OA, JF, ACB, ASK}
     additional_tendency!::AT = default_additional_tendency!
 
     # Initial condition specification
-    center_initial_condition::CIC = default_center_initial_condition
-    face_initial_condition::FIC = default_face_initial_condition
-    horizontal_mesh::HM = nothing # no good default value
-    npoly::Int = 1
-    z_max::FT = FT(0)
-    z_elem::Int = 1
+    center_initial_condition::CIC # function from local_geometry to a NamedTuple
+    face_initial_condition::FIC # function from local_geometry to a NamedTuple
+    horizontal_mesh::HM
+    npoly::Int
+    z_max::FT
+    z_elem::Int
     restart_file_name::String = "" # empty string means don't use restart file
 
     # Timestepping specification
-    t_end::FT = FT(0)
-    dt::FT = FT(0)
+    t_end::FT
+    dt::FT
     dt_save_to_sol::FT = FT(0) # 0 means don't save to sol
     dt_save_to_disk::FT = FT(0) # 0 means don't save to disk
     ode_algorithm::OA = SSPRK33 # good general-purpose explicit ODE algorithm
@@ -130,183 +128,175 @@ set_zero_tgrad!(∂Y∂t, Y, p, t) = ∂Y∂t .= FT(0)
 
 # Using @goto and @label instead of a for loop removes the need for `global`
 # annotations on all variables useful for debugging. If any setup causes the
-# simulation to crash, all the variables defined below for that
+# simulation to crash while running in the REPL, all the variables defined below
+# for that setup will be immediately available.
 # TODO: Eliminate redundant operations (e.g., if multiple setups use the same
 # initial conditions, don't recompute the initial conditions every time).
 # TODO: Allow multiple setups to be run in parallel.
-indices = 1:length(setups)
 sols = similar(setups, SciMLBase.AbstractODESolution)
-begin
-    iterator = iterate(indices)
-    @label driver_loop
-    if !isnothing(iterator)
-        index, state = iterator
-        (;
-            additional_cache,
-            additional_tendency!,
-            center_initial_condition,
-            face_initial_condition,
-            horizontal_mesh,
-            npoly,
-            z_max,
-            z_elem,
-            restart_file_name,
-            t_end,
-            dt,
-            dt_save_to_sol,
-            dt_save_to_disk,
-            ode_algorithm,
-            jacobian_flags,
-            max_newton_iters,
-            additional_callbacks,
-            additional_solver_kwargs,
-        ) = setups[index]
-
-        restart_file_name = get(ENV, "RESTART_FILE", restart_file_name)
-        if restart_file_name == ""
-            t_start = FT(0)
-            if is_distributed
-                # TODO: When is_distributed is true, automatically compute the
-                # maximum number base type objects required to store an element
-                # from Y.c or Y.f (or, to be accurate, an element from any Field
-                # on which gather() or weighted_dss!() will get called). One
-                # option is to make a non-distributed space, extract the
-                # local_geometry type, and find the sizes of the output types of
-                # center_initial_condition() and face_initial_condition() for
-                # that local_geometry type. This is rather inefficient, though,
-                # so for now we will just hardcode the value of 4.
-                max_field_element_size = 4 # ρ = 1 FT, 𝔼 = 1 FT, uₕ = 2 FTs
-                h_space, comms_ctx = make_distributed_horizontal_space(
-                    horizontal_mesh,
-                    npoly,
-                    Context,
-                    z_elem + 1,
-                    max_field_element_size,
-                )
-            else
-                h_space = make_horizontal_space(horizontal_mesh, npoly)
-                comms_ctx = nothing
-            end
-            center_space, face_space =
-                make_hybrid_spaces(h_space, z_max, z_elem)
-            ᶜlocal_geometry = Fields.local_geometry_field(center_space)
-            ᶠlocal_geometry = Fields.local_geometry_field(face_space)
-            Y = Fields.FieldVector(
-                c = center_initial_condition.(ᶜlocal_geometry),
-                f = face_initial_condition.(ᶠlocal_geometry),
-            )
-        else
-            if is_distributed
-                restart_file_name =
-                    split(restart_file_name, ".jld2")[1] * "_pid$pid.jld2"
-            end
-            restart_data = jldopen(restart_file_name)
-            t_start = restart_data["t"]
-            Y = restart_data["Y"]
-            close(restart_data)
-            ᶜlocal_geometry = Fields.local_geometry_field(Y.c)
-            ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
-            if is_distributed
-                comms_ctx = Spaces.setup_comms(
-                    Context,
-                    axes(Y.c).horizontal_space.topology, # Y.f would also work
-                    Spaces.Quadratures.GLL{npoly + 1}(),
-                    Spaces.nlevels(axes(Y.f)),
-                    max(sizeof(eltype(Y.c)), sizeof(eltype(Y.f))) ÷
-                    sizeof(eltype(Y)),
-                )
-            else
-                comms_ctx = nothing
-            end
-        end
-        p = get_cache(
-            ᶜlocal_geometry,
-            ᶠlocal_geometry,
-            additional_cache,
-            additional_tendency!,
-            comms_ctx,
-            dt,
-        )
-
-        if ode_algorithm <: Union{
-            OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
-            OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
-        }
-            use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
-            W = SchurComplementW(
-                Y,
-                use_transform,
-                jacobian_flags,
-                test_implicit_solver,
-            )
-            jac_kwargs =
-                use_transform ? (; jac_prototype = W, Wfact_t = Wfact!) :
-                (; jac_prototype = W, Wfact = Wfact!)
-
-            alg_kwargs = (; linsolve = linsolve!)
-            if ode_algorithm <: Union{
-                OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
-                OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
-            }
-                alg_kwargs = (;
-                    alg_kwargs...,
-                    nlsolve = NLNewton(; max_iter = max_newton_iters),
-                )
-            end
-        else
-            jac_kwargs = alg_kwargs = (;)
-        end
-
-        dss_callback =
-            FunctionCallingCallback(make_dss_func(comms_ctx); func_start = true)
-        if dt_save_to_disk == 0
-            save_to_disk_callback = nothing
-        else
-            save_to_disk_callback = PeriodicCallback(
-                make_save_to_disk_func(
-                    output_dir,
-                    test_file_name,
-                    is_distributed,
-                ),
-                dt_save_to_disk;
-                initial_affect = true,
-            )
-        end
-        callback = CallbackSet(
-            dss_callback,
-            save_to_disk_callback,
-            additional_callbacks...,
-        )
-
-        ode_function = SplitFunction(
-            ODEFunction(
-                implicit_tendency!;
-                jac_kwargs...,
-                tgrad = set_zero_tgrad!,
-            ),
-            remaining_tendency!;
-        )
-        integrator = init(
-            SplitODEProblem(ode_function, Y, (t_start, t_end), p),
-            ode_algorithm(; alg_kwargs...);
-            saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
-            callback = callback,
-            dt = dt,
-            adaptive = false,
-            progress = isinteractive(), # show progress bar when running in REPL
-            progress_steps = 1,
-            additional_solver_kwargs...,
-        )
-
-        if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
-            throw(:exit_profile)
-        end
-
-        sols[index] = @timev solve!(integrator)
-
-        iterator = iterate(indices, state)
-        @goto driver_loop
+begin # begin/end is needed to allow @label and @goto in global namespace
+    setup_index = 1
+    @label driver_loop_start
+    if setup_index > length(setups)
+        @goto driver_loop_end
     end
+    (;
+        additional_cache,
+        additional_tendency!,
+        center_initial_condition,
+        face_initial_condition,
+        horizontal_mesh,
+        npoly,
+        z_max,
+        z_elem,
+        restart_file_name,
+        t_end,
+        dt,
+        dt_save_to_sol,
+        dt_save_to_disk,
+        ode_algorithm,
+        jacobian_flags,
+        max_newton_iters,
+        additional_callbacks,
+        additional_solver_kwargs,
+    ) = setups[setup_index]
+
+    restart_file_name = get(ENV, "RESTART_FILE", restart_file_name)
+    if restart_file_name == ""
+        t_start = FT(0)
+        if is_distributed
+            # TODO: When is_distributed is true, automatically compute the
+            # maximum number base type objects required to store an element from
+            # Y.c or Y.f (or, to be accurate, an element from any Field on which
+            # gather() or weighted_dss!() will get called). One option is to
+            # make a non-distributed space, extract the local_geometry type, and
+            # find the sizes of the output types of center_initial_condition()
+            # and face_initial_condition() for that local_geometry type. This is
+            # rather inefficient, though, so for now we will just hardcode the
+            # value of 4.
+            max_field_element_size = 4 # ρ = 1 FT, 𝔼 = 1 FT, uₕ = 2 FTs
+            h_space, comms_ctx = make_distributed_horizontal_space(
+                horizontal_mesh,
+                npoly,
+                Context,
+                z_elem + 1,
+                max_field_element_size,
+            )
+        else
+            h_space = make_horizontal_space(horizontal_mesh, npoly)
+            comms_ctx = nothing
+        end
+        center_space, face_space = make_hybrid_spaces(h_space, z_max, z_elem)
+        ᶜlocal_geometry = Fields.local_geometry_field(center_space)
+        ᶠlocal_geometry = Fields.local_geometry_field(face_space)
+        Y = Fields.FieldVector(
+            c = center_initial_condition.(ᶜlocal_geometry),
+            f = face_initial_condition.(ᶠlocal_geometry),
+        )
+    else
+        if is_distributed
+            restart_file_name =
+                split(restart_file_name, ".jld2")[1] * "_pid$pid.jld2"
+        end
+        restart_data = jldopen(restart_file_name)
+        t_start = restart_data["t"]
+        Y = restart_data["Y"]
+        close(restart_data)
+        ᶜlocal_geometry = Fields.local_geometry_field(Y.c)
+        ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
+        if is_distributed
+            comms_ctx = Spaces.setup_comms(
+                Context,
+                axes(Y.c).horizontal_space.topology, # Y.f would also work
+                Spaces.Quadratures.GLL{npoly + 1}(),
+                Spaces.nlevels(axes(Y.f)),
+                max(sizeof(eltype(Y.c)), sizeof(eltype(Y.f))) ÷
+                sizeof(eltype(Y)),
+            )
+        else
+            comms_ctx = nothing
+        end
+    end
+    p = get_cache(
+        ᶜlocal_geometry,
+        ᶠlocal_geometry,
+        additional_cache,
+        additional_tendency!,
+        comms_ctx,
+        dt,
+    )
+
+    if ode_algorithm <: Union{
+        OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
+        OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
+    }
+        use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+        W = SchurComplementW(
+            Y,
+            use_transform,
+            jacobian_flags,
+            test_implicit_solver,
+        )
+        jac_kwargs =
+            use_transform ? (; jac_prototype = W, Wfact_t = Wfact!) :
+            (; jac_prototype = W, Wfact = Wfact!)
+
+        alg_kwargs = (; linsolve = linsolve!)
+        if ode_algorithm <: Union{
+            OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
+            OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
+        }
+            alg_kwargs = (;
+                alg_kwargs...,
+                nlsolve = NLNewton(; max_iter = max_newton_iters),
+            )
+        end
+    else
+        jac_kwargs = alg_kwargs = (;)
+    end
+
+    dss_callback =
+        FunctionCallingCallback(make_dss_func(comms_ctx); func_start = true)
+    if dt_save_to_disk == 0
+        save_to_disk_callback = nothing
+    else
+        save_to_disk_callback = PeriodicCallback(
+            make_save_to_disk_func(output_dir, test_file_name, is_distributed),
+            dt_save_to_disk;
+            initial_affect = true,
+        )
+    end
+    callback = CallbackSet(
+        dss_callback,
+        save_to_disk_callback,
+        additional_callbacks...,
+    )
+
+    ode_function = SplitFunction(
+        ODEFunction(implicit_tendency!; jac_kwargs..., tgrad = set_zero_tgrad!),
+        remaining_tendency!;
+    )
+    integrator = init(
+        SplitODEProblem(ode_function, Y, (t_start, t_end), p),
+        ode_algorithm(; alg_kwargs...);
+        saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
+        callback = callback,
+        dt = dt,
+        adaptive = false,
+        progress = isinteractive(), # show progress bar when running in REPL
+        progress_steps = 1,
+        additional_solver_kwargs...,
+    )
+
+    if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
+        throw(:exit_profile)
+    end
+
+    sols[setup_index] = @timev solve!(integrator)
+
+    setup_index += 1
+    @goto driver_loop_start
+    @label driver_loop_end
 end
 
 if is_distributed

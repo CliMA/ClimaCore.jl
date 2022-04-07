@@ -19,6 +19,7 @@ setups = [
         t_end = FT(60 * 60),
         dt = FT(5),
         dt_save_to_sol = FT(50),
+        dt_save_to_disk = FT(0), # 0 means don't save to disk
         ode_algorithm = SSPRK33,
     ),
 ]

@@ -78,15 +78,15 @@ end
 # TODO: Use full set of Δxs once the solution can be computed more quickly.
 # Δxs = is_small_scale ? FT[1000, 500, 250, 125, 50, 25] :
 #     FT[20e3, 10e3, 5e3, 2.5e3]
-Δxs = is_small_scale ? FT[1000, 500] : FT[20e3, 10e3]
+Δxs = is_small_scale ? FT[1000,] : FT[20e3, 10e3]
 Δzs = is_small_scale ? Δxs ./ 2 : Δxs ./ 40
 setups = map(Δxs, Δzs) do Δx, Δz
     npoly = 1
     x_elem = Int(x_max / (Δx * npoly))
     t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
-    dt_for_first_Δx = is_small_scale ? FT(1.5) : FT(20) # this depends on npoly
-    animation_duration = FT(5)
-    fps = 2
+    dt_for_first_Δx = is_small_scale ? FT(1.5) : FT(30) # this depends on npoly
+    animation_duration = FT(5) # output a 5-second gif
+    fps = 2 # play the gif at 2 frames per second
     return HybridDriverSetup(;
         center_initial_condition = make_center_initial_condition(Δz),
         face_initial_condition = make_face_initial_condition(),
@@ -107,24 +107,31 @@ end
 
 function postprocessing(sols, output_dir)
     if 𝔼_name == :ρθ
+        press = Y -> @. pressure_ρθ(Y.c.ρθ)
         T′ = Y -> begin
             ᶜp = @. pressure_ρθ(Y.c.ρθ)
             @. Y.c.ρθ / Y.c.ρ * (ᶜp / p_0)^(R_d / cp_d) - T₀
         end
     elseif 𝔼_name == :ρe
+        press = Y -> begin
+            ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+            ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
+            @. pressure_ρe(Y.c.ρe, ᶜK, ᶜΦ, Y.c.ρ)
+        end
         T′ = Y -> begin
             ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
             ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
             @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
         end
     elseif 𝔼_name == :ρe_int
+        press = Y -> @. pressure_ρe_int(Y.c.ρe_int, Y.c.ρ)
         T′ = Y -> @. Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
     end
     u′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
     v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
     w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
 
-    ρfb_init_array = ρfb_init_coefs(1, 900, 60)
+    ρfb_init_array = ρfb_init_coefs(1, 600, 40)
 
     for index in 1:length(sols)
         Δx = Δxs[index]
@@ -133,28 +140,28 @@ function postprocessing(sols, output_dir)
         ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
         ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
         lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
-        Y_lin = similar(sol.u[1])
 
         p₀_discrete(z) = p_0 * ((1 - δ * Δz / 2) / (1 + δ * Δz / 2))^(z / Δz)
         p₀_func = is_discrete_hydrostatic_balance ? p₀_discrete : p₀
+        p′ = Y -> press(Y) .- p₀_func.(ᶜlocal_geometry.coordinates.z)
         ρ′ = Y -> @. Y.c.ρ - p₀_func(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
-        ρ′_lin = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
 
         println("Info for Δx = $Δx:\n")
         for iframe in (1, length(sol.t))
             t = sol.t[iframe]
             Y = sol.u[iframe]
-            linear_solution!(Y_lin, lin_cache, ρfb_init_array, t)
+            (; ᶜp′, ᶜρ′, ᶜu′, ᶜv′, ᶠw′, ᶜT′) =
+                linear_solution(lin_cache, ρfb_init_array, t)
             println("Error norms at time t = $t:")
-            for (name, f, f_lin) in (
-                (:ρ′, ρ′, ρ′_lin),
-                (:T′, T′, T′),
-                (:u′, u′, u′),
-                (:v′, v′, v′),
-                (:w′, w′, w′),
+            for (name, f, var_lin) in (
+                (:p′, p′, ᶜp′),
+                (:ρ′, ρ′, ᶜρ′),
+                (:u′, u′, ᶜu′),
+                (:v′, v′, ᶜv′),
+                (:w′, w′, ᶠw′),
+                (:T′, T′, ᶜT′),
             )
                 var = f(Y)
-                var_lin = f_lin(Y_lin)
                 strings = (
                     norm_strings(var, var_lin, 2)...,
                     norm_strings(var, var_lin, Inf)...,
@@ -210,19 +217,13 @@ end
 
 # TODO: Verify that this converges as the resolution increases.
 function ρfb_init_coefs(npoly, x_elem, z_elem)
-    # min_λx = 2 * x_max / (x_elem * npoly)
-    # min_λz = 2 * z_top / z_elem
-    # min_λx = 2 * π / max_kx = x_max / max_ikx
-    # min_λz = 2 * π / max_kz = 2 * z_top / max_ikz
-    # max_ikx = x_max / min_λx = x_elem * npoly / 2
-    # max_ikz = 2 * z_top / min_λz = z_elem
-    max_ikx = x_elem * npoly ÷ 2
-    max_ikz = z_elem
+    max_ikx = x_elem * npoly
+    max_ikz = 2 * z_elem
 
     # coordinates
     horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
     h_space = make_horizontal_space(horizontal_mesh, npoly)
-    center_space, _ = make_hybrid_spaces(h_space, z_top, z_elem)
+    center_space, _ = make_hybrid_spaces(h_space, 2 * z_top, 2 * z_elem)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶜx = ᶜlocal_geometry.coordinates.x
     ᶜz = ᶜlocal_geometry.coordinates.z
@@ -243,14 +244,8 @@ function ρfb_init_coefs(npoly, x_elem, z_elem)
     ρfb_init_array = Array{Complex{FT}}(undef, 2 * max_ikx + 1, 2 * max_ikz + 1)
     ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     ᶜintegrand = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
-    unit_integral = 2 * sum(one.(ᶜρb_init))
-    # Since the coefficients are for a modified domain of height 2 * z_top, the
-    # unit integral over the domain must be multiplied by 2 to ensure correct
-    # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
-    # the "true" domain, so the integral of ᶜintegrand should not be modified.
-    @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
-        ikz in (-max_ikz):max_ikz
-
+    unit_integral = sum(one.(ᶜρb_init))
+    @progress "ρfb t=0" for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_top) * ikz
         @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
@@ -395,4 +390,78 @@ function linear_solution!(Y, lin_cache, ρfb_init_array, t)
     end
     @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, ᶜv))
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
+end
+
+function linear_solution(lin_cache, ρfb_init_array, t)
+    (; ᶜx, ᶠx, ᶜz, ᶠz, ᶜp₀, ᶜρ₀, ᶜbretherton_factor_pρ) = lin_cache
+    (; ᶜbretherton_factor_uvwT, ᶠbretherton_factor_uvwT) = lin_cache
+    (; ᶜfourier_factor, ᶠfourier_factor, ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb) = lin_cache
+
+    ᶜpb .= FT(0)
+    ᶜρb .= FT(0)
+    ᶜub .= FT(0)
+    ᶜvb .= FT(0)
+    ᶠwb .= FT(0)
+    max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
+    @progress "Y_lin" for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
+        kx = 2 * π / x_max * ikx
+        kz = 2 * π / (2 * z_top) * ikz
+
+        # Fourier coefficient of ᶜρb_init (for current kx and kz)
+        ρfb_init = ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1]
+
+        # Fourier factors, shifted by u₀ * t along the x-axis
+        @. ᶜfourier_factor = exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz))
+        @. ᶠfourier_factor = exp(im * (kx * (ᶠx - u₀ * t) + kz * ᶠz))
+
+        # roots of a₁(s)
+        p₁ = cₛ² * (kx^2 + kz^2 + δ^2 / 4) + f^2
+        q₁ = grav * kx^2 * (cₛ² * δ - grav) + cₛ² * f^2 * (kz^2 + δ^2 / 4)
+        α² = p₁ / 2 - sqrt(p₁^2 / 4 - q₁)
+        β² = p₁ / 2 + sqrt(p₁^2 / 4 - q₁)
+        α = sqrt(α²)
+        β = sqrt(β²)
+
+        # inverse Laplace transform of s^p/((s^2 + α^2)(s^2 + β^2)) for p ∈ -1:3
+        if α == 0
+            L₋₁ = (β² * t^2 / 2 - 1 + cos(β * t)) / β^4
+            L₀ = (β * t - sin(β * t)) / β^3
+        else
+            L₋₁ =
+                (-cos(α * t) / α² + cos(β * t) / β²) / (β² - α²) + 1 / (α² * β²)
+            L₀ = (sin(α * t) / α - sin(β * t) / β) / (β² - α²)
+        end
+        L₁ = (cos(α * t) - cos(β * t)) / (β² - α²)
+        L₂ = (-sin(α * t) * α + sin(β * t) * β) / (β² - α²)
+        L₃ = (-cos(α * t) * α² + cos(β * t) * β²) / (β² - α²)
+
+        # Fourier coefficients of Bretherton transforms of final perturbations
+        C₁ = grav * (grav - cₛ² * (im * kz + δ / 2))
+        C₂ = grav * (im * kz - δ / 2)
+        pfb = -ρfb_init * (L₁ + L₋₁ * f^2) * C₁
+        ρfb =
+            ρfb_init *
+            (L₃ + L₁ * (p₁ + C₂) + L₋₁ * f^2 * (cₛ² * (kz^2 + δ^2 / 4) + C₂))
+        ufb = ρfb_init * L₀ * im * kx * C₁ / ρₛ
+        vfb = -ρfb_init * L₋₁ * im * kx * f * C₁ / ρₛ
+        wfb = -ρfb_init * (L₂ + L₀ * (f^2 + cₛ² * kx^2)) * grav / ρₛ
+
+        # Bretherton transforms of final perturbations
+        @. ᶜpb += real(pfb * ᶜfourier_factor)
+        @. ᶜρb += real(ρfb * ᶜfourier_factor)
+        @. ᶜub += real(ufb * ᶜfourier_factor)
+        @. ᶜvb += real(vfb * ᶜfourier_factor)
+        @. ᶠwb += real(wfb * ᶠfourier_factor)
+        # The imaginary components should be 0 (or at least very close to 0).
+    end
+
+    # final state
+    ᶜp′ = @. ᶜpb * ᶜbretherton_factor_pρ
+    ᶜρ′ = @. ᶜρb * ᶜbretherton_factor_pρ
+    ᶜu′ = @. ᶜub * ᶜbretherton_factor_uvwT
+    ᶜv′ = @. ᶜvb * ᶜbretherton_factor_uvwT
+    ᶠw′ = @. ᶠwb * ᶠbretherton_factor_uvwT
+    ᶜT′ = @. (ᶜp₀ + ᶜp′) / (R_d * (ᶜρ₀ + ᶜρ′)) - T₀
+
+    return (; ᶜp′, ᶜρ′, ᶜu′, ᶜv′, ᶠw′, ᶜT′)
 end
