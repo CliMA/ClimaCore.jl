@@ -3,7 +3,9 @@ using LinearAlgebra
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEq: ODEProblem, solve
+using DiffEqBase
+using ClimaTimeSteppers
 
 import Logging
 import TerminalLoggers
@@ -175,7 +177,9 @@ for (k, ne) in enumerate(ne_seq)
         return (ρ = ρ, ρq = Q)
     end
 
-    function f!(ystar, y, parameters, t)
+    y0 = Fields.FieldVector(ρ = y0.ρ, ρq = y0.ρq)
+
+    function f!(dy, y, parameters, t, alpha, beta)
 
         # Set up operators
         grad = Operators.Gradient()
@@ -211,49 +215,56 @@ for (k, ne) in enumerate(ne_seq)
         end
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
+        ystar = similar(y)
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar)
+        Spaces.weighted_dss!(ystar.ρq)
         @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
 
         # Add advective flux divergence
-        @. ystar.ρ = -wdiv(y.ρ * u)         # contintuity equation
-        @. ystar.ρq += -wdiv(y.ρq * u)      # adevtion of tracers equation
-    end
+        @. dy.ρ = beta * dy.ρ - alpha * wdiv(y.ρ * u)         # contintuity equation
+        @. dy.ρq = beta * dy.ρq - alpha * wdiv(y.ρq * u) + alpha * ystar.ρq   # advection of tracers equation
 
-    function stage_callback!(ydoublestar, integrator, parameters, t)
-        space = parameters.space
+
         min_Q = parameters.min_Q
         max_Q = parameters.max_Q
 
         if lim_flag
             # Call quasimonotone limiter, to find optimal ρq (where ρq gets updated in place)
             Limiters.quasimonotone_limiter!(
-                ydoublestar.ρq,
-                ydoublestar.ρ,
+                dy.ρq,
+                dy.ρ,
                 min_Q,
                 max_Q,
                 rtol = limiter_tol,
             )
         end
-        Spaces.weighted_dss!(ydoublestar)
+        Spaces.weighted_dss!(dy.ρ)
+        Spaces.weighted_dss!(dy.ρq)
     end
 
+
     # Set up RHS function
-    ystar = similar(y0)
+    ystar = copy(y0)
     parameters = (space = space, min_Q = min_Q, max_Q = max_Q)
-    f!(ystar, y0, parameters, 0.0)
+    f!(ystar, y0, parameters, 0.0, dt, 1)
 
     # Solve the ODE
-    prob = ODEProblem(f!, y0, (0.0, end_time), parameters)
-    sol = solve(
+    prob = ODEProblem(
+        IncrementingODEFunction(f!),
+        copy(y0),
+        (0.0, end_time),
+        parameters,
+    )
+    yend = solve(
         prob,
-        SSPRK33(stage_callback!),
+        SSPRK33ShuOsher(),
         dt = dt,
         saveat = dt,
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
+    sol = (u = [yend],)
     L1err[k] =
         norm(
             (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
