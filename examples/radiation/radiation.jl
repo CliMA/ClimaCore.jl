@@ -1,7 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
-
-using ClimaCore
-
 using OrdinaryDiffEq: ODEProblem, solve, Euler
 using DiffEqCallbacks: SavingCallback, SavedValues,
     CallbackSet, FunctionCallingCallback, TerminateSteadyState

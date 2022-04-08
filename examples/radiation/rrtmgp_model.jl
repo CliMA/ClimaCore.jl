@@ -6,6 +6,7 @@ using ClimaCore.Spaces: FiniteDifferenceSpace
 
 using Pkg
 using NCDatasets
+using UnPack
 
 # zᵢ is the elevation of layer i
 #
@@ -1108,86 +1109,25 @@ get_vmr_h2o(vmr::RRTMGP.Vmrs.VmrGM, idx_gases) = vmr.vmr_h2o
 get_vmr_h2o(vmr::RRTMGP.Vmrs.Vmr, idx_gases) =
     @view vmr.vmr[:, :, idx_gases["h2o"]]
 
-# compute_lw_fluxes!(::RRTMGPModel) = nothing
-# compute_lw_fluxes!(model::RRTMGPModel{:gray, false}) =
-#     RRTMGP.RTESolver.solve_lw!(
-#         model.solver,
-#         model.max_threads,
-#     )
-using UnPack
-function compute_lw_fluxes!(model::RRTMGPModel)
-    slv = model.solver
-    τ = similar(slv.op.τ)
-    τ .= 0
-    I = Int
-    lkp_args = model.lookups
-    max_threads = model.max_threads
-
-    @unpack as, op, bcs_lw, src_lw, flux_lw, fluxb_lw = slv
-    @unpack nlay, ncol = as
-
-    nargs = length(lkp_args)
-    @assert nargs < 3
-    if nargs > 0
-        @assert lkp_args[1] isa RRTMGP.LookUpTables.LookUpLW
-        if nargs == 2
-            @assert lkp_args[2] isa RRTMGP.LookUpTables.LookUpCld
-        end
-        n_gpt = lkp_args[1].n_gpt
-        major_gpt2bnd = Array{I,1}(lkp_args[1].major_gpt2bnd) #TODO temp fix to avoid scalar indexing
-        flux = fluxb_lw
-    else
-        n_gpt = 1
-        flux = flux_lw
-    end
-    ibnd = 1
-    RRTMGP.Fluxes.set_flux_to_zero!(flux_lw)
-
-    for igpt = 1:n_gpt
-        if nargs > 0 && lkp_args[1] isa RRTMGP.LookUpTables.LookUpLW
-            ibnd = major_gpt2bnd[igpt]
-        end
-        # computing optical properties
-        RRTMGP.Optics.compute_optical_props!(op, as, src_lw, igpt, lkp_args...)
-        # τ .+= op.τ
-
-        if op isa RRTMGP.Optics.OneScalar
-            RRTMGP.RTESolver.rte_lw_noscat_solve!(
-                flux,
-                src_lw,
-                bcs_lw,
-                op,
-                nlay,
-                ncol,
-                igpt,
-                ibnd,
-                max_threads,
-            ) # no-scattering solver
-        else
-            RRTMGP.RTESolver.rte_lw_2stream_solve!(
-                flux,
-                src_lw,
-                bcs_lw,
-                op,
-                nlay,
-                ncol,
-                igpt,
-                ibnd,
-                max_threads,
-            ) # 2-stream solver
-        end
-
-        nargs > 0 && RRTMGP.Fluxes.add_to_flux!(flux_lw, flux)
-    end
-    flux_lw.flux_net .= flux_lw.flux_up .- flux_lw.flux_dn
-end
-# compute_lw_fluxes!(model::RRTMGPModel{:all, false}) =
-#     RRTMGP.RTESolver.solve_lw!(
-#         model.solver,
-#         model.max_threads,
-#         model.lookups.lookup_lw,
-#         model.lookups.lookup_lw_cld,
-#     )
+compute_lw_fluxes!(::RRTMGPModel) = nothing
+compute_lw_fluxes!(model::RRTMGPModel{:gray, false}) =
+    RRTMGP.RTESolver.solve_lw!(
+        model.solver,
+        model.max_threads,
+    )
+compute_lw_fluxes!(model::RRTMGPModel{:clear, false}) =
+    RRTMGP.RTESolver.solve_lw!(
+        model.solver,
+        model.max_threads,
+        model.lookups.lookup_lw,
+    )
+compute_lw_fluxes!(model::RRTMGPModel{:all, false}) =
+    RRTMGP.RTESolver.solve_lw!(
+        model.solver,
+        model.max_threads,
+        model.lookups.lookup_lw,
+        model.lookups.lookup_lw_cld,
+    )
 function compute_lw_fluxes!(model::RRTMGPModel{:all_with_clear, false})
     RRTMGP.RTESolver.solve_lw!(
         model.solver,
