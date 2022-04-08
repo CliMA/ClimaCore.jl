@@ -332,4 +332,22 @@ function level(field::FaceExtrudedFiniteDifferenceField, v::PlusHalf)
     Field(data, hspace)
 end
 
+"""
+    set!(f::Function, field::Field, args = ())
+
+Apply function `f` to populate
+values in field `field`. `f` must
+have a function signature with signature
+`f(::LocalGeometry[, args...])`.
+Additional arguments may be passed to
+`f` with `args`.
+"""
+function set!(f::Function, field::Field, args = ())
+    space = axes(field)
+    local_geometry = local_geometry_field(space)
+    field .= f.(local_geometry, args...)
+    return nothing
+end
+
+
 end # module
