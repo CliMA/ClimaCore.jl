@@ -289,3 +289,120 @@ function Base.setindex!(
     end
     return var
 end
+
+
+function first_center_space(fv::Fields.FieldVector)
+    for prop_chain in Fields.property_chains(fv)
+        f = Fields.single_field(fv, prop_chain)
+        space = axes(f)
+        if space isa Spaces.CenterExtrudedFiniteDifferenceSpace
+            return space
+        end
+    end
+    error("Unfound space")
+end
+
+function first_face_space(fv::Fields.FieldVector)
+    for prop_chain in Fields.property_chains(fv)
+        f = Fields.single_field(fv, prop_chain)
+        space = axes(f)
+        if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+            return space
+        end
+    end
+    error("Unfound space")
+end
+
+function process_name_default(s::AbstractString)
+    s = replace(s, "components_data_" => "")
+    return s
+end
+
+function remap2latlon(
+    Y::Fields.FieldVector;
+    t_now = 0.0,
+    nc_dir = pwd(),
+    nlat = 90,
+    nlon = 180,
+    filename = "tempremaptest.nc",
+    process_name = process_name_default,
+    center_space = first_center_space,
+    face_space = first_face_space,
+)
+    cspace = center_space(Y)
+    fspace = face_space(Y)
+    hspace = cspace.horizontal_space
+    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
+
+    # create a temporary dir for intermediate data
+    remap_tmpdir = joinpath(nc_dir, "remaptmp")
+    mkpath(remap_tmpdir)
+    FT = eltype(Y)
+
+    ### create an nc file to store raw cg data
+    # create data
+    datafile_cc = joinpath(remap_tmpdir, "test.nc")
+
+    varname(pc::Tuple) = process_name(join(pc, "_"))
+
+    NCDatasets.NCDataset(datafile_cc, "c") do nc
+        # defines the appropriate dimensions and variables for a space coordinate
+        # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
+        nc_time = def_time_coord(nc)
+        def_space_coord(nc, cspace, type = "cgll")
+        def_space_coord(nc, fspace, type = "cgll")
+        # define variables for the prognostic states
+        for prop_chain in Fields.property_chains(Y)
+            f = Fields.single_field(Y, prop_chain)
+            space = axes(f)
+            nc_var = defVar(nc, varname(prop_chain), FT, space, ("time",))
+            nc_var[:, 1] = f
+        end
+        # TODO: interpolate w onto center space and save it the same way as the other vars
+        nc_time[1] = t_now
+    end
+    varnames = varname.(Fields.property_chains(Y))
+
+    # write out our cubed sphere mesh
+    meshfile_cc = joinpath(remap_tmpdir, "mesh_cubedsphere.g")
+    write_exodus(meshfile_cc, hspace.topology)
+
+    meshfile_rll = joinpath(remap_tmpdir, "mesh_rll.g")
+    rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
+
+    meshfile_overlap = joinpath(remap_tmpdir, "mesh_overlap.g")
+    overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
+
+    weightfile = joinpath(remap_tmpdir, "remap_weights.nc")
+    remap_weights(
+        weightfile,
+        meshfile_cc,
+        meshfile_rll,
+        meshfile_overlap;
+        in_type = "cgll",
+        in_np = Nq,
+    )
+
+    datafile_latlon = joinpath(nc_dir, filename)
+
+    # TODO: add an option to silence tempest?
+    open(tempname(), "w") do io # silence tempest
+        redirect_stdout(io) do
+            apply_remap(datafile_latlon, datafile_cc, weightfile, varnames)
+        end
+    end
+    # Cleanup
+    all_files = [
+        joinpath(root, f) for
+        (root, dirs, files) in Base.Filesystem.walkdir(nc_dir) for
+        f in files
+    ]
+    for f in all_files
+        if endswith(f, ".g")
+            rm(f; force = true)
+        end
+    end
+    # rm(datafile_cc; force=true) # TODO: should we clean this up?
+    # rmpath(remap_tmpdir; force=true) # TODO: should we clean this up?
+    # TODO: Two NC files are created, do we need both?
+end

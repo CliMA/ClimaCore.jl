@@ -80,6 +80,7 @@ end
     R = 1000.0
     nlevels = 10
     Nq = 5
+    FT = Float64
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
     htopology = Topologies.Topology2D(hmesh)
@@ -96,6 +97,28 @@ end
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+
+    cent_fields = FieldFromNamedTuple(
+        hvspace,
+        (;
+            ρ = FT(0),
+            ρθ = FT(0),
+            ρuₕ = Geometry.UVVector(FT(0), FT(0)),
+            u = FT(0),
+            v = FT(0),
+            nt = ntuple(i -> (; a_up = FT(0)), 2),
+        ),
+    )
+    face_fields = FieldFromNamedTuple(
+        fhvspace,
+        (; ρw = Geometry.WVector(FT(0)), w = FT(0)),
+    )
+    Y = Fields.FieldVector(cent = cent_fields, face = face_fields)
 
     # write mesh
     meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
@@ -151,4 +174,11 @@ end
               ones(nlon, nlat, nlevels) .* reshape(zs, (1, 1, nlevels)) rtol =
             0.1
     end
+
+    nc_dir = OUTPUT_DIR
+    filename = "tempremaptest.nc"
+    file = joinpath(nc_dir, "tempremaptest.nc")
+    ClimaCoreTempestRemap.remap2latlon(Y; nc_dir, filename)
+    @test isfile(file)
+    rm(file; force = true)
 end
