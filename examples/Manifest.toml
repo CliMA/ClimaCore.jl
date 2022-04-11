@@ -172,10 +172,10 @@ uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 version = "0.7.0"
 
 [[deps.ClimaTimeSteppers]]
-deps = ["CUDA", "DiffEqBase", "KernelAbstractions", "LinearAlgebra", "MPI", "SciMLBase", "StaticArrays"]
-git-tree-sha1 = "4e49bf1b897d233c914acbcf381505f4788e0b6b"
+deps = ["CUDA", "DiffEqBase", "DiffEqCallbacks", "KernelAbstractions", "LinearAlgebra", "MPI", "SciMLBase", "StaticArrays"]
+git-tree-sha1 = "bcd531eff2eea0e29e35d255bfa8450bb696748b"
 uuid = "595c0a79-7f3d-439a-bc5a-b232dc3bde79"
-version = "0.1.1"
+version = "0.2.0"
 
 [[deps.CloseOpenIntervals]]
 deps = ["ArrayInterface", "Static"]
