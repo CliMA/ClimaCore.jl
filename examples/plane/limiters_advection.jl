@@ -255,7 +255,7 @@ for (k, ne) in enumerate(ne_seq)
         (0.0, end_time),
         parameters,
     )
-    yend = solve(
+    sol = solve(
         prob,
         SSPRK33ShuOsher(),
         dt = dt,
@@ -264,7 +264,7 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    sol = (u = [yend],)
+
     L1err[k] =
         norm(
             (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
