@@ -410,6 +410,7 @@ end
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     IFH{S, Ni, typeof(array)}(array)
 end
 
@@ -662,6 +663,7 @@ end
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
+    @assert size(array, 3) == typesize(T, S)
     check_basetype(T, S)
     IJF{S, Nij, typeof(array)}(array)
 end
@@ -801,6 +803,7 @@ end
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
