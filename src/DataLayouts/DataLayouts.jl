@@ -898,16 +898,19 @@ end
 
 function VF{S}(array::AbstractArray{T, 2}) where {S, T}
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     VF{S, typeof(array)}(array)
 end
 
 function VF{S}(array::AbstractVector{T}) where {S, T}
+    check_basetype(T, S)
     @assert typesize(T, S) == 1
     VF{S}(reshape(array, (:, 1)))
 end
 
 function VF{S}(ArrayType, nelements) where {S}
     T = eltype(ArrayType)
+    check_basetype(T, S)
     VF{S}(ArrayType(undef, nelements, typesize(T, S)))
 end
 
