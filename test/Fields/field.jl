@@ -257,3 +257,18 @@ end
         @test var === Fields.single_field(Y, prop_chain)
     end
 end
+
+@testset "Set!" begin
+    space = spectral_space_2D()
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+    FT = Float64
+    nt = (; x = FT(0), y = FT(0))
+    Y = FieldFromNamedTuple(space, nt)
+    foo(local_geom) =
+        sin(local_geom.coordinates.x * local_geom.coordinates.y) + 3
+    Fields.set!(foo, Y.x)
+    @test all((parent(Y.x) .> 1))
+end

@@ -196,6 +196,7 @@ Base.ones(::Spaces.AbstractSpace)
 Base.sum(::Fields.Field)
 Fields.Statistics.mean(::Fields.Field)
 Fields.LinearAlgebra.norm(::Fields.Field)
+Fields.set!
 ```
 
 ## Limiters
