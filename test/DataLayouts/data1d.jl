@@ -101,7 +101,7 @@ end
     @testset "VF analyzer optimizations" begin
         for FT in TestFloatTypes
             S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
-            data1 = ones(FT, 2, 2)
+            data1 = ones(FT, 2, 3)
             S2 = NamedTuple{(:c,), Tuple{FT}}
             data2 = ones(FT, 2, 1)
 
