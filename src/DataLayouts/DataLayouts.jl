@@ -189,6 +189,7 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 2) == Nij
     @assert size(array, 3) == Nk
     check_basetype(T, S)
+    @assert size(array, 4) == typesize(T, S)
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
@@ -255,6 +256,7 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     check_basetype(T, S)
+    @assert size(array, 3) == typesize(T, S)
     IJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -1018,6 +1020,8 @@ end
 
 function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
     @assert size(array, 2) == size(array, 3) == Nij
+    check_basetype(T, S)
+    @assert size(array, 4) == typesize(T, S)
     VIJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -1186,6 +1190,7 @@ end
 function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     @assert size(array, 2) == Ni
     check_basetype(T, S)
+    @assert size(array, 3) == typesize(T, S)
     VIFH{S, Ni, typeof(array)}(array)
 end
 
