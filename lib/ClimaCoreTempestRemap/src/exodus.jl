@@ -45,7 +45,7 @@ function write_exodus(
             connect1[v, e] = uv
         end
         (e, v) = first(vertex)
-        c = Geometry.components(Meshes.coordinates(topology, e, v))
+        c = Float64.(Geometry.components(Meshes.coordinates(topology, e, v)))
         if normalize_coordinates
             c = c ./ norm(c)
         end
