@@ -44,7 +44,7 @@ partition numbers
         reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
         (pid - 1) * Nq * Nq * nel
 
-    Spaces.weighted_dss!(y0, comms_ctx)
+    Spaces.weighted_dss!(y0)
     passed = 0
 #! format: off
     if pid == 1

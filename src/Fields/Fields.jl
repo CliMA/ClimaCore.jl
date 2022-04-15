@@ -277,11 +277,6 @@ function Spaces.variational_solve!(field::Field)
     return field
 end
 
-function Spaces.horizontal_dss!(field::Field)
-    Spaces.horizontal_dss!(field_values(field), axes(field))
-    return field
-end
-
 """
     Spaces.weighted_dss!(f::Field)
 
@@ -311,13 +306,19 @@ which reduces to
 \\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
 ```
 """
-function Spaces.weighted_dss!(field::Field)
-    Spaces.weighted_dss!(field_values(field), axes(field))
+function Spaces.weighted_dss!(
+    field::Field,
+    ghost_buffer = Spaces.create_ghost_buffer(field),
+)
+    Spaces.weighted_dss!(field_values(field), axes(field), ghost_buffer)
     return field
 end
-function Spaces.weighted_dss!(field::Field, comms_ctx)
-    Spaces.weighted_dss!(field_values(field), axes(field), comms_ctx)
-    return field
+function Spaces.create_ghost_buffer(field::Field)
+    space = axes(field)
+    hspace =
+        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
+        space.horizontal_space : space
+    Spaces.create_ghost_buffer(field_values(field), hspace.topology)
 end
 
 

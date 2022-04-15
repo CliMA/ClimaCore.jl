@@ -7,18 +7,18 @@ import ClimaCore:
 
 using ClimaComms
 using ClimaCommsMPI
-const Context = ClimaCommsMPI.MPICommsContext
-const pid, nprocs = ClimaComms.init(Context)
-comms_ctx = Context(ClimaComms.Neighbor[])
+comms_ctx = ClimaCommsMPI.MPICommsContext()
+pid, nprocs = ClimaComms.init(comms_ctx)
 
 # log output only from root process
-logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
 atexit() do
     global_logger(prev_logger)
 end
 
 function distributed_grid(
+    comms_ctx,
     n1,
     n2,
     x1periodic,
@@ -37,7 +37,7 @@ function distributed_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    return Topologies.DistributedTopology2D(mesh, Context)
+    return Topologies.DistributedTopology2D(comms_ctx, mesh)
 end
 
 function strip_extra_gface_info(gfacesin)
@@ -68,105 +68,44 @@ end
 |_|_|_|_|
 =#
 @testset "4x4 element quad mesh with non-periodic boundaries" begin
-    dtopo = distributed_grid(4, 4, false, false)
+    dtopo = distributed_grid(comms_ctx, 4, 4, false, false)
     ifaces = sort(collect(Topologies.interior_faces(dtopo)))
     gfaces = sort(collect(Topologies.ghost_faces(dtopo)))
     gfacesout = strip_extra_gface_info(gfaces)
-    passed = 0
+
+    @test length(ifaces) == 3
+    @test ifaces ==
+          sort([(1, 2, 2, 4, true), (2, 2, 3, 4, true), (3, 2, 4, 4, true)])
+    if pid == 1 || pid == 4
+        @test length(gfaces) == 4
+    else
+        @test length(gfaces) == 8
+    end
     if pid == 1
-        if length(ifaces) == 3
-            passed += 1
-        end
-        if ifaces ==
-           sort([(1, 2, 2, 4, true), (2, 2, 3, 4, true), (3, 2, 4, 4, true)])
-            passed += 1
-        end
-        if length(gfaces) == 4
-            passed += 1
-        end
-        if gfacesout == sort([
+        @test gfacesout == sort([
+            (1, 3, 1, 1, true),
+            (2, 3, 2, 1, true),
+            (3, 3, 3, 1, true),
+            (4, 3, 4, 1, true),
+        ])
+    elseif pid == 2 || pid == 3
+        @test gfacesout == sort([
+            (1, 1, 1, 3, true),
+            (2, 1, 2, 3, true),
+            (3, 1, 3, 3, true),
+            (4, 1, 4, 3, true),
             (1, 3, 5, 1, true),
             (2, 3, 6, 1, true),
             (3, 3, 7, 1, true),
             (4, 3, 8, 1, true),
         ])
-            passed += 1
-        end
-    elseif pid == 2
-        if length(ifaces) == 3
-            passed += 1
-        end
-        if ifaces ==
-           sort([(5, 2, 6, 4, true), (6, 2, 7, 4, true), (7, 2, 8, 4, true)])
-            passed += 1
-        end
-        if length(gfaces) == 8
-            passed += 1
-        end
-        if gfacesout == sort([
-            (5, 1, 1, 3, true),
-            (5, 3, 9, 1, true),
-            (6, 1, 2, 3, true),
-            (6, 3, 10, 1, true),
-            (7, 1, 3, 3, true),
-            (7, 3, 11, 1, true),
-            (8, 1, 4, 3, true),
-            (8, 3, 12, 1, true),
-        ])
-            passed += 1
-        end
-    elseif pid == 3
-        if length(ifaces) == 3
-            passed += 1
-        end
-        if ifaces == sort([
-            (9, 2, 10, 4, true),
-            (10, 2, 11, 4, true),
-            (11, 2, 12, 4, true),
-        ])
-            passed += 1
-        end
-        if length(gfaces) == 8
-            passed += 1
-        end
-        if gfacesout == sort([
-            (9, 1, 5, 3, true),
-            (9, 3, 13, 1, true),
-            (10, 1, 6, 3, true),
-            (10, 3, 14, 1, true),
-            (11, 1, 7, 3, true),
-            (11, 3, 15, 1, true),
-            (12, 1, 8, 3, true),
-            (12, 3, 16, 1, true),
-        ])
-            passed += 1
-        end
     else
-        if length(ifaces) == 3
-            passed += 1
-        end
-        if ifaces == sort([
-            (13, 2, 14, 4, true),
-            (14, 2, 15, 4, true),
-            (15, 2, 16, 4, true),
+        @test gfacesout == sort([
+            (1, 1, 1, 3, true),
+            (2, 1, 2, 3, true),
+            (3, 1, 3, 3, true),
+            (4, 1, 4, 3, true),
         ])
-            passed += 1
-        end
-        if length(gfaces) == 4
-            passed += 1
-        end
-        if gfacesout == sort([
-            (13, 1, 9, 3, true),
-            (14, 1, 10, 3, true),
-            (15, 1, 11, 3, true),
-            (16, 1, 12, 3, true),
-        ])
-            passed += 1
-        end
-    end
-    passed = ClimaComms.reduce(comms_ctx, passed, +)
-    if pid == 1
-        @test passed == 16
     end
 end
 
@@ -176,141 +115,80 @@ end
 |_|_|
 =#
 @testset "2x2 element quad mesh with non-periodic boundaries" begin
-    dtopo = distributed_grid(2, 2, false, false)
-    ivs = collect(Topologies.interior_vertices(dtopo))
-    gvs = sort(collect(Topologies.ghost_vertices(dtopo)))
-    gvsout = strip_extra_gvert_info(gvs)
-    passed = 0
+    dtopo = distributed_grid(comms_ctx, 2, 2, false, false)
+    ivs = map(sort ∘ collect, Topologies.local_vertices(dtopo))
+    gvs = map(sort ∘ collect, Topologies.ghost_vertices(dtopo))
+
     if pid == 1
-        if length(ivs) == 1
-            passed += 1
-        end
-        if ivs[1] == [(1, 1)]
-            passed += 1
-        end
-        if length(gvs) == 3
-            passed += 1
-        end
-        if gvsout == [
-            [(1, 2), (2, 1)],
-            [(1, 3), (2, 4), (3, 2), (4, 1)],
-            [(1, 4), (3, 1)],
+        # 2 3
+        # x 1
+        @test ivs == [[(1, 1)]]
+        @test gvs == [
+            sort([(false, 1, 2), (true, 1, 1)]),
+            sort([(false, 1, 3), (true, 1, 4), (true, 2, 2), (true, 3, 1)]),
+            sort([(false, 1, 4), (true, 2, 1)]),
         ]
-            passed += 1
-        end
     elseif pid == 2
-        if length(ivs) == 1
-            passed += 1
-        end
-        if ivs[1] == [(2, 2)]
-            passed += 1
-        end
-        if length(gvs) == 3
-            passed += 1
-        end
-        if gvsout == [
-            [(1, 2), (2, 1)],
-            [(1, 3), (2, 4), (3, 2), (4, 1)],
-            [(2, 3), (4, 2)],
+        # 2 3
+        # 1 x
+        @test ivs == [[(1, 2)]]
+        @test gvs == [
+            sort([(false, 1, 1), (true, 1, 2)]),
+            sort([(false, 1, 3), (true, 3, 2)]),
+            sort([(false, 1, 4), (true, 1, 3), (true, 2, 2), (true, 3, 1)]),
         ]
-            passed += 1
-        end
     elseif pid == 3
-        if length(ivs) == 1
-            passed += 1
-        end
-        if ivs[1] == [(3, 4)]
-            passed += 1
-        end
-        if length(gvs) == 3
-            passed += 1
-        end
-        if gvsout == [
-            [(1, 3), (2, 4), (3, 2), (4, 1)],
-            [(1, 4), (3, 1)],
-            [(3, 3), (4, 4)],
+        # x 3
+        # 1 2
+        @test ivs == [[(1, 4)]]
+        @test gvs == [
+            sort([(false, 1, 1), (true, 1, 4)]),
+            sort([(false, 1, 2), (true, 1, 3), (true, 2, 4), (true, 3, 1)]),
+            sort([(false, 1, 3), (true, 3, 4)]),
         ]
-            passed += 1
-        end
     else
-        if length(ivs) == 1
-            passed += 1
-        end
-        if ivs[1] == [(4, 3)]
-            passed += 1
-        end
-        if length(gvs) == 3
-            passed += 1
-        end
-        if gvsout == [
-            [(1, 3), (2, 4), (3, 2), (4, 1)],
-            [(2, 3), (4, 2)],
-            [(3, 3), (4, 4)],
+        # 3 x
+        # 1 2
+        @test ivs == [[(1, 3)]]
+        @test gvs == [
+            sort([(false, 1, 1), (true, 1, 3), (true, 2, 4), (true, 3, 2)]),
+            sort([(false, 1, 2), (true, 2, 3)]),
+            sort([(false, 1, 4), (true, 3, 3)]),
         ]
-            passed += 1
-        end
-    end
-    passed = ClimaComms.reduce(comms_ctx, passed, +)
-    if pid == 1
-        @test passed == 16
     end
 end
 
 #=
- _ _  _ _  _ _  _ _
-|_|_||_|_||_|_||_|_|
-|_|_||_|_||_|_||_|_|
+ _ _
+|_|_|
+|_|_|
+|_|_|
+|_|_|
+|_|_|
+|_|_|
+|_|_|
+|_|_|
 =#
 @testset "2x8 element quad mesh with non-periodic boundaries" begin
-    dtopo = distributed_grid(2, 8, false, false)
-    foi(e) = dtopo.orderindex[e]
-    local_elems = map(foi, dtopo.local_elems)
-    send_elems = [map(foi, selems) for selems in dtopo.send_elems]
-    ghost_elems = [map(foi, gelems) for gelems in dtopo.ghost_elems]
-    passed = 0
+    dtopo = distributed_grid(comms_ctx, 2, 8, false, false)
+    local_elems = dtopo.local_elem_gidx
+    send_elems = dtopo.local_elem_gidx[dtopo.send_elem_lidx]
+    ghost_elems = dtopo.recv_elem_gidx
     if pid == 1
-        if local_elems == [1, 2, 3, 4]
-            passed += 1
-        end
-        if send_elems == [[3, 4]]
-            passed += 1
-        end
-        if ghost_elems == [[5, 6]]
-            passed += 1
-        end
+        @test local_elems == [1, 2, 3, 4]
+        @test send_elems == [3, 4]
+        @test ghost_elems == [5, 6]
     elseif pid == 2
-        if local_elems == [5, 6, 7, 8]
-            passed += 1
-        end
-        if send_elems == [[5, 6], [7, 8]]
-            passed += 1
-        end
-        if ghost_elems == [[3, 4], [9, 10]]
-            passed += 1
-        end
+        @test local_elems == [5, 6, 7, 8]
+        @test send_elems == [5, 6, 7, 8]
+        @test ghost_elems == [3, 4, 9, 10]
     elseif pid == 3
-        if local_elems == [9, 10, 11, 12]
-            passed += 1
-        end
-        if send_elems == [[9, 10], [11, 12]]
-            passed += 1
-        end
-        if ghost_elems == [[7, 8], [13, 14]]
-            passed += 1
-        end
+        @test local_elems == [9, 10, 11, 12]
+        @test send_elems == [9, 10, 11, 12]
+        @test ghost_elems == [7, 8, 13, 14]
     else
-        if local_elems == [13, 14, 15, 16]
-            passed += 1
-        end
-        if send_elems == [[13, 14]]
-            passed += 1
-        end
-        if ghost_elems == [[11, 12]]
-            passed += 1
-        end
-    end
-    passed = ClimaComms.reduce(comms_ctx, passed, +)
-    if pid == 1
-        @test passed == 12
+        @test local_elems == [13, 14, 15, 16]
+        @test send_elems == [13, 14]
+        @test ghost_elems == [11, 12]
     end
 end

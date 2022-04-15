@@ -6,12 +6,12 @@ import ClimaCore:
 
 using ClimaComms
 using ClimaCommsMPI
-const Context = ClimaCommsMPI.MPICommsContext
-const pid, nprocs = ClimaComms.init(Context)
+const context = ClimaCommsMPI.MPICommsContext()
+const pid, nprocs = ClimaComms.init(context)
 
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 # log output only from root process
-logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
 atexit() do
     global_logger(prev_logger)
@@ -41,10 +41,9 @@ function distributed_space(
         ),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    topology = Topologies.DistributedTopology2D(mesh, Context)
+    topology = Topologies.DistributedTopology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
-    comms_ctx = Spaces.setup_comms(Context, topology, quad, Nv, Nf)
-    space = Spaces.SpectralElementSpace2D(topology, quad, comms_ctx)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
 
-    return (space, comms_ctx)
+    return (space, context)
 end

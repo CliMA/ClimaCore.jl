@@ -15,21 +15,21 @@ hyperdiffusion_cache(
     use_tempest_mode ? (; ᶠχw_data = similar(ᶠlocal_geometry, FT)) : (;),
 )
 
-function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
+function hyperdiffusion_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     (; ᶜp, ᶜχ, ᶜχuₕ) = p # assume that ᶜp has been updated
-    (; comms_ctx, κ₄, divergence_damping_factor, use_tempest_mode) = p
+    (; ghost_buffer, κ₄, divergence_damping_factor, use_tempest_mode) = p
     point_type = eltype(Fields.local_geometry_field(axes(Y.c)).coordinates)
 
     if use_tempest_mode
         @. ᶜχ = wdivₕ(gradₕ(ᶜρ)) # ᶜχρ
-        Spaces.weighted_dss!(ᶜχ, comms_ctx)
+        Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
         @. Yₜ.c.ρ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
 
         if :ρθ in propertynames(Y.c)
             @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ)) # ᶜχρθ
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
             @. Yₜ.c.ρθ -= κ₄ * wdivₕ(gradₕ(ᶜχ))
         else
             error("use_tempest_mode must be false when not using ρθ")
@@ -37,20 +37,20 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
 
         (; ᶠχw_data) = p
         @. ᶠχw_data = wdivₕ(gradₕ(Y.f.w.components.data.:1))
-        Spaces.weighted_dss!(ᶠχw_data, comms_ctx)
+        Spaces.weighted_dss!(ᶠχw_data, ghost_buffer.χ)
         @. Yₜ.f.w.components.data.:1 -= κ₄ * wdivₕ(gradₕ(ᶠχw_data))
     else
         if :ρθ in propertynames(Y.c)
             @. ᶜχ = wdivₕ(gradₕ(Y.c.ρθ / ᶜρ)) # ᶜχθ
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
             @. Yₜ.c.ρθ -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
         elseif :ρe in propertynames(Y.c)
             @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe + ᶜp) / ᶜρ)) # ᶜχe
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
             @. Yₜ.c.ρe -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
         elseif :ρe_int in propertynames(Y.c)
             @. ᶜχ = wdivₕ(gradₕ((Y.c.ρe_int + ᶜp) / ᶜρ)) # ᶜχe_int
-            Spaces.weighted_dss!(ᶜχ, comms_ctx)
+            Spaces.weighted_dss!(ᶜχ, ghost_buffer.χ)
             @. Yₜ.c.ρe_int -= κ₄ * wdivₕ(ᶜρ * gradₕ(ᶜχ))
         end
     end
@@ -60,7 +60,7 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
             wgradₕ(divₕ(ᶜuₕ)) - Geometry.Covariant12Vector(
                 wcurlₕ(Geometry.Covariant3Vector(curlₕ(ᶜuₕ))),
             )
-        Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
+        Spaces.weighted_dss!(ᶜχuₕ, ghost_buffer.χuₕ)
         @. Yₜ.c.uₕ -=
             κ₄ * (
                 divergence_damping_factor * wgradₕ(divₕ(ᶜχuₕ)) -
@@ -70,7 +70,7 @@ function hyperdiffusion_tendency!(Yₜ, Y, p, t, comms_ctx = nothing)
             )
     elseif point_type <: Geometry.Abstract2DPoint
         @. ᶜχuₕ = Geometry.Covariant12Vector(wgradₕ(divₕ(ᶜuₕ)))
-        Spaces.weighted_dss!(ᶜχuₕ, comms_ctx)
+        Spaces.weighted_dss!(ᶜχuₕ, ghost_buffer.χuₕ)
         @. Yₜ.c.uₕ -=
             κ₄ *
             divergence_damping_factor *

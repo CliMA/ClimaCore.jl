@@ -206,16 +206,16 @@ end
     @testset "1×1 element quad mesh with all periodic boundries" begin
         topology = rectangular_grid(1, 1, true, true)
         # this has 1 global vertex
-        @test length(Topologies.vertices(topology)) == 1
-        V = collect(Topologies.vertices(topology))
+        @test length(Topologies.local_vertices(topology)) == 1
+        V = collect(Topologies.local_vertices(topology))
         @test V[1] isa Topologies.Vertex
         @test sort(collect(V[1])) == [(1, 1), (1, 2), (1, 3), (1, 4)]
     end
 
     @testset "1×1 element quad mesh with 1 periodic boundary" begin
         topology = rectangular_grid(1, 1, true, false)
-        @test length(Topologies.vertices(topology)) == 2
-        V = collect(Topologies.vertices(topology))
+        @test length(Topologies.local_vertices(topology)) == 2
+        V = collect(Topologies.local_vertices(topology))
         @test V[1] isa Topologies.Vertex
         @test sort(collect(V[1])) == [(1, 1), (1, 2)]
         @test sort(collect(V[2])) == [(1, 3), (1, 4)]
@@ -223,8 +223,8 @@ end
 
     @testset "1×1 element quad mesh with non-periodic boundaries" begin
         topology = rectangular_grid(1, 1, false, false)
-        @test length(Topologies.vertices(topology)) == 4
-        V = collect(Topologies.vertices(topology))
+        @test length(Topologies.local_vertices(topology)) == 4
+        V = collect(Topologies.local_vertices(topology))
         @test V[1] isa Topologies.Vertex
         @test collect(V[1]) == [(1, 1)]
         @test collect(V[2]) == [(1, 2)]
@@ -234,8 +234,8 @@ end
 
     @testset "2×3 element quad mesh with non-periodic boundaries" begin
         topology = rectangular_grid(2, 3, false, false)
-        @test length(Topologies.vertices(topology)) == 3 * 4
-        V = collect(Topologies.vertices(topology))
+        @test length(Topologies.local_vertices(topology)) == 3 * 4
+        V = collect(Topologies.local_vertices(topology))
         @test length(V[1]) == 1
         @test collect(V[1]) == [(1, 1)]
     end
@@ -243,8 +243,8 @@ end
 
     @testset "2×3 element quad mesh with periodic boundaries" begin
         topology = rectangular_grid(2, 3, true, true)
-        @test length(Topologies.vertices(topology)) == 2 * 3
-        V = collect(Topologies.vertices(topology))
+        @test length(Topologies.local_vertices(topology)) == 2 * 3
+        V = collect(Topologies.local_vertices(topology))
         @test length(V) == 6
         @test sort([sort(collect(vert)) for vert in V]) == sort([
             sort([(1, 1), (2, 2), (5, 4), (6, 3)]),

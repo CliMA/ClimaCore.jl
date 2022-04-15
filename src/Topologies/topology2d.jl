@@ -81,6 +81,10 @@ end
 domain(topology::Topology2D) = domain(topology.mesh)
 nelems(topology::Topology2D) = nlocalelems(topology)
 nlocalelems(topology::Topology2D) = length(topology.elemorder)
+localelems(topology::Topology2D) = topology.elemorder
+nghostelems(topology::Topology2D) = 0
+ghostelems(topology::Topology2D) = ()
+
 localelemindex(topology::Topology2D, elem) = topology.orderindex[elem]
 coordinates(topology::Topology2D, e::Int, arg) =
     coordinates(topology.mesh, topology.elemorder[e], arg)
@@ -101,31 +105,10 @@ function opposing_face(topology::Topology2D, e::Int, face::Int)
     return (topology.orderindex[opelem], opface, reversed)
 end
 interior_faces(topology::Topology2D) = topology.internal_faces
-
-Base.length(vertiter::VertexIterator{<:Topology2D}) =
-    length(vertiter.topology.vertex_offset) - 1
-Base.eltype(::VertexIterator{T}) where {T <: Topology2D} = Vertex{T, Int}
-function Base.iterate(vertiter::VertexIterator{<:Topology2D}, uvert = 1)
-    topology = vertiter.topology
-    if uvert >= length(topology.vertex_offset)
-        return nothing
-    end
-    return Vertex(topology, uvert), uvert + 1
-end
-
-Base.length(vertex::Vertex{<:Topology2D}) =
-    vertex.topology.vertex_offset[vertex.num + 1] -
-    vertex.topology.vertex_offset[vertex.num]
-Base.eltype(vertex::Vertex{<:Topology2D}) = eltype(vertex.topology.vertices)
-function Base.iterate(
-    vertex::Vertex{<:Topology2D},
-    idx = vertex.topology.vertex_offset[vertex.num],
-)
-    if idx >= vertex.topology.vertex_offset[vertex.num + 1]
-        return nothing
-    end
-    return vertex.topology.vertices[idx], idx + 1
-end
+local_vertices(topology::Topology2D) =
+    VertexIterator(topology.vertices, topology.vertex_offset)
+ghost_faces(topology::Topology2D) = ()
+ghost_vertices(topology::Topology2D) = ()
 
 boundary_names(topology::Topology2D) = keys(topology.boundaries)
 boundary_tags(topology::Topology2D) = NamedTuple{boundary_names(topology)}(
