@@ -23,7 +23,7 @@ include("ddss_setup.jl")
         reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
         (pid - 1) * Nq * Nq * nel
 
-    Spaces.weighted_dss!(y0, comms_ctx)
+    Spaces.weighted_dss!(y0)
     passed = 0
     #=
     [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5,
@@ -55,7 +55,7 @@ end
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
 
-    Spaces.weighted_dss!(y0, comms_ctx)
+    Spaces.weighted_dss!(y0)
 
     @test yx ≈ y0
 end

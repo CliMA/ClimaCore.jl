@@ -17,11 +17,11 @@ ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 
 using ClimaComms
 using ClimaCommsMPI
-const Context = ClimaCommsMPI.MPICommsContext
-const pid, nprocs = ClimaComms.init(Context)
+const comms_ctx = ClimaCommsMPI.MPICommsContext()
+const pid, nprocs = ClimaComms.init(comms_ctx)
 
 # log output only from root process
-logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
 atexit() do
@@ -45,12 +45,11 @@ Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 
-grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+grid_topology = Topologies.DistributedTopology2D(comms_ctx, mesh)
 global_grid_topology = Topologies.Topology2D(mesh)
 Nf = 4
 Nv = 1
-comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
-space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 
 gathered_coord = DataLayouts.gather(

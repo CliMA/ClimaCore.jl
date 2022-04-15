@@ -1,6 +1,18 @@
 import ..Topologies
 using ..RecursiveApply
 
+dss_transform(arg, local_geometry, weight, i, j) =
+    weight[i, j] ⊠ dss_transform(arg[i, j], local_geometry[i, j])
+dss_transform(arg, local_geometry, weight::Nothing, i, j) =
+    dss_transform(arg[i, j], local_geometry[i, j])
+dss_transform(arg, local_geometry::Nothing, weight::Nothing, i, j) = arg[i, j]
+dss_transform(arg, local_geometry, weight, i) =
+    dss_transform(arg[i], local_geometry[i]) ⊠ weight[i]
+dss_transform(arg, local_geometry, weight::Nothing, i) =
+    dss_transform(arg[i], local_geometry[i])
+dss_transform(arg, local_geometry::Nothing, weight::Nothing, i) = arg[i]
+
+
 @inline function dss_transform(arg, local_geometry)
     RecursiveApply.rmap(arg) do x
         Base.@_inline_meta
@@ -61,24 +73,44 @@ end
     Geometry.transform(ax, arg, local_geometry)
 end
 
-@inline function dss_untransform(refarg, targ, local_geometry)
-    RecursiveApply.rmap(refarg, targ) do rx, tx
+dss_untransform(::Type{T}, targ, local_geometry, i, j) where {T} =
+    dss_untransform(T, targ, local_geometry[i, j])
+dss_untransform(::Type{T}, targ, local_geometry::Nothing, i, j) where {T} =
+    dss_untransform(T, targ, local_geometry)
+dss_untransform(::Type{T}, targ, local_geometry, i) where {T} =
+    dss_untransform(T, targ, local_geometry[i])
+dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
+    dss_untransform(T, targ, local_geometry)
+@inline function dss_untransform(
+    ::Type{NamedTuple{names, T}},
+    targ::NamedTuple{names},
+    local_geometry,
+) where {names, T}
+    NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
+end
+@inline function dss_untransform(
+    ::Type{T},
+    targ::Tuple,
+    local_geometry,
+) where {T <: Tuple}
+    RecursiveApply.rmap(fieldtypes(T), targ) do Tx, tx
         Base.@_inline_meta
-        dss_untransform(rx, tx, local_geometry)
+        dss_untransform(Tx, tx, local_geometry)
     end
 end
-@inline dss_untransform(refarg::Number, targ, local_geometry) = targ
+
+@inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ
 @inline dss_untransform(
-    refarg::T,
+    ::Type{T},
     targ::T,
     local_geometry::Geometry.LocalGeometry,
-) where {T <: Geometry.AxisTensor} = targ
+) where {T <: Geometry.AxisVector} = targ
 @inline function dss_untransform(
-    refarg::Geometry.AxisTensor,
-    targ::Geometry.AxisTensor,
+    ::Type{Geometry.AxisVector{T, A1, S}},
+    targ::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
-)
-    ax = axes(refarg, 1)
+) where {T, A1, S}
+    ax = A1()
     # workaround for using a Covariant12Vector in a UW space
     if (
         axes(local_geometry.∂x∂ξ, 1) isa Geometry.UWAxis &&
@@ -97,13 +129,13 @@ end
 end
 
 function dss_1d!(
-    dest,
-    src,
-    local_geometry_data,
     htopology::Topologies.AbstractTopology,
-    Nq::Int,
-    Nv::Int = 1,
+    data,
+    local_geometry_data = nothing,
+    dss_weights = nothing,
 )
+    Nq = size(data, 1)
+    Nv = size(data, 4)
     idx1 = CartesianIndex(1, 1, 1, 1, 1)
     idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
     for (elem1, face1, elem2, face2, reversed) in
@@ -111,370 +143,441 @@ function dss_1d!(
         for level in 1:Nv
             @assert face1 == 1 && face2 == 2 && !reversed
             local_geometry_slab1 = slab(local_geometry_data, level, elem1)
-            src_slab1 = slab(src, level, elem1)
+            weight_slab1 = slab(dss_weights, level, elem1)
+            data_slab1 = slab(data, level, elem1)
+
             local_geometry_slab2 = slab(local_geometry_data, level, elem2)
-            src_slab2 = slab(src, level, elem2)
+            weight_slab2 = slab(dss_weights, level, elem2)
+            data_slab2 = slab(data, level, elem2)
             val =
-                dss_transform(src_slab1[idx1], local_geometry_slab1[idx1]) ⊞
-                dss_transform(src_slab2[idx2], local_geometry_slab2[idx2])
+                dss_transform(
+                    data_slab1,
+                    local_geometry_slab1,
+                    weight_slab1,
+                    idx1,
+                ) ⊞ dss_transform(
+                    data_slab2,
+                    local_geometry_slab2,
+                    weight_slab2,
+                    idx2,
+                )
 
-            dest_slab1 = slab(dest, level, elem1)
-            dest_slab2 = slab(dest, level, elem2)
-
-            dest_slab1[idx1] = dss_untransform(
-                dest_slab1[idx1],
+            data_slab1[idx1] = dss_untransform(
+                eltype(data_slab1),
                 val,
-                local_geometry_slab1[idx1],
+                local_geometry_slab1,
+                idx1,
             )
-            dest_slab2[idx2] = dss_untransform(
-                dest_slab2[idx2],
+            data_slab2[idx2] = dss_untransform(
+                eltype(data_slab2),
                 val,
-                local_geometry_slab2[idx2],
+                local_geometry_slab2,
+                idx2,
             )
         end
     end
-    return dest
+    return data
 end
 
-function dss_2d!(
-    dest,
-    src,
-    local_geometry_data,
-    ghost_geometry_data,
-    topology::Topologies.AbstractTopology,
-    Nq::Int,
-    Nv::Int = 1,
-    comms_ctx = nothing,
-)
-    @assert ghost_geometry_data === nothing && comms_ctx === nothing
+struct GhostBuffer{G, D}
+    graph_context::G
+    send_data::D
+    recv_data::D
+end
 
-    # TODO: generalize to extruded domains by returning a cartesian index?
-    # iterate over the interior faces for each element of the mesh
-    for (elem1, face1, elem2, face2, reversed) in
+recv_buffer(ghost::GhostBuffer) = ghost.recv_data
+
+create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
+
+function create_ghost_buffer(
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    topology::Topologies.DistributedTopology2D,
+) where {S, Nij}
+    if data isa DataLayouts.IJFH
+        send_data = DataLayouts.IJFH{S, Nij}(
+            typeof(parent(data)),
+            Topologies.nsendelems(topology),
+        )
+        recv_data = DataLayouts.IJFH{S, Nij}(
+            typeof(parent(data)),
+            Topologies.nrecvelems(topology),
+        )
+        k = stride(parent(send_data), 4)
+    else
+        Nv, _, _, Nf, _ = size(parent(data))
+        send_data = DataLayouts.VIJFH{S, Nij}(
+            similar(
+                parent(data),
+                (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
+            ),
+        )
+        recv_data = DataLayouts.VIJFH{S, Nij}(
+            similar(
+                parent(data),
+                (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
+            ),
+        )
+        k = stride(parent(send_data), 5)
+    end
+
+    graph_context = ClimaComms.graph_context(
+        topology.context,
+        parent(send_data),
+        k .* topology.send_elem_lengths,
+        topology.neighbor_pids,
+        parent(recv_data),
+        k .* topology.recv_elem_lengths,
+        topology.neighbor_pids,
+    )
+    GhostBuffer(graph_context, send_data, recv_data)
+end
+
+"""
+    fill_send_buffer!(topology, data, ghost_buffer)
+
+Fill the send buffer of `ghost_buffer` with the necessary data from `data`.
+"""
+function fill_send_buffer!(
+    topology::Topologies.DistributedTopology2D,
+    data::DataLayouts.AbstractData,
+    ghost_buffer::GhostBuffer,
+)
+
+    Nv = size(data, 4)
+    send_data = ghost_buffer.send_data
+    for (sidx, lidx) in enumerate(topology.send_elem_lidx)
+        for level in 1:Nv
+            src_slab = slab(data, level, lidx)
+            send_slab = slab(send_data, level, sidx)
+            copyto!(send_slab, src_slab)
+        end
+    end
+    return nothing
+end
+
+function dss_interior_faces!(
+    topology,
+    data,
+    local_geometry_data = nothing,
+    local_weights = nothing,
+)
+    Nq = size(data, 1)
+    Nv = size(data, 4)
+
+    for (lidx1, face1, lidx2, face2, reversed) in
         Topologies.interior_faces(topology)
         for level in 1:Nv
-            # iterate over non-vertex nodes
-            src_slab1 = slab(src, level, elem1)
-            src_slab2 = slab(src, level, elem2)
-            local_geometry_slab1 = slab(local_geometry_data, level, elem1)
-            local_geometry_slab2 = slab(local_geometry_data, level, elem2)
-            dest_slab1 = slab(dest, level, elem1)
-            dest_slab2 = slab(dest, level, elem2)
+
+            data_slab1 = slab(data, level, lidx1)
+            data_slab2 = slab(data, level, lidx2)
+            local_geometry_slab1 = slab(local_geometry_data, level, lidx1)
+            local_geometry_slab2 = slab(local_geometry_data, level, lidx2)
+            weight_slab1 = slab(local_weights, level, lidx1)
+            weight_slab2 = slab(local_weights, level, lidx2)
             for q in 2:(Nq - 1)
                 i1, j1 = Topologies.face_node_index(face1, Nq, q, false)
                 i2, j2 = Topologies.face_node_index(face2, Nq, q, reversed)
                 val =
                     dss_transform(
-                        src_slab1[i1, j1],
-                        local_geometry_slab1[i1, j1],
+                        data_slab1,
+                        local_geometry_slab1,
+                        weight_slab1,
+                        i1,
+                        j1,
                     ) ⊞ dss_transform(
-                        src_slab2[i2, j2],
-                        local_geometry_slab2[i2, j2],
+                        data_slab2,
+                        local_geometry_slab2,
+                        weight_slab2,
+                        i2,
+                        j2,
                     )
-                dest_slab1[i1, j1] = dss_untransform(
-                    dest_slab1[i1, j1],
+                data_slab1[i1, j1] = dss_untransform(
+                    eltype(data_slab1),
                     val,
-                    local_geometry_slab1[i1, j1],
+                    local_geometry_slab1,
+                    i1,
+                    j1,
                 )
-                dest_slab2[i2, j2] = dss_untransform(
-                    dest_slab2[i2, j2],
+                data_slab2[i2, j2] = dss_untransform(
+                    eltype(data_slab2),
                     val,
-                    local_geometry_slab2[i2, j2],
+                    local_geometry_slab2,
+                    i2,
+                    j2,
                 )
             end
         end
     end
+    return nothing
+end
 
-    # iterate over all vertices
-    for vertex in Topologies.vertices(topology)
+function dss_local_vertices!(
+    topology,
+    data,
+    local_geometry_data = nothing,
+    local_weights = nothing,
+)
+    Nq = size(data, 1)
+    Nv = size(data, 4)
+
+    for vertex in Topologies.local_vertices(topology)
         # for each level
         for level in 1:Nv
             # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, vertex) do (elem, vertex_num)
-                i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                local_geometry_slab = slab(local_geometry_data, level, elem)
-                src_slab = slab(src, level, elem)
-                dss_transform(src_slab[i, j], local_geometry_slab[i, j])
+            sum_data = mapreduce(⊞, vertex) do (lidx, vert)
+                i, j = Topologies.vertex_node_index(vert, Nq)
+                data_slab = slab(data, level, lidx)
+                local_geometry_slab = slab(local_geometry_data, level, lidx)
+                weight_slab = slab(local_weights, level, lidx)
+                dss_transform(data_slab, local_geometry_slab, weight_slab, i, j)
             end
 
             # scatter: assign sum to shared vertices
-            for (elem, vertex_num) in vertex
-                dest_slab = slab(dest, level, elem)
-                i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                local_geometry_slab = slab(local_geometry_data, level, elem)
-                dest_slab[i, j] = dss_untransform(
-                    dest_slab[i, j],
+            for (lidx, vert) in vertex
+                data_slab = slab(data, level, lidx)
+                i, j = Topologies.vertex_node_index(vert, Nq)
+                local_geometry_slab = slab(local_geometry_data, level, lidx)
+                data_slab[i, j] = dss_untransform(
+                    eltype(data_slab),
                     sum_data,
-                    local_geometry_slab[i, j],
+                    local_geometry_slab,
+                    i,
+                    j,
                 )
             end
         end
     end
-    return dest
+end
+
+function dss_ghost_faces!(
+    topology,
+    data,
+    recv_buf,
+    local_geometry_data = nothing,
+    ghost_geometry_data = nothing,
+    local_weights = nothing,
+    ghost_weights = nothing;
+    update_ghost = false,
+)
+    Nq = size(data, 1)
+    Nv = size(data, 4)
+
+    for (lidx1, face1, ridx2, face2, reversed) in
+        Topologies.ghost_faces(topology)
+        for level in 1:Nv
+
+            data_slab1 = slab(data, level, lidx1)
+            data_slab2 = slab(recv_buf, level, ridx2)
+            local_geometry_slab1 = slab(local_geometry_data, level, lidx1)
+            local_geometry_slab2 = slab(ghost_geometry_data, level, ridx2)
+            weight_slab1 = slab(local_weights, level, lidx1)
+            weight_slab2 = slab(ghost_weights, level, ridx2)
+            for q in 2:(Nq - 1)
+                i1, j1 = Topologies.face_node_index(face1, Nq, q, false)
+                i2, j2 = Topologies.face_node_index(face2, Nq, q, reversed)
+                val =
+                    dss_transform(
+                        data_slab1,
+                        local_geometry_slab1,
+                        weight_slab1,
+                        i1,
+                        j1,
+                    ) ⊞ dss_transform(
+                        data_slab2,
+                        local_geometry_slab2,
+                        weight_slab2,
+                        i2,
+                        j2,
+                    )
+                data_slab1[i1, j1] = dss_untransform(
+                    eltype(data_slab1),
+                    val,
+                    local_geometry_slab1,
+                    i1,
+                    j1,
+                )
+                if update_ghost
+                    data_slab2[i2, j2] = dss_untransform(
+                        eltype(data_slab2),
+                        val,
+                        local_geometry_slab2,
+                        i2,
+                        j2,
+                    )
+                end
+            end
+        end
+    end
+end
+
+function dss_ghost_vertices!(
+    topology,
+    data,
+    recv_buf,
+    local_geometry_data = nothing,
+    ghost_geometry_data = nothing,
+    local_weights = nothing,
+    ghost_weights = nothing;
+    update_ghost = false,
+)
+    Nq = size(data, 1)
+    Nv = size(data, 4)
+
+    for vertex in Topologies.ghost_vertices(topology)
+        # for each level
+        for level in 1:Nv
+            # gather: compute sum over shared vertices
+            sum_data = mapreduce(⊞, vertex) do (isghost, idx, vert)
+                i, j = Topologies.vertex_node_index(vert, Nq)
+                if isghost
+                    ridx = idx
+                    src_slab = slab(recv_buf, level, ridx)
+                    local_geometry_slab =
+                        slab(ghost_geometry_data, level, ridx)
+                    weight_slab = slab(ghost_weights, level, ridx)
+                    dss_transform(
+                        src_slab,
+                        local_geometry_slab,
+                        weight_slab,
+                        i,
+                        j,
+                    )
+                else
+                    lidx = idx
+                    src_slab = slab(data, level, lidx)
+                    local_geometry_slab =
+                        slab(local_geometry_data, level, lidx)
+                    weight_slab = slab(local_weights, level, lidx)
+                    dss_transform(
+                        src_slab,
+                        local_geometry_slab,
+                        weight_slab,
+                        i,
+                        j,
+                    )
+                end
+            end
+
+            # scatter: assign sum to shared vertices
+            for (isghost, idx, vert) in vertex
+                if isghost
+                    if !update_ghost
+                        continue
+                    end
+                    ridx = idx
+                    i, j = Topologies.vertex_node_index(vert, Nq)
+                    dest_slab = slab(recv_buf, level, ridx)
+                    local_geometry_slab = slab(ghost_geometry_data, level, ridx)
+                    dest_slab[i, j] = dss_untransform(
+                        eltype(dest_slab),
+                        sum_data,
+                        local_geometry_slab,
+                        i,
+                        j,
+                    )
+                else
+                    lidx = idx
+                    dest_slab = slab(data, level, lidx)
+                    i, j = Topologies.vertex_node_index(vert, Nq)
+                    local_geometry_slab = slab(local_geometry_data, level, lidx)
+                    dest_slab[i, j] = dss_untransform(
+                        eltype(dest_slab),
+                        sum_data,
+                        local_geometry_slab,
+                        i,
+                        j,
+                    )
+                end
+            end
+        end
+    end
 end
 
 function dss_2d!(
-    dest,
-    src,
-    local_geometry_data,
-    ghost_geometry_data,
-    topology::Topologies.DistributedTopology2D,
-    Nq::Int,
-    Nv::Int = 1,
-    comms_ctx = nothing,
+    topology,
+    data,
+    ghost_buffer,
+    local_geometry_data = nothing,
+    ghost_geometry_data = nothing,
+    local_weights = nothing,
+    ghost_weights = nothing,
 )
-    if Topologies.nneighbors(topology) > 0
-        @assert comms_ctx !== nothing
-    end
-    pid = ClimaComms.mypid(comms_ctx)
-    elt = eltype(dest)
 
-    # prepare send buffers from send elements
-    for nbr_idx in 1:Topologies.nneighbors(topology)
-        sbuf = ClimaComms.send_stage(ClimaComms.neighbors(comms_ctx)[nbr_idx])
-        for level in 1:Nv
-            senum = 1
-            for sendelem in topology.send_elems[nbr_idx]
-                sidx = Topologies.localelemindex(topology, sendelem)
-                src_slab = slab(src, level, sidx)
-                dest_slab =
-                    DataLayouts.IJF{elt, Nq}(view(sbuf, level, :, :, :, senum))
-                copyto!(dest_slab, src_slab)
-                senum += 1
-            end
-        end
+
+    if ghost_buffer isa GhostBuffer
+        # 1) copy send data to buffer
+        fill_send_buffer!(topology, data, ghost_buffer)
+        # 2) start communication
+        ClimaComms.start(ghost_buffer.graph_context)
     end
 
-    # start the communication
-    ClimaComms.start(comms_ctx)
+    dss_interior_faces!(topology, data, local_geometry_data, local_weights)
 
-    # DSS over the interior faces and vertices
-    # TODO: generalize to extruded domains by returning a cartesian index?
-    # iterate over the interior faces for each element of the mesh
-    for (e1, face1, e2, face2, reversed) in Topologies.interior_faces(topology)
-        for level in 1:Nv
-            # iterate over non-vertex nodes
-            e1idx = Topologies.localelemindex(topology, e1)
-            e2idx = Topologies.localelemindex(topology, e2)
-            src_slab1 = slab(src, level, e1idx)
-            src_slab2 = slab(src, level, e2idx)
-            local_geometry_slab1 = slab(local_geometry_data, level, e1idx)
-            local_geometry_slab2 = slab(local_geometry_data, level, e2idx)
-            dest_slab1 = slab(dest, level, e1idx)
-            dest_slab2 = slab(dest, level, e2idx)
-            for q in 2:(Nq - 1)
-                i1, j1 = Topologies.face_node_index(face1, Nq, q, false)
-                i2, j2 = Topologies.face_node_index(face2, Nq, q, reversed)
-                val =
-                    dss_transform(
-                        src_slab1[i1, j1],
-                        local_geometry_slab1[i1, j1],
-                    ) ⊞ dss_transform(
-                        src_slab2[i2, j2],
-                        local_geometry_slab2[i2, j2],
-                    )
-                dest_slab1[i1, j1] = dss_untransform(
-                    dest_slab1[i1, j1],
-                    val,
-                    local_geometry_slab1[i1, j1],
-                )
-                dest_slab2[i2, j2] = dss_untransform(
-                    dest_slab2[i2, j2],
-                    val,
-                    local_geometry_slab2[i2, j2],
-                )
-            end
-        end
+    # 4) progress communication
+    if ghost_buffer isa GhostBuffer
+        ClimaComms.progress(ghost_buffer.graph_context)
     end
 
-    # progress communication
-    ClimaComms.progress(comms_ctx)
+    dss_local_vertices!(topology, data, local_geometry_data, local_weights)
 
-    # iterate over interior vertices
-    for vertex in Topologies.interior_vertices(topology)
-        # for each level
-        for level in 1:Nv
-            # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, vertex) do (elem, vertex_num)
-                e = Topologies.localelemindex(topology, elem)
-                i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                local_geometry_slab = slab(local_geometry_data, level, e)
-                src_slab = slab(src, level, e)
-                dss_transform(src_slab[i, j], local_geometry_slab[i, j])
-            end
-
-            # scatter: assign sum to shared vertices
-            for (elem, vertex_num) in vertex
-                e = Topologies.localelemindex(topology, elem)
-                dest_slab = slab(dest, level, e)
-                i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                local_geometry_slab = slab(local_geometry_data, level, e)
-                dest_slab[i, j] = dss_untransform(
-                    dest_slab[i, j],
-                    sum_data,
-                    local_geometry_slab[i, j],
-                )
-            end
-        end
+    # 6) complete communication
+    if ghost_buffer isa GhostBuffer
+        ClimaComms.finish(ghost_buffer.graph_context)
     end
 
-    # complete communication
-    ClimaComms.finish(comms_ctx)
-
-    # DSS over ghost faces; this is set up such that `elem1` is local
-    # and `elem2` is remote
-    #  - potentially change to:
-    #   (localelemnumber, face1, nbr_idx, gei, face2)
-
-    for (e1, face1, e2, face2, reversed, opid, nbr_idx, gei) in
-        Topologies.ghost_faces(topology)
-
-        # this is the local index for global order element 1
-        lei = topology.localorderindex[e1]
-
-        # get the receive buffer for this neighbor
-        rbuf = ClimaComms.recv_stage(ClimaComms.neighbors(comms_ctx)[nbr_idx])
-
-        for level in 1:Nv
-            src_slab1 = slab(src, level, lei)
-            local_geometry_slab1 = slab(local_geometry_data, level, lei)
-
-            src_slab2 =
-                DataLayouts.IJF{elt, Nq}(view(rbuf, level, :, :, :, gei))
-
-            # unlike the ghost elements, the geometry data is not organized
-            # by neighbor so we must compute the correct index into it
-            geomei = gei
-            for n in 1:(nbr_idx - 1)
-                geomei += length(topology.ghost_elems[n])
-            end
-            ghost_geometry_slab2 = slab(ghost_geometry_data, level, geomei)
-
-            dest_slab = slab(dest, level, lei)
-            for q in 2:(Nq - 1)
-                i1, j1 = Topologies.face_node_index(face1, Nq, q, false)
-                i2, j2 = Topologies.face_node_index(face2, Nq, q, reversed)
-                val =
-                    dss_transform(
-                        src_slab1[i1, j1],
-                        local_geometry_slab1[i1, j1],
-                    ) ⊞ dss_transform(
-                        src_slab2[i2, j2],
-                        ghost_geometry_slab2[i2, j2],
-                    )
-
-                dest_slab[i1, j1] = dss_untransform(
-                    dest_slab[i1, j1],
-                    val,
-                    local_geometry_slab1[i1, j1],
-                )
-            end
-        end
+    # 7) DSS over ghost faces
+    if ghost_buffer isa GhostBuffer
+        recv_buf = recv_buffer(ghost_buffer)
+    else
+        recv_buf = ghost_buffer
     end
 
-    # DSS over ghost vertices
-    # potentially change to an iterator over (nbr_idx, gei, vert) or (0, lei, vert)
-    for verts in Topologies.ghost_vertices(topology)
-        for level in 1:Nv
-            # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, verts) do (e, vertex_num, nbr_idx, gei)
-                i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                opid = topology.elempid[e]
-                if opid == pid
-                    lei = topology.localorderindex[e]
-                    src_slab = slab(src, level, lei)
-                    geometry_slab = slab(local_geometry_data, level, lei)
-                else
-                    elem = topology.elemorder[e]
-                    rbuf = ClimaComms.recv_stage(
-                        ClimaComms.neighbors(comms_ctx)[nbr_idx],
-                    )
-                    src_slab = DataLayouts.IJF{elt, Nq}(
-                        view(rbuf, level, :, :, :, gei),
-                    )
-                    geomei = gei
-                    for n in 1:(nbr_idx - 1)
-                        geomei += length(topology.ghost_elems[n])
-                    end
-                    geometry_slab = slab(ghost_geometry_data, level, geomei)
-                end
-                dss_transform(src_slab[i, j], geometry_slab[i, j])
-            end
+    dss_ghost_faces!(
+        topology,
+        data,
+        recv_buf,
+        local_geometry_data,
+        ghost_geometry_data,
+        local_weights,
+        ghost_weights,
+    )
+    dss_ghost_vertices!(
+        topology,
+        data,
+        recv_buf,
+        local_geometry_data,
+        ghost_geometry_data,
+        local_weights,
+        ghost_weights,
+    )
 
-            # scatter: assign sum to shared vertices
-            for (e, vertex_num) in verts
-                if topology.elempid[e] == pid
-                    lei = topology.localorderindex[e]
-                    dest_slab = slab(dest, level, lei)
-                    i, j = Topologies.vertex_node_index(vertex_num, Nq)
-                    local_geometry_slab = slab(local_geometry_data, level, lei)
-                    dest_slab[i, j] = dss_untransform(
-                        dest_slab[i, j],
-                        sum_data,
-                        local_geometry_slab[i, j],
-                    )
-                end
-            end
-        end
-    end
-
-    return dest
+    # 8) DSS over ghost vertices
+    return data
 end
 
-"""
-    horizontal_dss!(dest, src, topology, Nq)
 
-Apply horizontal direct stiffness summation (DSS) to `src`, storing the result in `dest`.
-"""
-function horizontal_dss!(dest, src, space::AbstractSpace, comms_ctx = nothing)
+
+function weighted_dss!(data, space::AbstractSpace, ghost_buffer = nothing)
     if space isa ExtrudedFiniteDifferenceSpace
-        Nv = nlevels(space)
         hspace = space.horizontal_space
     else
-        Nv = 1
         hspace = space
     end
-    htopology = hspace.topology
-    Nq = Quadratures.degrees_of_freedom(hspace.quadrature_style)::Int
-    if hspace isa SpectralElementSpace1D
-        dss_1d!(dest, src, local_geometry_data(space), htopology, Nq, Nv)
-    elseif hspace isa SpectralElementSpace2D
+    topology = hspace.topology
+    if topology isa Topologies.IntervalTopology
+        dss_1d!(topology, data, local_geometry_data(space), hspace.dss_weights)
+    else
+        if isnothing(ghost_buffer)
+            ghost_buffer = create_ghost_buffer(data, topology)
+        end
         dss_2d!(
-            dest,
-            src,
+            topology,
+            data,
+            ghost_buffer,
             local_geometry_data(space),
             ghost_geometry_data(space),
-            htopology,
-            Nq,
-            Nv,
-            comms_ctx,
+            hspace.local_dss_weights,
+            hspace.ghost_dss_weights,
         )
     end
 end
-
-horizontal_dss!(data, space::AbstractSpace, comms_ctx = nothing) =
-    horizontal_dss!(data, data, space::AbstractSpace, comms_ctx)
-
-weighted_dss!(dest, src, space::AbstractSpace, comms_ctx = nothing) =
-    horizontal_dss!(
-        dest,
-        Base.Broadcast.broadcasted(⊠, src, space.dss_weights),
-        space,
-        comms_ctx,
-    )
-
-function weighted_dss!(
-    dest,
-    src,
-    space::ExtrudedFiniteDifferenceSpace,
-    comms_ctx = nothing,
-)
-    horizontal_dss!(
-        dest,
-        Base.Broadcast.broadcasted(⊠, src, space.horizontal_space.dss_weights),
-        space,
-        comms_ctx,
-    )
-end
-weighted_dss!(data, space::AbstractSpace, comms_ctx = nothing) =
-    weighted_dss!(data, data, space, comms_ctx)

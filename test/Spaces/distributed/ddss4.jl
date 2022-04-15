@@ -17,7 +17,7 @@ include("ddss_setup.jl")
         reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
         (pid - 1) * Nq * Nq * nel
 
-    Spaces.weighted_dss!(y0, comms_ctx)
+    Spaces.weighted_dss!(y0)
     passed = 0
     #=
     output from single process run:
@@ -32,7 +32,7 @@ include("ddss_setup.jl")
             passed += 1
         end
     elseif pid == 2
-        if yarr[:] == [32.5, 40.0, 41.0, 32.5, 14.5, 22.0, 23.0, 14.5, 18.5, 26.0, 27.0, 18.5, 32.5, 40.0, 41.0, 32.5] 
+        if yarr[:] == [32.5, 40.0, 41.0, 32.5, 14.5, 22.0, 23.0, 14.5, 18.5, 26.0, 27.0, 18.5, 32.5, 40.0, 41.0, 32.5]
             passed += 1
         end
     elseif pid == 3

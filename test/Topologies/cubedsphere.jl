@@ -67,8 +67,8 @@ end
         topology = Topologies.Topology2D(
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 1),
         )
-        length(Topologies.vertices(topology)) == 8
-        for uvert in Topologies.vertices(topology)
+        length(Topologies.local_vertices(topology)) == 8
+        for uvert in Topologies.local_vertices(topology)
             @test length(uvert) == 3
         end
     end
@@ -76,8 +76,8 @@ end
         topology = Topologies.Topology2D(
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 3),
         )
-        length(Topologies.vertices(topology)) == 8 + 12 * 2 + 6 * 4
-        for uvert in Topologies.vertices(topology)
+        length(Topologies.local_vertices(topology)) == 8 + 12 * 2 + 6 * 4
+        for uvert in Topologies.local_vertices(topology)
             @test length(uvert) in (3, 4)
         end
     end

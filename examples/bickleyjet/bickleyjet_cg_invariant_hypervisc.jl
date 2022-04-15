@@ -17,11 +17,11 @@ usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms
     using ClimaCommsMPI
-    const Context = ClimaCommsMPI.MPICommsContext
-    const pid, nprocs = ClimaComms.init(Context)
+    const context = ClimaCommsMPI.MPICommsContext()
+    const pid, nprocs = ClimaComms.init(context)
 
     # log output only from root process
-    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+    logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
 
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
     atexit() do
@@ -59,12 +59,9 @@ Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 if usempi
-    grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
     global_grid_topology = Topologies.Topology2D(mesh)
-    Nf = 4
-    Nv = 1
-    comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 else
     comms_ctx = nothing
@@ -100,6 +97,13 @@ end
 
 y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
 
+if usempi
+    ghost_buffer = Spaces.create_ghost_buffer(y0)
+else
+    ghost_buffer = nothing
+end
+
+
 function energy(state, p, local_geometry)
     ρ, u = state.ρ, state.u
     return ρ * Geometry._norm_sqr(u, local_geometry) / 2 + p.g * ρ^2 / 2
@@ -122,7 +126,7 @@ function rhs!(dydt, y, _, t)
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
-    Spaces.weighted_dss!(dydt, comms_ctx)
+    Spaces.weighted_dss!(dydt, ghost_buffer)
 
     @. dydt.u =
         -D₄ * (
@@ -138,7 +142,7 @@ function rhs!(dydt, y, _, t)
         dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
-    Spaces.weighted_dss!(dydt, comms_ctx)
+    Spaces.weighted_dss!(dydt, ghost_buffer)
     return dydt
 end
 
@@ -161,8 +165,8 @@ sol_global = []
 if usempi
     for sol_step in sol.u
         sol_step_values_global =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol_step))
-        if ClimaComms.iamroot(Context)
+            DataLayouts.gather(context, Fields.field_values(sol_step))
+        if ClimaComms.iamroot(context)
             sol_step_global = Fields.Field(sol_step_values_global, global_space)
             push!(sol_global, sol_step_global)
         end
@@ -181,7 +185,7 @@ function total_energy(y, parameters)
     sum(energy.(y, Ref(parameters), Fields.local_geometry_field(global_space)))
 end
 
-if !usempi || (usempi && ClimaComms.iamroot(Context))
+if !usempi || (usempi && ClimaComms.iamroot(context))
     anim = Plots.@animate for u in solution
         Plots.plot(u.ρθ, clim = (-1, 1))
     end

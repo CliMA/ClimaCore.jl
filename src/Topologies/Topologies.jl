@@ -28,7 +28,7 @@ mesh in the horizontal domain.
 - [`vertex_node_index`](@ref)
 - [`vertices`](@ref)
 - [`neighboring_elements`](@ref)
-- [`interior_vertices`](@ref)
+- [`local_vertices`](@ref)
 - [`ghost_vertices`](@ref)
 - [`neighbors`](@ref)
 - [`boundary_tags`](@ref)
@@ -202,50 +202,65 @@ function vertex_node_index(vertex_num, Nq)
     end
 end
 
-struct Vertex{T <: AbstractTopology, V}
-    topology::T
-    num::V
-end
-Base.eltype(::Type{<:Vertex}) = Tuple{Int, Int}
-
 """
     vertices(topology)
 
 An iterator over the unique (shared) vertices of the topology `topology`.
-Each vertex is an iterator over `(element, vertex_number)` pairs.
+Each vertex returns a `Vertex` object, which is itself an iterator.
 """
-function vertices(topology)
-    VertexIterator(topology)
+struct VertexIterator{T}
+    vertices::Vector{T}
+    vertex_offset::Vector{Int}
 end
-struct VertexIterator{T <: AbstractTopology}
-    topology::T
+Base.eltype(::Type{VertexIterator{T}}) where {T} = Vertex{T}
+Base.eltype(::VertexIterator{T}) where {T} = Vertex{T}
+Base.length(vertiter::VertexIterator{T}) where {T} =
+    length(vertiter.vertex_offset) - 1
+
+function Base.iterate(vertiter::VertexIterator, num = 1)
+    if num >= length(vertiter.vertex_offset)
+        return nothing
+    end
+    return Vertex(vertiter, num), num + 1
 end
 
+
+struct Vertex{T}
+    vertiter::VertexIterator{T}
+    num::Int
+end
+Base.eltype(::Type{Vertex{T}}) where {T} = T
+Base.eltype(::Vertex{T}) where {T} = T
+Base.length(vertex::Vertex{T}) where {T} =
+    vertex.vertiter.vertex_offset[vertex.num + 1] -
+    vertex.vertiter.vertex_offset[vertex.num]
+function Base.iterate(
+    vertex::Vertex,
+    idx = vertex.vertiter.vertex_offset[vertex.num],
+)
+    if idx >= vertex.vertiter.vertex_offset[vertex.num + 1]
+        return nothing
+    end
+    return vertex.vertiter.vertices[idx], idx + 1
+end
+
+
+
 """
-    interior_vertices(topology)
+    local_vertices(topology)
 
 An iterator over the interior vertices of `topology`. Each vertex is an
-iterator over `(element, vertex_number)` pairs.
+iterator over `(lidx, vert)` pairs.
 """
-function interior_vertices(topology)
-    InteriorVertexIterator(topology)
-end
-struct InteriorVertexIterator{T <: AbstractTopology}
-    topology::T
-end
+function local_vertices end
 
 """
     ghost_vertices(topology)
 
 An iterator over the ghost vertices of `topology`. Each vertex is an
-iterator over `(element, vertex_number)` pairs.
+iterator over `(isghost, lidx/ridx, vert)` pairs.
 """
-function ghost_vertices(topology)
-    GhostVertexIterator(topology)
-end
-struct GhostVertexIterator{T <: AbstractTopology}
-    topology::T
-end
+function ghost_vertices end
 
 """
     neighbors(topology)

@@ -29,7 +29,7 @@ function write_exodus(
     time_step = 0
 
     num_elem = Topologies.nlocalelems(topology)
-    num_nodes = length(Topologies.vertices(topology))
+    num_nodes = length(Topologies.local_vertices(topology))
     num_dim = Geometry.ncomponents(Meshes.coordinate_type(topology))
     num_qa_rec = 1
     num_el_blk = 1
@@ -40,7 +40,7 @@ function write_exodus(
     connect1 = Array{Int32}(undef, (num_nod_per_el1, num_elem)) # array of unique vertex indices for each element
     coord = Array{Float64}(undef, (num_nodes, num_dim))  # array of coordinates for each unique vertex
 
-    for (uv, vertex) in enumerate(Topologies.vertices(topology))
+    for (uv, vertex) in enumerate(Topologies.local_vertices(topology))
         for (e, v) in vertex
             connect1[v, e] = uv
         end
