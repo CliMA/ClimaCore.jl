@@ -150,7 +150,6 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
     w5 = abs(uₙ) * (Δρθ - θ * Δp * c⁻²)
 
     # fluxes!!!
-
     fluxᵀn_ρ = (w1 + w2 + w3) * 0.5
     fluxᵀn_ρu =
         (w1 * (u - c * n) + w2 * (u + c * n) + w3 * u + w4 * (Δu - Δuₙ * n)) *

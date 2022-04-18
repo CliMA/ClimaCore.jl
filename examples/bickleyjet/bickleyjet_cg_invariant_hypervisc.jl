@@ -132,12 +132,21 @@ function rhs!(dydt, y, _, t)
         )
     @. dydt.ρθ = -D₄ * wdiv(y.ρ * grad(dydt.ρθ))
 
-    # add in pieces
+    # main rhs pieces. all the best pieces. the greatest
+    local_geometry = Fields.local_geometry_field(axes(y.u))
+    x₂ = local_geometry.coordinates.y
+    # log(cosh()) => derivative is tanh  = sinh / cosh
+    u_forcing = @. Geometry.Covariant12Vector(
+        Geometry.UVVector(1/5 * log(cosh(x₂*5)), 0.0),
+        local_geometry,
+    )
+
+    forcing = @. 0.01 * (y.u - u_forcing)
     @. begin
         dydt.ρ = -wdiv(y.ρ * y.u)
-        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
+        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u) - forcing
         dydt.ρθ += -wdiv(y.ρθ * y.u)
-    end
+    end    
     Spaces.weighted_dss!(dydt, comms_ctx)
     return dydt
 end
