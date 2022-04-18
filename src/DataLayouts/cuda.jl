@@ -19,6 +19,9 @@ Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
 Adapt.adapt_structure(to, data::VF{S}) where {S} =
     VF{S}(Adapt.adapt(to, parent(data)))
 
+Adapt.adapt_structure(to, data::DataF{S}) where {S} =
+    DataF{S}(Adapt.adapt(to, parent(data)))
+
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}
 
