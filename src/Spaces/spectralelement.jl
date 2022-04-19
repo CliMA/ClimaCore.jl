@@ -135,7 +135,7 @@ end
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
 """
-function SpectralElementSpace2D(topology, quadrature_style; nvars = 5)
+function SpectralElementSpace2D(topology, quadrature_style)
 
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
