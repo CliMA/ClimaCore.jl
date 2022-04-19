@@ -3,6 +3,11 @@
 
 abstract type DataStyle <: Base.BroadcastStyle end
 
+abstract type Data0DStyle <: DataStyle end
+struct DataFStyle{A} <: Data0DStyle end
+DataStyle(::Type{DataF{S, A}}) where {S, A} = DataFStyle{parent_array_type(A)}()
+Data0DStyle(::Type{DataFStyle{A}}) where {A} = DataFStyle{A}
+
 abstract type DataColumnStyle <: DataStyle end
 struct VFStyle{A} <: DataColumnStyle end
 DataStyle(::Type{VF{S, A}}) where {S, A} = VFStyle{parent_array_type(A)}()
@@ -60,6 +65,10 @@ Base.Broadcast.BroadcastStyle(
     ds::DataStyle,
 ) = ds
 
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::DataFStyle{A2},
+) where {A1, A2} = DataFStyle{promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(::VFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
     VFStyle{promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
@@ -84,6 +93,39 @@ Base.Broadcast.BroadcastStyle(
 ) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
     ::VIJFHStyle{Nij, A1},
+    ::VIJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::IFStyle{Ni, A2},
+) where {Ni, A1, A2} = IFStyle{Ni, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::IJFStyle{Nij, A2},
+) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(::DataFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
+    VFStyle{promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::IFHStyle{Ni, A2},
+) where {Ni, A1, A2} = IFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::IJFHStyle{Nij, A2},
+) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::VIFHStyle{Ni, A2},
+) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
     ::VIJFHStyle{Nij, A2},
 ) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 
@@ -171,6 +213,15 @@ end
 end
 
 function Base.similar(
+    bc::Union{DataF{<:Any, A}, Broadcast.Broadcasted{DataFStyle{A}}},
+    ::Type{Eltype},
+) where {A, Eltype}
+    PA = parent_array_type(A)
+    array = similar(PA, (1, typesize(eltype(A), Eltype)))
+    return DataF{Eltype}(array)
+end
+
+function Base.similar(
     bc::Union{IJFH{<:Any, Nij, A}, Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
     ::Type{Eltype},
 ) where {Nij, A, Eltype}
@@ -236,6 +287,17 @@ function Base.similar(
     PA = parent_array_type(A)
     array = similar(PA, (Nv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return VIJFH{Eltype, Nij}(array)
+end
+
+function Base.mapreduce(
+    fn::F,
+    op::Op,
+    bc::Union{DataF{<:Any, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+) where {F, Op, A}
+    mapreduce(op, 1) do v
+        Base.@_inline_meta
+        @inbounds fn(bc[])
+    end
 end
 
 function Base.mapreduce(
@@ -350,6 +412,14 @@ end
             Base.Broadcast.Broadcasted{DS}(bc.f, bc.args, axes(dest)),
         ),
     )
+end
+
+@inline function Base.copyto!(
+    dest::DataF{S},
+    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+) where {S, A}
+    dest[] = convert(S, bc[])
+    return dest
 end
 
 function Base.copyto!(

@@ -5,6 +5,7 @@ using Base: operator_associativity
 
 include("recursive.jl")
 
+include("DataLayouts/data0d.jl")
 include("DataLayouts/data1d.jl")
 include("DataLayouts/data2d.jl")
 include("DataLayouts/data1dx.jl")
