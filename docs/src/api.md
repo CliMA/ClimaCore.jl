@@ -177,6 +177,17 @@ Spaces.Quadratures.differentiation_matrix
 Spaces.Quadratures.orthonormal_poly
 ```
 
+#### Internals
+
+```@docs
+Spaces.dss_transform
+Spaces.dss_untransform
+Spaces.dss_interior_faces!
+Spaces.dss_local_vertices!
+Spaces.dss_ghost_faces!
+Spaces.dss_ghost_vertices!
+```
+
 ## RecursiveApply
 
 ```@docs

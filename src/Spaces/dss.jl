@@ -1,6 +1,17 @@
 import ..Topologies
 using ..RecursiveApply
 
+"""
+    dss_transform(arg, local_geometry, weight, I...)
+
+Transfrom `arg[I...]` to a basis for direct stiffness summation (DSS).
+Transformations only apply to vector quantities.
+
+- `local_geometry[I...]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+- `weight[I...]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+
+See [`Spaces.weighted_dss!`](@ref).
+"""
 dss_transform(arg, local_geometry, weight, i, j) =
     weight[i, j] ⊠ dss_transform(arg[i, j], local_geometry[i, j])
 dss_transform(arg, local_geometry, weight::Nothing, i, j) =
@@ -73,6 +84,13 @@ end
     Geometry.transform(ax, arg, local_geometry)
 end
 
+"""
+    dss_untransform(T, targ, local_geometry, I...)
+
+Transform `targ[I...]` back to a value of type `T` after performing direct stiffness summation (DSS).
+
+See [`Spaces.weighted_dss!`](@ref).
+"""
 dss_untransform(::Type{T}, targ, local_geometry, i, j) where {T} =
     dss_untransform(T, targ, local_geometry[i, j])
 dss_untransform(::Type{T}, targ, local_geometry::Nothing, i, j) where {T} =
@@ -236,6 +254,8 @@ end
     fill_send_buffer!(topology, data, ghost_buffer)
 
 Fill the send buffer of `ghost_buffer` with the necessary data from `data`.
+
+Part of [`Spaces.weighted_dss!`](@ref).
 """
 function fill_send_buffer!(
     topology::Topologies.DistributedTopology2D,
@@ -255,6 +275,16 @@ function fill_send_buffer!(
     return nothing
 end
 
+"""
+    dss_interior_faces!(topology, data [, local_geometry_data=nothing, local_weights=nothing])
+
+Perform DSS on the local interior faces of the topology.
+
+If `local_geometry` is `nothing`, no transformations are applied to vectors.
+If `local_weights` is `nothing`, no weighting is applied (i.e. colocated values are summed).
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
 function dss_interior_faces!(
     topology,
     data,
@@ -311,6 +341,13 @@ function dss_interior_faces!(
     return nothing
 end
 
+"""
+    dss_local_vertices!(topology, data[, local_geometry_data=nothing, local_weights=nothing])
+
+Perform DSS on the local vertices of the topology.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
 function dss_local_vertices!(
     topology,
     data,
@@ -349,6 +386,16 @@ function dss_local_vertices!(
     end
 end
 
+"""
+    dss_ghost_faces!(topology, data, ghost_data,
+        local_geometry_data=nothing, ghost_geometry_data=nothing,
+        local_weights=nothing ghost_weights=nothing;
+        update_ghost=false)
+
+Perform DSS on the ghost faces of the topology. `ghost_data` should contain the ghost element data.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
 function dss_ghost_faces!(
     topology,
     data,
@@ -410,6 +457,16 @@ function dss_ghost_faces!(
     end
 end
 
+"""
+    dss_ghost_vertices!(topology, data, ghost_data,
+        local_geometry_data=nothing, ghost_geometry_data=nothing,
+        local_weights=nothing ghost_weights=nothing;
+        update_ghost=false)
+
+Perform DSS on the ghost faces of the topology. `ghost_data` should contain the ghost element data.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
 function dss_ghost_vertices!(
     topology,
     data,

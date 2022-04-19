@@ -278,15 +278,16 @@ function Spaces.variational_solve!(field::Field)
 end
 
 """
-    Spaces.weighted_dss!(f::Field)
+    Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_ghost_buffer(field)])
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
-(i.e. it modifies the `f`).
+(i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
+for communication in a distributed setting, see [`Spaces.create_ghost_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
 ``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
-\\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1`` such
-that for all ``\\phi \\in \\mathcal{V}_1``
+\\cap \\mathcal{C}_0``, defined as the field ``\\theta \\in \\mathcal{V}_1``
+such that for all ``\\phi \\in \\mathcal{V}_1``
 ```math
 \\int_\\Omega \\phi \\theta \\,d\\Omega = \\int_\\Omega \\phi f \\,d\\Omega
 ```
@@ -313,6 +314,12 @@ function Spaces.weighted_dss!(
     Spaces.weighted_dss!(field_values(field), axes(field), ghost_buffer)
     return field
 end
+
+"""
+    Spaces.create_ghost_buffer(field::Field)
+
+Create a buffer for communicating neighbour information of `field`.
+"""
 function Spaces.create_ghost_buffer(field::Field)
     space = axes(field)
     hspace =
