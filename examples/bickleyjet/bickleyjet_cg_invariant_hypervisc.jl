@@ -17,11 +17,11 @@ usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
     using ClimaComms
     using ClimaCommsMPI
-    const Context = ClimaCommsMPI.MPICommsContext
-    const pid, nprocs = ClimaComms.init(Context)
+    const context = ClimaCommsMPI.MPICommsContext()
+    const pid, nprocs = ClimaComms.init(context)
 
     # log output only from root process
-    logger_stream = ClimaComms.iamroot(Context) ? stderr : devnull
+    logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
 
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
     atexit() do
@@ -59,12 +59,9 @@ Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 if usempi
-    grid_topology = Topologies.DistributedTopology2D(mesh, Context)
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
     global_grid_topology = Topologies.Topology2D(mesh)
-    Nf = 4
-    Nv = 1
-    comms_ctx = Spaces.setup_comms(Context, grid_topology, quad, Nv, Nf)
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad, comms_ctx)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 else
     comms_ctx = nothing
@@ -92,13 +89,21 @@ function init_state(local_geometry, p)
         Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′),
         local_geometry,
     )
+    ω = Geometry.Contravariant3Vector(eltype(p.ρ₀)(0))
 
     # set initial tracer
     θ = sin(p.k * y)
-    return (ρ = ρ, u = u, ρθ = ρ * θ)
+    return (ρ=ρ, u=u, ρθ=ρ * θ, ω=ω)
 end
 
 y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
+
+if usempi
+    ghost_buffer = Spaces.create_ghost_buffer(y0)
+else
+    ghost_buffer = nothing
+end
+
 
 function energy(state, p, local_geometry)
     ρ, u = state.ρ, state.u
@@ -122,7 +127,7 @@ function rhs!(dydt, y, _, t)
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
-    Spaces.weighted_dss!(dydt, comms_ctx)
+    Spaces.weighted_dss!(dydt, ghost_buffer)
 
     @. dydt.u =
         -D₄ * (
@@ -132,22 +137,14 @@ function rhs!(dydt, y, _, t)
         )
     @. dydt.ρθ = -D₄ * wdiv(y.ρ * grad(dydt.ρθ))
 
-    # main rhs pieces. all the best pieces. the greatest
-    local_geometry = Fields.local_geometry_field(axes(y.u))
-    x₂ = local_geometry.coordinates.y
-    # log(cosh()) => derivative is tanh  = sinh / cosh
-    u_forcing = @. Geometry.Covariant12Vector(
-        Geometry.UVVector(1/5 * log(cosh(x₂*5)), 0.0),
-        local_geometry,
-    )
-
-    forcing = @. 0.01 * (y.u - u_forcing)
+    # add in pieces
+    y.ω = @. curl(y.u)
     @. begin
         dydt.ρ = -wdiv(y.ρ * y.u)
-        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u) - forcing
+        dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
-    end    
-    Spaces.weighted_dss!(dydt, comms_ctx)
+    end
+    Spaces.weighted_dss!(dydt, ghost_buffer)
     return dydt
 end
 
@@ -170,8 +167,8 @@ sol_global = []
 if usempi
     for sol_step in sol.u
         sol_step_values_global =
-            DataLayouts.gather(comms_ctx, Fields.field_values(sol_step))
-        if ClimaComms.iamroot(Context)
+            DataLayouts.gather(context, Fields.field_values(sol_step))
+        if ClimaComms.iamroot(context)
             sol_step_global = Fields.Field(sol_step_values_global, global_space)
             push!(sol_global, sol_step_global)
         end
@@ -190,11 +187,11 @@ function total_energy(y, parameters)
     sum(energy.(y, Ref(parameters), Fields.local_geometry_field(global_space)))
 end
 
-if !usempi || (usempi && ClimaComms.iamroot(Context))
+if !usempi || (usempi && ClimaComms.iamroot(context))
     anim = Plots.@animate for u in solution
-        Plots.plot(u.ρθ, clim = (-1, 1))
+        Plots.plot(u.ω, clim = (-1, 1))
     end
-    Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+    Plots.mp4(anim, joinpath(path, "vorticity.mp4"), fps = 10)
 
     Es = [total_energy(u, parameters) for u in solution]
 

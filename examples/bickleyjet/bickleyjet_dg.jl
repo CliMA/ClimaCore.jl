@@ -18,29 +18,33 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+using Random
+using Distributions
+
+
 const parameters = (
-    ϵ = 0.1,  # perturbation size for initial condition
-    l = 0.5, # Gaussian width
-    k = 0.5, # Sinusoidal wavenumber
-    ρ₀ = 1.0, # reference density
-    c = 2,
-    g = 10,
+    ϵ=0.1,  # perturbation size for initial condition
+    l=0.5, # Gaussian width
+    k=0.5, # Sinusoidal wavenumber
+    ρ₀=1.0, # reference density
+    c=2,
+    g=10,
 )
 
-numflux_name = get(ARGS, 1, "rusanov")
+numflux_name = get(ARGS, 1, "roe")
 boundary_name = get(ARGS, 2, "")
 
 domain = Domains.RectangleDomain(
     Domains.IntervalDomain(
         Geometry.XPoint(-2π),
         Geometry.XPoint(2π),
-        periodic = true,
+        periodic=true,
     ),
     Domains.IntervalDomain(
         Geometry.YPoint(-2π),
         Geometry.YPoint(2π),
-        periodic = boundary_name != "noslip",
-        boundary_names = boundary_name != "noslip" ? nothing : (:south, :north),
+        periodic=boundary_name != "noslip",
+        boundary_names=boundary_name != "noslip" ? nothing : (:south, :north),
     ),
 )
 
@@ -70,12 +74,11 @@ function init_state(coord, p)
     u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
     u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
 
-
     u = Geometry.UVVector(U₁ + p.ϵ * u₁′, p.ϵ * u₂′)
     # set initial tracer
     θ = sin(p.k * y)
 
-    return (ρ = ρ, ρu = ρ * u, ρθ = ρ * θ)
+    return (ρ=ρ, ρu=ρ * u, ρθ=ρ * θ)
 end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
@@ -83,7 +86,7 @@ y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
 function flux(state, p)
     ρ, ρu, ρθ = state.ρ, state.ρu, state.ρθ
     u = ρu / ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ * u)
+    return (ρ=ρu, ρu=((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ=ρθ * u)
 end
 
 function energy(state, p)
@@ -156,7 +159,7 @@ function roeflux(n, (y⁻, parameters⁻), (y⁺, parameters⁺))
         0.5
     fluxᵀn_ρθ = ((w1 + w2) * θ + w5) * 0.5
 
-    Δf = (ρ = -fluxᵀn_ρ, ρu = -fluxᵀn_ρu, ρθ = -fluxᵀn_ρθ)
+    Δf = (ρ=-fluxᵀn_ρ, ρu=-fluxᵀn_ρu, ρθ=-fluxᵀn_ρθ)
     rmap(f -> f' * n, Favg) ⊞ Δf
 end
 
@@ -196,7 +199,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
         y,
         parameters,
     ) do normal, (y⁻, parameters)
-        y⁺ = (ρ = y⁻.ρ, ρu = y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ = y⁻.ρθ)
+        y⁺ = (ρ=y⁻.ρ, ρu=y⁻.ρu - dot(y⁻.ρu, normal) * normal, ρθ=y⁻.ρθ)
         numflux(normal, (y⁻, parameters), (y⁺, parameters))
     end
 
@@ -216,14 +219,14 @@ dydt = Fields.Field(similar(Fields.field_values(y0)), space)
 rhs!(dydt, y0, (parameters, numflux), 0.0);
 
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 200.0), (parameters, numflux))
+prob = ODEProblem(rhs!, y0, (0.0, 400.0), (parameters, numflux))
 sol = solve(
     prob,
     SSPRK33(),
-    dt = 0.02,
-    saveat = 1.0,
-    progress = true,
-    progress_message = (dt, u, p, t) -> t,
+    dt=0.0025,
+    saveat=1.0,
+    progress=true,
+    progress_message=(dt, u, p, t) -> t,
 )
 
 ENV["GKSwstype"] = "nul"
@@ -238,14 +241,14 @@ path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
 anim = Plots.@animate for u in sol.u
-    Plots.plot(u.ρθ, clim = (-1, 1))
+    Plots.plot(u.ρθ, clim=(-1, 1))
 end
-Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps = 10)
+Plots.mp4(anim, joinpath(path, "tracer.mp4"), fps=10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
 
-function linkfig(figpath, alt = "")
+function linkfig(figpath, alt="")
     # buildkite-agent upload figpath
     # link figure in logs if we are running on CI
     if get(ENV, "BUILDKITE", "") == "true"
@@ -258,3 +261,20 @@ linkfig(
     relpath(joinpath(path, "energy.png"), joinpath(@__DIR__, "../..")),
     "Total Energy",
 )
+
+# dump to file
+conv = Geometry.Covariant12Vector
+curl = Operators.Curl()
+out_arr_ω = zeros(401, 512, 512)
+out_arr_θ = zeros(401, 512, 512)
+for (i, u) in enumerate(sol.u)
+    ω = @. curl(conv(u.ρu / u.ρ))
+    θ = @. u.ρθ / u.ρ
+    out_arr_ω[i, :, :] = Operators.matrix_interpolate(ω.components.data.:1, 8*Nq)
+    out_arr_θ[i, :, :] = Operators.matrix_interpolate(θ, 8*Nq)
+end
+using HDF5
+fid = h5open("low_res.h5", "w")
+fid["tracer"] = out_arr_θ
+fid["vorticity"] = out_arr_ω  
+close(fid)
