@@ -937,28 +937,33 @@ return_eltype(::AdvectionOperator, velocity, arg) = eltype(arg)
     U = UpwindBiasedProductC2F(;boundaries)
     U.(v, x)
 
-Compute the product of a face-valued vector field `v` and a center-valued field
-`x` at cell faces by upwinding `x` according to `v`
+Compute the product of the face-valued vector field `v` and a center-valued
+field `x` at cell faces by upwinding `x` according to the direction of `v`.
+
+More precisely, it is computed based on the sign of the 3rd contravariant
+component, and it returns a `Contravariant3Vector`:
 ```math
-U(v,x)[i] = \\begin{cases}
-  v[i] x[i-\\tfrac{1}{2}] \\textrm{, if } v[i] > 0 \\\\
-  v[i] x[i+\\tfrac{1}{2}] \\textrm{, if } v[i] < 0
+U(\\boldsymbol{v},x)[i] = \\begin{cases}
+  v^3[i] x[i-\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] > 0 \\\\
+  v^3[i] x[i+\\tfrac{1}{2}]\\boldsymbol{e}_3 \\textrm{, if } v^3[i] < 0
   \\end{cases}
 ```
+where ``\\boldsymbol{e}_3`` is the 3rd covariant basis vector.
 
 Supported boundary conditions are:
-- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` on the boundary. On
-  the left boundary the stencil is
+- [`SetValue(x₀)`](@ref): set the value of `x` to be `x₀` in a hypothetical
+  ghost cell on the other side of the boundary. On the left boundary the stencil
+  is
   ```math
-  U(v,x)[\\tfrac{1}{2}] = \\begin{cases}
-    v[\\tfrac{1}{2}] x_0 \\textrm{, if }  v[\\tfrac{1}{2}] > 0 \\\\
-    v[\\tfrac{1}{2}] x[1] \\textrm{, if }  v[\\tfrac{1}{2}] < 0
+  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = \\begin{cases}
+    v^3[\\tfrac{1}{2}] x_0  \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] > 0 \\\\
+    v^3[\\tfrac{1}{2}] x[1] \\boldsymbol{e}_3 \\textrm{, if }  v^3[\\tfrac{1}{2}] < 0
     \\end{cases}
   ```
 - [`Extrapolate()`](@ref): set the value of `x` to be the same as the closest
   interior point. On the left boundary, the stencil is
   ```math
-  U(v,x)[\\tfrac{1}{2}] = U(v,x)[1 + \\tfrac{1}{2}]
+  U(\\boldsymbol{v},x)[\\tfrac{1}{2}] = U(\\boldsymbol{v},x)[1 + \\tfrac{1}{2}]
   ```
 """
 struct UpwindBiasedProductC2F{BCS} <: AdvectionOperator
