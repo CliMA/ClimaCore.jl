@@ -29,7 +29,16 @@ dss_transform(arg, local_geometry::Nothing, weight::Nothing, i) = arg[i]
         Base.@_inline_meta
         dss_transform(x, local_geometry)
     end
+    # dss_transform(arg, local_geometry)
 end
+# Not sure if this is even needed:
+# @inline dss_transform_recurse(::Type{T}, lg) where {T <: Tuple} =
+#     (dss_transform_recurse(fieldtypes(T)[1], lg),
+#         dss_transform_recurse(Base.tail(fieldtypes(T)), lg)...)
+# @inline dss_transform_recurse(args::Type{Type{T}}, lg) where {T <: Tuple} =
+#     (dss_transform(fieldtypes(T)[1], lg),)
+# @inline dss_transform_recurse(::Type{<:Tuple{}}, lg) = ()
+
 @inline dss_transform(arg::Number, local_geometry) = arg
 @inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.CartesianAxis}}},
@@ -111,9 +120,36 @@ end
     targ::Tuple,
     local_geometry,
 ) where {T <: Tuple}
-    RecursiveApply.rmap(fieldtypes(T), targ) do Tx, tx
-        Base.@_inline_meta
-        dss_untransform(Tx, tx, local_geometry)
+    # RecursiveApply.rmap(fieldtypes(T), targ) do Tx, tx
+    #     Base.@_inline_meta
+    #     dss_untransform(Tx, tx, local_geometry)
+    # end
+    dss_untransform_recurse(T, targ, local_geometry)
+end
+# Recursively call dss_untransform on broadcast arguments
+# in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple} = (
+    dss_untransform_recurse(fieldtypes(T)[1], targ[1], lg),
+    dss_untransform_recurse(Base.tail(fieldtypes(T)), Base.tail(targ), lg)...,
+)
+@inline dss_untransform_recurse(
+    ::Type{Type{T}},
+    targ,
+    lg,
+) where {T <: Tuple} = (dss_untransform(fieldtypes(T)[1], Base.tail(targ), lg),)
+@inline dss_untransform_recurse(::Type{<:Tuple{}}, targ, lg) = ()
+
+
+if VERSION >= v"1.7.0"
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(dss_untransform)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(dss_untransform_recurse)
+            m.recursion_relation = dont_limit
+        end
     end
 end
 
