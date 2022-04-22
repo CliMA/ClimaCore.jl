@@ -105,45 +105,22 @@ dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
     targ::NamedTuple{names},
     local_geometry,
 ) where {names, T}
-    NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
-end
-@inline function dss_untransform(
-    ::Type{T},
-    targ::Tuple,
-    local_geometry,
-) where {T <: Tuple}
-    # RecursiveApply.rmap(fieldtypes(T), targ) do Tx, tx
-    #     Base.@_inline_meta
-    #     dss_untransform(Tx, tx, local_geometry)
-    # end
-    dss_untransform_recurse(T, targ, local_geometry)
+    NamedTuple{names}(dss_untransform_recurse(T, Tuple(targ), local_geometry))
 end
 # Recursively call dss_untransform on broadcast arguments
 # in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
 @inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple} = (
     dss_untransform(fieldtypes(T)[1], targ[1], lg),
-    dss_untransform_recurse(Base.tail(fieldtypes(T)), Base.tail(targ), lg)...,
+    dss_untransform_recurse(
+        Tuple{Base.tail(fieldtypes(T))...},
+        Base.tail(targ),
+        lg,
+    )...,
 )
-@inline dss_untransform_recurse(
-    ::Type{Type{T}},
-    targ,
-    lg,
-) where {T <: Tuple} = (dss_untransform(fieldtypes(T)[1], Base.tail(targ), lg),)
+@inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple{<:Any}} =
+    (dss_untransform(fieldtypes(T)[1], targ[1], lg),)
 @inline dss_untransform_recurse(::Type{<:Tuple{}}, targ, lg) = ()
-
-
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(dss_untransform)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(dss_untransform_recurse)
-            m.recursion_relation = dont_limit
-        end
-    end
-end
 
 @inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ
 @inline dss_untransform(
@@ -172,6 +149,18 @@ end
         return Geometry.Covariant12Vector(u₁, u₂)
     end
     Geometry.transform(ax, targ, local_geometry)
+end
+
+if VERSION >= v"1.7.0"
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(dss_untransform)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(dss_untransform_recurse)
+            m.recursion_relation = dont_limit
+        end
+    end
 end
 
 function dss_1d!(
