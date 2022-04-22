@@ -29,15 +29,7 @@ dss_transform(arg, local_geometry::Nothing, weight::Nothing, i) = arg[i]
         Base.@_inline_meta
         dss_transform(x, local_geometry)
     end
-    # dss_transform(arg, local_geometry)
 end
-# Not sure if this is even needed:
-# @inline dss_transform_recurse(::Type{T}, lg) where {T <: Tuple} =
-#     (dss_transform_recurse(fieldtypes(T)[1], lg),
-#         dss_transform_recurse(Base.tail(fieldtypes(T)), lg)...)
-# @inline dss_transform_recurse(args::Type{Type{T}}, lg) where {T <: Tuple} =
-#     (dss_transform(fieldtypes(T)[1], lg),)
-# @inline dss_transform_recurse(::Type{<:Tuple{}}, lg) = ()
 
 @inline dss_transform(arg::Number, local_geometry) = arg
 @inline dss_transform(
@@ -130,7 +122,7 @@ end
 # in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
 @inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple} = (
-    dss_untransform_recurse(fieldtypes(T)[1], targ[1], lg),
+    dss_untransform(fieldtypes(T)[1], targ[1], lg),
     dss_untransform_recurse(Base.tail(fieldtypes(T)), Base.tail(targ), lg)...,
 )
 @inline dss_untransform_recurse(
