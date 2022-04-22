@@ -112,12 +112,13 @@ end
 # see Base.Broadcast.preprocess_args
 @inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple} = (
     dss_untransform(fieldtypes(T)[1], targ[1], lg),
-    dss_untransform_recurse(
-        Tuple{Base.tail(fieldtypes(T))...},
-        Base.tail(targ),
-        lg,
-    )...,
+    dss_untransform_recurse(Base.tail(fieldtypes(T)), Base.tail(targ), lg)...,
 )
+@inline dss_untransform_recurse(tup::Tuple, targ, lg) = (
+    dss_untransform(tup[1], targ[1], lg),
+    dss_untransform_recurse(Base.tail(tup), Base.tail(targ), lg)...,
+)
+@inline dss_untransform_recurse(::Tuple{}, targ, lg) = ()
 @inline dss_untransform_recurse(::Type{T}, targ, lg) where {T <: Tuple{<:Any}} =
     (dss_untransform(fieldtypes(T)[1], targ[1], lg),)
 @inline dss_untransform_recurse(::Type{<:Tuple{}}, targ, lg) = ()
