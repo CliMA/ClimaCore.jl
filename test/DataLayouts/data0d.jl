@@ -101,7 +101,6 @@ end
     data_vf2 = data_f .+ data_vf
     @test data_vf2 isa VF{S}
     @test size(data_vf2) == (1, 1, 1, 3, 1)
-
 end
 
 @testset "broadcasting DataF + IF data object => IF" begin
@@ -112,7 +111,6 @@ end
     data_if2 = data_f .+ data_if
     @test data_if2 isa IF{S}
     @test size(data_if2) == (2, 1, 1, 1, 1)
-
 end
 
 @testset "broadcasting DataF + IFH data object => IFH" begin
@@ -123,7 +121,6 @@ end
     data_ifh2 = data_f .+ data_ifh
     @test data_ifh2 isa IFH{S}
     @test size(data_ifh2) == (2, 1, 1, 1, 3)
-
 end
 
 @testset "broadcasting DataF + IJF data object => IJF" begin
@@ -134,7 +131,6 @@ end
     data_ijf2 = data_f .+ data_ijf
     @test data_ijf2 isa IJF{S}
     @test size(data_ijf2) == (2, 2, 1, 1, 1)
-
 end
 
 @testset "broadcasting DataF + IJFH data object => IJFH" begin
@@ -145,7 +141,6 @@ end
     data_ijfh2 = data_f .+ data_ijfh
     @test data_ijfh2 isa IJFH{S}
     @test size(data_ijfh2) == (2, 2, 1, 1, 3)
-
 end
 
 @testset "broadcasting DataF + VIFH data object => VIFH" begin
@@ -156,7 +151,6 @@ end
     data_vifh2 = data_f .+ data_vifh
     @test data_vifh2 isa VIFH{S}
     @test size(data_vifh2) == (4, 1, 1, 10, 10)
-
 end
 
 @testset "broadcasting DataF + VIJFH data object => VIJFH" begin
@@ -167,28 +161,66 @@ end
     data_vijfh2 = data_f .+ data_vijfh
     @test data_vijfh2 isa VIJFH{S}
     @test size(data_vijfh2) == (2, 2, 1, 2, 2)
-
 end
 
-# Test that Julia ia able to optimize DataF DataLayouts v1.7+
-@static if @isdefined(var"@test_opt")
-    @testset "DataF analyzer optimizations" begin
-        for FT in TestFloatTypes
-            S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
-            data1 = ones(FT, 1, 2)
-            S2 = NamedTuple{(:c,), Tuple{FT}}
-            data2 = ones(FT, 1, 1)
+@testset "column IF => DataF" begin
+    FT = Float64
+    S = Complex{FT}
+    array = FT[1 2; 3 4]
+    data_if = IF{S, 2}(array)
+    if_column = column(data_if, 2)
+    @test if_column isa DataF
+    @test if_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_if, 3)
+end
 
-            dl1 = DataF{S1}(data1)
-            dl2 = DataF{S2}(data2)
+@testset "column IFH => DataF" begin
+    FT = Float64
+    S = Complex{FT}
+    array = ones(FT, 2, 2, 3)
+    array[1, :, 1] .= FT[3, 4]
+    data_ifh = IFH{S, 2}(array)
+    ifh_column = column(data_ifh, 1, 1)
+    @test ifh_column isa DataF
+    @test ifh_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_ifh, 3, 2)
+    @test_throws BoundsError column(data_ifh, 2, 4)
+end
 
-            f(a1, a2) = a1.a.re * a2.c + a1.b
+@testset "column IJF => DataF" begin
+    FT = Float64
+    S = Complex{FT}
+    array = ones(FT, 2, 2, 2)
+    array[1, 1, :] .= FT[3, 4]
+    data_ijf = IJF{S, 2}(array)
+    ijf_column = column(data_ijf, 1, 1)
+    @test ijf_column isa DataF
+    @test ijf_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_ijf, 3, 1)
+    @test_throws BoundsError column(data_ijf, 1, 3)
+end
 
-            # property access
-            @test_opt getproperty(data1, :a)
-            # test map as proxy for broadcast
-            @test_opt map(f, data1, data2)
-            @test_opt mapreduce(f, +, data1, data2)
-        end
-    end
+@testset "column IJFH => DataF" begin
+    FT = Float64
+    S = Complex{FT}
+    array = ones(2, 2, 2, 3)
+    array[1, 1, :, 2] .= FT[3, 4]
+    data_ijfh = IJFH{S, 2}(array)
+    ijfh_column = column(data_ijfh, 1, 1, 2)
+    @test ijfh_column isa DataF
+    @test ijfh_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_ijfh, 3, 1, 1)
+    @test_throws BoundsError column(data_ijfh, 1, 3, 1)
+    @test_throws BoundsError column(data_ijfh, 1, 1, 4)
+end
+
+@testset "level VF => DataF" begin
+    FT = Float64
+    S = Complex{FT}
+    array = FT[1 2; 3 4; 5 6]
+    data_vf = VF{S}(array)
+    vf_level = level(data_vf, 2)
+    @test vf_level isa DataF
+    @test vf_level[] == 3.0 + 4.0im
+    @test_throws BoundsError level(data_vf, 4)
 end

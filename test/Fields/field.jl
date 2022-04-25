@@ -79,6 +79,9 @@ end
         f1_slab .= q .+ f2_slab
     end
     @test all(parent(f1) .== 3)
+
+    point_field = Fields.column(field, 1, 1, 1)
+    @test axes(point_field) isa Spaces.PointSpace
 end
 
 @testset "Broadcasting interception for tuple-valued fields" begin
@@ -271,4 +274,21 @@ end
         sin(local_geom.coordinates.x * local_geom.coordinates.y) + 3
     Fields.set!(foo, Y.x)
     @test all((parent(Y.x) .> 1))
+end
+
+@testset "PointField" begin
+    FT = Float64
+    coord = Geometry.XPoint(FT(π))
+    space = Spaces.PointSpace(coord)
+    @test parent(Spaces.local_geometry_data(space)) ==
+          FT[Geometry.component(coord, 1) 1.0 1.0 1.0 1.0]
+    field = Fields.coordinate_field(space)
+    @test field isa Fields.PointField
+    @test Fields.field_values(field)[] == coord
+
+    field = ones(space) .* π
+    sin_field = sin.(field)
+    add_field = field .+ field
+    @test isapprox(Fields.field_values(sin_field)[], FT(0.0); atol = √eps(FT))
+    @test isapprox(Fields.field_values(add_field)[], FT(2π))
 end

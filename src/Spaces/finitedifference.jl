@@ -161,3 +161,9 @@ function right_boundary_name(space::FiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.topology(space))
     propertynames(boundaries)[2]
 end
+
+function level(space::FiniteDifferenceSpace, v)
+    local_geometry = local_geometry_data(space)
+    local_geometry = level(local_geometry, v)
+    PointSpace(local_geometry)
+end
