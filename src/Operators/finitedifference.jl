@@ -1229,7 +1229,7 @@ function stencil_right_boundary(
     arg,
 )
     space = axes(arg)
-    @assert idx <= right_face_boundary_idx(space) + 1
+    @assert idx <= right_face_boundary_idx(space) - 1
 
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx),
