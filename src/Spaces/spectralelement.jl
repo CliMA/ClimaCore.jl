@@ -426,6 +426,17 @@ function slab(space::AbstractSpectralElementSpace, v, h)
 end
 slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
 
+function column(space::SpectralElementSpace1D, i, h)
+    local_geometry = local_geometry_data(space)
+    local_geometry = column(local_geometry, i, h)
+    PointSpace(local_geometry)
+end
+
+function column(space::SpectralElementSpace2D, i, j, h)
+    local_geometry = local_geometry_data(space)
+    local_geometry = column(local_geometry, i, j, h)
+    PointSpace(local_geometry)
+end
 
 # XXX: this cannot take `space` as it must be constructed beforehand so
 # that the `space` constructor can do DSS (to compute DSS weights)

@@ -8,6 +8,7 @@ CurrentModule = ClimaCore
 
 ```@docs
 DataLayouts
+DataLayouts.DataF
 DataLayouts.IF
 DataLayouts.IJF
 DataLayouts.VF
