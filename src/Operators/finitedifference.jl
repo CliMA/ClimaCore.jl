@@ -1094,6 +1094,9 @@ Supported boundary conditions are:
   and the first-order upwind scheme to compute `x` on the right boundary.
 - [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
 and the third-order upwind reconstruction to compute `x` on the right boundary.
+
+!!! note
+    These boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1229,7 +1232,7 @@ function stencil_right_boundary(
     arg,
 )
     space = axes(arg)
-    @assert idx <= right_face_boundary_idx(space) + 1
+    @assert idx <= right_face_boundary_idx(space) - 1
 
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx),
