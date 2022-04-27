@@ -1,0 +1,131 @@
+env:
+  JULIA_VERSION: "1.7.1"
+  MPICH_VERSION: "4.0.0"
+  OPENMPI_VERSION: "4.1.1"
+  CUDA_VERSION: "11.2"
+  OPENBLAS_NUM_THREADS: 1
+
+steps:
+  - label: "init :computer:"
+    key: "init_cpu_env"
+    command:
+      - echo "--- Instantiate scaling test"
+      - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
+
+      - echo "--- Instantiate status"
+      - "julia --project -e 'using Pkg; Pkg.status()'"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_cpus_per_task: 8
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+
+  - wait
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (1) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_1p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p1/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 1
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (2) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_2p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p2/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 2
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (4) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_4p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p4/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 4
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (8) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_8p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p8/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 8
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (16) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_16p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p16/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 16
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (32) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_32p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p32/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 32
+
+  - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (64) processes"
+    key: "cpu_mpi_held_suarez_scaling_test_rhotheta_64p"
+    command:
+      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p64/Float32/*"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 2
+      slurm_tasks_per_node: 32
