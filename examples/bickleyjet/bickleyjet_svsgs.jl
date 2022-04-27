@@ -9,6 +9,7 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 using DiffEqCallbacks
 using SpecialFunctions
 using StaticArrays
+using JLD2
 
 import Logging
 import TerminalLoggers
@@ -25,7 +26,7 @@ const parameters = (
     A = 1.90695, # Spectral integration constant (4.5c Braun et al. (2018))
     k₁ = 1/3,
     k₂ = -5/3,
-    ν = 1.0 # Viscosity
+    ν = 1e-4 # Viscosity
 )
 
 domain = Domains.RectangleDomain(
@@ -41,7 +42,7 @@ domain = Domains.RectangleDomain(
     ),
 )
 
-n1, n2 = 5,5
+n1, n2 = 2,2
 Nq = 4
 Nqh = 7
 const Δx = 4π / n1 / Nq
@@ -366,7 +367,7 @@ function rhs!(dydt, y, _, t)
       τ = compute_subgrid_stress(Kₑx, Kₑy, E, ∇𝒰)
       flux_sgs = @. y.ρ * τ
       # DSS Flux tendency
-      @. dydt.ρu += R(div(I(flux_sgs)))
+      @. dydt.ρu -= R(div(I(flux_sgs)))
     end
     # ----------------------------------------
     
@@ -396,10 +397,9 @@ sol = solve(
     prob,
     SSPRK33(),
     dt = 0.02,
-    saveat = 5.0,
+    saveat = 1.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 #    callback = dss_callback
 )
-
 include("svsgs_postproc.jl")

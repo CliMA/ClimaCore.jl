@@ -2,7 +2,7 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dir = "cg"
+dir = "cg_nosgs$(n1)"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -143,6 +143,7 @@ Plots.mp4(anim, joinpath(path, "x_momentum_tendency.mp4"), fps = 10)
 
 Es = [total_energy(u, parameters) for u in sol.u]
 Plots.png(Plots.plot(Es), joinpath(path, "energy.png"))
+jldsave("energy_nosgs_$(n1).jld2"; E=Es)
 
 function linkfig(figpath, alt = "")
     # buildkite-agent upload figpath
