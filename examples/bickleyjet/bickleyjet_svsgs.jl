@@ -42,7 +42,7 @@ domain = Domains.RectangleDomain(
     ),
 )
 
-n1, n2 = 2,2
+n1, n2 = 16,16
 Nq = 4
 Nqh = 7
 const Δx = 4π / n1 / Nq
@@ -277,9 +277,10 @@ function compute_subgrid_stress(K::Fields.Field, ℯᵥ::Fields.Field, ∇𝒰)
       for j in 1:Nq
         T1 = PK[i,j,1,he] * (FT(1) - PE[i,j,1,he]^2)
         T2 = PK[i,j,1,he] * (FT(1) - PE[i,j,2,he]^2)
+        T3 = PK[i,j,1,he] * (FT(0) - PE[i,j,1,he]*PE[i,j,2,he])
         parent(τ)[i,j,1,he] = T1
-        parent(τ)[i,j,2,he] = FT(0)
-        parent(τ)[i,j,3,he] = FT(0)
+        parent(τ)[i,j,2,he] = T3
+        parent(τ)[i,j,3,he] = T3
         parent(τ)[i,j,4,he] = T2
       end
     end
@@ -333,7 +334,7 @@ function rhs!(dydt, y, _, t)
     @. dydt = -R(div(flux(I(y), rparameters)))
     # ----------------------------------------
     # SV SGS Calculations
-    sgs_isactive = false
+    sgs_isactive = true
     if sgs_isactive
       𝒰 = @. y.ρu / y.ρ
       ∇𝒰 = @. R(grad(I(𝒰)))
@@ -365,9 +366,17 @@ function rhs!(dydt, y, _, t)
       Kₑy = @. 1/2 * y.ρ * K₀εy * (2*parameters.ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
       # Get SGS Flux
       τ = compute_subgrid_stress(Kₑx, Kₑy, E, ∇𝒰)
+      τq = compute_subgrid_stress(sqrt.(Kₑx), sqrt.(Kₑy), E, ∇𝒰)
       flux_sgs = @. y.ρ * τ
       # DSS Flux tendency
       @. dydt.ρu -= R(div(I(flux_sgs)))
+      
+      Kₑq = @. sqrt(Kₑx^2 + Kₑy^2)
+      # TODO: Check scaling for turbulent energy in tracer flux term (eq. 4.3b)
+      τqf = @. τq.components.data.:1 + τq.components.data.:2 + τq.components.data.:3 + τq.components.data.:4 
+      θ = @. y.ρθ / y.ρ
+      flux_tracer = @. τqf * grad(θ) * Δx / 2 * y.ρ
+      @. dydt.ρθ += R(div(I(flux_tracer)))
     end
     # ----------------------------------------
     

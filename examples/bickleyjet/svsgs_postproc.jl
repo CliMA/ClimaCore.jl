@@ -2,7 +2,7 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dir = "cg_nosgs$(n1)"
+dir = "cg_nosgs$(n1)_difftracer"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
