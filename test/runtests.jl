@@ -46,7 +46,7 @@ using Base: operator_associativity
 @time include("Operators/finitedifference/column.jl")
 @time include("Operators/finitedifference/opt.jl")
 @time include("Operators/finitedifference/opt_examples.jl")
-@time include("Operators/finitedifference/implicit_stencils.jl")
+# @time include("Operators/finitedifference/implicit_stencils.jl") now part of buildkite
 @time include("Operators/finitedifference/opt_implicit_stencils.jl")
 
 @time include("Operators/hybrid/2d.jl")
