@@ -196,7 +196,8 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
-sol = @timev OrdinaryDiffEq.solve!(integrator)
+
+t_diff = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
@@ -233,7 +234,8 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         sol = DiffEqBase.sensitivity_solution(sol, global_sol_u, sol.t)
     end
 end
-if !is_distributed || (is_distributed && ClimaComms.iamroot(comms_ctx))
+if !is_distributed || ClimaComms.iamroot(comms_ctx)
+    println("Walltime = $t_diff seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
     postprocessing(sol, output_dir)
 end
