@@ -99,9 +99,9 @@ function total_energy(y, parameters)
 end
 
 """
-  structure_function(A::Field)
-Computes (δuᵢ)ⱼ = (uᵢ(x₀ ± 𝑒ⱼΔ) - uᵢ(x₀))²
-which is (δuᵢ)ⱼ = (Aⱼ - Bᵢ)². This is the second
+  structure_function(A::Field; p = 2)
+Computes (δuᵢ)ⱼ = (uᵢ(x₀ ± 𝑒ⱼΔ) - uᵢ(x₀))ᵖ
+which is (δuᵢ)ⱼ = (Aⱼ - Bᵢ)ᵖ. This is the pth order
 order structure function. This can be generalised to
 higher order structure functions. Function halo is the 
 nearest bounding "square/cube" in 2D/3D. 
@@ -117,7 +117,7 @@ References:
 (1) doi:10.1017/S0022112009006867 
 (2) doi:10.1017/jfm.2018.766
 """
-function structure_function(χ::Fields.Field)
+function structure_function(χ::Fields.Field; p=2)
     space = axes(χ)
     FT = Spaces.undertype(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
@@ -143,7 +143,7 @@ function structure_function(χ::Fields.Field)
           n, Σ = 0, zero(eltype(out))
           for J in max(Ifirst, I-I1):min(Ilast, I+I1)
             if I != J
-              Σ += (χ_slab[I] - χ_slab[J])^2
+              Σ += (χ_slab[I] - χ_slab[J])^p
               n += 1
             end
           end
@@ -155,18 +155,17 @@ function structure_function(χ::Fields.Field)
 end
 
 """
-  structure_function(A::AbstractArray,B::AbstractArray)
+  structure_function(A::AbstractArray,B::AbstractArray; p=2)
 Computes (δuᵢ)ⱼ = (uᵢ(x₀ ± 𝑒ⱼΔ) - uᵢ(x₀))²
-which is (δuᵢ)ⱼ = (Aⱼ - Bᵢ)². This is the second
-order structure function. This can be generalised to
-higher order structure functions. Function halo is the 
+which is (δuᵢ)ⱼ = (Aⱼ - Bᵢ)². This is the pth
+order structure function. Function halo is the 
 nearest bounding "square/cube" in 2D/3D. 
 For "target" point O, the halo is thus given by 
 x--x--x
 x--O--x
 x--x--x
 """
-function structure_function(A::AbstractArray, B::AbstractArray)
+function structure_function(A::AbstractArray, B::AbstractArray; p= 2)
     @assert typeof(A) == typeof(B)
     F₂ = similar(A)
     R = CartesianIndices(A)
@@ -176,7 +175,7 @@ function structure_function(A::AbstractArray, B::AbstractArray)
         n, Σ = 0, zero(eltype(F₂))
         for J in max(Ifirst, I-I1):min(Ilast, I+I1)
           if I != J
-            Σ += (A[I] - B[J])^2
+            Σ += (A[I] - B[J])^p
             n += 1
           end
         end
@@ -275,8 +274,10 @@ function compute_subgrid_stress(K::Fields.Field, ℯᵥ::Fields.Field, ∇𝒰)
   for he in 1:nh
     for i in 1:Nq
       for j in 1:Nq
+        # Diagonal Terms
         T1 = PK[i,j,1,he] * (FT(1) - PE[i,j,1,he]^2)
         T2 = PK[i,j,1,he] * (FT(1) - PE[i,j,2,he]^2)
+        # Off diagonal terms (Symmetric Stress Assumption)
         T3 = PK[i,j,1,he] * (FT(0) - PE[i,j,1,he]*PE[i,j,2,he])
         parent(τ)[i,j,1,he] = T1
         parent(τ)[i,j,2,he] = T3
@@ -302,11 +303,15 @@ function compute_subgrid_stress(K₁::Fields.Field, K₂::Fields.Field, ℯᵥ::
     for i in 1:Nq
       for j in 1:Nq
         T1 = PK1[i,j,1,he] * (FT(1) - PE[i,j,1,he]^2)
-        T2 = PK2[i,j,1,he] * (FT(1) - PE[i,j,2,he]^2)
-        parent(τ)[i,j,1,he] = T1
-        parent(τ)[i,j,2,he] = FT(0)
-        parent(τ)[i,j,3,he] = FT(0)
-        parent(τ)[i,j,4,he] = T2
+        T2 = PK1[i,j,1,he] * (FT(1) - PE[i,j,2,he]^2)
+        T3 = PK1[i,j,1,he] * (FT(0) - PE[i,j,1,he]*PE[i,j,2,he])
+        T4 = PK2[i,j,1,he] * (FT(1) - PE[i,j,1,he]^2)
+        T5 = PK2[i,j,1,he] * (FT(1) - PE[i,j,2,he]^2)
+        T6 = PK2[i,j,1,he] * (FT(0) - PE[i,j,1,he]*PE[i,j,2,he])
+        parent(τ)[i,j,1,he] = T1 + T4
+        parent(τ)[i,j,2,he] = T3 + T6
+        parent(τ)[i,j,3,he] = T3 + T6
+        parent(τ)[i,j,4,he] = T2 + T5
       end
     end
   end
@@ -356,26 +361,39 @@ function rhs!(dydt, y, _, t)
       # Compute Subgrid Tendency Based on Vortex Model
       k₁ = parameters.k₁
       kc = π / Δx
-      F₂x = structure_function(𝒰.components.data.:1) # 4.5b
-      F₂y = structure_function(𝒰.components.data.:2) # 4.5b
-      K₀εx = @. kolmogorov_prefactor(F₂x)
-      K₀εy = @. kolmogorov_prefactor(F₂y)
+      F₂x = structure_function(𝒰.components.data.:1; p=2) # 4.5b
+      F₂y = structure_function(𝒰.components.data.:2; p=2) # 4.5b
+      F₂ = @. F₂x + F₂y
+      K₀ε = @. kolmogorov_prefactor(F₂)
       Q = @. 2*parameters.ν*kc^2/3/(ã + 1e-14)
       Γ = @. gamma(-k₁, Q)
-      Kₑx = @. 1/2 * y.ρ * K₀εx * (2*parameters.ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
-      Kₑy = @. 1/2 * y.ρ * K₀εy * (2*parameters.ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
+      Kₑ = @. 1/2 * K₀ε * (2*parameters.ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
       # Get SGS Flux
-      τ = compute_subgrid_stress(Kₑx, Kₑy, E, ∇𝒰)
-      τq = compute_subgrid_stress(sqrt.(Kₑx), sqrt.(Kₑy), E, ∇𝒰)
-      flux_sgs = @. y.ρ * τ
-      # DSS Flux tendency
-      @. dydt.ρu -= R(div(I(flux_sgs)))
-      
-      Kₑq = @. sqrt(Kₑx^2 + Kₑy^2)
-      # TODO: Check scaling for turbulent energy in tracer flux term (eq. 4.3b)
+      τ = compute_subgrid_stress(Kₑ, E, ∇𝒰)
+      τq = compute_subgrid_stress(sqrt.(Kₑ), E, ∇𝒰)
       τqf = @. τq.components.data.:1 + τq.components.data.:2 + τq.components.data.:3 + τq.components.data.:4 
       θ = @. y.ρθ / y.ρ
-      flux_tracer = @. τqf * grad(θ) * Δx / 2 * y.ρ
+      
+      # SMAGORINSKY 
+   #   C_smag = 0.25
+   #   ν_smag = smagorinsky_viscosity(𝒮, Δx; C_smag)
+   #   flux_sgs = @. y.ρ * ν_smag * 2 * 𝒮
+   #   flux_tracer = @. y.ρ * 3 * ν_smag * grad(θ) 
+
+      # STRETCHED VORTEX 
+     flux_sgs = @. - y.ρ * τ
+     flux_tracer = @. τqf * grad(θ) * Δx / 2 * y.ρ
+
+      # NOSGS
+      # flux_sgs = @. -0 * τ
+      # flux_tracer = @. -0 * grad(θ)
+      
+      # CONSTANT VISCOSITY SGS
+   #    ν_constant = 1.5e-5
+   #    flux_sgs = @. ν_constant * ∇𝒰
+   #    flux_tracer = @. ν_constant * grad(θ)
+      
+      @. dydt.ρu += R(div(I(flux_sgs)))
       @. dydt.ρθ += R(div(I(flux_tracer)))
     end
     # ----------------------------------------
@@ -383,6 +401,15 @@ function rhs!(dydt, y, _, t)
     # Tendency DSS Application
     Spaces.weighted_dss!(dydt)
     return dydt
+end
+
+function smagorinsky_viscosity(𝒮::Fields.Field, Δx; C_smag = 0.2)
+  # Assume 𝒮 is the input strain-rate
+  S11 = 𝒮.components.data.:1
+  S12 = 𝒮.components.data.:3
+  S22 = 𝒮.components.data.:4
+  ν = @. (C_smag * Δx)^2 * sqrt(S11^2 + S22^2 + 2*S12^2)
+  return ν
 end
 
 # Next steps:
@@ -401,11 +428,11 @@ end
 dss_func = make_dss_func()
 dss_callback = FunctionCallingCallback(dss_func, func_start=true)
 # Solve the ODE operator
-prob = ODEProblem(rhs!, y0, (0.0, 50.0))
+prob = ODEProblem(rhs!, y0, (0.0, 1000.0))
 sol = solve(
     prob,
     SSPRK33(),
-    dt = 0.02,
+    dt = 0.05,
     saveat = 1.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,

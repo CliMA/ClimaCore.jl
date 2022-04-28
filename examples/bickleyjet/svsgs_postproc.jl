@@ -2,7 +2,7 @@ ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 
-dir = "cg_nosgs$(n1)_difftracer"
+dir = "longsim_cg_sgs$(n1)_hypsgs"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -111,8 +111,8 @@ anim = Plots.@animate for u in sol.u
     # Compute Subgrid Tendency Based on Vortex Model
     k₁ = parameters.k₁
     kc = π / Δx
-    F₂x = structure_function(𝒰.components.data.:1) # 4.5b
-    F₂y = structure_function(𝒰.components.data.:2) # 4.5b
+    F₂x = structure_function(𝒰.components.data.:1; p= 2) # 4.5b
+    F₂y = structure_function(𝒰.components.data.:2; p= 2) # 4.5b
     K₀εx = @. kolmogorov_prefactor(F₂x)
     K₀εy = @. kolmogorov_prefactor(F₂y)
     Q = @. 2*parameters.ν*kc^2/3/(ã + 1e-14)
