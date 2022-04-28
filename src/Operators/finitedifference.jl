@@ -132,7 +132,6 @@ interior_indices2 = 2:n-1
 
 import ..Utilities: PlusHalf, half
 
-
 left_idx(::Spaces.CenterFiniteDifferenceSpace) = 1
 right_idx(space::Spaces.CenterFiniteDifferenceSpace) =
     length(space.center_local_geometry)
@@ -174,6 +173,17 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     space.face_local_geometry[i]
 end
 
+
+"""
+    BoundaryCondition
+
+An abstract type for boundary conditions for [`FiniteDifferenceOperator`](@ref)s.
+
+Subtypes should define:
+- [`boundary_width`](@ref)
+- [`stencil_left_boundary`](@ref)
+- [`stencil_right_boundary`](@ref)
+"""
 abstract type BoundaryCondition end
 
 """
@@ -243,6 +253,18 @@ struct Interior <: Location end
 struct LeftBoundaryWindow{name} <: BoundaryWindow end
 struct RightBoundaryWindow{name} <: BoundaryWindow end
 
+"""
+    FiniteDifferenceOperator
+
+An abstract type for finite difference operators. Instances of this should define:
+
+- [`return_eltype`](@ref)
+- [`return_space`](@ref)
+- [`stencil_interior_width`](@ref)
+- [`stencil_interior`](@ref)
+
+See also [`BoundaryCondition`](@ref) for how to define the boundaries.
+"""
 abstract type FiniteDifferenceOperator end
 
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
@@ -285,13 +307,66 @@ struct CompositeStencilStyle <: AbstractStencilStyle end
 
 
 """
-    stencil_interior_width(op, args...)
+    return_eltype(::Op, fields...)
 
-The width of the interior stencil for the operator with the given arguments.
-Returns a tuple of 2-tuples: each 2-tuple should be the lower and upper bounds
-of the index offsets of the stencil for each argument in the stencil.
+Defines the element type of the result of operator `Op`
+"""
+function return_eltype end
+
+"""
+    return_space(::Op, spaces...)
+
+Defines the space the operator `Op` returns values on.
+"""
+function return_space end
+
+"""
+    stencil_interior_width(::Op, args...)
+
+Defines the width of the interior stencil for the operator `Op` with the given
+arguments. Returns a tuple of 2-tuples: each 2-tuple should be the lower and
+upper bounds of the index offsets of the stencil for each argument in the
+stencil.
+
+## Example
+```
+stencil(::Op, arg1, arg2) = ((-half, 1+half), (0,0))
+```
+implies that at index `i`, the stencil accesses `arg1` at `i-half`, `i+half` and
+`i+1+half`, and `arg2` at index `i`.
 """
 function stencil_interior_width end
+
+"""
+    stencil_interior(::Op, loc, idx, args...)
+
+Defines the stencil of the operator `Op` in the interior of the domain at `idx`;
+`args` are the input arguments.
+"""
+function stencil_interior end
+
+
+"""
+    boundary_width(::Op, ::BC, args...)
+
+Defines the width of a boundary condition `BC` on an operator `Op`. This is the
+number of locations that are used in a modified stencil.
+"""
+function boundary_width end
+
+"""
+    stencil_left_boundary(::Op, ::BC, loc, idx, args...)
+
+Defines the stencil of operator `Op` at `idx` near the left boundary, with boundary condition `BC`.
+"""
+function stencil_left_boundary end
+
+"""
+    stencil_right_boundary(::Op, ::BC, loc, idx, args...)
+
+Defines the stencil of operator `Op` at `idx` near the right boundary, with boundary condition `BC`.
+"""
+function stencil_right_boundary end
 
 
 abstract type InterpolationOperator <: FiniteDifferenceOperator end
@@ -1094,6 +1169,9 @@ Supported boundary conditions are:
   and the first-order upwind scheme to compute `x` on the right boundary.
 - [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
 and the third-order upwind reconstruction to compute `x` on the right boundary.
+
+!!! note
+    These boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct Upwind3rdOrderBiasedProductC2F{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1229,7 +1307,7 @@ function stencil_right_boundary(
     arg,
 )
     space = axes(arg)
-    @assert idx <= right_face_boundary_idx(space) + 1
+    @assert idx <= right_face_boundary_idx(space) - 1
 
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx),

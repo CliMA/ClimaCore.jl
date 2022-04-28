@@ -31,6 +31,7 @@ coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
 include("quadrature.jl")
 import .Quadratures
 
+include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("hybrid.jl")

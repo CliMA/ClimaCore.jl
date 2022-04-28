@@ -32,6 +32,9 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
+# Point Field
+const PointField{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
 
 # Spectral Element Field
 const SpectralElementField2D{V, S} =

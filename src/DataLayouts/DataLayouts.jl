@@ -19,7 +19,7 @@ import StaticArrays: SOneTo, MArray
 import ClimaComms
 
 import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args, ..level
-export slab, column, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
+export slab, column, level, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
 
 include("struct.jl")
 
@@ -319,6 +319,13 @@ end
     IJF{S, Nij}(dataview)
 end
 
+@inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
+    @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= length(data)) ||
+                 throw(BoundsError(data, (i, j, h)))
+    dataview = @inbounds view(parent(data), i, j, :, h)
+    DataF{S}(reshape(dataview, (1, :)))
+end
+
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
     data::IJFH{S, Nij},
@@ -391,6 +398,13 @@ end
 end
 slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 
+@inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
+    @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
+                 throw(BoundsError(data, (i, h)))
+    dataview = @inbounds view(parent(data), i, :, h)
+    DataF{S}(reshape(dataview, (1, :)))
+end
+
 @generated function _property_view(
     data::IFH{S, Ni, A},
     ::Val{Idx},
@@ -419,8 +433,14 @@ end
 # Data0D DataLayout
 # ======================
 
+Base.length(data::Data0D) = 1
 Base.size(data::Data0D) = (1, 1, 1, 1, 1)
 
+"""
+    DataF{S, A} <: Data0D{S}
+
+Backing `DataLayout` for 0D point data.
+"""
 struct DataF{S, A} <: Data0D{S}
     array::A
 end
@@ -450,6 +470,18 @@ end
     nbytes = typesize(T, SS)
     dataview = @inbounds view(array, :, (offset + 1):(offset + nbytes))
     DataF{SS}(dataview)
+end
+
+@generated function _property_view(
+    data::DataF{S, A},
+    ::Val{Idx},
+) where {S, A, Idx}
+    SS = fieldtype(S, Idx)
+    T = eltype(A)
+    offset = fieldtypeoffset(T, S, Idx)
+    nbytes = typesize(T, SS)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return :(DataF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
 end
 
 @inline function Base.getindex(data::DataF{S}) where {S}
@@ -581,6 +613,13 @@ end
     set_struct!(dataview, convert(S, val))
 end
 
+@inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
+    @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
+                 throw(BoundsError(data, (i, j)))
+    dataview = @inbounds view(parent(data), i, j, :)
+    DataF{S}(reshape(dataview, (1, :)))
+end
+
 # ======================
 # DataSlab1D DataLayout
 # ======================
@@ -670,6 +709,12 @@ end
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     dataview = @inbounds view(parent(data), i, :)
     set_struct!(dataview, convert(S, val))
+end
+
+@inline function column(data::IF{S, Ni}, i) where {S, Ni}
+    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
+    dataview = @inbounds view(parent(data), i, :)
+    DataF{S}(reshape(dataview, (1, :)))
 end
 
 # ======================
@@ -773,6 +818,14 @@ end
     @boundscheck (i >= 1 && j >= 1 && h >= 1) ||
                  throw(BoundsError(data, (i, j, h)))
     data
+end
+
+@inline function level(data::VF{S}, v) where {S}
+    Nv = size(data, 4)
+    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v)))
+    array = parent(data)
+    dataview = @inbounds view(array, v, :)
+    DataF{S}(reshape(dataview, (1, :)))
 end
 
 # ======================

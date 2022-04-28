@@ -12,7 +12,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
     strategy:
       fail-fast: false
       matrix:
@@ -36,40 +36,11 @@ jobs:
         version: ${{ matrix.julia-version }}
 
     - name: Cache artifacts
-      uses: actions/cache@v1
-      env:
-        cache-name: cache-artifacts
-      with:
-        path: ~/.julia/artifacts
-        key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-test-${{ env.cache-name }}-
-          ${{ runner.os }}-test-
-          ${{ runner.os }}-
+      uses: julia-actions/cache@v1
 
-    - name: Install Project Packages
-      run: |
-        julia --color=yes --project -e 'using Pkg; Pkg.instantiate()'
-        julia --color=yes --project -e 'using Pkg; Pkg.precompile(;strict=true)'
-        julia --color=yes --project -e 'using Pkg; Pkg.status()'
-
-    - name: Project Manifest
-      run: |
-        julia --color=no --project -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
-
-    - name: Install Project Test Packages
-      run: |
-        julia --color=yes --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
-        julia --color=yes --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'
-        julia --color=yes --project=test -e 'using Pkg; Pkg.status()'
-
-    - name: Project Test Manifest
-      run: |
-        julia --color=no --project=test -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
+    - name: Build package
+      uses: julia-actions/julia-buildpkg@v1
 
     - name: Run Unit Tests
-      env:
-        TEST_MODULES: ${{ matrix.test-modules }}
-      run: |
-        julia --color=yes --check-bounds=yes --project=test test/runtests.jl
+      uses: julia-actions/julia-runtest@v1
       continue-on-error: ${{ matrix.version == 'nightly' }}

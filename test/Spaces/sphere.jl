@@ -28,6 +28,11 @@ using Test
     # unique nodes
     @test length(collect(Spaces.unique_nodes(space))) ==
           nn - nn2 - 2 * nn3 - 3 * nn4
+
+    point_space = column(space, 1, 1, 1)
+    @test point_space isa Spaces.PointSpace
+    @test Spaces.coordinates_data(point_space)[] ==
+          column(Spaces.coordinates_data(space), 1, 1, 1)[]
 end
 
 @testset "Volume of a spherical shell" begin

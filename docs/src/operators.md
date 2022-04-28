@@ -50,6 +50,11 @@ Finite difference operators are similar with some subtle differences:
 We use the following convention:
  - centers are indexed by integers `1, 2, ..., n`
  - faces are indexed by half integers `half, 1+half, ..., n+half`
+
+```@docs
+FiniteDifferenceOperator
+```
+
 ### Interpolation operators
 
 ```@docs
@@ -81,13 +86,29 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
+FirstOrderOneSided
+ThirdOrderOneSided
 ```
 
 ## Finite difference boundary conditions
 
 ```@docs
+BoundaryCondition
 SetValue
 SetGradient
 SetDivergence
 Extrapolate
+```
+
+
+## Internal APIs
+
+```@docs
+return_eltype
+return_space
+stencil_interior_width
+stencil_interior
+boundary_width
+stencil_left_boundary
+stencil_right_boundary
 ```

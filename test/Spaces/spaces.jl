@@ -46,8 +46,31 @@ import ClimaCore.DataLayouts: IJFH
         end
     end
 
+    point_space = Spaces.column(space, 1, 1)
+    @test point_space isa Spaces.PointSpace
+    @test Spaces.coordinates_data(point_space)[] ==
+          Spaces.column(coord_data, 1, 1)[]
 end
 
+@testset "finite difference space" begin
+    FT = Float64
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0) .. Geometry.ZPoint{FT}(5),
+        boundary_names = (:bottom, :top),
+    )
+    mesh = Meshes.IntervalMesh(domain; nelems = 1)
+    topology = Topologies.IntervalTopology(mesh)
+
+    for Space in
+        [Spaces.CenterFiniteDifferenceSpace, Spaces.FaceFiniteDifferenceSpace]
+        space = Spaces.CenterFiniteDifferenceSpace(topology)
+        coord_data = Spaces.coordinates_data(space)
+        point_space = Spaces.level(space, 1)
+        @test point_space isa Spaces.PointSpace
+        @test Spaces.coordinates_data(point_space)[] ==
+              Spaces.level(coord_data, 1)[]
+    end
+end
 
 @testset "1×1 domain space" begin
     FT = Float32
@@ -66,9 +89,10 @@ end
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    array = parent(Spaces.coordinates_data(space))
+    coord_data = Spaces.coordinates_data(space)
+    array = parent(coord_data)
     @test size(array) == (4, 4, 2, 1)
-    coord_slab = slab(Spaces.coordinates_data(space), 1)
+    coord_slab = slab(coord_data, 1)
     @test coord_slab[1, 1] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
     @test coord_slab[4, 1] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
     @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
@@ -98,6 +122,11 @@ end
     @test sum(parent(space.boundary_surface_geometries.north.sWJ)) ≈ 8
     @test parent(space.boundary_surface_geometries.north.normal)[1, :, 1] ≈
           [0.0, 1.0]
+
+    point_space = Spaces.column(space, 1, 1, 1)
+    @test point_space isa Spaces.PointSpace
+    @test Spaces.coordinates_data(point_space)[] ==
+          Spaces.column(coord_data, 1, 1, 1)[]
 end
 
 #=
