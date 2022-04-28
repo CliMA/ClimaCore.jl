@@ -10,6 +10,16 @@ remapping package, by Paul Ullrich.
 
 # Interface
 
+## Online remap
+
+```@docs
+LinearTempestRemap
+generate_map
+remap!
+remap
+```
+
+
 ## Mesh export
 
 ```@docs
