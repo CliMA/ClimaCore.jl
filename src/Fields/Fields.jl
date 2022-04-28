@@ -4,7 +4,12 @@ import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
-import ..Spaces: Spaces, AbstractSpace
+import ..Spaces:
+    Spaces,
+    AbstractSpace,
+    SpectralElementSpace1D,
+    SpectralElementSpace2D,
+    ExtrudedFiniteDifferenceSpace
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf
 
@@ -311,9 +316,43 @@ which reduces to
 ```
 """
 function Spaces.weighted_dss!(
-    field::Field,
+    field::Field{V, S},
+    ghost_buffer = nothing, # added for compatibility
+) where {V, S <: SpectralElementSpace1D}
+    Spaces.weighted_dss!(field_values(field), axes(field))
+    return field
+end
+
+function Spaces.weighted_dss!(
+    field::Field{V, S},
     ghost_buffer = Spaces.create_ghost_buffer(field),
-)
+) where {V, S <: SpectralElementSpace2D}
+    Spaces.weighted_dss!(field_values(field), axes(field), ghost_buffer)
+    return field
+end
+
+function Spaces.weighted_dss!(
+    field::Field{V, S},
+    ghost_buffer = nothing, # added for compatibility
+) where {
+    V,
+    ST,
+    H <: SpectralElementSpace1D,
+    S <: ExtrudedFiniteDifferenceSpace{ST, H},
+}
+    Spaces.weighted_dss!(field_values(field), axes(field))
+    return field
+end
+
+function Spaces.weighted_dss!(
+    field::Field{V, S},
+    ghost_buffer = Spaces.create_ghost_buffer(field),
+) where {
+    V,
+    ST,
+    H <: SpectralElementSpace2D,
+    S <: ExtrudedFiniteDifferenceSpace{ST, H},
+}
     Spaces.weighted_dss!(field_values(field), axes(field), ghost_buffer)
     return field
 end

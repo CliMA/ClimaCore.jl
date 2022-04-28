@@ -40,11 +40,10 @@ const ymin = -2π              # domain y lower bound
 const ymax = 2π               # domain y upper bound
 const ρ₀ = 1.0                # air density
 const D₄ = 0.0                # hyperdiffusion coefficient
-const u0 = π / 2              # angular velocity
 const r0 = (xmax - xmin) / 6  # bells radius
-const end_time = 2π           # simulation period in seconds
-const dt = end_time / 8000
-const n_steps = Int(round(end_time / dt))
+const end_time = 2 * pi       # simulation period in seconds
+const dt = 1e-3
+const n_steps = Int(div(end_time, dt))
 const flow_center =
     Geometry.XYPoint(xmin + (xmax - xmin) / 2, ymin + (ymax - ymin) / 2)
 const bell_centers = [
@@ -122,6 +121,16 @@ for (k, ne) in enumerate(ne_seq)
     coords = Fields.coordinate_field(space)
     Δh[k] = (xmax - xmin) / ne
 
+    # Initialize simple uniform rotational flow
+    u = map(coords) do coord
+        x, y = coord.x, coord.y
+
+        u₁ = -(y - flow_center.y)
+        u₂ = (x - flow_center.x)
+
+        Geometry.UVVector(u₁, u₂)
+    end
+
     # Initialize state
     y0 = map(coords) do coord
         x, y = coord.x, coord.y
@@ -175,19 +184,6 @@ for (k, ne) in enumerate(ne_seq)
         # Set up operators
         grad = Operators.Gradient()
         wdiv = Operators.WeakDivergence()
-        end_time = parameters.end_time
-
-        # Define the flow
-        coords = Fields.coordinate_field(axes(y.ρq))
-        u = map(coords) do coord
-            local y
-            x, y = coord.x, coord.y
-
-            uu = -u0 * (y - flow_center.y) * cospi(t / end_time)
-            uv = u0 * (x - flow_center.x) * cospi(t / end_time)
-
-            Geometry.UVVector(uu, uv)
-        end
 
         # Compute min_Q[] and max_Q[] that will be needed later in the stage limiter
         space = parameters.space
@@ -225,8 +221,9 @@ for (k, ne) in enumerate(ne_seq)
         @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
 
         # Add advective flux divergence
-        @. dy.ρ = beta * dy.ρ - alpha * wdiv(y.ρ * u)                         # contintuity equation
+        @. dy.ρ = beta * dy.ρ - alpha * wdiv(y.ρ * u)         # contintuity equation
         @. dy.ρq = beta * dy.ρq - alpha * wdiv(y.ρq * u) + alpha * ystar.ρq   # advection of tracers equation
+
 
         min_Q = parameters.min_Q
         max_Q = parameters.max_Q
@@ -245,10 +242,10 @@ for (k, ne) in enumerate(ne_seq)
         Spaces.weighted_dss!(dy.ρq)
     end
 
+
     # Set up RHS function
     ystar = copy(y0)
-    parameters =
-        (space = space, min_Q = min_Q, max_Q = max_Q, end_time = end_time)
+    parameters = (space = space, min_Q = min_Q, max_Q = max_Q)
     f!(ystar, y0, parameters, 0.0, dt, 1)
 
     # Solve the ODE
@@ -268,13 +265,15 @@ for (k, ne) in enumerate(ne_seq)
         progress_message = (dt, u, p, t) -> t,
     )
 
-    L1err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        1,
-    )
-    L2err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-    )
+    L1err[k] =
+        norm(
+            (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
+            1,
+        ) / norm(ones(space), 1)
+    L2err[k] =
+        norm(
+            (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
+        ) / norm(ones(space))
     Linferr[k] = norm(
         (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
         Inf,
@@ -298,6 +297,7 @@ for (k, ne) in enumerate(ne_seq)
         joinpath(path, "final_q.png"),
     )
 end
+
 
 # Print convergence rate info
 conv = convergence_rate(L2err, Δh)
