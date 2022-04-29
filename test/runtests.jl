@@ -51,6 +51,7 @@ include("Operators/finitedifference/opt_implicit_stencils.jl")
 
 include("Operators/hybrid/2d.jl")
 include("Operators/hybrid/3d.jl")
+include("Operators/hybrid/dss_opt.jl")
 include("Operators/hybrid/opt.jl")
 
 include("Operators/remapping.jl")
