@@ -33,16 +33,27 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
 # we implement our own to avoid the type-widening code, and throw a more useful error
-@noinline error_inferred_eltype(bc) = error(
-    "cannot infer concrete eltype of $(bc.f) on $(tuplemap(eltype, bc.args))",
-)
+struct BroadcastInferenceError <: Exception
+    bc::Base.Broadcast.Broadcasted
+end
+
+function Base.showerror(io::IO, err::BroadcastInferenceError)
+    print(io, "BroadcastInferenceError: cannot infer eltype.\n")
+    f = err.bc.f
+    eltypes = tuplemap(eltype, err.bc.args)
+    if !hasmethod(f, eltypes)
+        print(io, "  function $(f) does not have a method for $(eltypes)")
+    else
+        InteractiveUtils.code_warntype(io, f, eltypes)
+    end
+end
 
 function Base.copy(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractFieldStyle}
     ElType = eltype(bc)
     if !Base.isconcretetype(ElType)
-        error_inferred_eltype(bc)
+        throw(BroadcastInferenceError(bc))
     end
     # We can trust it and defer to the simpler `copyto!`
     return copyto!(similar(bc, ElType), bc)
