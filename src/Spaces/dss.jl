@@ -13,44 +13,71 @@ Transformations only apply to vector quantities.
 See [`Spaces.weighted_dss!`](@ref).
 """
 dss_transform(arg, local_geometry, weight, i, j) =
-    weight[i, j] ⊠ dss_transform(arg[i, j], local_geometry[i, j])
+    dss_transform(arg[i, j], local_geometry[i, j], weight[i, j])
 dss_transform(arg, local_geometry, weight::Nothing, i, j) =
-    dss_transform(arg[i, j], local_geometry[i, j])
+    dss_transform(arg[i, j], local_geometry[i, j], 1)
 dss_transform(arg, local_geometry::Nothing, weight::Nothing, i, j) = arg[i, j]
+
 dss_transform(arg, local_geometry, weight, i) =
-    dss_transform(arg[i], local_geometry[i]) ⊠ weight[i]
+    dss_transform(arg[i], local_geometry[i], weight[i])
 dss_transform(arg, local_geometry, weight::Nothing, i) =
-    dss_transform(arg[i], local_geometry[i])
+    dss_transform(arg[i], local_geometry[i], 1)
 dss_transform(arg, local_geometry::Nothing, weight::Nothing, i) = arg[i]
 
-
-@inline function dss_transform(arg, local_geometry)
-    RecursiveApply.rmap(arg) do x
-        Base.@_inline_meta
-        dss_transform(x, local_geometry)
-    end
+@inline function dss_transform(
+    arg::Tuple{},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+)
+    ()
 end
-@inline dss_transform(arg::Number, local_geometry) = arg
+@inline function dss_transform(
+    arg::Tuple,
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+)
+    (
+        dss_transform(first(arg), local_geometry, weight),
+        dss_transform(Base.tail(arg), local_geometry, weight)...,
+    )
+end
+@inline function dss_transform(
+    arg::NamedTuple{names},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) where {names}
+    NamedTuple{names}(dss_transform(Tuple(arg), local_geometry, weight))
+end
+@inline dss_transform(
+    arg::Number,
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = arg * weight
 @inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.CartesianAxis}}},
     local_geometry::Geometry.LocalGeometry,
-) where {T, N} = arg
+    weight,
+) where {T, N} = arg * weight
 @inline dss_transform(
     arg::Geometry.CartesianVector,
     local_geometry::Geometry.LocalGeometry,
-) where {T, N} = arg
+    weight,
+) where {T, N} = arg * weight
 @inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.LocalAxis}}},
     local_geometry::Geometry.LocalGeometry,
-) where {T, N} = arg
+    weight,
+) where {T, N} = arg * weight
 @inline dss_transform(
     arg::Geometry.LocalVector,
     local_geometry::Geometry.LocalGeometry,
-) where {T, N} = arg
+    weight,
+) where {T, N} = arg * weight
 
 @inline function dss_transform(
     arg::Geometry.AxisVector,
     local_geometry::Geometry.LocalGeometry,
+    weight,
 )
     ax = axes(local_geometry.∂x∂ξ, 1)
     axfrom = axes(arg, 1)
@@ -60,14 +87,14 @@ end
         axfrom isa Geometry.Covariant3Axis ||
         axfrom isa Geometry.Contravariant3Axis
     )
-        return arg
+        return arg * weight
     end
     # 2D domain axis (1,3) curl
     if ax isa Geometry.UWAxis && (
         axfrom isa Geometry.Covariant2Axis ||
         axfrom isa Geometry.Contravariant2Axis
     )
-        return arg
+        return arg * weight
     end
     # workaround for using a Covariant12Vector in a UW space
     if ax isa Geometry.UWAxis && axfrom isa Geometry.Covariant12Axis
@@ -79,9 +106,9 @@ end
             local_geometry,
         )
         u, w = Geometry.components(uw_vector)
-        return Geometry.UVWVector(u, v, w)
+        return Geometry.UVWVector(u, v, w) * weight
     end
-    Geometry.transform(ax, arg, local_geometry)
+    Geometry.transform(ax, arg, local_geometry) * weight
 end
 
 """
@@ -106,15 +133,28 @@ dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
 ) where {names, T}
     NamedTuple{names}(dss_untransform(T, Tuple(targ), local_geometry))
 end
+@inline dss_untransform(
+    ::Type{Tuple{}},
+    targ::Tuple{},
+    local_geometry::Geometry.LocalGeometry,
+) = ()
 @inline function dss_untransform(
     ::Type{T},
     targ::Tuple,
-    local_geometry,
+    local_geometry::Geometry.LocalGeometry,
 ) where {T <: Tuple}
-    RecursiveApply.rmap(fieldtypes(T), targ) do Tx, tx
-        Base.@_inline_meta
-        dss_untransform(Tx, tx, local_geometry)
-    end
+    (
+        dss_untransform(
+            Base.tuple_type_head(T),
+            Base.first(targ),
+            local_geometry,
+        ),
+        dss_untransform(
+            Base.tuple_type_tail(T),
+            Base.tail(targ),
+            local_geometry,
+        )...,
+    )
 end
 
 @inline dss_untransform(::Type{T}, targ::T, local_geometry) where {T} = targ

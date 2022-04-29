@@ -14,7 +14,7 @@ export ⊞, ⊠, ⊟, tuplemap
 
 A `map` impl for mapping function `fn` a tuple argument `tup`
 
-Currently just calls `Base.map` behind the scenes but is left 
+Currently just calls `Base.map` behind the scenes but is left
 stubbed out for potential specialization in the future.
 """
 @inline function tuplemap(fn::F, tup::Tuple) where {F}
@@ -26,7 +26,7 @@ end
 
 A `map` impl for mapping function `fn` over `tup1`, `tup2` tuple arguments.
 
-Currently just calls `Base.map` behind the scenes but is left 
+Currently just calls `Base.map` behind the scenes but is left
 stubbed out for potential specialization in the future.
 """
 @inline function tuplemap(fn::F, tup1::Tuple, tup2::Tuple) where {F}
@@ -41,8 +41,9 @@ Recursively apply `fn` to each element of `X`
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
 rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
+rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
 rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
-    tuplemap((x, y) -> rmap(fn, x, y), X, Y)
+    (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
