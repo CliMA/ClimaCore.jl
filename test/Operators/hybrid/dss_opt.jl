@@ -1,4 +1,4 @@
-using Test
+using Test, JET
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:
@@ -16,7 +16,7 @@ import ClimaCore:
 import ClimaCore.Utilities: half
 import ClimaCore.DataLayouts: level
 
-const FT = Float64
+FT = Float64
 
 vertdomain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0.0),
