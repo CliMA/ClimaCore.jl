@@ -93,8 +93,8 @@ for (k, ne) in enumerate(ne_seq)
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
-    min_Q = zeros(n_elems)
-    max_Q = zeros(n_elems)
+    min_q = zeros(n_elems)
+    max_q = zeros(n_elems)
 
     coords = Fields.coordinate_field(space)
     Δh[k] = 2 * R / ne
@@ -167,33 +167,37 @@ for (k, ne) in enumerate(ne_seq)
             Geometry.UVVector(uu, uv)
         end
 
-        # Compute min_Q[] and max_Q[] that will be needed later in the stage limiter
+        # Compute min_q[] and max_q[] that will be needed later in the stage limiter
         space = parameters.space
         n_elems = Topologies.nlocalelems(space)
         topology = space.topology
 
-        neigh_elems_Q_min = Array{Float64}(undef, 8)
-        neigh_elems_Q_max = Array{Float64}(undef, 8)
+        neigh_elems_q_min = Array{Float64}(undef, 8)
+        neigh_elems_q_max = Array{Float64}(undef, 8)
 
         for e in 1:n_elems
-            Q_e = Fields.slab(y.ρq, e)
+            q_e = Fields.slab(y.ρq, e) ./ Fields.slab(y.ρ, e)
 
-            Q_e_min = minimum(Q_e)
-            Q_e_max = maximum(Q_e)
+            q_e_min = minimum(q_e)
+            q_e_max = maximum(q_e)
             neigh_elems = Topologies.neighboring_elements(topology, e)
             for i in 1:length(neigh_elems)
                 if neigh_elems[i] == 0
-                    neigh_elems_Q_min[i] = +Inf
-                    neigh_elems_Q_max[i] = -Inf
+                    neigh_elems_q_min[i] = +Inf
+                    neigh_elems_q_max[i] = -Inf
                 else
-                    neigh_elems_Q_min[i] =
-                        Fields.minimum(Fields.slab(y.ρq, neigh_elems[i]))
-                    neigh_elems_Q_max[i] =
-                        Fields.maximum(Fields.slab(y.ρq, neigh_elems[i]))
+                    neigh_elems_q_min[i] = Fields.minimum(
+                        Fields.slab(y.ρq, neigh_elems[i]) ./
+                        Fields.slab(y.ρ, neigh_elems[i]),
+                    )
+                    neigh_elems_q_max[i] = Fields.maximum(
+                        Fields.slab(y.ρq, neigh_elems[i]) ./
+                        Fields.slab(y.ρ, neigh_elems[i]),
+                    )
                 end
             end
-            parameters.min_Q[e] = min(minimum(neigh_elems_Q_min), Q_e_min)
-            parameters.max_Q[e] = max(maximum(neigh_elems_Q_max), Q_e_max)
+            parameters.min_q[e] = min(minimum(neigh_elems_q_min), q_e_min)
+            parameters.max_q[e] = max(maximum(neigh_elems_q_max), q_e_max)
         end
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
@@ -208,8 +212,8 @@ for (k, ne) in enumerate(ne_seq)
 
     function stage_callback!(ydoublestar, integrator, parameters, t)
         space = parameters.space
-        min_Q = parameters.min_Q
-        max_Q = parameters.max_Q
+        min_q = parameters.min_q
+        max_q = parameters.max_q
         T = parameters.T
 
         if lim_flag
@@ -217,8 +221,8 @@ for (k, ne) in enumerate(ne_seq)
             Limiters.quasimonotone_limiter!(
                 ydoublestar.ρq,
                 ydoublestar.ρ,
-                min_Q,
-                max_Q,
+                min_q,
+                max_q,
                 rtol = limiter_tol,
             )
         end
@@ -227,7 +231,7 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters = (space = space, min_Q = min_Q, max_Q = max_Q, T = T)
+    parameters = (space = space, min_q = min_q, max_q = max_q, T = T)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
@@ -237,7 +241,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         SSPRK33(stage_callback!),
         dt = dt,
-        saveat = 5 * dt,
+        saveat = 10 * dt,
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
