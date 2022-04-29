@@ -293,7 +293,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG plane limiter cosine bells"
+  - label: ":computer: Plane limiters advection cosine bells"
     key: "cpu_cg_plane_advection_limiter_cosine_bells"
     command:
       - "julia --color=yes --project=examples examples/plane/limiters_advection.jl"
@@ -304,7 +304,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG plane limiter Gaussian bells"
+  - label: ":computer: Plane limiters advection Gaussian bells"
     key: "cpu_cg_plane_advection_limiter_gaussian_bells"
     command:
       - "julia --color=yes --project=examples examples/plane/limiters_advection.jl gaussian_bells"
@@ -315,7 +315,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG plane limiter cylinders"
+  - label: ":computer: Plane limiters advection cylinders"
     key: "cpu_cg_plane_advection_limiter_cylinders"
     command:
       - "julia --color=yes --project=examples examples/plane/limiters_advection.jl cylinders"
@@ -438,7 +438,7 @@ steps:
       queue: central
       slurm_ntasks: 2
 
-  - label: ":computer: Solid body CG sphere cosine bell alpha0"
+  - label: ":computer: Solid body sphere cosine bell alpha0"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha0"
     command:
       - "julia --color=yes --project=examples examples/sphere/solidbody.jl"
@@ -449,7 +449,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Solid body CG sphere cosine bell alpha45"
+  - label: ":computer: Solid body sphere cosine bell alpha45"
     key: "cpu_solidbody_cg_sphere_cosine_bell_alpha45"
     command:
       - "julia --color=yes --project=examples examples/sphere/solidbody.jl cosine_bell alpha45"
@@ -460,7 +460,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Solid body CG sphere gaussian bell alpha0"
+  - label: ":computer: Solid body sphere Gaussian bell alpha0"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha0"
     command:
       - "julia --color=yes --project=examples examples/sphere/solidbody.jl gaussian_bell"
@@ -471,7 +471,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Solid body CG sphere gaussian bell alpha45"
+  - label: ":computer: Solid body sphere Gaussian bell alpha45"
     key: "cpu_solidbody_cg_sphere_gaussian_bell_alpha45"
     command:
       - "julia --color=yes --project=examples examples/sphere/solidbody.jl gaussian_bell alpha45"
@@ -482,7 +482,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG sphere limiter cosine bells"
+  - label: ":computer: Sphere limiters advection cosine bells"
     key: "cpu_cg_sphere_advection_limiter_cosine_bells"
     command:
       - "julia --color=yes --project=examples examples/sphere/limiters_advection.jl"
@@ -493,7 +493,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG sphere limiter Gaussian bells"
+  - label: ":computer: Sphere limiters advection Gaussian bells"
     key: "cpu_cg_advection_limiter_gaussian_bells"
     command:
       - "julia --color=yes --project=examples examples/sphere/limiters_advection.jl gaussian_bells"
@@ -504,7 +504,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Advection CG sphere limiter cylinders"
+  - label: ":computer: Sphere limiters advection cylinders"
     key: "cpu_cg_advection_limiter_cylinders"
     command:
       - "julia --color=yes --project=examples examples/sphere/limiters_advection.jl cylinders"
@@ -515,7 +515,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Steady-state shallow water 2D CG sphere alpha0"
+  - label: ":computer: Steady-state shallow water 2D sphere alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_alpha0"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl"
@@ -526,7 +526,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Steady-state shallow water 2D CG sphere alpha45"
+  - label: ":computer: Shallow-water 2D sphere steady-state alpha45"
     key: "cpu_shallowwater_2d_cg_sphere_alpha45"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state alpha45"
@@ -537,7 +537,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha0"
+  - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_compact_alpha0"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state_compact"
@@ -548,7 +548,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Steady-state shallow water 2D CG sphere with compact support alpha60"
+  - label: ":computer: Shallow-water 2D sphere steady-state with compact support alpha60"
     key: "cpu_shallowwater_2d_cg_sphere_compact_alpha60"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl steady_state_compact alpha60"
@@ -559,7 +559,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha0"
+  - label: ":computer: Shallow-water 2D sphere barotropic instability alpha0"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha0"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
@@ -570,7 +570,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Shallow water 2D CG sphere barotropic instability alpha30"
+  - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability alpha30"
@@ -581,7 +581,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Non-uniform shallow water 2D CG sphere alpha0"
+  - label: ":computer: Shallow-water 2D sphere mountain alpha0"
     key: "cpu_nonuniform_shallowwater_2d_cg_sphere"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl mountain"
@@ -592,7 +592,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Rossby Haurwitz 2D CG sphere"
+  - label: ":computer: Shallow-water 2D sphere Rossby Haurwitz"
     key: "cpu_rossbyhaurwitz_2d_cg_sphere"
     command:
       - "julia --color=yes --project=examples examples/sphere/shallow_water.jl rossby_haurwitz"
@@ -603,7 +603,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: 3D deformation flow"
+  - label: ":computer: 3D sphere deformation flow"
     key: "cpu_3d_deformation_flow"
     command:
       - "julia --color=yes --project=examples examples/hybrid/sphere/deformation_flow.jl"
@@ -614,7 +614,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Float 64 baroclinic wave (ρe)"
+  - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
     key: "cpu_baroclinic_wave_rho_e_float64"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -628,7 +628,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: baroclinic wave (ρe)"
+  - label: ":computer: 3D sphere baroclinic wave (ρe)"
     key: "cpu_baroclinic_wave_rho_e"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -641,7 +641,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: MPI baroclinic wave (ρe)"
+  - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
     key: "cpu_mpi_baroclinic_wave_rho_e"
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -656,7 +656,7 @@ steps:
       slurm_ntasks: 2
 
 
-  - label: ":computer: baroclinic wave (ρθ)"
+  - label: ":computer: 3D sphere baroclinic wave (ρθ)"
     key: "cpu_baroclinic_wave_rho_theta"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -669,7 +669,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: nonhydrostatic gravity wave"
+  - label: ":computer: 3D sphere nonhydrostatic gravity wave"
     key: "cpu_nonhydrostatic_gravity_wave"
     command:
       - "julia --color=yes --project=examples examples/hybrid/sphere/nonhydrostatic_gravity_wave.jl"
@@ -680,7 +680,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: solid body rotation"
+  - label: ":computer: 3D sphere solid-body rotation"
     key: "cpu_solid_body_rotation"
     command:
       - "julia --color=yes --project=examples examples/hybrid/sphere/solid_body_rotation_3d.jl"
@@ -689,7 +689,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: hydrostatically and geostrophically balanced flow (ρe)"
+  - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρe)"
     key: "cpu_balanced_flow_rho_e"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -702,7 +702,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: hydrostatically and geostrophically balanced flow (ρθ)"
+  - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρθ)"
     key: "cpu_balanced_flow_rho_theta"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -715,7 +715,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez (ρe)"
+  - label: ":computer: 3D sphere dry Held-Suarez (ρe)"
     key: "cpu_held_suarez_rho_e"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -728,7 +728,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: Float64 dry held-suarez (ρθ)"
+  - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
     key: "cpu_held_suarez_rho_theta_float64"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -742,7 +742,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez (ρθ)"
+  - label: ":computer: 3D sphere dry Held-Suarez (ρθ)"
     key: "cpu_held_suarez_rho_theta"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -755,7 +755,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: dry held-suarez (ρe_int)"
+  - label: ":computer: 3D sphere dry Held-Suarez (ρe_int)"
     key: "cpu_held_suarez_rho_e_int"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -768,7 +768,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: inertial gravity wave"
+  - label: ":computer: 3D sphere inertial gravity wave"
     key: "cpu_inertial_gravity_wave"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
