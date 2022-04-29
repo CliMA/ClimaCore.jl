@@ -540,37 +540,38 @@ function rhs!(dYdt, y, parameters, t)
       ∇𝒰 = @. grad(𝒰)
       # Assemble 𝒮 = 1/2(uᵢ,ⱼ + uⱼ,ᵢ)
       𝒮 = strainrate(∇𝒰)
+      norm𝒮 = @. 𝒮.components.data.:1^2 + 2 * 𝒮.components.data.:2^2 + 𝒮.components.data.:4^2
     # Compute Most Extensional Eigenvector
       E = compute_ℯᵥ(𝒮)
-      ℯᵥ¹ = @. E.components.data.:1
-      ℯᵥ² = @. E.components.data.:2
-      𝒮₁₁ = @. 𝒮.components.data.:1
-      𝒮₁₂ = @. 𝒮.components.data.:2
-      𝒮₂₁ = @. 𝒮.components.data.:3
-      𝒮₂₂ = @. 𝒮.components.data.:4
-      ã₁ = @. ℯᵥ¹*ℯᵥ¹*𝒮₁₁ 
-      ã₂ = @. ℯᵥ¹*ℯᵥ²*𝒮₁₂
-      ã₃ = @. ℯᵥ²*ℯᵥ¹*𝒮₂₁
-      ã₄ = @. ℯᵥ²*ℯᵥ²*𝒮₂₂
-      ã = @. abs(ã₁ + ã₂ + ã₃ + ã₄) 
-      # Compute Subgrid Tendency Based on Vortex Model
-      kc = π / Δx
-      F₂x = structure_function(𝒰.components.data.:1; p=2) # 4.5b
-      F₂y = structure_function(𝒰.components.data.:2; p=2) # 4.5b
-      F₂ = @. F₂x + F₂y
-      K₀ε = @. kolmogorov_prefactor(F₂)
-      Q = @. 2*ν*kc^2/3/(ã + 1e-14)
-      Γ = @. gamma(-k₁, Q)
-      Kₑ = @. 1/2 * K₀ε * (2*ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
-      # Get SGS Flux
-      τ = compute_subgrid_stress(Kₑ, E, ∇𝒰)
-      
-      # STRETCHED VORTEX 
-      flux_sgs = @. - τ
-      flux_sgs1 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:1, flux_sgs.components.data.:2))
-      flux_sgs2 = @.Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:2, flux_sgs.components.data.:4)) 
-      @. dYdt.u += wdiv(flux_sgs1)
-      @. dYdt.u += wdiv(flux_sgs2)
+#      ℯᵥ¹ = @. E.components.data.:1
+#      ℯᵥ² = @. E.components.data.:2
+#      𝒮₁₁ = @. 𝒮.components.data.:1
+#      𝒮₁₂ = @. 𝒮.components.data.:2
+#      𝒮₂₁ = @. 𝒮.components.data.:3
+#      𝒮₂₂ = @. 𝒮.components.data.:4
+#      ã₁ = @. ℯᵥ¹*ℯᵥ¹*𝒮₁₁ 
+#      ã₂ = @. ℯᵥ¹*ℯᵥ²*𝒮₁₂
+#      ã₃ = @. ℯᵥ²*ℯᵥ¹*𝒮₂₁
+#      ã₄ = @. ℯᵥ²*ℯᵥ²*𝒮₂₂
+#      ã = @. abs(ã₁ + ã₂ + ã₃ + ã₄) 
+#      # Compute Subgrid Tendency Based on Vortex Model
+#      kc = π / Δx
+#      F₂x = structure_function(𝒰.components.data.:1; p=2) # 4.5b
+#      F₂y = structure_function(𝒰.components.data.:2; p=2) # 4.5b
+#      F₂ = @. F₂x + F₂y
+#      K₀ε = @. kolmogorov_prefactor(F₂)
+#      Q = @. 2*ν*kc^2/3/(ã + 1e-14)
+#      Γ = @. gamma(-k₁, Q)
+#      Kₑ = @. 1/2 * K₀ε * (2*ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
+#      # Get SGS Flux
+#      τ = compute_subgrid_stress(Kₑ, E, ∇𝒰)
+#      
+#      # STRETCHED VORTEX 
+#      flux_sgs = @. - τ
+#      #flux_sgs1 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:1, flux_sgs.components.data.:2))
+#      #flux_sgs2 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:2, flux_sgs.components.data.:4))
+#      #@. dYdt.u.components.data.:1 += wdiv(flux_sgs1)
+#      #@. dYdt.u.components.data.:2 += wdiv(flux_sgs2)
     end
 
     # Add in pieces
