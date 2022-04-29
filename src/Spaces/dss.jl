@@ -652,29 +652,62 @@ function dss_2d!(
     return data
 end
 
-
-
-function weighted_dss!(data, space::AbstractSpace, ghost_buffer = nothing)
-    if space isa ExtrudedFiniteDifferenceSpace
-        hspace = space.horizontal_space
-    else
-        hspace = space
-    end
+function weighted_dss!(
+    data,
+    hspace::SpectralElementSpace1D,
+    ghost_buffer = nothing,
+)
     topology = hspace.topology
-    if topology isa Topologies.IntervalTopology
-        dss_1d!(topology, data, local_geometry_data(space), hspace.dss_weights)
-    else
-        if isnothing(ghost_buffer)
-            ghost_buffer = create_ghost_buffer(data, topology)
-        end
-        dss_2d!(
-            topology,
-            data,
-            ghost_buffer,
-            local_geometry_data(space),
-            ghost_geometry_data(space),
-            hspace.local_dss_weights,
-            hspace.ghost_dss_weights,
-        )
+    dss_1d!(topology, data, local_geometry_data(hspace), hspace.dss_weights)
+end
+
+function weighted_dss!(
+    data,
+    space::ExtrudedFiniteDifferenceSpace{S, H},
+    ghost_buffer = nothing,
+) where {S, H <: SpectralElementSpace1D}
+    hspace = space.horizontal_space
+    topology = hspace.topology
+    dss_1d!(topology, data, local_geometry_data(space), hspace.dss_weights)
+end
+
+function weighted_dss!(
+    data,
+    hspace::SpectralElementSpace2D,
+    ghost_buffer = nothing,
+)
+    topology = hspace.topology
+    if isnothing(ghost_buffer)
+        ghost_buffer = create_ghost_buffer(data, topology)
     end
+    dss_2d!(
+        topology,
+        data,
+        ghost_buffer,
+        local_geometry_data(hspace),
+        ghost_geometry_data(hspace),
+        hspace.local_dss_weights,
+        hspace.ghost_dss_weights,
+    )
+end
+
+function weighted_dss!(
+    data,
+    space::ExtrudedFiniteDifferenceSpace{S, H},
+    ghost_buffer = nothing,
+) where {S, H <: SpectralElementSpace2D}
+    hspace = space.horizontal_space
+    topology = hspace.topology
+    if isnothing(ghost_buffer)
+        ghost_buffer = create_ghost_buffer(data, topology)
+    end
+    dss_2d!(
+        topology,
+        data,
+        ghost_buffer,
+        local_geometry_data(space),
+        ghost_geometry_data(space),
+        hspace.local_dss_weights,
+        hspace.ghost_dss_weights,
+    )
 end
