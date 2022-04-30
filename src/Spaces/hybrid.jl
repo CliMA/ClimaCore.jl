@@ -125,6 +125,8 @@ quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
 
 topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
+vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
+    space.vertical_topology
 
 function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
     SpectralElementSpaceSlab(

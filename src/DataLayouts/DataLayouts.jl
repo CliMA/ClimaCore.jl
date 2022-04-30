@@ -404,6 +404,7 @@ slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
     dataview = @inbounds view(parent(data), i, :, h)
     DataF{S}(reshape(dataview, (1, :)))
 end
+@inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = column(data, i, h)
 
 @generated function _property_view(
     data::IFH{S, Ni, A},

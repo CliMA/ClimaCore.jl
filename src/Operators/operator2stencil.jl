@@ -93,10 +93,11 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{InterpolateF2C, InterpolateC2F}},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = RecursiveApply.rdiv(getidx(arg, loc, idx - half), 2)
-    val⁺ = RecursiveApply.rdiv(getidx(arg, loc, idx + half), 2)
+    val⁻ = RecursiveApply.rdiv(getidx(arg, loc, idx - half, hidx), 2)
+    val⁺ = RecursiveApply.rdiv(getidx(arg, loc, idx + half, hidx), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
@@ -104,6 +105,7 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = eltype(arg)
@@ -114,6 +116,7 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = eltype(arg)
@@ -124,9 +127,10 @@ function stencil_left_boundary(
     bc::Union{SetGradient, Extrapolate},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁺ = getidx(arg, loc, idx + half)
+    val⁺ = getidx(arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -134,9 +138,10 @@ function stencil_right_boundary(
     bc::Union{SetGradient, Extrapolate},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = getidx(arg, loc, idx - half)
+    val⁻ = getidx(arg, loc, idx - half, hidx)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 
@@ -145,9 +150,10 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiasedC2F}},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = getidx(arg, loc, idx - half)
+    val⁻ = getidx(arg, loc, idx - half, hidx)
     return StencilCoefs{-half, -half}((val⁻,))
 end
 stencil_left_boundary(
@@ -155,6 +161,7 @@ stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 ) = StencilCoefs{-half, -half}((zero(eltype(arg)),))
 
@@ -163,9 +170,10 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiasedC2F}},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁺ = getidx(arg, loc, idx + half)
+    val⁺ = getidx(arg, loc, idx + half, hidx)
     return StencilCoefs{half, half}((val⁺,))
 end
 stencil_right_boundary(
@@ -173,6 +181,7 @@ stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 ) = StencilCoefs{half, half}((zero(eltype(arg)),))
 
@@ -181,21 +190,22 @@ function stencil_interior(
     ::Operator2Stencil{<:AdvectionC2C},
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ⁻ = getidx(arg, loc, idx - 1)
-    θ = getidx(arg, loc, idx)
-    θ⁺ = getidx(arg, loc, idx + 1)
+    θ⁻ = getidx(arg, loc, idx - 1, hidx)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(arg, loc, idx + 1, hidx)
     val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
     val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -205,21 +215,22 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ⁻ = bc.val
-    θ = getidx(arg, loc, idx)
-    θ⁺ = getidx(arg, loc, idx + 1)
+    θ⁻ = getidx(bc.val, loc, nothing, hidx)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(arg, loc, idx + 1, hidx)
     val⁻ = w³⁻ ⊠ (θ ⊟ θ⁻)
     val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -229,21 +240,22 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ⁻ = getidx(arg, loc, idx - 1)
-    θ = getidx(arg, loc, idx)
-    θ⁺ = bc.val
+    θ⁻ = getidx(arg, loc, idx - 1, hidx)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(bc.val, loc, nothing, hidx)
     val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
     val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -253,16 +265,17 @@ function stencil_left_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ = getidx(arg, loc, idx)
-    θ⁺ = getidx(arg, loc, idx + 1)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(arg, loc, idx + 1, hidx)
     val⁺ = w³⁺ ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
@@ -271,16 +284,17 @@ function stencil_right_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    θ = getidx(arg, loc, idx)
-    θ⁻ = getidx(arg, loc, idx - 1)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁻ = getidx(arg, loc, idx - 1, hidx)
     val⁻ = w³⁻ ⊠ (θ ⊟ θ⁻)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
@@ -290,21 +304,22 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{FluxCorrectionC2C, FluxCorrectionF2F}},
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ⁻ = getidx(arg, loc, idx - 1)
-    θ = getidx(arg, loc, idx)
-    θ⁺ = getidx(arg, loc, idx + 1)
+    θ⁻ = getidx(arg, loc, idx - 1, hidx)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(arg, loc, idx + 1, hidx)
     val⁻ = ⊟(abs(w³⁻) ⊠ (θ ⊟ θ⁻))
     val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -314,16 +329,17 @@ function stencil_left_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
     space = axes(arg)
     w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(velocity, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    θ = getidx(arg, loc, idx)
-    θ⁺ = getidx(arg, loc, idx + 1)
+    θ = getidx(arg, loc, idx, hidx)
+    θ⁺ = getidx(arg, loc, idx + 1, hidx)
     val⁺ = abs(w³⁺) ⊠ (θ⁺ ⊟ θ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
@@ -332,17 +348,18 @@ function stencil_right_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     velocity,
     arg,
 )
 
     space = axes(arg)
     w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(velocity, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    θ⁻ = getidx(arg, loc, idx - 1)
-    θ = getidx(arg, loc, idx)
+    θ⁻ = getidx(arg, loc, idx - 1, hidx)
+    θ = getidx(arg, loc, idx, hidx)
     val⁻ = ⊟(abs(w³⁻) ⊠ (θ ⊟ θ⁻))
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
@@ -352,10 +369,11 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{GradientF2C, GradientC2F}},
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = Geometry.Covariant3Vector(-1) ⊗ getidx(arg, loc, idx - half)
-    val⁺ = Geometry.Covariant3Vector(1) ⊗ getidx(arg, loc, idx + half)
+    val⁻ = Geometry.Covariant3Vector(-1) ⊗ getidx(arg, loc, idx - half, hidx)
+    val⁺ = Geometry.Covariant3Vector(1) ⊗ getidx(arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
@@ -363,9 +381,10 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁺ = Geometry.Covariant3Vector(1) ⊗ getidx(arg, loc, idx + half)
+    val⁺ = Geometry.Covariant3Vector(1) ⊗ getidx(arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -373,9 +392,10 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = Geometry.Covariant3Vector(-1) ⊗ getidx(arg, loc, idx - half)
+    val⁻ = Geometry.Covariant3Vector(-1) ⊗ getidx(arg, loc, idx - half, hidx)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 stencil_left_boundary(
@@ -383,6 +403,7 @@ stencil_left_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(GradientF2C)
 stencil_right_boundary(
@@ -390,6 +411,7 @@ stencil_right_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(GradientF2C)
 function stencil_left_boundary(
@@ -397,9 +419,10 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁺ = Geometry.Covariant3Vector(2) ⊗ getidx(arg, loc, idx + half)
+    val⁺ = Geometry.Covariant3Vector(2) ⊗ getidx(arg, loc, idx + half, hidx)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -407,9 +430,10 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
-    val⁻ = Geometry.Covariant3Vector(-2) ⊗ getidx(arg, loc, idx - half)
+    val⁻ = Geometry.Covariant3Vector(-2) ⊗ getidx(arg, loc, idx - half, hidx)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 function stencil_left_boundary(
@@ -417,6 +441,7 @@ function stencil_left_boundary(
     bc::SetGradient,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.gradient_result_type(Val((3,)), eltype(arg))
@@ -427,6 +452,7 @@ function stencil_right_boundary(
     bc::SetGradient,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.gradient_result_type(Val((3,)), eltype(arg))
@@ -438,18 +464,19 @@ function stencil_interior(
     ::Operator2Stencil{<:Union{DivergenceF2C, DivergenceC2F}},
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
     Ju³⁻ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(arg, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
     Ju³⁺ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(arg, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx).J
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J))
     val⁺ = RecursiveApply.rdiv(Ju³⁺, J)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -459,14 +486,15 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
     Ju³⁺ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(arg, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx).J
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁺ = RecursiveApply.rdiv(Ju³⁺, J)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
@@ -475,14 +503,15 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
     Ju³⁻ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(arg, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx).J
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J))
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
@@ -491,6 +520,7 @@ stencil_left_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(DivergenceF2C)
 stencil_right_boundary(
@@ -498,6 +528,7 @@ stencil_right_boundary(
     bc::Extrapolate,
     loc,
     idx,
+    hidx,
     arg,
 ) = extrapolation_increases_bandwidth_error(DivergenceF2C)
 function stencil_left_boundary(
@@ -505,14 +536,15 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
     Ju³⁺ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx + half),
-        Geometry.LocalGeometry(space, idx + half),
+        getidx(arg, loc, idx + half, hidx),
+        Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx).J
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁺ = RecursiveApply.rdiv(Ju³⁺, J / 2)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
@@ -521,14 +553,15 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
     Ju³⁻ = Geometry.Jcontravariant3(
-        getidx(arg, loc, idx - half),
-        Geometry.LocalGeometry(space, idx - half),
+        getidx(arg, loc, idx - half, hidx),
+        Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx).J
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J / 2))
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
@@ -537,6 +570,7 @@ function stencil_left_boundary(
     bc::SetDivergence,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.divergence_result_type(eltype(arg))
@@ -547,6 +581,7 @@ function stencil_right_boundary(
     bc::SetDivergence,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.divergence_result_type(eltype(arg))
@@ -563,11 +598,11 @@ fd3_curl⁺(::Geometry.Covariant3Vector, J) =
 fd3_curl⁺(u::Geometry.Covariant12Vector, J) =
     Geometry.Contravariant12Vector(-u.u₂ / J, u.u₁ / J)
 
-function stencil_interior(::Operator2Stencil{<:CurlC2F}, loc, idx, arg)
+function stencil_interior(::Operator2Stencil{<:CurlC2F}, loc, idx, hidx, arg)
     space = axes(arg)
-    u₋ = getidx(arg, loc, idx - half)
-    u₊ = getidx(arg, loc, idx + half)
-    J = Geometry.LocalGeometry(space, idx).J
+    u₋ = getidx(arg, loc, idx - half, hidx)
+    u₊ = getidx(arg, loc, idx + half, hidx)
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁻ = ⊟(fd3_curl⁺(u₋, J))
     val⁺ = fd3_curl⁺(u₊, J)
     return StencilCoefs{-half, half}((val⁻, val⁺))
@@ -577,11 +612,12 @@ function stencil_left_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
-    u₊ = getidx(arg, loc, idx + half)
-    J = Geometry.LocalGeometry(space, idx).J
+    u₊ = getidx(arg, loc, idx + half, hidx)
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁺ = fd3_curl⁺(u₊, J / 2)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
@@ -590,11 +626,12 @@ function stencil_right_boundary(
     bc::SetValue,
     loc,
     idx,
+    hidx,
     arg,
 )
     space = axes(arg)
-    u₋ = getidx(arg, loc, idx - half)
-    J = Geometry.LocalGeometry(space, idx).J
+    u₋ = getidx(arg, loc, idx - half, hidx)
+    J = Geometry.LocalGeometry(space, idx, hidx).J
     val⁻ = ⊟(fd3_curl⁺(u₋, J))
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
@@ -603,6 +640,7 @@ function stencil_left_boundary(
     bc::SetCurl,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.curl_result_type(Val((3,)), eltype(arg))
@@ -613,6 +651,7 @@ function stencil_right_boundary(
     bc::SetCurl,
     loc,
     idx,
+    hidx,
     arg,
 )
     T = Geometry.curl_result_type(Val((3,)), eltype(arg))

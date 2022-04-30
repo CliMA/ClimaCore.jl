@@ -200,7 +200,15 @@ end
     i,
     h,
 )
-    Ref(slab(bc, h)[i])
+    slab(bc, h)[i]
+end
+@propagate_inbounds function column(
+    bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
+    i,
+    j,
+    h,
+)
+    slab(bc, h)[i]
 end
 
 @propagate_inbounds function column(
@@ -209,7 +217,7 @@ end
     j,
     h,
 )
-    Ref(slab(bc, h)[i, j])
+    slab(bc, h)[i, j]
 end
 
 function Base.similar(
