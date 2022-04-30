@@ -131,6 +131,8 @@ Topologies.boundary_tags
 Topologies.boundary_tag
 Topologies.boundary_faces
 Topologies.vertices
+Topologies.local_neighboring_elements
+Topologies.ghost_neighboring_elements
 ```
 
 ## Spaces

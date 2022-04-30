@@ -7,28 +7,27 @@ using Test
         topology = Topologies.Topology2D(
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 1),
         )
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [6, 2, 3, 5, 0, 0, 0, 0]
+        @test Topologies.local_neighboring_elements(topology, 1) == [2, 3, 5, 6]
     end
     @testset "2 elements across each panel" begin
         topology = Topologies.Topology2D(
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 2),
         )
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [23, 2, 3, 20, 24, 4, 19, 0]
-        @test Topologies.neighboring_elements(topology, 2) ==
-              [24, 5, 4, 1, 0, 7, 3, 23]
-        @test Topologies.neighboring_elements(topology, 3) ==
-              [1, 4, 11, 19, 2, 9, 0, 20]
-        @test Topologies.neighboring_elements(topology, 4) ==
-              [2, 7, 9, 3, 5, 0, 11, 1]
+        @test Topologies.local_neighboring_elements(topology, 1) ==
+              [2, 3, 4, 19, 20, 23, 24]
+        @test Topologies.local_neighboring_elements(topology, 2) ==
+              [1, 3, 4, 5, 7, 23, 24]
+        @test Topologies.local_neighboring_elements(topology, 3) ==
+              [1, 2, 4, 9, 11, 19, 20]
+        @test Topologies.local_neighboring_elements(topology, 4) ==
+              [1, 2, 3, 5, 7, 9, 11]
     end
     @testset "3 elements across each panel" begin
         topology = Topologies.Topology2D(
             Meshes.EquiangularCubedSphere(Domains.SphereDomain(5.0), 3),
         )
-        @test Topologies.neighboring_elements(topology, 5) ==
-              [2, 6, 8, 4, 3, 9, 7, 1]
+        @test Topologies.local_neighboring_elements(topology, 5) ==
+              [1, 2, 3, 4, 6, 7, 8, 9]
     end
 end
 
