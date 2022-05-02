@@ -536,7 +536,7 @@ function rhs!(dYdt, y, parameters, t)
     if sgs_isactive
       local_space = axes(y.u)
       local_geometry = Fields.local_geometry_field(local_space)
-      𝒰 = @. Geometry.UVVector(Geometry.Covariant12Vector(y.u))
+      𝒰 = @. Geometry.LocalVector(Geometry.Covariant12Vector(y.u))
       ∇𝒰 = @. grad(𝒰)
       # Assemble 𝒮 = 1/2(uᵢ,ⱼ + uⱼ,ᵢ)
       𝒮 = strainrate(∇𝒰)
