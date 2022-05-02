@@ -87,7 +87,6 @@ function adapt_space!(
         face_column = column(space.face_local_geometry, i, j, h)
         fZ_column = column(Fields.field_values(fZ), i, j, h)
         f∇Z_column = column(Fields.field_values(f∇Z), i, j, h)
-
         center_column = column(space.center_local_geometry, i, j, h)
         cZ_column = column(Fields.field_values(cZ), i, j, h)
         c∇Z_column = column(Fields.field_values(c∇Z), i, j, h)
@@ -111,7 +110,7 @@ function adapt_space!(
             elseif v == Nv + 1
                 # if this is the domain max face level compute the metric
                 # extrapolating from the top face level of the domain
-                2 * fZ_column[v] - cZ_column[v - 1]
+                2 * (fZ_column[v] - cZ_column[v - 1])
             else
                 cZ_column[v] - cZ_column[v - 1]
             end

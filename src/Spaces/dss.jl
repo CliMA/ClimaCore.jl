@@ -73,6 +73,11 @@ end
     local_geometry::Geometry.LocalGeometry,
     weight,
 ) where {T, N} = arg * weight
+@inline dss_transform(
+    arg::Geometry.Covariant3Vector,
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = arg * weight
 
 @inline function dss_transform(
     arg::Geometry.AxisVector,

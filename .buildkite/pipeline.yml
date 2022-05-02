@@ -402,6 +402,17 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Density current 2D hybrid invariant total energy (topography mesh interface)"
+    key: "cpu_density_current_2d_hybrid_invariant_total_energy_no-warp_topography"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/topo_dc_2dinvariant_rhoe.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/dc_invariant_etot_topo/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: Density current 2D hybrid invariant potential temperature"
     key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
