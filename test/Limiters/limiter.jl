@@ -96,10 +96,10 @@ end
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
-    min_ρq = zeros(n_elems)
-    max_ρq = ones(n_elems)
+    min_q = zeros(n_elems)
+    max_q = ones(n_elems)
 
-    Limiters.quasimonotone_limiter!(ρq, ρ, min_ρq, max_ρq, rtol = lim_tol)
+    Limiters.quasimonotone_limiter!(ρq, ρ, min_q, max_q, rtol = lim_tol)
     @test parent(ρq)[:, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol = 10eps()
     # Check mass conservation after application of limiter
     @test sum(ρq) ≈ initial_Q_mass rtol = 10eps()
@@ -127,16 +127,16 @@ end
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
-    min_ρq = zeros(n_elems)
-    max_ρq = ones(n_elems)
-    max_ρq[2] = 0.5
+    min_q = zeros(n_elems)
+    max_q = ones(n_elems)
+    max_q[2] = 0.5
 
-    Limiters.quasimonotone_limiter!(ρq, ρ, min_ρq, max_ρq, rtol = lim_tol)
-    # Check elem 1 values, with min_ρq = 0, max_ρq = 1
+    Limiters.quasimonotone_limiter!(ρq, ρ, min_q, max_q, rtol = lim_tol)
+    # Check elem 1 values, with min_q = 0, max_q = 1
     @test parent(ρq)[:, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol = 10eps()
-    # Check elem 2 values, with min_ρq = 0, max_ρq = 0.5
+    # Check elem 2 values, with min_q = 0, max_q = 0.5
     @test parent(ρq)[:, :, 1, 2] ≈ [0.45 0.45001; 0.5 0.5] rtol = 10eps()
-    # Check elem 3, vertex 1 value that was between min_ρq = 0, max_ρq = 1 bounds
+    # Check elem 3, vertex 1 value that was between min_q = 0, max_q = 1 bounds
     @test parent(ρq)[9] ≈ 1 rtol = 10eps()
     # Check mass conservation after application of limiter
     @test sum(ρq) ≈ initial_Q_mass rtol = 10eps()
@@ -161,10 +161,10 @@ end
 
     # Initialize variables needed for limiters
     horz_n_elems = Topologies.nlocalelems(horzspace.topology)
-    min_ρq = zeros(horz_n_elems, n3)
-    max_ρq = ones(horz_n_elems, n3)
+    min_q = zeros(horz_n_elems, n3)
+    max_q = ones(horz_n_elems, n3)
 
-    Limiters.quasimonotone_limiter!(ρq, ρ, min_ρq, max_ρq, rtol = lim_tol)
+    Limiters.quasimonotone_limiter!(ρq, ρ, min_q, max_q, rtol = lim_tol)
     @test parent(ρq)[1, :, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol =
         10eps()
 
@@ -195,18 +195,18 @@ end
 
     # Initialize variables needed for limiters
     horz_n_elems = Topologies.nlocalelems(horzspace.topology)
-    min_ρq = zeros(horz_n_elems, n3)
-    max_ρq = ones(horz_n_elems, n3)
+    min_q = zeros(horz_n_elems, n3)
+    max_q = ones(horz_n_elems, n3)
     # Change max only for level 1, elem 2
-    max_ρq[2, 1] = 0.5
+    max_q[2, 1] = 0.5
 
-    Limiters.quasimonotone_limiter!(ρq, ρ, min_ρq, max_ρq, rtol = lim_tol)
-    # Check level 1, elem 1 values, with min_ρq = 0, max_ρq = 1
+    Limiters.quasimonotone_limiter!(ρq, ρ, min_q, max_q, rtol = lim_tol)
+    # Check level 1, elem 1 values, with min_q = 0, max_q = 1
     @test parent(ρq)[1, :, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol =
         10eps()
-    # Check level 1, elem 2 values, with min_ρq = 0, max_ρq = 0.5
+    # Check level 1, elem 2 values, with min_q = 0, max_q = 0.5
     @test parent(ρq)[1, :, :, 1, 2] ≈ [0.45 0.45001; 0.5 0.5] rtol = 10eps()
-    # Check level 2, elem 5 values, with min_ρq = 0, max_ρq = 1
+    # Check level 2, elem 5 values, with min_q = 0, max_q = 1
     @test parent(ρq)[2, :, :, 1, 5] ≈ [0.0 0.0; 0.950005 0.950005] rtol =
         10eps()
     # Check level 3, elem 7 values, with unvaried entries

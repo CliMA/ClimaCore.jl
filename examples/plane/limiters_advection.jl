@@ -100,7 +100,7 @@ domain = Domains.RectangleDomain(
 )
 
 # Set up spatial discretization
-ne_seq = 2 .^ (2, 3, 4, 5)
+ne_seq = 2 .^ (2, 3, 4)
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
@@ -116,8 +116,8 @@ for (k, ne) in enumerate(ne_seq)
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
-    min_Q = zeros(n_elems)
-    max_Q = zeros(n_elems)
+    min_q = zeros(n_elems)
+    max_q = zeros(n_elems)
 
     coords = Fields.coordinate_field(space)
     Δh[k] = (xmax - xmin) / ne
@@ -189,33 +189,37 @@ for (k, ne) in enumerate(ne_seq)
             Geometry.UVVector(uu, uv)
         end
 
-        # Compute min_Q[] and max_Q[] that will be needed later in the stage limiter
+        # Compute min_q[] and max_q[] that will be needed later in the stage limiter
         space = parameters.space
         n_elems = Topologies.nlocalelems(space)
         topology = space.topology
 
-        neigh_elems_Q_min = Array{Float64}(undef, 8)
-        neigh_elems_Q_max = Array{Float64}(undef, 8)
+        neigh_elems_q_min = Array{Float64}(undef, 8)
+        neigh_elems_q_max = Array{Float64}(undef, 8)
 
         for e in 1:n_elems
-            Q_e = Fields.slab(y.ρq, e)
+            q_e = Fields.slab(y.ρq, e) ./ Fields.slab(y.ρ, e)
 
-            Q_e_min = minimum(Q_e)
-            Q_e_max = maximum(Q_e)
+            q_e_min = minimum(q_e)
+            q_e_max = maximum(q_e)
             neigh_elems = Topologies.neighboring_elements(topology, e)
             for i in 1:length(neigh_elems)
                 if neigh_elems[i] == 0
-                    neigh_elems_Q_min[i] = +Inf
-                    neigh_elems_Q_max[i] = -Inf
+                    neigh_elems_q_min[i] = +Inf
+                    neigh_elems_q_max[i] = -Inf
                 else
-                    neigh_elems_Q_min[i] =
-                        Fields.minimum(Fields.slab(y.ρq, neigh_elems[i]))
-                    neigh_elems_Q_max[i] =
-                        Fields.maximum(Fields.slab(y.ρq, neigh_elems[i]))
+                    neigh_elems_q_min[i] = Fields.minimum(
+                        Fields.slab(y.ρq, neigh_elems[i]) ./
+                        Fields.slab(y.ρ, neigh_elems[i]),
+                    )
+                    neigh_elems_q_max[i] = Fields.maximum(
+                        Fields.slab(y.ρq, neigh_elems[i]) ./
+                        Fields.slab(y.ρ, neigh_elems[i]),
+                    )
                 end
             end
-            parameters.min_Q[e] = min(minimum(neigh_elems_Q_min), Q_e_min)
-            parameters.max_Q[e] = max(maximum(neigh_elems_Q_max), Q_e_max)
+            parameters.min_q[e] = min(minimum(neigh_elems_q_min), q_e_min)
+            parameters.max_q[e] = max(maximum(neigh_elems_q_max), q_e_max)
         end
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
@@ -228,16 +232,16 @@ for (k, ne) in enumerate(ne_seq)
         @. dy.ρ = beta * dy.ρ - alpha * wdiv(y.ρ * u)                         # contintuity equation
         @. dy.ρq = beta * dy.ρq - alpha * wdiv(y.ρq * u) + alpha * ystar.ρq   # advection of tracers equation
 
-        min_Q = parameters.min_Q
-        max_Q = parameters.max_Q
+        min_q = parameters.min_q
+        max_q = parameters.max_q
 
         if lim_flag
             # Call quasimonotone limiter, to find optimal ρq (where ρq gets updated in place)
             Limiters.quasimonotone_limiter!(
                 dy.ρq,
                 dy.ρ,
-                min_Q,
-                max_Q,
+                min_q,
+                max_q,
                 rtol = limiter_tol,
             )
         end
@@ -248,7 +252,7 @@ for (k, ne) in enumerate(ne_seq)
     # Set up RHS function
     ystar = copy(y0)
     parameters =
-        (space = space, min_Q = min_Q, max_Q = max_Q, end_time = end_time)
+        (space = space, min_q = min_q, max_q = max_q, end_time = end_time)
     f!(ystar, y0, parameters, 0.0, dt, 1)
 
     # Solve the ODE
@@ -262,7 +266,7 @@ for (k, ne) in enumerate(ne_seq)
         prob,
         SSPRK33ShuOsher(),
         dt = dt,
-        saveat = dt,
+        saveat = 0.99 * 800 * dt,
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
