@@ -29,9 +29,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_1p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.1 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p1/Float32/*"
+      - "report.1.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -45,9 +46,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_2p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.2 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p2/Float32/*"
+      - "report.2.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -61,9 +63,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_4p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.4 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p4/Float32/*"
+      - "report.4.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -77,9 +80,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_8p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.8 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p8/Float32/*"
+      - "report.8.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -93,9 +97,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_16p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.16 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p16/Float32/*"
+      - "report.16.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -109,9 +114,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_32p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.32 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p32/Float32/*"
+      - "report.32.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -125,9 +131,10 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_64p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.%q{SLURM_NTASKS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=report.64 mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p64/Float32/*"
+      - "report.64.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
