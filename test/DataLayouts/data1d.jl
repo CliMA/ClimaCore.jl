@@ -113,8 +113,7 @@ end
             # property access
             @test_opt getproperty(data1, :a)
             # test map as proxy for broadcast
-            @test_opt map(f, data1, data2)
-            @test_opt mapreduce(f, +, data1, data2)
+            @test_opt broadcast(f, dl1, dl2)
         end
     end
 end
