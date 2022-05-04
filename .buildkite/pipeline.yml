@@ -658,6 +658,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: 3D sphere limiters deformation flow"
+    key: "cpu_3d_limiters_deformation_flow"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/sphere/limiters_deformation_flow.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/limiters_deformation_flow/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
     key: "cpu_baroclinic_wave_rho_e_float64"
     command:
