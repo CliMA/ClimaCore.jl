@@ -147,6 +147,25 @@ function great_circle_distance(
 end
 
 """
+    great_circle_distance(pt1::LatLongZPoint, pt2::LatLongZPoint, global_geometry::SphericalGlobalGeometry)
+
+Compute the great circle (spherical geodesic) distance between `pt1` and `pt2`.
+"""
+function great_circle_distance(
+    pt1::LatLongZPoint,
+    pt2::LatLongZPoint,
+    global_geom::SphericalGlobalGeometry,
+)
+    ϕ1 = pt1.lat
+    λ1 = pt1.long
+    ϕ2 = pt2.lat
+    λ2 = pt2.long
+    latlong_pt1 = LatLongPoint(ϕ1, λ1)
+    latlong_pt2 = LatLongPoint(ϕ2, λ2)
+    return great_circle_distance(latlong_pt1, latlong_pt2, global_geom)
+end
+
+"""
     euclidean_distance(pt1::XYPoint, pt2::XYPoint)
 
 Compute the 2D or 3D Euclidean distance between `pt1` and `pt2`.

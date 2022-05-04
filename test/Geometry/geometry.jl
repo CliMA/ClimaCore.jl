@@ -573,6 +573,12 @@ end
         global_geom,
     ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
 
+    # test between two LatLongZPoints
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
+        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
+        global_geom,
+    ) == 0.0
 end
 
 @testset "1D XPoint Euclidean distance" begin
