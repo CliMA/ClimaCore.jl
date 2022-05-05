@@ -139,9 +139,14 @@ mass_0 = usempi ? ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρ), +) : sum(Y.Yc.ρ)
 if !usempi || (usempi && ClimaComms.iamroot(comms_ctx))
     @show (energy_0, mass_0)
 end
-ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y, horztopology) : nothing
-
-function rhs_invariant!(dY, Y, _, t)
+ghost_buffer = (
+    dρe = Spaces.create_ghost_buffer(Yc.ρe),
+    duₕ = Spaces.create_ghost_buffer(Y.uₕ),
+    uₕ = Spaces.create_ghost_buffer(Y.uₕ),
+    Yc = Spaces.create_ghost_buffer(Y.Yc),
+    w = Spaces.create_ghost_buffer(Y.w),
+)
+function rhs_invariant!(dY, Y, ghost_buffer, t)
 
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
@@ -188,8 +193,12 @@ function rhs_invariant!(dY, Y, _, t)
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
-    Spaces.weighted_dss!(dρe, ghost_buffer)
-    Spaces.weighted_dss!(duₕ, ghost_buffer)
+    Spaces.weighted_dss_start!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_start!(duₕ, ghost_buffer.duₕ)
+    Spaces.weighted_dss_internal!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_internal!(duₕ, ghost_buffer.duₕ)
+    Spaces.weighted_dss_ghost!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_ghost!(duₕ, ghost_buffer.duₕ)
 
     κ₄ = 100.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -280,18 +289,24 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe += fcc(fw, cρe)
     # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
-    Spaces.weighted_dss!(dY.Yc, ghost_buffer)
-    Spaces.weighted_dss!(dY.uₕ, ghost_buffer)
-    Spaces.weighted_dss!(dY.w, ghost_buffer)
+    Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_start!(dY.w, ghost_buffer.w)
+    Spaces.weighted_dss_internal!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_internal!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_internal!(dY.w, ghost_buffer.w)
+    Spaces.weighted_dss_ghost!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_ghost!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_ghost!(dY.w, ghost_buffer.w)
     return dY
 end
 
 dYdt = similar(Y);
-rhs_invariant!(dYdt, Y, nothing, 0.0);
+rhs_invariant!(dYdt, Y, ghost_buffer, 0.0);
 # run!
 using OrdinaryDiffEq
 Δt = 0.050
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0))
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0), ghost_buffer)
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
@@ -305,7 +320,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol_invariant = @timev OrdinaryDiffEq.solve!(integrator)
+t_diff = @elapsed sol_invariant = OrdinaryDiffEq.solve!(integrator)
 
 FT = Float64
 Es = FT[]
@@ -334,7 +349,8 @@ dir = "bubble_3d_invariant_rhoe"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-if !usempi || (usempi && ClimaComms.iamroot(comms_ctx))
+if !usempi || ClimaComms.iamroot(comms_ctx)
+    println("Walltime = $t_diff seconds")
     # post-processing
     Plots.png(
         Plots.plot((Es .- energy_0) ./ energy_0),
