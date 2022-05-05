@@ -10,7 +10,7 @@ import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
-import LinearAlgebra, Statistics, InteractiveUtils
+import LinearAlgebra, Statistics
 
 """
     Field(values, space)
@@ -37,18 +37,19 @@ const PointField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
 
 # Spectral Element Field
+const SpectralElementField{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.AbstractSpectralElementSpace}
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
 const SpectralElementField2D{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace2D}
 
-const SpectralElementField1D{V, S} =
-    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
-
 const FiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FiniteDifferenceSpace}
-
 const FaceFiniteDifferenceField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.FaceFiniteDifferenceSpace}
-
 const CenterFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -59,12 +60,10 @@ const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
-
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.FaceExtrudedFiniteDifferenceSpace}
-
 const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -130,6 +129,9 @@ slab(field::Field, inds...) =
 
 column(field::Field, inds...) =
     Field(column(field_values(field), inds...), column(axes(field), inds...))
+column(field::FiniteDifferenceField, inds...) = field
+
+
 
 # nice printing
 # follow x-array like printing?
@@ -348,16 +350,28 @@ function Spaces.create_ghost_buffer(field::Field)
 end
 
 
-function level(field::CenterExtrudedFiniteDifferenceField, v::Int)
+function level(
+    field::Union{
+        CenterFiniteDifferenceField,
+        CenterExtrudedFiniteDifferenceField,
+    },
+    v::Int,
+)
     hspace = level(axes(field), v)
     data = level(field_values(field), v)
     Field(data, hspace)
 end
-function level(field::FaceExtrudedFiniteDifferenceField, v::PlusHalf)
+function level(
+    field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
+    v::PlusHalf,
+)
     hspace = level(axes(field), v)
     data = level(field_values(field), v.i + 1)
     Field(data, hspace)
 end
+
+Base.getindex(field::PointField) = getindex(field_values(field))
+Base.setindex!(field::PointField, val) = setindex!(field_values(field), val)
 
 """
     set!(f::Function, field::Field, args = ())

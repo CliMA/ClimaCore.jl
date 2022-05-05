@@ -176,7 +176,23 @@ end
     hv_center_space, hv_face_space =
         hvspace_3D((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))
 
-    function rhs!(dudt, u, _, t)
+    abstract type BCtag end
+    struct ZeroFlux <: BCtag end
+
+    bc_divF2C_bottom!(::ZeroFlux, dY, Y, p, t) =
+        Operators.SetValue(Geometry.UVWVector(0.0, 0.0, 0.0))
+
+    struct ZeroFieldFlux <: BCtag end
+    function bc_divF2C_bottom!(::ZeroFieldFlux, dY, Y, p, t)
+        space = axes(Y.h).horizontal_space
+        FT = Spaces.undertype(space)
+        zeroflux = Fields.zeros(FT, space)
+        return Operators.SetValue(
+            Geometry.UVWVector.(zeroflux, zeroflux, zeroflux),
+        )
+    end
+
+    function rhs!(dudt, u, p, t)
         h = u.h
         dh = dudt.h
 
@@ -184,7 +200,7 @@ end
         # and outflow at top
         Ic2f = Operators.InterpolateC2F(top = Operators.Extrapolate())
         divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(Geometry.UVWVector(0.0, 0.0, 0.0)),
+            bottom = bc_divF2C_bottom!(p.bc, dudt, u, p, t),
         )
         # only upward advection
         @. dh = -divf2c(Ic2f(h) * Geometry.UVWVector(0.0, 0.0, 1.0))
@@ -214,11 +230,55 @@ end
 
     using OrdinaryDiffEq
     U = Fields.FieldVector(h = h_init(0.5, 0.5, 0.5))
+    U_fieldbc = copy(U)
     Δt = 0.01
     t_end = 1.0
-    prob = ODEProblem(rhs!, U, (0.0, t_end))
+    p = (bc = ZeroFlux(),)
+    p_fieldbc = (bc = ZeroFieldFlux(),)
+    prob = ODEProblem(rhs!, U, (0.0, t_end), p)
+    prob_fieldbc = ODEProblem(rhs!, U, (0.0, t_end), p_fieldbc)
     sol = solve(prob, SSPRK33(), dt = Δt)
+    sol_fieldbc = solve(prob_fieldbc, SSPRK33(), dt = Δt)
 
     h_end = h_init(0.5 - t_end, 0.5 - t_end, 0.5 - t_end)
     @test h_end ≈ sol.u[end].h rtol = 0.5
+
+    @test sol.u == sol_fieldbc.u
+end
+
+@testset "Spatially varying boundary conditions" begin
+    FT = Float64
+    n_elems_seq = (5, 6, 7, 8)
+
+    err = zeros(FT, length(n_elems_seq))
+    Δh = zeros(FT, length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        cs, fs = hvspace_3D((-pi, pi), (-pi, pi), (-pi, pi), 4, 4, 2^n)
+        coords = Fields.coordinate_field(cs)
+
+        c = sin.(coords.x .+ coords.z)
+
+        bottom_face = level(fs, half)
+        top_face = level(fs, 2^n + half)
+        bottom_coords = Fields.coordinate_field(bottom_face)
+        top_coords = Fields.coordinate_field(top_face)
+        flux_bottom =
+            @. Geometry.WVector(sin(bottom_coords.x + bottom_coords.z))
+        flux_top = @. Geometry.WVector(sin(top_coords.x + top_coords.z))
+        divf2c = Operators.DivergenceF2C(
+            bottom = Operators.SetValue(flux_bottom),
+            top = Operators.SetValue(flux_top),
+        )
+        Ic2f = Operators.InterpolateC2F(
+            bottom = Operators.Extrapolate(),
+            top = Operators.Extrapolate(),
+        )
+
+        div = divf2c.(Ic2f.(c) .* Geometry.WVector.(Fields.ones(fs)))
+
+        err[k] = norm(div .- cos.(coords.x .+ coords.z))
+    end
+    @show err
+    @test err[4] ≤ err[3] ≤ err[2] ≤ err[1]
 end

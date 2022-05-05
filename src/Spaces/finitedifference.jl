@@ -144,6 +144,7 @@ end
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
 topology(space::FiniteDifferenceSpace) = space.topology
+vertical_topology(space::FiniteDifferenceSpace) = space.topology
 nlevels(space::FiniteDifferenceSpace) = length(space)
 
 local_geometry_data(space::CenterFiniteDifferenceSpace) =

@@ -340,18 +340,18 @@ return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
-function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx)
-    coefs = getidx(stencil, loc, idx)
+function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
+    coefs = getidx(stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
-    i_func = i -> coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i)
+    i_func = i -> coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i, hidx)
     return length(i_vals) == 0 ? zero(eltype(eltype(stencil))) :
            mapreduce(i_func, ⊞, i_vals)
 end
 
-function stencil_interior(::ApplyStencil, loc, idx, stencil, arg)
+function stencil_interior(::ApplyStencil, loc, idx, hidx, stencil, arg)
     lbw, ubw = bandwidths(eltype(stencil))
     i_vals = lbw:ubw
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
 function stencil_left_boundary(
@@ -359,12 +359,13 @@ function stencil_left_boundary(
     ::LeftStencilBoundary,
     loc,
     idx,
+    hidx,
     stencil,
     arg,
 )
     ubw = bandwidths(eltype(stencil))[2]
     i_vals = (left_idx(axes(arg)) - idx):ubw
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
 function stencil_right_boundary(
@@ -372,12 +373,13 @@ function stencil_right_boundary(
     ::RightStencilBoundary,
     loc,
     idx,
+    hidx,
     stencil,
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
     i_vals = lbw:(right_idx(axes(arg)) - idx)
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
 
@@ -417,12 +419,21 @@ end
 
 # TODO: Optimize this so that the generated version is unnecessary. This is
 # currently ~30% slower than the generated version.
-function compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
-    coefs1 = getidx(stencil1, loc, idx)
+function compose_stencils_at_idx(
+    i_vals_tuple,
+    stencil1,
+    stencil2,
+    loc,
+    idx,
+    hidx,
+)
+    coefs1 = getidx(stencil1, loc, idx, hidx)
     lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
     i_func_at_j(j) =
-        i -> coefs1[i - lbw1 + 1] ⊠ getidx(stencil2, loc, idx + i)[j - i + lbw1]
+        i ->
+            coefs1[i - lbw1 + 1] ⊠
+            getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
     function j_func(j)
         i_vals = i_vals_tuple[j]
         return length(i_vals) == 0 ? zero(eltype(eltype(stencil1))) :
@@ -432,13 +443,13 @@ function compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
 end
 
 function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
-    coefs_expr = :(coefs1 = getidx(stencil1, loc, idx))
+    coefs_expr = :(coefs1 = getidx(stencil1, loc, idx, hidx))
     lbw1 = bandwidths(eltype(stencil1_T))[1]
     lbw, ubw = composed_bandwidths(stencil1_T, stencil2_T)
     i_func_at_j(j) =
         i -> :(
             coefs1[$(i - lbw1 + 1)] ⊠
-            getidx(stencil2, loc, idx + $i)[$(j - i + lbw1)]
+            getidx(stencil2, loc, idx + $i, hidx)[$(j - i + lbw1)]
         )
     function j_func(j)
         i_vals = i_vals_tuple[j]
@@ -450,7 +461,7 @@ function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
     return :($coefs_expr; return $result_expr)
 end
 
-function stencil_interior(::ComposeStencils, loc, idx, stencil1, stencil2)
+function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
     if @generated # Won't get generated if common code is moved out of if-else.
         lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
         i_vals_at_j(j) = (lbw1 + max(0, j - bw2)):(ubw1 + min(0, j - bw1))
@@ -466,6 +477,7 @@ function stencil_interior(::ComposeStencils, loc, idx, stencil1, stencil2)
             stencil2,
             loc,
             idx,
+            hidx,
         )
     end
 end
@@ -475,6 +487,7 @@ function stencil_left_boundary(
     ::LeftStencilBoundary,
     loc,
     idx,
+    hidx,
     stencil1,
     stencil2,
 )
@@ -482,7 +495,14 @@ function stencil_left_boundary(
     min_i = left_idx(axes(stencil2)) - idx
     i_vals_at_j(j) = max(lbw1 + max(0, j - bw2), min_i):(ubw1 + min(0, j - bw1))
     i_vals_tuple = get_i_vals_tuple(i_vals_at_j, stencil1, stencil2)
-    return compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
+    return compose_stencils_at_idx(
+        i_vals_tuple,
+        stencil1,
+        stencil2,
+        loc,
+        idx,
+        hidx,
+    )
 end
 
 function stencil_right_boundary(
@@ -490,6 +510,7 @@ function stencil_right_boundary(
     ::RightStencilBoundary,
     loc,
     idx,
+    hidx,
     stencil1,
     stencil2,
 )
@@ -497,7 +518,14 @@ function stencil_right_boundary(
     max_i = right_idx(axes(stencil2)) - idx
     i_vals_at_j(j) = (lbw1 + max(0, j - bw2)):min(ubw1 + min(0, j - bw1), max_i)
     i_vals_tuple = get_i_vals_tuple(i_vals_at_j, stencil1, stencil2)
-    return compose_stencils_at_idx(i_vals_tuple, stencil1, stencil2, loc, idx)
+    return compose_stencils_at_idx(
+        i_vals_tuple,
+        stencil1,
+        stencil2,
+        loc,
+        idx,
+        hidx,
+    )
 end
 
 
