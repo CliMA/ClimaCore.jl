@@ -22,7 +22,7 @@ face_initial_condition(local_geometry) = (;)
 postprocessing(sol, output_dir) = nothing
 
 ################################################################################
-is_distributed = haskey(ENV, "CLIMACORE_DISTRIBUTED")
+is_distributed = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
 using Logging
 if is_distributed
@@ -105,7 +105,6 @@ else
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt)
-
 if ode_algorithm <: Union{
     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
     OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,

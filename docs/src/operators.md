@@ -37,6 +37,9 @@ Restrict
 ```@docs
 Spaces.weighted_dss!
 Spaces.create_ghost_buffer
+Spaces.weighted_dss_start!
+Spaces.weighted_dss_internal!
+Spaces.weighted_dss_ghost!
 ```
 
 ## Finite difference operators

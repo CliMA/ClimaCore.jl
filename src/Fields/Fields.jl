@@ -318,6 +318,22 @@ function Spaces.weighted_dss!(
     return field
 end
 
+function Spaces.weighted_dss_start!(field::Field, ghost_buffer)
+    Spaces.weighted_dss_start!(field_values(field), axes(field), ghost_buffer)
+end
+
+function Spaces.weighted_dss_internal!(field::Field, ghost_buffer)
+    Spaces.weighted_dss_internal!(
+        field_values(field),
+        axes(field),
+        ghost_buffer,
+    )
+end
+
+function Spaces.weighted_dss_ghost!(field, ghost_buffer)
+    Spaces.weighted_dss_ghost!(field_values(field), axes(field), ghost_buffer)
+end
+
 """
     Spaces.create_ghost_buffer(field::Field)
 

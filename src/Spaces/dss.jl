@@ -1,4 +1,4 @@
-import ..Topologies
+import ..Topologies: Topology2D, DistributedTopology2D
 using ..RecursiveApply
 
 """
@@ -657,62 +657,142 @@ function dss_2d!(
     return data
 end
 
-function weighted_dss!(
-    data,
-    hspace::SpectralElementSpace1D,
-    ghost_buffer = nothing,
-)
-    topology = hspace.topology
-    dss_1d!(topology, data, local_geometry_data(hspace), hspace.dss_weights)
-end
+"""
+    weighted_dss!(data, space, ghost_buffer = nothing)
 
-function weighted_dss!(
-    data,
-    space::ExtrudedFiniteDifferenceSpace{S, H},
-    ghost_buffer = nothing,
-) where {S, H <: SpectralElementSpace1D}
-    hspace = space.horizontal_space
-    topology = hspace.topology
-    dss_1d!(topology, data, local_geometry_data(space), hspace.dss_weights)
-end
+Computes weighted dss of `data`. This function consists of 
 
-function weighted_dss!(
-    data,
-    hspace::SpectralElementSpace2D,
-    ghost_buffer = nothing,
-)
-    topology = hspace.topology
+1). `weighted_dss_start!` which loads the send buffer and starts communications,
+
+2). `weighted_dss_internal!` which progresses the communication and performs dss operations on interior vertices and faces, and
+
+3). `weighted_dss_ghost!` which completes the communication and performs dss on ghost vertices and faces
+
+These constituent functions can also be called separately for increased overlap between computation and communication when merging multiple dss
+operations.
+
+"""
+function weighted_dss!(data, space, ghost_buffer = nothing)
     if isnothing(ghost_buffer)
+        topology =
+            space isa ExtrudedFiniteDifferenceSpace ?
+            space.horizontal_space.topology : space.topology
         ghost_buffer = create_ghost_buffer(data, topology)
     end
-    dss_2d!(
-        topology,
-        data,
-        ghost_buffer,
-        local_geometry_data(hspace),
-        ghost_geometry_data(hspace),
-        hspace.local_dss_weights,
-        hspace.ghost_dss_weights,
-    )
+    weighted_dss_start!(data, space, ghost_buffer)
+    weighted_dss_internal!(data, space, ghost_buffer)
+    weighted_dss_ghost!(data, space, ghost_buffer)
 end
 
-function weighted_dss!(
+"""
+    weighted_dss_start!(data, space, ghost_buffer)
+
+Create the ghost buffer, if necessary, load the send buffer and start communication.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
+function weighted_dss_start!(
     data,
-    space::ExtrudedFiniteDifferenceSpace{S, H},
-    ghost_buffer = nothing,
-) where {S, H <: SpectralElementSpace2D}
-    hspace = space.horizontal_space
-    topology = hspace.topology
-    if isnothing(ghost_buffer)
-        ghost_buffer = create_ghost_buffer(data, topology)
+    space::Union{ExtrudedFiniteDifferenceSpace{S, H}, H},
+    ghost_buffer,
+) where {S, T <: DistributedTopology2D, H <: SpectralElementSpace2D{T}}
+    topology =
+        space isa ExtrudedFiniteDifferenceSpace ?
+        space.horizontal_space.topology : space.topology
+    if ghost_buffer isa GhostBuffer
+        # 1) copy send data to buffer
+        fill_send_buffer!(topology, data, ghost_buffer)
+        # 2) start communication
+        ClimaComms.start(ghost_buffer.graph_context)
     end
-    dss_2d!(
+    return nothing
+end
+
+function weighted_dss_start!(data, space, ghost_buffer)
+    return nothing
+end
+
+"""
+    weighted_dss_internal!(data, space, ghost_buffer)
+
+Perform weighted dss for internal faces and vertices. Progress the communication.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
+function weighted_dss_internal!(data, space, ghost_buffer)
+    hspace =
+        space isa ExtrudedFiniteDifferenceSpace ? space.horizontal_space : space
+    topology = hspace.topology
+    local_geometry = local_geometry_data(space)
+    if hspace isa SpectralElementSpace1D
+        dss_1d!(topology, data, local_geometry, hspace.dss_weights)
+    else
+        local_weights = hspace.local_dss_weights
+        # 3) dss for interior faces
+        dss_interior_faces!(topology, data, local_geometry, local_weights)
+        # 4) progress communication
+        if ghost_buffer isa GhostBuffer
+            ClimaComms.progress(ghost_buffer.graph_context)
+        end
+        # 5) dss for interior local vertices
+        dss_local_vertices!(topology, data, local_geometry, local_weights)
+    end
+    return nothing
+end
+
+"""
+    weighted_dss_ghost!(data, space, ghost_buffer)
+
+Complete communication. Perform weighted dss for ghost faces and vertices.
+
+Part of [`Spaces.weighted_dss!`](@ref).
+"""
+function weighted_dss_ghost!(
+    data,
+    space::Union{ExtrudedFiniteDifferenceSpace{S, H}, H},
+    ghost_buffer,
+) where {S, T <: DistributedTopology2D, H <: SpectralElementSpace2D{T}}
+    hspace =
+        space isa ExtrudedFiniteDifferenceSpace ? space.horizontal_space : space
+    topology = hspace.topology
+    local_geometry = local_geometry_data(space)
+    local_weights = hspace.local_dss_weights
+    ghost_geometry = ghost_geometry_data(space)
+    ghost_weights = hspace.ghost_dss_weights
+    # 6) complete communication
+    if ghost_buffer isa GhostBuffer
+        ClimaComms.finish(ghost_buffer.graph_context)
+    end
+
+    if ghost_buffer isa GhostBuffer
+        recv_buf = recv_buffer(ghost_buffer)
+    else
+        recv_buf = ghost_buffer
+    end
+
+    # 7) DSS over ghost faces
+    dss_ghost_faces!(
         topology,
         data,
-        ghost_buffer,
-        local_geometry_data(space),
-        ghost_geometry_data(space),
-        hspace.local_dss_weights,
-        hspace.ghost_dss_weights,
+        recv_buf,
+        local_geometry,
+        ghost_geometry,
+        local_weights,
+        ghost_weights,
     )
+    # 8) DSS over ghost vertices
+    dss_ghost_vertices!(
+        topology,
+        data,
+        recv_buf,
+        local_geometry,
+        ghost_geometry,
+        local_weights,
+        ghost_weights,
+    )
+    return data
+end
+
+function weighted_dss_ghost!(data, space, ghost_buffer)
+    return data
 end
