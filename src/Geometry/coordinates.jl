@@ -186,6 +186,9 @@ Base.:(*)(x::Number, p::AbstractPoint) = p * x
 Base.:(/)(p::T, x::Number) where {T <: AbstractPoint} =
     unionalltype(T)((components(p) / x)...)
 
+Base.LinRange(start::T, stop::T, length::Integer) where {T <: Abstract1DPoint} =
+    Base.LinRange{T}(start, stop, length)
+
 # we add our own method to this so that `BigFloat` coordinate ranges are computed accurately.
 function Base.lerpi(
     j::Integer,
