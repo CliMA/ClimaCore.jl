@@ -394,7 +394,7 @@ ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots
 Plots.GRBackend()
 
-dir = "schar_tracer_noslip"
+dir = "tracer_mountain_advection"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 

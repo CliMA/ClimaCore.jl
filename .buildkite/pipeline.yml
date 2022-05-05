@@ -391,6 +391,17 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+  
+  - label: ":computer: Passive tracer advection over mountains"
+    key: "cpu_passive_tracer_advection_over_mountain"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/tracer_mountain_advection.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/tracer_mountain_advection/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
 
   - label: ":computer: Density current 2D hybrid invariant total energy"
     key: "cpu_density_current_2d_hybrid_invariant_total_energy"
