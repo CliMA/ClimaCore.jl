@@ -49,15 +49,15 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 const R = 6.37122e6
 const Ω = 7.292e-5
 const g = 9.80616
-const D₄ = 1.0e16 # hyperdiffusion coefficient
+const D₄ = 0.0e16 # hyperdiffusion coefficient
 const Aₖ = 1.90695 # Spectral integration constant (4.5c Braun et al. (2018))
 const k₁ = 1/3
 const k₂ = -5/3
 const ν = 1e-4 # Viscosity
-const Δx = 185331.0
+const Δx = 123554.0
 
 # Test case specifications
-const test_name = get(ARGS, 1, "steady_state") # default test case to run
+const test_name = get(ARGS, 1, "barotropic_instability") # default test case to run
 const test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
 const steady_state_test_name = "steady_state"
 const steady_state_compact_test_name = "steady_state_compact"
@@ -411,7 +411,7 @@ function strainrate(∇𝒰::Fields.Field)
   horz_x_elems = space.topology.elemorder.indices.:1[end]
   horz_y_elems = space.topology.elemorder.indices.:2[end]
   
-  𝒮 = similar(∇𝒰)
+  𝒮 = zero(∇𝒰)
 
   ∇𝒰_11 = @. ∇𝒰.components.data.:1
   ∇𝒰_12 = @. ∇𝒰.components.data.:2
@@ -419,10 +419,10 @@ function strainrate(∇𝒰::Fields.Field)
   ∇𝒰_22 = @. ∇𝒰.components.data.:4
 
   # Symmetric Rate of Strain Tensor Components
-  S11 = @. 1/2*(∇𝒰_11 + ∇𝒰_11)
+  S11 = @. ∇𝒰_11
   S12 = @. 1/2*(∇𝒰_12 + ∇𝒰_21) 
   S21 = @. 1/2*(∇𝒰_21 + ∇𝒰_12)
-  S22 = @. 1/2*(∇𝒰_22 + ∇𝒰_22)
+  S22 = @. ∇𝒰_22
 
   nh = horz_x_elems * horz_y_elems
   for he in 1:nh
@@ -543,35 +543,35 @@ function rhs!(dYdt, y, parameters, t)
       norm𝒮 = @. 𝒮.components.data.:1^2 + 2 * 𝒮.components.data.:2^2 + 𝒮.components.data.:4^2
     # Compute Most Extensional Eigenvector
       E = compute_ℯᵥ(𝒮)
-#      ℯᵥ¹ = @. E.components.data.:1
-#      ℯᵥ² = @. E.components.data.:2
-#      𝒮₁₁ = @. 𝒮.components.data.:1
-#      𝒮₁₂ = @. 𝒮.components.data.:2
-#      𝒮₂₁ = @. 𝒮.components.data.:3
-#      𝒮₂₂ = @. 𝒮.components.data.:4
-#      ã₁ = @. ℯᵥ¹*ℯᵥ¹*𝒮₁₁ 
-#      ã₂ = @. ℯᵥ¹*ℯᵥ²*𝒮₁₂
-#      ã₃ = @. ℯᵥ²*ℯᵥ¹*𝒮₂₁
-#      ã₄ = @. ℯᵥ²*ℯᵥ²*𝒮₂₂
-#      ã = @. abs(ã₁ + ã₂ + ã₃ + ã₄) 
-#      # Compute Subgrid Tendency Based on Vortex Model
-#      kc = π / Δx
-#      F₂x = structure_function(𝒰.components.data.:1; p=2) # 4.5b
-#      F₂y = structure_function(𝒰.components.data.:2; p=2) # 4.5b
-#      F₂ = @. F₂x + F₂y
-#      K₀ε = @. kolmogorov_prefactor(F₂)
-#      Q = @. 2*ν*kc^2/3/(ã + 1e-14)
-#      Γ = @. gamma(-k₁, Q)
-#      Kₑ = @. 1/2 * K₀ε * (2*ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
-#      # Get SGS Flux
-#      τ = compute_subgrid_stress(Kₑ, E, ∇𝒰)
-#      
-#      # STRETCHED VORTEX 
-#      flux_sgs = @. - τ
-#      #flux_sgs1 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:1, flux_sgs.components.data.:2))
-#      #flux_sgs2 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:2, flux_sgs.components.data.:4))
-#      #@. dYdt.u.components.data.:1 += wdiv(flux_sgs1)
-#      #@. dYdt.u.components.data.:2 += wdiv(flux_sgs2)
+      ℯᵥ¹ = @. E.components.data.:1
+      ℯᵥ² = @. E.components.data.:2
+      𝒮₁₁ = @. 𝒮.components.data.:1
+      𝒮₁₂ = @. 𝒮.components.data.:2
+      𝒮₂₁ = @. 𝒮.components.data.:3
+      𝒮₂₂ = @. 𝒮.components.data.:4
+      ã₁ = @. ℯᵥ¹*ℯᵥ¹*𝒮₁₁ 
+      ã₂ = @. ℯᵥ¹*ℯᵥ²*𝒮₁₂
+      ã₃ = @. ℯᵥ²*ℯᵥ¹*𝒮₂₁
+      ã₄ = @. ℯᵥ²*ℯᵥ²*𝒮₂₂
+      ã = @. abs(ã₁ + ã₂ + ã₃ + ã₄) 
+      # Compute Subgrid Tendency Based on Vortex Model
+      kc = π / Δx
+      F₂x = structure_function(𝒰.components.data.:1; p=2) # 4.5b
+      F₂y = structure_function(𝒰.components.data.:2; p=2) # 4.5b
+      F₂ = @. F₂x + F₂y
+      K₀ε = @. kolmogorov_prefactor(F₂)
+      Q = @. 2*ν*kc^2/3/(ã + 1e-14)
+      Γ = @. gamma(-k₁, Q)
+      Kₑ = @. 1/2 * K₀ε * (2*ν/3/(ã + 1e-14))^(k₁) * Γ # (4.4)
+      # Get SGS Flux
+      τ = compute_subgrid_stress(Kₑ, E, ∇𝒰)
+      
+      # STRETCHED VORTEX 
+      flux_sgs = @. - τ
+      flux_sgs1 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:1, flux_sgs.components.data.:2))
+      flux_sgs2 = @. Geometry.Covariant12Vector(Geometry.UVVector(flux_sgs.components.data.:2, flux_sgs.components.data.:4))
+     @. dYdt.u.components.data.:1 += wdiv(flux_sgs1)
+     @. dYdt.u.components.data.:2 += wdiv(flux_sgs2)
     end
 
     # Add in pieces
@@ -591,7 +591,7 @@ rhs!(dYdt, Y, parameters, 0.0)
 
 # Solve the ODE
 dt = 9 * 60
-T = 86400 * 2
+T = 86400 * 50
 
 prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 integrator = OrdinaryDiffEq.init(
