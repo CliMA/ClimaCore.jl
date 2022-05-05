@@ -201,12 +201,14 @@ nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
 nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
     size(space.face_local_geometry, 4)
 
-left_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
-    propertynames(space.vertical_topology.boundaries)[1]
-
-right_boundary_name(space::ExtrudedFiniteDifferenceSpace) =
-    propertynames(space.vertical_topology.boundaries)[2]
-
+function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
+    boundaries = Topologies.boundaries(space.vertical_topology)
+    propertynames(boundaries)[1]
+end
+function right_boundary_name(space::ExtrudedFiniteDifferenceSpace)
+    boundaries = Topologies.boundaries(space.vertical_topology)
+    propertynames(boundaries)[2]
+end
 function blockmat(
     a::Geometry.Axis2Tensor{
         FT,
