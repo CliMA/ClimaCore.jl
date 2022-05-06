@@ -2773,7 +2773,7 @@ function _threaded_copyto!(
 ) where {S <: AbstractStencilStyle}
     Threads.@threads for h in 1:Nh
         for j in 1:Nj, i in 1:Ni
-            apply_stencil!(column_field_out, column_bc, (i, j, h))
+            apply_stencil!(field_out, bc, (i, j, h))
         end
     end
     return field_out
