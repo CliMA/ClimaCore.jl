@@ -35,8 +35,7 @@ const γ = 1.4 # heat capacity ratio
 const C_p = R_d * γ / (γ - 1) # heat capacity at constant pressure
 const C_v = R_d / (γ - 1) # heat capacity at constant volume
 const T_0 = 273.16 # triple point temperature
-const uᵣ = 1.0
-const kinematic_viscosity = 75.0 #m²/s
+const kinematic_viscosity = 0.0 #m²/s
 const hyperdiffusivity = 1e8*1.0 #m²/s
  
 function warp_surface(coord)   
@@ -44,7 +43,7 @@ function warp_surface(coord)
   FT = eltype(x)
   a = 25000
   λ = 8000
-  h₀ = 3000
+  h₀ = 1000
   if abs(x) <= a
     h = h₀ * (cos(π*x/2/a))^2 * (cos(π*x/λ))^2
   else
@@ -55,9 +54,9 @@ end
 function hvspace_2D(
     xlim = (-π, π),
     zlim = (0, 4π),
-    xelem = 60,
+    xelem = 75,
     zelem = 50,
-    npoly = 5,
+    npoly = 4,
     warp_fn = warp_surface,
 )
     FT = Float64
@@ -99,31 +98,31 @@ hv_center_space, hv_face_space = hvspace_2D((-150000, 150000), (0, 25000))
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
 # Prognostic thermodynamic variable: Total Energy 
 function init_advection_over_mountain(x, z)
-    θ₀ = 280.0
+    θ_b = 300.0
     cp_d = C_p
     cv_d = C_v
-    p₀ = MSLP
+    p_0 = MSLP
     g = grav
-    
-    𝒩 = 0.01
-    π_exner = @. exp(-g * z / (cp_d * θ₀))
-    θ = @. θ₀ * exp(𝒩 ^2 * z / g)
-    T = @. π_exner * θ # temperature
-    ρ = @. p₀ / (R_d * θ) * (π_exner)^(cp_d/R_d)
-    e = @. cv_d * (T - T_0) + Φ(z) + 50.0
-    ρe = @. ρ * e
 
-    x₀ = -50000.0
+    π_exn = 1.0 - g * z / cp_d / θ_b # exner function
+    T = π_exn * θ_b # temperature
+    p = p_0 * π_exn^(cp_d / R_d) # pressure
+    ρ = p / R_d / T # density
+    e = cv_d * (T - T_0) + g * z
+    ρe = ρ * e # total energy
+
+    x₀ = -15000.0
+    #x₀ = -50000.0
     z₀ = 9000.0
     A_x = 25000.0
     A_z = 3000.0
     r = @. sqrt((x-x₀)^2/A_x^2 + (z-z₀)^2/A_z^2)
-    q₀ = 1.0
+    q₀ = 0.0
   
     if r <= 1
-      q = q₀ * (cos(π*r/2))^2 
+      q = q₀ #* (cos(π*r/2))^2 
     else
-      q = eltype(x)(0)
+      q = eltype(x)(q₀) #* 0
     end
       
     ρq = @. ρ * q
@@ -272,7 +271,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     # curl term
     hcurl = Operators.Curl()
-    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+    # effectively a homogeneous Neumann condition on u₁ at the boundary
     vcurlc2f = Operators.CurlC2F(
         bottom = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
         top = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
@@ -280,18 +279,18 @@ function rhs_invariant!(dY, Y, _, t)
 
     fω¹ = hcurl.(fw)
     fω¹ .+= vcurlc2f.(cuₕ)
-
+    
+    fω² = hcurl.(cuₕ)
+    @show fω²
+    
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
-#    fu¹ =
-#        Geometry.Contravariant1Vector.(Geometry.Covariant13Vector.(Ic2f.(cuₕ)),)
-#    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant13Vector.(fw))
-    fu = Geometry.Contravariant13Vector.(Ic2f.(cuₕ)) .+ Geometry.Contravariant13Vector.(fw)
-    fu¹ = Geometry.project.(Ref(Geometry.Contravariant1Axis()), fu)
-    fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
+    fu¹ = @. Geometry.project(Geometry.Contravariant1Axis(), Ic2f(cuₕ)) + Geometry.project(Geometry.Contravariant1Axis(), w) 
+    fu³ = @. Geometry.project(Geometry.Contravariant3Axis(), Ic2f(cuₕ)) + Geometry.project(Geometry.Contravariant3Axis(), w)  
     @. dw -= fω¹ × fu¹ # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹ × fu³)
+    #@. duₕ -=  fω² × fu¹
 
 
     @. duₕ -= hgrad(cp) / cρ
@@ -311,9 +310,11 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
     
-    # 4) tracer 
+    # 4) tracer tendencies  
+    # In extruded grids
     @. dρq -= hdiv(cuw * (cρq))
     @. dρq -= vdivf2c(fw * Ic2f(cρq))
+    @. dρq -= vdivf2c(Ic2f(cuₕ * (cρq)))
 
     # Uniform 2nd order diffusion
     ∂c = Operators.GradientF2C()
@@ -323,10 +324,12 @@ function rhs_invariant!(dY, Y, _, t)
     ᶠ∇ᵥuₕ = @. vgradc2f(cuₕ.components.data.:1)
     ᶜ∇ᵥw = @. ∂c(fw.components.data.:1)
     ᶠ∇ᵥh_tot = @. vgradc2f(h_tot)
+    ᶠ∇ᵥq = @. vgradc2f(cq)
 
     ᶜ∇ₕuₕ = @. hgrad(cuₕ.components.data.:1)
     ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
     ᶜ∇ₕh_tot = @. hgrad(h_tot)
+    ᶜ∇ₕq = @. hgrad(cq)
 
     hκ₂∇²uₕ = @. hwdiv(κ₂ * ᶜ∇ₕuₕ)
     vκ₂∇²uₕ = @. vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
@@ -334,6 +337,8 @@ function rhs_invariant!(dY, Y, _, t)
     vκ₂∇²w = @. vdivc2f(κ₂ * ᶜ∇ᵥw)
     hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
     vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
+    hκ₂∇²q = @. hwdiv(cρ * κ₂ * ᶜ∇ₕq)
+    vκ₂∇²q = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥq)
 
     dfw = dY.w.components.data.:1
     dcu = dY.uₕ.components.data.:1
@@ -363,7 +368,7 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.1
+Δt = 1.00
 timeend = 5000.0
 function make_dss_func()
   _dss!(x::Fields.Field)=Spaces.weighted_dss!(x)
@@ -378,7 +383,7 @@ integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
     dt = Δt,
-    saveat = 100.0,
+    saveat = 500.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
     callback = dss_callback
@@ -424,6 +429,22 @@ anim = Plots.@animate for u in sol.u
     Plots.plot(u)
 end
 Plots.mp4(anim, joinpath(path, "vel_u.mp4"), fps = 20)
+
+anim = Plots.@animate for u in sol.u
+    ᶜu = @. Geometry.Covariant13Vector(u.uₕ)
+    ᶜw = @. Geometry.Covariant13Vector(If2c(u.w))
+    w = @. Geometry.project(Geometry.Contravariant1Axis(), ᶜu) +  Geometry.project(Geometry.Contravariant1Axis(), ᶜw) 
+    Plots.plot(w)
+end
+Plots.mp4(anim, joinpath(path, "ucontravariant1.mp4"), fps = 20)
+
+anim = Plots.@animate for u in sol.u
+    ᶜu = @. Geometry.Covariant13Vector(u.uₕ)
+    ᶜw = @. Geometry.Covariant13Vector(If2c(u.w))
+    w = @. Geometry.project(Geometry.Contravariant3Axis(), ᶜu) +  Geometry.project(Geometry.Contravariant3Axis(), ᶜw) 
+    Plots.plot(w)
+end
+Plots.mp4(anim, joinpath(path, "contravariant3.mp4"), fps = 20)
 
 # post-processing
 Es = [sum(u.Yc.ρe) for u in sol.u]
