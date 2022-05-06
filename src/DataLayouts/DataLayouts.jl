@@ -505,6 +505,8 @@ end
     col[] = val
 end
 
+Base.copy(data::DataF{S}) where {S} = DataF{S}(copy(parent(data)))
+
 # ======================
 # DataSlab2D DataLayout
 # ======================

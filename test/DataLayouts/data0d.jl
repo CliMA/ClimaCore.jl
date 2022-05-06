@@ -26,6 +26,10 @@ TestFloatTypes = (Float32, Float64)
             10eps()
 
         @test sum(x -> x[2], data) ≈ sum(array[:, 3]) atol = 10eps()
+
+        data_copy = copy(data)
+        @test data_copy isa DataF
+        @test data_copy[] == data[]
     end
 end
 
