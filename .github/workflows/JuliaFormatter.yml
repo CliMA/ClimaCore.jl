@@ -38,7 +38,9 @@ jobs:
       run: |
         julia --color=yes --project=.dev .dev/climaformat.jl --verbose .
 
-    - name: Check formatting diff
-      if: steps.filter.outputs.julia_file_change == 'true'
-      run: |
-        git diff --color=always --exit-code
+    - name: Suggester
+      uses: reviewdog/action-suggester@v1
+      with:
+        tool_name: JuliaFormatter
+        level: error
+        fail_on_error: true
