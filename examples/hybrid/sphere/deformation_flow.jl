@@ -47,7 +47,7 @@ function sphere_3D(
     R = 6.37122e6,
     zlim = (0, 12.0e3),
     helem = 4,
-    zelem = 12,
+    zelem = 36,
     npoly = 4,
 )
     FT = Float64
@@ -171,6 +171,10 @@ function rhs!(dydt, y, (coords, face_coords), t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
+    third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
@@ -197,19 +201,19 @@ function rhs!(dydt, y, (coords, face_coords), t)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
     @. dρq1 -= hdiv(cuvw * ρq1)
-    @. dρq1 -= vdivf2c(w * Ic2f(ρq1))
+    @. dρq1 -= vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq1 ./ ρ))
     @. dρq1 -= vdivf2c(Ic2f(uₕ * ρq1))
 
     @. dρq2 -= hdiv(cuvw * ρq2)
-    @. dρq2 -= vdivf2c(w * Ic2f(ρq2))
+    @. dρq2 -= vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq2 ./ ρ))
     @. dρq2 -= vdivf2c(Ic2f(uₕ * ρq2))
 
     @. dρq3 -= hdiv(cuvw * ρq3)
-    @. dρq3 -= vdivf2c(w * Ic2f(ρq3))
+    @. dρq3 -= vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq3 ./ ρ))
     @. dρq3 -= vdivf2c(Ic2f(uₕ * ρq3))
 
     @. dρq4 -= hdiv(cuvw * ρq4)
-    @. dρq4 -= vdivf2c(w * Ic2f(ρq4))
+    @. dρq4 -= vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq4 ./ ρ))
     @. dρq4 -= vdivf2c(Ic2f(uₕ * ρq4))
 
     Spaces.weighted_dss!(dydt)
