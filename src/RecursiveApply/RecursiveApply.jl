@@ -49,6 +49,11 @@ rmap(fn::F, X::NamedTuple{names}) where {F, names} =
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
+
+rmin(X, Y) = rmap(min, X, Y)
+rmax(X, Y) = rmap(max, X, Y)
+
+
 """
     rmaptype(fn, T)
 
