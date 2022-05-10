@@ -6,6 +6,7 @@ include("baroclinic_wave_utilities.jl")
 
 const sponge = false
 
+ENV["CLIMACORE_WRITE_SCALING_DATA"] = true
 # Variables required for driver.jl (modify as needed)
 horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = 16)
 npoly = 4
