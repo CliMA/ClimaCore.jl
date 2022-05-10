@@ -30,7 +30,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p1/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_1_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -45,7 +45,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p2/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_2_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -60,7 +60,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p4/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_4_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -75,7 +75,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p8/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_8_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -90,7 +90,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p16/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_16_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -105,7 +105,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p32/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_32_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -120,7 +120,7 @@ steps:
     command:
       - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
-      - "examples/hybrid/sphere/output/held_suarez_scaling_rhotheta/p64/Float32/*"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_64_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -129,3 +129,19 @@ steps:
       queue: central
       slurm_nodes: 2
       slurm_tasks_per_node: 32
+
+  - wait
+
+  - label: ":computer: scaling plots"
+    key: "cpu_scaling_plots"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plot_scaling_results.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/*.png"
+    env:
+      TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
+    agents:
+      config: cpu
+      queue: central
+      slurm_nodes: 1
+      slurm_tasks_per_node: 1

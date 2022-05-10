@@ -196,7 +196,7 @@ end
 
 @info "Running `$test_dir/$test_file_name` test case"
 
-t_diff = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
@@ -231,10 +231,14 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
     end
     if ClimaComms.iamroot(comms_ctx)
         sol = DiffEqBase.sensitivity_solution(sol, global_sol_u, sol.t)
+        output_file =
+            joinpath(output_dir, "scaling_data_$(nprocs)_processes.jld2")
+        println("writing performance data to $output_file")
+        jldsave(output_file; nprocs, walltime)
     end
 end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
-    println("Walltime = $t_diff seconds")
+    println("Walltime = $walltime seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
     postprocessing(sol, output_dir)
 end
