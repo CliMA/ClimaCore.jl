@@ -18,7 +18,7 @@ using ClimaCore,
 
 # ### 1.1 Domains
 #
-# A _domain_ a region of space (think of a mathematical domain).
+# A _domain_ is a region of space (think of a mathematical domain).
 
 column_domain = ClimaCore.Domains.IntervalDomain(
     ClimaCore.Geometry.ZPoint(0.0) .. ClimaCore.Geometry.ZPoint(10.0),
