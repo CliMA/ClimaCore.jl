@@ -10,7 +10,7 @@ import ..Utilities: PlusHalf
 
 using ..RecursiveApply
 
-import LinearAlgebra, Statistics
+import LinearAlgebra, Statistics, InteractiveUtils
 
 """
     Field(values, space)
