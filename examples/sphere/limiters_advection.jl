@@ -46,7 +46,6 @@ const cosine_test_name = "cosine_bells"
 const gaussian_test_name = "gaussian_bells"
 const cylinder_test_name = "cylinders"
 const lim_flag = true
-const limiter_tol = 5e-14
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
@@ -167,38 +166,7 @@ for (k, ne) in enumerate(ne_seq)
             Geometry.UVVector(uu, uv)
         end
 
-        # Compute min_q[] and max_q[] that will be needed later in the stage limiter
-        space = parameters.space
-        n_elems = Topologies.nlocalelems(space)
-        topology = space.topology
-
-        neigh_elems_q_min = Array{Float64}(undef, 8)
-        neigh_elems_q_max = Array{Float64}(undef, 8)
-
-        for e in 1:n_elems
-            q_e = Fields.slab(y.ρq, e) ./ Fields.slab(y.ρ, e)
-
-            q_e_min = minimum(q_e)
-            q_e_max = maximum(q_e)
-            neigh_elems = Topologies.local_neighboring_elements(topology, e)
-            for i in 1:length(neigh_elems)
-                if neigh_elems[i] == 0
-                    neigh_elems_q_min[i] = +Inf
-                    neigh_elems_q_max[i] = -Inf
-                else
-                    neigh_elems_q_min[i] = Fields.minimum(
-                        Fields.slab(y.ρq, neigh_elems[i]) ./
-                        Fields.slab(y.ρ, neigh_elems[i]),
-                    )
-                    neigh_elems_q_max[i] = Fields.maximum(
-                        Fields.slab(y.ρq, neigh_elems[i]) ./
-                        Fields.slab(y.ρ, neigh_elems[i]),
-                    )
-                end
-            end
-            parameters.min_q[e] = min(minimum(neigh_elems_q_min), q_e_min)
-            parameters.max_q[e] = max(maximum(neigh_elems_q_max), q_e_max)
-        end
+        Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
@@ -211,19 +179,11 @@ for (k, ne) in enumerate(ne_seq)
     end
 
     function stage_callback!(ydoublestar, integrator, parameters, t)
-        space = parameters.space
-        min_q = parameters.min_q
-        max_q = parameters.max_q
-        T = parameters.T
-
         if lim_flag
-            # Call quasimonotone limiter, to find optimal ρq (where ρq gets updated in place)
-            Limiters.quasimonotone_limiter!(
+            Limiters.apply_limiter!(
                 ydoublestar.ρq,
                 ydoublestar.ρ,
-                min_q,
-                max_q,
-                rtol = limiter_tol,
+                parameters.limiter,
             )
         end
         Spaces.weighted_dss!(ydoublestar)
@@ -231,7 +191,11 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters = (space = space, min_q = min_q, max_q = max_q, T = T)
+    parameters = (
+        space = space,
+        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq, y0.ρ),
+        T = T,
+    )
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE

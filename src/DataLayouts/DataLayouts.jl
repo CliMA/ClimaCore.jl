@@ -137,7 +137,7 @@ function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
     return dest
 end
 
-function nfields(data::AbstractData{S}) where {S}
+function ncomponents(data::AbstractData{S}) where {S}
     typesize(eltype(parent(data)), S)
 end
 
