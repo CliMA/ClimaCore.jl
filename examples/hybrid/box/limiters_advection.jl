@@ -81,7 +81,7 @@ end
 
 # Advection problem on a 3D Cartesian domain with bounds-preserving quasimonotone horizontal limiter.
 # The initial condition can be set via a command line argument.
-# Possible test cases are: cosine_bells (default), gaussian_bells, and cylinders
+# Possible test cases are: cosine_bells (default), gaussian_bells, and slotted_spheres
 
 FT = Float64
 
@@ -240,8 +240,8 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         uv = @. u0 * (xc - flow_center.x) * cospi(t / end_time)
         uw = @. u0 * sinpi(zf / zmax) * cospi(t / end_time)
 
-        uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
-        w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
+        cuₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
+        fw = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
 
         # Set up operators
         # Spectral horizontal operators
@@ -262,11 +262,15 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
             top = Operators.ThirdOrderOneSided(),
         )
 
-        vert_flux_wρ = vdivf2c.(w .* first_order_Ic2f.(y.ρ))
+        fuₕ = first_order_Ic2f.(cuₕ)
+        fuvw =
+            Geometry.Contravariant123Vector.(fuₕ) .+
+            Geometry.Contravariant123Vector.(fw)
+        vert_flux_wρ = vdivf2c.(fw .* first_order_Ic2f.(y.ρ))
         vert_flux_wρq =
             vdivf2c.(
                 first_order_Ic2f.(y.ρ) .*
-                third_order_upwind_c2f.(w, y.ρq ./ y.ρ),
+                third_order_upwind_c2f.(fuvw, y.ρq ./ y.ρ),
             )
 
         # Compute min_q[] and max_q[] that will be needed later in the stage limiter
@@ -317,9 +321,10 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         @. ystar.ρq = -D₄ * hwdiv(y.ρ * hgrad(ystar.ρq))
 
         # Compute vertical velocity by interpolating faces to centers
-        cw = first_order_If2c.(w)        # Covariant3Vector on faces, interpolated to centers
+        cw = first_order_If2c.(fw)        # Covariant3Vector on faces, interpolated to centers
         cuvw =
-            Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
+            Geometry.Covariant123Vector.(cuₕ) .+
+            Geometry.Covariant123Vector.(cw)
 
         # 1) Contintuity equation:
         # 1.1) Horizontal advective flux with horizontal/vertical velocity
@@ -329,7 +334,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         # already accounted for in 1.1)
 
         # 1.3) Vertical advective flux with horizontal velocity
-        @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* uₕ))
+        @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* cuₕ))
 
         # 1.4) Vertical advective flux with vertical velocity
         @. dy.ρ -= alpha * vert_flux_wρ
@@ -341,11 +346,11 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         # 2.2) Horizontal advective flux with vertical velocity
         # already accounted for in 2.1)
 
-        # 2.3) Vertical advective flux with horizontal velocity
-        @. dy.ρq -= alpha * vdivf2c.(first_order_Ic2f.(y.ρq .* uₕ))
+        # 2.3) Vertical advective flux with horizontal/vertical velocity
+        @. dy.ρq -= alpha * vert_flux_wρq
 
         # 2.4) Vertical advective flux with vertical velocity
-        @. dy.ρq -= alpha * vert_flux_wρq
+        # already accounted for in 2.3)
 
         min_q = parameters.min_q
         max_q = parameters.max_q
