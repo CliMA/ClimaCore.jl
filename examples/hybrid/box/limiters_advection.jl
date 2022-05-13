@@ -124,7 +124,6 @@ const cosine_test_name = "cosine_bells"
 const gaussian_test_name = "gaussian_bells"
 const cylinder_test_name = "slotted_spheres"
 const lim_flag = true
-const limiter_tol = 5e-14
 
 # Plot variables and auxiliary function
 ENV["GKSwstype"] = "nul"
@@ -169,11 +168,6 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         yelems = horz_ne,
         zelems = zelems,
     )
-
-    # Initialize variables needed for limiters
-    horz_n_elems = Topologies.nlocalelems(horzspace.topology)
-    min_q = zeros(horz_n_elems, zelems)
-    max_q = zeros(horz_n_elems, zelems)
 
     center_coords = Fields.coordinate_field(hv_center_space)
     face_coords = Fields.coordinate_field(hv_face_space)
@@ -273,47 +267,6 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
                 third_order_upwind_c2f.(fuvw, y.ρq ./ y.ρ),
             )
 
-        # Compute min_q[] and max_q[] that will be needed later in the stage limiter
-        horzspace = parameters.horzspace
-        horz_n_elems = Topologies.nlocalelems(horzspace)
-        topology = horzspace.topology
-
-        horz_neigh_elems_q_min = Array{FT}(undef, 8, zelems)
-        horz_neigh_elems_q_max = Array{FT}(undef, 8, zelems)
-        horz_q_e = Array{Fields.Field}(undef, zelems)
-        horz_q_e_min = Array{FT}(undef, zelems)
-        horz_q_e_max = Array{FT}(undef, zelems)
-
-        for v in 1:zelems
-            for he in 1:horz_n_elems
-                horz_q_e[v] =
-                    Fields.slab(y.ρq, v, he) ./ Fields.slab(y.ρ, v, he)
-
-                horz_q_e_min[v] = minimum(horz_q_e[v])
-                horz_q_e_max[v] = maximum(horz_q_e[v])
-                horz_neigh_elems = Topologies.neighboring_elements(topology, he)
-                for i in 1:length(horz_neigh_elems)
-                    if horz_neigh_elems[i] == 0
-                        horz_neigh_elems_q_min[i] = +Inf
-                        horz_neigh_elems_q_max[i] = -Inf
-                    else
-                        horz_neigh_elems_q_min[i] = Fields.minimum(
-                            Fields.slab(y.ρq, v, horz_neigh_elems[i]) ./
-                            Fields.slab(y.ρ, v, horz_neigh_elems[i]),
-                        )
-                        horz_neigh_elems_q_max[i] = Fields.maximum(
-                            Fields.slab(y.ρq, v, horz_neigh_elems[i]) ./
-                            Fields.slab(y.ρ, v, horz_neigh_elems[i]),
-                        )
-                    end
-                end
-                parameters.min_q[he, v] =
-                    min(minimum(horz_neigh_elems_q_min), horz_q_e_min[v])
-                parameters.max_q[he, v] =
-                    max(maximum(horz_neigh_elems_q_max), horz_q_e_max[v])
-            end
-        end
-
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         ystar = similar(y)
         @. ystar.ρq = hwdiv(hgrad(y.ρq / y.ρ))
@@ -352,18 +305,9 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         # 2.4) Vertical advective flux with vertical velocity
         # already accounted for in 2.3)
 
-        min_q = parameters.min_q
-        max_q = parameters.max_q
-
         if lim_flag
-            # Call quasimonotone limiter, to find optimal ρq (where ρq gets updated in place)
-            Limiters.quasimonotone_limiter!(
-                dy.ρq,
-                dy.ρ,
-                min_q,
-                max_q,
-                rtol = limiter_tol,
-            )
+            Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
+            Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
         end
         Spaces.weighted_dss!(dy.ρ)
         Spaces.weighted_dss!(dy.ρq)
@@ -373,8 +317,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
     ystar = copy(y0)
     parameters = (
         horzspace = horzspace,
-        min_q = min_q,
-        max_q = max_q,
+        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq, y0.ρ),
         end_time = end_time,
         center_coords = center_coords,
         face_coords = face_coords,
