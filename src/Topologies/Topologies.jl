@@ -27,7 +27,8 @@ mesh in the horizontal domain.
 - [`ghost_faces`](@ref)
 - [`vertex_node_index`](@ref)
 - [`vertices`](@ref)
-- [`neighboring_elements`](@ref)
+- [`local_neighboring_elements`](@ref)
+- [`ghost_neighboring_elements`](@ref)
 - [`local_vertices`](@ref)
 - [`ghost_vertices`](@ref)
 - [`neighbors`](@ref)
@@ -178,11 +179,20 @@ struct GhostFaceIterator{T <: AbstractTopology}
 end
 
 """
-    neighboring_elements(topology, elem)
+    local_neighboring_elements(topology::AbstractTopology, lidx::Integer)
 
-The list of neighboring elements of element `elem` in `topology`.
+An iterator of the local element indices (lidx) of the local elements which are
+neighbors of the local element `lidx` in `topology` (excluding `lidx` itself).
 """
-function neighboring_elements end
+function local_neighboring_elements end
+
+"""
+    ghost_neighboring_elements(topology::AbstractTopology, ridx::Integer)
+
+An iterator of the receive buffer indices (ridx) of the ghost elements which are
+neighbors  of the local element `lidx` in `topology`.
+"""
+function ghost_neighboring_elements end
 
 """
     i,j = vertex_node_index(vertex_num, Nq)
@@ -245,7 +255,6 @@ function Base.iterate(
 end
 
 
-
 """
     local_vertices(topology)
 
@@ -303,5 +312,10 @@ include("dtopology2d.jl")
 @deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
 @deprecate GridTopology(mesh) Topology2D(mesh)
 @deprecate Topology2D(mesh) Topology2D(mesh)
+@deprecate neighboring_elements(topology::Topology2D, elem) local_neighboring_elements(
+    topology,
+    elem,
+)
+
 
 end # module

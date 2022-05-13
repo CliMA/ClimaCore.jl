@@ -17,6 +17,8 @@ struct Topology2D{M <: Meshes.AbstractMesh{2}, EO, OI, BF} <: AbstractTopology
     vertices::Vector{Tuple{Int, Int}}
     "the index in `vertices` of the first `(e,vert)` pair for all unique vertices"
     vertex_offset::Vector{Int}
+    neighbor_elem::Vector{Int}
+    neighbor_elem_offset::Vector{Int}
     "a NamedTuple of vectors of `(e,face)` "
     boundaries::BF
 end
@@ -38,7 +40,13 @@ function Topology2D(
         boundary_name => Tuple{Int, Int}[] for
         boundary_name in Meshes.boundary_names(mesh)
     )
+
+    temp_neighbor_elemset = SortedSet{Int}()
+    neighbor_elem = Int[]
+    neighbor_elem_offset = Int[1]
+
     for (e, elem) in enumerate(elemorder)
+        empty!(temp_neighbor_elemset)
         for face in 1:4
             if Meshes.is_boundary_face(mesh, elem, face)
                 boundary_name = Meshes.boundary_face_name(mesh, elem, face)
@@ -54,6 +62,12 @@ function Topology2D(
             end
         end
         for vert in 1:4
+            for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
+                o = orderindex[velem]
+                if o != e
+                    push!(temp_neighbor_elemset, o)
+                end
+            end
             if !any(Meshes.SharedVertices(mesh, elem, vert)) do (velem, vvert)
                 (orderindex[velem], vvert) < (e, vert)
             end
@@ -65,6 +79,8 @@ function Topology2D(
                 push!(vertex_offset, length(vertices) + 1)
             end
         end
+        append!(neighbor_elem, temp_neighbor_elemset)
+        push!(neighbor_elem_offset, length(neighbor_elem) + 1)
     end
     @assert length(vertices) == 4 * length(elemorder) == vertex_offset[end] - 1
     return Topology2D(
@@ -74,6 +90,8 @@ function Topology2D(
         internal_faces,
         vertices,
         vertex_offset,
+        neighbor_elem,
+        neighbor_elem_offset,
         boundaries,
     )
 end
@@ -119,61 +137,10 @@ boundary_tag(topology::Topology2D, boundary_name::Symbol) =
 
 boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
 
-function neighboring_elements(topology::Topology2D, elem)
-
-    # Each interior elem in a Topology2D will have 8 neighboring elements
-    #
-    #    o------o------o------o
-    #    |      |      |      |
-    #    |      |      |      |
-    #    o------o------o------o
-    #    |      |      |      |
-    #    |      |      |      |
-    #    o------o------o------o
-    #    |      |      |      |
-    #    |      |      |      |
-    #    o------o------o------o
-    #
-    #
-    # Except for corner elements of the cube (they will have 7)
-    #
-    #    o------o------o------o
-    #    |      |      |      |
-    #    |      |      |      |
-    #    o------o------o------o
-    #    |      |      |      |
-    #    |      |      |      |
-    #    o------o------o------o
-    #    |      |      |   ^
-    #    |      |      | < these two faces are the same at a cube corner
-    #    o------o------o
-
-    neigh_elems = Array{Int}(undef, 8)
-    op_faces = Array{Int}(undef, 8)
-    # First find the cross elements
-    for f in 1:4
-        (opelem, opface, _) = opposing_face(topology, elem, f)
-        # We look to the right of opface. Hence, subtract -1 from opface
-        opface = mod1(opface - 1, 4)
-        op_faces[f] = opface
-        neigh_elems[f] = opelem
-    end
-
-    for e in 1:4
-        # If the element is at a boundary, we don't want to check its opposing element and return a 0 elem index
-        if neigh_elems[e] == 0
-            opelem = 0
-        else
-            # Given an element in the cross element, check the opposing on the right/top/left/bottom
-            (opelem, _, _) =
-                opposing_face(topology, neigh_elems[e], op_faces[e])
-            # If the opposing element is already in the list of neighboring elements, we are at a cube corner and we return a 0 elem index
-            if opelem ∈ neigh_elems[1:4]
-                opelem = 0
-            end
-        end
-        neigh_elems[e + 4] = opelem
-    end
-
-    return neigh_elems
+function local_neighboring_elements(topology::Topology2D, elem)
+    return view(
+        topology.neighbor_elem,
+        topology.neighbor_elem_offset[elem]:(topology.neighbor_elem_offset[elem + 1] - 1),
+    )
 end
+ghost_neighboring_elements(topology::Topology2D, elem) = ()

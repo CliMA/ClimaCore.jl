@@ -71,6 +71,16 @@ struct DistributedTopology2D{
     ghost_vertices::Vector{Tuple{Bool, Int, Int}}
     "the index in `ghost_vertices` of the first tuple for each unique vertex"
     ghost_vertex_offset::Vector{Int}
+
+    "a vector of the lidx of neighboring local elements of each element"
+    local_neighbor_elem::Vector{Int}
+    "the index into `local_neighbor_elem` for the start of each element"
+    local_neighbor_elem_offset::Vector{Int}
+    "a vector of the ridx of neighboring ghost elements of each element"
+    ghost_neighbor_elem::Vector{Int}
+    "the index into `ghost_neighbor_elem` for the start of each element"
+    ghost_neighbor_elem_offset::Vector{Int}
+
     "a NamedTuple of vectors of `(e,face)` "
     boundaries::BF
 end
@@ -141,58 +151,80 @@ function DistributedTopology2D(
     local_vertex_offset = Int[1]
     ghost_vertices = Tuple{Bool, Int, Int}[]
     ghost_vertex_offset = Int[1]
-    temp_elem = Tuple{Int, Int, Int}[]
+    temp_vertlist = Tuple{Int, Int, Int}[]
+
+    temp_local_neighbor_elemset = SortedSet{Int}()
+    temp_ghost_neighbor_elemset = SortedSet{Int}()
+    local_neighbor_elem = Int[]
+    local_neighbor_elem_offset = Int[1]
+    ghost_neighbor_elem = Int[]
+    ghost_neighbor_elem_offset = Int[1]
 
     # 1) iterate over the vertices of local elements to determeind the vertex connectivity
     #    since we don't yet know the ridx of halo elements, we instead store the gidx.
-    for gidx in local_elem_gidx
+    for (lidx, gidx) in enumerate(local_elem_gidx)
         elem = elemorder[gidx]
+        empty!(temp_local_neighbor_elemset)
+        empty!(temp_ghost_neighbor_elemset)
         # Determine whether a vertex is an interior or a ghost vertex. For
         # ghost vertices, we record the elements to be sent, the elements
         # to be received (ghost elements) and other information to ease DSS.
         for vert in 1:4
+            seen = false
             isghostvertex = false
-            empty!(temp_elem)
+            empty!(temp_vertlist)
             for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
                 vgidx = orderindex[velem]
                 vpid = elempid[vgidx]
                 if vpid == pid
+                    vlidx = global_elem_lidx[vgidx]
+                    if vlidx != lidx
+                        push!(temp_local_neighbor_elemset, vlidx)
+                    end
                     if (vgidx, vvert) < (gidx, vert)
                         # we've already seen this vertex
-                        @goto skip
+                        seen = true
                     end
-                    vlidx = global_elem_lidx[vgidx]
-                    push!(temp_elem, (0, vlidx, vvert))
+                    push!(temp_vertlist, (0, vlidx, vvert))
                 else
                     isghostvertex = true
+                    # use gidx until we can determine ridx ridx
                     push!(recv_elem_set, (vpid, vgidx))
-                    push!(temp_elem, (vpid, vgidx, vvert))
+                    push!(temp_ghost_neighbor_elemset, vgidx)
+                    push!(temp_vertlist, (vpid, vgidx, vvert))
                 end
             end
-            # append to either local_vertices or ghost_vertices
-            if isghostvertex
-                for (vpid, vidx, vvert) in temp_elem
-                    # vidx will be lidx if local, gidx if ghost
-                    # replace the gidx with ridx in step 4.
-                    push!(ghost_vertices, (vpid != 0, vidx, vvert))
-                    # if it's a ghost_vertex, push every (dest pid, lidx) to the send_elem_set
-                    if vpid != 0
-                        for (xpid, xidx, _) in temp_elem
-                            if xpid == 0
-                                push!(send_elem_set, (vpid, xidx))
+            if !seen
+                # append to either local_vertices or ghost_vertices
+                if isghostvertex
+                    for (vpid, vidx, vvert) in temp_vertlist
+                        # vidx will be lidx if local, gidx if ghost
+                        # replace the gidx with ridx in step 4.
+                        push!(ghost_vertices, (vpid != 0, vidx, vvert))
+                        # if it's a ghost_vertex, push every (dest pid, lidx) to the send_elem_set
+                        if vpid != 0
+                            for (xpid, xidx, _) in temp_vertlist
+                                if xpid == 0
+                                    push!(send_elem_set, (vpid, xidx))
+                                end
                             end
                         end
                     end
+                    push!(ghost_vertex_offset, length(ghost_vertices) + 1)
+                else
+                    for (_, vlidx, vvert) in temp_vertlist
+                        push!(local_vertices, (vlidx, vvert))
+                    end
+                    push!(local_vertex_offset, length(local_vertices) + 1)
                 end
-                push!(ghost_vertex_offset, length(ghost_vertices) + 1)
-            else
-                for (_, vlidx, vvert) in temp_elem
-                    push!(local_vertices, (vlidx, vvert))
-                end
-                push!(local_vertex_offset, length(local_vertices) + 1)
             end
-            @label skip
         end
+
+        # build neighbors
+        append!(local_neighbor_elem, temp_local_neighbor_elemset)
+        push!(local_neighbor_elem_offset, length(local_neighbor_elem) + 1)
+        append!(ghost_neighbor_elem, temp_ghost_neighbor_elemset)
+        push!(ghost_neighbor_elem_offset, length(ghost_neighbor_elem) + 1)
     end
 
     # 2) compute send_elem information
@@ -255,6 +287,12 @@ function DistributedTopology2D(
             ghost_vertices[i] = (isghost, ridx, vert)
         end
     end
+    # update ghost_neighbor_elem with ridx, and order by ridx
+    for i in eachindex(ghost_neighbor_elem)
+        gidx = ghost_neighbor_elem[i]
+        ridx = global_elem_ridx[gidx]
+        ghost_neighbor_elem[i] = ridx
+    end
 
     # 5) faces
     boundaries = NamedTuple(
@@ -306,6 +344,10 @@ function DistributedTopology2D(
         local_vertex_offset,
         ghost_vertices,
         ghost_vertex_offset,
+        local_neighbor_elem,
+        local_neighbor_elem_offset,
+        ghost_neighbor_elem,
+        ghost_neighbor_elem_offset,
         boundaries,
     )
 end
@@ -360,6 +402,20 @@ local_vertices(topology::DistributedTopology2D) =
     VertexIterator(topology.local_vertices, topology.local_vertex_offset)
 ghost_vertices(topology::DistributedTopology2D) =
     VertexIterator(topology.ghost_vertices, topology.ghost_vertex_offset)
+
+function local_neighboring_elements(topology::DistributedTopology2D, elem)
+    return view(
+        topology.local_neighbor_elem,
+        topology.local_neighbor_elem_offset[elem]:(topology.local_neighbor_elem_offset[elem + 1] - 1),
+    )
+end
+function ghost_neighboring_elements(topology::DistributedTopology2D, elem)
+    return view(
+        topology.ghost_neighbor_elem,
+        topology.ghost_neighbor_elem_offset[elem]:(topology.ghost_neighbor_elem_offset[elem + 1] - 1),
+    )
+end
+
 
 neighbors(topology::DistributedTopology2D) = topology.neighbor_pids
 boundary_names(topology::DistributedTopology2D) = keys(topology.boundaries)

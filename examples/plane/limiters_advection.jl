@@ -202,7 +202,7 @@ for (k, ne) in enumerate(ne_seq)
 
             q_e_min = minimum(q_e)
             q_e_max = maximum(q_e)
-            neigh_elems = Topologies.neighboring_elements(topology, e)
+            neigh_elems = Topologies.local_neighboring_elements(topology, e)
             for i in 1:length(neigh_elems)
                 if neigh_elems[i] == 0
                     neigh_elems_q_min[i] = +Inf

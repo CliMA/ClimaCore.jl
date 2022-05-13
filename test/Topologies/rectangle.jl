@@ -81,38 +81,28 @@ end
 
     @testset "1×1 element quad mesh with 1 periodic boundary" begin
         topology = rectangular_grid(1, 1, true, false)
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [0, 1, 0, 1, 0, 0, 0, 0]
+        @test Topologies.local_neighboring_elements(topology, 1) == []
     end
 
     @testset "1×1 element quad mesh with non-periodic boundaries" begin
         topology = rectangular_grid(1, 1, false, false)
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [0, 0, 0, 0, 0, 0, 0, 0]
+        @test Topologies.local_neighboring_elements(topology, 1) == []
     end
 
     @testset "2×2 element quad mesh with periodic boundaries" begin
         topology = rectangular_grid(2, 2, true, true)
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [3, 2, 3, 2, 4, 4, 4, 4]
-        @test Topologies.neighboring_elements(topology, 2) ==
-              [4, 1, 4, 1, 3, 3, 3, 3]
-        @test Topologies.neighboring_elements(topology, 3) ==
-              [1, 4, 1, 4, 2, 2, 2, 2]
-        @test Topologies.neighboring_elements(topology, 4) ==
-              [2, 3, 2, 3, 1, 1, 1, 1]
+        @test Topologies.local_neighboring_elements(topology, 1) == [2, 3, 4]
+        @test Topologies.local_neighboring_elements(topology, 2) == [1, 3, 4]
+        @test Topologies.local_neighboring_elements(topology, 3) == [1, 2, 4]
+        @test Topologies.local_neighboring_elements(topology, 4) == [1, 2, 3]
     end
 
     @testset "2×2 element quad mesh with non-periodic boundaries" begin
         topology = rectangular_grid(2, 2, false, false)
-        @test Topologies.neighboring_elements(topology, 1) ==
-              [0, 2, 3, 0, 0, 4, 0, 0]
-        @test Topologies.neighboring_elements(topology, 2) ==
-              [0, 0, 4, 1, 0, 0, 3, 0]
-        @test Topologies.neighboring_elements(topology, 3) ==
-              [1, 4, 0, 0, 2, 0, 0, 0]
-        @test Topologies.neighboring_elements(topology, 4) ==
-              [2, 0, 0, 3, 0, 0, 0, 1]
+        @test Topologies.local_neighboring_elements(topology, 1) == [2, 3, 4]
+        @test Topologies.local_neighboring_elements(topology, 2) == [1, 3, 4]
+        @test Topologies.local_neighboring_elements(topology, 3) == [1, 2, 4]
+        @test Topologies.local_neighboring_elements(topology, 4) == [1, 2, 3]
     end
 end
 

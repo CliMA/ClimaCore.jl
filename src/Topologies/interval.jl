@@ -106,8 +106,21 @@ function Base.iterate(
     end
 end
 
-function neighboring_elements(topology::AbstractIntervalTopology, elem)
+function local_neighboring_elements(topology::AbstractIntervalTopology, elem)
     (opelem_1, _, _) = opposing_face(topology, elem, 1)
     (opelem_2, _, _) = opposing_face(topology, elem, 2)
-    return (opelem_1, opelem_2)
+    if opelem_1 == 0
+        if opelem_2 == 0
+            return ()
+        else
+            return (opelem_2,)
+        end
+    else
+        if opelem_2 == 0
+            return (opelem_1,)
+        else
+            return (opelem_1, opelem_2)
+        end
+    end
 end
+ghost_neighboring_elements(topology::AbstractIntervalTopology, elem) = ()
