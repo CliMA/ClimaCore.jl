@@ -57,6 +57,7 @@ using Base: operator_associativity
 @time include("Operators/remapping.jl")
 
 @time include("Limiters/limiter.jl")
+@time include("Limiters/distributed.jl")
 
 if "CUDA" in ARGS
     @time include("gpu/cuda.jl")
