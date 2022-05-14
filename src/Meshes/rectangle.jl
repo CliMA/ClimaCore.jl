@@ -15,7 +15,7 @@ struct RectilinearMesh{I1 <: IntervalMesh, I2 <: IntervalMesh} <: AbstractMesh2D
     intervalmesh1::I1
     intervalmesh2::I2
 end
-RectilinearMesh(domain::RectangleDomain, n1, n2) = RectilinearMesh(
+RectilinearMesh(domain::RectangleDomain, n1::Int, n2::Int) = RectilinearMesh(
     IntervalMesh(domain.interval1; nelems = n1),
     IntervalMesh(domain.interval2; nelems = n2),
 )

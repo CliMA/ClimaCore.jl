@@ -83,7 +83,7 @@ struct Uniform <: StretchingRule end
 function IntervalMesh(
     domain::IntervalDomain{CT},
     ::Uniform = Uniform();
-    nelems,
+    nelems::Int,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
         throw(ArgumentError("`nelems` must be ≥ 1"))
@@ -114,7 +114,7 @@ end
 function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::ExponentialStretching{FT};
-    nelems,
+    nelems::Int,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
         throw(ArgumentError("`nelems` must be ≥ 1"))
@@ -144,7 +144,7 @@ end
 function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::GeneralizedExponentialStretching{FT};
-    nelems,
+    nelems::Int,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
