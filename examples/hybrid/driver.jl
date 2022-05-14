@@ -66,15 +66,6 @@ include(joinpath(test_dir, "$test_file_name.jl"))
 import ClimaCore: enable_threading
 enable_threading() = false
 
-# TODO: When is_distributed is true, automatically compute the maximum number of
-# bytes required to store an element from Y.c or Y.f (or, really, from any Field
-# on which gather() or weighted_dss!() will get called). One option is to make a
-# non-distributed space, extract the local_geometry type, and find the sizes of
-# the output types of center_initial_condition() and face_initial_condition()
-# for that local_geometry type. This is rather inefficient, though, so for now
-# we will just hardcode the value of 4.
-max_field_element_size = 4 # ρ = 1 byte, 𝔼 = 1 byte, uₕ = 2 bytes
-
 if haskey(ENV, "RESTART_FILE")
     restart_file_name = ENV["RESTART_FILE"]
     if is_distributed
