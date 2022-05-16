@@ -152,3 +152,61 @@ end
             0.1
     end
 end
+
+@testset "write nc data for column with $node_type" for node_type in
+                                                        ["cgll", "dgll"]
+
+    node_type = "cgll"
+    FT = Float64
+    x_max = FT(0)
+    y_max = FT(0)
+    x_elem = 1
+    y_elem = 1
+    # generate CC mesh
+    nlevels = 10
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
+        periodic = true,
+    )
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(zero(y_max)),
+        Geometry.YPoint(y_max);
+        periodic = true,
+    )
+    domain = Domains.RectangleDomain(x_domain, y_domain)
+    hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
+
+    quad = Spaces.Quadratures.GL{1}()
+    htopology = Topologies.Topology2D(hmesh)
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+
+    vdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(50.0);
+        boundary_tags = (:bottom, :top),
+    )
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+
+    hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+
+    # write data
+    datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
+    NCDataset(datafile_cc, "c") do nc
+        def_space_coord(nc, hvspace; type = node_type)
+        def_space_coord(nc, fhvspace; type = node_type)
+
+        nc_x = defVar(nc, "xx", Float64, hvspace)
+        nc_z = defVar(nc, "xz", Float64, hvspace)
+        nc_z_half = defVar(nc, "xz_half", Float64, fhvspace)
+
+        nc_x[:] = Fields.coordinate_field(hvspace).x
+        nc_z[:] = Fields.coordinate_field(hvspace).z
+        nc_z_half[:] = Fields.coordinate_field(fhvspace).z
+        nothing
+    end
+    @test isfile(datafile_cc)
+    rm(datafile_cc; force = true)
+end
