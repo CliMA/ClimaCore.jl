@@ -70,6 +70,32 @@ end
         @test Spaces.coordinates_data(point_space)[] ==
               Spaces.level(coord_data, 1)[]
     end
+
+    x_max = FT(0)
+    y_max = FT(1)
+    x_elem = 2
+    y_elem = 2
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(zero(x_max)),
+        Geometry.XPoint(x_max);
+        periodic = true,
+    )
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(zero(y_max)),
+        Geometry.YPoint(y_max);
+        periodic = true,
+    )
+    domain = Domains.RectangleDomain(x_domain, y_domain)
+    hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
+
+    quad = Spaces.Quadratures.GL{1}()
+    htopology = Topologies.Topology2D(hmesh)
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+
+    @test collect(Spaces.unique_nodes(hspace)) ==
+          [((1, 1), 1);;; ((1, 1), 2);;; ((1, 1), 3);;; ((1, 1), 4)]
+    @test length(Spaces.unique_nodes(hspace)) == 4
+    @test length(Spaces.all_nodes(hspace)) == 4
 end
 
 @testset "1×1 domain space" begin

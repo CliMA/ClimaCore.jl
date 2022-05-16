@@ -484,7 +484,12 @@ first `((i,j), e)` triple.
 
 This function is experimental, and may change in future.
 """
-unique_nodes(space::SpectralElementSpace2D) = UniqueNodeIterator(space)
+unique_nodes(space::SpectralElementSpace2D) =
+    unique_nodes(space, space.quadrature_style)
+
+unique_nodes(space::SpectralElementSpace2D, quad::Quadratures.QuadratureStyle) =
+    UniqueNodeIterator(space)
+unique_nodes(space::SpectralElementSpace2D, ::Quadratures.GL) = all_nodes(space)
 
 struct UniqueNodeIterator{S}
     space::S
