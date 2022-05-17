@@ -299,16 +299,18 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         # 2.2) Horizontal advective flux with vertical velocity
         # already accounted for in 2.1)
 
-        # 2.3) Vertical advective flux with horizontal/vertical velocity
-        @. dy.ρq -= alpha * vert_flux_wρq
-
-        # 2.4) Vertical advective flux with vertical velocity
-        # already accounted for in 2.3)
-
+        # 2.3) Apply the limiters:
         if lim_flag
             Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
             Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
         end
+
+        # 2.4) Vertical advective flux with horizontal/vertical velocity
+        @. dy.ρq -= alpha * vert_flux_wρq
+
+        # 2.5) Vertical advective flux with vertical velocity
+        # already accounted for in 2.4)
+
         Spaces.weighted_dss!(dy.ρ)
         Spaces.weighted_dss!(dy.ρq)
     end
@@ -384,7 +386,7 @@ Plots.png(
     joinpath(path, "L1error.png"),
 )
 linkfig(
-    relpath(joinpath(path, "L1error.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "L1error.png"), joinpath(@__DIR__, "../../..")),
     "L₁ error Vs Nₑ",
 )
 
@@ -402,7 +404,7 @@ Plots.png(
     joinpath(path, "L2error.png"),
 )
 linkfig(
-    relpath(joinpath(path, "L2error.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "L2error.png"), joinpath(@__DIR__, "../../..")),
     "L₂ error Vs Nₑ",
 )
 
@@ -419,6 +421,6 @@ Plots.png(
     joinpath(path, "Linferror.png"),
 )
 linkfig(
-    relpath(joinpath(path, "Linferror.png"), joinpath(@__DIR__, "../..")),
+    relpath(joinpath(path, "Linferror.png"), joinpath(@__DIR__, "../../..")),
     "L∞ error Vs Nₑ",
 )
