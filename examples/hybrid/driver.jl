@@ -187,7 +187,13 @@ end
 
 @info "Running `$test_dir/$test_file_name` test case"
 
-walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+n_steps = Int(cld(t_end - t_start, dt))
+
+walltime = @elapsed begin
+    for i in 1:n_steps
+        OrdinaryDiffEq.step!(integrator, dt)
+    end
+end
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
