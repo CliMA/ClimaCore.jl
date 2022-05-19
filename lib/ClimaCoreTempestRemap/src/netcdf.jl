@@ -49,9 +49,66 @@ the type used by [`remap_weights`](@ref).
 
 If a compatible dimension already exists, it will be reused.
 """
-function def_space_coord(
+def_space_coord(
     nc::NCDataset,
     space::Spaces.SpectralElementSpace2D;
+    type = "dgll",
+) = def_space_coord(nc, space, space.topology.mesh; type)
+
+function def_space_coord(
+    nc::NCDataset,
+    space::Spaces.SpectralElementSpace2D,
+    ::Meshes.RectilinearMesh;
+    type = "dgll",
+)
+    if type == "cgll"
+        nodes = Spaces.unique_nodes(space)
+    elseif type == "dgll"
+        nodes = Spaces.all_nodes(space)
+    else
+        error("Unsupported type: $type")
+    end
+    ncol = length(nodes)
+
+    if haskey(nc, "Y")
+        # dimension already exists: check correct size
+        if size(nc["Y"]) != (ncol,)
+            error("incompatible horizontal dimension already exists")
+        end
+        return (nc["X"], nc["Y"])
+    end
+
+    # # dimensions
+    defDim(nc, "ncol", ncol)
+
+    # variables
+    ## X
+    X = defVar(nc, "X", Float64, ("ncol",))
+    X.attrib["units"] = "m"
+    X.attrib["axis"] = "X"
+    X.attrib["long_name"] = "x-coordinate in Cartesian system"
+
+    ## lat
+    Y = defVar(nc, "Y", Float64, ("ncol",))
+    Y.attrib["units"] = "m"
+    Y.attrib["axis"] = "Y"
+    Y.attrib["long_name"] = "y-coordinate in Cartesian system"
+
+    coords = Spaces.coordinates_data(space)
+
+    for (col, ((i, j), e)) in enumerate(nodes)
+        coord = slab(coords, e)[i, j]
+        X[col] = coord.x
+        Y[col] = coord.y
+    end
+    nc.attrib["node_type"] = type
+    return (X, Y)
+end
+
+function def_space_coord(
+    nc::NCDataset,
+    space::Spaces.SpectralElementSpace2D,
+    mesh::Meshes.AbstractMesh2D;
     type = "dgll",
 )
     if type == "cgll"
