@@ -14,7 +14,9 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEq: ODEProblem, solve
+using DiffEqBase
+using ClimaTimeSteppers
 
 import Logging
 import TerminalLoggers
@@ -42,12 +44,16 @@ const R_t = R / 2 # horizontal half-width of tracers
 const Z_t = 1000.0 # vertical half-width of tracers
 const κ₄ = 1.0e16 # hyperviscosity
 
+# time constants
+T = 86400.0 * 12.0
+dt = 60.0 * 60.0
+
 # set up function space
 function sphere_3D(
     R = 6.37122e6,
     zlim = (0, 12.0e3),
     helem = 4,
-    zelem = 12,
+    zelem = 36,
     npoly = 4,
 )
     FT = Float64
@@ -117,7 +123,19 @@ y0 = map(coords) do coord
     return (ρ = ρ_ref(z), ρq1 = ρq1, ρq2 = ρq2, ρq3 = ρq3, ρq4 = ρq4)
 end
 
-function rhs!(dydt, y, (coords, face_coords), t)
+y0 = Fields.FieldVector(
+    ρ = y0.ρ,
+    ρq1 = y0.ρq1,
+    ρq2 = y0.ρq2,
+    ρq3 = y0.ρq3,
+    ρq4 = y0.ρq4,
+)
+
+function rhs!(dydt, y, parameters, t, alpha, beta)
+
+    τ = parameters.τ
+    coords = parameters.coords
+    face_coords = parameters.face_coords
 
     ϕ = coords.lat
     λ = coords.long
@@ -160,7 +178,8 @@ function rhs!(dydt, y, (coords, face_coords), t)
     dρq3 = dydt.ρq3
     dρq4 = dydt.ρq4
 
-    dρ .= 0 .* ρ
+    # No change in density: divergence-free flow
+    @. dydt.ρ = beta * dydt.ρ + 0 .* y.ρ
 
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
@@ -171,62 +190,71 @@ function rhs!(dydt, y, (coords, face_coords), t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
+    third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
 
     ### HYPERVISCOSITY
+    ystar = similar(y)
+    @. ystar.ρq1 = hwdiv(hgrad(ρq1 / ρ))
+    Spaces.weighted_dss!(ystar.ρq1)
+    @. ystar.ρq1 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq1))
 
-    χq1 = @. dρq1 = hwdiv(hgrad(ρq1 / ρ))
-    Spaces.weighted_dss!(dρq1)
-    @. dρq1 = -κ₄ * hwdiv(ρ * hgrad(χq1))
+    @. ystar.ρq2 = hwdiv(hgrad(ρq2 / ρ))
+    Spaces.weighted_dss!(ystar.ρq2)
+    @. ystar.ρq2 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq2))
 
-    χq2 = @. dρq2 = hwdiv(hgrad(ρq2 / ρ))
-    Spaces.weighted_dss!(dρq2)
-    @. dρq2 = -κ₄ * hwdiv(ρ * hgrad(χq2))
+    @. ystar.ρq3 = hwdiv(hgrad(ρq3 / ρ))
+    Spaces.weighted_dss!(ystar.ρq3)
+    @. ystar.ρq3 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq3))
 
-    χq3 = @. dρq3 = hwdiv(hgrad(ρq3 / ρ))
-    Spaces.weighted_dss!(dρq3)
-    @. dρq3 = -κ₄ * hwdiv(ρ * hgrad(χq3))
-
-    χq4 = @. dρq4 = hwdiv(hgrad(ρq4 / ρ))
-    Spaces.weighted_dss!(dρq4)
-    @. dρq4 = -κ₄ * hwdiv(ρ * hgrad(χq4))
+    @. ystar.ρq4 = hwdiv(hgrad(ρq4 / ρ))
+    Spaces.weighted_dss!(ystar.ρq4)
+    @. ystar.ρq4 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq4))
 
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
-    @. dρq1 -= hdiv(cuvw * ρq1)
-    @. dρq1 -= vdivf2c(w * Ic2f(ρq1))
-    @. dρq1 -= vdivf2c(Ic2f(uₕ * ρq1))
+    @. dρq1 = beta * dρq1 - alpha * hdiv(cuvw * ρq1) + alpha * ystar.ρq1
+    @. dρq1 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq1 ./ ρ))
+    @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
 
-    @. dρq2 -= hdiv(cuvw * ρq2)
-    @. dρq2 -= vdivf2c(w * Ic2f(ρq2))
-    @. dρq2 -= vdivf2c(Ic2f(uₕ * ρq2))
+    @. dρq2 = beta * dρq2 - alpha * hdiv(cuvw * ρq2) + alpha * ystar.ρq2
+    @. dρq2 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq2 ./ ρ))
+    @. dρq2 -= alpha * vdivf2c(Ic2f(uₕ * ρq2))
 
-    @. dρq3 -= hdiv(cuvw * ρq3)
-    @. dρq3 -= vdivf2c(w * Ic2f(ρq3))
-    @. dρq3 -= vdivf2c(Ic2f(uₕ * ρq3))
+    @. dρq3 = beta * dρq3 - alpha * hdiv(cuvw * ρq3) + alpha * ystar.ρq3
+    @. dρq3 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq3 ./ ρ))
+    @. dρq3 -= alpha * vdivf2c(Ic2f(uₕ * ρq3))
 
-    @. dρq4 -= hdiv(cuvw * ρq4)
-    @. dρq4 -= vdivf2c(w * Ic2f(ρq4))
-    @. dρq4 -= vdivf2c(Ic2f(uₕ * ρq4))
+    @. dρq4 = beta * dρq4 - alpha * hdiv(cuvw * ρq4) + alpha * ystar.ρq4
+    @. dρq4 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq4 ./ ρ))
+    @. dρq4 -= alpha * vdivf2c(Ic2f(uₕ * ρq4))
 
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss!(dydt.ρ)
+    Spaces.weighted_dss!(dydt.ρq1)
+    Spaces.weighted_dss!(dydt.ρq2)
+    Spaces.weighted_dss!(dydt.ρq3)
+    Spaces.weighted_dss!(dydt.ρq4)
 
     return dydt
 end
 
-dydt = similar(y0)
-rhs!(dydt, y0, (coords, face_coords), 0.0)
+# Set up RHS function
+ystar = copy(y0)
+parameters = (τ = τ, coords = coords, face_coords = face_coords)
+
+rhs!(ystar, y0, parameters, 0.0, dt, 1)
 
 # run!
-T = 86400 * 12
-dt = 60 * 60
-prob = ODEProblem(rhs!, y0, (0.0, T), (coords, face_coords))
+prob = ODEProblem(IncrementingODEFunction(rhs!), copy(y0), (0.0, T), parameters)
 sol = solve(
     prob,
-    SSPRK33(),
+    SSPRK33ShuOsher(),
     dt = dt,
     saveat = dt,
     progress = true,
@@ -274,13 +302,13 @@ end
 Plots.png(
     Plots.plot(
         sol.u[trunc(Int, end / 2)].ρq3 ./ ρ_ref.(coords.z),
-        level = 5,
+        level = 15,
         clim = (-1, 1),
     ),
     joinpath(path, "q3_6day.png"),
 )
 
 Plots.png(
-    Plots.plot(sol.u[end].ρq3 ./ ρ_ref.(coords.z), level = 5, clim = (-1, 1)),
+    Plots.plot(sol.u[end].ρq3 ./ ρ_ref.(coords.z), level = 15, clim = (-1, 1)),
     joinpath(path, "q3_12day.png"),
 )
