@@ -4,16 +4,17 @@ env:
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.3"
   OPENBLAS_NUM_THREADS: 1
+  PROFILE_PATH: "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32"
 
 steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
-      - echo "--- Instantiate scaling test"
+      - "echo --- Instantiate scaling test"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
-      - echo "--- Instantiate status"
+      - "echo --- Instantiate status"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -29,12 +30,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_1p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_1_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.1.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 1
     agents:
       config: cpu
       queue: central
@@ -45,12 +48,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_2p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_2_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.2.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 2
     agents:
       config: cpu
       queue: central
@@ -61,12 +66,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_4p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_4_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.4.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 4
     agents:
       config: cpu
       queue: central
@@ -77,12 +84,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_8p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_8_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.8.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 8
     agents:
       config: cpu
       queue: central
@@ -93,12 +102,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_16p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_16_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.16.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 16
     agents:
       config: cpu
       queue: central
@@ -109,12 +120,14 @@ steps:
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_32p"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=sphere_held_suarez_rhoe/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=$$PROFILE_PATH/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_32_processes.jld2"
+      - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/report.32.*"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
       CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 32
     agents:
       config: cpu
       queue: central

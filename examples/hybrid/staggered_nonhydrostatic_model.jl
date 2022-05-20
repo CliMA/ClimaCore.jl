@@ -102,6 +102,12 @@ end
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = (;)
 
 function implicit_tendency!(Yₜ, Y, p, t)
+    NVTX.isactive() && (
+        profile_implicit_tendency = NVTX.range_start(;
+            message = "implicit tendency",
+            color = colorant"blue",
+        )
+    )
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
@@ -152,19 +158,34 @@ function implicit_tendency!(Yₜ, Y, p, t)
     #     @. Yₜ.c.ρe_int += ᶜFC(ᶠw, ᶜρe_int)
     # end
 
+    NVTX.isactive() && NVTX.range_end(profile_implicit_tendency)
     return Yₜ
 end
 
 function remaining_tendency!(Yₜ, Y, p, t)
+    NVTX.isactive() && (
+        profile_remaining_tendency = NVTX.range_start(;
+            message = "remaining tendency",
+            color = colorant"yellow",
+        )
+    )
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
     additional_tendency!(Yₜ, Y, p, t)
+    NVTX.isactive() && (
+        dss_remaining_tendency = NVTX.range_start(;
+            message = "dss_remaining_tendency",
+            color = colorant"blue",
+        )
+    )
     Spaces.weighted_dss_start!(Yₜ.c, p.ghost_buffer.c)
     Spaces.weighted_dss_start!(Yₜ.f, p.ghost_buffer.f)
     Spaces.weighted_dss_internal!(Yₜ.c, p.ghost_buffer.c)
     Spaces.weighted_dss_internal!(Yₜ.f, p.ghost_buffer.f)
     Spaces.weighted_dss_ghost!(Yₜ.c, p.ghost_buffer.c)
     Spaces.weighted_dss_ghost!(Yₜ.f, p.ghost_buffer.f)
+    NVTX.isactive() && NVTX.range_end(dss_remaining_tendency)
+    NVTX.isactive() && NVTX.range_end(profile_remaining_tendency)
     return Yₜ
 end
 
