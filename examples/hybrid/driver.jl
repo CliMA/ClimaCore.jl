@@ -46,6 +46,7 @@ atexit() do
     global_logger(prev_logger)
 end
 
+using NVTX
 using OrdinaryDiffEq
 using DiffEqCallbacks
 using JLD2
