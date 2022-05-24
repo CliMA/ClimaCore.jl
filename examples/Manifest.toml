@@ -952,9 +952,7 @@ version = "0.8.4"
 
 [[deps.NVTX]]
 deps = ["Colors"]
-git-tree-sha1 = "94511916be25e0b2abc1f7627a99907d8dc57b6f"
-repo-rev = "main"
-repo-url = "https://github.com/simonbyrne/NVTX.jl"
+git-tree-sha1 = "bf350bf3a8f837b3d8fac433721ed4f3f9742a7f"
 uuid = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 version = "0.1.0"
 
