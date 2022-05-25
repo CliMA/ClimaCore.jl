@@ -114,14 +114,25 @@ function Base.copyto!(
     return dest
 end
 
-@noinline function error_mismatched_spaces(
+allow_mismatched_diagonalized_spaces() = false
+
+@noinline function warn_mismatched_spaces(
     space1::Type{S},
     space2::Type{S},
 ) where {S <: AbstractSpace}
-    error(
-        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
-    )
+    @warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance"
+    return nothing
 end
+
+is_diagonalized_spaces(
+    ::Type{S},
+    ::Type{S},
+) where {S <: AbstractSpace} = true
+
+is_diagonalized_spaces(
+    ::Type,
+    ::Type,
+) = false
 
 @noinline function error_mismatched_spaces(space1::Type, space2::Type)
     error("Broacasted spaces are not the same ClimaCore.Spaces type")
@@ -132,7 +143,12 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        error_mismatched_spaces(typeof(space1), typeof(space2))
+        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
+            allow_mismatched_diagonalized_spaces()
+            warn_mismatched_spaces(typeof(space1), typeof(space2))
+        else
+            error_mismatched_spaces(typeof(space1), typeof(space2))
+        end
     end
     return space1
 end
@@ -145,7 +161,12 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        error_mismatched_spaces(typeof(space1), typeof(space2))
+        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
+            allow_mismatched_diagonalized_spaces()
+            warn_mismatched_spaces(typeof(space1), typeof(space2))
+        else
+            error_mismatched_spaces(typeof(space1), typeof(space2))
+        end
     end
     return nothing
 end
