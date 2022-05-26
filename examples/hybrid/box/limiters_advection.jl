@@ -240,6 +240,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         # Set up operators
         # Spectral horizontal operators
         hgrad = Operators.Gradient()
+        hdiv = Operators.Divergence()
         hwdiv = Operators.WeakDivergence()
         # Vertical staggered FD operators
         first_order_Ic2f = Operators.InterpolateC2F(
@@ -267,52 +268,50 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
                 third_order_upwind_c2f.(fuvw, y.ρq ./ y.ρ),
             )
 
-        # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
-        ystar = similar(y)
-        @. ystar.ρq = hwdiv(hgrad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar.ρq)
-        @. ystar.ρq = -D₄ * hwdiv(y.ρ * hgrad(ystar.ρq))
-
         # Compute vertical velocity by interpolating faces to centers
         cw = first_order_If2c.(fw)        # Covariant3Vector on faces, interpolated to centers
         cuvw =
             Geometry.Covariant123Vector.(cuₕ) .+
             Geometry.Covariant123Vector.(cw)
 
-        # 1) Contintuity equation:
-        # 1.1) Horizontal advective flux with horizontal/vertical velocity
+        ## NOTE: With limiters, the order of the operations 1)-5) below matters!
+
+        # 1) Horizontal Transport:
+        # 1.1) Horizontal part of continuity equation:
         @. dy.ρ = beta * dy.ρ - alpha * hwdiv(y.ρ * cuvw)
 
-        # 1.2) Horizontal advective flux with vertical velocity
-        # already accounted for in 1.1)
-
-        # 1.3) Vertical advective flux with horizontal velocity
-        @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* cuₕ))
-
-        # 1.4) Vertical advective flux with vertical velocity
-        @. dy.ρ -= alpha * vert_flux_wρ
-
-        # 2) Advection of tracers equation:
-        # 2.1) Horizontal advective flux with horizontal/vertical velocity
+        # 1.2) Horizontal advection of tracer equations:
         @. dy.ρq = beta * dy.ρq - alpha * hwdiv(y.ρq * cuvw) + alpha * ystar.ρq
 
-        # 2.2) Horizontal advective flux with vertical velocity
-        # already accounted for in 2.1)
-
-        # 2.3) Apply the limiters:
+        # 2) Apply the limiters:
         if lim_flag
+            # First compute the min_q/max_q at the current time step
             Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
+            # Then apply the limiters
             Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
         end
 
-        # 2.4) Vertical advective flux with horizontal/vertical velocity
-        @. dy.ρq -= alpha * vert_flux_wρq
+        # 3) Add Hyperdiffusion to the horizontal tracers equation (using weak div)
+        # Set up working variable needed for hyperdiffusion
+        ystar = similar(y)
 
-        # 2.5) Vertical advective flux with vertical velocity
-        # already accounted for in 2.4)
+        # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
+        @. ystar.ρq = hwdiv(hgrad(y.ρq / y.ρ))
+        Spaces.weighted_dss!(ystar.ρq)
+        @. ystar.ρq = -D₄ * hwdiv(y.ρ * hgrad(ystar.ρq))
 
+        # 4) Vertical Transport:
+        # 4.1) Vertical part of continuity equation
+        @. dy.ρ -= alpha * vert_flux_wρ
+
+        # 4.2) Vertical advection of tracer equation
+        @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* cuₕ))
+
+        # 5) DSS:
         Spaces.weighted_dss!(dy.ρ)
         Spaces.weighted_dss!(dy.ρq)
+
+        return dy
     end
 
     # Set up RHS function

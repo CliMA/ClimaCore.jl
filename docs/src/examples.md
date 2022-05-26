@@ -25,7 +25,7 @@ Follows the continuity equation
 This is discretized using the following
 ```math
 \begin{equation}
-  \frac{\partial}{\partial t} \rho \approx - wD_h[ \rho (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))] - D^c_v[I^f(\rho \boldsymbol{u}_h)) + I^f(\rho) \boldsymbol{u}_v)] .
+  \frac{\partial}{\partial t} \rho \approx - D_h[ \rho (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))] - D^c_v[I^f(\rho \boldsymbol{u}_h)) + I^f(\rho) \boldsymbol{u}_v)] .
 \label{eq:3d-box-advection-lim-discrete-continuity}
 \end{equation}
 ```
@@ -45,7 +45,7 @@ This is discretized using the following
 ```math
 \begin{equation}
 \frac{\partial}{\partial t} \rho q \approx
-- wD_h[ \rho q (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))]
+- D_h[ \rho q (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))]
 - D^c_v\left[I^f(\rho q) U^f\left(I^f(\boldsymbol{u}_h) + \boldsymbol{u}_v, \frac{\rho q}{\rho} \right) \right] + g(\rho, q),
 \label{eq:3d-box-advection-lim-discrete-tracers}
 \end{equation}
@@ -78,6 +78,7 @@ We make use of the following operators
 
 #### Differentiation operators
 
+- ``D_h`` is the [discrete horizontal strong spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Divergence), called `hdiv` in the example code.
 - ``wD_h`` is the [discrete horizontal weak spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakDivergence), called `hwdiv` in the example code.
 - ``D^c_v`` is the [face-to-center vertical divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.DivergenceF2C), called `vdivf2c` in the example code.
   - This example uses advective fluxes equal to zero at the top and bottom boundaries.
@@ -89,6 +90,19 @@ To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rh
 - ``g_2(\rho, q) = -\nu_4 wD_h(\rho G_h(\rho q))``
     - with ``\nu_4`` the hyperviscosity coefficient.
 
+#### Application of Flux Limiters
+
+!!! note
+
+    Since we use flux limiters that limit only operators defined in the spectral space (i.e., they are applied level-wise in the horizontal direction), the application of limiters has to follow a precise order in the sequence of operations that specifies the total tendency.
+
+The order of operations should be the following:
+
+1. Horizontal transport (with strong divergence ``D_h``)
+2. Horizontal Flux Limiters
+3. Horizontal hyperdiffusion (with weak divergence ``wD_h``)
+4. Vertical transport
+5. DSS
 #### Problem flow and set-up
 
 This test case is set up in a Cartesian (box) domain `` [-2 \pi, 2 \pi]^2 \times [0, 4 \pi] ~\textrm{m}^3``, doubly periodic in the horizontal direction, but not in the vertical direction.
