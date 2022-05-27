@@ -112,6 +112,107 @@ This example is set up to run with three possible initial conditions:
 
 ## 2D Sphere examples
 
+### Shallow-water equations
+
+The shallow water equations in the so-called *vector invariant form* from [Bao2014](@cite) are:
+
+
+```math
+\begin{align}
+  \frac{\partial h}{\partial t} + \nabla \cdot (h u) &= 0\\
+  \frac{\partial u_i}{\partial t} + \nabla (\Phi + \tfrac{1}{2}\|u\|^2)_i  &= (\boldsymbol{u} \times (f + \nabla \times \boldsymbol{u}))_i
+\label{eq:shallow-water}
+\end{align}
+```
+where ``f`` is the Coriolis term and ``\Phi = g(h+h_s)``, with ``g`` the gravitational accelration constant, ``h`` the (free) height of the fluid and  ``h_s`` a non-uniform reference surface.
+
+To the above set of equations, we allow the uset to add a hyperdiffusion operator, ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h, \boldsymbol{u})]``, with ``\nu_4`` (measured in m^4/s) the hyperviscosity constant coefficient. In the hyperdiffusion expression, ``\nabla^4`` represents a biharmonic operator, and it assumes a different formulation on curvilinear reference systems, depending on it being applied to a scalar field, such as ``h``, or a vector field, such as ``\boldsymbol{u}``.
+
+
+The governing equations then become:
+
+```math
+\begin{align}
+  \frac{\partial h}{\partial t} + \nabla \cdot (h u) &= g(h, \boldsymbol{u})\\
+  \frac{\partial u_i}{\partial t} + \nabla (\Phi + \tfrac{1}{2}\|u\|^2)_i  &= (\boldsymbol{u} \times (f + \nabla \times \boldsymbol{u}))_i + g(h, \boldsymbol{u})
+\label{eq:shallow-water-with-hyperdiff}
+\end{align}
+```
+
+Since this is a 2D problem (with related 2D vector field), the curl is defined to be
+
+```math
+\begin{align}
+ \omega^i = (\nabla \times u)^i &=
+    \begin{cases}
+        0 &\text{ if $i =1,2$},\\
+        \frac{1}{J} \left[ \frac{\partial u_2}{\partial \xi^1} - \frac{\partial u_1}{\partial \xi^2} \right] &\text{ if $i=3$},
+    \end{cases}
+\label{eq:2Dvorticity}
+\end{align}
+```
+where we have used the coordinate system in each 2D reference element, i.e., ``(\xi^1, \xi^2) \in [-1,1]\times[-1,1]``. Similarly, if additionally ``v^1 = v^2 = 0``, then
+
+```math
+\begin{align}
+   (\boldsymbol{u} \times \boldsymbol{v})_i =
+    \begin{cases}
+          J u^2 v^3 &\text{ if $i=1$},\\
+        - J u^1 v^3 &\text{ if $i=2$},\\
+        0 &\text{ if $i=3$}.
+    \end{cases}
+\end{align}
+```
+
+Hence, we can rewrite equations \eqref{eq:shallow-water} using the velocity representation in covariant coordinates, in this case ``u = u_1 \boldsymbol{b}^1 + u_2 \boldsymbol{b}^2 + 0\boldsymbol{b}^3``, and ``g(h, \boldsymbol{u}) = 0 `` for simplicity, as:
+
+```math
+\begin{align}
+    \frac{\partial h}{\partial t} + \frac{1}{J}\frac{\partial}{\partial \xi^j}\Big(h J u^j\Big) &= 0\\
+    \frac{\partial u_i}{\partial t} + \frac{\partial}{\partial \xi^i} (\Phi + \tfrac{1}{2}\|u\|^2)  &= E_{ijk}u^j (f^k + \omega^k) .
+\label{eq:covariant-shallow-water}
+\end{align}
+```
+
+#### Prognostic variables
+
+* ``h``: scalar _height_ field of the fluid, measured in m.
+* ``\boldsymbol{u}`` _velocity_, a 2D vector measured in m/s.
+#### Differentiation operators
+
+Because this is a purely 2D problem, there is no staggered vertical discretization, hence, there is no need of specifying variables at cell centers, faces or to reconstruct from faces to centers and vice versa.
+
+- ``D`` is the [discrete horizontal strong spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Divergence), called `div` in the example code.
+- ``wD`` is the [discrete horizontal weak spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakDivergence), called `wdiv` in the example code.
+- ``G`` is the [discrete horizontal strong spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Gradient), called `grad` in the example code.
+- ``wG`` is the [discrete horizontal weak spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakGradient), called `wgrad` in the example code.
+- ``Curl`` is the [discrete curl](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Curl), called `curl` in the example code.
+- ``wCurl`` is the [discrete weak curl](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakCurl), called `wcurl` in the example code.
+
+
+To discretize the hyperdiffusion operator, ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h, \boldsymbol{u})]``, in the horizontal direction, we compose the weak divergence, ``wD``, and the gradient operator, ``G``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(h, \boldsymbol{u}) \circ DSS(h, \boldsymbol{u}) \circ g_1(h, \boldsymbol{u})]``. Moreover, when ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h)]``, i.e., the operator is applied to a scalar field only, it is discretized composing the following operations:
+- ``g_1(h) = wD(G(h))``
+- ``DSS(g_1(h))``
+- ``g_2(h) = -\nu_4 wD(G(h))``
+whereas, when the operator is applied to a vector field, i.e., ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (\boldsymbol{u})]``, it is discretized as:
+- ``g_1(h, \boldsymbol{u}) = wG(D(\boldsymbol{u})) - wCurl(Curl(\boldsymbol{u}))``
+- ``DSS(h, \boldsymbol{u}) = DSS(g_1(h, \boldsymbol{u}))``
+- ``g_2(h, \boldsymbol{u}) = -\nu_4 \left[ wG(D(\boldsymbol{u})) - wCurl(Curl(\boldsymbol{u})) \right]``
+
+In both cases, ``\nu_4`` is the hyperviscosity coefficient.
+
+#### Problem flow and set-up
+
+This test case is set up on a 2D (surface) spherical domain represented by a cubed-sphere manifold.
+
+This suite of examples contains five different test cases:
+- One, invoked via the command-line argument `steady_state`, which reproduces Test Case 2 in [Williamson1992](@cite). This test case gives the steady-state solution to the non-linear shallow water equations. It consists of a solid body rotation or zonal flow with the corresponding geostrophic height field. The Coriolis parameter is a function of latitude and longitude so the flow can be specified with the spherical coordinate poles not necessarily coincident with Earth's rotation axis. Hence, this test case can be run with a specified command-line argument for the angle ``\alpha`` that represents the angle between the north pole and the center of the top cube panel of the cubed-sphere geometry.
+- A second one, invoked via the command-line argument `steady_state_compact`, reproduces Test Case 3 in [Williamson1992](@cite). This test case gives the steady-state solution to the non-linear shallow water equations with nonlinear zonal geostrophic flow with compact support.
+- A third one, invoked via the command-line argument `mountain`, reproduces Test Case 5 in [Williamson1992](@cite). It represents a zonal flow over an isolated mountain, where the governing equations describe a global steady-state nonlinear zonal geostrophic flow, with a corresponding geostrophic height field over a non-uniform reference surface `h_s`.
+- A fourth one, invoked via the command-line argument `rossby_haurwitz`, reproduces Test Case 6 in [Williamson1992](@cite). It represents the solution of the nonlinear barotropic vorticity equation on the sphere.
+- A fifth one, invoked via the command-line argument `barotropic_instability`, reproduces the test case in [Galewsky2004](@cite) (also in Sec. 7.6 in [Ullrich2010](@cite)). This test case consists of a zonal jet with compact support at a latitude of ``45°``. A small height disturbance is then added, which causes the jet to become unstable and collapse into a highly vortical structure.
+
+
 ## 3D Sphere examples
 
 ### Deformation Flow with Flux Limiters
@@ -208,7 +309,7 @@ To discretize the hyperdiffusion operator for each tracer concentration, ``g(\rh
 The order of operations should be the following:
 
 1. Horizontal transport (with strong divergence ``D_h``)
-2. Horizontal Flux Limiters
+2. Horizontal flux Limiters
 3. Horizontal hyperdiffusion (with weak divergence ``wD_h``)
 4. Vertical transport
 5. DSS
