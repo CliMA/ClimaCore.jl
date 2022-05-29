@@ -48,6 +48,7 @@ end
         @test length(mesh.faces) == nelems + 1 # number of faces is +1 elements
         @test Meshes.nelements(mesh) == nelems
         @test Meshes.elements(mesh) == UnitRange(1, nelems)
+        @test Meshes.element_horizontal_length_scale(mesh) ≈ 1 / nelems
     end
     dom, mesh = unit_intervalmesh(nelems = 2)
     @test Meshes.domain(mesh) isa Domains.IntervalDomain

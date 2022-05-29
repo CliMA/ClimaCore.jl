@@ -39,7 +39,6 @@ const parameters = (
     ρ₀ = 1.0, # reference density
     c = 2,
     g = 10,
-    D₄ = 1e-4, # hyperdiffusion coefficient
 )
 
 domain = Domains.RectangleDomain(
@@ -105,7 +104,10 @@ function energy(state, p, local_geometry)
 end
 
 function rhs!(dydt, y, _, t)
-    D₄ = parameters.D₄
+    space = axes(y)
+    c = sqrt(parameters.g * parameters.ρ₀)
+    D₄ = 0.0015 * c * Spaces.node_horizontal_length_scale(space)^3 # hyperdiffusion coefficient
+
     g = parameters.g
 
     sdiv = Operators.Divergence()

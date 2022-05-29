@@ -42,7 +42,7 @@ Base.@kwdef struct PhysicalParameters{FT} # rename to PhysicalParameters
     "Gravitational constant"
     g::FT = FT(9.80616)
     "Hyperdiffusion coefficient"
-    D₄::FT = FT(1.0e16)
+    ν₄::FT = FT(0.25)
 end
 #This example solves the shallow-water equations on a cubed-sphere manifold.
 #This file contains five test cases:
@@ -256,7 +256,7 @@ end
 # Set initial condition
 function set_initial_condition(space, test::RossbyHaurwitzTest)
     (; a, h0, ω, K, α, params) = test
-    (; R, Ω, g, D₄) = params
+    (; R, Ω, g) = params
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
         ϕ = coord.lat
@@ -296,7 +296,7 @@ end
 
 function set_initial_condition(space, test::SteadyStateCompactTest)
     (; u0, h0, ϕᵦ, ϕₑ, xₑ, α, params) = test
-    (; R, Ω, g, D₄) = params
+    (; R, Ω, g) = params
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
 
@@ -369,7 +369,7 @@ function set_initial_condition(space, test::SteadyStateCompactTest)
 end
 function set_initial_condition(space, test::BarotropicInstabilityTest)
     (; u_max, αₚ, βₚ, h0, h_hat, ϕ₀, ϕ₁, ϕ₂, eₙ, α, params) = test
-    (; R, Ω, g, D₄) = params
+    (; R, Ω, g) = params
 
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
@@ -428,7 +428,7 @@ function set_initial_condition(
     test::T,
 ) where {T <: Union{MountainTest, SteadyStateTest}}
     (; u0, h0, α, params) = test
-    (; R, Ω, g, D₄) = params
+    (; R, Ω, g) = params
     Y = map(Fields.local_geometry_field(space)) do local_geometry
         coord = local_geometry.coordinates
 
@@ -455,7 +455,11 @@ end
 function rhs!(dYdt, y, parameters, t)
     @nvtx "rhs!" color = colorant"red" begin
         (; f, h_s, ghost_buffer, params) = parameters
-        (; D₄, g) = params
+        (; ν₄, g) = params
+
+        space = axes(y)
+        D₄ = ν₄ * Spaces.node_horizontal_length_scale(space)^3 # hyperdiffusion coefficient
+
 
         div = Operators.Divergence()
         wdiv = Operators.WeakDivergence()
@@ -551,6 +555,8 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
         global_space =
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     end
+    @show Spaces.node_horizontal_length_scale(space)^3
+
     coords = Fields.coordinate_field(space)
     f = set_coriolis_parameter(space, test)
     h_s = surface_topography(space, test)
