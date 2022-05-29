@@ -51,6 +51,13 @@ meshes = [
           CartesianIndices((2, 3))
 end
 
+@testset "element_horizontal_length_scale" begin
+    for mesh in meshes
+        @test Meshes.element_horizontal_length_scale(mesh) ≈
+              sqrt(1 / Meshes.nelements(mesh))
+    end
+end
+
 @testset "opposing face" begin
     for mesh in meshes
         for elem in Meshes.elements(mesh)

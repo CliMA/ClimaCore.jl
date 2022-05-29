@@ -34,6 +34,11 @@ function Base.show(io::IO, mesh::IntervalMesh)
     print(io, " of ")
     print(io, mesh.domain)
 end
+function element_horizontal_length_scale(mesh::IntervalMesh)
+    cmax = Geometry.component(mesh.domain.coord_max, 1)
+    cmin = Geometry.component(mesh.domain.coord_min, 1)
+    return (cmax - cmin) / nelements(mesh)
+end
 
 coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
     mesh.faces[elem + vert - 1]

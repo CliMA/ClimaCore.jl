@@ -119,6 +119,7 @@ Meshes.SharedVertices
 Meshes.face_connectivity_matrix
 Meshes.vertex_connectivity_matrix
 Meshes.linearindices
+Meshes.element_horizontal_length_scale
 ```
 
 ## Topologies
@@ -193,6 +194,10 @@ Spaces.Δz_metric_component
 Spaces.SpectralElementSpace1D
 Spaces.SpectralElementSpace2D
 Spaces.SpectralElementSpaceSlab
+```
+
+```@docs
+Spaces.node_horizontal_length_scale
 ```
 
 ### Quadratures

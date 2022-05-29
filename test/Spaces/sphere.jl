@@ -107,6 +107,9 @@ end
     quad = Quadratures.GLL{Nq}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
+    @test Spaces.node_horizontal_length_scale(horzspace) ≈
+          sqrt((4 * pi * radius^2) / (helem^2 * 6 * (Nq - 1)^2))
+
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
 

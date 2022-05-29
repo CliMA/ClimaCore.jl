@@ -80,6 +80,8 @@ end
                     end
                 end
             end
+            @test Meshes.element_horizontal_length_scale(mesh) ≈
+                  sqrt((4pi * 5^2) / Meshes.nelements(mesh))
         end
     end
 end
