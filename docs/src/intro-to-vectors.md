@@ -1,4 +1,4 @@
-#### Introduction to Vectors and Vector Fields in ClimaCore.jl
+# Introduction to Vectors and Vector Fields in ClimaCore.jl
 _Vector_ can mean a few things depending on context:
 
 - In Julia, a `Vector` is just an ordered collection of values (i.e., a container).
@@ -23,7 +23,7 @@ ClmaCore supports different coordinate systems and, therefore, vector representa
 In fact, one of the key requirements of ClimaCore is to support vectors specified
 in orthogonal (Cartesian) and curvilinear coordinate systems.
 
-#### `LocalVector`: `UVector`, `UVVector`, and `UVWVector`, etc; a "universal" basis
+# `LocalVector`: `UVector`, `UVVector`, and `UVWVector`, etc; a "universal" basis
 
 The easiest basis to use is the "UVW" basis, which can be defined in both Cartesian
 or spherical domains:
@@ -48,7 +48,7 @@ that can be equally defined on Cartesian or spherical spaces.
 But if users need to compute with them, or feed differential operators with them,
 then may want to consider different bases, as not all operators accept all bases.
 
-#### Covariant and Contravariant bases
+# Covariant and Contravariant bases
 
 ![Different bases supported in ClimaCore.jl](Bases.png)
 
@@ -79,12 +79,12 @@ while the _contravariant basis_ is the opposite: gradient in ``x`` of the coordi
 * things get a little more complicated in the presence of terrain, but ``\xi^3`` is radially aligned
   - the 3rd covariant component is aligned with W, but the 3rd contravariant component may not be (e.g. at the surface it is normal to the boundary).
 
-#### Cartesian bases
+# Cartesian bases
 Analogously to `CartesianPoint`s, in ClimaCore, there are also `CartesianVector`s:
 these allow conversion to a global Cartesian basis. It is intended mainly for
 visualization purposes.
 
-#### Conversions
+# Conversions
 
 To convert between different vector bases, you need a `LocalGeometry` object:
 this contains all the necessary information (coordinates, metric terms, etc)

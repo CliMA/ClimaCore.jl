@@ -68,6 +68,8 @@ withenv("GKSwstype" => "nul") do
             "Home" => "index.md",
             "Introduction" => "intro.md",
             "API" => "api.md",
+            "Intro to Vectors" => "intro-to-vectors.md",
+            "Intro to SEM" => "intro-to-sem.md",
             "Operators" => "operators.md",
             "Developer docs" => ["Performance tips" => "performance_tips.md"],
             "Tutorials" => [
