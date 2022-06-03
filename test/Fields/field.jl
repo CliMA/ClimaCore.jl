@@ -292,3 +292,21 @@ end
     @test isapprox(Fields.field_values(sin_field)[], FT(0.0); atol = √eps(FT))
     @test isapprox(Fields.field_values(add_field)[], FT(2π))
 end
+
+@testset "Broadcasting same spaces different instances" begin
+    space1 = spectral_space_2D()
+    space2 = spectral_space_2D()
+    field1 = ones(space1)
+    field2 = 2 .* ones(space2)
+    @test Fields.is_diagonalized_spaces(typeof(space1), typeof(space2))
+    @test_throws ErrorException(
+        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
+    ) field1 .= field2
+
+    # turn warning on
+    Fields.allow_mismatched_diagonalized_spaces() = true
+    @test_warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance" field1 .=
+        field2
+    @test parent(field1) == parent(field2)
+    Fields.allow_mismatched_diagonalized_spaces() = false
+end
