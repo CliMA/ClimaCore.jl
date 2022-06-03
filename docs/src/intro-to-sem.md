@@ -1,4 +1,4 @@
-#### Introduction to the Finite/Spectral Element Method
+# Introduction to the Finite/Spectral Element Method
 
 In finite element formulations, the weak form of a Partial Differential Equation
 (PDE)---which involves integrating all terms in the PDE over the domain---is
