@@ -128,3 +128,22 @@ function Base.iterate(iter::FieldIterator, state = 1)
     pc = iter.prop_chains[state]
     return ((single_field(f, pc), pc), state + 1)
 end
+
+const ColumnIteratorTypes =
+    Union{ExtrudedFiniteDifferenceField, FiniteDifferenceField}
+ColumnIterator(field::ColumnIteratorTypes) = Spaces.ColumnIterator(axes(field))
+
+"""
+    iterate_columns(::ExtrudedFiniteDifferenceField)
+    iterate_columns(::FiniteDifferenceField)
+
+Iterates over columns given a field (or space)
+
+```julia
+for inds in Spaces.iterate_columns(field)
+    column_field = Fields.column(field, inds...)
+end
+```
+"""
+iterate_columns(field::ColumnIteratorTypes) =
+    Spaces.iterate_columns(axes(field))

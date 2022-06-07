@@ -29,10 +29,10 @@ using Test
     @test length(collect(Spaces.unique_nodes(space))) ==
           nn - nn2 - 2 * nn3 - 3 * nn4
 
-    point_space = column(space, 1, 1, 1)
+    point_space = Spaces.column(space, 1, 1, 1)
     @test point_space isa Spaces.PointSpace
     @test Spaces.coordinates_data(point_space)[] ==
-          column(Spaces.coordinates_data(space), 1, 1, 1)[]
+          Spaces.column(Spaces.coordinates_data(space), 1, 1, 1)[]
 end
 
 @testset "Volume of a spherical shell" begin
@@ -63,4 +63,8 @@ end
     # "shallow atmosphere" spherical shell: volume = surface area * height
     @test sum(ones(hv_center_space)) ≈ 4pi * radius^2 * (zlim[2] - zlim[1]) rtol =
         1e-3
+
+    Ni, Nj, _, _, Nh = size(Spaces.local_geometry_data(hv_center_space))
+    @test Spaces.iterate_columns(hv_center_space) ==
+          Iterators.product(1:Ni, 1:Nj, 1:Nh)
 end

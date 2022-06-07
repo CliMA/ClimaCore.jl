@@ -37,5 +37,6 @@ include("finitedifference.jl")
 include("hybrid.jl")
 include("triangulation.jl")
 include("dss.jl")
+include("column_iterator.jl")
 
 end # module

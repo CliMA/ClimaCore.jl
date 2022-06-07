@@ -212,6 +212,13 @@ end
     object_that_contains_Yf = (; Yf)
     @test axes(deepcopy(Yf).field_vf) === space_vf
     @test axes(deepcopy(object_that_contains_Yf).Yf.field_vf) === space_vf
+
+    @test Fields.iterate_columns(Y.field_vf) ==
+          Spaces.iterate_columns(axes(Y.field_vf))
+    @test Fields.iterate_columns(Y.field_vifh) ==
+          Spaces.iterate_columns(axes(Y.field_vifh))
+    @test Fields.iterate_columns(Y.field_vijfh) ==
+          Spaces.iterate_columns(axes(Y.field_vijfh))
 end
 
 @testset "Scalar field iterator" begin

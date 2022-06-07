@@ -69,6 +69,7 @@ end
         @test point_space isa Spaces.PointSpace
         @test Spaces.coordinates_data(point_space)[] ==
               Spaces.level(coord_data, 1)[]
+        @test collect(Spaces.iterate_columns(space)) == [(1, 1, 1);;;]
     end
 
     x_max = FT(0)
