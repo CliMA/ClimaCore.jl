@@ -110,6 +110,7 @@ include("common.jl")
 include("interval.jl")
 include("rectangle.jl")
 include("cubedsphere.jl")
+include("latlong.jl")
 
 # deprecations
 @deprecate EquispacedRectangleMesh(args...) RectilinearMesh(args...)
