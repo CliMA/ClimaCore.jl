@@ -255,7 +255,7 @@ function overlap_weights!(J_ov, target, source, i, j, coords_t, coords_s)
         targ_idx = Nq_t * (i - 1) + k # global nodal index
         for l in 1:Nq_s
             src_idx = Nq_s * (j - 1) + l
-            # (integral of src_basis * tgt_basis on overlap) / (reference elem length * overlap elem length)
+            # (integral of src_basis * tgt_basis on overlap) / (reference elem length) * overlap elem length
             J_ov[targ_idx, src_idx] =
                 (w_ov' * (I_mat_t[:, k] .* I_mat_s[:, l])) ./ 2 *
                 (max_ov - min_ov)
@@ -289,4 +289,100 @@ See [Ullrich2015] section 2.
 function local_weights(space::AbstractSpace)
     wj = space.local_geometry.WJ
     return vec(parent(wj))
+end
+
+## RegularLatLong interpolation
+struct RLLRemap{
+    T <: Meshes.RegularLatLongMesh,
+    S <: AbstractSpace,
+    M <: AbstractMatrix,
+    E <: AbstractVector,
+}
+    target::T # rll mesh
+    source::S # source space
+    map::M # linear mapping operator
+    elems::E # elements associated with target pts
+end
+
+function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
+
+    source_mesh = Spaces.topology(source_space).mesh
+    latitude, longitude = target_mesh.lat, target_mesh.long
+
+    coords = []
+    for lat in latitude
+        for long in longitude
+            coord = Geometry.LatLongPoint(lat, long)
+            elem = Meshes.containing_element(source_mesh, coord)
+            push!(
+                coords,
+                (coord = Geometry.LatLongPoint(lat, long), elem = elem),
+            )
+        end
+    end
+    p = sortperm(coords, by = coord -> coord.elem)
+    permute!(coords, p)
+    coords = map(coords, 1:length(coords)) do coord, i
+        (coord..., idx = i)
+    end
+    elems = map(x -> (elem = x.elem, idx = x.idx), unique(x -> x.elem, coords))
+
+    QS_s = Spaces.quadrature_style(source_space)
+    Nq_s = Quadratures.degrees_of_freedom(QS_s)
+    # rows - for each rll coord, cols - for each node in corresponding elem
+    op = spzeros(length(coords), Nq_s^2)
+    for i in 1:length(elems)
+        # better solution than start_idx, last_idx?
+        elem, start_idx = elems[i]
+        last_idx = i == length(elems) ? length(coords) : elems[i + 1].idx - 1
+        for j in start_idx:last_idx
+            op[j, :] = remap_weights(coords[j].coord, elem, source_space)
+        end
+    end
+    return RLLRemap(target_mesh, source_space, op, elems)
+end
+
+"""
+    remap(R::RLLRemap, source_field::Field)
+
+Applies `R` to `source_field` and outputs a vector of values corresponding to latlong pts.
+"""
+function remap(R::RLLRemap, source_field::Field)
+    target_vec = zeros(Meshes.ncoordinates(R.target))
+    remap!(target_vec, R, source_field)
+end
+
+"""
+    remap!(target_vec::Field, R::RLLRemap, source_field::Field)
+
+Applies the remapping operator `R` to `source_field` and stores the solution in `target_vec`.
+"""
+function remap!(target_vec, R::RLLRemap, source_field::Field)
+    @assert (R.source == axes(source_field)) "Remap operator and field space dimensions do not match."
+    @assert (length(target_vec) == Meshes.ncoordinates(R.target)) "Target vector and operator mesh dimensions do not match."
+    data = parent(source_field)
+    for (i, elem) in enumerate(R.elems)
+        elem_idx =
+            Topologies.localelemindex(axes(source_field).topology, elem.elem)
+        start_idx = elem.idx
+        last_idx =
+            i == length(R.elems) ? length(target_vec) : R.elems[i + 1].idx - 1
+        for j in start_idx:last_idx
+            # multiply rows of map by nodal values in corresponding element
+            target_vec[j] = R.map[j, :]' * vec(data[:, :, 1, elem_idx])
+        end
+    end
+    return target_vec
+end
+
+function remap_weights(coord, elem, source_space)
+    FT = Spaces.undertype(source_space)
+    quad = Spaces.quadrature_style(source_space)
+    source_mesh = Spaces.topology(source_space).mesh
+
+    ξ, w = Quadratures.quadrature_points(FT, quad)
+    ξ_latlong = Meshes.reference_coordinates(source_mesh, elem, coord)
+    Imat_x = Quadratures.interpolation_matrix(SVector(ξ_latlong[1]), ξ)
+    Imat_y = Quadratures.interpolation_matrix(SVector(ξ_latlong[2]), ξ)
+    return kron(Imat_y, Imat_x) #weights to get from nodes in elem to coord
 end
