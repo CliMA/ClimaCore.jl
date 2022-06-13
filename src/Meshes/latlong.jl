@@ -18,14 +18,14 @@ function RegularLatLongMesh(
     @assert -180 <= long_bounds[1] < long_bounds[2] <= 180
 
     FT = typeof(domain.radius)
-    lat = range(ClosedInterval{FT}(lat_bounds[1], lat_bounds[2]), nlat) # lat [-90, 90]
+    lat = range(lat_bounds[1], lat_bounds[2], length = nlat)
     if long_bounds[1] + 360 ≈ long_bounds[2] # periodic, long_bounds[2] "=" long_bounds[1]
         long = range(
             Interval{:closed, :open, FT}(long_bounds[1], long_bounds[2]),
             nlong,
-        ) # long (-180, 180]
+        )
     else
-        long = range(ClosedInterval{FT}(long_bounds[1], long_bounds[2]), nlong) # long (-180, 180]
+        long = range(long_bounds[1], long_bounds[2], length = nlong)
     end
     return RegularLatLongMesh{typeof.((domain, lat))...}(domain, lat, long)
 end
