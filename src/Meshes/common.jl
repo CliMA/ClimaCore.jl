@@ -82,7 +82,7 @@ inverse map from `orderindex = linearindices(elemorder)` such that
 This will try to use the most efficient structure available.
 """
 linearindices(elemorder::CartesianIndices) = LinearIndices(elemorder)
-function linearindices(elemorder::AbstractVector{CartesianIndex})
+function linearindices(elemorder::AbstractVector{<:CartesianIndex})
     cmax = maximum(elemorder)
     L = zeros(Int, cmax.I)
     for (i, c) in enumerate(elemorder)
@@ -92,7 +92,7 @@ function linearindices(elemorder::AbstractVector{CartesianIndex})
 end
 function linearindices(elemorder)
     orderindex = Dict{eltype(elemorder), Int}()
-    for (i, elem) in elemorder
+    for (i, elem) in enumerate(elemorder)
         orderindex[elem] = i
     end
     return orderindex

@@ -109,11 +109,13 @@ Meshes.linearindices
 
 ## Topologies
 A `Topology` determines the ordering and connections between elements of a mesh.
+![Space-filling curve element ordering for a cubed sphere mesh](cubedsphere_spacefillingcurve.png)
 ### Types
 ```@docs
 Topologies.AbstractTopology
 Topologies.IntervalTopology
 Topologies.Topology2D
+Topologies.spacefillingcurve
 ```
 
 ### Interfaces
