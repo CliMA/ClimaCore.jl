@@ -19,7 +19,9 @@ using Base: operator_associativity
 @time include("Meshes/cubedsphere.jl")
 
 @time include("Topologies/rectangle.jl")
+@time include("Topologies/rectangle_sfc.jl")
 @time include("Topologies/cubedsphere.jl")
+@time include("Topologies/cubedsphere_sfc.jl")
 @time include("Topologies/distributed.jl")
 
 @time include("Spaces/quadrature.jl")

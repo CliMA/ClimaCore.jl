@@ -1,4 +1,5 @@
 using ClimaComms, DataStructures
+using GilbertCurves
 
 """
     DistributedTopology2D(mesh::AbstractMesh2D, elemorder=Mesh.elements(mesh))
@@ -85,6 +86,41 @@ struct DistributedTopology2D{
     boundaries::BF
 end
 
+"""
+    spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
+
+Generate element ordering, `elemorder`, based on a space filling curve
+for a `CubedSphere` mesh.
+
+"""
+function spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
+    ne = mesh.ne
+    majordim = [1, 2, 1, 2, 1, 2]
+    elemorder = CartesianIndex{3}[]
+    for panel in 1:6
+        push!(
+            elemorder,
+            [
+                CartesianIndex(cartidx, panel) for
+                cartidx in gilbertindices((ne, ne); majdim = majordim[panel])
+            ]...,
+        )
+    end
+    return elemorder
+end
+
+"""
+    spacefillingcurve(mesh::Meshes.RectilinearMesh)
+
+Generate element ordering, `elemorder`, based on a space filling curve
+for a `Rectilinear` mesh.
+
+"""
+spacefillingcurve(mesh::Meshes.RectilinearMesh) = gilbertindices((
+    Meshes.nelements(mesh.intervalmesh1),
+    Meshes.nelements(mesh.intervalmesh2),
+))
+
 # returns partition[1..nelems] where partition[e] = pid of the owning process
 function simple_partition(elemorder, npart::Int)
     nelems = length(elemorder)
@@ -104,11 +140,10 @@ function simple_partition(elemorder, npart::Int)
     return partition
 end
 
-
 function DistributedTopology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
-    elemorder = Meshes.elements(mesh), # an iterator of mesh elements (typically a map Int => CartesianIndex)
+    elemorder = spacefillingcurve(mesh), # obtain elemorder from space-filling curve
     elempid = nothing, # array of same size as elemorder, containing owning pid for each element (it should be sorted)
     orderindex = Meshes.linearindices(elemorder), # inverse mapping of elemorder (e.g. map CartesianIndex => Int)
 )

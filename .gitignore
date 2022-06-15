@@ -26,6 +26,7 @@ docs/src/tutorials/
 
 # Check in the docs and examples manifests
 !docs/Manifest.toml
+!docs/src/assets/
 !examples/Manifest.toml
 !perf/Manifest.toml
 
