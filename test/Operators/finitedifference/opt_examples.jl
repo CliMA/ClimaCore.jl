@@ -65,7 +65,7 @@ if VERSION >= v"1.7.0"
                 @. cfield.z = cfield.x * cfield.y * Ic(ffield.y) * Ic(ffield.x) * cfield.ϕ * cfield.ψ
             end
             #! format: off
-            @test_broken p == 0
+            @test p == 0
             @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
             p = @allocated begin
                 @. cz = cx * cy * Ic(fy) * Ic(fx) * cϕ * cψ
@@ -89,7 +89,7 @@ if VERSION >= v"1.7.0"
                 @. ffield.z = ffield.x * ffield.y * If(cfield.y) * If(cfield.x) * ffield.ϕ * ffield.ψ
             end
             #! format: on
-            @test_broken p == 0
+            @test p == 0
             @. fz = fx * fy * If(cy) * If(cx) * fϕ * fψ
             p = @allocated begin
                 @. fz = fx * fy * If(cy) * If(cx) * fϕ * fψ
@@ -139,7 +139,7 @@ if VERSION >= v"1.7.0"
                 @. cfield.z = cfield.x * cfield.y * ∇c(wvec(ffield.y)) * ∇c(wvec(ffield.x)) * cfield.ϕ * cfield.ψ
             end
             #! format: on
-            @test_broken p == 0
+            @test p == 0
             @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
             p = @allocated begin
                 @. cz = cx * cy * ∇c(wvec(fy)) * ∇c(wvec(fx)) * cϕ * cψ
@@ -485,14 +485,15 @@ if VERSION >= v"1.7.0"
                 p_i = @allocated begin
                     a_up_bcs = a_bcs(FT, i)
                     Iaf2 = Operators.InterpolateC2F(; a_up_bcs...)
+                    # add extra parentheses so that we call +(+(a,b,c),d), as +(a,b,c,d) triggers allocations
                     @. fynt =
-                        -(∇f(wvec(LBC(Iaf2(cxnt) * fx * fxnt * fxnt)))) +
+                        (-(∇f(wvec(LBC(Iaf2(cxnt) * fx * fxnt * fxnt)))) +
                         (fx * Iaf2(cxnt) * fxnt * (I0f(cz) * fy - I0f(cy) * fxnt)) +
-                        (fx * Iaf2(cxnt) * I0f(cϕ)) +
+                        (fx * Iaf2(cxnt) * I0f(cϕ))) +
                         fψ
                 end
                 #! format: on
-                @test_broken p_i == 0
+                @test p_i == 0
             end
         end
 
