@@ -67,7 +67,7 @@ const T_0 = 273.16 # triple point temperature
 Φ(z) = grav * z
 
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
-# Prognostic thermodynamic variable: Total Energy 
+# Prognostic thermodynamic variable: Total Energy
 function init_dry_rising_bubble_2d(x, z)
     x_c = 0.0
     z_c = 350.0
@@ -243,8 +243,8 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.02
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 500.0))
+Δt = 0.04
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 1400.0))
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
