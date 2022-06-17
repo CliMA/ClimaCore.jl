@@ -157,6 +157,12 @@ end
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     _getproperty(data, Val{name}())
 end
+@inline function Base.dotgetproperty(
+    data::AbstractData{S},
+    name::Symbol,
+) where {S}
+    _getproperty(data, Val{name}())
+end
 
 #= Generic function impl fallback
 @noinline function error_invalid_fieldname(@nospecialize(S::Type), name::Symbol)

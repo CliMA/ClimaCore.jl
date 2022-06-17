@@ -83,6 +83,8 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline Base.axes(field::Field) = getfield(field, :space)
 
 # need to define twice to avoid ambiguities
+@inline Base.dotgetproperty(field::Field, prop) = Base.getproperty(field, prop)
+
 @inline Base.getproperty(field::Field, name::Symbol) = Field(
     DataLayouts._getproperty(field_values(field), Val{name}()),
     axes(field),
