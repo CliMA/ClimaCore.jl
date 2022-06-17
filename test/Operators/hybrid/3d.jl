@@ -282,3 +282,17 @@ end
     @show err
     @test err[4] ≤ err[3] ≤ err[2] ≤ err[1]
 end
+
+
+@testset "bycolumn fuse" begin
+    hv_center_space, hv_face_space =
+        hvspace_3D((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))
+
+    fz = Fields.coordinate_field(hv_face_space).z
+    ∇ = Operators.GradientF2C()
+    ∇z = map(coord -> WVector(0.0), Fields.coordinate_field(hv_center_space))
+    Fields.bycolumn(hv_center_space) do colidx
+        @. ∇z[colidx] = WVector(∇(fz[colidx]))
+    end
+    @test ∇z == WVector.(∇.(fz))
+end

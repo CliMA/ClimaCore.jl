@@ -626,3 +626,18 @@ end
 
     @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
 end
+
+
+@testset "bycolumn fuse" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(xlim = (-pi, pi), zlim = (-pi, pi))
+
+    fz = Fields.coordinate_field(hv_face_space).z
+    ∇ = Operators.GradientF2C()
+    ∇z = map(coord -> WVector(0.0), Fields.coordinate_field(hv_center_space))
+    Fields.bycolumn(hv_center_space) do colidx
+        @. ∇z[colidx] = WVector(∇(fz[colidx]))
+    end
+    @test ∇z == WVector.(∇.(fz))
+
+end
