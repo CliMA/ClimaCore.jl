@@ -170,6 +170,11 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
+    # 1.c) vertical upwinding
+    third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
     # we want the total u³ at the boundary to be zero: we can either constrain
     # both to be zero, or allow one to be non-zero and set the other to be its
     # negation
@@ -215,7 +220,7 @@ function rhs_invariant!(dY, Y, _, t)
     # 3) total energy
 
     @. dρe -= hdiv(cuw * (cρe + cp))
-    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c((Ic2f(cρ) * third_order_upwind_c2f(fw, (cρe + cp) / cρ)))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     fcc = Operators.FluxCorrectionC2C(
@@ -244,7 +249,7 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 # run!
 using OrdinaryDiffEq
 Δt = 0.04
-prob = ODEProblem(rhs_invariant!, Y, (0.0, 1400.0))
+prob = ODEProblem(rhs_invariant!, Y, (0.0, 1200.0))
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
