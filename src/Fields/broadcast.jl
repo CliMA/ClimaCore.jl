@@ -32,6 +32,27 @@ Base.Broadcast.broadcastable(field::Field) = field
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
+# _first: recursively get the first element
+_first_data_layout(data::DataLayouts.VF) = data[1]
+_first_data_layout(data::DataLayouts.DataF) = data[]
+_first(x::Real) = x
+_first(x::Geometry.LocalGeometry) = x
+_first(data::DataLayouts.VF) = data[]
+_first(field::Field) = _first_data_layout(field_values(column(field, 1, 1, 1)))
+_first(space::Spaces.AbstractSpace) =
+    _first_data_layout(field_values(column(space, 1, 1, 1)))
+_first(bc::Base.Broadcast.Broadcasted) = _first.(bc.args) # Is this case necessary?
+_first(x::Base.RefValue{T}) where {T} = x
+unref(x::Ref{T}) where {T} = x.x
+unref(T) = T
+
+function call_with_first(bc)
+    # Try calling with first applied to all arguments:
+    bc′ = Base.Broadcast.preprocess(nothing, bc)
+    first_args = map(arg -> unref(_first(arg)), bc′.args)
+    bc.f(first_args...)
+end
+
 # we implement our own to avoid the type-widening code, and throw a more useful error
 struct BroadcastInferenceError <: Exception
     bc::Base.Broadcast.Broadcasted
@@ -39,8 +60,9 @@ end
 
 function Base.showerror(io::IO, err::BroadcastInferenceError)
     print(io, "BroadcastInferenceError: cannot infer eltype.\n")
-    f = err.bc.f
-    eltypes = tuplemap(eltype, err.bc.args)
+    bc = err.bc
+    f = bc.f
+    eltypes = tuplemap(eltype, bc.args)
     if !hasmethod(f, eltypes)
         print(io, "  function $(f) does not have a method for $(eltypes)")
     else
@@ -53,6 +75,7 @@ function Base.copy(
 ) where {Style <: AbstractFieldStyle}
     ElType = eltype(bc)
     if !Base.isconcretetype(ElType)
+        call_with_first(bc)
         throw(BroadcastInferenceError(bc))
     end
     # We can trust it and defer to the simpler `copyto!`
