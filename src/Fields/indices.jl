@@ -43,8 +43,8 @@ multiple column-wise operations in a single pass, making use of multiple threads
 div = DivergenceC2F()
 
 bycolumn(axes(f)) do colidx
-    @. dg[colidx] = ∇(f[colidx])
-    @. df[colidx] = div(g[colidx])
+    @. ∇f[colidx] = ∇(f[colidx])
+    @. df[colidx] = div(∇f[colidx])
 end
 ```
 """
