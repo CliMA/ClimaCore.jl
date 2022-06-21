@@ -1,5 +1,6 @@
 import ClimaCore
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Hypsography
 using NCDatasets
 using TempestRemap_jll
 using Test
@@ -145,6 +146,118 @@ end
         @test lats ≈ -89:2:89
         @test lons ≈ 1:2:359
         @test zs == 2.5:5:47.5
+        @test Array(nc_rll["xlat"]) ≈ ones(nlon, nlat, nlevels) .* lats' rtol =
+            0.1
+        @test Array(nc_rll["xz"]) ≈
+              ones(nlon, nlat, nlevels) .* reshape(zs, (1, 1, nlevels)) rtol =
+            0.1
+    end
+end
+
+function test_warp(coords)
+    λ, ϕ = coords.long, coords.lat
+    FT = eltype(λ)
+    ϕₘ = FT(0) # degrees (equator)
+    λₘ = FT(3 / 2 * 180)  # degrees
+    rₘ = @. FT(acos(sind(ϕₘ) * sind(ϕ) + cosd(ϕₘ) * cosd(ϕ) * cosd(λ - λₘ))) # Great circle distance (rads)
+    Rₘ = FT(3π / 4) # Moutain radius
+    ζₘ = FT(π / 16) # Mountain oscillation half-width
+    h₀ = FT(10)
+    if rₘ < Rₘ
+        zₛ = FT(h₀ / 2) * (1 + cospi(rₘ / Rₘ))
+    else
+        zₛ = @. FT(0)
+    end
+    return zₛ
+end
+
+@testset "write remap warped 3d sphere data $node_type" for node_type in
+                                                            ["cgll", "dgll"]
+    # generate CC mesh
+    ne = 4
+    R = 1000.0
+    nlevels = 10
+    Nq = 5
+    hdomain = Domains.SphereDomain(R)
+    hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
+    htopology = Topologies.Topology2D(hmesh)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+
+    vdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(50.0);
+        boundary_tags = (:bottom, :top),
+    )
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
+    vfspace = Spaces.FaceFiniteDifferenceSpace(vmesh)
+    z_surface = test_warp.(Fields.coordinate_field(hspace))
+    fhvspace = Spaces.ExtrudedFiniteDifferenceSpace(
+        hspace,
+        vfspace,
+        Hypsography.LinearAdaption(),
+        z_surface,
+    )
+    chvspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fhvspace)
+
+    # write mesh
+    meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
+    write_exodus(meshfile_cc, htopology)
+
+    # write data
+    datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
+    NCDataset(datafile_cc, "c") do nc
+        def_space_coord(nc, chvspace; type = node_type)
+        def_space_coord(nc, fhvspace; type = node_type)
+
+        nc_xlat = defVar(nc, "xlat", Float64, chvspace)
+        nc_xz = defVar(nc, "xz", Float64, chvspace)
+        nc_xz_half = defVar(nc, "xz_half", Float64, fhvspace)
+
+        nc_xlat[:] = Fields.coordinate_field(chvspace).lat
+        nc_xz[:] = Fields.coordinate_field(chvspace).z
+        nc_xz_half[:] = Fields.coordinate_field(fhvspace).z
+        nothing
+    end
+
+    nlat = 90
+    nlon = 180
+    meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
+    rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
+
+    meshfile_overlap = joinpath(OUTPUT_DIR, "mesh_overlap.g")
+    overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
+
+    weightfile = joinpath(OUTPUT_DIR, "remap_weights.nc")
+    remap_weights(
+        weightfile,
+        meshfile_cc,
+        meshfile_rll,
+        meshfile_overlap;
+        in_type = node_type,
+        in_np = Nq,
+    )
+
+    datafile_rll = joinpath(OUTPUT_DIR, "data_rll_3d.nc")
+    apply_remap(
+        datafile_rll,
+        datafile_cc,
+        weightfile,
+        ["xlat", "xz", "xz_half"],
+    )
+
+    NCDataset(datafile_rll) do nc_rll
+        lats = Array(nc_rll["lat"])
+        lons = Array(nc_rll["lon"])
+        zs = Array(nc_rll["z"])
+        xzs = Array(nc_rll["xz"])
+        xzhalfs = Array(nc_rll["xz_half"])
+        @test size(xzs) == (180, 90, 10)
+        @test size(xzhalfs) == (180, 90, 11)
+        @test lats ≈ -89:2:89
+        @test lons ≈ 1:2:359
+        @test maximum(xzs[:, :, 1]) ≈ 12.0 rtol = 0.1
+        @test maximum(xzhalfs[:, :, 1]) ≈ 10.0 rtol = 0.1
         @test Array(nc_rll["xlat"]) ≈ ones(nlon, nlat, nlevels) .* lats' rtol =
             0.1
         @test Array(nc_rll["xz"]) ≈
