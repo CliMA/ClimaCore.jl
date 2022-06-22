@@ -823,7 +823,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: 3D sphere inertial gravity wave"
+  - label: ":computer: 2D plane inertial gravity wave"
     key: "cpu_inertial_gravity_wave"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
