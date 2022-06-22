@@ -50,6 +50,11 @@ const ᶜFC = Operators.FluxCorrectionC2C(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
+const ᶠupwind_product1 = Operators.UpwindBiasedProductC2F()
+const ᶠupwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
+    bottom = Operators.ThirdOrderOneSided(),
+    top = Operators.ThirdOrderOneSided(),
+)
 
 const ᶜinterp_stencil = Operators.Operator2Stencil(ᶜinterp)
 const ᶠinterp_stencil = Operators.Operator2Stencil(ᶠinterp)
@@ -62,12 +67,12 @@ pressure_ρθ(ρθ) = p_0 * (ρθ * R_d / p_0)^γ
 pressure_ρe(ρe, K, Φ, ρ) = ρ * R_d * ((ρe / ρ - K - Φ) / cv_d + T_tri)
 pressure_ρe_int(ρe_int, ρ) = R_d * (ρe_int / cv_d + ρ * T_tri)
 
-get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt) = merge(
-    default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y),
+get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode) = merge(
+    default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode),
     additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt),
 )
 
-function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y)
+function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
     ᶜcoord = ᶜlocal_geometry.coordinates
     if eltype(ᶜcoord) <: Geometry.LatLongZPoint
         ᶜf = @. 2 * Ω * sind(ᶜcoord.lat)
@@ -89,6 +94,9 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y)
             ᶜlocal_geometry,
             Operators.StencilCoefs{-half, half, NTuple{2, FT}},
         ),
+        ᶠupwind_product = upwinding_mode == :first_order ? ᶠupwind_product1 :
+                          upwinding_mode == :third_order ? ᶠupwind_product3 :
+                          nothing,
         ghost_buffer = (
             c = Spaces.create_ghost_buffer(Y.c),
             f = Spaces.create_ghost_buffer(Y.f),
@@ -105,7 +113,7 @@ function implicit_tendency!(Yₜ, Y, p, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
-    (; ᶜK, ᶜΦ, ᶜp) = p
+    (; ᶜK, ᶜΦ, ᶜp, ᶠupwind_product) = p
 
     # Used for automatically computing the Jacobian ∂Yₜ/∂Y. Currently requires
     # allocation because the cache is stored separately from Y, which means that
@@ -122,20 +130,41 @@ function implicit_tendency!(Yₜ, Y, p, t)
     if :ρθ in propertynames(Y.c)
         ᶜρθ = Y.c.ρθ
         @. ᶜp = pressure_ρθ(ᶜρθ)
-        @. Yₜ.c.ρθ = -(ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw))
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρθ = -(ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw))
+        else
+            @. Yₜ.c.ρθ =
+                -(ᶜdivᵥ(ᶠinterp(Y.c.ρ) * ᶠupwind_product(ᶠw, ᶜρθ / Y.c.ρ)))
+        end
     elseif :ρe in propertynames(Y.c)
         ᶜρe = Y.c.ρe
         @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
-        @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρe = -(ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw))
+        else
+            @. Yₜ.c.ρe = -(ᶜdivᵥ(
+                ᶠinterp(Y.c.ρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / Y.c.ρ),
+            ))
+        end
     elseif :ρe_int in propertynames(Y.c)
         ᶜρe_int = Y.c.ρe_int
         @. ᶜp = pressure_ρe_int(ᶜρe_int, ᶜρ)
-        @. Yₜ.c.ρe_int = -(
-            ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) -
-            ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
-        )
-        # or, equivalently,
-        # @. Yₜ.c.ρe_int = -(ᶜdivᵥ(ᶠinterp(ᶜρe_int) * ᶠw) + ᶜp * ᶜdivᵥ(ᶠw))
+        if isnothing(ᶠupwind_product)
+            @. Yₜ.c.ρe_int = -(
+                ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) -
+                ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
+            )
+            # or, equivalently,
+            # Yₜ.c.ρe_int = -(ᶜdivᵥ(ᶠinterp(ᶜρe_int) * ᶠw) + ᶜp * ᶜdivᵥ(ᶠw))
+        else
+            @. Yₜ.c.ρe_int = -(
+                ᶜdivᵥ(
+                    ᶠinterp(Y.c.ρ) *
+                    ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / Y.c.ρ),
+                ) -
+                ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
+            )
+        end
     end
 
     Yₜ.c.uₕ .= Ref(zero(eltype(Yₜ.c.uₕ)))
@@ -253,13 +282,20 @@ function Wfact!(W, Y, p, dtγ, t)
     ᶜρ = Y.c.ρ
     ᶜuₕ = Y.c.uₕ
     ᶠw = Y.f.w
-    (; ᶜK, ᶜΦ, ᶜp, ∂ᶜK∂ᶠw_data) = p
+    (; ᶜK, ᶜΦ, ᶜp, ∂ᶜK∂ᶠw_data, ᶠupwind_product) = p
 
     dtγ_ref[] = dtγ
 
     # If we let ᶠw_data = ᶠw.components.data.:1 and ᶠw_unit = one.(ᶠw), then
     # ᶠw == ᶠw_data .* ᶠw_unit. The Jacobian blocks involve ᶠw_data, not ᶠw.
     ᶠw_data = ᶠw.components.data.:1
+
+    # If ∂(ᶜarg)/∂(ᶠw_data) = 0, then
+    # ∂(ᶠupwind_product(ᶠw, ᶜarg))/∂(ᶠw_data) =
+    #     ᶠupwind_product(ᶠw + εw, arg) / to_scalar(ᶠw + εw).
+    # The εw is only necessary in case w = 0.
+    εw = Ref(Geometry.Covariant3Vector(eps(FT)))
+    to_scalar(vector) = vector.u₃
 
     # ᶜinterp(ᶠw) =
     #     ᶜinterp(ᶠw)_data * ᶜinterp(ᶠw)_unit =
@@ -291,38 +327,74 @@ function Wfact!(W, Y, p, dtγ, t)
             error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact when using ρθ")
         end
 
-        # ᶜρθₜ = -ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw)
-        # ∂(ᶜρθₜ)/∂(ᶠw_data) = -ᶜdivᵥ_stencil(ᶠinterp(ᶜρθ) * ᶠw_unit)
-        @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρθ) * one(ᶠw)))
+        if isnothing(ᶠupwind_product)
+            # ᶜρθₜ = -ᶜdivᵥ(ᶠinterp(ᶜρθ) * ᶠw)
+            # ∂(ᶜρθₜ)/∂(ᶠw_data) = -ᶜdivᵥ_stencil(ᶠinterp(ᶜρθ) * ᶠw_unit)
+            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρθ) * one(ᶠw)))
+        else
+            # ᶜρθₜ = -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, ᶜρθ / ᶜρ))
+            # ∂(ᶜρθₜ)/∂(ᶠw_data) =
+            #     -ᶜdivᵥ_stencil(
+            #         ᶠinterp(ᶜρ) * ∂(ᶠupwind_product(ᶠw, ᶜρθ / ᶜρ))/∂(ᶠw_data),
+            #     )
+            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(
+                ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw + εw, ᶜρθ / ᶜρ) /
+                to_scalar(ᶠw + εw),
+            ))
+        end
     elseif :ρe in propertynames(Y.c)
         ᶜρe = Y.c.ρe
         @. ᶜK = norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw))) / 2
         @. ᶜp = pressure_ρe(ᶜρe, ᶜK, ᶜΦ, ᶜρ)
 
-        if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
-            # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
-            # ∂(ᶜρeₜ)/∂(ᶠw_data) =
-            #     -ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * ᶠw_unit) -
-            #     ᶜdivᵥ_stencil(ᶠw) * ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw_data)
-            # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw_data) =
-            #     ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) * ∂(ᶜp)/∂(ᶠw_data)
-            # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) = ᶠinterp_stencil(1)
-            # ∂(ᶜp)/∂(ᶠw_data) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw_data)
-            # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
-            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-                -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw))) - compose(
-                    ᶜdivᵥ_stencil(ᶠw),
-                    compose(
-                        ᶠinterp_stencil(one(ᶜp)),
-                        -(ᶜρ * R_d / cv_d) * ∂ᶜK∂ᶠw_data,
-                    ),
+        if isnothing(ᶠupwind_product)
+            if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :exact
+                # ᶜρeₜ = -ᶜdivᵥ(ᶠinterp(ᶜρe + ᶜp) * ᶠw)
+                # ∂(ᶜρeₜ)/∂(ᶠw_data) =
+                #     -ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * ᶠw_unit) -
+                #     ᶜdivᵥ_stencil(ᶠw) * ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw_data)
+                # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶠw_data) =
+                #     ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) * ∂(ᶜp)/∂(ᶠw_data)
+                # ∂(ᶠinterp(ᶜρe + ᶜp))/∂(ᶜp) = ᶠinterp_stencil(1)
+                # ∂(ᶜp)/∂(ᶠw_data) = ∂(ᶜp)/∂(ᶜK) * ∂(ᶜK)/∂(ᶠw_data)
+                # ∂(ᶜp)/∂(ᶜK) = -ᶜρ * R_d / cv_d
+                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
+                    -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw))) - compose(
+                        ᶜdivᵥ_stencil(ᶠw),
+                        compose(
+                            ᶠinterp_stencil(one(ᶜp)),
+                            -(ᶜρ * R_d / cv_d) * ∂ᶜK∂ᶠw_data,
+                        ),
+                    )
+            elseif flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
+                # same as above, but we approximate ∂(ᶜp)/∂(ᶜK) = 0, so that
+                # ∂ᶜ𝔼ₜ∂ᶠ𝕄 has 3 diagonals instead of 5
+                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw)))
+            else
+                error(
+                    "∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact or :no_∂ᶜp∂ᶜK when using ρe \
+                     without upwinding",
                 )
-        elseif flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
-            # same as above, but we approximate ∂(ᶜp)/∂(ᶜK) = 0, so that ∂ᶜ𝔼ₜ∂ᶠ𝕄
-            # has 3 diagonals instead of 5
-            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw)))
+            end
         else
-            error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact or :no_∂ᶜp∂ᶜK when using ρe")
+            # TODO: Add Operator2Stencil for UpwindBiasedProductC2F to ClimaCore
+            # to allow exact Jacobian calculation.
+            if flags.∂ᶜ𝔼ₜ∂ᶠ𝕄_mode == :no_∂ᶜp∂ᶜK
+                # ᶜρeₜ =
+                #     -ᶜdivᵥ(ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))
+                # ∂(ᶜρeₜ)/∂(ᶠw_data) =
+                #     -ᶜdivᵥ_stencil(
+                #         ᶠinterp(ᶜρ) *
+                #         ∂(ᶠupwind_product(ᶠw, (ᶜρe + ᶜp) / ᶜρ))/∂(ᶠw_data),
+                #     )
+                @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(ᶜdivᵥ_stencil(
+                    ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw + εw, (ᶜρe + ᶜp) / ᶜρ) /
+                    to_scalar(ᶠw + εw),
+                ))
+            else
+                error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :no_∂ᶜp∂ᶜK when using ρe with \
+                       upwinding")
+            end
         end
     elseif :ρe_int in propertynames(Y.c)
         ᶜρe_int = Y.c.ρe_int
@@ -332,17 +404,55 @@ function Wfact!(W, Y, p, dtγ, t)
             error("∂ᶜ𝔼ₜ∂ᶠ𝕄_mode must be :exact when using ρe_int")
         end
 
-        # ᶜρe_intₜ =
-        #     -ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) +
-        #     ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
-        # ∂(ᶜρe_intₜ)/∂(ᶠw_data) =
-        #     -ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw_unit) + ᶜinterp_stencil(
-        #         dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw_unit)),
-        #     )
-        @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
-            -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * one(ᶠw))) + ᶜinterp_stencil(
-                dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(one(ᶠw))),
+        if isnothing(ᶠupwind_product)
+            # ᶜρe_intₜ =
+            #     -(
+            #         ᶜdivᵥ(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw) -
+            #         ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw))
+            #     )
+            # ∂(ᶜρe_intₜ)/∂(ᶠw_data) =
+            #     -(
+            #         ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * ᶠw_unit) -
+            #         ᶜinterp_stencil(dot(
+            #             ᶠgradᵥ(ᶜp),
+            #             Geometry.Contravariant3Vector(ᶠw_unit),
+            #         ),)
+            #     )
+            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(
+                ᶜdivᵥ_stencil(ᶠinterp(ᶜρe_int + ᶜp) * one(ᶠw)) -
+                ᶜinterp_stencil(
+                    dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(one(ᶠw))),
+                )
             )
+        else
+            # ᶜρe_intₜ =
+            #     -(
+            #         ᶜdivᵥ(
+            #             ᶠinterp(ᶜρ) * ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / ᶜρ),
+            #         ) -
+            #         ᶜinterp(dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(ᶠw)))
+            #     )
+            # ∂(ᶜρe_intₜ)/∂(ᶠw_data) =
+            #     -(
+            #         ᶜdivᵥ_stencil(
+            #             ᶠinterp(ᶜρ) *
+            #             ∂(ᶠupwind_product(ᶠw, (ᶜρe_int + ᶜp) / ᶜρ))/∂(ᶠw_data),
+            #         ) -
+            #         ᶜinterp_stencil(dot(
+            #             ᶠgradᵥ(ᶜp),
+            #             Geometry.Contravariant3Vector(ᶠw_unit),
+            #         ),)
+            #     )
+            @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 = -(
+                ᶜdivᵥ_stencil(
+                    ᶠinterp(ᶜρ) *
+                    ᶠupwind_product(ᶠw + εw, (ᶜρe_int + ᶜp) / ᶜρ) /
+                    to_scalar(ᶠw + εw),
+                ) - ᶜinterp_stencil(
+                    dot(ᶠgradᵥ(ᶜp), Geometry.Contravariant3Vector(one(ᶠw))),
+                )
+            )
+        end
     end
 
     # To convert ∂(ᶠwₜ)/∂(ᶜ𝔼) to ∂(ᶠw_data)ₜ/∂(ᶜ𝔼) and ∂(ᶠwₜ)/∂(ᶠw_data) to

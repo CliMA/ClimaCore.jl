@@ -823,7 +823,7 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: 3D sphere inertial gravity wave"
+  - label: ":computer: 2D plane inertial gravity wave"
     key: "cpu_inertial_gravity_wave"
     command:
       - "julia --color=yes --project=examples examples/hybrid/driver.jl"
@@ -831,6 +831,20 @@ steps:
       - "examples/hybrid/plane/output/inertial_gravity_wave/Float32/*"
     env:
       TEST_NAME: "plane/inertial_gravity_wave"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: 2D plane rising bubble implicit"
+    key: "cpu_bubble_2d_implicit"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/bubble_2d_implicit/Float32/*"
+    env:
+      FLOAT_TYPE: "FLOAT64"
+      TEST_NAME: "plane/bubble_2d_implicit"
     agents:
       config: cpu
       queue: central
