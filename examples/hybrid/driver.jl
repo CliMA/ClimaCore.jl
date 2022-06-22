@@ -1,5 +1,6 @@
 # Test-specific definitions (may be overwritten in each test case file)
 # TODO: Allow some of these to be enironment variables or command line arguments
+upwinding_mode = :none
 horizontal_mesh = nothing # must be object of type AbstractMesh
 npoly = 0
 z_max = 0
@@ -95,7 +96,7 @@ else
         f = face_initial_condition.(ᶠlocal_geometry),
     )
 end
-p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt)
+p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode)
 if ode_algorithm <: Union{
     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
     OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
