@@ -58,6 +58,22 @@ using LinearAlgebra, StaticArrays
     @test DataLayouts.typesize(Float64, typeof(x)) == 2
 end
 
+@testset "Printing" begin
+    # https://github.com/CliMA/ClimaCore.jl/issues/768
+    T = Geometry.AxisTensor{
+        Float64,
+        2,
+        Tuple{Geometry.LocalAxis{(1, 2)}, Geometry.CovariantAxis{(1, 2)}},
+        SMatrix{2, 2, Float64, 4},
+    }
+    components = SMatrix{2, 2, Float64, 4}([4.0 0.0; 0.0 5.0])
+    axes_T = (Geometry.LocalAxis{(1, 2)}(), Geometry.CovariantAxis{(1, 2)}())
+    ats = T(axes_T, components)
+    s = sprint(show, ats)
+    @test s ==
+          "AxisTensor{Float64, 2, Tuple{ClimaCore.Geometry.LocalAxis{(1, 2)}, ClimaCore.Geometry.CovariantAxis{(1, 2)}}, SMatrix{2, 2, Float64, 4}}((ClimaCore.Geometry.LocalAxis{(1, 2)}(), ClimaCore.Geometry.CovariantAxis{(1, 2)}()), [4.0 0.0; 0.0 5.0])\n"
+end
+
 @testset "transform" begin
     @test Geometry.transform(
         Geometry.Covariant12Axis(),
