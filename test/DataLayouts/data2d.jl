@@ -31,10 +31,10 @@ end
 @testset "get_struct / set_struct!" begin
     array = [1.0, 2.0, 3.0]
     S = Tuple{Complex{Float64}, Float64}
-    @test get_struct(array, S) == (1.0 + 2.0im, 3.0)
-    set_struct!(array, (4.0 + 2.0im, 6.0))
+    @test get_struct(array, S, Val(1), CartesianIndex(1)) == (1.0 + 2.0im, 3.0)
+    set_struct!(array, (4.0 + 2.0im, 6.0), Val(1), CartesianIndex(1))
     @test array == [4.0, 2.0, 6.0]
-    @test get_struct(array, S) == (4.0 + 2.0im, 6.0)
+    @test get_struct(array, S, Val(1), CartesianIndex(1)) == (4.0 + 2.0im, 6.0)
 end
 
 @testset "IJFH" begin

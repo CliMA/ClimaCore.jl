@@ -164,16 +164,26 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
     return out
 end
 
-"""
-    get_struct(array, S[, offset=0])
+@inline offset_index(
+    start_index::CartesianIndex{N},
+    ::Val{D},
+    offset,
+) where {N, D} = CartesianIndex(
+    ntuple(n -> n == D ? start_index[n] + offset : start_index[n], N),
+)
 
-Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
+"""
+    get_struct(array, S, Val(D), start_index)
+
+Construct an object of type `S` packed along the `D` dimension, from the values of `array`,
+starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function get_struct(
     array::AbstractArray{T},
     ::Type{S},
-    offset,
-) where {T, S}
+    ::Val{D},
+    start_index::CartesianIndex,
+) where {T, S, D}
     tup = :(())
     for i in 1:fieldcount(S)
         push!(
@@ -181,7 +191,8 @@ Base.@propagate_inbounds @generated function get_struct(
             :(get_struct(
                 array,
                 fieldtype(S, $i),
-                offset + fieldtypeoffset(T, S, $i),
+                Val($D),
+                offset_index(start_index, Val($D), fieldtypeoffset(T, S, $i)),
             )),
         )
     end
@@ -189,29 +200,37 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
+    # else
+    #     Base.@_propagate_inbounds_meta
+    #     args = ntuple(fieldcount(S)) do i
+    #         get_struct(array, fieldtype(S, i), Val(D), offset_index(start_index, Val(D), fieldtypeoffset(T, S, i)))
+    #     end
+    #     return bypass_constructor(S, args)
+    # end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
 Base.@propagate_inbounds function get_struct(
     array::AbstractArray{S},
     ::Type{S},
-    offset,
-) where {S}
-    return @inbounds array[offset + 1]
+    ::Val{D},
+    start_index::CartesianIndex,
+) where {S, D}
+    @inbounds return array[start_index]
 end
 
-Base.@propagate_inbounds function get_struct(
-    array::AbstractArray{T},
-    ::Type{S},
-) where {T, S}
-    @inbounds get_struct(array, S, 0)
-end
+"""
+    set_struct!(array, val::S, Val(D), start_index)
 
+Store an object `val` of type `S` packed along the `D` dimension, into `array`,
+starting at `start_index`.
+"""
 Base.@propagate_inbounds @generated function set_struct!(
     array::AbstractArray{T},
     val::S,
-    offset,
-) where {T, S}
+    ::Val{D},
+    start_index::CartesianIndex,
+) where {T, S, D}
     ex = quote
         Base.@_propagate_inbounds_meta
     end
@@ -221,7 +240,8 @@ Base.@propagate_inbounds @generated function set_struct!(
             :(set_struct!(
                 array,
                 getfield(val, $i),
-                offset + fieldtypeoffset(T, S, $i),
+                Val($D),
+                offset_index(start_index, Val($D), fieldtypeoffset(T, S, $i)),
             )),
         )
     end
@@ -232,14 +252,11 @@ end
 Base.@propagate_inbounds function set_struct!(
     array::AbstractArray{S},
     val::S,
-    offset,
-) where {S}
-    @inbounds array[offset + 1] = val
+    ::Val{D},
+    index::CartesianIndex,
+) where {S, D}
+    @inbounds array[index] = val
     val
-end
-
-Base.@propagate_inbounds function set_struct!(array, val)
-    @inbounds set_struct!(array, val, 0)
 end
 
 # For complex nested types (ex. wrapped SMatrix) we hit a recursion limit and de-optimize
