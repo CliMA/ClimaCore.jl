@@ -867,10 +867,10 @@ uuid = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 version = "0.19.2"
 
 [[deps.MPICH_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "MPIPreferences", "Pkg"]
-git-tree-sha1 = "4d61a56bd6d57dd7f9920b882a210bb849cdf217"
+deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "MPIPreferences", "Pkg", "TOML"]
+git-tree-sha1 = "089ec72dbf7d7a853626f438d140d0a642ddbda4"
 uuid = "7cb0a576-ebde-5e09-9194-50597f1243b4"
-version = "4.0.2+2"
+version = "4.0.2+4"
 
 [[deps.MPIPreferences]]
 deps = ["Libdl", "Preferences"]
