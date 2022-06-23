@@ -28,6 +28,9 @@ const v₀ = FT(0)
 const T₀ = FT(250)
 const ΔT = FT(0.01)
 
+# Additional values required for driver
+upwinding_mode = :third_order
+
 # Other convenient constants used in reference paper
 const δ = grav / (R_d * T₀)        # Bretherton height parameter
 const cₛ² = cp_d / cv_d * R_d * T₀ # speed of sound squared
