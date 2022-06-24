@@ -168,7 +168,7 @@ Base.@propagate_inbounds function _inner_copyto!(
         apply_slab(sbc.op, out_slab_space, in_slab_space, _slab_args...),
     )
 end
-
+#=
 function _serial_copyto!(
     field_out::Field,
     sbc::SpectralBroadcasted,
@@ -194,91 +194,73 @@ function _threaded_copyto!(
     end
     return field_out
 end
-
-function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
-    space = axes(field_out)
-    Fields.byslab(space) do slabidx
-        slab_out = slab(field_out, slabidx)
-        slab_in = slab(sbc, slabidx)
-        copy_slab!(slab_out, resolve_operator(slab_in))
+=#
+function Base.copyto!(out::Field, sbc::SpectralBroadcasted)
+    Fields.byslab(axes(out)) do slabidx
+        copyto_slab!(out, sbc, slabidx)
     end
-    #=
-    Nv = Spaces.nlevels(space)
-    Nh = Topologies.nlocalelems(Spaces.topology(space))
-    if enable_threading()
-        return _threaded_copyto!(field_out, sbc, Nv, Nh)
-    end
-    return _serial_copyto!(field_out, sbc, Nv, Nh)
-    =#
+    return out
 end
+
 
 function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
 end
 
-function slab(
-    sbc::SpectralBroadcasted{Style},
-    inds...,
-) where {Style <: SpectralStyle}
-    _args = slab_args(sbc.args, inds...)
-    _axes = slab(axes(sbc), inds...)
-    SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
-end
-
-function slab(
-    bc::Base.Broadcast.Broadcasted{Style},
-    inds...,
-) where {Style <: AbstractSpectralStyle}
-    _args = slab_args(bc.args, inds...)
-    _axes = slab(axes(bc), inds...)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
-end
-
 function Base.copyto!(
-    field_out::Field,
+    out::Field,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
-    space = axes(field_out)
-    Fields.byslab(space) do slabidx
-        slab_out = slab(field_out, slabidx)
-        slab_in = slab(sbc, slabidx)
-        copy_slab!(slab_out, resolve_operator(slab_in))
-
-        # copyto!(slab(field_out, slabidx), slab(bc, slabidx))
+    Fields.byslab(axes(out)) do slabidx
+        copyto_slab!(out, bc, slabidx)
     end
-    #=
-    topology = Spaces.topology(space)
-    Nv = Spaces.nlevels(space)::Int
-    Nh = Topologies.nlocalelems(topology)::Int
-    @inbounds for h in 1:Nh, v in 1:Nv
-        slab_out = slab(field_out, v, h)
-        _slab_args = _apply_slab_args(slab_args(bc.args, v, h), v, h)
-        copy_slab!(
-            slab_out,
-            Base.Broadcast.Broadcasted{Style}(bc.f, _slab_args, axes(slab_out)),
-        )
-    end
-    =#
-    return field_out
+    return out
 end
 
-function copy_slab!(slab_out::Fields.SlabField1D, res)
-    space = axes(slab_out)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)::Int
-    @inbounds for i in 1:Nq
-        set_node!(slab_out, i, get_node(res, i))
-    end
-    return slab_out
-end
+"""
+    copyto_slab!(out, bc, slabidx)
 
-function copy_slab!(slab_out::Fields.SlabField2D, res)
-    space = axes(slab_out)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)::Int
+Copy the slab indexed by `slabidx` from `bc` to `out`.
+"""
+function copyto_slab!(out, bc, slabidx)
+    space = axes(out)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    rbc = resolve_operator(bc, slabidx)
     @inbounds for j in 1:Nq, i in 1:Nq
-        set_node!(slab_out, i, j, get_node(res, i, j))
+        ij = CartesianIndex((i,j))
+        set_node!(out, ij, slabidx, get_node(rbc, ij, slabidx))
     end
-    return slab_out
+    return nothing
 end
+
+
+"""
+    resolve_operator(bc, slabidx)
+
+Recursively evaluate any operators in `bc` at `slabidx`, replacing any
+`SpectralBroadcasted` objects with an `IF`/`IJF` object.
+"""
+function resolve_operator(bc::SpectralBroadcasted, slabidx)
+    args = _resolve_operator_args(slabidx, bc.args...)
+    apply_operator(bc.op, bc.axes, slabidx, args...)
+end
+function resolve_operator(bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle}, slabidx)
+    args = _resolve_operator_args(slabidx, bc.args...)
+    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, args, bc.axes)
+end
+resolve_operator(x, slabidx) = x
+
+"""
+    _resolve_operator(slabidx, args...)
+
+Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
+"""
+_resolve_operator_args(slabidx) = ()
+@inline _resolve_operator_args(slabidx, arg, xargs...) =
+    (resolve_operator(arg, slabidx), _resolve_operator_args(slabidx, xargs...)...)
+
+
 
 # 1D get/set node
 
@@ -290,83 +272,32 @@ end
 @inline node_args(args::Tuple{}, inds...) = ()
 
 # 1D intermediate slab data types
-Base.@propagate_inbounds function get_node(v::MVector, i)
-    v[i]
+
+_get_node(ij, slabidx) = ()
+_get_node(ij, slabidx, arg, xargs...) = (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
+
+Base.@propagate_inbounds function get_node(scalar, ij, slabidx)
+    scalar
+end
+Base.@propagate_inbounds function get_node(field::Fields.Field, ij, slabidx)
+    # TODO: get rid of slab call
+    getindex(Fields.field_values(slab(field, slabidx)), ij)
+end
+Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, ij, slabidx)
+    bc.f(_get_node(ij, slabidx, bc.args...)...)
+end
+Base.@propagate_inbounds function get_node(data::Union{DataLayouts.IJF, DataLayouts.IF}, ij, slabidx)
+    data[ij]
 end
 
-Base.@propagate_inbounds function get_node(v::SVector, i)
-    v[i]
-end
-
-Base.@propagate_inbounds function get_node(scalar, i)
-    scalar[]
-end
-
-Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
-    getindex(Fields.field_values(field), i)
-end
-
-Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i)
-    bc.f(node_args(bc.args, i)...)
-end
-
-Base.@propagate_inbounds set_node!(field::Fields.SlabField1D, i, val) =
-    setindex!(Fields.field_values(field), val, i)
-
-# 2D get/set node
-Base.@propagate_inbounds function get_node(v::MMatrix, i, j)
-    v[i, j]
-end
-
-Base.@propagate_inbounds function get_node(v::SMatrix, i, j)
-    v[i, j]
-end
-
-Base.@propagate_inbounds function get_node(scalar, i, j)
-    scalar[]
-end
-
-Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
-    getindex(Fields.field_values(field), i, j)
-end
-
-Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
-    bc.f(node_args(bc.args, i, j)...)
-end
 
 Base.@propagate_inbounds function set_node!(
-    field::Fields.SlabField2D,
-    i,
-    j,
-    val,
+    field::Fields.Field,
+    ij, slabidx, val
 )
-    setindex!(Fields.field_values(field), val, i, j)
+    setindex!(Fields.field_values(slab(field, slabidx)), val, ij)
 end
 
-# Broadcast recursive machinery
-@inline _apply_slab_args(args::Tuple, inds...) = (
-    _apply_slab(args[1], inds...),
-    _apply_slab_args(Base.tail(args), inds...)...,
-)
-@inline _apply_slab_args(args::Tuple{Any}, inds...) =
-    (_apply_slab(args[1], inds...),)
-@inline _apply_slab_args(args::Tuple{}, inds...) = ()
-
-@inline _apply_slab(x, inds...) = x
-@inline _apply_slab(sbc::SpectralBroadcasted, inds...) = apply_slab(
-    sbc.op,
-    slab(axes(sbc), inds...),
-    slab(input_space(sbc), inds...),
-    _apply_slab_args(sbc.args, inds...)...,
-)
-@inline _apply_slab(
-    bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle},
-    inds...,
-) = Base.Broadcast.Broadcasted{CompositeSpectralStyle}(
-    bc.f,
-    _apply_slab_args(bc.args, inds...),
-    bc.axes,
-)
 
 function Base.Broadcast.BroadcastStyle(
     ::Type{SB},
@@ -382,26 +313,6 @@ function Base.Broadcast.BroadcastStyle(
 end
 
 
-resolve_operator(bc) = bc
-function resolve_operator(sbc::SpectralBroadcasted)
-    args = _resolve_operator(sbc.args...)
-    out_space = axes(sbc)
-    in_space = input_space(sbc)
-    Field(apply_slab(sbc.op, out_space, in_space, args...), out_space)
-end
-function resolve_operator(
-    bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle},
-)
-    args = _resolve_operator(bc.args...)
-    Base.Broadcast.Broadcasted{CompositeSpectralStyle}(bc.f, args, axes(bc))
-end
-
-_resolve_operator() = ()
-_resolve_operator(arg, xargs...) =
-    (resolve_operator(arg), _resolve_operator(xargs...)...)
-function Base.copyto!(slab_out::Fields.SlabField, slab_in)
-    copy_slab!(slab_out, resolve_operator(slab_in))
-end
 
 
 
@@ -666,19 +577,20 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     return IF{RT, Nq}(SArray(parent(out)))
 end
 
-function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
-    FT = Spaces.undertype(slab_space)
-    QS = Spaces.quadrature_style(slab_space)
+function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
-    RT = operator_return_eltype(op, eltype(slab_data))
+    RT = operator_return_eltype(op, eltype(arg))
     Nf = DataLayouts.typesize(FT, RT)
     out = IJF{RT, Nq}(
         zeros(StaticArrays.MArray{Tuple{Nq, Nq, Nf}, FT, 3, Nq * Nq * Nf}),
     )
     @inbounds for j in 1:Nq, i in 1:Nq
-        x = get_node(slab_data, i, j)
+        ij = CartesianIndex((i,j))
+        x = get_node(arg, ij, slabidx)
         for ii in 1:Nq
             ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
             out[ii, j] = out[ii, j] ⊞ ∂f∂ξ₁
