@@ -197,12 +197,19 @@ end
 
 function Base.copyto!(field_out::Field, sbc::SpectralBroadcasted)
     space = axes(field_out)
+    Fields.byslab(space) do slabidx
+        slab_out = slab(field_out, slabidx)
+        slab_in = slab(sbc, slabidx)
+        copy_slab!(slab_out, resolve_operator(slab_in))
+    end
+    #=
     Nv = Spaces.nlevels(space)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     if enable_threading()
         return _threaded_copyto!(field_out, sbc, Nv, Nh)
     end
     return _serial_copyto!(field_out, sbc, Nv, Nh)
+    =#
 end
 
 function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
@@ -232,6 +239,14 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractSpectralStyle}
     space = axes(field_out)
+    Fields.byslab(space) do slabidx
+        slab_out = slab(field_out, slabidx)
+        slab_in = slab(sbc, slabidx)
+        copy_slab!(slab_out, resolve_operator(slab_in))
+
+        # copyto!(slab(field_out, slabidx), slab(bc, slabidx))
+    end
+    #=
     topology = Spaces.topology(space)
     Nv = Spaces.nlevels(space)::Int
     Nh = Topologies.nlocalelems(topology)::Int
@@ -243,6 +258,7 @@ function Base.copyto!(
             Base.Broadcast.Broadcasted{Style}(bc.f, _slab_args, axes(slab_out)),
         )
     end
+    =#
     return field_out
 end
 
@@ -313,9 +329,6 @@ end
 Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
     getindex(Fields.field_values(field), i, j)
 end
-Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
-    getindex(Fields.field_values(field), i)
-end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
     bc.f(node_args(bc.args, i, j)...)
@@ -369,7 +382,6 @@ function Base.Broadcast.BroadcastStyle(
 end
 
 
-
 resolve_operator(bc) = bc
 function resolve_operator(sbc::SpectralBroadcasted)
     args = _resolve_operator(sbc.args...)
@@ -390,6 +402,8 @@ _resolve_operator(arg, xargs...) =
 function Base.copyto!(slab_out::Fields.SlabField, slab_in)
     copy_slab!(slab_out, resolve_operator(slab_in))
 end
+
+
 
 
 """

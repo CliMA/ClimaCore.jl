@@ -14,36 +14,36 @@ function slab(field::SpectralElementField, slabidx::SlabIndex{Nothing})
 end
 function slab(
     field::CenterExtrudedFiniteDifferenceField,
-    colidx::SlabIndex{Int},
+    slabidx::SlabIndex{Int},
 )
     slab(field, slabidx.v, slabidx.h)
 end
 function slab(
     field::FaceExtrudedFiniteDifferenceField,
-    colidx::SlabIndex{PlusHalf{Int}},
+    slabidx::SlabIndex{PlusHalf{Int}},
 )
     slab(field, slabidx.v + half, slabidx.h)
 end
 
 function byslab(fn, space::Spaces.AbstractSpectralElementSpace)
     Nh = Topologies.nlocalelems(space.topology)::Int
-    Threads.@threads for h in 1:Nh
+    for h in 1:Nh
         fn(SlabIndex(nothing, h))
     end
 end
 function byslab(fn, space::Spaces.CenterExtrudedFiniteDifferenceSpace)
-    Nh = Topologies.nlocalelems(topology)::Int
-    Nv = Spaces.nlevels(space)::Int
-    Threads.@threads for h in 1:Nh
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    for h in 1:Nh
         for v in 1:Nv
             fn(SlabIndex(v, h))
         end
     end
 end
 function byslab(fn, space::Spaces.FaceExtrudedFiniteDifferenceSpace)
-    Nh = Topologies.nlocalelems(topology)::Int
-    Nv = Spaces.nlevels(space)::Int
-    Threads.@threads for h in 1:Nh
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    for h in 1:Nh
         for v in 1:Nv
             fn(SlabIndex(v - half, h))
         end
