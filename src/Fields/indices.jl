@@ -27,7 +27,7 @@ end
 
 function byslab(fn, space::Spaces.AbstractSpectralElementSpace)
     Nh = Topologies.nlocalelems(space.topology)::Int
-    Threads.@threads for h in 1:Nh
+    for h in 1:Nh
         fn(SlabIndex(nothing, h))
     end
 end
