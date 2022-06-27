@@ -219,8 +219,8 @@ _resolve_operator_args(slabidx) = ()
 
 
 
-_get_node(ij, slabidx) = ()
-_get_node(ij, slabidx, arg, xargs...) = (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
+@inline _get_node(ij, slabidx) = ()
+@inline _get_node(ij, slabidx, arg, xargs...) = (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
 
 Base.@propagate_inbounds function get_node(scalar, ij, slabidx)
     scalar[]
@@ -909,33 +909,33 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
     DataLayouts._mzero!(out, FT)
     # input data is a Covariant12Vector field
-    if RT <: Geometry.Contravariant3Vector
-        @inbounds for j in 1:Nq, i in 1:Nq
-            ij = CartesianIndex((i,j))
-            local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
-            W = local_geometry.WJ / local_geometry.J
-            Wv₁ =
-                W ⊠ Geometry.covariant1(v, local_geometry)
-            for jj in 1:Nq
-                Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
-                out[i, jj] =
-                    out[i, jj] ⊞ Geometry.Contravariant3Vector(
-                        Dᵀ₂Wv₁,
-                    )
-            end
-            Wv₂ =
-                W ⊠ Geometry.covariant2(v, local_geometry)
-            for ii in 1:Nq
-                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
-                out[ii, j] =
-                    out[ii, j] ⊞ Geometry.Contravariant3Vector(
-                        ⊟(Dᵀ₁Wv₂),
-                    )
-            end
-        end
-        # input data is a Covariant3Vector field
-    elseif RT <: Geometry.Contravariant12Vector
+    # if RT <: Geometry.Contravariant3Vector
+    #     @inbounds for j in 1:Nq, i in 1:Nq
+    #         ij = CartesianIndex((i,j))
+    #         local_geometry = get_local_geometry(space, ij, slabidx)
+    #         v = get_node(arg, ij, slabidx)
+    #         W = local_geometry.WJ / local_geometry.J
+    #         Wv₁ =
+    #             W ⊠ Geometry.covariant1(v, local_geometry)
+    #         for jj in 1:Nq
+    #             Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
+    #             out[i, jj] =
+    #                 out[i, jj] ⊞ Geometry.Contravariant3Vector(
+    #                     Dᵀ₂Wv₁,
+    #                 )
+    #         end
+    #         Wv₂ =
+    #             W ⊠ Geometry.covariant2(v, local_geometry)
+    #         for ii in 1:Nq
+    #             Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
+    #             out[ii, j] =
+    #                 out[ii, j] ⊞ Geometry.Contravariant3Vector(
+    #                     ⊟(Dᵀ₁Wv₂),
+    #                 )
+    #         end
+    #     end
+    #     # input data is a Covariant3Vector field
+    # elseif RT <: Geometry.Contravariant12Vector
         @inbounds for j in 1:Nq, i in 1:Nq
             ij = CartesianIndex((i,j))
             local_geometry = get_local_geometry(space, ij, slabidx)
@@ -956,9 +956,9 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
                     Geometry.Contravariant12Vector(⊟(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
             end
         end
-    else
-        error("invalid return type: $RT")
-    end
+    # else
+    #     error("invalid return type: $RT")
+    # end
     for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i,j))
         local_geometry = get_local_geometry(space, ij, slabidx)
