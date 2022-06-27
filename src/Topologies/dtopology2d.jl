@@ -143,7 +143,7 @@ end
 function DistributedTopology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
-    elemorder = spacefillingcurve(mesh), # obtain elemorder from space-filling curve
+    elemorder = Meshes.elements(mesh),
     elempid = nothing, # array of same size as elemorder, containing owning pid for each element (it should be sorted)
     orderindex = Meshes.linearindices(elemorder), # inverse mapping of elemorder (e.g. map CartesianIndex => Int)
 )
