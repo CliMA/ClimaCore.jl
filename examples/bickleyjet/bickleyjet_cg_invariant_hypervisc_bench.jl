@@ -83,3 +83,6 @@ Operators.apply_operator(sbc1.op, space, Fields.SlabIndex(nothing, 1), sbc1.args
 sbc2 = Base.Broadcast.instantiate(Base.Broadcast.broadcasted(wcurl, x))
 Operators.apply_operator(sbc2.op, space, Fields.SlabIndex(nothing, 1), sbc2.args[1])
 
+using Profile
+Profile.clear_malloc_data()
+@. b = wcurl(x)
