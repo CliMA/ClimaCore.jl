@@ -196,7 +196,6 @@ RecursiveApply.tuplemap
 
 ## Fields
 
-
 ```@docs
 Fields.Field
 Fields.coordinate_field
@@ -207,6 +206,8 @@ Base.sum(::Fields.Field)
 Fields.Statistics.mean(::Fields.Field)
 Fields.LinearAlgebra.norm(::Fields.Field)
 Fields.set!
+Fields.ColumnIndex
+Fields.bycolumn
 ```
 
 ## Limiters

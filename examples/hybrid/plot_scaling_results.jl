@@ -1,5 +1,6 @@
 using Plots
 using JLD2
+using Plots.PlotMeasures
 
 I = Int
 FT = Float32
@@ -48,6 +49,7 @@ Plots.png(
         label = "simulation time = 1 hour",
         legend = :topright,
         grid = :true,
+        margin = 15mm,
     ),
     figpath,
 )
