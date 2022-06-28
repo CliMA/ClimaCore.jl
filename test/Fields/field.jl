@@ -1,5 +1,6 @@
 using Test
 using StaticArrays, IntervalSets
+import ClimaCore
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
@@ -7,6 +8,8 @@ import ClimaCore:
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
+
+include(joinpath(@__DIR__, "util_spaces.jl"))
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     domain = Domains.RectangleDomain(
@@ -309,4 +312,57 @@ end
         field2
     @test parent(field1) == parent(field2)
     Fields.allow_mismatched_diagonalized_spaces() = false
+end
+
+struct InferenceFoo{FT}
+    bar::FT
+end
+Base.broadcastable(x::InferenceFoo) = Ref(x)
+@testset "Inference failure message" begin
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+    function ics_foo(::Type{FT}, lg, foo) where {FT}
+        uv = Geometry.UVVector(FT(0), FT(0))
+        z = Geometry.Covariant12Vector(uv, lg)
+        y = foo.bingo
+        return (; x = FT(0) + y)
+    end
+    function ics_foo_with_field(::Type{FT}, lg, foo, f) where {FT}
+        uv = Geometry.UVVector(FT(0), FT(0))
+        z = Geometry.Covariant12Vector(uv, lg)
+        ζ = f.a
+        y = foo.baz
+        return (; x = FT(0) + y - ζ)
+    end
+    function FieldFromNamedTupleBroken(
+        space,
+        ics::Function,
+        ::Type{FT},
+        params...,
+    ) where {FT}
+        lg = Fields.local_geometry_field(space)
+        return ics.(FT, lg, params...)
+    end
+    FT = Float64
+    foo = InferenceFoo(2.0)
+
+    for space in all_spaces(FT)
+        Y = FieldFromNamedTuple(space, (; a = FT(0), b = FT(1)))
+        @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
+            space,
+            ics_foo,
+            FT,
+            foo,
+        )
+        @test_throws ErrorException("type InferenceFoo has no field baz") FieldFromNamedTupleBroken(
+            space,
+            ics_foo_with_field,
+            FT,
+            foo,
+            Y,
+        )
+    end
+
 end
