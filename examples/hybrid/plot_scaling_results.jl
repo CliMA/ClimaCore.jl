@@ -1,6 +1,6 @@
 using Plots
 using JLD2
-using Measures
+using Plots.PlotMeasures
 
 I = Int
 FT = Float32
@@ -46,7 +46,7 @@ Plots.png(
         xlabel = "nprocs",
         ylabel = "wall time (sec)",
         title = "Scaling data",
-        label = "simulation time",
+        label = "simulation time = 1 hour",
         legend = :topright,
         grid = :true,
         margin = 15mm,
