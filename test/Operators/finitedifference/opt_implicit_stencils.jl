@@ -154,7 +154,6 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         @test_throws ArgumentError Operators.Operator2Stencil(op).(a)
     end
 
-    apply = Operators.ApplyStencil()
 
     apply_configs = (
         (a_FS, a_FS, (ops_F2C_S2S..., ops_F2C_S2V...)),
@@ -164,34 +163,39 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     )
 
     compressed_keys(op) = nameof(typeof(op))
-    success_tabs = Dict()
-    for (a0, a1, op1s) in apply_configs
-        for op1 in op1s
-            success_tabs[compressed_keys(op1)] = NaN
-        end
+
+    function apply_single_stencil(a0, a1, op1)
+        apply = Operators.ApplyStencil()
+        stencil_op1 = Operators.Operator2Stencil(op1)
+        applied_stencil_op = apply.(stencil_op1.(a1), a0)
+        p = @allocated @. applied_stencil_op = apply.(stencil_op1.(a1), a0)
+        return p
     end
 
-    for (a0, a1, op1s) in apply_configs
-        for op1 in op1s
-            stencil_op1 = Operators.Operator2Stencil(op1)
-            applied_stencil_op = apply.(stencil_op1.(a1), a0) # compile
-            p = @allocated applied_stencil_op = apply.(stencil_op1.(a1), a0)
-            success_tabs[compressed_keys(op1)] = p
+    function apply_all_stencils(apply_configs)
+        success_tabs = Dict()
+        for (a0, a1, op1s) in apply_configs
+            for op1 in op1s
+                success_tabs[compressed_keys(op1)] = apply_single_stencil(a0, a1, op1)
+            end
         end
+        return success_tabs
     end
 
-    @test_broken success_tabs[:RightBiasedC2F] == 0        # p = 259392
-    @test_broken success_tabs[:InterpolateC2F] == 0        # p = 560064
-    @test_broken success_tabs[:CurriedTwoArgOperator] == 0 # p = 677968
-    @test_broken success_tabs[:GradientF2C] == 0           # p = 140160
-    @test_broken success_tabs[:DivergenceF2C] == 0         # p = 140160
-    @test_broken success_tabs[:LeftBiasedC2F] == 0         # p = 259392
-    @test_broken success_tabs[:DivergenceC2F] == 0         # p = 560064
-    @test_broken success_tabs[:GradientC2F] == 0           # p = 560064
-    @test_broken success_tabs[:CurlC2F] == 0               # p = 560064
-    @test_broken success_tabs[:InterpolateF2C] == 0        # p = 8832
-    @test_broken success_tabs[:LeftBiasedF2C] == 0         # p = 74496
-    @test_broken success_tabs[:RightBiasedF2C] == 0        # p = 74496
+    success_tabs = apply_all_stencils(apply_configs)
+
+    @test success_tabs[:RightBiasedC2F] == 0
+    @test success_tabs[:InterpolateC2F] == 0
+    @test success_tabs[:CurriedTwoArgOperator] == 0
+    @test success_tabs[:GradientF2C] == 0
+    @test success_tabs[:DivergenceF2C] == 0
+    @test success_tabs[:LeftBiasedC2F] == 0
+    @test success_tabs[:DivergenceC2F] == 0
+    @test success_tabs[:GradientC2F] == 0
+    @test success_tabs[:CurlC2F] == 0
+    @test success_tabs[:InterpolateF2C] == 0
+    @test success_tabs[:LeftBiasedF2C] == 0
+    @test success_tabs[:RightBiasedF2C] == 0
 
     # for k in keys(success_tabs) # for debugging
     #     @show k, success_tabs[k]
@@ -210,26 +214,27 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     )
 
     compressed_keys(op1, op2) = (nameof(typeof(op1)), nameof(typeof(op2)))
-    success_compose_tabs = Dict()
-    for (a0, a1, a2, op1s, op2s) in apply_configs
-        for op1 in op1s
-            for op2 in op2s
-                success_compose_tabs[compressed_keys(op1, op2)] = NaN
-            end
-        end
+
+    function apply_single_composed_stencils(a0, a1, a2, op1, op2)
+        apply = Operators.ApplyStencil()
+        stencil_op1 = Operators.Operator2Stencil(op1)
+        stencil_op2 = Operators.Operator2Stencil(op2)
+        applied_stencil_op = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0) # compile
+        p = @allocated @. applied_stencil_op = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+        return p
     end
 
-    for (a0, a1, a2, op1s, op2s) in apply_configs
-        for op1 in op1s
-            for op2 in op2s
-                stencil_op1 = Operators.Operator2Stencil(op1)
-                stencil_op2 = Operators.Operator2Stencil(op2)
-                applied_stencil_op = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0) # compile
-                p = @allocated applied_stencil_op = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-                success_compose_tabs[compressed_keys(op1, op2)] = p
+    function apply_composed_stencils(apply_configs)
+        success_compose_tabs = Dict()
+        for (a0, a1, a2, op1s, op2s) in apply_configs
+            for op1 in op1s
+                for op2 in op2s
+                    success_compose_tabs[compressed_keys(op1, op2)] = apply_single_composed_stencils(a0, a1, a2, op1, op2)
+                end
             end
         end
     end
+    success_compose_tabs = apply_composed_stencils(apply_configs)
 
     @test_broken success_compose_tabs[(:CurriedTwoArgOperator, :DivergenceF2C)] == 0          # p = 1332272
     @test_broken success_compose_tabs[(:InterpolateC2F, :GradientF2C)] == 0                   # p = 1227712
