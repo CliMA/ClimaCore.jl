@@ -62,7 +62,7 @@ end
     arg::Geometry.CartesianVector,
     local_geometry::Geometry.LocalGeometry,
     weight,
-) where {T, N} = arg * weight
+) = arg * weight
 @inline dss_transform(
     arg::Geometry.AxisTensor{T, N, <:Tuple{Vararg{Geometry.LocalAxis}}},
     local_geometry::Geometry.LocalGeometry,
@@ -72,7 +72,7 @@ end
     arg::Geometry.LocalVector,
     local_geometry::Geometry.LocalGeometry,
     weight,
-) where {T, N} = arg * weight
+) = arg * weight
 @inline dss_transform(
     arg::Geometry.Covariant3Vector,
     local_geometry::Geometry.LocalGeometry,
