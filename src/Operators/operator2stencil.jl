@@ -186,30 +186,9 @@ stencil_right_boundary(
 ) = StencilCoefs{half, half}((zero(eltype(arg)),))
 
 
-function stencil_interior(
-    ::Operator2Stencil{<:AdvectionC2C},
-    loc,
-    idx,
-    hidx,
-    velocity,
-    arg,
-)
-    space = axes(arg)
-    w³⁻ = Geometry.contravariant3(
-        getidx(velocity, loc, idx - half, hidx),
-        Geometry.LocalGeometry(space, idx - half, hidx),
-    )
-    w³⁺ = Geometry.contravariant3(
-        getidx(velocity, loc, idx + half, hidx),
-        Geometry.LocalGeometry(space, idx + half, hidx),
-    )
-    θ⁻ = getidx(arg, loc, idx - 1, hidx)
-    θ = getidx(arg, loc, idx, hidx)
-    θ⁺ = getidx(arg, loc, idx + 1, hidx)
-    val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
-    val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
-    return StencilCoefs{-half, half}((val⁻, val⁺))
-end
+stencil_interior(stencil::Operator2Stencil{<:AdvectionC2C}, args...) =
+    StencilCoefs{-half, half}(stencil_interior_parts(stencil.op, args...))
+
 function stencil_left_boundary(
     ::Operator2Stencil{<:AdvectionC2C},
     bc::SetValue,

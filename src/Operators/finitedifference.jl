@@ -1531,7 +1531,12 @@ return_space(
 
 stencil_interior_width(::AdvectionC2C, velocity, arg) =
     ((-half, +half), (-1, 1))
-function stencil_interior(::AdvectionC2C, loc, idx, hidx, velocity, arg)
+stencil_interior(stencil::AdvectionC2C, loc, idx, hidx, velocity, arg) =
+    RecursiveApply.radd(
+        stencil_interior_parts(stencil, loc, idx, hidx, velocity, arg)...,
+    )
+
+function stencil_interior_parts(::AdvectionC2C, loc, idx, hidx, velocity, arg)
     space = axes(arg)
     θ⁺ = getidx(arg, loc, idx + 1, hidx)
     θ = getidx(arg, loc, idx, hidx)
@@ -1544,9 +1549,9 @@ function stencil_interior(::AdvectionC2C, loc, idx, hidx, velocity, arg)
         getidx(velocity, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    ∂θ₃⁺ = θ⁺ ⊟ θ
-    ∂θ₃⁻ = θ ⊟ θ⁻
-    return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
+    val⁻ = RecursiveApply.rdiv(w³⁻ ⊠ (θ ⊟ θ⁻), 2)
+    val⁺ = RecursiveApply.rdiv(w³⁺ ⊠ (θ⁺ ⊟ θ), 2)
+    return (val⁻, val⁺)
 end
 
 boundary_width(::AdvectionC2C, ::SetValue, velocity, arg) = 1
