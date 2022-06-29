@@ -5,25 +5,25 @@
 # bandwidths.
 # For simplicity, coefficients outside the matrix represented by a Field of
 # StencilCoefs can be set to 0 (or, rather, zero(T) for coefficient type T).
-struct StencilCoefs{lbw, ubw, C <: Tuple}
+struct StencilCoefs{lbw, ubw, C <: NTuple}
     coefs::C
 end
 
-function StencilCoefs{lbw, ubw}(coefs::Tuple) where {lbw, ubw}
+function StencilCoefs{lbw, ubw}(coefs::NTuple{N, T}) where {lbw, ubw, N, T}
     if !(
         (lbw isa Integer && ubw isa Integer) ||
         (lbw isa PlusHalf && ubw isa PlusHalf)
     )
         error("Invalid stencil bandwidths $lbw and $ubw (inconsistent types)")
     end
-    if length(coefs) != ubw - lbw + 1
+    if N != ubw - lbw + 1
         error("Stencil bandwidth ($(ubw - lbw + 1)) and number of stencil \
-              coefficients ($(length(coefs))) are not equal")
+              coefficients ($N) are not equal")
     end
-    if length(coefs) == 0 # no reason to support edge case of an empty stencil
+    if N == 0 # no reason to support edge case of an empty stencil
         error("Stencil cannot be empty")
     end
-    if !isconcretetype(eltype(coefs)) # must be compatible with DataLayouts
+    if !isconcretetype(T) # must be compatible with DataLayouts
         error("Stencil coefficients must all have the same concrete type")
     end
     return StencilCoefs{lbw, ubw, typeof(coefs)}(coefs)
