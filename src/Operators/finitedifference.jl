@@ -2692,6 +2692,8 @@ Base.Broadcast._broadcast_getindex_eltype(
     bc::Base.Broadcast.Broadcasted{StencilStyle},
 ) = eltype(bc)
 
+allow_mismatched_fd_spaces() = false
+
 # check that inferred output field space is equal to dest field space
 @noinline inferred_stencil_spaces_error(
     dest_space_type::Type,
@@ -2706,10 +2708,10 @@ function Base.Broadcast.materialize!(
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}
     dest_space, result_space = axes(dest), axes(bc)
-    if result_space !== dest_space
+    if result_space !== dest_space && !allow_mismatched_fd_spaces()
         # TODO: we pass the types here to avoid stack copying data
         # but this could lead to a confusing error message (same space type but different instances)
-        # inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
+        inferred_stencil_spaces_error(typeof(dest_space), typeof(result_space))
     end
     # the default Base behavior is to instantiate a Broadcasted object with the same axes as the dest
     return copyto!(
