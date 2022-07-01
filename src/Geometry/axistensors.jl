@@ -288,8 +288,7 @@ end
 # LinearAlgebra
 
 check_axes(::A, ::A) where {A} = nothing
-check_axes(ax1, ax2) where {A} =
-    throw(DimensionMismatch("$ax1 and $ax2 do not match"))
+check_axes(ax1, ax2) = throw(DimensionMismatch("$ax1 and $ax2 do not match"))
 
 check_dual(ax1, ax2) = _check_dual(ax1, ax2, dual(ax2))
 _check_dual(::A, _, ::A) where {A} = nothing

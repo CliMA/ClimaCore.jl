@@ -38,4 +38,7 @@ include("hybrid.jl")
 include("triangulation.jl")
 include("dss.jl")
 
+horizontal_space(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space
+horizontal_space(space::AbstractSpace) = space
+
 end # module

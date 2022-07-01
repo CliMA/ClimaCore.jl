@@ -47,7 +47,6 @@ function isa_12_covariant_field(
     f::Type{CF},
 ) where {
     FT,
-    T,
     CF <: Geometry.AxisTensor{
         FT,
         1,
@@ -62,7 +61,6 @@ function isa_3_covariant_field(
     f::Type{CF},
 ) where {
     FT,
-    T,
     CF <: Geometry.AxisTensor{
         FT,
         1,
