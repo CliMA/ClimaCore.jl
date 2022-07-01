@@ -261,7 +261,7 @@ end
 function Base.similar(
     ::Union{IF{<:Any, Ni, A}, Broadcast.Broadcasted{IFStyle{Ni, A}}},
     ::Type{Eltype},
-) where {S, Ni, A, Eltype}
+) where {Ni, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
     array = MArray{Tuple{Ni, Nf}, eltype(A), 2, Ni * Nf}(undef)
     return IF{Eltype, Ni}(array)
@@ -432,8 +432,8 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
-) where {S, Nij, A}
+    bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
+) where {S, Nij}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
@@ -445,8 +445,8 @@ end
 
 function Base.copyto!(
     dest::IFH{S, Ni},
-    bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}},
-) where {S, Ni, A}
+    bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
+) where {S, Ni}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)

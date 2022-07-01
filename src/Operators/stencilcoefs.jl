@@ -9,7 +9,7 @@ struct StencilCoefs{lbw, ubw, C <: NTuple}
     coefs::C
 end
 
-function StencilCoefs{lbw, ubw}(coefs::NTuple{N, T}) where {lbw, ubw, N, T}
+function StencilCoefs{lbw, ubw}(coefs::NTuple{N}) where {lbw, ubw, N}
     if !(
         (lbw isa Integer && ubw isa Integer) ||
         (lbw isa PlusHalf && ubw isa PlusHalf)
@@ -23,6 +23,7 @@ function StencilCoefs{lbw, ubw}(coefs::NTuple{N, T}) where {lbw, ubw, N, T}
     if N == 0 # no reason to support edge case of an empty stencil
         error("Stencil cannot be empty")
     end
+    T = eltype(coefs)
     if !isconcretetype(T) # must be compatible with DataLayouts
         error("Stencil coefficients must all have the same concrete type")
     end
