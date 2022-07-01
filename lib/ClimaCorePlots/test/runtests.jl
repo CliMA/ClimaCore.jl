@@ -57,6 +57,33 @@ end
     fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere_field.png")
     Plots.png(field_fig, fig_png)
     @test isfile(fig_png)
+
+    # check different ordering
+    grid_topology = ClimaCore.Topologies.Topology2D(
+        mesh,
+        ClimaCore.Topologies.spacefillingcurve(mesh),
+    )
+    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
+    coords = ClimaCore.Fields.coordinate_field(space)
+
+    u = map(coords) do coord
+        u0 = 20.0
+        α0 = 45.0
+        ϕ = coord.lat
+        λ = coord.long
+
+        uu = u0 * (cosd(α0) * cosd(ϕ) + sind(α0) * cosd(λ) * sind(ϕ))
+        uv = -u0 * sind(α0) * sind(λ)
+        ClimaCore.Geometry.UVVector(uu, uv)
+    end
+
+    field_fig = Plots.plot(u.components.data.:1)
+    @test field_fig !== nothing
+
+    fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere_field_spacefilling.png")
+    Plots.png(field_fig, fig_png)
+    @test isfile(fig_png)
 end
 
 @testset "spectral element 3D extruded cubed-sphere" begin
