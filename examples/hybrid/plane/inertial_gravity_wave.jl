@@ -50,9 +50,9 @@ fps = 2
 # Additional values required for driver
 horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
-dt = is_small_scale ? FT(1.5) : FT(20)
+dt = is_small_scale ? FT(1.3) : FT(20)
 dt_save_to_sol = t_end / (animation_duration * fps)
-ode_algorithm = OrdinaryDiffEq.Rosenbrock23
+ode_algorithm = ClimaTimeSteppers.SSPRK33ShuOsher # ARS343 requires a prohibitively small timestep
 jacobian_flags = (;
     ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = ᶜ𝔼_name == :ρe ? :no_∂ᶜp∂ᶜK : :exact,
     ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact,
@@ -98,9 +98,9 @@ face_initial_condition(local_geometry) =
 
 function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
-    ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
-    lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
-    Y_lin = similar(sol.u[1])
+    # ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
+    # lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
+    # Y_lin = similar(sol.u[1])
 
     ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
     if ᶜ𝔼_name == :ρθ
@@ -120,22 +120,22 @@ function postprocessing(sol, output_dir)
     v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
     w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
 
-    for iframe in (1, length(sol.t))
-        t = sol.t[iframe]
-        Y = sol.u[iframe]
-        linear_solution!(Y_lin, lin_cache, t)
-        println("Error norms at time t = $t:")
-        for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
-            var = f(Y)
-            var_lin = f(Y_lin)
-            strings = (
-                norm_strings(var, var_lin, 2)...,
-                norm_strings(var, var_lin, Inf)...,
-            )
-            println("ϕ = $name: ", join(strings, ", "))
-        end
-        println()
-    end
+    # for iframe in (1, length(sol.t))
+    #     t = sol.t[iframe]
+    #     Y = sol.u[iframe]
+    #     linear_solution!(Y_lin, lin_cache, t)
+    #     println("Error norms at time t = $t:")
+    #     for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
+    #         var = f(Y)
+    #         var_lin = f(Y_lin)
+    #         strings = (
+    #             norm_strings(var, var_lin, 2)...,
+    #             norm_strings(var, var_lin, Inf)...,
+    #         )
+    #         println("ϕ = $name: ", join(strings, ", "))
+    #     end
+    #     println()
+    # end
 
     anim_vars = (
         (:Tprime, T′, is_small_scale ? 0.014 : 0.014),
@@ -146,21 +146,21 @@ function postprocessing(sol, output_dir)
     @progress "Animations" for iframe in 1:length(sol.t)
         t = sol.t[iframe]
         Y = sol.u[iframe]
-        linear_solution!(Y_lin, lin_cache, t)
+        # linear_solution!(Y_lin, lin_cache, t)
         for (ivar, (_, f, lim)) in enumerate(anim_vars)
             var = f(Y)
-            var_lin = f(Y_lin)
-            var_rel_err = @. (var - var_lin) / (abs(var_lin) + eps(FT))
+            # var_lin = f(Y_lin)
+            # var_rel_err = @. (var - var_lin) / (abs(var_lin) + eps(FT))
             # adding eps(FT) to the denominator prevents divisions by 0
-            frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
+            # frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
             frame(anims[3 * ivar - 1], plot(var, clim = (-lim, lim)))
-            frame(anims[3 * ivar], plot(var_rel_err, clim = (-10, 10)))
+            # frame(anims[3 * ivar], plot(var_rel_err, clim = (-10, 10)))
         end
     end
     for (ivar, (name, _, _)) in enumerate(anim_vars)
-        mp4(anims[3 * ivar - 2], joinpath(output_dir, "$(name)_lin.mp4"); fps)
+        # mp4(anims[3 * ivar - 2], joinpath(output_dir, "$(name)_lin.mp4"); fps)
         mp4(anims[3 * ivar - 1], joinpath(output_dir, "$name.mp4"); fps)
-        mp4(anims[3 * ivar], joinpath(output_dir, "$(name)_rel_err.mp4"); fps)
+        # mp4(anims[3 * ivar], joinpath(output_dir, "$(name)_rel_err.mp4"); fps)
     end
 end
 

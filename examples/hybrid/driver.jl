@@ -47,7 +47,7 @@ atexit() do
     global_logger(prev_logger)
 end
 
-using OrdinaryDiffEq
+using OrdinaryDiffEq, ClimaTimeSteppers
 using DiffEqCallbacks
 using JLD2
 
@@ -97,21 +97,32 @@ else
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode)
-if ode_algorithm <: Union{
-    OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
-    OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
-}
-    use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
+if (
+    # ode_algorithm <: Union{
+    #     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
+    #     OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
+    # }
+    "linsolve" in split(methods(ode_algorithm)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
+)
+    use_transform = !(
+        any(
+            ode_algorithm .<:
+            (Rosenbrock23, Rosenbrock32, ClimaTimeSteppers.ARSAlgorithm)
+        )
+    )
     W = SchurComplementW(Y, use_transform, jacobian_flags, test_implicit_solver)
     jac_kwargs =
         use_transform ? (; jac_prototype = W, Wfact_t = Wfact!) :
         (; jac_prototype = W, Wfact = Wfact!)
 
     alg_kwargs = (; linsolve = linsolve!)
-    if ode_algorithm <: Union{
-        OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
-        OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
-    }
+    if (
+        # ode_algorithm <: Union{
+        #     OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
+        #     OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
+        # }
+        "nlsolve" in split(methods(ode_algorithm)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
+    )
         alg_kwargs =
             (; alg_kwargs..., nlsolve = NLNewton(; max_iter = max_newton_iters))
     end
@@ -159,17 +170,67 @@ end
 callback =
     CallbackSet(dss_callback, save_to_disk_callback, additional_callbacks...)
 
-problem = SplitODEProblem(
-    ODEFunction(
-        implicit_tendency!;
-        jac_kwargs...,
-        tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
-    ),
-    remaining_tendency!,
-    Y,
-    (t_start, t_end),
-    p,
-)
+function make_remaining_forward_euler_step(Y)
+    ∂Y∂t_remaining = similar(Y)
+    function forward_euler_step!(Yn, Y, p, t, dtγ)
+        # @info "We're at t = $t" # progress bars are not implemented in ClimaTimeSteppers
+        remaining_tendency!(∂Y∂t_remaining, Y, p, t)
+        @. Yn = Y + dtγ * ∂Y∂t_remaining
+    end
+end
+function make_forward_euler_step(Y)
+    ∂Y∂t_implicit = similar(Y)
+    ∂Y∂t_remaining = similar(Y)
+    function forward_euler_step!(Yn, Y, p, t, dtγ)
+        # @info "We're at t = $t" # progress bars are not implemented in ClimaTimeSteppers
+        implicit_tendency!(∂Y∂t_implicit, Y, p, t)
+        remaining_tendency!(∂Y∂t_remaining, Y, p, t)
+        @. Yn = Y + dtγ * (∂Y∂t_implicit + ∂Y∂t_remaining)
+    end
+end
+if ode_algorithm <: ClimaTimeSteppers.ARSAlgorithm # if using ClimaTimeSteppers imex algorithm
+    remaining_ode_function =
+        ClimaTimeSteppers.ForwardEulerODEFunction(
+            make_remaining_forward_euler_step(Y)
+        )
+    problem = ODEProblem(
+        SplitFunction(
+            ODEFunction(
+                implicit_tendency!;
+                jac_kwargs...,
+                tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
+            ),
+            remaining_ode_function,
+        ),
+        Y,
+        (t_start, t_end),
+        p,
+    )
+elseif ode_algorithm <: ClimaTimeSteppers.DistributedODEAlgorithm # using ClimaTimeSteppers explicit algorithm
+    ode_function =
+        ClimaTimeSteppers.ForwardEulerODEFunction(make_forward_euler_step(Y))
+    problem = ODEProblem(
+        ode_function,
+        Y,
+        (t_start, t_end),
+        p,
+    )
+else # not using ClimaTimeSteppers
+    remaining_ode_function = ODEFunction(remaining_tendency!)
+    problem = ODEProblem(
+        SplitFunction(
+            ODEFunction(
+                implicit_tendency!;
+                jac_kwargs...,
+                tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
+            ),
+            remaining_ode_function,
+        ),
+        Y,
+        (t_start, t_end),
+        p,
+    )
+end
 integrator = OrdinaryDiffEq.init(
     problem,
     ode_algorithm(; alg_kwargs...);
