@@ -432,20 +432,16 @@ function _unfolded_pannel_matrix(field, interpolate)
     Operators.tensor_product!(interpolated_data, field_data, Imat)
 
     # element index ordering defined by a specific layout
-    eidx = 1
-    for panel_idx in 1:6
+    for (lidx, elem) in enumerate(topology.elemorder)
+        ex1, ex2, panel_idx = elem.I
         panel_data = panels[panel_idx]
-        # elements are ordered along fastest axis defined in sphere box mesh
-        for ex2 in 1:panel_size, ex1 in 1:panel_size
-            # compute the nodal extent index range for this element
-            x1_nodal_range = (dof * (ex1 - 1) + 1):(dof * ex1)
-            x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
-            # transpose the data as our plotting axis order is
-            # reverse nodal element order (x1 axis varies fastest)
-            data_element = permutedims(parent(interpolated_data)[:, :, 1, eidx])
-            panel_data[x2_nodal_range, x1_nodal_range] = data_element
-            eidx += 1
-        end
+        # compute the nodal extent index range for this element
+        x1_nodal_range = (dof * (ex1 - 1) + 1):(dof * ex1)
+        x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
+        # transpose the data as our plotting axis order is
+        # reverse nodal element order (x1 axis varies fastest)
+        data_element = permutedims(parent(interpolated_data)[:, :, 1, lidx])
+        panel_data[x2_nodal_range, x1_nodal_range] = data_element
     end
 
     # (px, py, rot) for each panel
