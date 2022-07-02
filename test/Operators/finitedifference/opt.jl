@@ -224,9 +224,11 @@ end
             center_values = ones(FT, center_space)
             center_velocities = Geometry.WVector.(center_values)
 
+            filter(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+
             # face space operators
-            @test_opt sum(ones(FT, face_space))
-            @test_opt sum(sin.(faces))
+            @test_opt function_filter = filter sum(ones(FT, face_space))
+            @test_opt function_filter = filter sum(sin.(faces))
 
             @test_opt opt_InterpolateF2C(faces)
             @test_opt opt_WeightedInterpolateF2C(face_values, faces)
@@ -247,8 +249,8 @@ end
             @test_opt opt_SetBoundary_SetValue(faces)
 
             # center space operators
-            @test_opt sum(ones(FT, center_space))
-            @test_opt sum(sin.(centers))
+            @test_opt function_filter = filter sum(ones(FT, center_space))
+            @test_opt function_filter = filter sum(sin.(centers))
 
             @test_opt opt_InterpolateC2F_SetValue(centers)
             @test_opt opt_InterpolateC2F_SetGradient(centers)
