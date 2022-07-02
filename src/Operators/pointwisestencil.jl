@@ -461,26 +461,27 @@ function compose_stencils_at_idx(
     hidx,
 ) where {ir_type <: AbstractIndexRangeType}
 
-    lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-        a = get_start(ir_type, stencil1, stencil2, idx, j)
-        b = get_stop(ir_type, stencil1, stencil2, idx, j)
-        (a, b)
-    end
-
     coefs1 = getidx(stencil1, loc, idx, hidx)
     lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    i_func_at_j(j) =
-        i ->
-            coefs1[i - lbw1 + 1] ⊠
-            getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
-    function j_func(j)
-        i_vals = i_vals_tuple[j][1]:i_vals_tuple[j][2]
-        return length(i_vals) == 0 ? zero(eltype(eltype(stencil1))) :
-               mapreduce(i_func_at_j(j), ⊞, i_vals)
+    ntup = ntuple(ubw - lbw + 1) do j
+        a = get_start(ir_type, stencil1, stencil2, idx, j)
+        b = get_stop(ir_type, stencil1, stencil2, idx, j)
+        i_vals = a:b
+        if b < a
+        # if length(i_vals) == 0
+            zero(eltype(eltype(stencil1)))
+        else
+            mapreduce(
+                i ->
+                coefs1[i - lbw1 + 1] ⊠
+                getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
+                ⊞,
+                i_vals
+            )
+        end
     end
-    return StencilCoefs{lbw, ubw}(ntuple(j -> j_func(j), ubw - lbw + 1))
+    return StencilCoefs{lbw, ubw}(ntup)
 end
 
 function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
