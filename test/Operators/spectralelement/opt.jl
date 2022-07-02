@@ -99,6 +99,8 @@ end
 
 @static if @isdefined(var"@test_opt")
 
+    filter(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+
     function test_operators(field, vfield)
         @test_opt opt_Gradient(field)
         opt_WeakGradient(field)
@@ -110,12 +112,12 @@ end
         @test_opt opt_Divergence(vfield)
         @test_opt opt_WeakDivergence(vfield)
 
-        @test_opt opt_ScalarDSS(field)
-        @test_opt opt_VectorDss_Curl(vfield)
-        @test_opt opt_VectorDss_DivGrad(vfield)
+        @test_opt function_filter = filter opt_ScalarDSS(field)
+        @test_opt function_filter = filter opt_VectorDss_Curl(vfield)
+        @test_opt function_filter = filter opt_VectorDss_DivGrad(vfield)
 
-        @test_opt opt_ScalarHyperdiffusion(field)
-        @test_opt opt_VectorHyperdiffusion(vfield)
+        @test_opt function_filter = filter opt_ScalarHyperdiffusion(field)
+        @test_opt function_filter = filter opt_VectorHyperdiffusion(vfield)
     end
 end
 
