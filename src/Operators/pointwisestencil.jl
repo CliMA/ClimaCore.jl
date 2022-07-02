@@ -288,6 +288,44 @@ abstract type PointwiseStencilOperator <: FiniteDifferenceOperator end
 struct LeftStencilBoundary <: BoundaryCondition end
 struct RightStencilBoundary <: BoundaryCondition end
 
+abstract type AbstractIndexRangeType end
+struct IndexRangeInteriorType <: AbstractIndexRangeType end
+struct IndexRangeLeftType <: AbstractIndexRangeType end
+struct IndexRangeRightType <: AbstractIndexRangeType end
+
+# ((lbw1 + max(0, j - bw2)), (ubw1 + min(0, j - bw1)))
+function get_start(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    return lbw1 + max(0, j - bw2)
+end
+function get_stop(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    return ubw1 + min(0, j - bw1)
+end
+
+# (max(lbw1 + max(0, j - bw2), min_i), (ubw1 + min(0, j - bw1)))
+function get_start(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    min_i = left_idx(axes(stencil2)) - idx
+    return max(lbw1 + max(0, j - bw2), min_i)
+end
+function get_stop(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    return (ubw1 + min(0, j - bw1))
+end
+
+# ((lbw1 + max(0, j - bw2)), min(ubw1 + min(0, j - bw1), max_i))
+function get_start(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    return lbw1 + max(0, j - bw2)
+end
+function get_stop(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    max_i = right_idx(axes(stencil2)) - idx
+    return min(ubw1 + min(0, j - bw1), max_i)
+end
+
+
 has_boundary(
     ::PointwiseStencilOperator,
     ::LeftBoundaryWindow{name},
@@ -458,17 +496,19 @@ end
 
 function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
     if @generated # Won't get generated if common code is moved out of if-else.
-        lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
         lbw, ubw = composed_bandwidths(stencil1, stencil2)
         i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-            ((lbw1 + max(0, j - bw2)), (ubw1 + min(0, j - bw1)))
+            a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+            b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+            (a, b)
         end
         return compose_stencils_at_idx_expr(i_vals_tuple, stencil1, stencil2)
     else
-        lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
         lbw, ubw = composed_bandwidths(stencil1, stencil2)
         i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-            ((lbw1 + max(0, j - bw2)),(ubw1 + min(0, j - bw1)))
+            a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+            b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+            (a, b)
         end
         return compose_stencils_at_idx(
             i_vals_tuple,
@@ -490,12 +530,11 @@ function stencil_left_boundary(
     stencil1,
     stencil2,
 )
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    min_i = left_idx(axes(stencil2)) - idx
-
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
     i_vals_tuple = ntuple(Val(ubw - lbw + 1)) do j
-        (max(lbw1 + max(0, j - bw2), min_i), (ubw1 + min(0, j - bw1)))
+        a = get_start(IndexRangeLeftType, stencil1, stencil2, idx, j)
+        b = get_stop(IndexRangeLeftType, stencil1, stencil2, idx, j)
+        (a, b)
     end
 
     return compose_stencils_at_idx(
@@ -517,12 +556,11 @@ function stencil_right_boundary(
     stencil1,
     stencil2,
 )
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    max_i = right_idx(axes(stencil2)) - idx
-
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
     i_vals_tuple = ntuple(Val(ubw - lbw + 1)) do j
-        ((lbw1 + max(0, j - bw2)), min(ubw1 + min(0, j - bw1), max_i))
+        a = get_start(IndexRangeRightType, stencil1, stencil2, idx, j)
+        b = get_stop(IndexRangeRightType, stencil1, stencil2, idx, j)
+        (a, b)
     end
 
     return compose_stencils_at_idx(
