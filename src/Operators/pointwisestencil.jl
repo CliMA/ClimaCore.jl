@@ -450,8 +450,6 @@ function bandwidth_info(stencil1, stencil2)
     return lbw1, ubw1, bw1, bw2
 end
 
-# TODO: Optimize this so that the generated version is unnecessary. This is
-# currently ~30% slower than the generated version.
 function compose_stencils_at_idx(
     ::Type{ir_type},
     stencil1,
@@ -473,13 +471,13 @@ function compose_stencils_at_idx(
         else
             mapreduce(
                 i ->
-                coefs1[i - lbw1 + 1] ⊠
-                getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
+                    coefs1[i - lbw1 + 1] ⊠
+                    getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
                 ⊞,
-                ntuple(Val(b-a+1)) do k
+                ntuple(Val(b - a + 1)) do k
                     Base.@_inline_meta
-                    a+k-1
-                end
+                    a + k - 1
+                end,
             )
         end
     end
