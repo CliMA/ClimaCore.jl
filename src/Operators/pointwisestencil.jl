@@ -475,50 +475,21 @@ function compose_stencils_at_idx(
     return StencilCoefs{lbw, ubw}(ntuple(j -> j_func(j), ubw - lbw + 1))
 end
 
-function compose_stencils_at_idx_expr(i_vals_tuple, stencil1_T, stencil2_T)
-    coefs_expr = :(coefs1 = getidx(stencil1, loc, idx, hidx))
-    lbw1 = bandwidths(eltype(stencil1_T))[1]
-    lbw, ubw = composed_bandwidths(stencil1_T, stencil2_T)
-    i_func_at_j(j) =
-        i -> :(
-            coefs1[$(i - lbw1 + 1)] ⊠
-            getidx(stencil2, loc, idx + $i, hidx)[$(j - i + lbw1)]
-        )
-    function j_func(j)
-        i_vals = i_vals_tuple[j][1]:i_vals_tuple[j][2]
-        return length(i_vals) == 0 ? zero(eltype(eltype(stencil1_T))) :
-               :($(mapreduce(i_func_at_j(j), ⊞, i_vals)))
-    end
-    result_expr =
-        :(StencilCoefs{$lbw, $ubw}($(ntuple(j -> j_func(j), ubw - lbw + 1))))
-    return :($coefs_expr; return $result_expr)
-end
-
 function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
-    if @generated # Won't get generated if common code is moved out of if-else.
-        lbw, ubw = composed_bandwidths(stencil1, stencil2)
-        i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-            a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-            b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-            (a, b)
-        end
-        return compose_stencils_at_idx_expr(i_vals_tuple, stencil1, stencil2)
-    else
-        lbw, ubw = composed_bandwidths(stencil1, stencil2)
-        i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-            a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-            b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-            (a, b)
-        end
-        return compose_stencils_at_idx(
-            i_vals_tuple,
-            stencil1,
-            stencil2,
-            loc,
-            idx,
-            hidx,
-        )
+    lbw, ubw = composed_bandwidths(stencil1, stencil2)
+    i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
+        a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+        b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
+        (a, b)
     end
+    return compose_stencils_at_idx(
+        i_vals_tuple,
+        stencil1,
+        stencil2,
+        loc,
+        idx,
+        hidx,
+    )
 end
 
 function stencil_left_boundary(
