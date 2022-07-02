@@ -453,13 +453,21 @@ end
 # TODO: Optimize this so that the generated version is unnecessary. This is
 # currently ~30% slower than the generated version.
 function compose_stencils_at_idx(
-    i_vals_tuple,
+    ::Type{ir_type},
     stencil1,
     stencil2,
     loc,
     idx,
     hidx,
-)
+) where {ir_type <: AbstractIndexRangeType}
+
+    lbw, ubw = composed_bandwidths(stencil1, stencil2)
+    i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
+        a = get_start(ir_type, stencil1, stencil2, idx, j)
+        b = get_stop(ir_type, stencil1, stencil2, idx, j)
+        (a, b)
+    end
+
     coefs1 = getidx(stencil1, loc, idx, hidx)
     lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
@@ -476,14 +484,8 @@ function compose_stencils_at_idx(
 end
 
 function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
-    lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    i_vals_tuple = ntuple(Val((ubw - lbw + 1))) do j
-        a = get_start(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-        b = get_stop(IndexRangeInteriorType, stencil1, stencil2, idx, j)
-        (a, b)
-    end
     return compose_stencils_at_idx(
-        i_vals_tuple,
+        IndexRangeInteriorType,
         stencil1,
         stencil2,
         loc,
@@ -501,15 +503,8 @@ function stencil_left_boundary(
     stencil1,
     stencil2,
 )
-    lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    i_vals_tuple = ntuple(Val(ubw - lbw + 1)) do j
-        a = get_start(IndexRangeLeftType, stencil1, stencil2, idx, j)
-        b = get_stop(IndexRangeLeftType, stencil1, stencil2, idx, j)
-        (a, b)
-    end
-
     return compose_stencils_at_idx(
-        i_vals_tuple,
+        IndexRangeLeftType,
         stencil1,
         stencil2,
         loc,
@@ -527,15 +522,8 @@ function stencil_right_boundary(
     stencil1,
     stencil2,
 )
-    lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    i_vals_tuple = ntuple(Val(ubw - lbw + 1)) do j
-        a = get_start(IndexRangeRightType, stencil1, stencil2, idx, j)
-        b = get_stop(IndexRangeRightType, stencil1, stencil2, idx, j)
-        (a, b)
-    end
-
     return compose_stencils_at_idx(
-        i_vals_tuple,
+        IndexRangeRightType,
         stencil1,
         stencil2,
         loc,
