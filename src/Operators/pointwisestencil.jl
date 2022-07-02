@@ -464,12 +464,11 @@ function compose_stencils_at_idx(
     coefs1 = getidx(stencil1, loc, idx, hidx)
     lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    ntup = ntuple(ubw - lbw + 1) do j
+    ntup = ntuple(Val(ubw - lbw + 1)) do j
+        Base.@_inline_meta
         a = get_start(ir_type, stencil1, stencil2, idx, j)
         b = get_stop(ir_type, stencil1, stencil2, idx, j)
-        i_vals = a:b
         if b < a
-        # if length(i_vals) == 0
             zero(eltype(eltype(stencil1)))
         else
             mapreduce(
@@ -477,7 +476,10 @@ function compose_stencils_at_idx(
                 coefs1[i - lbw1 + 1] ⊠
                 getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
                 ⊞,
-                i_vals
+                ntuple(Val(b-a+1)) do k
+                    Base.@_inline_meta
+                    a+k-1
+                end
             )
         end
     end
