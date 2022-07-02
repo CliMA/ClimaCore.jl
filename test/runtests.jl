@@ -4,6 +4,7 @@ using Base: operator_associativity
 # Order of tests is intended to reflect dependency order of functionality
 
 @time include("recursive.jl")
+@time include("Utilities/plushalf.jl")
 
 @time include("DataLayouts/data0d.jl")
 @time include("DataLayouts/data1d.jl")

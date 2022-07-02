@@ -38,4 +38,7 @@ Base.convert(::Type{P}, i::Integer) where {P <: PlusHalf} =
 Base.convert(::Type{I}, h::PlusHalf) where {I <: Integer} =
     throw(InexactError(:convert, I, h))
 
+Base.length(r::UnitRange{PlusHalf{I}}) where {I} =
+    last(r) - first(r) + oneunit(I)
+
 Base.step(::AbstractUnitRange{PlusHalf{I}}) where {I} = one(I)
