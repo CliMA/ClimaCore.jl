@@ -469,15 +469,16 @@ function compose_stencils_at_idx(
         if b < a
             zero(eltype(eltype(stencil1)))
         else
+            inner_ntup = ntuple(Val(b - a + 1)) do k
+                Base.@_inline_meta
+                a + k - 1
+            end
             mapreduce(
                 i ->
                     coefs1[i - lbw1 + 1] ⊠
                     getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
                 ⊞,
-                ntuple(Val(b - a + 1)) do k
-                    Base.@_inline_meta
-                    a + k - 1
-                end,
+                inner_ntup,
             )
         end
     end
