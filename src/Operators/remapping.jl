@@ -297,11 +297,13 @@ struct RLLRemap{
     S <: AbstractSpace,
     M <: AbstractMatrix,
     E <: AbstractVector,
+    P <: AbstractVector,
 }
     target::T # rll mesh
     source::S # source space
     map::M # linear mapping operator
     elems::E # elements associated with target pts
+    p::P # coordinate permutation vector
 end
 
 function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
@@ -309,6 +311,7 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
     source_mesh = Spaces.topology(source_space).mesh
     latitude, longitude = target_mesh.lat, target_mesh.long
 
+    # store latlong coords and associated elements
     coords = []
     for lat in latitude
         for long in longitude
@@ -316,15 +319,18 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
             elem = Meshes.containing_element(source_mesh, coord)
             push!(
                 coords,
-                (coord = Geometry.LatLongPoint(lat, long), elem = elem),
+                (coord = coord, elem = elem),
             )
         end
     end
+
+    # sort coords by element
     p = sortperm(coords, by = coord -> coord.elem)
     permute!(coords, p)
     coords = map(coords, 1:length(coords)) do coord, i
         (coord..., idx = i)
     end
+    # get unique elements and the indices of the first associated coords
     elems = map(x -> (elem = x.elem, idx = x.idx), unique(x -> x.elem, coords))
 
     QS_s = Spaces.quadrature_style(source_space)
@@ -339,7 +345,7 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
             op[j, :] = remap_weights(coords[j].coord, elem, source_space)
         end
     end
-    return RLLRemap(target_mesh, source_space, op, elems)
+    return RLLRemap(target_mesh, source_space, op, elems, p)
 end
 
 """
@@ -372,6 +378,7 @@ function remap!(target_vec, R::RLLRemap, source_field::Field)
             target_vec[j] = R.map[j, :]' * vec(data[:, :, 1, elem_idx])
         end
     end
+    invpermute!(target_vec, R.p)
     return target_vec
 end
 
