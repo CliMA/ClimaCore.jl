@@ -449,10 +449,10 @@ function compose_stencils_at_idx(
         Base.@_inline_meta
         a = (lbw1 + max(0, j - bw2))::typeof(lbw1)
         b = (ubw1 + min(0, j - bw1))::typeof(lbw1)
-        N = (b-a+1)::Int
+        N = (b - a + 1)::Int
         inner_ntup = ntuple(Val(N)) do ki
             Base.@_inline_meta
-            k = (a+ki-1)::typeof(lbw1)
+            k = (a + ki - 1)::typeof(lbw1)
             (k, is_non_zero(ir_type, a, b, space2, idx, k))
         end
         mapreduce(⊞, inner_ntup) do tup
