@@ -293,39 +293,6 @@ struct IndexRangeInteriorType <: AbstractIndexRangeType end
 struct IndexRangeLeftType <: AbstractIndexRangeType end
 struct IndexRangeRightType <: AbstractIndexRangeType end
 
-# ((lbw1 + max(0, j - bw2)), (ubw1 + min(0, j - bw1)))
-function get_start(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    return lbw1 + max(0, j - bw2)
-end
-function get_stop(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    return ubw1 + min(0, j - bw1)
-end
-
-# (max(lbw1 + max(0, j - bw2), min_i), (ubw1 + min(0, j - bw1)))
-function get_start(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    min_i = left_idx(axes(stencil2)) - idx
-    return max(lbw1 + max(0, j - bw2), min_i)
-end
-function get_stop(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    return (ubw1 + min(0, j - bw1))
-end
-
-# ((lbw1 + max(0, j - bw2)), min(ubw1 + min(0, j - bw1), max_i))
-function get_start(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    return lbw1 + max(0, j - bw2)
-end
-function get_stop(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
-    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    max_i = right_idx(axes(stencil2)) - idx
-    return min(ubw1 + min(0, j - bw1), max_i)
-end
-
-
 has_boundary(
     ::PointwiseStencilOperator,
     ::LeftBoundaryWindow{name},
@@ -450,6 +417,20 @@ function bandwidth_info(stencil1, stencil2)
     return lbw1, ubw1, bw1, bw2
 end
 
+is_non_zero(::Type{IndexRangeInteriorType}, a, b, space2, idx, k)::Bool = true
+
+function is_non_zero(::Type{IndexRangeLeftType}, a, b, space2, idx, k)::Bool
+    min_i = left_idx(space2) - idx
+    a_lim = max(a, min_i)
+    return a_lim ≤ k ≤ b
+end
+
+function is_non_zero(::Type{IndexRangeRightType}, a, b, space2, idx, k)::Bool
+    max_i = right_idx(space2) - idx
+    b_lim = min(b, max_i)
+    return a ≤ k ≤ b_lim
+end
+
 function compose_stencils_at_idx(
     ::Type{ir_type},
     stencil1,
@@ -460,24 +441,31 @@ function compose_stencils_at_idx(
 ) where {ir_type <: AbstractIndexRangeType}
 
     coefs1 = getidx(stencil1, loc, idx, hidx)
-    lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
-    ntup = ntuple(Val(ubw - lbw + 1)) do j
+    lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    space2 = axes(stencil2)
+    n = (ubw - lbw + 1)::Int
+    ntup = ntuple(Val(n)) do j
         Base.@_inline_meta
-        a = get_start(ir_type, stencil1, stencil2, idx, j)
-        b = get_stop(ir_type, stencil1, stencil2, idx, j)
-        inner_ntup = ntuple(Val(b - a + 1)) do k
+        a = (lbw1 + max(0, j - bw2))::typeof(lbw1)
+        b = (ubw1 + min(0, j - bw1))::typeof(lbw1)
+        N = (b-a+1)::Int
+        inner_ntup = ntuple(Val(N)) do ki
             Base.@_inline_meta
-            a + k - 1
+            k = (a+ki-1)::typeof(lbw1)
+            (k, is_non_zero(ir_type, a, b, space2, idx, k))
         end
-        mapreduce(
-            i ->
+        mapreduce(⊞, inner_ntup) do tup
+            Base.@_inline_meta
+            i = first(tup)::typeof(lbw1)
+            is_non_zero_value = last(tup)::Bool
+            if is_non_zero_value
                 coefs1[i - lbw1 + 1] ⊠
-                getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1],
-            ⊞,
-            inner_ntup;
-            init = zero(eltype(eltype(stencil1)))
-        )
+                getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
+            else
+                zero(eltype(eltype(stencil1)))
+            end
+        end
     end
     return StencilCoefs{lbw, ubw}(ntup)
 end
