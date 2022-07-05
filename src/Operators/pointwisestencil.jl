@@ -444,29 +444,24 @@ function compose_stencils_at_idx(
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
     space2 = axes(stencil2)
+    zeroT = eltype(eltype(stencil1))
     n = (ubw - lbw + 1)::Int
-    ntup = ntuple(Val(n)) do j
-        Base.@_inline_meta
-        a = (lbw1 + max(0, j - bw2))::typeof(lbw1)
-        b = (ubw1 + min(0, j - bw1))::typeof(lbw1)
-        N = (b - a + 1)::Int
-        inner_ntup = ntuple(Val(N)) do ki
+    ntup = (ntuple(Val(n)) do j
             Base.@_inline_meta
-            k = (a + ki - 1)::typeof(lbw1)
-            (k, is_non_zero(ir_type, a, b, space2, idx, k))
-        end
-        mapreduce(⊞, inner_ntup) do tup
-            Base.@_inline_meta
-            i = first(tup)::typeof(lbw1)
-            is_non_zero_value = last(tup)::Bool
-            if is_non_zero_value
-                coefs1[i - lbw1 + 1] ⊠
-                getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
-            else
-                zero(eltype(eltype(stencil1)))
-            end
-        end
-    end
+            a = (lbw1 + max(0, j - bw2))::typeof(lbw1)
+            b = (ubw1 + min(0, j - bw1))::typeof(lbw1)
+            N = (b - a + 1)::Int
+            reduce(⊞, ntuple(Val(N)) do ki
+                Base.@_inline_meta
+                i = (a + ki - 1)::typeof(lbw1)
+                if is_non_zero(ir_type, a, b, space2, idx, i)
+                    coefs1[i - lbw1 + 1] ⊠
+                    getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
+                else
+                    zero(zeroT)
+                end
+            end)
+        end)::NTuple{n,zeroT}
     return StencilCoefs{lbw, ubw}(ntup)
 end
 
