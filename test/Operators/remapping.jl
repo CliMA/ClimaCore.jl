@@ -725,3 +725,29 @@ end
         end
     end
 end
+
+@testset "RegularLatLong Interpolation" begin
+    radius = FT(3)
+    ne = 10
+    Nq = 4
+    spheredomain = Domains.SphereDomain(radius)
+    # each of the 6 faces has 4x4 elements with 4x4 nodes per elem
+    # 96 elems of 16 nodes each
+    mesh = Meshes.EquiangularCubedSphere(spheredomain, ne)
+    topology = Topologies.Topology2D(mesh)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    coords = Fields.coordinate_field(space)
+
+    rllmesh = Meshes.RegularLatLongMesh(spheredomain, 100, 100)
+    rllcoords = Meshes.rllcoords(rllmesh)
+
+    R = Operators.RLLRemap(rllmesh, space)
+
+    source_field = sind.(coords.long) .* cosd.(coords.lat)
+    remap_vec = Operators.remap(R, source_field)
+    truth_vec =
+        sind.(getproperty.(rllcoords, :long)) .*
+        cosd.(getproperty.(rllcoords, :lat))
+    @test isapprox(remap_vec, truth_vec; atol = 1e-4)
+end

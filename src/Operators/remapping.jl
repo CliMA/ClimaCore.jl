@@ -317,10 +317,7 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
         for long in longitude
             coord = Geometry.LatLongPoint(lat, long)
             elem = Meshes.containing_element(source_mesh, coord)
-            push!(
-                coords,
-                (coord = coord, elem = elem),
-            )
+            push!(coords, (coord = coord, elem = elem))
         end
     end
 
