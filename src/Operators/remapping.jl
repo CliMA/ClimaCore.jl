@@ -6,7 +6,26 @@ using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
 
-struct LinearRemap{T <: AbstractSpace, S <: AbstractSpace, M <: AbstractMatrix}
+abstract type AbstractRemap end
+
+"""
+    IdentityRemap <: AbstractRemap
+
+The identity remap operator.
+"""
+struct IdentityRemap <: AbstractRemap end
+
+remap(R::IdentityRemap, source_field::Field) = deepcopy(source_field)
+
+function remap!(target_field::Field, R::IdentityRemap, source_field::Field)
+    target_field .= source_field
+end
+
+struct LinearRemap{
+    T <: AbstractSpace,
+    S <: AbstractSpace,
+    M <: AbstractMatrix,
+} <: AbstractRemap
     target::T
     source::S
     map::M # linear mapping operator
@@ -20,8 +39,15 @@ A remapping operator from the `source` space to the `target` space.
 See [Ullrich2015](@cite) eqs. 3 and 4.
 """
 function LinearRemap(target::AbstractSpace, source::AbstractSpace)
-    R = linear_remap_op(target, source)
-    LinearRemap(target, source, R)
+    if typeof(target) == typeof(source) && (
+        parent(Spaces.local_geometry_data(target)) ==
+        parent(Spaces.local_geometry_data(source))
+    )
+        return IdentityRemap()
+    else
+        R = linear_remap_op(target, source)
+        return LinearRemap(target, source, R)
+    end
 end
 
 """

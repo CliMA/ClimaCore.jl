@@ -1,7 +1,8 @@
 using Test
 using ClimaCore:
     Domains, Meshes, Topologies, Geometry, Operators, Spaces, Fields
-using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
+using ClimaCore.Operators:
+    local_weights, linear_remap_op, remap, remap!, LinearRemap, IdentityRemap
 using ClimaCore.Topologies: Topology2D
 using ClimaCore.Spaces: AbstractSpace, Quadratures
 using ClimaCore.DataLayouts: IJFH
@@ -91,7 +92,9 @@ end
 
 function test_identity(space)
     R = LinearRemap(space, space)
-    @test R.map ≈ I
+    @test R isa IdentityRemap
+    map = linear_remap_op(space, space)
+    @test map ≈ I
 end
 
 @testset "Linear Operator Properties" begin
@@ -171,8 +174,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -242,8 +244,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -296,8 +297,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -371,8 +371,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(source.local_geometry)
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
