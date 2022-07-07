@@ -40,7 +40,7 @@ end
 
 function opt_CurlCurl(field)
     curl = Operators.Curl()
-    return curl.(curl.(field))
+    return curl.(Covariant3Vector.(curl.(field)))
 end
 
 function opt_Divergence(field)
@@ -105,19 +105,23 @@ end
         @test_opt opt_Gradient(field)
         opt_WeakGradient(field)
 
-        @test_opt opt_Curl(vfield)
-        @test_opt opt_WeakCurl(vfield)
-        @test_opt opt_CurlCurl(vfield)
+        covariant_vfield = Geometry.CovariantVector.(vfield)
+
+        @test_opt opt_Curl(covariant_vfield)
+        @test_opt opt_WeakCurl(covariant_vfield)
+        @test_opt opt_CurlCurl(covariant_vfield)
 
         @test_opt opt_Divergence(vfield)
         @test_opt opt_WeakDivergence(vfield)
 
         @test_opt function_filter = filter opt_ScalarDSS(field)
-        @test_opt function_filter = filter opt_VectorDss_Curl(vfield)
+        @test_opt function_filter = filter opt_VectorDss_Curl(covariant_vfield)
         @test_opt function_filter = filter opt_VectorDss_DivGrad(vfield)
 
         @test_opt function_filter = filter opt_ScalarHyperdiffusion(field)
-        @test_opt function_filter = filter opt_VectorHyperdiffusion(vfield)
+        @test_opt function_filter = filter opt_VectorHyperdiffusion(
+            covariant_vfield,
+        )
     end
 end
 
