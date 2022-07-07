@@ -35,13 +35,10 @@ ncoordinates(mesh::RegularLatLongMesh) = length(mesh.lat) * length(mesh.long)
 
 function rllcoords(mesh::RegularLatLongMesh)
     latitude, longitude = mesh.lat, mesh.long
-
     # store latlong coords and associated elements
-    coords = []
-    for lat in latitude
-        for long in longitude
-            push!(coords, Geometry.LatLongPoint(lat, long))
-        end
-    end
+    coords = [
+        Geometry.LatLongPoint(lat, long) for lat in latitude for
+        long in longitude
+    ]
     return coords
 end

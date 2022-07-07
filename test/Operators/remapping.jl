@@ -750,4 +750,8 @@ end
         sind.(getproperty.(rllcoords, :long)) .*
         cosd.(getproperty.(rllcoords, :lat))
     @test isapprox(remap_vec, truth_vec; atol = 1e-4)
+
+    source_field = ones(space)
+    remap!(remap_vec, R, source_field)
+    @test isapprox(remap_vec, ones(length(rllcoords)))
 end

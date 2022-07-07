@@ -295,7 +295,7 @@ end
 struct RLLRemap{
     T <: Meshes.RegularLatLongMesh,
     S <: AbstractSpace,
-    M <: AbstractMatrix,
+    M <: AbstractArray,
     E <: AbstractVector,
     P <: AbstractVector,
 }
@@ -312,14 +312,13 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
     latitude, longitude = target_mesh.lat, target_mesh.long
 
     # store latlong coords and associated elements
-    coords = []
-    for lat in latitude
-        for long in longitude
+    coords = [
+        begin
             coord = Geometry.LatLongPoint(lat, long)
             elem = Meshes.containing_element(source_mesh, coord)
-            push!(coords, (coord = coord, elem = elem))
-        end
-    end
+            (coord = coord, elem = elem)
+        end for lat in latitude for long in longitude
+    ]
 
     # sort coords by element
     p = sortperm(coords, by = coord -> coord.elem)
@@ -333,13 +332,13 @@ function RLLRemap(target_mesh::Meshes.RegularLatLongMesh, source_space)
     QS_s = Spaces.quadrature_style(source_space)
     Nq_s = Quadratures.degrees_of_freedom(QS_s)
     # rows - for each rll coord, cols - for each node in corresponding elem
-    op = spzeros(length(coords), Nq_s^2)
+    op = zeros(Nq_s, Nq_s, length(coords))
     for i in 1:length(elems)
         # better solution than start_idx, last_idx?
         elem, start_idx = elems[i]
         last_idx = i == length(elems) ? length(coords) : elems[i + 1].idx - 1
         for j in start_idx:last_idx
-            op[j, :] = remap_weights(coords[j].coord, elem, source_space)
+            op[:, :, j] = remap_weights(coords[j].coord, elem, source_space)
         end
     end
     return RLLRemap(target_mesh, source_space, op, elems, p)
@@ -372,7 +371,8 @@ function remap!(target_vec, R::RLLRemap, source_field::Field)
             i == length(R.elems) ? length(target_vec) : R.elems[i + 1].idx - 1
         for j in start_idx:last_idx
             # multiply rows of map by nodal values in corresponding element
-            target_vec[j] = R.map[j, :]' * vec(data[:, :, 1, elem_idx])
+            target_vec[j] =
+                dot(view(R.map, :, :, j), view(data, :, :, 1, elem_idx))
         end
     end
     invpermute!(target_vec, R.p)
@@ -388,5 +388,5 @@ function remap_weights(coord, elem, source_space)
     ξ_latlong = Meshes.reference_coordinates(source_mesh, elem, coord)
     Imat_x = Quadratures.interpolation_matrix(SVector(ξ_latlong[1]), ξ)
     Imat_y = Quadratures.interpolation_matrix(SVector(ξ_latlong[2]), ξ)
-    return kron(Imat_y, Imat_x) #weights to get from nodes in elem to coord
+    return kron(Imat_x', Imat_y) #weights to get from nodes in elem to coord
 end
