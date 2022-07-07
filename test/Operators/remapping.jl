@@ -754,4 +754,16 @@ end
     source_field = ones(space)
     remap!(remap_vec, R, source_field)
     @test isapprox(remap_vec, ones(length(rllcoords)))
+
+    topology = Topologies.spacefillingcurve(mesh)
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    coords = Fields.coordinate_field(space)
+
+    R = Operators.RLLRemap(rllmesh, space)
+    source_field = sind.(coords.long) .* cosd.(coords.lat)
+    remap_vec = Operators.remap(R, source_field)
+    truth_vec =
+        sind.(getproperty.(rllcoords, :long)) .*
+        cosd.(getproperty.(rllcoords, :lat))
+    @test isapprox(remap_vec, truth_vec; atol = 1e-4)
 end
