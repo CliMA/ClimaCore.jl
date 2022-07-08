@@ -446,22 +446,27 @@ function compose_stencils_at_idx(
     space2 = axes(stencil2)
     zeroT = eltype(eltype(stencil1))
     n = (ubw - lbw + 1)::Int
-    ntup = (ntuple(Val(n)) do j
+    ntup = (
+        ntuple(Val(n)) do j
             Base.@_inline_meta
             a = (lbw1 + max(0, j - bw2))::typeof(lbw1)
             b = (ubw1 + min(0, j - bw1))::typeof(lbw1)
             N = (b - a + 1)::Int
-            reduce(⊞, ntuple(Val(N)) do ki
-                Base.@_inline_meta
-                i = (a + ki - 1)::typeof(lbw1)
-                if is_non_zero(ir_type, a, b, space2, idx, i)
-                    coefs1[i - lbw1 + 1] ⊠
-                    getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
-                else
-                    zero(zeroT)
-                end
-            end)
-        end)::NTuple{n,zeroT}
+            reduce(
+                ⊞,
+                ntuple(Val(N)) do ki
+                    Base.@_inline_meta
+                    i = (a + ki - 1)::typeof(lbw1)
+                    if is_non_zero(ir_type, a, b, space2, idx, i)
+                        coefs1[i - lbw1 + 1] ⊠
+                        getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
+                    else
+                        zero(zeroT)
+                    end
+                end,
+            )
+        end
+    )::NTuple{n, zeroT}
     return StencilCoefs{lbw, ubw}(ntup)
 end
 
