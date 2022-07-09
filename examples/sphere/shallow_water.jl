@@ -124,8 +124,8 @@ function linkfig(figpath, alt = "")
 end
 
 # Set up discretization
-ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
-Nq = 4
+ne = 4 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
+Nq = 5
 
 domain = Domains.SphereDomain(R)
 mesh = Meshes.EquiangularCubedSphere(domain, ne)
@@ -398,8 +398,8 @@ parameters = (; f = f, h_s = h_s)
 rhs!(dYdt, Y, parameters, 0.0)
 
 # Solve the ODE
-dt = 9 * 60
-T = 86400 * 2
+dt = 400
+T = 86400 * 10
 
 prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 integrator = OrdinaryDiffEq.init(
