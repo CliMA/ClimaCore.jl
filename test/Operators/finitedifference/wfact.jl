@@ -4,7 +4,8 @@ import ClimaCore
 # To avoid JET failures in the error message
 ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
 
 import ClimaCore.Utilities: half
 import LinearAlgebra: norm_sqr
@@ -99,10 +100,7 @@ function wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ,
     @. ∂ᶜ𝔼ₜ∂ᶠ𝕄 =
         -(ᶜdivᵥ_stencil(ᶠinterp(ᶜρe + ᶜp) * one(ᶠw))) - compose(
             ᶜdivᵥ_stencil(ᶠw),
-            compose(
-                ᶠinterp_stencil(one(ᶜp)),
-                -(ᶜρ * R_d / cv_d) * ∂ᶜK∂ᶠw_data,
-            ),
+            compose(ᶠinterp_stencil(one(ᶜp)), -(ᶜρ * R_d / cv_d) * ∂ᶜK∂ᶠw_data),
         )
 
     return nothing
