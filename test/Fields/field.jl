@@ -264,6 +264,29 @@ end
     end
 end
 
+# Test truncated field type printing:
+ClimaCore.Fields.truncate_printing_field_types() = true
+@testset "Truncated printing" begin
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+    nt = (; x = Float64(0), y = Float64(0))
+    Y = FieldFromNamedTuple(spectral_space_2D(), nt)
+    @test sprint(show, typeof(Y)) == "Field{(:x, :y)} (trunc disp)"
+end
+ClimaCore.Fields.truncate_printing_field_types() = false
+
+@testset "Standard printing" begin
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+    nt = (; x = Float64(0), y = Float64(0))
+    Y = FieldFromNamedTuple(spectral_space_2D(), nt)
+    s = sprint(show, typeof(Y)) # just make sure this doesn't break
+end
+
 @testset "Set!" begin
     space = spectral_space_2D()
     function FieldFromNamedTuple(space, nt::NamedTuple)
