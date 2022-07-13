@@ -107,4 +107,8 @@ end
 @time wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
 
 using JET
-@test_opt wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
+@testset "JET test for `compose` in wfact! kernel" begin
+    @test_opt wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
+end
+
+ClimaCore.Operators.allow_mismatched_fd_spaces() = false
