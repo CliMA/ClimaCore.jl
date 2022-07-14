@@ -4,3 +4,6 @@ ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+Plots = "1.30.1"
