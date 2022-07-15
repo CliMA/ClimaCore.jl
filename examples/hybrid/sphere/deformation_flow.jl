@@ -43,6 +43,7 @@ const z_c = 5.0e3 # initial altitude of tracers
 const R_t = R / 2 # horizontal half-width of tracers
 const Z_t = 1000.0 # vertical half-width of tracers
 const κ₄ = 1.0e16 # hyperviscosity
+const C = 1.0 # flux-correction coefficient
 
 # time constants
 T = 86400.0 * 12.0
@@ -190,6 +191,10 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
+    first_order_upwind_c2f = Operators.UpwindBiasedProductC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
     third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
@@ -219,8 +224,21 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
+    corrected_antidiff_flux = similar(dρq1)
     @. dρq1 = beta * dρq1 - alpha * hdiv(cuvw * ρq1) + alpha * ystar.ρq1
-    @. dρq1 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq1 ./ ρ))
+    @. corrected_antidiff_flux = vdivf2c(
+        Ic2f(ρ) *
+        C *
+        (
+            third_order_upwind_c2f(w, ρq1 / ρ) -
+            first_order_upwind_c2f(w, ρq1 / ρ)
+        ),
+    )
+    @. dρq1 -=
+        alpha * (
+            vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 / ρ)) +
+            corrected_antidiff_flux
+        )
     @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
 
     @. dρq2 = beta * dρq2 - alpha * hdiv(cuvw * ρq2) + alpha * ystar.ρq2
