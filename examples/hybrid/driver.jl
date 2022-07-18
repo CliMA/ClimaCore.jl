@@ -57,12 +57,25 @@ include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
 include("../common_spaces.jl")
 
+if get(ENV, "Z_STRETCH", "false") == "true"
+    z_stretch_scale = FT(7e3)
+    z_stretch = Meshes.ExponentialStretching(z_stretch_scale)
+    z_stretch_string = "stretched"
+else
+    z_stretch = Meshes.Uniform()
+    z_stretch_string = "uniform"
+end
+
 if haskey(ENV, "TEST_NAME")
     test_dir, test_file_name = split(ENV["TEST_NAME"], '/')
 else
     error("ENV[\"TEST_NAME\"] required (e.g., \"sphere/baroclinic_wave_rhoe\")")
 end
 include(joinpath(test_dir, "$test_file_name.jl"))
+
+if z_stretch_string == "stretched"
+    test_file_name = "$(z_stretch_string)_$(test_file_name)"
+end
 
 import ClimaCore: enable_threading
 enable_threading() = false
@@ -88,12 +101,13 @@ else
         h_space = make_horizontal_space(horizontal_mesh, npoly)
         comms_ctx = nothing
     end
-    center_space, face_space = make_hybrid_spaces(h_space, z_max, z_elem)
+    center_space, face_space =
+        make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶠlocal_geometry = Fields.local_geometry_field(face_space)
     Y = Fields.FieldVector(
-        c = center_initial_condition.(ᶜlocal_geometry),
-        f = face_initial_condition.(ᶠlocal_geometry),
+        c = center_initial_condition(ᶜlocal_geometry),
+        f = face_initial_condition(ᶠlocal_geometry),
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode)
@@ -187,6 +201,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 @info "Running `$test_dir/$test_file_name` test case"
+@info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 
@@ -194,7 +209,7 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(horizontal_mesh, npoly)
         global_center_space, global_face_space =
-            make_hybrid_spaces(global_h_space, z_max, z_elem)
+            make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
         global_Y_c_type = Fields.Field{
             typeof(Fields.field_values(Y.c)),
             typeof(global_center_space),

@@ -835,6 +835,20 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: stretched 2D plane inertial gravity wave"
+    key: "cpu_stretch_inertial_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/stretched_inertial_gravity_wave/Float32/*"
+    env:
+      TEST_NAME: "plane/inertial_gravity_wave"
+      Z_STRETCH: "true"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":rocket::computer: Allocations analysis"
     key: "cpu_allocations"
     command:
