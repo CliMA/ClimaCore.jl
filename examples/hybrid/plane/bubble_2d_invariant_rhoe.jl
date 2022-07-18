@@ -25,7 +25,8 @@ function hvspace_2D(
     zlim = (0, 4π),
     xelem = 10,
     zelem = 40,
-    npoly = 4,
+    npoly = 4;
+    z_stretch_scale = 4π / 6.0,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -33,7 +34,11 @@ function hvspace_2D(
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_names = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vertmesh = Meshes.IntervalMesh(
+        vertdomain,
+        Meshes.ExponentialStretching(z_stretch_scale);
+        nelems = zelem,
+    )
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
@@ -54,7 +59,8 @@ function hvspace_2D(
 end
 
 # set up 2D domain - doubly periodic box
-hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
+hv_center_space, hv_face_space =
+    hvspace_2D((-500, 500), (0, 1000), z_stretch_scale = 1000 / 6.0)
 
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
@@ -248,7 +254,7 @@ rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
 using OrdinaryDiffEq
-Δt = 0.04
+Δt = 0.01
 prob = ODEProblem(rhs_invariant!, Y, (0.0, 1200.0))
 integrator = OrdinaryDiffEq.init(
     prob,
