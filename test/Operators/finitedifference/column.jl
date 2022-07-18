@@ -660,113 +660,119 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    n_elems_seq = 2 .^ (4, 6, 8, 10)
+    stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
 
-    err_adv_wc = zeros(FT, length(n_elems_seq))
+    for (i, stretch_fn) in enumerate(stretch_fns)
+        err_adv_wc = zeros(FT, length(n_elems_seq))
+        Δh = zeros(FT, length(n_elems_seq))
+        for (k, n) in enumerate(n_elems_seq)
+            domain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(-pi),
+                Geometry.ZPoint{FT}(pi);
+                boundary_tags = (:bottom, :top),
+            )
+            mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
-    Δh = zeros(FT, length(n_elems_seq))
+            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-    for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(-pi),
-            Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:bottom, :top),
-        )
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
+            centers = getproperty(Fields.coordinate_field(cs), :z)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+            # Upwind3rdOrderBiasedProductC2F Center -> Face operator
+            # Unitary, constant advective velocity
+            w = Geometry.WVector.(ones(fs))
+            # c = sin(z), scalar field defined at the centers
+            Δz = FT(2pi / n)
+            c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
+            s = sin.(centers)
 
-        centers = getproperty(Fields.coordinate_field(cs), :z)
+            fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+                bottom = Operators.FirstOrderOneSided(),
+                top = Operators.FirstOrderOneSided(),
+            )
 
-        # Upwind3rdOrderBiasedProductC2F Center -> Face operator
-        # Unitary, constant advective velocity
-        w = Geometry.WVector.(ones(fs))
-        # c = sin(z), scalar field defined at the centers
-        Δz = FT(2pi / n)
-        c = (cos.(centers .- Δz / 2) .- cos.(centers .+ Δz / 2)) ./ Δz
-        s = sin.(centers)
+            divf2c = Operators.DivergenceF2C(
+                bottom = Operators.SetValue(
+                    Geometry.Contravariant3Vector(FT(0.0)),
+                ),
+                top = Operators.SetValue(
+                    Geometry.Contravariant3Vector(FT(0.0)),
+                ),
+            )
 
-        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-            bottom = Operators.FirstOrderOneSided(),
-            top = Operators.FirstOrderOneSided(),
-        )
+            adv_wc = divf2c.(fluxᶠ.(w, c))
 
-        divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
-            top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
-        )
+            Δh[k] = cs.face_local_geometry.J[1]
 
-        adv_wc = divf2c.(fluxᶠ.(w, c))
+            # Error
+            err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        end
 
-        Δh[k] = cs.face_local_geometry.J[1]
-
-        # Error
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+        # Check convergence rate
+        conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+        # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
+        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.2006
+        @test conv_adv_wc[1] ≈ 0.5 atol = 0.2
+        @test conv_adv_wc[2] ≈ 0.5 atol = 0.3
+        @test conv_adv_wc[3] ≈ 1.0 atol = 0.55
     end
-
-    # Check convergence rate
-    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
-    # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 0.2
-    @test conv_adv_wc[1] ≈ 0.5 atol = 0.2
-    @test conv_adv_wc[2] ≈ 0.5 atol = 0.1
-    @test conv_adv_wc[3] ≈ 0.5 atol = 0.1
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs" begin
     FT = Float64
-    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    n_elems_seq = 2 .^ (4, 6, 8, 10)
+    stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
 
-    err_adv_wc = zeros(FT, length(n_elems_seq))
+    for (i, stretch_fn) in enumerate(stretch_fns)
+        err_adv_wc = zeros(FT, length(n_elems_seq))
+        Δh = zeros(FT, length(n_elems_seq))
+        for (k, n) in enumerate(n_elems_seq)
+            domain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(-pi),
+                Geometry.ZPoint{FT}(pi);
+                boundary_tags = (:bottom, :top),
+            )
+            mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-    Δh = zeros(FT, length(n_elems_seq))
+            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
-    for (k, n) in enumerate(n_elems_seq)
-        domain = Domains.IntervalDomain(
-            Geometry.ZPoint{FT}(-pi),
-            Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:bottom, :top),
-        )
-        mesh = Meshes.IntervalMesh(domain; nelems = n)
+            centers = getproperty(Fields.coordinate_field(cs), :z)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+            # Upwind3rdOrderBiasedProductC2F Center -> Face operator
+            # Unitary, constant advective velocity
+            w = Geometry.WVector.(ones(fs))
+            # c = sin(z), scalar field defined at the centers
+            c = sin.(centers)
 
-        centers = getproperty(Fields.coordinate_field(cs), :z)
+            fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+                bottom = Operators.ThirdOrderOneSided(),
+                top = Operators.ThirdOrderOneSided(),
+            )
 
-        # Upwind3rdOrderBiasedProductC2F Center -> Face operator
-        # Unitary, constant advective velocity
-        w = Geometry.WVector.(ones(fs))
-        # c = sin(z), scalar field defined at the centers
-        c = sin.(centers)
+            divf2c = Operators.DivergenceF2C(
+                bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
+                top = Operators.SetValue(Geometry.WVector(FT(0.0))),
+            )
+            adv_wc = divf2c.(fluxᶠ.(w, c))
 
-        fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-            bottom = Operators.ThirdOrderOneSided(),
-            top = Operators.ThirdOrderOneSided(),
-        )
+            Δh[k] = cs.face_local_geometry.J[1]
+            # Errors
+            err_adv_wc[k] = norm(adv_wc .- cos.(centers))
 
-        divf2c = Operators.DivergenceF2C(
-            bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
-            top = Operators.SetValue(Geometry.WVector(FT(0.0))),
-        )
-        adv_wc = divf2c.(fluxᶠ.(w, c))
+        end
 
-        Δh[k] = cs.face_local_geometry.J[1]
-        # Errors
-        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
-
+        # Check convergence rate
+        conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+        # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
+        @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-1
+        @test conv_adv_wc[1] ≈ 2.5 atol = 0.1
+        @test conv_adv_wc[2] ≈ 2.5 atol = 0.1
+        @test conv_adv_wc[3] ≈ 2.5 atol = 0.1
     end
-
-    # Check convergence rate
-    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
-    # Upwind3rdOrderBiasedProductC2F conv, with f(z) = sin(z)
-    @test err_adv_wc[3] ≤ err_adv_wc[2] ≤ err_adv_wc[1] ≤ 5e-1
-    @test conv_adv_wc[1] ≈ 2.5 atol = 0.1
-    @test conv_adv_wc[2] ≈ 2.5 atol = 0.1
-    @test conv_adv_wc[3] ≈ 2.5 atol = 0.1
 end
 
 @testset "Biased interpolation" begin
