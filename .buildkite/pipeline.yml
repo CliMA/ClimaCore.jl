@@ -20,7 +20,6 @@ steps:
       - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate perf"
-      - "julia --project=perf -e 'using Pkg; Pkg.develop(path=\".\")'"
       - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=perf -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
