@@ -65,6 +65,8 @@ using Base: operator_associativity
 @time include("Limiters/distributed.jl")
 @time include("aqua.jl") # Code quality checks
 
+include("InputOutput/runtests_inputoutput.jl")
+
 if "CUDA" in ARGS
     @time include("gpu/cuda.jl")
     @time include("gpu/data.jl")
