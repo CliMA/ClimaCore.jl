@@ -9,7 +9,7 @@ A 1D mesh on an `IntervalDomain`.
 
 Construct a 1D mesh with face locations at `faces`.
 
-    IntervalMesh(domain::IntervalDomain[, stetching=Uniform()]; nelems=)
+    IntervalMesh(domain::IntervalDomain[, stretching=Uniform()]; nelems=)
 
 Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possible values of `stretching` are:
 
