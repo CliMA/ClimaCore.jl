@@ -20,6 +20,7 @@ include("../staggered_nonhydrostatic_model.jl")
 
 # Additional constants required for inertial gravity wave initial condition
 z_max = FT(10e3)
+const z_stretch_scale = z_max / 6.0
 const x_max = is_small_scale ? FT(300e3) : FT(6000e3)
 const x_mid = is_small_scale ? FT(100e3) : FT(3000e3)
 const d = is_small_scale ? FT(5e3) : FT(100e3)
@@ -50,7 +51,7 @@ fps = 2
 # Additional values required for driver
 horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
-dt = is_small_scale ? FT(1.5) : FT(20)
+dt = is_small_scale ? FT(1.0) : FT(20)
 dt_save_to_sol = t_end / (animation_duration * fps)
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
 jacobian_flags = (;
@@ -190,7 +191,7 @@ function ρfb_init_coefs(
         periodic_line_mesh(; x_max, x_elem = upsampling_factor * x_elem)
     h_space = make_horizontal_space(horizontal_mesh, npoly)
     center_space, _ =
-        make_hybrid_spaces(h_space, z_max, upsampling_factor * z_elem)
+        make_hybrid_spaces(h_space, z_max, upsampling_factor * z_elem; z_stretch_scale)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶜx = ᶜlocal_geometry.coordinates.x
     ᶜz = ᶜlocal_geometry.coordinates.z

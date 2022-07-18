@@ -88,7 +88,8 @@ else
         h_space = make_horizontal_space(horizontal_mesh, npoly)
         comms_ctx = nothing
     end
-    center_space, face_space = make_hybrid_spaces(h_space, z_max, z_elem)
+    z_stretch_scale = z_max / 6.0
+    center_space, face_space = make_hybrid_spaces(h_space, z_max, z_elem; z_stretch_scale)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶠlocal_geometry = Fields.local_geometry_field(face_space)
     Y = Fields.FieldVector(
@@ -193,8 +194,9 @@ walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(horizontal_mesh, npoly)
+        z_stretch_scale = z_max / 6.0
         global_center_space, global_face_space =
-            make_hybrid_spaces(global_h_space, z_max, z_elem)
+            make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch_scale)
         global_Y_c_type = Fields.Field{
             typeof(Fields.field_values(Y.c)),
             typeof(global_center_space),
