@@ -117,7 +117,7 @@ end
         Geometry.ZPoint(0.1997009518240897),
         Geometry.ZPoint(0.2665952891528509),
         Geometry.ZPoint(0.3800869206593279),
-        Geometry.ZPoint(0.9999999999999988),
+        Geometry.ZPoint(1.0000000000000000),
     ]
     @test Meshes.coordinates(mesh, 1, 1) == ref_profile[1]
     for eidx in Meshes.nelements(mesh)

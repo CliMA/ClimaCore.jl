@@ -123,7 +123,7 @@ function IntervalMesh(
     cmax = Geometry.component(domain.coord_max, 1)
     R = cmax - cmin
     h = stretch.H / R
-    η(ζ) = -h * log1p((expm1(-1 / h)) * ζ)
+    η(ζ) = ζ == 1 ? ζ : -h * log1p((expm1(-1 / h)) * ζ)
     faces =
         [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
     IntervalMesh(domain, faces)
