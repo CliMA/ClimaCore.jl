@@ -41,77 +41,32 @@ The `cache` enables reading of relevant data without duplication.
 """
 struct HDF5Reader
     file::HDF5.File
-    cache::Dict{Any, Any}
+    domain_cache::Dict{Any, Any}
+    mesh_cache::Dict{Any, Any}
+    topology_cache::Dict{Any, Any}
+    space_cache::Dict{Any, Any}
 end
 
 function HDF5Reader(filename::AbstractString)
     file = h5open(filename, "r")
-    cache = Dict()
-    return HDF5Reader(file, cache)
+    return HDF5Reader(file, Dict(), Dict(), Dict(), Dict())
 end
 
-"""
-    Base.read!(reader, path)
 
-Checks the cache to verify if the object, specified by the `path`, is in the cache.
-If it has not been read, this function reads it to the cache and returns the object.
-"""
-function Base.read!(reader::HDF5Reader, path::AbstractString)
-    (; file, cache) = reader
-    name = split(path, "/")[end]
-    if !haskey(cache, name)
-        @assert haskey(file, path)
-        read_new!(reader, name, _type(reader, path))
-    end
-    return cache[name]
+function Base.close(hdfreader::HDF5Reader)
+    close(hdfreader.file)
+    empty!(hdfreader.domain_cache)
+    empty!(hdfreader.mesh_cache)
+    empty!(hdfreader.topology_cache)
+    empty!(hdfreader.space_cache)
+    return nothing
 end
 
-"""
-    _type(reader, path)
-
-Extracts the type of the object, specified by the `path`.
-"""
-_type(reader::HDF5Reader, path::AbstractString) =
-    ClimaCore.eval(Meta.parse(attrs(reader.file[path])["type"]))
-
-function _scan_primitive_type_string(typestring::AbstractString)
-    @assert typestring ∈ (
-        "Int8",
-        "UInt8",
-        "Int16",
-        "UInt16",
-        "Int32",
-        "UInt32",
-        "Int64",
-        "UInt64",
-        "Int128",
-        "UInt128",
-        "Float16",
-        "Float32",
-        "Float64",
-        "BigFloat",
-    )
-    typestring == "Int8" && return Int8
-    typestring == "UInt8" && return UInt8
-    typestring == "Int16" && return Int16
-    typestring == "UInt16" && return UInt16
-    typestring == "Int32" && return Int32
-    typestring == "UInt32" && return UInt32
-    typestring == "Int64" && return Int64
-    typestring == "UInt64" && return UInt64
-    typestring == "Int128" && return Int128
-    typestring == "UInt128" && return UInt128
-    typestring == "Float64" && return Float64
-    typestring == "Float32" && return Float32
-    typestring == "Float16" && return Float16
-    return BigFloat
-end
-
-function _scan_coord_string(coordstring::AbstractString)
-    @assert coordstring ∈ ("XPoint", "YPoint", "ZPoint")
-    coordstring == "ZPoint" && return ZPoint
+function _scan_coord_type(coordstring::AbstractString)
+    coordstring == "XPoint" && return XPoint
     coordstring == "YPoint" && return YPoint
-    return XPoint
+    coordstring == "ZPoint" && return ZPoint
+    error("Invalid coord type $coordstring")
 end
 
 function _scan_quadrature_style(quadraturestring::AbstractString, npts)
@@ -147,290 +102,183 @@ function matrix_to_cartesianindices(elemorder_matrix)
     return reshape(elemorder, dims...)
 end
 
-"""
-    read_new!(reader, name, ::Type{IntervalDomain})
 
-Reads an object named 'name' of type 'IntervalDomain'.
 """
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{IntervalDomain},
-)
-    g = reader.file["domains/" * name]
-    coord_type = attrs(g)["coord_type"]
-    FT = _scan_primitive_type_string(split(split(coord_type, "{")[end], "}")[1])
-    CT = _scan_coord_string(split(split(coord_type, "{")[1], ".")[end])
-    coord_min = parse(FT, split(split(attrs(g)["coord_min"], "(")[end], ")")[1])
-    coord_max = parse(FT, split(split(attrs(g)["coord_max"], "(")[end], ")")[1])
-    boundary_names =
-        haskey(attributes(g), "boundary_names") ?
-        tuple(map(Symbol, attrs(g)["boundary_names"])...) : nothing
-    periodic = boundary_names === nothing ? true : false
-    reader.cache[name] = Domains.IntervalDomain(
-        CT{FT}(coord_min),
-        CT{FT}(coord_max),
-        periodic = periodic,
-        boundary_names = boundary_names,
-    )
-    return nothing
+    read_domain(reader, name)
+
+Reads a domain named `name` from the file reader.
+"""
+function read_domain(reader, name)
+    Base.get!(reader.domain_cache, name) do
+        read_domain_new(reader, name)
+    end
+end
+
+function read_domain_new(reader::HDF5Reader, name::AbstractString)
+    group = reader.file["domains/$name"]
+    type = attrs(group)["type"]
+    if type == "IntervalDomain"
+        CT = _scan_coord_type(attrs(group)["coord_type"])
+        coord_min = CT(attrs(group)["coord_min"])
+        coord_max = CT(attrs(group)["coord_max"])
+        if haskey(attributes(group), "boundary_names")
+            boundary_names =
+                tuple(map(Symbol, attrs(group)["boundary_names"])...)
+            return Domains.IntervalDomain(coord_min, coord_max; boundary_names)
+        else
+            return Domains.IntervalDomain(coord_min, coord_max; periodic = true)
+        end
+    elseif type == "SphereDomain"
+        radius = attrs(group)["radius"]
+        return Domains.SphereDomain(radius)
+    else
+        error("Unsupported domain type $type")
+    end
+end
+
+
+"""
+    read_mesh(reader, name)
+
+Reads a topology named `name` from the file reader.
+"""
+function read_mesh(reader, name)
+    Base.get!(reader.mesh_cache, name) do
+        read_mesh_new(reader, name)
+    end
+end
+
+function read_mesh_new(reader::HDF5Reader, name::AbstractString)
+    group = reader.file["meshes/$name"]
+    type = attrs(group)["type"]
+    if type == "IntervalMesh"
+        domain = read_domain(reader, attrs(group)["domain"])
+        nelements = attrs(group)["nelements"]
+        faces_type = attrs(group)["faces_type"]
+        if faces_type == "Range"
+            return Meshes.IntervalMesh(
+                domain,
+                Meshes.Uniform(),
+                nelems = nelements,
+            )
+        else
+            CT = Domains.coordinate_type(domain)
+            faces = [CT(coords) for coords in attrs(group)["faces"]]
+            return Meshes.IntervalMesh(domain, faces)
+        end
+    elseif type == "RectilinearMesh"
+        intervalmesh1 = read_mesh(reader, attrs(group)["intervalmesh1"])
+        intervalmesh2 = read_mesh(reader, attrs(group)["intervalmesh2"])
+        return Meshes.RectilinearMesh(intervalmesh1, intervalmesh2)
+    elseif type == "EquiangularCubedSphere"
+        domain = read_domain(reader, attrs(group)["domain"])
+        localelementmap =
+            attrs(group)["localelementmap"] == "NormalizedBilinearMap" ?
+            NormalizedBilinearMap() : IntrinsicMap()
+        ne = attrs(group)["ne"]
+        return Meshes.EquiangularCubedSphere(domain, ne, localelementmap)
+    end
 end
 
 """
-    read_new!(reader, name, ::Type{SphereDomain})
+    read_topology(reader, name)
 
-Reads an object named 'name' of type 'SphereDomain'.
+Reads a topology named `name` from the file reader.
 """
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{SphereDomain},
-)
-    g = reader.file["domains/" * name]
-    reader.cache[name] = Domains.SphereDomain(attrs(g)["radius"])
-    return nothing
+function read_topology(reader, name)
+    Base.get!(reader.topology_cache, name) do
+        read_topology_new(reader, name)
+    end
+end
+
+
+function read_topology_new(reader::HDF5Reader, name::AbstractString)
+    group = reader.file["topologies/$name"]
+    type = attrs(group)["type"]
+    if type == "IntervalTopology"
+        mesh = read_mesh(reader, attrs(group)["mesh"])
+        return Topologies.IntervalTopology(mesh)
+    elseif type == "Topology2D"
+        mesh = read_mesh(reader, attrs(group)["mesh"])
+        if haskey(group, "elemorder")
+            elemorder =
+                matrix_to_cartesianindices(HDF5.read(group, "elemorder"))
+            return Topologies.Topology2D(mesh, elemorder)
+        else
+            return Topologies.Topology2D(mesh)
+        end
+    else
+        error("Unsupported type $type")
+    end
+end
+
+
+"""
+    read_space(reader, name)
+
+Reads a space named `name` from the file reader.
+"""
+function read_space(reader, name)
+    Base.get!(reader.space_cache, name) do
+        read_space_new(reader, name)
+    end
+end
+
+function read_space_new(reader, name)
+    group = reader.file["spaces/$name"]
+    type = attrs(group)["type"]
+    if type in ("SpectralElementSpace1D", "SpectralElementSpace2D")
+        npts = attrs(group)["quadrature_num_points"]
+        quadrature_style =
+            _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
+        topology = read_topology(reader, attrs(group)["topology"])
+        if type == "SpectralElementSpace1D"
+            Spaces.SpectralElementSpace1D(topology, quadrature_style)
+        else
+            Spaces.SpectralElementSpace2D(topology, quadrature_style)
+        end
+    elseif type == "ExtrudedFiniteDifferenceSpace"
+        if attrs(group)["staggering"] == "CellFace"
+            center_space = read_space(reader, attrs(group)["center_space"])
+            return Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
+        else
+            vertical_topology =
+                read_topology(reader, attrs(group)["vertical_topology"])
+            horizontal_space =
+                read_space(reader, attrs(group)["horizontal_space"])
+            return Spaces.ExtrudedFiniteDifferenceSpace(
+                horizontal_space,
+                Spaces.CenterFiniteDifferenceSpace(vertical_topology),
+            )
+        end
+    end
 end
 
 """
-    read_new!(reader, name, ::Type{IntervalMesh})
+    read_field(reader, name)
 
-Reads an object named 'name' of type 'IntervalMesh'.
+Reads a field named `name` from the file reader.
 """
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{IntervalMesh},
-)
-    (; file, cache) = reader
-    g = file["meshes/" * name]
-    domain = attrs(g)["domain"]
-    FT = _scan_primitive_type_string(attrs(g)["FT"]) # Float type
-    nelements = attrs(g)["nelements"]
-    faces_type = attrs(g)["faces_type"]
-    if faces_type == "Range"
-        cache[name] = Meshes.IntervalMesh(
-            Base.read!(reader, "domains/" * domain),
-            Meshes.Uniform(),
-            nelems = nelements,
+function read_field(reader::HDF5Reader, name::AbstractString)
+    obj = reader.file["fields/$name"]
+    type = attrs(obj)["type"]
+    if type == "Field"
+        data = read(obj)
+        data_layout = attrs(obj)["data_layout"]
+        Nij = size(data, findfirst("I", data_layout)[1])
+        DataLayout = _scan_data_layout(data_layout)
+        ElType = eval(Meta.parse(attrs(obj)["value_type"]))
+        values = DataLayout{ElType, Nij}(data)
+        space = read_space(reader, attrs(obj)["space"])
+        return Fields.Field(values, space)
+    elseif type == "FieldVector"
+        FieldVector(;
+            [
+                Symbol(sub) => read_field(reader, "$name/$sub") for
+                sub in keys(obj)
+            ]...,
         )
     else
-        CT = _scan_coord_string(
-            split(
-                replace(
-                    attrs(g)["faces_pt_type"],
-                    "ClimaCore." => "",
-                    "Geometry." => "",
-                ),
-                "{",
-            )[1],
-        )
-        faces = [CT{FT}(coords) for coords in attrs(g)["faces"]]
-        cache[name] =
-            Meshes.IntervalMesh(Base.read!(reader, "domains/" * domain), faces)
+        error("Unsupported type $type")
     end
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{RectilinearMesh})
-
-Reads an object named 'name' of type 'RectilinearMesh'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{RectilinearMesh},
-)
-    (; file, cache) = reader
-    g = file["meshes/" * name]
-    interval1 = attrs(g)["interval1"]
-    interval2 = attrs(g)["interval2"]
-    cache[name] = Meshes.RectilinearMesh(
-        Base.read!(reader, "meshes/$interval1"),
-        Base.read!(reader, "meshes/$interval2"),
-    )
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{EquiangularCubedSphere})
-
-Reads an object named 'name' of type 'EquiangularCubedSphere'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{EquiangularCubedSphere},
-)
-    (; file, cache) = reader
-    g = file["meshes/" * name]
-    localelementmap =
-        occursin("NormalizedBilinearMap", attrs(g)["localelementmap"]) ?
-        NormalizedBilinearMap() : IntrinsicMap()
-    ne = attrs(g)["ne"]
-    domain = attrs(g)["domain"]
-    cache[name] = Meshes.EquiangularCubedSphere(
-        Base.read!(reader, "domains/" * domain),
-        ne,
-        localelementmap,
-    )
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{IntervalTopology})
-
-Reads an object named 'name' of type 'IntervalTopology'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{IntervalTopology},
-)
-    (; file, cache) = reader
-    g = file["topologies/" * name]
-    mesh = attrs(g)["mesh"]
-    cache[name] =
-        Topologies.IntervalTopology(Base.read!(reader, "meshes/" * mesh))
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{Topology2D})
-
-Reads an object named 'name' of type 'Topology2D'.
-"""
-function read_new!(reader::HDF5Reader, name::AbstractString, ::Type{Topology2D})
-    (; file, cache) = reader
-    g = file["topologies/" * name]
-    elemorder_matrix = HDF5.read(g, "elemorder")
-    elemorder = matrix_to_cartesianindices(elemorder_matrix)
-    mesh = attrs(g)["mesh"]
-    cache[name] =
-        Topologies.Topology2D(Base.read!(reader, "meshes/" * mesh), elemorder)
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{SpectralElementSpace1D})
-
-Reads an object named 'name' of type 'SpectralElementSpace1D'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{SpectralElementSpace1D},
-)
-    (; file, cache) = reader
-    g = file["spaces/" * name]
-    npts = attrs(g)["quadrature_num_points"]
-    quadrature_style = _scan_quadrature_style(attrs(g)["quadrature_type"], npts)
-    topology = attrs(g)["topology"]
-    cache[name] = Spaces.SpectralElementSpace1D(
-        Base.read!(reader, "topologies/" * topology),
-        quadrature_style,
-    )
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{SpectralElementSpace2D})
-
-Reads an object named 'name' of type 'SpectralElementSpace2D'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{SpectralElementSpace2D},
-)
-    (; file, cache) = reader
-    g = file["spaces/" * name]
-    npts = attrs(g)["quadrature_num_points"]
-    quadrature_style = _scan_quadrature_style(attrs(g)["quadrature_type"], npts)
-    topology = attrs(g)["topology"]
-    cache[name] = Spaces.SpectralElementSpace2D(
-        Base.read!(reader, "topologies/" * topology),
-        quadrature_style,
-    )
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{ExtrudedFiniteDifferenceSpace})
-
-Reads an object named 'name' of type 'ExtrudedFiniteDifferenceSpace'.
-"""
-function read_new!(
-    reader::HDF5Reader,
-    name::AbstractString,
-    ::Type{T},
-) where {T <: ExtrudedFiniteDifferenceSpace}
-    (; file, cache) = reader
-    g = file["spaces/" * name]
-    staggering = attrs(g)["staggering"] == "CellCenter" ? CellCenter : CellFace
-    vertical_topology = attrs(g)["vertical_topology"]
-    horizontal_space_name = attrs(g)["horizontal_space"]
-    vertical_space = Spaces.FiniteDifferenceSpace{staggering}(
-        Base.read!(reader, "topologies/" * vertical_topology),
-    )
-    horizontal_space = Base.read!(reader, "spaces/" * horizontal_space_name)
-    cache[name] =
-        Spaces.ExtrudedFiniteDifferenceSpace(horizontal_space, vertical_space)
-    return nothing
-end
-
-"""
-    read_new!(reader, name, ::Type{Field})
-
-Reads an object named 'name' of type 'Field'.
-"""
-function read_new!(reader::HDF5Reader, name::AbstractString, ::Type{Field})
-    (; file, cache) = reader
-    @assert name ∈ keys(file["fields"])
-    g = file["fields/" * name]
-    data = read_dataset(g, "data")
-    data_layout = attrs(g)["data_layout"]
-    Nij = size(data, findfirst("I", data_layout)[1])
-    DataLayout = _scan_data_layout(data_layout)
-    ElType = ClimaCore.eval(Meta.parse(attrs(g)["value_type"]))
-    values = DataLayout{ElType, Nij}(data)
-    spacename = attrs(g)["space"]
-    return Fields.Field(values, Base.read!(reader, "spaces/" * spacename))
-end
-
-"""
-    read_fieldvector!(reader, name)
-
-Reads a 'FieldVector' with name 'name` from the HDFReader.
-"""
-function read_fieldvector!(reader::HDF5Reader, name::AbstractString)
-    (; file, cache) = reader
-    @assert name ∈ keys(file["fieldvectors"])
-    g = file["fieldvectors/" * name]
-    fields = attrs(g)["fields"]
-    return FieldVector(;
-        [
-            Symbol(name) =>
-                read_new!(reader, name, _type(reader, "fields/" * name)) for
-            name in fields
-        ]...,
-    )
-end
-
-"""
-    read!(filename, fvname)
-
-Reads a 'FieldVector' with name 'fvname` from the HDF5 file 'filename'.
-"""
-function read(filename::AbstractString, fvname::AbstractString)
-    hdfreader = InputOutput.HDF5Reader(filename)
-    fv = InputOutput.read_fieldvector!(hdfreader, fvname)
-    Base.close(hdfreader)
-    return fv
-end
-
-function Base.close(hdfreader::HDF5Reader)
-    close(hdfreader.file)
-    empty!(hdfreader.cache)
-    return nothing
 end
