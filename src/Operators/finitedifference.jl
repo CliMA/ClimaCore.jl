@@ -2599,18 +2599,18 @@ end
 end
 
 # unwap boxed scalars
-getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
-getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
-getidx(field::Fields.PointField, loc::Location, idx) = field[]
+@inline getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
+@inline getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
+@inline getidx(field::Fields.PointField, loc::Location, idx) = field[]
 
 # recursive fallback for scalar, just return
-getidx(scalar, ::Location, idx, hidx) = scalar
+@inline getidx(scalar, ::Location, idx, hidx) = scalar
 
 # getidx error fallbacks
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
-function getidx(field::Fields.Field, loc::Location, idx, hidx)
+@inline function getidx(field::Fields.Field, loc::Location, idx, hidx)
     getidx(column(field, hidx...), loc, idx)
     # inferred_getidx_error(typeof(idx), typeof(axes(field)))
 end
@@ -2634,7 +2634,7 @@ end
     (getidx(arg[1], loc, idx, hidx),)
 @inline getidx_args(::Tuple{}, loc::Location, idx, hidx) = ()
 
-function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx, hidx)
+@inline function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx, hidx)
     #_args = tuplemap(arg -> getidx(arg, loc, idx), bc.args)
     _args = getidx_args(bc.args, loc, idx, hidx)
     bc.f(_args...)
@@ -2819,4 +2819,20 @@ function apply_stencil!(field_out, bc, hidx)
         end
     end
     return field_out
+end
+
+if VERSION >= v"1.7.0-beta1"
+    # For complex nested types (ex. wrapped SMatrix) we hit a recursion limit and de-optimize
+    # We know the recursion will terminate due to the fact that bitstype fields
+    # cannot be self referential so there are no cycles in get/set_struct (bounded tree)
+    # TODO: enforce inference termination some other way
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(getidx)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(getidx_args)
+            m.recursion_relation = dont_limit
+        end
+    end
 end
