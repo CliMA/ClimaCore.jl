@@ -1,6 +1,6 @@
 abstract type AbstractWriter end
 
-
+using PkgVersion
 using HDF5
 using ..Domains
 using ..Meshes
@@ -21,6 +21,7 @@ end
 
 function HDF5Writer(filename::String)
     file = h5open(filename, "w")
+    attrs(file)["ClimaCore version"] = string(PkgVersion.@Version)
     cache = Dict{String, String}()
     return HDF5Writer(file, cache)
 end

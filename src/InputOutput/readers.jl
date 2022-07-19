@@ -2,6 +2,7 @@ abstract type AbstractReader end
 
 using HDF5
 using StaticArrays
+using ..ClimaCore
 using ..Domains: IntervalDomain, SphereDomain
 using ..Meshes:
     Meshes,
@@ -71,7 +72,7 @@ end
 Extracts the type of the object, specified by the `path`.
 """
 _type(reader::HDF5Reader, path::AbstractString) =
-    eval(Meta.parse(attrs(reader.file[path])["type"]))
+    ClimaCore.eval(Meta.parse(attrs(reader.file[path])["type"]))
 
 function _scan_primitive_type_string(typestring::AbstractString)
     @assert typestring ∈ (
@@ -391,8 +392,7 @@ function read_new!(reader::HDF5Reader, name::AbstractString, ::Type{Field})
     data_layout = attrs(g)["data_layout"]
     Nij = size(data, findfirst("I", data_layout)[1])
     DataLayout = _scan_data_layout(data_layout)
-    ElType =
-        eval(Meta.parse(replace(attrs(g)["value_type"], "ClimaCore." => "")))
+    ElType = ClimaCore.eval(Meta.parse(attrs(g)["value_type"]))
     values = DataLayout{ElType, Nij}(data)
     spacename = attrs(g)["space"]
     return Fields.Field(values, Base.read!(reader, "spaces/" * spacename))
