@@ -1,5 +1,4 @@
 EXAMPLE_DIR = joinpath(dirname(@__DIR__), "examples")
-EXAMPLE_DIR in LOAD_PATH || pushfirst!(LOAD_PATH, EXAMPLE_DIR)
 
 # Track allocations in ClimaCore.jl plus some important dependencies:
 import ClimaCore
