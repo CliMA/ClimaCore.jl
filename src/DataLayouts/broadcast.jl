@@ -480,13 +480,14 @@ end
     return dest
 end
 
+using LoopVectorization
 # inline inner column(::DataColumn) copy
 @inline function Base.copyto!(
     dest::VF{S},
     bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {S, A}
     _, _, _, Nv, _ = size(dest)
-    @inbounds for v in 1:Nv
+    @turbo for v in eachindex(1:Nv)
         idx = CartesianIndex(1, 1, 1, v, 1)
         dest[idx] = convert(S, bc[idx])
     end
