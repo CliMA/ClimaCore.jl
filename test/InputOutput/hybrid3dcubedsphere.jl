@@ -44,7 +44,10 @@ using ClimaCore:
     Y = Fields.FieldVector(c = ᶜlocal_geometry, f = ᶠlocal_geometry)
 
     # write field vector to hdf5 file
-    InputOutput.write!("hybrid3dcubedsphere.hdf5", "Y" => Y) # write field vector from hdf5 file
-    restart_Y = InputOutput.read("hybrid3dcubedsphere.hdf5", "Y") # read fieldvector from hdf5 file
+    filename = tempname()
+    InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
+    reader = InputOutput.HDF5Reader(filename)
+    restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+    close(reader)
     @test restart_Y == Y # test if restart is exact
 end
