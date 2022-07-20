@@ -34,10 +34,26 @@ import ..Geometry:
 using ..DataLayouts
 
 """
-    HDF5Reader
+    HDF5Reader(filename)
 
-A struct containing the `filename` and `cache` for reading data from the HDF5 file.
-The `cache` enables reading of relevant data without duplication.
+An `AbstractReader` for reading from HDF5 files created by [`HDF5Writer`](@ref).
+The reader object contains an internal cache of domains, meshes, topologies and spaces
+that are read so that duplicate objects are not created.
+
+# Interface
+- [`read_domain`](@ref)
+- [`read_mesh`](@ref)
+- [`read_topology`](@ref)
+- [`read_space`](@ref)
+- [`read_field`](@ref)
+
+# Usage
+
+```julia
+reader = InputOutput.HDF5Reader(filename)
+field = read_field(reader, "Y")
+close(reader)
+```
 """
 struct HDF5Reader
     file::HDF5.File
@@ -104,9 +120,10 @@ end
 
 
 """
-    read_domain(reader, name)
+    read_domain(reader::AbstractReader, name)
 
-Reads a domain named `name` from the file reader.
+Reads a domain named `name` from `reader`. Domain objects are cached in the
+reader to avoid creating duplicate objects.
 """
 function read_domain(reader, name)
     Base.get!(reader.domain_cache, name) do
@@ -138,9 +155,10 @@ end
 
 
 """
-    read_mesh(reader, name)
+    read_mesh(reader::AbstractReader, name)
 
-Reads a topology named `name` from the file reader.
+Reads a mesh named `name` from `reader`, or from the reader cache if it has
+already been read.
 """
 function read_mesh(reader, name)
     Base.get!(reader.mesh_cache, name) do
@@ -181,9 +199,10 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
 end
 
 """
-    read_topology(reader, name)
+    read_topology(reader::AbstractReader, name)
 
-Reads a topology named `name` from the file reader.
+Reads a topology named `name` from `reader`, or from the reader cache if it has
+already been read.
 """
 function read_topology(reader, name)
     Base.get!(reader.topology_cache, name) do
@@ -214,9 +233,10 @@ end
 
 
 """
-    read_space(reader, name)
+    read_space(reader::AbstractReader, name)
 
-Reads a space named `name` from the file reader.
+Reads a space named `name` from `reader`, or from the reader cache if it has
+already been read.
 """
 function read_space(reader, name)
     Base.get!(reader.space_cache, name) do
@@ -257,7 +277,9 @@ end
 """
     read_field(reader, name)
 
-Reads a field named `name` from the file reader.
+Reads a `Field` or `FieldVector` named `name` from `reader`. Fields are _not_
+cached, so that reading the same field multiple times will create multiple
+distinct objects.
 """
 function read_field(reader::HDF5Reader, name::AbstractString)
     obj = reader.file["fields/$name"]

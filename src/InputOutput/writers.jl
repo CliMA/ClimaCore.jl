@@ -9,10 +9,24 @@ using ..Spaces
 using ..Fields
 
 """
-    HDF5Writer
+    HDF5Writer(filename)
 
-A struct containing the `filename` and `cache` for writing data to the HDF5 file.
-The `cache` enables writing of relevant data without duplication.
+An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
+storage conventions. An internal cache is used to avoid writing duplicate
+domains, meshes, topologies and spaces to the file. Use [`HDF5Reader`](@ref) to
+load the data from the file.
+
+# Interface
+
+[`write!`](@ref)
+
+# Usage
+
+```julia
+writer = InputOutput.HDF5Writer(filename)
+InputOutput.write!(writer, Y, "Y")
+close(writer)
+```
 """
 struct HDF5Writer <: AbstractWriter
     file::HDF5.File
@@ -46,15 +60,23 @@ function cartesianindices_to_matrix(elemorder)
 end
 
 """
-    write!(reader, obj[, path])
+    write!(writer::AbstractWriter, obj[, preferredname])
 
-Checks the cache to verify if the object, specified by the `path`, is in the cache.
-If it has not been read, this function reads it to the cache and returns the name of the object.
+Write the object `obj` using `writer`. An optional `preferredname` can be
+provided, otherwise [`defaultname`](@ref) will be used to generate a name. The
+name of the object will be returned.
+
+A cache of domains, meshes, topologies and spaces is kept: if one of these
+objects has already been written, then the file will not be modified: instead
+the name under which the object was first written will be returned. Note that
+`Field`s and `FieldVector`s are _not_ cached, and so can be written multiple
+times.
 """
-write!(writer::HDF5Writer, obj, name = defaultname(obj)) =
+function write!(writer::HDF5Writer, obj, name = defaultname(obj))
     get!(writer.cache, name) do
         write_new!(writer, obj, name)
     end
+end
 
 # Domains
 defaultname(::Domains.SphereDomain) = "sphere"
@@ -278,11 +300,6 @@ function write_new!(
     return group
 end
 
-"""
-    write_new!(writer, space, name)
-
-Write `CenterExtrudedFiniteDifferenceSpace` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     space::Spaces.CenterExtrudedFiniteDifferenceSpace,
@@ -304,11 +321,6 @@ function write_new!(
     return name
 end
 
-"""
-    write_new!(writer, space, name)
-
-Write `FaceExtrudedFiniteDifferenceSpace` data to HDF5.
-"""
 function write_new!(
     writer::HDF5Writer,
     space::Spaces.FaceExtrudedFiniteDifferenceSpace,
@@ -328,11 +340,6 @@ end
 
 
 # write fields
-"""
-    write!(writer, field, name)
-
-Write `Field` data to HDF5.
-"""
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     axes_name = write!(writer, axes(field))
     write_dataset(writer.file, "fields/$name", parent(field))
@@ -347,12 +354,7 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     write_attribute(dataset, "space", axes_name)
     return name
 end
-# field vectors
-"""
-    write_new!(writer, fieldvector, name)
 
-Write `FieldVector` data to HDF5.
-"""
 function write!(
     writer::HDF5Writer,
     fieldvector::Fields.FieldVector,
