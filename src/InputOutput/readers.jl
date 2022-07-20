@@ -65,6 +65,14 @@ end
 
 function HDF5Reader(filename::AbstractString)
     file = h5open(filename, "r")
+    if !haskey(attrs(file), "ClimaCore version")
+        error("Not a ClimaCore HDF5 file")
+    end
+    file_version = VersionNumber(attrs(file)["ClimaCore version"])
+    package_version = PkgVersion.@Version
+    if file_version > package_version
+        @warn "$filename was written using a newer version of ClimaCore than is currently loaded" file_version package_version
+    end
     return HDF5Reader(file, Dict(), Dict(), Dict(), Dict())
 end
 
