@@ -52,6 +52,7 @@ using Base: operator_associativity
 @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end
 @safetestset "FD ops - linsolve" begin @time include("Operators/finitedifference/linsolve.jl") end
 @safetestset "FD ops - examples" begin @time include("Operators/finitedifference/opt_examples.jl") end
+@safetestset "FD ops - column benchmark" begin @time include("Operators/finitedifference/column_benchmark.jl") end
 # now part of buildkite
 # @time include("Operators/finitedifference/implicit_stencils.jl")
 # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
