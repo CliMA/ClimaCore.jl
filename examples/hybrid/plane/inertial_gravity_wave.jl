@@ -40,7 +40,7 @@ const ρₛ = p_0 / (R_d * T₀)        # air density at surface
 # TODO: Loop over all domain setups used in reference paper
 const Δx = is_small_scale ? FT(1e3) : FT(20e3)
 const Δz = is_small_scale ? Δx / 2 : Δx / 40
-z_elem = Int(z_max / Δz)
+z_elem = Int(z_max * 1.5 / Δz) # 30 vertical elements
 npoly, x_elem = 1, Int(x_max / Δx) # max small-scale dt = 1.5
 # npoly, x_elem = 4, Int(x_max / (Δx * (4 + 1))) # max small-scale dt = 0.8
 
@@ -51,7 +51,7 @@ fps = 2
 # Additional values required for driver
 horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
-dt = is_small_scale ? FT(1.0) : FT(20)
+dt = is_small_scale ? FT(0.5) : FT(20)
 dt_save_to_sol = t_end / (animation_duration * fps)
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
 jacobian_flags = (;
