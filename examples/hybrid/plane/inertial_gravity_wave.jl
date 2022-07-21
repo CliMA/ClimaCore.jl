@@ -190,8 +190,12 @@ function ρfb_init_coefs(
     horizontal_mesh =
         periodic_line_mesh(; x_max, x_elem = upsampling_factor * x_elem)
     h_space = make_horizontal_space(horizontal_mesh, npoly)
-    center_space, _ =
-        make_hybrid_spaces(h_space, z_max, upsampling_factor * z_elem; z_stretch_scale)
+    center_space, _ = make_hybrid_spaces(
+        h_space,
+        z_max,
+        upsampling_factor * z_elem;
+        z_stretch_scale,
+    )
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶜx = ᶜlocal_geometry.coordinates.x
     ᶜz = ᶜlocal_geometry.coordinates.z

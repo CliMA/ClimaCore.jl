@@ -88,8 +88,9 @@ else
         h_space = make_horizontal_space(horizontal_mesh, npoly)
         comms_ctx = nothing
     end
-    z_stretch_scale = z_max / 6.0
-    center_space, face_space = make_hybrid_spaces(h_space, z_max, z_elem; z_stretch_scale)
+    z_stretch_scale = 7e3
+    center_space, face_space =
+        make_hybrid_spaces(h_space, z_max, z_elem; z_stretch_scale)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶠlocal_geometry = Fields.local_geometry_field(face_space)
     Y = Fields.FieldVector(
