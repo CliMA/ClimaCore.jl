@@ -20,7 +20,7 @@ include("../staggered_nonhydrostatic_model.jl")
 
 # Additional constants required for inertial gravity wave initial condition
 z_max = FT(10e3)
-const z_stretch_scale = z_max / 6.0
+const z_stretch_scale = 7e3
 const x_max = is_small_scale ? FT(300e3) : FT(6000e3)
 const x_mid = is_small_scale ? FT(100e3) : FT(3000e3)
 const d = is_small_scale ? FT(5e3) : FT(100e3)
