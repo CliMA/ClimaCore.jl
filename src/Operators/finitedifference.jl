@@ -2599,23 +2599,23 @@ end
 end
 
 # unwap boxed scalars
-getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
-getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
-getidx(field::Fields.PointField, loc::Location, idx) = field[]
+@inline getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
+@inline getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
+@inline getidx(field::Fields.PointField, loc::Location, idx) = field[]
 
 # recursive fallback for scalar, just return
-getidx(scalar, ::Location, idx, hidx) = scalar
+@inline getidx(scalar, ::Location, idx, hidx) = scalar
 
 # getidx error fallbacks
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
-function getidx(field::Fields.Field, loc::Location, idx, hidx)
+@inline function getidx(field::Fields.Field, loc::Location, idx, hidx)
     getidx(column(field, hidx...), loc, idx)
     # inferred_getidx_error(typeof(idx), typeof(axes(field)))
 end
 
-function getidx(
+@inline function getidx(
     field::Base.Broadcast.Broadcasted{StencilStyle},
     ::Location,
     idx,
@@ -2634,14 +2634,14 @@ end
     (getidx(arg[1], loc, idx, hidx),)
 @inline getidx_args(::Tuple{}, loc::Location, idx, hidx) = ()
 
-function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx, hidx)
+@inline function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx, hidx)
     #_args = tuplemap(arg -> getidx(arg, loc, idx), bc.args)
     _args = getidx_args(bc.args, loc, idx, hidx)
     bc.f(_args...)
 end
 
 # setidx! methods for copyto!
-function setidx!(
+Base.@propagate_inbounds function setidx!(
     field::Union{
         Fields.CenterFiniteDifferenceField,
         Fields.CenterExtrudedFiniteDifferenceField,
@@ -2655,7 +2655,7 @@ function setidx!(
     val
 end
 
-function setidx!(
+Base.@propagate_inbounds function setidx!(
     field::Union{
         Fields.FaceFiniteDifferenceField,
         Fields.FaceExtrudedFiniteDifferenceField,
