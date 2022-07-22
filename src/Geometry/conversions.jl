@@ -141,19 +141,19 @@ covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
 @inline contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
-    project(Contravariant1Axis(), u, local_geometry).u¹
+    transform(Contravariant123Axis(), u, local_geometry).u¹
 @inline contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
-    project(Contravariant2Axis(), u, local_geometry).u²
+    transform(Contravariant123Axis(), u, local_geometry).u²
 @inline contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
-    project(Contravariant3Axis(), u, local_geometry).u³
+    transform(Contravariant123Axis(), u, local_geometry).u³
 
-function contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry)
+@inline function contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry)
     @inbounds transform(Contravariant123Axis(), u, local_geometry)[1, :]
 end
-function contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry)
+@inline function contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry)
     @inbounds transform(Contravariant123Axis(), u, local_geometry)[2, :]
 end
-function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
+@inline function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
     @inbounds transform(Contravariant123Axis(), u, local_geometry)[3, :]
 end
 
