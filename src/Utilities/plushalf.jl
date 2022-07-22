@@ -32,13 +32,21 @@ Base.:<=(h1::PlusHalf, h2::PlusHalf) = h1.i <= h2.i
 Base.:<(h1::PlusHalf, h2::PlusHalf) = h1.i < h2.i
 Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
 Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
+# Base.isequal(h1::PlusHalf, h2::PlusHalf) = h1.i == h2.i
 
 Base.convert(::Type{P}, i::Integer) where {P <: PlusHalf} =
     throw(InexactError(:convert, P, i))
 Base.convert(::Type{I}, h::PlusHalf) where {I <: Integer} =
     throw(InexactError(:convert, I, h))
 
-Base.length(r::UnitRange{PlusHalf{I}}) where {I} =
-    last(r) - first(r) + oneunit(I)
+function Base.length(r::UnitRange{PlusHalf{I}}) where {I}
+    # i = (last(r) - first(r) + oneunit(I))::Int
+    i = (last(r) - first(r) + oneunit(I))
+    return i
+end
 
 Base.step(::AbstractUnitRange{PlusHalf{I}}) where {I} = one(I)
+# Base.last(r::AbstractUnitRange{PlusHalf{I}}) where {I} = length(r)
+
+
+# @code_typed length(PlusHalf(0):PlusHalf(10))

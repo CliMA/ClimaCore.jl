@@ -135,7 +135,7 @@ function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
     )
 end
 
-column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
+@inline column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
     space.staggering,
     space.vertical_topology,
     Geometry.CartesianGlobalGeometry(),
