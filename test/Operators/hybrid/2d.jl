@@ -13,6 +13,7 @@ import ClimaCore:
     Fields,
     Operators,
     level
+import ClimaCore.Geometry: WVector
 import ClimaCore.Domains.Geometry: ⊗
 import ClimaCore.Utilities: half
 

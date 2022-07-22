@@ -1,5 +1,5 @@
 using Test
-import ClimaCore.DataLayouts: VIFH, slab, column
+import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH
 
 @testset "VIFH" begin
     TestFloatTypes = (Float32, Float64)
