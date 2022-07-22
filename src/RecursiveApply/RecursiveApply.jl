@@ -38,15 +38,15 @@ end
 
 Recursively apply `fn` to each element of `X`
 """
-@inline rmap(fn::F, X) where {F} = fn(X)
-@inline rmap(fn::F, X, Y) where {F} = fn(X, Y)
-@inline rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
-@inline rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
-@inline rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
+rmap(fn::F, X) where {F} = fn(X)
+rmap(fn::F, X, Y) where {F} = fn(X, Y)
+rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
+rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
     (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
-@inline rmap(fn::F, X::NamedTuple{names}) where {F, names} =
+rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
-@inline rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
+rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
 
@@ -77,7 +77,7 @@ Recursively scale each element of `X` by `Y`.
 rmul(X, Y) = rmap(*, X, Y)
 rmul(w::Number, X) = rmap(x -> w * x, X)
 rmul(X, w::Number) = rmap(x -> x * w, X)
-rmul(w1::T, w2::T) where {T <: Number} = w1 * w2
+rmul(w1::Number, w2::Number) = w1 * w2
 const ⊠ = rmul
 
 """
@@ -90,7 +90,7 @@ radd(X) = X
 radd(X, Y) = rmap(+, X, Y)
 radd(w::Number, X) = rmap(x -> w + x, X)
 radd(X, w::Number) = rmap(x -> x + w, X)
-radd(w1::T, w2::T) where {T <: Number} = w1 + w2
+radd(w1::Number, w2::Number) = w1 + w2
 const ⊞ = radd
 
 # Adapted from Base/operators.jl for general nary operator fallbacks
@@ -106,11 +106,11 @@ end
 
 Recursively subtract elements of `Y` from `X`.
 """
-@inline rsub(X) = rmap(-, X)
-@inline rsub(X, Y) = rmap(-, X, Y)
-@inline rsub(X, w::Number) = rmap(x -> x - w, X)
-@inline rsub(w::Number, X) = rmap(x -> w - x, X)
-@inline rsub(w1::T, w2::T) where {T <: Number} = w1 - w2
+rsub(X) = rmap(-, X)
+rsub(X, Y) = rmap(-, X, Y)
+rsub(X, w::Number) = rmap(x -> x - w, X)
+rsub(w::Number, X) = rmap(x -> w - x, X)
+rsub(w1::Number, w2::Number) = w1 - w2
 const ⊟ = rsub
 
 """
@@ -121,7 +121,7 @@ Recursively divide each element of `X` by `Y`
 rdiv(X, Y) = rmap(/, X, Y)
 rdiv(X, w::Number) = rmap(x -> x / w, X)
 rdiv(w::Number, X) = rmap(x -> w / x, X)
-rdiv(w1::T, w2::T) where {T <: Number} = w1 / w2
+rdiv(w1::Number, w2::Number) = w1 / w2
 
 """
     rmuladd(w, X, Y)
@@ -130,7 +130,7 @@ Recursively add elements of `w * X + Y`.
 """
 rmuladd(w::Number, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
 rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
-rmuladd(w::T, x::T, y::T) where {T <: Number} = muladd(w, x, y)
+rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 
 """
     rmatmul1(W, S, i, j)
@@ -164,21 +164,6 @@ function rmatmul2(W, S, i, j)
         r = rmuladd(W[j, jj], S[i, jj], r)
     end
     return r
-end
-
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(rmap)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(rsub)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(tuplemap)
-            m.recursion_relation = dont_limit
-        end
-    end
 end
 
 end # module
