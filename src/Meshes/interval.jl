@@ -212,3 +212,50 @@ function IntervalMesh(
     faces = [zₛ; faces...]
     IntervalMesh(domain, CT.(faces))
 end
+
+"""
+    TruncatedIntervalMesh(
+        domain::IntervalDomain{CT},
+        stretch::GeneralizedExponentialStretching{FT};
+        nelems::Int,
+        z_top::FT,
+    )
+
+Constructs an `IntervalMesh`, truncating the given `domain` exactly at `z_top`.
+The truncation preserves the number of degrees of freedom covering the space
+from the `:bottom` to `z_top`, adjusting the stretching so that `:top` is at `z_top`. 
+"""
+function TruncatedIntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::GeneralizedExponentialStretching{FT};
+    nelems::Int,
+    z_top::FT,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+
+    parent_mesh = IntervalMesh(domain, stretch; nelems = nelems)
+    # Get approximate top
+    faces = parent_mesh.faces
+    k_top = length(faces)
+    for (k_f, face) in enumerate(faces)
+        if face.z ≥ z_top
+            k_top = k_f
+            break
+        end
+    end
+
+    z₀ = faces[1]
+    z_approx_top = faces[k_top]
+    trunc_faces = faces[1:k_top]
+    new_nelems = length(trunc_faces) - 1
+
+    Δz_top = trunc_faces[end].z - trunc_faces[end - 1].z
+    Δz_surf = trunc_faces[2].z - trunc_faces[1].z
+
+    new_stretch = GeneralizedExponentialStretching(Δz_surf, Δz_top)
+    new_domain = IntervalDomain(
+        z₀,
+        Geometry.ZPoint{FT}(z_top),
+        boundary_tags = (:bottom, :top),
+    )
+    return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
+end

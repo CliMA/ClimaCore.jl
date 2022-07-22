@@ -161,3 +161,29 @@ end
     # a residual tol of ~1e-1 or 1e-2 is fine for typical use cases
     @test fₑ - fₑ₋₁ ≈ 7.0 / 45.0 rtol = 1e-2
 end
+
+@testset "TruncatedIntervalMesh" begin
+    nz = 55
+    Δz_s = 30.0
+    Δz_top = 8000.0
+    z_toa_parent = 45000.0
+    z_top = 4000.0
+    z0 = 0.0
+    FT = eltype(z_toa_parent)
+    stretch = Meshes.GeneralizedExponentialStretching(Δz_s, Δz_top)
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(z0),
+        Geometry.ZPoint{FT}(z_toa_parent),
+        boundary_tags = (:bottom, :top),
+    )
+    mesh = Meshes.TruncatedIntervalMesh(
+        domain,
+        stretch,
+        nelems = nz,
+        z_top = z_top,
+    )
+    @test Meshes.nelements(mesh) == 27
+    @test length(mesh.faces) == 28
+    @test mesh.faces[end].z ≈ z_top
+    @test mesh.faces[1].z ≈ FT(0)
+end
