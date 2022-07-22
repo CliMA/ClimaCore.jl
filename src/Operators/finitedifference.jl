@@ -1895,19 +1895,19 @@ return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
 return_space(::GradientF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
     Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
-stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
+@inline stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 @inline function stencil_interior(::GradientF2C, loc, idx, hidx, arg)
     Geometry.Covariant3Vector(1) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(arg, loc, idx - half, hidx))
 end
 
-boundary_width(::GradientF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, hidx, arg)
+@inline boundary_width(::GradientF2C, ::SetValue, arg) = 1
+@inline function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, hidx, arg)
     @assert idx == left_center_boundary_idx(arg)
     Geometry.Covariant3Vector(1) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(bc.val, loc, nothing, hidx))
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::GradientF2C,
     bc::SetValue,
     loc,
@@ -1920,8 +1920,8 @@ function stencil_right_boundary(
     (getidx(bc.val, loc, nothing, hidx) ⊟ getidx(arg, loc, idx - half, hidx))
 end
 
-boundary_width(::GradientF2C, ::Extrapolate, arg) = 1
-function stencil_left_boundary(
+@inline boundary_width(::GradientF2C, ::Extrapolate, arg) = 1
+@inline function stencil_left_boundary(
     op::GradientF2C,
     ::Extrapolate,
     loc,
@@ -1937,7 +1937,7 @@ function stencil_left_boundary(
         Geometry.LocalGeometry(space, idx, hidx),
     )
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     op::GradientF2C,
     ::Extrapolate,
     loc,
@@ -2581,7 +2581,7 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     if Topologies.isperiodic(space.topology)
         idx = mod1(idx, length(space))
     end
-    return field_data[idx]
+    return @inbounds field_data[idx]
 end
 
 @inline function getidx(
@@ -2595,7 +2595,7 @@ end
     if Topologies.isperiodic(space.topology)
         i = mod1(i, length(space))
     end
-    return field_data[i]
+    return @inbounds field_data[i]
 end
 
 # unwap boxed scalars

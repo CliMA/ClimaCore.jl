@@ -92,7 +92,7 @@ function slab(
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
-function column(
+@inline function column(
     bc::Base.Broadcast.Broadcasted{Style},
     i,
     j,
