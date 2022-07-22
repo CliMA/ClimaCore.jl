@@ -1,6 +1,7 @@
 using ClimaCore: Domains, Meshes, Geometry
 using Test
 using SparseArrays
+using StaticArrays
 
 
 function rectangular_mesh(

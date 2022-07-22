@@ -12,6 +12,7 @@ import ClimaCore:
     Spaces,
     Fields,
     Operators
+import ClimaCore.Geometry: WVector
 
 import ClimaCore.Utilities: half
 import ClimaCore.DataLayouts: level

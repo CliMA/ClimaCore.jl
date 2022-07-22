@@ -1,5 +1,5 @@
 using LinearAlgebra, IntervalSets, UnPack
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry
+import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column
 
 using Test
 
