@@ -83,7 +83,7 @@ end
 #####
 ##### Field implementation (with `apply_stencil!`)
 #####
-function op_field_apply_stencil!(c, f)
+function op_field_apply_stencil_div!(c, f)
     ∇f = Operators.DivergenceF2C()
     wvec = Geometry.WVector
     @. c.x = ∇f(wvec(f.y))
@@ -156,5 +156,16 @@ function benchmark_grad(vars_contig, cfield, ffield)
 
     println("\n############################ Field apply_stencil! grad")
     trial = @benchmark op_field_apply_stencil_grad!($(cfield.∇x), $(ffield.y))
+    show(stdout, MIME("text/plain"), trial)
+end
+
+function benchmark_div(vars_contig, cfield, ffield)
+    println("\n############################ Arrays loop views")
+    (; D, U, xarr, yarr) = vars_contig
+    trial = @benchmark op_raw_arrays_loop_views!($xarr, $yarr, $D, $U)
+    show(stdout, MIME("text/plain"), trial)
+
+    println("\n############################ Field apply_stencil! div")
+    trial = @benchmark op_field_apply_stencil_div!($cfield, $ffield)
     show(stdout, MIME("text/plain"), trial)
 end

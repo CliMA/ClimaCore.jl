@@ -181,7 +181,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         idx = mod1(idx, length(space))
     end
-    column(space.center_local_geometry, hidx...)[idx]
+    @inbounds column(space.center_local_geometry, hidx...)[idx]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Union{
@@ -195,7 +195,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         i = mod1(i, length(space))
     end
-    column(space.face_local_geometry, hidx...)[i]
+    @inbounds column(space.face_local_geometry, hidx...)[i]
 end
 
 
@@ -2090,8 +2090,8 @@ return_space(::DivergenceF2C, space::Spaces.FaceFiniteDifferenceSpace) =
 return_space(::DivergenceF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
     Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
-stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
-function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
+@inline stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
+Base.@propagate_inbounds function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
     Ju³₊ = Geometry.Jcontravariant3(
@@ -2105,8 +2105,8 @@ function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
 
-boundary_width(::DivergenceF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline boundary_width(::DivergenceF2C, ::SetValue, arg) = 1
+@inline function stencil_left_boundary(
     ::DivergenceF2C,
     bc::SetValue,
     loc,
@@ -2127,7 +2127,7 @@ function stencil_left_boundary(
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::DivergenceF2C,
     bc::SetValue,
     loc,
@@ -2149,8 +2149,8 @@ function stencil_right_boundary(
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
 
-boundary_width(::DivergenceF2C, ::Extrapolate, arg) = 1
-function stencil_left_boundary(
+@inline boundary_width(::DivergenceF2C, ::Extrapolate, arg) = 1
+@inline function stencil_left_boundary(
     op::DivergenceF2C,
     ::Extrapolate,
     loc,
@@ -2161,7 +2161,7 @@ function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, hidx, arg)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     op::DivergenceF2C,
     ::Extrapolate,
     loc,

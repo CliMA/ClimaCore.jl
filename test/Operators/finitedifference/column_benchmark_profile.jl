@@ -1,7 +1,8 @@
 include("column_benchmark_utils.jl")
 
 function apply_kernel!(cfield, ffield, D, U, xarr, yarr)
-    op_field_apply_stencil_grad!(cfield.∇x, ffield.y)
+    # op_field_apply_stencil_grad!(cfield.∇x, ffield.y)
+    op_field_apply_stencil_div!(cfield, ffield)
     # op_raw_arrays_loop_views!(xarr, yarr, D, U)
 end
 
