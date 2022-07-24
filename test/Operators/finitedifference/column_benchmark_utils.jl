@@ -92,6 +92,11 @@ function set_value_bcs(c)
              top = Operators.SetValue(FT(0)))
 end
 
+function extrapolate_bcs(c)
+    return (;bottom = Operators.Extrapolate(),
+             top = Operators.Extrapolate())
+end
+
 function set_value_contra3_bcs(c)
     FT = Spaces.undertype(axes(c))
     contra3 = Geometry.Contravariant3Vector
@@ -166,9 +171,16 @@ end
 
 function set_curl_bcs(c)
     FT = Spaces.undertype(axes(c))
-    cov12 = Geometry.Contravariant12Vector
-    return (;bottom = Operators.SetCurl(cov12(FT(0), FT(0))),
-             top = Operators.SetCurl(cov12(FT(0), FT(0))))
+    contra12 = Geometry.Contravariant12Vector
+    return (;bottom = Operators.SetCurl(contra12(FT(0), FT(0))),
+             top = Operators.SetCurl(contra12(FT(0), FT(0))))
+end
+
+function set_curl_value_bcs(c)
+    FT = Spaces.undertype(axes(c))
+    cov12 = Geometry.Covariant12Vector
+    return (;bottom = Operators.SetValue(cov12(FT(0), FT(0))),
+             top = Operators.SetValue(cov12(FT(0), FT(0))))
 end
 
 function bc_name(bcs::NamedTuple)
@@ -189,17 +201,17 @@ include("column_benchmark_kernels.jl")
 
 bcs_tested(c, ::typeof(op_GradientF2C!)) = ((), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c), set_value_bcs(c))
-bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((), )
-bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c),)
+bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((), extrapolate_bcs(c))
+bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((), )
-bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c),)
+bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_LeftBiasedC2F!)) = (set_bot_value_bc(c),)
 bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((), set_bot_value_bc(c))
 bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
 bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((), set_top_value_bc(c))
-bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c), )
-bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), )
-bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased_3_bcs(c), )
+bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c), set_curl_value_bcs(c))
+bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
+bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased_3_bcs(c), extrapolate_bcs(c))
 
 # Composed operators (bcs handled case-by-case)
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
@@ -284,8 +296,11 @@ function benchmark_cases(vars_contig, cfield, ffield)
     @test_broken t_ave[(op_RightBiasedC2F!, :SetValue)] < 500
     @test_broken t_ave[(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
     @test_broken t_ave[(op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[(op_CurlC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 500
     @test_broken t_ave[(op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
     @test_broken t_ave[(op_GradientF2C!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 500
     @test_broken t_ave[(op_InterpolateF2C!, :none)] < 500
     @test_broken t_ave[(op_RightBiasedF2C!, :none)] < 500
     @test_broken t_ave[(op_LeftBiasedC2F!, :SetValue)] < 500
@@ -293,6 +308,7 @@ function benchmark_cases(vars_contig, cfield, ffield)
     @test_broken t_ave[(op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
     @test_broken t_ave[(op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
     @test_broken t_ave[(op_InterpolateC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 500
     @test_broken t_ave[(op_GradientC2F!, :SetValue, :SetValue)] < 500
     @test_broken t_ave[(op_GradientC2F!, :SetGradient, :SetGradient)] < 500
     @test_broken t_ave[(op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
