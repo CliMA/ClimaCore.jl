@@ -137,7 +137,7 @@ function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
     return dest
 end
 
-function ncomponents(data::AbstractData{S}) where {S}
+@inline function ncomponents(data::AbstractData{S}) where {S}
     typesize(eltype(parent(data)), S)
 end
 
@@ -607,7 +607,7 @@ end
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
                  throw(BoundsError(data, (i, j)))
     dataview = @inbounds view(parent(data), i, j, :)
-    get_struct(dataview, S)
+    @inbounds get_struct(dataview, S)
 end
 
 @inline function Base.setindex!(
@@ -711,7 +711,7 @@ end
 @inline function Base.getindex(data::IF{S, Ni}, i::Integer) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     dataview = @inbounds view(parent(data), i, :)
-    get_struct(dataview, S)
+    @inbounds get_struct(dataview, S)
 end
 
 @inline function Base.setindex!(data::IF{S, Ni}, val, i::Integer) where {S, Ni}
@@ -950,7 +950,7 @@ end
 end
 
 @propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex{5})
-    data[I[1], I[2], I[4]]
+    @inbounds data[I[1], I[2], I[4]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -958,7 +958,7 @@ end
     val,
     I::CartesianIndex{5},
 )
-    data[I[1], I[2], I[4]] = val
+    @inbounds data[I[1], I[2], I[4]] = val
 end
 
 function gather(

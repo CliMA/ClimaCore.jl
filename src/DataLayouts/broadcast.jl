@@ -183,7 +183,7 @@ end
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
-    _args = column_args(bc.args, inds...)
+    @inbounds _args = column_args(bc.args, inds...)
     _axes = nothing
     Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
 end
@@ -200,7 +200,7 @@ end
     i,
     h,
 )
-    slab(bc, h)[i]
+    @inbounds slab(bc, h)[i]
 end
 @propagate_inbounds function column(
     bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
@@ -208,7 +208,7 @@ end
     j,
     h,
 )
-    slab(bc, h)[i]
+    @inbounds slab(bc, h)[i]
 end
 
 @propagate_inbounds function column(
@@ -217,7 +217,7 @@ end
     j,
     h,
 )
-    slab(bc, h)[i, j]
+    @inbounds slab(bc, h)[i, j]
 end
 
 function Base.similar(

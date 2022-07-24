@@ -181,7 +181,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         idx = mod1(idx, length(space))
     end
-    column(space.center_local_geometry, hidx...)[idx]
+    @inbounds column(space.center_local_geometry, hidx...)[idx]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Union{
@@ -195,7 +195,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         i = mod1(i, length(space))
     end
-    column(space.face_local_geometry, hidx...)[i]
+    @inbounds column(space.face_local_geometry, hidx...)[i]
 end
 
 
@@ -414,7 +414,7 @@ return_space(
 ) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::InterpolateF2C, arg) = ((-half, half),)
-function stencil_interior(::InterpolateF2C, loc, idx, hidx, arg)
+@inline function stencil_interior(::InterpolateF2C, loc, idx, hidx, arg)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
     RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
@@ -460,14 +460,14 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::InterpolateC2F, arg) = ((-half, half),)
-function stencil_interior(::InterpolateC2F, loc, idx, hidx, arg)
+@inline function stencil_interior(::InterpolateC2F, loc, idx, hidx, arg)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
     RecursiveApply.rdiv(a⁺ ⊞ a⁻, 2)
 end
 
 boundary_width(::InterpolateC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::InterpolateC2F,
     bc::SetValue,
     loc,
@@ -478,7 +478,7 @@ function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(arg)
     getidx(bc.val, loc, nothing, hidx)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::InterpolateC2F,
     bc::SetValue,
     loc,
@@ -491,7 +491,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::InterpolateC2F, ::SetGradient, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::InterpolateC2F,
     bc::SetGradient,
     loc,
@@ -508,7 +508,7 @@ function stencil_left_boundary(
     )
     a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::InterpolateC2F,
     bc::SetGradient,
     loc,
@@ -527,7 +527,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::InterpolateC2F, ::Extrapolate, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::InterpolateC2F,
     bc::Extrapolate,
     loc,
@@ -539,7 +539,7 @@ function stencil_left_boundary(
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁺
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::InterpolateC2F,
     bc::Extrapolate,
     loc,
@@ -580,11 +580,11 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::LeftBiasedC2F, arg) = ((-half, -half),)
-stencil_interior(::LeftBiasedC2F, loc, idx, hidx, arg) =
+@inline stencil_interior(::LeftBiasedC2F, loc, idx, hidx, arg) =
     getidx(arg, loc, idx - half, hidx)
 
 boundary_width(::LeftBiasedC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::LeftBiasedC2F,
     bc::SetValue,
     loc,
@@ -622,11 +622,11 @@ return_space(::LeftBiasedF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
     Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::LeftBiasedF2C, arg) = ((-half, -half),)
-stencil_interior(::LeftBiasedF2C, loc, idx, hidx, arg) =
+@inline stencil_interior(::LeftBiasedF2C, loc, idx, hidx, arg) =
     getidx(arg, loc, idx - half, hidx)
 
 boundary_width(::LeftBiasedF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::LeftBiasedF2C,
     bc::SetValue,
     loc,
@@ -668,7 +668,7 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::LeftBiased3rdOrderC2F, arg) = ((-half - 1, half + 1),)
-stencil_interior(::LeftBiased3rdOrderC2F, loc, idx, hidx, arg) =
+@inline stencil_interior(::LeftBiased3rdOrderC2F, loc, idx, hidx, arg) =
     (
         -2 * getidx(arg, loc, idx - 1 - half, hidx) +
         10 * getidx(arg, loc, idx - half, hidx) +
@@ -676,7 +676,7 @@ stencil_interior(::LeftBiased3rdOrderC2F, loc, idx, hidx, arg) =
     ) / 12
 
 boundary_width(::LeftBiased3rdOrderC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::LeftBiased3rdOrderC2F,
     bc::SetValue,
     loc,
@@ -716,7 +716,7 @@ return_space(
 ) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::LeftBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
-stencil_interior(::LeftBiased3rdOrderF2C, loc, idx, hidx, arg) =
+@inline stencil_interior(::LeftBiased3rdOrderF2C, loc, idx, hidx, arg) =
     (
         -2 * getidx(arg, loc, idx - 1 - half, hidx) +
         10 * getidx(arg, loc, idx - half, hidx) +
@@ -724,7 +724,7 @@ stencil_interior(::LeftBiased3rdOrderF2C, loc, idx, hidx, arg) =
     ) / 12
 
 boundary_width(::LeftBiased3rdOrderF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::LeftBiased3rdOrderF2C,
     bc::SetValue,
     loc,
@@ -764,11 +764,11 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::RightBiasedC2F, arg) = ((half, half),)
-stencil_interior(::RightBiasedC2F, loc, idx, hidx, arg) =
+@inline stencil_interior(::RightBiasedC2F, loc, idx, hidx, arg) =
     getidx(arg, loc, idx + half, hidx)
 
 boundary_width(::RightBiasedC2F, ::SetValue, arg) = 1
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::RightBiasedC2F,
     bc::SetValue,
     loc,
@@ -808,11 +808,11 @@ return_space(
 ) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::RightBiasedF2C, arg) = ((half, half),)
-stencil_interior(::RightBiasedF2C, loc, idx, hidx, arg) =
+@inline stencil_interior(::RightBiasedF2C, loc, idx, hidx, arg) =
     getidx(arg, loc, idx + half, hidx)
 
 boundary_width(::RightBiasedF2C, ::SetValue, arg) = 1
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::RightBiasedF2C,
     bc::SetValue,
     loc,
@@ -855,7 +855,7 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::RightBiased3rdOrderC2F, arg) = ((-half - 1, half + 1),)
-stencil_interior(::RightBiased3rdOrderC2F, loc, idx, hidx, arg) =
+@inline stencil_interior(::RightBiased3rdOrderC2F, loc, idx, hidx, arg) =
     (
         4 * getidx(arg, loc, idx - half, hidx) +
         10 * getidx(arg, loc, idx + half, hidx) -
@@ -863,7 +863,7 @@ stencil_interior(::RightBiased3rdOrderC2F, loc, idx, hidx, arg) =
     ) / 12
 
 boundary_width(::RightBiased3rdOrderC2F, ::SetValue, arg) = 1
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::RightBiased3rdOrderC2F,
     bc::SetValue,
     loc,
@@ -905,7 +905,7 @@ return_space(
 ) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::RightBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
-stencil_interior(::RightBiased3rdOrderF2C, loc, idx, hidx, arg) =
+@inline stencil_interior(::RightBiased3rdOrderF2C, loc, idx, hidx, arg) =
     (
         4 * getidx(arg, loc, idx - half, hidx) +
         10 * getidx(arg, loc, idx + half, hidx) -
@@ -913,7 +913,7 @@ stencil_interior(::RightBiased3rdOrderF2C, loc, idx, hidx, arg) =
     ) / 12
 
 boundary_width(::RightBiased3rdOrderF2C, ::SetValue, arg) = 1
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::RightBiased3rdOrderF2C,
     bc::SetValue,
     loc,
@@ -965,7 +965,14 @@ return_space(
 
 stencil_interior_width(::WeightedInterpolateF2C, weight, arg) =
     ((-half, half), (-half, half))
-function stencil_interior(::WeightedInterpolateF2C, loc, idx, hidx, weight, arg)
+@inline function stencil_interior(
+    ::WeightedInterpolateF2C,
+    loc,
+    idx,
+    hidx,
+    weight,
+    arg,
+)
     w⁺ = getidx(weight, loc, idx + half, hidx)
     w⁻ = getidx(weight, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
@@ -1011,7 +1018,14 @@ return_space(
 
 stencil_interior_width(::WeightedInterpolateC2F, weight, arg) =
     ((-half, half), (-half, half))
-function stencil_interior(::WeightedInterpolateC2F, loc, idx, hidx, weight, arg)
+@inline function stencil_interior(
+    ::WeightedInterpolateC2F,
+    loc,
+    idx,
+    hidx,
+    weight,
+    arg,
+)
     w⁺ = getidx(weight, loc, idx + half, hidx)
     w⁻ = getidx(weight, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
@@ -1020,7 +1034,7 @@ function stencil_interior(::WeightedInterpolateC2F, loc, idx, hidx, weight, arg)
 end
 
 boundary_width(::WeightedInterpolateC2F, ::SetValue, weight, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::SetValue,
     loc,
@@ -1033,7 +1047,7 @@ function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(space)
     getidx(bc.val, loc, nothing, hidx)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::WeightedInterpolateC2F,
     bc::SetValue,
     loc,
@@ -1048,7 +1062,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::WeightedInterpolateC2F, ::SetGradient, weight, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::SetGradient,
     loc,
@@ -1066,7 +1080,7 @@ function stencil_left_boundary(
     )
     a⁺ ⊟ RecursiveApply.rdiv(v₃, 2)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::WeightedInterpolateC2F,
     bc::SetGradient,
     loc,
@@ -1086,7 +1100,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::WeightedInterpolateC2F, ::Extrapolate, weight, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::Extrapolate,
     loc,
@@ -1100,7 +1114,7 @@ function stencil_left_boundary(
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁺
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::WeightedInterpolateC2F,
     bc::Extrapolate,
     loc,
@@ -1171,7 +1185,7 @@ return_space(
     arg_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = velocity_space
 
-function upwind_biased_product(v, a⁻, a⁺)
+@inline function upwind_biased_product(v, a⁻, a⁺)
     RecursiveApply.rdiv(
         ((v ⊞ RecursiveApply.rmap(abs, v)) ⊠ a⁻) ⊞
         ((v ⊟ RecursiveApply.rmap(abs, v)) ⊠ a⁺),
@@ -1182,7 +1196,7 @@ end
 stencil_interior_width(::UpwindBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half, half))
 
-function stencil_interior(
+@inline function stencil_interior(
     ::UpwindBiasedProductC2F,
     loc,
     idx,
@@ -1202,7 +1216,7 @@ end
 
 boundary_width(::UpwindBiasedProductC2F, ::SetValue, velocity, arg) = 1
 
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::UpwindBiasedProductC2F,
     bc::SetValue,
     loc,
@@ -1222,7 +1236,7 @@ function stencil_left_boundary(
     return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, aᴸᴮ, a⁺))
 end
 
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::UpwindBiasedProductC2F,
     bc::SetValue,
     loc,
@@ -1244,7 +1258,7 @@ end
 
 boundary_width(::UpwindBiasedProductC2F, ::Extrapolate, velocity, arg) = 1
 
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     op::UpwindBiasedProductC2F,
     ::Extrapolate,
     loc,
@@ -1258,7 +1272,7 @@ function stencil_left_boundary(
     stencil_interior(op, loc, idx + 1, hidx, velocity, arg)
 end
 
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     op::UpwindBiasedProductC2F,
     ::Extrapolate,
     loc,
@@ -1315,7 +1329,7 @@ return_space(
     arg_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = velocity_space
 
-function upwind_3rdorder_biased_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺)
+@inline function upwind_3rdorder_biased_product(v, a⁻, a⁻⁻, a⁺, a⁺⁺)
     RecursiveApply.rdiv(
         (v ⊠ (7 ⊠ (a⁺ + a⁻) ⊟ (a⁺⁺ + a⁻⁻))) ⊟
         (RecursiveApply.rmap(abs, v) ⊠ (3 ⊠ (a⁺ - a⁻) ⊟ (a⁺⁺ - a⁻⁻))),
@@ -1326,7 +1340,7 @@ end
 stencil_interior_width(::Upwind3rdOrderBiasedProductC2F, velocity, arg) =
     ((0, 0), (-half - 1, half + 1))
 
-function stencil_interior(
+@inline function stencil_interior(
     ::Upwind3rdOrderBiasedProductC2F,
     loc,
     idx,
@@ -1355,7 +1369,7 @@ boundary_width(
     arg,
 ) = 2
 
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::FirstOrderOneSided,
     loc,
@@ -1375,7 +1389,7 @@ function stencil_left_boundary(
     return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
 end
 
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::FirstOrderOneSided,
     loc,
@@ -1403,7 +1417,7 @@ boundary_width(
     arg,
 ) = 2
 
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::ThirdOrderOneSided,
     loc,
@@ -1424,7 +1438,7 @@ function stencil_left_boundary(
     return Geometry.Contravariant3Vector(vᶠ * a)
 end
 
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
     bc::ThirdOrderOneSided,
     loc,
@@ -1476,7 +1490,7 @@ return_space(
 ) = arg_space
 
 stencil_interior_width(::AdvectionF2F, velocity, arg) = ((0, 0), (-1, 1))
-function stencil_interior(::AdvectionF2F, loc, idx, hidx, velocity, arg)
+@inline function stencil_interior(::AdvectionF2F, loc, idx, hidx, velocity, arg)
     space = axes(arg)
     θ⁺ = getidx(arg, loc, idx + 1, hidx)
     θ⁻ = getidx(arg, loc, idx - 1, hidx)
@@ -1531,7 +1545,7 @@ return_space(
 
 stencil_interior_width(::AdvectionC2C, velocity, arg) =
     ((-half, +half), (-1, 1))
-function stencil_interior(::AdvectionC2C, loc, idx, hidx, velocity, arg)
+@inline function stencil_interior(::AdvectionC2C, loc, idx, hidx, velocity, arg)
     space = axes(arg)
     θ⁺ = getidx(arg, loc, idx + 1, hidx)
     θ = getidx(arg, loc, idx, hidx)
@@ -1550,7 +1564,7 @@ function stencil_interior(::AdvectionC2C, loc, idx, hidx, velocity, arg)
 end
 
 boundary_width(::AdvectionC2C, ::SetValue, velocity, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::AdvectionC2C,
     bc::SetValue,
     loc,
@@ -1576,7 +1590,7 @@ function stencil_left_boundary(
     ∂θ₃⁻ = 2 ⊠ (θ ⊟ θ⁻)
     return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::AdvectionC2C,
     bc::SetValue,
     loc,
@@ -1604,7 +1618,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::AdvectionC2C, ::Extrapolate, velocity, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::AdvectionC2C,
     ::Extrapolate,
     loc,
@@ -1624,7 +1638,7 @@ function stencil_left_boundary(
     ∂θ₃⁺ = θ⁺ ⊟ θ
     return (w³⁺ ⊠ ∂θ₃⁺)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::AdvectionC2C,
     ::Extrapolate,
     loc,
@@ -1663,7 +1677,14 @@ return_space(
 
 stencil_interior_width(::FluxCorrectionC2C, velocity, arg) =
     ((-half, +half), (-1, 1))
-function stencil_interior(::FluxCorrectionC2C, loc, idx, hidx, velocity, arg)
+@inline function stencil_interior(
+    ::FluxCorrectionC2C,
+    loc,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
     space = axes(arg)
     θ⁺ = getidx(arg, loc, idx + 1, hidx)
     θ = getidx(arg, loc, idx, hidx)
@@ -1682,7 +1703,7 @@ function stencil_interior(::FluxCorrectionC2C, loc, idx, hidx, velocity, arg)
 end
 
 boundary_width(::FluxCorrectionC2C, ::Extrapolate, velocity, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::FluxCorrectionC2C,
     ::Extrapolate,
     loc,
@@ -1702,7 +1723,7 @@ function stencil_left_boundary(
     ∂θ₃⁺ = θ⁺ ⊟ θ
     return (abs(w³⁺) ⊠ ∂θ₃⁺)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::FluxCorrectionC2C,
     ::Extrapolate,
     loc,
@@ -1741,7 +1762,14 @@ return_space(
 
 stencil_interior_width(::FluxCorrectionF2F, velocity, arg) =
     ((-half, +half), (-1, 1))
-function stencil_interior(::FluxCorrectionF2F, loc, idx, hidx, velocity, arg)
+@inline function stencil_interior(
+    ::FluxCorrectionF2F,
+    loc,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
     space = axes(arg)
     θ⁺ = getidx(arg, loc, idx + 1, hidx)
     θ = getidx(arg, loc, idx, hidx)
@@ -1760,7 +1788,7 @@ function stencil_interior(::FluxCorrectionF2F, loc, idx, hidx, velocity, arg)
 end
 
 boundary_width(::FluxCorrectionF2F, ::Extrapolate, velocity, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::FluxCorrectionF2F,
     ::Extrapolate,
     loc,
@@ -1780,7 +1808,7 @@ function stencil_left_boundary(
     ∂θ₃⁺ = θ⁺ ⊟ θ
     return (abs(w³⁺) ⊠ ∂θ₃⁺)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::FluxCorrectionF2F,
     ::Extrapolate,
     loc,
@@ -1823,11 +1851,11 @@ return_space(
 ) = space
 
 stencil_interior_width(::SetBoundaryOperator, arg) = ((0, 0),)
-stencil_interior(::SetBoundaryOperator, loc, idx, hidx, arg) =
+@inline stencil_interior(::SetBoundaryOperator, loc, idx, hidx, arg) =
     getidx(arg, loc, idx, hidx)
 
 boundary_width(::SetBoundaryOperator, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::SetBoundaryOperator,
     bc::SetValue,
     loc,
@@ -1838,7 +1866,7 @@ function stencil_left_boundary(
     @assert idx == left_face_boundary_idx(arg)
     getidx(bc.val, loc, nothing, hidx)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::SetBoundaryOperator,
     bc::SetValue,
     loc,
@@ -1896,18 +1924,25 @@ return_space(::GradientF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
     Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
-function stencil_interior(::GradientF2C, loc, idx, hidx, arg)
+@inline function stencil_interior(::GradientF2C, loc, idx, hidx, arg)
     Geometry.Covariant3Vector(1) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(arg, loc, idx - half, hidx))
 end
 
 boundary_width(::GradientF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(::GradientF2C, bc::SetValue, loc, idx, hidx, arg)
+@inline function stencil_left_boundary(
+    ::GradientF2C,
+    bc::SetValue,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     @assert idx == left_center_boundary_idx(arg)
     Geometry.Covariant3Vector(1) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(bc.val, loc, nothing, hidx))
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::GradientF2C,
     bc::SetValue,
     loc,
@@ -1921,7 +1956,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::GradientF2C, ::Extrapolate, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     op::GradientF2C,
     ::Extrapolate,
     loc,
@@ -1937,7 +1972,7 @@ function stencil_left_boundary(
         Geometry.LocalGeometry(space, idx, hidx),
     )
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     op::GradientF2C,
     ::Extrapolate,
     loc,
@@ -1987,19 +2022,26 @@ return_space(::GradientC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
     Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::GradientC2F, arg) = ((-half, half),)
-function stencil_interior(::GradientC2F, loc, idx, hidx, arg)
+@inline function stencil_interior(::GradientC2F, loc, idx, hidx, arg)
     Geometry.Covariant3Vector(1) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(arg, loc, idx - half, hidx))
 end
 
 boundary_width(::GradientC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(::GradientC2F, bc::SetValue, loc, idx, hidx, arg)
+@inline function stencil_left_boundary(
+    ::GradientC2F,
+    bc::SetValue,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     @assert idx == left_face_boundary_idx(arg)
     # ∂x[i] = 2(∂x[i + half] - val)
     Geometry.Covariant3Vector(2) ⊗
     (getidx(arg, loc, idx + half, hidx) ⊟ getidx(bc.val, loc, nothing, hidx))
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::GradientC2F,
     bc::SetValue,
     loc,
@@ -2014,7 +2056,7 @@ end
 
 # left / right SetGradient boundary conditions
 boundary_width(::GradientC2F, ::SetGradient, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::GradientC2F,
     bc::SetGradient,
     loc,
@@ -2031,7 +2073,7 @@ function stencil_left_boundary(
         Geometry.LocalGeometry(space, idx, hidx),
     )
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::GradientC2F,
     bc::SetGradient,
     loc,
@@ -2091,7 +2133,7 @@ return_space(::DivergenceF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
     Spaces.CenterExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
-function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
+@inline function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
     Ju³₊ = Geometry.Jcontravariant3(
@@ -2106,7 +2148,7 @@ function stencil_interior(::DivergenceF2C, loc, idx, hidx, arg)
 end
 
 boundary_width(::DivergenceF2C, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::DivergenceF2C,
     bc::SetValue,
     loc,
@@ -2127,7 +2169,7 @@ function stencil_left_boundary(
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::DivergenceF2C,
     bc::SetValue,
     loc,
@@ -2150,7 +2192,7 @@ function stencil_right_boundary(
 end
 
 boundary_width(::DivergenceF2C, ::Extrapolate, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     op::DivergenceF2C,
     ::Extrapolate,
     loc,
@@ -2161,7 +2203,7 @@ function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(arg)
     stencil_interior(op, loc, idx + 1, hidx, arg)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     op::DivergenceF2C,
     ::Extrapolate,
     loc,
@@ -2209,7 +2251,7 @@ return_space(
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
 stencil_interior_width(::DivergenceC2F, arg) = ((-half, half),)
-function stencil_interior(::DivergenceC2F, loc, idx, hidx, arg)
+@inline function stencil_interior(::DivergenceC2F, loc, idx, hidx, arg)
     space = axes(arg)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
     Ju³₊ = Geometry.Jcontravariant3(
@@ -2224,7 +2266,7 @@ function stencil_interior(::DivergenceC2F, loc, idx, hidx, arg)
 end
 
 boundary_width(::DivergenceC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::DivergenceC2F,
     bc::SetValue,
     loc,
@@ -2246,7 +2288,7 @@ function stencil_left_boundary(
     )
     RecursiveApply.rdiv(Ju³₊ ⊟ Ju³, local_geometry.J / 2)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::DivergenceC2F,
     bc::SetValue,
     loc,
@@ -2270,7 +2312,7 @@ end
 
 # left / right SetDivergence boundary conditions
 boundary_width(::DivergenceC2F, ::SetDivergence, arg) = 1
-function stencil_left_boundary(
+@inline function stencil_left_boundary(
     ::DivergenceC2F,
     bc::SetDivergence,
     loc,
@@ -2282,7 +2324,7 @@ function stencil_left_boundary(
     # imposed flux boundary condition at left most face
     getidx(bc.val, loc, nothing, hidx)
 end
-function stencil_right_boundary(
+@inline function stencil_right_boundary(
     ::DivergenceC2F,
     bc::SetDivergence,
     loc,
@@ -2347,17 +2389,26 @@ return_space(::CurlC2F, space::Spaces.CenterFiniteDifferenceSpace) =
 return_space(::CurlC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
     Spaces.FaceExtrudedFiniteDifferenceSpace(space)
 
-fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, J) =
-    Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) / J)
-fd3_curl(u₊::Geometry.Covariant2Vector, u₋::Geometry.Covariant2Vector, J) =
-    Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) / J)
-fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, J) =
+@inline fd3_curl(
+    u₊::Geometry.Covariant1Vector,
+    u₋::Geometry.Covariant1Vector,
+    J,
+) = Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) / J)
+@inline fd3_curl(
+    u₊::Geometry.Covariant2Vector,
+    u₋::Geometry.Covariant2Vector,
+    J,
+) = Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) / J)
+@inline fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, J) =
     Geometry.Contravariant3Vector(zero(eltype(J)))
-fd3_curl(u₊::Geometry.Covariant12Vector, u₋::Geometry.Covariant12Vector, J) =
-    Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
+@inline fd3_curl(
+    u₊::Geometry.Covariant12Vector,
+    u₋::Geometry.Covariant12Vector,
+    J,
+) = Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
-function stencil_interior(::CurlC2F, loc, idx, hidx, arg)
+@inline function stencil_interior(::CurlC2F, loc, idx, hidx, arg)
     space = axes(arg)
     u₊ = getidx(arg, loc, idx + half, hidx)
     u₋ = getidx(arg, loc, idx - half, hidx)
@@ -2366,14 +2417,28 @@ function stencil_interior(::CurlC2F, loc, idx, hidx, arg)
 end
 
 boundary_width(::CurlC2F, ::SetValue, arg) = 1
-function stencil_left_boundary(::CurlC2F, bc::SetValue, loc, idx, hidx, arg)
+@inline function stencil_left_boundary(
+    ::CurlC2F,
+    bc::SetValue,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     space = axes(arg)
     u₊ = getidx(arg, loc, idx + half, hidx)
     u = getidx(bc.val, loc, nothing, hidx)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
     return fd3_curl(u₊, u, local_geometry.J / 2)
 end
-function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, hidx, arg)
+@inline function stencil_right_boundary(
+    ::CurlC2F,
+    bc::SetValue,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     space = axes(arg)
     u = getidx(bc.val, loc, nothing, hidx)
     u₋ = getidx(arg, loc, idx - half, hidx)
@@ -2382,10 +2447,24 @@ function stencil_right_boundary(::CurlC2F, bc::SetValue, loc, idx, hidx, arg)
 end
 
 boundary_width(::CurlC2F, ::SetCurl, arg) = 1
-function stencil_left_boundary(::CurlC2F, bc::SetCurl, loc, idx, hidx, arg)
+@inline function stencil_left_boundary(
+    ::CurlC2F,
+    bc::SetCurl,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     return getidx(bc.val, loc, nothing, hidx)
 end
-function stencil_right_boundary(::CurlC2F, bc::SetCurl, loc, idx, hidx, arg)
+@inline function stencil_right_boundary(
+    ::CurlC2F,
+    bc::SetCurl,
+    loc,
+    idx,
+    hidx,
+    arg,
+)
     return getidx(bc.val, loc, nothing, hidx)
 end
 
@@ -2507,7 +2586,7 @@ end
     idx,
     hidx,
 )
-    stencil_interior(bc.f, loc, idx, hidx, bc.args...)
+    @inbounds stencil_interior(bc.f, loc, idx, hidx, bc.args...)
 end
 
 @inline function getidx(
@@ -2520,7 +2599,7 @@ end
     space = axes(bc)
     if has_boundary(bc.f, loc) &&
        idx < left_idx(space) + boundary_width(bc, loc)
-        stencil_left_boundary(
+        @inbounds stencil_left_boundary(
             op,
             get_boundary(op, loc),
             loc,
@@ -2530,7 +2609,7 @@ end
         )
     else
         # fallback to interior stencil
-        stencil_interior(op, loc, idx, hidx, bc.args...)
+        @inbounds stencil_interior(op, loc, idx, hidx, bc.args...)
     end
 end
 
@@ -2544,7 +2623,7 @@ end
     space = axes(bc)
     if has_boundary(bc.f, loc) &&
        idx > (right_idx(space) - boundary_width(bc, loc))
-        stencil_right_boundary(
+        @inbounds stencil_right_boundary(
             op,
             get_boundary(op, loc),
             loc,
@@ -2554,7 +2633,7 @@ end
         )
     else
         # fallback to interior stencil
-        stencil_interior(op, loc, idx, hidx, bc.args...)
+        @inbounds stencil_interior(op, loc, idx, hidx, bc.args...)
     end
 end
 
@@ -2581,7 +2660,7 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
     if Topologies.isperiodic(space.topology)
         idx = mod1(idx, length(space))
     end
-    return field_data[idx]
+    return @inbounds field_data[idx]
 end
 
 @inline function getidx(
@@ -2595,23 +2674,24 @@ end
     if Topologies.isperiodic(space.topology)
         i = mod1(i, length(space))
     end
-    return field_data[i]
+    return @inbounds field_data[i]
 end
 
 # unwap boxed scalars
-getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
-getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
-getidx(field::Fields.PointField, loc::Location, idx) = field[]
+@inline getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
+@inline getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
+@inline getidx(field::Fields.PointField, loc::Location, idx) = field[]
 
 # recursive fallback for scalar, just return
-getidx(scalar, ::Location, idx, hidx) = scalar
+@inline getidx(scalar, ::Location, idx, hidx) = scalar
 
 # getidx error fallbacks
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
-function getidx(field::Fields.Field, loc::Location, idx, hidx)
-    getidx(column(field, hidx...), loc, idx)
+@inline function getidx(field::Fields.Field, loc::Location, idx, hidx)
+    @inbounds col = column(field, hidx...)
+    @inbounds getidx(col, loc, idx)
     # inferred_getidx_error(typeof(idx), typeof(axes(field)))
 end
 
@@ -2634,14 +2714,33 @@ end
     (getidx(arg[1], loc, idx, hidx),)
 @inline getidx_args(::Tuple{}, loc::Location, idx, hidx) = ()
 
-function getidx(bc::Base.Broadcast.Broadcasted, loc::Location, idx, hidx)
+@inline function getidx(
+    bc::Base.Broadcast.Broadcasted,
+    loc::Location,
+    idx,
+    hidx,
+)
     #_args = tuplemap(arg -> getidx(arg, loc, idx), bc.args)
-    _args = getidx_args(bc.args, loc, idx, hidx)
-    bc.f(_args...)
+    @inbounds begin
+        _args = getidx_args(bc.args, loc, idx, hidx)
+        bc.f(_args...)
+    end
+end
+
+if VERSION >= v"1.7.0"
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(getidx_args)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(getidx)
+            m.recursion_relation = dont_limit
+        end
+    end
 end
 
 # setidx! methods for copyto!
-function setidx!(
+@inline function setidx!(
     field::Union{
         Fields.CenterFiniteDifferenceField,
         Fields.CenterExtrudedFiniteDifferenceField,
@@ -2651,11 +2750,11 @@ function setidx!(
     val,
 )
     field_data = Fields.field_values(field)
-    column(field_data, hidx...)[idx] = val
+    @inbounds column(field_data, hidx...)[idx] = val
     val
 end
 
-function setidx!(
+@inline function setidx!(
     field::Union{
         Fields.FaceFiniteDifferenceField,
         Fields.FaceExtrudedFiniteDifferenceField,
@@ -2665,7 +2764,7 @@ function setidx!(
     val,
 )
     field_data = Fields.field_values(field)
-    column(field_data, hidx...)[idx.i + 1] = val
+    @inbounds column(field_data, hidx...)[idx.i + 1] = val
     val
 end
 

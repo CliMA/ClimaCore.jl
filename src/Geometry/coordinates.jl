@@ -135,9 +135,9 @@ product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
 component(p::AbstractPoint{FT}, i::Symbol) where {FT} = getfield(p, i)::FT
 component(p::AbstractPoint{FT}, i::Integer) where {FT} = getfield(p, i)::FT
 
-ncomponents(p::AbstractPoint) = nfields(p)
-ncomponents(::Type{P}) where {P <: AbstractPoint} = fieldcount(P)
-components(p::AbstractPoint) =
+@inline ncomponents(p::AbstractPoint) = nfields(p)
+@inline ncomponents(::Type{P}) where {P <: AbstractPoint} = fieldcount(P)
+@inline components(p::AbstractPoint) =
     SVector(ntuple(i -> component(p, i), ncomponents(p)))
 
 _coordinate_type(ptyp::Type{Abstract1DPoint}, ::Val{1}) = ptyp
