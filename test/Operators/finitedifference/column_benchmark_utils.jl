@@ -272,31 +272,32 @@ function benchmark_cases(vars_contig, cfield, ffield)
     t_ave = Dict()
     for key in keys(trials)
         trial = trials[key]
-        t_ave[key] = BenchmarkTools.prettytime(StatsBase.mean(trial.times))
-        @info "$(t_ave[key]) <=> t_ave[$key]"
+        t_ave[key] = StatsBase.mean(trial.times) # nano seconds
+        t_pretty = BenchmarkTools.prettytime(t_ave[key])
+        @info "$t_pretty <=> t_ave[$key]"
     end
 
-    @test_broken t_ave[(op_LeftBiasedF2C!, :none)] < 5e-7
-    @test_broken t_ave[(op_DivergenceF2C!, :none)] < 5e-7
-    @test_broken t_ave[(op_LeftBiasedF2C!, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_RightBiasedF2C!, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_RightBiasedC2F!, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 5e-7
-    @test_broken t_ave[(op_CurlC2F!, :SetCurl, :SetCurl)] < 5e-7
-    @test_broken t_ave[(op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_GradientF2C!, :SetValue, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_InterpolateF2C!, :none)] < 5e-7
-    @test_broken t_ave[(op_RightBiasedF2C!, :none)] < 5e-7
-    @test_broken t_ave[(op_LeftBiasedC2F!, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_GradientF2C!, :none)] < 5e-7
-    @test_broken t_ave[(op_divgrad_CC!, :SetValue, :SetValue, :none)] < 5e-7
-    @test_broken t_ave[(op_div_interp_FF!, :none, :SetValue, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_InterpolateC2F!, :SetValue, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_GradientC2F!, :SetValue, :SetValue)] < 5e-7
-    @test_broken t_ave[(op_GradientC2F!, :SetGradient, :SetGradient)] < 5e-7
-    @test_broken t_ave[(op_div_interp_CC!, :SetValue, :SetValue, :none)] < 5e-7
-    @test_broken t_ave[(op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 5e-7
-    @test_broken t_ave[(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 5e-7
+    @test_broken t_ave[(op_LeftBiasedF2C!, :none)] < 500
+    @test_broken t_ave[(op_DivergenceF2C!, :none)] < 500
+    @test_broken t_ave[(op_LeftBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[(op_RightBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[(op_RightBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[(op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[(op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_GradientF2C!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_InterpolateF2C!, :none)] < 500
+    @test_broken t_ave[(op_RightBiasedF2C!, :none)] < 500
+    @test_broken t_ave[(op_LeftBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[(op_GradientF2C!, :none)] < 500
+    @test_broken t_ave[(op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[(op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_InterpolateC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_GradientC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_GradientC2F!, :SetGradient, :SetGradient)] < 500
+    @test_broken t_ave[(op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[(op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 500
 
     return nothing
 end
