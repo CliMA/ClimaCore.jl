@@ -90,6 +90,15 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column performance benchmarks"
+    key: "cpu_column_perf_bm"
+    command:
+      - "julia --color=yes --project=test test/Operators/finitedifference/column_benchmark.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
     command:
