@@ -193,12 +193,12 @@ function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
-@propagate_inbounds function get_struct(
+@inline function get_struct(
     array::AbstractArray{S},
     ::Type{S},
     offset,
 ) where {S}
-    return array[offset + 1]
+    return @inbounds array[offset + 1]
 end
 
 @inline function get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S}
@@ -235,12 +235,8 @@ function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
     end
 end
 
-@propagate_inbounds function set_struct!(
-    array::AbstractArray{S},
-    val::S,
-    offset,
-) where {S}
-    array[offset + 1] = val
+@inline function set_struct!(array::AbstractArray{S}, val::S, offset) where {S}
+    @inbounds array[offset + 1] = val
     val
 end
 

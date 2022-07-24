@@ -133,36 +133,41 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
     AxisVector(WAxis(), components(u))
 
 
-covariant1(u::AxisVector, local_geometry::LocalGeometry) =
+@inline covariant1(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₁
-covariant2(u::AxisVector, local_geometry::LocalGeometry) =
+@inline covariant2(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₂
-covariant3(u::AxisVector, local_geometry::LocalGeometry) =
+@inline covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
-contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
+@inline contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
     transform(Contravariant123Axis(), u, local_geometry).u¹
-contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
+@inline contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
     transform(Contravariant123Axis(), u, local_geometry).u²
-contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+@inline contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
     transform(Contravariant123Axis(), u, local_geometry).u³
 
-contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry)[1, :]
-contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry)[2, :]
-contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry)[3, :]
+@inline function contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry)
+    @inbounds transform(Contravariant123Axis(), u, local_geometry)[1, :]
+end
+@inline function contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry)
+    @inbounds transform(Contravariant123Axis(), u, local_geometry)[2, :]
+end
+@inline function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
+    @inbounds transform(Contravariant123Axis(), u, local_geometry)[3, :]
+end
 
-Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
+@inline Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
     local_geometry.J * contravariant3(u, local_geometry)
 
 # required for curl-curl
-covariant3(u::Contravariant3Vector, local_geometry::LocalGeometry{(1, 2)}) =
-    contravariant3(u, local_geometry)
+@inline covariant3(
+    u::Contravariant3Vector,
+    local_geometry::LocalGeometry{(1, 2)},
+) = contravariant3(u, local_geometry)
 
 # workarounds for using a Covariant12Vector/Covariant123Vector in a UW space:
-function LocalVector(
+@inline function LocalVector(
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -171,7 +176,7 @@ function LocalVector(
     u, w = components(transform(LocalAxis{(1, 3)}(), vector2, local_geometry))
     return UVWVector(u, v, w)
 end
-function contravariant1(
+@inline function contravariant1(
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -179,7 +184,7 @@ function contravariant1(
     vector2 = Covariant13Vector(u₁, u₃)
     return transform(Contravariant13Axis(), vector2, local_geometry).u¹
 end
-function contravariant3(
+@inline function contravariant3(
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -187,7 +192,7 @@ function contravariant3(
     vector2 = Covariant13Vector(u₁, zero(u₁))
     return transform(Contravariant13Axis(), vector2, local_geometry).u³
 end
-function ContravariantVector(
+@inline function ContravariantVector(
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )

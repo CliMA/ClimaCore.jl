@@ -2,14 +2,17 @@
 include("column_benchmark_utils.jl")
 
 function apply_kernel!(cfield, ffield, D, U, xarr, yarr)
-    # op_GradientF2C!(cfield, ffield)
+    # op_DivergenceF2C!(cfield, ffield)
+    op_CurlC2F!(cfield, ffield)
+    # bcs = (; inner = set_upwind_biased_3_bcs(cfield), outer = set_value_contra3_bcs(cfield))
+    # op_divUpwind3rdOrderBiasedProductC2F!(cfield, ffield, bcs)
     # op_2mul_1add!(xarr, yarr, D, U)
-    bcs = (; inner = (), outer = set_value_divgrad_uₕ_bcs(cfield))
-    op_divgrad_uₕ!(cfield, ffield, bcs)
+    # bcs = (; inner = (), outer = set_value_divgrad_uₕ_bcs(cfield))
+    # op_divgrad_uₕ!(cfield, ffield, bcs)
 end
 
 function apply_kernel_loop!(cfield, ffield, D, U, xarr, yarr)
-    for _ in 1:10000
+    for _ in 1:100000
         apply_kernel!(cfield, ffield, D, U, xarr, yarr) # compile
     end
 end

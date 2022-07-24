@@ -135,13 +135,14 @@ function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
     )
 end
 
-column(space::ExtrudedFiniteDifferenceSpace, i, j, h) = FiniteDifferenceSpace(
-    space.staggering,
-    space.vertical_topology,
-    Geometry.CartesianGlobalGeometry(),
-    column(space.center_local_geometry, i, j, h),
-    column(space.face_local_geometry, i, j, h),
-)
+@inline column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
+    FiniteDifferenceSpace(
+        space.staggering,
+        space.vertical_topology,
+        Geometry.CartesianGlobalGeometry(),
+        column(space.center_local_geometry, i, j, h),
+        column(space.face_local_geometry, i, j, h),
+    )
 function level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer)
     horizontal_space = space.horizontal_space
     if horizontal_space isa SpectralElementSpace1D

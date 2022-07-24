@@ -27,19 +27,19 @@ ClimaCore.Geometry.CartesianAxis{(1, 2, 3)}()
 function dual end
 
 struct CovariantAxis{I} <: AbstractAxis{I} end
-symbols(::CovariantAxis) = (:u₁, :u₂, :u₃)
+@inline symbols(::CovariantAxis) = (:u₁, :u₂, :u₃)
 
 struct ContravariantAxis{I} <: AbstractAxis{I} end
-symbols(::ContravariantAxis) = (:u¹, :u², :u³)
+@inline symbols(::ContravariantAxis) = (:u¹, :u², :u³)
 dual(::CovariantAxis{I}) where {I} = ContravariantAxis{I}()
 dual(::ContravariantAxis{I}) where {I} = CovariantAxis{I}()
 
 struct LocalAxis{I} <: AbstractAxis{I} end
-symbols(::LocalAxis) = (:u, :v, :w)
+@inline symbols(::LocalAxis) = (:u, :v, :w)
 dual(::LocalAxis{I}) where {I} = LocalAxis{I}()
 
 struct CartesianAxis{I} <: AbstractAxis{I} end
-symbols(::CartesianAxis) = (:u1, :u2, :u3)
+@inline symbols(::CartesianAxis) = (:u1, :u2, :u3)
 dual(::CartesianAxis{I}) where {I} = CartesianAxis{I}()
 
 coordinate_axis(::Type{<:XPoint}) = (1,)
@@ -59,21 +59,46 @@ coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
 coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
 
-@inline function idxin(I::Tuple{Vararg{Int}}, i::Int)
-    N = length(I)
-    for n in 1:N
-        if I[n] == i
-            return n
+@inline idxin(I::Tuple{Int}, i::Int) = 1
+
+@inline function idxin(I::Tuple{Int, Int}, i::Int)
+    @inbounds begin
+        if I[1] == i
+            return 1
+        else
+            return 2
         end
     end
-    return nothing
 end
+
+@inline function idxin(I::Tuple{Int, Int, Int}, i::Int)
+    @inbounds begin
+        if I[1] == i
+            return 1
+        elseif I[2] == i
+            return 2
+        else
+            return 3
+        end
+    end
+end
+
+#= For avoiding JET failures =#
+error_on_no_name_found() = true
 
 @inline function symidx(ax::AbstractAxis{I}, name::Symbol) where {I}
     S = symbols(ax)
-    name == S[1] ? idxin(I, 1) :
-    name == S[2] ? idxin(I, 2) :
-    name == S[3] ? idxin(I, 3) : error("$ax has no symbol $name")
+    if name == S[1]
+        return idxin(I, 1)
+    elseif name == S[2]
+        return idxin(I, 2)
+    elseif name == S[3]
+        return idxin(I, 3)
+    elseif error_on_no_name_found()
+        error("$ax has no symbol $name")
+    else
+        return -1 # for type stability
+    end
 end
 
 # most of these are required for printing
@@ -222,9 +247,13 @@ const CartesianVector{T, I, S} = AxisVector{T, CartesianAxis{I}, S}
 const LocalVector{T, I, S} = AxisVector{T, LocalAxis{I}, S}
 
 Base.propertynames(x::AxisVector) = symbols(axes(x, 1))
-function Base.getproperty(x::AxisVector, name::Symbol)
+@inline function Base.getproperty(x::AxisVector, name::Symbol)
     n = symidx(axes(x, 1), name)
-    isnothing(n) ? zero(eltype(x)) : components(x)[n]
+    if isnothing(n)
+        zero(eltype(x))
+    else
+        @inbounds components(x)[n]
+    end
 end
 
 
@@ -349,7 +378,7 @@ function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     AxisTensor(axes(A), components(A) - b)
 end
 
-function _transform(
+@inline function _transform(
     ato::Ato,
     x::AxisVector{T, Afrom, SVector{N, T}},
 ) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
@@ -417,7 +446,7 @@ end
     return :(AxisVector(ato, SVector($(vals...))))
 end
 
-function _transform(
+@inline function _transform(
     ato::Ato,
     x::Axis2Tensor{T, Tuple{Afrom, A2}},
 ) where {
@@ -508,10 +537,11 @@ end
     ))
 end
 
-transform(ato::CovariantAxis, v::CovariantTensor) = _transform(ato, v)
-transform(ato::ContravariantAxis, v::ContravariantTensor) = _transform(ato, v)
-transform(ato::CartesianAxis, v::CartesianTensor) = _transform(ato, v)
-transform(ato::LocalAxis, v::LocalTensor) = _transform(ato, v)
+@inline transform(ato::CovariantAxis, v::CovariantTensor) = _transform(ato, v)
+@inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
+    _transform(ato, v)
+@inline transform(ato::CartesianAxis, v::CartesianTensor) = _transform(ato, v)
+@inline transform(ato::LocalAxis, v::LocalTensor) = _transform(ato, v)
 
 project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
 project(ato::ContravariantAxis, v::ContravariantTensor) = _project(ato, v)

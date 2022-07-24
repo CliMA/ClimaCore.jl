@@ -17,16 +17,22 @@ end
 
 Base.getindex(field::Field, colidx::ColumnIndex) = column(field, colidx)
 
-function column(field::SpectralElementField1D, colidx::ColumnIndex{1})
+@inline function column(field::SpectralElementField1D, colidx::ColumnIndex{1})
     column(field, colidx.ij[1], colidx.h)
 end
-function column(field::ExtrudedFiniteDifferenceField, colidx::ColumnIndex{1})
+@inline function column(
+    field::ExtrudedFiniteDifferenceField,
+    colidx::ColumnIndex{1},
+)
     column(field, colidx.ij[1], colidx.h)
 end
-function column(field::SpectralElementField2D, colidx::ColumnIndex{2})
+@inline function column(field::SpectralElementField2D, colidx::ColumnIndex{2})
     column(field, colidx.ij[1], colidx.ij[2], colidx.h)
 end
-function column(field::ExtrudedFiniteDifferenceField, colidx::ColumnIndex{2})
+@inline function column(
+    field::ExtrudedFiniteDifferenceField,
+    colidx::ColumnIndex{2},
+)
     column(field, colidx.ij[1], colidx.ij[2], colidx.h)
 end
 
