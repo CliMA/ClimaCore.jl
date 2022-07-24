@@ -225,12 +225,16 @@ bcs_tested(c, ::typeof(op_div_interp_CC!)) =
 bcs_tested(c, ::typeof(op_div_interp_FF!)) =
     ((; inner = (), outer = set_value_contra3_bcs(c)), )
 
-function benchmark_func!(trials, fun, c, f, show_bm = false)
+function benchmark_func!(t_ave, trials, fun, c, f, verbose = false)
     for bcs in bcs_tested(c, fun)
         key = (fun, bc_name(bcs)...)
-        show_bm && @info "\n@benchmarking $key"
+        verbose && @info "\n@benchmarking $key"
         trials[key] = BenchmarkTools.@benchmark $fun($c, $f, $bcs)
-        show_bm && show(stdout, MIME("text/plain"), trials[key])
+        verbose && show(stdout, MIME("text/plain"), trials[key])
+
+        t_ave[key] = StatsBase.mean(trials[key].times) # nano seconds
+        t_pretty = BenchmarkTools.prettytime(t_ave[key])
+        verbose || @info "$t_pretty <=> t_ave[$key]"
     end
 end
 
@@ -276,17 +280,10 @@ function benchmark_cases(vars_contig, cfield, ffield)
     ]
 
     trials = Dict()
+    t_ave = Dict()
     @info "Benchmarking operators, this may take a minute or two..."
     for op in ops
-        benchmark_func!(trials, op, cfield, ffield, #= show_bm = =# false)
-    end
-    # For configuring tests:
-    t_ave = Dict()
-    for key in keys(trials)
-        trial = trials[key]
-        t_ave[key] = StatsBase.mean(trial.times) # nano seconds
-        t_pretty = BenchmarkTools.prettytime(t_ave[key])
-        @info "$t_pretty <=> t_ave[$key]"
+        benchmark_func!(t_ave, trials, op, cfield, ffield, #= verbose = =# false)
     end
 
     @test_broken t_ave[(op_LeftBiasedF2C!, :none)] < 500
