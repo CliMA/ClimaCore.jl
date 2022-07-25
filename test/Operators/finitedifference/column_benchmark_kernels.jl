@@ -93,6 +93,12 @@ function op_div_interp_FF!(c, f, bcs)
     @. f.y = div(interp(f.contra3))
     return nothing
 end
+function op_divgrad_uₕ!(c, f, bcs)
+    grad = Operators.GradientC2F(bcs.inner)
+    div = Operators.DivergenceF2C(bcs.outer)
+    @. c.uₕ2 = div(f.y * grad(c.uₕ))
+    return nothing
+end
 function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs.inner)
     divf2c = Operators.DivergenceF2C(bcs.outer)
