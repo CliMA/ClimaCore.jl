@@ -307,7 +307,7 @@ end
     coord = Geometry.XPoint(FT(π))
     space = Spaces.PointSpace(coord)
     @test parent(Spaces.local_geometry_data(space)) ==
-          FT[Geometry.component(coord, 1) 1.0 1.0 1.0 1.0]
+          FT[Geometry.component(coord, 1) 1.0 1.0 1.0 1.0 1.0]
     field = Fields.coordinate_field(space)
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
