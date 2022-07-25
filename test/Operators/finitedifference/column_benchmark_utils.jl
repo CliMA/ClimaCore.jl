@@ -4,6 +4,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
 import BenchmarkTools
 import StatsBase
 import OrderedCollections
+using ClimaCore.Geometry: ⊗
 
 import ClimaCore
 ClimaCore.enable_threading() = false
@@ -14,6 +15,7 @@ import ClimaCore.Domains: Geometry
 field_vars(::Type{FT}) where {FT} = (;
     x = FT(0),
     uₕ = Geometry.Covariant12Vector(FT(0), FT(0)),
+    uₕ2 = Geometry.Covariant12Vector(FT(0), FT(0)),
     curluₕ = Geometry.Contravariant12Vector(FT(0), FT(0)),
     w = Geometry.Covariant3Vector(FT(0)),
     contra3 = Geometry.Contravariant3Vector(FT(0)),
@@ -103,6 +105,32 @@ function set_value_contra3_bcs(c)
     contra3 = Geometry.Contravariant3Vector
     return (;bottom = Operators.SetValue(contra3(FT(0.0))),
              top = Operators.SetValue(contra3(FT(0.0))))
+end
+
+function set_value_divgrad_uₕ_bcs(c) # real-world example
+    FT = Spaces.undertype(axes(c))
+    top_val = Geometry.Contravariant3Vector(FT(0)) ⊗
+            Geometry.Covariant12Vector(FT(0), FT(0))
+    bottom_val = Geometry.Contravariant3Vector(FT(0)) ⊗
+            Geometry.Covariant12Vector(FT(0), FT(0))
+    return (;top = Operators.SetValue(top_val),
+             bottom = Operators.Extrapolate())
+end
+
+# TODO: get this working
+function set_value_divgrad_uₕ_field_bcs(c) # real-world example
+    FT = Spaces.undertype(axes(c))
+    top_val = Geometry.Contravariant3Vector(FT(0)) ⊗
+            Geometry.Covariant12Vector(FT(0), FT(0))
+    z_bottom = Spaces.level(Fields.coordinate_field(c).z, 1)
+    bottom_val =
+        Geometry.Contravariant3Vector.(zeros(axes(z_bottom))) .⊗
+        Geometry.Covariant12Vector.(
+            zeros(axes(z_bottom)),
+            zeros(axes(z_bottom)),
+        )
+    return (;top = Operators.SetValue(top_val),
+             bottom = Operators.SetValue(.-bottom_val))
 end
 
 function set_vec_value_bcs(c)
@@ -225,6 +253,11 @@ bcs_tested(c, ::typeof(op_div_interp_CC!)) =
     ((; inner = set_value_contra3_bcs(c), outer = ()), )
 bcs_tested(c, ::typeof(op_div_interp_FF!)) =
     ((; inner = (), outer = set_value_contra3_bcs(c)), )
+bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
+    (
+        (; inner = (), outer = set_value_divgrad_uₕ_bcs(c)),
+        # (; inner = (), outer = set_value_divgrad_uₕ_field_bcs(c)), # TODO: add once working
+    )
 
 function benchmark_func!(t_ave, trials, fun, c, f, verbose = false)
     for bcs in bcs_tested(c, fun)
@@ -278,6 +311,7 @@ function benchmark_cases(vars_contig, cfield, ffield)
         op_divgrad_FF!,
         op_div_interp_CC!,
         op_div_interp_FF!,
+        op_divgrad_uₕ!,
     ]
 
     trials = OrderedCollections.OrderedDict()
@@ -312,6 +346,7 @@ function benchmark_cases(vars_contig, cfield, ffield)
     @test_broken t_ave[(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
     @test_broken t_ave[(op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
     @test_broken t_ave[(op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500
 
     return nothing
 end

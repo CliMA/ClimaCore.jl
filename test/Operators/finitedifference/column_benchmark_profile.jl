@@ -4,6 +4,8 @@ include("column_benchmark_utils.jl")
 function apply_kernel!(cfield, ffield, D, U, xarr, yarr)
     # op_GradientF2C!(cfield, ffield)
     # op_2mul_1add!(xarr, yarr, D, U)
+    bcs = (; inner = (), outer = set_value_divgrad_uₕ_bcs(cfield))
+    op_divgrad_uₕ!(cfield, ffield, bcs)
 end
 
 function apply_kernel_loop!(cfield, ffield, D, U, xarr, yarr)
