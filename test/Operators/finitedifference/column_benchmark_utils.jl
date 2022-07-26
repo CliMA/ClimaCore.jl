@@ -9,7 +9,7 @@ using ClimaCore.Geometry: ⊗
 import ClimaCore
 ClimaCore.enable_threading() = false
 
-import ClimaCore: Domains, Meshes, Spaces, Fields, Operators
+import ClimaCore: Domains, Meshes, Spaces, Fields, Operators, Topologies
 import ClimaCore.Domains: Geometry
 
 field_vars(::Type{FT}) where {FT} = (;
@@ -25,13 +25,43 @@ field_vars(::Type{FT}) where {FT} = (;
     ∇x = Geometry.Covariant3Vector(FT(0)),
 )
 
-function get_fields(n_elems, ::Type{FT}) where {FT}
+function get_spaces(z_elems, ::Type{FT}) where {FT}
+    quad = Spaces.Quadratures.GL{1}()
+    x_domain = Domains.IntervalDomain(
+        Geometry.XPoint(FT(0)),
+        Geometry.XPoint(FT(1));
+        periodic = true,
+    )
+    y_domain = Domains.IntervalDomain(
+        Geometry.YPoint(FT(0)),
+        Geometry.YPoint(FT(1));
+        periodic = true,
+    )
+    h_domain = Domains.RectangleDomain(x_domain, y_domain)
+    h_mesh = Meshes.RectilinearMesh(h_domain, #=x_elem=# 1, #=y_elem=# 1)
+    topology = Topologies.Topology2D(h_mesh)
+    h_space = Spaces.SpectralElementSpace2D(topology, quad)
+
+    z_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0.0),
+        Geometry.ZPoint{FT}(pi);
+        boundary_tags = (:bottom, :top),
+    )
+    z_mesh = Meshes.IntervalMesh(z_domain; nelems = z_elems)
+    z_topology = Topologies.IntervalTopology(z_mesh)
+    z_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
+    cs = Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_space)
+    fs = Spaces.FaceExtrudedFiniteDifferenceSpace(cs)
+    return (;cs, fs)
+end
+
+function get_column_spaces(z_elems, ::Type{FT}) where {FT}
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
         Geometry.ZPoint{FT}(pi);
         boundary_tags = (:bottom, :top),
     )
-    mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
+    mesh = Meshes.IntervalMesh(domain; nelems = z_elems)
     cs = Spaces.CenterFiniteDifferenceSpace(mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = getproperty(Fields.coordinate_field(cs), :z)
@@ -39,16 +69,21 @@ function get_fields(n_elems, ::Type{FT}) where {FT}
     cfield = field_wrapper(cs, field_vars(FT))
     ffield = field_wrapper(fs, field_vars(FT))
 
-    L = zeros(FT, n_elems)
-    D = zeros(FT, n_elems)
-    U = zeros(FT, n_elems)
-    xarr = rand(FT, n_elems)
-    uₕ_x = rand(FT, n_elems)
-    uₕ_y = rand(FT, n_elems)
-    yarr = rand(FT, n_elems + 1)
-    vars_contig = (; L, D, U, xarr, yarr, uₕ_x, uₕ_y)
+    return (;cs, fs)
+end
 
-    return (; cfield, ffield, vars_contig)
+function get_fields(z_elems, ::Type{FT}, has_h_space = false) where {FT}
+
+    (; cs, fs) = if has_h_space
+        get_spaces(z_elems, FT)
+    else
+        get_column_spaces(z_elems, FT)
+    end
+    zc = getproperty(Fields.coordinate_field(cs), :z)
+    zf = getproperty(Fields.coordinate_field(fs), :z)
+    cfield = field_wrapper(cs, field_vars(FT))
+    ffield = field_wrapper(fs, field_vars(FT))
+    return (; cfield, ffield)
 end
 
 function field_wrapper(space, nt::NamedTuple)
@@ -117,20 +152,24 @@ function set_value_divgrad_uₕ_bcs(c) # real-world example
              bottom = Operators.Extrapolate())
 end
 
-# TODO: get this working
-function set_value_divgrad_uₕ_field_bcs(c) # real-world example
+function set_value_divgrad_uₕ_maybe_field_bcs(c) # real-world example
     FT = Spaces.undertype(axes(c))
     top_val = Geometry.Contravariant3Vector(FT(0)) ⊗
             Geometry.Covariant12Vector(FT(0), FT(0))
-    z_bottom = Spaces.level(Fields.coordinate_field(c).z, 1)
-    bottom_val =
-        Geometry.Contravariant3Vector.(zeros(axes(z_bottom))) .⊗
-        Geometry.Covariant12Vector.(
-            zeros(axes(z_bottom)),
-            zeros(axes(z_bottom)),
-        )
-    return (;top = Operators.SetValue(top_val),
-             bottom = Operators.SetValue(.-bottom_val))
+    if hasproperty(axes(c), :horizontal_space)
+        z_bottom = Spaces.level(Fields.coordinate_field(c).z, 1)
+        bottom_val =
+            Geometry.Contravariant3Vector.(zeros(axes(z_bottom))) .⊗
+            Geometry.Covariant12Vector.(
+                zeros(axes(z_bottom)),
+                zeros(axes(z_bottom)),
+            )
+        return (;top = Operators.SetValue(top_val),
+                 bottom = Operators.SetValue(.-bottom_val))
+    else
+        return (;top = Operators.SetValue(top_val),
+                 bottom = Operators.SetValue(top_val))
+    end
 end
 
 function set_vec_value_bcs(c)
@@ -256,12 +295,12 @@ bcs_tested(c, ::typeof(op_div_interp_FF!)) =
 bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
     (
         (; inner = (), outer = set_value_divgrad_uₕ_bcs(c)),
-        # (; inner = (), outer = set_value_divgrad_uₕ_field_bcs(c)), # TODO: add once working
+        (; inner = (), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
     )
 
-function benchmark_func!(t_ave, trials, fun, c, f, verbose = false)
+function benchmark_func!(t_ave, trials, fun, c, f, has_h_space, verbose = false)
     for bcs in bcs_tested(c, fun)
-        key = (fun, bc_name(bcs)...)
+        key = (has_h_space, fun, bc_name(bcs)...)
         verbose && @info "\n@benchmarking $key"
         trials[key] = BenchmarkTools.@benchmark $fun($c, $f, $bcs)
         verbose && show(stdout, MIME("text/plain"), trials[key])
@@ -272,9 +311,16 @@ function benchmark_func!(t_ave, trials, fun, c, f, verbose = false)
     end
 end
 
-function benchmark_cases(vars_contig, cfield, ffield)
+function benchmark_arrays(z_elems, ::Type{FT}) where {FT}
+    L = zeros(FT, z_elems)
+    D = zeros(FT, z_elems)
+    U = zeros(FT, z_elems)
+    xarr = rand(FT, z_elems)
+    uₕ_x = rand(FT, z_elems)
+    uₕ_y = rand(FT, z_elems)
+    yarr = rand(FT, z_elems + 1)
+
     println("\n############################ 2-point stencil")
-    (; L, D, U, xarr, yarr, uₕ_x, uₕ_y) = vars_contig
     trial = BenchmarkTools.@benchmark op_2mul_1add!($xarr, $yarr, $D, $U)
     show(stdout, MIME("text/plain"), trial)
     println()
@@ -286,7 +332,29 @@ function benchmark_cases(vars_contig, cfield, ffield)
     trial = BenchmarkTools.@benchmark curl_like!($xarr, $uₕ_x, $uₕ_y, $D, $U)
     show(stdout, MIME("text/plain"), trial)
     println()
+end
 
+function benchmark_operators(z_elems, ::Type{FT}) where {FT}
+    trials = OrderedCollections.OrderedDict()
+    t_ave = OrderedCollections.OrderedDict()
+    benchmark_arrays(z_elems, FT)
+
+    @warn string(
+        "The `set_value_divgrad_uₕ_maybe_field_bcs` bcs are different",
+        "between `has_h_space = true` and `has_h_space = false`."
+    )
+
+    has_h_space = false
+    (; cfield, ffield) = get_fields(1000, Float64, true)
+    (; cfield, ffield) = get_fields(z_elems, FT, has_h_space)
+    benchmark_operators_base(trials, t_ave, cfield, ffield, has_h_space)
+
+    has_h_space = true
+    (; cfield, ffield) = get_fields(z_elems, FT, has_h_space)
+    benchmark_operators_base(trials, t_ave, cfield, ffield, has_h_space)
+end
+
+function benchmark_operators_base(trials, t_ave, cfield, ffield, has_h_space)
     ops = [
         #### Core discrete operators
         op_GradientF2C!,
@@ -314,39 +382,66 @@ function benchmark_cases(vars_contig, cfield, ffield)
         op_divgrad_uₕ!,
     ]
 
-    trials = OrderedCollections.OrderedDict()
-    t_ave = OrderedCollections.OrderedDict()
     @info "Benchmarking operators, this may take a minute or two..."
     for op in ops
-        benchmark_func!(t_ave, trials, op, cfield, ffield, #= verbose = =# false)
+        benchmark_func!(t_ave, trials, op, cfield, ffield, has_h_space, #= verbose = =# false)
     end
 
-    @test_broken t_ave[(op_GradientF2C!, :none)] < 500
-    @test_broken t_ave[(op_GradientF2C!, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_GradientC2F!, :SetGradient, :SetGradient)] < 500
-    @test_broken t_ave[(op_GradientC2F!, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_DivergenceF2C!, :none)] < 500
-    @test_broken t_ave[(op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 500
-    @test_broken t_ave[(op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
-    @test_broken t_ave[(op_InterpolateF2C!, :none)] < 500
-    @test_broken t_ave[(op_InterpolateC2F!, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 500
-    @test_broken t_ave[(op_LeftBiasedC2F!, :SetValue)] < 500
-    @test_broken t_ave[(op_LeftBiasedF2C!, :none)] < 500
-    @test_broken t_ave[(op_LeftBiasedF2C!, :SetValue)] < 500
-    @test_broken t_ave[(op_RightBiasedC2F!, :SetValue)] < 500
-    @test_broken t_ave[(op_RightBiasedF2C!, :none)] < 500
-    @test_broken t_ave[(op_RightBiasedF2C!, :SetValue)] < 500
-    @test_broken t_ave[(op_CurlC2F!, :SetCurl, :SetCurl)] < 500
-    @test_broken t_ave[(op_CurlC2F!, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 500
-    @test_broken t_ave[(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
-    @test_broken t_ave[(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
-    @test_broken t_ave[(op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
-    @test_broken t_ave[(op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
-    @test_broken t_ave[(op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_GradientF2C!, :none)] < 500
+    @test_broken t_ave[true, (op_GradientF2C!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_GradientC2F!, :SetGradient, :SetGradient)] < 500
+    @test_broken t_ave[true, (op_GradientC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_DivergenceF2C!, :none)] < 500
+    @test_broken t_ave[true, (op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[true, (op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[true, (op_InterpolateF2C!, :none)] < 500
+    @test_broken t_ave[true, (op_InterpolateC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[true, (op_LeftBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[true, (op_LeftBiasedF2C!, :none)] < 500
+    @test_broken t_ave[true, (op_LeftBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[true, (op_RightBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[true, (op_RightBiasedF2C!, :none)] < 500
+    @test_broken t_ave[true, (op_RightBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[true, (op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[true, (op_CurlC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[true, (op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[true, (op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[true, (op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[true, (op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[true, (op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 500
+    @test_broken t_ave[true, (op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500 # different with/without h_space
+
+    @test_broken t_ave[false, (op_GradientF2C!, :none)] < 500
+    @test_broken t_ave[false, (op_GradientF2C!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_GradientC2F!, :SetGradient, :SetGradient)] < 500
+    @test_broken t_ave[false, (op_GradientC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_DivergenceF2C!, :none)] < 500
+    @test_broken t_ave[false, (op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[false, (op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[false, (op_InterpolateF2C!, :none)] < 500
+    @test_broken t_ave[false, (op_InterpolateC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[false, (op_LeftBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[false, (op_LeftBiasedF2C!, :none)] < 500
+    @test_broken t_ave[false, (op_LeftBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[false, (op_RightBiasedC2F!, :SetValue)] < 500
+    @test_broken t_ave[false, (op_RightBiasedF2C!, :none)] < 500
+    @test_broken t_ave[false, (op_RightBiasedF2C!, :SetValue)] < 500
+    @test_broken t_ave[false, (op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[false, (op_CurlC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[false, (op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[false, (op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[false, (op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[false, (op_div_interp_FF!, :none, :SetValue, :Extrapolate)] < 500
+    @test_broken t_ave[false, (op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[false, (op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500 # different with/without h_space
 
     return nothing
 end
