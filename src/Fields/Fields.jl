@@ -6,7 +6,7 @@ import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf
+import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply
 
