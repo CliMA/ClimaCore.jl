@@ -141,21 +141,18 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
     CovariantVector(u, local_geometry).u₃
 
 @inline contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry).u¹
+    @inbounds project(Contravariant1Axis(), u, local_geometry)[1]
 @inline contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry).u²
+    @inbounds project(Contravariant2Axis(), u, local_geometry)[1]
 @inline contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
-    transform(Contravariant123Axis(), u, local_geometry).u³
+    @inbounds project(Contravariant3Axis(), u, local_geometry)[1]
 
-@inline function contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry)
-    @inbounds transform(Contravariant123Axis(), u, local_geometry)[1, :]
-end
-@inline function contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry)
-    @inbounds transform(Contravariant123Axis(), u, local_geometry)[2, :]
-end
-@inline function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
-    @inbounds transform(Contravariant123Axis(), u, local_geometry)[3, :]
-end
+@inline contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    @inbounds project(Contravariant1Axis(), u, local_geometry)[1, :]
+@inline contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    @inbounds project(Contravariant2Axis(), u, local_geometry)[1, :]
+@inline contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
+    @inbounds project(Contravariant3Axis(), u, local_geometry)[1, :]
 
 Base.@propagate_inbounds Jcontravariant3(
     u::AxisTensor,
