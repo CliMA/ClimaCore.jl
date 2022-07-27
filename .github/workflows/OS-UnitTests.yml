@@ -10,7 +10,7 @@ jobs:
   test-os:
     timeout-minutes: 80
     strategy:
-      fail-fast: true
+      fail-fast: true # temporarily disabled while experiencing windows issue.
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 

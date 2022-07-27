@@ -117,6 +117,7 @@ norm_sqr(C123(ᶜuₕ) + C123(ᶜinterp(ᶠw)))
 ᶜdivᵥ(ᶠinterp(ρ) * ᶠupwind_product(ᶠw, (ρe_tot + ᶜp) / ρ))
 Yₜ.c.uₕ -= Geometry.Covariant12Vector(gradₕ(ᶜp) / ᶜρ + gradₕ(ᶜK + ᶜΦ))
 Yₜ.c.uₕ -= ᶜinterp(ᶠω¹² × ᶠu³) + (ᶜf + ᶜω³) × (project(Contravariant12Axis(), ᶜuvw))
+@. ᶠK_E = eddy_diffusivity_coefficient(norm(ᶠv_a), ᶠz_a, ᶠinterp(ᶜp))
 
 # Collect examples in TurbulenceConvection
 (TODO)

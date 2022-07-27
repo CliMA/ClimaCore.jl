@@ -426,16 +426,16 @@ function slab(space::AbstractSpectralElementSpace, v, h)
 end
 slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
 
-function column(space::SpectralElementSpace1D, i, h)
+@inline function column(space::SpectralElementSpace1D, i, h)
     local_geometry = local_geometry_data(space)
-    local_geometry = column(local_geometry, i, h)
+    @inbounds local_geometry = column(local_geometry, i, h)
     PointSpace(local_geometry)
 end
-column(space::SpectralElementSpace1D, i, j, h) = column(space, i, h)
+@inline column(space::SpectralElementSpace1D, i, j, h) = column(space, i, h)
 
-function column(space::SpectralElementSpace2D, i, j, h)
+@inline function column(space::SpectralElementSpace2D, i, j, h)
     local_geometry = local_geometry_data(space)
-    local_geometry = column(local_geometry, i, j, h)
+    @inbounds local_geometry = column(local_geometry, i, j, h)
     PointSpace(local_geometry)
 end
 

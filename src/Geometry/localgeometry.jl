@@ -17,7 +17,7 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     ∂ξ∂x::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
 end
 
-LocalGeometry(coordinates, J, WJ, ∂x∂ξ) =
+@inline LocalGeometry(coordinates, J, WJ, ∂x∂ξ) =
     LocalGeometry(coordinates, J, WJ, ∂x∂ξ, inv(∂x∂ξ))
 
 """

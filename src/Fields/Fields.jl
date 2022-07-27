@@ -129,9 +129,12 @@ const ColumnField{V, S} =
 slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
-column(field::Field, inds...) =
-    Field(column(field_values(field), inds...), column(axes(field), inds...))
-column(field::FiniteDifferenceField, inds...) = field
+@inline function column(field::Field, inds...)
+    @inbounds vals = column(field_values(field), inds...)
+    @inbounds spaces = column(axes(field), inds...)
+    @inbounds Field(vals, spaces)
+end
+@inline column(field::FiniteDifferenceField, inds...) = field
 
 
 

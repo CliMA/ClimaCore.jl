@@ -119,10 +119,13 @@ promote_parent_array_type(
 Create an instance of type `T` from a tuple of field values `args`, bypassing
 possible internal constructors. `T` should be a concrete type.
 """
-@generated function bypass_constructor(::Type{T}, args) where {T}
+Base.@propagate_inbounds @generated function bypass_constructor(
+    ::Type{T},
+    args,
+) where {T}
     vars = ntuple(_ -> gensym(), fieldcount(T))
     assign = [
-        :($var::$(fieldtype(T, i)) = getfield(args, $i)) for
+        :(@inbounds $var::$(fieldtype(T, i)) = getfield(args, $i)) for
         (i, var) in enumerate(vars)
     ]
     construct = Expr(:new, :T, vars...)
@@ -166,85 +169,76 @@ end
 
 Construct an object of type `S` from the values of `array`, optionally offset by `offset` from the start of the array.
 """
-function get_struct(array::AbstractArray{T}, ::Type{S}, offset) where {T, S}
-    if @generated
-        tup = :(())
-        for i in 1:fieldcount(S)
-            push!(
-                tup.args,
-                :(get_struct(
-                    array,
-                    fieldtype(S, $i),
-                    offset + fieldtypeoffset(T, S, $i),
-                )),
-            )
-        end
-        return quote
-            Base.@_propagate_inbounds_meta
-            bypass_constructor(S, $tup)
-        end
-    else
+Base.@propagate_inbounds @generated function get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+    offset,
+) where {T, S}
+    tup = :(())
+    for i in 1:fieldcount(S)
+        push!(
+            tup.args,
+            :(get_struct(
+                array,
+                fieldtype(S, $i),
+                offset + fieldtypeoffset(T, S, $i),
+            )),
+        )
+    end
+    return quote
         Base.@_propagate_inbounds_meta
-        args = ntuple(fieldcount(S)) do i
-            get_struct(array, fieldtype(S, i), offset + fieldtypeoffset(T, S, i))
-        end
-        return bypass_constructor(S, args)
+        @inbounds bypass_constructor(S, $tup)
     end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
-@propagate_inbounds function get_struct(
+Base.@propagate_inbounds function get_struct(
     array::AbstractArray{S},
     ::Type{S},
     offset,
 ) where {S}
-    return array[offset + 1]
+    return @inbounds array[offset + 1]
 end
 
-@inline function get_struct(array::AbstractArray{T}, ::Type{S}) where {T, S}
+Base.@propagate_inbounds function get_struct(
+    array::AbstractArray{T},
+    ::Type{S},
+) where {T, S}
     @inbounds get_struct(array, S, 0)
 end
 
-function set_struct!(array::AbstractArray{T}, val::S, offset) where {T, S}
-    if @generated
-        ex = quote
-            Base.@_propagate_inbounds_meta
-        end
-        for i in 1:fieldcount(S)
-            push!(
-                ex.args,
-                :(set_struct!(
-                    array,
-                    getfield(val, $i),
-                    offset + fieldtypeoffset(T, S, $i),
-                )),
-            )
-        end
-        push!(ex.args, :(return val))
-        return ex
-    else
+Base.@propagate_inbounds @generated function set_struct!(
+    array::AbstractArray{T},
+    val::S,
+    offset,
+) where {T, S}
+    ex = quote
         Base.@_propagate_inbounds_meta
-        for i in 1:fieldcount(S)
-            set_struct!(
-                array,
-                getfield(val, i),
-                offset + fieldtypeoffset(T, S, i),
-            )
-        end
-        return val
     end
+    for i in 1:fieldcount(S)
+        push!(
+            ex.args,
+            :(set_struct!(
+                array,
+                getfield(val, $i),
+                offset + fieldtypeoffset(T, S, $i),
+            )),
+        )
+    end
+    push!(ex.args, :(return val))
+    return ex
 end
 
-@propagate_inbounds function set_struct!(
+Base.@propagate_inbounds function set_struct!(
     array::AbstractArray{S},
     val::S,
     offset,
 ) where {S}
-    array[offset + 1] = val
+    @inbounds array[offset + 1] = val
     val
 end
 
-@inline function set_struct!(array, val)
+Base.@propagate_inbounds function set_struct!(array, val)
     @inbounds set_struct!(array, val, 0)
 end
 

@@ -96,7 +96,8 @@ const ⊞ = radd
 # Adapted from Base/operators.jl for general nary operator fallbacks
 for op in (:rmul, :radd)
     @eval begin
-        ($op)(a, b, c, xs...) = Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
+        @inline ($op)(a, b, c, xs...) =
+            Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
     end
 end
 
