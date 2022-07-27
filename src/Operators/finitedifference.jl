@@ -2144,7 +2144,7 @@ stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
 end
 
 boundary_width(::DivergenceF2C, ::SetValue, arg) = 1
@@ -2167,7 +2167,7 @@ boundary_width(::DivergenceF2C, ::SetValue, arg) = 1
         getidx(bc.val, loc, nothing, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
 end
 @inline function stencil_right_boundary(
     ::DivergenceF2C,
@@ -2188,7 +2188,7 @@ end
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
 end
 
 boundary_width(::DivergenceF2C, ::Extrapolate, arg) = 1
@@ -2262,7 +2262,7 @@ stencil_interior_width(::DivergenceC2F, arg) = ((-half, half),)
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³₋, local_geometry.J)
+    (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
 end
 
 boundary_width(::DivergenceC2F, ::SetValue, arg) = 1
@@ -2286,7 +2286,7 @@ boundary_width(::DivergenceC2F, ::SetValue, arg) = 1
         getidx(bc.val, loc, nothing, hidx),
         local_geometry,
     )
-    RecursiveApply.rdiv(Ju³₊ ⊟ Ju³, local_geometry.J / 2)
+    (Ju³₊ ⊟ Ju³) ⊠ (2 * local_geometry.invJ)
 end
 @inline function stencil_right_boundary(
     ::DivergenceC2F,
@@ -2307,7 +2307,7 @@ end
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    RecursiveApply.rdiv(Ju³ ⊟ Ju³₋, local_geometry.J / 2)
+    (Ju³ ⊟ Ju³₋) ⊠ (2 * local_geometry.invJ)
 end
 
 # left / right SetDivergence boundary conditions
@@ -2392,20 +2392,26 @@ return_space(::CurlC2F, space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
 @inline fd3_curl(
     u₊::Geometry.Covariant1Vector,
     u₋::Geometry.Covariant1Vector,
-    J,
-) = Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) / J)
+    invJ,
+) = Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)
 @inline fd3_curl(
     u₊::Geometry.Covariant2Vector,
     u₋::Geometry.Covariant2Vector,
-    J,
-) = Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) / J)
-@inline fd3_curl(::Geometry.Covariant3Vector, ::Geometry.Covariant3Vector, J) =
-    Geometry.Contravariant3Vector(zero(eltype(J)))
+    invJ,
+) = Geometry.Contravariant1Vector(-(u₊.u₂ - u₋.u₂) * invJ)
+@inline fd3_curl(
+    ::Geometry.Covariant3Vector,
+    ::Geometry.Covariant3Vector,
+    invJ,
+) = Geometry.Contravariant3Vector(zero(eltype(invJ)))
 @inline fd3_curl(
     u₊::Geometry.Covariant12Vector,
     u₋::Geometry.Covariant12Vector,
-    J,
-) = Geometry.Contravariant12Vector(-(u₊.u₂ - u₋.u₂) / J, (u₊.u₁ - u₋.u₁) / J)
+    invJ,
+) = Geometry.Contravariant12Vector(
+    -(u₊.u₂ - u₋.u₂) * invJ,
+    (u₊.u₁ - u₋.u₁) * invJ,
+)
 
 stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
 @inline function stencil_interior(::CurlC2F, loc, idx, hidx, arg)
@@ -2413,7 +2419,7 @@ stencil_interior_width(::CurlC2F, arg) = ((-half, half),)
     u₊ = getidx(arg, loc, idx + half, hidx)
     u₋ = getidx(arg, loc, idx - half, hidx)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u₊, u₋, local_geometry.J)
+    return fd3_curl(u₊, u₋, local_geometry.invJ)
 end
 
 boundary_width(::CurlC2F, ::SetValue, arg) = 1
@@ -2429,7 +2435,7 @@ boundary_width(::CurlC2F, ::SetValue, arg) = 1
     u₊ = getidx(arg, loc, idx + half, hidx)
     u = getidx(bc.val, loc, nothing, hidx)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u₊, u, local_geometry.J / 2)
+    return fd3_curl(u₊, u, local_geometry.invJ * 2)
 end
 @inline function stencil_right_boundary(
     ::CurlC2F,
@@ -2443,7 +2449,7 @@ end
     u = getidx(bc.val, loc, nothing, hidx)
     u₋ = getidx(arg, loc, idx - half, hidx)
     local_geometry = Geometry.LocalGeometry(space, idx, hidx)
-    return fd3_curl(u, u₋, local_geometry.J / 2)
+    return fd3_curl(u, u₋, local_geometry.invJ * 2)
 end
 
 boundary_width(::CurlC2F, ::SetCurl, arg) = 1

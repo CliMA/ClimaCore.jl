@@ -476,9 +476,9 @@ function stencil_interior(
         getidx(arg, loc, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J))
-    val⁺ = RecursiveApply.rdiv(Ju³⁺, J)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁻ = Ju³⁻ ⊠ (-invJ)
+    val⁺ = Ju³⁺ ⊠ invJ
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
@@ -494,8 +494,8 @@ function stencil_left_boundary(
         getidx(arg, loc, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁺ = RecursiveApply.rdiv(Ju³⁺, J)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁺ = Ju³⁺ ⊠ invJ
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -511,8 +511,8 @@ function stencil_right_boundary(
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J))
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁻ = Ju³⁻ ⊠ (-invJ)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 stencil_left_boundary(
@@ -544,8 +544,8 @@ function stencil_left_boundary(
         getidx(arg, loc, idx + half, hidx),
         Geometry.LocalGeometry(space, idx + half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁺ = RecursiveApply.rdiv(Ju³⁺, J / 2)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁺ = Ju³⁺ ⊠ (2 * invJ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -561,8 +561,8 @@ function stencil_right_boundary(
         getidx(arg, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
     )
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁻ = ⊟(RecursiveApply.rdiv(Ju³⁻, J / 2))
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁻ = Ju³⁻ ⊠ (-2 * invJ)
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 function stencil_left_boundary(
@@ -589,22 +589,22 @@ function stencil_right_boundary(
 end
 
 # Evaluate fd3_curl(u, zero(u), J).
-fd3_curl⁺(u::Geometry.Covariant1Vector, J) =
-    Geometry.Contravariant2Vector(u.u₁ / J)
-fd3_curl⁺(u::Geometry.Covariant2Vector, J) =
-    Geometry.Contravariant1Vector(-u.u₂ / J)
-fd3_curl⁺(::Geometry.Covariant3Vector, J) =
-    Geometry.Contravariant3Vector(zero(eltype(J)))
-fd3_curl⁺(u::Geometry.Covariant12Vector, J) =
-    Geometry.Contravariant12Vector(-u.u₂ / J, u.u₁ / J)
+fd3_curl⁺(u::Geometry.Covariant1Vector, invJ) =
+    Geometry.Contravariant2Vector(u.u₁ * invJ)
+fd3_curl⁺(u::Geometry.Covariant2Vector, invJ) =
+    Geometry.Contravariant1Vector(-u.u₂ * invJ)
+fd3_curl⁺(::Geometry.Covariant3Vector, invJ) =
+    Geometry.Contravariant3Vector(zero(eltype(invJ)))
+fd3_curl⁺(u::Geometry.Covariant12Vector, invJ) =
+    Geometry.Contravariant12Vector(-u.u₂ * invJ, u.u₁ * invJ)
 
 function stencil_interior(::Operator2Stencil{<:CurlC2F}, loc, idx, hidx, arg)
     space = axes(arg)
     u₋ = getidx(arg, loc, idx - half, hidx)
     u₊ = getidx(arg, loc, idx + half, hidx)
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁻ = ⊟(fd3_curl⁺(u₋, J))
-    val⁺ = fd3_curl⁺(u₊, J)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁻ = ⊟(fd3_curl⁺(u₋, invJ))
+    val⁺ = fd3_curl⁺(u₊, invJ)
     return StencilCoefs{-half, half}((val⁻, val⁺))
 end
 function stencil_left_boundary(
@@ -617,8 +617,8 @@ function stencil_left_boundary(
 )
     space = axes(arg)
     u₊ = getidx(arg, loc, idx + half, hidx)
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁺ = fd3_curl⁺(u₊, J / 2)
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁺ = fd3_curl⁺(u₊, 2 * invJ)
     return StencilCoefs{-half, half}((zero(val⁺), val⁺))
 end
 function stencil_right_boundary(
@@ -631,8 +631,8 @@ function stencil_right_boundary(
 )
     space = axes(arg)
     u₋ = getidx(arg, loc, idx - half, hidx)
-    J = Geometry.LocalGeometry(space, idx, hidx).J
-    val⁻ = ⊟(fd3_curl⁺(u₋, J))
+    invJ = Geometry.LocalGeometry(space, idx, hidx).invJ
+    val⁻ = ⊟(fd3_curl⁺(u₋, invJ))
     return StencilCoefs{-half, half}((val⁻, zero(val⁻)))
 end
 function stencil_left_boundary(

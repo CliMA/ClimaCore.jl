@@ -422,7 +422,7 @@ function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
     end
     @inbounds for i in 1:Nq
         local_geometry = slab_local_geometry[i]
-        out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
+        out[i] = out[i] ⊠ local_geometry.invJ
     end
     return SVector(out)
 end
@@ -458,7 +458,7 @@ function apply_slab(op::Divergence{(1, 2)}, slab_space, _, slab_data)
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
+        out[i, j] = out[i, j] ⊠ local_geometry.invJ
     end
     return SMatrix(out)
 end
@@ -697,7 +697,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     DataLayouts._mzero!(out, FT)
     @inbounds for i in 1:Nq
         local_geometry = slab_local_geometry[i]
-        W = local_geometry.WJ / local_geometry.J
+        W = local_geometry.WJ * local_geometry.invJ
         Wx = W ⊠ get_node(slab_data, i)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
@@ -706,7 +706,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     end
     @inbounds for i in 1:Nq
         local_geometry = slab_local_geometry[i]
-        W = local_geometry.WJ / local_geometry.J
+        W = local_geometry.WJ * local_geometry.invJ
         out[i] = RecursiveApply.rdiv(out[i], W)
     end
     return SVector(out)
@@ -724,7 +724,7 @@ function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
     DataLayouts._mzero!(out, FT)
     @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        W = local_geometry.WJ / local_geometry.J
+        W = local_geometry.WJ * local_geometry.invJ
         Wx = W ⊠ get_node(slab_data, i, j)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
@@ -737,7 +737,7 @@ function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        W = local_geometry.WJ / local_geometry.J
+        W = local_geometry.WJ * local_geometry.invJ
         out[i, j] = RecursiveApply.rdiv(out[i, j], W)
     end
     return SMatrix(out)
@@ -819,7 +819,7 @@ function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
     end
     @inbounds for i in 1:Nq
         local_geometry = slab_local_geometry[i]
-        out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
+        out[i] = out[i] ⊠ local_geometry.invJ
     end
     return SVector(out)
 end
@@ -887,7 +887,7 @@ function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
-        out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
+        out[i, j] = out[i, j] ⊠ local_geometry.invJ
     end
     return SMatrix(out)
 end
@@ -949,7 +949,7 @@ function apply_slab(op::WeakCurl{(1,)}, slab_space, _, slab_data)
     if RT <: Geometry.Contravariant2Vector
         @inbounds for i in 1:Nq
             local_geometry = slab_local_geometry[i]
-            W = local_geometry.WJ / local_geometry.J
+            W = local_geometry.WJ * local_geometry.invJ
             Wv₃ =
                 W ⊠ Geometry.covariant3(
                     get_node(slab_data, i),
@@ -984,7 +984,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     if RT <: Geometry.Contravariant3Vector
         @inbounds for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i, j]
-            W = local_geometry.WJ / local_geometry.J
+            W = local_geometry.WJ * local_geometry.invJ
             Wv₁ =
                 W ⊠ Geometry.covariant1(
                     get_node(slab_data, i, j),
@@ -1016,7 +1016,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     elseif RT <: Geometry.Contravariant12Vector
         @inbounds for j in 1:Nq, i in 1:Nq
             local_geometry = slab_local_geometry[i, j]
-            W = local_geometry.WJ / local_geometry.J
+            W = local_geometry.WJ * local_geometry.invJ
             Wv₃ =
                 W ⊠ Geometry.covariant3(
                     get_node(slab_data, i, j),
