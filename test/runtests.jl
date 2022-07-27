@@ -4,6 +4,14 @@ using Base: operator_associativity
 #! format: off
 # Order of tests is intended to reflect dependency order of functionality
 
+#= TODO: add windows test back in. Currently getting
+ReadOnlyMemoryError()
+ERROR: Package ClimaCore errored during testing (exit code: 541541187)
+Stacktrace:
+ [1] pkgerror(msg::String)
+=#
+if !Sys.iswindows()
+
 @safetestset "Recursive" begin @time include("recursive.jl") end
 @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
 
@@ -47,13 +55,6 @@ using Base: operator_associativity
 @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
 @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
 
-#= TODO: add windows test back in. Currently getting
-ReadOnlyMemoryError()
-ERROR: Package ClimaCore errored during testing (exit code: 541541187)
-Stacktrace:
- [1] pkgerror(msg::String)
-=#
-if !Sys.iswindows()
 @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
 @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
 @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end

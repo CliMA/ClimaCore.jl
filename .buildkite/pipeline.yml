@@ -78,6 +78,7 @@ steps:
     agents:
       config: cpu
       queue: central
+      slurm_mem: 64GB
       slurm_ntasks: 1
 
   - label: ":computer: test implicit_stencil"
