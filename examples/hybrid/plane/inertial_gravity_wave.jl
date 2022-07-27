@@ -96,44 +96,73 @@ end
 face_initial_condition(local_geometry) =
     (; w = Geometry.Covariant3Vector(FT(0)))
 
+function ρ′!(ρ′, Y, ᶜlocal_geometry)
+    @. ρ′ = Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
+end
+
+function T′!(T′, Y, ᶜK, ᶜΦ)
+    if ᶜ𝔼_name == :ρθ
+        @. T′ = Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) - T₀
+    elseif ᶜ𝔼_name == :ρe
+        @. ᶜK = norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+        @. T′ = (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
+    elseif ᶜ𝔼_name == :ρe_int
+        @. T′ = Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
+    end
+end
+function u′!(u′, Y)
+    @. u′ = Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
+end
+function v′!(v′, Y)
+    @. v′ = Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
+end
+function w′!(w′, Y)
+    @. w′ = Geometry.WVector(Y.f.w).components.data.:1
+end
+
 function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
     ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
     lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     Y_lin = similar(sol.u[1])
+    Y = first(sol.u)
+    ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
 
-    ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
-    if ᶜ𝔼_name == :ρθ
-        T′ =
-            Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) -
-               T₀
-    elseif ᶜ𝔼_name == :ρe
-        T′ = Y -> begin
-            ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
-            ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
-            @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
-        end
-    elseif ᶜ𝔼_name == :ρe_int
-        T′ = Y -> @. Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
-    end
-    u′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
-    v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
-    w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
+    # Create some copies
+    ρ′ = similar(Y.c.ρ)
+    T′ = similar(Y.c.ρ)
+    u′ = @. Geometry.UVVector.(Y.c.uₕ).components.data.:1
+    v′ = @. Geometry.UVVector.(Y.c.uₕ).components.data.:2
+    w′ = similar(Y.f.w)
+    ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
+
+    ρ′_lin = similar(Y.c.ρ)
+    T′_lin = similar(Y.c.ρ)
+    u′_lin = @. Geometry.UVVector.(Y.c.uₕ).components.data.:1
+    v′_lin = @. Geometry.UVVector.(Y.c.uₕ).components.data.:2
+    w′_lin = similar(Y.f.w)
+    nstring(x, y) = (norm_strings(x, y, 2)..., norm_strings(x, y, Inf)...)
 
     for iframe in (1, length(sol.t))
         t = sol.t[iframe]
         Y = sol.u[iframe]
         linear_solution!(Y_lin, lin_cache, t)
         println("Error norms at time t = $t:")
-        for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
-            var = f(Y)
-            var_lin = f(Y_lin)
-            strings = (
-                norm_strings(var, var_lin, 2)...,
-                norm_strings(var, var_lin, Inf)...,
-            )
-            println("ϕ = $name: ", join(strings, ", "))
-        end
+        ρ′!(ρ′, Y, ᶜlocal_geometry)
+        T′!(T′, Y, ᶜK, ᶜΦ)
+        u′!(u′, Y)
+        v′!(v′, Y)
+        w′!(w′, Y)
+        ρ′!(ρ′_lin, Y_lin, ᶜlocal_geometry)
+        T′!(T′_lin, Y_lin, ᶜK, ᶜΦ)
+        u′!(u′_lin, Y_lin)
+        v′!(v′_lin, Y_lin)
+        w′!(w′_lin, Y_lin)
+        println("ρ: ", join(nstring(ρ′, ρ′_lin), ", "))
+        println("T: ", join(nstring(T′, T′_lin), ", "))
+        println("u: ", join(nstring(u′, u′_lin), ", "))
+        println("v: ", join(nstring(v′, v′_lin), ", "))
+        println("w: ", join(nstring(w′, w′_lin), ", "))
         println()
     end
 
@@ -143,7 +172,7 @@ function postprocessing(sol, output_dir)
         (:wprime, w′, is_small_scale ? 0.0042 : 0.0014),
     )
     anims = [Animation() for _ in 1:(3 * length(anim_vars))]
-    @progress "Animations" for iframe in 1:length(sol.t)
+    @progress "Animations" threshold = 0.01 for iframe in 1:length(sol.t)
         t = sol.t[iframe]
         Y = sol.u[iframe]
         linear_solution!(Y_lin, lin_cache, t)
@@ -216,14 +245,14 @@ function ρfb_init_coefs(
     # unit integral over the domain must be multiplied by 2 to ensure correct
     # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
     # the "true" domain, so the integral of ᶜintegrand should not be modified.
-    @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
+    @progress "ρfb_init" threshold = 0.01 for ikx in (-max_ikx):max_ikx,
         ikz in (-max_ikz):max_ikz
 
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_max) * ikz
         @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
         @. ᶜintegrand = ᶜρb_init / ᶜfourier_factor
-        ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
+        @inbounds ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
             sum(ᶜintegrand) / unit_integral
     end
     return ρfb_init_array
@@ -291,7 +320,7 @@ function linear_solution!(Y, lin_cache, t)
     ᶜvb .= FT(0)
     ᶠwb .= FT(0)
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
-    for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
+    @inbounds for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_max) * ikz
 
