@@ -178,7 +178,7 @@ integrator = OrdinaryDiffEq.init(
     dt = dt,
     adaptive = false,
     progress = show_progress_bar,
-    progress_steps = 1,
+    progress_steps = 20,
     additional_solver_kwargs...,
 )
 
