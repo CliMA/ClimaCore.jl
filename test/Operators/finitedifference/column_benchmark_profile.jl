@@ -7,8 +7,8 @@ function apply_kernel!(cfield, ffield)
     # bcs = (; inner = set_upwind_biased_3_bcs(cfield), outer = set_value_contra3_bcs(cfield))
     # op_divUpwind3rdOrderBiasedProductC2F!(cfield, ffield, bcs)
     # op_2mul_1add!(xarr, yarr, D, U)
-    # bcs = (; inner = (), outer = set_value_divgrad_uₕ_bcs(cfield))
-    bcs = (; inner = (), outer = set_value_divgrad_uₕ_maybe_field_bcs(cfield))
+    bcs = (; inner = (), outer = set_value_divgrad_uₕ_bcs(cfield))
+    # bcs = (; inner = (), outer = set_value_divgrad_uₕ_maybe_field_bcs(cfield))
     op_divgrad_uₕ!(cfield, ffield, bcs)
 end
 

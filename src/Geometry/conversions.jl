@@ -151,13 +151,24 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
     @inbounds project(Contravariant1Axis(), u, local_geometry)[1, :]
 @inline contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
     @inbounds project(Contravariant2Axis(), u, local_geometry)[1, :]
-@inline contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
+@inline function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
+    # @show typeof(u)
+    # error("Done")
     @inbounds project(Contravariant3Axis(), u, local_geometry)[1, :]
+end
 
 Base.@propagate_inbounds Jcontravariant3(
     u::AxisTensor,
     local_geometry::LocalGeometry,
+# ) = Jcontravariant3(u, local_geometry)
 ) = local_geometry.J * contravariant3(u, local_geometry)
+
+Base.@propagate_inbounds contravariant3(
+    u::AxisTensor{FT, 2, Tuple{CovariantAxis{(3,)}, CovariantAxis{(1, 2)}}, SMatrix{1, 2, FT, 2}},
+    # u::Axis2Tensor,
+    lg::LocalGeometry,
+# ) where {FT} = local_geometry.gⁱʲ * u
+) where {FT} = Covariant12Vector(lg.gⁱʲ[3,3] * u[3,1], lg.gⁱʲ[3,3] * u[3,2])
 
 # required for curl-curl
 @inline covariant3(

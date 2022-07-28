@@ -17,10 +17,13 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S}
     "Partial derivatives of the map from `x` to `ξ`: `∂ξ∂x[i,j]` is ∂ξⁱ/∂xʲ"
     ∂ξ∂x::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, LocalAxis{I}}, S}
+    gⁱʲ::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
 end
 
-@inline LocalGeometry(coordinates, J, WJ, ∂x∂ξ) =
-    LocalGeometry(coordinates, J, WJ, inv(J), ∂x∂ξ, inv(∂x∂ξ))
+@inline function LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
+    ∂ξ∂x = inv(∂x∂ξ)
+    LocalGeometry(coordinates, J, WJ, inv(J), ∂x∂ξ, ∂ξ∂x, ∂ξ∂x*∂ξ∂x')
+end
 
 """
     SurfaceGeometry
