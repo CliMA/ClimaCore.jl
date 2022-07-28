@@ -544,17 +544,58 @@ end
     ))
 end
 
-@inline transform(ato::CovariantAxis, v::CovariantTensor) = _transform(ato, v)
-@inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
-    _transform(ato, v)
-@inline transform(ato::CartesianAxis, v::CartesianTensor) = _transform(ato, v)
-@inline transform(ato::LocalAxis, v::LocalTensor) = _transform(ato, v)
+const project_args = Dict{Any, Int}()
+const transform_args = Dict{Any, Int}()
 
-@inline project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
-@inline project(ato::ContravariantAxis, v::ContravariantTensor) =
+function collect_transform_args(ato, v)
+    key = (typeof(ato), typeof(v))
+    if !haskey(transform_args, key)
+        transform_args[key] = 1
+        println("USED TRANSFORM ARGS = $(key)")
+    end
+end
+
+function collect_project_args(ato, v)
+    key = (typeof(ato), typeof(v))
+    if !haskey(project_args, key)
+        project_args[key] = 1
+        println("USED PROJECT ARGS = $(key)")
+    end
+end
+
+@inline function transform(ato::CovariantAxis, v::CovariantTensor)
+    collect_transform_args(ato, v)
+    _transform(ato, v)
+end
+@inline function transform(ato::ContravariantAxis, v::ContravariantTensor)
+    collect_transform_args(ato, v)
+    _transform(ato, v)
+end
+@inline function transform(ato::CartesianAxis, v::CartesianTensor)
+    collect_transform_args(ato, v)
+    _transform(ato, v)
+end
+@inline function transform(ato::LocalAxis, v::LocalTensor)
+    collect_transform_args(ato, v)
+    _transform(ato, v)
+end
+
+@inline function project(ato::CovariantAxis, v::CovariantTensor)
+    collect_project_args(ato, v)
     _project(ato, v)
-@inline project(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
-@inline project(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
+end
+@inline function project(ato::ContravariantAxis, v::ContravariantTensor)
+    collect_project_args(ato, v)
+    _project(ato, v)
+end
+@inline function project(ato::CartesianAxis, v::CartesianTensor)
+    collect_project_args(ato, v)
+    _project(ato, v)
+end
+@inline function project(ato::LocalAxis, v::LocalTensor)
+    collect_project_args(ato, v)
+    _project(ato, v)
+end
 
 
 """
