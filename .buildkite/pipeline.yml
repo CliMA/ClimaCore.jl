@@ -71,15 +71,68 @@ steps:
 
   - wait
 
-  - label: ":computer: unit tests"
-    key: "cpu_unittests"
+  - label: ":computer: unit tests 1"
+    key: "cpu_unittests_1"
     command:
-      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl --nbins 3 --bin_id 1"
     agents:
       config: cpu
       queue: central
       slurm_mem: 64GB
       slurm_ntasks: 1
+
+  - label: ":computer: unit tests 2"
+    key: "cpu_unittests_2"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl --nbins 3 --bin_id 2"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
+  - label: ":computer: unit tests 3"
+    key: "cpu_unittests_3"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl --nbins 3 --bin_id 3"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
+  - label: ":flower_playing_cards: unit tests 1"
+    key: "gpu_unittests_1"
+    command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA --nbins 3 --bin_id 1"
+    agents:
+      config: gpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_gres: "gpu:1"
+
+  - label: ":flower_playing_cards: unit tests 2"
+    key: "gpu_unittests_1"
+    command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA --nbins 3 --bin_id 2"
+    agents:
+      config: gpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_gres: "gpu:1"
+
+  - label: ":flower_playing_cards: unit tests 3"
+    key: "gpu_unittests_1"
+    command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA --nbins 3 --bin_id 3"
+    agents:
+      config: gpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_gres: "gpu:1"
 
   - label: ":computer: test implicit_stencil Float32"
     key: "cpu_implicit_stencil_float32"
@@ -116,17 +169,6 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
-  - label: ":flower_playing_cards: unit tests"
-    key: "gpu_unittests"
-    command:
-      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
-    agents:
-      config: gpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_gres: "gpu:1"
 
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
