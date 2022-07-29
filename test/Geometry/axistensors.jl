@@ -71,7 +71,7 @@ end
     ats = T(axes_T, components)
     s = sprint(show, ats)
     @test s ==
-          "AxisTensor{Float64, 2, Tuple{ClimaCore.Geometry.LocalAxis{(1, 2)}, ClimaCore.Geometry.CovariantAxis{(1, 2)}}, StaticArraysCore.SMatrix{2, 2, Float64, 4}}((ClimaCore.Geometry.LocalAxis{(1, 2)}(), ClimaCore.Geometry.CovariantAxis{(1, 2)}()), [4.0 0.0; 0.0 5.0])\n"
+          "AxisTensor{Float64, 2, Tuple{ClimaCore.Geometry.LocalAxis{(1, 2)}, ClimaCore.Geometry.CovariantAxis{(1, 2)}}, StaticArraysCore.SMatrix{2, 2, Float64, 4}}((ClimaCore.Geometry.LocalAxis{(1, 2)}(), ClimaCore.Geometry.CovariantAxis{(1, 2)}()), [4.0 0.0; 0.0 5.0])"
 end
 
 @testset "transform" begin
