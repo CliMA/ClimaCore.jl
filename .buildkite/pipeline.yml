@@ -117,6 +117,15 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":rocket::computer: Axis tensor conversion performance benchmarks"
+    key: "cpu_axis_tensor_conversion_perf_bm"
+    command:
+      - "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
     command:
