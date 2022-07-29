@@ -81,6 +81,37 @@ steps:
       slurm_mem: 64GB
       slurm_ntasks: 1
 
+  - label: ":computer: unit tests: distributed spaces"
+    key: "cpu_unittests_dist_space"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
+  - label: ":computer: unit tests: fields diffeq"
+    key: "cpu_unittests_fields_diffeq"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
+  - label: ":flower_playing_cards: unit tests"
+    key: "gpu_unittests"
+    command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
+    agents:
+      config: gpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_gres: "gpu:1"
+
   - label: ":computer: test implicit_stencil Float32"
     key: "cpu_implicit_stencil_float32"
     command:
@@ -116,17 +147,6 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
-
-  - label: ":flower_playing_cards: unit tests"
-    key: "gpu_unittests"
-    command:
-      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
-    agents:
-      config: gpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_gres: "gpu:1"
 
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
