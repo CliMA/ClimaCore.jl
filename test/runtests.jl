@@ -38,10 +38,12 @@ if !Sys.iswindows()
 @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
 @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
 @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
-@safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
+# Moved to separate job
+# @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
 
 @safetestset "Fields" begin @time include("Fields/field.jl") end
-@safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
+# Moved to separate job
+# @safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
 
 @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
 @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
