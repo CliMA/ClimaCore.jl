@@ -81,10 +81,27 @@ steps:
       slurm_mem: 64GB
       slurm_ntasks: 1
 
-  - label: ":computer: test implicit_stencil"
-    key: "cpu_implicit_stencil"
+  - label: ":computer: test implicit_stencil Float32"
+    key: "cpu_implicit_stencil_float32"
     command:
-      - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl"
+      - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: test implicit_stencil Float64"
+    key: "cpu_implicit_stencil_float64"
+    command:
+      - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: test implicit_stencil opt"
+    key: "cpu_implicit_stencil_opt"
+    command:
       - "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_implicit_stencils.jl"
     agents:
       config: cpu
