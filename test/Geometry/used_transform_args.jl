@@ -1,27 +1,12 @@
 # This was collected by running ClimaCore's test suite
 # and printing all input argument types for `transform`
+#! format: off
 function used_transform_arg_types(::Type{FT}) where {FT}
     return [
         (CovariantAxis{(1, 2)}, Covariant1Vector{FT}),
         (CovariantAxis{(1, 2)}, Covariant13Vector{FT}),
-        (
-            CovariantAxis{(1, 2)},
-            AxisTensor{
-                FT,
-                2,
-                Tuple{CovariantAxis{(1,)}, CartesianAxis{(1,)}},
-                StaticArraysCore.SMatrix{1, 1, FT, 1},
-            },
-        ),
-        (
-            CovariantAxis{(1, 2)},
-            AxisTensor{
-                FT,
-                2,
-                Tuple{CovariantAxis{(1, 3)}, CartesianAxis{(1,)}},
-                StaticArraysCore.SMatrix{2, 1, FT, 2},
-            },
-        ),
+        (CovariantAxis{(1, 2)}, AxisTensor{FT, 2, Tuple{CovariantAxis{(1,)}, CartesianAxis{(1,)}}, StaticArraysCore.SMatrix{1, 1, FT, 1},},),
+        (CovariantAxis{(1, 2)}, AxisTensor{FT, 2, Tuple{CovariantAxis{(1, 3)}, CartesianAxis{(1,)}}, StaticArraysCore.SMatrix{2, 1, FT, 2},},),
         (LocalAxis{(1, 2)}, UVVector{FT}),
         (CovariantAxis{(1, 3)}, Covariant1Vector{FT}),
         (LocalAxis{(1, 3)}, UWVector{FT}),
@@ -43,24 +28,8 @@ function used_transform_arg_types(::Type{FT}) where {FT}
         (CovariantAxis{(1, 2)}, Covariant3Vector{FT}),
         (LocalAxis{(1, 2, 3)}, UVVector{FT}),
         (CovariantAxis{(1, 2, 3)}, Covariant123Vector{FT}),
-        (
-            CovariantAxis{(1, 2)},
-            AxisTensor{
-                FT,
-                2,
-                Tuple{CovariantAxis{(1, 2)}, LocalAxis{(1, 2)}},
-                StaticArraysCore.SMatrix{2, 2, FT, 4},
-            },
-        ),
-        (
-            LocalAxis{(1, 2)},
-            AxisTensor{
-                FT,
-                2,
-                Tuple{LocalAxis{(1, 2)}, LocalAxis{(1, 2)}},
-                StaticArraysCore.SMatrix{2, 2, FT, 4},
-            },
-        ),
+        (CovariantAxis{(1, 2)}, AxisTensor{FT, 2, Tuple{CovariantAxis{(1, 2)}, LocalAxis{(1, 2)}}, StaticArraysCore.SMatrix{2, 2, FT, 4},},),
+        (LocalAxis{(1, 2)}, AxisTensor{FT, 2, Tuple{LocalAxis{(1, 2)}, LocalAxis{(1, 2)}}, StaticArraysCore.SMatrix{2, 2, FT, 4},},),
         (ContravariantAxis{(1, 2)}, Contravariant12Vector{FT}),
         (CovariantAxis{(1, 2, 3)}, Covariant3Vector{FT}),
         (ContravariantAxis{(1, 2, 3)}, Contravariant3Vector{FT}),
@@ -84,3 +53,4 @@ function used_transform_arg_types(::Type{FT}) where {FT}
         (LocalAxis{(1, 2)}, UWVector{FT}),
     ]
 end
+#! format: on
