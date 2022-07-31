@@ -80,35 +80,39 @@ cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
     sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
 
 function center_initial_condition(
-    local_geometry,
+    ᶜlocal_geometry,
     ᶜ𝔼_name;
     is_balanced_flow = false,
 )
-    (; lat, long, z) = local_geometry.coordinates
-    ρ = pres(lat, z) / R_d / temp(lat, z)
-    u₀ = u(lat, z)
-    v₀ = v(lat, z)
+    (; lat, long, z) = ᶜlocal_geometry.coordinates
+    ᶜρ = @. pres(lat, z) / R_d / temp(lat, z)
+    u₀ = @. u(lat, z)
+    v₀ = @. v(lat, z)
     if !is_balanced_flow
-        u₀ += δu(long, lat, z)
-        v₀ += δv(long, lat, z)
+        @. u₀ += δu(long, lat, z)
+        @. v₀ += δv(long, lat, z)
     end
-    uₕ_local = Geometry.UVVector(u₀, v₀)
-    uₕ = Geometry.Covariant12Vector(uₕ_local, local_geometry)
+    ᶜuₕ_local = @. Geometry.UVVector(u₀, v₀)
+    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local, ᶜlocal_geometry)
     if ᶜ𝔼_name === Val(:ρθ)
-        ρθ = ρ * θ(lat, z)
-        return (; ρ, ρθ, uₕ)
+        ᶜρθ = @. ᶜρ * θ(lat, z)
+        return NamedTuple{(:ρ, :ρθ, :uₕ)}.(tuple.(ᶜρ, ᶜρθ, ᶜuₕ))
     elseif ᶜ𝔼_name === Val(:ρe)
-        ρe =
-            ρ *
-            (cv_d * (temp(lat, z) - T_tri) + norm_sqr(uₕ_local) / 2 + grav * z)
-        return (; ρ, ρe, uₕ)
+        ᶜρe = @. ᶜρ * (
+            cv_d * (temp(lat, z) - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * z
+        )
+        return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
     elseif ᶜ𝔼_name === Val(:ρe_int)
-        ρe_int = ρ * cv_d * (temp(lat, z) - T_tri)
-        return (; ρ, ρe_int, uₕ)
+        ᶜρe_int = @. ᶜρ * cv_d * (temp(lat, z) - T_tri)
+        return NamedTuple{(:ρ, :ρe_int, :uₕ)}.(tuple.(ᶜρ, ᶜρe_int, ᶜuₕ))
     end
 end
-face_initial_condition(local_geometry) =
-    (; w = Geometry.Covariant3Vector(FT(0)))
+
+function face_initial_condition(local_geometry)
+    (; lat, long, z) = local_geometry.coordinates
+    w = @. Geometry.Covariant3Vector(zero(z))
+    return NamedTuple{(:w,)}.(tuple.(w))
+end
 
 ##
 ## Additional tendencies
