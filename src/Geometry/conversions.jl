@@ -328,6 +328,96 @@ for op in (:transform, :project)
 end
 
 
+@generated function project(
+    ax::ContravariantAxis{Ito},
+    v::CovariantVector{T, Ifrom},
+    local_geometry::LocalGeometry{J},
+) where {T, Ito, Ifrom, J}
+    Nfrom = length(Ifrom)
+    Nto = length(Ito)
+    NJ = length(J)
+
+    vals = []
+    for i in Ito
+        if i ∈ J
+            # e.g. i = 2, J = (1,2,3)
+            IJ = intersect(J, Ifrom)
+            if isempty(IJ)
+                val = 0
+            else
+                niJ = findfirst(==(i), J)
+                val = Expr(
+                    :call,
+                    :+,
+                    [
+                        :(
+                            local_geometry.gⁱʲ[$niJ, $(findfirst(==(j), J))] * v[$(findfirst(==(j), Ifrom))]
+                        ) for j in IJ
+                    ]...,
+                )
+            end
+        elseif i ∈ Ifrom
+            # e.g. i = 2, J = (1,3), Ifrom = (2,)
+            ni = findfirst(==(i), Ifrom)
+            val = :(v[$ni])
+        else
+            # e.g. i = 2, J = (1,3), Ifrom = (1,)
+            val = 0
+        end
+        push!(vals, val)
+    end
+    :(AxisVector(ContravariantAxis{$Ito}(), SVector{$Nto, $T}($(vals...))))
+end
+@generated function project(
+    ax::ContravariantAxis{Ito},
+    v::Covariant2Tensor{T, Tuple{CovariantAxis{Ifrom}, A}},
+    local_geometry::LocalGeometry{J},
+) where {T, Ito, Ifrom, A, J}
+    Nfrom = length(Ifrom)
+    Nto = length(Ito)
+    NJ = length(J)
+    NA = length(A.instance)
+
+    vals = []
+    for na in 1:NA
+        for i in Ito
+            if i ∈ J
+                # e.g. i = 2, J = (1,2,3)
+                IJ = intersect(J, Ifrom)
+                if isempty(IJ)
+                    val = 0
+                else
+                    niJ = findfirst(==(i), J)
+                    val = Expr(
+                        :call,
+                        :+,
+                        [
+                            :(
+                                local_geometry.gⁱʲ[
+                                    $niJ,
+                                    $(findfirst(==(j), J)),
+                                ] * v[$(findfirst(==(j), Ifrom)), $na]
+                            ) for j in IJ
+                        ]...,
+                    )
+                end
+            elseif i ∈ Ifrom
+                # e.g. i = 2, J = (1,3), Ifrom = (2,)
+                ni = findfirst(==(i), Ifrom)
+                val = :(v[$ni, $na])
+            else
+                # e.g. i = 2, J = (1,3), Ifrom = (1,)
+                val = 0
+            end
+            push!(vals, val)
+        end
+    end
+    :(AxisTensor(
+        (ContravariantAxis{$Ito}(), A.instance),
+        SMatrix{$Nto, $NA, $T, $(Nto * NA)}($(vals...)),
+    ))
+end
+
 """
     divergence_result_type(V)
 
