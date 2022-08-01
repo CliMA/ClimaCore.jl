@@ -161,3 +161,119 @@ end
         SMatrix{$(length(Ito)), $M}($(vals...)),
     ))
 end
+
+
+for op in (:ref_transform, :ref_project)
+    @eval begin
+        # Covariant <-> Cartesian
+        @inline $op(
+            ax::CartesianAxis,
+            v::CovariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂ξ∂x' *
+            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
+        )
+        @inline $op(
+            ax::CovariantAxis,
+            v::CartesianTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂x∂ξ' *
+            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 1)), v),
+        )
+        @inline $op(
+            ax::LocalAxis,
+            v::CovariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂ξ∂x' *
+            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
+        )
+        @inline $op(
+            ax::CovariantAxis,
+            v::LocalTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂x∂ξ' *
+            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 1)), v),
+        )
+
+        # Contravariant <-> Cartesian
+        @inline $op(
+            ax::ContravariantAxis,
+            v::CartesianTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂ξ∂x *
+            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 2)), v),
+        )
+        @inline $op(
+            ax::CartesianAxis,
+            v::ContravariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂x∂ξ *
+            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 2)), v),
+        )
+        @inline $op(
+            ax::ContravariantAxis,
+            v::LocalTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂ξ∂x *
+            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 2)), v),
+        )
+
+        @inline $op(
+            ax::LocalAxis,
+            v::ContravariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂x∂ξ *
+            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 2)), v),
+        )
+
+        # Covariant <-> Contravariant
+        @inline $op(
+            ax::ContravariantAxis,
+            v::CovariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂ξ∂x *
+            local_geometry.∂ξ∂x' *
+            $op(Geometry.dual(axes(local_geometry.∂ξ∂x, 1)), v),
+        )
+        @inline $op(
+            ax::CovariantAxis,
+            v::ContravariantTensor,
+            local_geometry::LocalGeometry,
+        ) = $op(
+            ax,
+            local_geometry.∂x∂ξ' *
+            local_geometry.∂x∂ξ *
+            $op(Geometry.dual(axes(local_geometry.∂x∂ξ, 2)), v),
+        )
+
+        @inline $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
+            $op(ato, v)
+        @inline $op(
+            ato::ContravariantAxis,
+            v::ContravariantTensor,
+            ::LocalGeometry,
+        ) = $op(ato, v)
+        @inline $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
+            $op(ato, v)
+        @inline $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) =
+            $op(ato, v)
+    end
+end
