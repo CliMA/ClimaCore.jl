@@ -27,7 +27,7 @@ end
 
 function time_func_fast(func::F, x, y) where {F}
     time = 0
-    nsamples = 100
+    nsamples = 20
     for i in 1:nsamples
         time += @elapsed func(x, y)
     end
@@ -35,39 +35,61 @@ function time_func_fast(func::F, x, y) where {F}
     time = time/nsamples*ns # average and convert to ns
     return time
 end
+precent_speedup(opt, ref) = trunc((opt.time-ref.time)/ref.time*100, digits=0)
 
-benchmark_conversion(arg_set, ::Type{FT}, func) where {FT} =
-    benchmark_conversion(arg_set, FT, func, reference_func(func))
+function print_colored(percentspeedup)
+    color = percentspeedup < 0 ? :green : :red
+    printstyled(percentspeedup; color)
+end
+function benchmark_func(args, key, func)
+    ref_func = reference_func(func)
+    # Reference
+    result = ref_func(args...) # compile first
+    time = time_func(ref_func, args...)
+    t_pretty = BenchmarkTools.prettytime(time)
+    ref = (;time, t_pretty, result)
+    # Optimized
+    result = func(args...) # compile first
+    time = time_func(func, args...)
+    t_pretty = BenchmarkTools.prettytime(time)
+    opt = (;time, t_pretty, result)
 
-function benchmark_conversion(arg_set, ::Type{FT}, func::F, ref_func::RF) where {FT, F, RF}
+    percentspeedup = precent_speedup(opt, ref)
+
+    # if abs(percentspeedup) > 3 # only print significant changes
+        # @info "Benchmark: (%speedup, opt, ref): ($(percentspeedup), $(opt.t_pretty), $(ref.t_pretty)). Key: $key"
+        print("Benchmark: (%speedup, opt, ref): (")
+        print_colored(percentspeedup)
+        print(", $(opt.t_pretty), $(ref.t_pretty)). Key: $key\n")
+    # end
+    return (;opt, ref)
+end
+
+benchmark_conversion(arg_set, func) =
+    benchmark_conversion_serial(arg_set, func)
+    # benchmark_conversion_parallel(arg_set, func)
+
+function benchmark_conversion_serial(arg_set, func)
     results = OrderedCollections.OrderedDict()
-    for args in arg_set
-        key = typeof.(args)
-        # Reference
-        result = ref_func(args...) # compile first
-        result = ref_func(args...) # compile first
-        time = time_func(ref_func, args...)
-        t_pretty = BenchmarkTools.prettytime(time)
-        ref = (;time, t_pretty, result)
-        # Optimized
-        result = func(args...) # compile first
-        result = func(args...) # compile first
-        time = time_func(func, args...)
-        t_pretty = BenchmarkTools.prettytime(time)
-        opt = (;time, t_pretty, result)
-
-        percentspeedup = trunc((opt.time-ref.time)/ref.time*100, digits=0)
-
-        if abs(percentspeedup) > 3 # only print significant changes
-            # @info "Benchmark: (%speedup, opt, ref): ($(percentspeedup), $(opt.t_pretty), $(ref.t_pretty)). Key: $key"
-            color = percentspeedup < 0 ? :green : :red
-            print("Benchmark: (%speedup, opt, ref): (")
-            printstyled(percentspeedup; color)
-            print(", $(opt.t_pretty), $(ref.t_pretty)). Key: $key\n")
-        end
-        results[key] = (;opt, ref)
+    map(arg_set) do args
+        results[typeof.(args)] = benchmark_func(args, typeof.(args), func)
     end
     return results
+end
+
+function benchmark_conversion_parallel(arg_set, func)
+    # asyncmap(arg_set) do args
+    #     results[typeof.(args)] = benchmark_func(args, typeof.(args), func)
+    # end
+    results = asyncmap(arg_set; ntasks=20) do args
+        benchmark_func(args, typeof.(args), func)
+    end
+
+    results_dict = OrderedCollections.OrderedDict()
+    for x in results
+        results_dict[typeof.(arg_set[i])] = results[i]
+    end
+    return results_dict
 end
 
 function all_axes()
@@ -111,15 +133,6 @@ all_observed_axistensors(::Type{FT}) where {FT} =
     vcat(map(x-> rand(last(x)), used_project_arg_types(FT)),
          map(x-> rand(last(x)), used_transform_arg_types(FT)))
 
-func_args(FT, ::typeof(Geometry.project)) =
-    map(used_project_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
-func_args(FT, ::typeof(Geometry.transform)) =
-    map(used_transform_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
-
 function all_possible_func_args(FT, ::typeof(Geometry.contravariant3))
     # TODO: this is not accurate yet, since we don't yet
     # vary over all possible LocalGeometry's.
@@ -136,78 +149,153 @@ function all_possible_func_args(FT, ::typeof(Geometry.contravariant3))
     end
 end
 
-function func_args(FT, f::typeof(Geometry.contravariant3))
-    # TODO: fix this..
+function all_possible_func_args(FT, ::typeof(Geometry.project))
+    # TODO: this is not accurate yet, since we don't yet
+    # vary over all possible LocalGeometry's.
+    M = @SMatrix [
+        FT(4) FT(1)
+        FT(0.5) FT(2)
+    ]
+    J = LinearAlgebra.det(M)
+    ∂x∂ξ = rand(Geometry.AxisTensor{FT, 2, Tuple{Geometry.LocalAxis{(3,)}, Geometry.CovariantAxis{(3,)}}, SMatrix{1, 1, FT, 1}})
+    lg = Geometry.LocalGeometry(Geometry.XYPoint(FT(0), FT(0)), J, J, ∂x∂ξ)
+    # Geometry.LocalGeometry{(3,), Geometry.ZPoint{FT}, FT, SMatrix{1, 1, FT, 1}} 
+    Iterators.flatten(map(all_axistensors(FT)) do (at)
+        map(all_axes()) do ax
+            (at, lg)
+        end
+    end)
+end
+
+function func_args(FT, f::typeof(Geometry.project))
     apfa = all_possible_func_args(FT, f)
+    @info "Number of all possible args for $f: $(length(apfa))"
+    @info "Filtering applicable methods (this can take a while)..."
     args_dict = Dict()
     for _args in apfa
+        hasmethod(f, typeof(_args)) || continue
         try
             f(_args...)
             args_dict[typeof.(_args)] = _args
         catch
         end
-        # hasmethod(f, typeof(_args)) || continue
         # args_dict[typeof.(_args)] = _args
     end
+    @info "Finished filtering"
+    println("Number of applicable methods: $(length(args_dict))")
+    @assert length(args_dict) == 2474
+    error("Success!")
     return values(args_dict)
+    # return collect(values(args_dict))[1:10]
+    # map(used_project_arg_types(FT)) do (axt, axtt)
+    #     (axt(), rand(axtt))
+    # end
+end
+func_args(FT, ::typeof(Geometry.transform)) =
+    map(used_transform_arg_types(FT)) do (axt, axtt)
+        (axt(), rand(axtt))
+    end
+
+function func_args(FT, f::typeof(Geometry.contravariant3))
+    # TODO: fix this..
+    apfa = all_possible_func_args(FT, f)
+    @info "Number of all possible args for $f: $(length(apfa))"
+    @info "Filtering applicable methods (this can take a while)..."
+    args_dict = Dict()
+    for _args in apfa
+        hasmethod(f, typeof(_args)) || continue
+        try
+            f(_args...)
+            args_dict[typeof.(_args)] = _args
+        catch
+        end
+        # args_dict[typeof.(_args)] = _args
+    end
+    @info "Finished filtering"
+    println("Number of applicable methods: $(length(args_dict))")
+    @assert length(args_dict) == 2474
+    error("Success!")
+    return values(args_dict)
+    # return collect(values(args_dict))[1:10]
 end
 
 reference_func(::typeof(Geometry.contravariant3)) = ref_contravariant3
 reference_func(::typeof(Geometry.project)) = ref_project
 reference_func(::typeof(Geometry.transform)) = ref_transform
 
+function keys_expected_to_pass(::Type{FT}, f::typeof(Geometry.project)) where {FT}
+    return Dict(
+        # AxisTensor{FT, 2, Tuple{CovariantAxis{(3,)}, CovariantAxis{(1, 2)}}, SMatrix{1, 2, FT, 2}} => true,
+    )
+end
 function keys_expected_to_pass(::Type{FT}, f::typeof(Geometry.contravariant3)) where {FT}
-    ketp = [
-        AxisTensor{FT, 2, Tuple{CovariantAxis{(3,)}, CovariantAxis{(1, 2)}}, SMatrix{1, 2, FT, 2}},
-    ]
+    return Dict(
+        # AxisTensor{FT, 2, Tuple{CovariantAxis{(3,)}, CovariantAxis{(1, 2)}}, SMatrix{1, 2, FT, 2}} => true,
+    )
 end
 
 function test_optimized_function(::Type{FT}, func) where {FT}
     @info "Testing optimized $func..."
     args = func_args(FT, func)
-    bm = benchmark_conversion(args, FT, func)
+    bm = @time benchmark_conversion(args, func)
     bm_results = OrderedCollections.OrderedDict()
-    components(x::FT) = x
+
+    # Correctness comparisons
+    components(x::T) where {T <: Real} = x
     components(x) = Geometry.components(x)
+    compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
+    compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
+    compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
+    compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
+
+    expected_perf_pass = keys_expected_to_pass(FT, func)
     for key in keys(bm)
         bm_results[key] = (;
-            correctness = all(
-                components(bm[key].opt.result) .≈
-                components(bm[key].ref.result)), # test correctness
+            correctness = compare(bm[key].opt.result, bm[key].ref.result), # test correctness
             perf_pass =  (bm[key].opt.time - bm[key].ref.time)/bm[key].ref.time*100 < -50, # test performance
-            expect_pass = false,
         )
     end
-    # ketp = keys_expected_to_pass(FT, f)
-    # for key in keys(bm_results)
-    #     bm_results[key].expect_pass = haskey(keys_expected_to_pass)
-    # end
     bmr = values(bm_results)
     if !all(getproperty.(bmr, :correctness))
         for key in keys(bm_results)
             bm_results[key].correctness && continue
-            # TODO: silenced for now, uncomment
-            # @info "Correctness failure.  (opt, ref): ($(bm[key].opt.result), $(bm[key].ref.result)). key: $key"
+            @info "Correctness failure.  (opt, ref): ($(bm[key].opt.result), $(bm[key].ref.result)). key: $key"
         end
     end
     if any(getproperty.(bmr, :perf_pass))
         for key in keys(bm_results)
-            bm_results[key].perf_pass || continue
-            # key in keys_expected_to_pass(FT, func) || continue
+            success_expected = get(expected_perf_pass, key, false)
+            @show success_expected
+            success_expected && continue
             key_str = replace("$key", "Float64" => "FT", "Float32" => "FT")
-            @info "Unexpected perf pass. (opt, ref): ($(bm[key].opt.time), $(bm[key].ref.time)). key: $key_str"
+            print("Unexpected perf pass. (speedup, opt, ref): (")
+            print_colored(precent_speedup(bm[key].opt, bm[key].ref))
+            print("$(bm[key].opt.t_pretty), $(bm[key].ref.t_pretty)). key: $key_str\n")
         end
     end
-    if !all(getproperty.(bmr, :correctness)) || !all(getproperty.(bmr, :perf_pass))
-        error("Error in optimization tests for $func. See above for results")
+    if !all(getproperty.(bmr, :correctness))
+        error("Error in optimization (correctness) tests for $func. See above for results")
     end
+    expected_pass_perf_tests = getproperty.(Ref(bm_results), keys(expected_perf_pass))
+    if !all(getproperty.(expected_pass_perf_tests, :perf_pass))
+        error("Error in optimization (performance) tests for $func. See above for results")
+    end
+
+    expected_perf_fail_keys = setdiff(keys(bm_results), keys(expected_perf_pass))
+    for key in keys(expected_perf_pass)
+        @test bm_results[key].perf_pass
+    end
+    for key in expected_perf_fail_keys
+        @test_broken bm_results[key].perf_pass
+    end
+
 end
 
 # TODO: figure out how to make error checking in `transform` optional
 
 @testset "Test optimized functions" begin
-    # test_optimized_function(Float64, Geometry.project)
-    test_optimized_function(Float64, Geometry.contravariant3)
+    test_optimized_function(Float64, Geometry.project)
+    # test_optimized_function(Float64, Geometry.contravariant3)
     # test_optimized_function(Float64, Geometry.transform)
 end
 
