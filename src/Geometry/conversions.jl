@@ -159,6 +159,15 @@ Base.@propagate_inbounds Jcontravariant3(
     local_geometry::LocalGeometry,
 ) = local_geometry.J * contravariant3(u, local_geometry)
 
+# Base.@propagate_inbounds function contravariant3(
+#     u::AxisTensor{FT, 2, Tuple{CovariantAxis{(3,)}, CovariantAxis{(1, 2)}}, SMatrix{1, 2, FT, 2}},
+#     lg::LocalGeometry,
+# ) where {FT}
+#     # error("Success!")
+#     # println("Success!")
+#     Covariant12Vector(lg.gⁱʲ[3,3] * u[3,1], lg.gⁱʲ[3,3] * u[3,2])
+# end
+
 # required for curl-curl
 @inline covariant3(
     u::Contravariant3Vector,
