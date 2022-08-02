@@ -378,7 +378,10 @@ end
         end
         push!(vals, val)
     end
-    :(AxisVector(ContravariantAxis{$Ito}(), SVector{$Nto, $T}($(vals...))))
+    quote
+        Base.@_propagate_inbounds_meta
+        AxisVector(ContravariantAxis{$Ito}(), SVector{$Nto, $T}($(vals...)))
+    end
 end
 @generated function project(
     ax::ContravariantAxis{Ito},
@@ -424,10 +427,13 @@ end
             push!(vals, val)
         end
     end
-    :(AxisTensor(
-        (ContravariantAxis{$Ito}(), A.instance),
-        SMatrix{$Nto, $NA, $T, $(Nto * NA)}($(vals...)),
-    ))
+    quote
+        Base.@_propagate_inbounds_meta
+        AxisTensor(
+            (ContravariantAxis{$Ito}(), A.instance),
+            SMatrix{$Nto, $NA, $T, $(Nto * NA)}($(vals...)),
+        )
+    end
 end
 
 """
