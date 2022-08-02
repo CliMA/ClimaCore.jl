@@ -1,7 +1,7 @@
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
-    OrderedCollections, LinearAlgebra, Combinatorics
+    OrderedCollections, LinearAlgebra, Combinatorics, GFlops
 using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
@@ -13,8 +13,11 @@ using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     Contravariant1Axis, Contravariant2Axis
 
 include("ref_funcs.jl") # compact, generic but unoptimized reference
-include("func_arg_types.jl")
+include("method_info.jl")
 include("func_args.jl")
+
+count_flops(f::F, x, y) where {F} = GFlops.@count_ops f($x, $y)
+count_flops(f::F, x, y, z) where {F} = GFlops.@count_ops f($x, $y, $z)
 
 # time_func(func::F, args...) where {F} = time_func_accurate(func, args...)
 time_func(f::F, args...) where {F} = time_func_fast(f, args...)
@@ -57,36 +60,56 @@ function time_func_fast(f::F, x, y, z) where {F}
     return time
 end
 precent_speedup(opt, ref) = trunc((opt.time-ref.time)/ref.time*100, digits=0)
-function print_colored(percentspeedup)
-    color = percentspeedup < 0 ? :green : :red
-    printstyled(percentspeedup; color)
+function print_colored(Δflops)
+    color = Δflops < 0 ? :green :
+            Δflops == 0 ? :yellow : :red
+    printstyled(Δflops; color)
 end
 
-function benchmark_func(args, key, f)
+function total_flops(flops)
+    n_flops = 0
+    for pn in propertynames(flops)
+        n_flops += getproperty(flops, pn)
+    end
+    return n_flops
+end
+
+function benchmark_func(args, key, f, flops, ::Type{FT}) where {FT}
     f_ref = reference_func(f)
     # Reference
     result = f_ref(args...) # compile first
+    ref_flops = count_flops(f_ref, args...)
     time = time_func(f_ref, args...)
     t_pretty = BenchmarkTools.prettytime(time)
     ref = (;time, t_pretty, result)
     # Optimized
     result = f(args...) # compile first
+    opt_flops = count_flops(f, args...)
     time = time_func(f, args...)
     t_pretty = BenchmarkTools.prettytime(time)
     opt = (;time, t_pretty, result)
 
     percentspeedup = precent_speedup(opt, ref)
 
-    # if abs(percentspeedup) > 3 # only print significant changes
-        print("Benchmark: (%speedup, opt, ref): (")
-        print_colored(percentspeedup)
+    computed_flops = total_flops(opt_flops)
+    reduced_flops = computed_flops < flops
+    Δflops = computed_flops - flops
+
+    # if reduced_flops # only print significant changes
+        print("Benchmark: (Δflops, opt, ref): (")
+        print_colored(Δflops)
         print(", $(opt.t_pretty), $(ref.t_pretty)). Key: $key\n")
     # end
     bm = (;
         opt,
         ref,
+        Δflops,
+        opt_flops,
+        flops, # current flops
+        computed_flops,
+        reduced_flops,
         correctness = compare(opt.result, ref.result), # test correctness
-        perf_pass = (opt.time - ref.time)/ref.time*100 < -50, # test performance
+        perf_pass = (opt.time - ref.time)/ref.time*100 < -100, # test performance
     )
     return bm
 end
@@ -94,9 +117,9 @@ end
 dict_key(f, args) = (nameof(f), typeof.(args)...)
 
 # expensive/slow. Can we (safely) parallelize this?
-function benchmark_conversions!(benchmarks, all_args, f)
-    for args in all_args
-        benchmarks[dict_key(f, args)] = benchmark_func(args, dict_key(f, args), f)
+function benchmark_conversions!(benchmarks, f, FT)
+    for (args, flops) in func_args(FT, f)
+        benchmarks[dict_key(f, args)] = benchmark_func(args, dict_key(f, args), f, flops, FT)
     end
     return nothing
 end
@@ -104,6 +127,7 @@ end
 reference_func(::typeof(Geometry.contravariant1)) = ref_contravariant1
 reference_func(::typeof(Geometry.contravariant2)) = ref_contravariant2
 reference_func(::typeof(Geometry.contravariant3)) = ref_contravariant3
+reference_func(::typeof(Geometry.Jcontravariant3)) = ref_Jcontravariant3
 reference_func(::typeof(Geometry.project)) = ref_project
 reference_func(::typeof(Geometry.transform)) = ref_transform
 
@@ -123,17 +147,26 @@ function test_optimized_functions(::Type{FT}) where {FT}
         Geometry.contravariant1,
         Geometry.contravariant2,
         Geometry.contravariant3,
+        Geometry.Jcontravariant3,
     )
         @info "Testing optimized $f..."
-        all_args = func_args(FT, f)
-        benchmark_conversions!(benchmarks, all_args, f)
+        benchmark_conversions!(benchmarks, f, FT)
     end
 
-    # TODO: add mechanism for expected pass
     for key in keys(benchmarks)
         @test benchmarks[key].correctness      # test correctness
-        @test_broken benchmarks[key].perf_pass # test performance
+        @test benchmarks[key].Δflops ≤ 0       # Don't regress
+        @test_broken benchmarks[key].perf_pass # rough timing test (benchmarking is hard for ns funcs)
     end
+
+    # Warn about expensive operations
+    for key in keys(benchmarks)
+        if benchmarks[key].computed_flops > 0
+            key_str = replace("$key", "Float64" => "FT", "Float32" => "FT")
+            @info "Flops = $(benchmarks[key].computed_flops). Method info: $key_str"
+        end
+    end
+
 end
 
 # TODO: figure out how to make error checking in `transform` optional

@@ -298,3 +298,8 @@ end
     CovariantVector(u, local_geometry).u₂
 @inline ref_covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
+
+Base.@propagate_inbounds ref_Jcontravariant3(
+    u::AxisTensor,
+    local_geometry::LocalGeometry,
+) = local_geometry.J * ref_contravariant3(u, local_geometry)
