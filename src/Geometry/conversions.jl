@@ -1,3 +1,15 @@
+const arg_dict = Dict{Any, Int}()
+
+function collect_method_info(arg_dict, fun, args...)
+    key = (Symbol(fun), length(args), typeof.(args)...)
+    if haskey(arg_dict, key)
+        return nothing
+    else
+        arg_dict[key] = 1
+        println("COLLECTED METHOD INFO: $(key)")
+    end
+end
+
 (AxisVector{T, A, SVector{1, T}} where {T})(
     a::Real,
     ::LocalGeometry,
@@ -8,22 +20,34 @@ ContravariantVector(u::ContravariantVector, ::LocalGeometry) = u
 CovariantVector(u::CovariantVector, ::LocalGeometry) = u
 LocalVector(u::LocalVector, ::LocalGeometry) = u
 
-ContravariantVector(
+function ContravariantVector(
     u::LocalVector{T, I},
     local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.∂ξ∂x * u
-LocalVector(
+) where {T, I}
+    collect_method_info(arg_dict, ContravariantVector, u, local_geometry)
+    local_geometry.∂ξ∂x * u
+end
+function LocalVector(
     u::ContravariantVector{T, I},
     local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.∂x∂ξ * u
-CovariantVector(
+) where {T, I}
+    collect_method_info(arg_dict, LocalVector, u, local_geometry)
+    local_geometry.∂x∂ξ * u
+end
+function CovariantVector(
     u::LocalVector{T, I},
     local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.∂x∂ξ' * u
-LocalVector(
+) where {T, I}
+    collect_method_info(arg_dict, CovariantVector, u, local_geometry)
+    local_geometry.∂x∂ξ' * u
+end
+function LocalVector(
     u::CovariantVector{T, I},
     local_geometry::LocalGeometry{I},
-) where {T, I} = local_geometry.∂ξ∂x' * u
+) where {T, I}
+    collect_method_info(arg_dict, LocalVector, u, local_geometry)
+    local_geometry.∂ξ∂x' * u
+end
 
 # Converting to specific dimension types
 (::Type{<:ContravariantVector{<:Any, I}})(
@@ -72,47 +96,69 @@ LocalVector(
 
 # Generic N-axis conversion functions,
 # Convert to specific local geometry dimension then convert vector type
-LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(LocalAxis{I}(), transform(CovariantAxis{I}(), u), local_geometry)
-
-LocalVector(
-    u::ContravariantVector,
-    local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    LocalAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
-    local_geometry,
-)
-
-CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(CovariantAxis{I}(), transform(LocalAxis{I}(), u), local_geometry)
-
-CovariantVector(
-    u::ContravariantVector,
-    local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    CovariantAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
-    local_geometry,
-)
-
-ContravariantVector(
-    u::LocalVector,
-    local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    ContravariantAxis{I}(),
-    transform(LocalAxis{I}(), u),
-    local_geometry,
-)
-
-ContravariantVector(
+function LocalVector(
     u::CovariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    ContravariantAxis{I}(),
-    transform(CovariantAxis{I}(), u),
-    local_geometry,
-)
+) where {I}
+    collect_method_info(arg_dict, LocalVector, u, local_geometry)
+    transform(LocalAxis{I}(), transform(CovariantAxis{I}(), u), local_geometry)
+end
+
+function LocalVector(
+    u::ContravariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I}
+    collect_method_info(arg_dict, LocalVector, u, local_geometry)
+    transform(
+        LocalAxis{I}(),
+        transform(ContravariantAxis{I}(), u),
+        local_geometry,
+    )
+end
+
+function CovariantVector(
+    u::LocalVector,
+    local_geometry::LocalGeometry{I},
+) where {I}
+    collect_method_info(arg_dict, CovariantVector, u, local_geometry)
+    transform(CovariantAxis{I}(), transform(LocalAxis{I}(), u), local_geometry)
+end
+
+function CovariantVector(
+    u::ContravariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I}
+    collect_method_info(arg_dict, CovariantVector, u, local_geometry)
+    transform(
+        CovariantAxis{I}(),
+        transform(ContravariantAxis{I}(), u),
+        local_geometry,
+    )
+end
+
+function ContravariantVector(
+    u::LocalVector,
+    local_geometry::LocalGeometry{I},
+) where {I}
+    collect_method_info(arg_dict, ContravariantVector, u, local_geometry)
+    transform(
+        ContravariantAxis{I}(),
+        transform(LocalAxis{I}(), u),
+        local_geometry,
+    )
+end
+
+function ContravariantVector(
+    u::CovariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I}
+    collect_method_info(arg_dict, ContravariantVector, u, local_geometry)
+    transform(
+        ContravariantAxis{I}(),
+        transform(CovariantAxis{I}(), u),
+        local_geometry,
+    )
+end
 
 # In order to make curls and cross products work in 2D, we define the 3rd
 # dimension to be orthogonal to the exisiting dimensions, and have unit length
@@ -140,36 +186,55 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
 @inline covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
 
-@inline contravariant1(u::AxisVector, local_geometry::LocalGeometry) =
+@inline function contravariant1(u::AxisVector, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant1, u, local_geometry)
     @inbounds project(Contravariant1Axis(), u, local_geometry)[1]
-@inline contravariant2(u::AxisVector, local_geometry::LocalGeometry) =
+end
+@inline function contravariant2(u::AxisVector, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant2, u, local_geometry)
     @inbounds project(Contravariant2Axis(), u, local_geometry)[1]
-@inline contravariant3(u::AxisVector, local_geometry::LocalGeometry) =
+end
+@inline function contravariant3(u::AxisVector, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant3, u, local_geometry)
     @inbounds project(Contravariant3Axis(), u, local_geometry)[1]
+end
 
-@inline contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry) =
+@inline function contravariant1(u::Axis2Tensor, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant1, u, local_geometry)
     @inbounds project(Contravariant1Axis(), u, local_geometry)[1, :]
-@inline contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry) =
+end
+@inline function contravariant2(u::Axis2Tensor, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant2, u, local_geometry)
     @inbounds project(Contravariant2Axis(), u, local_geometry)[1, :]
-@inline contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
+end
+@inline function contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry)
+    collect_method_info(arg_dict, contravariant3, u, local_geometry)
     @inbounds project(Contravariant3Axis(), u, local_geometry)[1, :]
+end
 
-Base.@propagate_inbounds Jcontravariant3(
+Base.@propagate_inbounds function Jcontravariant3(
     u::AxisTensor,
     local_geometry::LocalGeometry,
-) = local_geometry.J * contravariant3(u, local_geometry)
+)
+    collect_method_info(arg_dict, Jcontravariant3, u, local_geometry)
+    local_geometry.J * contravariant3(u, local_geometry)
+end
 
 # required for curl-curl
-@inline covariant3(
+@inline function covariant3(
     u::Contravariant3Vector,
     local_geometry::LocalGeometry{(1, 2)},
-) = contravariant3(u, local_geometry)
+)
+    collect_method_info(arg_dict, covariant3, u, local_geometry)
+    contravariant3(u, local_geometry)
+end
 
 # workarounds for using a Covariant12Vector/Covariant123Vector in a UW space:
 @inline function LocalVector(
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
+    collect_method_info(arg_dict, LocalVector, vector, local_geometry)
     u₁, v, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
     u, w = components(transform(LocalAxis{(1, 3)}(), vector2, local_geometry))
@@ -179,6 +244,7 @@ end
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
+    collect_method_info(arg_dict, contravariant1, vector, local_geometry)
     u₁, _, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
     return transform(Contravariant13Axis(), vector2, local_geometry).u¹
@@ -187,6 +253,7 @@ end
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )
+    collect_method_info(arg_dict, contravariant3, vector, local_geometry)
     u₁, _ = components(vector)
     vector2 = Covariant13Vector(u₁, zero(u₁))
     return transform(Contravariant13Axis(), vector2, local_geometry).u³
@@ -195,6 +262,7 @@ end
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )
+    collect_method_info(arg_dict, ContravariantVector, vector, local_geometry)
     u₁, v = components(vector)
     vector2 = Covariant1Vector(u₁)
     vector3 = transform(
@@ -223,107 +291,166 @@ function project end
 for op in (:transform, :project)
     @eval begin
         # Covariant <-> Cartesian
-        @inline $op(
+        @inline function $op(
             ax::CartesianAxis,
             v::CovariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂ξ∂x' *
+                $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+            )
+        end
+        @inline function $op(
             ax::CovariantAxis,
             v::CartesianTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂x∂ξ' *
+                $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
+            )
+        end
+        @inline function $op(
             ax::LocalAxis,
             v::CovariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂ξ∂x' *
+                $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+            )
+        end
+        @inline function $op(
             ax::CovariantAxis,
             v::LocalTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
         )
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂x∂ξ' *
+                $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
+            )
+        end
 
         # Contravariant <-> Cartesian
-        @inline $op(
+        @inline function $op(
             ax::ContravariantAxis,
             v::CartesianTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂ξ∂x *
+                $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
+            )
+        end
+        @inline function $op(
             ax::CartesianAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂x∂ξ *
+                $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+            )
+        end
+        @inline function $op(
             ax::ContravariantAxis,
             v::LocalTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
         )
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂ξ∂x *
+                $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
+            )
+        end
 
-        @inline $op(
+        @inline function $op(
             ax::LocalAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂x∂ξ *
+                $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+            )
+        end
 
         # Covariant <-> Contravariant
-        @inline $op(
+        @inline function $op(
             ax::ContravariantAxis,
             v::CovariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x *
-            local_geometry.∂ξ∂x' *
-            $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
-        @inline $op(
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂ξ∂x *
+                local_geometry.∂ξ∂x' *
+                $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+            )
+        end
+        @inline function $op(
             ax::CovariantAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ' *
-            local_geometry.∂x∂ξ *
-            $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
+            collect_method_info(arg_dict, $op, ax, v, local_geometry)
+            $op(
+                ax,
+                local_geometry.∂x∂ξ' *
+                local_geometry.∂x∂ξ *
+                $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
+            )
+        end
 
-        @inline $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
+        @inline function $op(
+            ato::CovariantAxis,
+            v::CovariantTensor,
+            local_geometry::LocalGeometry,
+        )
+            collect_method_info(arg_dict, $op, ato, v, local_geometry)
             $op(ato, v)
-        @inline $op(
+        end
+        @inline function $op(
             ato::ContravariantAxis,
             v::ContravariantTensor,
-            ::LocalGeometry,
-        ) = $op(ato, v)
-        @inline $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
+            local_geometry::LocalGeometry,
+        )
+            collect_method_info(arg_dict, $op, ato, v, local_geometry)
             $op(ato, v)
-        @inline $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) =
+        end
+        @inline function $op(
+            ato::CartesianAxis,
+            v::CartesianTensor,
+            local_geometry::LocalGeometry,
+        )
+            collect_method_info(arg_dict, $op, ato, v, local_geometry)
             $op(ato, v)
+        end
+        @inline function $op(
+            ato::LocalAxis,
+            v::LocalTensor,
+            local_geometry::LocalGeometry,
+        )
+            collect_method_info(arg_dict, $op, ato, v, local_geometry)
+            $op(ato, v)
+        end
     end
 end
 
