@@ -1,6 +1,7 @@
 using Test, StaticArrays
-import Random, BenchmarkTools, StatsBase, OrderedCollections, LinearAlgebra
 #! format: off
+import Random, BenchmarkTools, StatsBase,
+    OrderedCollections, LinearAlgebra, Combinatorics
 using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
@@ -13,127 +14,108 @@ include("transform_project.jl") # compact, generic but unoptimized reference
 include("used_transform_args.jl")
 include("ref_funcs.jl")
 include("used_project_args.jl")
+include("func_args.jl")
 
 # time_func(func::F, x, y) where {F} = time_func_accurate(func, x, y)
-time_func(func::F, x, y) where {F} = time_func_fast(func, x, y)
+time_func(f::F, x, y) where {F} = time_func_fast(f, x, y)
 
-function time_func_accurate(func::F, x, y) where {F}
-    b = BenchmarkTools.@benchmarkable $func($x, $y)
-    trial = BenchmarkTools.run(b; samples = 3)
+function time_func_accurate(f::F, x, y) where {F}
+    b = BenchmarkTools.@benchmarkable $f($x, $y)
+    trial = BenchmarkTools.run(b)
     # show(stdout, MIME("text/plain"), trial)
     time = StatsBase.mean(trial.times)
     return time
 end
 
-function time_func_fast(func::F, x, y) where {F}
+function time_func_fast(f::F, x, y) where {F}
     time = 0
     nsamples = 100
     for i in 1:nsamples
-        time += @elapsed func(x, y)
+        time += @elapsed f(x, y)
     end
     ns = 1e9
     time = time/nsamples*ns # average and convert to ns
     return time
 end
-
-function benchmark_conversion(arg_set, ::Type{FT}, func::F) where {FT, F}
-    results = OrderedCollections.OrderedDict()
-    ref_func = reference_func(func)
-    for args in arg_set
-        key = typeof.(args)
-        # Reference
-        result = ref_func(args...) # compile first
-        time = time_func(ref_func, args...)
-        t_pretty = BenchmarkTools.prettytime(time)
-        ref = (;time, t_pretty, result)
-        # Optimized
-        result = func(args...) # compile first
-        time = time_func(func, args...)
-        t_pretty = BenchmarkTools.prettytime(time)
-        opt = (;time, t_pretty, result)
-
-        @info "Benchmark: opt: $(opt.t_pretty) ref: $(ref.t_pretty). Key: $key"
-        results[key] = (;opt, ref)
-    end
-    return results
+precent_speedup(opt, ref) = trunc((opt.time-ref.time)/ref.time*100, digits=0)
+function print_colored(percentspeedup)
+    color = percentspeedup < 0 ? :green : :red
+    printstyled(percentspeedup; color)
 end
 
-function all_axes()
-    all_Is() = [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
-    collect(Iterators.flatten(map(all_Is()) do I
-        (
-            CovariantAxis{I}(),
-            ContravariantAxis{I}(),
-            LocalAxis{I}(),
-            CartesianAxis{I}()
-        )
-    end))
-end
+function benchmark_func(args, key, f)
+    f_ref = reference_func(f)
+    # Reference
+    result = f_ref(args...) # compile first
+    time = time_func(f_ref, args...)
+    t_pretty = BenchmarkTools.prettytime(time)
+    ref = (;time, t_pretty, result)
+    # Optimized
+    result = f(args...) # compile first
+    time = time_func(f, args...)
+    t_pretty = BenchmarkTools.prettytime(time)
+    opt = (;time, t_pretty, result)
 
-all_observed_axistensors(::Type{FT}) where {FT} =
-    vcat(map(x-> rand(last(x)), used_project_arg_types(FT)),
-         map(x-> rand(last(x)), used_transform_arg_types(FT)))
+    percentspeedup = precent_speedup(opt, ref)
 
-func_args(FT, ::typeof(Geometry.project)) =
-    map(used_project_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
-func_args(FT, ::typeof(Geometry.transform)) =
-    map(used_transform_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
-
-function all_possible_func_args(FT, ::typeof(Geometry.contravariant3))
-    # TODO: this is not accurate yet, since we don't yet
-    # vary over all possible LocalGeometry's.
-    M = @SMatrix [
-        FT(4) FT(1)
-        FT(0.5) FT(2)
-    ]
-    J = LinearAlgebra.det(M)
-    ∂x∂ξ = rand(Geometry.AxisTensor{FT, 2, Tuple{Geometry.LocalAxis{(3,)}, Geometry.CovariantAxis{(3,)}}, SMatrix{1, 1, FT, 1}})
-    lg = Geometry.LocalGeometry(Geometry.XYPoint(FT(0), FT(0)), J, J, ∂x∂ξ)
-    # Geometry.LocalGeometry{(3,), Geometry.ZPoint{FT}, FT, SMatrix{1, 1, FT, 1}}
-    Iterators.flatten(
-        map(used_project_arg_types(FT)) do (axt, axtt)
-            map(all_axes()) do ax
-                (rand(axtt), lg)
-            end
-        end
+    # if abs(percentspeedup) > 3 # only print significant changes
+        print("Benchmark: (%speedup, opt, ref): (")
+        print_colored(percentspeedup)
+        print(", $(opt.t_pretty), $(ref.t_pretty)). Key: $key\n")
+    # end
+    bm = (;
+        opt,
+        ref,
+        correctness = compare(opt.result, ref.result), # test correctness
+        perf_pass = (opt.time - ref.time)/ref.time*100 < -50, # test performance
     )
+    return bm
 end
 
-function func_args(FT, f::typeof(Geometry.contravariant3))
-    # TODO: fix this..
-    apfa = all_possible_func_args(FT, f)
-    args_dict = Dict()
-    for _args in apfa
-        hasmethod(f, typeof(_args)) || continue
-        args_dict[typeof.(_args)] = _args
+dict_key(f, args) = (nameof(f), typeof.(args)...)
+
+# expensive/slow. Can we (safely) parallelize this?
+function benchmark_conversions!(benchmarks, all_args, f)
+    for args in all_args
+        benchmarks[dict_key(f, args)] = benchmark_func(args, dict_key(f, args), f)
     end
-    return values(args_dict)
+    return nothing
 end
 
 reference_func(::typeof(Geometry.contravariant3)) = ref_contravariant3
 reference_func(::typeof(Geometry.project)) = ref_project
 reference_func(::typeof(Geometry.transform)) = ref_transform
 
-function test_optimized_function(::Type{FT}, func) where {FT}
-    @info "Testing optimized $func..."
-    args = func_args(FT, func)
-    bm = benchmark_conversion(args, FT, func)
-    for key in keys(bm)
-        @test bm[key].opt.result == bm[key].ref.result      # test correctness
-        @test_broken bm[key].opt.time*10 < bm[key].ref.time # test performance
+# Correctness comparisons
+components(x::T) where {T <: Real} = x
+components(x) = Geometry.components(x)
+compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
+compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
+compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
+compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
+
+function test_optimized_functions(::Type{FT}) where {FT}
+    benchmarks = OrderedCollections.OrderedDict()
+    for f in (
+        Geometry.project,          # not yet comprehensive
+        # Geometry.transform,      # not yet comprehensive
+        # Geometry.contravariant3, # not yet comprehensive
+    )
+        @info "Testing optimized $f..."
+        all_args = func_args(FT, f)
+        benchmark_conversions!(benchmarks, all_args, f)
+    end
+
+    for key in keys(benchmarks)
+        @test benchmarks[key].correctness      # test correctness
+        @test_broken benchmarks[key].perf_pass # test performance
     end
 end
 
 # TODO: figure out how to make error checking in `transform` optional
 
 @testset "Test optimized functions" begin
-    test_optimized_function(Float64, Geometry.project)
-    # test_optimized_function(Float64, Geometry.contravariant3)
-    # test_optimized_function(Float64, Geometry.transform)
+    test_optimized_functions(Float64)
 end
 
 #! format: on
