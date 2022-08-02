@@ -161,6 +161,9 @@ Base.size(a::AxisTensor) = map(length, axes(a))
 Base.rand(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
     AxisTensor{T, N, A, S}(A.instance, rand(S))
 
+Base.zeros(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
+    AxisTensor{T, N, A, S}(A.instance, zeros(S))
+
 function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
     print(
         io,

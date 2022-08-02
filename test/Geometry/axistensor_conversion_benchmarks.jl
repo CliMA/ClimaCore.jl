@@ -8,16 +8,16 @@ using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     WVector, Covariant12Vector, UVWVector, Covariant123Vector, Covariant3Vector,
     Contravariant12Vector, Contravariant3Vector, Contravariant123Vector,
     Contravariant13Vector, Contravariant2Vector, Axis2Tensor, Contravariant3Axis,
-    LocalGeometry, CovariantTensor, CartesianTensor, LocalTensor, ContravariantTensor
+    LocalGeometry, CovariantTensor, CartesianTensor, LocalTensor, ContravariantTensor,
+    XZPoint, XYZPoint, LatLongZPoint, XYPoint, ZPoint, LatLongPoint, XPoint,
+    Contravariant1Axis, Contravariant2Axis
 
-include("transform_project.jl") # compact, generic but unoptimized reference
-include("used_transform_args.jl")
-include("ref_funcs.jl")
-include("used_project_args.jl")
+include("ref_funcs.jl") # compact, generic but unoptimized reference
+include("func_arg_types.jl")
 include("func_args.jl")
 
-# time_func(func::F, x, y) where {F} = time_func_accurate(func, x, y)
-time_func(f::F, x, y) where {F} = time_func_fast(f, x, y)
+# time_func(func::F, args...) where {F} = time_func_accurate(func, args...)
+time_func(f::F, args...) where {F} = time_func_fast(f, args...)
 
 function time_func_accurate(f::F, x, y) where {F}
     b = BenchmarkTools.@benchmarkable $f($x, $y)
@@ -27,13 +27,32 @@ function time_func_accurate(f::F, x, y) where {F}
     return time
 end
 
+function time_func_accurate(f::F, x, y, z) where {F}
+    b = BenchmarkTools.@benchmarkable $f($x, $y, $z)
+    trial = BenchmarkTools.run(b)
+    # show(stdout, MIME("text/plain"), trial)
+    time = StatsBase.mean(trial.times)
+    return time
+end
+
 function time_func_fast(f::F, x, y) where {F}
-    time = 0
+    time = Float64(0)
     nsamples = 100
     for i in 1:nsamples
         time += @elapsed f(x, y)
     end
-    ns = 1e9
+    ns = Float64(1e9)
+    time = time/nsamples*ns # average and convert to ns
+    return time
+end
+
+function time_func_fast(f::F, x, y, z) where {F}
+    time = Float64(0)
+    nsamples = 100
+    for i in 1:nsamples
+        time += @elapsed f(x, y, z)
+    end
+    ns = Float64(1e9)
     time = time/nsamples*ns # average and convert to ns
     return time
 end
@@ -82,6 +101,8 @@ function benchmark_conversions!(benchmarks, all_args, f)
     return nothing
 end
 
+reference_func(::typeof(Geometry.contravariant1)) = ref_contravariant1
+reference_func(::typeof(Geometry.contravariant2)) = ref_contravariant2
 reference_func(::typeof(Geometry.contravariant3)) = ref_contravariant3
 reference_func(::typeof(Geometry.project)) = ref_project
 reference_func(::typeof(Geometry.transform)) = ref_transform
@@ -97,15 +118,18 @@ compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(
 function test_optimized_functions(::Type{FT}) where {FT}
     benchmarks = OrderedCollections.OrderedDict()
     for f in (
-        Geometry.project,          # not yet comprehensive
-        # Geometry.transform,      # not yet comprehensive
-        # Geometry.contravariant3, # not yet comprehensive
+        Geometry.project,
+        Geometry.transform,
+        Geometry.contravariant1,
+        Geometry.contravariant2,
+        Geometry.contravariant3,
     )
         @info "Testing optimized $f..."
         all_args = func_args(FT, f)
         benchmark_conversions!(benchmarks, all_args, f)
     end
 
+    # TODO: add mechanism for expected pass
     for key in keys(benchmarks)
         @test benchmarks[key].correctness      # test correctness
         @test_broken benchmarks[key].perf_pass # test performance
