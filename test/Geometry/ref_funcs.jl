@@ -19,4 +19,3 @@
     CovariantVector(u, local_geometry).u₂
 @inline ref_covariant3(u::AxisVector, local_geometry::LocalGeometry) =
     CovariantVector(u, local_geometry).u₃
-
