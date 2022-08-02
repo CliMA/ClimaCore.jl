@@ -31,34 +31,41 @@ get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: XPoint{
 #####
 
 function func_args(FT, f::typeof(Geometry.project))
-    map(func_arg_types(FT, f)) do at
+    result = map(method_info(FT, f)) do minfo
+        at, flops = minfo[1:end-1],last(minfo)
         if length(at) == 3
-            (at[1](), rand(at[2]), get_lg_instance(at[3])) # 3-argument method
+            (at[1](), rand(at[2]), get_lg_instance(at[3]), flops) # 3-argument method
         else
-            (at[1](), rand(at[2])) # 2-argument method
+            (at[1](), rand(at[2]), flops) # 2-argument method
         end
     end
+    map(x->(x[1:end-1], x[end]), result)
 end
 
 function func_args(FT, f::typeof(Geometry.transform))
-    map(func_arg_types(FT, f)) do at
+    result = map(method_info(FT, f)) do minfo
+        at, flops = minfo[1:end-1],last(minfo)
         # TODO: don't use zeros, since this invalidates the correctness tests.
         if length(at) == 3
-            (at[1](), zeros(at[2]), get_lg_instance(at[3])) # 3-argument method
+            (at[1](), zeros(at[2]), get_lg_instance(at[3]), flops) # 3-argument method
         else
-            (at[1](), zeros(at[2])) # 2-argument method
+            (at[1](), zeros(at[2]), flops) # 2-argument method
         end
     end
+    map(x->(x[1:end-1], x[end]), result)
 end
 
 function func_args(FT, f::Union{
         typeof(Geometry.contravariant1),
         typeof(Geometry.contravariant2),
         typeof(Geometry.contravariant3),
+        typeof(Geometry.Jcontravariant3),
     })
-    map(func_arg_types(FT, f)) do at
-        (rand(at[1]), get_lg_instance(at[2]))
+    result = map(method_info(FT, f)) do minfo
+        at, flops = minfo[1:end-1],last(minfo)
+        (rand(at[1]), get_lg_instance(at[2]), flops)
     end
+    map(x->(x[1:end-1], x[end]), result)
 end
 
 #! format: on
