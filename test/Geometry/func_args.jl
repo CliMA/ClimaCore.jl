@@ -5,60 +5,60 @@ to call different functions with.
 
 #! format: off
 
-function all_axes()
-    all_Is() = [(1,), (2,), (3,), (1, 2), (1, 3), (2, 3), (1, 2, 3)]
-    collect(Iterators.flatten(map(all_Is()) do I
-        (
-            CovariantAxis{I}(),
-            ContravariantAxis{I}(),
-            LocalAxis{I}(),
-            CartesianAxis{I}()
-        )
-    end))
-end
+#####
+##### Helpers
+#####
+Base.rand(::Type{T}) where {FT, T <: XZPoint{FT}} = T(rand(FT),rand(FT))
+Base.rand(::Type{T}) where {FT, T <: XYZPoint{FT}} = T(rand(FT),rand(FT),rand(FT))
+Base.rand(::Type{T}) where {FT, T <: LatLongZPoint{FT}} = T(rand(FT),rand(FT),rand(FT))
+Base.rand(::Type{T}) where {FT, T <: XYPoint{FT}} = T(rand(FT),rand(FT))
+Base.rand(::Type{T}) where {FT, T <: ZPoint{FT}} = T(rand(FT))
+Base.rand(::Type{T}) where {FT, T <: LatLongPoint{FT}} = T(rand(FT),rand(FT))
+Base.rand(::Type{T}) where {FT, T <: XPoint{FT}} = T(rand(FT))
 
-all_observed_axistensors(::Type{FT}) where {FT} =
-    vcat(map(x-> rand(last(x)), used_project_arg_types(FT)),
-         map(x-> rand(last(x)), used_transform_arg_types(FT)))
+get_∂x∂ξ(::Type{FT}, I, ::Type{S}) where {FT, S} = rand(Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S})
 
-func_args(FT, ::typeof(Geometry.project)) =
-    map(used_project_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
-func_args(FT, ::typeof(Geometry.transform)) =
-    map(used_transform_arg_types(FT)) do (axt, axtt)
-        (axt(), rand(axtt))
-    end
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XZPoint{FT}       , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: XYZPoint{FT}      , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{3, 3, FT, 9}, C <: LatLongZPoint{FT} , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: XYPoint{FT}       , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: ZPoint{FT}        , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{2, 2, FT, 4}, C <: LatLongPoint{FT}  , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
+get_lg_instance(::Type{T}) where {FT, I, S <: SMatrix{1, 1, FT, 1}, C <: XPoint{FT}        , T <: LocalGeometry{I, C, FT, S}} = LocalGeometry(rand(C), rand(FT), rand(FT), get_∂x∂ξ(FT, I, S))
 
-function all_possible_func_args(FT, ::typeof(Geometry.contravariant3))
-    # TODO: this is not accurate yet, since we don't yet
-    # vary over all possible LocalGeometry's.
-    M = @SMatrix [
-        FT(4) FT(1)
-        FT(0.5) FT(2)
-    ]
-    J = LinearAlgebra.det(M)
-    ∂x∂ξ = rand(Geometry.AxisTensor{FT, 2, Tuple{Geometry.LocalAxis{(3,)}, Geometry.CovariantAxis{(3,)}}, SMatrix{1, 1, FT, 1}})
-    lg = Geometry.LocalGeometry(Geometry.XYPoint(FT(0), FT(0)), J, J, ∂x∂ξ)
-    # Geometry.LocalGeometry{(3,), Geometry.ZPoint{FT}, FT, SMatrix{1, 1, FT, 1}}
-    Iterators.flatten(
-        map(used_project_arg_types(FT)) do (axt, axtt)
-            map(all_axes()) do ax
-                (rand(axtt), lg)
-            end
+#####
+##### func args
+#####
+
+function func_args(FT, f::typeof(Geometry.project))
+    map(func_arg_types(FT, f)) do at
+        if length(at) == 3
+            (at[1](), rand(at[2]), get_lg_instance(at[3])) # 3-argument method
+        else
+            (at[1](), rand(at[2])) # 2-argument method
         end
-    )
+    end
 end
 
-function func_args(FT, f::typeof(Geometry.contravariant3))
-    # TODO: fix this..
-    apfa = all_possible_func_args(FT, f)
-    args_dict = Dict()
-    for args in apfa
-        hasmethod(f, typeof(args)) || continue
-        args_dict[dict_key(f, args)] = args
+function func_args(FT, f::typeof(Geometry.transform))
+    map(func_arg_types(FT, f)) do at
+        # TODO: don't use zeros, since this invalidates the correctness tests.
+        if length(at) == 3
+            (at[1](), zeros(at[2]), get_lg_instance(at[3])) # 3-argument method
+        else
+            (at[1](), zeros(at[2])) # 2-argument method
+        end
     end
-    return values(args_dict)
+end
+
+function func_args(FT, f::Union{
+        typeof(Geometry.contravariant1),
+        typeof(Geometry.contravariant2),
+        typeof(Geometry.contravariant3),
+    })
+    map(func_arg_types(FT, f)) do at
+        (rand(at[1]), get_lg_instance(at[2]))
+    end
 end
 
 #! format: on
