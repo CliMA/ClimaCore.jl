@@ -217,4 +217,31 @@ end
         Covariant123Vector(1.0, 1.0, 1.0),
         local_geom,
     ) == Contravariant123Vector(0.25, 1.0, 1.0)
+
+
+    @test Geometry.project(
+        Geometry.Contravariant12Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant12Vector(0.25, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant1Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant1Vector(0.25) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant2Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant2Vector(1.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 0.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant123Vector(1.0, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
 end

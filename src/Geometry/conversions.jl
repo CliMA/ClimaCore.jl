@@ -292,6 +292,7 @@ for op in (:transform, :project)
         )
 
         # Covariant <-> Contravariant
+        #=
         @inline $op(
             ax::ContravariantAxis,
             v::CovariantTensor,
@@ -302,6 +303,7 @@ for op in (:transform, :project)
             local_geometry.∂ξ∂x' *
             $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
+        =#
         @inline $op(
             ax::CovariantAxis,
             v::ContravariantTensor,
@@ -327,6 +329,16 @@ for op in (:transform, :project)
     end
 end
 
+@inline transform(
+    ax::ContravariantAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+) = transform(
+    ax,
+    local_geometry.∂ξ∂x *
+    local_geometry.∂ξ∂x' *
+    transform(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+)
 
 @generated function project(
     ax::ContravariantAxis{Ito},
@@ -370,7 +382,7 @@ end
 end
 @generated function project(
     ax::ContravariantAxis{Ito},
-    v::Covariant2Tensor{T, Tuple{CovariantAxis{Ifrom}, A}},
+    v::Contravariant2Tensor{T, Tuple{CovariantAxis{Ifrom}, A}},
     local_geometry::LocalGeometry{J},
 ) where {T, Ito, Ifrom, A, J}
     Nfrom = length(Ifrom)
