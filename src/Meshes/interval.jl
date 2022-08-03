@@ -145,11 +145,14 @@ function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::GeneralizedExponentialStretching{FT};
     nelems::Int,
+    FT_solve = Float64,
+    tol = 1e-3,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
     end
-    dz_surface, dz_top = stretch.dz_surface, stretch.dz_top
+    dz_surface = FT_solve(stretch.dz_surface)
+    dz_top = FT_solve(stretch.dz_top)
     if !(dz_surface ≤ dz_top)
         throw(ArgumentError("dz_surface must be ≤ dz_top"))
     end
@@ -162,20 +165,20 @@ function IntervalMesh(
     exp_stretch(ζ, h) = -h * log(1 - (1 - exp(-1 / h)) * ζ)
 
     # nondimensional vertical coordinate ([0.0, 1.0])
-    ζ_n = LinRange(one(FT), nelems, nelems) / nelems
+    ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
     # find surface height variation
     find_surface(h) = dz_surface - zₜ * exp_stretch(ζ_n[1], h)
     # we use linearization
     # hₛ ≈ -dz_surface / zₜ / log(1 - 1/nelems)
     # to approx bracket the lower / upper bounds of root sol
-    guess₋ = -dz_surface / zₜ / log(1 - FT(1 / (nelems - 1)))
-    guess₊ = -dz_surface / zₜ / log(1 - FT(1 / (nelems + 1)))
+    guess₋ = -dz_surface / zₜ / log(1 - FT_solve(1 / (nelems - 1)))
+    guess₊ = -dz_surface / zₜ / log(1 - FT_solve(1 / (nelems + 1)))
     hₛsol = RootSolvers.find_zero(
         find_surface,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT(1e-3)),
+        RootSolvers.ResidualTolerance(FT_solve(tol)),
     )
     if hₛsol.converged !== true
         error(
@@ -189,13 +192,13 @@ function IntervalMesh(
     # we use the linearization
     # hₜ ≈ (zₜ - dz_top) / zₜ / log(nelem)
     # to approx braket the lower, upper bounds of root sol
-    guess₋ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems + 1))
-    guess₊ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems - 1))
+    guess₋ = ((zₜ - zₛ) - dz_top) / zₜ / FT_solve(log(nelems + 1))
+    guess₊ = ((zₜ - zₛ) - dz_top) / zₜ / FT_solve(log(nelems - 1))
     hₜsol = RootSolvers.find_zero(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT(1e-3)),
+        RootSolvers.ResidualTolerance(FT_solve(tol)),
     )
     if hₜsol.converged !== true
         error(
@@ -209,6 +212,6 @@ function IntervalMesh(
     faces = (zₛ + (zₜ - zₛ)) * exp_stretch.(ζ_n, h)
 
     # add the bottom level
-    faces = [zₛ; faces...]
+    faces = FT[zₛ; faces...] # type-cast back to FT
     IntervalMesh(domain, CT.(faces))
 end
