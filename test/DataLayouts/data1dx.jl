@@ -114,3 +114,10 @@ end
           FT[f == 1 ? 3 : 1 for v in 1:3, i in 1:2, f in 1:2, h in 1:2]
 
 end
+
+@testset "fill" begin
+
+    data = IFH{Float64, 3}(ones(3, 1, 3))
+    data .= 2.0
+    @test all(==(2.0), parent(data))
+end
