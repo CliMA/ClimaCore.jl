@@ -96,9 +96,11 @@ function benchmark_func(args, key, f, flops, ::Type{FT}) where {FT}
     Δflops = computed_flops - flops
 
     # if reduced_flops # only print significant changes
-        print("Benchmark: (Δflops, opt, ref): (")
+        key_str = replace("$key", "Float64" => "FT", "Float32" => "FT", " " => "")
+        print("Flops (Δ, now, main): (")
         print_colored(Δflops)
-        print(", $(opt.t_pretty), $(ref.t_pretty)). Key: $key\n")
+        print(", $computed_flops, $flops).")
+        print("Time (opt, ref): ($(opt.t_pretty), $(ref.t_pretty)). Key: $key_str\n")
     # end
     bm = (;
         opt,
@@ -140,6 +142,7 @@ compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
 
 function test_optimized_functions(::Type{FT}) where {FT}
+    @info "Testing optimized functions with $FT"
     benchmarks = OrderedCollections.OrderedDict()
     for f in (
         Geometry.project,
@@ -154,19 +157,11 @@ function test_optimized_functions(::Type{FT}) where {FT}
     end
 
     for key in keys(benchmarks)
-        @test benchmarks[key].correctness      # test correctness
-        @test benchmarks[key].Δflops ≤ 0       # Don't regress
-        @test_broken benchmarks[key].perf_pass # rough timing test (benchmarking is hard for ns funcs)
+        @test benchmarks[key].correctness       # test correctness
+        @test benchmarks[key].Δflops ≤ 0        # Don't regress
+        @test_broken benchmarks[key].Δflops < 0 # Error on improvements
+        @test_broken benchmarks[key].perf_pass  # rough timing test (benchmarking is hard for ns funcs)
     end
-
-    # Warn about expensive operations
-    for key in keys(benchmarks)
-        if benchmarks[key].computed_flops > 0
-            key_str = replace("$key", "Float64" => "FT", "Float32" => "FT")
-            @info "Flops = $(benchmarks[key].computed_flops). Method info: $key_str"
-        end
-    end
-
 end
 
 # TODO: figure out how to make error checking in `transform` optional
