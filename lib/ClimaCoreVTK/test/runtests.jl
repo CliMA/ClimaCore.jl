@@ -247,6 +247,8 @@ end
 
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fspace)
+    coords = Fields.coordinate_field(cspace)
+
     writevtk(
         joinpath(OUTPUT_DIR, "hybrid_sphere_point"),
         Fields.coordinate_field(fspace);
@@ -261,4 +263,36 @@ end
         basis = :point,
     )
     @test isfile(joinpath(OUTPUT_DIR, "hybrid_sphere_point_latlong.vtu"))
+
+    times = 0:10:350
+    U = Array{Fields.Field}(undef, length(times))
+    for t in 1:length(times)
+        u = map(coords) do coord
+            α = 45.0
+            cosd(coord.lat) *
+            (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α)) +
+            coord.z
+        end
+        U[t] = u
+    end
+
+    writevtk(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_scalar_series"),
+        times,
+        (U = U,),
+        basis = :lagrange,
+    )
+    for (i, _) in enumerate(times)
+        istr = lpad(i, 3, "0")
+        @test isfile(
+            joinpath(
+                OUTPUT_DIR,
+                "series",
+                "hybrid_sphere_scalar_series_$(istr).vtu",
+            ),
+        )
+    end
+    @test isfile(
+        joinpath(OUTPUT_DIR, "series", "hybrid_sphere_scalar_series.pvd"),
+    )
 end
