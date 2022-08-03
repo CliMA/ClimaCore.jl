@@ -287,13 +287,16 @@ const Axis2TensorOrAdj{T, A, S} =
 
 # based on 1st dimension
 const Covariant2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{CovariantAxis, AbstractAxis}}
-const Contravariant2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{ContravariantAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{CovariantAxis, AbstractAxis}, S}
+const Contravariant2Tensor{T, A, S} = Axis2Tensor{
+    T,
+    A,
+    S,
+} where {T, A <: Tuple{ContravariantAxis, AbstractAxis}, S}
 const Cartesian2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{CartesianAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{CartesianAxis, AbstractAxis}, S}
 const Local2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{LocalAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{LocalAxis, AbstractAxis}, S}
 
 const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
 const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}

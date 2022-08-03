@@ -173,3 +173,75 @@ end
     @test Geometry.UVVector(Geometry._cross(uⁱ, vⁱ, local_geom), local_geom) ==
           Geometry.UVVector(6.0, -3.0)
 end
+
+
+@testset "project" begin
+    M = @SMatrix [
+        2.0 0.0
+        0.0 1.0
+    ]
+    J = det(M)
+
+    local_geom = Geometry.LocalGeometry(
+        Geometry.XYPoint(0.0, 0.0),
+        J,
+        J,
+        Geometry.Axis2Tensor(
+            (Geometry.UVAxis(), Geometry.Covariant12Axis()),
+            M,
+        ),
+    )
+
+    @test Geometry.project(
+        Geometry.Contravariant12Axis(),
+        Covariant12Vector(1.0, 1.0),
+        local_geom,
+    ) == Contravariant12Vector(0.25, 1.0)
+    @test Geometry.project(
+        Geometry.Contravariant1Axis(),
+        Covariant12Vector(1.0, 1.0),
+        local_geom,
+    ) == Contravariant1Vector(0.25)
+    @test Geometry.project(
+        Geometry.Contravariant2Axis(),
+        Covariant12Vector(1.0, 1.0),
+        local_geom,
+    ) == Contravariant2Vector(1.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant12Vector(1.0, 1.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 0.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant123Vector(1.0, 1.0, 1.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 1.0)
+
+
+    @test Geometry.project(
+        Geometry.Contravariant12Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant12Vector(0.25, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant1Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant1Vector(0.25) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant2Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant2Vector(1.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant12Vector(1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 0.0) ⊗ Covariant12Vector(2.0, 8.0)
+    @test Geometry.project(
+        Geometry.Contravariant123Axis(),
+        Covariant123Vector(1.0, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0),
+        local_geom,
+    ) == Contravariant123Vector(0.25, 1.0, 1.0) ⊗ Covariant12Vector(2.0, 8.0)
+end
