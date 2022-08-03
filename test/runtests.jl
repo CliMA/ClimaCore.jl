@@ -26,21 +26,26 @@ if !Sys.iswindows()
 
 @safetestset "Interval mesh" begin @time include("Meshes/interval.jl") end
 @safetestset "Rectangle mesh" begin @time include("Meshes/rectangle.jl") end
-@safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
+# now part of buildkite
+# @safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
 
 @safetestset "Rectangle topology" begin @time include("Topologies/rectangle.jl") end
 @safetestset "Rectangle surface topology" begin @time include("Topologies/rectangle_sfc.jl") end
 @safetestset "Cubedsphere topology" begin @time include("Topologies/cubedsphere.jl") end
 @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
-@safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
+# now part of buildkite
+# @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
 
 @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
 @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
-@safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
-@safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
-@safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
+# now part of buildkite
+# @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
+# @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
+# now part of buildkite
+# @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
 
-@safetestset "Fields" begin @time include("Fields/field.jl") end
+# now part of buildkite
+# @safetestset "Fields" begin @time include("Fields/field.jl") end
 @safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
 
 @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
@@ -71,8 +76,9 @@ if !Sys.iswindows()
 
 @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
 
-@safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
-@safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
+# now part of buildkite
+# @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
+# @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
 
 # Code quality checks
 @safetestset "Aqua" begin @time include("aqua.jl") end
