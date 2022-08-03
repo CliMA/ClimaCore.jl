@@ -1,5 +1,6 @@
 import ClimaCore.DataLayouts: IJFH
 
+import ClimaCore.Operators: remap, remap!
 
 """
     LinearTempestRemap{T, S, M, C, V}
@@ -13,9 +14,8 @@ where:
  - `target_idxs` is the same as `source_idxs` but for the target mesh.
  - `col_indices` are the source column indices from TempestRemap. (length = number of overlap-mesh nodes)
  - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
-
 """
-struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
+struct LinearTempestRemap{S, T, W, I, V} <: ClimaCore.Operators.AbstractRemap
     source_space::S
     target_space::T
     weights::W
@@ -26,76 +26,12 @@ struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     out_type::String
 end
 
-function remap!(
-    target::IJFH{S, Nqt},
-    R::LinearMap,
-    source::IJFH{S, Nqs},
-) where {S, Nqt, Nqs}
-    source_array = parent(source)
-    target_array = parent(target)
-
-    fill!(target_array, zero(eltype(target_array)))
-    Nf = size(target_array, 3)
-
-    # ideally we would use the tempestremap dgll (redundant node) representation
-    # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
-    for (n, wt) in enumerate(R.weights)
-        is, js, es = (
-            view(R.source_idxs[1], n),
-            view(R.source_idxs[2], n),
-            view(R.source_idxs[3], n),
-        )
-        it, jt, et = (
-            view(R.target_idxs[1], n),
-            view(R.target_idxs[2], n),
-            view(R.target_idxs[3], n),
-        )
-        for f in 1:Nf
-            target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
-        end
-    end
-
-    # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
-    # (we could get rid of this if we added the redundant nodes to the matrix)
-    # using out_type == "cgll"
-    if R.out_type == "cgll"
-        topology = Spaces.topology(R.target_space)
-        Spaces.dss_interior_faces!(topology, target)
-        Spaces.dss_local_vertices!(topology, target)
-    end
-    return target
-end
-
 """
-    remap!(target::Field, R::LinearMap, source::Field)
+    LinearTempestRemap(target_space, source_space; in_type="cgll", out_type="cgll")
 
-Applies the remapping `R` to a `source` Field, storing the result in `target`.
+Generate the remapping weights from TempestRemap.
 """
-function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
-    @assert axes(source) == R.source_space
-    @assert axes(target) == R.target_space
-    # we use the tempestremap cgll representation
-    # it will set the redundant nodes to zero
-    remap!(Fields.field_values(target), R, Fields.field_values(source))
-    return target
-end
-
-"""
-    remap(R::LinearMap, source::Field)
-
-Applies the remapping `R` to a `source` Field, allocating a new field in the output.
-"""
-function remap(R::LinearMap, source::Fields.Field)
-    remap!(Fields.Field(eltype(source), R.target_space), R, source)
-end
-
-
-"""
-    generate_map(target_space, source_space; in_type="cgll", out_type="cgll")
-
-Generate the remapping weights from TempestRemap, returning a `LinearMap` object. This should only be called once.
-"""
-function generate_map(
+function LinearTempestRemap(
     target_space::Spaces.SpectralElementSpace2D,
     source_space::Spaces.SpectralElementSpace2D;
     meshfile_source = tempname(),
@@ -165,7 +101,7 @@ function generate_map(
     target_unique_idxs =
         (target_unique_idxs_i, target_unique_idxs_j, target_unique_idxs_e)
 
-    return LinearMap(
+    return LinearTempestRemap(
         source_space,
         target_space,
         weights,
@@ -175,4 +111,52 @@ function generate_map(
         row_indices,
         out_type,
     )
+end
+
+function remap!(
+    target_field::Fields.Field,
+    R::LinearTempestRemap,
+    source_field::Fields.Field,
+)
+    @assert axes(source_field) == R.source_space
+    @assert axes(target_field) == R.target_space
+    # we use the tempestremap cgll representation
+    # it will set the redundant nodes to zero
+    source_array = parent(source_field)
+    target_array = parent(target_field)
+
+    fill!(target_array, zero(eltype(target_array)))
+    Nf = size(target_array, 3)
+
+    # ideally we would use the tempestremap dgll (redundant node) representation
+    # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
+    for (n, wt) in enumerate(R.weights)
+        is, js, es = (
+            view(R.source_idxs[1], n),
+            view(R.source_idxs[2], n),
+            view(R.source_idxs[3], n),
+        )
+        it, jt, et = (
+            view(R.target_idxs[1], n),
+            view(R.target_idxs[2], n),
+            view(R.target_idxs[3], n),
+        )
+        for f in 1:Nf
+            target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
+        end
+    end
+
+    # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
+    # (we could get rid of this if we added the redundant nodes to the matrix)
+    # using out_type == "cgll"
+    if R.out_type == "cgll"
+        topology = Spaces.topology(R.target_space)
+        Spaces.dss_interior_faces!(topology, Fields.field_values(target_field))
+        Spaces.dss_local_vertices!(topology, Fields.field_values(target_field))
+    end
+    return target_field
+end
+
+function remap(R::LinearTempestRemap, source_field::Fields.Field)
+    remap!(Fields.Field(eltype(source_field), R.target_space), R, source_field)
 end

@@ -74,7 +74,7 @@ end
 
     # use TempestRemap to generate map weights
     weightfile = tempname()
-    R = ClimaCoreTempestRemap.generate_map(
+    R = ClimaCoreTempestRemap.LinearTempestRemap(
         space_o,
         space_i,
         weightfile = weightfile,
