@@ -42,6 +42,21 @@ jld2_files = filter(x -> endswith(x, ".jld2"), readdir(jld2_dir, join = true))
 
 function remap2latlon(filein, nc_dir, nlat, nlon)
     datain = jldopen(filein)
+    t_now = datain["t"]
+    Y = datain["Y"]
+    ClimaCoreTempestRemap.remap2latlon(
+        Y;
+        t_now,
+        nc_dir,
+        filename = filein,
+        nlat,
+        nlon,
+    )
+end
+
+# TODO: delete if above function is okay
+function remap2latlon(filein, nc_dir, nlat, nlon)
+    datain = jldopen(filein)
 
     # get time and states from jld2 data
     t_now = datain["t"]
