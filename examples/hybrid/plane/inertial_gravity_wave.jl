@@ -126,68 +126,95 @@ function face_initial_condition(local_geometry)
     return NamedTuple{(:w,)}.(tuple.(w))
 end
 
+function get_post_proc_cache(Y)
+    ρ′ = similar(Y.c.ρ)
+    T′ = similar(Y.c.ρ)
+    uₕ = similar(Y.c.uₕ)
+    ᶠw = similar(Y.f.w)
+    parent(uₕ) .= 0
+    parent(ᶠw) .= 0
+    u′ = @. Geometry.UVVector(uₕ).components.data.:1
+    v′ = @. Geometry.UVVector(uₕ).components.data.:2
+    w′ = @. Geometry.WVector(ᶠw).components.data.:1
+    ᶜK = @. norm_sqr(C123(uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+    T′err = similar(u′)
+    u′err = similar(v′)
+    w′err = similar(w′)
+    (; u′, v′, w′, T′, ρ′, ᶜK, T′err, u′err, w′err)
+end
+
+function compute_vars!(Y, cache, z, ᶜΦ)
+    (; u′, v′, w′, T′, ρ′, ᶜK) = cache
+    @. ρ′ = Y.c.ρ - p₀(z) / (R_d * T₀)
+    if ᶜ𝔼_name == :ρθ
+        @. T′ = Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) - T₀
+    elseif ᶜ𝔼_name == :ρe
+        @. ᶜK = norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
+        @. T′ = (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
+    elseif ᶜ𝔼_name == :ρe_int
+        @. T′ = Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
+    end
+    @. u′ = Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
+    @. v′ = Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
+    @. w′ = Geometry.WVector(Y.f.w).components.data.:1
+end
+
+function plot_frame!(var, var_lin, err, lim, ivar, anims)
+    @. err = (var - var_lin) / (abs(var_lin) + eps(FT))
+    # adding eps(FT) to the denominator prevents divisions by 0
+    frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
+    frame(anims[3 * ivar - 1], plot(var, clim = (-lim, lim)))
+    frame(anims[3 * ivar], plot(err, clim = (-10, 10)))
+end
+
 function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
     ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
     lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     Y_lin = similar(sol.u[1])
 
-    ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
-    if ᶜ𝔼_name == :ρθ
-        T′ =
-            Y -> @. Y.c.ρθ / Y.c.ρ * (pressure_ρθ(Y.c.ρθ) / p_0)^(R_d / cp_d) -
-               T₀
-    elseif ᶜ𝔼_name == :ρe
-        T′ = Y -> begin
-            ᶜK = @. norm_sqr(C123(Y.c.uₕ) + C123(ᶜinterp(Y.f.w))) / 2
-            ᶜΦ = Fields.coordinate_field(Y.c).z .* grav
-            @. (Y.c.ρe / Y.c.ρ - ᶜK - ᶜΦ) / cv_d + T_tri - T₀
-        end
-    elseif ᶜ𝔼_name == :ρe_int
-        T′ = Y -> @. Y.c.ρe_int / Y.c.ρ / cv_d + T_tri - T₀
-    end
-    u′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:1 - u₀
-    v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
-    w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
+    z = ᶜlocal_geometry.coordinates.z
+    ᶜΦ = z .* grav
+    cache = get_post_proc_cache(Y)
+    cache_lin = get_post_proc_cache(Y_lin)
+
+    nstring(x, y) = (norm_strings(x, y, 2)..., norm_strings(x, y, Inf)...)
 
     for iframe in (1, length(sol.t))
         t = sol.t[iframe]
         Y = sol.u[iframe]
         linear_solution!(Y_lin, lin_cache, t)
         println("Error norms at time t = $t:")
-        for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
-            var = f(Y)
-            var_lin = f(Y_lin)
-            strings = (
-                norm_strings(var, var_lin, 2)...,
-                norm_strings(var, var_lin, Inf)...,
-            )
-            println("ϕ = $name: ", join(strings, ", "))
-        end
+
+        compute_vars!(Y, cache, z, ᶜΦ)
+        compute_vars!(Y_lin, cache_lin, z, ᶜΦ)
+
+        println("ϕ = ρ′: ", join(nstring(cache.ρ′, cache_lin.ρ′), ", "))
+        println("ϕ = T′: ", join(nstring(cache.T′, cache_lin.T′), ", "))
+        println("ϕ = u′: ", join(nstring(cache.u′, cache_lin.u′), ", "))
+        println("ϕ = v′: ", join(nstring(cache.v′, cache_lin.v′), ", "))
+        println("ϕ = w′: ", join(nstring(cache.w′, cache_lin.w′), ", "))
         println()
     end
 
-    anim_vars = (
-        (:Tprime, T′, is_small_scale ? 0.014 : 0.014),
-        (:uprime, u′, is_small_scale ? 0.042 : 0.014),
-        (:wprime, w′, is_small_scale ? 0.0042 : 0.0014),
-    )
+    T′lim = is_small_scale ? 0.014 : 0.014
+    u′lim = is_small_scale ? 0.042 : 0.014
+    w′lim = is_small_scale ? 0.0042 : 0.0014
+    anim_vars = (:Tprime, :uprime, :wprime)
     anims = [Animation() for _ in 1:(3 * length(anim_vars))]
     @progress "Animations" for iframe in 1:length(sol.t)
         t = sol.t[iframe]
         Y = sol.u[iframe]
         linear_solution!(Y_lin, lin_cache, t)
-        for (ivar, (_, f, lim)) in enumerate(anim_vars)
-            var = f(Y)
-            var_lin = f(Y_lin)
-            var_rel_err = @. (var - var_lin) / (abs(var_lin) + eps(FT))
-            # adding eps(FT) to the denominator prevents divisions by 0
-            frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
-            frame(anims[3 * ivar - 1], plot(var, clim = (-lim, lim)))
-            frame(anims[3 * ivar], plot(var_rel_err, clim = (-10, 10)))
-        end
+
+        compute_vars!(Y, cache, z, ᶜΦ)
+        compute_vars!(Y_lin, cache_lin, z, ᶜΦ)
+
+        plot_frame!(cache.T′, cache_lin.T′, cache.T′err, T′lim, 1, anims)
+        plot_frame!(cache.u′, cache_lin.u′, cache.u′err, u′lim, 2, anims)
+        plot_frame!(cache.w′, cache_lin.w′, cache.w′err, w′lim, 3, anims)
     end
-    for (ivar, (name, _, _)) in enumerate(anim_vars)
+    for (ivar, name) in enumerate(anim_vars)
         mp4(anims[3 * ivar - 2], joinpath(output_dir, "$(name)_lin.mp4"); fps)
         mp4(anims[3 * ivar - 1], joinpath(output_dir, "$name.mp4"); fps)
         mp4(anims[3 * ivar], joinpath(output_dir, "$(name)_rel_err.mp4"); fps)
@@ -195,14 +222,17 @@ function postprocessing(sol, output_dir)
 end
 
 function norm_strings(var, var_lin, p)
+    norm_var = norm(var, p; normalize = false)
     norm_err = norm(var .- var_lin, p; normalize = false)
     scaled_norm_err = norm_err / norm(var_lin, p; normalize = false)
     return (
-        @sprintf("‖ϕ‖_%d = %-#9.4g", p, norm(var, p; normalize = false)),
+        @sprintf("‖ϕ‖_%d = %-#9.4g", p, norm_var),
         @sprintf("‖ϕ - ϕ_lin‖_%d = %-#9.4g", p, norm_err),
         @sprintf("‖ϕ - ϕ_lin‖_%d/‖ϕ_lin‖_%d = %-#9.4g", p, p, scaled_norm_err),
     )
 end
+
+fourier_factor(kx, x, kz, z) = exp(im * (kx * x + kz * z))
 
 # min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
 # min_λz = 2 * (FT( / z_)elem) / upsampling_factor
@@ -245,21 +275,21 @@ function ρfb_init_coefs(
 
     # Fourier coefficients of Bretherton transform of initial perturbation
     ρfb_init_array = Array{Complex{FT}}(undef, 2 * max_ikx + 1, 2 * max_ikz + 1)
-    ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     ᶜintegrand = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     unit_integral = 2 * sum(one.(ᶜρb_init))
     # Since the coefficients are for a modified domain of height 2 * z_max, the
     # unit integral over the domain must be multiplied by 2 to ensure correct
     # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
     # the "true" domain, so the integral of ᶜintegrand should not be modified.
+
+    # TODO: can we compute this analytically? If not, can we try apply threading?
     @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
         ikz in (-max_ikz):max_ikz
 
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_max) * ikz
-        @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
-        @. ᶜintegrand = ᶜρb_init / ᶜfourier_factor
-        ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
+        @. ᶜintegrand = ᶜρb_init / fourier_factor(kx, ᶜx, kz, ᶜz)
+        @inbounds ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
             sum(ᶜintegrand) / unit_integral
     end
     return ρfb_init_array
@@ -291,10 +321,6 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
         # Fourier coefficients of Bretherton transform of initial perturbation
         ρfb_init_array = ρfb_init_coefs(),
 
-        # Fourier transform factors
-        ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry)),
-        ᶠfourier_factor = Fields.Field(Complex{FT}, axes(ᶠlocal_geometry)),
-
         # Bretherton transform of final perturbation
         ᶜpb = Fields.Field(FT, axes(ᶜlocal_geometry)),
         ᶜρb = Fields.Field(FT, axes(ᶜlocal_geometry)),
@@ -314,11 +340,14 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     )
 end
 
+# Fourier factors, shifted by u₀ * t along the x-axis
+fourier_factor(kx, x, kz, z, t) = exp(im * (kx * (x - u₀ * t) + kz * z))
+
 function linear_solution!(Y, lin_cache, t)
     (; ᶜx, ᶠx, ᶜz, ᶠz, ᶜp₀, ᶜρ₀, ᶜu₀, ᶜv₀, ᶠw₀) = lin_cache
     (; ᶜbretherton_factor_pρ) = lin_cache
     (; ᶜbretherton_factor_uvwT, ᶠbretherton_factor_uvwT) = lin_cache
-    (; ρfb_init_array, ᶜfourier_factor, ᶠfourier_factor) = lin_cache
+    (; ρfb_init_array) = lin_cache
     (; ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb, ᶜp, ᶜρ, ᶜu, ᶜv, ᶠw, ᶜT) = lin_cache
 
     ᶜpb .= FT(0)
@@ -327,16 +356,13 @@ function linear_solution!(Y, lin_cache, t)
     ᶜvb .= FT(0)
     ᶠwb .= FT(0)
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
-    for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
+    # TODO: improve performance (better cache locality?)
+    @inbounds for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_max) * ikz
 
         # Fourier coefficient of ᶜρb_init (for current kx and kz)
         ρfb_init = ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1]
-
-        # Fourier factors, shifted by u₀ * t along the x-axis
-        @. ᶜfourier_factor = exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz))
-        @. ᶠfourier_factor = exp(im * (kx * (ᶠx - u₀ * t) + kz * ᶠz))
 
         # roots of a₁(s)
         p₁ = cₛ² * (kx^2 + kz^2 + δ^2 / 4) + f^2
@@ -371,11 +397,11 @@ function linear_solution!(Y, lin_cache, t)
         wfb = -ρfb_init * (L₂ + L₀ * (f^2 + cₛ² * kx^2)) * grav / ρₛ
 
         # Bretherton transforms of final perturbations
-        @. ᶜpb += real(pfb * ᶜfourier_factor)
-        @. ᶜρb += real(ρfb * ᶜfourier_factor)
-        @. ᶜub += real(ufb * ᶜfourier_factor)
-        @. ᶜvb += real(vfb * ᶜfourier_factor)
-        @. ᶠwb += real(wfb * ᶠfourier_factor)
+        @. ᶜpb += real(pfb * fourier_factor(kx, ᶜx, kz, ᶜz, t))
+        @. ᶜρb += real(ρfb * fourier_factor(kx, ᶜx, kz, ᶜz, t))
+        @. ᶜub += real(ufb * fourier_factor(kx, ᶜx, kz, ᶜz, t))
+        @. ᶜvb += real(vfb * fourier_factor(kx, ᶜx, kz, ᶜz, t))
+        @. ᶠwb += real(wfb * fourier_factor(kx, ᶠx, kz, ᶠz, t))
         # The imaginary components should be 0 (or at least very close to 0).
     end
 
