@@ -1,0 +1,394 @@
+import Pkg
+# Pkg.add(Pkg.PackageSpec(; url = "https://github.com/CliMA/ODEConvergenceTester.jl"))
+Pkg.develop(Pkg.PackageSpec(; path = "../ODEConvergenceTester.jl"))
+Pkg.develop(Pkg.PackageSpec(; path = "."))
+
+import Logging
+import TerminalLoggers
+Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+import LinearAlgebra: norm, ×
+import UnPack
+import OrdinaryDiffEq
+const ODE = OrdinaryDiffEq
+
+import ClimaCore:
+    ClimaCore, Spaces, Domains, Meshes, Geometry, Topologies, Fields, Operators
+const CC = ClimaCore
+
+non_dimensionalize!(u, v) = nothing
+function non_dimensionalize!(u::FV, v::FV) where {FV <: CC.Fields.Field}
+    if isempty(propertynames(u))
+        ∑u = sum(abs.(parent(u))) / length(parent(u))
+        ∑v = sum(abs.(parent(v))) / length(parent(v))
+        ∑uv = (∑u + ∑v) / 2
+        if !(∑uv ≈ 0)
+            u .= u ./ ∑uv
+            v .= v ./ ∑uv
+        end
+    else
+        for sym in propertynames(u)
+            uvar = getproperty(u, sym)
+            vvar = getproperty(v, sym)
+            non_dimensionalize!(uvar, vvar)
+        end
+    end
+    return nothing
+end
+
+function non_dimensionalize!(u::FV, v::FV) where {FV <: CC.Fields.FieldVector}
+    if all(sym -> sym in propertynames(u), (:cent, :face))
+        non_dimensionalize!(u.cent, v.cent)
+        non_dimensionalize!(u.face, v.face)
+        return nothing
+    end
+    for sym in propertynames(u)
+        uvar = getproperty(u, sym)
+        vvar = getproperty(v, sym)
+        non_dimensionalize!(uvar, vvar)
+    end
+    return nothing
+end
+
+# This experiment tests
+#     1) hydrostatic and geostrophic balance;
+#     2) linear instability.
+# - "baroclinic_wave": the defaul simulation, following https://rmets.onlinelibrary.wiley.com/doi/full/10.1002/qj.2241.
+# - "balanced_flow": the same balanced background flow as the baroclinic wave but with zero perturbation.
+
+# test specifications
+const test_name = get(ARGS, 1, "baroclinic_wave") # default test case to run baroclinic wave
+
+# parameters
+const R = 6.371229e6 # radius
+const grav = 9.80616 # gravitational constant
+const Ω = 7.29212e-5 # Earth rotation (radians / sec)
+const R_d = 287.0 # R dry (gas constant / mol mass dry air)
+const κ = 2 / 7 # kappa
+const γ = 1.4 # heat capacity ratio
+const cp_d = R_d / κ # heat capacity at constant pressure
+const cv_d = cp_d - R_d # heat capacity at constant volume
+const p_0 = 1.0e5 # reference pressure
+const k = 3
+const T_e = 310 # temperature at the equator
+const T_p = 240 # temperature at the pole
+const T_0 = 0.5 * (T_e + T_p)
+const T_tri = 273.16 # triple point temperature
+const Γ = 0.005
+const A = 1 / Γ
+const B = (T_0 - T_p) / T_0 / T_p
+const C = 0.5 * (k + 2) * (T_e - T_p) / T_e / T_p
+const b = 2
+const H = R_d * T_0 / grav
+const z_t = 15.0e3
+const λ_c = 20.0
+const ϕ_c = 40.0
+const d_0 = R / 6
+const V_p = 1.0
+
+τ_z_1(z) = exp(Γ * z / T_0)
+τ_z_2(z) = 1 - 2 * (z / b / H)^2
+τ_z_3(z) = exp(-(z / b / H)^2)
+τ_1(z) = 1 / T_0 * τ_z_1(z) + B * τ_z_2(z) * τ_z_3(z)
+τ_2(z) = C * τ_z_2(z) * τ_z_3(z)
+τ_int_1(z) = A * (τ_z_1(z) - 1) + B * z * τ_z_3(z)
+τ_int_2(z) = C * z * τ_z_3(z)
+F_z(z) = (1 - 3 * (z / z_t)^2 + 2 * (z / z_t)^3) * (z ≤ z_t)
+I_T(ϕ) = cosd(ϕ)^k - k / (k + 2) * (cosd(ϕ))^(k + 2)
+T(ϕ, z) = (τ_1(z) - τ_2(z) * I_T(ϕ))^(-1)
+p(ϕ, z) = p_0 * exp(-grav / R_d * (τ_int_1(z) - τ_int_2(z) * I_T(ϕ)))
+r(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c))
+U(ϕ, z) =
+    grav * k / R * τ_int_2(z) * T(ϕ, z) * (cosd(ϕ)^(k - 1) - cosd(ϕ)^(k + 1))
+u(ϕ, z) = -Ω * R * cosd(ϕ) + sqrt((Ω * R * cosd(ϕ))^2 + R * cosd(ϕ) * U(ϕ, z))
+v(ϕ, z) = 0.0
+c3(λ, ϕ) = cos(π * r(λ, ϕ) / 2 / d_0)^3
+s1(λ, ϕ) = sin(π * r(λ, ϕ) / 2 / d_0)
+cond(λ, ϕ) = (0 < r(λ, ϕ) < d_0) * (r(λ, ϕ) != R * pi)
+if test_name == "baroclinic_wave"
+    δu(λ, ϕ, z) =
+        -16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        (-sind(ϕ_c) * cosd(ϕ) + cosd(ϕ_c) * sind(ϕ) * cosd(λ - λ_c)) /
+        sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    δv(λ, ϕ, z) =
+        16 * V_p / 3 / sqrt(3) *
+        F_z(z) *
+        c3(λ, ϕ) *
+        s1(λ, ϕ) *
+        cosd(ϕ_c) *
+        sind(λ - λ_c) / sin(r(λ, ϕ) / R) * cond(λ, ϕ)
+    const κ₄ = 1.0e17 # m^4/s
+elseif test_name == "balanced_flow"
+    δu(λ, ϕ, z) = 0.0
+    δv(λ, ϕ, z) = 0.0
+    const κ₄ = 0.0
+end
+uu(λ, ϕ, z) = u(ϕ, z) + δu(λ, ϕ, z)
+uv(λ, ϕ, z) = v(ϕ, z) + δv(λ, ϕ, z)
+
+# set up function space
+function sphere_3D(
+    R = 6.37122e6,
+    zlim = (0, 12.0e3),
+    helem = 4,
+    zelem = 12,
+    npoly = 4,
+)
+    FT = Float64
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+
+    horzdomain = Domains.SphereDomain(R)
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
+    horztopology = Topologies.Topology2D(horzmesh)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    return (hv_center_space, hv_face_space)
+end
+
+Φ(z) = grav * z
+
+function pressure(ρ, e, normuvw, z)
+    I = e - Φ(z) - normuvw^2 / 2
+    T = I / cv_d + T_tri
+    return ρ * R_d * T
+end
+
+function initial_condition(ϕ, λ, z)
+    ρ = p(ϕ, z) / R_d / T(ϕ, z)
+    e = cv_d * (T(ϕ, z) - T_tri) + Φ(z) + (uu(λ, ϕ, z)^2 + uv(λ, ϕ, z)^2) / 2
+    ρe = ρ * e
+
+    return (ρ = ρ, ρe = ρe)
+end
+
+function initial_condition_velocity(local_geometry)
+    coord = local_geometry.coordinates
+    ϕ = coord.lat
+    λ = coord.long
+    z = coord.z
+    return Geometry.transform(
+        Geometry.Covariant12Axis(),
+        Geometry.UVVector(uu(λ, ϕ, z), uv(λ, ϕ, z)),
+        local_geometry,
+    )
+end
+
+function rhs!(dY, Y, parameters, t)
+    UnPack.@unpack cuvw, cω³, fω¹², fu¹², fu³ = parameters
+    UnPack.@unpack cp, cE, coords, f, If2c, Ic2f = parameters
+    cρ = Y.Yc.ρ # scalar on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant12Vector on centers
+    cρe = Y.Yc.ρe # scalar on centers
+
+    dρ = dY.Yc.ρ
+    dw = dY.w
+    duₕ = dY.uₕ
+    dρe = dY.Yc.ρe
+    z = coords.z
+
+    # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33
+
+    hdiv = Operators.Divergence()
+    hwdiv = Operators.WeakDivergence()
+    hgrad = Operators.Gradient()
+    hwgrad = Operators.WeakGradient()
+    hcurl = Operators.Curl()
+    hwcurl = Operators.WeakCurl()
+
+    @. dρ = 0 * cρ
+
+    ### HYPERVISCOSITY
+    # 1) compute hyperviscosity coefficients
+
+    @. dρe = hwdiv(hgrad(cρe / cρ))
+    χe = dρe
+    @. duₕ =
+        hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+            hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+        )
+    χuₕ = duₕ
+
+    Spaces.weighted_dss!(dρe)
+    Spaces.weighted_dss!(duₕ)
+
+    @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
+    @. duₕ =
+        -κ₄ * (
+            hwgrad(hdiv(χuₕ)) - Geometry.Covariant12Vector(
+                hwcurl(Geometry.Covariant3Vector(hcurl(χuₕ))),
+            )
+        )
+
+    # 1) Mass conservation
+    @. cuvw =
+        Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(If2c(fw))
+
+    @. dw = fw * 0
+
+    # 1.a) horizontal divergence
+    @. dρ -= hdiv(cρ * (cuvw))
+
+    # 1.b) vertical divergence
+    vdivf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+    )
+    # we want the total u³ at the boundary to be zero: we can either constrain
+    # both to be zero, or allow one to be non-zero and set the other to be its
+    # negation
+
+    # explicit part
+    @. dρ -= vdivf2c(Ic2f(cρ * cuₕ))
+    # implicit part
+    @. dρ -= vdivf2c(Ic2f(cρ) * fw)
+
+    # 2) Momentum equation
+
+    # curl term
+    # effectively a homogeneous Dirichlet condition on u₁ at the boundary
+    vcurlc2f = Operators.CurlC2F(
+        bottom = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
+        top = Operators.SetCurl(Geometry.Contravariant12Vector(0.0, 0.0)),
+    )
+    @. cω³ = hcurl(cuₕ) # Contravariant3Vector
+    @. fω¹² = hcurl(fw) # Contravariant12Vector
+    @. fω¹² += vcurlc2f(cuₕ) # Contravariant12Vector
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    @. fu¹² =
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(Ic2f(cuₕ))) # Contravariant12Vector in 3D
+    @. fu³ = Geometry.Contravariant3Vector(Geometry.Covariant123Vector(fw))
+    @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
+    @. duₕ -= If2c(fω¹² × fu³)
+
+    # Needed for 3D:
+    @. duₕ -=
+        (f + cω³) ×
+        Geometry.Contravariant12Vector(Geometry.Covariant123Vector(cuₕ))
+
+    @. cp = pressure(cρ, cρe / cρ, norm(cuvw), z)
+
+    @. duₕ -= hgrad(cp) / cρ
+    vgradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+    )
+    @. dw -= vgradc2f(cp) / Ic2f(cρ)
+
+    @. cE = (norm(cuvw)^2) / 2 + Φ(z)
+    @. duₕ -= hgrad(cE)
+    @. dw -= vgradc2f(cE)
+
+    # 3) total energy
+
+    @. dρe -= hdiv(cuvw * (cρe + cp))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
+
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
+
+    return dY
+end
+
+function ode_integrator()
+    # set up 3D domain - spherical shell
+    hv_center_space, hv_face_space = sphere_3D(R, (0, 30.0e3), 4, 10, 4)
+
+    # initial conditions
+    coords = Fields.coordinate_field(hv_center_space)
+    local_geometries = Fields.local_geometry_field(hv_center_space)
+    face_coords = Fields.coordinate_field(hv_face_space)
+
+    # Coriolis
+    f = @. Geometry.Contravariant3Vector(
+        Geometry.WVector(2 * Ω * sind(coords.lat)),
+    )
+
+    Yc0 =
+        map(coord -> initial_condition(coord.lat, coord.long, coord.z), coords)
+    Yc = map(coord -> initial_condition(coord.lat, coord.long, coord.z), coords)
+    uₕ = map(
+        local_geometry -> initial_condition_velocity(local_geometry),
+        local_geometries,
+    )
+    uₕ0 = map(
+        local_geometry -> initial_condition_velocity(local_geometry),
+        local_geometries,
+    )
+    w0 = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
+    w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
+    Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
+    If2c = Operators.InterpolateF2C()
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+    cuvw = Geometry.Covariant123Vector.(Y.uₕ)
+    cω³ = Operators.Curl().(Y.uₕ)
+    fω¹² = Operators.Curl().(Y.w)
+    fu¹² =
+        Geometry.Contravariant12Vector.(
+            Geometry.Covariant123Vector.(Ic2f.(Y.uₕ)),
+        )
+    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(Y.w))
+    cp = @. pressure(Y.Yc.ρ, Y.Yc.ρe / Y.Yc.ρ, norm(cuvw), coords.z)
+    cE = @. (norm(cuvw)^2) / 2 + Φ(coords.z)
+    parameters = (; cuvw, cω³, fω¹², fu¹², fu³, cp, cE, coords, f, If2c, Ic2f)
+
+    if test_name == "baroclinic_wave"
+        time_end = 86400.0 * 0.01
+    elseif test_name == "balanced_flow"
+        time_end = 3600
+    end
+    dt = 5
+    prob = ODE.ODEProblem(rhs!, Y, (0.0, time_end), parameters)
+
+    integrator = ODE.init(
+        prob,
+        ODE.SSPRK33(),
+        dt = dt,
+        saveat = time_end,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+    return integrator
+end
+
+integrator = ode_integrator()
+
+function compute_err_norm(u, v)
+    # We need to normalize individual fields so that,
+    # for example, temperature doesn't dominate the error
+    # over velocity/momentum.
+    non_dimensionalize!(u, v)
+    norm(parent(u) .- parent(v))
+end
+
+import ODEConvergenceTester
+
+ODEConvergenceTester.refinement_study(
+    integrator;
+    refinement_range = 6:10,
+    compute_err_norm = compute_err_norm,
+)
+nothing
