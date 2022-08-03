@@ -92,6 +92,12 @@ Base.show(io::IO, mesh::AbstractCubedSphere) = print(
 
 domain(mesh::AbstractCubedSphere) = mesh.domain
 elements(mesh::AbstractCubedSphere) = CartesianIndices((mesh.ne, mesh.ne, 6))
+nelements(mesh::AbstractCubedSphere) = mesh.ne * mesh.ne * 6
+
+function element_length_scale(mesh::AbstractCubedSphere)
+    FT = typeof(mesh.domain.radius)
+    return FT(sqrt(4 * pi / 6)) * mesh.domain.radius / mesh.ne
+end
 
 is_boundary_face(mesh::AbstractCubedSphere, elem, face) = false
 boundary_face_name(mesh::AbstractCubedSphere, elem, face) = nothing

@@ -105,6 +105,7 @@ Meshes.SharedVertices
 Meshes.face_connectivity_matrix
 Meshes.vertex_connectivity_matrix
 Meshes.linearindices
+Meshes.element_length_scale
 ```
 
 ## Topologies
@@ -158,6 +159,10 @@ or the interfaces (faces in 3D, edges in 2D or points in 1D) between elements
 Users should construct either the center or face space from the mesh, then construct
 the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
+
+```@docs
+Spaces.node_length_scale
+```
 
 ### Quadratures
 

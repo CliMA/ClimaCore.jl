@@ -50,6 +50,7 @@ struct GLL{Nq} <: QuadratureStyle end
 
 @inline polynomial_degree(::GLL{Nq}) where {Nq} = Int(Nq - 1)
 @inline degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq)
+unique_degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq - 1)
 
 @generated function quadrature_points(::Type{FT}, ::GLL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.both)
@@ -65,6 +66,7 @@ struct GL{Nq} <: QuadratureStyle end
 
 @inline polynomial_degree(::GL{Nq}) where {Nq} = Int(Nq - 1)
 @inline degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)
+unique_degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)
 
 @generated function quadrature_points(::Type{FT}, ::GL{Nq}) where {FT, Nq}
     points, weights = GaussQuadrature.legendre(FT, Nq, GaussQuadrature.neither)

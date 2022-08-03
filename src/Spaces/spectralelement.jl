@@ -24,6 +24,19 @@ topology(space::AbstractSpectralElementSpace) = space.topology
 quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 
 """
+    Spaces.node_length_scale(space::AbstractSpectralElementSpace)
+
+The approximate length scale of the distance between nodes. This is defined as the
+length scale of the mesh (see [`Meshes.element_length_scale`](@ref)), divided by the
+number of unique quadrature points along each dimension.
+"""
+function node_length_scale(space::AbstractSpectralElementSpace)
+    quad = quadrature_style(space)
+    Nu = Quadratures.unique_degrees_of_freedom(quad)
+    return Meshes.element_length_scale(space.topology.mesh) / Nu
+end
+
+"""
     SpectralElementSpace1D <: AbstractSpace
 
 A one-dimensional space: within each element the space is represented as a polynomial.

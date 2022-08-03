@@ -45,7 +45,6 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 const R = 6.37122e6
 const Ω = 7.292e-5
 const g = 9.80616
-const D₄ = 1.0e16 # hyperdiffusion coefficient
 
 # Test case specifications
 const test_name = get(ARGS, 1, "steady_state") # default test case to run
@@ -358,6 +357,10 @@ end
 function rhs!(dYdt, y, parameters, t)
     f = parameters.f
     h_s = parameters.h_s
+
+    space = axes(y)
+    c = sqrt(g * h0)
+    D₄ = 0.0015 * c * Spaces.node_length_scale(space)^3 # hyperdiffusion coefficient
 
     div = Operators.Divergence()
     wdiv = Operators.WeakDivergence()
