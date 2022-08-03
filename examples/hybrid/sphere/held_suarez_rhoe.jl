@@ -19,6 +19,7 @@ jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ�
 
 # Additional values required for driver
 upwinding_mode = :third_order
+z_stretch_scale = FT(7e3)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),
@@ -40,7 +41,7 @@ function postprocessing(sol, output_dir)
 
     anim = Plots.@animate for Y in sol.u
         ᶜv = Geometry.UVVector.(Y.c.uₕ).components.data.:2
-        Plots.plot(ᶜv, level = 3, clim = (-6, 6))
+        Plots.plot(ᶜv, level = 7, clim = (-6, 6))
     end
     Plots.mp4(anim, joinpath(output_dir, "v.mp4"), fps = 5)
 end
