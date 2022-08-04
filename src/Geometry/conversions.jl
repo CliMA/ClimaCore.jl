@@ -477,6 +477,44 @@ end
     end
 end
 
+# A few other expensive ones:
+#! format: off
+@inline function project(
+    ax::ContravariantAxis{(1,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(1, 2)},LocalAxis{(1, 2)}},SMatrix{2,2,FT,4}},
+    lg::LocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(1,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [
+            lg.∂ξ∂x[1, 1]*v[1, 1]+lg.∂ξ∂x[1, 2]*v[2, 1] lg.∂ξ∂x[1, 1]*v[1, 2]+lg.∂ξ∂x[1, 2]*v[2, 2]
+        ])
+end
+@inline function project(
+    ax::ContravariantAxis{(2,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(1,2)},LocalAxis{(1,2)}},SMatrix{2,2,FT,4}},
+    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(2,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [
+            lg.∂ξ∂x[2, 1]*v[1, 1]+lg.∂ξ∂x[2, 2]*v[2, 1] lg.∂ξ∂x[2, 1]*v[1, 2]+lg.∂ξ∂x[2, 2]*v[2, 2]
+        ]
+    )
+end
+@inline function project(
+    ax::ContravariantAxis{(3,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(3,)},LocalAxis{(1,2)}},SMatrix{1,2,FT,2}},
+    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(3,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [lg.∂ξ∂x[3, 3]*v[1, 1] lg.∂ξ∂x[3, 3]*v[1, 2]]
+    )
+end
+#! format: on
+
+
 """
     divergence_result_type(V)
 
