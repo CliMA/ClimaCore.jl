@@ -539,5 +539,6 @@ The flow (reversed halfway trhough the time period) is specified as ``\boldsymbo
     u_d &= \frac{\omega_0  R}{ b / p_{\textrm{top}}} \cos (\lambda') \cos(\phi)^2 \cos(2 \pi t / \tau) \left[-exp(\frac{(p - p_0)}{ b p_{\textrm{top}}}) + exp(\frac{(p_{\textrm{top}} - p(zc)}{b p_{\textrm{top}}}) \nonumber
 \label{eq:3d-sphere-lim-flow}
 \end{align}
+```
 
 where all values of the parameters can be found in Table 1.1 in the reference [Ullrich2012DynamicalCM](@cite).
