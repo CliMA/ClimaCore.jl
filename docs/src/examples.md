@@ -304,7 +304,7 @@ The flow was chosen to be a horizontal uniform rotation. Moreover, the flow is r
 \begin{align}
     u &= k sin (\lambda)^2  sin (2  \phi)  \cos(\pi  t / T_f) +
        \frac{2 \pi}{T_f} \cos (\phi) \nonumber \\
-    v &= k \sin (2  \lambda) \cos (\phi) * \cos(\pi t / T_f)
+    v &= k \sin (2  \lambda) \cos (\phi) \cos(\pi t / T_f)
 \label{eq:2d-sphere-lim-flow}
 \end{align}
 ```
@@ -533,10 +533,10 @@ The flow (reversed halfway trhough the time period) is specified as ``\boldsymbo
 
 ```math
 \begin{align}
-    u_a &= k sin (\lambda')^2  sin (2  \phi)  \cos(\pi  t / \tau) +
-       \frac{2 \pi R}{\tau} \cos (\phi) \nonumber \\
-    v_a &= k \sin (2  \lambda') \cos (\phi) * \cos(\pi t / \tau) \nonumber \\
-    u_d &= \frac{\omega_0  R}{ b / p_{\textrm{top}}} \cos (\lambda') \cos(\phi)^2 \cos(2 \pi t / \tau) \left[-exp(\frac{(p - p_0)}{ b p_{\textrm{top}}}) + exp(\frac{(p_{\textrm{top}} - p(zc)}{b p_{\textrm{top}}}) \nonumber
+  u_a &= k \sin (\lambda')^2  \sin (2  \phi)  \cos(\pi  t / \tau) +
+      \frac{2 \pi R}{\tau} \cos (\phi) \nonumber \\
+  v_a &= k \sin (2  \lambda') \cos (\phi) \cos(\pi t / \tau) \nonumber \\
+  u_d &= \frac{\omega_0  R}{ b / p_{\textrm{top}}} \cos (\lambda') \cos(\phi)^2 \cos(2 \pi t / \tau) \left[-exp \left( \frac{(p - p_0)}{ b p_{\textrm{top}}} \right) + exp \left( \frac{(p_{\textrm{top}} - p(zc))}{b p_{\textrm{top}}} \right) \right] \nonumber
 \label{eq:3d-sphere-lim-flow}
 \end{align}
 
