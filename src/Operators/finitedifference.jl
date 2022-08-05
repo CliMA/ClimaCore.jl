@@ -1966,7 +1966,7 @@ boundary_width(::GradientF2C, ::Extrapolate, arg) = 1
 )
     space = axes(arg)
     @assert idx == left_center_boundary_idx(arg)
-    Geometry.transform(
+    Geometry.project(
         Geometery.Covariant3Axis(),
         stencil_interior(op, loc, idx + 1, hidx, arg),
         Geometry.LocalGeometry(space, idx, hidx),
@@ -1982,7 +1982,7 @@ end
 )
     space = axes(arg)
     @assert idx == right_center_boundary_idx(arg)
-    Geometry.transform(
+    Geometry.project(
         Geometry.Covariant3Axis(),
         stencil_interior(op, loc, idx - 1, hidx, arg),
         Geometry.LocalGeometry(space, idx, hidx),
@@ -2067,7 +2067,7 @@ boundary_width(::GradientC2F, ::SetGradient, arg) = 1
     @assert idx == left_face_boundary_idx(arg)
     space = axes(arg)
     # imposed flux boundary condition at left most face
-    Geometry.transform(
+    Geometry.project(
         Geometry.Covariant3Axis(),
         getidx(bc.val, loc, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
@@ -2084,7 +2084,7 @@ end
     @assert idx == right_face_boundary_idx(arg)
     space = axes(arg)
     # imposed flux boundary condition at right most face
-    Geometry.transform(
+    Geometry.project(
         Geometry.Covariant3Axis(),
         getidx(bc.val, loc, nothing, hidx),
         Geometry.LocalGeometry(space, idx, hidx),

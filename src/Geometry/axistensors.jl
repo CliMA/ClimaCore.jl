@@ -524,6 +524,9 @@ end
     x
 end
 
+#= Set `assert_exact_transform() = true` for debugging=#
+assert_exact_transform() = false
+
 @generated function _transform(
     ato::Ato,
     x::Axis2Tensor{T, Tuple{Afrom, A2}},
@@ -534,12 +537,14 @@ end
 } where {Ito, Ifrom, J, T}
     N = length(Ifrom)
     M = length(J)
-    errcond = false
-    for n in 1:N
-        i = Ifrom[n]
-        if i ∉ Ito
-            for m in 1:M
-                errcond = :($errcond || x[$n, $m] != zero(T))
+    if assert_exact_transform()
+        errcond = false
+        for n in 1:N
+            i = Ifrom[n]
+            if i ∉ Ito
+                for m in 1:M
+                    errcond = :($errcond || x[$n, $m] != zero(T))
+                end
             end
         end
     end
@@ -558,8 +563,10 @@ end
     end
     quote
         Base.@_propagate_inbounds_meta
-        if $errcond
-            throw(InexactError(:transform, Ato, x))
+        if assert_exact_transform()
+            if $errcond
+                throw(InexactError(:transform, Ato, x))
+            end
         end
         @inbounds Axis2Tensor(
             (ato, axes(x, 2)),
@@ -597,11 +604,11 @@ end
     ))
 end
 
-@inline transform(ato::CovariantAxis, v::CovariantTensor) = _transform(ato, v)
+@inline transform(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
 @inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
-    _transform(ato, v)
-@inline transform(ato::CartesianAxis, v::CartesianTensor) = _transform(ato, v)
-@inline transform(ato::LocalAxis, v::LocalTensor) = _transform(ato, v)
+    _project(ato, v)
+@inline transform(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
+@inline transform(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
 
 @inline project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
 @inline project(ato::ContravariantAxis, v::ContravariantTensor) =

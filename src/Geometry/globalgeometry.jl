@@ -13,7 +13,7 @@ Cartesian123Point(pt::AbstractPoint, global_geometry::AbstractGlobalGeometry) =
     u::AxisVector,
     global_geometry::AbstractGlobalGeometry,
     local_geometry::LocalGeometry,
-) where {I} = transform(
+) where {I} = project(
     CartesianAxis{I}(),
     CartesianVector(u, global_geometry, local_geometry),
 )

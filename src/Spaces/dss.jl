@@ -105,7 +105,7 @@ end
     if ax isa Geometry.UWAxis && axfrom isa Geometry.Covariant12Axis
         # return Geometry.transform(Geometry.UVWAxis(), arg, local_geometry)
         u₁, v = Geometry.components(arg)
-        uw_vector = Geometry.transform(
+        uw_vector = Geometry.project(
             Geometry.UWAxis(),
             Geometry.Covariant13Vector(u₁, zero(u₁)),
             local_geometry,
@@ -113,7 +113,7 @@ end
         u, w = Geometry.components(uw_vector)
         return Geometry.UVWVector(u, v, w) * weight
     end
-    Geometry.transform(ax, arg, local_geometry) * weight
+    Geometry.project(ax, arg, local_geometry) * weight
 end
 
 """
