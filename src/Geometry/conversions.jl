@@ -34,13 +34,13 @@ LocalVector(
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::ContravariantVector,
     ::LocalGeometry,
-) where {I} = transform(ContravariantAxis{I}(), u)
+) where {I} = project(ContravariantAxis{I}(), u)
 
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} =
-    transform(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
+    project(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
 
 (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector{<:Any, I},
@@ -50,12 +50,12 @@ LocalVector(
 (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector,
     ::LocalGeometry,
-) where {I} = transform(CovariantAxis{I}(), u)
+) where {I} = project(CovariantAxis{I}(), u)
 
 (::Type{<:CovariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
-) where {I} = transform(CovariantAxis{I}(), CovariantVector(u, local_geometry))
+) where {I} = project(CovariantAxis{I}(), CovariantVector(u, local_geometry))
 
 (::Type{<:LocalVector{<:Any, I}})(
     u::LocalVector{<:Any, I},
@@ -63,54 +63,48 @@ LocalVector(
 ) where {I} = u
 
 (::Type{<:LocalVector{<:Any, I}})(u::LocalVector, ::LocalGeometry) where {I} =
-    transform(LocalAxis{I}(), u)
+    project(LocalAxis{I}(), u)
 
 (::Type{<:LocalVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
-) where {I} = transform(LocalAxis{I}(), LocalVector(u, local_geometry))
+) where {I} = project(LocalAxis{I}(), LocalVector(u, local_geometry))
 
 # Generic N-axis conversion functions,
 # Convert to specific local geometry dimension then convert vector type
 LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(LocalAxis{I}(), transform(CovariantAxis{I}(), u), local_geometry)
+    project(LocalAxis{I}(), project(CovariantAxis{I}(), u), local_geometry)
 
 LocalVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    LocalAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
-    local_geometry,
-)
+) where {I} =
+    project(LocalAxis{I}(), project(ContravariantAxis{I}(), u), local_geometry)
 
 CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(CovariantAxis{I}(), transform(LocalAxis{I}(), u), local_geometry)
+    project(CovariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
 CovariantVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
+) where {I} = project(
     CovariantAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
+    project(ContravariantAxis{I}(), u),
     local_geometry,
 )
 
 ContravariantVector(
     u::LocalVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    ContravariantAxis{I}(),
-    transform(LocalAxis{I}(), u),
-    local_geometry,
-)
+) where {I} =
+    project(ContravariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
 ContravariantVector(
     u::CovariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
+) where {I} = project(
     ContravariantAxis{I}(),
-    transform(CovariantAxis{I}(), u),
+    project(CovariantAxis{I}(), u),
     local_geometry,
 )
 
@@ -172,7 +166,7 @@ Base.@propagate_inbounds Jcontravariant3(
 )
     u₁, v, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
-    u, w = components(transform(LocalAxis{(1, 3)}(), vector2, local_geometry))
+    u, w = components(project(LocalAxis{(1, 3)}(), vector2, local_geometry))
     return UVWVector(u, v, w)
 end
 @inline function contravariant1(
@@ -181,7 +175,7 @@ end
 )
     u₁, _, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
-    return transform(Contravariant13Axis(), vector2, local_geometry).u¹
+    return project(Contravariant13Axis(), vector2, local_geometry).u¹
 end
 @inline function contravariant3(
     vector::CovariantVector{<:Any, (1, 2)},
@@ -189,7 +183,7 @@ end
 )
     u₁, _ = components(vector)
     vector2 = Covariant13Vector(u₁, zero(u₁))
-    return transform(Contravariant13Axis(), vector2, local_geometry).u³
+    return project(Contravariant13Axis(), vector2, local_geometry).u³
 end
 @inline function ContravariantVector(
     vector::CovariantVector{<:Any, (1, 2)},
@@ -197,9 +191,9 @@ end
 )
     u₁, v = components(vector)
     vector2 = Covariant1Vector(u₁)
-    vector3 = transform(
+    vector3 = project(
         ContravariantAxis{(1, 3)}(),
-        transform(CovariantAxis{(1, 3)}(), vector2),
+        project(CovariantAxis{(1, 3)}(), vector2),
         local_geometry,
     )
     u¹, u³ = components(vector3)
@@ -374,11 +368,11 @@ end
     ax::ContravariantAxis,
     v::CovariantTensor,
     local_geometry::LocalGeometry,
-) = transform(
+) = project(
     ax,
     local_geometry.∂ξ∂x *
     local_geometry.∂ξ∂x' *
-    transform(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+    project(dual(axes(local_geometry.∂ξ∂x, 1)), v),
 )
 
 @generated function project(

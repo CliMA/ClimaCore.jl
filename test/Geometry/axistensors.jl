@@ -1,6 +1,8 @@
 using Test
 using ClimaCore.Geometry, ClimaCore.DataLayouts
 using LinearAlgebra, StaticArrays
+import ClimaCore
+ClimaCore.Geometry.assert_exact_transform() = true
 
 @testset "AxisTensors" begin
     x = Geometry.Covariant12Vector(1.0, 2.0)
