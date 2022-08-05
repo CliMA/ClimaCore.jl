@@ -399,7 +399,7 @@ Divergence{()}(space) = Divergence{operator_axes(space)}()
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -427,7 +427,7 @@ function apply_slab(op::Divergence{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::Divergence{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Divergence{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -508,7 +508,7 @@ WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-function apply_slab(op::WeakDivergence{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakDivergence{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -536,7 +536,7 @@ function apply_slab(op::WeakDivergence{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -601,7 +601,7 @@ Gradient{()}(space) = Gradient{operator_axes(space)}()
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -620,7 +620,7 @@ function apply_slab(op::Gradient{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Gradient{(1, 2)}, slab_space, _, slab_data)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -685,7 +685,7 @@ WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -712,7 +712,7 @@ function apply_slab(op::WeakGradient{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakGradient{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -793,7 +793,7 @@ Curl{()}(space) = Curl{operator_axes(space)}()
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -824,7 +824,7 @@ function apply_slab(op::Curl{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -935,7 +935,7 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-function apply_slab(op::WeakCurl{(1,)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakCurl{(1,)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -970,7 +970,7 @@ function apply_slab(op::WeakCurl{(1,)}, slab_space, _, slab_data)
     return SVector(out)
 end
 
-function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
@@ -1072,7 +1072,7 @@ struct Interpolate{I, S} <: TensorOperator
 end
 Interpolate(space) = Interpolate{operator_axes(space), typeof(space)}(space)
 
-function apply_slab(
+@inline function apply_slab(
     op::Interpolate{(1,)},
     slab_space_out,
     slab_space_in,
@@ -1097,7 +1097,7 @@ function apply_slab(
     return slab_data_out
 end
 
-function apply_slab(
+@inline function apply_slab(
     op::Interpolate{(1, 2)},
     slab_space_out,
     slab_space_in,
@@ -1161,7 +1161,7 @@ struct Restrict{I, S} <: TensorOperator
 end
 Restrict(space) = Restrict{operator_axes(space), typeof(space)}(space)
 
-function apply_slab(
+@inline function apply_slab(
     op::Restrict{(1,)},
     slab_space_out,
     slab_space_in,
@@ -1191,7 +1191,7 @@ function apply_slab(
     return slab_data_out
 end
 
-function apply_slab(
+@inline function apply_slab(
     op::Restrict{(1, 2)},
     slab_space_out,
     slab_space_in,
