@@ -536,7 +536,12 @@ operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     return SVector(out)
 end
 
-@inline function apply_slab(op::WeakDivergence{(1, 2)}, slab_space, _, slab_data)
+@inline function apply_slab(
+    op::WeakDivergence{(1, 2)},
+    slab_space,
+    _,
+    slab_data,
+)
     slab_local_geometry = Spaces.local_geometry_data(slab_space)
     FT = Spaces.undertype(slab_space)
     QS = Spaces.quadrature_style(slab_space)
