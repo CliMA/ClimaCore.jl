@@ -400,6 +400,9 @@ function linear_solution!(Y, lin_cache, t)
     elseif ᶜ𝔼_name == :ρe_int
         @. Y.c.ρe_int = ᶜρ * cv_d * (ᶜT - T_tri)
     end
-    @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, ᶜv))
+    # NOTE: The following two lines are a temporary workaround b/c Covariant12Vector won't accept a non-zero second component in an XZ-space.
+    # So we temporarily set it to zero and then reassign its intended non-zero value (since in case of large-scale config ᶜv is non-zero)
+    @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))
+    @. Y.c.uₕ.components.data.:2 .= ᶜv
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
 end
