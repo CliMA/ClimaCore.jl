@@ -224,6 +224,8 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
+    # The following, simple Flux-corrected Transport regression test (falling back to the 3rd-order upwinding, with C=1) is implemented following
+    # Ref: https://link.springer.com/book/10.1007/978-1-4419-6412-0 , Sec. 5.4 (p. 221)
     corrected_antidiff_flux = similar(dρq1)
     @. dρq1 = beta * dρq1 - alpha * hdiv(cuvw * ρq1) + alpha * ystar.ρq1
     @. corrected_antidiff_flux = vdivf2c(
