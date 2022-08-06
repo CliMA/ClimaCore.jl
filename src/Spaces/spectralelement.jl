@@ -418,13 +418,13 @@ const SpectralElementSpaceSlab2D =
 nlevels(space::SpectralElementSpaceSlab1D) = 1
 nlevels(space::SpectralElementSpaceSlab2D) = 1
 
-function slab(space::AbstractSpectralElementSpace, v, h)
+@inline function slab(space::AbstractSpectralElementSpace, v, h)
     SpectralElementSpaceSlab(
         space.quadrature_style,
         slab(space.local_geometry, v, h),
     )
 end
-slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
+@inline slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
 
 @inline function column(space::SpectralElementSpace1D, i, h)
     local_geometry = local_geometry_data(space)

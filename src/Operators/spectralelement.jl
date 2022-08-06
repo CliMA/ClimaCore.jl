@@ -207,7 +207,7 @@ function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
 end
 
-function slab(
+@inline function slab(
     sbc::SpectralBroadcasted{Style},
     inds...,
 ) where {Style <: SpectralStyle}
@@ -216,7 +216,7 @@ function slab(
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
 end
 
-function slab(
+@inline function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractSpectralStyle}

@@ -402,7 +402,7 @@ end
     dataview = @inbounds view(parent(data), :, :, h)
     IF{S, Ni}(dataview)
 end
-slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
+@inline slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||

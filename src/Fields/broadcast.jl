@@ -82,7 +82,7 @@ function Base.copy(
     return copyto!(similar(bc, ElType), bc)
 end
 
-function slab(
+@inline function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     v,
     h,
