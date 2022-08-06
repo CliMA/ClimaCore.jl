@@ -180,7 +180,7 @@ end
         ax isa Geometry.Covariant12Axis
     )
         u, u₂, w = Geometry.components(targ)
-        u₁_vector = Geometry.transform(
+        u₁_vector = Geometry.project(
             Geometry.Covariant1Axis(),
             Geometry.UWVector(u, w),
             local_geometry,
@@ -188,7 +188,7 @@ end
         u₁, = Geometry.components(u₁_vector)
         return Geometry.Covariant12Vector(u₁, u₂)
     end
-    Geometry.transform(ax, targ, local_geometry)
+    Geometry.project(ax, targ, local_geometry)
 end
 
 function dss_1d!(
