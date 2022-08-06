@@ -273,11 +273,11 @@ end
 
 # 1D intermediate slab data types
 Base.@propagate_inbounds function get_node(v::MVector, i)
-    v[i]
+    @inbounds v[i]
 end
 
 Base.@propagate_inbounds function get_node(v::SVector, i)
-    v[i]
+    @inbounds v[i]
 end
 
 Base.@propagate_inbounds function get_node(scalar, i)
@@ -285,7 +285,7 @@ Base.@propagate_inbounds function get_node(scalar, i)
 end
 
 Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
-    getindex(Fields.field_values(field), i)
+    @inbounds getindex(Fields.field_values(field), i)
 end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i)
@@ -297,11 +297,11 @@ Base.@propagate_inbounds set_node!(field::Fields.SlabField1D, i, val) =
 
 # 2D get/set node
 Base.@propagate_inbounds function get_node(v::MMatrix, i, j)
-    v[i, j]
+    @inbounds v[i, j]
 end
 
 Base.@propagate_inbounds function get_node(v::SMatrix, i, j)
-    v[i, j]
+    @inbounds v[i, j]
 end
 
 Base.@propagate_inbounds function get_node(scalar, i, j)
@@ -309,11 +309,12 @@ Base.@propagate_inbounds function get_node(scalar, i, j)
 end
 
 Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
-    getindex(Fields.field_values(field), i, j)
+    @inbounds getindex(Fields.field_values(field), i, j)
 end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
-    bc.f(node_args(bc.args, i, j)...)
+    @inbounds na = node_args(bc.args, i, j)
+    bc.f(na...)
 end
 
 Base.@propagate_inbounds function set_node!(
@@ -322,7 +323,7 @@ Base.@propagate_inbounds function set_node!(
     j,
     val,
 )
-    setindex!(Fields.field_values(field), val, i, j)
+    @inbounds setindex!(Fields.field_values(field), val, i, j)
 end
 
 # Broadcast recursive machinery
@@ -1056,7 +1057,7 @@ end
     else
         error("invalid return type: $RT")
     end
-    for j in 1:Nq, i in 1:Nq
+    @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
@@ -1292,7 +1293,7 @@ function tensor_product!(
     # temporary storage
     temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
 
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         in_slab = slab(in, h)
         out_slab = slab(out, h)
         for j in 1:Nij_in, i in 1:Nij_out
@@ -1312,10 +1313,10 @@ function tensor_product!(
 ) where {S, Nij_out, Nij_in}
     # temporary storage
     temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
-    for j in 1:Nij_in, i in 1:Nij_out
+    @inbounds for j in 1:Nij_in, i in 1:Nij_out
         temp[i, j] = RecursiveApply.rmatmul1(M, in_slab, i, j)
     end
-    for j in 1:Nij_out, i in 1:Nij_out
+    @inbounds for j in 1:Nij_out, i in 1:Nij_out
         out_slab[i, j] = RecursiveApply.rmatmul2(M, temp, i, j)
     end
     return out_slab
