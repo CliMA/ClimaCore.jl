@@ -27,9 +27,14 @@ function slab end
 
 # Recursively call slab() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
-@inline slab_args(args::Tuple, inds...) =
-    (slab(args[1], inds...), slab_args(Base.tail(args), inds...)...)
-@inline slab_args(args::Tuple{Any}, inds...) = (slab(args[1], inds...),)
+@inline function slab_args(args::Tuple, inds...)
+    @inbounds s1 = slab(args[1], inds...)
+    (s1, slab_args(Base.tail(args), inds...)...)
+end
+@inline function slab_args(args::Tuple{Any}, inds...)
+    @inbounds s1 = slab(args[1], inds...)
+    (s1,)
+end
 @inline slab_args(args::Tuple{}, inds...) = ()
 
 """
@@ -46,9 +51,14 @@ function column end
 
 # Recursively call column() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
-@inline column_args(args::Tuple, inds...) =
-    (column(args[1], inds...), column_args(Base.tail(args), inds...)...)
-@inline column_args(args::Tuple{Any}, inds...) = (column(args[1], inds...),)
+@inline function column_args(args::Tuple, inds...)
+    @inbounds c1 = column(args[1], inds...)
+    (c1, column_args(Base.tail(args), inds...)...)
+end
+@inline function column_args(args::Tuple{Any}, inds...)
+    @inbounds c1 = column(args[1], inds...)
+    (c1,)
+end
 @inline column_args(args::Tuple{}, inds...) = ()
 
 function level end

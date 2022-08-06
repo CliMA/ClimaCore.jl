@@ -157,9 +157,9 @@ Base.@propagate_inbounds function _inner_copyto!(
     v::Integer,
     h::Integer,
 )
-    slab_out = slab(field_out, v, h)
-    out_slab_space = slab(axes(sbc), v, h)
-    in_slab_space = slab(input_space(sbc), v, h)
+    @inbounds slab_out = slab(field_out, v, h)
+    @inbounds out_slab_space = slab(axes(sbc), v, h)
+    @inbounds in_slab_space = slab(input_space(sbc), v, h)
     _slab_args = _apply_slab_args(slab_args(sbc.args, v, h), v, h)
     copy_slab!(
         slab_out,
@@ -221,7 +221,7 @@ end
     inds...,
 ) where {Style <: AbstractSpectralStyle}
     _args = slab_args(bc.args, inds...)
-    _axes = slab(axes(bc), inds...)
+    @inbounds _axes = slab(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
@@ -281,7 +281,7 @@ Base.@propagate_inbounds function get_node(v::SVector, i)
 end
 
 Base.@propagate_inbounds function get_node(scalar, i)
-    scalar[]
+    @inbounds scalar[]
 end
 
 Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
@@ -289,11 +289,11 @@ Base.@propagate_inbounds function get_node(field::Fields.SlabField1D, i)
 end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i)
-    bc.f(node_args(bc.args, i)...)
+    @inbounds bc.f(node_args(bc.args, i)...)
 end
 
 Base.@propagate_inbounds set_node!(field::Fields.SlabField1D, i, val) =
-    setindex!(Fields.field_values(field), val, i)
+    @inbounds setindex!(Fields.field_values(field), val, i)
 
 # 2D get/set node
 Base.@propagate_inbounds function get_node(v::MMatrix, i, j)
@@ -305,7 +305,7 @@ Base.@propagate_inbounds function get_node(v::SMatrix, i, j)
 end
 
 Base.@propagate_inbounds function get_node(scalar, i, j)
-    scalar[]
+    @inbounds scalar[]
 end
 
 Base.@propagate_inbounds function get_node(field::Fields.SlabField2D, i, j)
@@ -314,7 +314,7 @@ end
 
 Base.@propagate_inbounds function get_node(bc::Base.Broadcast.Broadcasted, i, j)
     @inbounds na = node_args(bc.args, i, j)
-    bc.f(na...)
+    @inbounds bc.f(na...)
 end
 
 Base.@propagate_inbounds function set_node!(
@@ -336,12 +336,16 @@ end
 @inline _apply_slab_args(args::Tuple{}, inds...) = ()
 
 @inline _apply_slab(x, inds...) = x
-@inline _apply_slab(sbc::SpectralBroadcasted, inds...) = apply_slab(
-    sbc.op,
-    slab(axes(sbc), inds...),
-    slab(input_space(sbc), inds...),
-    _apply_slab_args(sbc.args, inds...)...,
-)
+@inline function _apply_slab(sbc::SpectralBroadcasted, inds...)
+    @inbounds svals = slab(axes(sbc), inds...)
+    @inbounds sinspace = slab(input_space(sbc), inds...)
+        apply_slab(
+        sbc.op,
+        svals,
+        sinspace,
+        _apply_slab_args(sbc.args, inds...)...,
+    )
+end
 @inline _apply_slab(
     bc::Base.Broadcast.Broadcasted{CompositeSpectralStyle},
     inds...,
@@ -350,19 +354,6 @@ end
     _apply_slab_args(bc.args, inds...),
     bc.axes,
 )
-
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(_apply_slab_args)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(_apply_slab)
-            m.recursion_relation = dont_limit
-        end
-    end
-end
-
 
 function Base.Broadcast.BroadcastStyle(
     ::Type{SB},
@@ -1259,16 +1250,16 @@ function tensor_product! end
 
 function tensor_product!(
     out::DataLayouts.Data1DX{S, Ni_out},
-    in::DataLayouts.Data1DX{S, Ni_in},
+    indata::DataLayouts.Data1DX{S, Ni_in},
     M::SMatrix{Ni_out, Ni_in},
 ) where {S, Ni_out, Ni_in}
-    (_, _, _, Nv_in, Nh_in) = size(in)
+    (_, _, _, Nv_in, Nh_in) = size(indata)
     (_, _, _, Nv_out, Nh_out) = size(out)
     # TODO: assumes the same number of levels (horizontal only)
     @assert Nv_in == Nv_out
     @assert Nh_in == Nh_out
-    for h in 1:Nh_out, v in 1:Nv_out
-        in_slab = slab(in, v, h)
+    @inbounds for h in 1:Nh_out, v in 1:Nv_out
+        in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
         @inbounds for i in 1:Ni_out
             r = M[i, 1] ⊠ in_slab[1]

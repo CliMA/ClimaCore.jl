@@ -496,7 +496,7 @@ end
 end
 
 @propagate_inbounds function Base.getindex(col::Data0D, I::CartesianIndex{5})
-    col[]
+    @inbounds col[]
 end
 
 @inline function Base.setindex!(data::DataF{S}, val) where {S}
@@ -508,7 +508,7 @@ end
     val,
     I::CartesianIndex{5},
 )
-    col[] = val
+    @inbounds col[] = val
 end
 
 Base.copy(data::DataF{S}) where {S} = DataF{S}(copy(parent(data)))
@@ -521,7 +521,7 @@ Base.copy(data::DataF{S}) where {S} = DataF{S}(copy(parent(data)))
     slab::DataSlab2D{S},
     I::CartesianIndex,
 ) where {S}
-    slab[I[1], I[2]]
+    @inbounds slab[I[1], I[2]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -529,7 +529,7 @@ end
     val,
     I::CartesianIndex,
 ) where {S}
-    slab[I[1], I[2]] = val
+    @inbounds slab[I[1], I[2]] = val
 end
 
 Base.size(::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
@@ -634,7 +634,7 @@ end
 # ======================
 
 @propagate_inbounds function Base.getindex(slab::DataSlab1D, I::CartesianIndex)
-    slab[I[1]]
+    @inbounds slab[I[1]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -642,7 +642,7 @@ end
     val,
     I::CartesianIndex,
 )
-    slab[I[1]] = val
+    @inbounds slab[I[1]] = val
 end
 
 function Base.size(::DataSlab1D{<:Any, Ni}) where {Ni}
@@ -800,7 +800,7 @@ end
     col::DataColumn,
     I::CartesianIndex{5},
 )
-    col[I[4]]
+    @inbounds col[I[4]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -808,7 +808,7 @@ end
     val,
     I::CartesianIndex{5},
 )
-    col[I[4]] = val
+    @inbounds col[I[4]] = val
 end
 
 @inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
