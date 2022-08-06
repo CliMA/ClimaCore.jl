@@ -38,20 +38,20 @@ end
 
 Recursively apply `fn` to each element of `X`
 """
-rmap(fn::F, X) where {F} = fn(X)
-rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
-rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
+@inline rmap(fn::F, X) where {F} = fn(X)
+@inline rmap(fn::F, X, Y) where {F} = fn(X, Y)
+@inline rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
+@inline rmap(fn, X::T, Y::T) where {T <: Tuple{}} = ()
+@inline rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
     (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
-rmap(fn::F, X::NamedTuple{names}) where {F, names} =
+@inline rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
-rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
+@inline rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
 
-rmin(X, Y) = rmap(min, X, Y)
-rmax(X, Y) = rmap(max, X, Y)
+@inline rmin(X, Y) = rmap(min, X, Y)
+@inline rmax(X, Y) = rmap(max, X, Y)
 
 
 """
@@ -59,10 +59,10 @@ rmax(X, Y) = rmap(max, X, Y)
 
 The return type of `rmap(fn, X::T)`.
 """
-rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
-rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
+@inline rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
+@inline rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
     Tuple{tuplemap(fn, tuple(T.parameters...))...}
-rmaptype(
+@inline rmaptype(
     fn::F,
     ::Type{T},
 ) where {F, T <: NamedTuple{names, tup}} where {names, tup} =
@@ -74,10 +74,10 @@ rmaptype(
 
 Recursively scale each element of `X` by `Y`.
 """
-rmul(X, Y) = rmap(*, X, Y)
-rmul(w::Number, X) = rmap(x -> w * x, X)
-rmul(X, w::Number) = rmap(x -> x * w, X)
-rmul(w1::Number, w2::Number) = w1 * w2
+@inline rmul(X, Y) = rmap(*, X, Y)
+@inline rmul(w::Number, X) = rmap(x -> w * x, X)
+@inline rmul(X, w::Number) = rmap(x -> x * w, X)
+@inline rmul(w1::Number, w2::Number) = w1 * w2
 const ⊠ = rmul
 
 """
@@ -86,11 +86,11 @@ const ⊠ = rmul
 
 Recursively add elements of `X` and `Y`.
 """
-radd(X) = X
-radd(X, Y) = rmap(+, X, Y)
-radd(w::Number, X) = rmap(x -> w + x, X)
-radd(X, w::Number) = rmap(x -> x + w, X)
-radd(w1::Number, w2::Number) = w1 + w2
+@inline radd(X) = X
+@inline radd(X, Y) = rmap(+, X, Y)
+@inline radd(w::Number, X) = rmap(x -> w + x, X)
+@inline radd(X, w::Number) = rmap(x -> x + w, X)
+@inline radd(w1::Number, w2::Number) = w1 + w2
 const ⊞ = radd
 
 # Adapted from Base/operators.jl for general nary operator fallbacks
@@ -107,11 +107,11 @@ end
 
 Recursively subtract elements of `Y` from `X`.
 """
-rsub(X) = rmap(-, X)
-rsub(X, Y) = rmap(-, X, Y)
-rsub(X, w::Number) = rmap(x -> x - w, X)
-rsub(w::Number, X) = rmap(x -> w - x, X)
-rsub(w1::Number, w2::Number) = w1 - w2
+@inline rsub(X) = rmap(-, X)
+@inline rsub(X, Y) = rmap(-, X, Y)
+@inline rsub(X, w::Number) = rmap(x -> x - w, X)
+@inline rsub(w::Number, X) = rmap(x -> w - x, X)
+@inline rsub(w1::Number, w2::Number) = w1 - w2
 const ⊟ = rsub
 
 """
@@ -119,19 +119,19 @@ const ⊟ = rsub
 
 Recursively divide each element of `X` by `Y`
 """
-rdiv(X, Y) = rmap(/, X, Y)
-rdiv(X, w::Number) = rmap(x -> x / w, X)
-rdiv(w::Number, X) = rmap(x -> w / x, X)
-rdiv(w1::Number, w2::Number) = w1 / w2
+@inline rdiv(X, Y) = rmap(/, X, Y)
+@inline rdiv(X, w::Number) = rmap(x -> x / w, X)
+@inline rdiv(w::Number, X) = rmap(x -> w / x, X)
+@inline rdiv(w1::Number, w2::Number) = w1 / w2
 
 """
     rmuladd(w, X, Y)
 
 Recursively add elements of `w * X + Y`.
 """
-rmuladd(w::Number, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
-rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
-rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
+@inline rmuladd(w::Number, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
+@inline rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
+@inline rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 
 """
     rmatmul1(W, S, i, j)
@@ -141,10 +141,10 @@ Recursive matrix product along the 1st dimension of `S`. Equivalent to:
     mapreduce(⊠, ⊞, W[i,:], S[:,j])
 
 """
-function rmatmul1(W, S, i, j)
+@inline function rmatmul1(W, S, i, j)
     Nq = size(W, 2)
-    r = W[i, 1] ⊠ S[1, j]
-    for ii in 2:Nq
+    @inbounds r = W[i, 1] ⊠ S[1, j]
+    @inbounds for ii in 2:Nq
         r = rmuladd(W[i, ii], S[ii, j], r)
     end
     return r
@@ -158,10 +158,10 @@ Recursive matrix product along the 2nd dimension `S`. Equivalent to:
     mapreduce(⊠, ⊞, W[j,:], S[i, :])
 
 """
-function rmatmul2(W, S, i, j)
+@inline function rmatmul2(W, S, i, j)
     Nq = size(W, 2)
-    r = W[j, 1] ⊠ S[i, 1]
-    for jj in 2:Nq
+    @inbounds r = W[j, 1] ⊠ S[i, 1]
+    @inbounds for jj in 2:Nq
         r = rmuladd(W[j, jj], S[i, jj], r)
     end
     return r

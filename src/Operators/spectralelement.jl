@@ -350,6 +350,19 @@ end
     bc.axes,
 )
 
+if VERSION >= v"1.7.0"
+    if hasfield(Method, :recursion_relation)
+        dont_limit = (args...) -> true
+        for m in methods(_apply_slab_args)
+            m.recursion_relation = dont_limit
+        end
+        for m in methods(_apply_slab)
+            m.recursion_relation = dont_limit
+        end
+    end
+end
+
+
 function Base.Broadcast.BroadcastStyle(
     ::Type{SB},
 ) where {SB <: SpectralBroadcasted}
