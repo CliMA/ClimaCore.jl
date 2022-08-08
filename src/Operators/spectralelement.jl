@@ -207,20 +207,20 @@ function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
 end
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     sbc::SpectralBroadcasted{Style},
     inds...,
 ) where {Style <: SpectralStyle}
-    _args = slab_args(sbc.args, inds...)
-    _axes = slab(axes(sbc), inds...)
+    @inbounds _args = slab_args(sbc.args, inds...)
+    @inbounds _axes = slab(axes(sbc), inds...)
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
 end
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractSpectralStyle}
-    _args = slab_args(bc.args, inds...)
+    @inbounds _args = slab_args(bc.args, inds...)
     @inbounds _axes = slab(axes(bc), inds...)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
@@ -234,7 +234,7 @@ function Base.copyto!(
     Nv = Spaces.nlevels(space)::Int
     Nh = Topologies.nlocalelems(topology)::Int
     @inbounds for h in 1:Nh, v in 1:Nv
-        slab_out = slab(field_out, v, h)
+        @inbounds slab_out = slab(field_out, v, h)
         _slab_args = _apply_slab_args(slab_args(bc.args, v, h), v, h)
         copy_slab!(
             slab_out,
@@ -339,7 +339,7 @@ end
 @inline function _apply_slab(sbc::SpectralBroadcasted, inds...)
     @inbounds svals = slab(axes(sbc), inds...)
     @inbounds sinspace = slab(input_space(sbc), inds...)
-        apply_slab(
+    apply_slab(
         sbc.op,
         svals,
         sinspace,

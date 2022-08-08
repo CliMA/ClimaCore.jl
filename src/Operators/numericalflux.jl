@@ -30,14 +30,18 @@ function add_numerical_flux_internal!(fn, dydt, args...)
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
-        internal_surface_geometry_slab =
+        @inbounds internal_surface_geometry_slab =
             slab(space.internal_surface_geometry, iface)
 
-        arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
-        arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
+        arg_slabs⁻ = map(args) do arg
+            @inbounds slab(Fields.todata(arg), elem⁻)
+        end
+        arg_slabs⁺ = map(args) do arg
+            @inbounds slab(Fields.todata(arg), elem⁺)
+        end
 
-        dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
-        dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
+        @inbounds dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)
+        @inbounds dydt_slab⁺ = slab(Fields.field_values(dydt), elem⁺)
 
         for q in 1:Nq
             sgeom⁻ = internal_surface_geometry_slab[q]

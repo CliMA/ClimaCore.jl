@@ -402,7 +402,7 @@ end
     dataview = @inbounds view(parent(data), :, :, h)
     IF{S, Ni}(dataview)
 end
-@inline slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
+@inline slab(data::IFH, v::Integer, h::Integer) = @inbounds slab(data, h)
 
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
@@ -410,7 +410,7 @@ end
     dataview = @inbounds view(parent(data), i, :, h)
     DataF{S}(reshape(dataview, (1, :)))
 end
-@inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = column(data, i, h)
+@inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = @inbounds column(data, i, h)
 
 @generated function _property_view(
     data::IFH{S, Ni, A},

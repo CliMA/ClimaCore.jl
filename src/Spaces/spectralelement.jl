@@ -418,22 +418,23 @@ const SpectralElementSpaceSlab2D =
 nlevels(space::SpectralElementSpaceSlab1D) = 1
 nlevels(space::SpectralElementSpaceSlab2D) = 1
 
-@inline function slab(space::AbstractSpectralElementSpace, v, h)
+Base.@propagate_inbounds function slab(space::AbstractSpectralElementSpace, v, h)
+    @inbounds slab_vals = slab(space.local_geometry, v, h)
     SpectralElementSpaceSlab(
         space.quadrature_style,
-        slab(space.local_geometry, v, h),
+        slab_vals,
     )
 end
-@inline slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
+Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) = slab(space, 1, h)
 
-@inline function column(space::SpectralElementSpace1D, i, h)
+Base.@propagate_inbounds function column(space::SpectralElementSpace1D, i, h)
     local_geometry = local_geometry_data(space)
     @inbounds local_geometry = column(local_geometry, i, h)
     PointSpace(local_geometry)
 end
-@inline column(space::SpectralElementSpace1D, i, j, h) = column(space, i, h)
+Base.@propagate_inbounds column(space::SpectralElementSpace1D, i, j, h) = column(space, i, h)
 
-@inline function column(space::SpectralElementSpace2D, i, j, h)
+Base.@propagate_inbounds function column(space::SpectralElementSpace2D, i, j, h)
     local_geometry = local_geometry_data(space)
     @inbounds local_geometry = column(local_geometry, i, j, h)
     PointSpace(local_geometry)

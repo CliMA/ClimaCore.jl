@@ -161,7 +161,7 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Ni, DS <: Union{Data1DStyle{Ni}, Data1DXStyle{Ni}}}
@@ -170,7 +170,7 @@ Base.Broadcast.broadcastable(data::AbstractData) = data
     Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
 end
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Nij, DS <: Union{Data2DStyle{Nij}, Data2DXStyle{Nij}}}

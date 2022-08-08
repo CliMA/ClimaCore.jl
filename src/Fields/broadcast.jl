@@ -82,17 +82,17 @@ function Base.copy(
     return copyto!(similar(bc, ElType), bc)
 end
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     v,
     h,
 ) where {Style <: AbstractFieldStyle}
-    _args = slab_args(bc.args, v, h)
-    _axes = slab(axes(bc), v, h)
+    @inbounds _args = slab_args(bc.args, v, h)
+    @inbounds _axes = slab(axes(bc), v, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
-@inline function column(
+Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
     i,
     j,

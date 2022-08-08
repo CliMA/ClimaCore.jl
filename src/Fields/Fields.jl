@@ -126,13 +126,13 @@ const SlabField2D{V, S} = Field{
 const ColumnField{V, S} =
     Field{V, S} where {V <: DataLayouts.DataColumn, S <: Spaces.AbstractSpace}
 
-@inline function slab(field::Field, inds...)
+Base.@propagate_inbounds function slab(field::Field, inds...)
     @inbounds slab_vals = slab(field_values(field), inds...)
     @inbounds slab_space = slab(axes(field), inds...)
     Field(slab_vals, slab_space)
 end
 
-@inline function column(field::Field, inds...)
+Base.@propagate_inbounds function column(field::Field, inds...)
     @inbounds vals = column(field_values(field), inds...)
     @inbounds spaces = column(axes(field), inds...)
     @inbounds Field(vals, spaces)

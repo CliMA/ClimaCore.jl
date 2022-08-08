@@ -128,7 +128,7 @@ topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     space.vertical_topology
 
-@inline function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
+Base.@propagate_inbounds function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
     @inbounds slab_vals = slab(local_geometry_data(space), v, h)
     SpectralElementSpaceSlab(
         space.horizontal_space.quadrature_style,
@@ -136,7 +136,7 @@ vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     )
 end
 
-@inline function column(space::ExtrudedFiniteDifferenceSpace, i, j, h)
+Base.@propagate_inbounds function column(space::ExtrudedFiniteDifferenceSpace, i, j, h)
     @inbounds clg = column(space.center_local_geometry, i, j, h)
     @inbounds flg = column(space.face_local_geometry, i, j, h)
     FiniteDifferenceSpace(
