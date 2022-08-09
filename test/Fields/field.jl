@@ -1,6 +1,7 @@
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore
+import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
@@ -8,6 +9,11 @@ import ClimaCore:
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
+
+function FieldFromNamedTuple(space, nt::NamedTuple)
+    cmv(z) = nt
+    return cmv.(Fields.coordinate_field(space))
+end
 
 include(joinpath(@__DIR__, "util_spaces.jl"))
 
@@ -234,10 +240,6 @@ end
     @test prop_chains[5] == (:k, :y)
     @test prop_chains[6] == (:k, :z)
 
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
     FT = Float64
     nt =
         (; x = FT(0), y = FT(0), tup = ntuple(i -> (; a = FT(1), b = FT(1)), 2))
@@ -267,10 +269,6 @@ end
 # Test truncated field type printing:
 ClimaCore.Fields.truncate_printing_field_types() = true
 @testset "Truncated printing" begin
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
     nt = (; x = Float64(0), y = Float64(0))
     Y = FieldFromNamedTuple(spectral_space_2D(), nt)
     @test sprint(show, typeof(Y)) == "Field{(:x, :y)} (trunc disp)"
@@ -278,10 +276,6 @@ end
 ClimaCore.Fields.truncate_printing_field_types() = false
 
 @testset "Standard printing" begin
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
     nt = (; x = Float64(0), y = Float64(0))
     Y = FieldFromNamedTuple(spectral_space_2D(), nt)
     s = sprint(show, typeof(Y)) # just make sure this doesn't break
@@ -289,10 +283,6 @@ end
 
 @testset "Set!" begin
     space = spectral_space_2D()
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
     FT = Float64
     nt = (; x = FT(0), y = FT(0))
     Y = FieldFromNamedTuple(space, nt)
@@ -319,6 +309,38 @@ end
     @test isapprox(Fields.field_values(add_field)[], FT(2π))
 end
 
+fc_index(
+    i,
+    ::Union{
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+        Spaces.FaceFiniteDifferenceSpace,
+    },
+) = PlusHalf(i)
+fc_index(
+    i,
+    ::Union{
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+        Spaces.CenterFiniteDifferenceSpace,
+    },
+) = i
+
+@testset "Level" begin
+    FT = Float64
+    for space in all_spaces(FT)
+        (
+            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
+            space isa Spaces.FiniteDifferenceSpace
+        ) || continue
+        Y = FieldFromNamedTuple(space, (; x = FT(2)))
+        lg_space = Spaces.level(space, fc_index(1, space))
+        lg_field_space = axes(Fields.level(Y, fc_index(1, space)))
+        @test all(
+            lg_space.local_geometry.coordinates ===
+            lg_field_space.local_geometry.coordinates,
+        )
+    end
+end
+
 @testset "Broadcasting same spaces different instances" begin
     space1 = spectral_space_2D()
     space2 = spectral_space_2D()
@@ -342,10 +364,6 @@ struct InferenceFoo{FT}
 end
 Base.broadcastable(x::InferenceFoo) = Ref(x)
 @testset "Inference failure message" begin
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
     function ics_foo(::Type{FT}, lg, foo) where {FT}
         uv = Geometry.UVVector(FT(0), FT(0))
         z = Geometry.Covariant12Vector(uv, lg)

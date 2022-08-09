@@ -163,7 +163,12 @@ function right_boundary_name(space::FiniteDifferenceSpace)
     propertynames(boundaries)[2]
 end
 
-function level(space::FiniteDifferenceSpace, v)
+function level(space::FaceFiniteDifferenceSpace, v::PlusHalf)
+    local_geometry = local_geometry_data(space)
+    local_geometry = level(local_geometry, v.i + 1)
+    PointSpace(local_geometry)
+end
+function level(space::CenterFiniteDifferenceSpace, v::Int)
     local_geometry = local_geometry_data(space)
     local_geometry = level(local_geometry, v)
     PointSpace(local_geometry)
