@@ -649,6 +649,21 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
+    key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
+    command:
+      - "module load cuda/11.3 nsight-systems/2022.2.1"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 2
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 2
+
   - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
     command:

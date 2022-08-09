@@ -1,16 +1,42 @@
 using LinearAlgebra
+using Colors
+
+include("../nvtx.jl")
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    DataLayouts
 
 import QuadGK
 import OrdinaryDiffEq
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
-import Logging
-import TerminalLoggers
-Logging.global_logger(TerminalLoggers.TerminalLogger())
+using Logging
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+if usempi
+    using ClimaComms
+    using ClimaCommsMPI
+    const context = ClimaCommsMPI.MPICommsContext()
+    const pid, nprocs = ClimaComms.init(context)
 
+    # log output only from root process
+    logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
+
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+    atexit() do
+        global_logger(prev_logger)
+    end
+else
+    import TerminalLoggers
+    global_logger(TerminalLoggers.TerminalLogger())
+    context = nothing
+end
 # This example solves the shallow-water equations on a cubed-sphere manifold.
 # This file contains five test cases:
 # - One, called "steady_state", reproduces Test Case 2 in Williamson et al,
@@ -40,7 +66,6 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 #   support at a latitude of 45°. A small height disturbance is then added,
 #   which causes the jet to become unstable and collapse into a highly vortical
 #   structure.
-
 # Physical parameters needed
 const R = 6.37122e6
 const Ω = 7.292e-5
@@ -105,34 +130,22 @@ else # default case, steady-state test case
     const h0 = 2.94e4 / g
 end
 
-# Plot variables and auxiliary function
-ENV["GKSwstype"] = "nul"
-using ClimaCorePlots, Plots
-Plots.GRBackend()
-dir = "cg_sphere_shallowwater_$(test_name)"
-dir = "$(dir)_$(test_angle_name)"
-path = joinpath(@__DIR__, "output", dir)
-mkpath(path)
-
-function linkfig(figpath, alt = "")
-    # Buildkite-agent upload figpath
-    # Link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
-    end
-end
-
 # Set up discretization
 ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
 Nq = 4
 
 domain = Domains.SphereDomain(R)
 mesh = Meshes.EquiangularCubedSphere(domain, ne)
-grid_topology = Topologies.Topology2D(mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
-space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-
+if usempi
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    global_grid_topology = Topologies.Topology2D(mesh)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
+else
+    grid_topology = Topologies.Topology2D(mesh)
+    global_space = space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+end
 coords = Fields.coordinate_field(space)
 
 # Definition of Coriolis parameter
@@ -354,41 +367,57 @@ else # steady-state and mountain test cases share the same form of fields
         return (h = h, u = u)
     end
 end
+if !usempi
+    Y0_global = deepcopy(Y)
+else
+    Y0_global_values = DataLayouts.gather(context, Fields.field_values(Y))
+    if ClimaComms.iamroot(context)
+        Y0_global = Fields.Field(Y0_global_values, global_space)
+    end
+end
+ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y) : nothing
 
 function rhs!(dYdt, y, parameters, t)
-    f = parameters.f
-    h_s = parameters.h_s
+    @nvtx "rhs!" color = colorant"red" begin
+        f = parameters.f
+        h_s = parameters.h_s
 
-    div = Operators.Divergence()
-    wdiv = Operators.WeakDivergence()
-    grad = Operators.Gradient()
-    wgrad = Operators.WeakGradient()
-    curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+        div = Operators.Divergence()
+        wdiv = Operators.WeakDivergence()
+        grad = Operators.Gradient()
+        wgrad = Operators.WeakGradient()
+        curl = Operators.Curl()
+        wcurl = Operators.WeakCurl()
 
-    # Compute hyperviscosity first
-    @. dYdt.h = wdiv(grad(y.h))
-    @. dYdt.u =
-        wgrad(div(y.u)) -
-        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+        # Compute hyperviscosity first
+        @nvtx "Hyperviscosity (rhs!)" color = colorant"green" begin
+            @. dYdt.h = wdiv(grad(y.h))
+            @. dYdt.u =
+                wgrad(div(y.u)) - Geometry.Covariant12Vector(
+                    wcurl(Geometry.Covariant3Vector(curl(y.u))),
+                )
 
-    Spaces.weighted_dss!(dYdt)
+            Spaces.weighted_dss!(dYdt, ghost_buffer)
 
-    @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
-    @. dYdt.u =
-        -D₄ * (
-            wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
-                wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
-            )
-        )
-
-    # Add in pieces
-    @. begin
-        dYdt.h += -wdiv(y.h * y.u)
-        dYdt.u +=
-            -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) + y.u × (f + curl(y.u))
+            @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
+            @. dYdt.u =
+                -D₄ * (
+                    wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
+                        wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
+                    )
+                )
+        end
+        @nvtx "h and u (rhs!)" color = colorant"blue" begin
+            # Add in pieces
+            @. begin
+                dYdt.h += -wdiv(y.h * y.u)
+                dYdt.u +=
+                    -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) +
+                    y.u × (f + curl(y.u))
+            end
+            Spaces.weighted_dss!(dYdt, ghost_buffer)
+        end
     end
-    Spaces.weighted_dss!(dYdt)
     return dYdt
 end
 
@@ -416,106 +445,148 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev OrdinaryDiffEq.solve!(integrator)
+if usempi
+    walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+    ClimaComms.iamroot(context) && println("walltime = $walltime (sec)")
+else
+    sol = @timev OrdinaryDiffEq.solve!(integrator)
+end
+sol_global = []
+if usempi
+    for sol_step in sol.u
+        sol_step_values_global =
+            DataLayouts.gather(context, Fields.field_values(sol_step))
+        if ClimaComms.iamroot(context)
+            sol_step_global = Fields.Field(sol_step_values_global, global_space)
+            push!(sol_global, sol_step_global)
+        end
+    end
+end
+solution = usempi ? sol_global : sol.u
+if !usempi || ClimaComms.iamroot(context)
+    # Plot variables and auxiliary function
+    ENV["GKSwstype"] = "nul"
+    using ClimaCorePlots
+    import Plots
+    Plots.GRBackend()
+    dir = "cg_sphere_shallowwater_$(test_name)"
+    dir = "$(dir)_$(test_angle_name)"
+    path = joinpath(@__DIR__, "output", dir)
+    mkpath(path)
 
-@info "Test case: $(test_name)"
-@info "  with α: $(test_angle_name)"
-@info "Solution L₂ norm at time t = 0: ", norm(Y.h)
-@info "Solution L₂ norm at time t = $(T): ", norm(sol.u[end].h)
-@info "Fluid volume at time t = 0: ", sum(Y.h)
-@info "Fluid volume at time t = $(T): ", sum(sol.u[end].h)
+    function linkfig(figpath, alt = "")
+        # Buildkite-agent upload figpath
+        # Link figure in logs if we are running on CI
+        if get(ENV, "BUILDKITE", "") == "true"
+            artifact_url = "artifact://$figpath"
+            print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+        end
+    end
+    @info "Test case: $(test_name)"
+    @info "  with α: $(test_angle_name)"
+    @info "Solution L₂ norm at time t = 0: ", norm(Y0_global.h)
+    @info "Solution L₂ norm at time t = $(T): ", norm(solution[end].h)
+    @info "Fluid volume at time t = 0: ", sum(Y0_global.h)
+    @info "Fluid volume at time t = $(T): ", sum(solution[end].h)
 
-if test_name == steady_state_test_name ||
-   test_name == steady_state_compact_test_name
-    # In these cases, we use the IC as the reference exact solution
-    @info "L₁ error at T = $(T): ", norm(sol.u[end].h .- Y.h, 1)
-    @info "L₂ error at T = $(T): ", norm(sol.u[end].h .- Y.h)
-    @info "L∞ error at T = $(T): ", norm(sol.u[end].h .- Y.h, Inf)
-    # Pointwise final L₂ error
-    Plots.png(
-        Plots.plot(sol.u[end].h .- Y.h),
-        joinpath(path, "final_height_L2_error.png"),
-    )
-    linkfig(
-        relpath(
+    if test_name == steady_state_test_name ||
+       test_name == steady_state_compact_test_name
+        # In these cases, we use the IC as the reference exact solution
+        @info "L₁ error at T = $(T): ", norm(solution[end].h .- Y0_global.h, 1)
+        @info "L₂ error at T = $(T): ", norm(solution[end].h .- Y0_global.h)
+        @info "L∞ error at T = $(T): ",
+        norm(solution[end].h .- Y0_global.h, Inf)
+        # Pointwise final L₂ error
+        Plots.png(
+            Plots.plot(solution[end].h .- Y0_global.h),
             joinpath(path, "final_height_L2_error.png"),
-            joinpath(@__DIR__, "../.."),
-        ),
-        "Absolute error in height",
-    )
-    # Height errors over time
-    relL1err = Array{Float64}(undef, div(T, dt))
-    for t in 1:div(T, dt)
-        relL1err[t] = norm(sol.u[t].h .- Y.h, 1) / norm(Y.h, 1)
-    end
-    Plots.png(
-        Plots.plot(
-            [1:dt:T],
-            relL1err,
-            xlabel = "time [s]",
-            ylabel = "Relative L₁ err",
-            label = "",
-        ),
-        joinpath(path, "HeightRelL1errorVstime.png"),
-    )
-    linkfig(
-        relpath(
+        )
+        linkfig(
+            relpath(
+                joinpath(path, "final_height_L2_error.png"),
+                joinpath(@__DIR__, "../.."),
+            ),
+            "Absolute error in height",
+        )
+        # Height errors over time
+        relL1err = Array{Float64}(undef, div(T, dt))
+        for t in 1:div(T, dt)
+            relL1err[t] =
+                norm(solution[t].h .- Y0_global.h, 1) / norm(Y0_global.h, 1)
+        end
+        Plots.png(
+            Plots.plot(
+                [1:dt:T],
+                relL1err,
+                xlabel = "time [s]",
+                ylabel = "Relative L₁ err",
+                label = "",
+            ),
             joinpath(path, "HeightRelL1errorVstime.png"),
-            joinpath(@__DIR__, "../.."),
-        ),
-        "Height relative L1 error over time",
-    )
+        )
+        linkfig(
+            relpath(
+                joinpath(path, "HeightRelL1errorVstime.png"),
+                joinpath(@__DIR__, "../.."),
+            ),
+            "Height relative L1 error over time",
+        )
 
-    relL2err = Array{Float64}(undef, div(T, dt))
-    for t in 1:div(T, dt)
-        relL2err[t] = norm(sol.u[t].h .- Y.h) / norm(Y.h)
-    end
-    Plots.png(
-        Plots.plot(
-            [1:dt:T],
-            relL2err,
-            xlabel = "time [s]",
-            ylabel = "Relative L₂ err",
-            label = "",
-        ),
-        joinpath(path, "HeightRelL2errorVstime.png"),
-    )
-    linkfig(
-        relpath(
+        relL2err = Array{Float64}(undef, div(T, dt))
+        for t in 1:div(T, dt)
+            relL2err[t] = norm(solution[t].h .- Y0_global.h) / norm(Y0_global.h)
+        end
+        Plots.png(
+            Plots.plot(
+                [1:dt:T],
+                relL2err,
+                xlabel = "time [s]",
+                ylabel = "Relative L₂ err",
+                label = "",
+            ),
             joinpath(path, "HeightRelL2errorVstime.png"),
-            joinpath(@__DIR__, "../.."),
-        ),
-        "Height relative L2 error over time",
-    )
+        )
+        linkfig(
+            relpath(
+                joinpath(path, "HeightRelL2errorVstime.png"),
+                joinpath(@__DIR__, "../.."),
+            ),
+            "Height relative L2 error over time",
+        )
 
-    RelLInferr = Array{Float64}(undef, div(T, dt))
-    for t in 1:div(T, dt)
-        RelLInferr[t] = norm(sol.u[t].h .- Y.h, Inf) / norm(Y.h, Inf)
-    end
-    Plots.png(
-        Plots.plot(
-            [1:dt:T],
-            RelLInferr,
-            xlabel = "time [s]",
-            ylabel = "Relative L∞ err",
-            label = "",
-        ),
-        joinpath(path, "HeightRelL1InferrorVstime.png"),
-    )
-    linkfig(
-        relpath(
-            joinpath(path, "HeightRelLInferrorVstime.png"),
-            joinpath(@__DIR__, "../.."),
-        ),
-        "Height relative L_Inf error over time",
-    )
-else # In the non steady-state cases, we only plot the latest output of the dynamic problem
-    Plots.png(Plots.plot(sol.u[end].h), joinpath(path, "final_height.png"))
-    linkfig(
-        relpath(
+        RelLInferr = Array{Float64}(undef, div(T, dt))
+        for t in 1:div(T, dt)
+            RelLInferr[t] =
+                norm(solution[t].h .- Y0_global.h, Inf) / norm(Y0_global.h, Inf)
+        end
+        Plots.png(
+            Plots.plot(
+                [1:dt:T],
+                RelLInferr,
+                xlabel = "time [s]",
+                ylabel = "Relative L∞ err",
+                label = "",
+            ),
+            joinpath(path, "HeightRelL1InferrorVstime.png"),
+        )
+        linkfig(
+            relpath(
+                joinpath(path, "HeightRelLInferrorVstime.png"),
+                joinpath(@__DIR__, "../.."),
+            ),
+            "Height relative L_Inf error over time",
+        )
+    else # In the non steady-state cases, we only plot the latest output of the dynamic problem
+        Plots.png(
+            Plots.plot(solution[end].h),
             joinpath(path, "final_height.png"),
-            joinpath(@__DIR__, "../.."),
-        ),
-        "Height field at the final time step",
-    )
+        )
+        linkfig(
+            relpath(
+                joinpath(path, "final_height.png"),
+                joinpath(@__DIR__, "../.."),
+            ),
+            "Height field at the final time step",
+        )
+    end
 end
