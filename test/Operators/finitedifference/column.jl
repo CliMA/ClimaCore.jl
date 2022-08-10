@@ -848,7 +848,7 @@ end
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
-        C = 1.0 # flux-correction coefficient (falling back to third-order upwinding)
+        C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
         # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
         # Unitary, constant advective velocity
@@ -903,7 +903,7 @@ end
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
-            C = 1.0 # flux-correction coefficient (falling back to third-order upwinding)
+            C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
             # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
             # Unitary, constant advective velocity
@@ -973,7 +973,7 @@ end
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
-            C = 1.0 # flux-correction coefficient (falling back to third-order upwinding)
+            C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
 
             # UpwindBiasedProductC2F & Upwind3rdOrderBiasedProductC2F Center -> Face operator
             # Unitary, constant advective velocity
