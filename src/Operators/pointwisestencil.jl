@@ -371,9 +371,12 @@ return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
     coefs = getidx(stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
-    i_func = i -> coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i, hidx)
-    return length(i_vals) == 0 ? zero(eltype(eltype(stencil))) :
-           mapreduce(i_func, ⊞, i_vals)
+    val = zero(eltype(eltype(stencil)))
+    for j in 1:length(i_vals)
+        i = i_vals[j]
+        val = val ⊞ coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i, hidx)
+    end
+    return val
 end
 
 function stencil_interior(::ApplyStencil, loc, idx, hidx, stencil, arg)
