@@ -338,7 +338,7 @@ fc_index(
             lg_space.local_geometry.coordinates ===
             lg_field_space.local_geometry.coordinates,
         )
-        @test Fields.zeros(lg_space)
+        @test all(Fields.zeros(lg_space) === Fields.zeros(lg_field_space))
     end
 end
 
@@ -346,14 +346,14 @@ end
     FT = Float64
     for space in all_spaces(FT)
         if space isa Spaces.SpectralElementSpace1D
-            Y = FieldFromNamedTuple(space, (; x = FT(2)))
+            Y = FieldFromNamedTuple(space, (; x = FT(1)))
             point_space = Spaces.column(space, 1, 1)
-            @test Fields.zeros(lg_space)
+            @test Fields.ones(point_space) === Fields.column(Y.x, 1, 1)
         end
         if space isa Spaces.SpectralElementSpace2D
-            Y = FieldFromNamedTuple(space, (; x = FT(2)))
+            Y = FieldFromNamedTuple(space, (; x = FT(1)))
             point_space = Spaces.column(space, 1, 1, 1)
-            @test Fields.zeros(lg_space)
+            @test Fields.ones(point_space) === Fields.column(Y.x, 1, 1, 1)
         end
 
     end
