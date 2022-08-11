@@ -342,18 +342,22 @@ fc_index(
     end
 end
 
-@testset "Column" begin
+@testset "Points from Columns" begin
     FT = Float64
     for space in all_spaces(FT)
         if space isa Spaces.SpectralElementSpace1D
             Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            point_space_from_field = axes(Fields.column(Y.x, 1, 1))
             point_space = Spaces.column(space, 1, 1)
-            @test Fields.ones(point_space) == Fields.column(Y.x, 1, 1)
+            @test Fields.ones(point_space) ==
+                  Fields.ones(point_space_from_field)
         end
         if space isa Spaces.SpectralElementSpace2D
             Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            point_space_from_field = axes(Fields.column(Y.x, 1, 1, 1))
             point_space = Spaces.column(space, 1, 1, 1)
-            @test Fields.ones(point_space) == Fields.column(Y.x, 1, 1, 1)
+            @test Fields.ones(point_space) ==
+                  Fields.ones(point_space_from_field)
         end
 
     end
