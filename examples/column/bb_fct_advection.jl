@@ -1,6 +1,8 @@
 using Test
 using LinearAlgebra
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEq: ODEProblem, solve
+using DiffEqBase
+using ClimaTimeSteppers
 
 import ClimaCore:
     Fields,
@@ -22,7 +24,7 @@ import ClimaCore:
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "fct_advection"
+dir = "bb_fct_advection"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -35,10 +37,11 @@ function linkfig(figpath, alt = "")
     end
 end
 
-function f!(dydt, y, parameters, t)
+function f!(dydt, y, parameters, t, alpha, beta)
 
-    (; w, C, corrected_antidiff_flux) = parameters
-    FT = Spaces.undertype(axes(y))
+    (; w, A, y_td) = parameters
+    y = y.y
+    dydt = dydt.y
 
     first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
         bottom = Operators.Extrapolate(),
@@ -52,24 +55,32 @@ function f!(dydt, y, parameters, t)
         bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
         top = Operators.SetValue(Geometry.WVector(FT(0.0))),
     )
+    FCTBB = Operators.FCTBorisBook(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
 
-    @. corrected_antidiff_flux =
-        divf2c(C * (third_order_fluxᶠ(w, y) - first_order_fluxᶠ(w, y)))
-    @. dydt = -(divf2c(first_order_fluxᶠ(w, y)) + corrected_antidiff_flux)
+    @. y_td = beta * dydt - alpha * divf2c(first_order_fluxᶠ(w, y))
+    @. dydt =
+        y_td -
+        alpha * divf2c(
+            FCTBB(
+                third_order_fluxᶠ(w, y) - first_order_fluxᶠ(w, y),
+                y_td * alpha,
+            ),
+        )
 
     return dydt
 end
 
 FT = Float64
-t₀ = FT(0)
-t₁ = FT(1)
-z₀ = FT(0)
-zₕ = FT(1)
-z₁ = FT(1)
+t₀ = FT(0.0)
+t₁ = FT(1.0)
+z₀ = FT(0.0)
+zₕ = FT(1.0)
+z₁ = FT(1.0)
 speed = FT(1.0)
-C = FT(0.5) # flux-correction coefficient: ∈ [0,1] with
-#                              0 = first-order upwinding
-#                              1 = third-order upwinding
+
 n = 2 .^ 6
 
 domain = Domains.IntervalDomain(
@@ -91,32 +102,41 @@ pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
 # Initial condition
 y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
 
+# ClimaTimeSteppers need a FieldVector
+y0 = Fields.FieldVector(y = y0)
+
 # Set up parameters needed for time-stepping
 Δt = 0.0001
 dydt = copy(y0)
-corrected_antidiff_flux = similar(y0)
-parameters = (; w, C, corrected_antidiff_flux)
+A = similar(dydt.y)
+y_td = similar(dydt.y)
+
+parameters = (; w, A, y_td)
 # Call the RHS function
-f!(dydt, y0, parameters, t₀)
+f!(dydt, y0, parameters, 0.0, Δt, 1)
 t₁ = 100Δt
-prob = ODEProblem(f!, y0, (t₀, t₁), parameters)
+prob = ODEProblem(IncrementingODEFunction(f!), copy(y0), (t₀, t₁), parameters)
 sol = solve(
     prob,
-    SSPRK33(),
+    SSPRK33ShuOsher(),
     dt = Δt,
     saveat = Δt,
     progress = true,
     adaptive = false,
     progress_message = (dt, u, p, t) -> t,
 )
-computed_result = sol.u[end]
+computed_result = sol.u[end].y
 analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
 err = norm(computed_result .- analytical_result)
+initial_mass = sum(sol.u[1].y)
+mass = sum(sol.u[end].y)
+rel_mass_err = norm((mass - initial_mass) / initial_mass)
 
 @test err ≤ 0.018
+@test rel_mass_err ≤ 13eps()
 
-plot(sol.u[end])
+plot(sol.u[end].y)
 Plots.png(
-    Plots.plot!(analytical_result, title = "FCT (C=0.5)"),
-    joinpath(path, "exact_and_computed_advected_square_wave_C_05.png"),
+    Plots.plot!(analytical_result, title = "Boris and Book FCT"),
+    joinpath(path, "exact_and_computed_advected_square_wave_BBFCT.png"),
 )
