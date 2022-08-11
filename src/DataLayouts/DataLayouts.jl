@@ -328,8 +328,8 @@ end
 @inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= length(data)) ||
                  throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), i, j, :, h)
-    DataF{S}(reshape(dataview, (1, :)))
+    dataview = @inbounds view(parent(data), [i], j, :, h)
+    DataF{S}(dataview)
 end
 
 function gather(
@@ -407,8 +407,8 @@ slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), i, :, h)
-    DataF{S}(reshape(dataview, (1, :)))
+    dataview = @inbounds view(parent(data), [i], :, h)
+    DataF{S}(dataview)
 end
 @inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = column(data, i, h)
 
@@ -625,8 +625,8 @@ end
 @inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
-    dataview = @inbounds view(parent(data), i, j, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    dataview = @inbounds view(parent(data), [i], j, :)
+    DataF{S}(dataview)
 end
 
 # ======================
@@ -722,8 +722,8 @@ end
 
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    dataview = @inbounds view(parent(data), i, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    dataview = @inbounds view(parent(data), [i], :)
+    DataF{S}(dataview)
 end
 
 # ======================
@@ -833,8 +833,8 @@ end
     Nv = size(data, 4)
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v)))
     array = parent(data)
-    dataview = @inbounds view(array, v, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    dataview = @inbounds view(array, [v], :)
+    DataF{S}(dataview)
 end
 
 # ======================
