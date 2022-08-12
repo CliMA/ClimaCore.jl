@@ -1566,9 +1566,7 @@ boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a = stencil_interior(RightBiased3rdOrderC2F(), loc, idx, hidx, arg)
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
+    return Geometry.Contravariant3Vector(vᶠ)
 end
 
 @inline function stencil_right_boundary(
@@ -1587,9 +1585,7 @@ end
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    a = stencil_interior(LeftBiased3rdOrderC2F(), loc, idx, hidx, arg)
-
-    return Geometry.Contravariant3Vector(vᶠ * a)
+    return Geometry.Contravariant3Vector(vᶠ)
 end
 
 """
