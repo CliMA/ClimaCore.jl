@@ -181,6 +181,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Column BB FCT Advection Eq"
+    key: "cpu_bb_fct_column_advect"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=examples examples/column/bb_fct_advection.jl"
+    artifact_paths:
+      - "examples/column/output/bb_fct_advection/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Column Advection Diffusion Eq"
     key: "cpu_column_advect_diff"
     command:

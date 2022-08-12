@@ -1460,6 +1460,139 @@ end
 end
 
 """
+    U = FCTBorisBook(;boundaries)
+    U.(v, x)
+
+Correct the flux using the flux-corrected transport formulation by Boris and Book
+Input arguments:
+- a face-valued vector field `v`
+- a center-valued field `x`
+```math
+U(v,x)[i] = \\begin{cases}
+  v[i] \\left(-2 x[i-\\tfrac{3}{2}] + 10 x[i-\\tfrac{1}{2}] + 4 x[i+\\tfrac{1}{2}] \\right) / 12  \\textrm{, if } v[i] > 0 \\\\
+  v[i] \\left(4 x[i-\\tfrac{1}{2}] + 10 x[i+\\tfrac{1}{2}] -2 x[i+\\tfrac{3}{2}]  \\right) / 12  \\textrm{, if } v[i] < 0
+  \\end{cases}
+```
+This stencil is based on [BorisBook1973](@cite).
+
+Supported boundary conditions are:
+- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
+and the third-order upwind reconstruction to compute `x` on the right boundary.
+
+!!! note
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+"""
+struct FCTBorisBook{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+FCTBorisBook(; kwargs...) = FCTBorisBook(NamedTuple(kwargs))
+
+return_eltype(::FCTBorisBook, V, A) =
+    Geometry.Contravariant3Vector{eltype(eltype(V))}
+
+return_space(
+    ::FCTBorisBook,
+    velocity_space::Spaces.FaceFiniteDifferenceSpace,
+    arg_space::Spaces.CenterFiniteDifferenceSpace,
+) = velocity_space
+return_space(
+    ::FCTBorisBook,
+    velocity_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    arg_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = velocity_space
+
+@inline function fct_boris_book(v, a⁻, a⁺, a⁺⁺, a⁺⁺⁺, step)
+    if v != zero(eltype(v))
+        sign(v) ⊠ (RecursiveApply.rmap(
+            max,
+            zero(eltype(a⁻)),
+            RecursiveApply.rmap(
+                min,
+                RecursiveApply.rmap(abs, v),
+                RecursiveApply.rmap(
+                    min,
+                    sign(v) ⊠ (a⁺⁺⁺ - a⁺⁺) ⊠ step,
+                    sign(v) ⊠ (a⁺ - a⁻) ⊠ step,
+                ),
+            ),
+        ))
+    else
+        RecursiveApply.rmap(
+            max,
+            zero(eltype(a⁻)),
+            RecursiveApply.rmap(
+                min,
+                v,
+                RecursiveApply.rmap(min, (a⁺⁺⁺ - a⁺⁺) ⊠ step, (a⁺ - a⁻) ⊠ step),
+            ),
+        )
+    end
+end
+
+stencil_interior_width(::FCTBorisBook, velocity, arg) =
+    ((0, 0), (-half, half + 2))
+
+@inline function stencil_interior(::FCTBorisBook, loc, idx, hidx, velocity, arg)
+    space = axes(arg)
+    a⁻ = getidx(arg, loc, idx - half, hidx)
+    a⁺ = getidx(arg, loc, idx + half, hidx)
+    a⁺⁺ = getidx(arg, loc, idx + half + 1, hidx)
+    a⁺⁺⁺ = getidx(arg, loc, idx + half + 2, hidx)
+    vᶠ = Geometry.contravariant3(
+        getidx(velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    step = Geometry.LocalGeometry(space, idx, hidx).∂x∂ξ[1]
+    return Geometry.Contravariant3Vector(
+        fct_boris_book(vᶠ, a⁻, a⁺, a⁺⁺, a⁺⁺⁺, step),
+    )
+end
+
+boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 3
+
+@inline function stencil_left_boundary(
+    ::FCTBorisBook,
+    bc::ThirdOrderOneSided,
+    loc,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    space = axes(arg)
+    @assert idx <= left_face_boundary_idx(space) + 2
+
+    vᶠ = Geometry.contravariant3(
+        getidx(velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a = stencil_interior(RightBiased3rdOrderC2F(), loc, idx, hidx, arg)
+
+    return Geometry.Contravariant3Vector(vᶠ * a)
+end
+
+@inline function stencil_right_boundary(
+    ::FCTBorisBook,
+    bc::ThirdOrderOneSided,
+    loc,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+    space = axes(arg)
+    @assert idx <= right_face_boundary_idx(space) - 1
+
+    vᶠ = Geometry.contravariant3(
+        getidx(velocity, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    a = stencil_interior(LeftBiased3rdOrderC2F(), loc, idx, hidx, arg)
+
+    return Geometry.Contravariant3Vector(vᶠ * a)
+end
+
+"""
     A = AdvectionF2F(;boundaries)
     A.(v, θ)
 
