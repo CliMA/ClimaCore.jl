@@ -75,7 +75,6 @@ end
 
 FT = Float64
 t₀ = FT(0.0)
-t₁ = FT(1.0)
 z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
