@@ -1501,54 +1501,54 @@ return_space(
     arg_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = velocity_space
 
-@inline function fct_boris_book(v, a⁻, a⁺, a⁺⁺, a⁺⁺⁺, step)
+@inline function fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺, step)
     if v != zero(eltype(v))
         sign(v) ⊠ (RecursiveApply.rmap(
             max,
-            zero(eltype(a⁻)),
+            zero(eltype(v)),
             RecursiveApply.rmap(
                 min,
                 RecursiveApply.rmap(abs, v),
                 RecursiveApply.rmap(
                     min,
-                    sign(v) ⊠ (a⁺⁺⁺ - a⁺⁺) ⊠ step,
-                    sign(v) ⊠ (a⁺ - a⁻) ⊠ step,
+                    sign(v) ⊠ (a⁺⁺ - a⁺) ⊠ step,
+                    sign(v) ⊠ (a⁻ - a⁻⁻) ⊠ step,
                 ),
             ),
         ))
     else
         RecursiveApply.rmap(
             max,
-            zero(eltype(a⁻)),
+            zero(eltype(v)),
             RecursiveApply.rmap(
                 min,
                 v,
-                RecursiveApply.rmap(min, (a⁺⁺⁺ - a⁺⁺) ⊠ step, (a⁺ - a⁻) ⊠ step),
+                RecursiveApply.rmap(min, (a⁺⁺ - a⁺) ⊠ step, (a⁻ - a⁻⁻) ⊠ step),
             ),
         )
     end
 end
 
 stencil_interior_width(::FCTBorisBook, velocity, arg) =
-    ((0, 0), (-half, half + 2))
+    ((0, 0), (-half - 1, half + 1))
 
 @inline function stencil_interior(::FCTBorisBook, loc, idx, hidx, velocity, arg)
     space = axes(arg)
+    a⁻⁻ = getidx(arg, loc, idx - half - 1, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁺⁺ = getidx(arg, loc, idx + half + 1, hidx)
-    a⁺⁺⁺ = getidx(arg, loc, idx + half + 2, hidx)
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
     step = Geometry.LocalGeometry(space, idx, hidx).∂x∂ξ[1]
     return Geometry.Contravariant3Vector(
-        fct_boris_book(vᶠ, a⁻, a⁺, a⁺⁺, a⁺⁺⁺, step),
+        fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺, step),
     )
 end
 
-boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 3
+boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
 
 @inline function stencil_left_boundary(
     ::FCTBorisBook,
@@ -1560,7 +1560,7 @@ boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 3
     arg,
 )
     space = axes(arg)
-    @assert idx <= left_face_boundary_idx(space) + 2
+    @assert idx <= left_face_boundary_idx(space) + 1
 
     vᶠ = Geometry.contravariant3(
         getidx(velocity, loc, idx, hidx),
