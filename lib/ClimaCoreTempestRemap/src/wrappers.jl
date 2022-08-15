@@ -77,7 +77,9 @@ Keyword arguments are passed as command-line options. These include:
   - `"cgll"`: continuous GLL finite element method (a single value for colocated nodes)
   - `"dgll"`: discontinuous GLL finite element method (duplicate values for colocated nodes)
 - 'in_np'/'out_np': Order of input and output meshes
+- 'mono': Monotonicity of remapping. Note: must be used with in_np = 1
 
+Set `mono = true` and `in_np = 1` for monotone remapping
 Set `verbose=true` to print information.
 
 See [Tempest remap: offline map generation](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-generation)
@@ -98,7 +100,11 @@ function remap_weights(
     --out_map $weightfile
     ```
     for (k, v) in kwargs
-        append!(cmd.exec, [string("--", k), string(v)])
+        if typeof(v) == Bool && v
+            append!(cmd.exec, [string("--", k)])
+        else
+            append!(cmd.exec, [string("--", k), string(v)])
+        end
     end
     run(pipeline(cmd, stdout = verbose ? stdout : devnull))
 end

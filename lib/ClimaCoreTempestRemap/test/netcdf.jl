@@ -154,6 +154,127 @@ end
     end
 end
 
+@testset "write remap 3d sphere data $node_type to rll and back" for node_type in
+                                                                     [
+    "cgll",
+    "dgll",
+]
+    # generate CC mesh
+    ne = 4
+    R = 1000.0
+    nlevels = 10
+    Nq = 4
+    hdomain = Domains.SphereDomain(R)
+    hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
+    htopology = Topologies.Topology2D(hmesh)
+    quad = Spaces.Quadratures.GLL{Nq}()
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+
+    vdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(50.0);
+        boundary_tags = (:bottom, :top),
+    )
+    vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+
+    hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+
+    # write mesh
+    meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
+    write_exodus(meshfile_cc, htopology)
+
+    # write data
+    datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
+    NCDataset(datafile_cc, "c") do nc
+        def_space_coord(nc, hvspace; type = node_type)
+        def_space_coord(nc, fhvspace; type = node_type)
+
+        nc_xlat = defVar(nc, "xlat", Float64, hvspace)
+        nc_xz = defVar(nc, "xz", Float64, hvspace)
+        nc_xz_half = defVar(nc, "xz_half", Float64, fhvspace)
+
+        nc_xlat[:] = Fields.coordinate_field(hvspace).lat
+        nc_xz[:] = Fields.coordinate_field(hvspace).z
+        nc_xz_half[:] = Fields.coordinate_field(fhvspace).z
+        nothing
+    end
+
+    nlat = 90
+    nlon = 180
+    meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
+    rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
+
+    meshfile_overlap = joinpath(OUTPUT_DIR, "mesh_overlap.g")
+    overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
+
+    weightfile = joinpath(OUTPUT_DIR, "remap_weights.nc")
+    remap_weights(
+        weightfile,
+        meshfile_cc,
+        meshfile_rll,
+        meshfile_overlap;
+        in_type = node_type,
+        in_np = Nq,
+        mono = true,
+    )
+
+    datafile_rll = joinpath(OUTPUT_DIR, "data_rll_3d.nc")
+    apply_remap(datafile_rll, datafile_cc, weightfile, ["xlat", "xz"])
+
+    NCDataset(weightfile) do weights
+        # test monotonicity
+        @test maximum(weights["S"]) <= 1
+        @test minimum(weights["S"]) >= 0 ||
+              isapprox(minimum(weights["S"]), 0; atol = 10^(-15))
+    end
+
+    NCDataset(datafile_rll) do nc_rll
+        lats = Array(nc_rll["lat"])
+        lons = Array(nc_rll["lon"])
+        zs = Array(nc_rll["z"])
+        @test lats ≈ -89:2:89
+        @test lons ≈ 1:2:359
+        @test zs == 2.5:5:47.5
+        @test Array(nc_rll["xlat"]) ≈ ones(nlon, nlat, nlevels) .* lats' rtol =
+            0.1
+        @test Array(nc_rll["xz"]) ≈
+              ones(nlon, nlat, nlevels) .* reshape(zs, (1, 1, nlevels)) rtol =
+            0.1
+    end
+
+    # convert newly-created rll data to new node_type (cgll/dgll)
+    # write mesh
+    meshfile_cc_post = joinpath(OUTPUT_DIR, "mesh_cc_3d_post.g")
+    write_exodus(meshfile_cc_post, htopology)
+
+    meshfile_overlap_post = joinpath(OUTPUT_DIR, "mesh_overlap_post.g")
+    overlap_mesh(meshfile_overlap_post, meshfile_rll, meshfile_cc_post)
+
+    weightfile_post = joinpath(OUTPUT_DIR, "remap_weights_post.nc")
+    remap_weights(
+        weightfile_post,
+        meshfile_rll,
+        meshfile_cc_post,
+        meshfile_overlap_post;
+        out_type = node_type,
+        out_np = Nq - 1,
+        in_np = 1,
+        mono = true,
+    )
+
+    datafile_cc_post = joinpath(OUTPUT_DIR, "data_cc_post.nc")
+    apply_remap(datafile_cc_post, datafile_rll, weightfile_post, ["xlat", "xz"])
+
+    NCDataset(weightfile_post) do weights_post
+        # test monotonicity
+        @test maximum(weights_post["S"]) <= 1
+        @test minimum(weights_post["S"]) >= 0 ||
+              isapprox(minimum(weights_post["S"]), 0; atol = 10^(-15))
+    end
+end
+
 function test_warp(coords)
     λ, ϕ = coords.long, coords.lat
     FT = eltype(λ)
