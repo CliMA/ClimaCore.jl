@@ -225,7 +225,7 @@ function Base.similar(
     ::Type{Eltype},
 ) where {A, Eltype}
     PA = parent_array_type(A)
-    array = similar(PA, (1, typesize(eltype(A), Eltype)))
+    array = similar(PA, (typesize(eltype(A), Eltype)))
     return DataF{Eltype}(array)
 end
 

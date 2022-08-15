@@ -329,7 +329,7 @@ end
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= length(data)) ||
                  throw(BoundsError(data, (i, j, h)))
     dataview = @inbounds view(parent(data), i, j, :, h)
-    DataF{S}(reshape(dataview, (1, :)))
+    DataF{S}(dataview)
 end
 
 function gather(
@@ -408,7 +408,7 @@ slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
     @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
     dataview = @inbounds view(parent(data), i, :, h)
-    DataF{S}(reshape(dataview, (1, :)))
+    DataF{S}(dataview)
 end
 @inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = column(data, i, h)
 
@@ -452,21 +452,14 @@ struct DataF{S, A} <: Data0D{S}
     array::A
 end
 
-function DataF{S}(array::AbstractArray{T, 2}) where {S, T}
-    @assert size(array, 1) == 1
+function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
     DataF{S, typeof(array)}(array)
 end
 
-function DataF{S}(array::AbstractVector{T}) where {S, T}
-    @assert size(array, 1) == 1
-    @assert typesize(T, S) == 1
-    DataF{S}(reshape(array, (:, 1)))
-end
-
 function DataF{S}(ArrayType) where {S}
     T = eltype(ArrayType)
-    DataF{S}(ArrayType(undef, 1, typesize(T, S)))
+    DataF{S}(ArrayType(undef, typesize(T, S)))
 end
 
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
@@ -475,7 +468,7 @@ end
     SS = fieldtype(S, i)
     offset = fieldtypeoffset(T, S, i)
     nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + nbytes))
+    dataview = @inbounds view(array, (offset + 1):(offset + nbytes))
     DataF{SS}(dataview)
 end
 
@@ -488,7 +481,7 @@ end
     offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
-    return :(DataF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
+    return :(DataF{$SS}(@inbounds view(parent(data), $field_byterange)))
 end
 
 @inline function Base.getindex(data::DataF{S}) where {S}
@@ -626,7 +619,7 @@ end
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
     dataview = @inbounds view(parent(data), i, j, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    DataF{S}(dataview)
 end
 
 # ======================
@@ -723,7 +716,7 @@ end
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     dataview = @inbounds view(parent(data), i, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    DataF{S}(dataview)
 end
 
 # ======================
@@ -834,7 +827,7 @@ end
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v)))
     array = parent(data)
     dataview = @inbounds view(array, v, :)
-    DataF{S}(reshape(dataview, (1, :)))
+    DataF{S}(dataview)
 end
 
 # ======================
