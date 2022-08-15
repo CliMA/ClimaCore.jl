@@ -338,6 +338,28 @@ fc_index(
             lg_space.local_geometry.coordinates ===
             lg_field_space.local_geometry.coordinates,
         )
+        @test all(Fields.zeros(lg_space) == Fields.zeros(lg_field_space))
+    end
+end
+
+@testset "Points from Columns" begin
+    FT = Float64
+    for space in all_spaces(FT)
+        if space isa Spaces.SpectralElementSpace1D
+            Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            point_space_from_field = axes(Fields.column(Y.x, 1, 1))
+            point_space = Spaces.column(space, 1, 1)
+            @test Fields.ones(point_space) ==
+                  Fields.ones(point_space_from_field)
+        end
+        if space isa Spaces.SpectralElementSpace2D
+            Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            point_space_from_field = axes(Fields.column(Y.x, 1, 1, 1))
+            point_space = Spaces.column(space, 1, 1, 1)
+            @test Fields.ones(point_space) ==
+                  Fields.ones(point_space_from_field)
+        end
+
     end
 end
 
