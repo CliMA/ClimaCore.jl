@@ -5,7 +5,7 @@ local_geometry_data(space::AbstractPointSpace) = space.local_geometry
 """
     PointSpace <: AbstractSpace
 
-A zero-dimensional space. 
+A zero-dimensional space.
 """
 struct PointSpace{LG} <: AbstractPointSpace
     local_geometry::LG
@@ -13,7 +13,7 @@ end
 
 function PointSpace(local_geometry::LG) where {LG <: Geometry.LocalGeometry}
     FT = Geometry.undertype(LG)
-    local_geometry_data = DataLayouts.DataF{LG}(Matrix{FT})
+    local_geometry_data = DataLayouts.DataF{LG}(Array{FT})
     local_geometry_data[] = local_geometry
     return PointSpace(local_geometry_data)
 end

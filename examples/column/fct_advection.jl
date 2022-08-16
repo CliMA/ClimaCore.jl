@@ -62,7 +62,6 @@ end
 
 FT = Float64
 t₀ = FT(0)
-t₁ = FT(1)
 z₀ = FT(0)
 zₕ = FT(1)
 z₁ = FT(1)
@@ -112,8 +111,12 @@ sol = solve(
 computed_result = sol.u[end]
 analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
 err = norm(computed_result .- analytical_result)
+initial_mass = sum(sol.u[1])
+mass = sum(sol.u[end])
+rel_mass_err = norm((mass - initial_mass) / initial_mass)
 
 @test err ≤ 0.018
+@test rel_mass_err ≤ eps()
 
 plot(sol.u[end])
 Plots.png(

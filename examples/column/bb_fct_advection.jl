@@ -39,7 +39,7 @@ end
 
 function f!(dydt, y, parameters, t, alpha, beta)
 
-    (; w, A, y_td) = parameters
+    (; w, y_td) = parameters
     y = y.y
     dydt = dydt.y
 
@@ -66,7 +66,7 @@ function f!(dydt, y, parameters, t, alpha, beta)
         alpha * divf2c(
             FCTBB(
                 third_order_fluxᶠ(w, y) - first_order_fluxᶠ(w, y),
-                y_td * alpha,
+                y_td / alpha,
             ),
         )
 
@@ -107,10 +107,9 @@ y0 = Fields.FieldVector(y = y0)
 # Set up parameters needed for time-stepping
 Δt = 0.0001
 dydt = copy(y0)
-A = similar(dydt.y)
 y_td = similar(dydt.y)
 
-parameters = (; w, A, y_td)
+parameters = (; w, y_td)
 # Call the RHS function
 f!(dydt, y0, parameters, 0.0, Δt, 1)
 t₁ = 100Δt
@@ -131,8 +130,8 @@ initial_mass = sum(sol.u[1].y)
 mass = sum(sol.u[end].y)
 rel_mass_err = norm((mass - initial_mass) / initial_mass)
 
-@test err ≤ 0.018
-@test rel_mass_err ≤ 13eps()
+@test err ≤ 0.0185
+@test rel_mass_err ≤ 8eps()
 
 plot(sol.u[end].y)
 Plots.png(
