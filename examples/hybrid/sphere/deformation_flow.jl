@@ -134,9 +134,7 @@ y0 = Fields.FieldVector(
 
 function rhs!(dydt, y, parameters, t, alpha, beta)
 
-    τ = parameters.τ
-    coords = parameters.coords
-    face_coords = parameters.face_coords
+    (; τ, coords, face_coords, ystar) = parameters
 
     ϕ = coords.lat
     λ = coords.long
@@ -204,7 +202,6 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     hgrad = Operators.Gradient()
 
     ### HYPERVISCOSITY
-    ystar = similar(y)
     @. ystar.ρq1 = hwdiv(hgrad(ρq1 / ρ))
     Spaces.weighted_dss!(ystar.ρq1)
     @. ystar.ρq1 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq1))
@@ -266,7 +263,7 @@ end
 
 # Set up RHS function
 ystar = copy(y0)
-parameters = (τ = τ, coords = coords, face_coords = face_coords)
+parameters = (; τ, coords, face_coords, ystar)
 
 rhs!(ystar, y0, parameters, 0.0, dt, 1)
 
@@ -301,6 +298,27 @@ q4_error =
     norm(sol.u[end].ρq4 ./ ρ_ref.(coords.z) .- y0.ρq4 ./ ρ_ref.(coords.z)) /
     norm(y0.ρq4 ./ ρ_ref.(coords.z))
 @test q4_error ≈ 0.0 atol = 0.03
+
+# Tracer mass conservation checks
+q1_initial_mass = sum(y0.ρq1 ./ ρ_ref.(coords.z))
+q1_mass = sum(sol.u[end].ρq1 ./ ρ_ref.(coords.z))
+q1_rel_mass_err = norm((q1_mass - q1_initial_mass) / q1_initial_mass)
+@test q1_rel_mass_err ≈ 0.0 atol = 1.1e-5
+
+q2_initial_mass = sum(y0.ρq2 ./ ρ_ref.(coords.z))
+q2_mass = sum(sol.u[end].ρq2 ./ ρ_ref.(coords.z))
+q2_rel_mass_err = norm((q2_mass - q2_initial_mass) / q2_initial_mass)
+@test q2_rel_mass_err ≈ 0.0 atol = 2.2e-6
+
+q3_initial_mass = sum(y0.ρq3 ./ ρ_ref.(coords.z))
+q3_mass = sum(sol.u[end].ρq3 ./ ρ_ref.(coords.z))
+q3_rel_mass_err = norm((q3_mass - q3_initial_mass) / q3_initial_mass)
+@test q3_rel_mass_err ≈ 0.0 atol = 2.5e-6
+
+q4_initial_mass = sum(y0.ρq4 ./ ρ_ref.(coords.z))
+q4_mass = sum(sol.u[end].ρq4 ./ ρ_ref.(coords.z))
+q4_rel_mass_err = norm((q4_mass - q4_initial_mass) / q4_initial_mass)
+@test q4_rel_mass_err ≈ 0.0 atol = 2.2e-6
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
