@@ -1,6 +1,6 @@
 abstract type AbstractReader end
 
-using HDF5
+using HDF5, ClimaComms
 using StaticArrays
 using ..ClimaCore
 using ..Domains: IntervalDomain, SphereDomain
@@ -34,11 +34,16 @@ import ..Geometry:
 using ..DataLayouts
 
 """
-    HDF5Reader(filename)
+    HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
 
 An `AbstractReader` for reading from HDF5 files created by [`HDF5Writer`](@ref).
-The reader object contains an internal cache of domains, meshes, topologies and spaces
-that are read so that duplicate objects are not created.
+The reader object contains an internal cache of domains, meshes, topologies and
+spaces that are read so that duplicate objects are not created.
+
+The optional `context` can be used for reading distributed fields: in this case,
+the `MPICommsContext` used passed as an argument: resulting `Field`s will be
+distributed using this context. As with [`HDF5Writer`](@ref), this requires a
+HDF5 library with MPI support.
 
 # Interface
 - [`read_domain`](@ref)
@@ -55,16 +60,25 @@ field = read_field(reader, "Y")
 close(reader)
 ```
 """
-struct HDF5Reader
+struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
+    context::C
+    file_version::VersionNumber
     domain_cache::Dict{Any, Any}
     mesh_cache::Dict{Any, Any}
     topology_cache::Dict{Any, Any}
     space_cache::Dict{Any, Any}
 end
 
-function HDF5Reader(filename::AbstractString)
-    file = h5open(filename, "r")
+function HDF5Reader(
+    filename::AbstractString,
+    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(),
+)
+    if context isa ClimaComms.SingletonCommsContext
+        file = h5open(filename, "r")
+    else
+        file = h5open(filename, "r", context.mpicomm)
+    end
     if !haskey(attrs(file), "ClimaCore version")
         error("Not a ClimaCore HDF5 file")
     end
@@ -73,16 +87,24 @@ function HDF5Reader(filename::AbstractString)
     if file_version > package_version
         @warn "$filename was written using a newer version of ClimaCore than is currently loaded" file_version package_version
     end
-    return HDF5Reader(file, Dict(), Dict(), Dict(), Dict())
+    return HDF5Reader(
+        file,
+        context,
+        file_version,
+        Dict(),
+        Dict(),
+        Dict(),
+        Dict(),
+    )
 end
 
 
 function Base.close(hdfreader::HDF5Reader)
-    close(hdfreader.file)
     empty!(hdfreader.domain_cache)
     empty!(hdfreader.mesh_cache)
     empty!(hdfreader.topology_cache)
     empty!(hdfreader.space_cache)
+    close(hdfreader.file)
     return nothing
 end
 
@@ -228,11 +250,36 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
-            elemorder =
-                matrix_to_cartesianindices(HDF5.read(group, "elemorder"))
+            elemorder_matrix = HDF5.read(group, "elemorder")
+            if reader.file_version < v"0.10.9"
+                elemorder = collect(
+                    reinterpret(
+                        reshape,
+                        CartesianIndex{size(elemorder_matrix, 2)},
+                        elemorder_matrix',
+                    ),
+                )
+            else
+                elemorder = collect(
+                    reinterpret(
+                        reshape,
+                        CartesianIndex{size(elemorder_matrix, 1)},
+                        elemorder_matrix,
+                    ),
+                )
+            end
+        else
+            elemorder = Meshes.elements(mesh)
+        end
+
+        if reader.context isa ClimaComms.SingletonCommsContext
             return Topologies.Topology2D(mesh, elemorder)
         else
-            return Topologies.Topology2D(mesh)
+            return Topologies.DistributedTopology2D(
+                reader.context,
+                mesh,
+                elemorder,
+            )
         end
     else
         error("Unsupported type $type")
@@ -293,13 +340,20 @@ function read_field(reader::HDF5Reader, name::AbstractString)
     obj = reader.file["fields/$name"]
     type = attrs(obj)["type"]
     if type == "Field"
-        data = read(obj)
+        space = read_space(reader, attrs(obj)["space"])
+        topology = Spaces.topology(space)
+        if topology isa Topologies.DistributedTopology2D
+            nd = ndims(obj)
+            localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
+            data = obj[localidx...]
+        else
+            data = read(obj)
+        end
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
         DataLayout = _scan_data_layout(data_layout)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
         values = DataLayout{ElType, Nij}(data)
-        space = read_space(reader, attrs(obj)["space"])
         return Fields.Field(values, space)
     elseif type == "FieldVector"
         FieldVector(;
