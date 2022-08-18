@@ -1468,19 +1468,20 @@ Input arguments:
 - a face-valued vector field `v`
 - a center-valued field `x`
 ```math
-U(v,x)[i] = \\begin{cases}
-  v[i] \\left(-2 x[i-\\tfrac{3}{2}] + 10 x[i-\\tfrac{1}{2}] + 4 x[i+\\tfrac{1}{2}] \\right) / 12  \\textrm{, if } v[i] > 0 \\\\
-  v[i] \\left(4 x[i-\\tfrac{1}{2}] + 10 x[i+\\tfrac{1}{2}] -2 x[i+\\tfrac{3}{2}]  \\right) / 12  \\textrm{, if } v[i] < 0
-  \\end{cases}
+Ac(v,x)[i] =
+  s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) \\Delta z ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\Delta z \\right] \\right\\},
 ```
-This stencil is based on [BorisBook1973](@cite).
+where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive flux.
+This formulation is based on [BorisBook1973](@cite).
 
 Supported boundary conditions are:
 - [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
 and the third-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces,
+    and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a
+    [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct FCTBorisBook{BCS} <: AdvectionOperator
     bcs::BCS
