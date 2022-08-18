@@ -50,9 +50,9 @@ fps = 2
 # Additional values required for driver
 horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
-dt = is_small_scale ? FT(1.3) : FT(20)
+dt = is_small_scale ? FT(5) : FT(20)
 dt_save_to_sol = t_end / (animation_duration * fps)
-ode_algorithm = ClimaTimeSteppers.SSPRK33ShuOsher # ARS343 requires a prohibitively small timestep
+ode_algorithm = ClimaTimeSteppers.ARS343 # ARS343 requires a prohibitively small timestep
 jacobian_flags = (;
     ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = ᶜ𝔼_name == :ρe ? :no_∂ᶜp∂ᶜK : :exact,
     ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact,

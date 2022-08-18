@@ -129,3 +129,11 @@ function nlsolve!(
     nlsolver.ηold = η
     postamble!(nlsolver, integrator)
 end
+
+# Don't wrap a ForwardEulerODEFunction in an ODEFunction.
+OrdinaryDiffEq.ODEFunction{iip}(
+    f::ClimaTimeSteppers.ForwardEulerODEFunction
+) where {iip} = f
+OrdinaryDiffEq.ODEFunction(
+    f::ClimaTimeSteppers.ForwardEulerODEFunction
+) = f

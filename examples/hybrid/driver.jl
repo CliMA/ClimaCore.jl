@@ -11,7 +11,8 @@ dt_save_to_sol = 0 # 0 means don't save to sol
 dt_save_to_disk = 0 # 0 means don't save to disk
 ode_algorithm = nothing # must be object of type OrdinaryDiffEqAlgorithm
 jacobian_flags = (;) # only required by implicit ODE algorithms
-max_newton_iters = 10 # only required by ODE algorithms that use Newton's method
+newton_κ = Inf # only required by ODE algorithms that use Newton's method
+max_newton_iters = 2 # only required by ODE algorithms that use Newton's method
 show_progress_bar = false
 additional_callbacks = () # e.g., printing diagnostic information
 additional_solver_kwargs = (;) # e.g., abstol and reltol
@@ -56,6 +57,7 @@ const FT = get(ENV, "FLOAT_TYPE", "Float32") == "Float32" ? Float32 : Float64
 include("../implicit_solver_debugging_tools.jl")
 include("../ordinary_diff_eq_bug_fixes.jl")
 include("../common_spaces.jl")
+include("../imex_euler.jl")
 
 if haskey(ENV, "TEST_NAME")
     test_dir, test_file_name = split(ENV["TEST_NAME"], '/')
@@ -97,17 +99,19 @@ else
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode)
+ode_algorithm_type =
+    ode_algorithm isa Function ? typeof(ode_algorithm()) : ode_algorithm # awful hack for OrdinaryDiffEq.IMEXEuler
 if (
-    # ode_algorithm <: Union{
+    # ode_algorithm_type <: Union{
     #     OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
     #     OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
     # }
-    "linsolve" in split(methods(ode_algorithm)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
+    "linsolve" in split(methods(ode_algorithm_type)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
 )
     use_transform = !(
         any(
-            ode_algorithm .<:
-            (Rosenbrock23, Rosenbrock32, ClimaTimeSteppers.ARSAlgorithm)
+            ode_algorithm_type .<:
+            (Rosenbrock23, Rosenbrock32, ClimaTimeSteppers.ARSAlgorithm, IMEXEulerAlgorithm)
         )
     )
     W = SchurComplementW(Y, use_transform, jacobian_flags, test_implicit_solver)
@@ -117,14 +121,16 @@ if (
 
     alg_kwargs = (; linsolve = linsolve!)
     if (
-        # ode_algorithm <: Union{
+        # ode_algorithm_type <: Union{
         #     OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
         #     OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
         # }
-        "nlsolve" in split(methods(ode_algorithm)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
+        "nlsolve" in split(methods(ode_algorithm_type)[1].slot_syms, "\0") # awful hack for ClimaTimeSteppers
     )
-        alg_kwargs =
-            (; alg_kwargs..., nlsolve = NLNewton(; max_iter = max_newton_iters))
+        alg_kwargs = (;
+            alg_kwargs...,
+            nlsolve = NLNewton(; κ = newton_κ, max_iter = max_newton_iters),
+        )
     end
 else
     jac_kwargs = alg_kwargs = (;)
@@ -173,9 +179,9 @@ callback =
 function make_remaining_forward_euler_step(Y)
     ∂Y∂t_remaining = similar(Y)
     function forward_euler_step!(Yn, Y, p, t, dtγ)
-        # @info "We're at t = $t" # progress bars are not implemented in ClimaTimeSteppers
+        @info "We're at t = $t" # progress bars are not implemented in ClimaTimeSteppers
         remaining_tendency!(∂Y∂t_remaining, Y, p, t)
-        @. Yn = Y + dtγ * ∂Y∂t_remaining
+        @. Yn = Yn + dtγ * ∂Y∂t_remaining
     end
 end
 function make_forward_euler_step(Y)
@@ -185,10 +191,11 @@ function make_forward_euler_step(Y)
         # @info "We're at t = $t" # progress bars are not implemented in ClimaTimeSteppers
         implicit_tendency!(∂Y∂t_implicit, Y, p, t)
         remaining_tendency!(∂Y∂t_remaining, Y, p, t)
-        @. Yn = Y + dtγ * (∂Y∂t_implicit + ∂Y∂t_remaining)
+        @. Yn = Yn + dtγ * (∂Y∂t_implicit + ∂Y∂t_remaining)
     end
 end
-if ode_algorithm <: ClimaTimeSteppers.ARSAlgorithm # if using ClimaTimeSteppers imex algorithm
+if ode_algorithm_type <: ClimaTimeSteppers.ARSAlgorithm ||
+    ode_algorithm_type <: IMEXEulerAlgorithm # if using ClimaTimeSteppers imex algorithm
     remaining_ode_function =
         ClimaTimeSteppers.ForwardEulerODEFunction(
             make_remaining_forward_euler_step(Y)
@@ -206,7 +213,7 @@ if ode_algorithm <: ClimaTimeSteppers.ARSAlgorithm # if using ClimaTimeSteppers 
         (t_start, t_end),
         p,
     )
-elseif ode_algorithm <: ClimaTimeSteppers.DistributedODEAlgorithm # using ClimaTimeSteppers explicit algorithm
+elseif ode_algorithm_type <: ClimaTimeSteppers.DistributedODEAlgorithm # using ClimaTimeSteppers explicit algorithm
     ode_function =
         ClimaTimeSteppers.ForwardEulerODEFunction(make_forward_euler_step(Y))
     problem = ODEProblem(
