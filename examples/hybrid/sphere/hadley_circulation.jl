@@ -79,7 +79,7 @@ end
 # RHS tendency specification
 function rhs!(dydt, y, parameters, t, alpha, beta)
 
-    (; coords, face_coords, τ, u₀, ω₀, K, ρ₀, ystar) = parameters
+    (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar) = parameters
 
     ϕ = coords.lat
     zc = coords.z
@@ -87,16 +87,15 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     ϕf = face_coords.lat
 
     uu = @. u₀ * cosd(ϕ)
-    uv = @. -(R * ω₀ * pi * ρ₀ / K / z_top / ρ_ref(zc)) *
+    uv = @. -(R * w₀ * pi * ρ₀ / K / z_top / ρ_ref(zc)) *
        sind(K * ϕ) *
        cosd(ϕ) *
-       cosd(pi * zc / z_top) *
+       cos(pi * zc / z_top) *
        cos(pi * t / τ)
-    ω = @. (ω₀ * ρ₀ / K / ρ_ref(zf)) *
+    uw = @. (w₀ * ρ₀ / K / ρ_ref(zf)) *
        (-2 * sind(K * ϕf) * sind(ϕf) + K * cosd(ϕf) * cosd(K * ϕf)) *
-       sind(pi * zf / z_top) *
+       sin(pi * zf / z_top) *
        cos(pi * t / τ)
-    uw = @. -ω / ρ_ref(zf) / grav
 
     uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
     w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
@@ -156,14 +155,14 @@ const ρ₀ = p₀ / R_d / T₀   # density at the surface
 const τ = 86400.0          # period of motion (1 day)
 const K = 5                # number of overturning cells
 const u₀ = 40.0            # reference zonal velocity
-const ω₀ = 0.15            # reference vertical velocity
+const w₀ = 0.15            # reference vertical velocity
 const z₁ = 2000.0          # lower boundary of tracer layer
 const z₂ = 5000.0          # upper boundary of tracer layer
-const κ₄ = 0.0             # hyperviscosity
+const κ₄ = 1.0e16          # hyperviscosity
 
 # time constants
 T = 86400.0 * 1.0
-dt = 60.0 * 60.0
+dt = 30.0 * 60.0
 
 # set up 3D domain
 hv_center_space, hv_face_space = sphere_3D()
@@ -199,7 +198,7 @@ parameters = (;
     face_coords = face_coords,
     τ = τ,
     u₀ = u₀,
-    ω₀ = ω₀,
+    w₀ = w₀,
     K = K,
     ρ₀ = ρ₀,
     ystar = ystar,
@@ -226,8 +225,8 @@ q1_error =
 initial_mass = sum(y0.ρq1 ./ ρ_ref.(coords.z))
 mass = sum(sol.u[end].ρq1 ./ ρ_ref.(coords.z))
 rel_mass_err = norm((mass - initial_mass) / initial_mass)
-@test q1_error ≈ 0.0 atol = 0.05
-@test rel_mass_err ≈ 0.0 atol = 3e-6
+@test q1_error ≈ 0.0 atol = 0.35
+@test rel_mass_err ≈ 0.0 atol = 2.5e-4
 
 Plots.png(
     Plots.plot(
@@ -238,7 +237,7 @@ Plots.png(
     joinpath(path, "q1_half_day_level_11.png"),
 )
 
-# Remapping infrastructure to have lat-altitude Plots
+# Remapping infrastructure to have lat-altitude plots
 remap_tmpdir = path * "/remaptmp/"
 mkpath(remap_tmpdir)
 datafile_cc = remap_tmpdir * "cc.nc"
@@ -310,7 +309,7 @@ calc_zonalave(x) = dropdims(mean(x, dims = 1), dims = 1)
 q1_zonalave = calc_zonalave(q1)
 
 times = 0.0:dt:T
-levels = range(0, 4.95; step = 0.45) # contour levels
+levels = range(0, 1.1; step = 0.1) # contour levels
 anim = Plots.@animate for i in 1:length(times)
     Plots.contourf(
         lat,
@@ -321,7 +320,7 @@ anim = Plots.@animate for i in 1:length(times)
         title = "q1 zonal average",
         xlabel = "lat (deg N)",
         ylabel = "z (m)",
-        clim = (-0.1, 4.5),
+        clim = (-0.1, 1.1),
         levels = levels,
     )
 end
