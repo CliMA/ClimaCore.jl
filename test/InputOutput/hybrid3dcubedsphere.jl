@@ -10,6 +10,21 @@ using ClimaCore:
     DataLayouts,
     InputOutput
 
+using ClimaComms
+usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+if usempi
+    using ClimaCommsMPI, MPI
+    const comms_ctx = ClimaCommsMPI.MPICommsContext()
+    pid, nprocs = ClimaComms.init(comms_ctx)
+    filename = MPI.bcast(tempname(), 0, MPI.COMM_WORLD)
+    if ClimaComms.iamroot(comms_ctx)
+        @info "Distributed test" nprocs
+    end
+else
+    const comms_ctx = ClimaComms.SingletonCommsContext()
+    ClimaComms.init(comms_ctx)
+    filename = tempname()
+end
 
 @testset "HDF5 restart test for 3d hybrid cubed sphere" begin
     FT = Float32
@@ -22,7 +37,18 @@ using ClimaCore:
     # horizontal space
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
-    topology = Topologies.Topology2D(horizontal_mesh)
+    if comms_ctx isa ClimaComms.SingletonCommsContext
+        topology = Topologies.Topology2D(
+            horizontal_mesh,
+            Topologies.spacefillingcurve(horizontal_mesh),
+        )
+    else
+        topology = Topologies.DistributedTopology2D(
+            comms_ctx,
+            horizontal_mesh,
+            Topologies.spacefillingcurve(horizontal_mesh),
+        )
+    end
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(topology, quad)
     # vertical space
@@ -44,9 +70,11 @@ using ClimaCore:
     Y = Fields.FieldVector(c = ᶜlocal_geometry, f = ᶠlocal_geometry)
 
     # write field vector to hdf5 file
-    filename = tempname()
-    InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
-    reader = InputOutput.HDF5Reader(filename)
+    writer = InputOutput.HDF5Writer(filename, comms_ctx)
+    InputOutput.write!(writer, Y, "Y")
+    close(writer)
+
+    reader = InputOutput.HDF5Reader(filename, comms_ctx)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
     @test restart_Y == Y # test if restart is exact

@@ -1,6 +1,6 @@
 env:
   JULIA_VERSION: "1.7.1"
-  MPICH_VERSION: "4.0.0"
+  MPI_IMPL: "openmpi"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
@@ -125,6 +125,17 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+
+  - label: ":computer: Parallel HDF5 IO tests"
+    key: "cpu_parallel_hdf5"
+    command:
+      - "mpiexec julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 3
 
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
@@ -675,7 +686,7 @@ steps:
     key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
     command:
       - "module load cuda/11.3 nsight-systems/2022.2.1"
-      - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
     artifact_paths:
       - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
     env:
