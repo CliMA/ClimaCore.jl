@@ -1468,19 +1468,20 @@ Input arguments:
 - a face-valued vector field `v`
 - a center-valued field `x`
 ```math
-U(v,x)[i] = \\begin{cases}
-  v[i] \\left(-2 x[i-\\tfrac{3}{2}] + 10 x[i-\\tfrac{1}{2}] + 4 x[i+\\tfrac{1}{2}] \\right) / 12  \\textrm{, if } v[i] > 0 \\\\
-  v[i] \\left(4 x[i-\\tfrac{1}{2}] + 10 x[i+\\tfrac{1}{2}] -2 x[i+\\tfrac{3}{2}]  \\right) / 12  \\textrm{, if } v[i] < 0
-  \\end{cases}
+Ac(v,x)[i] =
+  s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) \\Delta z ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\Delta z \\right] \\right\\},
 ```
-This stencil is based on [BorisBook1973](@cite).
+where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive flux.
+This formulation is based on [BorisBook1973](@cite).
 
 Supported boundary conditions are:
-- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
-and the third-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary,
+and the first-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces,
+    and so this operator cannot be materialized directly: it needs to be composed with another operator that does not make use of this value, e.g. a
+    [`DivergenceF2C`](@ref) operator, with a [`SetValue`](@ref) boundary.
 """
 struct FCTBorisBook{BCS} <: AdvectionOperator
     bcs::BCS
@@ -1548,11 +1549,11 @@ stencil_interior_width(::FCTBorisBook, velocity, arg) =
     )
 end
 
-boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
+boundary_width(::FCTBorisBook, ::FirstOrderOneSided, velocity, arg) = 2
 
 @inline function stencil_left_boundary(
     ::FCTBorisBook,
-    bc::ThirdOrderOneSided,
+    bc::FirstOrderOneSided,
     loc,
     idx,
     hidx,
@@ -1566,12 +1567,12 @@ boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    return Geometry.Contravariant3Vector(vᶠ)
+    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
 end
 
 @inline function stencil_right_boundary(
     ::FCTBorisBook,
-    bc::ThirdOrderOneSided,
+    bc::FirstOrderOneSided,
     loc,
     idx,
     hidx,
@@ -1585,8 +1586,212 @@ end
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    return Geometry.Contravariant3Vector(vᶠ)
+    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
 end
+
+
+
+#########################
+"""
+    U = FCTZalesak(;boundaries)
+    U.(A, Φ, Φᵗᵈ)
+
+Correct the flux using the flux-corrected transport formulation by Zalesak
+Input arguments:
+- a face-valued vector field `A`
+- a center-valued field `Φ`
+- a center-valued field `Φᵗᵈ`
+```math
+Φ_j^{n+1} = Φ_j^{td} - \frac{dt}{dx}(C_{j+\frac{1}{2}}A_{j+\frac{1}{2}} - C_{j-\frac{1}{2}}A_{j-\frac{1}{2}})
+```
+This stencil is based on [zalesak1979fully](@cite).
+
+Supported boundary conditions are:
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary,
+and the first-order upwind reconstruction to compute `x` on the right boundary.
+
+!!! note
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define 
+    the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to 
+    be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, 
+    with a [`SetValue`](@ref) boundary.
+"""
+struct FCTZalesak{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+FCTZalesak(; kwargs...) = FCTZalesak(NamedTuple(kwargs))
+
+return_eltype(::FCTZalesak, A, Φ, Φᵗᵈ) =
+    Geometry.Contravariant3Vector{eltype(eltype(A))}
+
+return_space(
+    ::FCTZalesak,
+    A_space::Spaces.FaceFiniteDifferenceSpace,
+    Φ_space::Spaces.CenterFiniteDifferenceSpace,
+    Φᵗᵈ_space::Spaces.CenterFiniteDifferenceSpace,
+) = A_space
+return_space(
+    ::FCTZalesak,
+    A_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    Φ_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    Φᵗᵈ_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = A_space
+
+@inline function fct_zalesak(
+    Aⱼ₋₁₂,
+    Aⱼ₊₁₂,
+    Aⱼ₊₃₂,
+    ϕⱼ₋₁,
+    ϕⱼ,
+    ϕⱼ₊₁,
+    ϕⱼ₊₂,
+    ϕⱼ₋₁ᵗᵈ,
+    ϕⱼᵗᵈ,
+    ϕⱼ₊₁ᵗᵈ,
+    ϕⱼ₊₂ᵗᵈ,
+    dxⱼ,
+    dxⱼ₊₁,
+)
+    # 1/dt is in ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ
+
+    stable_zero = zero(eltype(Aⱼ₊₁₂))
+    stable_one = one(eltype(Aⱼ₊₁₂))
+
+    if (
+        Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero ||
+        Aⱼ₊₁₂ * (ϕⱼ₊₂ᵗᵈ - ϕⱼ₊₁ᵗᵈ) < stable_zero ||
+        Aⱼ₊₁₂ * (ϕⱼᵗᵈ - ϕⱼ₋₁ᵗᵈ) < stable_zero
+    )
+        Aⱼ₊₁₂ = stable_zero
+    end
+    ϕⱼᵐᵃˣ = max(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
+    ϕⱼᵐⁱⁿ = min(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
+    Pⱼ⁺ = max(stable_zero, Aⱼ₋₁₂) - min(stable_zero, Aⱼ₊₁₂)
+    Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ) * dxⱼ
+    Rⱼ⁺ = (Pⱼ⁺ > stable_zero ? min(stable_one, Qⱼ⁺ / Pⱼ⁺) : stable_zero)
+    Pⱼ⁻ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₋₁₂)
+    Qⱼ⁻ = (ϕⱼᵗᵈ - ϕⱼᵐⁱⁿ) * dxⱼ
+    Rⱼ⁻ = (Pⱼ⁻ > stable_zero ? min(stable_one, Qⱼ⁻ / Pⱼ⁻) : stable_zero)
+
+    ϕⱼ₊₁ᵐᵃˣ = max(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
+    ϕⱼ₊₁ᵐⁱⁿ = min(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
+    Pⱼ₊₁⁺ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₊₃₂)
+    Qⱼ₊₁⁺ = (ϕⱼ₊₁ᵐᵃˣ - ϕⱼ₊₁ᵗᵈ) * dxⱼ₊₁
+    Rⱼ₊₁⁺ = (Pⱼ₊₁⁺ > stable_zero ? min(stable_one, Qⱼ₊₁⁺ / Pⱼ₊₁⁺) : stable_zero)
+    Pⱼ₊₁⁻ = max(stable_zero, Aⱼ₊₃₂) - min(stable_zero, Aⱼ₊₁₂)
+    Qⱼ₊₁⁻ = (ϕⱼ₊₁ᵗᵈ - ϕⱼ₊₁ᵐⁱⁿ) * dxⱼ₊₁
+    Rⱼ₊₁⁻ = (Pⱼ₊₁⁻ > stable_zero ? min(stable_one, Qⱼ₊₁⁻ / Pⱼ₊₁⁻) : stable_zero)
+
+    Cⱼ₊₁₂ = (Aⱼ₊₁₂ ≥ stable_zero ? min(Rⱼ₊₁⁺, Rⱼ⁻) : min(Rⱼ⁺, Rⱼ₊₁⁻))
+
+    return Cⱼ₊₁₂ * Aⱼ₊₁₂
+
+end
+
+stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
+    ((-1, 1), (-half - 1, half + 1), (-half - 1, half + 1))
+
+@inline function stencil_interior(
+    ::FCTZalesak,
+    loc,
+    idx,
+    hidx,
+    A_space,
+    Φ_space,
+    Φᵗᵈ_space,
+)
+
+    center_space = axes(Φ_space)
+    face_space = axes(A_space)
+    # cell center variables
+    ϕⱼ₋₁ = getidx(Φ_space, loc, idx - half - 1, hidx)
+    ϕⱼ = getidx(Φ_space, loc, idx - half, hidx)
+    ϕⱼ₊₁ = getidx(Φ_space, loc, idx + half, hidx)
+    ϕⱼ₊₂ = getidx(Φ_space, loc, idx + half + 1, hidx)
+    # cell center variables
+    ϕⱼ₋₁ᵗᵈ = getidx(Φᵗᵈ_space, loc, idx - half - 1, hidx)
+    ϕⱼᵗᵈ = getidx(Φᵗᵈ_space, loc, idx - half, hidx)
+    ϕⱼ₊₁ᵗᵈ = getidx(Φᵗᵈ_space, loc, idx + half, hidx)
+    ϕⱼ₊₂ᵗᵈ = getidx(Φᵗᵈ_space, loc, idx + half + 1, hidx)
+    # cell face variables
+    Aⱼ₊₁₂ = Geometry.contravariant3(
+        getidx(A_space, loc, idx, hidx),
+        Geometry.LocalGeometry(face_space, idx, hidx),
+    )
+    Aⱼ₋₁₂ = Geometry.contravariant3(
+        getidx(A_space, loc, idx - 1, hidx),
+        Geometry.LocalGeometry(face_space, idx - 1, hidx),
+    )
+    Aⱼ₊₃₂ = Geometry.contravariant3(
+        getidx(A_space, loc, idx + 1, hidx),
+        Geometry.LocalGeometry(face_space, idx + 1, hidx),
+    )
+
+
+    dxⱼ = Geometry.LocalGeometry(center_space, idx - half, hidx).∂x∂ξ[1]
+    dxⱼ₊₁ = Geometry.LocalGeometry(center_space, idx + half, hidx).∂x∂ξ[1]
+
+
+    return Geometry.Contravariant3Vector(
+        fct_zalesak(
+            Aⱼ₋₁₂,
+            Aⱼ₊₁₂,
+            Aⱼ₊₃₂,
+            ϕⱼ₋₁,
+            ϕⱼ,
+            ϕⱼ₊₁,
+            ϕⱼ₊₂,
+            ϕⱼ₋₁ᵗᵈ,
+            ϕⱼᵗᵈ,
+            ϕⱼ₊₁ᵗᵈ,
+            ϕⱼ₊₂ᵗᵈ,
+            dxⱼ,
+            dxⱼ₊₁,
+        ),
+    )
+end
+
+boundary_width(
+    ::FCTZalesak,
+    ::FirstOrderOneSided,
+    A_space,
+    Φ_space,
+    Φᵗᵈ_space,
+) = 2
+
+@inline function stencil_left_boundary(
+    ::FCTZalesak,
+    bc::FirstOrderOneSided,
+    loc,
+    idx,
+    hidx,
+    A_space,
+    Φ_space,
+    Φᵗᵈ_space,
+)
+    face_space = axes(A_space)
+    @assert idx <= left_face_boundary_idx(face_space) + 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_space))))
+end
+
+@inline function stencil_right_boundary(
+    ::FCTZalesak,
+    bc::FirstOrderOneSided,
+    loc,
+    idx,
+    hidx,
+    A_space,
+    Φ_space,
+    Φᵗᵈ_space,
+)
+    face_space = axes(A_space)
+    @assert idx <= right_face_boundary_idx(face_space) - 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_space))))
+end
+
+
 
 """
     A = AdvectionF2F(;boundaries)

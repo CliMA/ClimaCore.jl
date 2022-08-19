@@ -24,7 +24,7 @@ import ClimaCore:
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "bb_fct_advection"
+dir = "zalesak_fct_advection"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -39,7 +39,7 @@ end
 
 function f!(dydt, y, parameters, t, alpha, beta)
 
-    (; w, y_td) = parameters
+    (; w, A, y_td) = parameters
     y = y.y
     dydt = dydt.y
 
@@ -55,7 +55,7 @@ function f!(dydt, y, parameters, t, alpha, beta)
         bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
         top = Operators.SetValue(Geometry.WVector(FT(0.0))),
     )
-    FCTBB = Operators.FCTBorisBook(
+    FCTZalesak = Operators.FCTZalesak(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
@@ -64,8 +64,9 @@ function f!(dydt, y, parameters, t, alpha, beta)
     @. dydt =
         y_td -
         alpha * divf2c(
-            FCTBB(
+            FCTZalesak(
                 third_order_fluxᶠ(w, y) - first_order_fluxᶠ(w, y),
+                y / alpha,
                 y_td / alpha,
             ),
         )
@@ -75,6 +76,7 @@ end
 
 FT = Float64
 t₀ = FT(0.0)
+t₁ = FT(1.0)
 z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
@@ -86,6 +88,7 @@ domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(-π),
     Geometry.ZPoint{FT}(π);
     boundary_names = (:bottom, :top),
+    # periodic = true,
 )
 mesh = Meshes.IntervalMesh(domain, nelems = n)
 cs = Spaces.CenterFiniteDifferenceSpace(mesh)
@@ -107,9 +110,10 @@ y0 = Fields.FieldVector(y = y0)
 # Set up parameters needed for time-stepping
 Δt = 0.0001
 dydt = copy(y0)
+A = similar(dydt.y)
 y_td = similar(dydt.y)
 
-parameters = (; w, y_td)
+parameters = (; w, A, y_td)
 # Call the RHS function
 f!(dydt, y0, parameters, 0.0, Δt, 1)
 t₁ = 100Δt
@@ -130,11 +134,11 @@ initial_mass = sum(sol.u[1].y)
 mass = sum(sol.u[end].y)
 rel_mass_err = norm((mass - initial_mass) / initial_mass)
 
-@test err ≤ 0.0185
-@test rel_mass_err ≤ 8eps()
+@test err ≤ 0.019
+@test rel_mass_err ≤ 13eps()
 
 plot(sol.u[end].y)
 Plots.png(
-    Plots.plot!(analytical_result, title = "Boris and Book FCT"),
-    joinpath(path, "exact_and_computed_advected_square_wave_BBFCT.png"),
+    Plots.plot!(analytical_result, title = "Zalesak FCT"),
+    joinpath(path, "exact_and_computed_advected_square_wave_ZalesakFCT.png"),
 )
