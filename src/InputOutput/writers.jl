@@ -1,13 +1,5 @@
 abstract type AbstractWriter end
 
-using PkgVersion
-using HDF5, ClimaComms
-using ..Domains
-using ..Meshes
-using ..Topologies
-using ..Spaces
-using ..Fields
-
 """
     HDF5Writer(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
 
@@ -54,7 +46,7 @@ function HDF5Writer(
     else
         file = h5open(filename, "w", context.mpicomm)
     end
-    write_attribute(file, "ClimaCore version", string(PkgVersion.@Version))
+    write_attribute(file, "ClimaCore version", string(VERSION))
     cache = Dict{String, String}()
     return HDF5Writer(file, context, cache)
 end

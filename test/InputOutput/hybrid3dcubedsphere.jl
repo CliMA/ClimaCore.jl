@@ -38,9 +38,16 @@ end
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
     if comms_ctx isa ClimaComms.SingletonCommsContext
-        topology = Topologies.Topology2D(horizontal_mesh)
+        topology = Topologies.Topology2D(
+            horizontal_mesh,
+            Topologies.spacefillingcurve(horizontal_mesh),
+        )
     else
-        topology = Topologies.DistributedTopology2D(comms_ctx, horizontal_mesh)
+        topology = Topologies.DistributedTopology2D(
+            comms_ctx,
+            horizontal_mesh,
+            Topologies.spacefillingcurve(horizontal_mesh),
+        )
     end
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(topology, quad)

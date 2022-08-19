@@ -1,6 +1,7 @@
 abstract type AbstractReader end
 
-using HDF5, ClimaComms
+# these need to be here for to make the eval work
+# TODO: figure out a better way to represent types
 using StaticArrays
 using ..ClimaCore
 using ..Domains: IntervalDomain, SphereDomain
@@ -83,8 +84,7 @@ function HDF5Reader(
         error("Not a ClimaCore HDF5 file")
     end
     file_version = VersionNumber(attrs(file)["ClimaCore version"])
-    package_version = PkgVersion.@Version
-    if file_version > package_version
+    if file_version > VERSION
         @warn "$filename was written using a newer version of ClimaCore than is currently loaded" file_version package_version
     end
     return HDF5Reader(
@@ -109,28 +109,28 @@ function Base.close(hdfreader::HDF5Reader)
 end
 
 function _scan_coord_type(coordstring::AbstractString)
-    coordstring == "XPoint" && return XPoint
-    coordstring == "YPoint" && return YPoint
-    coordstring == "ZPoint" && return ZPoint
+    coordstring == "XPoint" && return Geometry.XPoint
+    coordstring == "YPoint" && return Geometry.YPoint
+    coordstring == "ZPoint" && return Geometry.ZPoint
     error("Invalid coord type $coordstring")
 end
 
 function _scan_quadrature_style(quadraturestring::AbstractString, npts)
     @assert quadraturestring ∈ ("GLL", "GL", "Uniform", "ClosedUniform")
-    quadraturestring == "GLL" && return GLL{npts}()
-    quadraturestring == "GL" && return GL{npts}()
-    quadraturestring == "Uniform" && return Uniform{npts}()
-    return ClosedUniform{npts}()
+    quadraturestring == "GLL" && return Spaces.Quadratures.GLL{npts}()
+    quadraturestring == "GL" && return Spaces.Quadratures.GL{npts}()
+    quadraturestring == "Uniform" && return Spaces.Quadratures.Uniform{npts}()
+    return Spaces.Quadratures.ClosedUniform{npts}()
 end
 
 function _scan_data_layout(layoutstring::AbstractString)
     @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-    layoutstring == "IJFH" && return IJFH
-    layoutstring == "IJF" && return IJF
-    layoutstring == "IFH" && return IFH
-    layoutstring == "IF" && return IF
-    layoutstring == "VIJFH" && return VIJFH
-    return VIFH
+    layoutstring == "IJFH" && return DataLayouts.IJFH
+    layoutstring == "IJF" && return DataLayouts.IJF
+    layoutstring == "IFH" && return DataLayouts.IFH
+    layoutstring == "IF" && return DataLayouts.IF
+    layoutstring == "VIJFH" && return DataLayouts.VIJFH
+    return DataLayouts.VIFH
 end
 
 """
@@ -222,7 +222,7 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
         domain = read_domain(reader, attrs(group)["domain"])
         localelementmap =
             attrs(group)["localelementmap"] == "NormalizedBilinearMap" ?
-            NormalizedBilinearMap() : IntrinsicMap()
+            Meshes.NormalizedBilinearMap() : Meshes.IntrinsicMap()
         ne = attrs(group)["ne"]
         return Meshes.EquiangularCubedSphere(domain, ne, localelementmap)
     end
@@ -356,7 +356,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         values = DataLayout{ElType, Nij}(data)
         return Fields.Field(values, space)
     elseif type == "FieldVector"
-        FieldVector(;
+        Fields.FieldVector(;
             [
                 Symbol(sub) => read_field(reader, "$name/$sub") for
                 sub in keys(obj)
