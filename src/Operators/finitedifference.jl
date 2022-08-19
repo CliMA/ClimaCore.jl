@@ -1475,8 +1475,8 @@ where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v[i] \\leq 0`
 This formulation is based on [BorisBook1973](@cite).
 
 Supported boundary conditions are:
-- [`ThirdOrderOneSided(x₀)`](@ref): uses the third-order downwind reconstruction to compute `x` on the left boundary,
-and the third-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary,
+and the first-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
     Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces,
@@ -1549,11 +1549,11 @@ stencil_interior_width(::FCTBorisBook, velocity, arg) =
     )
 end
 
-boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
+boundary_width(::FCTBorisBook, ::FirstOrderOneSided, velocity, arg) = 2
 
 @inline function stencil_left_boundary(
     ::FCTBorisBook,
-    bc::ThirdOrderOneSided,
+    bc::FirstOrderOneSided,
     loc,
     idx,
     hidx,
@@ -1567,12 +1567,12 @@ boundary_width(::FCTBorisBook, ::ThirdOrderOneSided, velocity, arg) = 2
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    return Geometry.Contravariant3Vector(vᶠ)
+    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
 end
 
 @inline function stencil_right_boundary(
     ::FCTBorisBook,
-    bc::ThirdOrderOneSided,
+    bc::FirstOrderOneSided,
     loc,
     idx,
     hidx,
@@ -1586,7 +1586,7 @@ end
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    return Geometry.Contravariant3Vector(vᶠ)
+    return Geometry.Contravariant3Vector(zero(eltype(vᶠ)))
 end
 
 """
