@@ -752,6 +752,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: 3D sphere Hadley circulation"
+    key: "cpu_3d_hadley_circulation"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/hadley_circulation/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
     key: "cpu_baroclinic_wave_rho_e_float64"
     command:
