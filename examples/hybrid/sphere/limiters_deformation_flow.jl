@@ -27,36 +27,36 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 # 3D deformation flow (DCMIP 2012 Test 1-1)
 # Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.1
 
-const R = 6.37122e6        # radius
-const grav = 9.8           # gravitational constant
-const R_d = 287.058        # R dry (gas constant / mol mass dry air)
-const z_top = 1.2e4        # height position of the model top
-const p_top = 25494.4      # pressure at the model top
-const T_0 = 300            # isothermal atmospheric temperature
-const H = R_d * T_0 / grav # scale height
-const p_0 = 1.0e5          # reference pressure
-const τ = 1036800.0        # period of motion
-const ω_0 = 23000 * pi / τ # maxium of the vertical pressure velocity
-const b = 0.2              # normalized pressure depth of divergent layer
-const λ_c1 = 150.0         # initial longitude of first tracer
-const λ_c2 = 210.0         # initial longitude of second tracer
-const ϕ_c = 0.0            # initial latitude of tracers
-const centers = [
-    Geometry.LatLongZPoint(ϕ_c, λ_c1, 0.0),
-    Geometry.LatLongZPoint(ϕ_c, λ_c2, 0.0),
-]
-const z_c = 5.0e3          # initial altitude of tracers
-const R_t = R / 2          # horizontal half-width of tracers
-const Z_t = 1000.0         # vertical half-width of tracers
-const D₄ = 1.0e16          # hyperviscosity coefficient
+const FT = Float64
 
-lim_flag = true           # limiters flag
-T = 86400 * 12.0           # simulation times in seconds (12 days)
-dt = 60.0 * 60.0           # time step in seconds (20 minutes)
+const R = FT(6.37122e6)        # radius
+const grav = FT(9.8)           # gravitational constant
+const R_d = FT(287.058)        # R dry (gas constant / mol mass dry air)
+const z_top = FT(1.2e4)        # height position of the model top
+const p_top = FT(25494.4)      # pressure at the model top
+const T_0 = FT(300)            # isothermal atmospheric temperature
+const H = R_d * T_0 / grav     # scale height
+const p_0 = FT(1.0e5)          # reference pressure
+const τ = FT(1036800.0)        # period of motion
+const ω_0 = FT(23000) * FT(pi) / τ # maxium of the vertical pressure velocity
+const b = FT(0.2)              # normalized pressure depth of divergent layer
+const λ_c1 = FT(150.0)         # initial longitude of first tracer
+const λ_c2 = FT(210.0)         # initial longitude of second tracer
+const ϕ_c = FT(0.0)            # initial latitude of tracers
+const centers = (
+    Geometry.LatLongZPoint(ϕ_c, λ_c1, FT(0.0)),
+    Geometry.LatLongZPoint(ϕ_c, λ_c2, FT(0.0)),
+)
+const z_c = FT(5.0e3)          # initial altitude of tracers
+const R_t = R / 2              # horizontal half-width of tracers
+const Z_t = FT(1000.0)         # vertical half-width of tracers
+const D₄ = FT(1.0e16)          # hyperviscosity coefficient
+
+lim_flag = false                # limiters flag
+T = 86400 * FT(12.0)           # simulation times in seconds (12 days)
+# dt = FT(60.0) * FT(60.0)     # time step in seconds (20 minutes)
 zelems = 36
 helems = 4
-
-FT = Float64
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
@@ -86,13 +86,12 @@ end
 
 # set up function space
 function sphere_3D(
-    R = 6.37122e6,
-    zlim = (0, 12.0e3);
+    R = FT(6.37122e6),
+    zlim = (0, FT(12.0e3));
     helem = 4,
     zelem = 36,
     npoly = 4,
 )
-    FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
@@ -132,28 +131,28 @@ tracers = map(center_coords) do coord
     zd = z - z_c
     λ = coord.long
     ϕ = coord.lat
-    rd = Vector{Float64}(undef, 2)
+    rd = Vector{FT}(undef, 2)
     # great circle distances
     for i in 1:2
         rd[i] = Geometry.great_circle_distance(coord, centers[i], global_geom)
     end
     # scaled distance functions
-    d = Vector{Float64}(undef, 2)
+    d = Vector{FT}(undef, 2)
     for i in 1:2
         d[i] = min(1, (rd[i] / R_t)^2 + (zd / Z_t)^2)
     end
-    q1 = 0.5 * (1 + cos(pi * d[1])) + 0.5 * (1 + cos(pi * d[2]))
-    q2 = 0.9 - 0.8 * q1^2
-    q3 = 0.0
-    if d[1] < 0.5 || d[2] < 0.5
-        q3 = 1.0
+    q1 = FT(0.5) * (1 + cos(FT(pi) * d[1])) + FT(0.5) * (1 + cos(FT(pi) * d[2]))
+    q2 = FT(0.9) - FT(0.8) * q1^2
+    q3 = FT(0.0)
+    if d[1] < FT(0.5) || d[2] < FT(0.5)
+        q3 = FT(1.0)
     else
-        q3 = 0.1
+        q3 = FT(0.1)
     end
-    if (z > z_c) && (ϕ > ϕ_c - rad2deg(1 / 8)) && (ϕ < ϕ_c + rad2deg(1 / 8))
-        q3 = 0.1
+    if (z > z_c) && (ϕ > ϕ_c - rad2deg(FT(1) / 8)) && (ϕ < ϕ_c + rad2deg(FT(1) / 8))
+        q3 = FT(0.1)
     end
-    q4 = 1 - 3 / 10 * (q1 + q2 + q3)
+    q4 = 1 - FT(3) / 10 * (q1 + q2 + q3)
     q5 = 1
 
     ρq1 = ρ_ref(z) * q1
@@ -209,16 +208,16 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     sp =
         @. 1 + exp((p_top - p_0) / b / p_top) - exp((p(zf) - p_0) / b / p_top) -
            exp((p_top - p(zf)) / b / p_top)
-    ua = @. k * sind(λp)^2 * sind(2 * ϕ) * cos(pi * t / τ) +
-       2 * pi * R / τ * cosd(ϕ)
+    ua = @. k * sind(λp)^2 * sind(2 * ϕ) * cos(FT(pi) * t / τ) +
+       2 * FT(pi) * R / τ * cosd(ϕ)
     ud = @. ω_0 * R / b / p_top *
        cosd(λp) *
        cosd(ϕ)^2 *
-       cos(2 * pi * t / τ) *
+       cos(2 * FT(pi) * t / τ) *
        (-exp((p(zc) - p_0) / b / p_top) + exp((p_top - p(zc)) / b / p_top))
     uu = @. ua + ud
-    uv = @. k * sind(2 * λp) * cosd(ϕ) * cos(pi * t / τ)
-    ω = @. ω_0 * sind(λpf) * cosd(ϕf) * cos(2 * pi * t / τ) * sp
+    uv = @. k * sind(2 * λp) * cosd(ϕ) * cos(FT(pi) * t / τ)
+    ω = @. ω_0 * sind(λpf) * cosd(ϕf) * cos(2 * FT(pi) * t / τ) * sp
     uw = @. -ω / ρ_ref(zf) / grav
 
     uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
@@ -359,70 +358,131 @@ parameters = (
 )
 
 # Set up the RHS function
-rhs!(ystar, y0, parameters, 0.0, dt, 1)
-
+# rhs!(ystar, y0, parameters, FT(0.0), dt, 1)
 
 # Solve the ODE
-prob = ODEProblem(IncrementingODEFunction(rhs!), copy(y0), (0.0, T), parameters)
-sol = solve(
-    prob,
-    SSPRK33ShuOsher(),
-    dt = dt,
-    saveat = dt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, pm, t) -> t,
+M_inits = [
+    sum(y0.ρ),
+    sum(y0.tracers.ρq1),
+    sum(y0.tracers.ρq2),
+    sum(y0.tracers.ρq3),
+    sum(y0.tracers.ρq4),
+    sum(y0.tracers.ρq5),
+]
+
+# error per timestep ~ eps(FT) ==> M(t + dt) = E * M(t) ==> M(T) = E^(T/dt) * M(0)
+
+# WTS: log(|M(t) - M(0)| / M(0)) = C - log(dt) ==>
+# |M(t) - M(0)| / M(0) = exp(C) / dt ==>
+# |M(t) - M(0)| = exp(C) * M(0) / dt
+
+# |M(t + dt) - M(0)| = |M(t) - M(0)|
+
+dts = FT[1.075, 1.05, 1.025, @.(10^(-(0:6) / 4))...] .* (60 * 60)
+M_errs = similar(dts, length(dts), 6)
+for (index, dt) in enumerate(dts)
+    @info dt
+    prob = ODEProblem(IncrementingODEFunction(rhs!), copy(y0), (FT(0.0), T), parameters)
+    sol = @timev solve(
+        prob,
+        SSPRK33ShuOsher(),
+        dt = dt,
+        saveat = T,
+        progress = true,
+        adaptive = false,
+    )
+    y = sol.u[end]
+    M_errs[index, 1] = abs((sum(y.ρ) - M_inits[1]) / M_inits[1])
+    M_errs[index, 2] = abs((sum(y.tracers.ρq1) - M_inits[2]) / M_inits[2])
+    M_errs[index, 3] = abs((sum(y.tracers.ρq2) - M_inits[3]) / M_inits[3])
+    M_errs[index, 4] = abs((sum(y.tracers.ρq3) - M_inits[4]) / M_inits[4])
+    M_errs[index, 5] = abs((sum(y.tracers.ρq4) - M_inits[5]) / M_inits[5])
+    M_errs[index, 6] = abs((sum(y.tracers.ρq5) - M_inits[6]) / M_inits[6])
+    @info M_errs[index, :]
+end
+str1 = lim_flag ? "with" : "without"
+str2 = lim_flag ? "_lim_" : "_no_lim_"
+plt = Plots.plot(
+    dts,
+    M_errs;
+    line = (3, :solid),
+    scale = :log10,
+    legend = :topright,
+    title = "Conservation Error for Deformation Flow $str1 Limiters ($FT)",
+    xlabel = "dt [s]",
+    ylabel = "Relative Change: |M_end - M_start| / M_start",
+    label = [
+        "M = sum(Y.ρ)";;
+        "M = sum(Y.tracers.ρq1)";;
+        "M = sum(Y.tracers.ρq2)";;
+        "M = sum(Y.tracers.ρq3)";;
+        "M = sum(Y.tracers.ρq4)";;
+        "M = sum(Y.tracers.ρq5)";;
+    ],
+    titlefontsize = 10,
+    guidefontsize = 9,
+    background_color_legend = RGBA(1, 1, 1, 0.7),
 )
-
-q1_error =
-    norm(
-        sol.u[end].tracers.ρq1 ./ ρ_ref.(center_coords.z) .-
-        y0.tracers.ρq1 ./ ρ_ref.(center_coords.z),
-    ) / norm(y0.tracers.ρq1 ./ ρ_ref.(center_coords.z))
-@test q1_error ≈ 0.0 atol = 0.75
-
-q2_error =
-    norm(
-        sol.u[end].tracers.ρq2 ./ ρ_ref.(center_coords.z) .-
-        y0.tracers.ρq2 ./ ρ_ref.(center_coords.z),
-    ) / norm(y0.tracers.ρq2 ./ ρ_ref.(center_coords.z))
-@test q2_error ≈ 0.0 atol = 0.034
-
-q3_error =
-    norm(
-        sol.u[end].tracers.ρq3 ./ ρ_ref.(center_coords.z) .-
-        y0.tracers.ρq3 ./ ρ_ref.(center_coords.z),
-    ) / norm(y0.tracers.ρq3 ./ ρ_ref.(center_coords.z))
-@test q3_error ≈ 0.0 atol = 0.41
-
-q4_error =
-    norm(
-        sol.u[end].tracers.ρq4 ./ ρ_ref.(center_coords.z) .-
-        y0.tracers.ρq4 ./ ρ_ref.(center_coords.z),
-    ) / norm(y0.tracers.ρq4 ./ ρ_ref.(center_coords.z))
-@test q4_error ≈ 0.0 atol = 0.03
-
-q5_error =
-    norm(
-        sol.u[end].tracers.ρq5 ./ ρ_ref.(center_coords.z) .-
-        y0.tracers.ρq5 ./ ρ_ref.(center_coords.z),
-    ) / norm(y0.tracers.ρq5 ./ ρ_ref.(center_coords.z))
-@test q5_error ≈ 0.0 atol = 0.007
-
-Plots.png(
-    Plots.plot(
-        sol.u[trunc(Int, end / 2)].tracers.ρq3 ./ ρ_ref.(center_coords.z),
-        level = 15,
-        clim = (-1, 1),
-    ),
-    joinpath(path, "q3_6day.png"),
+Plots.plot!(
+    [dts[end], dts[1]],
+    [M_errs[end, 1], M_errs[end, 1] * dts[end] / dts[1]];
+    label = "Expected Conservation Error",
+    line = (2, :dot, :red)
 )
+if lim_flag
+    Plots.vline!([1.085 * 60 * 60]; label = "", line = (1, :dash, :black))
+end
+Plots.png(plt, joinpath(path, "conservation$str2$FT.png"))
 
-Plots.png(
-    Plots.plot(
-        sol.u[end].tracers.ρq3 ./ ρ_ref.(center_coords.z),
-        level = 15,
-        clim = (-1, 1),
-    ),
-    joinpath(path, "q3_12day.png"),
-)
+# q1_error =
+#     norm(
+#         sol.u[end].tracers.ρq1 ./ ρ_ref.(center_coords.z) .-
+#         y0.tracers.ρq1 ./ ρ_ref.(center_coords.z),
+#     ) / norm(y0.tracers.ρq1 ./ ρ_ref.(center_coords.z))
+# @test q1_error ≈ 0.0 atol = 0.75
+
+# q2_error =
+#     norm(
+#         sol.u[end].tracers.ρq2 ./ ρ_ref.(center_coords.z) .-
+#         y0.tracers.ρq2 ./ ρ_ref.(center_coords.z),
+#     ) / norm(y0.tracers.ρq2 ./ ρ_ref.(center_coords.z))
+# @test q2_error ≈ 0.0 atol = 0.034
+
+# q3_error =
+#     norm(
+#         sol.u[end].tracers.ρq3 ./ ρ_ref.(center_coords.z) .-
+#         y0.tracers.ρq3 ./ ρ_ref.(center_coords.z),
+#     ) / norm(y0.tracers.ρq3 ./ ρ_ref.(center_coords.z))
+# @test q3_error ≈ 0.0 atol = 0.41
+
+# q4_error =
+#     norm(
+#         sol.u[end].tracers.ρq4 ./ ρ_ref.(center_coords.z) .-
+#         y0.tracers.ρq4 ./ ρ_ref.(center_coords.z),
+#     ) / norm(y0.tracers.ρq4 ./ ρ_ref.(center_coords.z))
+# @test q4_error ≈ 0.0 atol = 0.03
+
+# q5_error =
+#     norm(
+#         sol.u[end].tracers.ρq5 ./ ρ_ref.(center_coords.z) .-
+#         y0.tracers.ρq5 ./ ρ_ref.(center_coords.z),
+#     ) / norm(y0.tracers.ρq5 ./ ρ_ref.(center_coords.z))
+# @test q5_error ≈ 0.0 atol = 0.007
+
+# Plots.png(
+#     Plots.plot(
+#         sol.u[trunc(Int, end / 2)].tracers.ρq3 ./ ρ_ref.(center_coords.z),
+#         level = 15,
+#         clim = (-1, 1),
+#     ),
+#     joinpath(path, "q3_6day.png"),
+# )
+
+# Plots.png(
+#     Plots.plot(
+#         sol.u[end].tracers.ρq3 ./ ρ_ref.(center_coords.z),
+#         level = 15,
+#         clim = (-1, 1),
+#     ),
+#     joinpath(path, "q3_12day.png"),
+# )
