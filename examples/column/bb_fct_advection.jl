@@ -56,8 +56,8 @@ function f!(dydt, y, parameters, t, alpha, beta)
         top = Operators.SetValue(Geometry.WVector(FT(0.0))),
     )
     FCTBB = Operators.FCTBorisBook(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
     )
 
     @. y_td = beta * dydt - alpha * divf2c(first_order_fluxᶠ(w, y))
