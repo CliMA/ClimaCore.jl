@@ -43,7 +43,6 @@ const z_c = 5.0e3 # initial altitude of tracers
 const R_t = R / 2 # horizontal half-width of tracers
 const Z_t = 1000.0 # vertical half-width of tracers
 const κ₄ = 1.0e16 # hyperviscosity
-const C = 1.0 # flux-correction coefficient
 
 # time constants
 T = 86400.0 * 12.0
@@ -121,7 +120,17 @@ y0 = map(coords) do coord
     ρq3 = ρ_ref(z) * q3
     ρq4 = ρ_ref(z) * q4
 
-    return (ρ = ρ_ref(z), ρq1 = ρq1, ρq2 = ρq2, ρq3 = ρq3, ρq4 = ρq4)
+    return (
+        ρ = ρ_ref(z),
+        ρq1 = ρq1,
+        ρq2 = ρq2,
+        ρq3 = ρq3,
+        ρq4 = ρq4,
+        ρq1_td = ρq1,
+        ρq2_td = ρq2,
+        ρq3_td = ρq3,
+        ρq4_td = ρq4,
+    )
 end
 
 y0 = Fields.FieldVector(
@@ -130,11 +139,15 @@ y0 = Fields.FieldVector(
     ρq2 = y0.ρq2,
     ρq3 = y0.ρq3,
     ρq4 = y0.ρq4,
+    ρq1_td = y0.ρq1,
+    ρq2_td = y0.ρq2,
+    ρq3_td = y0.ρq3,
+    ρq4_td = y0.ρq4,
 )
 
 function rhs!(dydt, y, parameters, t, alpha, beta)
 
-    (; τ, coords, face_coords, ystar) = parameters
+    (; τ, coords, face_coords, ystar, y_td) = parameters
 
     ϕ = coords.lat
     λ = coords.long
@@ -165,17 +178,22 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
     w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
 
+    # aliases
     ρ = y.ρ
     ρq1 = y.ρq1
     ρq2 = y.ρq2
     ρq3 = y.ρq3
     ρq4 = y.ρq4
 
-    dρ = dydt.ρ
     dρq1 = dydt.ρq1
     dρq2 = dydt.ρq2
     dρq3 = dydt.ρq3
     dρq4 = dydt.ρq4
+
+    ρq1_td = y_td.ρq1
+    ρq2_td = y_td.ρq2
+    ρq3_td = y_td.ρq3
+    ρq4_td = y_td.ρq4
 
     # No change in density: divergence-free flow
     @. dydt.ρ = beta * dydt.ρ + 0 .* y.ρ
@@ -196,6 +214,10 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
+    )
+    FCTZalesak = Operators.FCTZalesak(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
     )
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
@@ -221,36 +243,108 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
-    # The following, simple Flux-corrected Transport regression test (falling back to the 3rd-order upwinding, with C=1) is implemented following
-    # Ref: https://link.springer.com/book/10.1007/978-1-4419-6412-0 , Sec. 5.4 (p. 221)
-    corrected_antidiff_flux = similar(dρq1)
-    @. dρq1 = beta * dρq1 - alpha * hdiv(cuvw * ρq1) + alpha * ystar.ρq1
-    @. corrected_antidiff_flux = vdivf2c(
-        Ic2f(ρ) *
-        C *
-        (
-            third_order_upwind_c2f(w, ρq1 / ρ) -
-            first_order_upwind_c2f(w, ρq1 / ρ)
-        ),
+    # 1) Vertical transport for ρq1:
+    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
+    @. ρq1_td = (
+        beta * ρq1 -
+        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 ./ ρ))
     )
-    @. dρq1 -=
-        alpha * (
-            vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 / ρ)) +
-            corrected_antidiff_flux
+    @. dρq1 = (
+        beta * (dρq1 - ρq1) + ρq1_td -
+        alpha * vdivf2c(
+            Ic2f(ρ) * FCTZalesak(
+                (
+                    third_order_upwind_c2f(w, ρq1 ./ ρ) -
+                    first_order_upwind_c2f(w, ρq1 ./ ρ)
+                ),
+                ρq1 ./ ρ / alpha,
+                ρq1_td ./ ρ / alpha,
+            ),
         )
+    )
+
+    # 1.2) vertical advection by horizontal velocity:
     @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
+    # 2) Horizontal transport for ρq1 (includes both horizontal and vertical velocity components)
+    @. dρq1 -= alpha * hdiv(cuvw * ρq1) - alpha * ystar.ρq1
 
-    @. dρq2 = beta * dρq2 - alpha * hdiv(cuvw * ρq2) + alpha * ystar.ρq2
-    @. dρq2 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq2 ./ ρ))
+    # 1) Vertical transport for ρq2:
+    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
+    @. ρq2_td = (
+        beta * ρq2 -
+        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq2 ./ ρ))
+    )
+    @. dρq2 = (
+        beta * (dρq2 - ρq2) + ρq2_td -
+        alpha * vdivf2c(
+            Ic2f(ρ) * FCTZalesak(
+                (
+                    third_order_upwind_c2f(w, ρq2 ./ ρ) -
+                    first_order_upwind_c2f(w, ρq2 ./ ρ)
+                ),
+                ρq2 ./ ρ / alpha,
+                ρq2_td ./ ρ / alpha,
+            ),
+        )
+    )
+
+
+    # 1.2) vertical advection by horizontal velocity:
     @. dρq2 -= alpha * vdivf2c(Ic2f(uₕ * ρq2))
+    # 2) Horizontal transport for ρq2 (includes both horizontal and vertical velocity components)
+    @. dρq2 -= alpha * hdiv(cuvw * ρq2) - alpha * ystar.ρq2
 
-    @. dρq3 = beta * dρq3 - alpha * hdiv(cuvw * ρq3) + alpha * ystar.ρq3
-    @. dρq3 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq3 ./ ρ))
+    # 1) Vertical transport for ρq3:
+    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
+    @. ρq3_td = (
+        beta * ρq3 -
+        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq3 ./ ρ))
+    )
+    @. dρq3 = (
+        beta * (dρq3 - ρq3) + ρq3_td -
+        alpha * vdivf2c(
+            Ic2f(ρ) * FCTZalesak(
+                (
+                    third_order_upwind_c2f(w, ρq3 ./ ρ) -
+                    first_order_upwind_c2f(w, ρq3 ./ ρ)
+                ),
+                ρq3 ./ ρ / alpha,
+                ρq3_td ./ ρ / alpha,
+            ),
+        )
+    )
+
+
+    # 1.2) vertical advection by horizontal velocity:
     @. dρq3 -= alpha * vdivf2c(Ic2f(uₕ * ρq3))
+    # 2) Horizontal transport for ρq3 (includes both horizontal and vertical velocity components)
+    @. dρq3 -= alpha * hdiv(cuvw * ρq3) - alpha * ystar.ρq3
 
-    @. dρq4 = beta * dρq4 - alpha * hdiv(cuvw * ρq4) + alpha * ystar.ρq4
-    @. dρq4 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq4 ./ ρ))
+    # 1) Vertical transport for ρq4:
+    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
+    @. ρq4_td = (
+        beta * ρq4 -
+        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq4 ./ ρ))
+    )
+    @. dρq4 = (
+        beta * (dρq4 - ρq4) + ρq4_td -
+        alpha * vdivf2c(
+            Ic2f(ρ) * FCTZalesak(
+                (
+                    third_order_upwind_c2f(w, ρq4 ./ ρ) -
+                    first_order_upwind_c2f(w, ρq4 ./ ρ)
+                ),
+                ρq4 ./ ρ / alpha,
+                ρq4_td ./ ρ / alpha,
+            ),
+        )
+    )
+
+
+    # 1.2) vertical advection by horizontal velocity:
     @. dρq4 -= alpha * vdivf2c(Ic2f(uₕ * ρq4))
+    # 2) Horizontal transport for ρq4 (includes both horizontal and vertical velocity components)
+    @. dρq4 -= alpha * hdiv(cuvw * ρq4) - alpha * ystar.ρq4
 
     Spaces.weighted_dss!(dydt.ρ)
     Spaces.weighted_dss!(dydt.ρq1)
@@ -263,7 +357,9 @@ end
 
 # Set up RHS function
 ystar = copy(y0)
-parameters = (; τ, coords, face_coords, ystar)
+y_td = copy(y0)
+
+parameters = (; τ, coords, face_coords, ystar, y_td)
 
 rhs!(ystar, y0, parameters, 0.0, dt, 1)
 
@@ -287,7 +383,7 @@ q1_error =
 q2_error =
     norm(sol.u[end].ρq2 ./ ρ_ref.(coords.z) .- y0.ρq2 ./ ρ_ref.(coords.z)) /
     norm(y0.ρq2 ./ ρ_ref.(coords.z))
-@test q2_error ≈ 0.0 atol = 0.03
+@test q2_error ≈ 0.0 atol = 0.031
 
 q3_error =
     norm(sol.u[end].ρq3 ./ ρ_ref.(coords.z) .- y0.ρq3 ./ ρ_ref.(coords.z)) /
@@ -303,22 +399,22 @@ q4_error =
 q1_initial_mass = sum(y0.ρq1 ./ ρ_ref.(coords.z))
 q1_mass = sum(sol.u[end].ρq1 ./ ρ_ref.(coords.z))
 q1_rel_mass_err = norm((q1_mass - q1_initial_mass) / q1_initial_mass)
-@test q1_rel_mass_err ≈ 0.0 atol = 1.1e-5
+@test q1_rel_mass_err ≈ 0.0 atol = 0.0011
 
 q2_initial_mass = sum(y0.ρq2 ./ ρ_ref.(coords.z))
 q2_mass = sum(sol.u[end].ρq2 ./ ρ_ref.(coords.z))
 q2_rel_mass_err = norm((q2_mass - q2_initial_mass) / q2_initial_mass)
-@test q2_rel_mass_err ≈ 0.0 atol = 2.2e-6
+@test q2_rel_mass_err ≈ 0.0 atol = 2.e-5
 
 q3_initial_mass = sum(y0.ρq3 ./ ρ_ref.(coords.z))
 q3_mass = sum(sol.u[end].ρq3 ./ ρ_ref.(coords.z))
 q3_rel_mass_err = norm((q3_mass - q3_initial_mass) / q3_initial_mass)
-@test q3_rel_mass_err ≈ 0.0 atol = 2.5e-6
+@test q3_rel_mass_err ≈ 0.0 atol = 2.5e-5
 
 q4_initial_mass = sum(y0.ρq4 ./ ρ_ref.(coords.z))
 q4_mass = sum(sol.u[end].ρq4 ./ ρ_ref.(coords.z))
 q4_rel_mass_err = norm((q4_mass - q4_initial_mass) / q4_initial_mass)
-@test q4_rel_mass_err ≈ 0.0 atol = 2.2e-6
+@test q4_rel_mass_err ≈ 0.0 atol = 2.2e-5
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
@@ -350,3 +446,16 @@ Plots.png(
     Plots.plot(sol.u[end].ρq3 ./ ρ_ref.(coords.z), level = 15, clim = (-1, 1)),
     joinpath(path, "q3_12day.png"),
 )
+
+times = 0:dt:T
+anim = Plots.@animate for i in 1:length(times)
+    Plots.plot(sol.u[i].ρq1 ./ ρ_ref.(coords.z), level = 15)
+end
+
+Plots.mp4(anim, joinpath(path, "q1_anim.mp4"), fps = 60)
+
+anim = Plots.@animate for i in 1:length(times)
+    Plots.plot(sol.u[i].ρq3 ./ ρ_ref.(coords.z), level = 15)
+end
+
+Plots.mp4(anim, joinpath(path, "q3_anim.mp4"), fps = 60)
