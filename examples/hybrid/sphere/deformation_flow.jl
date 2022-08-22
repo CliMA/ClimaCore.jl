@@ -47,6 +47,7 @@ const κ₄ = 1.0e16 # hyperviscosity
 # time constants
 T = 86400.0 * 12.0
 dt = 60.0 * 60.0
+
 FT = Float64
 
 # set up function space
@@ -368,7 +369,7 @@ q1_error =
 q2_error =
     norm(sol.u[end].ρq2 ./ ρ_ref.(coords.z) .- y0.ρq2 ./ ρ_ref.(coords.z)) /
     norm(y0.ρq2 ./ ρ_ref.(coords.z))
-@test q2_error ≈ 0.0 atol = 0.031
+@test q2_error ≈ 0.0 atol = 0.032
 
 q3_error =
     norm(sol.u[end].ρq3 ./ ρ_ref.(coords.z) .- y0.ρq3 ./ ρ_ref.(coords.z)) /
@@ -378,7 +379,7 @@ q3_error =
 q4_error =
     norm(sol.u[end].ρq4 ./ ρ_ref.(coords.z) .- y0.ρq4 ./ ρ_ref.(coords.z)) /
     norm(y0.ρq4 ./ ρ_ref.(coords.z))
-@test q4_error ≈ 0.0 atol = 0.03
+@test q4_error ≈ 0.0 atol = 0.025
 
 # Tracer mass conservation checks
 q1_initial_mass = sum(y0.ρq1)
@@ -399,7 +400,7 @@ q3_rel_mass_err = norm((q3_mass - q3_initial_mass) / q3_initial_mass)
 q4_initial_mass = sum(y0.ρq4)
 q4_mass = sum(sol.u[end].ρq4)
 q4_rel_mass_err = norm((q4_mass - q4_initial_mass) / q4_initial_mass)
-@test q4_rel_mass_err ≈ 0.0 atol = 7e1eps(FT)
+@test q4_rel_mass_err ≈ 0.0 atol = 8e1eps(FT)
 
 # visualization artifacts
 ENV["GKSwstype"] = "nul"
