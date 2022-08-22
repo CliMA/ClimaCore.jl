@@ -79,7 +79,7 @@ end
 # RHS tendency specification
 function rhs!(dydt, y, parameters, t, alpha, beta)
 
-    (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar) = parameters
+    (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar, y_td) = parameters
 
     ϕ = coords.lat
     zc = coords.z
@@ -104,6 +104,7 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     ρ = y.ρ
     ρq1 = y.ρq1
     dρq1 = dydt.ρq1
+    ρq1_td = y_td.ρq1
 
     # No change in density: divergence-free flow
     @. dydt.ρ = beta * dydt.ρ + 0 .* y.ρ
@@ -117,9 +118,17 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
+    first_order_upwind_c2f = Operators.UpwindBiasedProductC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
     third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
+    )
+    FCTZalesak = Operators.FCTZalesak(
+        bottom = Operators.FirstOrderOneSided(),
+        top = Operators.FirstOrderOneSided(),
     )
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
@@ -133,9 +142,29 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     cw = If2c.(w)
     cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
 
-    @. dρq1 = beta * dρq1 - alpha * hdiv(cuvw * ρq1) + alpha * ystar.ρq1
-    @. dρq1 -= alpha * vdivf2c(Ic2f(ρ) * third_order_upwind_c2f.(w, ρq1 ./ ρ))
+    # 1) Vertical transport for ρq1:
+    # 1.1) vertical advection by vertical velocity, corrected by Zalesak FCT:
+    @. ρq1_td =
+        beta * ρq1 -
+        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 / ρ))
+
+    @. dρq1 =
+        beta * (dρq1 - ρq1) + ρq1_td -
+        alpha * vdivf2c(
+            Ic2f(ρ) * FCTZalesak(
+                (
+                    third_order_upwind_c2f(w, ρq1 / ρ) -
+                    first_order_upwind_c2f(w, ρq1 / ρ)
+                ),
+                ρq1 / ρ / alpha,
+                ρq1_td / ρ / alpha,
+            ),
+        )
+
+    # 1.2) vertical advection by horizontal velocity:
     @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
+    # 2) Horizontal transport for ρq1 (includes both horizontal and vertical velocity components)
+    @. dρq1 -= alpha * hdiv(cuvw * ρq1) - alpha * ystar.ρq1
 
     Spaces.weighted_dss!(dydt.ρ)
     Spaces.weighted_dss!(dydt.ρq1)
@@ -186,23 +215,15 @@ y0 = map(coords) do coord
 
     ρq1 = ρ_ref(z) * q1
 
-    return (ρ = ρ_ref(z), ρq1 = ρq1)
+    return (ρ = ρ_ref(z), ρq1 = ρq1, ρq1_td = ρq1)
 end
 
 # IC FieldVector
-y0 = Fields.FieldVector(ρ = y0.ρ, ρq1 = y0.ρq1)
+y0 = Fields.FieldVector(ρ = y0.ρ, ρq1 = y0.ρq1, ρq1_td = y0.ρq1)
 
 ystar = copy(y0)
-parameters = (;
-    coords = coords,
-    face_coords = face_coords,
-    τ = τ,
-    u₀ = u₀,
-    w₀ = w₀,
-    K = K,
-    ρ₀ = ρ₀,
-    ystar = ystar,
-)
+y_td = copy(y0)
+parameters = (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar, y_td)
 
 # Set up the initial flow
 rhs!(ystar, y0, parameters, 0.0, dt, 1)
@@ -222,11 +243,11 @@ sol = solve(
 q1_error =
     norm(sol.u[end].ρq1 ./ ρ_ref.(coords.z) .- y0.ρq1 ./ ρ_ref.(coords.z)) /
     norm(y0.ρq1 ./ ρ_ref.(coords.z))
-initial_mass = sum(y0.ρq1 ./ ρ_ref.(coords.z))
-mass = sum(sol.u[end].ρq1 ./ ρ_ref.(coords.z))
+initial_mass = sum(y0.ρq1)
+mass = sum(sol.u[end].ρq1)
 rel_mass_err = norm((mass - initial_mass) / initial_mass)
-@test q1_error ≈ 0.0 atol = 0.35
-@test rel_mass_err ≈ 0.0 atol = 2.5e-4
+@test q1_error ≈ 0.0 atol = 0.56
+@test rel_mass_err ≈ 0.0 atol = 6e1eps()
 
 Plots.png(
     Plots.plot(

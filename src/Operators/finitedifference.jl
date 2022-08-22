@@ -1611,9 +1611,9 @@ Supported boundary conditions are:
 and the first-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
-    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define 
-    the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to 
-    be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator, 
+    Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define
+    the value at the actual boundary faces, and so this operator cannot be materialized directly: it needs to
+    be composed with another operator that does not make use of this value, e.g. a [`DivergenceF2C`](@ref) operator,
     with a [`SetValue`](@ref) boundary.
 """
 struct FCTZalesak{BCS} <: AdvectionOperator
@@ -1649,8 +1649,6 @@ return_space(
     ϕⱼᵗᵈ,
     ϕⱼ₊₁ᵗᵈ,
     ϕⱼ₊₂ᵗᵈ,
-    dxⱼ,
-    dxⱼ₊₁,
 )
     # 1/dt is in ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ
 
@@ -1667,19 +1665,19 @@ return_space(
     ϕⱼᵐᵃˣ = max(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     ϕⱼᵐⁱⁿ = min(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     Pⱼ⁺ = max(stable_zero, Aⱼ₋₁₂) - min(stable_zero, Aⱼ₊₁₂)
-    Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ) * dxⱼ
+    Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ)
     Rⱼ⁺ = (Pⱼ⁺ > stable_zero ? min(stable_one, Qⱼ⁺ / Pⱼ⁺) : stable_zero)
     Pⱼ⁻ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₋₁₂)
-    Qⱼ⁻ = (ϕⱼᵗᵈ - ϕⱼᵐⁱⁿ) * dxⱼ
+    Qⱼ⁻ = (ϕⱼᵗᵈ - ϕⱼᵐⁱⁿ)
     Rⱼ⁻ = (Pⱼ⁻ > stable_zero ? min(stable_one, Qⱼ⁻ / Pⱼ⁻) : stable_zero)
 
     ϕⱼ₊₁ᵐᵃˣ = max(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
     ϕⱼ₊₁ᵐⁱⁿ = min(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
     Pⱼ₊₁⁺ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₊₃₂)
-    Qⱼ₊₁⁺ = (ϕⱼ₊₁ᵐᵃˣ - ϕⱼ₊₁ᵗᵈ) * dxⱼ₊₁
+    Qⱼ₊₁⁺ = (ϕⱼ₊₁ᵐᵃˣ - ϕⱼ₊₁ᵗᵈ)
     Rⱼ₊₁⁺ = (Pⱼ₊₁⁺ > stable_zero ? min(stable_one, Qⱼ₊₁⁺ / Pⱼ₊₁⁺) : stable_zero)
     Pⱼ₊₁⁻ = max(stable_zero, Aⱼ₊₃₂) - min(stable_zero, Aⱼ₊₁₂)
-    Qⱼ₊₁⁻ = (ϕⱼ₊₁ᵗᵈ - ϕⱼ₊₁ᵐⁱⁿ) * dxⱼ₊₁
+    Qⱼ₊₁⁻ = (ϕⱼ₊₁ᵗᵈ - ϕⱼ₊₁ᵐⁱⁿ)
     Rⱼ₊₁⁻ = (Pⱼ₊₁⁻ > stable_zero ? min(stable_one, Qⱼ₊₁⁻ / Pⱼ₊₁⁻) : stable_zero)
 
     Cⱼ₊₁₂ = (Aⱼ₊₁₂ ≥ stable_zero ? min(Rⱼ₊₁⁺, Rⱼ⁻) : min(Rⱼ⁺, Rⱼ₊₁⁻))
@@ -1727,11 +1725,6 @@ stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
         Geometry.LocalGeometry(face_space, idx + 1, hidx),
     )
 
-
-    dxⱼ = Geometry.LocalGeometry(center_space, idx - half, hidx).∂x∂ξ[1]
-    dxⱼ₊₁ = Geometry.LocalGeometry(center_space, idx + half, hidx).∂x∂ξ[1]
-
-
     return Geometry.Contravariant3Vector(
         fct_zalesak(
             Aⱼ₋₁₂,
@@ -1745,8 +1738,6 @@ stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
             ϕⱼᵗᵈ,
             ϕⱼ₊₁ᵗᵈ,
             ϕⱼ₊₂ᵗᵈ,
-            dxⱼ,
-            dxⱼ₊₁,
         ),
     )
 end
