@@ -1543,7 +1543,7 @@ stencil_interior_width(::FCTBorisBook, velocity, arg) =
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    step = Geometry.LocalGeometry(space, idx, hidx).∂x∂ξ[1]
+    step = Geometry.LocalGeometry(space, idx - half, hidx).∂x∂ξ[3, 3]
     return Geometry.Contravariant3Vector(
         fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺, step),
     )
