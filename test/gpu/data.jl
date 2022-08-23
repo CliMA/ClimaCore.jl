@@ -45,6 +45,7 @@ end
     @test Array(parent(res)) == FT[2 for i in 1:2, j in 1:2, f in 1:1, h in 1:2]
 end
 
+#=
 @testset "broadcasting assignment from scalar" begin
     FT = Float64
     S = Complex{FT}
@@ -53,3 +54,4 @@ end
     @test Array(parent(data)) ==
           FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
 end
+=#
