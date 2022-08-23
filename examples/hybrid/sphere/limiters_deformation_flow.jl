@@ -24,6 +24,112 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+import ClimaCore.Limiters: apply_limit_slab!
+using ClimaCore: DataLayouts
+function apply_limit_slab!(
+    slab_ρq::DataLayouts.IJF{<:Any, Nij},
+    slab_ρ::DataLayouts.IJF{<:Any, Nij},
+    slab_WJ::DataLayouts.IJF{<:Any, Nij},
+    slab_q_bounds::DataLayouts.IF{<:Any, 2},
+) where {Nij}
+
+    Nf = DataLayouts.ncomponents(slab_ρq)
+
+    array_ρq = parent(slab_ρq)
+    array_ρ = parent(slab_ρ)
+    array_w = parent(slab_WJ)
+    array_q_bounds = parent(slab_q_bounds)
+
+    rtol = eps(eltype(array_ρq)) # sqrt(eps(eltype(array_ρq)))
+    maxiter = Nij * Nij
+
+    # 1) compute ρ_tot
+    ρ_tot = zero(eltype(array_ρ))
+    for j in 1:Nij, i in 1:Nij
+        ρ_tot += array_ρ[i, j, 1] * array_w[i, j, 1]
+    end
+
+    @assert ρ_tot > 0
+
+    for f in 1:Nf
+        q_min = array_q_bounds[1, f]
+        q_max = array_q_bounds[2, f]
+
+        # 2) compute ∫ρq
+        ρq_tot = zero(eltype(array_ρq))
+        for j in 1:Nij, i in 1:Nij
+            ρq_tot += array_ρq[i, j, f] * array_w[i, j, 1]
+        end
+
+        # 3) set bounds
+        q_avg = ρq_tot / ρ_tot
+        q_min = min(q_min, q_avg)
+        q_max = max(q_max, q_avg)
+
+        # 3) compute total mass change
+        for iter in 1:maxiter
+            Δρq = zero(eltype(array_ρq))
+            for j in 1:Nij, i in 1:Nij
+                ρ = array_ρ[i, j, 1]
+                ρq = array_ρq[i, j, f]
+                ρq_max = ρ * q_max
+                ρq_min = ρ * q_min
+                w = array_w[i, j]
+                if ρq > ρq_max
+                    Δρq += (ρq - ρq_max) * w
+                    array_ρq[i, j, f] = ρq_max
+                elseif ρq < ρq_min
+                    Δρq += (ρq - ρq_min) * w
+                    array_ρq[i, j, f] = ρq_min
+                end
+            end
+
+            if abs(Δρq) < rtol * ρq_tot
+                break
+            end
+
+            if Δρq > 0 # add mass
+                # compute total density
+                Δρ = zero(eltype(array_ρ))
+                for j in 1:Nij, i in 1:Nij
+                    ρ = array_ρ[i, j, 1]
+                    ρq = array_ρq[i, j, f]
+                    w = array_w[i, j]
+                    if ρq < ρ * q_max
+                        Δρ += ρ * w
+                    end
+                end
+                Δq = Δρq / Δρ # compute average ratio change
+                for j in 1:Nij, i in 1:Nij
+                    ρ = array_ρ[i, j, 1]
+                    ρq = array_ρq[i, j, f]
+                    if ρq < ρ * q_max
+                        array_ρq[i, j, f] += ρ * Δq
+                    end
+                end
+            else # remove mass
+                Δρ = zero(eltype(array_ρ))
+                for j in 1:Nij, i in 1:Nij
+                    ρ = array_ρ[i, j, 1]
+                    ρq = array_ρq[i, j, f]
+                    w = array_w[i, j]
+                    if ρq > ρ * q_min
+                        Δρ += ρ * w
+                    end
+                end
+                Δq = Δρq / Δρ
+                for j in 1:Nij, i in 1:Nij
+                    ρ = array_ρ[i, j, 1]
+                    ρq = array_ρq[i, j, f]
+                    if ρq > ρ * q_min
+                        array_ρq[i, j, f] += ρ * Δq
+                    end
+                end
+            end
+        end
+    end
+end
+
 # 3D deformation flow (DCMIP 2012 Test 1-1)
 # Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.1
 
@@ -52,7 +158,7 @@ const R_t = R / 2              # horizontal half-width of tracers
 const Z_t = FT(1000.0)         # vertical half-width of tracers
 const D₄ = FT(1.0e16)          # hyperviscosity coefficient
 
-lim_flag = false                # limiters flag
+lim_flag = true                # limiters flag
 T = 86400 * FT(12.0)           # simulation times in seconds (12 days)
 # dt = FT(60.0) * FT(60.0)     # time step in seconds (20 minutes)
 zelems = 36
@@ -370,15 +476,7 @@ M_inits = [
     sum(y0.tracers.ρq5),
 ]
 
-# error per timestep ~ eps(FT) ==> M(t + dt) = E * M(t) ==> M(T) = E^(T/dt) * M(0)
-
-# WTS: log(|M(t) - M(0)| / M(0)) = C - log(dt) ==>
-# |M(t) - M(0)| / M(0) = exp(C) / dt ==>
-# |M(t) - M(0)| = exp(C) * M(0) / dt
-
-# |M(t + dt) - M(0)| = |M(t) - M(0)|
-
-dts = FT[1.075, 1.05, 1.025, @.(10^(-(0:6) / 4))...] .* (60 * 60)
+dts = FT[1.075, 1.05, 1.025, @.(10^(-(0:2) / 4))...] .* (60 * 60)
 M_errs = similar(dts, length(dts), 6)
 for (index, dt) in enumerate(dts)
     @info dt
@@ -403,8 +501,8 @@ end
 str1 = lim_flag ? "with" : "without"
 str2 = lim_flag ? "_lim_" : "_no_lim_"
 plt = Plots.plot(
-    dts,
-    M_errs;
+    dts[2:end],
+    M_errs[2:end, :];
     line = (3, :solid),
     scale = :log10,
     legend = :topright,
@@ -432,7 +530,7 @@ Plots.plot!(
 if lim_flag
     Plots.vline!([1.085 * 60 * 60]; label = "", line = (1, :dash, :black))
 end
-Plots.png(plt, joinpath(path, "conservation$str2$FT.png"))
+Plots.png(plt, joinpath(path, "new_conservation$str2$FT.png"))
 
 # q1_error =
 #     norm(
