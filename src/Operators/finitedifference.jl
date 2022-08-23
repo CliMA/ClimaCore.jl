@@ -1502,7 +1502,7 @@ return_space(
     arg_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = velocity_space
 
-@inline function fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺, step)
+@inline function fct_boris_book(v, a⁻⁻, a⁻, a⁺, a⁺⁺)
     if v != zero(eltype(v))
         sign(v) ⊠ (RecursiveApply.rmap(
             max,
@@ -1512,8 +1512,8 @@ return_space(
                 RecursiveApply.rmap(abs, v),
                 RecursiveApply.rmap(
                     min,
-                    sign(v) ⊠ (a⁺⁺ - a⁺) ⊠ step,
-                    sign(v) ⊠ (a⁻ - a⁻⁻) ⊠ step,
+                    sign(v) ⊠ (a⁺⁺ - a⁺),
+                    sign(v) ⊠ (a⁻ - a⁻⁻),
                 ),
             ),
         ))
@@ -1524,7 +1524,7 @@ return_space(
             RecursiveApply.rmap(
                 min,
                 v,
-                RecursiveApply.rmap(min, (a⁺⁺ - a⁺) ⊠ step, (a⁻ - a⁻⁻) ⊠ step),
+                RecursiveApply.rmap(min, (a⁺⁺ - a⁺), (a⁻ - a⁻⁻)),
             ),
         )
     end
@@ -1543,10 +1543,7 @@ stencil_interior_width(::FCTBorisBook, velocity, arg) =
         getidx(velocity, loc, idx, hidx),
         Geometry.LocalGeometry(space, idx, hidx),
     )
-    step = Geometry.LocalGeometry(space, idx, hidx).∂x∂ξ[1]
-    return Geometry.Contravariant3Vector(
-        fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺, step),
-    )
+    return Geometry.Contravariant3Vector(fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺))
 end
 
 boundary_width(::FCTBorisBook, ::FirstOrderOneSided, velocity, arg) = 2
