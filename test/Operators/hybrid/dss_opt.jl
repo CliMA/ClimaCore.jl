@@ -2,7 +2,6 @@ using Test, JET
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore
-ClimaCore.Geometry.error_on_no_name_found() = false
 
 import ClimaCore:
     ClimaCore,
