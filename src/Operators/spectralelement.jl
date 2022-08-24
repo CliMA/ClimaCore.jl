@@ -883,7 +883,7 @@ function apply_slab(op::Curl{(1, 2)}, slab_space, _, slab_data)
             end
         end
     else
-        error("invalid return type: $RT")
+        error("invalid return type")
     end
     @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
@@ -1036,7 +1036,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
             end
         end
     else
-        error("invalid return type: $RT")
+        error("invalid return type")
     end
     for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]

@@ -209,7 +209,45 @@ end
 """
     transform(axis, V[, local_geometry])
 
-Transform the first axis of the vector or tensor `V` to `axis`.
+Transform the first axis of the vector or tensor `V` to `axis`. This will throw
+an error if the conversion is not exact.
+
+The conversion rules are defined as:
+
+- `v::Covariant` => `Local`:     `∂ξ∂x' * v`
+- `v::Local` => `Contravariant`: `∂ξ∂x  * v`
+- `v::Contravariant` => `Local`: `∂x∂ξ  * v`
+- `v::Local` => `Covariant`:     `∂x∂ξ' * v`
+- `v::Covariant` => `Contravariant`:  `∂ξ∂x * (∂ξ∂x' * v) = gⁱʲ * v`
+- `v::Contravariant` => `Covariant`:  `∂x∂ξ' * ∂x∂ξ * v   = gᵢⱼ * v`
+
+# Example
+Consider the conversion from a  `Covariant12Vector` to a `Contravariant12Axis`.
+Mathematically, we can write this as
+
+```
+[ v¹ ]   [g¹¹  g¹²  g¹³ ]   [ v₁ ]
+[ v² ] = [g²¹  g²²  g²³ ] * [ v₂ ]
+[ v³ ]   [g³¹  g³²  g³³ ]   [ 0  ]
+```
+
+`project` will drop v³ term no matter what the value is, i.e. it returns
+
+```
+[ v¹ ]   [g¹¹ v₁  + g¹² v₂ ]
+[ v² ] = [g²¹ v₁  + g²² v₂ ]
+[ 0  ]   [<drops this>]
+```
+
+`transform` will drop the v³ term, but throw an error if it is non-zero (i.e. if
+the conversion is not exact)
+
+```
+[ v¹ ]   [g¹¹ v₁  + g¹² v₂ ]
+[ v² ] = [g²¹ v₁  + g²² v₂ ]
+[ 0  ]   [<asserts g²³ v₁  + g²³ v₂ == 0>]
+```
+
 """
 function transform end
 
@@ -217,6 +255,9 @@ function transform end
     project(axis, V[, local_geometry])
 
 Project the first axis component of the vector or tensor `V` to `axis`
+
+This is equivalent to [`transform`](@ref), but will not throw an error if the
+conversion is not exact.
 """
 function project end
 
