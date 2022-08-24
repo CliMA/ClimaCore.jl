@@ -399,8 +399,8 @@ function test_results(t_ave)
     buffer = 1.7
     ns = 1
     μs = 10^3
-    @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 329.319*ns*buffer
-    @test t_ave[(:no_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 335.235*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 559.8423*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 569.8995*ns*buffer
     @test t_ave[(:no_h_space, op_GradientC2F!, :SetGradient, :SetGradient)] < 250.761*ns*buffer
     @test t_ave[(:no_h_space, op_GradientC2F!, :SetValue, :SetValue)] < 248.521*ns*buffer
     @test t_ave[(:no_h_space, op_DivergenceF2C!, :none)] < 1.550*μs*buffer
