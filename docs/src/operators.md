@@ -67,6 +67,8 @@ WeightedInterpolateC2F
 WeightedInterpolateF2C
 UpwindBiasedProductC2F
 Upwind3rdOrderBiasedProductC2F
+FCTBorisBook
+FCTZalesak
 LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C

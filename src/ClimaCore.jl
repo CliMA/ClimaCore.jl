@@ -1,5 +1,8 @@
 module ClimaCore
 
+using PkgVersion
+const VERSION = PkgVersion.@Version
+
 include("interface.jl")
 include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")

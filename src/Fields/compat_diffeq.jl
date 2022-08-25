@@ -46,6 +46,11 @@ RecursiveArrayTools.recursivecopy(a::AbstractArray{<:Field}) =
     RecursiveArrayTools.unpack_args(i, bc.args)...,
 )
 
+function RecursiveArrayTools.recursivefill!(field::Field, value)
+    RecursiveArrayTools.recursivefill!(parent(field), value)
+    return field
+end
+
 
 function DiffEqBase.calculate_residuals!(
     out::Fields.Field,

@@ -20,6 +20,7 @@ include("../staggered_nonhydrostatic_model.jl")
 
 # Additional constants required for inertial gravity wave initial condition
 z_max = FT(10e3)
+z_stretch_scale = FT(7e3)
 const x_max = is_small_scale ? FT(300e3) : FT(6000e3)
 const x_mid = is_small_scale ? FT(100e3) : FT(3000e3)
 const d = is_small_scale ? FT(5e3) : FT(100e3)
@@ -29,7 +30,7 @@ const T₀ = FT(250)
 const ΔT = FT(0.01)
 
 # Additional values required for driver
-upwinding_mode = :third_order
+upwinding_mode = :third_order # :none to switch to centered diff
 
 # Other convenient constants used in reference paper
 const δ = grav / (R_d * T₀)        # Bretherton height parameter
@@ -39,7 +40,7 @@ const ρₛ = p_0 / (R_d * T₀)        # air density at surface
 # TODO: Loop over all domain setups used in reference paper
 const Δx = is_small_scale ? FT(1e3) : FT(20e3)
 const Δz = is_small_scale ? Δx / 2 : Δx / 40
-z_elem = Int(z_max / Δz)
+z_elem = Int(z_max / Δz) # default 20 vertical elements
 npoly, x_elem = 1, Int(x_max / Δx) # max small-scale dt = 1.5
 # npoly, x_elem = 4, Int(x_max / (Δx * (4 + 1))) # max small-scale dt = 0.8
 
@@ -47,10 +48,12 @@ npoly, x_elem = 1, Int(x_max / Δx) # max small-scale dt = 1.5
 animation_duration = FT(5)
 fps = 2
 
+# Set up mesh
+horizontal_mesh = periodic_line_mesh(; x_max, x_elem = x_elem)
+
 # Additional values required for driver
-horizontal_mesh = periodic_line_mesh(; x_max, x_elem)
-t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
 dt = is_small_scale ? FT(1.5) : FT(20)
+t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
 dt_save_to_sol = t_end / (animation_duration * fps)
 ode_algorithm = OrdinaryDiffEq.Rosenbrock23
 jacobian_flags = (;
@@ -59,7 +62,8 @@ jacobian_flags = (;
 )
 show_progress_bar = true
 
-if is_discrete_hydrostatic_balance
+function discrete_hydrostatic_balance!(ᶠΔz, ᶜΔz, grav)
+
     # Yₜ.f.w = 0 in implicit tendency                                        ==>
     # -(ᶠgradᵥ(ᶜp) / ᶠinterp(ᶜρ) + ᶠgradᵥᶜΦ) = 0                             ==>
     # ᶠgradᵥ(ᶜp) = -grav * ᶠinterp(ᶜρ)                                       ==>
@@ -67,34 +71,60 @@ if is_discrete_hydrostatic_balance
     # p(z + Δz) + grav * Δz * ρ(z + Δz) / 2 = p(z) - grav * Δz * ρ(z) / 2    ==>
     # p(z + Δz) * (1 + δ * Δz / 2) = p(z) * (1 - δ * Δz / 2)                 ==>
     # p(z + Δz) / p(z) = (1 - δ * Δz / 2) / (1 + δ * Δz / 2)                 ==>
-    # p(z) = p(0) * ((1 - δ * Δz / 2) / (1 + δ * Δz / 2))^(z / Δz)
-    p₀(z) = p_0 * ((1 - δ * Δz / 2) / (1 + δ * Δz / 2))^(z / Δz)
-else
-    p₀(z) = p_0 * exp(-δ * z)
+    # p(z + Δz) = p(z) * (1 - δ * Δz / 2) / (1 + δ * Δz / 2)
+    ᶜp = similar(ᶜΔz)
+    ᶜp1 = Fields.level(ᶜp, 1)
+    ᶜΔz1 = Fields.level(ᶜΔz, 1)
+    @. ᶜp1 = p_0 * (1 - δ * ᶜΔz1 / 4) / (1 + δ * ᶜΔz1 / 4)
+    for i in 1:(Spaces.nlevels(axes(ᶜp)) - 1)
+        ᶜpi = parent(Fields.level(ᶜp, i))
+        ᶜpi1 = parent(Fields.level(ᶜp, i + 1))
+        ᶠΔzi1 = parent(Fields.level(ᶠΔz, Spaces.PlusHalf(i)))
+        @. ᶜpi1 = ᶜpi * (1 - δ * ᶠΔzi1 / 2) / (1 + δ * ᶠΔzi1 / 2)
+    end
+    return ᶜp
 end
-Tb_init(x, z) = ΔT * exp(-(x - x_mid)^2 / d^2) * sin(π * z / z_max::FT)
-T′_init(x, z) = Tb_init(x, z) * exp(δ * z / 2)
+Tb_init(x, z, ΔT, x_mid, d, z_max) =
+    ΔT * exp(-(x - x_mid)^2 / d^2) * sin(π * z / z_max)
+T′_init(x, z, ΔT, x_mid, d, z_max, δ) =
+    Tb_init(x, z, ΔT, x_mid, d, z_max) * exp(δ * z / 2)
+# Pressure definition, when not in discrete hydrostatic balance state
+p₀(z) = @. p_0 * exp(-δ * z)
 
-function center_initial_condition(local_geometry)
-    (; x, z) = local_geometry.coordinates
-    p = p₀(z)
-    T = T₀ + T′_init(x, z)
-    ρ = p / (R_d * T)
-    uₕ_local = Geometry.UVVector(u₀, v₀)
-    uₕ = Geometry.Covariant12Vector(uₕ_local, local_geometry)
+function center_initial_condition(ᶜlocal_geometry)
+    ᶜx = ᶜlocal_geometry.coordinates.x
+    ᶜz = ᶜlocal_geometry.coordinates.z
+    # Correct pressure and density if in hydrostatic balance state
+    if is_discrete_hydrostatic_balance
+        face_space =
+            Spaces.FaceExtrudedFiniteDifferenceSpace(axes(ᶜlocal_geometry))
+        ᶠΔz = Fields.local_geometry_field(face_space).∂x∂ξ.components.data.:4
+        ᶜΔz = ᶜlocal_geometry.∂x∂ξ.components.data.:4
+        ᶜp = discrete_hydrostatic_balance!(ᶠΔz, ᶜΔz, grav)
+    else
+        ᶜp = @. p₀(ᶜz)
+    end
+    T = @. T₀ + T′_init(ᶜx, ᶜz, ΔT, x_mid, d, z_max, δ)
+    ᶜρ = @. ᶜp / (R_d * T)
+    ᶜuₕ_local = @. Geometry.UVVector(u₀ * one(ᶜz), v₀ * one(ᶜz))
+    ᶜuₕ = @. Geometry.Covariant12Vector(ᶜuₕ_local)
     if ᶜ𝔼_name == :ρθ
-        ρθ = ρ * T * (p_0 / p)^(R_d / cp_d)
-        return (; ρ, ρθ, uₕ)
+        ᶜρθ = @. ᶜρ * T * (p_0 / ᶜp)^(R_d / cp_d)
+        return NamedTuple{(:ρ, :ρθ, :uₕ)}.(tuple.(ᶜρ, ᶜρθ, uₕ))
     elseif ᶜ𝔼_name == :ρe
-        ρe = ρ * (cv_d * (T - T_tri) + norm_sqr(uₕ_local) / 2 + grav * z)
-        return (; ρ, ρe, uₕ)
+        ᶜρe = @. ᶜρ * (cv_d * (T - T_tri) + norm_sqr(ᶜuₕ_local) / 2 + grav * ᶜz)
+        return NamedTuple{(:ρ, :ρe, :uₕ)}.(tuple.(ᶜρ, ᶜρe, ᶜuₕ))
     elseif ᶜ𝔼_name == :ρe_int
-        ρe_int = ρ * cv_d * (T - T_tri)
-        return (; ρ, ρe_int, uₕ)
+        ᶜρe_int = @. ᶜρ * cv_d * (T - T_tri)
+        return NamedTuple{(:ρ, :ρe_int, :uₕ)}.(tuple.(ᶜρ, ᶜρe_int, ᶜuₕ))
     end
 end
-face_initial_condition(local_geometry) =
-    (; w = Geometry.Covariant3Vector(FT(0)))
+
+function face_initial_condition(local_geometry)
+    (; x, z) = local_geometry.coordinates
+    w = @. Geometry.Covariant3Vector(zero(z))
+    return NamedTuple{(:w,)}.(tuple.(w))
+end
 
 function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
@@ -189,8 +219,12 @@ function ρfb_init_coefs(
     horizontal_mesh =
         periodic_line_mesh(; x_max, x_elem = upsampling_factor * x_elem)
     h_space = make_horizontal_space(horizontal_mesh, npoly)
-    center_space, _ =
-        make_hybrid_spaces(h_space, z_max, upsampling_factor * z_elem)
+    center_space, _ = make_hybrid_spaces(
+        h_space,
+        z_max,
+        upsampling_factor * z_elem;
+        z_stretch,
+    )
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
     ᶜx = ᶜlocal_geometry.coordinates.x
     ᶜz = ᶜlocal_geometry.coordinates.z
@@ -198,11 +232,13 @@ function ρfb_init_coefs(
     # Bretherton transform of initial perturbation
     linearize_density_perturbation = false
     if linearize_density_perturbation
-        ᶜρb_init = @. -ρₛ * Tb_init(ᶜx, ᶜz) / T₀
+        ᶜρb_init = @. -ρₛ * Tb_init(ᶜx, ᶜz, ΔT, x_mid, d, z_max) / T₀
     else
         ᶜp₀ = @. p₀(ᶜz)
         ᶜρ₀ = @. ᶜp₀ / (R_d * T₀)
-        ᶜρ′_init = @. ᶜp₀ / (R_d * (T₀ + T′_init(ᶜx, ᶜz))) - ᶜρ₀
+        ᶜρ′_init =
+            @. ᶜp₀ / (R_d * (T₀ + T′_init(ᶜx, ᶜz, ΔT, x_mid, d, z_max, δ))) -
+               ᶜρ₀
         ᶜbretherton_factor_pρ = @. exp(-δ * ᶜz / 2)
         ᶜρb_init = @. ᶜρ′_init / ᶜbretherton_factor_pρ
     end
@@ -364,6 +400,9 @@ function linear_solution!(Y, lin_cache, t)
     elseif ᶜ𝔼_name == :ρe_int
         @. Y.c.ρe_int = ᶜρ * cv_d * (ᶜT - T_tri)
     end
-    @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, ᶜv))
+    # NOTE: The following two lines are a temporary workaround b/c Covariant12Vector won't accept a non-zero second component in an XZ-space.
+    # So we temporarily set it to zero and then reassign its intended non-zero value (since in case of large-scale config ᶜv is non-zero)
+    @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))
+    @. Y.c.uₕ.components.data.:2 .= ᶜv
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
 end

@@ -83,9 +83,10 @@ end
     end
 end
 
-#= For avoiding JET failures =#
-error_on_no_name_found() = true
-
+struct PropertyError <: Exception
+    ax::Any
+    name::Any
+end
 @inline function symidx(ax::AbstractAxis{I}, name::Symbol) where {I}
     S = symbols(ax)
     if name == S[1]
@@ -94,10 +95,8 @@ error_on_no_name_found() = true
         return idxin(I, 2)
     elseif name == S[3]
         return idxin(I, 3)
-    elseif error_on_no_name_found()
-        error("$ax has no symbol $name")
     else
-        return -1 # for type stability
+        throw(PropertyError(ax, name))
     end
 end
 
@@ -160,6 +159,9 @@ Base.size(a::AxisTensor) = map(length, axes(a))
 
 Base.rand(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
     AxisTensor{T, N, A, S}(A.instance, rand(S))
+
+Base.zeros(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} =
+    AxisTensor{T, N, A, S}(A.instance, zeros(S))
 
 function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
     print(
@@ -382,6 +384,7 @@ end
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
 end
+
 
 @inline function _transform(
     ato::Ato,

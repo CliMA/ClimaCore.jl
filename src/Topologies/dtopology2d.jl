@@ -45,7 +45,7 @@ struct DistributedTopology2D{
 
     # specific to this process
     "the global indices that are local to this process"
-    local_elem_gidx::Vector{Int}
+    local_elem_gidx::UnitRange{Int}
     "process ids of neighboring processes"
     neighbor_pids::Vector{Int}
     "local indices of elements to be copied to send buffer"
@@ -122,22 +122,20 @@ spacefillingcurve(mesh::Meshes.RectilinearMesh) = gilbertindices((
 ))
 
 # returns partition[1..nelems] where partition[e] = pid of the owning process
-function simple_partition(elemorder, npart::Int)
-    nelems = length(elemorder)
+function simple_partition(nelems::Int, npart::Int)
     partition = zeros(Int, nelems)
+    ranges = [0:0 for _ in 1:nelems]
     quot, rem = divrem(nelems, npart)
-    part_len = ones(Int, nelems) .* quot
-    if rem ≠ 0
-        part_len[1:rem] .+= 1
-    end
-    ctr = 1
+
+    offset = 0
     for i in 1:npart
-        for j in 1:part_len[i]
-            partition[ctr] = i
-            ctr += 1
-        end
+        part_len = i <= rem ? quot + 1 : quot
+        part_range = (offset + 1):(offset + part_len)
+        partition[part_range] .= i
+        ranges[i] = part_range
+        offset += part_len
     end
-    return partition
+    return partition, ranges
 end
 
 function DistributedTopology2D(
@@ -149,24 +147,17 @@ function DistributedTopology2D(
 )
     pid = ClimaComms.mypid(context)
     nprocs = ClimaComms.nprocs(context)
-    nelements = length(elemorder)
-    if isnothing(elempid)
-        elempid = simple_partition(elemorder, nprocs)
-    end
+
+    # To make IO easier, we enforce the partitioning to be sequential in the element ordering.
+    @assert elempid === nothing
+    elempid, ranges = simple_partition(length(elemorder), nprocs)
     @assert issorted(elempid)
-    EO = eltype(elemorder)
 
-    local_elem_gidx = Int[] # gidx = local_elem_gidx[lidx]
+    local_elem_gidx = ranges[pid] # gidx = local_elem_gidx[lidx]
     global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
-    nlocalelems = 0
-    for (gidx, owner_pid) in enumerate(elempid)
-        if owner_pid == pid
-            nlocalelems += 1
-            push!(local_elem_gidx, gidx)
-            global_elem_lidx[gidx] = nlocalelems
-        end
+    for (lidx, gidx) in enumerate(local_elem_gidx)
+        global_elem_lidx[gidx] = lidx
     end
-
 
     # convention
     #  - elem: an element of the Mesh (often a CartesianIndex object)

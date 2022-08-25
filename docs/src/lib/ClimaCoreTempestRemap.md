@@ -58,13 +58,13 @@ using NCDatasets, ClimaCoreTempestRemap
 
 # the issue is that the Space types changed since this changed
 # we can reconstruct it by digging around a bit
-Nq = Spaces.Quadratures.degrees_of_freedom(cspace.quadrature_style)
+Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace))
 
 datafile_cc = "test.nc"
 NCDataset(datafile_cc, "c") do nc
     # defines the appropriate dimensions and variables for a space coordinate
-    def_space_coord(nc, cspace)
-    def_space_coord(nc, fspace)
+    def_space_coord(nc, cspace, type = "cgll")
+    def_space_coord(nc, fspace, type = "cgll")
     # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
     nc_time = def_time_coord(nc)
 
@@ -115,7 +115,7 @@ remap_weights(
     meshfile_rll,
     meshfile_overlap;
     in_type = "cgll",
-    in_np = Spaces.degrees_of_freedom(space),
+    in_np = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace)),
 )
 
 # apply remap

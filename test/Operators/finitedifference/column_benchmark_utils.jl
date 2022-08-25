@@ -399,17 +399,17 @@ function test_results(t_ave)
     buffer = 1.7
     ns = 1
     μs = 10^3
-    @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 329.319*ns*buffer
-    @test t_ave[(:no_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 335.235*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 559.8423*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 569.8995*ns*buffer
     @test t_ave[(:no_h_space, op_GradientC2F!, :SetGradient, :SetGradient)] < 250.761*ns*buffer
     @test t_ave[(:no_h_space, op_GradientC2F!, :SetValue, :SetValue)] < 248.521*ns*buffer
     @test t_ave[(:no_h_space, op_DivergenceF2C!, :none)] < 1.550*μs*buffer
     @test t_ave[(:no_h_space, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 1.587*μs*buffer
     @test t_ave[(:no_h_space, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 1.565*μs*buffer
     @test t_ave[(:no_h_space, op_InterpolateF2C!, :none)] < 332.432*ns*buffer
-    @test t_ave[(:no_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 237.969*ns*buffer
-    @test t_ave[(:no_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 235.568*ns*buffer
-    @test t_ave[(:no_h_space, op_LeftBiasedC2F!, :SetValue)] < 214.877*ns*buffer
+    @test t_ave[(:no_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 404.5473*ns*buffer
+    @test t_ave[(:no_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 400.4656*ns*buffer
+    @test t_ave[(:no_h_space, op_LeftBiasedC2F!, :SetValue)] < 365.2909*ns*buffer
     @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :none)] < 185.358*ns*buffer
     @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :SetValue)] < 221.175*ns*buffer
     @test t_ave[(:no_h_space, op_RightBiasedC2F!, :SetValue)] < 138.649*ns*buffer

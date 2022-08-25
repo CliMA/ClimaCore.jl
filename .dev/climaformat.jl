@@ -31,8 +31,6 @@ Pkg.instantiate()
 
 using JuliaFormatter
 
-include("clima_formatter_options.jl")
-
 help = """
 Usage: climaformat.jl [flags] [FILE/PATH]...
 
@@ -82,4 +80,4 @@ else
     filenames = ARGS
 end
 
-format(filenames; clima_formatter_options..., opts...)
+format(filenames; opts...)

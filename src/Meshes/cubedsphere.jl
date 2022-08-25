@@ -243,18 +243,12 @@ function coordinates(
     ne = mesh.ne
     x, y, panel = elem.I
     # again, we want to arrange the calculation carefully so that signed zeros are correct
-    # - if isodd(ne) and ϕx == 0, then ξ1 == 0, and should have the same sign
-    ϕx = (ξ1 - FT(ne + 1 - 2 * x)) / ne
-    ϕy = (ξ2 - FT(ne + 1 - 2 * y)) / ne
     # - if iseven(ne) and ϕx == 0, then ξ1 == +/-1, and should have the _opposite_ sign
-    if iseven(ne)
-        if ϕx == 0
-            ϕx = copysign(ϕx, -ξ1)
-        end
-        if ϕy == 0
-            ϕy = copysign(ϕy, -ξ2)
-        end
-    end
+    # - if isodd(ne) and ϕx == 0, then ξ1 == 0, and should have the same sign
+    ox = 2 * x - 1 - ne
+    oy = 2 * y - 1 - ne
+    ϕx = (ox <= 0 ? -(-FT(ox) - ξ1) : ox + ξ1) / ne
+    ϕy = (oy <= 0 ? -(-FT(oy) - ξ2) : oy + ξ2) / ne
     return _coordinates(mesh, ϕx, ϕy, panel)
 end
 function coordinates(

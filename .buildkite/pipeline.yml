@@ -1,6 +1,6 @@
 env:
   JULIA_VERSION: "1.7.1"
-  MPICH_VERSION: "4.0.0"
+  MPI_IMPL: "openmpi"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
@@ -147,6 +147,17 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Parallel HDF5 IO tests"
+    key: "cpu_parallel_hdf5"
+    command:
+      - "mpiexec julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 3
+
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
     command:
@@ -175,6 +186,39 @@ steps:
       - "julia --color=yes --project=examples examples/column/advect.jl"
     artifact_paths:
       - "examples/column/output/advect/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column FCT Advection Eq"
+    key: "cpu_fct_column_advect"
+    command:
+      - "julia --color=yes --project=examples examples/column/fct_advection.jl"
+    artifact_paths:
+      - "examples/column/output/fct_advection/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column BB FCT Advection Eq"
+    key: "cpu_bb_fct_column_advect"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=examples examples/column/bb_fct_advection.jl"
+    artifact_paths:
+      - "examples/column/output/bb_fct_advection/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Column Zalesak FCT Advection Eq"
+    key: "cpu_zalesak_fct_column_advect"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=examples examples/column/zalesak_fct_advection.jl"
+    artifact_paths:
+      - "examples/column/output/zalesak_fct_advection/*"
     agents:
       config: cpu
       queue: central
@@ -659,6 +703,21 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
+    key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
+    command:
+      - "module load cuda/11.3 nsight-systems/2022.2.1"
+      - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+    artifact_paths:
+      - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
+    env:
+      CLIMACORE_DISTRIBUTED: "MPI"
+      NPROCS: 2
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 2
+
   - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
     command:
@@ -709,6 +768,17 @@ steps:
       - "julia --color=yes --project=examples examples/hybrid/sphere/limiters_deformation_flow.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/limiters_deformation_flow/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: 3D sphere Hadley circulation"
+    key: "cpu_3d_hadley_circulation"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
+    artifact_paths:
+      - "examples/hybrid/sphere/output/hadley_circulation/*"
     agents:
       config: cpu
       queue: central
@@ -876,6 +946,20 @@ steps:
       - "examples/hybrid/plane/output/inertial_gravity_wave/Float32/*"
     env:
       TEST_NAME: "plane/inertial_gravity_wave"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: stretched 2D plane inertial gravity wave"
+    key: "cpu_stretch_inertial_gravity_wave"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/stretched_inertial_gravity_wave/Float32/*"
+    env:
+      TEST_NAME: "plane/inertial_gravity_wave"
+      Z_STRETCH: "true"
     agents:
       config: cpu
       queue: central

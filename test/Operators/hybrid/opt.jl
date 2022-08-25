@@ -4,7 +4,6 @@ using JET
 using IntervalSets
 
 import ClimaCore
-ClimaCore.Geometry.error_on_no_name_found() = false
 
 import ClimaCore: Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry

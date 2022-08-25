@@ -1,20 +1,23 @@
 abstract type AbstractWriter end
 
-using PkgVersion
-using HDF5
-using ..Domains
-using ..Meshes
-using ..Topologies
-using ..Spaces
-using ..Fields
-
 """
-    HDF5Writer(filename)
+    HDF5Writer(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
 
 An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
 storage conventions. An internal cache is used to avoid writing duplicate
 domains, meshes, topologies and spaces to the file. Use [`HDF5Reader`](@ref) to
 load the data from the file.
+
+The optional `context` can be used for writing distributed fields: in this case,
+the `MPICommsContext` used passed as an argument: this must match the context
+used for distributing the `Field`.
+
+!!! note
+
+    The default Julia HDF5 binaries are not built with MPI support. To use the
+    distributed functionality, you will need to configure HDF5.jl with an
+    MPI-enabled HDF5 library, see [the HDF5.jl
+    documentation](https://juliaio.github.io/HDF5.jl/stable/#Parallel-HDF5).
 
 # Interface
 
@@ -28,22 +31,29 @@ InputOutput.write!(writer, Y, "Y")
 close(writer)
 ```
 """
-struct HDF5Writer <: AbstractWriter
+struct HDF5Writer{C <: ClimaComms.AbstractCommsContext} <: AbstractWriter
     file::HDF5.File
+    context::C
     cache::Dict{String, String}
 end
 
-function HDF5Writer(filename::String)
-    file = h5open(filename, "w")
-    attrs(file)["ClimaCore version"] = string(PkgVersion.@Version)
+function HDF5Writer(
+    filename::AbstractString,
+    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(),
+)
+    if context isa ClimaComms.SingletonCommsContext
+        file = h5open(filename, "w")
+    else
+        file = h5open(filename, "w", context.mpicomm)
+    end
+    write_attribute(file, "ClimaCore version", string(VERSION))
     cache = Dict{String, String}()
-    return HDF5Writer(file, cache)
+    return HDF5Writer(file, context, cache)
 end
 
-
 function Base.close(hdfwriter::HDF5Writer)
-    close(hdfwriter.file)
     empty!(hdfwriter.cache)
+    close(hdfwriter.file)
     return nothing
 end
 
@@ -140,9 +150,10 @@ function write_new!(
     mesh::Meshes.IntervalMesh,
     name::AbstractString = defaultname(mesh),
 )
+    domainname = write!(writer, mesh.domain)
     group = create_group(writer.file, "meshes/$name")
     write_attribute(group, "type", "IntervalMesh")
-    write_attribute(group, "domain", write!(writer, mesh.domain))
+    write_attribute(group, "domain", domainname)
     write_attribute(group, "nelements", Meshes.nelements(mesh))
     if occursin("LinRange", string(typeof(mesh.faces)))
         write_attribute(group, "faces_type", "Range")
@@ -162,10 +173,12 @@ function write_new!(
     mesh::Meshes.RectilinearMesh,
     name::AbstractString = defaultname(mesh),
 )
+    domainname1 = write!(writer, mesh.intervalmesh1)
+    domainname2 = write!(writer, mesh.intervalmesh2)
     group = create_group(writer.file, "meshes/$name")
     write_attribute(group, "type", "RectilinearMesh")
-    write_attribute(group, "intervalmesh1", write!(writer, mesh.intervalmesh1))
-    write_attribute(group, "intervalmesh2", write!(writer, mesh.intervalmesh2))
+    write_attribute(group, "intervalmesh1", domainname1)
+    write_attribute(group, "intervalmesh2", domainname2)
     return name
 end
 
@@ -179,6 +192,7 @@ function write_new!(
     mesh::Meshes.AbstractCubedSphere,
     name::AbstractString = defaultname(mesh),
 )
+    domainname = write!(writer, mesh.domain)
     group = create_group(writer.file, "meshes/$name")
     write_attribute(group, "type", string(nameof(typeof(mesh))))
     write_attribute(group, "ne", mesh.ne)
@@ -187,12 +201,13 @@ function write_new!(
         "localelementmap",
         string(nameof(typeof(mesh.localelementmap))),
     )
-    write_attribute(group, "domain", write!(writer, mesh.domain))
+    write_attribute(group, "domain", domainname)
     return name
 end
 
 # Topologies
 defaultname(::Topologies.Topology2D) = "2d"
+defaultname(::Topologies.DistributedTopology2D) = "2d"
 defaultname(topology::Topologies.IntervalTopology) = defaultname(topology.mesh)
 
 """
@@ -205,9 +220,10 @@ function write_new!(
     topology::Topologies.IntervalTopology,
     name::AbstractString = defaultname(topology),
 )
+    meshname = write!(writer, topology.mesh)
     group = create_group(writer.file, "topologies/$name")
     write_attribute(group, "type", "IntervalTopology")
-    write_attribute(group, "mesh", write!(writer, topology.mesh))
+    write_attribute(group, "mesh", meshname)
     return name
 end
 
@@ -221,12 +237,44 @@ function write_new!(
     topology::Topologies.Topology2D,
     name::AbstractString = defaultname(topology),
 )
+    @assert writer.context isa ClimaComms.SingletonCommsContext
+
     group = create_group(writer.file, "topologies/$name")
     write_attribute(group, "type", "Topology2D")
     write_attribute(group, "mesh", write!(writer, topology.mesh))
-    if !(topology.elemorder isa LinearIndices)
-        elemorder_matrix = cartesianindices_to_matrix(topology.elemorder)
+    if !(topology.elemorder isa CartesianIndices)
+        elemorder_matrix = reinterpret(reshape, Int, topology.elemorder)
         write_dataset(group, "elemorder", elemorder_matrix)
+    end
+    return name
+end
+
+"""
+    write_new!(writer, topology, name)
+
+Write `DistributedTopology2D` data to HDF5.
+"""
+function write_new!(
+    writer::HDF5Writer,
+    topology::Topologies.DistributedTopology2D,
+    name::AbstractString = defaultname(topology),
+)
+    @assert writer.context == topology.context
+
+    group = create_group(writer.file, "topologies/$name")
+    write_attribute(group, "type", "Topology2D")
+    write_attribute(group, "mesh", write!(writer, topology.mesh))
+    if !(topology.elemorder isa CartesianIndices)
+        elemorder_matrix = reinterpret(reshape, Int, topology.elemorder)
+        elemorder_dataset = create_dataset(
+            group,
+            "elemorder",
+            datatype(eltype(elemorder_matrix)),
+            dataspace(size(elemorder_matrix));
+            dxpl_mpio = :collective,
+        )
+        elemorder_dataset[:, topology.local_elem_gidx] =
+            elemorder_matrix[:, topology.local_elem_gidx]
     end
     return name
 end
@@ -341,9 +389,34 @@ end
 
 # write fields
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
-    axes_name = write!(writer, axes(field))
-    write_dataset(writer.file, "fields/$name", parent(field))
-    dataset = writer.file["fields/$name"]
+    space = axes(field)
+    space_name = write!(writer, space)
+
+    array = parent(field)
+    topology = Spaces.topology(space)
+    nd = ndims(array)
+    if topology isa Topologies.DistributedTopology2D
+        nelems = Topologies.nelems(topology)
+        dims = ntuple(d -> d == nd ? nelems : size(array, d), nd)
+        localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
+        dataset = create_dataset(
+            writer.file,
+            "fields/$name",
+            datatype(eltype(array)),
+            dataspace(dims);
+            dxpl_mpio = :collective,
+        )
+    else
+        dims = size(array)
+        localidx = ntuple(d -> (:), nd)
+        dataset = create_dataset(
+            writer.file,
+            "fields/$name",
+            datatype(eltype(array)),
+            dataspace(dims),
+        )
+    end
+    dataset[localidx...] = array
     write_attribute(dataset, "type", "Field")
     write_attribute(
         dataset,
@@ -351,7 +424,7 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
         string(nameof(typeof(Fields.field_values(field)))),
     )
     write_attribute(dataset, "value_type", string(eltype(field)))
-    write_attribute(dataset, "space", axes_name)
+    write_attribute(dataset, "space", space_name)
     return name
 end
 
