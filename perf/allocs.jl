@@ -20,9 +20,7 @@ dirs_to_monitor = [
 all_cases = [
     (joinpath(EXAMPLE_DIR, "sphere", "shallow_water.jl"), "barotropic_instability", ""),
     (joinpath(EXAMPLE_DIR, "hybrid", "plane", "bubble_2d_rhotheta.jl"), "", ""),
-    (joinpath(EXAMPLE_DIR, "hybrid", "box", "bubble_3d_rhotheta.jl"), "", ""),
     (joinpath(EXAMPLE_DIR, "hybrid", "driver.jl"), "", "sphere/baroclinic_wave_rhoe"),
-    (joinpath(EXAMPLE_DIR, "hybrid", "driver.jl"), "", "sphere/baroclinic_wave_rhotheta"),
 ]
 #! format: on
 
