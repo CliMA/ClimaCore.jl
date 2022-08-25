@@ -1,6 +1,6 @@
 using ClimaCore: Geometry, Domains, Meshes
 using Test
-using StaticArrays, SparseArrays, LinearAlgebra
+using StaticArrays, SparseArrays, LinearAlgebra, ForwardDiff
 
 
 @testset "opposing face" begin
@@ -182,6 +182,30 @@ end
             SVector(0.5, -1.0),
         ).x3 === +0.0
 
+        # derivative handling
+        M = ForwardDiff.jacobian(SVector(-1.0, 1.0)) do ξ
+            Geometry.components(
+                Meshes.coordinates(mesh, CartesianIndex(1, 2, 3), ξ),
+            )
+        end
+        @test M[1, 1] < 0
+        @test M[2, 1] == 0
+        @test M[3, 1] > 0
+        @test M[1, 2] == 0
+        @test M[2, 2] < 0
+        @test M[3, 2] == 0
+
+        M = ForwardDiff.jacobian(SVector(-1.0, -1.0)) do ξ
+            Geometry.components(
+                Meshes.coordinates(mesh, CartesianIndex(1, 3, 3), ξ),
+            )
+        end
+        @test M[1, 1] < 0
+        @test M[2, 1] == 0
+        @test M[3, 1] > 0
+        @test M[1, 2] == 0
+        @test M[2, 2] < 0
+        @test M[3, 2] == 0
     end
 end
 
@@ -214,6 +238,30 @@ end
             CartesianIndex(1, 2, 1),
             SVector(0.5, +0.0),
         ).x3 === +0.0
+
+        # derivative handling
+        M = ForwardDiff.jacobian(SVector(-1.0, -0.0)) do ξ
+            Geometry.components(
+                Meshes.coordinates(mesh, CartesianIndex(1, 2, 3), ξ),
+            )
+        end
+        @test M[1, 1] < 0
+        @test M[2, 1] == 0
+        @test M[3, 1] > 0
+        @test M[1, 2] == 0
+        @test M[2, 2] < 0
+        @test M[3, 2] == 0
+        M = ForwardDiff.jacobian(SVector(-1.0, +0.0)) do ξ
+            Geometry.components(
+                Meshes.coordinates(mesh, CartesianIndex(1, 2, 3), ξ),
+            )
+        end
+        @test M[1, 1] < 0
+        @test M[2, 1] == 0
+        @test M[3, 1] > 0
+        @test M[1, 2] == 0
+        @test M[2, 2] < 0
+        @test M[3, 2] == 0
     end
 end
 
