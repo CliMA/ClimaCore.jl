@@ -34,13 +34,13 @@ LocalVector(
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::ContravariantVector,
     ::LocalGeometry,
-) where {I} = transform(ContravariantAxis{I}(), u)
+) where {I} = project(ContravariantAxis{I}(), u)
 
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} =
-    transform(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
+    project(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
 
 (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector{<:Any, I},
@@ -50,12 +50,12 @@ LocalVector(
 (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector,
     ::LocalGeometry,
-) where {I} = transform(CovariantAxis{I}(), u)
+) where {I} = project(CovariantAxis{I}(), u)
 
 (::Type{<:CovariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
-) where {I} = transform(CovariantAxis{I}(), CovariantVector(u, local_geometry))
+) where {I} = project(CovariantAxis{I}(), CovariantVector(u, local_geometry))
 
 (::Type{<:LocalVector{<:Any, I}})(
     u::LocalVector{<:Any, I},
@@ -63,54 +63,48 @@ LocalVector(
 ) where {I} = u
 
 (::Type{<:LocalVector{<:Any, I}})(u::LocalVector, ::LocalGeometry) where {I} =
-    transform(LocalAxis{I}(), u)
+    project(LocalAxis{I}(), u)
 
 (::Type{<:LocalVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
-) where {I} = transform(LocalAxis{I}(), LocalVector(u, local_geometry))
+) where {I} = project(LocalAxis{I}(), LocalVector(u, local_geometry))
 
 # Generic N-axis conversion functions,
 # Convert to specific local geometry dimension then convert vector type
 LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(LocalAxis{I}(), transform(CovariantAxis{I}(), u), local_geometry)
+    project(LocalAxis{I}(), project(CovariantAxis{I}(), u), local_geometry)
 
 LocalVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    LocalAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
-    local_geometry,
-)
+) where {I} =
+    project(LocalAxis{I}(), project(ContravariantAxis{I}(), u), local_geometry)
 
 CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
-    transform(CovariantAxis{I}(), transform(LocalAxis{I}(), u), local_geometry)
+    project(CovariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
 CovariantVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
+) where {I} = project(
     CovariantAxis{I}(),
-    transform(ContravariantAxis{I}(), u),
+    project(ContravariantAxis{I}(), u),
     local_geometry,
 )
 
 ContravariantVector(
     u::LocalVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
-    ContravariantAxis{I}(),
-    transform(LocalAxis{I}(), u),
-    local_geometry,
-)
+) where {I} =
+    project(ContravariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
 ContravariantVector(
     u::CovariantVector,
     local_geometry::LocalGeometry{I},
-) where {I} = transform(
+) where {I} = project(
     ContravariantAxis{I}(),
-    transform(CovariantAxis{I}(), u),
+    project(CovariantAxis{I}(), u),
     local_geometry,
 )
 
@@ -172,7 +166,7 @@ Base.@propagate_inbounds Jcontravariant3(
 )
     u₁, v, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
-    u, w = components(transform(LocalAxis{(1, 3)}(), vector2, local_geometry))
+    u, w = components(project(LocalAxis{(1, 3)}(), vector2, local_geometry))
     return UVWVector(u, v, w)
 end
 @inline function contravariant1(
@@ -181,7 +175,7 @@ end
 )
     u₁, _, u₃ = components(vector)
     vector2 = Covariant13Vector(u₁, u₃)
-    return transform(Contravariant13Axis(), vector2, local_geometry).u¹
+    return project(Contravariant13Axis(), vector2, local_geometry).u¹
 end
 @inline function contravariant3(
     vector::CovariantVector{<:Any, (1, 2)},
@@ -189,7 +183,7 @@ end
 )
     u₁, _ = components(vector)
     vector2 = Covariant13Vector(u₁, zero(u₁))
-    return transform(Contravariant13Axis(), vector2, local_geometry).u³
+    return project(Contravariant13Axis(), vector2, local_geometry).u³
 end
 @inline function ContravariantVector(
     vector::CovariantVector{<:Any, (1, 2)},
@@ -197,9 +191,9 @@ end
 )
     u₁, v = components(vector)
     vector2 = Covariant1Vector(u₁)
-    vector3 = transform(
+    vector3 = project(
         ContravariantAxis{(1, 3)}(),
-        transform(CovariantAxis{(1, 3)}(), vector2),
+        project(CovariantAxis{(1, 3)}(), vector2),
         local_geometry,
     )
     u¹, u³ = components(vector3)
@@ -333,6 +327,7 @@ for op in (:transform, :project)
         )
 
         # Covariant <-> Contravariant
+        #=
         @inline $op(
             ax::ContravariantAxis,
             v::CovariantTensor,
@@ -343,6 +338,7 @@ for op in (:transform, :project)
             local_geometry.∂ξ∂x' *
             $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
+        =#
         @inline $op(
             ax::CovariantAxis,
             v::ContravariantTensor,
@@ -367,6 +363,150 @@ for op in (:transform, :project)
             $op(ato, v)
     end
 end
+
+@inline transform(
+    ax::ContravariantAxis,
+    v::CovariantTensor,
+    local_geometry::LocalGeometry,
+) = project(
+    ax,
+    local_geometry.∂ξ∂x *
+    local_geometry.∂ξ∂x' *
+    project(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+)
+
+@generated function project(
+    ax::ContravariantAxis{Ito},
+    v::CovariantVector{T, Ifrom},
+    local_geometry::LocalGeometry{J},
+) where {T, Ito, Ifrom, J}
+    Nfrom = length(Ifrom)
+    Nto = length(Ito)
+    NJ = length(J)
+
+    vals = []
+    for i in Ito
+        if i ∈ J
+            # e.g. i = 2, J = (1,2,3)
+            IJ = intersect(J, Ifrom)
+            if isempty(IJ)
+                val = 0
+            else
+                niJ = findfirst(==(i), J)
+                val = Expr(
+                    :call,
+                    :+,
+                    [
+                        :(
+                            local_geometry.gⁱʲ[$niJ, $(findfirst(==(j), J))] * v[$(findfirst(==(j), Ifrom))]
+                        ) for j in IJ
+                    ]...,
+                )
+            end
+        elseif i ∈ Ifrom
+            # e.g. i = 2, J = (1,3), Ifrom = (2,)
+            ni = findfirst(==(i), Ifrom)
+            val = :(v[$ni])
+        else
+            # e.g. i = 2, J = (1,3), Ifrom = (1,)
+            val = 0
+        end
+        push!(vals, val)
+    end
+    quote
+        Base.@_propagate_inbounds_meta
+        AxisVector(ContravariantAxis{$Ito}(), SVector{$Nto, $T}($(vals...)))
+    end
+end
+@generated function project(
+    ax::ContravariantAxis{Ito},
+    v::Contravariant2Tensor{T, Tuple{CovariantAxis{Ifrom}, A}},
+    local_geometry::LocalGeometry{J},
+) where {T, Ito, Ifrom, A, J}
+    Nfrom = length(Ifrom)
+    Nto = length(Ito)
+    NJ = length(J)
+    NA = length(A.instance)
+
+    vals = []
+    for na in 1:NA
+        for i in Ito
+            if i ∈ J
+                # e.g. i = 2, J = (1,2,3)
+                IJ = intersect(J, Ifrom)
+                if isempty(IJ)
+                    val = 0
+                else
+                    niJ = findfirst(==(i), J)
+                    val = Expr(
+                        :call,
+                        :+,
+                        [
+                            :(
+                                local_geometry.gⁱʲ[
+                                    $niJ,
+                                    $(findfirst(==(j), J)),
+                                ] * v[$(findfirst(==(j), Ifrom)), $na]
+                            ) for j in IJ
+                        ]...,
+                    )
+                end
+            elseif i ∈ Ifrom
+                # e.g. i = 2, J = (1,3), Ifrom = (2,)
+                ni = findfirst(==(i), Ifrom)
+                val = :(v[$ni, $na])
+            else
+                # e.g. i = 2, J = (1,3), Ifrom = (1,)
+                val = 0
+            end
+            push!(vals, val)
+        end
+    end
+    quote
+        Base.@_propagate_inbounds_meta
+        AxisTensor(
+            (ContravariantAxis{$Ito}(), A.instance),
+            SMatrix{$Nto, $NA, $T, $(Nto * NA)}($(vals...)),
+        )
+    end
+end
+
+# A few other expensive ones:
+#! format: off
+@inline function project(
+    ax::ContravariantAxis{(1,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(1, 2)},LocalAxis{(1, 2)}},SMatrix{2,2,FT,4}},
+    lg::LocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(1,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [
+            lg.∂ξ∂x[1, 1]*v[1, 1]+lg.∂ξ∂x[1, 2]*v[2, 1] lg.∂ξ∂x[1, 1]*v[1, 2]+lg.∂ξ∂x[1, 2]*v[2, 2]
+        ])
+end
+@inline function project(
+    ax::ContravariantAxis{(2,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(1,2)},LocalAxis{(1,2)}},SMatrix{2,2,FT,4}},
+    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(2,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [
+            lg.∂ξ∂x[2, 1]*v[1, 1]+lg.∂ξ∂x[2, 2]*v[2, 1] lg.∂ξ∂x[2, 1]*v[1, 2]+lg.∂ξ∂x[2, 2]*v[2, 2]
+        ]
+    )
+end
+@inline function project(
+    ax::ContravariantAxis{(3,)},
+    v::AxisTensor{FT,2,Tuple{LocalAxis{(3,)},LocalAxis{(1,2)}},SMatrix{1,2,FT,2}},
+    lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
+) where {FT}
+    AxisTensor(
+        (ContravariantAxis{(3,)}(), LocalAxis{(1, 2)}()),
+        @inbounds @SMatrix [lg.∂ξ∂x[3, 3]*v[1, 1] lg.∂ξ∂x[3, 3]*v[1, 2]]
+    )
+end
+#! format: on
 
 
 """

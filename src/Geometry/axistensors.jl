@@ -286,13 +286,16 @@ const Axis2TensorOrAdj{T, A, S} =
 
 # based on 1st dimension
 const Covariant2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{CovariantAxis, AbstractAxis}}
-const Contravariant2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{ContravariantAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{CovariantAxis, AbstractAxis}, S}
+const Contravariant2Tensor{T, A, S} = Axis2Tensor{
+    T,
+    A,
+    S,
+} where {T, A <: Tuple{ContravariantAxis, AbstractAxis}, S}
 const Cartesian2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{CartesianAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{CartesianAxis, AbstractAxis}, S}
 const Local2Tensor{T, A, S} =
-    Axis2Tensor{T, A, S} where {A <: Tuple{LocalAxis, AbstractAxis}}
+    Axis2Tensor{T, A, S} where {T, A <: Tuple{LocalAxis, AbstractAxis}, S}
 
 const CovariantTensor = Union{CovariantVector, Covariant2Tensor}
 const ContravariantTensor = Union{ContravariantVector, Contravariant2Tensor}
@@ -477,6 +480,9 @@ end
     x
 end
 
+#= Set `assert_exact_transform() = true` for debugging=#
+assert_exact_transform() = false
+
 @generated function _transform(
     ato::Ato,
     x::Axis2Tensor{T, Tuple{Afrom, A2}},
@@ -487,12 +493,14 @@ end
 } where {Ito, Ifrom, J, T}
     N = length(Ifrom)
     M = length(J)
-    errcond = false
-    for n in 1:N
-        i = Ifrom[n]
-        if i ∉ Ito
-            for m in 1:M
-                errcond = :($errcond || x[$n, $m] != zero(T))
+    if assert_exact_transform()
+        errcond = false
+        for n in 1:N
+            i = Ifrom[n]
+            if i ∉ Ito
+                for m in 1:M
+                    errcond = :($errcond || x[$n, $m] != zero(T))
+                end
             end
         end
     end
@@ -511,8 +519,10 @@ end
     end
     quote
         Base.@_propagate_inbounds_meta
-        if $errcond
-            throw(InexactError(:transform, Ato, x))
+        if assert_exact_transform()
+            if $errcond
+                throw(InexactError(:transform, Ato, x))
+            end
         end
         @inbounds Axis2Tensor(
             (ato, axes(x, 2)),
@@ -550,11 +560,11 @@ end
     ))
 end
 
-@inline transform(ato::CovariantAxis, v::CovariantTensor) = _transform(ato, v)
+@inline transform(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
 @inline transform(ato::ContravariantAxis, v::ContravariantTensor) =
-    _transform(ato, v)
-@inline transform(ato::CartesianAxis, v::CartesianTensor) = _transform(ato, v)
-@inline transform(ato::LocalAxis, v::LocalTensor) = _transform(ato, v)
+    _project(ato, v)
+@inline transform(ato::CartesianAxis, v::CartesianTensor) = _project(ato, v)
+@inline transform(ato::LocalAxis, v::LocalTensor) = _project(ato, v)
 
 @inline project(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
 @inline project(ato::ContravariantAxis, v::ContravariantTensor) =
