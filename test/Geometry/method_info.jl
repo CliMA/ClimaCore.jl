@@ -235,7 +235,7 @@ end
 
 function method_info(FT, ::typeof(Geometry.contravariant1))
     return [
-    (Covariant123Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 8),
+    (Covariant123Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 6),
     (Covariant123Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 5),
     (Covariant12Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 3),
     (Covariant123Vector{FT}, LocalGeometry{(1, 2, 3), LatLongZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 5),
@@ -285,7 +285,7 @@ function method_info(FT, ::typeof(Geometry.contravariant3))
     return [
     (Covariant3Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 1),
     (Contravariant3Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 0),
-    (Covariant12Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 8),
+    (Covariant12Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 6),
     (Covariant3Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 1),
     (Contravariant3Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 0),
     (Contravariant123Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 0),
@@ -321,7 +321,7 @@ function method_info(FT, ::typeof(Geometry.Jcontravariant3))
     return [
     (Covariant3Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 2),
     (Contravariant3Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 1),
-    (Covariant12Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 9),
+    (Covariant12Vector{FT}, LocalGeometry{(1, 3), XZPoint{FT}, FT, SMatrix{2, 2, FT, 4}}, 7),
     (Covariant3Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 2),
     (Contravariant3Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 1),
     (Covariant12Vector{FT}, LocalGeometry{(1, 2, 3), XYZPoint{FT}, FT, SMatrix{3, 3, FT, 9}}, 4),
