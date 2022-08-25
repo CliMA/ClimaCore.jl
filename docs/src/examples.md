@@ -428,11 +428,12 @@ This suite of examples contains five different test cases:
 
 ### Deformation Flow with Flux Limiters
 
-The 3D sphere advection/transport example in [`examples/hybrid/sphere/limiters_deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/limiters_deformation_flow.jl) demonstrates the application of flux limiters, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the high-order upwinding scheme in the vertical direction, called [`Upwind3rdOrderBiasedProductC2F`](@ref).
+The 3D sphere advection/transport example in [`examples/hybrid/sphere/deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/deformation_flow.jl) demonstrates the application of flux limiters in the horziontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the flux-corrected transport in the vertical direction; by default, it uses `FCTZalesak`.
 
 #### Equations and discretizations
 
-This test case is a slight modification of the one in [`examples/hybrid/sphere/limiters_deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/deformation_flow.jl), which does not exhibit flux limiters. The original test case can be found in Section 1.1 of [Ullrich2012DynamicalCM](@cite).
+The original test case (without limiters or flux-corrected transport) is specified in Section 1.1 of [Ullrich2012DynamicalCM](@cite).
+
 #### Mass
 
 Follows the continuity equation
@@ -446,7 +447,7 @@ Follows the continuity equation
 This is discretized using the following
 ```math
 \begin{equation}
-  \frac{\partial}{\partial t} \rho \approx - D_h[ \rho (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))] - D^c_v[I^f(\rho \boldsymbol{u}_h)) + I^f(\rho) \boldsymbol{u}_v)] .
+  \frac{\partial}{\partial t} \rho \approx - D_h[\rho \boldsymbol{u}^c] - D^c_v[I^f(\rho) \boldsymbol{u}^f].
 \label{eq:3d-sphere-lim-discrete-continuity}
 \end{equation}
 ```
@@ -466,8 +467,8 @@ This is discretized using the following
 ```math
 \begin{equation}
 \frac{\partial}{\partial t} \rho q \approx
-- D_h[ \rho q (\boldsymbol{u}_h + I^c(\boldsymbol{u}_v))]
-- D^c_v\left[I^f(\rho q \boldsymbol{u}_h) + U^f\left( \boldsymbol{u}_v, \frac{\rho q}{\rho} \right) \right] + g(\rho, q),
+- D_h[ \rho q \boldsymbol{u}^c]
+- D^c_v\left[I^f(\rho q) * \boldsymbol{u}^f_h + FCT^f\left( \boldsymbol{u}^f_v, \frac{\rho q}{\rho} \right) \right] + g(\rho, q),
 \label{eq:3d-sphere-lim-discrete-tracers}
 \end{equation}
 ```
@@ -493,8 +494,7 @@ We make use of the following operators
 * ``I^c`` is the [face-to-center reconstruction operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateF2C), called `If2c` in the example code.
 * ``I^f`` is the [center-to-face reconstruction operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.InterpolateC2F), called `Ic2f` in the example code.
   - Currently this is just the arithmetic mean, but we will need to use a weighted version with stretched vertical grids.
-* ``U^f`` is the [center-to-face upwind product operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Upwind3rdOrderBiasedProductC2F), called `third_order_upwind_c2f` in the example code
-  - This operator is of third-order of accuracy (when used with a constant vertical velocity and some reduced, but still high-order for non constant vertical velocity).
+* ``FCT^f`` denotes either the [center-to-face upwind product operator](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Upwind3rdOrderBiasedProductC2F) (which represents no flux-corrected transport), the center-to-face Boris & Book FCT operator, or the center-to-face Zalesak FCT operator.
 
 
 #### Differentiation operators
@@ -529,7 +529,7 @@ The order of operations should be the following:
 
 This test case is set up in a 3D (shell) spherical domain where the elevation goes from ``z=0~\textrm{m}`` (i.e., from the radius of the sphere ``R = 6.37122 10^6~\textrm{m}``) to ``z_{\textrm{top}} = 12000~\textrm{m}``.
 
-The flow (reversed halfway trhough the time period) is specified as ``\boldsymbol{u} = \boldsymbol{u}_a + \boldsymbol{u}_d``, where the components are defined as follows:
+The flow (reversed halfway through the time period) is specified as ``\boldsymbol{u} = \boldsymbol{u}_a + \boldsymbol{u}_d``, where the components are defined as follows:
 
 ```math
 \begin{align}

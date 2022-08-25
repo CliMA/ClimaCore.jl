@@ -741,23 +741,12 @@ steps:
       queue: central
       slurm_ntasks: 1
 
-  - label: ":computer: 3D sphere deformation flow"
+  - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
     key: "cpu_3d_deformation_flow"
     command:
       - "julia --color=yes --project=examples examples/hybrid/sphere/deformation_flow.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/deformation_flow/*"
-    agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-
-  - label: ":computer: 3D sphere limiters deformation flow"
-    key: "cpu_3d_limiters_deformation_flow"
-    command:
-      - "julia --color=yes --project=examples examples/hybrid/sphere/limiters_deformation_flow.jl"
-    artifact_paths:
-      - "examples/hybrid/sphere/output/limiters_deformation_flow/*"
     agents:
       config: cpu
       queue: central

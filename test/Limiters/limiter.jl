@@ -104,7 +104,7 @@ end
     q = map(coord -> (; coord.x, coord.y), Fields.coordinate_field(space))
     ρq = ρ .* q
 
-    limiter = Limiters.QuasiMonotoneLimiter(ρq, ρ)
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
     Limiters.compute_bounds!(limiter, ρq, ρ)
 
     for h2 in 1:n2
@@ -146,7 +146,7 @@ end
 
 
     ρq_new = deepcopy(ρq)
-    Limiters.apply_limit_slab!(ρq_new, ρ, WJ, q_bounds)
+    Limiters.apply_limit_slab!(ρq_new, ρ, WJ, q_bounds, eps(Float64))
 
 
     q_new = RecursiveApply.rdiv.(ρq_new, ρ)
@@ -177,7 +177,7 @@ end
 
     ρq = ρ .* q
 
-    limiter = Limiters.QuasiMonotoneLimiter(ρq, ρ)
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
     initial_Q_mass = sum(ρq)
 
     # Initialize variables needed for limiters
@@ -215,7 +215,7 @@ end
 
     total_ρq = sum(ρq)
 
-    limiter = Limiters.QuasiMonotoneLimiter(ρq, ρ)
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
     Limiters.compute_bounds!(limiter, ρq_ref, ρ)
     Limiters.apply_limiter!(ρq, ρ, limiter)
@@ -263,7 +263,7 @@ end
 
     total_ρq = sum(ρq)
 
-    limiter = Limiters.QuasiMonotoneLimiter(ρq, ρ)
+    limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
     Limiters.compute_bounds!(limiter, ρq_ref, ρ)
     Limiters.apply_limiter!(ρq, ρ, limiter)

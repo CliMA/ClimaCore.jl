@@ -97,7 +97,7 @@ const D₄ = 0.0                # hyperdiffusion coefficient
 const u0 = π / 2              # angular velocity
 const r0 = (xmax - xmin) / 6  # bells radius
 const end_time = 2π           # simulation period in seconds
-const dt = end_time / 800
+const dt = end_time / 2000
 const n_steps = Int(round(end_time / dt))
 const flow_center = Geometry.XYZPoint(
     xmin + (xmax - xmin) / 2,
@@ -318,7 +318,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
     ystar = copy(y0)
     parameters = (
         horzspace = horzspace,
-        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq, y0.ρ),
+        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq),
         end_time = end_time,
         center_coords = center_coords,
         face_coords = face_coords,

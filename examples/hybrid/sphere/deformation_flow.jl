@@ -1,434 +1,335 @@
+using OrdinaryDiffEq
 using Test
-using LinearAlgebra
+using Statistics: mean
 
-import ClimaCore:
-    ClimaCore,
-    slab,
-    Spaces,
-    Domains,
-    Meshes,
-    Geometry,
-    Topologies,
-    Spaces,
-    Fields,
-    Operators
-import ClimaCore.Utilities: half
-
-using OrdinaryDiffEq: ODEProblem, solve
-using DiffEqBase
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Limiters
 using ClimaTimeSteppers
 
-import Logging
-import TerminalLoggers
+using Logging
+using TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 # 3D deformation flow (DCMIP 2012 Test 1-1)
-# Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.1
+# Reference:
+# http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
+# Section 1.1
 
-const R = 6.37122e6 # radius
-const grav = 9.8 # gravitational constant
-const R_d = 287.058 # R dry (gas constant / mol mass dry air)
-const z_top = 1.2e4 # height position of the model top
-const p_top = 25494.4 # pressure at the model top
-const T_0 = 300 # isothermal atmospheric temperature
-const H = R_d * T_0 / grav # scale height
-const p_0 = 1.0e5 # reference pressure
-const τ = 1036800.0 # period of motion
-const ω_0 = 23000 * pi / τ # maxium of the vertical pressure velocity
-const b = 0.2 # normalized pressure depth of divergent layer
-const λ_c1 = 150.0 # initial longitude of first tracer
-const λ_c2 = 210.0 # initial longitude of second tracer
-const ϕ_c = 0.0 # initial latitude of tracers
-const z_c = 5.0e3 # initial altitude of tracers
-const R_t = R / 2 # horizontal half-width of tracers
-const Z_t = 1000.0 # vertical half-width of tracers
-const κ₄ = 1.0e16 # hyperviscosity
+const FT = Float64                # floating point type
+const R = FT(6.37122e6)           # radius
+const grav = FT(9.8)              # gravitational constant
+const R_d = FT(287.058)           # R dry (gas constant / mol mass dry air)
+const p_top = FT(25494.4)         # pressure at the model top
+const T_0 = FT(300)               # isothermal atmospheric temperature
+const H = R_d * T_0 / grav        # scale height
+const p_0 = FT(1e5)               # reference pressure
+const τ = FT(1036800)             # period of motion
+const ω_0 = FT(π) * FT(23000) / τ # maxium of the vertical pressure velocity
+const b = FT(0.2)                 # normalized pressure depth of divergent layer
+const λ_c1 = FT(150)              # initial longitude of first tracer
+const λ_c2 = FT(210)              # initial longitude of second tracer
+const ϕ_c = FT(0)                 # initial latitude of tracers
+const z_c = FT(5e3)               # initial altitude of tracers
+const R_t = R / 2                 # horizontal half-width of tracers
+const Z_t = FT(1000)              # vertical half-width of tracers
+const D₄ = FT(1e16)               # hyperviscosity coefficient
 
-# time constants
-T = 86400.0 * 12.0
-dt = 60.0 * 60.0
+# Parameters used in run_deformation_flow
+z_top = FT(1.2e4)
+zelem = 36
+helem = 4
+npoly = 4
+t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
+dt = FT(60 * 60) # 1 hour timestep
+ode_algorithm = SSPRK33ShuOsher()
 
-FT = Float64
-
-# set up function space
-function sphere_3D(
-    R = 6.37122e6,
-    zlim = (0, 12.0e3),
-    helem = 4,
-    zelem = 36,
-    npoly = 4,
+# Operators used in increment!
+const hdiv = Operators.Divergence()
+const hwdiv = Operators.WeakDivergence()
+const hgrad = Operators.Gradient()
+const If2c = Operators.InterpolateF2C()
+const Ic2f = Operators.InterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
 )
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_names = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+const vdivf2c = Operators.DivergenceF2C(
+    top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+    bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+)
+const upwind_product1_c2f = Operators.UpwindBiasedProductC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
+const upwind_product3_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+    bottom = Operators.ThirdOrderOneSided(),
+    top = Operators.ThirdOrderOneSided(),
+)
+const FCTZalesak = Operators.FCTZalesak(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+)
+const FCTBorisBook = Operators.FCTBorisBook(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+)
 
-    horzdomain = Domains.SphereDomain(R)
-    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.Topology2D(horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
-
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
-end
-
-# set up 3D domain
-hv_center_space, hv_face_space = sphere_3D()
-
-# initial conditions
-coords = Fields.coordinate_field(hv_center_space)
-face_coords = Fields.coordinate_field(hv_face_space)
-
-r1(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c1))
-r2(λ, ϕ) = R * acos(sind(ϕ_c) * sind(ϕ) + cosd(ϕ_c) * cosd(ϕ) * cosd(λ - λ_c2))
-
+# Reference pressure and density
 p(z) = p_0 * exp(-z / H)
 ρ_ref(z) = p(z) / R_d / T_0
 
-y0 = map(coords) do coord
-    z = coord.z
-    zd = z - z_c
-    λ = coord.long
+# Local wind velocity forcing
+function local_flow(local_geometry, t)
+    coord = local_geometry.coordinates
     ϕ = coord.lat
-    rd1 = r1(λ, ϕ)
-    rd2 = r2(λ, ϕ)
+    λ = coord.long
+    z = coord.z
 
-    d1 = min(1, (rd1 / R_t)^2 + (zd / Z_t)^2)
-    d2 = min(1, (rd2 / R_t)^2 + (zd / Z_t)^2)
-
-    q1 = 1 / 2.0 * (1 + cos(pi * d1)) + 1 / 2.0 * (1 + cos(pi * d2))
-    q2 = 0.9 - 0.8 * q1^2
-    q3 = 0.0
-    if d1 < 0.5 || d2 < 0.5
-        q3 = 1.0
-    else
-        q3 = 0.1
-    end
-
-    if (z > z_c) && (ϕ > ϕ_c - rad2deg(1 / 8)) && (ϕ < ϕ_c + rad2deg(1 / 8))
-        q3 = 0.1
-    end
-    q4 = 1 - 3 / 10 * (q1 + q2 + q3)
-
-    ρq1 = ρ_ref(z) * q1
-    ρq2 = ρ_ref(z) * q2
-    ρq3 = ρ_ref(z) * q3
-    ρq4 = ρ_ref(z) * q4
-
-    return (
-        ρ = ρ_ref(z),
-        ρq1 = ρq1,
-        ρq2 = ρq2,
-        ρq3 = ρq3,
-        ρq4 = ρq4,
-        ρq1_td = ρq1,
-        ρq2_td = ρq2,
-        ρq3_td = ρq3,
-        ρq4_td = ρq4,
-    )
-end
-
-y0 = Fields.FieldVector(
-    ρ = y0.ρ,
-    ρq1 = y0.ρq1,
-    ρq2 = y0.ρq2,
-    ρq3 = y0.ρq3,
-    ρq4 = y0.ρq4,
-    ρq1_td = y0.ρq1,
-    ρq2_td = y0.ρq2,
-    ρq3_td = y0.ρq3,
-    ρq4_td = y0.ρq4,
-)
-
-function rhs!(dydt, y, parameters, t, alpha, beta)
-
-    (; τ, coords, face_coords, ystar, y_td) = parameters
-
-    ϕ = coords.lat
-    λ = coords.long
-    zc = coords.z
-    zf = face_coords.z
-    λp = λ .- 360 * t / τ
     k = 10 * R / τ
+    λp = λ - FT(360) * t / τ
 
-    ϕf = face_coords.lat
-    λf = face_coords.long
-    λpf = λf .- 360 * t / τ
+    ua =
+        k * sind(λp)^2 * sind(2 * ϕ) * cos(FT(π) * t / τ) +
+        2 * FT(π) * R / τ * cosd(ϕ)
+    ud =
+        ω_0 * R / b / p_top *
+        cosd(λp) *
+        cosd(ϕ)^2 *
+        cos(2 * FT(π) * t / τ) *
+        (-exp((p(z) - p_0) / b / p_top) + exp((p_top - p(z)) / b / p_top))
+    uu = ua + ud
+
+    uv = k * sind(2 * λp) * cosd(ϕ) * cos(FT(π) * t / τ)
 
     sp =
-        @. 1 + exp((p_top - p_0) / b / p_top) - exp((p(zf) - p_0) / b / p_top) -
-           exp((p_top - p(zf)) / b / p_top)
-    ua = @. k * sind(λp)^2 * sind(2 * ϕ) * cos(pi * t / τ) +
-       2 * pi * R / τ * cosd(ϕ)
-    ud = @. ω_0 * R / b / p_top *
-       cosd(λp) *
-       cosd(ϕ)^2 *
-       cos(2 * pi * t / τ) *
-       (-exp((p(zc) - p_0) / b / p_top) + exp((p_top - p(zc)) / b / p_top))
-    uu = @. ua + ud
-    uv = @. k * sind(2 * λp) * cosd(ϕ) * cos(pi * t / τ)
-    ω = @. ω_0 * sind(λpf) * cosd(ϕf) * cos(2 * pi * t / τ) * sp
-    uw = @. -ω / ρ_ref(zf) / grav
+        1 + exp((p_top - p_0) / b / p_top) - exp((p(z) - p_0) / b / p_top) -
+        exp((p_top - p(z)) / b / p_top)
+    ω = ω_0 * sind(λp) * cosd(ϕ) * cos(2 * FT(π) * t / τ) * sp
+    uw = -ω / ρ_ref(z) / grav
 
-    uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
-    w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
-
-    # aliases
-    ρ = y.ρ
-    ρq1 = y.ρq1
-    ρq2 = y.ρq2
-    ρq3 = y.ρq3
-    ρq4 = y.ρq4
-
-    dρq1 = dydt.ρq1
-    dρq2 = dydt.ρq2
-    dρq3 = dydt.ρq3
-    dρq4 = dydt.ρq4
-
-    ρq1_td = y_td.ρq1
-    ρq2_td = y_td.ρq2
-    ρq3_td = y_td.ρq3
-    ρq4_td = y_td.ρq4
-
-    # No change in density: divergence-free flow
-    @. dydt.ρ = beta * dydt.ρ + 0 .* y.ρ
-
-    If2c = Operators.InterpolateF2C()
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    vdivf2c = Operators.DivergenceF2C(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
-    first_order_upwind_c2f = Operators.UpwindBiasedProductC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-    third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
-    )
-    FCTBB = Operators.FCTBorisBook(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
-    )
-    hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
-    hgrad = Operators.Gradient()
-
-    ### HYPERVISCOSITY
-    @. ystar.ρq1 = hwdiv(hgrad(ρq1 / ρ))
-    Spaces.weighted_dss!(ystar.ρq1)
-    @. ystar.ρq1 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq1))
-
-    @. ystar.ρq2 = hwdiv(hgrad(ρq2 / ρ))
-    Spaces.weighted_dss!(ystar.ρq2)
-    @. ystar.ρq2 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq2))
-
-    @. ystar.ρq3 = hwdiv(hgrad(ρq3 / ρ))
-    Spaces.weighted_dss!(ystar.ρq3)
-    @. ystar.ρq3 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq3))
-
-    @. ystar.ρq4 = hwdiv(hgrad(ρq4 / ρ))
-    Spaces.weighted_dss!(ystar.ρq4)
-    @. ystar.ρq4 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq4))
-
-    cw = If2c.(w)
-    cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
-
-    # 1) Vertical transport for ρq1:
-    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
-    @. ρq1_td =
-        beta * ρq1 -
-        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 / ρ))
-    @. dρq1 =
-        beta * (dρq1 - ρq1) + ρq1_td -
-        alpha * vdivf2c(
-            Ic2f(ρ) * FCTBB(
-                (
-                    third_order_upwind_c2f(w, ρq1 / ρ) -
-                    first_order_upwind_c2f(w, ρq1 / ρ)
-                ),
-                ρq1_td / ρ / alpha,
-            ),
-        )
-
-    # 1.2) vertical advection by horizontal velocity:
-    @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
-    # 2) Horizontal transport for ρq1 (includes both horizontal and vertical velocity components)
-    @. dρq1 -= alpha * hdiv(cuvw * ρq1) - alpha * ystar.ρq1
-
-    # 1) Vertical transport for ρq2:
-    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
-    @. ρq2_td =
-        beta * ρq2 -
-        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq2 / ρ))
-    @. dρq2 =
-        beta * (dρq2 - ρq2) + ρq2_td -
-        alpha * vdivf2c(
-            Ic2f(ρ) * FCTBB(
-                (
-                    third_order_upwind_c2f(w, ρq2 / ρ) -
-                    first_order_upwind_c2f(w, ρq2 / ρ)
-                ),
-                ρq2_td / ρ / alpha,
-            ),
-        )
-
-    # 1.2) vertical advection by horizontal velocity:
-    @. dρq2 -= alpha * vdivf2c(Ic2f(uₕ * ρq2))
-    # 2) Horizontal transport for ρq2 (includes both horizontal and vertical velocity components)
-    @. dρq2 -= alpha * hdiv(cuvw * ρq2) - alpha * ystar.ρq2
-
-    # 1) Vertical transport for ρq3:
-    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
-    @. ρq3_td =
-        beta * ρq3 -
-        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq3 / ρ))
-    @. dρq3 =
-        beta * (dρq3 - ρq3) + ρq3_td -
-        alpha * vdivf2c(
-            Ic2f(ρ) * FCTBB(
-                (
-                    third_order_upwind_c2f(w, ρq3 / ρ) -
-                    first_order_upwind_c2f(w, ρq3 / ρ)
-                ),
-                ρq3_td / ρ / alpha,
-            ),
-        )
-
-    # 1.2) vertical advection by horizontal velocity:
-    @. dρq3 -= alpha * vdivf2c(Ic2f(uₕ * ρq3))
-    # 2) Horizontal transport for ρq3 (includes both horizontal and vertical velocity components)
-    @. dρq3 -= alpha * hdiv(cuvw * ρq3) - alpha * ystar.ρq3
-
-    # 1) Vertical transport for ρq4:
-    # 1.1) vertical advection by vertical velocity, corrected by BB FCT:
-    @. ρq4_td =
-        beta * ρq4 -
-        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq4 / ρ))
-    @. dρq4 =
-        beta * (dρq4 - ρq4) + ρq4_td -
-        alpha * vdivf2c(
-            Ic2f(ρ) * FCTBB(
-                (
-                    third_order_upwind_c2f(w, ρq4 / ρ) -
-                    first_order_upwind_c2f(w, ρq4 / ρ)
-                ),
-                ρq4_td / ρ / alpha,
-            ),
-        )
-
-    # 1.2) vertical advection by horizontal velocity:
-    @. dρq4 -= alpha * vdivf2c(Ic2f(uₕ * ρq4))
-    # 2) Horizontal transport for ρq4 (includes both horizontal and vertical velocity components)
-    @. dρq4 -= alpha * hdiv(cuvw * ρq4) - alpha * ystar.ρq4
-
-    Spaces.weighted_dss!(dydt.ρ)
-    Spaces.weighted_dss!(dydt.ρq1)
-    Spaces.weighted_dss!(dydt.ρq2)
-    Spaces.weighted_dss!(dydt.ρq3)
-    Spaces.weighted_dss!(dydt.ρq4)
-
-    return dydt
+    physical_uvw = Geometry.UVWVector(uu, uv, uw)
+    return Geometry.Covariant123Vector(physical_uvw, local_geometry)
 end
 
-# Set up RHS function
-ystar = copy(y0)
-y_td = copy(y0)
+# The "tendency increment", which computes Y⁺ .+= dt * ∂Y/∂t
+function increment!(Y⁺, Y, cache, t, dt, beta)
+    (; cent_uvw, face_uvw, face_uv, face_w, limiter, Δₕq, fct_op, ρq_td_n) =
+        cache
+    ρ = Y.c.ρ
+    ρq = Y.c.ρq
+    ρ⁺ = Y⁺.c.ρ
+    ρq⁺ = Y⁺.c.ρq
 
-parameters = (; τ, coords, face_coords, ystar, y_td)
+    cent_local_geometry = Fields.local_geometry_field(cent_uvw)
+    face_local_geometry = Fields.local_geometry_field(face_uvw)
+    @. cent_uvw = local_flow(cent_local_geometry, t)
+    @. face_uvw = local_flow(face_local_geometry, t)
+    horz_axis = Ref(Geometry.Covariant12Axis())
+    vert_axis = Ref(Geometry.Covariant3Axis())
+    @. face_uv = Geometry.project(horz_axis, face_uvw)
+    @. face_w = Geometry.project(vert_axis, face_uvw)
 
-rhs!(ystar, y0, parameters, 0.0, dt, 1)
+    # NOTE: With a limiter, the order of operations 1-5 below matters!
 
-# run!
-prob = ODEProblem(IncrementingODEFunction(rhs!), copy(y0), (0.0, T), parameters)
-sol = solve(
-    prob,
-    SSPRK33ShuOsher(),
-    dt = dt,
-    saveat = dt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, p, t) -> t,
-)
+    # 1) Horizontal transport:
+    @. ρ⁺ -= dt * hdiv(ρ * cent_uvw)
+    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
+        ρq_n = ρq.:($n)
+        ρq⁺_n = ρq⁺.:($n)
+        @. ρq⁺_n -= dt * hdiv(ρq_n * cent_uvw)
+    end
 
-q1_error =
-    norm(sol.u[end].ρq1 ./ ρ_ref.(coords.z) .- y0.ρq1 ./ ρ_ref.(coords.z)) /
-    norm(y0.ρq1 ./ ρ_ref.(coords.z))
-@test q1_error ≈ 0.0 atol = 0.7
+    # 2) Limiter application:
+    if !isnothing(limiter)
+        Limiters.compute_bounds!(limiter, ρq, ρ)
+        Limiters.apply_limiter!(ρq⁺, ρ⁺, limiter)
+    end
 
-q2_error =
-    norm(sol.u[end].ρq2 ./ ρ_ref.(coords.z) .- y0.ρq2 ./ ρ_ref.(coords.z)) /
-    norm(y0.ρq2 ./ ρ_ref.(coords.z))
-@test q2_error ≈ 0.0 atol = 0.032
+    # 3) Hyperdiffusion of tracers:
+    @. Δₕq = hwdiv(hgrad(ρq / ρ))
+    Spaces.weighted_dss!(Δₕq)
+    @. ρq⁺ -= dt * D₄ * hwdiv(ρ * hgrad(Δₕq))
 
-q3_error =
-    norm(sol.u[end].ρq3 ./ ρ_ref.(coords.z) .- y0.ρq3 ./ ρ_ref.(coords.z)) /
-    norm(y0.ρq3 ./ ρ_ref.(coords.z))
-@test q3_error ≈ 0.0 atol = 0.4
+    # 4) Vertical transport:
+    @. ρ⁺ -= dt * vdivf2c(Ic2f(ρ) * face_uvw)
+    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
+        ρq_n = ρq.:($n)
+        ρq⁺_n = ρq⁺.:($n)
+        @. ρq⁺_n -= dt * vdivf2c(Ic2f(ρq_n) * face_uv)
+        if isnothing(fct_op)
+            @. ρq⁺_n -=
+                dt * vdivf2c(Ic2f(ρ) * upwind_product3_c2f(face_w, ρq_n / ρ))
+        else
+            @. ρq_td_n =
+                ρq_n -
+                dt * vdivf2c(Ic2f(ρ) * upwind_product1_c2f(face_w, ρq_n / ρ))
+            if fct_op == FCTZalesak
+                @. ρq⁺_n =
+                    ρq⁺_n - ρq_n + ρq_td_n -
+                    dt * vdivf2c(
+                        Ic2f(ρ) * FCTZalesak(
+                            upwind_product3_c2f(face_w, ρq_n / ρ) -
+                            upwind_product1_c2f(face_w, ρq_n / ρ),
+                            ρq_n / (dt * ρ),
+                            ρq_td_n / (dt * ρ),
+                        ),
+                    )
+            else # fct_op == FCTBorisBook
+                @. ρq⁺_n =
+                    ρq⁺_n - ρq_n + ρq_td_n -
+                    dt * vdivf2c(
+                        Ic2f(ρ) * FCTBorisBook(
+                            upwind_product3_c2f(face_w, ρq_n / ρ) -
+                            upwind_product1_c2f(face_w, ρq_n / ρ),
+                            ρq_td_n / (dt * ρ),
+                        ),
+                    )
+            end
+        end
+    end
 
-q4_error =
-    norm(sol.u[end].ρq4 ./ ρ_ref.(coords.z) .- y0.ρq4 ./ ρ_ref.(coords.z)) /
-    norm(y0.ρq4 ./ ρ_ref.(coords.z))
-@test q4_error ≈ 0.0 atol = 0.025
+    # 5) DSS:
+    Spaces.weighted_dss!(Y⁺.c)
 
-# Tracer mass conservation checks
-q1_initial_mass = sum(y0.ρq1)
-q1_mass = sum(sol.u[end].ρq1)
-q1_rel_mass_err = norm((q1_mass - q1_initial_mass) / q1_initial_mass)
-@test q1_rel_mass_err ≈ 0.0 atol = 8e1eps(FT)
+    return Y⁺
+end
 
-q2_initial_mass = sum(y0.ρq2)
-q2_mass = sum(sol.u[end].ρq2)
-q2_rel_mass_err = norm((q2_mass - q2_initial_mass) / q2_initial_mass)
-@test q2_rel_mass_err ≈ 0.0 atol = 8e1eps(FT)
+function run_deformation_flow(use_limiter, fct_op)
+    vert_domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0),
+        Geometry.ZPoint{FT}(z_top);
+        boundary_names = (:bottom, :top),
+    )
+    vert_mesh = Meshes.IntervalMesh(vert_domain, nelems = zelem)
+    vert_cent_space = Spaces.CenterFiniteDifferenceSpace(vert_mesh)
 
-q3_initial_mass = sum(y0.ρq3)
-q3_mass = sum(sol.u[end].ρq3)
-q3_rel_mass_err = norm((q3_mass - q3_initial_mass) / q3_initial_mass)
-@test q3_rel_mass_err ≈ 0.0 atol = 2e2eps(FT)
+    horz_domain = Domains.SphereDomain(R)
+    horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)
+    horz_topology = Topologies.Topology2D(horz_mesh)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    horz_space = Spaces.SpectralElementSpace2D(horz_topology, quad)
 
-q4_initial_mass = sum(y0.ρq4)
-q4_mass = sum(sol.u[end].ρq4)
-q4_rel_mass_err = norm((q4_mass - q4_initial_mass) / q4_initial_mass)
-@test q4_rel_mass_err ≈ 0.0 atol = 8e1eps(FT)
+    cent_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horz_space, vert_cent_space)
+    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(cent_space)
 
-# visualization artifacts
+    cent_Y = map(Fields.coordinate_field(cent_space)) do coord
+        ϕ = coord.lat
+        z = coord.z
+        zd = z - z_c
+
+        centers = (
+            Geometry.LatLongZPoint(ϕ_c, λ_c1, FT(0)),
+            Geometry.LatLongZPoint(ϕ_c, λ_c2, FT(0)),
+        )
+        horz_geometry = horz_space.global_geometry
+        rds = map(centers) do center
+            Geometry.great_circle_distance(coord, center, horz_geometry)
+        end
+        ds = @. min(1, (rds / R_t)^2 + (zd / Z_t)^2) # scaled distance functions
+
+        q1 = (1 + cos(FT(π) * ds[1])) / 2 + (1 + cos(FT(π) * ds[2])) / 2
+        q2 = FT(0.9) - FT(0.8) * q1^2
+        q3 =
+            if (ds[1] < FT(0.5) || ds[2] < FT(0.5)) && !(
+                (z > z_c) &&
+                (ϕ > ϕ_c - rad2deg(1 / 8)) &&
+                (ϕ < ϕ_c + rad2deg(1 / 8))
+            )
+                FT(1)
+            else
+                FT(0.1)
+            end
+        q4 = 1 - FT(0.3) * (q1 + q2 + q3)
+        q5 = FT(1)
+
+        ρ = ρ_ref(z)
+        return (; ρ, ρq = (ρ * q1, ρ * q2, ρ * q3, ρ * q4, ρ * q5))
+    end
+    Y = Fields.FieldVector(; c = cent_Y)
+
+    cache = (;
+        cent_uvw = Fields.Field(Geometry.Covariant123Vector{FT}, cent_space),
+        face_uvw = Fields.Field(Geometry.Covariant123Vector{FT}, face_space),
+        face_uv = Fields.Field(Geometry.Covariant12Vector{FT}, face_space),
+        face_w = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),
+        Δₕq = similar(Y.c.ρq),
+        limiter = use_limiter ? Limiters.QuasiMonotoneLimiter(Y.c.ρq) : nothing,
+        fct_op,
+        ρq_td_n = isnothing(fct_op) ? nothing : similar(Y.c.ρq.:1),
+    )
+
+    # TODO: Fix ClimaTimeSteppers to use a ForwardEulerFunction here
+    problem =
+        ODEProblem(IncrementingODEFunction(increment!), Y, (0, t_end), cache)
+    return solve(problem, ode_algorithm; dt, saveat = t_end / 2)
+end
+
+function conservation_errors(sol)
+    initial_total_mass = sum(sol.u[1].c.ρ)
+    initial_tracer_masses = map(n -> sum(sol.u[1].c.ρq.:($n)), 1:5)
+    final_total_mass = sum(sol.u[end].c.ρ)
+    final_tracer_masses = map(n -> sum(sol.u[end].c.ρq.:($n)), 1:5)
+    return (
+        (final_total_mass - initial_total_mass) / initial_total_mass,
+        (final_tracer_masses .- initial_tracer_masses) ./ initial_tracer_masses,
+    )
+end
+tracer_roughnesses(sol) =
+    map(1:5) do n
+        q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
+        mean_q_n = mean(q_n) # TODO: replace the mean with a low-pass filter
+        return mean(abs.(q_n .- mean_q_n))
+    end
+tracer_ranges(sol) =
+    map(1:5) do n
+        q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
+        return maximum(q_n) - minimum(q_n)
+    end
+
+ref_sol = run_deformation_flow(false, nothing)
+lim_sol = run_deformation_flow(true, nothing)
+fct_sol = run_deformation_flow(false, FCTZalesak)
+
+ref_ρ_err, ref_ρq_errs = conservation_errors(ref_sol)
+lim_ρ_err, lim_ρq_errs = conservation_errors(lim_sol)
+fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
+
+# Check that the conservation errors are not too big.
+@test abs(ref_ρ_err) < (FT == Float64 ? 1e-14 : 2e-5)
+@test all(abs.(ref_ρq_errs) .< 3 * abs(ref_ρ_err))
+
+# Check that the limiter and FCT have no effect on ρ.
+@test ref_ρ_err == lim_ρ_err == fct_ρ_err
+
+# Check that the error of the tracer with q = 1 is nearly the same as that of ρ.
+@test ref_ρq_errs[5] ≈ ref_ρ_err atol = 2eps(FT)
+@test lim_ρq_errs[5] ≈ lim_ρ_err atol = eps(FT)
+@test fct_ρq_errs[5] ≈ fct_ρ_err atol = 2eps(FT)
+
+# Check that the limiter and FCT do not significantly change the tracer errors.
+@test all(.≈(lim_ρq_errs, ref_ρq_errs, rtol = 0.3))
+@test all(.≈(fct_ρq_errs, ref_ρq_errs, rtol = 0.3))
+
+# Check that the limiter and FCT improve the "smoothness" of the tracers.
+@test all(tracer_roughnesses(lim_sol) .< tracer_roughnesses(ref_sol) .* 0.8)
+@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(ref_sol) .* 1.0)
+@test all(tracer_ranges(lim_sol) .< tracer_ranges(ref_sol) .* 0.6)
+@test all(tracer_ranges(fct_sol) .< tracer_ranges(ref_sol) .* 0.9)
+
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "deformation_flow"
-path = joinpath(@__DIR__, "output", dir)
+path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
-
-function linkfig(figpath, alt = "")
-    # buildkite-agent upload figpath
-    # link figure in logs if we are running on CI
-    if get(ENV, "BUILDKITE", "") == "true"
-        artifact_url = "artifact://$figpath"
-        print("\033]1338;url='$(artifact_url)';alt='$(alt)'\a\n")
+for (sol, suffix) in ((ref_sol, ""), (lim_sol, "_lim"), (fct_sol, "_fct"))
+    for (sol_index, day) in ((1, 6), (2, 12))
+        Plots.png(
+            Plots.plot(
+                sol.u[sol_index].c.ρq.:3 ./ sol.u[sol_index].c.ρ,
+                level = 15,
+                clim = (-1, 1),
+            ),
+            joinpath(path, "q3_day$day$suffix.png"),
+        )
     end
 end
-
-Plots.png(
-    Plots.plot(
-        sol.u[trunc(Int, end / 2)].ρq3 ./ ρ_ref.(coords.z),
-        level = 15,
-        clim = (-1, 1),
-    ),
-    joinpath(path, "q3_6day.png"),
-)
-
-Plots.png(
-    Plots.plot(sol.u[end].ρq3 ./ ρ_ref.(coords.z), level = 15, clim = (-1, 1)),
-    joinpath(path, "q3_12day.png"),
-)

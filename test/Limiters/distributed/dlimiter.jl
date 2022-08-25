@@ -68,7 +68,7 @@ q_ref = map(
 
 total_ρq = sum(ρq)
 
-limiter = Limiters.QuasiMonotoneLimiter(ρq, ρ)
+limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
 Limiters.compute_bounds!(limiter, ρq_ref, ρ)
 Limiters.apply_limiter!(ρq, ρ, limiter)

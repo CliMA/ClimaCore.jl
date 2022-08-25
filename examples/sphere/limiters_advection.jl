@@ -191,11 +191,8 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters = (
-        space = space,
-        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq, y0.ρ),
-        T = T,
-    )
+    parameters =
+        (space = space, limiter = Limiters.QuasiMonotoneLimiter(y0.ρq), T = T)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
