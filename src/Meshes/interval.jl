@@ -71,6 +71,26 @@ function boundary_face_name(mesh::IntervalMesh, elem::Integer, face)
     return nothing
 end
 
+function monotonic_check(faces)
+    if !(hasproperty(first(faces), :z) || eltype(faces) <: Real)
+        return nothing
+    end
+    z(face::AbstractFloat) = face
+    z(face::Geometry.AbstractPoint) = face.z
+    n = length(faces) - 1
+    monotonic_incr = all(map(i -> z(faces[i]) < z(faces[i + 1]), 1:n))
+    monotonic_decr = all(map(i -> z(faces[i]) > z(faces[i + 1]), 1:n))
+    if !(monotonic_incr || monotonic_decr)
+        error(
+            string(
+                "Faces in vertical mesh are not increasing monotonically. ",
+                "We need to have dz_bottom <= z_max / z_elem and dz_top >= z_max / z_elem.",
+            ),
+        )
+    end
+    return nothing
+end
+
 abstract type StretchingRule end
 
 """
@@ -89,6 +109,7 @@ function IntervalMesh(
         throw(ArgumentError("`nelems` must be ≥ 1"))
     end
     faces = range(domain.coord_min, domain.coord_max; length = nelems + 1)
+    monotonic_check(faces)
     IntervalMesh(domain, faces)
 end
 
@@ -126,6 +147,7 @@ function IntervalMesh(
     η(ζ) = ζ == 1 ? ζ : -h * log1p((expm1(-1 / h)) * ζ)
     faces =
         [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
+    monotonic_check(faces)
     IntervalMesh(domain, faces)
 end
 
@@ -210,5 +232,6 @@ function IntervalMesh(
 
     # add the bottom level
     faces = [zₛ; faces...]
+    monotonic_check(faces)
     IntervalMesh(domain, CT.(faces))
 end
