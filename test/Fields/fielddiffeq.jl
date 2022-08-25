@@ -66,7 +66,12 @@ end
         copyto!(J, α * LinearAlgebra.I)
     end
 
-    prob = ODEProblem(ODEFunction(f!), copy(y), (0.0, 1.0), 0.1)
+    prob = ODEProblem(
+        ODEFunction(f!; jac_prototype = zeros(length(y), length(y))),
+        copy(y),
+        (0.0, 1.0),
+        0.1,
+    )
     sol = solve(prob, SSPRK22(), dt = 0.01)
 
     sol = solve(prob, ImplicitEuler(), reltol = 1e-6)
