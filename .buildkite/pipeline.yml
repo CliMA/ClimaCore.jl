@@ -133,6 +133,8 @@ steps:
     timeout_in_minutes: 5
     env:
       CLIMACORE_DISTRIBUTED: "MPI"
+    retry:
+      automatic: true
     agents:
       config: cpu
       queue: central
