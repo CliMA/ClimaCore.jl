@@ -128,25 +128,35 @@ topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     space.vertical_topology
 
-function slab(space::ExtrudedFiniteDifferenceSpace, v, h)
+Base.@propagate_inbounds function slab(
+    space::ExtrudedFiniteDifferenceSpace,
+    v,
+    h,
+)
     SpectralElementSpaceSlab(
         space.horizontal_space.quadrature_style,
         slab(local_geometry_data(space), v, h),
     )
 end
 
-@inline function column(space::ExtrudedFiniteDifferenceSpace, i, j, h)
-    @inbounds clg = column(space.center_local_geometry, i, j, h)
-    @inbounds flg = column(space.face_local_geometry, i, j, h)
+Base.@propagate_inbounds function column(
+    space::ExtrudedFiniteDifferenceSpace,
+    i,
+    j,
+    h,
+)
     FiniteDifferenceSpace(
         space.staggering,
         space.vertical_topology,
         Geometry.CartesianGlobalGeometry(),
-        clg,
-        flg,
+        column(space.center_local_geometry, i, j, h),
+        column(space.face_local_geometry, i, j, h),
     )
 end
-function level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer)
+Base.@propagate_inbounds function level(
+    space::CenterExtrudedFiniteDifferenceSpace,
+    v::Integer,
+)
     horizontal_space = space.horizontal_space
     if horizontal_space isa SpectralElementSpace1D
         SpectralElementSpace1D(
@@ -172,10 +182,13 @@ function level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer)
         error("Unsupported horizontal space")
     end
 end
-function level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf)
+Base.@propagate_inbounds function level(
+    space::FaceExtrudedFiniteDifferenceSpace,
+    v::PlusHalf,
+)
     horizontal_space = space.horizontal_space
     if horizontal_space isa SpectralElementSpace1D
-        SpectralElementSpace1D(
+        @inbounds SpectralElementSpace1D(
             horizontal_space.topology,
             horizontal_space.quadrature_style,
             horizontal_space.global_geometry,
@@ -183,7 +196,7 @@ function level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf)
             horizontal_space.dss_weights,
         )
     elseif horizontal_space isa SpectralElementSpace2D
-        SpectralElementSpace2D(
+        @inbounds SpectralElementSpace2D(
             horizontal_space.topology,
             horizontal_space.quadrature_style,
             horizontal_space.global_geometry,

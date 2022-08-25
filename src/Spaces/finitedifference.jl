@@ -163,13 +163,17 @@ function right_boundary_name(space::FiniteDifferenceSpace)
     propertynames(boundaries)[2]
 end
 
-function level(space::FaceFiniteDifferenceSpace, v::PlusHalf)
-    local_geometry = local_geometry_data(space)
-    local_geometry = level(local_geometry, v.i + 1)
+Base.@propagate_inbounds function level(
+    space::FaceFiniteDifferenceSpace,
+    v::PlusHalf,
+)
+    @inbounds local_geometry = level(local_geometry_data(space), v.i + 1)
     PointSpace(local_geometry)
 end
-function level(space::CenterFiniteDifferenceSpace, v::Int)
-    local_geometry = local_geometry_data(space)
-    local_geometry = level(local_geometry, v)
+Base.@propagate_inbounds function level(
+    space::CenterFiniteDifferenceSpace,
+    v::Int,
+)
+    local_geometry = level(local_geometry_data(space), v)
     PointSpace(local_geometry)
 end

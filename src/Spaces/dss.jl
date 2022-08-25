@@ -201,8 +201,8 @@ function dss_1d!(
     Nv = size(data, 4)
     idx1 = CartesianIndex(1, 1, 1, 1, 1)
     idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
-    for (elem1, face1, elem2, face2, reversed) in
-        Topologies.interior_faces(htopology)
+    @inbounds for (elem1, face1, elem2, face2, reversed) in
+                  Topologies.interior_faces(htopology)
         for level in 1:Nv
             @assert face1 == 1 && face2 == 2 && !reversed
             local_geometry_slab1 = slab(local_geometry_data, level, elem1)
@@ -310,7 +310,7 @@ function fill_send_buffer!(
 
     Nv = size(data, 4)
     send_data = ghost_buffer.send_data
-    for (sidx, lidx) in enumerate(topology.send_elem_lidx)
+    @inbounds for (sidx, lidx) in enumerate(topology.send_elem_lidx)
         for level in 1:Nv
             src_slab = slab(data, level, lidx)
             send_slab = slab(send_data, level, sidx)
@@ -339,8 +339,8 @@ function dss_interior_faces!(
     Nq = size(data, 1)
     Nv = size(data, 4)
 
-    for (lidx1, face1, lidx2, face2, reversed) in
-        Topologies.interior_faces(topology)
+    @inbounds for (lidx1, face1, lidx2, face2, reversed) in
+                  Topologies.interior_faces(topology)
         for level in 1:Nv
 
             data_slab1 = slab(data, level, lidx1)
@@ -402,7 +402,7 @@ function dss_local_vertices!(
     Nq = size(data, 1)
     Nv = size(data, 4)
 
-    for vertex in Topologies.local_vertices(topology)
+    @inbounds for vertex in Topologies.local_vertices(topology)
         # for each level
         for level in 1:Nv
             # gather: compute sum over shared vertices
@@ -454,8 +454,8 @@ function dss_ghost_faces!(
     Nq = size(data, 1)
     Nv = size(data, 4)
 
-    for (lidx1, face1, ridx2, face2, reversed) in
-        Topologies.ghost_faces(topology)
+    @inbounds for (lidx1, face1, ridx2, face2, reversed) in
+                  Topologies.ghost_faces(topology)
         for level in 1:Nv
 
             data_slab1 = slab(data, level, lidx1)
@@ -525,7 +525,7 @@ function dss_ghost_vertices!(
     Nq = size(data, 1)
     Nv = size(data, 4)
 
-    for vertex in Topologies.ghost_vertices(topology)
+    @inbounds for vertex in Topologies.ghost_vertices(topology)
         # for each level
         for level in 1:Nv
             # gather: compute sum over shared vertices

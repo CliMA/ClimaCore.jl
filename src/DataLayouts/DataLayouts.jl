@@ -270,7 +270,7 @@ end
 
 function Base.fill!(data::IJFH, val)
     (_, _, _, _, Nh) = size(data)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
     end
     return data
@@ -408,7 +408,7 @@ end
 
 function Base.fill!(data::IFH, val)
     (_, _, _, _, Nh) = size(data)
-    for h in 1:Nh
+    @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
     end
     return data
@@ -419,7 +419,7 @@ end
     dataview = @inbounds view(parent(data), :, :, h)
     IF{S, Ni}(dataview)
 end
-slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
+Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
@@ -427,7 +427,8 @@ slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
     dataview = @inbounds view(parent(data), i, :, h)
     DataF{S}(dataview)
 end
-@inline column(data::IFH{S, Ni}, i, j, h) where {S, Ni} = column(data, i, h)
+Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
+    column(data, i, h)
 
 @generated function _property_view(
     data::IFH{S, Ni, A},
@@ -480,7 +481,7 @@ function DataF{S}(ArrayType) where {S}
 end
 
 function Base.fill!(data::DataF, val)
-    data[] = val
+    @inbounds data[] = val
     return data
 end
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
@@ -505,15 +506,15 @@ end
     return :(DataF{$SS}(@inbounds view(parent(data), $field_byterange)))
 end
 
-@inline function Base.getindex(data::DataF{S}) where {S}
+Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
     @inbounds get_struct(parent(data), S)
 end
 
 @propagate_inbounds function Base.getindex(col::Data0D, I::CartesianIndex{5})
-    col[]
+    @inbounds col[]
 end
 
-@inline function Base.setindex!(data::DataF{S}, val) where {S}
+Base.@propagate_inbounds function Base.setindex!(data::DataF{S}, val) where {S}
     @inbounds set_struct!(parent(data), convert(S, val))
 end
 
@@ -522,7 +523,7 @@ end
     val,
     I::CartesianIndex{5},
 )
-    col[] = val
+    @inbounds col[] = val
 end
 
 Base.copy(data::DataF{S}) where {S} = DataF{S}(copy(parent(data)))
@@ -535,7 +536,7 @@ Base.copy(data::DataF{S}) where {S} = DataF{S}(copy(parent(data)))
     slab::DataSlab2D{S},
     I::CartesianIndex,
 ) where {S}
-    slab[I[1], I[2]]
+    @inbounds slab[I[1], I[2]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -543,7 +544,7 @@ end
     val,
     I::CartesianIndex,
 ) where {S}
-    slab[I[1], I[2]] = val
+    @inbounds slab[I[1], I[2]] = val
 end
 
 Base.size(::DataSlab2D{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
@@ -589,8 +590,8 @@ function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij, 1, 1, 1)
 end
 function Base.fill!(data::IJF{S, Nij}, val) where {S, Nij}
-    for j in 1:Nij, i in 1:Nij
-        @inbounds data[i, j] = val
+    @inbounds for j in 1:Nij, i in 1:Nij
+        data[i, j] = val
     end
     return data
 end
@@ -654,7 +655,7 @@ end
 # ======================
 
 @propagate_inbounds function Base.getindex(slab::DataSlab1D, I::CartesianIndex)
-    slab[I[1]]
+    @inbounds slab[I[1]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -662,7 +663,7 @@ end
     val,
     I::CartesianIndex,
 )
-    slab[I[1]] = val
+    @inbounds slab[I[1]] = val
 end
 
 function Base.size(::DataSlab1D{<:Any, Ni}) where {Ni}
@@ -707,8 +708,8 @@ function replace_basetype(data::IF{S, Ni}, ::Type{T}) where {S, Ni, T}
 end
 
 function Base.fill!(data::IF{S, Ni}, val) where {S, Ni}
-    for i in 1:Ni
-        @inbounds data[i] = val
+    @inbounds for i in 1:Ni
+        data[i] = val
     end
     return data
 end
@@ -803,8 +804,8 @@ function Base.size(data::VF)
 end
 function Base.fill!(data::VF, val)
     Nv = size(parent(data), 1)
-    for v in 1:Nv
-        @inbounds data[v] = val
+    @inbounds for v in 1:Nv
+        data[v] = val
     end
     return data
 end
@@ -839,7 +840,7 @@ end
     col::DataColumn,
     I::CartesianIndex{5},
 )
-    col[I[4]]
+    @inbounds col[I[4]]
 end
 
 @propagate_inbounds function Base.setindex!(
@@ -847,7 +848,7 @@ end
     val,
     I::CartesianIndex{5},
 )
-    col[I[4]] = val
+    @inbounds col[I[4]] = val
 end
 
 @inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
@@ -919,7 +920,7 @@ end
 
 function Base.fill!(data::VIJFH, val)
     (Ni, Nj, _, Nv, Nh) = size(data)
-    for h in 1:Nh, v in 1:Nv
+    @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
     end
     return data
@@ -1060,7 +1061,7 @@ function Base.length(data::VIFH)
 end
 function Base.fill!(data::VIFH, val)
     (Ni, _, _, Nv, Nh) = size(data)
-    for h in 1:Nh, v in 1:Nv
+    @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
     end
     return data

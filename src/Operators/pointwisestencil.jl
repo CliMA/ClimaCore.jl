@@ -368,6 +368,7 @@ return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
+# TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
     coefs = getidx(stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
@@ -379,12 +380,14 @@ function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
     return val
 end
 
+# TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_interior(::ApplyStencil, loc, idx, hidx, stencil, arg)
     lbw, ubw = bandwidths(eltype(stencil))
     i_vals = lbw:ubw
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
+# TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_left_boundary(
     ::ApplyStencil,
     ::LeftStencilBoundary,
@@ -399,6 +402,7 @@ function stencil_left_boundary(
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
+# TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_right_boundary(
     ::ApplyStencil,
     ::RightStencilBoundary,
@@ -443,6 +447,7 @@ function bandwidth_info(stencil1, stencil2)
     return lbw1, ubw1, bw1, bw2
 end
 
+# TODO: find out why using Base.@propagate_inbounds hangs
 function compose_stencils_at_idx(
     ::Type{ir_type},
     stencil1,
@@ -473,6 +478,7 @@ function compose_stencils_at_idx(
     return StencilCoefs{lbw, ubw}(ntup)
 end
 
+# TODO: find out why using Base.@propagate_inbounds hangs
 function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
     return compose_stencils_at_idx(
         IndexRangeInteriorType,
@@ -484,6 +490,7 @@ function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
     )
 end
 
+# TODO: find out why using Base.@propagate_inbounds hangs
 function stencil_left_boundary(
     ::ComposeStencils,
     ::LeftStencilBoundary,
@@ -503,6 +510,7 @@ function stencil_left_boundary(
     )
 end
 
+# TODO: find out why using Base.@propagate_inbounds hangs
 function stencil_right_boundary(
     ::ComposeStencils,
     ::RightStencilBoundary,
