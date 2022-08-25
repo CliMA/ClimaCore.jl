@@ -116,6 +116,8 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+    soft_fail:
+      - exit_status: 1
 
   - label: ":rocket::computer: Axis tensor conversion performance benchmarks"
     key: "cpu_axis_tensor_conversion_perf_bm"
