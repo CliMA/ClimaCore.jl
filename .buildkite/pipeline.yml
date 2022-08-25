@@ -130,6 +130,7 @@ steps:
     key: "cpu_parallel_hdf5"
     command:
       - "mpiexec julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+    timeout_in_minutes: 5
     env:
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
