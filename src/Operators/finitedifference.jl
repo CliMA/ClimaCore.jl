@@ -1463,20 +1463,20 @@ end
     U = FCTBorisBook(;boundaries)
     U.(v, x)
 
-Correct the flux using the flux-corrected transport formulation by Boris and Book
+Correct the flux using the flux-corrected transport formulation by Boris and Book [BorisBook1973](@cite).
+
 Input arguments:
 - a face-valued vector field `v`
 - a center-valued field `x`
 ```math
 Ac(v,x)[i] =
-  s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) \\Delta z ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\Delta z \\right] \\right\\},
+  s[i] \\max \\left\\{0, \\min \\left[ |v[i] |, s[i] \\left( x[i+\\tfrac{3}{2}] - x[i+\\tfrac{1}{2}]  \\right) ,  s[i] \\left( x[i-\\tfrac{1}{2}] - x[i-\\tfrac{3}{2}]  \\right) \\right] \\right\\},
 ```
 where ``s[i] = +1`` if  `` v[i] \\geq 0`` and ``s[i] = -1`` if  `` v[i] \\leq 0``, and ``Ac`` represents the resulting corrected antidiffusive flux.
-This formulation is based on [BorisBook1973](@cite).
+This formulation is based on [BorisBook1973](@cite), as reported in [durran2010](@cite) section 5.4.1.
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary,
-and the first-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary, and the first-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
     Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define the value at the actual boundary faces,
@@ -1593,19 +1593,20 @@ end
     U = FCTZalesak(;boundaries)
     U.(A, Φ, Φᵗᵈ)
 
-Correct the flux using the flux-corrected transport formulation by Zalesak
+Correct the flux using the flux-corrected transport formulation by Zalesak [zalesak1979fully](@cite).
+
 Input arguments:
 - a face-valued vector field `A`
 - a center-valued field `Φ`
 - a center-valued field `Φᵗᵈ`
 ```math
-Φ_j^{n+1} = Φ_j^{td} - \frac{dt}{dx}(C_{j+\frac{1}{2}}A_{j+\frac{1}{2}} - C_{j-\frac{1}{2}}A_{j-\frac{1}{2}})
+Φ_j^{n+1} = Φ_j^{td} - (C_{j+\\frac{1}{2}}A_{j+\\frac{1}{2}} - C_{j-\\frac{1}{2}}A_{j-\\frac{1}{2}})
 ```
-This stencil is based on [zalesak1979fully](@cite).
+This stencil is based on [zalesak1979fully](@cite), as reported in [durran2010](@cite) section 5.4.2, where ``C`` denotes
+the corrected antidiffusive flux.
 
 Supported boundary conditions are:
-- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary,
-and the first-order upwind reconstruction to compute `x` on the right boundary.
+- [`FirstOrderOneSided(x₀)`](@ref): uses the first-order downwind reconstruction to compute `x` on the left boundary, and the first-order upwind reconstruction to compute `x` on the right boundary.
 
 !!! note
     Similar to the [`Upwind3rdOrderBiasedProductC2F`](@ref) operator, these boundary conditions do not define
