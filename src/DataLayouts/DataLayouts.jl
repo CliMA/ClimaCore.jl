@@ -268,6 +268,15 @@ function Base.size(data::IJFH{S, Nij}) where {S, Nij}
     (Nij, Nij, 1, Nv, Nh)
 end
 
+function Base.fill!(data::IJFH, val)
+    (_, _, _, _, Nh) = size(data)
+    for h in 1:Nh
+        fill!(slab(data, h), val)
+    end
+    return data
+end
+
+
 """
     IJFH{S,Nij}(ArrayType, nelements)
 
@@ -397,6 +406,14 @@ function Base.size(data::IFH{S, Ni}) where {S, Ni}
     (Ni, 1, 1, Nv, Nh)
 end
 
+function Base.fill!(data::IFH, val)
+    (_, _, _, _, Nh) = size(data)
+    for h in 1:Nh
+        fill!(slab(data, h), val)
+    end
+    return data
+end
+
 @inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
     @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
     dataview = @inbounds view(parent(data), :, :, h)
@@ -462,6 +479,10 @@ function DataF{S}(ArrayType) where {S}
     DataF{S}(ArrayType(undef, typesize(T, S)))
 end
 
+function Base.fill!(data::DataF, val)
+    data[] = val
+    return data
+end
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
     array = parent(data)
     T = eltype(array)
@@ -566,6 +587,12 @@ end
 
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij, 1, 1, 1)
+end
+function Base.fill!(data::IJF{S, Nij}, val) where {S, Nij}
+    for j in 1:Nij, i in 1:Nij
+        @inbounds data[i, j] = val
+    end
+    return data
 end
 
 @generated function _property_view(
@@ -679,6 +706,14 @@ function replace_basetype(data::IF{S, Ni}, ::Type{T}) where {S, Ni, T}
     return IF{S′, Ni}(similar(array, T))
 end
 
+function Base.fill!(data::IF{S, Ni}, val) where {S, Ni}
+    for i in 1:Ni
+        @inbounds data[i] = val
+    end
+    return data
+end
+
+
 @generated function _property_view(
     data::IF{S, Ni, A},
     ::Val{Idx},
@@ -762,6 +797,17 @@ end
 
 Base.copy(data::VF{S}) where {S} = VF{S}(copy(parent(data)))
 Base.lastindex(data::VF) = length(data)
+function Base.size(data::VF)
+    Nv = size(parent(data), 1)
+    return (1, 1, 1, Nv, 1)
+end
+function Base.fill!(data::VF, val)
+    Nv = size(parent(data), 1)
+    for v in 1:Nv
+        @inbounds data[v] = val
+    end
+    return data
+end
 
 @generated function _property_view(data::VF{S, A}, ::Val{Idx}) where {S, A, Idx}
     SS = fieldtype(S, Idx)
@@ -869,6 +915,14 @@ end
 
 function Base.length(data::VIJFH)
     size(parent(data), 1) * size(parent(data), 5)
+end
+
+function Base.fill!(data::VIJFH, val)
+    (Ni, Nj, _, Nv, Nh) = size(data)
+    for h in 1:Nh, v in 1:Nv
+        fill!(slab(data, v, h), val)
+    end
+    return data
 end
 
 @generated function _property_view(
@@ -1004,6 +1058,14 @@ end
 function Base.length(data::VIFH)
     size(parent(data), 1) * size(parent(data), 4)
 end
+function Base.fill!(data::VIFH, val)
+    (Ni, _, _, Nv, Nh) = size(data)
+    for h in 1:Nh, v in 1:Nv
+        fill!(slab(data, v, h), val)
+    end
+    return data
+end
+
 
 @generated function _property_view(
     data::VIFH{S, Ni, A},

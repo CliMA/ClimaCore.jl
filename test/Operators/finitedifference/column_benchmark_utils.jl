@@ -427,7 +427,7 @@ function test_results(t_ave)
     @test t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 4.637*μs*buffer
     @test t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 4.618*μs*buffer
     @test t_ave[(:has_h_space, op_GradientF2C!, :none)] < 441.097*ns*buffer
-    @test t_ave[(:has_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 426.364*ns*buffer
+    @test t_ave[(:has_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 724.818*ns*buffer
     @test t_ave[(:has_h_space, op_GradientC2F!, :SetGradient, :SetGradient)] < 346.544*ns*buffer
     @test t_ave[(:has_h_space, op_GradientC2F!, :SetValue, :SetValue)] < 327.835*ns*buffer
     @test t_ave[(:has_h_space, op_DivergenceF2C!, :none)] < 1.884*μs*buffer

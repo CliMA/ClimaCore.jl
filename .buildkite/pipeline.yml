@@ -81,6 +81,27 @@ steps:
       slurm_mem: 64GB
       slurm_ntasks: 1
 
+  - label: ":computer: unit tests expensive"
+    key: "cpu_unittests_expensive"
+    command:
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests_expensive.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
+  - label: ":flower_playing_cards: unit tests"
+    key: "gpu_unittests"
+    command:
+      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
+    agents:
+      config: gpu
+      queue: central
+      slurm_ntasks: 1
+      slurm_gres: "gpu:1"
+
   - label: ":computer: test implicit_stencil Float32"
     key: "cpu_implicit_stencil_float32"
     command:
@@ -116,6 +137,8 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+    soft_fail:
+      - exit_status: 1
 
   - label: ":rocket::computer: Axis tensor conversion performance benchmarks"
     key: "cpu_axis_tensor_conversion_perf_bm"
@@ -139,17 +162,6 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 3
-
-  - label: ":flower_playing_cards: unit tests"
-    key: "gpu_unittests"
-    command:
-      - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
-      - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
-    agents:
-      config: gpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_gres: "gpu:1"
 
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"

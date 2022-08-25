@@ -429,3 +429,42 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     end
 
 end
+
+
+@testset "scalar assignment" begin
+    domain_z = Domains.IntervalDomain(
+        Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
+        periodic = true,
+    )
+    mesh_z = Meshes.IntervalMesh(domain_z; nelems = 10)
+    topology_z = Topologies.IntervalTopology(mesh_z)
+
+    domain_x = Domains.IntervalDomain(
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+        periodic = true,
+    )
+    mesh_x = Meshes.IntervalMesh(domain_x; nelems = 10)
+    topology_x = Topologies.IntervalTopology(mesh_x)
+
+    domain_xy = Domains.RectangleDomain(
+        Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
+        Geometry.YPoint(-1.0) .. Geometry.YPoint(1.0),
+        x1periodic = true,
+        x2periodic = true,
+    )
+    mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
+    topology_xy = Topologies.Topology2D(mesh_xy)
+
+    quad = Spaces.Quadratures.GLL{4}()
+
+    space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
+    space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
+    space_ijfh = Spaces.SpectralElementSpace2D(topology_xy, quad)
+    space_vifh = Spaces.ExtrudedFiniteDifferenceSpace(space_ifh, space_vf)
+    space_vijfh = Spaces.ExtrudedFiniteDifferenceSpace(space_ijfh, space_vf)
+
+    C = map(x -> Geometry.Covariant12Vector(1.0, 1.0), zeros(space_vifh))
+    @test all(==(1.0), parent(C))
+    C .= Ref(zero(eltype(C)))
+    @test all(==(0.0), parent(C))
+end
