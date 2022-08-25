@@ -60,13 +60,18 @@ function f!(dydt, y, parameters, t)
     return dydt
 end
 
+# Define a pulse wave or square wave
+pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
+
 FT = Float64
 t₀ = FT(0)
+Δt = 0.0001
+t₁ = 100Δt
 z₀ = FT(0)
 zₕ = FT(1)
 z₁ = FT(1)
 speed = FT(1.0)
-C = FT(0.5) # flux-correction coefficient: ∈ [0,1] with
+C = FT(1.0) # flux-correction coefficient: ∈ [0,1] with
 #                              0 = first-order upwinding
 #                              1 = third-order upwinding
 n = 2 .^ 6
@@ -76,50 +81,61 @@ domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(π);
     boundary_names = (:bottom, :top),
 )
-mesh = Meshes.IntervalMesh(domain, nelems = n)
-cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-fs = Spaces.FaceFiniteDifferenceSpace(cs)
-zc = Fields.coordinate_field(cs)
+stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
+err = zeros(FT, length(stretch_fns))
+initial_mass = zeros(FT, length(stretch_fns))
+mass = zeros(FT, length(stretch_fns))
+rel_mass_err = zeros(FT, length(stretch_fns))
+plot_string = ["uniform", "stretched"]
 
-# Unitary, constant advective velocity
-w = Geometry.WVector.(speed .* ones(FT, fs))
+for (i, stretch_fn) in enumerate(stretch_fns)
 
-# Define a pulse wave or square wave
-pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
+    mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+    zc = Fields.coordinate_field(cs)
 
-# Initial condition
-y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
+    # Unitary, constant advective velocity
+    w = Geometry.WVector.(speed .* ones(FT, fs))
 
-# Set up parameters needed for time-stepping
-Δt = 0.0001
-dydt = copy(y0)
-corrected_antidiff_flux = similar(y0)
-parameters = (; w, C, corrected_antidiff_flux)
-# Call the RHS function
-f!(dydt, y0, parameters, t₀)
-t₁ = 100Δt
-prob = ODEProblem(f!, y0, (t₀, t₁), parameters)
-sol = solve(
-    prob,
-    SSPRK33(),
-    dt = Δt,
-    saveat = Δt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, p, t) -> t,
-)
-computed_result = sol.u[end]
-analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
-err = norm(computed_result .- analytical_result)
-initial_mass = sum(sol.u[1])
-mass = sum(sol.u[end])
-rel_mass_err = norm((mass - initial_mass) / initial_mass)
+    # Initial condition
+    y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
 
-@test err ≤ 0.018
-@test rel_mass_err ≤ eps()
+    # Set up fields needed for time-stepping
+    dydt = copy(y0)
+    corrected_antidiff_flux = similar(y0)
+    parameters = (; w, C, corrected_antidiff_flux)
+    # Call the RHS function
+    f!(dydt, y0, parameters, t₀)
 
-plot(sol.u[end])
-Plots.png(
-    Plots.plot!(analytical_result, title = "FCT (C=0.5)"),
-    joinpath(path, "exact_and_computed_advected_square_wave_C_05.png"),
-)
+    prob = ODEProblem(f!, y0, (t₀, t₁), parameters)
+    sol = solve(
+        prob,
+        SSPRK33(),
+        dt = Δt,
+        saveat = Δt,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+    computed_result = sol.u[end]
+    analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
+    err[i] = norm(computed_result .- analytical_result)
+    initial_mass[i] = sum(sol.u[1])
+    mass[i] = sum(sol.u[end])
+    rel_mass_err[i] = norm((mass[i] - initial_mass[i]) / initial_mass[i])
+
+    @test err[i] ≤ 0.11
+    @test rel_mass_err[i] ≤ 3eps()
+
+    plot(sol.u[end])
+    Plots.png(
+        Plots.plot!(analytical_result, title = "FCT (C=0.5)"),
+        joinpath(
+            path,
+            "exact_and_computed_advected_square_wave_C_05_" *
+            plot_string[i] *
+            ".png",
+        ),
+    )
+end
