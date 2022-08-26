@@ -3216,7 +3216,7 @@ function Base.copyto!(
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)
-    if enable_threading()
+    if enable_threading() && Nh > 1
         return _threaded_copyto!(field_out, bc, Ni, Nj, Nh)
     end
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
