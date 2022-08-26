@@ -210,7 +210,7 @@ for (k, ne) in enumerate(ne_seq)
     ystar = copy(y0)
     parameters = (
         space = space,
-        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq, y0.ρ),
+        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq),
         end_time = end_time,
     )
     f!(ystar, y0, parameters, 0.0, dt, 1)

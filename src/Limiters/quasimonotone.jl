@@ -12,9 +12,9 @@ As in HOMME, the implementation idea here is the following: we need to find a
 grid field which is closest to the initial field (in terms of weighted sum), but
 satisfies the min/max constraints. So, first we find values that do not satisfy
 constraints and bring these values to a closest constraint. This way we
-introduce some mass change (`mass_change`), which we then redistribute so that
-the l2 error is smallest. This redistribution might violate constraints; thus,
-we do a few iterations (typically a couple).
+introduce some change in the tracer mass, which we then redistribute so that the
+l2 error is smallest. This redistribution might violate constraints; thus, we do
+a few iterations (until `abs(Δtracer_mass) <= rtol * tracer_mass`).
 
 - `ρq`: tracer density Field, where `q` denotes tracer concentration per unit
   mass. This can be a scalar field, or a struct-valued field.
@@ -22,9 +22,9 @@ we do a few iterations (typically a couple).
 
 # Constructor
 
-    limiter = QuasiMonotoneLimiter(ρq::Field, ρ::Field)
+    limiter = QuasiMonotoneLimiter(ρq::Field; rtol = eps(eltype(parent(ρq))))
 
-Creates a limiter instance for the field `ρq` and the field `ρ`.
+Creates a limiter instance for the field `ρq` with relative tolerance `rtol`.
 
 # Usage
 
@@ -36,49 +36,43 @@ Then call [`apply_limiter!`](@ref) on the output fields:
 
     apply_limiter!(ρq, ρ, limiter)
 """
-struct QuasiMonotoneLimiter{D, G}
+struct QuasiMonotoneLimiter{D, G, FT}
     "contains the min and max of each element"
     q_bounds::D
     "contains the min and max of each element and its neighbors"
     q_bounds_nbr::D
     "communication buffer"
     ghost_buffer::G
+    "relative tolerance for tracer mass change"
+    rtol::FT
 end
 
 
-function QuasiMonotoneLimiter(ρq::Fields.Field, ρ::Fields.Field)
-    data = Fields.field_values(ρq)
-    topology = Spaces.topology(axes(ρq))
-    QuasiMonotoneLimiter(data, topology)
+function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq))))
+    q_bounds = make_q_bounds(Fields.field_values(ρq))
+    ghost_buffer =
+        Spaces.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
+    return QuasiMonotoneLimiter(q_bounds, similar(q_bounds), ghost_buffer, rtol)
 end
 
-function QuasiMonotoneLimiter(
-    data::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
-    topology::Topologies.AbstractTopology,
+Base.@deprecate(
+    QuasiMonotoneLimiter(ρq::Fields.Field, ρ::Fields.Field),
+    QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq)))),
+)
+
+function make_q_bounds(
+    ρq::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
 ) where {S}
-    Nf = DataLayouts.ncomponents(data)
-    _, _, _, Nv, Nh = size(data)
-    q_bounds = DataLayouts.IFH{S, 2}(similar(parent(data), (2, Nf, Nh)))
-    q_bounds_nbr = similar(q_bounds)
-    QuasiMonotoneLimiter(
-        q_bounds,
-        q_bounds_nbr,
-        Spaces.create_ghost_buffer(q_bounds, topology),
-    )
+    Nf = DataLayouts.ncomponents(ρq)
+    _, _, _, _, Nh = size(ρq)
+    return DataLayouts.IFH{S, 2}(similar(parent(ρq), (2, Nf, Nh)))
 end
-function QuasiMonotoneLimiter(
-    data::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
-    topology::Topologies.AbstractTopology,
+function make_q_bounds(
+    ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
 ) where {S}
-    Nf = DataLayouts.ncomponents(data)
-    _, _, _, Nv, Nh = size(data)
-    q_bounds = DataLayouts.VIFH{S, 2}(similar(parent(data), (Nv, 2, Nf, Nh)))
-    q_bounds_nbr = similar(q_bounds)
-    QuasiMonotoneLimiter(
-        q_bounds,
-        q_bounds_nbr,
-        Spaces.create_ghost_buffer(q_bounds, topology),
-    )
+    Nf = DataLayouts.ncomponents(ρq)
+    _, _, _, Nv, Nh = size(ρq)
+    return DataLayouts.VIFH{S, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
 end
 
 
@@ -242,142 +236,147 @@ end
     apply_limiter!(ρq, ρ, limiter::QuasiMonotoneLimiter)
 
 Apply the limiter on the tracer density  `ρq`, using the computed desired bounds
-on the concentration `q` and density, `ρ`, as an optimal weight. This iterates
-over each element, calling [`apply_limit_slab!`](@ref).
+on the concentration `q` and density `ρ` as an optimal weight. This iterates
+over each element, calling [`apply_limit_slab!`](@ref). If the limiter fails to
+converge for any element, a warning is issued.
 """
 function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
 )
-
-    space = axes(ρq)
-
-    # Initialize temp variables
+    (; q_bounds_nbr, rtol) = limiter
 
     ρq_data = Fields.field_values(ρq)
     ρ_data = Fields.field_values(ρ)
-    WJ_data = Spaces.local_geometry_data(space).WJ
+    WJ_data = Spaces.local_geometry_data(axes(ρq)).WJ
 
+    converged = true
     (_, _, _, Nv, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
             slab_ρ = slab(ρ_data, v, h)
             slab_ρq = slab(ρq_data, v, h)
-            slab_wj = slab(WJ_data, v, h)
-            slab_q_bounds = slab(limiter.q_bounds_nbr, v, h)
-            apply_limit_slab!(slab_ρq, slab_ρ, slab_wj, slab_q_bounds)
-        end # end of horz elem loop
-    end # end of vert level loop
+            slab_WJ = slab(WJ_data, v, h)
+            slab_q_bounds = slab(q_bounds_nbr, v, h)
+            converged &=
+                apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
+        end
+    end
+    converged || @warn "Limiter failed to converge with rtol = $rtol"
+
     return ρq
 end
 
 """
-    apply_limit_slab!(slab_ρq, slab_ρ, slab_wj, slab_q_bounds)
+    apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
 Apply the computed bounds of the tracer concentration (`slab_q_bounds`) in the
-limiter to `slab_ρq`, given the total mass `slab_ρ` and weights `slab_wj`.
+limiter to `slab_ρq`, given the total mass `slab_ρ`, metric terms `slab_WJ`,
+and relative tolerance `rtol`. Return whether the tolerance condition could be
+satisfied.
 """
-function apply_limit_slab!(
-    slab_ρq::DataLayouts.IJF{<:Any, Nij},
-    slab_ρ::DataLayouts.IJF{<:Any, Nij},
-    slab_WJ::DataLayouts.IJF{<:Any, Nij},
-    slab_q_bounds::DataLayouts.IF{<:Any, 2},
-) where {Nij}
-
+function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     Nf = DataLayouts.ncomponents(slab_ρq)
+    (Ni, Nj, _, _, _) = size(slab_ρq)
+    maxiter = Ni * Nj
 
     array_ρq = parent(slab_ρq)
     array_ρ = parent(slab_ρ)
     array_w = parent(slab_WJ)
     array_q_bounds = parent(slab_q_bounds)
 
-    rtol = sqrt(eps(eltype(array_ρq)))
-    maxiter = Nij * Nij
-
-    # 1) compute ρ_tot
-    ρ_tot = zero(eltype(array_ρ))
-    for j in 1:Nij, i in 1:Nij
-        ρ_tot += array_ρ[i, j, 1] * array_w[i, j, 1]
+    # 1) compute ∫ρ
+    total_mass = zero(eltype(array_ρ))
+    for j in 1:Nj, i in 1:Ni
+        total_mass += array_ρ[i, j, 1] * array_w[i, j, 1]
     end
 
-    @assert ρ_tot > 0
+    @assert total_mass > 0
 
+    converged = true
     for f in 1:Nf
         q_min = array_q_bounds[1, f]
         q_max = array_q_bounds[2, f]
 
         # 2) compute ∫ρq
-        ρq_tot = zero(eltype(array_ρq))
-        for j in 1:Nij, i in 1:Nij
-            ρq_tot += array_ρq[i, j, f] * array_w[i, j, 1]
+        tracer_mass = zero(eltype(array_ρq))
+        for j in 1:Nj, i in 1:Ni
+            tracer_mass += array_ρq[i, j, f] * array_w[i, j, 1]
         end
 
+        # TODO: Should this condition be enforced? (It isn't in HOMME.)
+        # @assert tracer_mass >= 0
+
         # 3) set bounds
-        q_avg = ρq_tot / ρ_tot
+        q_avg = tracer_mass / total_mass
         q_min = min(q_min, q_avg)
         q_max = max(q_max, q_avg)
 
-        # 3) compute total mass change
+        # 3) modify ρq
         for iter in 1:maxiter
-            Δρq = zero(eltype(array_ρq))
-            for j in 1:Nij, i in 1:Nij
+            Δtracer_mass = zero(eltype(array_ρq))
+            for j in 1:Nj, i in 1:Ni
                 ρ = array_ρ[i, j, 1]
                 ρq = array_ρq[i, j, f]
                 ρq_max = ρ * q_max
                 ρq_min = ρ * q_min
                 w = array_w[i, j]
                 if ρq > ρq_max
-                    Δρq += (ρq - ρq_max) * w
+                    Δtracer_mass += (ρq - ρq_max) * w
                     array_ρq[i, j, f] = ρq_max
                 elseif ρq < ρq_min
-                    Δρq += (ρq - ρq_min) * w
+                    Δtracer_mass += (ρq - ρq_min) * w
                     array_ρq[i, j, f] = ρq_min
                 end
             end
 
-            if abs(Δρq) < rtol * ρq_tot
+            if abs(Δtracer_mass) <= rtol * abs(tracer_mass)
                 break
             end
 
-            if Δρq > 0 # add mass
-                # compute total density
-                Δρ = zero(eltype(array_ρ))
-                for j in 1:Nij, i in 1:Nij
+            if Δtracer_mass > 0 # add mass
+                total_mass_at_Δ_points = zero(eltype(array_ρ))
+                for j in 1:Nj, i in 1:Ni
                     ρ = array_ρ[i, j, 1]
                     ρq = array_ρq[i, j, f]
                     w = array_w[i, j]
                     if ρq < ρ * q_max
-                        Δρ += ρ * w
+                        total_mass_at_Δ_points += ρ * w
                     end
                 end
-                Δq = Δρq / Δρ # compute average ratio change
-                for j in 1:Nij, i in 1:Nij
+                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+                for j in 1:Nj, i in 1:Ni
                     ρ = array_ρ[i, j, 1]
                     ρq = array_ρq[i, j, f]
                     if ρq < ρ * q_max
-                        array_ρq[i, j, f] += ρ * Δq
+                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
                     end
                 end
             else # remove mass
-                Δρ = zero(eltype(array_ρ))
-                for j in 1:Nij, i in 1:Nij
+                total_mass_at_Δ_points = zero(eltype(array_ρ))
+                for j in 1:Nj, i in 1:Ni
                     ρ = array_ρ[i, j, 1]
                     ρq = array_ρq[i, j, f]
                     w = array_w[i, j]
                     if ρq > ρ * q_min
-                        Δρ += ρ * w
+                        total_mass_at_Δ_points += ρ * w
                     end
                 end
-                Δq = Δρq / Δρ
-                for j in 1:Nij, i in 1:Nij
+                Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
+                for j in 1:Nj, i in 1:Ni
                     ρ = array_ρ[i, j, 1]
                     ρq = array_ρq[i, j, f]
                     if ρq > ρ * q_min
-                        array_ρq[i, j, f] += ρ * Δq
+                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
                     end
                 end
             end
+
+            if iter == maxiter
+                converged = false
+            end
         end
     end
+    return converged
 end
