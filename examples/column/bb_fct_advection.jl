@@ -73,8 +73,13 @@ function f!(dydt, y, parameters, t, alpha, beta)
     return dydt
 end
 
+# Define a pulse wave or square wave
+pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
+
 FT = Float64
 t₀ = FT(0.0)
+Δt = 0.0001
+t₁ = 100Δt
 z₀ = FT(0.0)
 zₕ = FT(1.0)
 z₁ = FT(1.0)
@@ -87,54 +92,67 @@ domain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(π);
     boundary_names = (:bottom, :top),
 )
-mesh = Meshes.IntervalMesh(domain, nelems = n)
-cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-fs = Spaces.FaceFiniteDifferenceSpace(cs)
-zc = Fields.coordinate_field(cs)
 
-# Unitary, constant advective velocity
-w = Geometry.WVector.(speed .* ones(FT, fs))
+stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
+err = zeros(FT, length(stretch_fns))
+initial_mass = zeros(FT, length(stretch_fns))
+mass = zeros(FT, length(stretch_fns))
+rel_mass_err = zeros(FT, length(stretch_fns))
+plot_string = ["uniform", "stretched"]
 
-# Define a pulse wave or square wave
-pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
+for (i, stretch_fn) in enumerate(stretch_fns)
 
-# Initial condition
-y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
+    mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+    zc = Fields.coordinate_field(cs)
 
-# ClimaTimeSteppers need a FieldVector
-y0 = Fields.FieldVector(y = y0)
+    # Unitary, constant advective velocity
+    w = Geometry.WVector.(speed .* ones(FT, fs))
 
-# Set up parameters needed for time-stepping
-Δt = 0.0001
-dydt = copy(y0)
-y_td = similar(dydt.y)
+    # Initial condition
+    y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
 
-parameters = (; w, y_td)
-# Call the RHS function
-f!(dydt, y0, parameters, 0.0, Δt, 1)
-t₁ = 100Δt
-prob = ODEProblem(IncrementingODEFunction(f!), copy(y0), (t₀, t₁), parameters)
-sol = solve(
-    prob,
-    SSPRK33ShuOsher(),
-    dt = Δt,
-    saveat = Δt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, p, t) -> t,
-)
-computed_result = sol.u[end].y
-analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
-err = norm(computed_result .- analytical_result)
-initial_mass = sum(sol.u[1].y)
-mass = sum(sol.u[end].y)
-rel_mass_err = norm((mass - initial_mass) / initial_mass)
+    # ClimaTimeSteppers need a FieldVector
+    y0 = Fields.FieldVector(y = y0)
 
-@test err ≤ 0.0185
-@test rel_mass_err ≤ 8eps()
+    # Set up fields needed for time-stepping
+    dydt = copy(y0)
+    y_td = similar(dydt.y)
 
-plot(sol.u[end].y)
-Plots.png(
-    Plots.plot!(analytical_result, title = "Boris and Book FCT"),
-    joinpath(path, "exact_and_computed_advected_square_wave_BBFCT.png"),
-)
+    parameters = (; w, y_td)
+    # Call the RHS function
+    f!(dydt, y0, parameters, 0.0, Δt, 1)
+
+    prob =
+        ODEProblem(IncrementingODEFunction(f!), copy(y0), (t₀, t₁), parameters)
+    sol = solve(
+        prob,
+        SSPRK33ShuOsher(),
+        dt = Δt,
+        saveat = Δt,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+    computed_result = sol.u[end].y
+    analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
+    err[i] = norm(computed_result .- analytical_result)
+    initial_mass[i] = sum(sol.u[1].y)
+    mass[i] = sum(sol.u[end].y)
+    rel_mass_err[i] = norm((mass - initial_mass) / initial_mass)
+
+    @test err[i] ≤ 0.11
+    @test rel_mass_err[i] ≤ 5eps()
+
+    plot(sol.u[end].y)
+    Plots.png(
+        Plots.plot!(analytical_result, title = "Boris and Book FCT"),
+        joinpath(
+            path,
+            "exact_and_computed_advected_square_wave_BBFCT_" *
+            plot_string[i] *
+            ".png",
+        ),
+    )
+end

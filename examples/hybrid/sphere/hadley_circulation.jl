@@ -61,7 +61,11 @@ function sphere_3D(
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_names = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vertmesh = Meshes.IntervalMesh(
+        vertdomain,
+        Meshes.ExponentialStretching(FT(7e3));
+        nelems = zelem,
+    )
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.SphereDomain(R)
@@ -191,7 +195,7 @@ const κ₄ = 1.0e16          # hyperviscosity
 
 # time constants
 T = 86400.0 * 1.0
-dt = 30.0 * 60.0
+dt = 15.0 * 60.0
 
 # set up 3D domain
 hv_center_space, hv_face_space = sphere_3D()
@@ -246,7 +250,7 @@ q1_error =
 initial_mass = sum(y0.ρq1)
 mass = sum(sol.u[end].ρq1)
 rel_mass_err = norm((mass - initial_mass) / initial_mass)
-@test q1_error ≈ 0.0 atol = 0.56
+@test q1_error ≈ 0.0 atol = 0.32
 @test rel_mass_err ≈ 0.0 atol = 6e1eps()
 
 Plots.png(
