@@ -161,7 +161,7 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Ni, DS <: Union{Data1DStyle{Ni}, Data1DXStyle{Ni}}}
@@ -170,7 +170,7 @@ Base.Broadcast.broadcastable(data::AbstractData) = data
     Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
 end
 
-@inline function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {Nij, DS <: Union{Data2DStyle{Nij}, Data2DXStyle{Nij}}}
@@ -179,11 +179,11 @@ end
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
 end
 
-@inline function column(
+Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
 ) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
-    @inbounds _args = column_args(bc.args, inds...)
+    _args = column_args(bc.args, inds...)
     _axes = nothing
     Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
 end
@@ -195,29 +195,29 @@ end
     bc
 end
 
-@propagate_inbounds function column(
+Base.@propagate_inbounds function column(
     bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
     i,
     h,
 )
-    @inbounds slab(bc, h)[i]
+    slab(bc, h)[i]
 end
-@propagate_inbounds function column(
+Base.@propagate_inbounds function column(
     bc::Union{Data1D, Base.Broadcast.Broadcasted{<:Data1D}},
     i,
     j,
     h,
 )
-    @inbounds slab(bc, h)[i]
+    slab(bc, h)[i]
 end
 
-@propagate_inbounds function column(
+Base.@propagate_inbounds function column(
     bc::Union{Data2D, Base.Broadcast.Broadcasted{<:Data2D}},
     i,
     j,
     h,
 )
-    @inbounds slab(bc, h)[i, j]
+    slab(bc, h)[i, j]
 end
 
 function Base.similar(
@@ -414,14 +414,15 @@ end
     bc = Base.Broadcast.instantiate(
         Base.Broadcast.Broadcasted{Style}(bc.f, bc.args, ()),
     )
-    fill!(dest, bc[])
+    @inbounds bc0 = bc[]
+    fill!(dest, bc0)
 end
 
 @inline function Base.copyto!(
     dest::DataF{S},
     bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A}
-    dest[] = convert(S, bc[])
+    @inbounds dest[] = convert(S, bc[])
     return dest
 end
 
@@ -508,12 +509,14 @@ function _threaded_copyto!(
 ) where {S, Ni, A}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
-    Threads.@threads for h in 1:Nh
-        # copy contiguous columns
-        @inbounds for i in 1:Ni
-            col_dest = column(dest, i, h)
-            col_bc = column(bc, i, h)
-            copyto!(col_dest, col_bc)
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            # copy contiguous columns
+            for i in 1:Ni
+                col_dest = column(dest, i, h)
+                col_bc = column(bc, i, h)
+                copyto!(col_dest, col_bc)
+            end
         end
     end
     return dest
@@ -556,12 +559,14 @@ function _threaded_copyto!(
 ) where {S, Nij, A}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
-    Threads.@threads for h in 1:Nh
-        # copy contiguous columns
-        @inbounds for j in 1:Nij, i in 1:Nij
-            col_dest = column(dest, i, j, h)
-            col_bc = column(bc, i, j, h)
-            copyto!(col_dest, col_bc)
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            # copy contiguous columns
+            for j in 1:Nij, i in 1:Nij
+                col_dest = column(dest, i, j, h)
+                col_bc = column(bc, i, j, h)
+                copyto!(col_dest, col_bc)
+            end
         end
     end
     return dest

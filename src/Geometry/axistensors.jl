@@ -27,19 +27,19 @@ ClimaCore.Geometry.CartesianAxis{(1, 2, 3)}()
 function dual end
 
 struct CovariantAxis{I} <: AbstractAxis{I} end
-@inline symbols(::CovariantAxis) = (:u₁, :u₂, :u₃)
+symbols(::CovariantAxis) = (:u₁, :u₂, :u₃)
 
 struct ContravariantAxis{I} <: AbstractAxis{I} end
-@inline symbols(::ContravariantAxis) = (:u¹, :u², :u³)
+symbols(::ContravariantAxis) = (:u¹, :u², :u³)
 dual(::CovariantAxis{I}) where {I} = ContravariantAxis{I}()
 dual(::ContravariantAxis{I}) where {I} = CovariantAxis{I}()
 
 struct LocalAxis{I} <: AbstractAxis{I} end
-@inline symbols(::LocalAxis) = (:u, :v, :w)
+symbols(::LocalAxis) = (:u, :v, :w)
 dual(::LocalAxis{I}) where {I} = LocalAxis{I}()
 
 struct CartesianAxis{I} <: AbstractAxis{I} end
-@inline symbols(::CartesianAxis) = (:u1, :u2, :u3)
+symbols(::CartesianAxis) = (:u1, :u2, :u3)
 dual(::CartesianAxis{I}) where {I} = CartesianAxis{I}()
 
 coordinate_axis(::Type{<:XPoint}) = (1,)
@@ -133,7 +133,7 @@ struct AxisTensor{
     components::S
 end
 
-@inline AxisTensor(
+AxisTensor(
     axes::A,
     components::S,
 ) where {
@@ -141,14 +141,14 @@ end
     S <: StaticArray{<:Tuple, T, N},
 } where {T, N} = AxisTensor{T, N, A, S}(axes, components)
 
-@inline AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
+AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
     AxisTensor(axes, SArray{Tuple{map(length, axes)...}}(components))
 
 # if the axes are already defined
-@inline (AxisTensor{T, N, A, S} where {S})(
+(AxisTensor{T, N, A, S} where {S})(
     components::AbstractArray{T, N},
 ) where {T, N, A} = AxisTensor(A.instance, components)
-@inline (AxisTensor{T, N, A, S} where {T, S})(
+(AxisTensor{T, N, A, S} where {T, S})(
     components::AbstractArray{<:Any, N},
 ) where {N, A} = AxisTensor(A.instance, components)
 
@@ -175,31 +175,31 @@ end
 
 Returns a `StaticArray` containing the components of `a` in its stored basis.
 """
-@inline components(a::AxisTensor) = getfield(a, :components)
+components(a::AxisTensor) = getfield(a, :components)
 
-@inline Base.getindex(v::AxisTensor, i...) =
-    @inbounds getindex(components(v), i...)
+Base.@propagate_inbounds Base.getindex(v::AxisTensor, i...) =
+    getindex(components(v), i...)
 
 
-@inline function Base.getindex(
+Base.@propagate_inbounds function Base.getindex(
     v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
     ::Colon,
     i::Integer,
 ) where {A1, A2}
-    AxisVector(axes(v, 1), @inbounds getindex(components(v), :, i))
+    AxisVector(axes(v, 1), getindex(components(v), :, i))
 end
-@inline function Base.getindex(
+Base.@propagate_inbounds function Base.getindex(
     v::AxisTensor{<:Any, 2, Tuple{A1, A2}},
     i::Integer,
     ::Colon,
 ) where {A1, A2}
-    AxisVector(axes(v, 2), @inbounds getindex(components(v), i, :))
+    AxisVector(axes(v, 2), getindex(components(v), i, :))
 end
 
 
-@inline Base.map(f::F, a::AxisTensor) where {F} =
+Base.map(f::F, a::AxisTensor) where {F} =
     AxisTensor(axes(a), map(f, components(a)))
-@inline Base.map(
+Base.map(
     f::F,
     a::AxisTensor{Ta, N, A},
     b::AxisTensor{Tb, N, A},
@@ -234,7 +234,7 @@ import Base: +, -, *, /, \, ==
 # vectors
 const AxisVector{T, A1, S} = AxisTensor{T, 1, Tuple{A1}, S}
 
-@inline AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
+AxisVector(ax::A1, v::SVector{N, T}) where {A1 <: AbstractAxis, N, T} =
     AxisVector{T, A1, SVector{N, T}}((ax,), v)
 
 (AxisVector{T, A, SVector{1, T}} where {T})(arg1::Real) where {A} =
@@ -265,11 +265,11 @@ end
 
 const AdjointAxisVector{T, A1, S} = Adjoint{T, AxisVector{T, A1, S}}
 
-@inline components(va::AdjointAxisVector) = components(parent(va))'
-@inline Base.getindex(va::AdjointAxisVector, i::Int) =
-    @inbounds getindex(components(va), i)
-@inline Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
-    @inbounds getindex(components(va), i, j)
+components(va::AdjointAxisVector) = components(parent(va))'
+Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int) =
+    getindex(components(va), i)
+Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
+    getindex(components(va), i, j)
 
 # 2-tensors
 const Axis2Tensor{T, A, S} = AxisTensor{T, 2, A, S}
@@ -279,7 +279,7 @@ Axis2Tensor(
 ) = AxisTensor(axes, components)
 
 const AdjointAxis2Tensor{T, A, S} = Adjoint{T, Axis2Tensor{T, A, S}}
-@inline components(va::AdjointAxis2Tensor) = components(parent(va))'
+components(va::AdjointAxis2Tensor) = components(parent(va))'
 
 const Axis2TensorOrAdj{T, A, S} =
     Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
@@ -335,27 +335,27 @@ _check_dual(ax1, ax2, _) =
     throw(DimensionMismatch("$ax1 is not dual with $ax2"))
 
 
-@inline function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
+function LinearAlgebra.dot(x::AxisVector, y::AxisVector)
     check_dual(axes(x, 1), axes(y, 1))
     return LinearAlgebra.dot(components(x), components(y))
 end
 
-@inline function Base.:*(x::AxisVector, y::AdjointAxisVector)
+function Base.:*(x::AxisVector, y::AdjointAxisVector)
     AxisTensor((axes(x, 1), axes(y, 2)), components(x) * components(y))
 end
-@inline function Base.:*(A::Axis2TensorOrAdj, x::AxisVector)
+function Base.:*(A::Axis2TensorOrAdj, x::AxisVector)
     check_dual(axes(A, 2), axes(x, 1))
     return AxisVector(axes(A, 1), components(A) * components(x))
 end
-@inline function Base.:*(A::Axis2TensorOrAdj, B::Axis2TensorOrAdj)
+function Base.:*(A::Axis2TensorOrAdj, B::Axis2TensorOrAdj)
     check_dual(axes(A, 2), axes(B, 1))
     return AxisTensor((axes(A, 1), axes(B, 2)), components(A) * components(B))
 end
 
-@inline function Base.inv(A::Axis2TensorOrAdj)
+function Base.inv(A::Axis2TensorOrAdj)
     return AxisTensor((dual(axes(A, 2)), dual(axes(A, 1))), inv(components(A)))
 end
-@inline function Base.:\(A::Axis2TensorOrAdj, x::AxisVector)
+function Base.:\(A::Axis2TensorOrAdj, x::AxisVector)
     check_axes(axes(A, 1), axes(x, 1))
     return AxisVector(dual(axes(A, 2)), components(A) \ components(x))
 end
@@ -379,24 +379,24 @@ LinearAlgebra.cross(y::Cartesian3Vector, x::Cartesian12Vector) =
 LinearAlgebra.cross(x::UVVector, y::WVector) = UVVector(x.v * y.w, -x.u * y.w)
 LinearAlgebra.cross(y::WVector, x::UVVector) = UVVector(-x.v * y.w, x.u * y.w)
 
-@inline function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
+function Base.:(+)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) + b)
 end
-@inline function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
+function Base.:(-)(A::Axis2Tensor, b::LinearAlgebra.UniformScaling)
     check_dual(axes(A)...)
     AxisTensor(axes(A), components(A) - b)
 end
 
 
-@inline function _transform(
+function _transform(
     ato::Ato,
     x::AxisVector{T, Afrom, SVector{N, T}},
 ) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
     x
 end
 
-@inline function _project(
+function _project(
     ato::Ato,
     x::AxisVector{T, Afrom, SVector{N, T}},
 ) where {Ato <: AbstractAxis{I}, Afrom <: AbstractAxis{I}} where {I, T, N}
@@ -458,7 +458,7 @@ end
     return :(@inbounds AxisVector(ato, SVector($(vals...))))
 end
 
-@inline function _transform(
+function _transform(
     ato::Ato,
     x::Axis2Tensor{T, Tuple{Afrom, A2}},
 ) where {
@@ -469,7 +469,7 @@ end
     x
 end
 
-@inline function _project(
+function _project(
     ato::Ato,
     x::Axis2Tensor{T, Tuple{Afrom, A2}},
 ) where {

@@ -57,6 +57,7 @@ function _linsolve!(x, A, b, update_matrix = false; kwargs...)
 
     # Compute remaining components of x
     @. xᶜρ = -bᶜρ + apply(∂ᶜρₜ∂ᶠ𝕄, xᶠ𝕄)
+    return nothing
 end
 
 import ClimaCore

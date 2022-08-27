@@ -126,13 +126,11 @@ const SlabField2D{V, S} = Field{
 const ColumnField{V, S} =
     Field{V, S} where {V <: DataLayouts.DataColumn, S <: Spaces.AbstractSpace}
 
-slab(field::Field, inds...) =
+Base.@propagate_inbounds slab(field::Field, inds...) =
     Field(slab(field_values(field), inds...), slab(axes(field), inds...))
 
-@inline function column(field::Field, inds...)
-    @inbounds vals = column(field_values(field), inds...)
-    @inbounds spaces = column(axes(field), inds...)
-    @inbounds Field(vals, spaces)
+Base.@propagate_inbounds function column(field::Field, inds...)
+    Field(column(field_values(field), inds...), column(axes(field), inds...))
 end
 @inline column(field::FiniteDifferenceField, inds...) = field
 
@@ -356,7 +354,7 @@ function Spaces.create_ghost_buffer(field::Field)
 end
 
 
-function level(
+Base.@propagate_inbounds function level(
     field::Union{
         CenterFiniteDifferenceField,
         CenterExtrudedFiniteDifferenceField,
@@ -367,17 +365,19 @@ function level(
     data = level(field_values(field), v)
     Field(data, hspace)
 end
-function level(
+Base.@propagate_inbounds function level(
     field::Union{FaceFiniteDifferenceField, FaceExtrudedFiniteDifferenceField},
     v::PlusHalf,
 )
     hspace = level(axes(field), v)
-    data = level(field_values(field), v.i + 1)
+    @inbounds data = level(field_values(field), v.i + 1)
     Field(data, hspace)
 end
 
-Base.getindex(field::PointField) = getindex(field_values(field))
-Base.setindex!(field::PointField, val) = setindex!(field_values(field), val)
+Base.@propagate_inbounds Base.getindex(field::PointField) =
+    getindex(field_values(field))
+Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
+    setindex!(field_values(field), val)
 
 """
     set!(f::Function, field::Field, args = ())

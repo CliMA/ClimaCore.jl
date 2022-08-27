@@ -96,8 +96,7 @@ const ⊞ = radd
 # Adapted from Base/operators.jl for general nary operator fallbacks
 for op in (:rmul, :radd)
     @eval begin
-        @inline ($op)(a, b, c, xs...) =
-            Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
+        ($op)(a, b, c, xs...) = Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
     end
 end
 
@@ -143,8 +142,8 @@ Recursive matrix product along the 1st dimension of `S`. Equivalent to:
 """
 function rmatmul1(W, S, i, j)
     Nq = size(W, 2)
-    r = W[i, 1] ⊠ S[1, j]
-    for ii in 2:Nq
+    @inbounds r = W[i, 1] ⊠ S[1, j]
+    @inbounds for ii in 2:Nq
         r = rmuladd(W[i, ii], S[ii, j], r)
     end
     return r
@@ -160,8 +159,8 @@ Recursive matrix product along the 2nd dimension `S`. Equivalent to:
 """
 function rmatmul2(W, S, i, j)
     Nq = size(W, 2)
-    r = W[j, 1] ⊠ S[i, 1]
-    for jj in 2:Nq
+    @inbounds r = W[j, 1] ⊠ S[i, 1]
+    @inbounds for jj in 2:Nq
         r = rmuladd(W[j, jj], S[i, jj], r)
     end
     return r

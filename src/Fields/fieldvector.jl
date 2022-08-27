@@ -95,23 +95,32 @@ BlockArrays.blockaxes(fv::FieldVector) =
 Base.axes(fv::FieldVector) =
     (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
 
-Base.getindex(fv::FieldVector, block::BlockArrays.Block{1}) =
-    backing_array(_values(fv)[block.n...])
-function Base.getindex(fv::FieldVector, bidx::BlockArrays.BlockIndex{1})
+Base.@propagate_inbounds Base.getindex(
+    fv::FieldVector,
+    block::BlockArrays.Block{1},
+) = backing_array(_values(fv)[block.n...])
+Base.@propagate_inbounds function Base.getindex(
+    fv::FieldVector,
+    bidx::BlockArrays.BlockIndex{1},
+)
     X = fv[BlockArrays.block(bidx)]
     X[bidx.α...]
 end
 
 # TODO: drop support for this
-Base.getindex(fv::FieldVector, i::Integer) =
+Base.@propagate_inbounds Base.getindex(fv::FieldVector, i::Integer) =
     getindex(fv, BlockArrays.findblockindex(axes(fv, 1), i))
 
-function Base.setindex!(fv::FieldVector, val, bidx::BlockArrays.BlockIndex{1})
+Base.@propagate_inbounds function Base.setindex!(
+    fv::FieldVector,
+    val,
+    bidx::BlockArrays.BlockIndex{1},
+)
     X = fv[BlockArrays.block(bidx)]
     X[bidx.α...] = val
 end
 # TODO: drop support for this
-Base.setindex!(fv::FieldVector, val, i::Integer) =
+Base.@propagate_inbounds Base.setindex!(fv::FieldVector, val, i::Integer) =
     setindex!(fv, val, BlockArrays.findblockindex(axes(fv, 1), i))
 
 Base.similar(fv::FieldVector{T}) where {T} =

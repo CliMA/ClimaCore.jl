@@ -15,21 +15,28 @@ struct ColumnIndex{N}
     h::Int
 end
 
-Base.getindex(field::Field, colidx::ColumnIndex) = column(field, colidx)
+Base.@propagate_inbounds Base.getindex(field::Field, colidx::ColumnIndex) =
+    column(field, colidx)
 
-@inline function column(field::SpectralElementField1D, colidx::ColumnIndex{1})
+Base.@propagate_inbounds function column(
+    field::SpectralElementField1D,
+    colidx::ColumnIndex{1},
+)
     column(field, colidx.ij[1], colidx.h)
 end
-@inline function column(
+Base.@propagate_inbounds function column(
     field::ExtrudedFiniteDifferenceField,
     colidx::ColumnIndex{1},
 )
     column(field, colidx.ij[1], colidx.h)
 end
-@inline function column(field::SpectralElementField2D, colidx::ColumnIndex{2})
+Base.@propagate_inbounds function column(
+    field::SpectralElementField2D,
+    colidx::ColumnIndex{2},
+)
     column(field, colidx.ij[1], colidx.ij[2], colidx.h)
 end
-@inline function column(
+Base.@propagate_inbounds function column(
     field::ExtrudedFiniteDifferenceField,
     colidx::ColumnIndex{2},
 )
@@ -57,9 +64,11 @@ end
 function bycolumn(fn, space::Spaces.SpectralElementSpace1D)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    Threads.@threads for h in 1:Nh
-        for i in 1:Nq
-            fn(ColumnIndex((i,), h))
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for i in 1:Nq
+                fn(ColumnIndex((i,), h))
+            end
         end
     end
     return nothing
@@ -67,9 +76,11 @@ end
 function bycolumn(fn, space::Spaces.SpectralElementSpace2D)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
-    Threads.@threads for h in 1:Nh
-        for j in 1:Nq, i in 1:Nq
-            fn(ColumnIndex((i, j), h))
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for j in 1:Nq, i in 1:Nq
+                fn(ColumnIndex((i, j), h))
+            end
         end
     end
     return nothing

@@ -148,10 +148,8 @@ LocalVector(u::ContravariantVector{<:Any, (3,)}, ::LocalGeometry{(1, 2)}) =
 @inline contravariant3(u::Axis2Tensor, local_geometry::LocalGeometry) =
     @inbounds project(Contravariant3Axis(), u, local_geometry)[1, :]
 
-Base.@propagate_inbounds Jcontravariant3(
-    u::AxisTensor,
-    local_geometry::LocalGeometry,
-) = local_geometry.J * contravariant3(u, local_geometry)
+@inline Jcontravariant3(u::AxisTensor, local_geometry::LocalGeometry) =
+    local_geometry.J * contravariant3(u, local_geometry)
 
 # required for curl-curl
 @inline covariant3(
@@ -160,7 +158,7 @@ Base.@propagate_inbounds Jcontravariant3(
 ) = contravariant3(u, local_geometry)
 
 # workarounds for using a Covariant12Vector/Covariant123Vector in a UW space:
-@inline function LocalVector(
+function LocalVector(
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -169,7 +167,7 @@ Base.@propagate_inbounds Jcontravariant3(
     u, w = components(project(LocalAxis{(1, 3)}(), vector2, local_geometry))
     return UVWVector(u, v, w)
 end
-@inline function contravariant1(
+function contravariant1(
     vector::CovariantVector{<:Any, (1, 2, 3)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -177,7 +175,7 @@ end
     vector2 = Covariant13Vector(u₁, u₃)
     return project(Contravariant13Axis(), vector2, local_geometry).u¹
 end
-@inline function contravariant3(
+function contravariant3(
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -185,7 +183,7 @@ end
     vector2 = Covariant13Vector(u₁, zero(u₁))
     return project(Contravariant13Axis(), vector2, local_geometry).u³
 end
-@inline function ContravariantVector(
+function ContravariantVector(
     vector::CovariantVector{<:Any, (1, 2)},
     local_geometry::LocalGeometry{(1, 3)},
 )
@@ -258,7 +256,7 @@ function project end
 for op in (:transform, :project)
     @eval begin
         # Covariant <-> Cartesian
-        @inline $op(
+        $op(
             ax::CartesianAxis,
             v::CovariantTensor,
             local_geometry::LocalGeometry,
@@ -266,7 +264,7 @@ for op in (:transform, :project)
             ax,
             local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
-        @inline $op(
+        $op(
             ax::CovariantAxis,
             v::CartesianTensor,
             local_geometry::LocalGeometry,
@@ -274,25 +272,21 @@ for op in (:transform, :project)
             ax,
             local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
         )
-        @inline $op(
-            ax::LocalAxis,
-            v::CovariantTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂ξ∂x' * $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
-        )
-        @inline $op(
-            ax::CovariantAxis,
-            v::LocalTensor,
-            local_geometry::LocalGeometry,
-        ) = $op(
-            ax,
-            local_geometry.∂x∂ξ' * $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
-        )
+        $op(ax::LocalAxis, v::CovariantTensor, local_geometry::LocalGeometry) =
+            $op(
+                ax,
+                local_geometry.∂ξ∂x' *
+                $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
+            )
+        $op(ax::CovariantAxis, v::LocalTensor, local_geometry::LocalGeometry) =
+            $op(
+                ax,
+                local_geometry.∂x∂ξ' *
+                $op(dual(axes(local_geometry.∂x∂ξ, 1)), v),
+            )
 
         # Contravariant <-> Cartesian
-        @inline $op(
+        $op(
             ax::ContravariantAxis,
             v::CartesianTensor,
             local_geometry::LocalGeometry,
@@ -300,7 +294,7 @@ for op in (:transform, :project)
             ax,
             local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
         )
-        @inline $op(
+        $op(
             ax::CartesianAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
@@ -308,7 +302,7 @@ for op in (:transform, :project)
             ax,
             local_geometry.∂x∂ξ * $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
-        @inline $op(
+        $op(
             ax::ContravariantAxis,
             v::LocalTensor,
             local_geometry::LocalGeometry,
@@ -317,7 +311,7 @@ for op in (:transform, :project)
             local_geometry.∂ξ∂x * $op(dual(axes(local_geometry.∂ξ∂x, 2)), v),
         )
 
-        @inline $op(
+        $op(
             ax::LocalAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
@@ -328,7 +322,7 @@ for op in (:transform, :project)
 
         # Covariant <-> Contravariant
         #=
-        @inline $op(
+        $op(
             ax::ContravariantAxis,
             v::CovariantTensor,
             local_geometry::LocalGeometry,
@@ -339,7 +333,7 @@ for op in (:transform, :project)
             $op(dual(axes(local_geometry.∂ξ∂x, 1)), v),
         )
         =#
-        @inline $op(
+        $op(
             ax::CovariantAxis,
             v::ContravariantTensor,
             local_geometry::LocalGeometry,
@@ -350,21 +344,17 @@ for op in (:transform, :project)
             $op(dual(axes(local_geometry.∂x∂ξ, 2)), v),
         )
 
-        @inline $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
+        $op(ato::CovariantAxis, v::CovariantTensor, ::LocalGeometry) =
             $op(ato, v)
-        @inline $op(
-            ato::ContravariantAxis,
-            v::ContravariantTensor,
-            ::LocalGeometry,
-        ) = $op(ato, v)
-        @inline $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
+        $op(ato::ContravariantAxis, v::ContravariantTensor, ::LocalGeometry) =
             $op(ato, v)
-        @inline $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) =
+        $op(ato::CartesianAxis, v::CartesianTensor, ::LocalGeometry) =
             $op(ato, v)
+        $op(ato::LocalAxis, v::LocalTensor, ::LocalGeometry) = $op(ato, v)
     end
 end
 
-@inline transform(
+transform(
     ax::ContravariantAxis,
     v::CovariantTensor,
     local_geometry::LocalGeometry,
@@ -473,7 +463,7 @@ end
 
 # A few other expensive ones:
 #! format: off
-@inline function project(
+function project(
     ax::ContravariantAxis{(1,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(1, 2)},LocalAxis{(1, 2)}},SMatrix{2,2,FT,4}},
     lg::LocalGeometry{(1, 2, 3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
@@ -484,7 +474,7 @@ end
             lg.∂ξ∂x[1, 1]*v[1, 1]+lg.∂ξ∂x[1, 2]*v[2, 1] lg.∂ξ∂x[1, 1]*v[1, 2]+lg.∂ξ∂x[1, 2]*v[2, 2]
         ])
 end
-@inline function project(
+function project(
     ax::ContravariantAxis{(2,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(1,2)},LocalAxis{(1,2)}},SMatrix{2,2,FT,4}},
     lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}
@@ -496,7 +486,7 @@ end
         ]
     )
 end
-@inline function project(
+function project(
     ax::ContravariantAxis{(3,)},
     v::AxisTensor{FT,2,Tuple{LocalAxis{(3,)},LocalAxis{(1,2)}},SMatrix{1,2,FT,2}},
     lg::LocalGeometry{(1,2,3),XYZPoint{FT},FT,SMatrix{3,3,FT,9}}

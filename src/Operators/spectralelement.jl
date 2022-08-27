@@ -185,9 +185,11 @@ function _threaded_copyto!(
     Nv::Int,
     Nh::Int,
 )
-    Threads.@threads for h in 1:Nh
-        @inbounds for v in 1:Nv
-            _inner_copyto!(field_out, sbc, v, h)
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for v in 1:Nv
+                _inner_copyto!(field_out, sbc, v, h)
+            end
         end
     end
     return field_out
@@ -207,7 +209,7 @@ function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
 end
 
-function slab(
+Base.@propagate_inbounds function slab(
     sbc::SpectralBroadcasted{Style},
     inds...,
 ) where {Style <: SpectralStyle}
@@ -216,7 +218,7 @@ function slab(
     SpectralBroadcasted{Style}(sbc.op, _args, _axes, sbc.input_space)
 end
 
-function slab(
+Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{Style},
     inds...,
 ) where {Style <: AbstractSpectralStyle}
@@ -1038,7 +1040,7 @@ function apply_slab(op::WeakCurl{(1, 2)}, slab_space, _, slab_data)
     else
         error("invalid return type")
     end
-    for j in 1:Nq, i in 1:Nq
+    @inbounds for j in 1:Nq, i in 1:Nq
         local_geometry = slab_local_geometry[i, j]
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
@@ -1240,18 +1242,18 @@ function tensor_product! end
 
 function tensor_product!(
     out::DataLayouts.Data1DX{S, Ni_out},
-    in::DataLayouts.Data1DX{S, Ni_in},
+    indata::DataLayouts.Data1DX{S, Ni_in},
     M::SMatrix{Ni_out, Ni_in},
 ) where {S, Ni_out, Ni_in}
-    (_, _, _, Nv_in, Nh_in) = size(in)
+    (_, _, _, Nv_in, Nh_in) = size(indata)
     (_, _, _, Nv_out, Nh_out) = size(out)
     # TODO: assumes the same number of levels (horizontal only)
     @assert Nv_in == Nv_out
     @assert Nh_in == Nh_out
-    for h in 1:Nh_out, v in 1:Nv_out
-        in_slab = slab(in, v, h)
+    @inbounds for h in 1:Nh_out, v in 1:Nv_out
+        in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
-        @inbounds for i in 1:Ni_out
+        for i in 1:Ni_out
             r = M[i, 1] ⊠ in_slab[1]
             for ii in 2:Ni_in
                 r = RecursiveApply.rmuladd(M[i, ii], in_slab[ii], r)
@@ -1264,18 +1266,18 @@ end
 
 function tensor_product!(
     out::DataLayouts.Data2D{S, Nij_out},
-    in::DataLayouts.Data2D{S, Nij_in},
+    indata::DataLayouts.Data2D{S, Nij_in},
     M::SMatrix{Nij_out, Nij_in},
 ) where {S, Nij_out, Nij_in}
 
-    Nh = length(in)
+    Nh = length(indata)
     @assert Nh == length(out)
 
     # temporary storage
     temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
 
-    for h in 1:Nh
-        in_slab = slab(in, h)
+    @inbounds for h in 1:Nh
+        in_slab = slab(indata, h)
         out_slab = slab(out, h)
         for j in 1:Nij_in, i in 1:Nij_out
             temp[i, j] = RecursiveApply.rmatmul1(M, in_slab, i, j)
@@ -1294,10 +1296,10 @@ function tensor_product!(
 ) where {S, Nij_out, Nij_in}
     # temporary storage
     temp = MArray{Tuple{Nij_out, Nij_in}, S, 2, Nij_out * Nij_in}(undef)
-    for j in 1:Nij_in, i in 1:Nij_out
+    @inbounds for j in 1:Nij_in, i in 1:Nij_out
         temp[i, j] = RecursiveApply.rmatmul1(M, in_slab, i, j)
     end
-    for j in 1:Nij_out, i in 1:Nij_out
+    @inbounds for j in 1:Nij_out, i in 1:Nij_out
         out_slab[i, j] = RecursiveApply.rmatmul2(M, temp, i, j)
     end
     return out_slab
