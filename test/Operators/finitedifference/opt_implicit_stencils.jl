@@ -176,7 +176,13 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         success_tabs = Dict()
         for (a0, a1, op1s) in apply_configs
             for op1 in op1s
-                success_tabs[compressed_keys(op1)] = apply_single_stencil(a0, a1, op1)
+                key = compressed_keys(op1)
+                alloc = apply_single_stencil(a0, a1, op1)
+                if haskey(success_tabs, key)
+                    success_tabs[key] += alloc
+                else
+                    success_tabs[key] = alloc
+                end
             end
         end
         return success_tabs
@@ -229,7 +235,13 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         for (a0, a1, a2, op1s, op2s) in apply_configs
             for op1 in op1s
                 for op2 in op2s
-                    success_compose_tabs[compressed_keys(op1, op2)] = apply_single_composed_stencils(a0, a1, a2, op1, op2)
+                    key = compressed_keys(op1, op2)
+                    alloc = apply_single_composed_stencils(a0, a1, a2, op1, op2)
+                    if haskey(success_compose_tabs, key)
+                        success_compose_tabs[key] += alloc
+                    else
+                        success_compose_tabs[key] = alloc
+                    end
                 end
             end
         end
