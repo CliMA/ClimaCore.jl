@@ -36,7 +36,7 @@ end
 
 # 2D x 1D hybrid function space setup
 function hvspace_3D(
-    FT = Float64;
+    FT = Float32;
     xlim = (-2π, 2π),
     ylim = (-2π, 2π),
     zlim = (0, 4π),
@@ -80,7 +80,7 @@ end
 
 
 @testset "compute_bounds" begin
-    FT = Float64
+    FT = Float32
     lim_tol = 5e-14
     Nij = 4
     n1 = n2 = 5
@@ -130,23 +130,24 @@ end
 
 
 @testset "apply_limit_slab!" begin
-    q = DataLayouts.IJF{Tuple{Float64, Float64}, 5}(
-        Float64[i + f for i in 1:5, j in 1:5, f in 1:2],
+    FT = Float32
+    q = DataLayouts.IJF{Tuple{FT, FT}, 5}(
+        Float32[i + f for i in 1:5, j in 1:5, f in 1:2],
     )
-    ρ = DataLayouts.IJF{Float64, 5}(
-        Float64[j / 2 for i in 1:5, j in 1:5, f in 1:1],
+    ρ = DataLayouts.IJF{FT, 5}(
+        Float32[j / 2 for i in 1:5, j in 1:5, f in 1:1],
     )
     ρq = ρ .⊠ q
-    WJ = DataLayouts.IJF{Float64, 5}(ones(5, 5, 1))
+    WJ = DataLayouts.IJF{FT, 5}(ones(FT, 5, 5, 1))
     q_min = (3.2, 3.0)
     q_max = (5.2, 5.0)
-    q_bounds = DataLayouts.IF{Tuple{Float64, Float64}, 2}(zeros(2, 2))
+    q_bounds = DataLayouts.IF{Tuple{FT, FT}, 2}(zeros(FT, 2, 2))
     q_bounds[1] = q_min
     q_bounds[2] = q_max
 
 
     ρq_new = deepcopy(ρq)
-    Limiters.apply_limit_slab!(ρq_new, ρ, WJ, q_bounds, eps(Float64))
+    Limiters.apply_limit_slab!(ρq_new, ρ, WJ, q_bounds, eps(FT))
 
 
     q_new = RecursiveApply.rdiv.(ρq_new, ρ)
@@ -161,7 +162,7 @@ end
 
 
 @testset "Optimization-based limiter on a 1×1 elem 2D domain space" begin
-    FT = Float64
+    FT = Float32
     lim_tol = 5e-14
     Nij = 2
 
@@ -171,30 +172,30 @@ end
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     # Initialize fields
-    ρ = ones(space)
-    q = ones(space)
+    ρ = ones(FT, space)
+    q = ones(FT, space)
     parent(q)[:, :, 1, 1] = [-0.2 0.00001; 1.1 1]
 
-    ρq = ρ .* q
+    ρq = @. ρ .* q
 
     limiter = Limiters.QuasiMonotoneLimiter(ρq)
     initial_Q_mass = sum(ρq)
 
     # Initialize variables needed for limiters
-    q_ref = ones(space)
+    q_ref = ones(FT, space)
     parent(q_ref)[:, :, 1, 1] = [0 0.00001; 1 1]
     ρq_ref = ρ .* q_ref
 
     Limiters.compute_bounds!(limiter, ρq_ref, ρ)
     Limiters.apply_limiter!(ρq, ρ, limiter)
 
-    @test parent(ρq)[:, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol = 10eps()
+    @test parent(ρq)[:, :, 1, 1] ≈ [0.0 0.0; 0.950005 0.950005] rtol = 10eps(FT)
     # Check mass conservation after application of limiter
-    @test sum(ρq) ≈ initial_Q_mass rtol = 10eps()
+    @test sum(ρq) ≈ initial_Q_mass rtol = 10eps(FT)
 end
 
 @testset "Optimization-based limiter on a 3×3 elem 2D domain space" begin
-    FT = Float64
+    FT = Float32
     Nij = 5
 
     mesh = rectangular_mesh(3, 3, false, false)
@@ -228,7 +229,7 @@ end
 
 
 @testset "Optimization-based limiter on a doubly-periodic 3x3×3 elem 2D x 1D hybrid domain space" begin
-    FT = Float64
+    FT = Float32
     Nij = 5
 
     n1 = n2 = 3
