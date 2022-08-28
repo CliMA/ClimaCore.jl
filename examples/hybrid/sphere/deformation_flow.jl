@@ -15,7 +15,7 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 # http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
 # Section 1.1
 
-const FT = Float64                # floating point type
+const FT = Float32                # floating point type
 const R = FT(6.37122e6)           # radius
 const grav = FT(9.8)              # gravitational constant
 const R_d = FT(287.058)           # R dry (gas constant / mol mass dry air)
