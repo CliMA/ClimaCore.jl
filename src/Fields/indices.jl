@@ -61,32 +61,59 @@ bycolumn(axes(f)) do colidx
 end
 ```
 """
-function bycolumn(fn, space::Spaces.SpectralElementSpace1D)
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace1D;
+    threading::Bool = false,
+)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        Threads.@threads for h in 1:Nh
-            for i in 1:Nq
-                fn(ColumnIndex((i,), h))
+        if threading
+            Threads.@threads for h in 1:Nh
+                for i in 1:Nq
+                    fn(ColumnIndex((i,), h))
+                end
+            end
+        else
+            for h in 1:Nh
+                for i in 1:Nq
+                    fn(ColumnIndex((i,), h))
+                end
             end
         end
     end
     return nothing
 end
-function bycolumn(fn, space::Spaces.SpectralElementSpace2D)
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace2D;
+    threading::Bool = false,
+)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        Threads.@threads for h in 1:Nh
-            for j in 1:Nq, i in 1:Nq
-                fn(ColumnIndex((i, j), h))
+        if threading
+            Threads.@threads for h in 1:Nh
+                for j in 1:Nq, i in 1:Nq
+                    fn(ColumnIndex((i, j), h))
+                end
+            end
+        else
+            for h in 1:Nh
+                for j in 1:Nq, i in 1:Nq
+                    fn(ColumnIndex((i, j), h))
+                end
             end
         end
     end
     return nothing
 end
-bycolumn(fn, space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    bycolumn(fn, space.horizontal_space)
+bycolumn(
+    fn,
+    space::Spaces.ExtrudedFiniteDifferenceSpace;
+    threading::Bool = false,
+) = bycolumn(fn, space.horizontal_space; threading)
 
 # potential TODO:
 # - define a ColumnIndices type, make it work with https://github.com/JuliaFolds/FLoops.jl
