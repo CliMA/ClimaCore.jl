@@ -65,9 +65,17 @@ function bycolumn(fn, space::Spaces.SpectralElementSpace1D)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        Threads.@threads for h in 1:Nh
-            for i in 1:Nq
-                fn(ColumnIndex((i,), h))
+        if enable_threading()
+            Threads.@threads for h in 1:Nh
+                for i in 1:Nq
+                    fn(ColumnIndex((i,), h))
+                end
+            end
+        else
+            for h in 1:Nh
+                for i in 1:Nq
+                    fn(ColumnIndex((i,), h))
+                end
             end
         end
     end
@@ -77,9 +85,17 @@ function bycolumn(fn, space::Spaces.SpectralElementSpace2D)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        Threads.@threads for h in 1:Nh
-            for j in 1:Nq, i in 1:Nq
-                fn(ColumnIndex((i, j), h))
+        if enable_threading()
+            Threads.@threads for h in 1:Nh
+                for j in 1:Nq, i in 1:Nq
+                    fn(ColumnIndex((i, j), h))
+                end
+            end
+        else
+            for h in 1:Nh
+                for j in 1:Nq, i in 1:Nq
+                    fn(ColumnIndex((i, j), h))
+                end
             end
         end
     end
