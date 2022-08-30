@@ -13,7 +13,7 @@ Here is a sbatch script template for setting up simulations on caltech central h
 #SBATCH --output=$YOUR_SIMULATION_LOG_DIR/simulation.log
 
 module purge
-module load julia/1.7.2 openmpi/4.0.0
+module load julia/1.8.0 openmpi/4.0.0
 
 export JULIA_MPI_BINARY=system
 export JULIA_CUDA_USE_BINARYBUILDER=false
