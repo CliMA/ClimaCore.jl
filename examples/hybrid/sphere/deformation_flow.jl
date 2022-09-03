@@ -289,39 +289,50 @@ tracer_ranges(sol) =
 ref_sol = run_deformation_flow(false, nothing)
 lim_sol = run_deformation_flow(true, nothing)
 fct_sol = run_deformation_flow(false, FCTZalesak)
+lim_fct_sol = run_deformation_flow(true, FCTZalesak)
 
 ref_ρ_err, ref_ρq_errs = conservation_errors(ref_sol)
 lim_ρ_err, lim_ρq_errs = conservation_errors(lim_sol)
 fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
+lim_fct_ρ_err, lim_fct_ρq_errs = conservation_errors(lim_fct_sol)
 
 # Check that the conservation errors are not too big.
 @test abs(ref_ρ_err) < (FT == Float64 ? 1e-14 : 2e-5)
 @test all(abs.(ref_ρq_errs) .< 3 * abs(ref_ρ_err))
 
 # Check that the limiter and FCT have no effect on ρ.
-@test ref_ρ_err == lim_ρ_err == fct_ρ_err
+@test ref_ρ_err == lim_ρ_err == fct_ρ_err == lim_fct_ρ_err
 
 # Check that the error of the tracer with q = 1 is nearly the same as that of ρ.
 @test ref_ρq_errs[5] ≈ ref_ρ_err atol = 2eps(FT)
 @test lim_ρq_errs[5] ≈ lim_ρ_err atol = eps(FT)
 @test fct_ρq_errs[5] ≈ fct_ρ_err atol = 2eps(FT)
+@test lim_fct_ρq_errs[5] ≈ lim_fct_ρ_err atol = 2eps(FT)
 
 # Check that the limiter and FCT do not significantly change the tracer errors.
 @test all(.≈(lim_ρq_errs, ref_ρq_errs, rtol = 0.3))
 @test all(.≈(fct_ρq_errs, ref_ρq_errs, rtol = 0.3))
+@test all(.≈(lim_fct_ρq_errs, ref_ρq_errs, rtol = 0.3))
 
 # Check that the limiter and FCT improve the "smoothness" of the tracers.
 @test all(tracer_roughnesses(lim_sol) .< tracer_roughnesses(ref_sol) .* 0.8)
 @test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(ref_sol) .* 1.0)
+@test all(tracer_roughnesses(lim_fct_sol) .< tracer_roughnesses(ref_sol) .* 0.8)
 @test all(tracer_ranges(lim_sol) .< tracer_ranges(ref_sol) .* 0.6)
 @test all(tracer_ranges(fct_sol) .< tracer_ranges(ref_sol) .* 0.9)
+@test all(tracer_ranges(lim_fct_sol) .< tracer_ranges(ref_sol) .* 0.5)
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
 path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
-for (sol, suffix) in ((ref_sol, ""), (lim_sol, "_lim"), (fct_sol, "_fct"))
+for (sol, suffix) in (
+    (ref_sol, ""),
+    (lim_sol, "_lim"),
+    (fct_sol, "_fct"),
+    (lim_fct_sol, "_lim_fct"),
+)
     for (sol_index, day) in ((1, 6), (2, 12))
         Plots.png(
             Plots.plot(
