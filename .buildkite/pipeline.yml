@@ -972,14 +972,12 @@ steps:
 
   - label: ":rocket::computer: Flamegraph profile"
     key: "cpu_flamegraph"
-    depends_on: "cpu_allocations"
-    allow_dependency_failure: true
-    env:
-      CI_PERF_CPUPROFILE: "true"
+    depends_on: "cpu_allocations"  # TODO: is this necessary?
+    allow_dependency_failure: true # TODO: is this necessary?
     command:
       - "julia --color=yes --project=perf perf/flame.jl"
     artifact_paths:
-      - "perf/output/*.cpuprofile"
+      - "perf/output/*"
     agents:
       config: cpu
       queue: central
