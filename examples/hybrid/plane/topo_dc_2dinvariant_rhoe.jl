@@ -55,8 +55,7 @@ function hvspace_2D(
     hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
         horzspace,
         vert_face_space,
-        Hypsography.LinearAdaption(),
-        z_surface,
+        Hypsography.LinearAdaption(z_surface),
     )
     hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
     return (hv_center_space, hv_face_space)

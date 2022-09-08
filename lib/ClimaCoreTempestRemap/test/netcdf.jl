@@ -316,8 +316,7 @@ end
     fhvspace = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vfspace,
-        Hypsography.LinearAdaption(),
-        z_surface,
+        Hypsography.LinearAdaption(z_surface),
     )
     chvspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fhvspace)
 

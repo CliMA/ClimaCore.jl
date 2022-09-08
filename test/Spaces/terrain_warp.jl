@@ -58,8 +58,7 @@ function warpedspace_2D(
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
-        Hypsography.LinearAdaption(),
-        z_surface,
+        Hypsography.LinearAdaption(z_surface),
     )
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
 
@@ -142,8 +141,7 @@ function warpedspace_3D(
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
-        Hypsography.LinearAdaption(),
-        z_surface,
+        Hypsography.LinearAdaption(z_surface),
     )
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
 

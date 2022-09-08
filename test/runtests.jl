@@ -74,6 +74,9 @@ if !Sys.iswindows()
 @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
 @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
 
+@safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
+@safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end
+
 @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
 
 # now part of buildkite

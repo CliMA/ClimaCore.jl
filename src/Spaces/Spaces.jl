@@ -34,7 +34,7 @@ import .Quadratures
 include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
-include("hybrid.jl")
+include("extruded.jl")
 include("triangulation.jl")
 include("dss.jl")
 

@@ -228,12 +228,10 @@ function def_space_coord(
     type = "dgll",
 ) where {S <: Spaces.Staggering}
     hvar = def_space_coord(nc, space.horizontal_space; type = type)
-    vertical_topology =
-        space.vertical_topology isa
-        ClimaCore.Hypsography.TerrainWarpedIntervalTopology ?
-        space.vertical_topology.topology : space.vertical_topology
-    vvar =
-        def_space_coord(nc, Spaces.FiniteDifferenceSpace{S}(vertical_topology))
+    vvar = def_space_coord(
+        nc,
+        Spaces.FiniteDifferenceSpace{S}(space.vertical_topology),
+    )
     (hvar..., vvar...)
 end
 
