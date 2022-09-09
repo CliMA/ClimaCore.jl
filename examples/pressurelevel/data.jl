@@ -6,6 +6,9 @@ if !isfile(filename)
 end
 
 using ClimaCore
+
+using Interpolations
+using Plots
 # read temperature data
 reader = ClimaCore.InputOutput.HDF5Reader(filename)
 
@@ -26,7 +29,19 @@ z_vec = vec(parent(ClimaCore.Fields.coordinate_field(axes(temperature_col)).z))
 # - handle out-of-range value: have an option to "fill"
 # - should we find z first, then interpolate?
 
-
 # plotting packages:
 # - Plots.jl (has multiple backends)
 # - Makie.jl (GPU-accelerated plotting with 3D support)
+
+"""
+Interpolates from the given input arrays using Interpolations.jl. z_vec must be monotonically increasing.
+"""
+function interpolate_wrapper(z_vec, pressure_vec, alg=FiniteDifferenceMonotonicInterpolation)
+    itp = interpolate(z_vec,pressure_vec,alg())
+    z_vec_q = minimum(z_vec):0.01:maximum(z_vec)
+
+    plot(z_vec,pressure_vec, seriestype=:scatter, label="Data", xlabel = "Z",ylabel="Pressure",title=string(alg))
+    plot!(z_vec_q, itp.(z_vec_q), label="Interpolation")
+
+end
+
