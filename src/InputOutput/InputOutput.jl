@@ -8,6 +8,7 @@ import ..Meshes
 import ..Topologies
 import ..Spaces
 import ..Fields
+import ..Hypsography
 import ..VERSION
 
 include("writers.jl")

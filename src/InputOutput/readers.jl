@@ -321,9 +321,20 @@ function read_space_new(reader, name)
                 read_topology(reader, attrs(group)["vertical_topology"])
             horizontal_space =
                 read_space(reader, attrs(group)["horizontal_space"])
+            hypsography_type = get(attrs(group), "hypsography_type", "Flat")
+            if hypsography_type == "Flat"
+                hypsography = Spaces.Flat()
+            elseif hypsography_type == "LinearAdaption"
+                hypsography = Hypsography.LinearAdaption(
+                    read_field(reader, attrs(group)["hypsography_surface"]),
+                )
+            else
+                error("Unsupported hypsography type $hypsography_type")
+            end
             return Spaces.ExtrudedFiniteDifferenceSpace(
                 horizontal_space,
                 Spaces.CenterFiniteDifferenceSpace(vertical_topology),
+                hypsography,
             )
         end
     end
