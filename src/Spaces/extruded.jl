@@ -2,10 +2,21 @@
 ##### Hybrid mesh
 #####
 
+abstract type HypsographyAdaption end
+
+"""
+    Flat()
+
+No surface hypsography.
+"""
+struct Flat <: HypsographyAdaption end
+
+
 struct ExtrudedFiniteDifferenceSpace{
     S <: Staggering,
     H <: AbstractSpace,
     T <: Topologies.AbstractIntervalTopology,
+    A <: HypsographyAdaption,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     LGG,
@@ -13,6 +24,7 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
     horizontal_space::H
     vertical_topology::T
+    hypsography::A
     global_geometry::GG
     center_local_geometry::LG
     face_local_geometry::LG
@@ -43,6 +55,7 @@ function ExtrudedFiniteDifferenceSpace{S}(
         S(),
         space.horizontal_space,
         space.vertical_topology,
+        space.hypsography,
         space.global_geometry,
         space.center_local_geometry,
         space.face_local_geometry,
@@ -77,6 +90,7 @@ ghost_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_space::V,
+    hypsography::Flat = Flat(),
 ) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
     staggering = vertical_space.staggering
     vertical_topology = vertical_space.topology
@@ -112,6 +126,7 @@ function ExtrudedFiniteDifferenceSpace(
         staggering,
         horizontal_space,
         vertical_topology,
+        hypsography,
         global_geometry,
         center_local_geometry,
         face_local_geometry,

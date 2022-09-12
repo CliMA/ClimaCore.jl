@@ -366,6 +366,14 @@ function write_new!(
         "vertical_topology",
         write!(writer, space.vertical_topology),
     )
+    if space.hypsography isa Hypsography.LinearAdaption
+        write_attribute(group, "hypsography_type", "LinearAdaption")
+        write_attribute(
+            group,
+            "hypsography_surface",
+            write!(writer, space.hypsography.surface, "_z_surface/$name"),
+        )
+    end
     return name
 end
 
