@@ -2,7 +2,7 @@ module Hypsography
 
 import ..slab, ..column
 import ..Geometry, ..Domains, ..Topologies, ..Spaces, ..Fields, ..Operators
-import ..Spaces: HypsographyAdaption, Flat
+import ..Spaces: ExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
 
 using StaticArrays, LinearAlgebra
 
@@ -12,17 +12,39 @@ using StaticArrays, LinearAlgebra
 Locate the levels by linear interpolation between the surface field and the top
 of the domain, using the method of [GalChen1975](@cite).
 """
-struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
+struct LinearAdaption{F <: Union{Fields.Field, Nothing}} <: HypsographyAdaption
+    # Union can be removed once deprecation removed.
     surface::F
 end
 
+# deprecated in 0.10.12
+LinearAdaption() = LinearAdaption(nothing)
+
+@deprecate(
+    ExtrudedFiniteDifferenceSpace(
+        horizontal_space::Spaces.AbstractSpace,
+        vertical_space::Spaces.FiniteDifferenceSpace,
+        adaption::LinearAdaption{Nothing},
+        z_surface::Fields.Field,
+    ),
+    ExtrudedFiniteDifferenceSpace(
+        horizontal_space,
+        vertical_space,
+        LinearAdaption(z_surface),
+    ),
+    false
+)
+
 # linear coordinates
-function Spaces.ExtrudedFiniteDifferenceSpace(
+function ExtrudedFiniteDifferenceSpace(
     horizontal_space::Spaces.AbstractSpace,
     vertical_space::Spaces.FiniteDifferenceSpace,
     adaption::HypsographyAdaption,
 )
     if adaption isa LinearAdaption
+        if isnothing(adaption.surface)
+            error("LinearAdaption requires a Field argument")
+        end
         if axes(adaption.surface) !== horizontal_space
             error("Terrain must be defined on the horizontal space")
         end
