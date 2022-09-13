@@ -14,11 +14,13 @@ using Makie, GLMakie, ClimaCoreMakie
 
 n = ClimaCore.Spaces.nlevels(axes(T))
 
-# plot the lowest level (surface)
-plot(ClimaCore.level(T,1))
-
-# plot the mid level
-plot(ClimaCore.level(T,n÷2))
-
-# plot the highest level
-plot(ClimaCore.level(T,n))
+begin
+    fig = Figure()
+    level_s = Slider(fig[2, 1], range = 1:n)
+    # plot level at slider
+    level_field = map(level_s.value) do n
+        ClimaCore.level(T, n)
+    end
+    plot(fig[1, 1], level_field, axis=(show_axis=false,))
+    fig
+end
