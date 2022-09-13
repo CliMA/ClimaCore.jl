@@ -13,7 +13,7 @@ Here is a sbatch script template for setting up simulations on caltech central h
 #SBATCH --output=$YOUR_SIMULATION_LOG_DIR/simulation.log
 
 module purge
-module load julia/1.8.0 openmpi/4.0.0
+module load julia/1.8.1 openmpi/4.1.1
 
 export JULIA_MPI_BINARY=system
 export JULIA_CUDA_USE_BINARYBUILDER=false
@@ -39,7 +39,7 @@ In the runscript, one needs to specify the following environmant variable:
 
 Meanwhile, to enable multithreads, one needs to change [here](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/driver.jl#L51) in `driver.jl` to be `enable_threading() = true`.
 
-To use `sphere/held_suarez_rhoe` as an example, one needs to modify [these lines](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/sphere/held_suarez_rhoe.jl#L6-L16) into the specific setup. In particular, `dt_save_to_disk=FT(0)` means no jld2 outputs. A non-zero value specifies the frequency in seconds to save the data into jld2 files. 
+To use `sphere/held_suarez_rhoe` as an example, one needs to modify [these lines](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/sphere/held_suarez_rhoe.jl#L6-L16) into the specific setup. In particular, `dt_save_to_disk=FT(0)` means no jld2 outputs. A non-zero value specifies the frequency in seconds to save the data into jld2 files.
 
 
 ## Remapping the CG nodal outputs in `jld2` onto the regular lat/lon grids and save into `nc` files
