@@ -71,7 +71,11 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     quad = Spaces.Quadratures.GLL{Nq}()
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.DistributedTopology2D(
+        context,
+        mesh,
+        Topologies.spacefillingcurve(mesh),
+    )
     global_grid_topology = Topologies.Topology2D(mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
@@ -146,13 +150,21 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     ClimaComms.barrier(context)
     for i in 1:nsamples # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
-            weighted_dss_full!(Y, ghost_buffer)
+            @nvtx "start" color = colorant"brown" begin
+                Spaces.weighted_dss_start!(Y, ghost_buffer)
+            end
+            @nvtx "internal" color = colorant"blue" begin
+                Spaces.weighted_dss_internal!(Y, ghost_buffer)
+            end
+            @nvtx "ghost" color = colorant"yellow" begin
+                Spaces.weighted_dss_ghost!(Y, ghost_buffer)
+            end
         end
     end
     ClimaComms.barrier(context)
 
     for i in 1:nsamples # profiling dss_comms
-        @nvtx "dss-comms-loop" color = colorant"blue" begin
+        @nvtx "dss-comms-loop" color = colorant"green" begin
             dss_comms!(grid_topology, Y, ghost_buffer)
         end
     end
