@@ -72,8 +72,14 @@ function hybrid3dcubedsphere_dss_profiler(
     z_stretch_string = "uniform"
     horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = h_elem)
 
-    h_space, comms_ctx =
-        make_distributed_horizontal_space(horizontal_mesh, npoly, comms_ctx)
+    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    h_topology = Topologies.DistributedTopology2D(
+        comms_ctx,
+        horizontal_mesh,
+        Topologies.spacefillingcurve(horizontal_mesh),
+    )
+    h_space = Spaces.SpectralElementSpace2D(h_topology, quad)
+
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
@@ -150,6 +156,30 @@ function hybrid3dcubedsphere_dss_profiler(
     end
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms_other /= FT(nsamples)
+
+    # profiling
+    ClimaComms.barrier(comms_ctx)
+    for i in 1:nsamples # profiling weighted dss
+        @nvtx "dss-loop" color = colorant"green" begin
+            @nvtx "start" color = colorant"brown" begin
+                Spaces.weighted_dss_start!(Y.f, ghost_buffer.f)
+            end
+            @nvtx "internal" color = colorant"blue" begin
+                Spaces.weighted_dss_internal!(Y.f, ghost_buffer.f)
+            end
+            @nvtx "ghost" color = colorant"yellow" begin
+                Spaces.weighted_dss_ghost!(Y.f, ghost_buffer.f)
+            end
+        end
+    end
+    ClimaComms.barrier(comms_ctx)
+
+    for i in 1:nsamples # profiling dss_comms
+        @nvtx "dss-comms-loop" color = colorant"green" begin
+            dss_comms!(horizontal_topology, Y.f, ghost_buffer.f)
+        end
+    end
+    ClimaComms.barrier(comms_ctx)
 
     if iamroot
         println("# of samples = $nsamples")
