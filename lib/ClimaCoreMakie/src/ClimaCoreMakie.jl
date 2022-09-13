@@ -4,7 +4,11 @@ import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f
 import ClimaCore
 
 @recipe(Viz, field) do scene
-    return Makie.Attributes(; colormap = :balance, shading = false, colorrange=Makie.automatic)
+    return Makie.Attributes(;
+        colormap = :balance,
+        shading = false,
+        colorrange = Makie.automatic,
+    )
 end
 
 Makie.plottype(::ClimaCore.Fields.SpectralElementField2D) =
@@ -57,7 +61,7 @@ function Makie.plot!(
         color = colors,
         colormap = plot.colormap,
         shading = plot.shading,
-        colorrange = plot.colorrange
+        colorrange = plot.colorrange,
     )
 end
 

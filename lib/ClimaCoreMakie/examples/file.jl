@@ -27,9 +27,14 @@ end
 begin
     fig = Figure()
     ax = GeoAxis(fig[1, 1])
-    ax2 = LScene(fig[1, 2]; show_axis=false)
+    ax2 = LScene(fig[1, 2]; show_axis = false)
     colorrange = extrema(hcat(vec.(parent.(ClimaCore.level.((T,), 1:n)))...))
-    level_s = Colorbar(fig[2, :], colorrange=colorrange, colormap=:balance, vertical = false)
+    level_s = Colorbar(
+        fig[2, :],
+        colorrange = colorrange,
+        colormap = :balance,
+        vertical = false,
+    )
     level_s = Slider(fig[3, :], range = 1:n)
 
     field = ClimaCore.level(T, n)
@@ -47,8 +52,16 @@ begin
     scalars = map(level_field) do field
         Float32.(vec(parent(field)))
     end
-    mesh!(ax, vertices, triangles; color=scalars, shading=false, colormap=:balance, colorrange=colorrange)
-    plot!(ax2, level_field, colorrange=colorrange)
+    mesh!(
+        ax,
+        vertices,
+        triangles;
+        color = scalars,
+        shading = false,
+        colormap = :balance,
+        colorrange = colorrange,
+    )
+    plot!(ax2, level_field, colorrange = colorrange)
 
     fig
 end
