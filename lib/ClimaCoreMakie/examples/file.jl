@@ -2,7 +2,10 @@ using Downloads
 
 filename = "day600.0.hdf5"
 if !isfile(filename)
-    Downloads.download("https://caltech.box.com/shared/static/uy2l2prwzb4mik49aajhodhym5fb7d7l.hdf5", filename)
+    Downloads.download(
+        "https://caltech.box.com/shared/static/uy2l2prwzb4mik49aajhodhym5fb7d7l.hdf5",
+        filename,
+    )
 end
 
 using ClimaCore
@@ -21,6 +24,6 @@ begin
     level_field = map(level_s.value) do n
         ClimaCore.level(T, n)
     end
-    plot(fig[1, 1], level_field, axis=(show_axis=false,))
+    plot(fig[1, 1], level_field, axis = (show_axis = false,))
     fig
 end
