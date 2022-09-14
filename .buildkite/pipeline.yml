@@ -161,7 +161,8 @@ steps:
     agents:
       config: cpu
       queue: central
-      slurm_ntasks: 3
+      slurm_nodes: 3
+      slurm_tasks_per_node: 1
 
   - label: ":computer: Column Heat Diffusion Eq"
     key: "cpu_column_heat"
