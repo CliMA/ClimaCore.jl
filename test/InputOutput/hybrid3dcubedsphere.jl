@@ -16,14 +16,18 @@ if usempi
     using ClimaCommsMPI, MPI
     const comms_ctx = ClimaCommsMPI.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
-    filename = MPI.bcast(tempname(), 0, MPI.COMM_WORLD)
+    # use same filename on all processes
+    # must be accessible by all procs
+    filename = tempname(pwd())
+    filename = MPI.bcast(filename, 0, MPI.COMM_WORLD)
     if ClimaComms.iamroot(comms_ctx)
-        @info "Distributed test" nprocs
+        @info "Distributed test" nprocs filename
     end
 else
     const comms_ctx = ClimaComms.SingletonCommsContext()
     ClimaComms.init(comms_ctx)
     filename = tempname()
+    @info "Single process test" filename
 end
 
 @testset "HDF5 restart test for 3d hybrid cubed sphere" begin
