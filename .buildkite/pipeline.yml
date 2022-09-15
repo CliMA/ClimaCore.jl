@@ -91,6 +91,16 @@ steps:
       slurm_mem: 64GB
       slurm_ntasks: 1
 
+  - label: ":computer: Field broadcast performance"
+    key: "cpu_field_broadcast_perf"
+    command:
+      - "julia --color=yes --project=test test/Fields/field_bc.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_mem: 64GB
+      slurm_ntasks: 1
+
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
     command:

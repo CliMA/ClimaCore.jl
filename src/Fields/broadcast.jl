@@ -129,7 +129,7 @@ function Base.similar(
     return Field(similar(todata(bc), Eltype), axes(bc))
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::Field,
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
 )
