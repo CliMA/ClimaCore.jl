@@ -426,7 +426,7 @@ end
     return dest
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
 ) where {S, Nij}
@@ -439,7 +439,7 @@ function Base.copyto!(
     return dest
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::IFH{S, Ni},
     bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
 ) where {S, Ni}
@@ -489,7 +489,7 @@ end
     return dest
 end
 
-function _serial_copyto!(
+@inline function _serial_copyto!(
     dest::VIFH{S, Ni},
     bc::Union{VIFH{S, Ni, A}, Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
 ) where {S, Ni, A}
@@ -503,7 +503,7 @@ function _serial_copyto!(
     return dest
 end
 
-function _threaded_copyto!(
+@inline function _threaded_copyto!(
     dest::VIFH{S, Ni},
     bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -522,14 +522,14 @@ function _threaded_copyto!(
     return dest
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::VIFH{S, Ni},
     source::VIFH{S, Ni, A},
 ) where {S, Ni, A}
     return _serial_copyto!(dest, source)
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::VIFH{S, Ni},
     bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -539,7 +539,7 @@ function Base.copyto!(
     return _serial_copyto!(dest, bc)
 end
 
-function _serial_copyto!(
+@inline function _serial_copyto!(
     dest::VIJFH{S, Nij},
     bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
 ) where {S, Nij, A}
@@ -553,7 +553,7 @@ function _serial_copyto!(
     return dest
 end
 
-function _threaded_copyto!(
+@inline function _threaded_copyto!(
     dest::VIJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}
@@ -572,14 +572,14 @@ function _threaded_copyto!(
     return dest
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::VIJFH{S, Nij},
     source::VIJFH{S, Nij, A},
 ) where {S, Nij, A}
     return _serial_copyto!(dest, source)
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     dest::VIJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}
