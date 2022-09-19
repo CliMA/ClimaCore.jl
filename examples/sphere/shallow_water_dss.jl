@@ -64,6 +64,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     if iamroot
         println("running distributed DSS using $nprocs processes")
     end
+    GC.gc(false)
     # Set up discretization
     ne = 9 # the rossby_haurwitz test case's initial state has a singularity at the pole. We avoid it by using odd number of elements
     Nq = npoly + 1
@@ -82,6 +83,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     Y = set_initial_condition(space)
     ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y) : nothing
     nsamples = 10000
+    nprofilesamples = 1000
 
     # precompile relevant functions
     Spaces.weighted_dss_internal!(Y, ghost_buffer)
@@ -148,7 +150,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
 
     # profiling
     ClimaComms.barrier(context)
-    for i in 1:nsamples # profiling weighted dss
+    for i in 1:nprofilesamples # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
                 Spaces.weighted_dss_start!(Y, ghost_buffer)
@@ -163,7 +165,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     end
     ClimaComms.barrier(context)
 
-    for i in 1:nsamples # profiling dss_comms
+    for i in 1:nprofilesamples # profiling dss_comms
         @nvtx "dss-comms-loop" color = colorant"green" begin
             dss_comms!(grid_topology, Y, ghost_buffer)
         end

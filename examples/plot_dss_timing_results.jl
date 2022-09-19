@@ -62,6 +62,7 @@ for i in 1:npoly
     log2nprocs[i] .= log2.(nprocs[i])
 end
 xticksstr = (log2nprocs[1], [string(i) for i in nprocs[1]])
+
 kwargs = (
     markershape = [:circle :square],
     markercolor = [:blue :green],
@@ -173,3 +174,62 @@ output_file = replace(output_file, "scaling" => "comparison")
 Plots.plot(plots..., layout = @layout([° °; ° °; ° _]))
 savefig(joinpath(output_dir, "$output_file.png"))
 savefig(joinpath(output_dir, "$output_file.pdf"))
+
+output_file = replace(output_file, "comparison" => "sub-components")
+
+kwargs = (
+    xticks = xticksstr,
+    ylim = (0.0, Inf),
+    ylabel = "time (sec)",
+    xlabel = "# of procs",
+    legendfontsize = 4,
+    legend = :topleft,
+    xlabelfontsize = 6,
+    ylabelfontsize = 6,
+    titlefontsize = 8,
+    left_margin = 5mm,
+    bottom_margin = 5mm,
+    top_margin = 5mm,
+)
+
+plots = Plots.Plot{Plots.GRBackend}[
+    plot(
+        log2nprocs[1],
+        [walltime_dss_full[1] walltime_dss_internal[1]],
+        markercolor = [:blue :green],
+        markershape = [:square :circle],
+        label = ["full DSS" "internal DSS"],
+        title = "Full DSS (npoly = 2)";
+        kwargs...,
+    ),
+    plot(
+        log2nprocs[2],
+        [walltime_dss_full[2] walltime_dss_internal[2]],
+        markercolor = [:blue :green],
+        markershape = [:square :circle],
+        label = ["full DSS" "internal DSS"],
+        title = "Full DSS (npoly = 4)";
+        kwargs...,
+    ),
+    plot(
+        log2nprocs[1],
+        [walltime_dss_comms[1] walltime_dss_comms_fsb[1] walltime_dss_comms_other[1]],
+        markercolor = [:blue :green :red],
+        markershape = [:square :circle :star],
+        label = ["DSS comms" "DSS fill send buffer" "DSS start end"],
+        title = "DSS comms (npoly = 2)";
+        kwargs...,
+    ),
+    plot(
+        log2nprocs[2],
+        [walltime_dss_comms[2] walltime_dss_comms_fsb[2] walltime_dss_comms_other[2]],
+        markercolor = [:blue :green :red],
+        markershape = [:square :circle :star],
+        label = ["DSS comms" "DSS fill send buffer" "DSS start end"],
+        title = "DSS comms (npoly = 4)";
+        kwargs...,
+    ),
+]
+Plots.plot(plots..., layout = @layout([° °; ° °]))
+savefig(joinpath(output_dir, "$output_file.pdf"))
+savefig(joinpath(output_dir, "$output_file.png"))
