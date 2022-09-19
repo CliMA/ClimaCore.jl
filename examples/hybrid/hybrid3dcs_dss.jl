@@ -65,6 +65,7 @@ function hybrid3dcubedsphere_dss_profiler(
     if iamroot
         println("running distributed DSS using $nprocs processes")
     end
+    GC.gc(false)
     R = FT(6.371229e6)
     z_max = FT(30e3)
     z_elem, h_elem = resolution == "low" ? (10, 4) : (45, 24)
@@ -93,24 +94,25 @@ function hybrid3dcubedsphere_dss_profiler(
         f = Spaces.create_ghost_buffer(Y.f),
     )
     nsamples = 10000
+    nprofilesamples = 1000
 
     # precompile relevant functions
-    space = axes(Y.f)
+    space = axes(Y.c)
     horizontal_topology = space.horizontal_space.topology
-    Spaces.weighted_dss_internal!(Y.f, ghost_buffer.f)
-    weighted_dss_full!(Y.f, ghost_buffer.f)
+    Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
+    weighted_dss_full!(Y.c, ghost_buffer.c)
     Spaces.fill_send_buffer!(
         horizontal_topology,
-        Fields.field_values(Y.f),
-        ghost_buffer.f,
+        Fields.field_values(Y.c),
+        ghost_buffer.c,
     )
-    dss_comms!(horizontal_topology, Y.f, ghost_buffer.f)
+    dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
     ClimaComms.barrier(comms_ctx)
 
     # timing
     walltime_dss_full = @elapsed begin # timing weighted dss
         for i in 1:nsamples
-            weighted_dss_full!(Y.f, ghost_buffer.f)
+            weighted_dss_full!(Y.c, ghost_buffer.c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -119,7 +121,7 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_internal = @elapsed begin # timing internal dss
         for i in 1:nsamples
-            Spaces.weighted_dss_internal!(Y.f, ghost_buffer.f)
+            Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -128,7 +130,7 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms = @elapsed begin # timing dss_comms
         for i in 1:nsamples
-            dss_comms!(horizontal_topology, Y.f, ghost_buffer.f)
+            dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -139,8 +141,8 @@ function hybrid3dcubedsphere_dss_profiler(
         for i in 1:nsamples
             Spaces.fill_send_buffer!(
                 horizontal_topology,
-                Fields.field_values(Y.f),
-                ghost_buffer.f,
+                Fields.field_values(Y.c),
+                ghost_buffer.c,
             )
         end
     end
@@ -150,8 +152,8 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms_other = @elapsed begin # timing dss_fill_send_buffer
         for i in 1:nsamples
-            ClimaComms.start(ghost_buffer.f.graph_context)
-            ClimaComms.finish(ghost_buffer.f.graph_context)
+            ClimaComms.start(ghost_buffer.c.graph_context)
+            ClimaComms.finish(ghost_buffer.c.graph_context)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -159,24 +161,24 @@ function hybrid3dcubedsphere_dss_profiler(
 
     # profiling
     ClimaComms.barrier(comms_ctx)
-    for i in 1:nsamples # profiling weighted dss
+    for i in 1:nprofilesamples # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
-                Spaces.weighted_dss_start!(Y.f, ghost_buffer.f)
+                Spaces.weighted_dss_start!(Y.c, ghost_buffer.c)
             end
             @nvtx "internal" color = colorant"blue" begin
-                Spaces.weighted_dss_internal!(Y.f, ghost_buffer.f)
+                Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
             end
             @nvtx "ghost" color = colorant"yellow" begin
-                Spaces.weighted_dss_ghost!(Y.f, ghost_buffer.f)
+                Spaces.weighted_dss_ghost!(Y.c, ghost_buffer.c)
             end
         end
     end
     ClimaComms.barrier(comms_ctx)
 
-    for i in 1:nsamples # profiling dss_comms
+    for i in 1:nprofilesamples # profiling dss_comms
         @nvtx "dss-comms-loop" color = colorant"green" begin
-            dss_comms!(horizontal_topology, Y.f, ghost_buffer.f)
+            dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
         end
     end
     ClimaComms.barrier(comms_ctx)
