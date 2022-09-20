@@ -84,8 +84,9 @@ function HDF5Reader(
         error("Not a ClimaCore HDF5 file")
     end
     file_version = VersionNumber(attrs(file)["ClimaCore version"])
-    if file_version > VERSION
-        @warn "$filename was written using a newer version of ClimaCore than is currently loaded" file_version package_version
+    current_version = VERSION
+    if file_version > current_version
+        @warn "$filename was written using a newer version of ClimaCore than is currently loaded" file_version current_version
     end
     return HDF5Reader(
         file,
