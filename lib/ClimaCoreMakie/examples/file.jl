@@ -36,7 +36,9 @@ begin
     space = axes(field)
     a, b, c = ClimaCore.Spaces.triangulate(space)
     triangles = GLTriangleFace.(a, b, c)
-    vertices = Point2f.(vec(long), vec(lat))
+    cf = ClimaCore.Fields.coordinate_field(space)
+    long, lat = vec.(parent.((cf.long, cf.lat)))
+    vertices = Point2f.(long, lat)
     # plot level at slider
     level_field = map(level_s.value) do n
         ClimaCore.level(T, n)
