@@ -236,7 +236,7 @@ InputOutput.write!
 ```
 
 ### Readers
-```
+```@docs
 InputOutput.HDF5Reader
 InputOutput.read_domain
 InputOutput.read_mesh
