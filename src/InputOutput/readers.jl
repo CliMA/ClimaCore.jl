@@ -57,9 +57,30 @@ HDF5 library with MPI support.
 
 ```julia
 reader = InputOutput.HDF5Reader(filename)
-field = read_field(reader, "Y")
+Y = read_field(reader, "Y")
+Y.c |> propertynames
+Y.f |> propertynames
+ρ_field = read_field(reader, "Y.c.ρ")
+w_field = read_field(reader, "Y.f.w")
 close(reader)
 ```
+
+To explore the contents of the `reader`, use either
+```julia
+julia> reader |> propertynames
+``` 
+e.g, to explore the components of the `space`, 
+```julia
+julia> reader.space_cache
+Dict{Any, Any} with 3 entries:
+  "center_extruded_finite_difference_space" => CenterExtrudedFiniteDifferenceSpace:…
+  "horizontal_space"                        => SpectralElementSpace2D:…
+  "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
+``` 
+
+Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
+fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
+
 """
 struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     file::HDF5.File
