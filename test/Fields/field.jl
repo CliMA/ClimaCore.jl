@@ -365,13 +365,17 @@ end
 
 @testset "(Domain/Column)-surface broadcasting" begin
     FT = Float64
-    function domain_surface_bc!(x, ᶜz_surf)
+    function domain_surface_bc!(x, ᶜz_surf, ᶜx_surf)
         @. x = x + ᶜz_surf
+        # exercises broadcast_shape(PointSpace, PointSpace)
+        @. x = x + (ᶜz_surf * ᶜx_surf)
         nothing
     end
-    function column_surface_bc!(x, ᶜz_surf)
+    function column_surface_bc!(x, ᶜz_surf, ᶜx_surf)
         Fields.bycolumn(axes(x)) do colidx
             @. x[colidx] = x[colidx] + ᶜz_surf[colidx]
+            # exercises broadcast_shape(PointSpace, PointSpace)
+            @. x[colidx] = x[colidx] + (ᶜz_surf[colidx] * ᶜx_surf[colidx])
         end
         nothing
     end
@@ -381,13 +385,20 @@ end
         Y = FieldFromNamedTuple(space, (; x = FT(1)))
         ᶜz_surf =
             Spaces.level(Fields.coordinate_field(Y.x).z, fc_index(1, space))
-        @test_broken begin
-            try
-                domain_surface_bc!(Y.x, ᶜz_surf)
-                true
-            catch
-                false
+        ᶜx_surf = Spaces.level(Y.x, fc_index(1, space))
+
+        # Still need to define broadcast rules for surface planes with 3D domains
+        if nameof(typeof(space)) == :ExtrudedFiniteDifferenceSpace
+            @test_broken begin
+                try
+                    domain_surface_bc!(Y.x, ᶜz_surf)
+                    true
+                catch
+                    false
+                end
             end
+        else
+            domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         end
         # Skip spaces incompatible with Fields.bycolumn:
         (
@@ -395,14 +406,7 @@ end
             space isa Spaces.SpectralElementSpace1D ||
             space isa Spaces.SpectralElementSpace2D
         ) || continue
-        @test_broken begin
-            try
-                column_surface_bc!(Y.x, ᶜz_surf)
-                true
-            catch
-                false
-            end
-        end
+        column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         nothing
     end
     nothing
