@@ -84,6 +84,22 @@ struct DistributedTopology2D{
 
     "a NamedTuple of vectors of `(e,face)` "
     boundaries::BF
+
+    "total number of unique non-boundary vertices"
+    nglobalvertices::Int
+    "total number of unique non-boundary faces"
+    nglobalfaces::Int
+    "global id for each unique ghost vertex"
+    ghost_vertex_gidx::Vector{Int}
+    "global id for each unique ghost face"
+    ghost_face_gidx::Vector{Int}
+    "number of unique vertices to be communicated to neighboring processes"
+    comm_vertex_lengths::Vector{Int}
+    "number of unique faces to be communicated to each neighboring process"
+    comm_face_lengths::Vector{Int}
+    ghost_vertex_neighbor_loc::Vector{Int}
+    ghost_vertex_comm_idx_offset::Vector{Int}
+    ghost_face_neighbor_loc::Vector{Int}
 end
 
 """
@@ -158,7 +174,35 @@ function DistributedTopology2D(
     for (lidx, gidx) in enumerate(local_elem_gidx)
         global_elem_lidx[gidx] = lidx
     end
-
+    # build global vertex and face idx
+    global_vertex_gidx = zeros(Int, 4, Meshes.nelements(mesh))
+    global_face_gidx = zeros(Int, 4, Meshes.nelements(mesh))
+    gvid, gfid = 1, 1
+    for elem in Meshes.elements(mesh)
+        ielem = orderindex[elem]
+        for (face, vert) in zip(1:4, 1:4)
+            if global_vertex_gidx[vert, ielem] == 0
+                for (velem, vvert) in Meshes.SharedVertices(mesh, elem, vert)
+                    ivelem = orderindex[velem]
+                    global_vertex_gidx[vvert, ivelem] = gvid
+                end
+                gvid += 1
+            end
+            if !Meshes.is_boundary_face(mesh, elem, face)
+                if global_face_gidx[face, ielem] == 0
+                    opelem, opface, reversed =
+                        Meshes.opposing_face(mesh, elem, face)
+                    iopelem = orderindex[opelem]
+                    global_face_gidx[face, ielem] = gfid
+                    global_face_gidx[opface, iopelem] = gfid
+                    gfid += 1
+                end
+            end
+        end
+    end
+    nglobalvertices = gvid - 1
+    nglobalfaces = gfid - 1
+    pid == 1 && @show (nglobalvertices, nglobalfaces)
     # convention
     #  - elem: an element of the Mesh (often a CartesianIndex object)
     #  - gidx (global element index): this is a unique numbering of all elements
@@ -351,6 +395,42 @@ function DistributedTopology2D(
             end
         end
     end
+    # 6). 
+    comm_vertex_lengths = zeros(Int, length(send_elem_pids))
+    ghost_vertex_neighbor_loc = Int[]
+    ghost_vertex_comm_idx_offset = ones(Int, length(ghost_vertex_offset))
+    ghost_vertex_gidx = zeros(Int, length(ghost_vertex_offset) - 1)
+    for (i, vertex) in
+        enumerate(VertexIterator(ghost_vertices, ghost_vertex_offset))
+        procs = Int[]
+        for (isghost, idx, lvert) in vertex
+            isghost && push!(procs, elempid[recv_elem_gidx[idx]])
+            if ghost_vertex_gidx[i] == 0
+                ghost_vertex_gidx[i] =
+                    isghost ? global_vertex_gidx[lvert, recv_elem_gidx[idx]] :
+                    global_vertex_gidx[lvert, local_elem_gidx[idx]]
+            end
+        end
+        unique!(procs)
+        ghost_vertex_comm_idx_offset[i + 1] =
+            ghost_vertex_comm_idx_offset[i] + length(procs)
+        for pr in procs
+            loc = findfirst(send_elem_pids .== pr)
+            push!(ghost_vertex_neighbor_loc, loc)
+            comm_vertex_lengths[loc] += 1
+        end
+    end
+    # 7). 
+    comm_face_lengths = zeros(Int, length(send_elem_pids))
+    ghost_face_neighbor_loc = Vector{Int}(undef, length(ghost_faces))
+    ghost_face_gidx = zeros(Int, length(ghost_faces))
+    for (i, (e, face, o, oface, reversed)) in enumerate(ghost_faces)
+        ghostelem = recv_elem_gidx[o]
+        loc = findfirst(send_elem_pids .== elempid[ghostelem])
+        comm_face_lengths[loc] += 1
+        ghost_face_neighbor_loc[i] = loc
+        ghost_face_gidx[i] = global_face_gidx[face, local_elem_gidx[e]]
+    end
 
     return DistributedTopology2D(
         context,
@@ -375,8 +455,105 @@ function DistributedTopology2D(
         ghost_neighbor_elem,
         ghost_neighbor_elem_offset,
         boundaries,
+        nglobalvertices,
+        nglobalfaces,
+        ghost_vertex_gidx,
+        ghost_face_gidx,
+        comm_vertex_lengths,
+        comm_face_lengths,
+        ghost_vertex_neighbor_loc,
+        ghost_vertex_comm_idx_offset,
+        ghost_face_neighbor_loc,
     )
 end
+
+function compute_ghost_send_recv_idx(topology::DistributedTopology2D, Nq)
+    (;
+        context,
+        neighbor_pids,
+        comm_vertex_lengths,
+        comm_face_lengths,
+        ghost_vertex_gidx,
+        ghost_face_gidx,
+        ghost_vertex_neighbor_loc,
+        ghost_vertex_comm_idx_offset,
+        ghost_face_neighbor_loc,
+        nglobalvertices,
+        nglobalfaces,
+    ) = topology
+    nfacedof = Nq - 2
+    comm_lengths = comm_vertex_lengths .+ (comm_face_lengths .* nfacedof)
+    ghost_face_ugidx = ghost_face_gidx .+ nglobalvertices # unique id for both vertices and faces
+
+    send_data = Array{Int}(undef, sum(comm_lengths))
+    recv_data = similar(send_data)
+
+    graph_context = ClimaComms.graph_context(
+        context,
+        send_data,
+        comm_lengths,
+        neighbor_pids,
+        recv_data,
+        comm_lengths,
+        neighbor_pids,
+    )
+
+    send_offset = Int[1]
+    append!(send_offset, cumsum(comm_lengths) .+ 1)
+    send_idx = deepcopy(send_offset)
+    # load send buffer with global vertex idx
+    for (i, gidx) in enumerate(ghost_vertex_gidx)
+        st, en = ghost_vertex_comm_idx_offset[i:(i + 1)]
+        for loc in ghost_vertex_neighbor_loc[st:(en - 1)]
+            send_data[send_idx[loc]] = gidx
+            send_idx[loc] += 1
+        end
+    end
+    # load send buffer with global face idx (shifted)
+    for (i, gidx) in enumerate(ghost_face_ugidx)
+        loc = ghost_face_neighbor_loc[i]
+        send_data[send_idx[loc]] = gidx
+        send_idx[loc] += 1
+        for j in 2:nfacedof
+            send_data[send_idx[loc]] = 0
+            send_idx[loc] += 1
+        end
+    end
+    ClimaComms.start(graph_context)
+    ClimaComms.progress(graph_context)
+    ClimaComms.finish(graph_context)
+    # setup send and recv indexes for ghost vertices
+    ghost_vertex_send_idx = similar(ghost_vertex_neighbor_loc)
+    ghost_vertex_recv_idx = similar(ghost_vertex_neighbor_loc)
+
+    for (i, gidx) in enumerate(ghost_vertex_gidx)
+        st, en = ghost_vertex_comm_idx_offset[i:(i + 1)]
+        for (ctr, loc) in enumerate(ghost_vertex_neighbor_loc[st:(en - 1)])
+            offset = send_offset[loc]
+            ghost_vertex_send_idx[st + ctr - 1] =
+                offset + findfirst(send_data[offset:end] .== gidx) - 1
+            ghost_vertex_recv_idx[st + ctr - 1] =
+                offset + findfirst(recv_data[offset:end] .== gidx) - 1
+        end
+    end
+    # setup send and recv indexes for ghost vertices
+    ghost_face_send_idx = similar(ghost_face_neighbor_loc)
+    ghost_face_recv_idx = similar(ghost_face_neighbor_loc)
+
+    for (i, gidx) in enumerate(ghost_face_ugidx)
+        loc = ghost_face_neighbor_loc[i]
+        offset = send_offset[loc]
+        ghost_face_send_idx[i] =
+            offset + findfirst(send_data[offset:end] .== gidx) - 1
+        ghost_face_recv_idx[i] =
+            offset + findfirst(recv_data[offset:end] .== gidx) - 1
+    end
+    return ghost_vertex_send_idx,
+    ghost_vertex_recv_idx,
+    ghost_face_send_idx,
+    ghost_face_recv_idx
+end
+
 
 domain(topology::DistributedTopology2D) = domain(topology.mesh)
 nelems(topology::DistributedTopology2D) = length(topology.elemorder)
