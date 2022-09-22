@@ -1,3 +1,4 @@
+# These tests require running with `--check-bounds=[auto|no]`
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore
@@ -48,6 +49,30 @@ include(joinpath(@__DIR__, "util_spaces.jl"))
         # bycolumn
         foocolumn!(Yx) # compile first
         p = @allocated foocolumn!(Yx)
+        @test p == 0
+    end
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/949
+@testset "Allocations with getproperty on FieldVectors" begin
+    FT = Float64
+    function allocs_test!(Y)
+        x = Y.x
+        fill!(x, 2.0)
+        nothing
+    end
+    function callfill!(Y)
+        fill!(Y, Ref((; x = 2.0)))
+        nothing
+    end
+    for space in all_spaces(FT)
+        Y = FieldFromNamedTuple(space, (; x = FT(2)))
+        allocs_test!(Y)
+        p = @allocated allocs_test!(Y)
+        @test p == 0
+
+        callfill!(Y)
+        p = @allocated callfill!(Y)
         @test p == 0
     end
 end
