@@ -154,16 +154,16 @@ end
     end
 end
 
-@testset "write remap 3d sphere data $node_type to rll and back" for node_type in
-                                                                     [
-    "cgll",
-    "dgll",
-]
+@testset "write remap 3d sphere data $node_type to rll and back with Nq = $Nq" for node_type in
+                                                                                   [
+        "cgll",
+        "dgll",
+    ],
+    Nq in [4, 5]
     # generate CC mesh
     ne = 4
     R = 1000.0
     nlevels = 10
-    Nq = 4
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
     htopology = Topologies.Topology2D(hmesh)
