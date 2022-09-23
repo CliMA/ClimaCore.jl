@@ -1,9 +1,9 @@
 module ClimaCoreMakie
 
-import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f
+import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f, Observable
 import ClimaCore
 
-@recipe(Viz, field) do scene
+@recipe(Viz, space, scalars) do scene
     return Makie.Attributes(;
         colormap = :balance,
         shading = false,
@@ -14,20 +14,27 @@ end
 Makie.plottype(::ClimaCore.Fields.SpectralElementField2D) =
     Viz{<:Tuple{ClimaCore.Fields.SpectralElementField2D}}
 
-function Makie.plot!(
-    plot::Viz{<:Tuple{ClimaCore.Fields.SpectralElementField2D}},
-)
-    # Use ignore_equal_values to not trigger an update when nothing changes
-    space = lift(plot.field; ignore_equal_values = true) do field
-        if !(eltype(field) <: Union{Float64, Float32})
-            error("plotting only implemented for F64, F32 scalar fields")
-        end
-        return ClimaCore.axes(field)
-    end
 
+function Makie.convert_arguments(
+    ::Type{<:Viz},
+    field::ClimaCore.Fields.SpectralElementField2D,
+)
+    if !(eltype(field) <: Union{Float64, Float32, ClimaCore.Geometry.WVector})
+        error("plotting only implemented for F64, F32 scalar fields")
+    end
+    return ClimaCore.axes(field), Float32.(vec(parent(field)))
+end
+
+function Makie.plot!(
+    plot::Viz{
+        <:Tuple{<:ClimaCore.Spaces.SpectralElementSpace2D, Vector{Float32}},
+    },
+)
+    space = plot.space
     # Only update vertices if global_geometry updates (is this the correct value to check for changes?)
     global_geometry =
         lift(x -> x.global_geometry, space; ignore_equal_values = true)
+
     vertices = lift(global_geometry) do gg
         cartesian =
             ClimaCore.Geometry.Cartesian123Point.(
@@ -52,13 +59,11 @@ function Makie.plot!(
         return GLTriangleFace.(a, b, c)
     end
 
-    colors = lift(x -> Float32.(vec(parent(x))), plot.field)
-
     Makie.mesh!(
         plot,
         vertices,
         triangles,
-        color = colors,
+        color = plot.scalars,
         colormap = plot.colormap,
         shading = plot.shading,
         colorrange = plot.colorrange,
