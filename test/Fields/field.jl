@@ -363,6 +363,55 @@ end
     end
 end
 
+@testset "(Domain/Column)-surface broadcasting" begin
+    FT = Float64
+    function domain_surface_bc!(x, ᶜz_surf, ᶜx_surf)
+        @. x = x + ᶜz_surf
+        # exercises broadcast_shape(PointSpace, PointSpace)
+        @. x = x + (ᶜz_surf * ᶜx_surf)
+        nothing
+    end
+    function column_surface_bc!(x, ᶜz_surf, ᶜx_surf)
+        Fields.bycolumn(axes(x)) do colidx
+            @. x[colidx] = x[colidx] + ᶜz_surf[colidx]
+            # exercises broadcast_shape(PointSpace, PointSpace)
+            @. x[colidx] = x[colidx] + (ᶜz_surf[colidx] * ᶜx_surf[colidx])
+        end
+        nothing
+    end
+    for space in all_spaces(FT)
+        # Filter out spaces without z coordinates:
+        :z in propertynames(Spaces.coordinates_data(space)) || continue
+        Y = FieldFromNamedTuple(space, (; x = FT(1)))
+        ᶜz_surf =
+            Spaces.level(Fields.coordinate_field(Y.x).z, fc_index(1, space))
+        ᶜx_surf = Spaces.level(Y.x, fc_index(1, space))
+
+        # Still need to define broadcast rules for surface planes with 3D domains
+        if nameof(typeof(space)) == :ExtrudedFiniteDifferenceSpace
+            @test_broken begin
+                try
+                    domain_surface_bc!(Y.x, ᶜz_surf)
+                    true
+                catch
+                    false
+                end
+            end
+        else
+            domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
+        end
+        # Skip spaces incompatible with Fields.bycolumn:
+        (
+            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
+            space isa Spaces.SpectralElementSpace1D ||
+            space isa Spaces.SpectralElementSpace2D
+        ) || continue
+        column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
+        nothing
+    end
+    nothing
+end
+
 @testset "Broadcasting same spaces different instances" begin
     space1 = spectral_space_2D()
     space2 = spectral_space_2D()

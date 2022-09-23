@@ -13,6 +13,7 @@ Standard broadcasting on Fields. Delegates the actual work to `DS`.
 struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
+FieldStyle(x::Base.Broadcast.Unknown) = x
 
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(DataStyle(V))
@@ -185,6 +186,21 @@ end
 @inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple{}) = space
 @inline Base.Broadcast.broadcast_shape(::Tuple{}, space::AbstractSpace) = space
 
+@inline Base.Broadcast.broadcast_shape(
+    pointspace::AbstractPointSpace,
+    space::AbstractSpace,
+) = space
+@inline Base.Broadcast.broadcast_shape(
+    space::AbstractSpace,
+    pointspace::AbstractPointSpace,
+) = space
+
+# Avoid method ambiguity:
+@inline Base.Broadcast.broadcast_shape(
+    a::AbstractPointSpace,
+    b::AbstractPointSpace,
+) = a
+
 # Overload broadcast axes shape checking for more useful error message for Field Spaces
 @inline function Base.Broadcast.check_broadcast_shape(
     space1::AbstractSpace,
@@ -213,6 +229,24 @@ end
 @inline function Base.Broadcast.check_broadcast_shape(
     ::AbstractSpace,
     ::Tuple{},
+)
+    return nothing
+end
+@inline function Base.Broadcast.check_broadcast_shape(
+    ::AbstractSpace,
+    ::AbstractPointSpace,
+)
+    return nothing
+end
+@inline function Base.Broadcast.check_broadcast_shape(
+    ::AbstractPointSpace,
+    ::AbstractSpace,
+)
+    return nothing
+end
+@inline function Base.Broadcast.check_broadcast_shape(
+    ::AbstractPointSpace,
+    ::AbstractPointSpace,
 )
     return nothing
 end
