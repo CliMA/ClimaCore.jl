@@ -256,6 +256,14 @@ local_geometry_field(space::AbstractSpace) =
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
 
+"""
+    dz_field(field::Field)
+    dz_field(space::AbstractSpace)
+
+A `Field` containing the `Δz` values on the same space as the given field.
+"""
+dz_field(field::Field) = dz_field(axes(field))
+dz_field(space::AbstractSpace) = Field(Spaces.dz_data(space), space)
 
 include("broadcast.jl")
 include("mapreduce.jl")
