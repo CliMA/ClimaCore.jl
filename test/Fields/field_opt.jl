@@ -7,6 +7,7 @@ import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
 
+using FastBroadcast
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
@@ -68,6 +69,33 @@ end
         callfill!(Y)
         p = @allocated callfill!(Y)
         @test p == 0
+    end
+end
+
+function fast_broadcast_single_field!(Y1, dt, Y2)
+    x = Y1.x
+    @.. x += 2.0
+    nothing
+end
+# Removing dt from argument fixes allocations
+function fast_broadcast_copyto!(Y1, dt, Y2)
+    @.. Y1 = Y2
+    nothing
+end
+# https://github.com/CliMA/ClimaCore.jl/issues/1356
+@testset "Allocations in @.. broadcasting" begin
+    FT = Float32
+    for space in TU.all_spaces(FT)
+        Y1 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
+        Y2 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
+        Y3 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
+        dt = FT(2.0)
+        fast_broadcast_single_field!(Y1, dt, Y2)
+        p = @allocated fast_broadcast_single_field!(Y1, dt, Y2)
+        @test p == 0
+        fast_broadcast_copyto!(Y1, dt, Y2)
+        p = @allocated fast_broadcast_copyto!(Y1, dt, Y2)
+        @test_broken p == 0
     end
 end
 
