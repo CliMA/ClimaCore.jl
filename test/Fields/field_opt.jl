@@ -76,3 +76,34 @@ end
         @test p == 0
     end
 end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/963
+@testset "Allocations StencilCoefs broadcasting" begin
+    sc(::Type{FT}) where {FT} =
+        Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
+    function allocs_test1!(Y)
+        x = Y.x
+        FT = Spaces.undertype(axes(x))
+        I = sc(FT)
+        x .= x .+ Ref(I)
+        nothing
+    end
+    function allocs_test2!(Y)
+        x = Y.x
+        FT = Spaces.undertype(axes(x))
+        I = sc(FT)
+        IR = Ref(sc(FT))
+        @. x += IR
+        nothing
+    end
+    FT = Float64
+    for space in all_spaces(FT)
+        Y = FieldFromNamedTuple(space, (; x = sc(FT)))
+        allocs_test1!(Y)
+        p = @allocated allocs_test1!(Y)
+        @test_broken p == 0
+        allocs_test2!(Y)
+        p = @allocated allocs_test2!(Y)
+        @test_broken p == 0
+    end
+end
