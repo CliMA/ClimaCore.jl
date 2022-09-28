@@ -2,7 +2,7 @@
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore
-import ClimaCore.Utilities: PlusHalf
+import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
@@ -33,11 +33,7 @@ include(joinpath(@__DIR__, "util_spaces.jl"))
         return nothing
     end
     for space in all_spaces(FT)
-        (
-            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-            space isa Spaces.SpectralElementSpace1D ||
-            space isa Spaces.SpectralElementSpace2D
-        ) || continue
+        bycolumnable(space) || continue
         Y = FieldFromNamedTuple(space, (; x = FT(2)))
 
         # Plain broadcast
@@ -78,32 +74,120 @@ end
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/963
-@testset "Allocations StencilCoefs broadcasting" begin
-    sc(::Type{FT}) where {FT} =
-        Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
-    function allocs_test1!(Y)
+sc(::Type{FT}) where {FT} =
+    Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
+function allocs_test1!(Y)
+    x = Y.x
+    FT = Spaces.undertype(axes(x))
+    I = sc(FT)
+    x .= x .+ Ref(I)
+    nothing
+end
+function allocs_test2!(Y)
+    x = Y.x
+    FT = Spaces.undertype(axes(x))
+    IR = Ref(sc(FT))
+    @. x += IR
+    nothing
+end
+function allocs_test1_column!(Y)
+    Fields.bycolumn(axes(Y.x)) do colidx
         x = Y.x
         FT = Spaces.undertype(axes(x))
-        I = sc(FT)
-        x .= x .+ Ref(I)
-        nothing
+        # I = sc(FT)
+        I = Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
+        x[colidx] .= x[colidx] .+ Ref(I)
     end
-    function allocs_test2!(Y)
+    nothing
+end
+function allocs_test2_column!(Y)
+    Fields.bycolumn(axes(Y.x)) do colidx
         x = Y.x
         FT = Spaces.undertype(axes(x))
-        I = sc(FT)
         IR = Ref(sc(FT))
-        @. x += IR
-        nothing
+        @. x[colidx] += IR
     end
+    nothing
+end
+
+function allocs_test3!(Y)
+    Fields.bycolumn(axes(Y.x)) do colidx
+        allocs_test3_column!(Y.x[colidx])
+    end
+    nothing
+end
+
+function allocs_test3_column!(x)
+    FT = Spaces.undertype(axes(x))
+    IR = Ref(Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))))
+    @. x += IR
+    I = Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
+    x .+= Ref(I)
+    nothing
+end
+
+@testset "Allocations StencilCoefs broadcasting" begin
     FT = Float64
     for space in all_spaces(FT)
         Y = FieldFromNamedTuple(space, (; x = sc(FT)))
         allocs_test1!(Y)
         p = @allocated allocs_test1!(Y)
-        @test_broken p == 0
+        @test p == 0
         allocs_test2!(Y)
         p = @allocated allocs_test2!(Y)
+        @test p == 0
+
+        bycolumnable(space) || continue
+
+        allocs_test1_column!(Y)
+        p = @allocated allocs_test1_column!(Y)
+        @test p == 0
+
+        allocs_test2_column!(Y)
+        p = @allocated allocs_test2_column!(Y)
+        @test p == 0
+
+        allocs_test3!(Y)
+        p = @allocated allocs_test3!(Y)
+        @test p == 0
+    end
+end
+nothing
+
+function allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+    Fields.bycolumn(axes(S)) do colidx
+        allocs_test_Ref_with_compose_column!(
+            S[colidx],
+            ∂ᶠ𝕄ₜ∂ᶜρ[colidx],
+            ∂ᶜρₜ∂ᶠ𝕄[colidx],
+        )
+    end
+    nothing
+end
+
+function allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+    compose = Operators.ComposeStencils()
+    FT = Spaces.undertype(axes(S))
+    IR = Ref(Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))))
+    @. S = compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) - IR
+    nothing
+end
+
+@testset "Allocations StencilCoefs Ref with ComposeStencils broadcasting" begin
+    FT = Float64
+    for space in all_spaces(FT)
+        space isa Spaces.CenterExtrudedFiniteDifferenceSpace || continue
+        cspace = space
+        fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
+        bidiag_type = Operators.StencilCoefs{-half, half, NTuple{2, FT}}
+        ∂ᶠ𝕄ₜ∂ᶜρ = Fields.Field(bidiag_type, fspace)
+        ∂ᶜρₜ∂ᶠ𝕄 = Fields.Field(bidiag_type, cspace)
+        tridiag_type = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
+        S = Fields.Field(tridiag_type, fspace)
+
+        allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        p = @allocated allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         @test_broken p == 0
     end
 end
+nothing

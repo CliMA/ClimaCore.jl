@@ -78,3 +78,9 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
 
     return [space1, space2, space3, space4, space5, space6, space7, space8]
 end
+
+bycolumnable(space) = (
+    space isa Spaces.ExtrudedFiniteDifferenceSpace ||
+    space isa Spaces.SpectralElementSpace1D ||
+    space isa Spaces.SpectralElementSpace2D
+)

@@ -402,11 +402,7 @@ end
             domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         end
         # Skip spaces incompatible with Fields.bycolumn:
-        (
-            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-            space isa Spaces.SpectralElementSpace1D ||
-            space isa Spaces.SpectralElementSpace2D
-        ) || continue
+        bycolumnable(space) || continue
         column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         nothing
     end
