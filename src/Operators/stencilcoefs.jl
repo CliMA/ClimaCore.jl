@@ -94,11 +94,12 @@ for op in (:+, :-)
         ($op)(a::StencilCoefs) = map($op, a)
     end
 end
+const OPTYPES = Union{Number, Geometry.AxisTensor}
 for op in (:+, :-, :*, :/, :÷, :\, :^, :%)
     @eval begin
         import Base: $op
         ($op)(a::StencilCoefs, b::StencilCoefs) = map($op, a, b)
-        ($op)(a::StencilCoefs, b) = map(c -> ($op)(c, b), a)
-        ($op)(a, b::StencilCoefs) = map(c -> ($op)(a, c), b)
+        ($op)(a::StencilCoefs, b::OPTYPES) = map(c -> ($op)(c, b), a)
+        ($op)(a::OPTYPES, b::StencilCoefs) = map(c -> ($op)(a, c), b)
     end
 end
