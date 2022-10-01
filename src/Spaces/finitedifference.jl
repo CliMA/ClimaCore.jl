@@ -153,6 +153,27 @@ local_geometry_data(space::CenterFiniteDifferenceSpace) =
 local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
 
+
+"""
+    z_component(::Type{<:Goemetry.AbstractPoint})
+
+The index of the z-component of an abstract point
+in an `AxisTensor`.
+"""
+z_component(::Type{<:Geometry.LatLongZPoint}) = 9
+z_component(::Type{<:Geometry.ZPoint}) = 1
+
+"""
+    dz_data(space::AbstractSpace)
+
+A DataLayout containing the `Δz` on a given space `space`.
+"""
+function dz_data(space::AbstractSpace)
+    lg = local_geometry_data(space)
+    data_layout_type = eltype(lg.coordinates)
+    return getproperty(lg.∂x∂ξ.components.data, z_component(data_layout_type))
+end
+
 function left_boundary_name(space::FiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.topology(space))
     propertynames(boundaries)[1]

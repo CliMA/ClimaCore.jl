@@ -3,7 +3,7 @@ import ClimaCore as CC
 #=
 Return a vector of toy spaces for testing
 =#
-function all_spaces(::Type{FT}) where {FT}
+function all_spaces(::Type{FT}; zelem = 10) where {FT}
 
     # 1d domain space
     domain = CC.Domains.IntervalDomain(
@@ -58,7 +58,6 @@ function all_spaces(::Type{FT}) where {FT}
     radius = FT(128)
     zlim = (0, 1)
     helem = 4
-    zelem = 10
     Nq = 4
 
     vertdomain = CC.Domains.IntervalDomain(

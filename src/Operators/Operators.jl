@@ -21,5 +21,6 @@ include("stencilcoefs.jl")
 include("operator2stencil.jl")
 include("pointwisestencil.jl")
 include("remapping.jl")
+include("integrals.jl")
 
 end # module
