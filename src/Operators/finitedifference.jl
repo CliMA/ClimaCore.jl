@@ -3237,7 +3237,7 @@ allow_mismatched_fd_spaces() = false
 )
 
 function Base.Broadcast.materialize!(
-    ::Base.Broadcast.BroadcastStyle,
+    ::DataLayouts.DataStyle,
     dest::Fields.Field,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractStencilStyle}

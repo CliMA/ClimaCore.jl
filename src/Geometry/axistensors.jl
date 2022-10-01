@@ -177,7 +177,7 @@ Returns a `StaticArray` containing the components of `a` in its stored basis.
 """
 components(a::AxisTensor) = getfield(a, :components)
 
-Base.@propagate_inbounds Base.getindex(v::AxisTensor, i...) =
+Base.@propagate_inbounds Base.getindex(v::AxisTensor, i::Int...) =
     getindex(components(v), i...)
 
 
@@ -226,7 +226,7 @@ import Base: +, -, *, /, \, ==
 @inline *(a::Number, b::AxisTensor) = map(c -> a * c, b)
 @inline *(a::AxisTensor, b::Number) = map(c -> c * b, a)
 @inline /(a::AxisTensor, b::Number) = map(c -> c / b, a)
-@inline \(a, b::AxisTensor) = map(c -> a \ c, b)
+@inline \(a::Number, b::AxisTensor) = map(c -> a \ c, b)
 
 @inline (==)(a::AxisTensor, b::AxisTensor) =
     axes(a) == axes(b) && components(a) == components(b)

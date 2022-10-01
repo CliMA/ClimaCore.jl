@@ -130,6 +130,7 @@ Recursively add elements of `w * X + Y`.
 """
 rmuladd(w::Number, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
 rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
+rmuladd(X::Number, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
 rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 
 """
