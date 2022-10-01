@@ -368,8 +368,14 @@ return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
+Base.@propagate_inbounds function apply_stencil_at_idx(
+    i_vals,
+    stencil,
+    arg,
+    loc,
+    idx,
+    hidx,
+)
     coefs = getidx(stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
     val = zero(eltype(eltype(stencil)))
@@ -380,15 +386,20 @@ function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
     return val
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(::ApplyStencil, loc, idx, hidx, stencil, arg)
+Base.@propagate_inbounds function stencil_interior(
+    ::ApplyStencil,
+    loc,
+    idx,
+    hidx,
+    stencil,
+    arg,
+)
     lbw, ubw = bandwidths(eltype(stencil))
     i_vals = lbw:ubw
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+Base.@propagate_inbounds function stencil_left_boundary(
     ::ApplyStencil,
     ::LeftStencilBoundary,
     loc,
@@ -402,8 +413,7 @@ function stencil_left_boundary(
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+Base.@propagate_inbounds function stencil_right_boundary(
     ::ApplyStencil,
     ::RightStencilBoundary,
     loc,
@@ -447,8 +457,7 @@ function bandwidth_info(stencil1, stencil2)
     return lbw1, ubw1, bw1, bw2
 end
 
-# TODO: find out why using Base.@propagate_inbounds hangs
-function compose_stencils_at_idx(
+Base.@propagate_inbounds function compose_stencils_at_idx(
     ::Type{ir_type},
     stencil1,
     stencil2,
@@ -466,7 +475,7 @@ function compose_stencils_at_idx(
         ntuple(Val(n)) do j
             Base.@_inline_meta
             val = zero(zeroT)
-            for i in get_range(ir_type, stencil1, stencil2, idx, j)
+            @inbounds for i in get_range(ir_type, stencil1, stencil2, idx, j)
                 val =
                     val ⊞
                     coefs1[i - lbw1 + 1] ⊠
@@ -478,8 +487,14 @@ function compose_stencils_at_idx(
     return StencilCoefs{lbw, ubw}(ntup)
 end
 
-# TODO: find out why using Base.@propagate_inbounds hangs
-function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
+Base.@propagate_inbounds function stencil_interior(
+    ::ComposeStencils,
+    loc,
+    idx,
+    hidx,
+    stencil1,
+    stencil2,
+)
     return compose_stencils_at_idx(
         IndexRangeInteriorType,
         stencil1,
@@ -490,8 +505,7 @@ function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
     )
 end
 
-# TODO: find out why using Base.@propagate_inbounds hangs
-function stencil_left_boundary(
+Base.@propagate_inbounds function stencil_left_boundary(
     ::ComposeStencils,
     ::LeftStencilBoundary,
     loc,
@@ -510,8 +524,7 @@ function stencil_left_boundary(
     )
 end
 
-# TODO: find out why using Base.@propagate_inbounds hangs
-function stencil_right_boundary(
+Base.@propagate_inbounds function stencil_right_boundary(
     ::ComposeStencils,
     ::RightStencilBoundary,
     loc,
