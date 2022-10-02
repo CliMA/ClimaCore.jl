@@ -23,6 +23,37 @@ end
 topology(space::AbstractSpectralElementSpace) = space.topology
 quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 
+abstract type AbstractPerimeter end
+
+"""
+    Perimeter2D <: AbstractPerimeter
+
+Iterate over the perimeter degrees of freedom of a 2D spectral element.
+"""
+struct Perimeter2D{Nq} <: AbstractPerimeter end
+
+"""
+    Perimeter2D(Nq)
+
+Construct a perimeter iterator for a 2D spectral element of degree `(Nq-1)`.
+"""
+Perimeter2D(Nq) = Perimeter2D{Nq}()
+
+function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 5
+        return (Topologies.vertex_node_index(loc, Nq), loc + 1)
+    elseif loc ≤ nperimeter2d(Nq)
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1) # face_node_index also counts the bordering vertex dof
+    else
+        return nothing
+    end
+end
+
+nperimeter2d(Nq) = 4 + (Nq - 2) * 4
+nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
+Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 """
     SpectralElementSpace1D <: AbstractSpace
 
@@ -320,6 +351,8 @@ function SpectralElementSpace2D(topology, quadrature_style)
 end
 
 nlevels(space::SpectralElementSpace2D) = 1
+perimeter(space::SpectralElementSpace2D) =
+    Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
 
 const RectilinearSpectralElementSpace2D =
     SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.RectilinearMesh}}
