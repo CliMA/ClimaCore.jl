@@ -155,6 +155,50 @@ end
           Spaces.column(coord_data, 1, 1, 1)[]
 end
 
+@testset "2D perimeter iterator on 2×2 rectangular mesh" begin
+    domain = Domains.RectangleDomain(
+        Domains.IntervalDomain(
+            Geometry.XPoint(-2π),
+            Geometry.XPoint(2π),
+            periodic = true,
+        ),
+        Domains.IntervalDomain(
+            Geometry.YPoint(-2π),
+            Geometry.YPoint(2π),
+            periodic = true,
+        ),
+    )
+    n1, n2 = 2, 2
+    Nq = 5
+    quad = Spaces.Quadratures.GLL{Nq}()
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    grid_topology = Topologies.Topology2D(mesh)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    perimeter = Spaces.perimeter(space)
+
+    reference = [
+        (1, 1),  # vertex 1
+        (Nq, 1), # vertex 2
+        (Nq, Nq),# vertex 3
+        (1, Nq), # vertex 4
+        (2, 1),  # face 1
+        (3, 1),
+        (4, 1),
+        (Nq, 2), # face 2
+        (Nq, 3),
+        (Nq, 4),
+        (4, Nq), # face 3
+        (3, Nq),
+        (2, Nq),
+        (1, 4),  # face 4
+        (1, 3),
+        (1, 2),
+    ]
+    for (p, (ip, jp)) in enumerate(perimeter)
+        @test (ip, jp) == reference[p] # face_node_index also counts the bordering vertex dof
+    end
+end
+
 #=
 @testset "dss on 2×2 rectangular mesh (unstructured)" begin
     FT = Float64
