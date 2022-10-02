@@ -187,7 +187,11 @@ end
 
         allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         p = @allocated allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
-        @test_broken p == 0
+        @test p == 0
+
+        allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        p = @allocated allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        @test p == 0
     end
 end
 nothing
