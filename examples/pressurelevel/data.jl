@@ -81,40 +81,22 @@ function interp_column!(
     pressure_levels::Vector,
 )
     # Setup data for loop
-    out_col_values = Fields.field_values(out_col)
-    data_col_values = Fields.field_values(data_col)
+    out_vec = Fields.field_values(out_col)
+    data_vec = Fields.field_values(data_col)
     z_vec = vec(parent(Fields.coordinate_field(axes(pressure_col)).z))
-    pressure_vec = vec(parent(pressure_col))
-    # Assume pressure is sorted monotonically decreasing, so reverse:
-    itp = interpolate(
-        reverse(pressure_vec),
-        reverse(z_vec),
-        FiniteDifferenceMonotonicInterpolation(),
-    )
-    z_i = 1
+    pressure_vec = [parent(pressure_col)[i] for i in 1:length(parent(pressure_col))]
     for (p_i, p_level) in enumerate(pressure_levels)
         (min_p, max_p) = extrema(pressure_col)
-        if p_level >= min_p && p_level <= max_p
-            z_level = itp(p_level)
-            while z_vec[z_i] < z_level && z_i < length(z_vec)
-                z_i += 1
-            end
-            if z_i > 1
-                data_below = data_col_values[z_i - 1]
-                data_above = data_col_values[z_i]
-                z_below = z_vec[z_i - 1]
-                z_above = z_vec[z_i]
-                fractional_dist = (z_above - z_level) / (z_above - z_below)
-                out_col_values[p_i] =
-                    (data_above - data_below) * fractional_dist + data_below
+        if min_p <= p_level <= max_p
+            j = searchsortedfirst(pressure_vec, p_level; rev=true)
+            if j > 1
+                frac_dist = (pressure_vec[j] - p_level) / (pressure_vec[j] - pressure_vec[j-1])
+                out_vec[p_i] = (data_vec[j] - data_vec[j-1]) * frac_dist + data_vec[j]
             else
-                # Issue: sometimes interpolates to slightly differing values
-                # @assert z_vec[z_i] == z_level
                 # Must be minimal height
-                out_col_values[p_i] = data_col_values[z_i]
+                out_vec[p_i] = data_vec[j]
             end
-            # println(p_level, "--> p interpolated to z --> ", z_level)
-            # println(z_vec[z_i], "--> z-data to p --> ", Fields.field_values(pressure_col)[z_i])
+            # println(p_level, " @index ", p_i, " --> ", pressure_vec[j], " --> ", out_vec[p_i])
         end
     end
 end
@@ -153,7 +135,7 @@ pressure_field = InputOutput.read_field(reader, "diagnostics/pressure")
     out_field = interp_vertical(data_field, pressure_field, pressure_levels)
     @test allNaN(out_field)
 
-    pressure_levels = [1, 6000, 10^12]
+    pressure_levels = [1, 10^12, 6000]
     out_values =
         parent(interp_vertical(data_field, pressure_field, pressure_levels))
     # Only value from 6000 should be filled
@@ -162,5 +144,26 @@ pressure_field = InputOutput.read_field(reader, "diagnostics/pressure")
         i in 1:length(out_values)
     )
 
+    # Test repeating values
+    pressure_levels = [4000, 4000]
+    out_values =
+        parent(interp_vertical(data_field, pressure_field, pressure_levels))
+    @test all(
+        i % 2 == 0 ? out_values[i]==out_values[i-1] : true for
+        i in 1:length(out_values)
+    )
+
 
 end
+
+# # Test bottom and top extremes
+# pressure_levels = [p for p in extrema(pressure_field[Fields.ColumnIndex((1,1),1)])]
+# pcol = pressure_field[Fields.ColumnIndex((1,1),1)]
+# interp_vertical(data_field, pcol, pressure_levels)
+
+
+# # Test all pressure levels in the column
+# pcol = pressure_field[Fields.ColumnIndex((1,1),1)]
+# pcol_values = parent(pcol)
+# pressure_levels = [pcol_values[i] for i in 1:length(pcol_values)]
+# interp_vertical(data_field, pcol, pressure_levels)
