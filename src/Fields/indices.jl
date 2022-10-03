@@ -104,5 +104,27 @@ end
 bycolumn(fn, space::Spaces.ExtrudedFiniteDifferenceSpace) =
     bycolumn(fn, space.horizontal_space)
 
+"""
+    ncolumns(::Field)
+    ncolumns(::Space)
+
+Number of columns in a given space.
+"""
+ncolumns(field::Field) = ncolumns(axes(field))
+
+ncolumns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
+    ncolumns(space.horizontal_space)
+
+function ncolumns(space::Spaces.SpectralElementSpace1D)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    return Nh * Nq
+end
+function ncolumns(space::Spaces.SpectralElementSpace2D)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    return Nh * Nq * Nq
+end
+
 # potential TODO:
 # - define a ColumnIndices type, make it work with https://github.com/JuliaFolds/FLoops.jl

@@ -624,3 +624,22 @@ ClimaCore.enable_threading() = false # launching threads allocates
     nothing
 end
 ClimaCore.enable_threading() = false
+
+@testset "ncolumns" begin
+    FT = Float64
+    for space in all_spaces(FT)
+        bycolumnable(space) || continue
+        hspace = Spaces.horizontal_space(space)
+        Nh = Topologies.nlocalelems(hspace)
+        Nq = Spaces.Quadratures.degrees_of_freedom(
+            Spaces.quadrature_style(hspace),
+        )
+        if nameof(typeof(space)) == :SpectralElementSpace1D
+            @test Fields.ncolumns(space) == Nh * Nq
+        else
+            @test Fields.ncolumns(space) == Nh * Nq * Nq
+        end
+        nothing
+    end
+    nothing
+end
