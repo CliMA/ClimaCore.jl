@@ -118,6 +118,7 @@ steps:
       - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -127,6 +128,7 @@ steps:
       - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -775,6 +777,7 @@ steps:
       - "examples/hybrid/sphere/output/deformation_flow/*"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -786,6 +789,7 @@ steps:
       - "examples/hybrid/sphere/output/hadley_circulation/*"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -813,6 +817,7 @@ steps:
       TEST_NAME: "sphere/baroclinic_wave_rhoe"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -827,6 +832,7 @@ steps:
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 2
 
@@ -841,6 +847,7 @@ steps:
       TEST_NAME: "sphere/baroclinic_wave_rhotheta"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -874,6 +881,7 @@ steps:
       TEST_NAME: "sphere/balanced_flow_rhoe"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -900,6 +908,7 @@ steps:
       TEST_NAME: "sphere/held_suarez_rhoe"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -914,6 +923,7 @@ steps:
       FLOAT_TYPE: "Float64"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -940,6 +950,7 @@ steps:
       TEST_NAME: "sphere/held_suarez_rhoe_int"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 
@@ -967,6 +978,7 @@ steps:
       Z_STRETCH: "true"
     agents:
       config: cpu
+      slurm_mem: 10GB
       queue: central
       slurm_ntasks: 1
 

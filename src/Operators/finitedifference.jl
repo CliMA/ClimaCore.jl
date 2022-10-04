@@ -3277,7 +3277,7 @@ function Base.similar(
     return Field(Eltype, sp)
 end
 
-function _serial_copyto!(
+@inline function _serial_copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
     Ni::Int,
@@ -3290,7 +3290,7 @@ function _serial_copyto!(
     return field_out
 end
 
-function _threaded_copyto!(
+@inline function _threaded_copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
     Ni::Int,
@@ -3307,7 +3307,7 @@ function _threaded_copyto!(
     return field_out
 end
 
-function Base.copyto!(
+@inline function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
 ) where {S <: AbstractStencilStyle}
@@ -3320,7 +3320,7 @@ function Base.copyto!(
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
 
-function apply_stencil!(field_out, bc, hidx)
+Base.@propagate_inbounds function apply_stencil!(field_out, bc, hidx)
     space = axes(bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         @inbounds for idx in
