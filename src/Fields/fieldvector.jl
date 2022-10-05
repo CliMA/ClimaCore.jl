@@ -35,8 +35,8 @@ mutable struct ScalarWrapper{T} <: AbstractArray{T, 0}
     val::T
 end
 Base.size(::ScalarWrapper) = ()
-Base.getindex(s::ScalarWrapper, args...) = s.val
-Base.setindex!(s::ScalarWrapper, value, args...) = s.val = value
+Base.getindex(s::ScalarWrapper) = s.val
+Base.setindex!(s::ScalarWrapper, value) = s.val = value
 Base.similar(s::ScalarWrapper) = ScalarWrapper(s.val)
 
 """

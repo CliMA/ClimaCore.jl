@@ -937,6 +937,7 @@ steps:
       TEST_NAME: "sphere/held_suarez_rhotheta"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
