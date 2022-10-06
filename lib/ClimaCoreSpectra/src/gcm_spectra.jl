@@ -3,17 +3,13 @@
 #=
 Cleanup items:
 
- - Inherit array types (i.e., don't assume things are `Array`, as we may have `CuArray` for gpu down the road), instead use `Arr where {Arr <: AbstractArray}`
- - Follow type promotion rules: https://docs.julialang.org/en/v1/manual/conversion-and-promotion/
  - Do we need this to be allocation-free?
- - Can we use external packages (e.g., RootSolvers) for loops that seem to be performing iterations?
- - Improve documentation
-
- - Add main module string with todo list:
-  - What API functions are needed?
-    - What are the function argument types?
-    - What do they do / output, in equation form?
+ - Can we use external packages (e.g., RootSolvers, AssociatedLegendrePolynomials)?
+ - What CC API functions are needed?
+    - Can we generalize the interface to use CC Fields to spare the user from having to do the remapping boilerplate?
 =#
+
+import FFTW
 
 """
     AbstractSpectralSphericalMesh
@@ -47,24 +43,41 @@ mutable struct SpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4} <:
     var_spectrum::ArrF3
 end
 
-function SpectralSphericalMesh{FT}(nθ::Int, nd::Int) where {FT}
+SpectralSphericalMesh{FT}(nθ::Int, nd::Int) where {FT} =
+    SpectralSphericalMesh(nθ, nd, Array{FT}, Array{Complex{FT}}, Array{Int})
+
+function SpectralSphericalMesh(
+    nθ::Int,
+    nd::Int,
+    ::Type{ArrType},
+    ::Type{ComplexType},
+    ::Type{IntArrType},
+) where {ArrType, ComplexType, IntArrType}
     nλ = 2nθ
     Δλ = 2π / nλ
 
     num_fourier = Int(floor((2 * nθ - 1) / 3)) # number of truncated zonal wavenumbers (m): minimum truncation given nθ - e.g.: nlat = 32 -> T21 (can change manually for more a severe truncation)
     num_spherical = Int(num_fourier + 1) # number of total wavenumbers (n)
 
-    wave_numbers = compute_wave_numbers(num_fourier, num_spherical)
+    wave_numbers = IntArrType(undef, num_fourier + 1, num_spherical + 1)
+    fill!(wave_numbers, 0)
+    compute_wave_numbers!(wave_numbers, num_fourier, num_spherical)
 
-    qwg = zeros(FT, num_fourier + 1, num_spherical + 1, nθ)
-    qnm = zeros(FT, num_fourier + 1, num_spherical + 2, nθ)
+    qwg = ArrType(undef, num_fourier + 1, num_spherical + 1, nθ)
+    fill!(qwg, 0)
+    qnm = ArrType(undef, num_fourier + 1, num_spherical + 2, nθ)
+    fill!(qnm, 0)
 
-    var_fourier = zeros(Complex{FT}, nλ, nθ, nd)
-    var_grid = zeros(FT, nλ, nθ, nd)
+    var_fourier = ComplexType(undef, nλ, nθ, nd)
+    fill!(var_fourier, 0)
+    var_grid = ArrType(undef, nλ, nθ, nd)
+    fill!(var_grid, 0)
     nθ_half = div(nθ, 2)
     var_spherical =
-        zeros(Complex{FT}, num_fourier + 1, num_spherical + 1, nd, nθ_half)
-    var_spectrum = zeros(FT, num_fourier + 1, num_spherical + 1, nd)
+        ComplexType(undef, num_fourier + 1, num_spherical + 1, nd, nθ_half)
+    fill!(var_spherical, 0)
+    var_spectrum = ArrType(undef, num_fourier + 1, num_spherical + 1, nd)
+    fill!(var_spectrum, 0)
 
     SpectralSphericalMesh(
         num_fourier,
@@ -109,6 +122,9 @@ Normalized associated Legendre polynomials, P_{m,l} = qnm.
     sqrt((l^2-m^2)/(4l^2-1))P_{l,m} = P_{l-1, m} -  sqrt(((l-1)^2-m^2)/(4(l-1)^2 - 1))P_{l-2,m}
     THe normalization assures that 1/2 ∫_{-1}^1 P_{l,m}(sinθ) P_{n,m}(sinθ) dsinθ = δ_{n,l}
     Julia index starts with 1, so qnm[m+1,l+1] = P_l^m
+
+TODO:
+ - Can we unify the interface with an external package that does this?
 """
 function compute_legendre!(FT, num_fourier, num_spherical, sinθ, nθ)
     qnm = zeros(FT, num_fourier + 1, num_spherical + 2, nθ)
@@ -168,9 +184,10 @@ function compute_gaussian!(FT, n)
     wts = zeros(FT, n)
 
     n_half = Int(n / 2)
+    n_plus_half = FT(n + 0.5)
     for i in 1:n_half
         dp = 0.0
-        z = cos(pi * (i - 0.25) / (n + 0.5))
+        z = cos(pi * (i - 0.25) / n_plus_half)
         for iter in 1:itermax
             p2 = 0.0
             p1 = 1.0
@@ -218,13 +235,13 @@ pfield = F(λ, η)             # Input variable on Gaussian grid FT[nλ, nθ]
 - [Wiin1967](@cite)
 """
 function trans_grid_to_spherical!(
-    mesh::SpectralSphericalMesh{FT, ArrF3, ArrI2, ArrC3, ArrC4},
-    pfield::ArrF2,
-) where {FT, ArrF3, ArrI2, ArrC3, ArrC4, ArrF2}
+    mesh::SpectralSphericalMesh{FT},
+    pfield::AbstractArray,
+) where {FT}
 
     num_fourier, num_spherical = mesh.num_fourier, mesh.num_spherical
     var_fourier2d, var_spherical2d =
-        mesh.var_fourier[:, :, 1] * 0.0, mesh.var_spherical[:, :, 1, :] * 0.0
+        mesh.var_fourier[:, :, 1] * 0, mesh.var_spherical[:, :, 1, :] * 0
     nλ, nθ, nd = mesh.nλ, mesh.nθ, mesh.nd
 
     # Retrieve weighted Legendre polynomials
@@ -232,7 +249,7 @@ function trans_grid_to_spherical!(
 
     # Fourier transformation
     for j in 1:nθ
-        var_fourier2d[:, j] = fft(pfield[:, j], 1) / nλ
+        var_fourier2d[:, j] = FFTW.fft(pfield[:, j], 1) / nλ
     end
 
     # Complete spherical harmonic transformation
@@ -246,13 +263,13 @@ function trans_grid_to_spherical!(
                     (
                         var_fourier2d_t[1:nθ_half] .+
                         var_fourier2d_t[nθ:-1:(nθ_half + 1)]
-                    ) .* qwg[m, n, 1:nθ_half] ./ 2.0
+                    ) .* qwg[m, n, 1:nθ_half] ./ 2
             else
                 var_spherical2d[m, n, :] .=
                     (
                         var_fourier2d_t[1:nθ_half] .-
                         var_fourier2d_t[nθ:-1:(nθ_half + 1)]
-                    ) .* qwg[m, n, 1:nθ_half] ./ 2.0
+                    ) .* qwg[m, n, 1:nθ_half] ./ 2
             end
         end
     end
@@ -261,20 +278,21 @@ function trans_grid_to_spherical!(
 end
 
 """
-    compute_wave_numbers(num_fourier::Int, num_spherical::Int)
+    compute_wave_numbers!(wave_numbers, num_fourier::Int, num_spherical::Int)
 
-See wave_numers[i,j] saves the wave number of this basis
+Set wave_numers[i,j] saves the wave number of this basis
 """
-function compute_wave_numbers(num_fourier::Int, num_spherical::Int)
-    wave_numbers = zeros(Int, num_fourier + 1, num_spherical + 1)
+function compute_wave_numbers!(
+    wave_numbers,
+    num_fourier::Int,
+    num_spherical::Int,
+)
 
     for m in 0:num_fourier
         for n in m:num_spherical
             wave_numbers[m + 1, n + 1] = n
         end
     end
-
-    return wave_numbers
 
 end
 
@@ -316,14 +334,14 @@ function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
     for k in 1:num_lev
         for j in 1:num_lat
             # compute fft frequencies for each latitude
-            x = lon ./ 180.0 .* π
-            dx = (lon[2] - lon[1]) ./ 180.0 .* π
+            x = lon ./ 180 .* π
+            dx = (lon[2] - lon[1]) ./ 180 .* π
 
-            freqs_ = fftfreq(num_fourier, 1.0 / dx) # 0,+ve freq,-ve freqs (lowest to highest)
+            freqs_ = FFTW.fftfreq(num_fourier, 1.0 / dx) # 0,+ve freq,-ve freqs (lowest to highest)
             freqs[:, j, k] = freqs_[1:num_pfourier] .* 2.0 .* π
 
             # compute the fourier coefficients for all latitudes
-            fourier = fft(var_grid[:, j, k]) # e.g. vcos_grid, ucos_grid
+            fourier = FFTW.fft(var_grid[:, j, k]) # e.g. vcos_grid, ucos_grid
             fourier = (fourier / num_fourier)
 
             # convert to energy spectra
@@ -334,7 +352,7 @@ function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
             for m in 2:num_pfourier
                 zon_spectrum[m, j, k] =
                     zon_spectrum[m, j, k] +
-                    2.0 * weight[k] * fourier[m] * conj(fourier[m]) # factor 2 for neg freq contribution
+                    2 * weight[k] * fourier[m] * conj(fourier[m]) # factor 2 for neg freq contribution
             end
         end
     end
@@ -355,6 +373,11 @@ end
 - mass_weight: Array with weights for mass-weighted calculations
 # References
 - [Baer1972](@cite)
+
+TODO:
+ - Can we define `power_spectrum_2d(field::ClimaCore.Field, mass_weight::ClimaCore.Field)`
+ - Call ClimaCoreTempestRemap to export lat-lon grid
+ - ClimaCoreSpectra can then take this output and compute the spectra
 """
 function power_spectrum_2d(FT, var_grid, mass_weight)
     #  initialize spherical mesh variables
@@ -384,9 +407,9 @@ function power_spectrum_2d(FT, var_grid, mass_weight)
 
         # Calculate energy spectra
         var_spectrum[:, :, k] =
-            2.0 .* sum(var_spherical[:, :, k, :], dims = 3) .*
+            2 .* sum(var_spherical[:, :, k, :], dims = 3) .*
             conj(sum(var_spherical[:, :, k, :], dims = 3))  # var_spectrum[m,n,k] # factor 2 to account for negative Fourier frequencies
-        var_spectrum[1, :, k] = var_spectrum[1, :, k] ./ 2.0 # m=0
+        var_spectrum[1, :, k] = var_spectrum[1, :, k] ./ 2 # m=0
     end
     return var_spectrum, mesh.wave_numbers, var_spherical, mesh
 end

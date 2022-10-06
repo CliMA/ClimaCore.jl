@@ -2,7 +2,7 @@
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "5b3578be3364aaff8258d882e735a534e56ba6c0"
+project_hash = "9c492ca2c6dbd05370b3d00e297294732a3aaf18"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -86,6 +86,11 @@ version = "0.8.11"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
+
+[[deps.AssociatedLegendrePolynomials]]
+git-tree-sha1 = "bf9e0d02e7884000b95ae8f9f3439a975bcb96e5"
+uuid = "2119f1ac-fb78-50f5-8cc0-dda848ebdb19"
+version = "1.0.0"
 
 [[deps.Automa]]
 deps = ["Printf", "ScanByte", "TranscodingStreams"]
@@ -218,6 +223,12 @@ deps = ["ClimaCore", "RecipesBase", "StaticArrays", "TriplotBase"]
 path = "../lib/ClimaCorePlots"
 uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 version = "0.2.4"
+
+[[deps.ClimaCoreSpectra]]
+deps = ["AssociatedLegendrePolynomials", "ClimaCore", "FFTW"]
+path = "../lib/ClimaCoreSpectra"
+uuid = "c2caaa1d-32ae-4754-ba0d-80e7561362e9"
+version = "0.1.0"
 
 [[deps.ClimaCoreTempestRemap]]
 deps = ["ClimaCore", "Dates", "LinearAlgebra", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]

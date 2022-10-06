@@ -1,6 +1,10 @@
 import Documenter, DocumenterCitations, Literate
 import ClimaCore,
-    ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots, ClimaCoreTempestRemap
+    ClimaCoreVTK,
+    ClimaCoreMakie,
+    ClimaCorePlots,
+    ClimaCoreTempestRemap,
+    ClimaCoreSpectra
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
@@ -60,6 +64,7 @@ withenv("GKSwstype" => "nul") do
         modules = [
             ClimaCore,
             ClimaCoreVTK,
+            ClimaCoreSpectra,
             ClimaCorePlots,
             ClimaCoreMakie,
             ClimaCoreTempestRemap,
@@ -79,6 +84,7 @@ withenv("GKSwstype" => "nul") do
             "Libraries" => [
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
+                joinpath("lib", "ClimaCoreSpectra.md"),
             ],
             "references.md",
         ],
