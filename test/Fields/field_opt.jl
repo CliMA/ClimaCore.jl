@@ -50,7 +50,7 @@ include(joinpath(@__DIR__, "util_spaces.jl"))
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/949
-@testset "Allocations with getproperty on FieldVectors" begin
+@testset "Allocations with getproperty on Fields" begin
     FT = Float64
     function allocs_test!(Y)
         x = Y.x
@@ -192,6 +192,38 @@ end
         allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         p = @allocated allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         @test p == 0
+    end
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/983
+@testset "Allocations with fill! and zero eltype broadcasting on FieldVectors" begin
+    FT = Float64
+    for space in all_spaces(FT)
+        Y = Fields.FieldVector(;
+            c = FieldFromNamedTuple(space, (; x = FT(0))),
+            f = FieldFromNamedTuple(space, (; x = FT(0))),
+        )
+
+        Y .= 0 # compile first
+        p = @allocated begin
+            Y .= 0
+            nothing
+        end
+        @test_broken p == 0
+
+        Y .= zero(eltype(Y)) # compile first
+        p = @allocated begin
+            Y .= zero(eltype(Y))
+            nothing
+        end
+        @test_broken p == 0
+
+        fill!(Y, zero(eltype(Y))) # compile first
+        p = @allocated begin
+            fill!(Y, zero(eltype(Y)))
+            nothing
+        end
+        @test_broken p == 0
     end
 end
 nothing
