@@ -218,9 +218,10 @@ end
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
 )
-    for symb in propertynames(dest)
+    map(propertynames(dest)) do symb
         p = parent(getfield(_values(dest), symb))
         copyto!(p, bc)
+        nothing
     end
     return dest
 end
