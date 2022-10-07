@@ -195,6 +195,10 @@ end
     end
 end
 
+function call_zero_eltype!(Y)
+    Y .= zero(eltype(Y))
+    nothing
+end
 # https://github.com/CliMA/ClimaCore.jl/issues/983
 @testset "Allocations with fill! and zero eltype broadcasting on FieldVectors" begin
     FT = Float64
@@ -209,21 +213,18 @@ end
             Y .= 0
             nothing
         end
-        @test_broken p == 0
+        @test p == 0
 
-        Y .= zero(eltype(Y)) # compile first
-        p = @allocated begin
-            Y .= zero(eltype(Y))
-            nothing
-        end
-        @test_broken p == 0
+        call_zero_eltype!(Y) # compile first
+        p = @allocated call_zero_eltype!(Y)
+        @test p == 0
 
         fill!(Y, zero(eltype(Y))) # compile first
         p = @allocated begin
             fill!(Y, zero(eltype(Y)))
             nothing
         end
-        @test_broken p == 0
+        @test p == 0
     end
 end
 nothing
