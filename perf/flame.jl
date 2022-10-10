@@ -25,11 +25,11 @@ prof = Profile.@profile begin
 end
 
 import ProfileCanvas
-include("profile_canvas_patch.jl")
+
 if haskey(ENV, "BUILDKITE_COMMIT") || haskey(ENV, "BUILDKITE_BRANCH")
     output_dir = joinpath(@__DIR__, "output")
     mkpath(output_dir)
-    html_file(joinpath(output_dir, "flame.html"))
+    ProfileCanvas.html_file(joinpath(output_dir, "flame.html"))
 else
     ProfileCanvas.view(Profile.fetch())
 end
