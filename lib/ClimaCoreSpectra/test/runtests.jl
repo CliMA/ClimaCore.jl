@@ -56,7 +56,7 @@ include(joinpath(@__DIR__, "spherical_helper.jl"))
 
     sum_res = (sum_spec - sum_grid) / sum_grid
 
-    @test sum_res < FT(0.1)
+    @test abs(sum_res) ≈ 0 atol = eps(FT)
 end
 
 @testset "power_spectrum_2d (GCM)" begin
@@ -99,6 +99,6 @@ end
     sum_res_1 = (sum_spec - sum_grid) / sum_grid
     sum_res_2 = (sum_reco - sum_grid) / sum_grid
 
-    @test abs(sum_res_1) < FT(0.1)
-    @test abs(sum_res_2) < FT(0.1)
+    @test abs(sum_res_1) ≈ 0 atol = 2e-2
+    @test abs(sum_res_2) ≈ 0 atol = 6e-6
 end

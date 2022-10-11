@@ -2,8 +2,6 @@
 
 #=
 Cleanup items:
-
- - Do we need this to be allocation-free?
  - Can we use external packages (e.g., RootSolvers, AssociatedLegendrePolynomials)?
  - What CC API functions are needed?
     - Can we generalize the interface to use CC Fields to spare the user from having to do the remapping boilerplate?
@@ -105,10 +103,10 @@ Normalized associated Legendre polynomials, P_{m,l} = qnm.
 
 # Arguments:
 - FT: FloatType
-- num_fourier
-- num_spherical
-- sinθ
-- nθ
+- num_fourier: Int, number of truncated zonal wavenumbers (m)
+- num_spherical: Int, number of total wavenumbers (n)
+- sinθ: Array{FT} with sin(latitude)
+- nθ: Int, number of Gaussian latitudes
 
 # References:
 - Ehrendorfer, M. (2011) Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics
@@ -117,22 +115,22 @@ Normalized associated Legendre polynomials, P_{m,l} = qnm.
 # Details (using notation and Eq. references from Ehrendorfer, 2011):
     l=0,1...∞    and m = -l, -l+1, ... l-1, l
     P_{0,0} = 1, such that 1/4π ∫∫YYdS = δ (where Y = spherical harmonics, S = domain surface area)
-    P_{m,m} = sqrt((2m+1)/2m) cosθ P_{m-1m-1}
-    P_{m+1,m} = sqrt(2m+3) sinθ P_{m m}
+    P_{m,m} = sqrt((2m+1)/2m) cosθ P_{m-1,m-1}
+    P_{m+1,m} = sqrt(2m+3) sinθ P_{m,m}
     sqrt((l^2-m^2)/(4l^2-1))P_{l,m} = P_{l-1, m} -  sqrt(((l-1)^2-m^2)/(4(l-1)^2 - 1))P_{l-2,m}
     THe normalization assures that 1/2 ∫_{-1}^1 P_{l,m}(sinθ) P_{n,m}(sinθ) dsinθ = δ_{n,l}
     Julia index starts with 1, so qnm[m+1,l+1] = P_l^m
-
-TODO:
- - Can we unify the interface with an external package that does this?
 """
 function compute_legendre!(FT, num_fourier, num_spherical, sinθ, nθ)
+
+    # TODO:
+    #  - Can we unify the interface with an external package that does this?
     qnm = zeros(FT, num_fourier + 1, num_spherical + 2, nθ)
 
     cosθ = sqrt.(1 .- sinθ .^ 2)
     ε = zeros(FT, num_fourier + 1, num_spherical + 2)
 
-    qnm[1, 1, :] .= 1
+    qnm[1, 1, :] .= 1 # P_{0,0}
     for m in 1:num_fourier
         qnm[m + 1, m + 1, :] = -sqrt((2m + 1) / (2m)) .* cosθ .* qnm[m, m, :] # Eq. B.20
         qnm[m, m + 1, :] = sqrt(2m + 1) * sinθ .* qnm[m, m, :] # Eq. B.22
@@ -160,7 +158,7 @@ Compute sin(latitude) and the weight factors for Gaussian integration.
 
 # Arguments
 - FT: FloatType
-- n: number of Gaussian latitudes
+- n: Int, number of Gaussian latitudes
 
 # References
 - Ehrendorfer, M., Spectral Numerical Weather Prediction Models, Appendix B, Society for Industrial and Applied Mathematics, 2011
@@ -280,7 +278,12 @@ end
 """
     compute_wave_numbers!(wave_numbers, num_fourier::Int, num_spherical::Int)
 
-Set wave_numers[i,j] saves the wave number of this basis
+# Arguments:
+- wave_numbers: Matrix of [Int, Int] to store the wave wave_numbers
+- num_fourier: Int, number of truncated zonal wavenumbers (m)
+- num_spherical: Int, number of total wavenumbers (n)
+
+Store the total wave number `n` for this basis in a matrix `wave_numbers` of shape [m,n].
 """
 function compute_wave_numbers!(
     wave_numbers,
@@ -303,17 +306,16 @@ end
 
 For a variable `var_grid` on a (lon,lat,z) grid, given an array of
 `weight`s, compute the zonal (1D) power spectrum using a Fourier
-transform at each latitude, from a velocity field. The input velocities
-must be intepolated to a Gaussian grid.
+transform at each Gaussian latitude. The input field must be first
+intepolated to a Gaussian grid.
 
 # Arguments
 - FT: FloatType
-- var_grid: variable (typically u or v) on a Gaussian (lon, lat, z) grid to be transformed
+- var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
 - z: Array with uniform z levels
 - lat: Array with uniform lats
 - lon: Array with uniform longs
 - weight: Array with weights for mass-weighted calculations
-
 """
 function power_spectrum_1d(FT, var_grid, z, lat, lon, weight)
     num_lev = length(z)
@@ -364,22 +366,24 @@ end
 """
     power_spectrum_2d(FT, var_grid, mass_weight)
 
-- transform variable on grid to the 2d spectral space using fft on latitude circles
+- transform variable on grid to the 2d spectral space using `fft` on latitude circles
 (as for the 1D spectrum) and Legendre polynomials for meridians, and calculate spectra.
 
 # Arguments
 - FT: FloatType
-- var_grid: variable (typically u or v) on a Gaussian (lon, lat, z) grid to be transformed
-- mass_weight: Array with weights for mass-weighted calculations
+- var_grid: variable on a Gaussian (lon, lat, z) grid to be transformed
+- mass_weight: Array with weights for mass-weighted calculations.
+
 # References
 - [Baer1972](@cite)
-
-TODO:
- - Can we define `power_spectrum_2d(field::ClimaCore.Field, mass_weight::ClimaCore.Field)`
- - Call ClimaCoreTempestRemap to export lat-lon grid
- - ClimaCoreSpectra can then take this output and compute the spectra
 """
 function power_spectrum_2d(FT, var_grid, mass_weight)
+
+    # TODO:
+    #  - Can we define `power_spectrum_2d(field::ClimaCore.Field, mass_weight::ClimaCore.Field)`
+    #  - Call ClimaCoreTempestRemap internally to export lat-lon grid
+    #  - ClimaCoreSpectra can then take this output and compute the spectra
+
     #  initialize spherical mesh variables
     nθ, nd = (size(var_grid, 2), size(var_grid, 3))
     mesh = SpectralSphericalMesh{FT}(nθ, nd)

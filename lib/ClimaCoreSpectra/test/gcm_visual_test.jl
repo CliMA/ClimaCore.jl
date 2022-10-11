@@ -1,12 +1,12 @@
-# Standalone test file that tests spectra visually
+# Standalone test file that tests spectra visually.
 # Taken from https://github.com/CliMA/ClimateMachine.jl/blob/master/test/Common/Spectra/gcm_standalone_visual_test.jl
 
 import Plots
 
-# https://github.com/jheinen/GR.jl/issues/278#issuecomment-587090846
+# The following needs to be set for https://github.com/jheinen/GR.jl/issues/278#issuecomment-587090846
 ENV["GKSwstype"] = "nul"
 
-using ClimaCoreSpectra:
+import ClimaCoreSpectra:
     compute_gaussian!,
     compute_legendre!,
     SpectralSphericalMesh,
@@ -16,7 +16,7 @@ using ClimaCoreSpectra:
     compute_wave_numbers!
 using FFTW
 
-# additional helper function for spherical harmonic spectrum tests
+# Additional helper function for spherical harmonic spectrum tests.
 # Adapted from: https://github.com/CliMA/ClimateMachine.jl/blob/master/test/Common/Spectra/spherical_helper_test.jl
 include(joinpath(@__DIR__, "spherical_helper.jl"))
 
@@ -31,7 +31,7 @@ xarray =
     FT(180.0) ./ n_gauss_lats * collect(FT, 1:1:(2n_gauss_lats))[:] .- FT(180.0)
 z = 1
 
-# Setup variable
+# Setup variables
 mass_weight = ones(FT, length(z));
 rll_grid_variable =
     FT(1.0) * reshape(
@@ -75,7 +75,7 @@ xarray =
 z = 1 # vertical levels: only one for sphere surface
 
 # Setup variable: use an example analytical P_nm function
-P_32 = sqrt(FT(105 / 8)) * (sinθ .- sinθ .^ 3)
+P_32 = sqrt(FT(105 / 8)) * (sinθ .- sinθ .^ 3) # degree 3, order 2 associated legendre polynomial
 rll_grid_variable =
     FT(1.0) * reshape(
         sin.(xarray / xarray[end] * FT(3.0) * π) .* P_32',
@@ -107,7 +107,7 @@ Plots.contourf(
     xlabel = "m",
     ylabel = "n",
     clim = (0, 0.25),
-    c = :roma,
+    c = :roma, # this palette was tested for color-blindness safety using the online simulator https://www.color-blindness.com/coblis-color-blindness-simulator/
 )
 
 Plots.savefig("2d_spectra.png")
