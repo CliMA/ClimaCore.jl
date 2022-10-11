@@ -52,24 +52,78 @@ sproj = [
     "+proj=sinu",
 ]
 
+# Downloading and unpacking time series needs to happen manually from:
+# https://caltech.box.com/shared/static/a65jnfdfpwqt9ka9nszvoedcg412c6q1.gz
+
+time_series = map(readdir(joinpath(pwd(), "time-series"); join = true)) do file
+    reader = ClimaCore.InputOutput.HDF5Reader(file)
+    return ClimaCore.InputOutput.read_field(reader, "diagnostics")
+end
+field = time_series[1].temperature
+nlevels = ClimaCore.Spaces.nlevels(axes(field))
+# Calculate a global color range per field type, so that the colorrange stays static when moving time/level.
+color_range_per_field = Dict(
+    map(propertynames(time_series[1])) do name
+        vecs = [
+            extrema(
+                hcat(
+                    vec.(
+                        parent.(
+                            ClimaCore.level.(
+                                (getproperty(slice, name),),
+                                1:nlevels,
+                            )
+                        )
+                    )...,
+                ),
+            ) for slice in time_series
+        ]
+        name => reduce(
+            ((amin, amax), (bmin, bmax)) ->
+                (min(amin, bmin), max(amax, bmax)),
+            vecs,
+        )
+    end,
+)
+
 begin
     fig = Figure(resolution = (1600, 800))
+    ####
+    ### Setup the grid layout for the menu and different plots
+    ####
+
+    # One slot for menus + toggles + colorbar
     toggles = fig[1, 1] = GridLayout()
     plots = fig[2, 1] = GridLayout()
-    colgap!(plots, 0)
+    colgap!(plots, 0) # leave no space between plots
+
+    # Define a few observables we need to create entries, which get connected to the widgets later
     projection = Observable(sproj[1])
-    fields = collect(string.(propertynames(diagnostics)))
+    fields = collect(string.(propertynames(time_series[1])))
+    # Two sliders for setting Time + Label
+    toggles[1, :] =
+        sliders = SliderGrid(
+            fig,
+            (label = "Time", range = 1:length(time_series)),
+            (label = "Level", range = 1:nlevels),
+        )
+    time_slider, level_slider = sliders.sliders
+    # Need a sub gridlayout, to get the columns aligned with the sliders
+    menu_items = toggles[2, :] = GridLayout()
+    # Use labels to label toggle + menu
+    menu_items[1, 1] = Label(fig, "earth overlay:", tellwidth = true)
+    menu_items[1, 2] = overlay_toggle = Toggle(fig, active = true)
 
-    toggles[1, 1] = Label(fig, "earth overlay:", tellwidth = true)
-    toggles[1, 2] = overlay_toggle = Toggle(fig, active = true)
-    toggles[1, 3] =
+    menu_items[1, 3] = Label(fig, "field:", tellwidth = true)
+    menu_items[1, 4] =
         field_selector = Menu(fig, options = fields, default = "temperature")
-    toggles[1, 4] =
+
+    menu_items[1, 5] = Label(fig, "projection:", tellwidth = true)
+    menu_items[1, 6] =
         dest_proj = Menu(fig, options = sproj, default = projection[])
-
+    # Have a global color range we
     colorrange = Observable((0.0, 1.0))
-
-    toggles[2, :] =
+    toggles[3, :] =
         level_s = Colorbar(
             fig,
             colorrange = colorrange,
@@ -77,59 +131,70 @@ begin
             vertical = false,
         )
 
+    # Create a geo axis to handle the projection
+    # Note, that Makie still needs some work in the event propagation of menu + friends,
+    # so when selecting e.g. a field, it may happen that it changes the axis zoom level
+    # use ctrl + double mouse click to reset it.
     plots[1, 1] = ax = GeoAxis(fig; dest = projection)
+    # Create a toggable land overlay
     earth_overlay =
         poly!(ax, GeoMakie.land(), color = (:white, 0.2), transparency = true)
     translate!(earth_overlay, 0, 0, 10)
     connect!(earth_overlay.visible, overlay_toggle.active)
-
+    # create a 3D plot without an axis for mapping the simulation on the sphere
     plots[1, 2] = ax2 = LScene(fig; show_axis = false)
 
-    colsize!(plots, 1, Relative(3 / 4))
+    colsize!(plots, 1, Relative(3 / 4)) # Give the GeoAxis more space
 
-
+    # Now, connect all the observables to the widgets
     on(dest_proj.selection) do proj
         projection[] = proj
     end
 
-    field_observable = Observable{Any}(diagnostics.temperature)
-    on(field_selector.selection; update = true) do fieldname
-        # Don't block menu when updating
-        @async begin
-            field_observable[] = getproperty(diagnostics, Symbol(fieldname))
-        end
+    field_observable = Observable{Any}()
+    #=
+    map!(f, new_observable, observable) works like:
+    new_observable = map(f, observable)
+    which works like:
+    # run everytime observable updates
+    on(observable) do new_value
+        new_observable[] = new_value
+    end
+    =#
+    map!(
+        field_observable,
+        field_selector.selection,
+        time_slider.value,
+    ) do fieldname, idx
+        return getproperty(time_series[idx], Symbol(fieldname))
+    end
+    # update=true, runs f immediately, otherwise f only runs when the input observable is triggered the first time
+    on(field_selector.selection; update = true) do field_name
+        # select the correct color range from the globally calcualted color ranges
+        colorrange[] = color_range_per_field[Symbol(field_name)]
+        return
     end
 
-    on(field_observable; update = true) do field
-        @async begin
-            colorrange[] =
-                extrema(hcat(vec.(parent.(ClimaCore.level.((field,), 1:n)))...))
-        end
-    end
+    # manually create the mesh for the 3D Sphere plot:
 
-    field = field_observable[]
-    n = ClimaCore.Spaces.nlevels(axes(field))
-
-    toggles[3, :] = height_slider = Slider(fig, range = 1:n)
-
-    field_slice = ClimaCore.level(T, 1)
+    field_slice = ClimaCore.level(field, 1)
     space = axes(field_slice)
-
     a, b, c = ClimaCore.Spaces.triangulate(space)
     triangles = GLTriangleFace.(a, b, c)
     cf = ClimaCore.Fields.coordinate_field(space)
     long, lat = vec.(parent.((cf.long, cf.lat)))
     vertices = Point2f.(long, lat)
 
-    # plot level at slider
+    # plot level at slider, needs to be any since the  type changes (also the reason why we use map! instead of map)
     field_slice_observable = Observable{Any}()
     map!(
         ClimaCore.level,
         field_slice_observable,
         field_observable,
-        height_slider.value,
+        level_slider.value,
     )
 
+    # extract the scalar field
     scalars = map(field_slice_observable) do field_slice
         Float32.(vec(parent(field_slice)))
     end
