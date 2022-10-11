@@ -245,7 +245,7 @@ end
 
 Set the curl at the boundary to be `val`.
 """
-struct SetCurl{S <: Geometry.ContravariantVector} <: BoundaryCondition
+struct SetCurl{S} <: BoundaryCondition
     val::S
 end
 

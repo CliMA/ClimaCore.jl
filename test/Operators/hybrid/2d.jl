@@ -547,6 +547,57 @@ end
     @test norm(curluw_diff) < norm(curluw_ref) * 1e-2
 end
 
+@testset "curl (field b.c.)" begin
+    hv_center_space, hv_face_space =
+        hvspace_2D(xlim = (-pi, pi), zlim = (-pi, pi))
+
+    ccoords = Fields.coordinate_field(hv_center_space)
+    fcoords = Fields.coordinate_field(hv_face_space)
+    fcoords_1 = Fields.level(fcoords, ClimaCore.Utilities.half)
+    curl_bcfield₁ = Geometry.Covariant1Vector.(0.0 .* fcoords_1.z)
+    curl_bcfield² = Geometry.Contravariant2Vector.(0.0 .* fcoords_1.z)
+
+    u =
+        Geometry.transform.(
+            Ref(Geometry.Covariant1Axis()),
+            Geometry.UVector.(sin.(ccoords.x .+ 2 .* ccoords.z)),
+        )
+    w =
+        Geometry.transform.(
+            Ref(Geometry.Covariant3Axis()),
+            Geometry.WVector.(cos.(3 .* fcoords.x .+ 4 .* fcoords.z)),
+        )
+
+    curl = Operators.Curl()
+    curlC2F = Operators.CurlC2F(
+        bottom = Operators.SetValue(curl_bcfield₁),
+        top = Operators.SetValue(Geometry.Covariant1Vector(0.0)),
+    )
+
+    curlu = curlC2F.(u)
+    curlw = curl.(w)
+    curluw = curlu .+ curlw
+    Spaces.weighted_dss!(curluw)
+
+    curlw_ref =
+        Geometry.Contravariant2Vector.(
+            3 .* sin.(3 .* fcoords.x .+ 4 .* fcoords.z),
+        )
+    curlu_ref =
+        Geometry.Contravariant2Vector.(2 .* cos.(fcoords.x .+ 2 .* fcoords.z))
+
+    curluw_ref = curlu_ref .+ curlw_ref
+
+    # TODO: make SetValue do reasonable things on Extruded spaces (#79)
+    zeroboundary = Operators.SetBoundaryOperator(
+        bottom = Operators.SetValue(curl_bcfield²),
+        top = Operators.SetValue(Geometry.Contravariant2Vector(0.0)),
+    )
+    curluw_diff = zeroboundary.(curluw .- curluw_ref)
+
+    @test norm(curluw_diff) < norm(curluw_ref) * 1e-2
+end
+
 
 @testset "curl-cross" begin
     hv_center_space, hv_face_space =
