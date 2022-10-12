@@ -76,6 +76,7 @@ withenv("GKSwstype" => "nul") do
                 tutorial in TUTORIALS
             ],
             "Examples" => "examples.md",
+            "AxisTensor conversions" => "axis_tensor_conversions.md",
             "Libraries" => [
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
