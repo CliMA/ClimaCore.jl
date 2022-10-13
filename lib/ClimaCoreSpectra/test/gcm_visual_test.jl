@@ -3,17 +3,11 @@
 
 import Plots
 
-# The following needs to be set for https://github.com/jheinen/GR.jl/issues/278#issuecomment-587090846
-ENV["GKSwstype"] = "nul"
+OUTPUT_DIR =
+    haskey(ENV, "BUILD_DOCS") ? "" :
+    mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
-import ClimaCoreSpectra:
-    compute_gaussian!,
-    compute_legendre!,
-    SpectralSphericalMesh,
-    trans_grid_to_spherical!,
-    power_spectrum_1d,
-    power_spectrum_2d,
-    compute_wave_numbers!
+import ClimaCoreSpectra: compute_gaussian!, power_spectrum_1d, power_spectrum_2d
 using FFTW
 
 # Additional helper function for spherical harmonic spectrum tests.
@@ -60,11 +54,11 @@ Plots.plot(
     xaxis = "wavenumber",
     yaxis = "nm spectrum",
 )
-Plots.savefig("1D_spectrum_vs_wave_numbers_plot.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "1D_spectrum_vs_wave_numbers_plot.png"))
 Plots.contourf(rll_grid_variable[:, :, 1], c = :roma)
-Plots.savefig("1D_raw_data_plot.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "1D_raw_data_plot.png"))
 Plots.contourf(nm_spectrum[2:20, :, 1], c = :roma)
-Plots.savefig("1D_spectrum.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "1D_spectrum.png"))
 
 # -- TEST 2: power_spectrum_2d
 # Setup grid
@@ -93,11 +87,11 @@ reconstruction = trans_spherical_to_grid!(mesh_info, spherical, FT)
 
 # Check visually
 Plots.contourf(rll_grid_variable[:, :, 1], c = :roma)
-Plots.savefig("2d_raw_data_plot.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "2d_raw_data_plot.png"))
 Plots.contourf(reconstruction[:, :, 1], c = :roma)
-Plots.savefig("2d_transformed.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "2d_transformed.png"))
 Plots.contourf(rll_grid_variable[:, :, 1] .- reconstruction[:, :, 1], c = :roma)
-Plots.savefig("error.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "error.png"))
 
 # Spectrum
 Plots.contourf(
@@ -110,7 +104,7 @@ Plots.contourf(
     c = :roma, # this palette was tested for color-blindness safety using the online simulator https://www.color-blindness.com/coblis-color-blindness-simulator/
 )
 
-Plots.savefig("2d_spectra.png")
+Plots.savefig(joinpath(OUTPUT_DIR, "2d_spectra.png"))
 
 # Check magnitude
 println(FT(0.5) .* sum(spectrum))

@@ -14,7 +14,8 @@ using NCDatasets, ClimaCoreTempestRemap, Test, FFTW, Plots
 
 import ClimaCoreSpectra: power_spectrum_2d, compute_gaussian!
 
-OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
+path = @__DIR__
+mkpath(path)
 
 FT = Float64
 
@@ -38,11 +39,13 @@ field_m3_P_32 = sqrt(105 / 8) .* (sinθ .- sinθ .^ 3) .* cos.(scaling .* 2 .* 2
 
 # Remap infrastructure:
 # write mesh
-meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc.g")
+remap_tmpdir = path * "/remaptmp/"
+mkpath(remap_tmpdir)
+meshfile_cc = joinpath(remap_tmpdir * "mesh_cc.g")
 write_exodus(meshfile_cc, topology)
 
 # write data
-datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
+datafile_cc = remap_tmpdir * "data_cc.nc"
 NCDataset(datafile_cc, "c") do nc
     def_space_coord(nc, space; type = "cgll")
 
@@ -54,13 +57,13 @@ end
 
 nlat = 32 # Gauss latitudes
 nlon = 64 # Gauss longitudes
-meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
+meshfile_rll = remap_tmpdir * "mesh_rll.g"
 rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)
 
-meshfile_overlap = joinpath(OUTPUT_DIR, "mesh_overlap.g")
+meshfile_overlap = remap_tmpdir * "mesh_overlap.g"
 overlap_mesh(meshfile_overlap, meshfile_cc, meshfile_rll)
 
-weightfile = joinpath(OUTPUT_DIR, "remap_weights.nc")
+weightfile = remap_tmpdir * "remap_weights.nc"
 remap_weights(
     weightfile,
     meshfile_cc,
@@ -70,7 +73,7 @@ remap_weights(
     in_np = Nq,
 )
 
-datafile_rll = joinpath(OUTPUT_DIR, "data_rll.nc")
+datafile_rll = remap_tmpdir * "data_rll.nc"
 apply_remap(datafile_rll, datafile_cc, weightfile, ["m3_P_32"])
 
 nt = NCDataset(datafile_rll) do nc_rll
@@ -103,3 +106,6 @@ Plots.contourf(
 # Since we started with the  associated Legendre polynomial P_3^2, we now check that the max of the spectrum happens at (m, n) = (2, 3) indices.
 # We need add 1 b/c Julia indexing starts from 1, whereas the order and degree of associated Legendre polynomials start from 0 by convention.
 @assert (3, 4) == Tuple(argmax(spectrum[:, :, 1]))
+
+# remove temp remapping files
+rm(remap_tmpdir, recursive = true)

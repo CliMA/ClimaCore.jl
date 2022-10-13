@@ -1,13 +1,13 @@
 name = "ClimaCoreSpectra"
-authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 uuid = "c2caaa1d-32ae-4754-ba0d-80e7561362e9"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 version = "0.1.0"
 
 [deps]
-AssociatedLegendrePolynomials = "2119f1ac-fb78-50f5-8cc0-dda848ebdb19"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 
 [compat]
 ClimaCore = "0.10.12"
 julia = "1.7"
+FFTW = "1"

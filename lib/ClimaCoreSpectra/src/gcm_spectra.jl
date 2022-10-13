@@ -217,12 +217,14 @@ end
 """
     trans_grid_to_spherical!(mesh::SpectralSphericalMesh, pfield::Arr{FT,2})
 
-Transforms a variable on a Gaussian grid (pfield[nλ, nθ]) into the spherical harmonics domain (var_spherical2d[num_fourier+1, num_spherical+1])
-Here λ = longitude, θ = latitude, η = sinθ, m = zonal wavenumber, n = total wavenumber:
-var_spherical2d = F_{m,n}    # Output variable in spectral space (Complex{FT}[num_fourier+1, num_spherical+1])
-qwg = P_{m,n}(η)w(η)         # Weighted Legendre polynomials (FT[num_fourier+1, num_spherical+1, nθ])
-var_fourier2d = g_{m, θ}     # Untruncated Fourier transformation (Complex{FT} [nλ, nθ])
-pfield = F(λ, η)             # Input variable on Gaussian grid FT[nλ, nθ]
+Transforms a variable on a Gaussian grid (pfield[nλ, nθ]) into the spherical harmonics domain (var_spherical2d[num_fourier+1, num_spherical+1]).
+
+# Details:
+    Here λ = longitude, θ = latitude, η = sinθ, m = zonal wavenumber, n = total wavenumber:
+    var_spherical2d = F_{m,n}    # Output variable in spectral space (Complex{FT}[num_fourier+1, num_spherical+1])
+    qwg = P_{m,n}(η)w(η)         # Weighted Legendre polynomials (FT[num_fourier+1, num_spherical+1, nθ])
+    var_fourier2d = g_{m, θ}     # Untruncated Fourier transformation (Complex{FT} [nλ, nθ])
+    pfield = F(λ, η)             # Input variable on Gaussian grid FT[nλ, nθ]
 
 # Arguments
 - mesh: struct with mesh information
@@ -278,12 +280,12 @@ end
 """
     compute_wave_numbers!(wave_numbers, num_fourier::Int, num_spherical::Int)
 
+Store the total wave number `n` for this basis in a matrix `wave_numbers` of shape [m,n].
+
 # Arguments:
 - wave_numbers: Matrix of [Int, Int] to store the wave wave_numbers
 - num_fourier: Int, number of truncated zonal wavenumbers (m)
 - num_spherical: Int, number of total wavenumbers (n)
-
-Store the total wave number `n` for this basis in a matrix `wave_numbers` of shape [m,n].
 """
 function compute_wave_numbers!(
     wave_numbers,
@@ -366,7 +368,7 @@ end
 """
     power_spectrum_2d(FT, var_grid, mass_weight)
 
-- transform variable on grid to the 2d spectral space using `fft` on latitude circles
+Transform a variable defined on a regular lat long grid to the 2d spectral space using `fft` on latitude circles
 (as for the 1D spectrum) and Legendre polynomials for meridians, and calculate spectra.
 
 # Arguments

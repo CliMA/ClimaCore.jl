@@ -2,13 +2,7 @@
 
 using Test, FFTW
 
-using ClimaCoreSpectra:
-    compute_gaussian!,
-    compute_legendre!,
-    power_spectrum_1d,
-    power_spectrum_2d,
-    trans_grid_to_spherical!,
-    compute_wave_numbers!
+using ClimaCoreSpectra: compute_gaussian!, power_spectrum_1d, power_spectrum_2d
 
 # additional helper function for spherical harmonic spectrum tests
 # Adapted from: https://github.com/CliMA/ClimateMachine.jl/blob/master/test/Common/Spectra/spherical_helper_test.jl
