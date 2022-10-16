@@ -91,6 +91,8 @@ steps:
     key: "cpu_unittests_expensive"
     command:
       - "julia --color=yes --check-bounds=yes --project=test test/runtests_expensive.jl"
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: 1
     agents:
       config: cpu
       queue: central
