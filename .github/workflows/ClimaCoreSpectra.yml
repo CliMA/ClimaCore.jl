@@ -1,0 +1,50 @@
+name: ClimaCoreSpectra CI
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ClimaCoreSpectra.yml"
+      - "lib/ClimaCoreSpectra/**"
+  push:
+    branches:
+      - staging
+      - trying
+jobs:
+  lib-climacore-spectra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: '1.8'
+      - uses: actions/cache@v1
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+      - name: Install Julia dependencies
+        run: >
+          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCoreSpectra")'
+      - name: Run the tests
+        continue-on-error: true
+        env:
+            GKSwstype: nul
+            CI_OUTPUT_DIR: output
+        run: >
+          julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCoreSpectra")'
+          && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
+      - name: Upload test Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: climacore-spectra-output
+          path: |
+            lib/ClimaCoreSpectra/test/output
+      - name: Fail after artifacts if tests failed
+        if: ${{ env.TESTS_SUCCESSFUL != 'true' }}
+        run: exit 1
