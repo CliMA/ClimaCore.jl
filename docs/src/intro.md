@@ -1,5 +1,6 @@
 # Introduction to ClimaCore.jl's API concepts
 
+
 ## What is ClimaCore.jl?
 
 A suite of tools for constructing spatial discretizations, entirely written in [Julia](https://julialang.org/).
