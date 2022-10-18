@@ -161,7 +161,12 @@ The index of the z-component of an abstract point
 in an `AxisTensor`.
 """
 z_component(::Type{<:Geometry.LatLongZPoint}) = 9
+z_component(::Type{<:Geometry.Cartesian3Point}) = 1
+z_component(::Type{<:Geometry.Cartesian13Point}) = 4
+z_component(::Type{<:Geometry.Cartesian123Point}) = 9
+z_component(::Type{<:Geometry.XYZPoint}) = 9
 z_component(::Type{<:Geometry.ZPoint}) = 1
+z_component(::Type{<:Geometry.XZPoint}) = 4
 
 """
     dz_data(space::AbstractSpace)

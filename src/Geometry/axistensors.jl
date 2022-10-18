@@ -54,6 +54,8 @@ coordinate_axis(::Type{<:Cartesian2Point}) = (2,)
 coordinate_axis(::Type{<:Cartesian3Point}) = (3,)
 
 coordinate_axis(::Type{<:Cartesian123Point}) = (1, 2, 3)
+coordinate_axis(::Type{<:LatLongZPoint}) = (1, 2, 3)
+coordinate_axis(::Type{<:Cartesian13Point}) = (1, 3)
 
 coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
