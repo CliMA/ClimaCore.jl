@@ -1,5 +1,6 @@
 module Fields
 
+import ..comm_context
 import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
@@ -10,6 +11,7 @@ import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf
 
 using ..RecursiveApply
+using ClimaComms
 
 import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
 
@@ -32,6 +34,21 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+comm_context(field::Field) = comm_context(axes(field))
+
+comm_context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
+    comm_context(space.horizontal_space)
+comm_context(space::Spaces.SpectralElementSpace2D) =
+    comm_context(space.topology)
+comm_context(space::S) where {S <: Spaces.AbstractSpace} =
+    ClimaComms.SingletonCommsContext()
+
+comm_context(topology::Topologies.DistributedTopology2D) = topology.context
+comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
+    ClimaComms.SingletonCommsContext()
+
+
 
 # Point Field
 const PointField{V, S} =

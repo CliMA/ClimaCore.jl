@@ -5,6 +5,20 @@ weighted_jacobian(field) = weighted_jacobian(axes(field))
 weighted_jacobian(space::Spaces.AbstractSpace) =
     Spaces.local_geometry_data(space).WJ
 
+_local_area(field) = Base.sum(weighted_jacobian(field))
+_area(field) =
+    ClimaComms.allreduce(comm_context(axes(field)), _local_area(field), +)
+
+_local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
+    Base.reduce(
+        RecursiveApply.radd,
+        Base.Broadcast.broadcasted(
+            RecursiveApply.rmul,
+            weighted_jacobian(field),
+            todata(field),
+        ),
+    )
+_local_sum(fn, field::Field) = _local_sum(Base.Broadcast.broadcasted(fn, field))
 """
     sum([f=identity,]v::Field)
 
@@ -22,25 +36,43 @@ and quadrature weights:
 where ``v_i`` is the value at each node, and ``f`` is the identity function if not specified.
 """
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
-    Base.reduce(
-        RecursiveApply.radd,
-        Base.Broadcast.broadcasted(
-            RecursiveApply.rmul,
-            weighted_jacobian(field),
-            todata(field),
-        ),
-    )
+    context = comm_context(axes(field))
+    local_sum = _local_sum(field)
+    if local_sum isa Number
+        ClimaComms.allreduce(context, local_sum, +)
+    elseif local_sum isa NamedTuple
+        S = typeof(local_sum)
+        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [local_sum...], +))[]
+    end
+
 end
 
-function Base.sum(fn, field::Field)
-    # Can't just call mapreduce as we need to weight _after_ applying the function
-    Base.sum(Base.Broadcast.broadcasted(fn, field))
+Base.sum(fn, field::Field) = Base.sum(Base.Broadcast.broadcasted(fn, field))
+
+function Base.maximum(fn, field::Field)
+    context = comm_context(axes(field))
+    localmax = mapreduce(fn, max, todata(field))
+    if localmax isa Number
+        ClimaComms.allreduce(context, localmax, max)
+    elseif localmax isa NamedTuple
+        S = typeof(localmax)
+        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [localmax...], max))[]
+    end
 end
 
-Base.maximum(fn, field::Field) = mapreduce(fn, max, todata(field))
 Base.maximum(field::Field) = maximum(identity, field)
 
-Base.minimum(fn, field::Field) = mapreduce(fn, min, todata(field))
+function Base.minimum(fn, field::Field)
+    context = comm_context(axes(field))
+    localmin = mapreduce(fn, min, todata(field))
+    if localmin isa Number
+        ClimaComms.allreduce(context, localmin, min)
+    elseif localmin isa NamedTuple
+        S = typeof(localmin)
+        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [localmin...], min))[]
+    end
+end
+
 Base.minimum(field::Field) = minimum(identity, field)
 
 # somewhat inefficient
@@ -62,10 +94,19 @@ summation of the field values multiplied by the Jacobian determinants and quadra
 where ``v_i`` is the Field value at each node, and ``f`` is the identity function if not specified.
 """
 function Statistics.mean(field::Field)
-    Base.sum(field) / Base.sum(weighted_jacobian(field))
+    context = comm_context(axes(field))
+    RecursiveApply.rdiv(
+        ClimaComms.allreduce(context, _local_sum(field), +),
+        ClimaComms.allreduce(context, _local_area(field), +),
+    )
 end
+
 function Statistics.mean(fn, field::Field)
-    Base.sum(fn, field) / Base.sum(weighted_jacobian(field))
+    context = comm_context(axes(field))
+    RecursiveApply.rdiv(
+        ClimaComms.allreduce(context, _local_sum(fn, field), +),
+        ClimaComms.allreduce(context, _local_area(field), +),
+    )
 end
 
 """
