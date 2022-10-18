@@ -476,7 +476,7 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
 
 end
 
-@testset "dz_field" begin
+@testset "Δz_field" begin
     FT = Float64
     x = FT(1)
     y = FT(2)
@@ -516,7 +516,7 @@ end
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)
         space = Spaces.PointSpace(local_geometry)
-        dz_computed = parent(Fields.dz_field(space))
+        dz_computed = parent(Fields.Δz_field(space))
         @test length(dz_computed) == 1
         @test dz_computed[1] == expected_dz
     end
@@ -603,7 +603,7 @@ convergence_rate(err, Δh) =
 
             Y = FieldFromNamedTuple(space, (; y = FT(1)))
             zcf = Fields.coordinate_field(Y.y).z
-            Δz = Fields.dz_field(axes(zcf))
+            Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
             Δz_1 = parent(Δz_col)[1]
             key = (space, zelem)
