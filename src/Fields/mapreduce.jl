@@ -1,24 +1,23 @@
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
 
-# useful operations
-weighted_jacobian(field) = weighted_jacobian(axes(field))
-weighted_jacobian(space::Spaces.AbstractSpace) =
-    Spaces.local_geometry_data(space).WJ
+"""
+    Fields.local_sum(v::Field)
 
-_local_area(field) = Base.sum(weighted_jacobian(field))
-_area(field) =
-    ClimaComms.allreduce(comm_context(axes(field)), _local_area(field), +)
+Compute the approximate integral of `v` over the domain local to the current
+context.
 
-_local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
+See [`sum`](@ref) for the integral over the full domain.
+"""
+local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
     Base.reduce(
         RecursiveApply.radd,
         Base.Broadcast.broadcasted(
             RecursiveApply.rmul,
-            weighted_jacobian(field),
+            Spaces.weighted_jacobian(axes(field)),
             todata(field),
         ),
     )
-_local_sum(fn, field::Field) = _local_sum(Base.Broadcast.broadcasted(fn, field))
+
 """
     sum([f=identity,]v::Field)
 
@@ -34,45 +33,38 @@ and quadrature weights:
 \\int_\\Omega f(v) \\, d \\Omega
 ```
 where ``v_i`` is the value at each node, and ``f`` is the identity function if not specified.
+
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
     context = comm_context(axes(field))
-    local_sum = _local_sum(field)
-    if local_sum isa Number
-        ClimaComms.allreduce(context, local_sum, +)
-    elseif local_sum isa NamedTuple
-        S = typeof(local_sum)
-        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [local_sum...], +))[]
-    end
-
+    data_sum = DataLayouts.DataF(local_sum(field))
+    ClimaComms.allreduce!(context, parent(data_sum), +)
+    return data_sum[]
 end
-
 Base.sum(fn, field::Field) = Base.sum(Base.Broadcast.broadcasted(fn, field))
 
+"""
+    maximum([f=identity,]v::Field)
+
+Approximate maximum of `v` or `f.(v)` over the domain.
+
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
+"""
 function Base.maximum(fn, field::Field)
     context = comm_context(axes(field))
-    localmax = mapreduce(fn, max, todata(field))
-    if localmax isa Number
-        ClimaComms.allreduce(context, localmax, max)
-    elseif localmax isa NamedTuple
-        S = typeof(localmax)
-        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [localmax...], max))[]
-    end
+    data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
+    ClimaComms.allreduce!(context, parent(data_max), max)
+    return data_max[]
 end
-
 Base.maximum(field::Field) = maximum(identity, field)
 
 function Base.minimum(fn, field::Field)
     context = comm_context(axes(field))
-    localmin = mapreduce(fn, min, todata(field))
-    if localmin isa Number
-        ClimaComms.allreduce(context, localmin, min)
-    elseif localmin isa NamedTuple
-        S = typeof(localmin)
-        DataLayouts.DataF{S}(ClimaComms.allreduce(context, [localmin...], min))[]
-    end
+    data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
+    ClimaComms.allreduce!(context, parent(data_min), min)
+    return data_min[]
 end
-
 Base.minimum(field::Field) = minimum(identity, field)
 
 # somewhat inefficient
@@ -92,22 +84,22 @@ summation of the field values multiplied by the Jacobian determinants and quadra
 \\frac{\\int_\\Omega f(v) \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}
 ```
 where ``v_i`` is the Field value at each node, and ``f`` is the identity function if not specified.
-"""
-function Statistics.mean(field::Field)
-    context = comm_context(axes(field))
-    RecursiveApply.rdiv(
-        ClimaComms.allreduce(context, _local_sum(field), +),
-        ClimaComms.allreduce(context, _local_area(field), +),
-    )
-end
 
-function Statistics.mean(fn, field::Field)
-    context = comm_context(axes(field))
-    RecursiveApply.rdiv(
-        ClimaComms.allreduce(context, _local_sum(fn, field), +),
-        ClimaComms.allreduce(context, _local_area(field), +),
-    )
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
+"""
+function Statistics.mean(
+    field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
+)
+    space = axes(field)
+    context = comm_context(space)
+    data_combined =
+        DataLayouts.DataF((local_sum(field), Spaces.local_area(space)))
+    ClimaComms.allreduce!(context, parent(data_combined), +)
+    sum_v, area_v = data_combined[]
+    RecursiveApply.rdiv(sum_v, area_v)
 end
+Statistics.mean(fn, field::Field) =
+    Statistics.mean(Base.Broadcast.broadcasted(fn, field))
 
 """
     norm(v::Field, p=2; normalize=true)
