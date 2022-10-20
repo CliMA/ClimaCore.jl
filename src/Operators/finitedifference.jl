@@ -3168,15 +3168,13 @@ Base.@propagate_inbounds function getidx(
     bc.f(_args...)
 end
 
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(getidx_args)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(getidx)
-            m.recursion_relation = dont_limit
-        end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(getidx_args)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(getidx)
+        m.recursion_relation = dont_limit
     end
 end
 
@@ -3263,15 +3261,13 @@ function Base.Broadcast.materialize!(
 end
 
 #TODO: the optimizer dies with column broadcast expressions over a certain complexity
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(column)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(column_args)
-            m.recursion_relation = dont_limit
-        end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(column)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(column_args)
+        m.recursion_relation = dont_limit
     end
 end
 
