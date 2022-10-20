@@ -187,6 +187,13 @@ Spaces.dss_ghost_faces!
 Spaces.dss_ghost_vertices!
 ```
 
+#### Utilities
+
+```@docs
+Spaces.area
+Spaces.local_area
+```
+
 ## RecursiveApply
 
 ```@docs
@@ -203,8 +210,10 @@ Fields.local_geometry_field
 Base.zeros(::Spaces.AbstractSpace)
 Base.ones(::Spaces.AbstractSpace)
 Base.sum(::Fields.Field)
+Fields.local_sum
 Fields.Statistics.mean(::Fields.Field)
 Fields.LinearAlgebra.norm(::Fields.Field)
+Fields.local_sum
 Fields.set!
 Fields.ColumnIndex
 Fields.bycolumn

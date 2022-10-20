@@ -656,6 +656,12 @@ Base.@propagate_inbounds function stencil_left_boundary(
     hidx,
     arg,
 )
+#=
+    if !(idx == left_center_boundary_idx(arg))
+        @show idx
+        @show left_center_boundary_idx(arg)
+    end
+    =#
     @assert idx == left_center_boundary_idx(arg)
     getidx(bc.val, loc, nothing, hidx)
 end

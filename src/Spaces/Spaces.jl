@@ -41,4 +41,29 @@ include("dss.jl")
 horizontal_space(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space
 horizontal_space(space::AbstractSpace) = space
 
+weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
+
+"""
+    Spaces.local_area(space::Spaces.AbstractSpace)
+
+The length/area/volume of `space` local to the current context. See
+[`Spaces.area`](@ref)
+"""
+local_area(space::Spaces.AbstractSpace) = Base.sum(weighted_jacobian(space))
+
+"""
+    Spaces.area(space::Spaces.AbstractSpace)
+
+The length/area/volume of `space`. This is computed as the sum of the quadrature
+weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
+```math
+\\sum_i W_i J_i \\approx \\int_\\Omega \\, d \\Omega
+```
+
+If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
+"""
+area(space::Spaces.AbstractSpace) =
+    ClimaComms.allreduce(comm_context(space), local_area(space), +)
+
+
 end # module
