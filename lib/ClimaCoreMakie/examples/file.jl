@@ -136,6 +136,10 @@ begin
     # so when selecting e.g. a field, it may happen that it changes the axis zoom level
     # use ctrl + double mouse click to reset it.
     plots[1, 1] = ax = GeoAxis(fig; dest = projection)
+
+    # Disable all interactions with the axis for now, since they're buggy :(
+    foreach(name -> deregister_interaction!(ax, name), keys(interactions(ax)))
+
     # Create a toggable land overlay
     earth_overlay =
         poly!(ax, GeoMakie.land(), color = (:white, 0.2), transparency = true)
