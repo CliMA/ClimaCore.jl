@@ -476,6 +476,51 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
 
 end
 
+@testset "Δz_field" begin
+    FT = Float64
+    x = FT(1)
+    y = FT(2)
+    z = FT(3)
+    lat, long = FT(4), FT(5)
+    x1 = FT(1)
+    x2 = FT(2)
+    x3 = FT(3)
+    coords = [
+        Geometry.ZPoint(z),
+        Geometry.XZPoint(x, z),
+        Geometry.XYZPoint(x, y, z),
+        Geometry.LatLongZPoint(lat, long, z),
+        Geometry.Cartesian3Point(x3),
+        Geometry.Cartesian13Point(x1, x3),
+        Geometry.Cartesian123Point(x1, x2, x3),
+    ]
+    all_components = [
+        SMatrix{1, 1, FT}(range(1, 1)...),
+        SMatrix{2, 2, FT}(range(1, 4)...),
+        SMatrix{3, 3, FT}(range(1, 9)...),
+        SMatrix{3, 3, FT}(range(1, 9)...),
+        SMatrix{1, 1, FT}(range(1, 1)...),
+        SMatrix{2, 2, FT}(range(1, 4)...),
+        SMatrix{3, 3, FT}(range(1, 9)...),
+    ]
+
+    expected_dzs = [1.0, 4.0, 9.0, 9.0, 1.0, 4.0, 9.0]
+
+    for (components, coord, expected_dz) in
+        zip(all_components, coords, expected_dzs)
+        CoordType = typeof(coord)
+        AIdx = Geometry.coordinate_axis(CoordType)
+        at = Geometry.AxisTensor(
+            (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
+            components,
+        )
+        local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)
+        space = Spaces.PointSpace(local_geometry)
+        dz_computed = parent(Fields.Δz_field(space))
+        @test length(dz_computed) == 1
+        @test dz_computed[1] == expected_dz
+    end
+end
 
 @testset "scalar assignment" begin
     domain_z = Domains.IntervalDomain(
@@ -558,7 +603,7 @@ convergence_rate(err, Δh) =
 
             Y = FieldFromNamedTuple(space, (; y = FT(1)))
             zcf = Fields.coordinate_field(Y.y).z
-            Δz = Fields.dz_field(axes(zcf))
+            Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
             Δz_1 = parent(Δz_col)[1]
             key = (space, zelem)

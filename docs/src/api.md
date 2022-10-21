@@ -147,6 +147,7 @@ Sketch of a 2DX hybrid discretization:
 
 ```@docs
 Spaces
+Spaces.Δz_data
 ```
 ### Finite Difference Spaces
 ClimaCore.jl supports staggered Finite Difference discretizations. Finite Differences
@@ -217,6 +218,7 @@ Fields.local_sum
 Fields.set!
 Fields.ColumnIndex
 Fields.bycolumn
+Fields.Δz_field
 ```
 
 ## Limiters

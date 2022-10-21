@@ -272,15 +272,17 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
+Base.@deprecate dz_field(space::AbstractSpace) Δz_field(space) false
+Base.@deprecate dz_field(field::Field) Δz_field(field) false
 
 """
-    dz_field(field::Field)
-    dz_field(space::AbstractSpace)
+    Δz_field(field::Field)
+    Δz_field(space::AbstractSpace)
 
 A `Field` containing the `Δz` values on the same space as the given field.
 """
-dz_field(field::Field) = dz_field(axes(field))
-dz_field(space::AbstractSpace) = Field(Spaces.dz_data(space), space)
+Δz_field(field::Field) = Δz_field(axes(field))
+Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
 
 include("broadcast.jl")
 include("mapreduce.jl")

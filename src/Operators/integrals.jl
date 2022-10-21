@@ -38,7 +38,7 @@ end
 
 function column_integral_definite(field::Fields.ColumnField)
     field_data = Fields.field_values(field)
-    Δz_data = Spaces.dz_data(axes(field))
+    Δz_data = Spaces.Δz_data(axes(field))
     Nv = Spaces.nlevels(axes(field))
     ∫field = zero(eltype(field))
     @inbounds for j in 1:Nv
