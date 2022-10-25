@@ -122,6 +122,7 @@ steps:
       queue: central
       slurm_ntasks: 1
       slurm_gres: "gpu:1"
+      slurm_mem: 32GB
 
   - label: ":computer: test implicit_stencil Float32"
     key: "cpu_implicit_stencil_float32"
