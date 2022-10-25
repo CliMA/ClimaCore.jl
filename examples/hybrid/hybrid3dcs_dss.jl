@@ -93,8 +93,10 @@ function hybrid3dcubedsphere_dss_profiler(
         c = Spaces.create_ghost_buffer(Y.c),
         f = Spaces.create_ghost_buffer(Y.f),
     )
+    dss_buffer_f = Spaces.create_dss_buffer(Y.f)
+    dss_buffer_c = Spaces.create_dss_buffer(Y.c)
     nsamples = 10000
-    nprofilesamples = 1000
+    nsamplesprofiling = 100
 
     # precompile relevant functions
     space = axes(Y.c)
@@ -107,6 +109,7 @@ function hybrid3dcubedsphere_dss_profiler(
         ghost_buffer.c,
     )
     dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
+    Spaces.weighted_dss2!(Y.c, dss_buffer_c)
     ClimaComms.barrier(comms_ctx)
 
     # timing
@@ -117,6 +120,14 @@ function hybrid3dcubedsphere_dss_profiler(
     end
     ClimaComms.barrier(comms_ctx)
     walltime_dss_full /= FT(nsamples)
+
+    walltime_dss2_full = @elapsed begin # timing weighted dss2
+        for i in 1:nsamples
+            Spaces.weighted_dss2!(Y.c, dss_buffer_c)
+        end
+    end
+    ClimaComms.barrier(comms_ctx)
+    walltime_dss2_full /= FT(nsamples)
 
     ClimaComms.barrier(comms_ctx)
     walltime_dss_internal = @elapsed begin # timing internal dss
@@ -161,7 +172,8 @@ function hybrid3dcubedsphere_dss_profiler(
 
     # profiling
     ClimaComms.barrier(comms_ctx)
-    for i in 1:nprofilesamples # profiling weighted dss
+
+    for i in 1:nsamplesprofiling # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
                 Spaces.weighted_dss_start!(Y.c, ghost_buffer.c)
@@ -176,7 +188,7 @@ function hybrid3dcubedsphere_dss_profiler(
     end
     ClimaComms.barrier(comms_ctx)
 
-    for i in 1:nprofilesamples # profiling dss_comms
+    for i in 1:nsamplesprofiling # profiling dss_comms
         @nvtx "dss-comms-loop" color = colorant"green" begin
             dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
         end
@@ -186,6 +198,7 @@ function hybrid3dcubedsphere_dss_profiler(
     if iamroot
         println("# of samples = $nsamples")
         println("walltime_dss_full per sample = $walltime_dss_full (sec)")
+        println("walltime_dss2_full per sample = $walltime_dss2_full (sec)")
         println(
             "walltime_dss_internal per sample = $walltime_dss_internal (sec)",
         )
@@ -208,6 +221,7 @@ function hybrid3dcubedsphere_dss_profiler(
             nprocs,
             nsamples,
             walltime_dss_full,
+            walltime_dss2_full,
             walltime_dss_internal,
             walltime_dss_comms,
             walltime_dss_comms_fsb,

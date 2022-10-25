@@ -45,7 +45,7 @@ function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
     elseif loc ≤ nperimeter2d(Nq)
         f = cld(loc - 4, Nq - 2)
         n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1) # face_node_index also counts the bordering vertex dof
+        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
     else
         return nothing
     end
@@ -54,6 +54,7 @@ end
 nperimeter2d(Nq) = 4 + (Nq - 2) * 4
 nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
+
 """
     SpectralElementSpace1D <: AbstractSpace
 

@@ -368,6 +368,22 @@ function Spaces.weighted_dss_ghost!(field, ghost_buffer)
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), ghost_buffer)
 end
 
+function Spaces.weighted_dss2!(
+    field::Field,
+    dss_buffer = Spaces.create_dss_buffer(field),
+)
+    Spaces.weighted_dss2!(field_values(field), axes(field), dss_buffer)
+    return field
+end
+Spaces.weighted_dss_start2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_start2!(field_values(field), axes(field), dss_buffer)
+
+Spaces.weighted_dss_internal2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_internal2!(field_values(field), axes(field), dss_buffer)
+
+Spaces.weighted_dss_ghost2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_ghost2!(field_values(field), axes(field), dss_buffer)
+
 """
     Spaces.create_ghost_buffer(field::Field)
 
@@ -381,6 +397,18 @@ function Spaces.create_ghost_buffer(field::Field)
     Spaces.create_ghost_buffer(field_values(field), hspace.topology)
 end
 
+"""
+    Spaces.create_dss_buffer(field::Field)
+
+Create a buffer for communicating neighbour information of `field`.
+"""
+function Spaces.create_dss_buffer(field::Field)
+    space = axes(field)
+    hspace =
+        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
+        space.horizontal_space : space
+    Spaces.create_dss_buffer(field_values(field), hspace)
+end
 
 Base.@propagate_inbounds function level(
     field::Union{
