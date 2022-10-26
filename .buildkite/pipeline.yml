@@ -1028,3 +1028,12 @@ steps:
       config: cpu
       queue: central
       slurm_ntasks: 1
+
+  - label: ":rocket::computer: Invalidations"
+    key: "cpu_invalidations"
+    command:
+      - "julia --color=yes --project=perf perf/invalidations.jl"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
