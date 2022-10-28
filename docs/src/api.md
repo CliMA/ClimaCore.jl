@@ -88,6 +88,7 @@ Meshes.NormalizedBilinearMap
 ```@docs
 Meshes.Uniform
 Meshes.ExponentialStretching
+Meshes.GeneralizedExponentialStretching
 ```
 
 ### Interfaces

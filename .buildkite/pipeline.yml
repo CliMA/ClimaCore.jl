@@ -1035,5 +1035,6 @@ steps:
       - "julia --color=yes --project=perf perf/invalidations.jl"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
