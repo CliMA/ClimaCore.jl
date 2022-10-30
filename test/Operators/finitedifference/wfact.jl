@@ -49,12 +49,6 @@ QDT = Operators.StencilCoefs{-(1 + half), 1 + half, NTuple{4, FT}}
 ∂ᶜK∂ᶠw_data = similar(ᶜρ, BDT)
 ∂ᶜ𝔼ₜ∂ᶠ𝕄 = similar(ᶜρ, QDT)
 
-
-# Allow one() to be called on vectors.
-Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
-Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
-    T(axes(T), S(one(T′)))
-
 function wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
 
     FT = eltype(ᶜρ)

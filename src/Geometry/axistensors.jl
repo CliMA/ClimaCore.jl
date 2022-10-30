@@ -172,6 +172,11 @@ function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
     )
 end
 
+# Allow one() to be called on vectors.
+Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
+Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
+    T(axes(T), S(one(T′)))
+
 """
     components(a::AxisTensor)
 

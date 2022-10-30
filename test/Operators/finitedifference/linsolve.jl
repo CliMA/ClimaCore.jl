@@ -67,11 +67,6 @@ include(
 jacobi_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact);
 use_transform = false;
 
-# Allow one() to be called on vectors.
-Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
-Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
-    T(axes(T), S(one(T′)))
-
 Y = Fields.FieldVector(
     c = map(
         coord -> (
