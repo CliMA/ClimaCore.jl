@@ -91,6 +91,11 @@ Meshes.ExponentialStretching
 Meshes.GeneralizedExponentialStretching
 ```
 
+### Mesh utilities
+```@docs
+Meshes.truncate_mesh
+```
+
 ### Interfaces
 ```@docs
 Meshes.domain
