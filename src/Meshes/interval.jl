@@ -280,3 +280,47 @@ function IntervalMesh(
     monotonic_check(faces)
     IntervalMesh(domain, CT.(faces))
 end
+
+
+"""
+    truncate_mesh(
+        parent_mesh::AbstractMesh,
+        trunc_domain::IntervalDomain{CT},
+    )
+Constructs an `IntervalMesh`, truncating the given `parent_mesh` defined on a
+truncated `trunc_domain`. The truncation preserves the number of
+degrees of freedom covering the space from the `trunc_domain`'s `:bottom` to `z_top`,
+adjusting the stretching.
+"""
+function truncate_mesh(
+    parent_mesh::IntervalMesh,
+    trunc_domain::IntervalDomain{CT},
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+
+    # Get approximate top
+    faces = parent_mesh.faces
+    k_top = length(faces)
+    z_top = trunc_domain.coord_max
+    z_bottom = trunc_domain.coord_min
+
+    for (k_f, face) in enumerate(faces)
+        if face.z ≥ z_top.z
+            k_top = k_f
+            break
+        end
+    end
+
+    trunc_faces = faces[1:k_top]
+    new_nelems = length(trunc_faces) - 1
+
+    Δz_top = trunc_faces[end].z - trunc_faces[end - 1].z
+    Δz_bottom = trunc_faces[2].z - trunc_faces[1].z
+
+    new_stretch = GeneralizedExponentialStretching(Δz_bottom, Δz_top)
+    new_domain = IntervalDomain(
+        z_bottom,
+        Geometry.ZPoint{FT}(z_top),
+        boundary_tags = (:bottom, :top),
+    )
+    return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
+end

@@ -4,7 +4,10 @@ import RootSolvers
 using DocStringExtensions
 
 export RectilinearMesh,
-    EquiangularCubedSphere, EquidistantCubedSphere, ConformalCubedSphere
+    EquiangularCubedSphere,
+    EquidistantCubedSphere,
+    ConformalCubedSphere,
+    truncate_mesh!
 
 import ..Domains:
     Domains,
