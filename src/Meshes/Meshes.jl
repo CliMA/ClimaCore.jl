@@ -7,7 +7,7 @@ export RectilinearMesh,
     EquiangularCubedSphere,
     EquidistantCubedSphere,
     ConformalCubedSphere,
-    truncate_mesh!
+    truncate_mesh
 
 import ..Domains:
     Domains,

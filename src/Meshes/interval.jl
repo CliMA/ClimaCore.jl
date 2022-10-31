@@ -289,7 +289,7 @@ end
     )
 Constructs an `IntervalMesh`, truncating the given `parent_mesh` defined on a
 truncated `trunc_domain`. The truncation preserves the number of
-degrees of freedom covering the space from the `trunc_domain`'s `:bottom` to `z_top`,
+degrees of freedom covering the space from the `trunc_domain`'s `z_bottom` to `z_top`,
 adjusting the stretching.
 """
 function truncate_mesh(
@@ -320,7 +320,7 @@ function truncate_mesh(
     new_domain = IntervalDomain(
         z_bottom,
         Geometry.ZPoint{FT}(z_top),
-        boundary_tags = (:bottom, :top),
+        boundary_names = trunc_domain.boundary_names,
     )
     return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
 end
