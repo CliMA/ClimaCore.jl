@@ -159,7 +159,7 @@ function IntervalMesh(
     ]
 
     if reverse_mode
-        faces = map(f -> eltype(faces)(-f.z), faces)
+        faces = map(f -> eltype(faces)(-f), faces)
         faces[1] = faces[1] == -cmax ? cmax : faces[1]
         reverse!(faces)
     end
