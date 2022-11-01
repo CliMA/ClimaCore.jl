@@ -601,6 +601,31 @@ end
     end
 end
 
+@testset "Add and subtract 1D X,Y,Z Points" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_x_1 = Geometry.XPoint(one(FT))
+        pt_x_2 = Geometry.XPoint(FT(2))
+        pt_y_1 = Geometry.YPoint(one(FT))
+        pt_y_2 = Geometry.YPoint(FT(2))
+        pt_z_1 = Geometry.ZPoint(one(FT))
+        pt_z_2 = Geometry.ZPoint(FT(2))
+        # Check 1D geometry points
+        @test pt_x_1 + pt_x_2 ≈ Geometry.XPoint(FT(3)) rtol = 2eps()
+        @test pt_x_1 - pt_x_2 ≈ Geometry.XPoint(FT(-1)) rtol = 2eps()
+        @test pt_y_1 + pt_y_2 ≈ Geometry.YPoint(FT(3)) rtol = 2eps()
+        @test pt_y_1 - pt_y_2 ≈ Geometry.YPoint(FT(-1)) rtol = 2eps()
+        @test pt_z_1 + pt_z_2 ≈ Geometry.ZPoint(FT(3)) rtol = 2eps()
+        @test pt_z_1 - pt_z_2 ≈ Geometry.ZPoint(FT(-1)) rtol = 2eps()
+        # Check components
+        @test (pt_x_1 + pt_x_2).x ≈ FT(3) rtol = 2eps()
+        @test (pt_x_1 - pt_x_2).x ≈ FT(-1) rtol = 2eps()
+        @test (pt_y_1 + pt_y_2).y ≈ FT(3) rtol = 2eps()
+        @test (pt_y_1 - pt_y_2).y ≈ FT(-1) rtol = 2eps()
+        @test (pt_z_1 + pt_z_2).z ≈ FT(3) rtol = 2eps()
+        @test (pt_z_1 - pt_z_2).z ≈ FT(-1) rtol = 2eps()
+    end
+end
+
 @testset "1D ZPoint Euclidean distance" begin
     for FT in (Float32, Float64, BigFloat)
         pt_1 = Geometry.ZPoint(one(FT))
