@@ -283,13 +283,13 @@ end
 end
 
 # Test truncated field type printing:
-ClimaCore.Fields.truncate_printing_field_types() = true
+Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => true))
 @testset "Truncated printing" begin
     nt = (; x = Float64(0), y = Float64(0))
     Y = FieldFromNamedTuple(spectral_space_2D(), nt)
     @test sprint(show, typeof(Y)) == "Field{(:x, :y)} (trunc disp)"
 end
-ClimaCore.Fields.truncate_printing_field_types() = false
+Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => false))
 
 @testset "Standard printing" begin
     nt = (; x = Float64(0), y = Float64(0))

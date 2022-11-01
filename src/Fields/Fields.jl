@@ -459,17 +459,14 @@ long.
 
 # Example
 ```
-import ClimaCore
-ClimaCore.Fields.truncate_printing_field_types() = true
+import Preferences
+Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => false))
 ```
 =#
-truncate_printing_field_types() = false
-
-function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
-    if truncate_printing_field_types()
+import Preferences
+if Preferences.@load_preference("TruncateClimaCoreFieldPrinting", false)
+    function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
         print(io, truncated_field_type_string(T))
-    else
-        invoke(show, Tuple{IO, Type}, io, T)
     end
 end
 
