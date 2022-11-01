@@ -601,6 +601,25 @@ end
     end
 end
 
+@testset "Opposite 1D X,Y,Z Points" begin
+    for FT in (Float32, Float64, BigFloat)
+        pt_x_1 = Geometry.XPoint(one(FT))
+        pt_x_2 = Geometry.XPoint(-one(FT))
+        pt_y_1 = Geometry.YPoint(one(FT))
+        pt_y_2 = Geometry.YPoint(-one(FT))
+        pt_z_1 = Geometry.ZPoint(one(FT))
+        pt_z_2 = Geometry.ZPoint(-one(FT))
+        # Check 1D geometry points
+        @test pt_x_1 ≈ -pt_x_2 rtol = 2eps()
+        @test pt_y_1 ≈ -pt_y_2 rtol = 2eps()
+        @test pt_z_1 ≈ -pt_z_2 rtol = 2eps()
+        # Check components
+        @test (pt_x_1).x ≈ -(pt_x_2).x rtol = 2eps()
+        @test (pt_y_1).y ≈ -(pt_y_2).y rtol = 2eps()
+        @test (pt_z_1).z ≈ -(pt_z_2).z rtol = 2eps()
+    end
+end
+
 @testset "Add and subtract 1D X,Y,Z Points" begin
     for FT in (Float32, Float64, BigFloat)
         pt_x_1 = Geometry.XPoint(one(FT))

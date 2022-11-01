@@ -174,6 +174,8 @@ coordinate(pt::AbstractPoint, ax::Int) = _coordinate(pt, Val(ax))
 coordinate(pt::AbstractPoint, ax::Integer) = _coordinate(pt, Int(ax))
 
 # the following are needed for linranges to work correctly with coordinate values
+Base.:(-)(p1::T) where {T <: AbstractPoint} =
+    unionalltype(T)((-components(p1)...))
 Base.:(-)(p1::T, p2::T) where {T <: AbstractPoint} =
     unionalltype(T)((components(p1) - components(p2))...)
 Base.:(+)(p1::T, p2::T) where {T <: AbstractPoint} =
