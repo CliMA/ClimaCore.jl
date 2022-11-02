@@ -464,7 +464,7 @@ Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => false))
 ```
 =#
 import Preferences
-if Preferences.@load_preference("TruncateClimaCoreFieldPrinting", false)
+if Preferences.@load_preference("TruncateFieldPrinting", false)
     function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
         print(io, truncated_field_type_string(T))
     end
