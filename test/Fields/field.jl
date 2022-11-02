@@ -283,6 +283,7 @@ end
 end
 
 # Test truncated field type printing:
+import Preferences
 Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => true))
 @testset "Truncated printing" begin
     nt = (; x = Float64(0), y = Float64(0))
