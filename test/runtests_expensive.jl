@@ -15,6 +15,7 @@ if !Sys.iswindows()
 @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
 @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
 @safetestset "Fields" begin @time include("Fields/field.jl") end
+@safetestset "Field printing" begin @time include("Fields/truncated_field_printing.jl") end
 @safetestset "Operators" begin @time include("Operators/spectralelement/run_sphere_geometry_distributed.jl") end
 @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
 @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end

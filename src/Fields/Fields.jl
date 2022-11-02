@@ -460,7 +460,7 @@ long.
 # Example
 ```
 import Preferences
-Preferences.@set_preferences!(Pair("TruncateClimaCoreFieldPrinting" => false))
+Preferences.@set_preferences!(Pair("TruncateFieldPrinting" => false))
 ```
 =#
 import Preferences
