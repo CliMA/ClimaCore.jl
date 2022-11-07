@@ -179,7 +179,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     hidx,
 )
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        idx = mod1(idx, length(space))
+        idx = mod1(idx, Spaces.nlevels(space))
     end
     @inbounds column(space.center_local_geometry, hidx...)[idx]
 end
@@ -193,7 +193,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
 )
     i = idx.i + 1
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        i = mod1(i, length(space))
+        i = mod1(i, Spaces.nlevels(space))
     end
     @inbounds column(space.face_local_geometry, hidx...)[i]
 end
@@ -1086,7 +1086,7 @@ Base.@propagate_inbounds function stencil_interior(
     w⁻ = getidx(weight, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
-    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (2 ⊠ (w⁺ ⊞ w⁻)))
+    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
 end
 
 boundary_width(::WeightedInterpolateC2F, ::SetValue, weight, arg) = 1
@@ -3087,7 +3087,7 @@ Base.@propagate_inbounds function getidx(
     field_data = Fields.field_values(bc)
     space = axes(bc)
     if Topologies.isperiodic(space.topology)
-        idx = mod1(idx, length(space))
+        idx = mod1(idx, Spaces.nlevels(space))
     end
     return @inbounds field_data[idx]
 end
@@ -3101,7 +3101,7 @@ Base.@propagate_inbounds function getidx(
     space = axes(bc)
     i = idx.i + 1
     if Topologies.isperiodic(space.topology)
-        i = mod1(i, length(space))
+        i = mod1(i, Spaces.nlevels(space))
     end
     return @inbounds field_data[i]
 end
@@ -3319,8 +3319,7 @@ end
 Base.@propagate_inbounds function apply_stencil!(field_out, bc, hidx)
     space = axes(bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        @inbounds for idx in
-                      left_idx(space):(left_idx(space) + length(space) - 1)
+        @inbounds for idx in left_idx(space):right_idx(space)
             setidx!(field_out, idx, hidx, getidx(bc, Interior(), idx, hidx))
         end
     else
