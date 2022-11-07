@@ -465,7 +465,7 @@ ClimaCore.Fields.truncate_printing_field_types() = true
 =#
 truncate_printing_field_types() = false
 
-function Base.show(io::IOContext, ::Type{T}) where {T <: Fields.Field}
+function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
     if truncate_printing_field_types()
         print(io, truncated_field_type_string(T))
     else
