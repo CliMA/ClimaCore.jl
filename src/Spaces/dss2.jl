@@ -41,6 +41,7 @@ function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     hspace::AbstractSpectralElementSpace,
 ) where {S, Nij}
+    @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
     topology = hspace.topology
     context =
         topology isa Topologies.DistributedTopology2D ? topology.context :
