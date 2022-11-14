@@ -150,6 +150,49 @@ end
     @test conv_adv_c2c[3] ≈ 2 atol = 0.1
 end
 
+@testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations: Kinetic Energy" begin
+
+    gradc2f = Operators.GradientC2F(
+        top = Operators.SetValue(0.0),
+        bottom = Operators.SetValue(0.0),
+    )
+    gradf2c = Operators.GradientF2C()
+
+    n_elems_seq = 2 .^ (5, 6, 7, 8)
+    err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+
+    for (k, n) in enumerate(n_elems_seq)
+        # Discrete Prodouct Rule Test
+        # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a∂s
+        # a, b are interface variables, and  ̅ represents interpolation
+        # c is a cell centered variable
+        # s is the coordinate along horizontal surfaces (terrain following)
+        # For this test, we use a(z) = z and b = sin(z),
+        hv_center_space, hv_face_space = hvspace_2D(helem = n, velem = n)
+        ᶠz = Fields.coordinate_field(hv_face_space).z
+        ᶜz = Fields.coordinate_field(hv_center_space).z
+        Δh[k] = 1.0 / n
+
+        # advective velocity
+        a = Geometry.WVector.(ones(Float64, hv_face_space) .* ᶠz,)
+        # scalar-valued field to be advected
+        b = sin.(ᶠz)
+        c = sin.(ᶜz)
+        ∂ab_numerical = @. gradf2c(a*b)
+        ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
+
+
+        err[k] = norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z))
+    end
+    # AdvectionC2C convergence rate
+    conv_adv_c2c = convergence_rate(err, Δh)
+    @show conv_adv_c2c
+    @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
+    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
+    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
+end
+
 @testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
 
     # Divergence Operator
