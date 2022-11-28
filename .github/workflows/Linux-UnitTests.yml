@@ -11,7 +11,7 @@ on:
       - '!lib/**'
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     timeout-minutes: 80
     strategy:
       fail-fast: false
