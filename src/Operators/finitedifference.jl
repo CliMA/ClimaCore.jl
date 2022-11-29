@@ -2794,7 +2794,7 @@ C(v)[i]^1 &= - \\frac{1}{J[i]} (v₂[i+\\tfrac{1}{2}] - v₂[i-\\tfrac{1}{2}]) \
 C(v)[i]^2 &= \\frac{1}{J[i]}  (v₁[i+\\tfrac{1}{2}] - v₁[i-\\tfrac{1}{2}])
 \\end{align*}
 ```
-where ``v₁` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
+where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
 ``J`` is the Jacobian determinant.
 
 The following boundary conditions are supported:
