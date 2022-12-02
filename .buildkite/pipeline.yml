@@ -498,6 +498,7 @@ steps:
     agents:
       config: cpu
       queue: central
+      slurm_mem: 20GB
       slurm_ntasks: 1
 
   - label: ":computer: Rising Bubble 2D hybrid invariant (ρθ)"
@@ -747,6 +748,7 @@ steps:
     agents:
       config: cpu
       queue: central
+      slurm_mem: 20GB
       slurm_ntasks: 2
 
   - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
