@@ -84,7 +84,7 @@ if !Sys.iswindows()
 # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
 
 # Code quality checks
-@safetestset "Aqua" begin @time include("aqua.jl") end
+#@safetestset "Aqua" begin @time include("aqua.jl") end
 
 @safetestset "InputOutput" begin include("InputOutput/runtests_inputoutput.jl") end
 end
