@@ -497,6 +497,7 @@ steps:
       - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -802,7 +803,7 @@ steps:
       - "examples/hybrid/sphere/output/hadley_circulation/*"
     agents:
       config: cpu
-      slurm_mem: 20GB
+      slurm_mem: 40GB
       queue: central
       slurm_ntasks: 1
 
