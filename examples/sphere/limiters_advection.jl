@@ -91,7 +91,8 @@ for (k, ne) in enumerate(ne_seq)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     grid_topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    space =
+        Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble = true)
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
