@@ -1,3 +1,4 @@
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -15,19 +16,20 @@ using Logging
 #ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    using ClimaComms
     using ClimaCommsMPI
     const context = ClimaCommsMPI.MPICommsContext()
     const pid, nprocs = ClimaComms.init(context)
-
+    const iamroot = ClimaComms.iamroot(context)
+    iamroot && println("running distributed simulation using $nprocs processes")
     # log output only from root process
-    logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
+    logger_stream = iamroot ? stderr : devnull
 
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
     atexit() do
         global_logger(prev_logger)
     end
 else
+    const context = ClimaComms.SingletonCommsContext()
     import TerminalLoggers
     global_logger(TerminalLoggers.TerminalLogger())
 end
@@ -58,14 +60,15 @@ n1, n2 = 16, 16
 Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
+grid_topology = Topologies.DistributedTopology2D(context, mesh)
 if usempi
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
-    global_grid_topology = Topologies.Topology2D(mesh)
+    global_grid_topology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 else
-    comms_ctx = nothing
-    grid_topology = Topologies.Topology2D(mesh)
     global_space = space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 end
 
