@@ -359,7 +359,13 @@ const RectilinearSpectralElementSpace2D =
     SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.RectilinearMesh}}
 
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.Topology2D{<:Meshes.AbstractCubedSphere},
+    <:Union{
+        Topologies.Topology2D{<:Meshes.AbstractCubedSphere},
+        Topologies.DistributedTopology2D{
+            <:ClimaComms.AbstractCommsContext,
+            <:Meshes.AbstractCubedSphere,
+        },
+    },
 }
 
 function compute_local_geometry(
