@@ -1,3 +1,4 @@
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -8,6 +9,8 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
 
 """
     convergence_rate(err, Δh)
@@ -76,7 +79,7 @@ Nq = 4
 for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
