@@ -13,7 +13,7 @@ remapping package, by Paul Ullrich.
 ## Online remap
 
 ```@docs
-LinearTempestRemap
+LinearMap
 generate_map
 remap!
 remap
