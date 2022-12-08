@@ -1,16 +1,18 @@
 using LinearAlgebra, IntervalSets, UnPack
+using ClimaComms
 import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column
 
 using Test
 
 @testset "Sphere" begin
     FT = Float64
+    context = ClimaComms.SingletonCommsContext()
     radius = FT(3)
     ne = 4
     Nq = 4
     domain = Domains.SphereDomain(radius)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    topology = Topologies.Topology2D(mesh)
+    topology = Topologies.DistributedTopology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
@@ -37,6 +39,7 @@ end
 
 @testset "Volume of a spherical shell" begin
     FT = Float64
+    context = ClimaComms.SingletonCommsContext()
     radius = FT(128)
     zlim = (0, 1)
     helem = 4
@@ -53,7 +56,7 @@ end
 
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(context, horzmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

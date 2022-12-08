@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields
@@ -54,6 +55,7 @@ end
 
 @testset "finite difference space" begin
     FT = Float64
+    context = ClimaComms.SingletonCommsContext()
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0) .. Geometry.ZPoint{FT}(5),
         boundary_names = (:bottom, :top),
@@ -89,7 +91,7 @@ end
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
     quad = Spaces.Quadratures.GL{1}()
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.DistributedTopology2D(context, hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     @test collect(Spaces.unique_nodes(hspace)) ==
@@ -100,6 +102,7 @@ end
 
 @testset "1×1 domain space" begin
     FT = Float32
+    context = ClimaComms.SingletonCommsContext()
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),
@@ -108,7 +111,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, 1, 1)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -156,6 +159,7 @@ end
 end
 
 @testset "2D perimeter iterator on 2×2 rectangular mesh" begin
+    context = ClimaComms.SingletonCommsContext()
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
             Geometry.XPoint(-2π),
@@ -172,7 +176,7 @@ end
     Nq = 5
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     perimeter = Spaces.perimeter(space)
 
@@ -212,7 +216,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -292,7 +296,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
