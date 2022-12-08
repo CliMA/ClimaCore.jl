@@ -47,7 +47,8 @@ mesh = Meshes.RectilinearMesh(domain, n1, n2)
 
 grid_topology =
     Topologies.DistributedTopology2D(comms_ctx, mesh, Meshes.elements(mesh))
-global_grid_topology = Topologies.Topology2D(mesh)
+global_grid_topology =
+    Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), mesh)
 Nf = 4
 Nv = 1
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
