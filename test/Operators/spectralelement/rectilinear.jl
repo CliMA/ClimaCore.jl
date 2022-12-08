@@ -1,5 +1,6 @@
 using Test
 using StaticArrays
+using ClimaComms
 import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore:
     Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
@@ -17,12 +18,18 @@ Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
 
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
-grid_topology = Topologies.Topology2D(grid_mesh)
+grid_topology = Topologies.DistributedTopology2D(
+    ClimaComms.SingletonCommsContext(),
+    grid_mesh,
+)
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 grid_coords = Fields.coordinate_field(grid_space)
 
 ts_mesh = Meshes.RectilinearMesh(domain, 17, 16)
-ts_topology = Topologies.Topology2D(ts_mesh)
+ts_topology = Topologies.DistributedTopology2D(
+    ClimaComms.SingletonCommsContext(),
+    ts_mesh,
+)
 ts_space = Spaces.SpectralElementSpace2D(ts_topology, quad)
 ts_coords = Fields.coordinate_field(ts_space)
 

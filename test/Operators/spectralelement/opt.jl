@@ -1,5 +1,6 @@
 using Test
 using JET
+using ClimaComms
 using LinearAlgebra, IntervalSets
 
 import ClimaCore:
@@ -138,7 +139,10 @@ end
             quad = Spaces.Quadratures.GLL{Nq}()
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
 
-            topology = Topologies.Topology2D(mesh)
+            topology = Topologies.DistributedTopology2D(
+                ClimaComms.SingletonCommsContext(),
+                mesh,
+            )
             space = Spaces.SpectralElementSpace2D(topology, quad)
 
             coords = Fields.coordinate_field(space)
@@ -192,7 +196,10 @@ end
 
             horzdomain = Domains.RectangleDomain(xdomain, ydomain)
             horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-            horztopology = Topologies.Topology2D(horzmesh)
+            horztopology = Topologies.DistributedTopology2D(
+                ClimaComms.SingletonCommsContext(),
+                horzmesh,
+            )
 
             quad = Spaces.Quadratures.GLL{npoly + 1}()
             horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

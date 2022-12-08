@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
@@ -23,7 +24,10 @@ include("sphere_sphericalharmonics.jl")
 
     Ne = 16
     mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
 
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()

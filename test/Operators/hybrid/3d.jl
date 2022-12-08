@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:
@@ -29,7 +30,10 @@ import ClimaCore.DataLayouts: level
 
     horzdomain = Domains.SphereDomain(30.0)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        horzmesh,
+    )
     quad = Spaces.Quadratures.GLL{3 + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
@@ -67,7 +71,10 @@ function hvspace_3D(
         x2periodic = true,
     )
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        horzmesh,
+    )
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

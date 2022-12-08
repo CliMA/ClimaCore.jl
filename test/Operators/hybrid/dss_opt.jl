@@ -1,4 +1,5 @@
 using Test, JET
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore
@@ -30,7 +31,10 @@ vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
 horzdomain = Domains.SphereDomain(30.0)
 horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
-horztopology = Topologies.Topology2D(horzmesh)
+horztopology = Topologies.DistributedTopology2D(
+    ClimaComms.SingletonCommsContext(),
+    horzmesh,
+)
 quad = Spaces.Quadratures.GLL{5}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
