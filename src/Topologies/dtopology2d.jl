@@ -637,6 +637,12 @@ function vertex_coordinates(topology::DistributedTopology2D, e::Int)
     end
 end
 
+coordinates(
+    topology::DistributedTopology2D{ClimaComms.SingletonCommsContext},
+    e::Int,
+    arg,
+) = coordinates(topology.mesh, topology.elemorder[e], arg)
+
 function opposing_face(topology::DistributedTopology2D, e::Int, face::Int)
     mesh = topology.mesh
     elem = topology.elemorder[e]

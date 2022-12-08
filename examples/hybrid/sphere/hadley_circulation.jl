@@ -1,3 +1,4 @@
+using ClimaComms
 using Test
 using LinearAlgebra
 
@@ -25,6 +26,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+const context = ClimaComms.SingletonCommsContext()
 # 3D Hadley-like Meridional Circulation (DCMIP 2012 Test 1-2)
 # Reference: http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf, Section 1.2
 
@@ -70,7 +72,7 @@ function sphere_3D(
 
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(context, horzmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

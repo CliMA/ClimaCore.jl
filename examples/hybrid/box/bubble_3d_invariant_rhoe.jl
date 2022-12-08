@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 
 import ClimaCore:
@@ -15,10 +16,8 @@ import ClimaCore:
     Operators
 using ClimaCore.Geometry
 using Logging
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
-usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+const usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    using ClimaComms
     using ClimaCommsMPI
     const comms_ctx = ClimaCommsMPI.MPICommsContext()
     const pid, nprocs = ClimaComms.init(comms_ctx)
@@ -32,6 +31,7 @@ if usempi
         global_logger(prev_logger)
     end
 else
+    const comms_ctx = ClimaComms.SingletonCommsContext()
     using Logging: global_logger
     using TerminalLoggers: TerminalLogger
     global_logger(TerminalLogger())
@@ -45,7 +45,6 @@ function hvspace_3D(
     yelem = 4,
     zelem = 16,
     npoly = 3;
-    usempi = false,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -66,9 +65,7 @@ function hvspace_3D(
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology =
-        usempi ? Topologies.DistributedTopology2D(comms_ctx, horzmesh) :
-        Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(comms_ctx, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -78,7 +75,7 @@ function hvspace_3D(
 end
 # set up 3D domain - doubly periodic box
 hv_center_space, hv_face_space, horztopology =
-    hvspace_3D((-500, 500), (-500, 500), (0, 1000), usempi = usempi)
+    hvspace_3D((-500, 500), (-500, 500), (0, 1000))
 
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
