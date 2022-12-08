@@ -329,7 +329,10 @@ dir = "bubble_3d_invariant_rhotheta"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-
+#=
+#TODO: Commenting out slice plot, as this is causing problems
+# with SingletonCommsContext. Plots.jl is unable to convert
+# field to series data for plotting. To be revisited.
 # slice along the center XZ axis
 Plots.png(
     Plots.plot(
@@ -339,7 +342,7 @@ Plots.png(
     ),
     joinpath(path, "theta_end.png"),
 )
-
+=#
 # post-processing
 Es = [total_energy(u) for u in sol.u]
 Mass = [sum(u.Yc.ρ) for u in sol.u]
