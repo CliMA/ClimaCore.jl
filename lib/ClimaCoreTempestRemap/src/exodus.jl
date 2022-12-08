@@ -19,7 +19,10 @@ Options:
 """
 function write_exodus(
     filename,
-    topology::Topologies.Topology2D;
+    topology::Union{
+        Topologies.Topology2D,
+        Topologies.DistributedTopology2D{ClimaComms.SingletonCommsContext},
+    };
     normalize_coordinates = true,
 )
 

@@ -1,3 +1,4 @@
+using ClimaComms
 using Test
 using LinearAlgebra
 
@@ -19,6 +20,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+const context = ClimaComms.SingletonCommsContext()
 # Nonhydrostatic gravity wave
 # Reference: https://climate.ucdavis.edu/pubs/UJ2012JCP.pdf Section 5.4
 
@@ -60,7 +62,7 @@ function sphere_3D(
 
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(context, horzmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -17,6 +18,9 @@ using ClimaCore.Geometry
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
@@ -41,7 +45,8 @@ function hvspace_3D(
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.DistributedTopology2D(context, horzmesh)
+    #horztopology = Topologies.Topology2D(horzmesh)
 
     zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -307,7 +312,6 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
-
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
@@ -324,6 +328,7 @@ end
 dir = "bubble_3d_invariant_rhotheta"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
+
 
 # slice along the center XZ axis
 Plots.png(

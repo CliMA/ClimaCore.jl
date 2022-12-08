@@ -1,3 +1,4 @@
+using ClimaComms
 using OrdinaryDiffEq
 using Test
 using Statistics: mean
@@ -10,6 +11,7 @@ using Logging
 using TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+const context = ClimaComms.SingletonCommsContext()
 # 3D deformation flow (DCMIP 2012 Test 1-1)
 # Reference:
 # http://www-personal.umich.edu/~cjablono/DCMIP-2012_TestCaseDocument_v1.7.pdf,
@@ -204,7 +206,7 @@ function run_deformation_flow(use_limiter, fct_op)
 
     horz_domain = Domains.SphereDomain(R)
     horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)
-    horz_topology = Topologies.Topology2D(horz_mesh)
+    horz_topology = Topologies.DistributedTopology2D(context, horz_mesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horz_space = Spaces.SpectralElementSpace2D(horz_topology, quad)
 
