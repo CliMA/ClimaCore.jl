@@ -1,4 +1,5 @@
 using LinearAlgebra, IntervalSets, UnPack
+using ClimaComms
 import ClimaCore:
     Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields
 
@@ -26,7 +27,10 @@ end
 
         domain = Domains.SphereDomain(radius)
         mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-        grid_topology = Topologies.Topology2D(mesh)
+        grid_topology = Topologies.DistributedTopology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh,
+        )
         quad = Spaces.Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

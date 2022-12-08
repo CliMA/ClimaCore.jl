@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using Random: seed!
 
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
@@ -63,7 +64,10 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
 
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        hmesh,
+    )
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 

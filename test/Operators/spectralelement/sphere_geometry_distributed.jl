@@ -50,7 +50,10 @@ end
         quad = Spaces.Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
         # for comparison with serial results
-        grid_topology_serial = Topologies.Topology2D(mesh)
+        grid_topology_serial = Topologies.DistributedTopology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh,
+        )
         space_serial = Spaces.SpectralElementSpace2D(grid_topology_serial, quad)
 
         surface_area = sum(ones(space))
