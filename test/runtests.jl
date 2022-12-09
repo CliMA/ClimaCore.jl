@@ -86,7 +86,7 @@ if !Sys.iswindows()
 # Code quality checks
 @safetestset "Aqua" begin @time include("aqua.jl") end
 
-@safetestset "InputOutput" begin include("InputOutput/runtests_inputoutput.jl") end
+#@safetestset "InputOutput" begin include("InputOutput/runtests_inputoutput.jl") end
 end
 
 if "CUDA" in ARGS
