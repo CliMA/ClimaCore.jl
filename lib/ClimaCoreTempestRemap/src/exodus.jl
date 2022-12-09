@@ -1,3 +1,7 @@
+# Temporary patch until https://github.com/Alexander-Barth/NCDatasets.jl/pull/195 is merged:
+import NCDatasets
+NCDatasets._normalizeindex(n, ind::Base.OneTo) = 1:1:(ind.stop)
+
 """
     write_exodus(filename, topology::Topology2D; normalize_coordinates=true)
 
@@ -121,14 +125,16 @@ function write_exodus(
         # variable values
         dt = now()
         qa_records = (
-            "ClimaCoreTempestRemap.jl",
+            "ClimaCoreTempestRemap.jl         ", # added buffer to match length
             string(PkgVersion.@Version),
             Dates.format(dt, dateformat"mm/dd/yyyy"), # mm/dd/yy is in the spec
             Dates.format(dt, dateformat"HH:MM:SS"),
         )
         for (i, rec) in enumerate(qa_records)
-            vrec = collect(rec)
-            var_qa_records[axes(vrec, 1), i] = vrec
+            # buffer string to match `len_string`
+            crec = rec * repeat(" ", len_string - length(rec))
+            vrec = collect(crec)
+            var_qa_records[axes(vrec, 1), i, 1] = vrec
         end
         var_coord[:, :] = coord
         var_connect1[:, :] = connect1
