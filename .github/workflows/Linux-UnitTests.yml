@@ -41,6 +41,10 @@ jobs:
     - name: Build package
       uses: julia-actions/julia-buildpkg@v1
 
-    - name: Run Unit Tests
-      uses: julia-actions/julia-runtest@v1
-      continue-on-error: ${{ matrix.version == 'nightly' }}
+    # - name: Run Unit Tests
+    #   uses: julia-actions/julia-runtest@v1
+    #   continue-on-error: ${{ matrix.version == 'nightly' }}
+
+    - name: Run Unit Tests without Pkg
+      run: |
+        julia --project=test -e 'using Pkg; Pkg.develop("."); include("test/runtests.jl")'

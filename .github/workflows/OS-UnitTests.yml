@@ -59,6 +59,6 @@ jobs:
       run: |
         julia --project=test -e 'using Pkg; Pkg.develop("."); include("test/runtests.jl")'
 
-    - name: Run Unit Tests
-      uses: julia-actions/julia-runtest@v1
-      if: steps.filter.outputs.run_test == 'true'
+    # - name: Run Unit Tests
+    #   uses: julia-actions/julia-runtest@v1
+    #   if: steps.filter.outputs.run_test == 'true'
