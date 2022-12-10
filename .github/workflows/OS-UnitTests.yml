@@ -57,7 +57,7 @@ jobs:
 
     - name: Run Unit Tests without Pkg
       run: |
-        julia --project=test -e """using Pkg; Pkg.develop(;path=\".\"); include(\"test/runtests.jl\")"""
+        julia --check-bounds=yes --project=test -e """using Pkg; Pkg.develop(;path=\".\"); include(\"test/runtests.jl\")"""
 
     # - name: Run Unit Tests
     #   uses: julia-actions/julia-runtest@v1
