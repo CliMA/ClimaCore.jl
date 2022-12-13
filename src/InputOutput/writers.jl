@@ -206,7 +206,6 @@ function write_new!(
 end
 
 # Topologies
-defaultname(::Topologies.Topology2D) = "2d"
 defaultname(::Topologies.DistributedTopology2D) = "2d"
 defaultname(topology::Topologies.IntervalTopology) = defaultname(topology.mesh)
 
@@ -224,28 +223,6 @@ function write_new!(
     group = create_group(writer.file, "topologies/$name")
     write_attribute(group, "type", "IntervalTopology")
     write_attribute(group, "mesh", meshname)
-    return name
-end
-
-"""
-    write_new!(writer, topology, name)
-
-Write `Topology2D` data to HDF5.
-"""
-function write_new!(
-    writer::HDF5Writer,
-    topology::Topologies.Topology2D,
-    name::AbstractString = defaultname(topology),
-)
-    @assert writer.context isa ClimaComms.SingletonCommsContext
-
-    group = create_group(writer.file, "topologies/$name")
-    write_attribute(group, "type", "Topology2D")
-    write_attribute(group, "mesh", write!(writer, topology.mesh))
-    if !(topology.elemorder isa CartesianIndices)
-        elemorder_matrix = reinterpret(reshape, Int, topology.elemorder)
-        write_dataset(group, "elemorder", elemorder_matrix)
-    end
     return name
 end
 
