@@ -42,5 +42,5 @@ jobs:
       uses: julia-actions/julia-buildpkg@v1
 
     - name: Run Unit Tests
-      run: julia --project -e 'using Pkg; Pkg.test()'
+      run: julia --project -e 'using Pkg; Pkg.test(coverage=true)'
       continue-on-error: ${{ matrix.version == 'nightly' }}
