@@ -15,17 +15,23 @@ function rll_mesh(
     nlat = 90,
     nlon = round(Int, nlat * 1.6),
 )
-    run(
-        pipeline(
-            ```
-   $(TempestRemap_jll.GenerateRLLMesh_exe())
-   --lon $nlon
-   --lat $nlat
-   --file $filename
-   ```,
-            stdout = verbose ? stdout : devnull,
-        ),
-    )
+    buf = IOBuffer()
+    if !success(pipeline(
+        ```
+$(TempestRemap_jll.GenerateRLLMesh_exe())
+--lon $nlon
+--lat $nlat
+--file $filename
+```,
+        stdout = buf,
+    ))
+        output = String(take!(buf))
+        error("GenerateRLLMesh failure\n$output")
+    end
+    if verbose
+        output = String(take!(buf))
+        print(output)
+    end
 end
 
 """
@@ -44,17 +50,25 @@ function overlap_mesh(
     meshfile_b::AbstractString;
     verbose = false,
 )
-    run(
+    buf = IOBuffer()
+    if !success(
         pipeline(
             ```
-   $(TempestRemap_jll.GenerateOverlapMesh_exe())
-   --a $meshfile_a
-   --b $meshfile_b
-   --out $outfile
-   ```,
-            stdout = verbose ? stdout : devnull,
+            $(TempestRemap_jll.GenerateOverlapMesh_exe())
+            --a $meshfile_a
+            --b $meshfile_b
+            --out $outfile
+            ```,
+            stdout = buf,
         ),
     )
+        output = String(take!(buf))
+        error("GenerateRLLMesh failure\n$output")
+    end
+    if verbose
+        output = String(take!(buf))
+        print(output)
+    end
 end
 
 """
@@ -93,12 +107,12 @@ function remap_weights(
     kwargs...,
 )
     cmd = ```
-    $(TempestRemap_jll.GenerateOfflineMap_exe())
-    --in_mesh $meshfile_in
-    --out_mesh $meshfile_out
-    --ov_mesh $meshfile_overlap
-    --out_map $weightfile
-    ```
+        $(TempestRemap_jll.GenerateOfflineMap_exe())
+        --in_mesh $meshfile_in
+        --out_mesh $meshfile_out
+        --ov_mesh $meshfile_overlap
+        --out_map $weightfile
+        ```
     for (k, v) in kwargs
         if typeof(v) == Bool && v
             append!(cmd.exec, [string("--", k)])
@@ -106,7 +120,16 @@ function remap_weights(
             append!(cmd.exec, [string("--", k), string(v)])
         end
     end
-    run(pipeline(cmd, stdout = verbose ? stdout : devnull))
+    buf = IOBuffer()
+    if !success(pipeline(cmd, stdout = buf))
+        output = String(take!(buf))
+        error("GenerateRLLMesh failure\n$output")
+    end
+    if verbose
+        output = String(take!(buf))
+        print(output)
+    end
+
 end
 
 """
@@ -127,16 +150,25 @@ function apply_remap(
     vars;
     verbose = false,
 )
-    run(
+    buf = IOBuffer()
+    if !success(
         pipeline(
             ```
-   $(TempestRemap_jll.ApplyOfflineMap_exe())
-   --map $weightfile
-   --var $(join(vars,","))
-   --in_data $infile
-   --out_data $outfile
-   ```,
-            stdout = verbose ? stdout : devnull,
+            $(TempestRemap_jll.ApplyOfflineMap_exe())
+            --map $weightfile
+            --var $(join(vars,","))
+            --in_data $infile
+            --out_data $outfile
+            ```,
+            stdout = buf,
         ),
     )
+        output = String(take!(buf))
+        error("GenerateRLLMesh failure\n$output")
+    end
+    if verbose
+        output = String(take!(buf))
+        print(output)
+    end
+
 end
