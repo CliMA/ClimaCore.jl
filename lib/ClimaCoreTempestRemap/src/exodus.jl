@@ -1,7 +1,3 @@
-# Temporary patch until https://github.com/Alexander-Barth/NCDatasets.jl/pull/195 is merged:
-import NCDatasets
-NCDatasets._normalizeindex(n, ind::Base.OneTo) = 1:1:(ind.stop)
-
 """
     write_exodus(filename, topology::Topology2D; normalize_coordinates=true)
 
@@ -88,9 +84,9 @@ function write_exodus(
         var_qa_records = defVar(
             dts,
             "qa_records",
-            Char,
+            Char, # NCDatasets uses Char, even though it is only 8 bits (Cchar)
             ("len_string", "four", "num_qa_rec"),
-        ) # quality assurance record (code name, QA descriptor, date, time) - here '\0's
+        )
         var_coor_names =
             defVar(dts, "coor_names", Char, ("len_string", "num_dim"))
         var_eb_names =
@@ -125,15 +121,13 @@ function write_exodus(
         # variable values
         dt = now()
         qa_records = (
-            "ClimaCoreTempestRemap.jl         ", # added buffer to match length
+            "ClimaCoreTempestRemap.jl",
             string(PkgVersion.@Version),
             Dates.format(dt, dateformat"mm/dd/yyyy"), # mm/dd/yy is in the spec
             Dates.format(dt, dateformat"HH:MM:SS"),
         )
-        for (i, rec) in enumerate(qa_records)
-            # buffer string to match `len_string`
-            crec = rec * repeat(" ", len_string - length(rec))
-            vrec = collect(crec)
+        for (i, qa_record) in enumerate(qa_records)
+            vrec = Base.CodeUnits(qa_record)
             var_qa_records[axes(vrec, 1), i, 1] = vrec
         end
         var_coord[:, :] = coord
