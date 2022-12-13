@@ -748,7 +748,8 @@ steps:
     agents:
       config: cpu
       queue: central
-      slurm_ntasks: 2
+      slurm_nodes: 1
+      slurm_tasks_per_node: 2
 
   - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
