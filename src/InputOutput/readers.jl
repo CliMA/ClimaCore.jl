@@ -11,7 +11,7 @@ using ..Meshes:
     IntervalMesh,
     RectilinearMesh,
     EquiangularCubedSphere
-using ..Topologies: Topologies, IntervalTopology, Topology2D
+using ..Topologies: Topologies, IntervalTopology
 using ..Spaces:
     Spaces,
     Spaces.Quadratures,
@@ -294,15 +294,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
             elemorder = Meshes.elements(mesh)
         end
 
-        if reader.context isa ClimaComms.SingletonCommsContext
-            return Topologies.Topology2D(mesh, elemorder)
-        else
-            return Topologies.DistributedTopology2D(
-                reader.context,
-                mesh,
-                elemorder,
-            )
-        end
+        return Topologies.DistributedTopology2D(reader.context, mesh, elemorder)
     else
         error("Unsupported type $type")
     end
