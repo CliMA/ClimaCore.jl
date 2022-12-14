@@ -1,4 +1,4 @@
-import ..Topologies: Topology2D, DistributedTopology2D
+import ..Topologies: DistributedTopology2D
 using ..RecursiveApply
 
 """
