@@ -568,6 +568,28 @@ steps:
       queue: central
       slurm_ntasks: 1
 
+  - label: ":computer: Nonhydrostatic Agnesi Mountain total energy (topography mesh interface)"
+    key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/topo_agnesi_nh.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/agnesi_etot_nh/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Schar Mountain total energy (topography mesh interface)"
+    key: "cpu_schaer_mtn_2d_hybrid_invariant_total_energy_topography"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/topo_schar_nh.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/schar_etot_nh/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
   - label: ":computer: Density current 2D hybrid invariant potential temperature"
     key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
     command:
