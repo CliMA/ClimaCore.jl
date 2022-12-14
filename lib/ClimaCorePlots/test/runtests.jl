@@ -1,5 +1,6 @@
 ENV["GKSwstype"] = "nul"
 using Test
+using ClimaComms
 using IntervalSets
 
 import Plots
@@ -35,7 +36,10 @@ end
 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 6)
-    grid_topology = ClimaCore.Topologies.Topology2D(mesh)
+    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     quad = ClimaCore.Spaces.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
@@ -59,7 +63,8 @@ end
     @test isfile(fig_png)
 
     # check different ordering
-    grid_topology = ClimaCore.Topologies.Topology2D(
+    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
         mesh,
         ClimaCore.Topologies.spacefillingcurve(mesh),
     )
@@ -93,7 +98,10 @@ end
 
     horz_domain = ClimaCore.Domains.SphereDomain(R)
     horz_mesh = ClimaCore.Meshes.EquiangularCubedSphere(horz_domain, 6)
-    horz_grid_topology = ClimaCore.Topologies.Topology2D(horz_mesh)
+    horz_grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        horz_mesh,
+    )
     quad = ClimaCore.Spaces.Quadratures.GLL{5}()
     horz_space =
         ClimaCore.Spaces.SpectralElementSpace2D(horz_grid_topology, quad)
@@ -153,7 +161,10 @@ end
     n1, n2 = 2, 2
     Nq = 4
     mesh = ClimaCore.Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = ClimaCore.Topologies.Topology2D(mesh)
+    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
 
     quad = ClimaCore.Spaces.Quadratures.ClosedUniform{Nq + 1}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -253,7 +264,10 @@ end
 
     horzdomain = ClimaCore.Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = ClimaCore.Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = ClimaCore.Topologies.Topology2D(horzmesh)
+    horztopology = ClimaCore.Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        horzmesh,
+    )
 
     quad = ClimaCore.Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = ClimaCore.Spaces.SpectralElementSpace2D(horztopology, quad)
