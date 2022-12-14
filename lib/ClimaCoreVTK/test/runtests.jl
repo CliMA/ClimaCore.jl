@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using ClimaCoreVTK
 using IntervalSets
 import ClimaCore:
@@ -12,7 +13,10 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
 
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, 4)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     quad = Spaces.Quadratures.GLL{5}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = Fields.coordinate_field(space)
@@ -136,7 +140,10 @@ end
     n1, n2 = 4, 4
     Nq = 4
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
@@ -198,7 +205,10 @@ end
     )
 
     hmesh = Meshes.RectilinearMesh(hdomain, 4, 4)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        hmesh,
+    )
     quad = Spaces.Quadratures.GLL{4}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -231,7 +241,10 @@ end
 
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, 4)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.DistributedTopology2D(
+        ClimaComms.SingletonCommsContext(),
+        hmesh,
+    )
     quad = Spaces.Quadratures.GLL{5}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 

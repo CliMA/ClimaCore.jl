@@ -1030,6 +1030,7 @@ steps:
       - "perf/allocations_output/*"
     agents:
       config: cpu
+      slurm_mem: 40GB
       queue: central
       slurm_ntasks: 1
 
