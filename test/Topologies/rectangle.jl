@@ -24,7 +24,7 @@ function rectangular_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    return Topologies.DistributedTopology2D(
+    return Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )

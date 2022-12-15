@@ -64,7 +64,7 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
 
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-    htopology = Topologies.DistributedTopology2D(
+    htopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         hmesh,
     )

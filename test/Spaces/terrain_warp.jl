@@ -133,7 +133,7 @@ function warpedspace_3D(
     )
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.DistributedTopology2D(
+    horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horzmesh,
     )

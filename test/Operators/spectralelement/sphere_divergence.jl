@@ -19,7 +19,7 @@ wdiv = Operators.WeakDivergence()
     Nq = 6
 
     mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-    grid_topology = Topologies.DistributedTopology2D(
+    grid_topology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -71,7 +71,7 @@ convergence_rate(err, Δh) =
 
         for (Ie, Ne) in enumerate(Nes)
             mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-            grid_topology = Topologies.DistributedTopology2D(
+            grid_topology = Topologies.Topology2D(
                 ClimaComms.SingletonCommsContext(),
                 mesh,
             )

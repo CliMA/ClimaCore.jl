@@ -91,7 +91,7 @@ end
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
     quad = Spaces.Quadratures.GL{1}()
-    htopology = Topologies.DistributedTopology2D(context, hmesh)
+    htopology = Topologies.Topology2D(context, hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     @test collect(Spaces.unique_nodes(hspace)) ==
@@ -111,7 +111,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, 1, 1)
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -176,7 +176,7 @@ end
     Nq = 5
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     perimeter = Spaces.perimeter(space)
 
@@ -216,7 +216,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), mesh)
+    grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     quad = Spaces.Quadratures.GLL{4}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
@@ -296,7 +296,7 @@ end
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), mesh)
+    grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)

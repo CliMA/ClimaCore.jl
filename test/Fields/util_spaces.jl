@@ -39,7 +39,7 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
         x2boundary = (:south, :north),
     )
     mesh = CC.Meshes.RectilinearMesh(domain, 1, 1)
-    grid_topology = CC.Topologies.DistributedTopology2D(
+    grid_topology = CC.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -55,7 +55,7 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
     Nq = 4
     domain = CC.Domains.SphereDomain(radius)
     mesh = CC.Meshes.EquiangularCubedSphere(domain, ne)
-    topology = CC.Topologies.DistributedTopology2D(
+    topology = CC.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -77,7 +77,7 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
 
     horzdomain = CC.Domains.SphereDomain(radius)
     horzmesh = CC.Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = CC.Topologies.DistributedTopology2D(
+    horztopology = CC.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horzmesh,
     )

@@ -23,7 +23,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
     Nq = 4
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.DistributedTopology2D(
+    grid_topology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )

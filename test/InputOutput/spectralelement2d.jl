@@ -65,7 +65,7 @@ end
     Nq = 4
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.DistributedTopology2D(
+    grid_topology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )

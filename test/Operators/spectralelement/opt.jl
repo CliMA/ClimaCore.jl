@@ -139,7 +139,7 @@ end
             quad = Spaces.Quadratures.GLL{Nq}()
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
 
-            topology = Topologies.DistributedTopology2D(
+            topology = Topologies.Topology2D(
                 ClimaComms.SingletonCommsContext(),
                 mesh,
             )
@@ -196,7 +196,7 @@ end
 
             horzdomain = Domains.RectangleDomain(xdomain, ydomain)
             horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-            horztopology = Topologies.DistributedTopology2D(
+            horztopology = Topologies.Topology2D(
                 ClimaComms.SingletonCommsContext(),
                 horzmesh,
             )

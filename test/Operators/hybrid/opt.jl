@@ -226,7 +226,7 @@ function hspace2d(FT)
     Nq = 3
     quad = Spaces.Quadratures.GLL{Nq}()
     hmesh = Meshes.RectilinearMesh(hdomain, 3, 3)
-    htopology = Topologies.DistributedTopology2D(
+    htopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         hmesh,
     )

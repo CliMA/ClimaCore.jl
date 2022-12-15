@@ -16,7 +16,7 @@ velem = 4
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
 htopology =
-    Topologies.DistributedTopology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
 quad = Spaces.Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 

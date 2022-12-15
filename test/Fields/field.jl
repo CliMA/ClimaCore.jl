@@ -44,7 +44,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.DistributedTopology2D(
+    grid_topology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -200,7 +200,7 @@ end
         x2periodic = true,
     )
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
-    topology_xy = Topologies.DistributedTopology2D(
+    topology_xy = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh_xy,
     )
@@ -552,7 +552,7 @@ end
         x2periodic = true,
     )
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
-    topology_xy = Topologies.DistributedTopology2D(
+    topology_xy = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh_xy,
     )

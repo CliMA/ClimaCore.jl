@@ -42,7 +42,7 @@ function distributed_space(
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     topology =
-        Topologies.DistributedTopology2D(context, mesh, Meshes.elements(mesh))
+        Topologies.Topology2D(context, mesh, Meshes.elements(mesh))
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 

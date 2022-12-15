@@ -30,7 +30,7 @@ import ClimaCore.DataLayouts: level
 
     horzdomain = Domains.SphereDomain(30.0)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
-    horztopology = Topologies.DistributedTopology2D(
+    horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horzmesh,
     )
@@ -71,7 +71,7 @@ function hvspace_3D(
         x2periodic = true,
     )
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.DistributedTopology2D(
+    horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horzmesh,
     )

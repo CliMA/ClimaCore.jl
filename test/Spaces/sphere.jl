@@ -12,7 +12,7 @@ using Test
     Nq = 4
     domain = Domains.SphereDomain(radius)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    topology = Topologies.DistributedTopology2D(context, mesh)
+    topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
@@ -56,7 +56,7 @@ end
 
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.DistributedTopology2D(context, horzmesh)
+    horztopology = Topologies.Topology2D(context, horzmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
