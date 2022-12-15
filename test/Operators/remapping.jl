@@ -3,7 +3,7 @@ using ClimaComms
 using ClimaCore:
     Domains, Meshes, Topologies, Geometry, Operators, Spaces, Fields
 using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
-using ClimaCore.Topologies: DistributedTopology2D
+using ClimaCore.Topologies: Topology2D
 using ClimaCore.Spaces: AbstractSpace, Quadratures
 using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
@@ -26,10 +26,7 @@ function make_space(
 )
     nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
-    topology = Topologies.DistributedTopology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     space = Spaces.SpectralElementSpace2D(topology, quad)
     return space
 end

@@ -44,7 +44,7 @@ comm_context(space::Spaces.SpectralElementSpace2D) =
 comm_context(space::S) where {S <: Spaces.AbstractSpace} =
     ClimaComms.SingletonCommsContext()
 
-comm_context(topology::Topologies.DistributedTopology2D) = topology.context
+comm_context(topology::Topologies.Topology2D) = topology.context
 comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
     ClimaComms.SingletonCommsContext()
 

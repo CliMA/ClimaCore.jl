@@ -545,12 +545,10 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     domain = Domains.SphereDomain(test.params.R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     quad = Spaces.Quadratures.GLL{Nq}()
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     if usempi
-        global_grid_topology = Topologies.DistributedTopology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        global_grid_topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
         global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
     else

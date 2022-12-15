@@ -45,10 +45,8 @@ function hvspace_3D(
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.DistributedTopology2D(
-        ClimaComms.SingletonCommsContext(),
-        horzmesh,
-    )
+    horztopology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =

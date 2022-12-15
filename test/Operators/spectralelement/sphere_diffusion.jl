@@ -23,10 +23,8 @@ using StaticArrays, IntervalSets, LinearAlgebra
     Nq = 4
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.DistributedTopology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

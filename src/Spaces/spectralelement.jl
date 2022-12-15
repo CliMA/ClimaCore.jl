@@ -226,7 +226,7 @@ function SpectralElementSpace2D(topology, quadrature_style)
 
 
     # alternatively, we could do a ghost exchange here?
-    if topology isa Topologies.DistributedTopology2D
+    if topology isa Topologies.Topology2D
         for (ridx, elem) in enumerate(Topologies.ghostelems(topology))
             ghost_geometry_slab = slab(ghost_geometry, ridx)
             for i in 1:Nq, j in 1:Nq
@@ -355,14 +355,14 @@ perimeter(space::SpectralElementSpace2D) =
     Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
 
 const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.DistributedTopology2D{
+    <:Topologies.Topology2D{
         <:ClimaComms.AbstractCommsContext,
         <:Meshes.RectilinearMesh,
     },
 }
 
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.DistributedTopology2D{
+    <:Topologies.Topology2D{
         <:ClimaComms.AbstractCommsContext,
         <:Meshes.AbstractCubedSphere,
     },

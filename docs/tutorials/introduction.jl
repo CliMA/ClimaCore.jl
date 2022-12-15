@@ -55,7 +55,7 @@ rectangle_mesh = ClimaCore.Meshes.RectilinearMesh(rectangle_domain, 16, 16)
 # A _topology_ determines the ordering and connections between elements of a mesh
 # - At the moment, this is only required for 2D meshes
 
-rectangle_topology = ClimaCore.Topologies.DistributedTopology2D(
+rectangle_topology = ClimaCore.Topologies.Topology2D(
     ClimaComms.SingletonCommsContext(),
     rectangle_mesh,
 )

@@ -41,7 +41,7 @@ end
     # horizontal space
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
-    topology = Topologies.DistributedTopology2D(
+    topology = Topologies.Topology2D(
         comms_ctx,
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),

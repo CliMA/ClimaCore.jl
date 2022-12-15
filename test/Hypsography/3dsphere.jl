@@ -29,10 +29,8 @@ vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
 horzdomain = Domains.SphereDomain(6e6)
 horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 12)
-horztopology = Topologies.DistributedTopology2D(
-    ClimaComms.SingletonCommsContext(),
-    horzmesh,
-)
+horztopology =
+    Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
 quad = Spaces.Quadratures.GLL{4 + 1}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

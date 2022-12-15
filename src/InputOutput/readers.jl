@@ -294,7 +294,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
             elemorder = Meshes.elements(mesh)
         end
 
-        return Topologies.DistributedTopology2D(reader.context, mesh, elemorder)
+        return Topologies.Topology2D(reader.context, mesh, elemorder)
     else
         error("Unsupported type $type")
     end
@@ -367,7 +367,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
     if type == "Field"
         space = read_space(reader, attrs(obj)["space"])
         topology = Spaces.topology(space)
-        if topology isa Topologies.DistributedTopology2D
+        if topology isa Topologies.Topology2D
             nd = ndims(obj)
             localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
             data = obj[localidx...]

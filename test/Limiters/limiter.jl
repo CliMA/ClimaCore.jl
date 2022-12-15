@@ -61,10 +61,8 @@ function hvspace_3D(
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelems, yelems)
-    horztopology = Topologies.DistributedTopology2D(
-        ClimaComms.SingletonCommsContext(),
-        horzmesh,
-    )
+    horztopology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
 
     zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -102,10 +100,8 @@ end
             x2min = 0.0,
             x2max = 3.0 * n2,
         )
-        topology = Topologies.DistributedTopology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         quad = Spaces.Quadratures.GLL{Nij}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
 
@@ -175,10 +171,8 @@ end
     for FT in (Float32,)
         lim_tol = FT(5e-14)
         mesh = rectangular_mesh(1, 1, false, false; FT = FT)
-        topology = Topologies.DistributedTopology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         quad = Spaces.Quadratures.GLL{Nij}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
 
@@ -213,10 +207,8 @@ end
 
     for FT in (Float64, Float32)
         mesh = rectangular_mesh(3, 3, false, false; FT = FT)
-        topology = Topologies.DistributedTopology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         quad = Spaces.Quadratures.GLL{Nij}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
 

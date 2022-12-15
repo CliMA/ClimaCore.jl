@@ -13,7 +13,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 6)
-    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -51,7 +51,7 @@ end
     n1, n2 = 2, 2
     Nq = 4
     mesh = ClimaCore.Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )

@@ -37,10 +37,8 @@ function make_horizontal_space(mesh, npoly)
         topology = Topologies.IntervalTopology(mesh)
         space = Spaces.SpectralElementSpace1D(topology, quad)
     elseif mesh isa Meshes.AbstractMesh2D
-        topology = Topologies.DistributedTopology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         space = Spaces.SpectralElementSpace2D(topology, quad)
     end
     return space
@@ -51,7 +49,7 @@ function make_distributed_horizontal_space(mesh, npoly, comms_ctx)
     if mesh isa Meshes.AbstractMesh1D
         error("Distributed mode does not work with 1D horizontal spaces.")
     elseif mesh isa Meshes.AbstractMesh2D
-        topology = Topologies.DistributedTopology2D(comms_ctx, mesh)
+        topology = Topologies.Topology2D(comms_ctx, mesh)
         space = Spaces.SpectralElementSpace2D(topology, quad)
     end
     return space
