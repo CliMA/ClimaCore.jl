@@ -305,17 +305,9 @@ function boundary_faces end
 
 # Topologies API implementations
 include("interval.jl")
-include("topology2d.jl")
 include("dtopology2d.jl")
 
 # deprecate
 @deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
-@deprecate GridTopology(mesh) Topology2D(mesh)
-@deprecate Topology2D(mesh) Topology2D(mesh)
-@deprecate neighboring_elements(topology::Topology2D, elem) local_neighboring_elements(
-    topology,
-    elem,
-)
-
 
 end # module

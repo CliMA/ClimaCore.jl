@@ -1,4 +1,5 @@
 [deps]
+ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 ClimaCoreMakie = "908f55d8-4145-4867-9c14-5dad1a479e4d"
 ClimaCorePlots = "cf7c7e5a-b407-4c48-9047-11a94a308626"
