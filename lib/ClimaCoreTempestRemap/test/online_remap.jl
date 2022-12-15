@@ -54,7 +54,7 @@ end
 
     # construct source mesh
     mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i)
-    topology_i = ClimaCore.Topologies.DistributedTopology2D(
+    topology_i = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh_i,
     )
@@ -66,7 +66,7 @@ end
 
     # construct target mesh
     mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o)
-    topology_o = ClimaCore.Topologies.DistributedTopology2D(
+    topology_o = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh_o,
     )

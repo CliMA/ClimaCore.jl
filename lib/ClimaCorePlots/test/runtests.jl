@@ -36,7 +36,7 @@ end
 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 6)
-    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -63,7 +63,7 @@ end
     @test isfile(fig_png)
 
     # check different ordering
-    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
         ClimaCore.Topologies.spacefillingcurve(mesh),
@@ -98,7 +98,7 @@ end
 
     horz_domain = ClimaCore.Domains.SphereDomain(R)
     horz_mesh = ClimaCore.Meshes.EquiangularCubedSphere(horz_domain, 6)
-    horz_grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    horz_grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horz_mesh,
     )
@@ -161,7 +161,7 @@ end
     n1, n2 = 2, 2
     Nq = 4
     mesh = ClimaCore.Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = ClimaCore.Topologies.DistributedTopology2D(
+    grid_topology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
@@ -264,7 +264,7 @@ end
 
     horzdomain = ClimaCore.Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = ClimaCore.Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = ClimaCore.Topologies.DistributedTopology2D(
+    horztopology = ClimaCore.Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         horzmesh,
     )

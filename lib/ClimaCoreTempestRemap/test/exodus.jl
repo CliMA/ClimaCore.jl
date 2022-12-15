@@ -14,10 +14,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     R = 1
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    topology = Topologies.DistributedTopology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     meshfile_cc = joinpath(OUTPUT_DIR, "test_cc.g")
     write_exodus(meshfile_cc, topology)
 
