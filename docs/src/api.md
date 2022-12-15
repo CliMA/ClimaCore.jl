@@ -165,6 +165,19 @@ or the interfaces (faces in 3D, edges in 2D or points in 1D) between elements
 Users should construct either the center or face space from the mesh, then construct
 the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
+#### Internals
+```@docs
+Spaces.Δz_metric_component
+```
+
+### Spectral Element Spaces
+
+```@docs
+Spaces.SpectralElementSpace1D
+Spaces.SpectralElementSpace2D
+Spaces.SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
+Spaces.SpectralElementSpaceSlab
+```
 
 ### Quadratures
 
@@ -203,6 +216,7 @@ Spaces.weighted_dss_start2!
 Spaces.weighted_dss_internal2!
 Spaces.weighted_dss_ghost2!
 Spaces.weighted_dss2!
+Spaces.unique_nodes
 ```
 
 #### Utilities
