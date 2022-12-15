@@ -2,7 +2,7 @@ using ClimaComms, DataStructures
 using GilbertCurves
 
 """
-    DistributedTopology2D(mesh::AbstractMesh2D, elemorder=Mesh.elements(mesh))
+    Topology2D(mesh::AbstractMesh2D, elemorder=Mesh.elements(mesh))
 
 This is a distributed topology for 2D meshes. `elemorder` is a vector or other
 linear ordering of the `Mesh.elements(mesh)`. `elempid` is a sorted vector of
@@ -23,7 +23,7 @@ Internally, we can refer to elements in several different ways:
 - `ridx`: "receive index": an index into the receive buffer of a ghost element.
     - `recv_elem_gidx[ridx] == gidx`
 """
-struct DistributedTopology2D{
+struct Topology2D{
     C <: ClimaComms.AbstractCommsContext,
     M <: Meshes.AbstractMesh{2},
     EO,
@@ -168,7 +168,7 @@ function simple_partition(nelems::Int, npart::Int)
     return partition, ranges
 end
 
-function DistributedTopology2D(
+function Topology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
     elemorder = Meshes.elements(mesh),
@@ -458,7 +458,7 @@ function DistributedTopology2D(
         ghost_face_gcidx[i] = global_face_gidx[face, local_elem_gidx[e]]
     end
 
-    return DistributedTopology2D(
+    return Topology2D(
         context,
         mesh,
         elemorder,
@@ -501,7 +501,7 @@ perimeter_face_indices(f, nfacedof, reversed = false) =
     !reversed ? ((4 + (f - 1) * nfacedof + 1):(4 + f * nfacedof)) :
     ((4 + f * nfacedof):-1:(4 + (f - 1) * nfacedof + 1))
 
-function compute_ghost_send_recv_idx(topology::DistributedTopology2D, Nq)
+function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
     (;
         context,
         neighbor_pids,
@@ -605,25 +605,25 @@ function compute_ghost_send_recv_idx(topology::DistributedTopology2D, Nq)
     return send_buf_idx, recv_buf_idx
 end
 
-domain(topology::DistributedTopology2D) = domain(topology.mesh)
-nelems(topology::DistributedTopology2D) = length(topology.elemorder)
-nlocalelems(topology::DistributedTopology2D) = length(topology.local_elem_gidx)
-function localelems(topology::DistributedTopology2D)
+domain(topology::Topology2D) = domain(topology.mesh)
+nelems(topology::Topology2D) = length(topology.elemorder)
+nlocalelems(topology::Topology2D) = length(topology.local_elem_gidx)
+function localelems(topology::Topology2D)
     topology.elemorder[topology.local_elem_gidx]
 end
-nghostelems(topology::DistributedTopology2D) = length(topology.recv_elem_gidx)
-function ghostelems(topology::DistributedTopology2D)
+nghostelems(topology::Topology2D) = length(topology.recv_elem_gidx)
+function ghostelems(topology::Topology2D)
     topology.elemorder[topology.recv_elem_gidx]
 end
 
-nneighbors(topology::DistributedTopology2D) = length(topology.neighbor_pids)
+nneighbors(topology::Topology2D) = length(topology.neighbor_pids)
 
 
 
-nsendelems(topology::DistributedTopology2D) = length(topology.send_elem_lidx)
-nrecvelems(topology::DistributedTopology2D) = length(topology.recv_elem_gidx)
+nsendelems(topology::Topology2D) = length(topology.send_elem_lidx)
+nrecvelems(topology::Topology2D) = length(topology.recv_elem_gidx)
 
-function localelemindex(topology::DistributedTopology2D, elem)
+function localelemindex(topology::Topology2D, elem)
     idx = topology.localorderindex[topology.orderindex[elem]]
     if idx == 0
         error("requested local element index for non-local element $(elem)")
@@ -631,19 +631,19 @@ function localelemindex(topology::DistributedTopology2D, elem)
     return idx
 end
 
-function vertex_coordinates(topology::DistributedTopology2D, e::Int)
+function vertex_coordinates(topology::Topology2D, e::Int)
     ntuple(4) do vert
         Meshes.coordinates(topology.mesh, topology.elemorder[e], vert)
     end
 end
 
 coordinates(
-    topology::DistributedTopology2D{ClimaComms.SingletonCommsContext},
+    topology::Topology2D{ClimaComms.SingletonCommsContext},
     e::Int,
     arg,
 ) = coordinates(topology.mesh, topology.elemorder[e], arg)
 
-function opposing_face(topology::DistributedTopology2D, e::Int, face::Int)
+function opposing_face(topology::Topology2D, e::Int, face::Int)
     mesh = topology.mesh
     elem = topology.elemorder[e]
     if Meshes.is_boundary_face(mesh, elem, face)
@@ -654,21 +654,21 @@ function opposing_face(topology::DistributedTopology2D, e::Int, face::Int)
     opelem, opface, reversed = Meshes.opposing_face(mesh, elem, face)
     return (topology.orderindex[opelem], opface, reversed)
 end
-interior_faces(topology::DistributedTopology2D) = topology.interior_faces
-ghost_faces(topology::DistributedTopology2D) = topology.ghost_faces
+interior_faces(topology::Topology2D) = topology.interior_faces
+ghost_faces(topology::Topology2D) = topology.ghost_faces
 
-local_vertices(topology::DistributedTopology2D) =
+local_vertices(topology::Topology2D) =
     VertexIterator(topology.local_vertices, topology.local_vertex_offset)
-ghost_vertices(topology::DistributedTopology2D) =
+ghost_vertices(topology::Topology2D) =
     VertexIterator(topology.ghost_vertices, topology.ghost_vertex_offset)
 
-function local_neighboring_elements(topology::DistributedTopology2D, elem)
+function local_neighboring_elements(topology::Topology2D, elem)
     return view(
         topology.local_neighbor_elem,
         topology.local_neighbor_elem_offset[elem]:(topology.local_neighbor_elem_offset[elem + 1] - 1),
     )
 end
-function ghost_neighboring_elements(topology::DistributedTopology2D, elem)
+function ghost_neighboring_elements(topology::Topology2D, elem)
     return view(
         topology.ghost_neighbor_elem,
         topology.ghost_neighbor_elem_offset[elem]:(topology.ghost_neighbor_elem_offset[elem + 1] - 1),
@@ -676,14 +676,14 @@ function ghost_neighboring_elements(topology::DistributedTopology2D, elem)
 end
 
 
-neighbors(topology::DistributedTopology2D) = topology.neighbor_pids
-boundary_names(topology::DistributedTopology2D) = keys(topology.boundaries)
-boundary_tags(topology::DistributedTopology2D) =
+neighbors(topology::Topology2D) = topology.neighbor_pids
+boundary_names(topology::Topology2D) = keys(topology.boundaries)
+boundary_tags(topology::Topology2D) =
     NamedTuple{boundary_names(topology)}(
         ntuple(i -> i, length(topology.boundaries)),
     )
-boundary_tag(topology::DistributedTopology2D, boundary_name::Symbol) =
+boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
-boundary_faces(topology::DistributedTopology2D, boundary) =
+boundary_faces(topology::Topology2D, boundary) =
     topology.boundaries[boundary]

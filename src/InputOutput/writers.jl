@@ -206,7 +206,7 @@ function write_new!(
 end
 
 # Topologies
-defaultname(::Topologies.DistributedTopology2D) = "2d"
+defaultname(::Topologies.Topology2D) = "2d"
 defaultname(topology::Topologies.IntervalTopology) = defaultname(topology.mesh)
 
 """
@@ -229,11 +229,11 @@ end
 """
     write_new!(writer, topology, name)
 
-Write `DistributedTopology2D` data to HDF5.
+Write `Topology2D` data to HDF5.
 """
 function write_new!(
     writer::HDF5Writer,
-    topology::Topologies.DistributedTopology2D,
+    topology::Topologies.Topology2D,
     name::AbstractString = defaultname(topology),
 )
     @assert writer.context == topology.context
@@ -384,7 +384,7 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     array = parent(field)
     topology = Spaces.topology(space)
     nd = ndims(array)
-    if topology isa Topologies.DistributedTopology2D &&
+    if topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
         dims = ntuple(d -> d == nd ? nelems : size(array, d), nd)

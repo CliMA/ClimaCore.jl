@@ -1,7 +1,7 @@
 using ..Meshes
 using ..Spaces:
     AbstractSpace, SpectralElementSpace1D, SpectralElementSpace2D, Quadratures
-using ..Topologies: DistributedTopology2D, IntervalTopology
+using ..Topologies: Topology2D, IntervalTopology
 using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
@@ -82,10 +82,10 @@ function overlap(
     source::S,
 ) where {
     T <: SpectralElementSpace2D{
-        <:DistributedTopology2D{ClimaComms.SingletonCommsContext},
+        <:Topology2D{ClimaComms.SingletonCommsContext},
     },
     S <: SpectralElementSpace2D{
-        <:DistributedTopology2D{ClimaComms.SingletonCommsContext},
+        <:Topology2D{ClimaComms.SingletonCommsContext},
     },
 }
     @assert (
@@ -271,12 +271,12 @@ end
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
 nxelems(
-    topology::Topologies.DistributedTopology2D{
+    topology::Topologies.Topology2D{
         ClimaComms.SingletonCommsContext,
     },
 ) = size(Meshes.elements(topology.mesh), 1)
 nyelems(
-    topology::Topologies.DistributedTopology2D{
+    topology::Topologies.Topology2D{
         ClimaComms.SingletonCommsContext,
     },
 ) = size(Meshes.elements(topology.mesh), 2)
