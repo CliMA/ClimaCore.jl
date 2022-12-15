@@ -545,9 +545,9 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     domain = Domains.SphereDomain(test.params.R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     quad = Spaces.Quadratures.GLL{Nq}()
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     if usempi
-        global_grid_topology = Topologies.DistributedTopology2D(
+        global_grid_topology = Topologies.Topology2D(
             ClimaComms.SingletonCommsContext(),
             mesh,
         )

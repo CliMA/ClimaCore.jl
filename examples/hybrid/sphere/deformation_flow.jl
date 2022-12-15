@@ -206,7 +206,7 @@ function run_deformation_flow(use_limiter, fct_op)
 
     horz_domain = Domains.SphereDomain(R)
     horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)
-    horz_topology = Topologies.DistributedTopology2D(context, horz_mesh)
+    horz_topology = Topologies.Topology2D(context, horz_mesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horz_space = Spaces.SpectralElementSpace2D(horz_topology, quad)
 

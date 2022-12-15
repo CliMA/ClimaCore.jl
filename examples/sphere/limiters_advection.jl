@@ -89,7 +89,7 @@ for (k, ne) in enumerate(ne_seq)
     # Set up space
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.DistributedTopology2D(context, mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

@@ -60,9 +60,9 @@ n1, n2 = 16, 16
 Nq = 4
 quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
-grid_topology = Topologies.DistributedTopology2D(context, mesh)
+grid_topology = Topologies.Topology2D(context, mesh)
 if usempi
-    global_grid_topology = Topologies.DistributedTopology2D(
+    global_grid_topology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
