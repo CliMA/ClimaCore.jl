@@ -37,10 +37,8 @@ function make_horizontal_space(mesh, npoly)
         topology = Topologies.IntervalTopology(mesh)
         space = Spaces.SpectralElementSpace1D(topology, quad)
     elseif mesh isa Meshes.AbstractMesh2D
-        topology = Topologies.Topology2D(
-            ClimaComms.SingletonCommsContext(),
-            mesh,
-        )
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         space = Spaces.SpectralElementSpace2D(topology, quad)
     end
     return space

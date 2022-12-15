@@ -72,11 +72,8 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     quad = Spaces.Quadratures.GLL{Nq}()
-    grid_topology = Topologies.Topology2D(
-        context,
-        mesh,
-        Topologies.spacefillingcurve(mesh),
-    )
+    grid_topology =
+        Topologies.Topology2D(context, mesh, Topologies.spacefillingcurve(mesh))
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     Y = set_initial_condition(space)
     ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y) : nothing

@@ -39,10 +39,8 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
         x2boundary = (:south, :north),
     )
     mesh = CC.Meshes.RectilinearMesh(domain, 1, 1)
-    grid_topology = CC.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    grid_topology =
+        CC.Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     quad = CC.Spaces.Quadratures.GLL{4}()
     points, weights = CC.Spaces.Quadratures.quadrature_points(FT, quad)
@@ -55,10 +53,8 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
     Nq = 4
     domain = CC.Domains.SphereDomain(radius)
     mesh = CC.Meshes.EquiangularCubedSphere(domain, ne)
-    topology = CC.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    topology =
+        CC.Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     quad = CC.Spaces.Quadratures.GLL{Nq}()
     space5 = CC.Spaces.SpectralElementSpace2D(topology, quad)
 
@@ -77,10 +73,8 @@ function all_spaces(::Type{FT}; zelem = 10) where {FT}
 
     horzdomain = CC.Domains.SphereDomain(radius)
     horzmesh = CC.Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = CC.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        horzmesh,
-    )
+    horztopology =
+        CC.Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
     quad = CC.Spaces.Quadratures.GLL{Nq}()
     space7 = CC.Spaces.SpectralElementSpace2D(horztopology, quad)
 

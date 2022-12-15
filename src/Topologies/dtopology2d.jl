@@ -678,12 +678,10 @@ end
 
 neighbors(topology::Topology2D) = topology.neighbor_pids
 boundary_names(topology::Topology2D) = keys(topology.boundaries)
-boundary_tags(topology::Topology2D) =
-    NamedTuple{boundary_names(topology)}(
-        ntuple(i -> i, length(topology.boundaries)),
-    )
+boundary_tags(topology::Topology2D) = NamedTuple{boundary_names(topology)}(
+    ntuple(i -> i, length(topology.boundaries)),
+)
 boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
-boundary_faces(topology::Topology2D, boundary) =
-    topology.boundaries[boundary]
+boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]

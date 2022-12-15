@@ -62,10 +62,8 @@ quad = Spaces.Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(context, mesh)
 if usempi
-    global_grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    global_grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
 else

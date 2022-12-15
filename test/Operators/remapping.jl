@@ -26,10 +26,7 @@ function make_space(
 )
     nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
-    topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     space = Spaces.SpectralElementSpace2D(topology, quad)
     return space
 end

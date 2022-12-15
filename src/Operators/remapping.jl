@@ -81,12 +81,8 @@ function overlap(
     target::T,
     source::S,
 ) where {
-    T <: SpectralElementSpace2D{
-        <:Topology2D{ClimaComms.SingletonCommsContext},
-    },
-    S <: SpectralElementSpace2D{
-        <:Topology2D{ClimaComms.SingletonCommsContext},
-    },
+    T <: SpectralElementSpace2D{<:Topology2D{ClimaComms.SingletonCommsContext}},
+    S <: SpectralElementSpace2D{<:Topology2D{ClimaComms.SingletonCommsContext}},
 }
     @assert (
         typeof(Spaces.topology(target).mesh) <: Meshes.RectilinearMesh &&
@@ -270,16 +266,10 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(
-    topology::Topologies.Topology2D{
-        ClimaComms.SingletonCommsContext,
-    },
-) = size(Meshes.elements(topology.mesh), 1)
-nyelems(
-    topology::Topologies.Topology2D{
-        ClimaComms.SingletonCommsContext,
-    },
-) = size(Meshes.elements(topology.mesh), 2)
+nxelems(topology::Topologies.Topology2D{ClimaComms.SingletonCommsContext}) =
+    size(Meshes.elements(topology.mesh), 1)
+nyelems(topology::Topologies.Topology2D{ClimaComms.SingletonCommsContext}) =
+    size(Meshes.elements(topology.mesh), 2)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)

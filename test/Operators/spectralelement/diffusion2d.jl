@@ -25,10 +25,8 @@ using OrdinaryDiffEq
     )
 
     mesh = Meshes.RectilinearMesh(domain, 10, 10)
-    grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()
