@@ -4,7 +4,10 @@ import RootSolvers
 using DocStringExtensions
 
 export RectilinearMesh,
-    EquiangularCubedSphere, EquidistantCubedSphere, ConformalCubedSphere
+    EquiangularCubedSphere,
+    EquidistantCubedSphere,
+    ConformalCubedSphere,
+    truncate_mesh
 
 import ..Domains:
     Domains,
@@ -69,7 +72,7 @@ const AbstractMesh2D = AbstractMesh{2}
 """
     Meshes.domain(mesh::AbstractMesh)
 
-The [`Domains.AbstractDomain`](@ref) on which the mesh is defined.
+The domain (a subtype of  [`Domains.AbstractDomain`](@ref)) on which the mesh is defined.
 """
 function domain end
 

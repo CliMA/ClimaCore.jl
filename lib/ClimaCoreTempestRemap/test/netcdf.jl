@@ -1,4 +1,5 @@
 import ClimaCore
+using ClimaComms
 using ClimaCore:
     Geometry, Meshes, Domains, Topologies, Spaces, Fields, Hypsography
 using NCDatasets
@@ -15,7 +16,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     Nq = 5
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    topology = Topologies.Topology2D(mesh)
+    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
     coords = Fields.coordinate_field(space)
@@ -83,7 +84,7 @@ end
     Nq = 5
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -166,7 +167,7 @@ end
     nlevels = 10
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -301,7 +302,7 @@ end
     Nq = 5
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -411,7 +412,7 @@ end
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
     quad = Spaces.Quadratures.GL{1}()
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(

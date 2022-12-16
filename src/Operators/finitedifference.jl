@@ -245,7 +245,7 @@ end
 
 Set the curl at the boundary to be `val`.
 """
-struct SetCurl{S <: Geometry.ContravariantVector} <: BoundaryCondition
+struct SetCurl{S} <: BoundaryCondition
     val::S
 end
 
@@ -2794,7 +2794,7 @@ C(v)[i]^1 &= - \\frac{1}{J[i]} (v₂[i+\\tfrac{1}{2}] - v₂[i-\\tfrac{1}{2}]) \
 C(v)[i]^2 &= \\frac{1}{J[i]}  (v₁[i+\\tfrac{1}{2}] - v₁[i-\\tfrac{1}{2}])
 \\end{align*}
 ```
-where ``v₁` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
+where ``v₁`` and ``v₂`` are the 1st and 2nd covariant components of ``v``, and
 ``J`` is the Jacobian determinant.
 
 The following boundary conditions are supported:
@@ -3162,15 +3162,13 @@ Base.@propagate_inbounds function getidx(
     bc.f(_args...)
 end
 
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(getidx_args)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(getidx)
-            m.recursion_relation = dont_limit
-        end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(getidx_args)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(getidx)
+        m.recursion_relation = dont_limit
     end
 end
 
@@ -3257,15 +3255,13 @@ function Base.Broadcast.materialize!(
 end
 
 #TODO: the optimizer dies with column broadcast expressions over a certain complexity
-if VERSION >= v"1.7.0"
-    if hasfield(Method, :recursion_relation)
-        dont_limit = (args...) -> true
-        for m in methods(column)
-            m.recursion_relation = dont_limit
-        end
-        for m in methods(column_args)
-            m.recursion_relation = dont_limit
-        end
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(column)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(column_args)
+        m.recursion_relation = dont_limit
     end
 end
 

@@ -1,6 +1,10 @@
 import Documenter, DocumenterCitations, Literate
 import ClimaCore,
-    ClimaCoreVTK, ClimaCoreMakie, ClimaCorePlots, ClimaCoreTempestRemap
+    ClimaCoreVTK,
+    ClimaCoreMakie,
+    ClimaCorePlots,
+    ClimaCoreTempestRemap,
+    ClimaCoreSpectra
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
@@ -60,6 +64,7 @@ withenv("GKSwstype" => "nul") do
         modules = [
             ClimaCore,
             ClimaCoreVTK,
+            ClimaCoreSpectra,
             ClimaCorePlots,
             ClimaCoreMakie,
             ClimaCoreTempestRemap,
@@ -67,9 +72,10 @@ withenv("GKSwstype" => "nul") do
         pages = Any[
             "Home" => "index.md",
             "Introduction" => "intro.md",
-            "API" => "api.md",
             "Mathematical Framework" => "math_framework.md",
+            "Installation and How-to Guides" => "installation_instructions.md",
             "Operators" => "operators.md",
+            "API" => "api.md",
             "Developer docs" => ["Performance tips" => "performance_tips.md"],
             "Tutorials" => [
                 joinpath("tutorials", tutorial * ".md") for
@@ -77,9 +83,14 @@ withenv("GKSwstype" => "nul") do
             ],
             "Examples" => "examples.md",
             "Libraries" => [
+                joinpath("lib", "ClimaCorePlots.md"),
+                joinpath("lib", "ClimaCoreMakie.md"),
                 joinpath("lib", "ClimaCoreVTK.md"),
                 joinpath("lib", "ClimaCoreTempestRemap.md"),
+                joinpath("lib", "ClimaCoreSpectra.md"),
             ],
+            "Contributing guide" => "Contributing.md",
+            "Code of Conduct" => "code_of_conduct.md",
             "references.md",
         ],
     )

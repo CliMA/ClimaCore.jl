@@ -480,6 +480,21 @@ function DataF{S}(ArrayType) where {S}
     DataF{S}(ArrayType(undef, typesize(T, S)))
 end
 
+function DataF(x::T) where {T}
+    if is_valid_basetype(Float64, T)
+        d = DataF{T}(Array{Float64})
+        d[] = x
+        return d
+    elseif is_valid_basetype(Float32, T)
+        d = DataF{T}(Array{Float32})
+        d[] = x
+        return d
+    else
+        check_basetype(Float64, T)
+    end
+end
+
+
 function Base.fill!(data::DataF, val)
     @inbounds data[] = val
     return data

@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 
 import ClimaCore
 # To avoid JET failures in the error message
@@ -14,7 +15,7 @@ velem = 4
 
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-htopology = Topologies.Topology2D(hmesh)
+htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
 quad = Spaces.Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -66,11 +67,6 @@ include(
 )
 jacobi_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :no_∂ᶜp∂ᶜK, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact);
 use_transform = false;
-
-# Allow one() to be called on vectors.
-Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
-Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
-    T(axes(T), S(one(T′)))
 
 Y = Fields.FieldVector(
     c = map(

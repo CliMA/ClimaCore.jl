@@ -45,7 +45,7 @@ function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
     elseif loc ≤ nperimeter2d(Nq)
         f = cld(loc - 4, Nq - 2)
         n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1) # face_node_index also counts the bordering vertex dof
+        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
     else
         return nothing
     end
@@ -54,6 +54,7 @@ end
 nperimeter2d(Nq) = 4 + (Nq - 2) * 4
 nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
+
 """
     SpectralElementSpace1D <: AbstractSpace
 
@@ -162,11 +163,42 @@ struct SpectralElementSpace2D{
 end
 
 """
-    SpectralElementSpace2D(topology, quadrature_style)
+    SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
 
-Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`.
+Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
+flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
+
+# Input arguments:
+- topology: Topology2D
+- quadrature_style: QuadratureStyle
+- enable_bubble: Bool
+
+The idea behind the so-called `bubble_correction` is that the numerical area
+of the domain (e.g., the sphere) is given by the sum of nodal integration weights
+times their corresponding Jacobians. However, this discrete sum is not exactly
+equal to the exact geometric area  (4pi*radius^2 for the sphere). To make these equal,
+the "epsilon bubble" approach modifies the inner weights in each element so that
+geometric and numerical areas of each element match.
+
+Let ``\\Delta A^e := A^e_{exact} - A^e_{approx}``, then, in
+the case of linear elements, we correct ``W_{i,j} J^e_{i,j}`` by:
+```math
+\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} + \\Delta A^e * W_{i,j}  .
+```
+and the case of non linear elements, by
+```math
+\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} \\left( 1 + \\tilde{A}^e \\right) ,
+```
+where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior nodal integration weights.
+
+Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
+[`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
-function SpectralElementSpace2D(topology, quadrature_style)
+function SpectralElementSpace2D(
+    topology,
+    quadrature_style;
+    enable_bubble = false,
+)
 
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
@@ -184,8 +216,6 @@ function SpectralElementSpace2D(topology, quadrature_style)
     ### How to DSS multiple fields?
     # 1. allocate buffers externally
 
-
-
     domain = Topologies.domain(topology)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)
@@ -202,6 +232,8 @@ function SpectralElementSpace2D(topology, quadrature_style)
     nlelems = Topologies.nlocalelems(topology)
     ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    high_order_quadrature_style = Spaces.Quadratures.GLL{Nq * 2}()
+    high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
@@ -210,23 +242,139 @@ function SpectralElementSpace2D(topology, quadrature_style)
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
+    high_order_quad_points, high_order_quad_weights =
+        Quadratures.quadrature_points(FT, high_order_quadrature_style)
     for (lidx, elem) in enumerate(Topologies.localelems(topology))
+        elem_area = zero(FT)
+        high_order_elem_area = zero(FT)
+        Δarea = zero(FT)
+        interior_elem_area = zero(FT)
+        WJ_corrected = zero(FT)
+        J_corrected = zero(FT)
         local_geometry_slab = slab(local_geometry, lidx)
+        # high-order quadrature loop for computing geometric element face area.
+        # NOTE: This is accurate only for Equiangular and Equidistant cubed-spheres, but not Conformal.
+        for i in 1:high_order_Nq, j in 1:high_order_Nq
+            ξ = SVector(high_order_quad_points[i], high_order_quad_points[j])
+            u, ∂u∂ξ =
+                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
+            J_high_order = det(Geometry.components(∂u∂ξ))
+            WJ_high_order =
+                J_high_order *
+                high_order_quad_weights[i] *
+                high_order_quad_weights[j]
+            high_order_elem_area += WJ_high_order
+        end
+        # low-order quadrature loop for computing numerical element face area
         for i in 1:Nq, j in 1:Nq
             ξ = SVector(quad_points[i], quad_points[j])
             u, ∂u∂ξ =
                 compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
+            elem_area += WJ
+            if !enable_bubble
+                local_geometry_slab[i, j] =
+                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+            end
+        end
 
-            local_geometry_slab[i, j] = Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+        # If enabled, apply bubble correction
+        if enable_bubble
+            if abs(elem_area - high_order_elem_area) ≤ eps(FT)
+                @warn "The numerical and geometric areas of the element are equal. The bubble correction will not be performed."
+                for i in 1:Nq, j in 1:Nq
+                    ξ = SVector(quad_points[i], quad_points[j])
+                    u, ∂u∂ξ = compute_local_geometry(
+                        global_geometry,
+                        topology,
+                        elem,
+                        ξ,
+                        AIdx,
+                    )
+                    J = det(Geometry.components(∂u∂ξ))
+                    WJ = J * quad_weights[i] * quad_weights[j]
+                    local_geometry_slab[i, j] =
+                        Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                end
+            else
+                # The idea behind the so-called `bubble_correction` is that
+                # the numerical area of the domain (e.g., the sphere) is given by the sum
+                # of nodal integration weights times their corresponding Jacobians. However,
+                # this discrete sum is not exactly equal to the exact geometric area
+                # (4pi*radius^2 for the sphere). It is required that numerical area = geometric area.
+                # The "epsilon bubble" approach modifies the inner weights in each
+                # element so that geometric and numerical areas of each element match.
+
+                # Compute difference between geometric area of an element and its approximate numerical area
+                Δarea = abs(high_order_elem_area - elem_area)
+
+                # Linear elements: Nq == 2 (SpectralElementSpace2D cannot have Nq < 2)
+                # Use uniform bubble correction
+                if Nq == 2
+                    for i in 1:Nq, j in 1:Nq
+                        ξ = SVector(quad_points[i], quad_points[j])
+                        u, ∂u∂ξ = compute_local_geometry(
+                            global_geometry,
+                            topology,
+                            elem,
+                            ξ,
+                            AIdx,
+                        )
+                        J = det(Geometry.components(∂u∂ξ))
+                        WJ = J * quad_weights[i] * quad_weights[j]
+                        WJ += Δarea * quad_weights[i] * quad_weights[j]
+                        local_geometry_slab[i, j] =
+                            Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                    end
+                else # Higher-order elements: Use HOMME bubble correction for the interior nodes
+                    for i in 2:(Nq - 1), j in 2:(Nq - 1)
+                        ξ = SVector(quad_points[i], quad_points[j])
+                        u, ∂u∂ξ = compute_local_geometry(
+                            global_geometry,
+                            topology,
+                            elem,
+                            ξ,
+                            AIdx,
+                        )
+                        J = det(Geometry.components(∂u∂ξ))
+                        WJ = J * quad_weights[i] * quad_weights[j]
+                        interior_elem_area += WJ
+                    end
+                    # Check that interior_elem_area is not too small
+                    if abs(interior_elem_area) ≤ sqrt(eps(FT))
+                        error(
+                            "Bubble correction cannot be performed; sum of inner weights is too small.",
+                        )
+                    end
+                    interior_elem_area = Δarea / interior_elem_area
+
+                    for i in 1:Nq, j in 1:Nq
+                        ξ = SVector(quad_points[i], quad_points[j])
+                        u, ∂u∂ξ = compute_local_geometry(
+                            global_geometry,
+                            topology,
+                            elem,
+                            ξ,
+                            AIdx,
+                        )
+                        J = det(Geometry.components(∂u∂ξ))
+                        WJ = J * quad_weights[i] * quad_weights[j]
+                        # Modify WJ only for interior nodes
+                        if i != 1 && j != 1 && i != Nq && j != Nq
+                            WJ *= 1 + interior_elem_area
+                        end
+                        # Finally allocate local geometry
+                        local_geometry_slab[i, j] =
+                            Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
+                    end
+                end
+            end
         end
     end
 
-
     # alternatively, we could do a ghost exchange here?
-    if topology isa Topologies.DistributedTopology2D
-
+    if topology isa Topologies.Topology2D
         for (ridx, elem) in enumerate(Topologies.ghostelems(topology))
             ghost_geometry_slab = slab(ghost_geometry, ridx)
             for i in 1:Nq, j in 1:Nq
@@ -354,11 +502,18 @@ nlevels(space::SpectralElementSpace2D) = 1
 perimeter(space::SpectralElementSpace2D) =
     Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
 
-const RectilinearSpectralElementSpace2D =
-    SpectralElementSpace2D{<:Topologies.Topology2D{<:Meshes.RectilinearMesh}}
+const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
+    <:Topologies.Topology2D{
+        <:ClimaComms.AbstractCommsContext,
+        <:Meshes.RectilinearMesh,
+    },
+}
 
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.Topology2D{<:Meshes.AbstractCubedSphere},
+    <:Topologies.Topology2D{
+        <:ClimaComms.AbstractCommsContext,
+        <:Meshes.AbstractCubedSphere,
+    },
 }
 
 function compute_local_geometry(

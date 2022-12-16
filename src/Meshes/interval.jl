@@ -15,7 +15,7 @@ Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possi
 
 - [`Uniform()`](@ref)
 - [`ExponentialStretching(H)`](@ref)
-- [`GeneralizedExponentialStretching(dz_surface, dz_top)`](@ref)
+- [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
 """
 struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <: AbstractMesh1D
     domain::I
@@ -83,7 +83,7 @@ function monotonic_check(faces)
     if !(monotonic_incr || monotonic_decr)
         error(
             string(
-                "Faces in vertical mesh are not increasing monotonically. ",
+                "Faces in vertical mesh are not increasing or decreasing monotonically. ",
                 "We need to have dz_bottom <= z_max / z_elem and dz_top >= z_max / z_elem.",
             ),
         )
@@ -115,7 +115,7 @@ end
 
 
 """
-    ExponentialStretching(H)
+    ExponentialStretching(H::FT)
 
 Apply exponential stretching to the domain when constructing elements. `H` is
 the scale height (a typical atmospheric scale height `H ≈ 7.5`km).
@@ -126,7 +126,13 @@ For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
 \\zeta = \\frac{1 - e^{-\\eta/h}}{1-e^{-1/h}},
 ```
 where ``\\eta = \\frac{z - z_0}{z_1-z_0}``, and ``h = \\frac{H}{z_1-z_0}`` is
-the non-dimensional scale height.
+the non-dimensional scale height. If `reverse_mode` is `true`, the smallest
+element is at the top, and the largest at the bottom (this is typical for land
+model configurations).
+
+Then, the user can define a stretched mesh via
+
+    ClimaCore.Meshes.IntervalMesh(interval_domain, ExponentialStretching(H); nelems::Int, reverse_mode = false)
 """
 struct ExponentialStretching{FT} <: StretchingRule
     H::FT
@@ -136,6 +142,7 @@ function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::ExponentialStretching{FT};
     nelems::Int,
+    reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems < 1
         throw(ArgumentError("`nelems` must be ≥ 1"))
@@ -144,22 +151,39 @@ function IntervalMesh(
     cmax = Geometry.component(domain.coord_max, 1)
     R = cmax - cmin
     h = stretch.H / R
-    η(ζ) = ζ == 1 ? ζ : -h * log1p((expm1(-1 / h)) * ζ)
-    faces =
-        [CT(cmin + R * η(ζ)) for ζ in range(FT(0), FT(1); length = nelems + 1)]
+
+    η(ζ) = ζ == 1 ? ζ : (-h) * log1p((expm1(-1 / h)) * ζ)
+    faces = [
+        CT(reverse_mode ? cmax + R * η(ζ) : cmin + R * η(ζ)) for
+        ζ in range(FT(0), FT(1); length = nelems + 1)
+    ]
+
+    if reverse_mode
+        faces = map(f -> eltype(faces)(-f), faces)
+        faces[1] = faces[1] == -cmax ? cmax : faces[1]
+        reverse!(faces)
+    end
     monotonic_check(faces)
     IntervalMesh(domain, faces)
 end
 
 """
-    GeneralizedExponentialStretching(dz_surface, dz_top)
+    GeneralizedExponentialStretching(dz_bottom::FT, dz_top::FT)
 
 Apply a generalized form of exponential stretching to the domain when constructing elements.
-`dz_surface` and `dz_top` are target element grid spacings at surface and at the top of the
-vertical column domain (m).
+`dz_bottom` and `dz_top` are target element grid spacings at the bottom and at the top of the
+vertical column domain (m). In typical atmosphere configurations, `dz_bottom` is the smallest
+grid spacing and `dz_top` the largest one. On the other hand, for typical land configurations,
+`dz_bottom` is the largest grid spacing and `dz_top` the smallest one.
+
+For land configurations, use `reverse_mode` = `true` (default value `false`).
+
+Then, the user can define a generalized stretched mesh via
+
+    ClimaCore.Meshes.IntervalMesh(interval_domain, GeneralizedExponentialStretching(dz_bottom, dz_top); nelems::Int, reverse_mode = false)
 """
 struct GeneralizedExponentialStretching{FT} <: StretchingRule
-    dz_surface::FT
+    dz_bottom::FT
     dz_top::FT
 end
 
@@ -167,71 +191,136 @@ function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::GeneralizedExponentialStretching{FT};
     nelems::Int,
+    reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
     end
-    dz_surface, dz_top = stretch.dz_surface, stretch.dz_top
-    if !(dz_surface ≤ dz_top)
-        throw(ArgumentError("dz_surface must be ≤ dz_top"))
+
+    dz_bottom, dz_top = stretch.dz_bottom, stretch.dz_top
+    if !(dz_bottom ≤ dz_top) && !reverse_mode
+        throw(ArgumentError("dz_bottom must be ≤ dz_top"))
     end
-    # surface coord height value
-    zₛ = Geometry.component(domain.coord_min, 1)
-    # top coord height value
-    zₜ = Geometry.component(domain.coord_max, 1)
+
+    if !(dz_bottom ≥ dz_top) && reverse_mode
+        throw(ArgumentError("dz_top must be ≤ dz_bottom"))
+    end
+
+    # bottom coord height value, always min, for both atmos and land, since z-axis does not change
+    z_bottom = Geometry.component(domain.coord_min, 1)
+    # top coord height value, always max, for both atmos and land, since z-axis does not change
+    z_top = Geometry.component(domain.coord_max, 1)
+    # but in case of reverse_mode, we temporarily swap them together with dz_bottom and dz_top
+    # so that the following root solve algorithm does not need to change
+    if reverse_mode
+        z_bottom, z_top = Geometry.component(domain.coord_max, 1),
+        -Geometry.component(domain.coord_min, 1)
+        dz_top, dz_bottom = dz_bottom, dz_top
+    end
 
     # define the inverse σ⁻¹ exponential stretching function
-    exp_stretch(ζ, h) = -h * log(1 - (1 - exp(-1 / h)) * ζ)
+    exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log(1 - (1 - exp(-1 / h)) * ζ)
 
-    # nondimensional vertical coordinate ([0.0, 1.0])
+    # nondimensional vertical coordinate (]0.0, 1.0])
     ζ_n = LinRange(one(FT), nelems, nelems) / nelems
 
-    # find surface height variation
-    find_surface(h) = dz_surface - zₜ * exp_stretch(ζ_n[1], h)
+    # find bottom height variation
+    find_bottom(h) = dz_bottom - z_top * exp_stretch(ζ_n[1], h)
     # we use linearization
-    # hₛ ≈ -dz_surface / zₜ / log(1 - 1/nelems)
+    # h_bottom ≈ -dz_bottom / (z_top - z_bottom) / log(1 - 1/nelems)
     # to approx bracket the lower / upper bounds of root sol
-    guess₋ = -dz_surface / zₜ / log(1 - FT(1 / (nelems - 1)))
-    guess₊ = -dz_surface / zₜ / log(1 - FT(1 / (nelems + 1)))
-    hₛsol = RootSolvers.find_zero(
-        find_surface,
+    guess₋ = -dz_bottom / (z_top - z_bottom) / log(1 - FT(1 / (nelems - 1)))
+    guess₊ = -dz_bottom / (z_top - z_bottom) / log(1 - FT(1 / (nelems + 1)))
+    h_bottom_sol = RootSolvers.find_zero(
+        find_bottom,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(FT(1e-3)),
     )
-    if hₛsol.converged !== true
+    if h_bottom_sol.converged !== true
         error(
-            "hₛ root failed to converge for dz_surface: $dz_surface on domain ($zₛ, $zₜ)",
+            "h_bottom root failed to converge for dz_bottom: $dz_bottom on domain ($z_bottom, $z_top)",
         )
     end
-    hₛ = hₛsol.root
+    h_bottom = h_bottom_sol.root
 
     # find top height variation
-    find_top(h) = dz_top - zₜ * (1 - exp_stretch(ζ_n[end - 1], h))
+    find_top(h) = dz_top - z_top * (1 - exp_stretch(ζ_n[end - 1], h))
     # we use the linearization
-    # hₜ ≈ (zₜ - dz_top) / zₜ / log(nelem)
+    # h_top ≈ (z_top - dz_top) / z_top / log(nelem)
     # to approx braket the lower, upper bounds of root sol
-    guess₋ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems + 1))
-    guess₊ = ((zₜ - zₛ) - dz_top) / zₜ / FT(log(nelems - 1))
-    hₜsol = RootSolvers.find_zero(
+    guess₋ = ((z_top - z_bottom) - dz_top) / z_top / FT(log(nelems + 1))
+    guess₊ = ((z_top - z_bottom) - dz_top) / z_top / FT(log(nelems - 1))
+    h_top_sol = RootSolvers.find_zero(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
         RootSolvers.ResidualTolerance(FT(1e-3)),
     )
-    if hₜsol.converged !== true
+    if h_top_sol.converged !== true
         error(
-            "hₜ root failed to converge for dz_top: $dz_surface on domain ($zₛ, $zₜ)",
+            "h_top root failed to converge for dz_top: $dz_top on domain ($z_bottom, $z_top)",
         )
     end
-    hₜ = hₜsol.root
+    h_top = h_top_sol.root
 
     # scale height variation with height
-    h = hₛ .+ (ζ_n .- ζ_n[1]) * (hₜ - hₛ) / (ζ_n[end - 1] - ζ_n[1])
-    faces = (zₛ + (zₜ - zₛ)) * exp_stretch.(ζ_n, h)
+    h =
+        h_bottom .+
+        (ζ_n .- ζ_n[1]) * (h_top - h_bottom) / (ζ_n[end - 1] - ζ_n[1])
+    faces = (z_bottom + (z_top - z_bottom)) * exp_stretch.(ζ_n, h)
 
     # add the bottom level
-    faces = [zₛ; faces...]
+    faces = [z_bottom; faces...]
+    if reverse_mode
+        reverse!(faces)
+        faces = map(f -> eltype(faces)(-f), faces)
+        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
+    end
     monotonic_check(faces)
     IntervalMesh(domain, CT.(faces))
+end
+
+
+"""
+    truncate_mesh(
+        parent_mesh::AbstractMesh,
+        trunc_domain::IntervalDomain{CT},
+    )
+Constructs an `IntervalMesh`, truncating the given `parent_mesh` defined on a
+truncated `trunc_domain`. The truncation preserves the number of
+degrees of freedom covering the space from the `trunc_domain`'s `z_bottom` to `z_top`,
+adjusting the stretching.
+"""
+function truncate_mesh(
+    parent_mesh::IntervalMesh,
+    trunc_domain::IntervalDomain{CT},
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+
+    # Get approximate top
+    faces = parent_mesh.faces
+    k_top = length(faces)
+    z_top = trunc_domain.coord_max
+    z_bottom = trunc_domain.coord_min
+
+    for (k_f, face) in enumerate(faces)
+        if face.z ≥ z_top.z
+            k_top = k_f
+            break
+        end
+    end
+
+    trunc_faces = faces[1:k_top]
+    new_nelems = length(trunc_faces) - 1
+
+    Δz_top = trunc_faces[end].z - trunc_faces[end - 1].z
+    Δz_bottom = trunc_faces[2].z - trunc_faces[1].z
+
+    new_stretch = GeneralizedExponentialStretching(Δz_bottom, Δz_top)
+    new_domain = IntervalDomain(
+        z_bottom,
+        Geometry.ZPoint{FT}(z_top),
+        boundary_names = trunc_domain.boundary_names,
+    )
+    return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
 end

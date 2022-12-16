@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using LinearAlgebra
 import ClimaCore
 import ClimaCore:
@@ -64,14 +65,15 @@ end
     Nq = 4
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
     Y = Fields.FieldVector(y0 = y0)
 
     # write field vector to hdf5 file
-    filename = tempname()
+    filename = tempname(pwd())
     InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
     reader = InputOutput.HDF5Reader(filename)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file

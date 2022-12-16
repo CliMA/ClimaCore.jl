@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 import ClimaCore
 import ClimaCore:
@@ -44,7 +45,8 @@ function hvspace_3D(
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -118,7 +120,7 @@ end
     Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
     # write field vector to hdf5 file
-    filename = tempname()
+    filename = tempname(pwd())
     InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
     reader = InputOutput.HDF5Reader(filename)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file

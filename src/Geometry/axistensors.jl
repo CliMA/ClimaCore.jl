@@ -54,6 +54,8 @@ coordinate_axis(::Type{<:Cartesian2Point}) = (2,)
 coordinate_axis(::Type{<:Cartesian3Point}) = (3,)
 
 coordinate_axis(::Type{<:Cartesian123Point}) = (1, 2, 3)
+coordinate_axis(::Type{<:LatLongZPoint}) = (1, 2, 3)
+coordinate_axis(::Type{<:Cartesian13Point}) = (1, 3)
 
 coordinate_axis(::Type{<:LatLongPoint}) = (1, 2)
 
@@ -169,6 +171,11 @@ function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
         "AxisTensor{$T, $N, $A, $S}($(getfield(a, :axes)), $(getfield(a, :components)))",
     )
 end
+
+# Allow one() to be called on vectors.
+Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
+Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
+    T(axes(T), S(one(T′)))
 
 """
     components(a::AxisTensor)

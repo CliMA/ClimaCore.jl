@@ -21,6 +21,10 @@ TestFloatTypes = (Float32, Float64)
         @test array[2] == -2.0
         @test array[3] == -3.0
 
+        data2 = DataF(data[])
+        @test typeof(data2) == typeof(data)
+        @test parent(data2) == parent(data)
+
         # sum of all the first field elements
         @test data.:1[] == Complex{FT}(array[1], array[2])
 

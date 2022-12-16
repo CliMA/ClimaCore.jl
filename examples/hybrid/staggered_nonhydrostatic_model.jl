@@ -272,11 +272,6 @@ end
 
 additional_tendency!(Yₜ, Y, p, t) = nothing
 
-# Allow one() to be called on vectors.
-Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
-Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
-    T(axes(T), S(one(T′)))
-
 function Wfact!(W, Y, p, dtγ, t)
     (; flags, dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶠ𝕄ₜ∂ᶠ𝕄) = W
     ᶜρ = Y.c.ρ

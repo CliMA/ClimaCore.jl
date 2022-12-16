@@ -23,6 +23,7 @@ npoly = length(poly)
 I, FT = Int, Float64
 nprocs = map(i -> Vector{I}(undef, 0), zeros(I, npoly))
 walltime_dss_full = map(i -> Vector{FT}(undef, 0), zeros(I, npoly))
+walltime_dss2_full = map(i -> Vector{FT}(undef, 0), zeros(I, npoly))
 walltime_dss_internal = map(i -> Vector{FT}(undef, 0), zeros(I, npoly))
 walltime_dss_comms = map(i -> Vector{FT}(undef, 0), zeros(I, npoly))
 walltime_dss_comms_fsb = map(i -> Vector{FT}(undef, 0), zeros(I, npoly))
@@ -36,6 +37,7 @@ for filename in readdir(output_dir)
             dict = load(joinpath(output_dir, filename))
             push!(nprocs[loc], I(dict["nprocs"]))
             push!(walltime_dss_full[loc], FT(dict["walltime_dss_full"]))
+            push!(walltime_dss2_full[loc], FT(dict["walltime_dss2_full"]))
             push!(walltime_dss_internal[loc], FT(dict["walltime_dss_internal"]))
             push!(walltime_dss_comms[loc], FT(dict["walltime_dss_comms"]))
             push!(
@@ -55,6 +57,7 @@ for i in 1:npoly
     order = sortperm(nprocs[i])
     nprocs[i] = nprocs[i][order]
     walltime_dss_full[i] = walltime_dss_full[i][order]
+    walltime_dss2_full[i] = walltime_dss2_full[i][order]
     walltime_dss_internal[i] = walltime_dss_internal[i][order]
     walltime_dss_comms[i] = walltime_dss_comms[i][order]
     walltime_dss_comms_fsb[i] = walltime_dss_comms_fsb[i][order]
@@ -62,7 +65,6 @@ for i in 1:npoly
     log2nprocs[i] .= log2.(nprocs[i])
 end
 xticksstr = (log2nprocs[1], [string(i) for i in nprocs[1]])
-
 kwargs = (
     markershape = [:circle :square],
     markercolor = [:blue :green],
@@ -175,15 +177,12 @@ Plots.plot(plots..., layout = @layout([° °; ° °; ° _]))
 savefig(joinpath(output_dir, "$output_file.png"))
 savefig(joinpath(output_dir, "$output_file.pdf"))
 
-output_file = replace(output_file, "comparison" => "sub-components")
 
 kwargs = (
     xticks = xticksstr,
     ylim = (0.0, Inf),
-    ylabel = "time (sec)",
     xlabel = "# of procs",
-    legendfontsize = 4,
-    legend = :topleft,
+    legendfontsize = 6,
     xlabelfontsize = 6,
     ylabelfontsize = 6,
     titlefontsize = 8,
@@ -194,42 +193,51 @@ kwargs = (
 
 plots = Plots.Plot{Plots.GRBackend}[
     plot(
-        log2nprocs[1],
-        [walltime_dss_full[1] walltime_dss_internal[1]],
+        [log2nprocs[1] log2nprocs[1]],
+        [walltime_dss_full[1] walltime_dss2_full[1]],
+        title = "DSS vs DSS2 (npoly = 2)",
+        label = ["current DSS" "DSS2"],
+        ylabel = "walltime (sec)",
+        markershape = [:circle :square],
         markercolor = [:blue :green],
-        markershape = [:square :circle],
-        label = ["full DSS" "internal DSS"],
-        title = "Full DSS (npoly = 2)";
+        legend = :topright;
+        kwargs...,
+    ),
+    plot(
+        [log2nprocs[2] log2nprocs[2]],
+        [walltime_dss_full[2] walltime_dss2_full[2]],
+        title = "DSS vs DSS2 (npoly = 4)",
+        label = ["current DSS" "DSS2"],
+        ylabel = "walltime (sec)",
+        markershape = [:circle :square],
+        markercolor = [:blue :green],
+        legend = :topright;
+        kwargs...,
+    ),
+    plot(
+        log2nprocs[1],
+        walltime_dss_full[1] ./ walltime_dss2_full[1],
+        title = "Speedup DSS vs DSS2 (npoly = 2)",
+        label = "walltime DSS/DSS2",
+        ylabel = "walltime (DSS/DSS2)",
+        markershape = :circle,
+        markercolor = :blue,
+        legend = :topleft;
         kwargs...,
     ),
     plot(
         log2nprocs[2],
-        [walltime_dss_full[2] walltime_dss_internal[2]],
-        markercolor = [:blue :green],
-        markershape = [:square :circle],
-        label = ["full DSS" "internal DSS"],
-        title = "Full DSS (npoly = 4)";
-        kwargs...,
-    ),
-    plot(
-        log2nprocs[1],
-        [walltime_dss_comms[1] walltime_dss_comms_fsb[1] walltime_dss_comms_other[1]],
-        markercolor = [:blue :green :red],
-        markershape = [:square :circle :star],
-        label = ["DSS comms" "DSS fill send buffer" "DSS start end"],
-        title = "DSS comms (npoly = 2)";
-        kwargs...,
-    ),
-    plot(
-        log2nprocs[2],
-        [walltime_dss_comms[2] walltime_dss_comms_fsb[2] walltime_dss_comms_other[2]],
-        markercolor = [:blue :green :red],
-        markershape = [:square :circle :star],
-        label = ["DSS comms" "DSS fill send buffer" "DSS start end"],
-        title = "DSS comms (npoly = 4)";
+        walltime_dss_full[2] ./ walltime_dss2_full[2],
+        title = "Speedup DSS vs DSS2 (npoly = 4)",
+        label = "walltime DSS/DSS2",
+        ylabel = "walltime (DSS/DSS2)",
+        markershape = :circle,
+        markercolor = :blue,
+        legend = :topleft;
         kwargs...,
     ),
 ]
+output_file = replace(output_file, "comparison" => "compare_dss_dss2")
 Plots.plot(plots..., layout = @layout([° °; ° °]))
-savefig(joinpath(output_dir, "$output_file.pdf"))
 savefig(joinpath(output_dir, "$output_file.png"))
+savefig(joinpath(output_dir, "$output_file.pdf"))

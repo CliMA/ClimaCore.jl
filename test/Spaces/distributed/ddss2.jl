@@ -25,27 +25,33 @@ include("ddss_setup.jl")
 
     init_state(local_geometry, p) = (ρ = 1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
-
     nel = Topologies.nlocalelems(Spaces.topology(space))
     yarr = parent(y0)
     yarr .=
         reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
         (pid - 1) * Nq * Nq * nel
 
-    Spaces.weighted_dss!(y0)
+    y2 = deepcopy(y0)
+    yarr2 = parent(y2)
+
+    Spaces.weighted_dss!(y0)  # current DSS
+    Spaces.weighted_dss2!(y2) # DSS2
     #=
     [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5,
      18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
     =#
 #! format: off
     if pid == 1
+        @show "pid = " pid
         @test yarr[:] == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5]
+        @test yarr2[:] == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5]
     else
+        @show "pid = " pid
         @test yarr[:] == [18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
+        @test yarr2[:] == [18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
     end
 #! format: on
 end
-
 
 
 @testset "4x1 element mesh on 2 processes - vector field" begin
@@ -54,8 +60,10 @@ end
     init_state(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
-
+    y2 = deepcopy(y0)
     Spaces.weighted_dss!(y0)
+    Spaces.weighted_dss2!(y2)
 
     @test yx ≈ y0
+    @test yx ≈ y2
 end

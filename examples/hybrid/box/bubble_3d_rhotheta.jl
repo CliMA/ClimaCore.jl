@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using LinearAlgebra, StaticArrays
 
 import ClimaCore:
@@ -17,7 +18,7 @@ import ClimaCore.Geometry: ⊗
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
-
+const context = ClimaComms.SingletonCommsContext()
 # set up function space
 
 function hvspace_3D(
@@ -44,7 +45,7 @@ function hvspace_3D(
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.Topology2D(context, horzmesh)
 
     zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),

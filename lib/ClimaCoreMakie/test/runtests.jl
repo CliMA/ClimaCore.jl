@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using IntervalSets
 
 import ClimaCore
@@ -12,7 +13,10 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 6)
-    grid_topology = ClimaCore.Topologies.Topology2D(mesh)
+    grid_topology = ClimaCore.Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     quad = ClimaCore.Spaces.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
@@ -47,7 +51,10 @@ end
     n1, n2 = 2, 2
     Nq = 4
     mesh = ClimaCore.Meshes.RectilinearMesh(domain, n1, n2)
-    grid_topology = ClimaCore.Topologies.Topology2D(mesh)
+    grid_topology = ClimaCore.Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh,
+    )
     #quad = ClimaCore.Spaces.Quadratures.GLL{Nq}()
     quad = ClimaCore.Spaces.Quadratures.ClosedUniform{Nq + 1}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)

@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 
 import ClimaCore
 # To avoid JET failures in the error message
@@ -18,7 +19,7 @@ velem = 4
 
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-htopology = Topologies.Topology2D(hmesh)
+htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
 quad = Spaces.Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -48,12 +49,6 @@ QDT = Operators.StencilCoefs{-(1 + half), 1 + half, NTuple{4, FT}}
 # this is just for testing the optimizations, so we can just make everything 1s
 ∂ᶜK∂ᶠw_data = similar(ᶜρ, BDT)
 ∂ᶜ𝔼ₜ∂ᶠ𝕄 = similar(ᶜρ, QDT)
-
-
-# Allow one() to be called on vectors.
-Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
-Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =
-    T(axes(T), S(one(T′)))
 
 function wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
 

@@ -1,4 +1,5 @@
 import ClimaCore
+using ClimaComms
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
 using NCDatasets
 using Test
@@ -53,7 +54,10 @@ end
 
     # construct source mesh
     mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i)
-    topology_i = ClimaCore.Topologies.Topology2D(mesh_i)
+    topology_i = ClimaCore.Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh_i,
+    )
     space_i = Spaces.SpectralElementSpace2D(
         topology_i,
         Spaces.Quadratures.GLL{nq_i}(),
@@ -62,7 +66,10 @@ end
 
     # construct target mesh
     mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o)
-    topology_o = ClimaCore.Topologies.Topology2D(mesh_o)
+    topology_o = ClimaCore.Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(),
+        mesh_o,
+    )
     space_o = Spaces.SpectralElementSpace2D(
         topology_o,
         Spaces.Quadratures.GLL{nq_o}(),

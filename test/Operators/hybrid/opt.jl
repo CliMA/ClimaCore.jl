@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using JET
 
 using IntervalSets
@@ -225,7 +226,7 @@ function hspace2d(FT)
     Nq = 3
     quad = Spaces.Quadratures.GLL{Nq}()
     hmesh = Meshes.RectilinearMesh(hdomain, 3, 3)
-    htopology = Topologies.Topology2D(hmesh)
+    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     return Spaces.SpectralElementSpace2D(htopology, quad)
 end
 

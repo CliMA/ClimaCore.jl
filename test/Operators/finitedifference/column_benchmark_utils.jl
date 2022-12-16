@@ -1,5 +1,6 @@
 #! format: off
 using Test
+using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 import BenchmarkTools
 import StatsBase
@@ -39,7 +40,7 @@ function get_spaces(z_elems, ::Type{FT}) where {FT}
     )
     h_domain = Domains.RectangleDomain(x_domain, y_domain)
     h_mesh = Meshes.RectilinearMesh(h_domain, #=x_elem=# 1, #=y_elem=# 1)
-    topology = Topologies.Topology2D(h_mesh)
+    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), h_mesh)
     h_space = Spaces.SpectralElementSpace2D(topology, quad)
 
     z_domain = Domains.IntervalDomain(

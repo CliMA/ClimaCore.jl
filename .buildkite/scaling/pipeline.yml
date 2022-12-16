@@ -1,5 +1,5 @@
 env:
-  JULIA_VERSION: "1.8.1"
+  JULIA_VERSION: "1.8.3"
   MPICH_VERSION: "4.0.0"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
@@ -9,6 +9,9 @@ steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
+      - echo "--- Configure MPI"
+      - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
+
       - echo "--- Instantiate scaling test"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"

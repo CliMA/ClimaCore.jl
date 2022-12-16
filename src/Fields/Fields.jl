@@ -1,5 +1,6 @@
 module Fields
 
+import ..comm_context
 import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
@@ -10,6 +11,7 @@ import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf
 
 using ..RecursiveApply
+using ClimaComms
 
 import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
 
@@ -32,6 +34,21 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+comm_context(field::Field) = comm_context(axes(field))
+
+comm_context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
+    comm_context(space.horizontal_space)
+comm_context(space::Spaces.SpectralElementSpace2D) =
+    comm_context(space.topology)
+comm_context(space::S) where {S <: Spaces.AbstractSpace} =
+    ClimaComms.SingletonCommsContext()
+
+comm_context(topology::Topologies.Topology2D) = topology.context
+comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
+    ClimaComms.SingletonCommsContext()
+
+
 
 # Point Field
 const PointField{V, S} =
@@ -255,15 +272,17 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
+Base.@deprecate dz_field(space::AbstractSpace) Δz_field(space) false
+Base.@deprecate dz_field(field::Field) Δz_field(field) false
 
 """
-    dz_field(field::Field)
-    dz_field(space::AbstractSpace)
+    Δz_field(field::Field)
+    Δz_field(space::AbstractSpace)
 
 A `Field` containing the `Δz` values on the same space as the given field.
 """
-dz_field(field::Field) = dz_field(axes(field))
-dz_field(space::AbstractSpace) = Field(Spaces.dz_data(space), space)
+Δz_field(field::Field) = Δz_field(axes(field))
+Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
 
 include("broadcast.jl")
 include("mapreduce.jl")
@@ -349,6 +368,22 @@ function Spaces.weighted_dss_ghost!(field, ghost_buffer)
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), ghost_buffer)
 end
 
+function Spaces.weighted_dss2!(
+    field::Field,
+    dss_buffer = Spaces.create_dss_buffer(field),
+)
+    Spaces.weighted_dss2!(field_values(field), axes(field), dss_buffer)
+    return field
+end
+Spaces.weighted_dss_start2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_start2!(field_values(field), axes(field), dss_buffer)
+
+Spaces.weighted_dss_internal2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_internal2!(field_values(field), axes(field), dss_buffer)
+
+Spaces.weighted_dss_ghost2!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_ghost2!(field_values(field), axes(field), dss_buffer)
+
 """
     Spaces.create_ghost_buffer(field::Field)
 
@@ -362,6 +397,18 @@ function Spaces.create_ghost_buffer(field::Field)
     Spaces.create_ghost_buffer(field_values(field), hspace.topology)
 end
 
+"""
+    Spaces.create_dss_buffer(field::Field)
+
+Create a buffer for communicating neighbour information of `field`.
+"""
+function Spaces.create_dss_buffer(field::Field)
+    space = axes(field)
+    hspace =
+        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
+        space.horizontal_space : space
+    Spaces.create_dss_buffer(field_values(field), hspace)
+end
 
 Base.@propagate_inbounds function level(
     field::Union{

@@ -153,25 +153,36 @@ local_geometry_data(space::CenterFiniteDifferenceSpace) =
 local_geometry_data(space::FaceFiniteDifferenceSpace) =
     space.face_local_geometry
 
+Base.@deprecate z_component(::Type{T}) where {T} Δz_metric_component(T) false
 
 """
-    z_component(::Type{<:Goemetry.AbstractPoint})
+    Δz_metric_component(::Type{<:Goemetry.AbstractPoint})
 
 The index of the z-component of an abstract point
 in an `AxisTensor`.
 """
-z_component(::Type{<:Geometry.LatLongZPoint}) = 9
-z_component(::Type{<:Geometry.ZPoint}) = 1
+Δz_metric_component(::Type{<:Geometry.LatLongZPoint}) = 9
+Δz_metric_component(::Type{<:Geometry.Cartesian3Point}) = 1
+Δz_metric_component(::Type{<:Geometry.Cartesian13Point}) = 4
+Δz_metric_component(::Type{<:Geometry.Cartesian123Point}) = 9
+Δz_metric_component(::Type{<:Geometry.XYZPoint}) = 9
+Δz_metric_component(::Type{<:Geometry.ZPoint}) = 1
+Δz_metric_component(::Type{<:Geometry.XZPoint}) = 4
+
+Base.@deprecate dz_data(space::AbstractSpace) Δz_data(space) false
 
 """
-    dz_data(space::AbstractSpace)
+    Δz_data(space::AbstractSpace)
 
 A DataLayout containing the `Δz` on a given space `space`.
 """
-function dz_data(space::AbstractSpace)
+function Δz_data(space::AbstractSpace)
     lg = local_geometry_data(space)
     data_layout_type = eltype(lg.coordinates)
-    return getproperty(lg.∂x∂ξ.components.data, z_component(data_layout_type))
+    return getproperty(
+        lg.∂x∂ξ.components.data,
+        Δz_metric_component(data_layout_type),
+    )
 end
 
 function left_boundary_name(space::FiniteDifferenceSpace)

@@ -1,9 +1,22 @@
 Base.map(fn, field::Field) = Base.broadcast(fn, field)
 
-# useful operations
-weighted_jacobian(field) = weighted_jacobian(axes(field))
-weighted_jacobian(space::Spaces.AbstractSpace) =
-    Spaces.local_geometry_data(space).WJ
+"""
+    Fields.local_sum(v::Field)
+
+Compute the approximate integral of `v` over the domain local to the current
+context.
+
+See [`sum`](@ref) for the integral over the full domain.
+"""
+local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
+    Base.reduce(
+        RecursiveApply.radd,
+        Base.Broadcast.broadcasted(
+            RecursiveApply.rmul,
+            Spaces.weighted_jacobian(axes(field)),
+            todata(field),
+        ),
+    )
 
 """
     sum([f=identity,]v::Field)
@@ -20,27 +33,38 @@ and quadrature weights:
 \\int_\\Omega f(v) \\, d \\Omega
 ```
 where ``v_i`` is the value at each node, and ``f`` is the identity function if not specified.
+
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
-    Base.reduce(
-        RecursiveApply.radd,
-        Base.Broadcast.broadcasted(
-            RecursiveApply.rmul,
-            weighted_jacobian(field),
-            todata(field),
-        ),
-    )
+    context = comm_context(axes(field))
+    data_sum = DataLayouts.DataF(local_sum(field))
+    ClimaComms.allreduce!(context, parent(data_sum), +)
+    return data_sum[]
 end
+Base.sum(fn, field::Field) = Base.sum(Base.Broadcast.broadcasted(fn, field))
 
-function Base.sum(fn, field::Field)
-    # Can't just call mapreduce as we need to weight _after_ applying the function
-    Base.sum(Base.Broadcast.broadcasted(fn, field))
+"""
+    maximum([f=identity,]v::Field)
+
+Approximate maximum of `v` or `f.(v)` over the domain.
+
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
+"""
+function Base.maximum(fn, field::Field)
+    context = comm_context(axes(field))
+    data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
+    ClimaComms.allreduce!(context, parent(data_max), max)
+    return data_max[]
 end
-
-Base.maximum(fn, field::Field) = mapreduce(fn, max, todata(field))
 Base.maximum(field::Field) = maximum(identity, field)
 
-Base.minimum(fn, field::Field) = mapreduce(fn, min, todata(field))
+function Base.minimum(fn, field::Field)
+    context = comm_context(axes(field))
+    data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
+    ClimaComms.allreduce!(context, parent(data_min), min)
+    return data_min[]
+end
 Base.minimum(field::Field) = minimum(identity, field)
 
 # somewhat inefficient
@@ -60,13 +84,22 @@ summation of the field values multiplied by the Jacobian determinants and quadra
 \\frac{\\int_\\Omega f(v) \\, d \\Omega}{\\int_\\Omega \\, d \\Omega}
 ```
 where ``v_i`` is the Field value at each node, and ``f`` is the identity function if not specified.
+
+If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Statistics.mean(field::Field)
-    Base.sum(field) / Base.sum(weighted_jacobian(field))
+function Statistics.mean(
+    field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
+)
+    space = axes(field)
+    context = comm_context(space)
+    data_combined =
+        DataLayouts.DataF((local_sum(field), Spaces.local_area(space)))
+    ClimaComms.allreduce!(context, parent(data_combined), +)
+    sum_v, area_v = data_combined[]
+    RecursiveApply.rdiv(sum_v, area_v)
 end
-function Statistics.mean(fn, field::Field)
-    Base.sum(fn, field) / Base.sum(weighted_jacobian(field))
-end
+Statistics.mean(fn, field::Field) =
+    Statistics.mean(Base.Broadcast.broadcasted(fn, field))
 
 """
     norm(v::Field, p=2; normalize=true)

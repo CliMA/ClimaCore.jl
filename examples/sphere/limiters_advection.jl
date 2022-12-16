@@ -1,3 +1,4 @@
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -8,6 +9,8 @@ using OrdinaryDiffEq
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
 
 """
     convergence_rate(err, Δh)
@@ -86,9 +89,10 @@ for (k, ne) in enumerate(ne_seq)
     # Set up space
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    space =
+        Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble = true)
 
     # Initialize variables needed for limiters
     n_elems = Topologies.nlocalelems(space.topology)
@@ -259,7 +263,6 @@ linkfig(
     relpath(joinpath(path, "L1error.png"), joinpath(@__DIR__, "../..")),
     "L₁ error Vs Nₑ",
 )
-
 
 # L₂ error Vs number of elements
 Plots.png(

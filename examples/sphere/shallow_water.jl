@@ -1,3 +1,4 @@
+using ClimaComms
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 using LinearAlgebra
 using Colors
@@ -513,8 +514,8 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
             println("running distributed simulation using $nprocs processes")
         end
     else
+        context = ClimaComms.SingletonCommsContext()
         global_logger(TerminalLoggers.TerminalLogger())
-        context = nothing
         println("running serial simulation")
     end
     # Test case specifications
@@ -544,13 +545,13 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     domain = Domains.SphereDomain(test.params.R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     quad = Spaces.Quadratures.GLL{Nq}()
+    grid_topology = Topologies.Topology2D(context, mesh)
     if usempi
-        grid_topology = Topologies.DistributedTopology2D(context, mesh)
-        global_grid_topology = Topologies.Topology2D(mesh)
+        global_grid_topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
         global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
     else
-        grid_topology = Topologies.Topology2D(mesh)
         global_space =
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     end

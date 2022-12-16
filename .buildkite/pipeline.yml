@@ -1,5 +1,8 @@
+agents:
+  slurm_mem: 8G
+
 env:
-  JULIA_VERSION: "1.8.1"
+  JULIA_VERSION: "1.8.3"
   MPI_IMPL: "openmpi"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
@@ -9,6 +12,9 @@ steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
+      - echo "--- Configure MPI"
+      - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
+
       - echo "--- Instantiate project"
 
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
@@ -45,6 +51,9 @@ steps:
     key: "init_gpu_env"
     command:
       - "export CUDA_HOME=/usr/local/cuda-$$CUDA_VERSION"
+
+      - echo "--- Configure MPI"
+      - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
 
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
@@ -85,6 +94,8 @@ steps:
     key: "cpu_unittests_expensive"
     command:
       - "julia --color=yes --check-bounds=yes --project=test test/runtests_expensive.jl"
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: 1
     agents:
       config: cpu
       queue: central
@@ -111,6 +122,7 @@ steps:
       queue: central
       slurm_ntasks: 1
       slurm_gres: "gpu:1"
+      slurm_mem: 32GB
 
   - label: ":computer: test implicit_stencil Float32"
     key: "cpu_implicit_stencil_float32"
@@ -485,6 +497,7 @@ steps:
       - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -518,6 +531,7 @@ steps:
       - "examples/hybrid/box/output/bubble_3d_invariant_rhotheta/*"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -549,6 +563,28 @@ steps:
       - "julia --color=yes --project=examples examples/hybrid/plane/topo_dc_2dinvariant_rhoe.jl"
     artifact_paths:
       - "examples/hybrid/plane/output/dc_invariant_etot_topo/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Nonhydrostatic Agnesi Mountain total energy (topography mesh interface)"
+    key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/topo_agnesi_nh.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/agnesi_etot_nh/*"
+    agents:
+      config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":computer: Schar Mountain total energy (topography mesh interface)"
+    key: "cpu_schaer_mtn_2d_hybrid_invariant_total_energy_topography"
+    command:
+      - "julia --color=yes --project=examples examples/hybrid/plane/topo_schar_nh.jl"
+    artifact_paths:
+      - "examples/hybrid/plane/output/schar_etot_nh/*"
     agents:
       config: cpu
       queue: central
@@ -734,7 +770,8 @@ steps:
     agents:
       config: cpu
       queue: central
-      slurm_ntasks: 2
+      slurm_nodes: 1
+      slurm_tasks_per_node: 2
 
   - label: ":computer: Shallow-water 2D sphere barotropic instability alpha30"
     key: "cpu_shallowwater_2d_cg_sphere_barotropic_alpha30"
@@ -789,7 +826,7 @@ steps:
       - "examples/hybrid/sphere/output/hadley_circulation/*"
     agents:
       config: cpu
-      slurm_mem: 20GB
+      slurm_mem: 40GB
       queue: central
       slurm_ntasks: 1
 
@@ -804,6 +841,7 @@ steps:
       FLOAT_TYPE: "Float64"
     agents:
       config: cpu
+      slurm_mem: 40GB
       queue: central
       slurm_ntasks: 1
 
@@ -965,6 +1003,7 @@ steps:
       TEST_NAME: "plane/inertial_gravity_wave"
     agents:
       config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1
 
@@ -991,6 +1030,7 @@ steps:
       - "perf/allocations_output/*"
     agents:
       config: cpu
+      slurm_mem: 40GB
       queue: central
       slurm_ntasks: 1
 
@@ -1013,5 +1053,15 @@ steps:
       - "julia --color=yes --project=perf perf/benchmark.jl"
     agents:
       config: cpu
+      queue: central
+      slurm_ntasks: 1
+
+  - label: ":rocket::computer: Invalidations"
+    key: "cpu_invalidations"
+    command:
+      - "julia --color=yes --project=perf perf/invalidations.jl"
+    agents:
+      config: cpu
+      slurm_mem: 20GB
       queue: central
       slurm_ntasks: 1

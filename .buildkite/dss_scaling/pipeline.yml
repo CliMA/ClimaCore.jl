@@ -1,15 +1,23 @@
 env:
-  JULIA_VERSION: "1.8.1"
+  JULIA_VERSION: "1.8.3"
   MPICH_VERSION: "4.0.0"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
   OPENBLAS_NUM_THREADS: 1
   slurm_time: 4:00:00
 
+agents:
+  config: cpu
+  queue: central
+  slurm_time: 8:00:00
+
 steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
+      - echo "--- Configure MPI"
+      - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
+
       - echo "--- Instantiate dss scaling test"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
       - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
@@ -315,8 +323,9 @@ steps:
         queue: central
         slurm_nodes: 1
         slurm_ntasks: 1
+        slurm_time: 8:00:00
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (2) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -334,8 +343,9 @@ steps:
         queue: central
         slurm_nodes: 1
         slurm_ntasks: 2
+        slurm_time: 8:00:00
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (4) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -353,8 +363,9 @@ steps:
         queue: central
         slurm_nodes: 1
         slurm_ntasks: 4
+        slurm_time: 4:00:00
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (8) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -373,7 +384,7 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 8
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (16) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -392,7 +403,7 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 16
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (32) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -411,7 +422,7 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 32
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (64) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -429,7 +440,7 @@ steps:
         slurm_nodes: 2
         slurm_ntasks: 64
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (128) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -448,7 +459,7 @@ steps:
         slurm_nodes: 4
         slurm_ntasks: 128
         slurm_exclusive:
-
+  
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (256) processes"
       command:
         - "module load cuda/11.3 nsight-systems/2022.2.1"
@@ -467,11 +478,11 @@ steps:
         slurm_nodes: 8
         slurm_ntasks: 256
         slurm_exclusive:
-
+  
   - wait
   - group: "Hybrid cubed sphere high-resolution DSS scaling plots"
     steps:
-
+ 
     - label: ":computer: DSS scaling plots for high resolution hybrid cubed sphere"
       key: "cpu_dss_scaling_high_resolution_plots_3dcs"
       command:

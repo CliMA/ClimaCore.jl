@@ -1,3 +1,4 @@
+using ClimaComms
 using Test
 using LinearAlgebra
 
@@ -20,6 +21,8 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
 
 const n_vert = 10
 const n_horz = 4
@@ -59,7 +62,7 @@ function sphere_3D(
 
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.Topology2D(context, horzmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
