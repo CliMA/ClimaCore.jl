@@ -53,8 +53,18 @@ sproj = [
     "+proj=sinu",
 ]
 
-# Downloading and unpacking time series needs to happen manually from:
-# https://caltech.box.com/shared/static/a65jnfdfpwqt9ka9nszvoedcg412c6q1.gz
+
+# time series example
+timeseries_dir = "time-series"
+if !isdir(timeseries_dir)
+    tarname = tempname()
+    Downloads.download(
+        "https://caltech.box.com/shared/static/a65jnfdfpwqt9ka9nszvoedcg412c6q1.gz",
+        tarname,
+    )
+    mkpath(timeseries_dir)
+    run(`tar -xzf $tarname -C $timeseries_dir`)
+end
 
 time_series = map(readdir(joinpath(pwd(), "time-series"); join = true)) do file
     reader = ClimaCore.InputOutput.HDF5Reader(file)
