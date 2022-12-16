@@ -1,5 +1,7 @@
 module Topologies
 
+using DocStringExtensions
+
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
@@ -13,7 +15,7 @@ mesh in the horizontal domain.
 # Interfaces
 
 - [`nelems`](@ref)
-- [`domain`](@ref)
+- [`domain(topology::AbstractTopology)`](@ref)
 - [`mesh`](@ref)
 - [`nlocalelems`](@ref)
 - [`nneighbors`](@ref)
@@ -26,7 +28,6 @@ mesh in the horizontal domain.
 - [`interior_faces`](@ref)
 - [`ghost_faces`](@ref)
 - [`vertex_node_index`](@ref)
-- [`vertices`](@ref)
 - [`local_neighboring_elements`](@ref)
 - [`ghost_neighboring_elements`](@ref)
 - [`local_vertices`](@ref)
@@ -42,11 +43,6 @@ abstract type AbstractDistributedTopology <: AbstractTopology end
 
 coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
 
-"""
-    domain(topology)
-
-Returns the domain of the `topology` from the underlying `mesh`
-"""
 function domain end
 
 """
@@ -213,7 +209,7 @@ function vertex_node_index(vertex_num, Nq)
 end
 
 """
-    vertices(topology)
+    Topologies.VertexIterator
 
 An iterator over the unique (shared) vertices of the topology `topology`.
 Each vertex returns a `Vertex` object, which is itself an iterator.

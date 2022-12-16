@@ -2,7 +2,7 @@ import ClimaCore.DataLayouts: IJFH
 
 
 """
-    LinearTempestRemap{T, S, M, C, V}
+    LinearMap{T, S, M, C, V}
 
 stores information on the TempestRemap map and the source and target data:
 
@@ -13,6 +13,7 @@ where:
  - `target_idxs` is the same as `source_idxs` but for the target mesh.
  - `col_indices` are the source column indices from TempestRemap. (length = number of overlap-mesh nodes)
  - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
+ - `out_type` string that defines the output type
 
 """
 struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl

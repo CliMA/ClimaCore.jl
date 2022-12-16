@@ -1,5 +1,13 @@
 # ClimaCoreSpectra.jl
 
+```@meta
+CurrentModule = ClimaCoreSpectra
+```
+
+ClimaCoreSpectra.jl provides functionality for calculating kinetic energy spectra using spherical harmonics.
+
+# Interface
+
 ```@docs
 ClimaCoreSpectra.SpectralSphericalMesh
 ClimaCoreSpectra.power_spectrum_1d
@@ -9,6 +17,8 @@ ClimaCoreSpectra.compute_legendre!
 ClimaCoreSpectra.trans_grid_to_spherical!
 ClimaCoreSpectra.compute_wave_numbers!
 ```
+
+# Examples
 
 ```@example
 import ClimaCore
