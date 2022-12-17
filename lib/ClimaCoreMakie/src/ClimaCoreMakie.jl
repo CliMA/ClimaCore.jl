@@ -1,124 +1,72 @@
 module ClimaCoreMakie
 
-import Makie: Makie, @recipe
+import Makie: Makie, @recipe, lift, GLTriangleFace, Point3f, Observable
 import ClimaCore
 
-@recipe(Viz, object) do scene
-    Makie.Attributes(; colormap = :balance)
-end
-
-function level_mesh(field::ClimaCore.Fields.SpectralElementField2D, level = 1)
-    space = axes(field)
-    Ni, Nj, _, _, Nh = size(space.local_geometry)
-    @assert Ni == Nj
-
-    cart_coords =
-        ClimaCore.Geometry.Cartesian123Point.(
-            ClimaCore.Fields.coordinate_field(space),
-            Ref(space.global_geometry),
-        )
-
-    triangle_count = Nh * (Nj - 1) * (Ni - 1) * 2
-    FaceType = Makie.GeometryBasics.GLTriangleFace
-    PointType = Makie.GeometryBasics.Point3f
-
-    faces = Array{FaceType}(undef, triangle_count)
-    vertices = Array{PointType}(undef, triangle_count * 3)
-
-    x1_data = ClimaCore.Fields.todata(cart_coords.x1)
-    x2_data = ClimaCore.Fields.todata(cart_coords.x2)
-    x3_data = ClimaCore.Fields.todata(cart_coords.x3)
-
-    L = LinearIndices((1:Ni, 1:Nj))
-    idx = 0
-    for h in 1:Nh
-        x1_slab = ClimaCore.slab(x1_data, level, h)
-        x2_slab = ClimaCore.slab(x2_data, level, h)
-        x3_slab = ClimaCore.slab(x3_data, level, h)
-        for j in 1:(Nj - 1), i in 1:(Ni - 1), t in 1:2
-            if t == 1
-                # quad triangle 1
-                I = L[i, j] + Ni * Nj * (h - 1)
-                J = L[i + 1, j] + Ni * Nj * (h - 1)
-                K = L[i, j + 1] + Ni * Nj * (h - 1)
-                faces[idx + 1] = Makie.GeometryBasics.GLTriangleFace(I, J, K)
-                vertices[idx * 3 + 1] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i, j],
-                    x2_slab[i, j],
-                    x3_slab[i, j],
-                )
-                vertices[idx * 3 + 2] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i + 1, j],
-                    x2_slab[i + 1, j],
-                    x3_slab[i + 1, j],
-                )
-                vertices[idx * 3 + 3] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i, j + 1],
-                    x2_slab[i, j + 1],
-                    x3_slab[i, j + 1],
-                )
-            else
-                # quad triangle 2
-                I = L[i + 1, j] + Ni * Nj * (h - 1)
-                J = L[i + 1, j + 1] + Ni * Nj * (h - 1)
-                K = L[i, j + 1] + Ni * Nj * (h - 1)
-                faces[idx + 1] = Makie.GeometryBasics.GLTriangleFace(I, J, K)
-                vertices[idx * 3 + 1] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i + 1, j],
-                    x2_slab[i + 1, j],
-                    x3_slab[i + 1, j],
-                )
-                vertices[idx * 3 + 2] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i + 1, j + 1],
-                    x2_slab[i + 1, j + 1],
-                    x3_slab[i + 1, j + 1],
-                )
-                vertices[idx * 3 + 3] = Makie.GeometryBasics.Point3f(
-                    x1_slab[i, j + 1],
-                    x2_slab[i, j + 1],
-                    x3_slab[i, j + 1],
-                )
-            end
-            idx += 1
-        end
-    end
-    return Makie.GeometryBasics.Mesh(vertices, faces)
+@recipe(Viz, space, scalars) do scene
+    return Makie.Attributes(;
+        colormap = :balance,
+        shading = false,
+        colorrange = Makie.automatic,
+    )
 end
 
 Makie.plottype(::ClimaCore.Fields.SpectralElementField2D) =
     Viz{<:Tuple{ClimaCore.Fields.SpectralElementField2D}}
 
-function Makie.plot!(
-    plot::Viz{<:Tuple{ClimaCore.Fields.SpectralElementField2D}},
-)
-    # retrieve the field to plot
-    field = plot[:object][]
 
-    if !(eltype(field) <: Union{Float64, Float32})
+function Makie.convert_arguments(
+    ::Type{<:Viz},
+    field::ClimaCore.Fields.SpectralElementField2D,
+)
+    if !(eltype(field) <: Union{Float64, Float32, ClimaCore.Geometry.WVector})
         error("plotting only implemented for F64, F32 scalar fields")
     end
-    space = ClimaCore.axes(field)
+    return ClimaCore.axes(field), Float32.(vec(parent(field)))
+end
 
-    cart_coords =
-        ClimaCore.Geometry.Cartesian123Point.(
-            ClimaCore.Fields.coordinate_field(space),
-            Ref(space.global_geometry),
+function Makie.plot!(
+    plot::Viz{
+        <:Tuple{<:ClimaCore.Spaces.SpectralElementSpace2D, Vector{Float32}},
+    },
+)
+    space = plot.space
+    # Only update vertices if global_geometry updates (is this the correct value to check for changes?)
+    global_geometry =
+        lift(x -> x.global_geometry, space; ignore_equal_values = true)
+
+    vertices = lift(global_geometry) do gg
+        cartesian =
+            ClimaCore.Geometry.Cartesian123Point.(
+                ClimaCore.Fields.coordinate_field(space[]),
+                Ref(gg),
+            )
+        # Use the OpenGL native Point3f type to avoid conversions
+        return Point3f.(
+            vec(parent(cartesian.x1)),
+            vec(parent(cartesian.x2)),
+            vec(parent(cartesian.x3)),
         )
-    vertices = hcat(
-        vec(parent(cart_coords.x1)),
-        vec(parent(cart_coords.x2)),
-        vec(parent(cart_coords.x3)),
-    )
-    triangles = hcat(ClimaCore.Spaces.triangulate(space)...)
+    end
 
-    colors = vec(parent(field))
+    # Triangles stay static if the size doesn't change, so we lift and only trigger updates if size changes:
+    space_size =
+        lift(x -> size(x.local_geometry), space; ignore_equal_values = true)
+
+    triangles = lift(space_size) do (Ni, Nj, _, _, Nh)
+        a, b, c = ClimaCore.Spaces.triangles(Ni, Nj, Nh)
+        # Use the native GPU types to avoid copies/conversions
+        return GLTriangleFace.(a, b, c)
+    end
+
     Makie.mesh!(
         plot,
         vertices,
         triangles,
-        color = colors,
-        colormap = plot[:colormap],
-        shading = false,
+        color = plot.scalars,
+        colormap = plot.colormap,
+        shading = plot.shading,
+        colorrange = plot.colorrange,
     )
 end
 
