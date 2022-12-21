@@ -360,11 +360,11 @@ function SpectralElementSpace2D(
                             AIdx,
                         )
                         J = det(Geometry.components(∂u∂ξ))
-                        WJ = J * quad_weights[i] * quad_weights[j]
-                        # Modify WJ only for interior nodes
+                        # Modify J only for interior nodes
                         if i != 1 && j != 1 && i != Nq && j != Nq
-                            WJ *= 1 + interior_elem_area
+                            J *= (1 + interior_elem_area)
                         end
+                        WJ = J * quad_weights[i] * quad_weights[j]
                         # Finally allocate local geometry
                         local_geometry_slab[i, j] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
