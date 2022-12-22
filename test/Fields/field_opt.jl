@@ -275,6 +275,6 @@ end
     foo!(obj) # compile first
 
     palloc = @allocated foo!(obj)
-    @test_broken palloc == 0
+    @test palloc == 0
 end
 nothing
