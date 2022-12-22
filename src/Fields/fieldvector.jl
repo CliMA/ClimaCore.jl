@@ -207,7 +207,8 @@ transform_broadcasted(x, symb, axes) = x
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
 )
-    for symb in propertynames(dest)
+    map(propertynames(dest)) do symb
+        Base.@_inline_meta
         p = parent(getfield(_values(dest), symb))
         copyto!(p, transform_broadcasted(bc, symb, axes(p)))
     end
@@ -219,6 +220,7 @@ end
     bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
 )
     map(propertynames(dest)) do symb
+        Base.@_inline_meta
         p = parent(getfield(_values(dest), symb))
         copyto!(p, bc)
         nothing
