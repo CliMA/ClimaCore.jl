@@ -227,4 +227,54 @@ end
         @test p == 0
     end
 end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/1062
+@testset "Allocations with copyto! on FieldVectors" begin
+    function toy_sphere(::Type{FT}) where {FT}
+        helem = npoly = 2
+        hdomain = Domains.SphereDomain(FT(1e7))
+        hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
+        htopology = Topologies.Topology2D(hmesh)
+        quad = Spaces.Quadratures.GLL{npoly + 1}()
+        hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+        vdomain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(zero(FT)),
+            Geometry.ZPoint{FT}(FT(1e4));
+            boundary_tags = (:bottom, :top),
+        )
+        vmesh = Meshes.IntervalMesh(vdomain, nelems = 4)
+        vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+        center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+        face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
+        return (center_space, face_space)
+    end
+    function field_vec(center_space, face_space)
+        Y = Fields.FieldVector(
+            c = map(Fields.coordinate_field(center_space)) do coord
+                FT = Spaces.undertype(center_space)
+                (; ρ = FT(0), uₕ = Geometry.Covariant12Vector(FT(0), FT(0)))
+            end,
+            f = map(Fields.coordinate_field(face_space)) do coord
+                FT = Spaces.undertype(face_space)
+                (; w = Geometry.Covariant3Vector(FT(0)))
+            end,
+        )
+        return Y
+    end
+    get_n(::Val{n}) where {n} = n
+    function foo!(obj)
+        @inbounds for i in 1:get_n(obj.N)
+            @. obj.U[i] = obj.u
+        end
+        return nothing
+    end
+    u = field_vec(toy_sphere(Float64)...)
+    n = 4
+    U = map(i -> similar(u), collect(1:n))
+    obj = (; u, N = Val(n), U)
+    foo!(obj) # compile first
+
+    palloc = @allocated foo!(obj)
+    @test_broken palloc == 0
+end
 nothing
