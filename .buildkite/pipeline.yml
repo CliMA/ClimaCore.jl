@@ -35,7 +35,6 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.status()'"
 
     agents:
-      slurm_ntasks: 1
       slurm_cpus_per_task: 8
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
@@ -48,7 +47,6 @@ steps:
       - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
     agents:
       slurm_mem: 64GB
-      slurm_ntasks: 1
 
   - label: ":computer: unit tests expensive"
     key: "cpu_unittests_expensive"
@@ -58,7 +56,6 @@ steps:
       OMPI_MCA_rmaps_base_oversubscribe: 1
     agents:
       slurm_mem: 64GB
-      slurm_ntasks: 1
 
   - label: ":computer: Field broadcast performance"
     key: "cpu_field_perf"
@@ -66,14 +63,13 @@ steps:
       - "julia --color=yes --project=test test/Fields/field_opt.jl"
     agents:
       slurm_mem: 20GB
-      slurm_ntasks: 1
 
   - label: ":flower_playing_cards: unit tests"
     key: "gpu_unittests"
     command:
+      - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
       - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
     agents:
-      slurm_ntasks: 1
       slurm_gres: "gpu:1"
       slurm_mem: 32GB
 
@@ -83,7 +79,6 @@ steps:
       - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
     agents:
       slurm_mem: 10GB
-      slurm_ntasks: 1
 
   - label: ":computer: test implicit_stencil Float64"
     key: "cpu_implicit_stencil_float64"
@@ -91,7 +86,6 @@ steps:
       - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
     agents:
       slurm_mem: 10GB
-      slurm_ntasks: 1
 
   - label: ":computer: test implicit_stencil opt"
     key: "cpu_implicit_stencil_opt"
@@ -103,7 +97,6 @@ steps:
     command:
       - "julia --color=yes --project=test test/Operators/finitedifference/column_benchmark.jl"
     agents:
-      slurm_ntasks: 1
     soft_fail:
       - exit_status: 1
 
@@ -112,7 +105,6 @@ steps:
     command:
       - "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
     agents:
-      slurm_ntasks: 1
 
   - label: ":computer: Parallel HDF5 IO tests"
     key: "cpu_parallel_hdf5"
