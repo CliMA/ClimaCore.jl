@@ -5,6 +5,7 @@ agents:
 
 env:
   JULIA_CUDA_USE_BINARYBUILDER: false
+  JULIA_HDF5_PATH:
   OPENBLAS_NUM_THREADS: 1
 
 steps:
@@ -104,12 +105,11 @@ steps:
     key: "cpu_axis_tensor_conversion_perf_bm"
     command:
       - "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
-    agents:
 
   - label: ":computer: Parallel HDF5 IO tests"
     key: "cpu_parallel_hdf5"
     command:
-      - "mpiexec julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+      - "srun julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
     timeout_in_minutes: 5
     env:
       CLIMACORE_DISTRIBUTED: "MPI"
@@ -236,7 +236,7 @@ steps:
   - label: ":computer: MPI Bickley jet CG vector invariant hyperviscosity"
     key: "cpu_mpi_bickleyjet_cg_invariant_hypervisc"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+      - "srun julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
     artifact_paths:
       - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
     env:
@@ -398,7 +398,7 @@ steps:
   - label: ":computer: MPI Rising Bubble 3D hybrid invariant (ρe)"
     key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_rhoe"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
+      - "srun julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
     artifact_paths:
       - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
     env:
@@ -569,13 +569,14 @@ steps:
   - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
     key: "cpu_mpi_baroclinic_wave_rho_e"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "srun julia --color=yes --project=examples examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
     env:
       TEST_NAME: "sphere/baroclinic_wave_rhoe"
       CLIMACORE_DISTRIBUTED: "MPI"
     agents:
+      slurm_ntasks: 2
       slurm_mem: 20GB
 
 
