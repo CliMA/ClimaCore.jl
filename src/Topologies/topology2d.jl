@@ -638,7 +638,7 @@ function vertex_coordinates(topology::Topology2D, e::Int)
 end
 
 coordinates(
-    topology::Topology2D{ClimaComms.SingletonCommsContext},
+    topology::Topology2D{<:ClimaComms.SingletonCommsContext},
     e::Int,
     arg,
 ) = coordinates(topology.mesh, topology.elemorder[e], arg)
