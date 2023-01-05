@@ -19,9 +19,9 @@ Options:
 """
 function write_exodus(
     filename,
-    topology::Topologies.Topology2D{ClimaComms.SingletonCommsContext};
+    topology::T;
     normalize_coordinates = true,
-)
+) where {T <: Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}}
 
     len_string = 33
     len_line = 81
