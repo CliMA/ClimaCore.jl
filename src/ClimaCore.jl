@@ -5,6 +5,7 @@ const VERSION = PkgVersion.@Version
 
 function comm_context end
 
+include("Device.jl")
 include("interface.jl")
 include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")

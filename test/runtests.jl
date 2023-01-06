@@ -96,6 +96,7 @@ end
 if "CUDA" in ARGS
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
     @safetestset "GPU - data" begin @time include("gpu/data.jl") end
+    @safetestset "GPU - device" begin @time include("gpu/device.jl") end
 end
 
 #! format: on
