@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.8.3 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
+  modules: julia/1.8.4 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
 
 env:
   JULIA_CUDA_USE_BINARYBUILDER: false
@@ -508,7 +508,7 @@ steps:
         key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
         command:
           - "module load cuda/11.3 nsight-systems/2022.2.1"
-          - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+          - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} srun julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
         artifact_paths:
           - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
         env:
