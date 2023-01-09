@@ -126,7 +126,6 @@ Topologies.spacefillingcurve
 
 ### Interfaces
 ```@docs
-Topologies.domain
 Topologies.mesh
 Topologies.nlocalelems
 Topologies.vertex_coordinates
@@ -135,7 +134,6 @@ Topologies.interior_faces
 Topologies.boundary_tags
 Topologies.boundary_tag
 Topologies.boundary_faces
-Topologies.vertices
 Topologies.local_neighboring_elements
 Topologies.ghost_neighboring_elements
 ```
@@ -165,6 +163,19 @@ or the interfaces (faces in 3D, edges in 2D or points in 1D) between elements
 Users should construct either the center or face space from the mesh, then construct
 the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
+#### Internals
+```@docs
+Spaces.Δz_metric_component
+```
+
+### Spectral Element Spaces
+
+```@docs
+Spaces.SpectralElementSpace1D
+Spaces.SpectralElementSpace2D
+Spaces.SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
+Spaces.SpectralElementSpaceSlab
+```
 
 ### Quadratures
 
@@ -203,6 +214,7 @@ Spaces.weighted_dss_start2!
 Spaces.weighted_dss_internal2!
 Spaces.weighted_dss_ghost2!
 Spaces.weighted_dss2!
+Spaces.unique_nodes
 ```
 
 #### Utilities
@@ -231,7 +243,6 @@ Base.sum(::Fields.Field)
 Fields.local_sum
 Fields.Statistics.mean(::Fields.Field)
 Fields.LinearAlgebra.norm(::Fields.Field)
-Fields.local_sum
 Fields.set!
 Fields.ColumnIndex
 Fields.bycolumn
@@ -239,6 +250,14 @@ Fields.Δz_field
 ```
 
 ## Limiters
+
+The limiters supertype is
+```@docs
+Limiters.AbstractLimiter
+```
+
+This class of flux-limiters is applied only in the horizontal direction (on spectral advection operators).
+
 
 ### Interfaces
 ```@docs

@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 import ClimaCore: Domains, Meshes, Topologies
 import ClimaCore.Geometry: Geometry
 using StaticArrays
@@ -23,7 +24,7 @@ function rectangular_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    return Topologies.Topology2D(mesh)
+    return Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 end
 
 @testset "opposing face tests" begin
@@ -112,7 +113,8 @@ end
         topology = rectangular_grid(1, 1, true, true)
         @test length(Topologies.interior_faces(topology)) == 2
         faces = collect(Topologies.interior_faces(topology))
-        @test sort(faces) == sort([(1, 4, 1, 2, true), (1, 3, 1, 1, true)])
+        @test sort(faces) == sort([(1, 4, 1, 2, true), (1, 3, 1, 1, true)]) ||
+              sort(faces) == sort([(1, 2, 1, 4, true), (1, 1, 1, 3, true)])
     end
 
 
@@ -120,7 +122,7 @@ end
         topology = rectangular_grid(1, 1, true, false)
         @test length(Topologies.interior_faces(topology)) == 1
         faces = collect(Topologies.interior_faces(topology))
-        @test faces == [(1, 4, 1, 2, true)]
+        @test faces == [(1, 4, 1, 2, true)] || faces == [(1, 2, 1, 4, true)]
     end
 
     @testset "1×1 element quad mesh with non-periodic boundaries" begin
@@ -139,6 +141,12 @@ end
             (3, 1, 1, 3, true),
             (4, 4, 3, 2, true),
             (4, 1, 2, 3, true),
+        ]) ||
+              sort(faces) == sort([
+            (1, 2, 2, 4, true),
+            (1, 3, 3, 1, true),
+            (3, 2, 4, 4, true),
+            (2, 3, 4, 1, true),
         ])
     end
 end

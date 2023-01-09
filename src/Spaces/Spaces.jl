@@ -19,6 +19,7 @@ using ClimaComms
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
+import ..Device
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
 
 abstract type AbstractSpace end

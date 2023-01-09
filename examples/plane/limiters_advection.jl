@@ -1,3 +1,4 @@
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -10,6 +11,8 @@ using ClimaTimeSteppers
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
 
 """
     convergence_rate(err, Δh)
@@ -109,7 +112,7 @@ Nq = 4
 # h-refinement study loop
 for (k, ne) in enumerate(ne_seq)
     mesh = Meshes.RectilinearMesh(domain, ne, ne)
-    grid_topology = Topologies.Topology2D(mesh)
+    grid_topology = Topologies.Topology2D(context, mesh)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

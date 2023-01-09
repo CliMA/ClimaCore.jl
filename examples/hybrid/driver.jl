@@ -26,8 +26,8 @@ postprocessing(sol, output_dir) = nothing
 is_distributed = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 
 using Logging
+using ClimaComms
 if is_distributed
-    using ClimaComms
     if ENV["CLIMACORE_DISTRIBUTED"] == "MPI"
         using ClimaCommsMPI
         const comms_ctx = ClimaCommsMPI.MPICommsContext()
@@ -95,11 +95,10 @@ if haskey(ENV, "RESTART_FILE")
 else
     t_start = FT(0)
     if is_distributed
-        h_space, comms_ctx =
+        h_space =
             make_distributed_horizontal_space(horizontal_mesh, npoly, comms_ctx)
     else
         h_space = make_horizontal_space(horizontal_mesh, npoly)
-        comms_ctx = nothing
     end
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)

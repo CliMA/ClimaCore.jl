@@ -32,7 +32,7 @@ ydomain = Domains.IntervalDomain(
 
 horzdomain = Domains.RectangleDomain(xdomain, ydomain)
 horzmesh = Meshes.RectilinearMesh(horzdomain, xelems, yelems)
-horztopology = Topologies.DistributedTopology2D(context, horzmesh)
+horztopology = Topologies.Topology2D(context, horzmesh)
 
 zdomain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(zlim[1]),

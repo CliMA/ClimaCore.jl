@@ -1,5 +1,5 @@
 status = [
-  "test-os (ubuntu-latest)",
+  "test-os (ubuntu-20.04)",
   "test-os (windows-latest)",
   "test-os (macos-latest)",
   "lib-climacore-vtk",

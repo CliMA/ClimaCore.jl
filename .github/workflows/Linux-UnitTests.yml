@@ -11,7 +11,7 @@ on:
       - '!lib/**'
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     timeout-minutes: 80
     strategy:
       fail-fast: false
@@ -42,5 +42,5 @@ jobs:
       uses: julia-actions/julia-buildpkg@v1
 
     - name: Run Unit Tests
-      uses: julia-actions/julia-runtest@v1
+      run: julia --project -e 'using Pkg; Pkg.test()'
       continue-on-error: ${{ matrix.version == 'nightly' }}

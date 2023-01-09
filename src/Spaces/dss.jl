@@ -1,4 +1,4 @@
-import ..Topologies: Topology2D, DistributedTopology2D
+import ..Topologies: Topology2D
 using ..RecursiveApply
 
 """
@@ -254,7 +254,7 @@ create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
 
 function create_ghost_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    topology::Topologies.DistributedTopology2D,
+    topology::Topologies.Topology2D,
 ) where {S, Nij}
     if data isa DataLayouts.IJFH
         send_data = DataLayouts.IJFH{S, Nij}(
@@ -303,7 +303,7 @@ Fill the send buffer of `ghost_buffer` with the necessary data from `data`.
 Part of [`Spaces.weighted_dss!`](@ref).
 """
 function fill_send_buffer!(
-    topology::Topologies.DistributedTopology2D,
+    topology::Topologies.Topology2D,
     data::DataLayouts.AbstractData,
     ghost_buffer::GhostBuffer,
 )
@@ -699,7 +699,7 @@ weighted_dss_start!(
     space::ExtrudedFiniteDifferenceSpace{S, H},
     hspace,
     ghost_buffer,
-) where {S, H <: SpectralElementSpace2D{<:DistributedTopology2D}} =
+) where {S, H <: SpectralElementSpace2D{<:Topology2D}} =
     _weighted_dss_start!(data, space, hspace, ghost_buffer)
 
 weighted_dss_start!(
@@ -707,7 +707,7 @@ weighted_dss_start!(
     space::H,
     hspace,
     ghost_buffer,
-) where {H <: SpectralElementSpace2D{<:DistributedTopology2D}} =
+) where {H <: SpectralElementSpace2D{<:Topology2D}} =
     _weighted_dss_start!(data, space, hspace, ghost_buffer)
 
 function weighted_dss_start!(data, space, hspace, ghost_buffer)
@@ -768,7 +768,7 @@ function weighted_dss_ghost!(
     space::ExtrudedFiniteDifferenceSpace{S, H},
     hspace,
     ghost_buffer,
-) where {S, H <: SpectralElementSpace2D{<:DistributedTopology2D}}
+) where {S, H <: SpectralElementSpace2D{<:Topology2D}}
     _weighted_dss_ghost!(data, space, hspace, ghost_buffer)
 end
 
@@ -777,7 +777,7 @@ function weighted_dss_ghost!(
     space::H,
     hspace,
     ghost_buffer,
-) where {H <: SpectralElementSpace2D{<:DistributedTopology2D}}
+) where {H <: SpectralElementSpace2D{<:Topology2D}}
     _weighted_dss_ghost!(data, space, hspace, ghost_buffer)
 end
 

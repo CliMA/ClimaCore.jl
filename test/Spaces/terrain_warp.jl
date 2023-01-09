@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 
 import ClimaCore:
     ClimaCore,
@@ -132,7 +133,8 @@ function warpedspace_3D(
     )
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

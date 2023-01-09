@@ -74,7 +74,7 @@ function hybrid3dcubedsphere_dss_profiler(
     horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = h_elem)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    h_topology = Topologies.DistributedTopology2D(
+    h_topology = Topologies.Topology2D(
         comms_ctx,
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),

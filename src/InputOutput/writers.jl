@@ -207,7 +207,6 @@ end
 
 # Topologies
 defaultname(::Topologies.Topology2D) = "2d"
-defaultname(::Topologies.DistributedTopology2D) = "2d"
 defaultname(topology::Topologies.IntervalTopology) = defaultname(topology.mesh)
 
 """
@@ -237,28 +236,6 @@ function write_new!(
     topology::Topologies.Topology2D,
     name::AbstractString = defaultname(topology),
 )
-    @assert writer.context isa ClimaComms.SingletonCommsContext
-
-    group = create_group(writer.file, "topologies/$name")
-    write_attribute(group, "type", "Topology2D")
-    write_attribute(group, "mesh", write!(writer, topology.mesh))
-    if !(topology.elemorder isa CartesianIndices)
-        elemorder_matrix = reinterpret(reshape, Int, topology.elemorder)
-        write_dataset(group, "elemorder", elemorder_matrix)
-    end
-    return name
-end
-
-"""
-    write_new!(writer, topology, name)
-
-Write `DistributedTopology2D` data to HDF5.
-"""
-function write_new!(
-    writer::HDF5Writer,
-    topology::Topologies.DistributedTopology2D,
-    name::AbstractString = defaultname(topology),
-)
     @assert writer.context == topology.context
 
     group = create_group(writer.file, "topologies/$name")
@@ -266,15 +243,19 @@ function write_new!(
     write_attribute(group, "mesh", write!(writer, topology.mesh))
     if !(topology.elemorder isa CartesianIndices)
         elemorder_matrix = reinterpret(reshape, Int, topology.elemorder)
-        elemorder_dataset = create_dataset(
-            group,
-            "elemorder",
-            datatype(eltype(elemorder_matrix)),
-            dataspace(size(elemorder_matrix));
-            dxpl_mpio = :collective,
-        )
-        elemorder_dataset[:, topology.local_elem_gidx] =
-            elemorder_matrix[:, topology.local_elem_gidx]
+        if writer.context isa ClimaComms.SingletonCommsContext
+            write_dataset(group, "elemorder", elemorder_matrix)
+        else
+            elemorder_dataset = create_dataset(
+                group,
+                "elemorder",
+                datatype(eltype(elemorder_matrix)),
+                dataspace(size(elemorder_matrix));
+                dxpl_mpio = :collective,
+            )
+            elemorder_dataset[:, topology.local_elem_gidx] =
+                elemorder_matrix[:, topology.local_elem_gidx]
+        end
     end
     return name
 end
@@ -403,7 +384,8 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     array = parent(field)
     topology = Spaces.topology(space)
     nd = ndims(array)
-    if topology isa Topologies.DistributedTopology2D
+    if topology isa Topologies.Topology2D &&
+       !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
         dims = ntuple(d -> d == nd ? nelems : size(array, d), nd)
         localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)

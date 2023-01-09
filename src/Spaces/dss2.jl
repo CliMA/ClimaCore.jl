@@ -44,7 +44,7 @@ function create_dss_buffer(
     @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
     topology = hspace.topology
     context =
-        topology isa Topologies.DistributedTopology2D ? topology.context :
+        topology isa Topologies.Topology2D ? topology.context :
         ClimaComms.SingletonCommsContext()
     local_geometry = local_geometry_data(hspace)
     local_weights = hspace.local_dss_weights
@@ -89,6 +89,7 @@ function create_dss_buffer(
             recv_data,
             buffer_lengths,
             neighbor_pids,
+            persistent = true,
         )
         send_buf_idx, recv_buf_idx =
             Topologies.compute_ghost_send_recv_idx(topology, Nij)
@@ -246,7 +247,7 @@ function weighted_dss_start2!(
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
     },
-    hspace::SpectralElementSpace2D{<:DistributedTopology2D},
+    hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
     dss_transform2!(
@@ -383,7 +384,7 @@ weighted_dss_ghost2!(
 function weighted_dss_ghost2!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::SpectralElementSpace2D{<:DistributedTopology2D},
+    hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
     ClimaComms.finish(dss_buffer.graph_context)

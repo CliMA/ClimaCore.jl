@@ -1,4 +1,5 @@
 using Test
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -17,6 +18,9 @@ using ClimaCore.Geometry
 import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
+
+const context = ClimaComms.SingletonCommsContext()
+
 function hvspace_3D(
     xlim = (-π, π),
     ylim = (-π, π),
@@ -41,7 +45,8 @@ function hvspace_3D(
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.Topology2D(context, horzmesh)
+    #horztopology = Topologies.Topology2D(horzmesh)
 
     zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -307,7 +312,6 @@ sol = solve(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
-
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
@@ -325,6 +329,10 @@ dir = "bubble_3d_invariant_rhotheta"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
+#=
+#TODO: Commenting out slice plot, as this is causing problems
+# with SingletonCommsContext. Plots.jl is unable to convert
+# field to series data for plotting. To be revisited.
 # slice along the center XZ axis
 Plots.png(
     Plots.plot(
@@ -334,7 +342,7 @@ Plots.png(
     ),
     joinpath(path, "theta_end.png"),
 )
-
+=#
 # post-processing
 Es = [total_energy(u) for u in sol.u]
 Mass = [sum(u.Yc.ρ) for u in sol.u]

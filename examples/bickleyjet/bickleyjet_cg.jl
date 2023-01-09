@@ -1,3 +1,4 @@
+using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
@@ -10,6 +11,7 @@ import Logging
 import TerminalLoggers
 Logging.global_logger(TerminalLoggers.TerminalLogger())
 
+const context = ClimaComms.SingletonCommsContext()
 
 const parameters = (
     ϵ = 0.1,  # perturbation size for initial condition
@@ -37,7 +39,7 @@ n1, n2 = 16, 16
 Nq = 4
 Nqh = 7
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
-grid_topology = Topologies.Topology2D(mesh)
+grid_topology = Topologies.Topology2D(context, mesh)
 quad = Spaces.Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

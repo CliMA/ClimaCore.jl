@@ -5,6 +5,7 @@ using ..Topologies: Topology2D, IntervalTopology
 using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
+using ClimaComms
 
 struct LinearRemap{T <: AbstractSpace, S <: AbstractSpace, M <: AbstractMatrix}
     target::T
@@ -80,8 +81,10 @@ function overlap(
     target::T,
     source::S,
 ) where {
-    T <: SpectralElementSpace2D{<:Topology2D},
-    S <: SpectralElementSpace2D{<:Topology2D},
+    T <:
+    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
+    S <:
+    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
 }
     @assert (
         typeof(Spaces.topology(target).mesh) <: Meshes.RectilinearMesh &&
@@ -265,9 +268,9 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.Topology2D) =
+nxelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
     size(Meshes.elements(topology.mesh), 1)
-nyelems(topology::Topologies.Topology2D) =
+nyelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
     size(Meshes.elements(topology.mesh), 2)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
