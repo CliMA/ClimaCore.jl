@@ -178,7 +178,7 @@ end
         # scalar-valued field to be advected
         b = sin.(ᶠz)
         c = sin.(ᶜz)
-        ∂ab_numerical = @. gradf2c(a*b)
+        ∂ab_numerical = @. gradf2c(a * b)
         ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
 
 

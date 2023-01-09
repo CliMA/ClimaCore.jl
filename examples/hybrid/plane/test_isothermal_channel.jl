@@ -24,15 +24,15 @@ global_logger(TerminalLogger())
 
 
 function warp_surface(coord)
-  # Parameters from GMD-9-2007-2016
-  # Specification for Agnesi Mountain following 
-  # Ulrich and Guerra [2016 GMD]
-  x = Geometry.component(coord,1)
-  FT = eltype(x)
-  ac = 5000
-  hc = 500.0
-  h = hc / (1 + ((x-12500)/ac)^2) #+ hc / (1 + ((x - 14000.0)/ac)^2)
-  return h * FT(0)
+    # Parameters from GMD-9-2007-2016
+    # Specification for Agnesi Mountain following 
+    # Ulrich and Guerra [2016 GMD]
+    x = Geometry.component(coord, 1)
+    FT = eltype(x)
+    ac = 5000
+    hc = 500.0
+    h = hc / (1 + ((x - 12500) / ac)^2) #+ hc / (1 + ((x - 14000.0)/ac)^2)
+    return h * FT(0)
 end
 
 function hvspace_2D(
@@ -91,7 +91,7 @@ function init_advection_test(x, z)
     p_0 = MSLP
     # auxiliary quantities
     T = T_0
-    p = p_0 
+    p = p_0
     ρ = p / R_d / T # density
     e = cv_d * (T - T_0) + (sin(x * π / 12500))^2 / 2
     ρe = ρ * e # total energy
@@ -111,17 +111,22 @@ uₕ = map(coord -> init_velocity_profile(coord.x, coord.z), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 uₕ = Geometry.Covariant1Vector.(uₕ)
 Ic2f = Operators.InterpolateC2F(
- bottom = Operators.Extrapolate(),
- top = Operators.Extrapolate(),
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
 )
 # ==========
 u₁_bc = Fields.level(Ic2f.(uₕ), ClimaCore.Utilities.half)
-gⁱʲ = Fields.level(Fields.local_geometry_field(hv_face_space), ClimaCore.Utilities.half).gⁱʲ
+gⁱʲ =
+    Fields.level(
+        Fields.local_geometry_field(hv_face_space),
+        ClimaCore.Utilities.half,
+    ).gⁱʲ
 g13 = gⁱʲ.components.data.:3
 g11 = gⁱʲ.components.data.:1
 g33 = gⁱʲ.components.data.:4
 u₃_bc = Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
-apply_boundary_w = Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
+apply_boundary_w =
+    Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
 @. w = apply_boundary_w(w)
 # ==========
 Spaces.weighted_dss!(Yc)
@@ -164,12 +169,18 @@ function rhs_invariant!(dY, Y, _, t)
     fuₕ = Ic2f.(cuₕ)
     # ==========
     u₁_bc = Fields.level(Ic2f.(cuₕ), ClimaCore.Utilities.half)
-    gⁱʲ = Fields.level(Fields.local_geometry_field(hv_face_space), ClimaCore.Utilities.half).gⁱʲ
+    gⁱʲ =
+        Fields.level(
+            Fields.local_geometry_field(hv_face_space),
+            ClimaCore.Utilities.half,
+        ).gⁱʲ
     g13 = gⁱʲ.components.data.:3
     g11 = gⁱʲ.components.data.:1
     g33 = gⁱʲ.components.data.:4
-    u₃_bc = Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
-    apply_boundary_w = Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
+    u₃_bc =
+        Geometry.Covariant3Vector.(-1 .* g13 .* u₁_bc.components.data.:1 ./ g33)
+    apply_boundary_w =
+        Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
     @. fw = apply_boundary_w(w)
     # ==========
     cw = If2c.(fw)
@@ -226,7 +237,7 @@ function rhs_invariant!(dY, Y, _, t)
 
     fω¹² = hcurl.(fw)
     fω¹² .+= vcurlc2f.(cuₕ)
-    
+
     cω¹² = hcurl.(cw)
     cω¹² .+= If2c.(vcurlc2f.(cuₕ))
 
@@ -238,10 +249,8 @@ function rhs_invariant!(dY, Y, _, t)
         Geometry.Covariant13Vector.(fw)
     fu¹² = Geometry.project.(Ref(Geometry.Contravariant1Axis()), fu)
     fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
-    
-    cu =
-        Geometry.Covariant13Vector.(cuₕ) .+
-        Geometry.Covariant13Vector.(cw)
+
+    cu = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
     cu¹ = Geometry.project.(Ref(Geometry.Contravariant1Axis()), cu)
     cu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), cu)
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
