@@ -177,7 +177,6 @@ end
         a = Geometry.WVector.(ones(Float64, hv_face_space) .* ᶠz,)
         # scalar-valued field to be advected
         b = sin.(ᶠz)
-        c = sin.(ᶜz)
         ∂ab_numerical = @. gradf2c(a * b)
         ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
 
