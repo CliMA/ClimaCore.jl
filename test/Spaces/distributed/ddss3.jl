@@ -70,8 +70,15 @@ partition numbers
 
     y2 = deepcopy(y0)
     yarr2 = parent(y2)
+
     Spaces.weighted_dss!(y0)
+    p = @allocated Spaces.weighted_dss!(y0)
+    @test_broken p == 0
+
     Spaces.weighted_dss2!(y2)
+    p = @allocated Spaces.weighted_dss2!(y2)
+    @test_broken p == 0
+
 #! format: off
     if pid == 1
         @test yarr[:] == [1.0, 2.0, 6.5, 4.0, 5.0, 9.5, 22.0, 23.0, 27.5, 6.5, 11.0, 15.5, 9.5, 14.0, 18.5, 27.5, 32.0, 34.25,
