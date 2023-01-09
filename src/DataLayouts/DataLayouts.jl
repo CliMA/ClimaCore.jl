@@ -258,7 +258,8 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     IJFH{S, Nij, typeof(array)}(array)
 end
 
-rebuild(data::IJFH{S, Nij}, array) where {S, Nij} = IJFH{S, Nij}(array)
+rebuild(data::IJFH{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
+    IJFH{S, Nij}(array)
 
 Base.copy(data::IJFH{S, Nij}) where {S, Nij} = IJFH{S, Nij}(copy(parent(data)))
 
@@ -1253,6 +1254,9 @@ end
     dataview = @inbounds view(parent(data), v, Ni * z2 .+ (1:Ni))
     return dataview
 end
+
+rebuild(data::AbstractData, ::Type{DA}) where {DA} =
+    rebuild(data, DA(getfield(data, :array)))
 
 # broadcast machinery
 include("broadcast.jl")
