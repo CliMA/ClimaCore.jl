@@ -215,7 +215,8 @@ function SpectralElementSpace2D(
 
     ### How to DSS multiple fields?
     # 1. allocate buffers externally
-
+    context = topology.context
+    DA = Device.device_array_type(context.device)
     domain = Topologies.domain(topology)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)
@@ -457,6 +458,8 @@ function SpectralElementSpace2D(
                 internal_surface_geometry_slab[q] = sgeom⁻
             end
         end
+        internal_surface_geometry =
+            DataLayouts.rebuild(internal_surface_geometry, DA)
 
         boundary_surface_geometries =
             map(Topologies.boundary_tags(topology)) do boundarytag
@@ -479,7 +482,7 @@ function SpectralElementSpace2D(
                             )
                     end
                 end
-                boundary_surface_geometry
+                DataLayouts.rebuild(boundary_surface_geometry, DA)
             end
     else
         internal_surface_geometry = nothing
@@ -489,10 +492,10 @@ function SpectralElementSpace2D(
         topology,
         quadrature_style,
         global_geometry,
-        local_geometry,
-        ghost_geometry,
-        dss_local_weights,
-        dss_ghost_weights,
+        DataLayouts.rebuild(local_geometry, DA),
+        DataLayouts.rebuild(ghost_geometry, DA),
+        DataLayouts.rebuild(dss_local_weights, DA),
+        DataLayouts.rebuild(dss_ghost_weights, DA),
         internal_surface_geometry,
         boundary_surface_geometries,
     )
