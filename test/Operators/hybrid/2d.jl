@@ -165,7 +165,6 @@ end
         # Discrete Prodouct Rule Test
         # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a∂s
         # a, b are interface variables, and  ̅ represents interpolation
-        # c is a cell centered variable
         # s is the coordinate along horizontal surfaces (terrain following)
         # For this test, we use a(z) = z and b = sin(z),
         hv_center_space, hv_face_space = hvspace_2D(helem = n, velem = n)
@@ -180,8 +179,7 @@ end
         ∂ab_numerical = @. gradf2c(a * b)
         ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
 
-
-        err[k] = norm(adv .- cos.(Fields.coordinate_field(hv_center_space).z))
+        err[k] = ∂ab_numerical .- ∂ab_analytical
     end
     # AdvectionC2C convergence rate
     conv_adv_c2c = convergence_rate(err, Δh)
