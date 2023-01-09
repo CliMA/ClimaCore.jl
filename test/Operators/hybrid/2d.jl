@@ -182,12 +182,12 @@ end
         err[k] = ∂ab_numerical .- ∂ab_analytical
     end
     # AdvectionC2C convergence rate
-    conv_adv_c2c = convergence_rate(err, Δh)
-    @show conv_adv_c2c
+    conv_adv_pr = convergence_rate(err, Δh)
+    @show conv_adv_pr
     @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-    @test conv_adv_c2c[1] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[2] ≈ 2 atol = 0.1
-    @test conv_adv_c2c[3] ≈ 2 atol = 0.1
+    @test conv_adv_pr[1] ≈ 2 atol = 0.1
+    @test conv_adv_pr[2] ≈ 2 atol = 0.1
+    @test conv_adv_pr[3] ≈ 2 atol = 0.1
 end
 
 @testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
