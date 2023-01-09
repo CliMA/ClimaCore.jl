@@ -4,7 +4,7 @@ using LinearAlgebra
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
 
-using OrdinaryDiffEq
+using OrdinaryDiffEq, Test
 
 import Logging
 import TerminalLoggers
@@ -75,11 +75,23 @@ function linkfig(figpath, alt = "")
     end
 end
 
+function conservation_error(sol)
+    initial_total_mass = sum(sol.u[1].ρ)
+    initial_tracer_mass = sum(sol.u[1].ρq)
+    final_total_mass = sum(sol.u[end].ρ)
+    final_tracer_mass = sum(sol.u[end].ρq)
+    return (
+        (final_total_mass - initial_total_mass) / initial_total_mass,
+        (final_tracer_mass - initial_tracer_mass) / initial_tracer_mass,
+    )
+end
+
 # Set up spatial discretization
 FT = Float64
 ne_seq = (5, 10, 20)
 Δh = zeros(FT, length(ne_seq))
-L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
+L1err, L2err, Linferr, relative_errors = zeros(FT, length(ne_seq)),
+zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq))
 Nq = 4
@@ -240,6 +252,16 @@ for (k, ne) in enumerate(ne_seq)
         Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
         joinpath(path, "final_q.png"),
     )
+
+    # Conservation errors
+    lim_ρ_err, lim_ρq_err = conservation_error(sol)
+    relative_errors[k] = abs(lim_ρ_err - lim_ρq_err)
+end
+
+# Check conservation
+atols = [2.5e1eps(FT), 2.5e1eps(FT), 8.5eps(FT)]
+for k in 1:length(ne_seq)
+    @test relative_errors[k] ≈ FT(0) atol = atols[k]
 end
 
 # Print convergence rate info
