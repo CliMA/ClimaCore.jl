@@ -19,8 +19,15 @@ include("ddss_setup.jl")
 
     y2 = deepcopy(y0)
     yarr2 = parent(y2)
+
     Spaces.weighted_dss!(y0)
+    p = @allocated Spaces.weighted_dss!(y0)
+    @test_broken p == 0
+
     Spaces.weighted_dss2!(y2)
+    p = @allocated Spaces.weighted_dss2!(y2)
+    @test_broken p == 0
+
     passed = 0
     #=
     output from single process run:
