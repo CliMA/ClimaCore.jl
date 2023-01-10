@@ -33,14 +33,12 @@ include("ddss_setup.jl")
 
     y2 = deepcopy(y0)
     yarr2 = parent(y2)
-
     Spaces.weighted_dss!(y0)  # current DSS
-    p = @allocated Spaces.weighted_dss!(y0)  # current DSS
-    @test_broken p == 0
 
-    Spaces.weighted_dss2!(y2) # DSS2
-    p = @allocated Spaces.weighted_dss2!(y2)
-    @test_broken p == 0
+    dss2_buffer = Spaces.create_dss_buffer(y2)
+    Spaces.weighted_dss2!(y2, dss2_buffer) # DSS2
+    p = @allocated Spaces.weighted_dss2!(y2, dss2_buffer)
+    @test p == 0
     #=
     [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5,
      18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
@@ -66,12 +64,11 @@ end
     y2 = deepcopy(y0)
 
     Spaces.weighted_dss!(y0)
-    p = @allocated Spaces.weighted_dss!(y0)
-    @test_broken p == 0
 
-    Spaces.weighted_dss2!(y2)
-    p = @allocated Spaces.weighted_dss2!(y2)
-    @test_broken p == 0
+    dss2_buffer = Spaces.create_dss_buffer(y2)
+    Spaces.weighted_dss2!(y2, dss2_buffer)
+    p = @allocated Spaces.weighted_dss2!(y2, dss2_buffer)
+    @test p == 0
 
     @test yx ≈ y0
     @test yx ≈ y2

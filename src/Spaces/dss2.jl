@@ -848,7 +848,6 @@ function dss_ghost2!(
     nfacedof = div(Np - 4, 4)
     perimeter_vertex_node_index = Topologies.perimeter_vertex_node_index
     perimeter_face_indices = Topologies.perimeter_face_indices
-    zero_data = map(zero, slab(perimeter_data, 1, 1)[1])
     (; repr_ghost_vertex) = topology
     @inbounds for (i, vertex) in enumerate(Topologies.ghost_vertices(topology))
         idxresult, lvertresult = repr_ghost_vertex[i]
