@@ -150,7 +150,7 @@ end
     @test conv_adv_c2c[3] ≈ 2 atol = 0.1
 end
 
-@testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations: Kinetic Energy" begin
+@testset "1D SE, 1D FD Extruded Domain Discrete Product Rule Operations" begin
 
     gradc2f = Operators.GradientC2F(
         top = Operators.SetValue(0.0),
@@ -163,9 +163,9 @@ end
 
     for (k, n) in enumerate(n_elems_seq)
         # Discrete Prodouct Rule Test
-        # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a∂s
+        # ∂(ab)/∂s = a̅∂b/∂s + b̅∂a/∂s
         # a, b are interface variables, and  ̅ represents interpolation
-        # s is the coordinate along horizontal surfaces (terrain following)
+        # s represents the vertical coordinate, in our case `z`
         # For this test, we use a(z) = z and b = sin(z),
         hv_center_space, hv_face_space = hvspace_2D(helem = n, velem = n)
         ᶠz = Fields.coordinate_field(hv_face_space).z
@@ -173,11 +173,9 @@ end
         Δh[k] = 1.0 / n
 
         # advective velocity
-        a = Geometry.WVector.(ones(Float64, hv_face_space) .* ᶠz,)
         # scalar-valued field to be advected
-        b = sin.(ᶠz)
-        ∂ab_numerical = @. gradf2c(a * b)
-        ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
+        ∂ab_numerical = @. Geometry.WVector(gradf2c(ᶠz * sin(ᶠz)))
+        ∂ab_analytical = @. Geometry.WVector(ᶜz * cos(ᶜz) + sin(ᶜz))
 
         err[k] = @. ∂ab_numerical - ∂ab_analytical
     end
