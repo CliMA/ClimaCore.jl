@@ -206,6 +206,242 @@ end
 BarotropicInstabilityTest(α::FT) where {FT} =
     BarotropicInstabilityTest{FT, PhysicalParameters{FT}}(; α = α)
 
+# Definition of Coriolis parameter
+function set_coriolis_parameter(space, test::AbstractTest)
+    Ω = test.params.Ω
+    α = test.α
+    f_rossby_haurwitz(Ω, ϕ, λ, α) = 2 * Ω * sind(ϕ) # for rossby_haurwitz test
+    f_default(Ω, ϕ, λ, α) = # all other test cases
+        2 * Ω * (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))
+    f_coriolis = test isa RossbyHaurwitzTest ? f_rossby_haurwitz : f_default
+
+    return map(Fields.local_geometry_field(space)) do local_geometry
+        ϕ = local_geometry.coordinates.lat
+        λ = local_geometry.coordinates.long
+        f = f_coriolis(Ω, ϕ, λ, α)
+        # Technically this should be a WVector, but since we are only in a 2D space,
+        # WVector, Contravariant3Vector, Covariant3Vector are all equivalent.
+        # This _won't_ be true in 3D however!
+        Geometry.Contravariant3Vector(f)
+    end
+end
+
+# Definition of bottom surface topography field
+function surface_topography(space, test::AbstractTest)
+    if test isa MountainTest
+        (; a, λc, ϕc, h_s0) = test
+        h_s = map(Fields.coordinate_field(space)) do coord
+            ϕ = coord.lat
+            λ = coord.long
+            r = sqrt(min(a^2, (λ - λc)^2 + (ϕ - ϕc)^2)) # positive branch
+            h_s = h_s0 * (1 - r / a)
+        end
+    else
+        h_s = zeros(space)
+    end
+    return h_s
+end
+
+# Set initial condition
+function set_initial_condition(space, test::RossbyHaurwitzTest)
+    (; a, h0, ω, K, α, params) = test
+    (; R, Ω, g, D₄) = params
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+        ϕ = coord.lat
+        λ = coord.long
+
+        A =
+            ω / 2 * (2 * Ω + ω) * cosd(ϕ)^2 +
+            1 / 4 *
+            K^2 *
+            cosd(ϕ)^(2 * a) *
+            ((a + 1) * cosd(ϕ)^2 + (2 * a^2 - a - 2) - 2 * a^2 * cosd(ϕ)^-2)
+        B =
+            2 * (Ω + ω) * K / (a + 1) / (a + 2) *
+            cosd(ϕ)^a *
+            ((a^2 + 2 * a + 2) - (a + 1)^2 * cosd(ϕ)^2)
+        C = 1 / 4 * K^2 * cosd(ϕ)^(2 * a) * ((a + 1) * cosd(ϕ)^2 - (a + 2))
+
+        h =
+            h0 +
+            (R^2 * A + R^2 * B * cosd(a * λ) + R^2 * C * cosd(2 * a * λ)) / g
+
+        uλ =
+            R * ω * cosd(ϕ) +
+            R * K * cosd(ϕ)^(a - 1) * (a * sind(ϕ)^2 - cosd(ϕ)^2) * cosd(a * λ)
+        uϕ = -R * K * a * cosd(ϕ)^(a - 1) * sind(ϕ) * sind(a * λ)
+
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+        return (h = h, u = u)
+    end
+    return Y
+end
+
+function set_initial_condition(space, test::SteadyStateCompactTest)
+    (; u0, h0, ϕᵦ, ϕₑ, xₑ, α, params) = test
+    (; R, Ω, g, D₄) = params
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+
+        ϕ = coord.lat
+        λ = coord.long
+
+        if α == 0.0
+            ϕprime = ϕ
+            λprime = λ
+        else
+            ϕprime = asind(sind(ϕ) * cosd(α) - cosd(ϕ) * cosd(λ) * sind(α))
+            λprime = asind(sind(λ) * cosd(ϕ) / cosd(ϕprime)) # for alpha45, this experiences numerical precision issues. The test case is designed for either alpha0 or alpha60
+
+            # Temporary angle to ensure λprime is in the right quadrant
+            λcond = cosd(α) * cosd(λ) * cosd(ϕ) + sind(α) * sind(ϕ)
+
+            # If λprime is not in the right quadrant, adjust
+            if λcond < 0.0
+                λprime = -λprime - 180.0 # shifted by 180 compared to the paper, because our λ ∈ [-180, 180]
+            end
+            if λprime < -180.0
+                λprime += 360.0
+            end
+        end
+
+        # Set auxiliary function needed for initial state of velocity field
+        b(x) = x ≤ 0.0 ? 0.0 : exp(-x^(-1))
+
+        x(ϕprime) = xₑ * (ϕprime - ϕᵦ) / (ϕₑ - ϕᵦ)
+        uλprime(ϕprime) =
+            u0 * b(x(ϕprime)) * b(xₑ - x(ϕprime)) * exp(4.0 / xₑ)
+        uϕprime = 0.0
+
+        # Set integral needed for height initial state
+        h_int(γ) =
+            abs(γ) < 90.0 ?
+            (2 * Ω * sind(γ) + uλprime(γ) * tand(γ) / R) * uλprime(γ) : 0.0
+
+        # Set initial state for height field
+        h =
+            h0 - (R / g) * (pi / 180.0) * QuadGK.quadgk(h_int, -90.0, ϕprime)[1]
+
+        # Set initial state for velocity field
+        uϕ = -(uλprime(ϕprime) * sind(α) * sind(λprime)) / cosd(ϕ)
+        if abs(cosd(λ)) < 1e-13
+            if abs(α) > 1e-13
+                if cosd(λ) > 0.0
+                    uλ = -uϕ * cosd(ϕ) / tand(α)
+                else
+                    uλ = uϕ * cosd(ϕ) / tand(α)
+                end
+            else
+                uλ = uλprime(ϕprime)
+            end
+        else
+            uλ =
+                (uϕ * sind(ϕ) * sind(λ) + uλprime(ϕprime) * cosd(λprime)) /
+                cosd(λ)
+        end
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+
+        return (h = h, u = u)
+    end
+    return Y
+end
+
+function set_initial_condition(space, test::BarotropicInstabilityTest)
+    (; u_max, αₚ, βₚ, h0, h_hat, ϕ₀, ϕ₁, ϕ₂, eₙ, α, params) = test
+    (; R, Ω, g, D₄) = params
+
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+
+        ϕ = coord.lat
+        λ = coord.long
+
+        if α == 0.0
+            ϕprime = ϕ
+        else
+            ϕprime = asind(sind(ϕ) * cosd(α) - cosd(ϕ) * cosd(λ) * sind(α))
+        end
+
+        # Set initial state of velocity field
+        uλprime(ϕprime) =
+            (u_max / eₙ) *
+            exp(1.0 / (deg2rad(ϕprime - ϕ₀) * deg2rad(ϕprime - ϕ₁))) *
+            (ϕ₀ < ϕprime < ϕ₁)
+        uϕprime = 0.0
+
+        # Set integral needed for height initial state
+        h_int(γ) =
+            abs(γ) < 90.0 ?
+            (2 * Ω * sind(γ) + uλprime(γ) * tand(γ) / R) * uλprime(γ) : 0.0
+
+        # Set initial state for height field
+        h =
+            h0 - (R / g) * (pi / 180.0) * QuadGK.quadgk(h_int, -90.0, ϕprime)[1]
+
+        if λ > 0.0
+            λ -= 360.0
+        end
+        if λ < -360.0 || λ > 0.0
+            @info "Invalid longitude value"
+        end
+
+        # Add height perturbation
+        h += h_hat * cosd(ϕ) * exp(-(λ^2 / αₚ^2) - ((ϕ₂ - ϕ)^2 / βₚ^2))
+
+        uλ = uλprime(ϕprime)
+        uϕ = uϕprime
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+
+        return (h = h, u = u)
+    end
+    return Y
+end
+# steady-state and mountain test cases share the same form of fields
+function set_initial_condition(
+    space,
+    test::T,
+) where {T <: Union{MountainTest, SteadyStateTest}}
+    (; u0, h0, α, params) = test
+    (; R, Ω, g, D₄) = params
+    Y = map(Fields.local_geometry_field(space)) do local_geometry
+        coord = local_geometry.coordinates
+
+        ϕ = coord.lat
+        λ = coord.long
+        h =
+            h0 -
+            (R * Ω * u0 + u0^2 / 2) / g *
+            (-cosd(λ) * cosd(ϕ) * sind(α) + sind(ϕ) * cosd(α))^2
+        uλ = u0 * (cosd(α) * cosd(ϕ) + sind(α) * cosd(λ) * sind(ϕ))
+        uϕ = -u0 * sind(α) * sind(λ)
+
+        u = Geometry.transform(
+            Geometry.Covariant12Axis(),
+            Geometry.UVVector(uλ, uϕ),
+            local_geometry,
+        )
+
+        return (h = h, u = u)
+    end
+    return Y
+end
+
 function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     device = Device.device()
     context = ClimaComms.SingletonCommsContext(device)
@@ -238,6 +474,11 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     quad = Spaces.Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    coords = Fields.coordinate_field(space)
+    f = set_coriolis_parameter(space, test)
+    h_s = surface_topography(space, test)
+    Y = set_initial_condition(space, test)
+
     return nothing
 end
 
