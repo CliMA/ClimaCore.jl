@@ -177,15 +177,15 @@ end
         ∂ab_numerical = @. Geometry.WVector(gradf2c(ᶠz * sin(ᶠz)))
         ∂ab_analytical = @. Geometry.WVector(ᶜz * cos(ᶜz) + sin(ᶜz))
 
-        err[k] = @. ∂ab_numerical - ∂ab_analytical
+        err[k] = @. norm(∂ab_numerical - ∂ab_analytical)
     end
-    # AdvectionC2C convergence rate
-    conv_adv_pr = convergence_rate(err, Δh)
-    @show conv_adv_pr
+    # Solution convergence rate
+    grad_pr = convergence_rate(err, Δh)
+    @show grad_pr
     @test err[3] ≤ err[2] ≤ err[1] ≤ 0.1
-    @test conv_adv_pr[1] ≈ 2 atol = 0.1
-    @test conv_adv_pr[2] ≈ 2 atol = 0.1
-    @test conv_adv_pr[3] ≈ 2 atol = 0.1
+    @test grad_pr[1] ≈ 2 atol = 0.1
+    @test grad_pr[2] ≈ 2 atol = 0.1
+    @test grad_pr[3] ≈ 2 atol = 0.1
 end
 
 @testset "1D SE, 1D FD Extruded Domain horizontal divergence operator" begin
