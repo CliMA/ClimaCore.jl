@@ -177,7 +177,7 @@ end
         ∂ab_numerical = @. Geometry.WVector(gradf2c(ᶠz * sin(ᶠz)))
         ∂ab_analytical = @. Geometry.WVector(ᶜz * cos(ᶜz) + sin(ᶜz))
 
-        err[k] = norm(∂ab_numerical - ∂ab_analytical)
+        err[k] = norm(∂ab_numerical .- ∂ab_analytical)
     end
     # Solution convergence rate
     grad_pr = convergence_rate(err, Δh)
