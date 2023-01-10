@@ -476,7 +476,7 @@ function rhs!(dYdt, y, parameters, t)
                     wcurl(Geometry.Covariant3Vector(curl(y.u))),
                 )
 
-            Spaces.weighted_dss!(dYdt, ghost_buffer)
+            Spaces.weighted_dss2!(dYdt, ghost_buffer)
 
             @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
             @. dYdt.u =
@@ -494,7 +494,7 @@ function rhs!(dYdt, y, parameters, t)
                     -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) +
                     y.u × (f + curl(y.u))
             end
-            Spaces.weighted_dss!(dYdt, ghost_buffer)
+            Spaces.weighted_dss2!(dYdt, ghost_buffer)
         end
     end
     return dYdt
@@ -567,7 +567,7 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
             Y0_global = Fields.Field(Y0_global_values, global_space)
         end
     end
-    ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y) : nothing
+    ghost_buffer = Spaces.create_dss_buffer(Y)
     # Set up RHS function
     dYdt = similar(Y)
     parameters =
