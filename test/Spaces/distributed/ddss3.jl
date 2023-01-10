@@ -72,12 +72,11 @@ partition numbers
     yarr2 = parent(y2)
 
     Spaces.weighted_dss!(y0)
-    p = @allocated Spaces.weighted_dss!(y0)
-    @test_broken p == 0
 
-    Spaces.weighted_dss2!(y2)
-    p = @allocated Spaces.weighted_dss2!(y2)
-    @test_broken p == 0
+    dss2_buffer = Spaces.create_dss_buffer(y2)
+    Spaces.weighted_dss2!(y2, dss2_buffer)
+    p = @allocated Spaces.weighted_dss2!(y2, dss2_buffer)
+    @test p == 0
 
 #! format: off
     if pid == 1
