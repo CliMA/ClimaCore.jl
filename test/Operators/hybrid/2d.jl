@@ -179,7 +179,7 @@ end
         ∂ab_numerical = @. gradf2c(a * b)
         ∂ab_analytical = @. ᶜz * cos(ᶜz) + sin(ᶜz)
 
-        err[k] = @. ∂ab_numerical .- ∂ab_analytical
+        err[k] = @. ∂ab_numerical - ∂ab_analytical
     end
     # AdvectionC2C convergence rate
     conv_adv_pr = convergence_rate(err, Δh)
