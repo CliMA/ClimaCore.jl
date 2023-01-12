@@ -324,6 +324,13 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/bubble_2d_rhotheta/*"
+      
+      - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
+        key: "cpu_isothermal_channel_2d_hybrid_rhoe"
+        command:
+          - "julia --color=yes --project=examples examples/hybrid/plane/isothermal_channel.jl"
+        artifact_paths:
+          - "examples/hybrid/plane/output/iso_channel_2d/*"
 
       - label: ":computer: Rising Bubble 3D hybrid (ρθ)"
         key: "cpu_rising_bubble_3d_hybrid_rhotheta"
