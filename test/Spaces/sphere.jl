@@ -52,6 +52,67 @@ using Test
     end
 end
 
+@testset "Bubble correction Nq robustness" begin
+
+    for FT in (Float64, Float32)
+        no_bubble_rtols = (
+            FT(0.64),
+            FT(0.19),
+            FT(0.027),
+            FT(0.0049),
+            FT(0.0008),
+            FT(0.00014),
+            FT(0.00028),
+            FT(3.97e-6),
+            FT(6.77e-7),
+        )
+        # Reference rtols with bubble (delete comment when fixed)
+        # bubble_rtols = (
+        #     FT(1.8),
+        #     FT(0.38),
+        #     FT(2.4e-5),
+        #     FT(0.0097),
+        #     FT(1.98e-8),
+        #     FT(0.00028),
+        #     FT(1.7e-11),
+        #     FT(7.94e-6),
+        #     FT(1.55e-14),
+        # )
+
+        for (k, Nq) in enumerate(2:10)
+            context = ClimaComms.SingletonCommsContext()
+            radius = FT(3)
+            ne = 1
+            domain = Domains.SphereDomain(radius)
+            mesh = Meshes.EquiangularCubedSphere(domain, ne)
+            topology = Topologies.Topology2D(context, mesh)
+            quad = Spaces.Quadratures.GLL{Nq}()
+            no_bubble_space = Spaces.SpectralElementSpace2D(topology, quad)
+            # surface area
+            @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                no_bubble_rtols[k]
+
+            bubble_space = Spaces.SpectralElementSpace2D(
+                topology,
+                quad;
+                enable_bubble = true,
+            )
+
+            if isodd(Nq)
+                @test_broken sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    no_bubble_rtols[k]
+            elseif Nq == 2
+                @test_broken sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    no_bubble_rtols[k]
+            else
+                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    no_bubble_rtols[k]
+            end
+        end
+    end
+
+end
+
 @testset "Volume of a spherical shell" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext()
