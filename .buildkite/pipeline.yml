@@ -4,17 +4,14 @@ agents:
   modules: julia/1.8.3 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
 
 env:
+  JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   JULIA_CUDA_USE_BINARYBUILDER: false
-  JULIA_HDF5_PATH:
   OPENBLAS_NUM_THREADS: 1
 
 steps:
   - label: "initialize"
     key: "init_cpu_env"
     command:
-      - echo "--- Configure MPI"
-      - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
-
       - echo "--- Instantiate project"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
