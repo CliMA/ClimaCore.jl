@@ -747,3 +747,10 @@ steps:
           - "julia --color=yes --project=perf perf/invalidations.jl"
         agents:
           slurm_mem: 20GB
+  - wait
+
+  - label: ":chart_with_downwards_trend: build history"
+    command:
+      - "build_history staging"
+    artifact_paths:
+      - "build_history.html"
