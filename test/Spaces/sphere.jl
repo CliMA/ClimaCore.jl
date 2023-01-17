@@ -62,11 +62,11 @@ end
             FT(0.0049),
             FT(0.0008),
             FT(0.00014),
-            FT(0.00028),
+            FT(2.4e-5),
             FT(3.97e-6),
             FT(6.77e-7),
         )
-        # Reference rtols with bubble (delete comment when fixed)
+        # Reference rtols with bubble w/ FT = Float64 (delete comment when fixed)
         # bubble_rtols = (
         #     FT(1.8),
         #     FT(0.38),
@@ -98,16 +98,8 @@ end
                 enable_bubble = true,
             )
 
-            if isodd(Nq)
-                @test_broken sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    no_bubble_rtols[k]
-            elseif Nq == 2
-                @test_broken sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    no_bubble_rtols[k]
-            else
-                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    no_bubble_rtols[k]
-            end
+            @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                no_bubble_rtols[k] broken = Nq == 2 || isodd(Nq)
         end
     end
 
