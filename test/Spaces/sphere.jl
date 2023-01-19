@@ -98,6 +98,8 @@ end
                 enable_bubble = true,
             )
 
+            @show FT
+            @show Nq
             @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
                 no_bubble_rtols[k] broken = Nq == 2 || isodd(Nq)
         end
