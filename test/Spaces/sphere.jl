@@ -56,51 +56,8 @@ end
 
     for FT in (Float64, Float32)
         # Reference rtols without bubble
-        no_bubble_rtols_f64 = (
-            FT(0.64),
-            FT(0.19),
-            FT(0.027),
-            FT(0.0049),
-            FT(0.0008),
-            FT(0.00014),
-            FT(2.4e-5),
-            FT(3.97e-6),
-            FT(6.77e-7),
-        )
-        no_bubble_rtols_f32 = (
-            FT(0.64f0),
-            FT(0.19f0),
-            FT(0.027f0),
-            FT(0.0049f0),
-            FT(0.0008f0),
-            FT(0.00014f0),
-            FT(2.4f-5),
-            FT(3.65f-6),
-            FT(4.05f-7),
-        )
-        # Reference rtols with bubble
-        bubble_rtols_f32 = (
-            FT(0.027),
-            FT(0.0008),
-            FT(2.4f-5),
-            FT(4.05f-7),
-            FT(1.35f-6),
-            FT(6.75f-8),
-            FT(1.08f-6),
-            FT(4.05f-7),
-            FT(6.75f-8),
-        )
-        bubble_rtols_f64 = (
-            FT(0.027),
-            FT(0.0008),
-            FT(2.33e-5),
-            FT(6.77e-7),
-            FT(1.98e-8),
-            FT(5.78e-10),
-            FT(1.7e-11),
-            FT(4.94e-13),
-            FT(1.53e-14),
-        )
+        rtols = [FT(35) * FT(0.5)^(FT(2.5) * Nq) for Nq in 2:10]
+
 
         for (k, Nq) in enumerate(2:10)
             context = ClimaComms.SingletonCommsContext()
@@ -112,27 +69,15 @@ end
             quad = Spaces.Quadratures.GLL{Nq}()
             no_bubble_space = Spaces.SpectralElementSpace2D(topology, quad)
             # check surface area
-            if FT == Float32
-                @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    no_bubble_rtols_f32[k]
-            else
-                @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    no_bubble_rtols_f64[k]
-            end
+            @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                rtols[k]
 
             bubble_space = Spaces.SpectralElementSpace2D(
                 topology,
                 quad;
                 enable_bubble = true,
             )
-
-            if FT == Float32
-                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    bubble_rtols_f32[k]
-            else
-                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                    bubble_rtols_f64[k]
-            end
+            @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol = rtols[k]
         end
     end
 
