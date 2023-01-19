@@ -183,7 +183,7 @@ geometric and numerical areas of each element match.
 Let ``\\Delta A^e := A^e_{exact} - A^e_{approx}``, then, in
 the case of linear elements, we correct ``W_{i,j} J^e_{i,j}`` by:
 ```math
-\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} / Nq^2 + \\Delta A^e * W_{i,j} / Nq^2 .
+\\widehat{W_{i,j} J^e}_{i,j} = W_{i,j} J^e_{i,j} + \\Delta A^e * W_{i,j} / Nq^2 .
 ```
 and the case of non linear elements, by
 ```math
@@ -245,7 +245,6 @@ function SpectralElementSpace2D(
         Quadratures.quadrature_points(FT, quadrature_style)
     high_order_quad_points, high_order_quad_weights =
         Quadratures.quadrature_points(FT, high_order_quadrature_style)
-    tot_area = zero(FT)
     for (lidx, elem) in enumerate(Topologies.localelems(topology))
         elem_area = zero(FT)
         high_order_elem_area = zero(FT)
@@ -307,7 +306,7 @@ function SpectralElementSpace2D(
                 # element so that geometric and numerical areas of each element match.
 
                 # Compute difference between geometric area of an element and its approximate numerical area
-                Δarea = abs(high_order_elem_area - elem_area)
+                Δarea = high_order_elem_area - elem_area
 
                 # Linear elements: Nq == 2 (SpectralElementSpace2D cannot have Nq < 2)
                 # Use uniform bubble correction
@@ -327,7 +326,6 @@ function SpectralElementSpace2D(
                         local_geometry_slab[i, j] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
-                    elem_area += Δarea
                 else # Higher-order elements: Use HOMME bubble correction for the interior nodes
                     for i in 2:(Nq - 1), j in 2:(Nq - 1)
                         ξ = SVector(quad_points[i], quad_points[j])
@@ -369,11 +367,9 @@ function SpectralElementSpace2D(
                         local_geometry_slab[i, j] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
-                    elem_area += Δarea
                 end
             end
         end
-        tot_area += elem_area # this matches the surface area in the test
     end
 
     # alternatively, we could do a ghost exchange here?

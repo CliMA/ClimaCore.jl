@@ -55,7 +55,8 @@ end
 @testset "Bubble correction Nq robustness" begin
 
     for FT in (Float64, Float32)
-        no_bubble_rtols = (
+        # Reference rtols without bubble
+        no_bubble_rtols_f64 = (
             FT(0.64),
             FT(0.19),
             FT(0.027),
@@ -66,18 +67,40 @@ end
             FT(3.97e-6),
             FT(6.77e-7),
         )
-        # Reference rtols with bubble w/ FT = Float64 (delete comment when fixed)
-        # bubble_rtols = (
-        #     FT(1.8),
-        #     FT(0.38),
-        #     FT(2.4e-5),
-        #     FT(0.0097),
-        #     FT(1.98e-8),
-        #     FT(0.00028),
-        #     FT(1.7e-11),
-        #     FT(7.94e-6),
-        #     FT(1.55e-14),
-        # )
+        no_bubble_rtols_f32 = (
+            FT(0.64f0),
+            FT(0.19f0),
+            FT(0.027f0),
+            FT(0.0049f0),
+            FT(0.0008f0),
+            FT(0.00014f0),
+            FT(2.4f-5),
+            FT(3.65f-6),
+            FT(4.05f-7),
+        )
+        # Reference rtols with bubble
+        bubble_rtols_f32 = (
+            FT(0.027),
+            FT(0.0008),
+            FT(2.4f-5),
+            FT(4.05f-7),
+            FT(1.35f-6),
+            FT(6.75f-8),
+            FT(1.08f-6),
+            FT(4.05f-7),
+            FT(6.75f-8),
+        )
+        bubble_rtols_f64 = (
+            FT(0.027),
+            FT(0.0008),
+            FT(2.33e-5),
+            FT(6.77e-7),
+            FT(1.98e-8),
+            FT(5.78e-10),
+            FT(1.7e-11),
+            FT(4.94e-13),
+            FT(1.53e-14),
+        )
 
         for (k, Nq) in enumerate(2:10)
             context = ClimaComms.SingletonCommsContext()
@@ -88,9 +111,14 @@ end
             topology = Topologies.Topology2D(context, mesh)
             quad = Spaces.Quadratures.GLL{Nq}()
             no_bubble_space = Spaces.SpectralElementSpace2D(topology, quad)
-            # surface area
-            @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                no_bubble_rtols[k]
+            # check surface area
+            if FT == Float32
+                @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    no_bubble_rtols_f32[k]
+            else
+                @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    no_bubble_rtols_f64[k]
+            end
 
             bubble_space = Spaces.SpectralElementSpace2D(
                 topology,
@@ -98,10 +126,13 @@ end
                 enable_bubble = true,
             )
 
-            @show FT
-            @show Nq
-            @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
-                no_bubble_rtols[k] broken = Nq == 2 || isodd(Nq)
+            if FT == Float32
+                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    bubble_rtols_f32[k]
+            else
+                @test sum(ones(bubble_space)) ≈ FT(4pi * radius^2) rtol =
+                    bubble_rtols_f64[k]
+            end
         end
     end
 
