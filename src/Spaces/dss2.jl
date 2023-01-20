@@ -21,8 +21,10 @@ struct DSSBuffer{G, D, A, B}
     recv_buf_idx::B
     "field id for all scalar fields stored in the `data` array"
     scalarfidx::Vector{Int}
-    "field id for all vector fields stored in the `data` array"
-    vectorfidx::Vector{Int}
+    "field id for all covariant12vector fields stored in the `data` array"
+    covariant12fidx::Vector{Int}
+    "field id for all contravariant12vector fields stored in the `data` array"
+    contravariant12fidx::Vector{Int}
     "internal local elements (lidx)"
     internal_elems::Vector{Int}
     "local elements (lidx) located on process boundary"
@@ -43,14 +45,24 @@ function create_dss_buffer(
 ) where {S, Nij}
     @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
     topology = hspace.topology
+    local_geometry = local_geometry_data(hspace)
+    local_weights = hspace.local_dss_weights
+    perimeter = Spaces.perimeter(hspace)
+    create_dss_buffer(data, topology, perimeter, local_geometry, local_weights)
+end
+
+function create_dss_buffer(
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    topology,
+    perimeter,
+    local_geometry = nothing,
+    local_weights = nothing,
+) where {S, Nij}
     context =
         topology isa Topologies.Topology2D ? topology.context :
         ClimaComms.SingletonCommsContext()
-    local_geometry = local_geometry_data(hspace)
-    local_weights = hspace.local_dss_weights
 
     (_, _, _, Nv, nelems) = Base.size(data)
-    perimeter = Spaces.perimeter(hspace)
     Np = Spaces.nperimeter(perimeter)
     Nf = cld(length(parent(data)), (Nij * Nij * Nv * nelems))
     nfacedof = Nij - 2
@@ -96,7 +108,7 @@ function create_dss_buffer(
         internal_elems = topology.internal_elems
         perimeter_elems = topology.perimeter_elems
     end
-    scalarfidx, vectorfidx = Int[], Int[], Int[], Int[]
+    scalarfidx, covariant12fidx, contravariant12fidx = Int[], Int[], Int[]
     supportedvectortypes = Union{
         Geometry.UVector,
         Geometry.VVector,
@@ -107,21 +119,32 @@ function create_dss_buffer(
         Geometry.UVWVector,
         Geometry.Covariant12Vector,
         Geometry.Covariant3Vector,
+        Geometry.Contravariant12Vector,
+        Geometry.Contravariant3Vector,
     }
+
     if S <: NamedTuple
         for (i, fieldtype) in enumerate(S.parameters[2].types)
             offset = DataLayouts.fieldtypeoffset(T, S, i)
             ncomponents = DataLayouts.typesize(T, fieldtype)
             if fieldtype <: Geometry.AxisVector # vector fields
+                if !(fieldtype <: supportedvectortypes)
+                    @show fieldtype
+                    @show supportedvectortypes
+                end
                 @assert fieldtype <: supportedvectortypes
                 if fieldtype <: Geometry.Covariant12Vector
-                    push!(vectorfidx, offset + 1)
+                    push!(covariant12fidx, offset + 1)
+                elseif fieldtype <: Geometry.Contravariant12Vector
+                    push!(contravariant12fidx, offset + 1)
                 else
                     append!(
                         scalarfidx,
                         Vector((offset + 1):(offset + ncomponents)),
                     )
                 end
+            elseif fieldtype <: NTuple # support a NTuple of primitive types
+                append!(scalarfidx, Vector((offset + 1):(offset + ncomponents)))
             else # scalar fields
                 push!(scalarfidx, offset + 1)
             end
@@ -129,12 +152,20 @@ function create_dss_buffer(
     else # deals with simple type, with single field (e.g: S = Float64, S = CovariantVector12, etc.)
         ncomponents = DataLayouts.typesize(T, S)
         if S <: Geometry.AxisVector # vector field
+            if !(S <: supportedvectortypes)
+                @show S
+                @show supportedvectortypes
+            end
             @assert S <: supportedvectortypes
             if S <: Geometry.Covariant12Vector
-                push!(vectorfidx, 1)
+                push!(covariant12fidx, 1)
+            elseif S <: Geometry.Contravariant12Vector
+                push!(contravariant12fidx, 1)
             else
                 append!(scalarfidx, Vector(1:ncomponents))
             end
+        elseif S <: NTuple # support a NTuple of primitive types
+            append!(scalarfidx, Vector(1:ncomponents))
         else # scalar field
             push!(scalarfidx, 1)
         end
@@ -152,7 +183,8 @@ function create_dss_buffer(
         send_buf_idx,
         recv_buf_idx,
         scalarfidx,
-        vectorfidx,
+        covariant12fidx,
+        contravariant12fidx,
         internal_elems,
         perimeter_elems,
     )
@@ -440,16 +472,19 @@ function dss_transform2!(
     localelems::Vector{Int},
 )
     if !isempty(localelems)
-        (; scalarfidx, vectorfidx, perimeter_data) = dss_buffer
-        ∂ξ∂x = local_geometry.∂ξ∂x
+        (; scalarfidx, covariant12fidx, contravariant12fidx, perimeter_data) =
+            dss_buffer
+        (; ∂ξ∂x, ∂x∂ξ) = local_geometry
         dss_transform2!(
             perimeter_data,
             data,
             ∂ξ∂x,
+            ∂x∂ξ,
             weight,
             perimeter,
             scalarfidx,
-            vectorfidx,
+            covariant12fidx,
+            contravariant12fidx,
             localelems,
         )
     end
@@ -484,15 +519,18 @@ function dss_untransform2!(
     perimeter::AbstractPerimeter,
     localelems::Vector{Int},
 )
-    (; scalarfidx, vectorfidx, perimeter_data) = dss_buffer
-    ∂x∂ξ = local_geometry.∂x∂ξ
+    (; scalarfidx, covariant12fidx, contravariant12fidx, perimeter_data) =
+        dss_buffer
+    (; ∂ξ∂x, ∂x∂ξ) = local_geometry
     dss_untransform2!(
         perimeter_data,
         data,
+        ∂ξ∂x,
         ∂x∂ξ,
         perimeter,
         scalarfidx,
-        vectorfidx,
+        covariant12fidx,
+        contravariant12fidx,
         localelems,
     )
     return nothing
@@ -506,7 +544,7 @@ end
         weight::DataLayouts.IJFH,
         perimeter::AbstractPerimeter,
         scalarfidx::Vector{Int},
-        vectorfidx::Vector{Int},
+        covariant12fidx::Vector{Int},
         localelems::Vector{Int},
     )
 
@@ -521,7 +559,7 @@ Arguments:
 - `weight`: local dss weights for horizontal space
 - `perimeter`: perimeter iterator
 - `scalarfidx`: field index for scalar fields in the data layout
-- `vectorfidx`: field index for Covariant12 vector fields in the data layout
+- `covariant12fidx`: field index for Covariant12 vector fields in the data layout
 - `localelems`: list of local elements to perform transformation operations on
 
 Part of [`Spaces.weighted_dss2!`](@ref).
@@ -530,18 +568,21 @@ function dss_transform2!(
     perimeter_data::DataLayouts.VIFH,
     data::DataLayouts.IJFH,
     ∂ξ∂x::DataLayouts.IJFH,
+    ∂x∂ξ::DataLayouts.IJFH,
     weight::DataLayouts.IJFH,
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
-    vectorfidx::Vector{Int},
+    covariant12fidx::Vector{Int},
+    contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
 )
     pdata = parent(data)
     pweight = parent(weight)
+    p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11, i12, i21, i22) =
-        length(p∂ξ∂x) / prod(size(∂ξ∂x)) == 4 ? (1, 3, 2, 4) : (1, 4, 2, 5)
+    (i11t, i12t, i21t, i22t) = (1, 3, 2, 4)
+    (i11, i12, i21, i22) = (1, 2, 3, 4)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
@@ -551,21 +592,35 @@ function dss_transform2!(
                     pdata[ip, jp, fidx, elem] * pweight[ip, jp, 1, elem]
             end
 
-            for fidx in vectorfidx
+            for fidx in covariant12fidx
                 pperimeter_data[1, p, fidx, elem] =
                     (
-                        p∂ξ∂x[ip, jp, i11, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂ξ∂x[ip, jp, i21, elem] *
+                        p∂ξ∂x[ip, jp, i11t, elem] * pdata[ip, jp, fidx, elem] +
+                        p∂ξ∂x[ip, jp, i21t, elem] *
                         pdata[ip, jp, fidx + 1, elem]
                     ) * pweight[ip, jp, 1, elem]
                 pperimeter_data[1, p, fidx + 1, elem] =
                     (
-                        p∂ξ∂x[ip, jp, i12, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂ξ∂x[ip, jp, i22, elem] *
+                        p∂ξ∂x[ip, jp, i12t, elem] * pdata[ip, jp, fidx, elem] +
+                        p∂ξ∂x[ip, jp, i22t, elem] *
                         pdata[ip, jp, fidx + 1, elem]
                     ) * pweight[ip, jp, 1, elem]
             end
 
+            for fidx in contravariant12fidx
+                pperimeter_data[1, p, fidx, elem] =
+                    (
+                        p∂x∂ξ[ip, jp, i11, elem] * pdata[ip, jp, fidx, elem] +
+                        p∂x∂ξ[ip, jp, i21, elem] *
+                        pdata[ip, jp, fidx + 1, elem]
+                    ) * pweight[ip, jp, 1, elem]
+                pperimeter_data[1, p, fidx + 1, elem] =
+                    (
+                        p∂x∂ξ[ip, jp, i12, elem] * pdata[ip, jp, fidx, elem] +
+                        p∂x∂ξ[ip, jp, i22, elem] *
+                        pdata[ip, jp, fidx + 1, elem]
+                    ) * pweight[ip, jp, 1, elem]
+            end
         end
     end
     return nothing
@@ -575,19 +630,22 @@ function dss_transform2!(
     perimeter_data::DataLayouts.VIFH,
     data::DataLayouts.VIJFH,
     ∂ξ∂x::DataLayouts.VIJFH,
+    ∂x∂ξ::DataLayouts.VIJFH,
     weight::DataLayouts.IJFH,
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
-    vectorfidx::Vector{Int},
+    covariant12fidx::Vector{Int},
+    contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
 )
     Nv = size(data, 4)
     pdata = parent(data)
     pweight = parent(weight)
+    p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11, i12, i21, i22) =
-        length(p∂ξ∂x) / prod(size(∂ξ∂x)) == 4 ? (1, 3, 2, 4) : (1, 4, 2, 5)
+    (i11t, i12t, i21t, i22t) = (1, 4, 2, 5)
+    (i11, i12, i21, i22) = (1, 2, 4, 5)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
@@ -600,20 +658,39 @@ function dss_transform2!(
                 end
             end
 
-            for fidx in vectorfidx
+            for fidx in covariant12fidx
                 for level in 1:Nv
                     pperimeter_data[level, p, fidx, elem] =
                         (
-                            p∂ξ∂x[level, ip, jp, i11, elem] *
+                            p∂ξ∂x[level, ip, jp, i11t, elem] *
                             pdata[level, ip, jp, fidx, elem] +
-                            p∂ξ∂x[level, ip, jp, i21, elem] *
+                            p∂ξ∂x[level, ip, jp, i21t, elem] *
                             pdata[level, ip, jp, fidx + 1, elem]
                         ) * pweight[ip, jp, 1, elem]
                     pperimeter_data[level, p, fidx + 1, elem] =
                         (
-                            p∂ξ∂x[level, ip, jp, i12, elem] *
+                            p∂ξ∂x[level, ip, jp, i12t, elem] *
                             pdata[level, ip, jp, fidx, elem] +
-                            p∂ξ∂x[level, ip, jp, i22, elem] *
+                            p∂ξ∂x[level, ip, jp, i22t, elem] *
+                            pdata[level, ip, jp, fidx + 1, elem]
+                        ) * pweight[ip, jp, 1, elem]
+                end
+            end
+
+            for fidx in contravariant12fidx
+                for level in 1:Nv
+                    pperimeter_data[level, p, fidx, elem] =
+                        (
+                            p∂x∂ξ[level, ip, jp, i11, elem] *
+                            pdata[level, ip, jp, fidx, elem] +
+                            p∂x∂ξ[level, ip, jp, i21, elem] *
+                            pdata[level, ip, jp, fidx + 1, elem]
+                        ) * pweight[ip, jp, 1, elem]
+                    pperimeter_data[level, p, fidx + 1, elem] =
+                        (
+                            p∂x∂ξ[level, ip, jp, i12, elem] *
+                            pdata[level, ip, jp, fidx, elem] +
+                            p∂x∂ξ[level, ip, jp, i22, elem] *
                             pdata[level, ip, jp, fidx + 1, elem]
                         ) * pweight[ip, jp, 1, elem]
                 end
@@ -629,7 +706,7 @@ end
         ∂x∂ξ::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
         perimeter::AbstractPerimeter,
         scalarfidx::Vector{Int},
-        vectorfidx::Vector{Int},
+        covariant12fidx::Vector{Int},
     )
 
 Transforms the DSS'd local vectors back to Covariant12 vectors, and copies the DSS'd data from the
@@ -642,42 +719,57 @@ Arguments:
 - `∂x∂ξ`: partial derivatives of the map from `ξ` to `x`: `∂x∂ξ[i,j]` is ∂xⁱ/∂ξʲ
 - `perimeter`: perimeter iterator
 - `scalarfidx`: field index for scalar fields in the data layout
-- `vectorfidx`: field index for Covariant12 vector fields in the data layout
+- `covariant12fidx`: field index for Covariant12 vector fields in the data layout
 
 Part of [`Spaces.weighted_dss2!`](@ref).
 """
 function dss_untransform2!(
     perimeter_data::DataLayouts.VIFH,
     data::DataLayouts.IJFH,
+    ∂ξ∂x::DataLayouts.IJFH,
     ∂x∂ξ::DataLayouts.IJFH,
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
-    vectorfidx::Vector{Int},
+    covariant12fidx::Vector{Int},
+    contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
 )
     nelems = size(data, 5)
     pdata = parent(data)
     p∂x∂ξ = parent(∂x∂ξ)
+    p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11, i12, i21, i22) =
-        length(p∂x∂ξ) / prod(size(∂x∂ξ)) == 4 ? (1, 3, 2, 4) : (1, 4, 2, 5)
+    (i11t, i12t, i21t, i22t) = (1, 3, 2, 4)
+    (i11, i12, i21, i22) = (1, 2, 3, 4)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in vectorfidx
-                pdata[ip, jp, fidx, elem] =
-                    p∂x∂ξ[ip, jp, i11, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂x∂ξ[ip, jp, i21, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-                pdata[ip, jp, fidx + 1, elem] =
-                    p∂x∂ξ[ip, jp, i12, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂x∂ξ[ip, jp, i22, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-            end
             for fidx in scalarfidx
                 pdata[ip, jp, fidx, elem] = pperimeter_data[1, p, fidx, elem]
+            end
+            for fidx in covariant12fidx
+                pdata[ip, jp, fidx, elem] =
+                    p∂x∂ξ[ip, jp, i11t, elem] *
+                    pperimeter_data[1, p, fidx, elem] +
+                    p∂x∂ξ[ip, jp, i21t, elem] *
+                    pperimeter_data[1, p, fidx + 1, elem]
+                pdata[ip, jp, fidx + 1, elem] =
+                    p∂x∂ξ[ip, jp, i12t, elem] *
+                    pperimeter_data[1, p, fidx, elem] +
+                    p∂x∂ξ[ip, jp, i22t, elem] *
+                    pperimeter_data[1, p, fidx + 1, elem]
+            end
+            for fidx in contravariant12fidx
+                pdata[ip, jp, fidx, elem] =
+                    p∂ξ∂x[ip, jp, i11, elem] *
+                    pperimeter_data[1, p, fidx, elem] +
+                    p∂ξ∂x[ip, jp, i21, elem] *
+                    pperimeter_data[1, p, fidx + 1, elem]
+                pdata[ip, jp, fidx + 1, elem] =
+                    p∂ξ∂x[ip, jp, i12, elem] *
+                    pperimeter_data[1, p, fidx, elem] +
+                    p∂ξ∂x[ip, jp, i22, elem] *
+                    pperimeter_data[1, p, fidx + 1, elem]
             end
         end
     end
@@ -687,36 +779,131 @@ end
 function dss_untransform2!(
     perimeter_data::DataLayouts.VIFH,
     data::DataLayouts.VIJFH,
+    ∂ξ∂x::DataLayouts.VIJFH,
     ∂x∂ξ::DataLayouts.VIJFH,
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
-    vectorfidx::Vector{Int},
+    covariant12fidx::Vector{Int},
+    contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
 )
     (_, _, _, Nv, nelems) = size(data)
     pdata = parent(data)
     p∂x∂ξ = parent(∂x∂ξ)
+    p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11, i12, i21, i22) =
-        length(p∂x∂ξ) / prod(size(∂x∂ξ)) == 4 ? (1, 3, 2, 4) : (1, 4, 2, 5)
+    (i11t, i12t, i21t, i22t) = (1, 4, 2, 5)
+    (i11, i12, i21, i22) = (1, 2, 4, 5)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in vectorfidx
+            for fidx in scalarfidx
                 for level in 1:Nv
                     pdata[level, ip, jp, fidx, elem] =
-                        p∂x∂ξ[level, ip, jp, i11, elem] *
+                        pperimeter_data[level, p, fidx, elem]
+                end
+            end
+            for fidx in covariant12fidx
+                for level in 1:Nv
+                    pdata[level, ip, jp, fidx, elem] =
+                        p∂x∂ξ[level, ip, jp, i11t, elem] *
                         pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[level, ip, jp, i21, elem] *
+                        p∂x∂ξ[level, ip, jp, i21t, elem] *
                         pperimeter_data[level, p, fidx + 1, elem]
                     pdata[level, ip, jp, fidx + 1, elem] =
-                        p∂x∂ξ[level, ip, jp, i12, elem] *
+                        p∂x∂ξ[level, ip, jp, i12t, elem] *
                         pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[level, ip, jp, i22, elem] *
+                        p∂x∂ξ[level, ip, jp, i22t, elem] *
                         pperimeter_data[level, p, fidx + 1, elem]
                 end
             end
-            for fidx in scalarfidx
+            for fidx in contravariant12fidx
+                for level in 1:Nv
+                    pdata[level, ip, jp, fidx, elem] =
+                        p∂ξ∂x[level, ip, jp, i11, elem] *
+                        pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[level, ip, jp, i21, elem] *
+                        pperimeter_data[level, p, fidx + 1, elem]
+                    pdata[level, ip, jp, fidx + 1, elem] =
+                        p∂ξ∂x[level, ip, jp, i12, elem] *
+                        pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[level, ip, jp, i22, elem] *
+                        pperimeter_data[level, p, fidx + 1, elem]
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+function dss_load_perimeter_data!(
+    dss_buffer::DSSBuffer,
+    data::Union{DataLayouts.IJFH},
+    perimeter,
+)
+    pperimeter_data = parent(dss_buffer.perimeter_data)
+    pdata = parent(data)
+    (_, _, nfid, nelems) = size(pperimeter_data)
+    for elem in 1:nelems
+        for (p, (ip, jp)) in enumerate(perimeter)
+            for fidx in 1:nfid
+                pperimeter_data[1, p, fidx, elem] = pdata[ip, jp, fidx, elem]
+            end
+        end
+    end
+    return nothing
+end
+
+function dss_load_perimeter_data!(
+    dss_buffer::DSSBuffer,
+    data::DataLayouts.VIJFH,
+    perimeter,
+)
+    pperimeter_data = parent(dss_buffer.perimeter_data)
+    pdata = parent(data)
+    (Nv, _, nfid, nelems) = size(pperimeter_data)
+    for elem in 1:nelems
+        for (p, (ip, jp)) in enumerate(perimeter)
+            for fidx in 1:nfid
+                for level in 1:Nv
+                    pperimeter_data[level, p, fidx, elem] =
+                        pdata[level, ip, jp, fidx, elem]
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+function dss_unload_perimeter_data!(
+    data::Union{DataLayouts.IJFH},
+    dss_buffer::DSSBuffer,
+    perimeter,
+)
+    pperimeter_data = parent(dss_buffer.perimeter_data)
+    pdata = parent(data)
+    (_, _, nfid, nelems) = size(pperimeter_data)
+    for elem in 1:nelems
+        for (p, (ip, jp)) in enumerate(perimeter)
+            for fidx in 1:nfid
+                pdata[ip, jp, fidx, elem] = pperimeter_data[1, p, fidx, elem]
+            end
+        end
+    end
+    return nothing
+end
+
+function dss_unload_perimeter_data!(
+    data::DataLayouts.VIJFH,
+    dss_buffer::DSSBuffer,
+    perimeter,
+)
+    pperimeter_data = parent(dss_buffer.perimeter_data)
+    pdata = parent(data)
+    (Nv, _, nfid, nelems) = size(pperimeter_data)
+    for elem in 1:nelems
+        for (p, (ip, jp)) in enumerate(perimeter)
+            for fidx in 1:nfid
                 for level in 1:Nv
                     pdata[level, ip, jp, fidx, elem] =
                         pperimeter_data[level, p, fidx, elem]
@@ -743,9 +930,17 @@ function dss_local2!(
     perimeter::AbstractPerimeter,
     topology::Topologies.AbstractTopology,
 )
-    (Np, _, _, Nv, _) = size(perimeter_data)
-    nfacedof = div(Np - 4, 4)
+    dss_local_vertices2!(perimeter_data, perimeter, topology)
+    dss_local_faces2!(perimeter_data, perimeter, topology)
+    return nothing
+end
 
+function dss_local_vertices2!(
+    perimeter_data::DataLayouts.VIFH,
+    perimeter::AbstractPerimeter,
+    topology::Topologies.AbstractTopology,
+)
+    (_, _, _, Nv, _) = size(perimeter_data)
     @inbounds for vertex in Topologies.local_vertices(topology)
         # for each level
         for level in 1:Nv
@@ -763,6 +958,16 @@ function dss_local2!(
             end
         end
     end
+    return nothing
+end
+
+function dss_local_faces2!(
+    perimeter_data::DataLayouts.VIFH,
+    perimeter::AbstractPerimeter,
+    topology::Topologies.AbstractTopology,
+)
+    (Np, _, _, Nv, _) = size(perimeter_data)
+    nfacedof = div(Np - 4, 4)
 
     @inbounds for (lidx1, face1, lidx2, face2, reversed) in
                   Topologies.interior_faces(topology)
@@ -798,28 +1003,31 @@ function dss_local_ghost2!(
     perimeter::AbstractPerimeter,
     topology::Topologies.AbstractTopology,
 )
-    (Np, _, _, Nv, _) = size(perimeter_data)
-    nfacedof = div(Np - 4, 4)
-    zero_data = map(zero, slab(perimeter_data, 1, 1)[1])
-    @inbounds for vertex in Topologies.ghost_vertices(topology)
-        for level in 1:Nv
-            # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, vertex) do (isghost, idx, vert)
-                ip = Topologies.perimeter_vertex_node_index(vert)
-                if !isghost
-                    lidx = idx
-                    perimeter_slab = slab(perimeter_data, level, lidx)
-                    perimeter_slab[ip]
-                else
-                    zero_data
-                end
-            end
-            for (isghost, idx, vert) in vertex
-                if !isghost
+    nghostvertices = length(topology.ghost_vertices)
+    if nghostvertices > 0
+        (Np, _, _, Nv, _) = size(perimeter_data)
+        nfacedof = div(Np - 4, 4)
+        zero_data = map(zero, slab(perimeter_data, 1, 1)[1])
+        @inbounds for vertex in Topologies.ghost_vertices(topology)
+            for level in 1:Nv
+                # gather: compute sum over shared vertices
+                sum_data = mapreduce(⊞, vertex) do (isghost, idx, vert)
                     ip = Topologies.perimeter_vertex_node_index(vert)
-                    lidx = idx
-                    perimeter_slab = slab(perimeter_data, level, lidx)
-                    perimeter_slab[ip] = sum_data
+                    if !isghost
+                        lidx = idx
+                        perimeter_slab = slab(perimeter_data, level, lidx)
+                        perimeter_slab[ip]
+                    else
+                        zero_data
+                    end
+                end
+                for (isghost, idx, vert) in vertex
+                    if !isghost
+                        ip = Topologies.perimeter_vertex_node_index(vert)
+                        lidx = idx
+                        perimeter_slab = slab(perimeter_data, level, lidx)
+                        perimeter_slab[ip] = sum_data
+                    end
                 end
             end
         end
@@ -920,9 +1128,83 @@ function load_from_recv_buffer2!(dss_buffer::DSSBuffer)
     return nothing
 end
 
-function dss_communicate2!(graph_context)
-    ClimaComms.start(graph_context)
-    ClimaComms.progress(graph_context)
-    ClimaComms.finish(graph_context)
+"""
+    dss2!(data, topology, quadrature_style)
+
+Computed unweighted/pure DSS of `data`.
+"""
+function dss2!(data, topology, quadrature_style)
+    perimeter = Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style))
+    # create dss buffer
+    dss_buffer = create_dss_buffer(data, topology, perimeter)
+    # load perimeter data from data
+    dss_load_perimeter_data!(dss_buffer, data, perimeter)
+    # compute local dss for ghost dof
+    dss_local_ghost2!(dss_buffer.perimeter_data, perimeter, topology)
+    # load send buffer
+    fill_send_buffer2!(dss_buffer)
+    # initiate communication
+    ClimaComms.start(dss_buffer.graph_context)
+    # compute local dss
+    dss_local2!(dss_buffer.perimeter_data, perimeter, topology)
+    # finish communication
+    ClimaComms.finish(dss_buffer.graph_context)
+    # load from receive buffer
+    load_from_recv_buffer2!(dss_buffer)
+    # finish dss computation for ghost dof
+    dss_ghost2!(dss_buffer.perimeter_data, perimeter, topology)
+    # load perimeter_data into data
+    dss_unload_perimeter_data!(data, dss_buffer, perimeter)
     return nothing
+end
+
+function dss_1d!(
+    htopology::Topologies.AbstractTopology,
+    data,
+    local_geometry_data = nothing,
+    dss_weights = nothing,
+)
+    Nq = size(data, 1)
+    Nv = size(data, 4)
+    idx1 = CartesianIndex(1, 1, 1, 1, 1)
+    idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
+    @inbounds for (elem1, face1, elem2, face2, reversed) in
+                  Topologies.interior_faces(htopology)
+        for level in 1:Nv
+            @assert face1 == 1 && face2 == 2 && !reversed
+            local_geometry_slab1 = slab(local_geometry_data, level, elem1)
+            weight_slab1 = slab(dss_weights, level, elem1)
+            data_slab1 = slab(data, level, elem1)
+
+            local_geometry_slab2 = slab(local_geometry_data, level, elem2)
+            weight_slab2 = slab(dss_weights, level, elem2)
+            data_slab2 = slab(data, level, elem2)
+            val =
+                dss_transform(
+                    data_slab1,
+                    local_geometry_slab1,
+                    weight_slab1,
+                    idx1,
+                ) ⊞ dss_transform(
+                    data_slab2,
+                    local_geometry_slab2,
+                    weight_slab2,
+                    idx2,
+                )
+
+            data_slab1[idx1] = dss_untransform(
+                eltype(data_slab1),
+                val,
+                local_geometry_slab1,
+                idx1,
+            )
+            data_slab2[idx2] = dss_untransform(
+                eltype(data_slab2),
+                val,
+                local_geometry_slab2,
+                idx2,
+            )
+        end
+    end
+    return data
 end

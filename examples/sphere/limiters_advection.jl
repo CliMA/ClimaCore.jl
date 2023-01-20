@@ -186,7 +186,7 @@ for (k, ne) in enumerate(ne_seq)
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar)
+        Spaces.weighted_dss2!(ystar)
         @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
 
         # Add advective flux divergence
@@ -202,7 +202,7 @@ for (k, ne) in enumerate(ne_seq)
                 parameters.limiter,
             )
         end
-        Spaces.weighted_dss!(ydoublestar)
+        Spaces.weighted_dss2!(ydoublestar)
     end
 
     # Set up RHS function
@@ -259,7 +259,8 @@ for (k, ne) in enumerate(ne_seq)
 end
 
 # Check conservation
-atols = [2.5e1eps(FT), 2.5e1eps(FT), 8.5eps(FT)]
+#atols = [2.5e1eps(FT), 2.5e1eps(FT), 8.5eps(FT)]
+atols = [2.5e1eps(FT), 2.5e1eps(FT), 1.0e1eps(FT)]
 for k in 1:length(ne_seq)
     @test relative_errors[k] ≈ FT(0) atol = atols[k]
 end

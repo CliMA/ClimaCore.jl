@@ -31,8 +31,8 @@ wgrad = Operators.WeakGradient()
     ∇η_w = wgrad.(η)
     ∇η_local = Geometry.transform.(Ref(Geometry.UVAxis()), ∇η)
     ∇ηw_local = Geometry.transform.(Ref(Geometry.UVAxis()), ∇η_w)
-    Spaces.weighted_dss!(∇η_local)
-    Spaces.weighted_dss!(∇ηw_local)
+    Spaces.weighted_dss2!(∇η_local)
+    Spaces.weighted_dss2!(∇ηw_local)
 
     ∇η_exact = @. Geometry.UVVector(
         cosd(coords.long) / radius,
@@ -80,8 +80,8 @@ convergence_rate(err, Δh) =
             ∇η_w = wgrad.(η)
             ∇η_local = Geometry.transform.(Ref(Geometry.UVAxis()), ∇η)
             ∇ηw_local = Geometry.transform.(Ref(Geometry.UVAxis()), ∇η_w)
-            Spaces.weighted_dss!(∇η_local)
-            Spaces.weighted_dss!(∇ηw_local)
+            Spaces.weighted_dss2!(∇η_local)
+            Spaces.weighted_dss2!(∇ηw_local)
 
             ∇η_exact = @. Geometry.UVVector(
                 cosd(coords.long) / radius,

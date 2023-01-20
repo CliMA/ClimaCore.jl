@@ -393,29 +393,13 @@ function SpectralElementSpace2D(
             end
         end
     end
-
     # dss_weights = J ./ dss(J)
     dss_local_weights = copy(local_geometry.J)
-    dss_ghost_weights = copy(ghost_geometry.J)
-
-    dss_interior_faces!(topology, dss_local_weights)
-    dss_local_vertices!(topology, dss_local_weights)
-    if ngelems > 0
-        dss_ghost_faces!(
-            topology,
-            dss_local_weights,
-            dss_ghost_weights;
-            update_ghost = true,
-        )
-        dss_ghost_vertices!(
-            topology,
-            dss_local_weights,
-            dss_ghost_weights;
-            update_ghost = true,
-        )
-        dss_ghost_weights .= ghost_geometry.J ./ dss_ghost_weights
+    if quadrature_style isa Quadratures.GLL
+        dss2!(dss_local_weights, topology, quadrature_style)
     end
     dss_local_weights .= local_geometry.J ./ dss_local_weights
+    dss_ghost_weights = copy(ghost_geometry.J) # not currently used
 
     SG = Geometry.SurfaceGeometry{
         FT,

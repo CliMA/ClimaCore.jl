@@ -46,7 +46,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
         grad = Operators.Gradient()
         wdiv = Operators.WeakDivergence()
         diff = @. -wdiv(grad(u))
-        Spaces.weighted_dss!(diff)
+        Spaces.weighted_dss2!(diff)
         return diff
     end
 

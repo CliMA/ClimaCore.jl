@@ -243,7 +243,7 @@ end
         # horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
         divf .= hdiv.(f .* Ref(c)) # Ref is needed to treat c as a scalar for the broadcasting operator
-        Spaces.weighted_dss!(divf)
+        Spaces.weighted_dss2!(divf)
         return divf
     end
 
@@ -283,7 +283,7 @@ end
         # only horizontal component of divergence
         hdiv = Operators.Divergence()
         @. dh += hdiv(h) # add the two components for full divergence +=
-        Spaces.weighted_dss!(dh)
+        Spaces.weighted_dss2!(dh)
 
         return dh
     end
@@ -364,7 +364,7 @@ end
         # only horizontal component of divergence
         hdiv = Operators.Divergence()
         @. dh += hdiv(h * Geometry.UVector(1.0)) # add the two components for full divergence +=
-        Spaces.weighted_dss!(dh)
+        Spaces.weighted_dss2!(dh)
 
         return divuf
     end
@@ -454,7 +454,7 @@ end
 
         hdiv = Operators.Divergence()
         @. vecdivf += hdiv(Geometry.UVector(1.0) ⊗ F)
-        Spaces.weighted_dss!(vecdivf)
+        Spaces.weighted_dss2!(vecdivf)
         return vecdivf
     end
 
@@ -493,7 +493,7 @@ end
         hdiv = Operators.Divergence()
 
         @. diffu += hdiv(K * hgrad(u))
-        Spaces.weighted_dss!(diffu)
+        Spaces.weighted_dss2!(diffu)
         return diffu
     end
 
@@ -546,7 +546,7 @@ end
         hdiv = Operators.Divergence()
 
         @. vec_diff += hdiv(K * hgrad(U))
-        Spaces.weighted_dss!(vec_diff)
+        Spaces.weighted_dss2!(vec_diff)
 
         return vec_diff
     end
@@ -607,7 +607,7 @@ end
     curlu = curlC2F.(u)
     curlw = curl.(w)
     curluw = curlu .+ curlw
-    Spaces.weighted_dss!(curluw)
+    Spaces.weighted_dss2!(curluw)
 
     curlw_ref =
         Geometry.Contravariant2Vector.(
@@ -658,7 +658,7 @@ end
     curlu = curlC2F.(u)
     curlw = curl.(w)
     curluw = curlu .+ curlw
-    Spaces.weighted_dss!(curluw)
+    Spaces.weighted_dss2!(curluw)
 
     curlw_ref =
         Geometry.Contravariant2Vector.(
@@ -754,8 +754,8 @@ end
 
     wdiv = Operators.WeakDivergence()
     grad = Operators.Gradient()
-    χ = Spaces.weighted_dss!(@. wdiv(grad(y)))
-    ∇⁴y = Spaces.weighted_dss!(@. wdiv(grad(χ)))
+    χ = Spaces.weighted_dss2!(@. wdiv(grad(y)))
+    ∇⁴y = Spaces.weighted_dss2!(@. wdiv(grad(χ)))
 
     @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
 end

@@ -42,10 +42,10 @@ include("sphere_sphericalharmonics.jl")
         grad = Operators.Gradient()
         wdiv = Operators.WeakDivergence()
         diff = @. wdiv(grad(u))
-        Spaces.weighted_dss!(diff)
+        Spaces.weighted_dss2!(diff)
 
         hyperdiff = @. wdiv(grad(diff))
-        Spaces.weighted_dss!(hyperdiff)
+        Spaces.weighted_dss2!(hyperdiff)
         return hyperdiff
     end
 

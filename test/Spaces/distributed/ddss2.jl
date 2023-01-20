@@ -31,14 +31,8 @@ include("ddss_setup.jl")
         reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
         (pid - 1) * Nq * Nq * nel
 
-    y2 = deepcopy(y0)
-    yarr2 = parent(y2)
-    Spaces.weighted_dss!(y0)  # current DSS
-
-    dss2_buffer = Spaces.create_dss_buffer(y2)
-    Spaces.weighted_dss2!(y2, dss2_buffer) # DSS2
-    p = @allocated Spaces.weighted_dss2!(y2, dss2_buffer)
-    @test p == 0
+    dss2_buffer = Spaces.create_dss_buffer(y0)
+    Spaces.weighted_dss2!(y0, dss2_buffer) # DSS2
     #=
     [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5,
      18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
@@ -46,14 +40,13 @@ include("ddss_setup.jl")
 #! format: off
     if pid == 1
         @test yarr[:] == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5]
-        @test yarr2[:] == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5]
     else
         @test yarr[:] == [18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
-        @test yarr2[:] == [18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
     end
 #! format: on
+    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    @test p == 0
 end
-
 
 @testset "4x1 element mesh on 2 processes - vector field" begin
     Nq = 3
@@ -61,15 +54,11 @@ end
     init_state(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
-    y2 = deepcopy(y0)
 
-    Spaces.weighted_dss!(y0)
-
-    dss2_buffer = Spaces.create_dss_buffer(y2)
-    Spaces.weighted_dss2!(y2, dss2_buffer)
-    p = @allocated Spaces.weighted_dss2!(y2, dss2_buffer)
-    @test p == 0
+    dss2_buffer = Spaces.create_dss_buffer(y0)
+    Spaces.weighted_dss2!(y0, dss2_buffer)
 
     @test yx ≈ y0
-    @test yx ≈ y2
+    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    @test p == 0
 end

@@ -63,31 +63,23 @@ end
             # test on divergence
             div = Operators.Divergence()
             u = rotational_field(space, α)
-            divu = Spaces.weighted_dss!(div.(deepcopy(u)))
             divu2 = Spaces.weighted_dss2!(div.(deepcopy(u)))
-            norm_divu = norm(divu)
             norm_divu2 = norm(divu2)
 
             u_serial = rotational_field(space_serial, α)
-            divu_serial = Spaces.weighted_dss!(div.(u_serial))
+            divu_serial = Spaces.weighted_dss2!(div.(u_serial))
             norm_divu_serial = norm(divu_serial)
-            @test norm_divu < 1e-2
             @test norm_divu2 < 1e-2
             # check if distributed and serial results match
-            @test norm_divu ≈ norm_divu_serial
             @test norm_divu2 ≈ norm_divu_serial
 
             # test dss on UVcoordinates
-            uu = Spaces.weighted_dss!(deepcopy(u))
             uu2 = Spaces.weighted_dss2!(deepcopy(u))
-            @test norm(uu .- u) < 1e-14
             @test norm(uu2 .- u) < 1e-14
 
             # test dss on Covariant12Vector
             uᵢ = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u)
-            uuᵢ = Spaces.weighted_dss!(deepcopy(uᵢ))
             uuᵢ2 = Spaces.weighted_dss2!(deepcopy(uᵢ))
-            @test norm(uuᵢ .- uᵢ) < 1e-14
             @test norm(uuᵢ2 .- uᵢ) < 1e-14
         end
     end

@@ -194,7 +194,7 @@ for (k, ne) in enumerate(ne_seq)
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         ystar = similar(y)
         @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar.ρq)
+        Spaces.weighted_dss2!(ystar.ρq)
         @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
 
         # Add advective flux divergence
@@ -205,8 +205,8 @@ for (k, ne) in enumerate(ne_seq)
             Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
             Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
         end
-        Spaces.weighted_dss!(dy.ρ)
-        Spaces.weighted_dss!(dy.ρq)
+        Spaces.weighted_dss2!(dy.ρ)
+        Spaces.weighted_dss2!(dy.ρq)
     end
 
     # Set up RHS function

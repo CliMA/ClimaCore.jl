@@ -76,7 +76,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
         Topologies.Topology2D(context, mesh, Topologies.spacefillingcurve(mesh))
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     Y = set_initial_condition(space)
-    ghost_buffer = usempi ? Spaces.create_ghost_buffer(Y) : nothing
+    ghost_buffer = Spaces.create_dss_buffer(Y)
     dss_buffer = Spaces.create_dss_buffer(Y)
     weighted_dss2! = Spaces.weighted_dss2!
     nsamples = 10000
