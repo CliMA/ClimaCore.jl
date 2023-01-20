@@ -44,19 +44,19 @@ ts_test_setup = (ts_topology, ts_space, ts_coords)
         f = sin.(coords.x .+ 2 .* coords.y)
 
         interpolated_field = I.(f)
-        Spaces.weighted_dss!(interpolated_field)
+        Spaces.weighted_dss2!(interpolated_field)
 
         @test axes(interpolated_field).quadrature_style == Iquad
         @test axes(interpolated_field).topology == topology
 
         restrict_field = R.(f)
-        Spaces.weighted_dss!(restrict_field)
+        Spaces.weighted_dss2!(restrict_field)
 
         @test axes(restrict_field).quadrature_style == quad
         @test axes(restrict_field).topology == topology
 
         interp_restrict_field = R.(I.(f))
-        Spaces.weighted_dss!(interp_restrict_field)
+        Spaces.weighted_dss2!(interp_restrict_field)
 
         @test axes(interp_restrict_field).quadrature_style == quad
         @test axes(interp_restrict_field).topology == topology
@@ -72,7 +72,7 @@ end
 
         grad = Operators.Gradient()
         gradf = grad.(f)
-        Spaces.weighted_dss!(gradf)
+        Spaces.weighted_dss2!(gradf)
 
         @test gradf ≈
               Geometry.Covariant12Vector.(
@@ -88,7 +88,7 @@ end
                 cos.(coords.x .+ 2 .* coords.y),
             )
         gradfv = Geometry.transform.(Ref(Geometry.UVAxis()), grad.(fv))
-        Spaces.weighted_dss!(gradfv)
+        Spaces.weighted_dss2!(gradfv)
         @test eltype(gradfv) <: Geometry.Axis2Tensor
     end
 end
@@ -100,7 +100,7 @@ end
 
         wgrad = Operators.WeakGradient()
         gradf = wgrad.(f)
-        Spaces.weighted_dss!(gradf)
+        Spaces.weighted_dss2!(gradf)
 
         @test Geometry.UVVector.(gradf) ≈
               Geometry.UVVector.(
@@ -120,7 +120,7 @@ end
 
         curl = Operators.Curl()
         curlv = curl.(Geometry.Covariant12Vector.(v))
-        Spaces.weighted_dss!(curlv)
+        Spaces.weighted_dss2!(curlv)
         curlv_ref =
             Geometry.Contravariant3Vector.(
                 .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
@@ -155,7 +155,7 @@ end
                     curl.(Geometry.Covariant12Vector.(v)),
                 ),
             )
-        Spaces.weighted_dss!(curlcurlv)
+        Spaces.weighted_dss2!(curlcurlv)
 
         @test Geometry.UVVector.(curlcurlv) ≈
               Geometry.UVVector.(curlcurlv_ref1, curlcurlv_ref2) rtol = 4e-2
@@ -189,7 +189,7 @@ end
                     ),
                 ),
             )
-        Spaces.weighted_dss!(curlcurlv)
+        Spaces.weighted_dss2!(curlcurlv)
 
         @test curlcurlv ≈ Geometry.UVVector.(curlcurlv_ref1, curlcurlv_ref2) rtol =
             4e-2
@@ -206,7 +206,7 @@ end
 
         wcurl = Operators.WeakCurl()
         curlv = wcurl.(Geometry.Covariant12Vector.(v))
-        Spaces.weighted_dss!(curlv)
+        Spaces.weighted_dss2!(curlv)
         curlv_ref =
             .-3 .* sin.(3 .* coords.x .+ 4 .* coords.y) .-
             2 .* cos.(coords.x .+ 2 .* coords.y)
@@ -225,7 +225,7 @@ end
 
         div = Operators.Divergence()
         divv = div.(v)
-        Spaces.weighted_dss!(divv)
+        Spaces.weighted_dss2!(divv)
         divv_ref =
             cos.(coords.x .+ 2 .* coords.y) .-
             2 .* sin.(3 .* coords.x .+ 2 .* coords.y)
@@ -245,7 +245,7 @@ end
 
         wdiv = Operators.WeakDivergence()
         divv = wdiv.(v)
-        Spaces.weighted_dss!(divv)
+        Spaces.weighted_dss2!(divv)
         divv_ref =
             cos.(coords.x .+ 2 .* coords.y) .-
             2 .* sin.(3 .* coords.x .+ 2 .* coords.y)
@@ -261,11 +261,11 @@ end
 
         grad = Operators.Gradient()
         gradf = grad.(f)
-        Spaces.weighted_dss!(gradf)
+        Spaces.weighted_dss2!(gradf)
 
         curl = Operators.Curl()
         curlgradf = curl.(gradf)
-        Spaces.weighted_dss!(curlgradf)
+        Spaces.weighted_dss2!(curlgradf)
 
         @test norm(curlgradf) < 1e-12
     end
@@ -276,11 +276,11 @@ end
         v = Geometry.Covariant3Vector.(sin.(coords.x .+ 2 .* coords.y))
         curl = Operators.Curl()
         curlv = curl.(v)
-        Spaces.weighted_dss!(curlv)
+        Spaces.weighted_dss2!(curlv)
 
         div = Operators.Divergence()
         divcurlv = div.(curlv)
-        Spaces.weighted_dss!(divcurlv)
+        Spaces.weighted_dss2!(divcurlv)
 
         @test norm(divcurlv) < 1e-12
     end
@@ -295,8 +295,8 @@ end
 
         wdiv = Operators.WeakDivergence()
         grad = Operators.Gradient()
-        χ = Spaces.weighted_dss!(@. wdiv(grad(y)))
-        ∇⁴y = Spaces.weighted_dss!(@. wdiv(grad(χ)))
+        χ = Spaces.weighted_dss2!(@. wdiv(grad(y)))
+        ∇⁴y = Spaces.weighted_dss2!(@. wdiv(grad(χ)))
 
         @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
     end
@@ -317,7 +317,7 @@ end
         sdiv = Operators.Divergence()
         wgrad = Operators.WeakGradient()
 
-        χ = Spaces.weighted_dss!(
+        χ = Spaces.weighted_dss2!(
             @. Geometry.UVVector(wgrad(sdiv(y))) - Geometry.UVVector(
                 wcurl(
                     Geometry.Covariant3Vector(
@@ -326,7 +326,7 @@ end
                 ),
             )
         )
-        ∇⁴y = Spaces.weighted_dss!(
+        ∇⁴y = Spaces.weighted_dss2!(
             @. Geometry.UVVector(wgrad(sdiv(χ))) - Geometry.UVVector(
                 wcurl(
                     Geometry.Covariant3Vector(

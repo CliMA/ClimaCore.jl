@@ -102,7 +102,7 @@ function rhs!(dydt, y, _, t)
 
     @. dydt = -R(div(flux(I(y), rparameters)))
 
-    Spaces.weighted_dss!(dydt)
+    Spaces.weighted_dss2!(dydt)
     return dydt
 end
 

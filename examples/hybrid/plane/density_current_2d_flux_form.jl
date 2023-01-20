@@ -217,9 +217,9 @@ function rhs!(dY, Y, _, t)
     @. dρθ = hwdiv(hgrad(θ))
     @. dρuₕ = hwdiv(hgrad(uₕ))
     @. dρw = hwdiv(hgrad(w))
-    Spaces.weighted_dss!(dYc)
-    Spaces.weighted_dss!(dρuₕ)
-    Spaces.weighted_dss!(dρw)
+    Spaces.weighted_dss2!(dYc)
+    Spaces.weighted_dss2!(dρuₕ)
+    Spaces.weighted_dss2!(dρw)
 
     κ₄ = 0.0 # m^4/s
     @. dρθ = -κ₄ * hwdiv(ρ * hgrad(dρθ))
@@ -279,9 +279,9 @@ function rhs!(dY, Y, _, t)
     #  2b) vertical div of vertial grad of potential temperature
     @. dρθ += ∂(κ₂ * (Yfρ * ∂f(ρθ / ρ)))
 
-    Spaces.weighted_dss!(dYc)
-    Spaces.weighted_dss!(dρuₕ)
-    Spaces.weighted_dss!(dρw)
+    Spaces.weighted_dss2!(dYc)
+    Spaces.weighted_dss2!(dρuₕ)
+    Spaces.weighted_dss2!(dρw)
     return dY
 end
 

@@ -147,7 +147,7 @@ end
         # horizontal divergence operator applied to all levels
         hdiv = Operators.Divergence()
         @. dudt = -hdiv(u * Geometry.UVVector(1.0, 1.0))
-        Spaces.weighted_dss!(dudt)
+        Spaces.weighted_dss2!(dudt)
         return dudt
     end
 
@@ -212,7 +212,7 @@ end
         # only horizontal advection
         hdiv = Operators.Divergence()
         @. dh += -hdiv(h * Geometry.UVVector(1.0, 1.0))
-        Spaces.weighted_dss!(dh)
+        Spaces.weighted_dss2!(dh)
 
         return dudt
     end

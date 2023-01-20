@@ -98,11 +98,11 @@ function default_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, upwinding_mode)
                           upwinding_mode == :third_order ? ᶠupwind_product3 :
                           nothing,
         ghost_buffer = (
-            c = Spaces.create_ghost_buffer(Y.c),
-            f = Spaces.create_ghost_buffer(Y.f),
-            χ = Spaces.create_ghost_buffer(Y.c.ρ), # for hyperdiffusion
-            χw = Spaces.create_ghost_buffer(Y.f.w.components.data.:1), # for hyperdiffusion
-            χuₕ = Spaces.create_ghost_buffer(Y.c.uₕ), # for hyperdiffusion
+            c = Spaces.create_dss_buffer(Y.c),
+            f = Spaces.create_dss_buffer(Y.f),
+            χ = Spaces.create_dss_buffer(Y.c.ρ), # for hyperdiffusion
+            χw = Spaces.create_dss_buffer(Y.f.w.components.data.:1), # for hyperdiffusion
+            χuₕ = Spaces.create_dss_buffer(Y.c.uₕ), # for hyperdiffusion
         ),
     )
 end
@@ -188,12 +188,12 @@ function remaining_tendency!(Yₜ, Y, p, t)
     Yₜ .= zero(eltype(Yₜ))
     default_remaining_tendency!(Yₜ, Y, p, t)
     additional_tendency!(Yₜ, Y, p, t)
-    Spaces.weighted_dss_start!(Yₜ.c, p.ghost_buffer.c)
-    Spaces.weighted_dss_start!(Yₜ.f, p.ghost_buffer.f)
-    Spaces.weighted_dss_internal!(Yₜ.c, p.ghost_buffer.c)
-    Spaces.weighted_dss_internal!(Yₜ.f, p.ghost_buffer.f)
-    Spaces.weighted_dss_ghost!(Yₜ.c, p.ghost_buffer.c)
-    Spaces.weighted_dss_ghost!(Yₜ.f, p.ghost_buffer.f)
+    Spaces.weighted_dss_start2!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_start2!(Yₜ.f, p.ghost_buffer.f)
+    Spaces.weighted_dss_internal2!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_internal2!(Yₜ.f, p.ghost_buffer.f)
+    Spaces.weighted_dss_ghost2!(Yₜ.c, p.ghost_buffer.c)
+    Spaces.weighted_dss_ghost2!(Yₜ.f, p.ghost_buffer.f)
     return Yₜ
 end
 

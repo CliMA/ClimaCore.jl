@@ -37,7 +37,7 @@ include("spectralelement.jl")
 include("finitedifference.jl")
 include("extruded.jl")
 include("triangulation.jl")
-include("dss.jl")
+include("dss_transform.jl")
 include("dss2.jl")
 
 horizontal_space(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space

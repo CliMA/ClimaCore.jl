@@ -344,29 +344,19 @@ which reduces to
 \\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
 ```
 """
-function Spaces.weighted_dss!(
+Spaces.weighted_dss!(
     field::Field,
     ghost_buffer = Spaces.create_ghost_buffer(field),
-)
-    Spaces.weighted_dss!(field_values(field), axes(field), ghost_buffer)
-    return field
-end
+) = Spaces.weighted_dss2!(field, ghost_buffer)
 
-function Spaces.weighted_dss_start!(field::Field, ghost_buffer)
-    Spaces.weighted_dss_start!(field_values(field), axes(field), ghost_buffer)
-end
+Spaces.weighted_dss_start!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_start2!(field, ghost_buffer)
 
-function Spaces.weighted_dss_internal!(field::Field, ghost_buffer)
-    Spaces.weighted_dss_internal!(
-        field_values(field),
-        axes(field),
-        ghost_buffer,
-    )
-end
+Spaces.weighted_dss_internal!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_internal2!(field, ghost_buffer)
 
-function Spaces.weighted_dss_ghost!(field, ghost_buffer)
-    Spaces.weighted_dss_ghost!(field_values(field), axes(field), ghost_buffer)
-end
+Spaces.weighted_dss_ghost!(field, ghost_buffer) =
+    Spaces.weighted_dss_ghost2!(field, ghost_buffer)
 
 function Spaces.weighted_dss2!(
     field::Field,
@@ -389,13 +379,7 @@ Spaces.weighted_dss_ghost2!(field::Field, dss_buffer) =
 
 Create a buffer for communicating neighbour information of `field`.
 """
-function Spaces.create_ghost_buffer(field::Field)
-    space = axes(field)
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        space.horizontal_space : space
-    Spaces.create_ghost_buffer(field_values(field), hspace.topology)
-end
+Spaces.create_ghost_buffer(field::Field) = Spaces.create_dss_buffer(field)
 
 """
     Spaces.create_dss_buffer(field::Field)

@@ -214,8 +214,8 @@ end
         function rhs(dY, Y, _, t)
             dY.uₕ = uₕ
             dY.w = w
-            Spaces.weighted_dss!(dY.uₕ)
-            Spaces.weighted_dss!(dY.w)
+            Spaces.weighted_dss2!(dY.uₕ)
+            Spaces.weighted_dss2!(dY.w)
             return (dY, Y)
         end
         (dY, Y) = rhs(dY, Y, nothing, 0.0)

@@ -61,8 +61,9 @@ function remap!(
     # using out_type == "cgll"
     if R.out_type == "cgll"
         topology = Spaces.topology(R.target_space)
-        Spaces.dss_interior_faces!(topology, target)
-        Spaces.dss_local_vertices!(topology, target)
+        hspace = Spaces.horizontal_space(R.target_space)
+        quadrature_style = hspace.quadrature_style
+        Spaces.dss2!(target, topology, quadrature_style)
     end
     return target
 end
