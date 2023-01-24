@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.8.3 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
+  modules: julia/1.8.5 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
