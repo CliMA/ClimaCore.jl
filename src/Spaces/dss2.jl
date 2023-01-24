@@ -1,5 +1,30 @@
 using DocStringExtensions
 
+function _get_idx(sizet::NTuple{5, Int}, loc::NTuple{5, Int})
+    (n1, n2, n3, n4, n5) = sizet
+    (i1, i2, i3, i4, i5) = loc
+    return i1 +
+           ((i2 - 1) + ((i3 - 1) + ((i4 - 1) + (i5 - 1) * n4) * n3) * n2) * n1
+end
+
+function _get_idx(sizet::NTuple{4, Int}, loc::NTuple{4, Int})
+    (n1, n2, n3, n4) = sizet
+    (i1, i2, i3, i4) = loc
+    return i1 + ((i2 - 1) + ((i3 - 1) + (i4 - 1) * n3) * n2) * n1
+end
+
+function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
+    nmetric = sizet[4]
+    (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
+    (level, i, j, elem) = loc
+    return (
+        _get_idx(sizet, (level, i, j, i11, elem)),
+        _get_idx(sizet, (level, i, j, i12, elem)),
+        _get_idx(sizet, (level, i, j, i21, elem)),
+        _get_idx(sizet, (level, i, j, i22, elem)),
+    )
+    return nothing
+end
 """
     DSSBuffer{G, D, A, B}
 
@@ -541,6 +566,7 @@ end
         perimeter_data::DataLayouts.VIFH,
         data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
         ∂ξ∂x::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        ∂x∂ξ::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
         weight::DataLayouts.IJFH,
         perimeter::AbstractPerimeter,
         scalarfidx::Vector{Int},
@@ -566,134 +592,70 @@ Part of [`Spaces.weighted_dss2!`](@ref).
 """
 function dss_transform2!(
     perimeter_data::DataLayouts.VIFH,
-    data::DataLayouts.IJFH,
-    ∂ξ∂x::DataLayouts.IJFH,
-    ∂x∂ξ::DataLayouts.IJFH,
+    data::Union{DataLayouts.VIJFH{S, Nij}, DataLayouts.IJFH{S, Nij}},
+    ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
+    ∂x∂ξ::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     weight::DataLayouts.IJFH,
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
     covariant12fidx::Vector{Int},
     contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
-)
+) where {S, Nij}
     pdata = parent(data)
     pweight = parent(weight)
     p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11t, i12t, i21t, i22t) = (1, 3, 2, 4)
-    (i11, i12, i21, i22) = (1, 2, 3, 4)
+    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
+    sizet_data = (nlevels, Nij, Nij, nfid, nelems)
+    sizet_wt = (Nij, Nij, 1, nelems)
+    sizet_metric = (nlevels, Nij, Nij, nmetric, nelems)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
+            weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
 
-            for fidx in scalarfidx
-                pperimeter_data[1, p, fidx, elem] =
-                    pdata[ip, jp, fidx, elem] * pweight[ip, jp, 1, elem]
+            for fidx in scalarfidx, level in 1:nlevels
+                data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
             end
 
-            for fidx in covariant12fidx
-                pperimeter_data[1, p, fidx, elem] =
+            for fidx in covariant12fidx, level in 1:nlevels
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pperimeter_data[level, p, fidx, elem] =
                     (
-                        p∂ξ∂x[ip, jp, i11t, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂ξ∂x[ip, jp, i21t, elem] *
-                        pdata[ip, jp, fidx + 1, elem]
-                    ) * pweight[ip, jp, 1, elem]
-                pperimeter_data[1, p, fidx + 1, elem] =
+                        p∂ξ∂x[idx11] * pdata[data_idx1] +
+                        p∂ξ∂x[idx12] * pdata[data_idx2]
+                    ) * weight
+                pperimeter_data[level, p, fidx + 1, elem] =
                     (
-                        p∂ξ∂x[ip, jp, i12t, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂ξ∂x[ip, jp, i22t, elem] *
-                        pdata[ip, jp, fidx + 1, elem]
-                    ) * pweight[ip, jp, 1, elem]
+                        p∂ξ∂x[idx21] * pdata[data_idx1] +
+                        p∂ξ∂x[idx22] * pdata[data_idx2]
+                    ) * weight
             end
 
-            for fidx in contravariant12fidx
-                pperimeter_data[1, p, fidx, elem] =
+            for fidx in contravariant12fidx, level in 1:nlevels
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pperimeter_data[level, p, fidx, elem] =
                     (
-                        p∂x∂ξ[ip, jp, i11, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂x∂ξ[ip, jp, i21, elem] *
-                        pdata[ip, jp, fidx + 1, elem]
-                    ) * pweight[ip, jp, 1, elem]
-                pperimeter_data[1, p, fidx + 1, elem] =
+                        p∂x∂ξ[idx11] * pdata[data_idx1] +
+                        p∂x∂ξ[idx21] * pdata[data_idx2]
+                    ) * weight
+                pperimeter_data[level, p, fidx + 1, elem] =
                     (
-                        p∂x∂ξ[ip, jp, i12, elem] * pdata[ip, jp, fidx, elem] +
-                        p∂x∂ξ[ip, jp, i22, elem] *
-                        pdata[ip, jp, fidx + 1, elem]
-                    ) * pweight[ip, jp, 1, elem]
-            end
-        end
-    end
-    return nothing
-end
-
-function dss_transform2!(
-    perimeter_data::DataLayouts.VIFH,
-    data::DataLayouts.VIJFH,
-    ∂ξ∂x::DataLayouts.VIJFH,
-    ∂x∂ξ::DataLayouts.VIJFH,
-    weight::DataLayouts.IJFH,
-    perimeter::AbstractPerimeter,
-    scalarfidx::Vector{Int},
-    covariant12fidx::Vector{Int},
-    contravariant12fidx::Vector{Int},
-    localelems::Vector{Int},
-)
-    Nv = size(data, 4)
-    pdata = parent(data)
-    pweight = parent(weight)
-    p∂x∂ξ = parent(∂x∂ξ)
-    p∂ξ∂x = parent(∂ξ∂x)
-    pperimeter_data = parent(perimeter_data)
-    (i11t, i12t, i21t, i22t) = (1, 4, 2, 5)
-    (i11, i12, i21, i22) = (1, 2, 4, 5)
-
-    @inbounds for elem in localelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-
-            for fidx in scalarfidx
-                for level in 1:Nv
-                    pperimeter_data[level, p, fidx, elem] =
-                        pdata[level, ip, jp, fidx, elem] *
-                        pweight[ip, jp, 1, elem]
-                end
-            end
-
-            for fidx in covariant12fidx
-                for level in 1:Nv
-                    pperimeter_data[level, p, fidx, elem] =
-                        (
-                            p∂ξ∂x[level, ip, jp, i11t, elem] *
-                            pdata[level, ip, jp, fidx, elem] +
-                            p∂ξ∂x[level, ip, jp, i21t, elem] *
-                            pdata[level, ip, jp, fidx + 1, elem]
-                        ) * pweight[ip, jp, 1, elem]
-                    pperimeter_data[level, p, fidx + 1, elem] =
-                        (
-                            p∂ξ∂x[level, ip, jp, i12t, elem] *
-                            pdata[level, ip, jp, fidx, elem] +
-                            p∂ξ∂x[level, ip, jp, i22t, elem] *
-                            pdata[level, ip, jp, fidx + 1, elem]
-                        ) * pweight[ip, jp, 1, elem]
-                end
-            end
-
-            for fidx in contravariant12fidx
-                for level in 1:Nv
-                    pperimeter_data[level, p, fidx, elem] =
-                        (
-                            p∂x∂ξ[level, ip, jp, i11, elem] *
-                            pdata[level, ip, jp, fidx, elem] +
-                            p∂x∂ξ[level, ip, jp, i21, elem] *
-                            pdata[level, ip, jp, fidx + 1, elem]
-                        ) * pweight[ip, jp, 1, elem]
-                    pperimeter_data[level, p, fidx + 1, elem] =
-                        (
-                            p∂x∂ξ[level, ip, jp, i12, elem] *
-                            pdata[level, ip, jp, fidx, elem] +
-                            p∂x∂ξ[level, ip, jp, i22, elem] *
-                            pdata[level, ip, jp, fidx + 1, elem]
-                        ) * pweight[ip, jp, 1, elem]
-                end
+                        p∂x∂ξ[idx12] * pdata[data_idx1] +
+                        p∂x∂ξ[idx22] * pdata[data_idx2]
+                    ) * weight
             end
         end
     end
@@ -703,10 +665,13 @@ end
     function dss_untransform2!(
         perimeter_data::DataLayouts.VIFH,
         data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
         ∂x∂ξ::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
         perimeter::AbstractPerimeter,
         scalarfidx::Vector{Int},
         covariant12fidx::Vector{Int},
+        contravariant12fidx::Vector{Int},
+        localelems::Vector{Int},
     )
 
 Transforms the DSS'd local vectors back to Covariant12 vectors, and copies the DSS'd data from the
@@ -723,112 +688,65 @@ Arguments:
 
 Part of [`Spaces.weighted_dss2!`](@ref).
 """
+
 function dss_untransform2!(
     perimeter_data::DataLayouts.VIFH,
-    data::DataLayouts.IJFH,
-    ∂ξ∂x::DataLayouts.IJFH,
-    ∂x∂ξ::DataLayouts.IJFH,
+    data::Union{DataLayouts.VIJFH{S, Nij}, DataLayouts.IJFH{S, Nij}},
+    ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
+    ∂x∂ξ::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     perimeter::AbstractPerimeter,
     scalarfidx::Vector{Int},
     covariant12fidx::Vector{Int},
     contravariant12fidx::Vector{Int},
     localelems::Vector{Int},
-)
-    nelems = size(data, 5)
+) where {S, Nij}
     pdata = parent(data)
     p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (i11t, i12t, i21t, i22t) = (1, 3, 2, 4)
-    (i11, i12, i21, i22) = (1, 2, 3, 4)
+    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
+    sizet_data = (nlevels, Nij, Nij, nfid, nelems)
+    sizet_metric = (nlevels, Nij, Nij, nmetric, nelems)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
             for fidx in scalarfidx
-                pdata[ip, jp, fidx, elem] = pperimeter_data[1, p, fidx, elem]
-            end
-            for fidx in covariant12fidx
-                pdata[ip, jp, fidx, elem] =
-                    p∂x∂ξ[ip, jp, i11t, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂x∂ξ[ip, jp, i21t, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-                pdata[ip, jp, fidx + 1, elem] =
-                    p∂x∂ξ[ip, jp, i12t, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂x∂ξ[ip, jp, i22t, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-            end
-            for fidx in contravariant12fidx
-                pdata[ip, jp, fidx, elem] =
-                    p∂ξ∂x[ip, jp, i11, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂ξ∂x[ip, jp, i21, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-                pdata[ip, jp, fidx + 1, elem] =
-                    p∂ξ∂x[ip, jp, i12, elem] *
-                    pperimeter_data[1, p, fidx, elem] +
-                    p∂ξ∂x[ip, jp, i22, elem] *
-                    pperimeter_data[1, p, fidx + 1, elem]
-            end
-        end
-    end
-    return nothing
-end
-
-function dss_untransform2!(
-    perimeter_data::DataLayouts.VIFH,
-    data::DataLayouts.VIJFH,
-    ∂ξ∂x::DataLayouts.VIJFH,
-    ∂x∂ξ::DataLayouts.VIJFH,
-    perimeter::AbstractPerimeter,
-    scalarfidx::Vector{Int},
-    covariant12fidx::Vector{Int},
-    contravariant12fidx::Vector{Int},
-    localelems::Vector{Int},
-)
-    (_, _, _, Nv, nelems) = size(data)
-    pdata = parent(data)
-    p∂x∂ξ = parent(∂x∂ξ)
-    p∂ξ∂x = parent(∂ξ∂x)
-    pperimeter_data = parent(perimeter_data)
-    (i11t, i12t, i21t, i22t) = (1, 4, 2, 5)
-    (i11, i12, i21, i22) = (1, 2, 4, 5)
-
-    @inbounds for elem in localelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in scalarfidx
-                for level in 1:Nv
-                    pdata[level, ip, jp, fidx, elem] =
-                        pperimeter_data[level, p, fidx, elem]
+                for level in 1:nlevels
+                    data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                    pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
                 end
             end
             for fidx in covariant12fidx
-                for level in 1:Nv
-                    pdata[level, ip, jp, fidx, elem] =
-                        p∂x∂ξ[level, ip, jp, i11t, elem] *
-                        pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[level, ip, jp, i21t, elem] *
-                        pperimeter_data[level, p, fidx + 1, elem]
-                    pdata[level, ip, jp, fidx + 1, elem] =
-                        p∂x∂ξ[level, ip, jp, i12t, elem] *
-                        pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[level, ip, jp, i22t, elem] *
-                        pperimeter_data[level, p, fidx + 1, elem]
+                for level in 1:nlevels
+                    data_idx1 =
+                        _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                    data_idx2 =
+                        _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    (idx11, idx12, idx21, idx22) =
+                        _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                    pdata[data_idx1] =
+                        p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem]
+                    pdata[data_idx2] =
+                        p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem]
                 end
             end
             for fidx in contravariant12fidx
-                for level in 1:Nv
-                    pdata[level, ip, jp, fidx, elem] =
-                        p∂ξ∂x[level, ip, jp, i11, elem] *
-                        pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[level, ip, jp, i21, elem] *
-                        pperimeter_data[level, p, fidx + 1, elem]
-                    pdata[level, ip, jp, fidx + 1, elem] =
-                        p∂ξ∂x[level, ip, jp, i12, elem] *
-                        pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[level, ip, jp, i22, elem] *
-                        pperimeter_data[level, p, fidx + 1, elem]
+                for level in 1:nlevels
+                    data_idx1 =
+                        _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                    data_idx2 =
+                        _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    (idx11, idx12, idx21, idx22) =
+                        _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                    pdata[data_idx1] =
+                        p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
+                    pdata[data_idx2] =
+                        p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
                 end
             end
         end
@@ -838,77 +756,35 @@ end
 
 function dss_load_perimeter_data!(
     dss_buffer::DSSBuffer,
-    data::Union{DataLayouts.IJFH},
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     perimeter,
-)
+) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
-    (_, _, nfid, nelems) = size(pperimeter_data)
-    for elem in 1:nelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in 1:nfid
-                pperimeter_data[1, p, fidx, elem] = pdata[ip, jp, fidx, elem]
-            end
-        end
-    end
-    return nothing
-end
-
-function dss_load_perimeter_data!(
-    dss_buffer::DSSBuffer,
-    data::DataLayouts.VIJFH,
-    perimeter,
-)
-    pperimeter_data = parent(dss_buffer.perimeter_data)
-    pdata = parent(data)
-    (Nv, _, nfid, nelems) = size(pperimeter_data)
-    for elem in 1:nelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in 1:nfid
-                for level in 1:Nv
-                    pperimeter_data[level, p, fidx, elem] =
-                        pdata[level, ip, jp, fidx, elem]
-                end
-            end
+    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    sizet = (nlevels, Nij, Nij, nfid, nelems)
+    for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
+        for fidx in 1:nfid, level in 1:nlevels
+            idx = _get_idx(sizet, (level, ip, jp, fidx, elem))
+            pperimeter_data[level, p, fidx, elem] = pdata[idx]
         end
     end
     return nothing
 end
 
 function dss_unload_perimeter_data!(
-    data::Union{DataLayouts.IJFH},
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     dss_buffer::DSSBuffer,
     perimeter,
-)
+) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
-    (_, _, nfid, nelems) = size(pperimeter_data)
-    for elem in 1:nelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in 1:nfid
-                pdata[ip, jp, fidx, elem] = pperimeter_data[1, p, fidx, elem]
-            end
-        end
-    end
-    return nothing
-end
-
-function dss_unload_perimeter_data!(
-    data::DataLayouts.VIJFH,
-    dss_buffer::DSSBuffer,
-    perimeter,
-)
-    pperimeter_data = parent(dss_buffer.perimeter_data)
-    pdata = parent(data)
-    (Nv, _, nfid, nelems) = size(pperimeter_data)
-    for elem in 1:nelems
-        for (p, (ip, jp)) in enumerate(perimeter)
-            for fidx in 1:nfid
-                for level in 1:Nv
-                    pdata[level, ip, jp, fidx, elem] =
-                        pperimeter_data[level, p, fidx, elem]
-                end
-            end
+    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    sizet = (nlevels, Nij, Nij, nfid, nelems)
+    for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
+        for fidx in 1:nfid, level in 1:nlevels
+            idx = _get_idx(sizet, (level, ip, jp, fidx, elem))
+            pdata[idx] = pperimeter_data[level, p, fidx, elem]
         end
     end
     return nothing
