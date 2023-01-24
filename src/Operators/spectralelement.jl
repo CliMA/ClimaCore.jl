@@ -55,32 +55,22 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes, InputSpace} <:
+struct SpectralBroadcasted{Style, Op, Args, Axes} <:
        Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
-    input_space::InputSpace
 end
 SpectralBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-    input_space::InputSpace = nothing,
-) where {Style, Op, Args, Axes, InputSpace} =
-    SpectralBroadcasted{Style, Op, Args, Axes, InputSpace}(
+) where {Style, Op, Args, Axes} =
+    SpectralBroadcasted{Style, Op, Args, Axes}(
         op,
         args,
         axes,
-        input_space,
     )
-
-input_space(arg) = axes(arg)
-input_space(::SpectralElementOperator, space) = space
-
-input_space(sbc::SpectralBroadcasted) =
-    isnothing(sbc.input_space) ?
-    input_space(sbc.op, tuplemap(axes, sbc.args)...) : sbc.input_space
 
 return_space(::SpectralElementOperator, space) = space
 
@@ -119,13 +109,8 @@ function Base.Broadcast.instantiate(
         axes = sbc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-    if sbc.input_space isa Nothing
-        inspace = input_space(sbc)
-    else
-        inspace = sbc.input_space
-    end
     op = typeof(op)(axes)
-    return SpectralBroadcasted{Style}(op, args, axes, inspace)
+    return SpectralBroadcasted{Style}(op, args, axes)
 end
 
 function Base.Broadcast.instantiate(
@@ -1049,7 +1034,6 @@ end
 # interplation / restriction
 abstract type TensorOperator <: SpectralElementOperator end
 
-input_space(op::TensorOperator, inspace) = inspace
 return_space(op::TensorOperator, inspace) = op.space
 operator_return_eltype(::TensorOperator, ::Type{S}) where {S} = S
 
