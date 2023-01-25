@@ -190,7 +190,14 @@ end
     resolve_operator(bc, slabidx)
 
 Recursively evaluate any operators in `bc` at `slabidx`, replacing any
-`SpectralBroadcasted` objects with an `IF`/`IJF` object.
+`SpectralBroadcasted` objects.
+
+- if `bc` is a regular `Broadcasted` object, return a new `Broadcasted` with `resolve_operator` called on each `arg`
+- if `bc` is a regular `SpectralBroadcasted` object:
+ - call `resolve_operator` called on each `arg`
+ - call `apply_operator`, returning the resulting "pseudo Field":  a `Field` with an
+ `IF`/`IJF` data object.
+- if `bc` is a `Field`, return that
 """
 function resolve_operator(bc::SpectralBroadcasted, slabidx)
     args = _resolve_operator_args(slabidx, bc.args...)
