@@ -55,8 +55,7 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes} <:
-       Base.AbstractBroadcasted
+struct SpectralBroadcasted{Style, Op, Args, Axes} <: Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
@@ -66,11 +65,7 @@ SpectralBroadcasted{Style}(
     args::Args,
     axes::Axes = nothing,
 ) where {Style, Op, Args, Axes} =
-    SpectralBroadcasted{Style, Op, Args, Axes}(
-        op,
-        args,
-        axes,
-    )
+    SpectralBroadcasted{Style, Op, Args, Axes}(op, args, axes)
 
 return_space(::SpectralElementOperator, space) = space
 
@@ -289,7 +284,10 @@ for m in methods(get_node)
 end
 
 Base.@propagate_inbounds function get_local_geometry(
-    space::Spaces.AbstractSpectralElementSpace,
+    space::Union{
+        Spaces.AbstractSpectralElementSpace,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
     ij::CartesianIndex{1},
     slabidx,
 )
@@ -300,10 +298,13 @@ Base.@propagate_inbounds function get_local_geometry(
     else
         v = slabidx.v
     end
-    Spaces.local_geometry_data(space)[i, j, nothing, v, h]
+    Spaces.local_geometry_data(space)[i, nothing, nothing, v, h]
 end
 Base.@propagate_inbounds function get_local_geometry(
-    space::Spaces.AbstractSpectralElementSpace,
+    space::Union{
+        Spaces.AbstractSpectralElementSpace,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
     ij::CartesianIndex{2},
     slabidx,
 )
@@ -409,8 +410,8 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -429,7 +430,7 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::Divergence{(1, 2)}, space, slabidx, arg)
@@ -439,8 +440,8 @@ function apply_operator(op::Divergence{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -467,7 +468,7 @@ function apply_operator(op::Divergence{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 
@@ -522,8 +523,8 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -542,7 +543,7 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] = RecursiveApply.rdiv(out[i], ⊟(local_geometry.WJ))
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
@@ -551,8 +552,9 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -579,7 +581,7 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i, j] = RecursiveApply.rdiv(out[i, j], ⊟(local_geometry.WJ))
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 """
@@ -618,8 +620,8 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         x = get_node(arg, ij, slabidx)
@@ -628,7 +630,7 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
             out[ii] += ∂f∂ξ
         end
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
@@ -638,8 +640,9 @@ function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         x = get_node(arg, ij, slabidx)
@@ -652,7 +655,7 @@ function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
             out[i, jj] = out[i, jj] ⊞ ∂f∂ξ₂
         end
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 
@@ -704,8 +707,8 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -722,7 +725,7 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
         W = local_geometry.WJ / local_geometry.J
         out[i] = RecursiveApply.rdiv(out[i], W)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
@@ -732,8 +735,9 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
@@ -754,7 +758,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
         W = local_geometry.WJ / local_geometry.J
         out[i, j] = RecursiveApply.rdiv(out[i, j], W)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 abstract type CurlSpectralElementOperator <: SpectralElementOperator end
@@ -814,8 +818,8 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     if RT <: Geometry.Contravariant2Vector
         @inbounds for i in 1:Nq
             ij = CartesianIndex((i,))
@@ -835,7 +839,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] = RecursiveApply.rdiv(out[i], local_geometry.J)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
@@ -845,8 +849,9 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
     # input data is a Covariant12Vector field
     if RT <: Geometry.Contravariant3Vector
         @inbounds for j in 1:Nq, i in 1:Nq
@@ -892,7 +897,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.J)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 """
@@ -945,8 +950,8 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MVector{Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
     # input data is a Covariant3Vector field
     if RT <: Geometry.Contravariant2Vector
         @inbounds for i in 1:Nq
@@ -968,7 +973,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i] = RecursiveApply.rdiv(out[i], local_geometry.WJ)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
@@ -978,8 +983,9 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
-    out = StaticArrays.MMatrix{Nq, Nq, RT}(undef)
-    DataLayouts._mzero!(out, FT)
+    out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    fill!(parent(out), zero(FT))
+
     # input data is a Covariant12Vector field
     if RT <: Geometry.Contravariant3Vector
         @inbounds for j in 1:Nq, i in 1:Nq
@@ -1028,7 +1034,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
-    return SArray(out)
+    return Field(SArray(out), space)
 end
 
 # interplation / restriction
@@ -1065,22 +1071,23 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     Nq_in = Quadratures.degrees_of_freedom(QS_in)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
-    S = eltype(arg)
-    slab_data_out = MVector{Nq_out, S}(undef)
+    RT = eltype(arg)
+    out = DataLayouts.IF{RT, Nq_out}(MArray, FT)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab_getnode
-        r = Imat[i, 1] ⊠ get_node(arg, CartesianIndex((1,)), slabidx)
+        ij = CartesianIndex((1,))
+        r = Imat[i, 1] ⊠ get_node(arg, ij, slabidx)
         for ii in 2:Nq_in
             ij = CartesianIndex((ii,))
             r = RecursiveApply.rmuladd(
                 Imat[i, ii],
-                get_node(arg, ii, slabidx),
+                get_node(arg, ij, slabidx),
                 r,
             )
         end
-        slab_data_out[i] = r
+        out[i] = r
     end
-    return SArray(slab_data_out)
+    return Field(SArray(out), space_out)
 end
 
 function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
@@ -1091,10 +1098,10 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
     Nq_in = Quadratures.degrees_of_freedom(QS_in)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     Imat = Quadratures.interpolation_matrix(FT, QS_out, QS_in)
-    S = eltype(arg)
+    RT = eltype(arg)
     # temporary storage
-    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
-    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
+    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
+    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         # we do this to remove one allocated intermediate array
@@ -1111,9 +1118,9 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
         temp[i, j] = r
     end
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
-        slab_data_out[i, j] = RecursiveApply.rmatmul2(Imat, temp, i, j)
+        out[i, j] = RecursiveApply.rmatmul2(Imat, temp, i, j)
     end
-    return SMatrix(slab_data_out)
+    return Field(SArray(out), space_out)
 end
 
 
@@ -1153,8 +1160,8 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
     Nq_in = Quadratures.degrees_of_freedom(QS_in)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
-    S = eltype(arg)
-    slab_data_out = MVector{Nq_out, S}(undef)
+    RT = eltype(arg)
+    out = IF{RT, Nq_out}(MArray, FT)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab get_node
         ij = CartesianIndex((1,))
@@ -1171,9 +1178,9 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
         end
         ij_out = CartesianIndex((i,))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        slab_data_out[i] = RecursiveApply.rdiv(r, WJ_out)
+        out[i] = RecursiveApply.rdiv(r, WJ_out)
     end
-    return slab_data_out
+    return Field(SArray(out), space_out)
 end
 
 function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
@@ -1184,10 +1191,10 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
     Nq_in = Quadratures.degrees_of_freedom(QS_in)
     Nq_out = Quadratures.degrees_of_freedom(QS_out)
     ImatT = Quadratures.interpolation_matrix(FT, QS_in, QS_out)' # transpose
-    S = eltype(arg)
+    RT = eltype(arg)
     # temporary storage
-    temp = MArray{Tuple{Nq_out, Nq_in}, S, 2, Nq_out * Nq_in}(undef)
-    slab_data_out = MArray{Tuple{Nq_out, Nq_out}, S, 2, Nq_out * Nq_out}(undef)
+    temp = DataLayouts.IJF{RT, max(Nq_in, Nq_out)}(MArray, FT)
+    out = DataLayouts.IJF{RT, Nq_out}(MArray, FT)
     @inbounds for j in 1:Nq_in, i in 1:Nq_out
         # manually inlined rmatmul1 with slab get_node
         ij = CartesianIndex((1, j))
@@ -1207,12 +1214,12 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
     @inbounds for j in 1:Nq_out, i in 1:Nq_out
         ij_out = CartesianIndex((i, j))
         WJ_out = get_local_geometry(space_out, ij_out, slabidx).WJ
-        slab_data_out[i, j] = RecursiveApply.rdiv(
+        out[i, j] = RecursiveApply.rdiv(
             RecursiveApply.rmatmul2(ImatT, temp, i, j),
             WJ_out,
         )
     end
-    return SMatrix(slab_data_out)
+    return Field(SArray(out), space_out)
 end
 
 
