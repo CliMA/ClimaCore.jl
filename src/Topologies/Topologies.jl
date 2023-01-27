@@ -2,6 +2,7 @@ module Topologies
 
 using DocStringExtensions
 
+import ..Device
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates

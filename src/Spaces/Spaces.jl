@@ -22,7 +22,7 @@ import ..slab, ..column, ..level
 import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 import ..Device
-using StaticArrays, ForwardDiff, LinearAlgebra, UnPack
+using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
 
 abstract type AbstractSpace end
 

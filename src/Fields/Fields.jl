@@ -12,6 +12,7 @@ import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply
 using ClimaComms
+import Adapt
 
 import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
 
@@ -48,6 +49,11 @@ comm_context(topology::Topologies.Topology2D) = topology.context
 comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
     ClimaComms.SingletonCommsContext()
 
+Adapt.adapt_structure(to, field::Field) =
+    Field(
+        Adapt.adapt_structure(to, Fields.field_values(field)),
+        Adapt.adapt_structure(to, axes(field)),
+    )
 
 
 # Point Field

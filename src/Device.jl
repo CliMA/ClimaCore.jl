@@ -8,4 +8,9 @@ device(; disablegpu = false) =
 device_array_type(::ClimaComms.CPU) = Array
 device_array_type(::ClimaComms.CUDA) = CUDA.CuArray
 
+device(ctx::ClimaComms.SingletonCommsContext) = ctx.device
+
+device(::Array) = ClimaComms.CPU()
+device(::CUDA.CuArray) = ClimaComms.CUDA()
+
 end

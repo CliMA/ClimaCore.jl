@@ -2,9 +2,10 @@ module Operators
 
 import LinearAlgebra
 
-using StaticArrays
+using StaticArrays, CUDA
 
 import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args
+import ..Device
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace

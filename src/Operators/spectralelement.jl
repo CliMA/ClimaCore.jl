@@ -4,6 +4,12 @@ struct SpectralStyle <: AbstractSpectralStyle end
 
 struct CompositeSpectralStyle <: AbstractSpectralStyle end
 
+struct CUDASpectralStyle <: AbstractSpectralStyle end
+
+import ClimaComms
+AbstractSpectralStyle(::ClimaComms.CPU) = SpectralStyle
+AbstractSpectralStyle(::ClimaComms.CUDA) = CUDASpectralStyle
+
 """
     SpectralElementOperator
 
@@ -55,17 +61,19 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes} <: Base.AbstractBroadcasted
+struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <: Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
+    work::Work
 end
 SpectralBroadcasted{Style}(
     op::Op,
     args::Args,
     axes::Axes = nothing,
-) where {Style, Op, Args, Axes} =
-    SpectralBroadcasted{Style, Op, Args, Axes}(op, args, axes)
+    work::Work = nothing,
+) where {Style, Op, Args, Axes, Work} =
+    SpectralBroadcasted{Style, Op, Args, Axes, Work}(op, args, axes, work)
 
 return_space(::SpectralElementOperator, space) = space
 
@@ -92,8 +100,8 @@ Base.eltype(sbc::SpectralBroadcasted) =
 @inline instantiate_args(::Tuple{}) = ()
 
 function Base.Broadcast.instantiate(
-    sbc::SpectralBroadcasted{Style},
-) where {Style}
+    sbc::SpectralBroadcasted,
+)
     op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
     args = instantiate_args(sbc.args)
@@ -105,8 +113,20 @@ function Base.Broadcast.instantiate(
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
     op = typeof(op)(axes)
+    Style = AbstractSpectralStyle(Device.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
 end
+
+import Adapt
+
+Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
+    SpectralBroadcasted{Style}(
+        sbc.op,
+        map(arg -> Adapt.adapt_structure(to, arg), sbc.args),
+        Adapt.adapt_structure(to, sbc.axes),
+    )
+
+
 
 function Base.Broadcast.instantiate(
     bc::Base.Broadcast.Broadcasted{Style},
@@ -154,6 +174,39 @@ function Base.copyto!(out::Field, sbc::SpectralBroadcasted)
     end
     return out
 end
+
+function Base.copyto!(out::Field, sbc::SpectralBroadcasted{CUDASpectralStyle})
+    space = axes(out)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+
+    @cuda threads=(Nq,Nq) blocks=(Nv,Nh) copyto_kernel!(out, sbc)
+    return out
+end
+
+
+function copyto_kernel!(out, sbc)
+    i = threadIdx().x
+    j = threadIdx().y
+    #if axes(out) isa Spaces.AbstractSpectralElementSpace
+        v = nothing
+    #elseif axes(out) isa Spaces.CenterExtrudedFiniteDifferenceSpace
+    #    v = blockIdx().x
+    #elseif axes(out) isa Spaces.FaceExtrudedFiniteDifferenceSpace
+    #    v = blockIdx().x - half
+    #end
+    h = blockIdx().y
+    ij = CartesianIndex((i,j))
+    slabidx = Fields.SlabIndex{Nothing}(v,h)
+
+    result = apply_operator_kernel(sbc.op, axes(out), ij, slabidx, sbc.args...)
+    set_node!(out, ij, slabidx, result)
+    return nothing
+end
+
+
 
 function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(sbc))
@@ -665,6 +718,41 @@ function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
+
+
+function apply_operator_kernel(op::Gradient{(1, 2)}, space, ij, slabidx, arg)
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    D = Quadratures.differentiation_matrix(FT, QS)
+    # allocate temp output
+    IT = eltype(arg)
+    Nf = DataLayouts.typesize(FT, IT)
+    array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    work = IJF{IT, Nq}(array)
+    i,j = ij.I
+    work[i,j] = get_node(arg, ij, slabidx)
+    CUDA.sync_threads()
+
+    ∂f∂ξ₁ = D[i,1] * work[1,j]
+    ∂f∂ξ₂ = D[j,1] * work[i,1]
+    for k = 2:Nq
+        ∂f∂ξ₁ += D[i,k] * work[k,j]
+        ∂f∂ξ₂ += D[j,k] * work[i,k]
+    end
+    return Geometry.Covariant12Vector(∂f∂ξ₁,∂f∂ξ₂)
+end
+
+function allocate_shared(op::Gradient{(1,2)}, arg)
+    S = eltype(arg)
+    space = axes(arg)
+    FT = Spaces.undertype(space)
+    QS = Spaces.quadrature_style(space)
+    Nq = Quadratures.degrees_of_freedom(QS)
+    Nf = DataLayouts.typesize(FT, S)
+    array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    return IJF{S, Nq}(array)
+end
 
 """
     wgrad = WeakGradient()
