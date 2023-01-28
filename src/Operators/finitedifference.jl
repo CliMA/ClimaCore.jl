@@ -997,7 +997,7 @@ Interpolate a face-valued field `x` to centers, weighted by a face-valued field
 WI(w, x)[i] = \\frac{
         w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
     }{
-        2 (w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}])
+        w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}]
     }
 ```
 
@@ -1033,7 +1033,7 @@ Base.@propagate_inbounds function stencil_interior(
     w⁻ = getidx(weight, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
-    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (2 ⊠ (w⁺ ⊞ w⁻)))
+    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
 end
 
 """
@@ -1046,7 +1046,7 @@ Interpolate a center-valued field `x` to faces, weighted by a center-valued fiel
 WI(w, x)[i] = \\frac{
     w[i+\\tfrac{1}{2}] x[i+\\tfrac{1}{2}] +  w[i-\\tfrac{1}{2}] x[i-\\tfrac{1}{2}])
 }{
-    2 (w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}])
+    w[i+\\tfrac{1}{2}] + w[i-\\tfrac{1}{2}]
 }
 ```
 
@@ -1054,7 +1054,9 @@ Supported boundary conditions are:
 
 - [`SetValue(val)`](@ref): set the value at the boundary face to be `val`.
 - [`SetGradient`](@ref): set the value at the boundary such that the gradient is `val`.
-- [`Extrapolate`](@ref): use the closest interior point as the boundary value
+- [`Extrapolate`](@ref): use the closest interior point as the boundary value.
+
+These have the same stencil as in [`InterpolateC2F`](@ref).
 """
 struct WeightedInterpolateC2F{BCS} <: WeightedInterpolationOperator
     bcs::BCS
@@ -1086,7 +1088,7 @@ Base.@propagate_inbounds function stencil_interior(
     w⁻ = getidx(weight, loc, idx - half, hidx)
     a⁺ = getidx(arg, loc, idx + half, hidx)
     a⁻ = getidx(arg, loc, idx - half, hidx)
-    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (2 ⊠ (w⁺ ⊞ w⁻)))
+    RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
 end
 
 boundary_width(::WeightedInterpolateC2F, ::SetValue, weight, arg) = 1

@@ -244,7 +244,9 @@ convergence_rate(err, Δh) =
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
-        err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
+        err = zeros(FT, length(n_elems_seq))
+        werr = zeros(FT, length(n_elems_seq))
+        Δh = zeros(FT, length(n_elems_seq))
 
         for (k, n) in enumerate(n_elems_seq)
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
@@ -258,30 +260,30 @@ convergence_rate(err, Δh) =
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             cent_field_exact = zeros(FT, cs)
-            cent_field = zeros(FT, cs)
             face_field = zeros(FT, fs)
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             face_field .= sin.(3π .* faces.z)
+            face_J = Fields.local_geometry_field(fs).J
+
             cent_field_exact .= sin.(3π .* centers.z)
             operator = Operators.InterpolateF2C()
-            cent_field .= operator.(face_field)
+            woperator = Operators.WeightedInterpolateF2C()
+            cent_field = operator.(face_field)
+            wcent_field = woperator.(face_J, face_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(parent(cent_field) .- parent(cent_field_exact)) /
-                length(parent(cent_field_exact))
+            err[k] = norm(cent_field .- cent_field_exact)
+            werr[k] = norm(wcent_field .- cent_field_exact)
         end
+
         conv = convergence_rate(err, Δh)
+        wconv = convergence_rate(werr, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 1e-2
+        @test all(1.8 .<= conv .<= 2)
+        @test all(1.8 .<= wconv .<= 2)
     end
 end
 
@@ -293,7 +295,7 @@ end
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
-
+        werr = zeros(FT, length(n_elems_seq))
         for (k, n) in enumerate(n_elems_seq)
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
@@ -307,33 +309,34 @@ end
 
             face_field_exact = zeros(FT, fs)
             cent_field = zeros(FT, cs)
-            face_field = zeros(FT, fs)
 
             centers = Fields.coordinate_field(cs)
             faces = Fields.coordinate_field(fs)
 
             cent_field .= sin.(3π .* centers.z)
+            cent_J = Fields.local_geometry_field(cs).J
             face_field_exact .= sin.(3π .* faces.z)
 
             operator = Operators.InterpolateC2F(
                 left = Operators.SetValue(0.0),
                 right = Operators.SetValue(0.0),
             )
-            face_field .= operator.(cent_field)
+            woperator = Operators.WeightedInterpolateC2F(
+                left = Operators.SetValue(0.0),
+                right = Operators.SetValue(0.0),
+            )
+            face_field = operator.(cent_field)
+            wface_field = woperator.(cent_J, cent_field)
 
             Δh[k] = cs.face_local_geometry.J[1]
-            err[k] =
-                norm(parent(face_field) .- parent(face_field_exact)) /
-                length(parent(face_field_exact))
+            err[k] = norm(face_field .- face_field_exact)
+            werr[k] = norm(wface_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
+        wconv = convergence_rate(werr, Δh)
         # conv should be approximately 2 for second order-accurate stencil.
-        @test 1.5 ≤ conv[1] ≤ 3
-        @test 1.5 ≤ conv[3] ≤ 3
-        if i == 1
-            @test conv[1] ≤ conv[2] ≤ conv[3]
-        end
-        @test err[3] ≤ err[2] ≤ err[1] ≤ 1e-2
+        @test all(1.8 .<= conv .<= 2)
+        @test all(1.8 .<= wconv .<= 2)
     end
 end
 
