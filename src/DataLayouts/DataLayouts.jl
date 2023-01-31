@@ -596,6 +596,9 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     IJF{S, Nij, typeof(array)}(array)
 end
 
+rebuild(data::IJF{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
+    IJF{S, Nij}(array)
+
 function replace_basetype(data::IJF{S, Nij}, ::Type{T}) where {S, Nij, T}
     array = parent(data)
     S′ = replace_basetype(eltype(array), T, S)
@@ -1057,6 +1060,9 @@ function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     check_basetype(T, S)
     VIFH{S, Ni, typeof(array)}(array)
 end
+
+rebuild(data::VIFH{S, Ni}, array::A) where {S, Ni, A <: AbstractArray} =
+    VIFH{S, Ni}(array)
 
 function replace_basetype(data::VIFH{S, Ni}, ::Type{T}) where {S, Ni, T}
     array = parent(data)

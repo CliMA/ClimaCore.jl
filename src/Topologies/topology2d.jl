@@ -28,6 +28,12 @@ struct Topology2D{
     M <: Meshes.AbstractMesh{2},
     EO,
     OI,
+    IF,
+    GF,
+    LV,
+    LVO,
+    GV,
+    GVO,
     BF,
 } <: AbstractDistributedTopology
     "the ClimaComms context on which the topology is defined"
@@ -58,20 +64,20 @@ struct Topology2D{
     recv_elem_lengths::Vector{Int}
 
     "a vector of all unique interior faces, (e, face, o, oface, reversed)"
-    interior_faces::Vector{Tuple{Int, Int, Int, Int, Bool}}
+    interior_faces::IF
     "a vector of all ghost faces, (e, face, o, oface, reversed)"
-    ghost_faces::Vector{Tuple{Int, Int, Int, Int, Bool}}
+    ghost_faces::GF
     "the collection of `(lidx, vert)`` pairs of vertices of local elements which touch a ghost element"
-    local_vertices::Vector{Tuple{Int, Int}}
+    local_vertices::LV
     "the index in `local_vertices` of the first tuple for each unique vertex"
-    local_vertex_offset::Vector{Int}
+    local_vertex_offset::LVO
     """
     The collection of `(isghost, idx, vert)` tuples of vertices of local elements which touch a ghost element.
     If `isghost` is false, then `idx` is the `lidx`, otherwise it is the `ridx`
     """
-    ghost_vertices::Vector{Tuple{Bool, Int, Int}}
+    ghost_vertices::GV
     "the index in `ghost_vertices` of the first tuple for each unique vertex"
-    ghost_vertex_offset::Vector{Int}
+    ghost_vertex_offset::GVO
 
     "a vector of the lidx of neighboring local elements of each element"
     local_neighbor_elem::Vector{Int}
@@ -115,6 +121,10 @@ struct Topology2D{
     "neighbor process location in neighbor_pids for each ghost face"
     ghost_face_neighbor_loc::Vector{Int}
 end
+
+Device.device(topology::Topology2D) = topology.context.device
+Device.device_array_type(topology::Topology2D) =
+    Device.device_array_type(topology.context.device)
 
 """
     spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
@@ -177,6 +187,7 @@ function Topology2D(
 )
     pid = ClimaComms.mypid(context)
     nprocs = ClimaComms.nprocs(context)
+    DA = Device.device_array_type(context.device)
 
     # To make IO easier, we enforce the partitioning to be sequential in the element ordering.
     @assert elempid === nothing
@@ -470,12 +481,12 @@ function Topology2D(
         send_elem_lengths,
         recv_elem_gidx,
         recv_elem_lengths,
-        interior_faces,
+        DA(interior_faces),
         ghost_faces,
-        local_vertices,
-        local_vertex_offset,
-        ghost_vertices,
-        ghost_vertex_offset,
+        DA(local_vertices),
+        DA(local_vertex_offset),
+        DA(ghost_vertices),
+        DA(ghost_vertex_offset),
         local_neighbor_elem,
         local_neighbor_elem_offset,
         ghost_neighbor_elem,
@@ -500,8 +511,14 @@ perimeter_vertex_node_index(v) = v
 perimeter_face_indices(f, nfacedof, reversed = false) =
     !reversed ? ((4 + (f - 1) * nfacedof + 1):(4 + f * nfacedof)) :
     ((4 + f * nfacedof):-1:(4 + (f - 1) * nfacedof + 1))
+perimeter_face_indices_cuda(f, nfacedof, reversed = false) =
+    !reversed ? ((4 + (f - 1) * nfacedof + 1), 1, (4 + f * nfacedof)) :
+    ((4 + f * nfacedof), -1, (4 + (f - 1) * nfacedof + 1))
+
+
 
 function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
+    DA = Device.device_array_type(topology)
     (;
         context,
         neighbor_pids,
@@ -509,8 +526,6 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         comm_face_lengths,
         ghost_vertex_gcidx,
         ghost_face_gcidx,
-        ghost_vertices,
-        ghost_vertex_offset,
         ghost_vertex_neighbor_loc,
         ghost_vertex_comm_idx_offset,
         ghost_faces,
@@ -519,6 +534,8 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         nglobalvertices,
         nglobalfaces,
     ) = topology
+    ghost_vertices = Array(topology.ghost_vertices)
+    ghost_vertex_offset = Array(topology.ghost_vertices)
     nfacedof = Nq - 2
     comm_lengths = comm_vertex_lengths .+ (comm_face_lengths .* nfacedof)
     ghost_face_ugidx = ghost_face_gcidx .+ nglobalvertices # unique id for both vertices and faces
@@ -602,7 +619,7 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
             recv_buf_idx[ghost_face_recv_idx[i] + j - 1, :] = [e, prange[j]]
         end
     end
-    return send_buf_idx, recv_buf_idx
+    return DA(send_buf_idx), DA(recv_buf_idx)
 end
 
 domain(topology::Topology2D) = domain(topology.mesh)

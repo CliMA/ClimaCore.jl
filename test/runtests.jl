@@ -37,6 +37,7 @@ if !Sys.iswindows()
 
     @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
+    @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end
     # now part of buildkite
     # @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
     # @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
@@ -97,6 +98,7 @@ if "CUDA" in ARGS
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
     @safetestset "GPU - data" begin @time include("gpu/data.jl") end
     @safetestset "GPU - device" begin @time include("gpu/device.jl") end
+    @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
 end
 
 #! format: on
