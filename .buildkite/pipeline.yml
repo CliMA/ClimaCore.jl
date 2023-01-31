@@ -46,8 +46,6 @@ steps:
         key: "cpu_unittests"
         command:
           - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
-        agents:
-          slurm_mem: 64GB
 
       - label: ":computer: unit tests expensive"
         key: "cpu_unittests_expensive"
@@ -55,15 +53,11 @@ steps:
           - "julia --color=yes --check-bounds=yes --project=test test/runtests_expensive.jl"
         env:
           OMPI_MCA_rmaps_base_oversubscribe: 1
-        agents:
-          slurm_mem: 64GB
 
       - label: ":computer: Field broadcast performance"
         key: "cpu_field_perf"
         command:
           - "julia --color=yes --project=test test/Fields/field_opt.jl"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":flower_playing_cards: unit tests"
         key: "gpu_unittests"
@@ -72,21 +66,16 @@ steps:
           - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
         agents:
           slurm_gres: "gpu:1"
-          slurm_mem: 32GB
 
       - label: ":computer: test implicit_stencil Float32"
         key: "cpu_implicit_stencil_float32"
         command:
           - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
-        agents:
-          slurm_mem: 10GB
 
       - label: ":computer: test implicit_stencil Float64"
         key: "cpu_implicit_stencil_float64"
         command:
           - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
-        agents:
-          slurm_mem: 10GB
 
       - label: ":computer: test implicit_stencil opt"
         key: "cpu_implicit_stencil_opt"
@@ -335,8 +324,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: Rising Bubble 2D hybrid invariant (ρθ)"
         key: "cpu_rising_bubble_2d_hybrid_invariant_rhotheta"
@@ -358,8 +345,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_invariant_rhotheta/*"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_3d_hybrid_invariant_rhoe"
@@ -552,8 +537,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/deformation_flow/*"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: 3D sphere Hadley circulation"
         key: "cpu_3d_hadley_circulation"
@@ -561,8 +544,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/hadley_circulation/*"
-        agents:
-          slurm_mem: 40GB
 
       - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e_float64"
@@ -573,8 +554,6 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
           FLOAT_TYPE: "Float64"
-        agents:
-          slurm_mem: 40GB
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"
@@ -584,8 +563,6 @@ steps:
           - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
-        agents:
-          slurm_mem: 10GB
 
       - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
         key: "cpu_mpi_baroclinic_wave_rho_e"
@@ -598,7 +575,6 @@ steps:
           CLIMACORE_DISTRIBUTED: "MPI"
         agents:
           slurm_ntasks: 2
-          slurm_mem: 20GB
 
 
       - label: ":computer: 3D sphere baroclinic wave (ρθ)"
@@ -609,8 +585,6 @@ steps:
           - "examples/hybrid/sphere/output/baroclinic_wave_rhotheta/Float32/*"
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhotheta"
-        agents:
-          slurm_mem: 10GB
 
       - label: ":computer: 3D sphere nonhydrostatic gravity wave"
         key: "cpu_nonhydrostatic_gravity_wave"
@@ -632,8 +606,6 @@ steps:
           - "examples/hybrid/sphere/output/balanced_flow_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/balanced_flow_rhoe"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: 3D sphere hydrostatically and geostrophically balanced flow (ρθ)"
         key: "cpu_balanced_flow_rho_theta"
@@ -652,8 +624,6 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
-        agents:
-          slurm_mem: 10GB
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"
@@ -664,8 +634,6 @@ steps:
         env:
           TEST_NAME: "sphere/held_suarez_rhotheta"
           FLOAT_TYPE: "Float64"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta"
@@ -675,8 +643,6 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhotheta/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhotheta"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: 3D sphere dry Held-Suarez (ρe_int)"
         key: "cpu_held_suarez_rho_e_int"
@@ -686,8 +652,6 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhoe_int/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe_int"
-        agents:
-          slurm_mem: 10GB
 
   - group: "Examples hybrid plane"
     steps:
@@ -700,8 +664,6 @@ steps:
           - "examples/hybrid/plane/output/inertial_gravity_wave/Float32/*"
         env:
           TEST_NAME: "plane/inertial_gravity_wave"
-        agents:
-          slurm_mem: 20GB
 
       - label: ":computer: stretched 2D plane inertial gravity wave"
         key: "cpu_stretch_inertial_gravity_wave"
@@ -712,8 +674,6 @@ steps:
         env:
           TEST_NAME: "plane/inertial_gravity_wave"
           Z_STRETCH: "true"
-        agents:
-          slurm_mem: 10GB
 
   - group: "Analysis"
     steps:
@@ -724,8 +684,6 @@ steps:
           - "julia --color=yes --project=perf perf/allocs.jl"
         artifact_paths:
           - "perf/allocations_output/*"
-        agents:
-          slurm_mem: 40GB
 
       - label: ":rocket::computer: Flamegraph profile"
         key: "cpu_flamegraph"
@@ -745,8 +703,6 @@ steps:
         key: "cpu_invalidations"
         command:
           - "julia --color=yes --project=perf perf/invalidations.jl"
-        agents:
-          slurm_mem: 20GB
   - wait
 
   - label: ":chart_with_downwards_trend: build history"
