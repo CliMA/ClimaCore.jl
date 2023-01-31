@@ -19,8 +19,6 @@ include("ddss_setup.jl")
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
     Spaces.weighted_dss2!(y0, dss2_buffer)
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
-    @test p == 0
 
     passed = 0
     #=
@@ -53,4 +51,6 @@ include("ddss_setup.jl")
     if pid == 1
         @test passed == 4#8
     end
+    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    @test p == 0
 end

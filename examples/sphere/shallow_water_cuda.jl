@@ -479,6 +479,10 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     h_s = surface_topography(space, test)
     Y = set_initial_condition(space, test)
 
+    ghost_buffer = Spaces.create_dss_buffer(Y)
+    Spaces.weighted_dss_start2!(Y, ghost_buffer)
+    Spaces.weighted_dss_internal2!(Y, ghost_buffer)
+    Spaces.weighted_dss_ghost2!(Y, ghost_buffer)
     return nothing
 end
 

@@ -38,6 +38,7 @@ struct Perimeter2D{Nq} <: AbstractPerimeter end
 Construct a perimeter iterator for a 2D spectral element of degree `(Nq-1)`.
 """
 Perimeter2D(Nq) = Perimeter2D{Nq}()
+Adapt.adapt_structure(to, x::Perimeter2D) = x
 
 function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
     if loc < 5
@@ -48,6 +49,18 @@ function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
         return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
     else
         return nothing
+    end
+end
+
+function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 1 || loc > nperimeter2d(Nq)
+        return (-1, -1)
+    elseif loc < 5
+        return Topologies.vertex_node_index(loc, Nq)
+    else
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return Topologies.face_node_index(f, Nq, 1 + n)
     end
 end
 
@@ -215,8 +228,7 @@ function SpectralElementSpace2D(
 
     ### How to DSS multiple fields?
     # 1. allocate buffers externally
-    context = topology.context
-    DA = Device.device_array_type(context.device)
+    DA = Device.device_array_type(topology)
     domain = Topologies.domain(topology)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)
@@ -392,20 +404,24 @@ function SpectralElementSpace2D(
                     Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
             end
         end
+        if !isnothing(ghost_geometry) && DA ≠ Array
+            ghost_geometry = DataLayouts.rebuild(ghost_geometry, DA)
+        end
     end
     # dss_weights = J ./ dss(J)
-    dss_local_weights = copy(local_geometry.J)
+    J = DataLayouts.rebuild(local_geometry.J, DA)
+    dss_local_weights = copy(J)
     if quadrature_style isa Quadratures.GLL
         dss2!(dss_local_weights, topology, quadrature_style)
     end
-    dss_local_weights .= local_geometry.J ./ dss_local_weights
-    dss_ghost_weights = copy(ghost_geometry.J) # not currently used
+    dss_local_weights .= J ./ dss_local_weights
+    dss_ghost_weights = copy(J) # not currently used
 
     SG = Geometry.SurfaceGeometry{
         FT,
         Geometry.AxisVector{FT, Geometry.LocalAxis{AIdx}, SVector{2, FT}},
     }
-    interior_faces = Topologies.interior_faces(topology)
+    interior_faces = Array(Topologies.interior_faces(topology))
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
@@ -475,9 +491,9 @@ function SpectralElementSpace2D(
         quadrature_style,
         global_geometry,
         DataLayouts.rebuild(local_geometry, DA),
-        DataLayouts.rebuild(ghost_geometry, DA),
-        DataLayouts.rebuild(dss_local_weights, DA),
-        DataLayouts.rebuild(dss_ghost_weights, DA),
+        ghost_geometry,
+        dss_local_weights,
+        dss_ghost_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
     )
