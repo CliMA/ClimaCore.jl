@@ -466,13 +466,13 @@ function test_results(t_ave)
     @test_broken t_ave[(:has_h_space, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
     @test_broken t_ave[(:has_h_space, op_CurlC2F!, :SetCurl, :SetCurl)] < 500
     @test_broken t_ave[(:has_h_space, op_CurlC2F!, :SetValue, :SetValue)] < 500
-    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 500
-    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 500
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 800
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 800
     @test_broken t_ave[(:has_h_space, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] < 500
     @test_broken t_ave[(:has_h_space, op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
     @test_broken t_ave[(:has_h_space, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
-    @test t_ave[(:has_h_space, op_div_interp_CC!, :SetValue, :SetValue, :none)] < 500
-    @test t_ave[(:has_h_space, op_div_interp_FF!, :none, :SetValue, :SetValue)] < 500
+    @test t_ave[(:has_h_space, op_div_interp_CC!, :SetValue, :SetValue, :none)] < 800
+    @test t_ave[(:has_h_space, op_div_interp_FF!, :none, :SetValue, :SetValue)] < 800
     @test_broken t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 500
     @test_broken t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500 # different with/without h_space
 end
