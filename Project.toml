@@ -32,7 +32,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 [compat]
 Adapt = "3"
 BlockArrays = "0.16"
-CUDA = "3"
+CUDA = "3, 4"
 ClimaComms = "0.3.1"
 CubedSphere = "0.2"
 DataStructures = "0.18"
