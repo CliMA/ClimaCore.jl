@@ -19,15 +19,15 @@ end
 include(joinpath(@__DIR__, "util_spaces.jl"))
 
 # https://github.com/CliMA/ClimaCore.jl/issues/946
-@testset "Allocations with broadcasting Refs" begin
+@testset "Allocations with broadcasting Scalars" begin
     FT = Float64
     function foo!(Yx::Fields.Field)
-        Yx .= Ref(1) .+ Yx
+        Yx .= (1,) .+ Yx
         return nothing
     end
     function foocolumn!(Yx::Fields.Field)
         Fields.bycolumn(axes(Yx)) do colidx
-            Yx[colidx] .= Ref(1) .+ Yx[colidx]
+            Yx[colidx] .= (1,) .+ Yx[colidx]
             nothing
         end
         return nothing
@@ -58,7 +58,7 @@ end
         nothing
     end
     function callfill!(Y)
-        fill!(Y, Ref((; x = 2.0)))
+        fill!(Y, ((; x = 2.0),))
         nothing
     end
     for space in all_spaces(FT)
@@ -80,13 +80,13 @@ function allocs_test1!(Y)
     x = Y.x
     FT = Spaces.undertype(axes(x))
     I = sc(FT)
-    x .= x .+ Ref(I)
+    x .= x .+ (I,)
     nothing
 end
 function allocs_test2!(Y)
     x = Y.x
     FT = Spaces.undertype(axes(x))
-    IR = Ref(sc(FT))
+    IR = (sc(FT),)
     @. x += IR
     nothing
 end
@@ -96,7 +96,7 @@ function allocs_test1_column!(Y)
         FT = Spaces.undertype(axes(x))
         # I = sc(FT)
         I = Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
-        x[colidx] .= x[colidx] .+ Ref(I)
+        x[colidx] .= x[colidx] .+ (I,)
     end
     nothing
 end
@@ -104,7 +104,7 @@ function allocs_test2_column!(Y)
     Fields.bycolumn(axes(Y.x)) do colidx
         x = Y.x
         FT = Spaces.undertype(axes(x))
-        IR = Ref(sc(FT))
+        IR = (sc(FT),)
         @. x[colidx] += IR
     end
     nothing
@@ -119,10 +119,10 @@ end
 
 function allocs_test3_column!(x)
     FT = Spaces.undertype(axes(x))
-    IR = Ref(Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))))
+    IR = (Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))),)
     @. x += IR
     I = Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT)))
-    x .+= Ref(I)
+    x .+= (I,)
     nothing
 end
 
@@ -154,9 +154,9 @@ end
 end
 nothing
 
-function allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+function allocs_test_scalar_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
     Fields.bycolumn(axes(S)) do colidx
-        allocs_test_Ref_with_compose_column!(
+        allocs_test_scalar_with_compose_column!(
             S[colidx],
             ∂ᶠ𝕄ₜ∂ᶜρ[colidx],
             ∂ᶜρₜ∂ᶠ𝕄[colidx],
@@ -165,15 +165,15 @@ function allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂�
     nothing
 end
 
-function allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+function allocs_test_scalar_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
     compose = Operators.ComposeStencils()
     FT = Spaces.undertype(axes(S))
-    IR = Ref(Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))))
+    IR = (Operators.StencilCoefs{-1, 1}((zero(FT), one(FT), zero(FT))),)
     @. S = compose(∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄) - IR
     nothing
 end
 
-@testset "Allocations StencilCoefs Ref with ComposeStencils broadcasting" begin
+@testset "Allocations StencilCoefs scalar with ComposeStencils broadcasting" begin
     FT = Float64
     for space in all_spaces(FT)
         space isa Spaces.CenterExtrudedFiniteDifferenceSpace || continue
@@ -185,12 +185,16 @@ end
         tridiag_type = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
         S = Fields.Field(tridiag_type, fspace)
 
-        allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
-        p = @allocated allocs_test_Ref_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        allocs_test_scalar_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        p = @allocated allocs_test_scalar_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
         @test p == 0
 
-        allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
-        p = @allocated allocs_test_Ref_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        allocs_test_scalar_with_compose_column!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
+        p = @allocated allocs_test_scalar_with_compose_column!(
+            S,
+            ∂ᶠ𝕄ₜ∂ᶜρ,
+            ∂ᶜρₜ∂ᶠ𝕄,
+        )
         @test p == 0
     end
 end

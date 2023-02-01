@@ -98,7 +98,7 @@ function alloc_test_derivative(cfield, ffield, ∇c, ∇f)
     p = @allocated begin
         c∇closure()
     end
-    @test_broken p == 0
+    @test p == 0
 
     ##### C2F
     # wvec = Geometry.WVector # cannot re-define, otherwise many allocations
@@ -168,7 +168,7 @@ function alloc_test_operators_in_loops(cfield, ffield)
         p = @allocated begin
             c∇closure()
         end
-        @test_broken p == 0
+        @test p == 0
     end
 end
 function alloc_test_nested_expressions_1(cfield, ffield)

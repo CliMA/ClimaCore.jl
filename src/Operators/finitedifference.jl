@@ -3109,6 +3109,7 @@ Base.@propagate_inbounds function getidx(
 end
 
 # unwap boxed scalars
+@inline getidx(scalar::Tuple{T}, loc::Location, idx, hidx) where {T} = scalar[1]
 @inline getidx(scalar::Ref, loc::Location, idx, hidx) = scalar[]
 @inline getidx(field::Fields.PointField, loc::Location, idx, hidx) = field[]
 @inline getidx(field::Fields.PointField, loc::Location, idx) = field[]
@@ -3275,7 +3276,7 @@ function Base.similar(
     return Field(Eltype, sp)
 end
 
-@inline function _serial_copyto!(
+function _serial_copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
     Ni::Int,
@@ -3288,7 +3289,7 @@ end
     return field_out
 end
 
-@inline function _threaded_copyto!(
+function _threaded_copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
     Ni::Int,
@@ -3305,7 +3306,7 @@ end
     return field_out
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     field_out::Field,
     bc::Base.Broadcast.Broadcasted{S},
 ) where {S <: AbstractStencilStyle}
