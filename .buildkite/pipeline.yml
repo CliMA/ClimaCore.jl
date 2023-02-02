@@ -20,6 +20,9 @@ steps:
       - echo "--- Instantiate test"
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
+      - echo "--- Instantiate lib/ClimaCoreTempestRemap"
+      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+
       - echo "--- Instantiate perf"
       - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
@@ -99,6 +102,19 @@ steps:
         key: "cpu_parallel_hdf5"
         command:
           - "srun julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+        timeout_in_minutes: 5
+        env:
+          CLIMACORE_DISTRIBUTED: "MPI"
+        retry:
+          automatic: true
+        agents:
+          slurm_nodes: 3
+          slurm_tasks_per_node: 1
+
+      - label: "TempestRemap MPI testing"
+        key: "write_exodus_mpi"
+        command:
+          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
         timeout_in_minutes: 5
         env:
           CLIMACORE_DISTRIBUTED: "MPI"

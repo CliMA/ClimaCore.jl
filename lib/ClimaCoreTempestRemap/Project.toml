@@ -5,6 +5,7 @@ version = "0.3.7"
 
 [deps]
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
+ClimaCommsMPI = "5f86816e-8b66-43b2-912e-75384f99de49"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
