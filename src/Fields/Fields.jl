@@ -51,8 +51,8 @@ comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
 
 Adapt.adapt_structure(to, field::Field) =
     Field(
-        Adapt.adapt_structure(to, Fields.field_values(field)),
-        Adapt.adapt_structure(to, axes(field)),
+        Adapt.adapt(to, Fields.field_values(field)),
+        Adapt.adapt(to, axes(field)),
     )
 
 

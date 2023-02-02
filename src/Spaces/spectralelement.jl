@@ -178,15 +178,15 @@ end
 
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
 SpectralElementSpace2D(
-    nothing, 
-    Adapt.adapt_structure(to, space.quadrature_style),
-    Adapt.adapt_structure(to, space.global_geometry),
-    Adapt.adapt_structure(to, space.local_geometry),
-    Adapt.adapt_structure(to, space.ghost_geometry),
-    Adapt.adapt_structure(to, space.local_dss_weights),
-    Adapt.adapt_structure(to, space.ghost_dss_weights),
-    Adapt.adapt_structure(to, space.internal_surface_geometry),
-    Adapt.adapt_structure(to, space.boundary_surface_geometries),
+    nothing, # drop topology
+    Adapt.adapt(to, space.quadrature_style),
+    Adapt.adapt(to, space.global_geometry),
+    Adapt.adapt(to, space.local_geometry),
+    Adapt.adapt(to, space.ghost_geometry),
+    Adapt.adapt(to, space.local_dss_weights),
+    Adapt.adapt(to, space.ghost_dss_weights),
+    Adapt.adapt(to, space.internal_surface_geometry),
+    Adapt.adapt(to, space.boundary_surface_geometries),
 )
 
 

@@ -1,8 +1,10 @@
 module Operators
 
-import LinearAlgebra
+import LinearAlgebra, Adapt
 
 using StaticArrays, CUDA
+
+import Base.Broadcast: Broadcasted
 
 import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args
 import ..Device
