@@ -80,7 +80,8 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
-struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <: Base.AbstractBroadcasted
+struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <:
+       Base.AbstractBroadcasted
     op::Op
     args::Args
     axes::Axes
@@ -100,7 +101,7 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
         Adapt.adapt(to, sbc.args),
         Adapt.adapt(to, sbc.axes),
     )
- 
+
 return_space(::SpectralElementOperator, space) = space
 
 Base.axes(sbc::SpectralBroadcasted) =
@@ -125,9 +126,7 @@ Base.eltype(sbc::SpectralBroadcasted) =
     (Base.Broadcast.instantiate(args[1]),)
 @inline instantiate_args(::Tuple{}) = ()
 
-function Base.Broadcast.instantiate(
-    sbc::SpectralBroadcasted,
-)
+function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
     op = sbc.op
     # recursively instantiate the arguments to allocate intermediate work arrays
     args = instantiate_args(sbc.args)
@@ -189,7 +188,13 @@ function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
 end
 
 # Functions for SlabBlockSpectralStyle
-function Base.copyto!(out::Field, sbc::Union{SpectralBroadcasted{SlabBlockSpectralStyle}, Broadcasted{SlabBlockSpectralStyle}})
+function Base.copyto!(
+    out::Field,
+    sbc::Union{
+        SpectralBroadcasted{SlabBlockSpectralStyle},
+        Broadcasted{SlabBlockSpectralStyle},
+    },
+)
     Fields.byslab(axes(out)) do slabidx
         copyto_slab!(out, sbc, slabidx)
     end
@@ -226,7 +231,10 @@ Recursively evaluate any operators in `bc` at `slabidx`, replacing any
  `IF`/`IJF` data object.
 - if `bc` is a `Field`, return that
 """
-function resolve_operator(bc::SpectralBroadcasted{SlabBlockSpectralStyle}, slabidx)
+function resolve_operator(
+    bc::SpectralBroadcasted{SlabBlockSpectralStyle},
+    slabidx,
+)
     args = _resolve_operator_args(slabidx, bc.args...)
     apply_operator(bc.op, bc.axes, slabidx, args...)
 end
@@ -252,14 +260,20 @@ _resolve_operator_args(slabidx) = ()
 
 
 # Functions for CUDASpectralStyle
-function Base.copyto!(out::Field, sbc::Union{SpectralBroadcasted{CUDASpectralStyle}, Broadcasted{CUDASpectralStyle}})
+function Base.copyto!(
+    out::Field,
+    sbc::Union{
+        SpectralBroadcasted{CUDASpectralStyle},
+        Broadcasted{CUDASpectralStyle},
+    },
+)
     space = axes(out)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
 
-    @cuda threads=(Nq,Nq) blocks=(Nv,Nh) copyto_kernel!(out, sbc)
+    @cuda threads = (Nq, Nq) blocks = (Nv, Nh) copyto_kernel!(out, sbc)
     return out
 end
 
@@ -268,20 +282,26 @@ function copyto_kernel!(out::Fields.SpectralElementField2D, sbc)
     j = threadIdx().y
     v = nothing
     h = blockIdx().y
-    ij = CartesianIndex((i,j))
-    slabidx = Fields.SlabIndex(v,h)
+    ij = CartesianIndex((i, j))
+    slabidx = Fields.SlabIndex(v, h)
     result = get_node(sbc, ij, slabidx)
     set_node!(out, ij, slabidx, result)
     return nothing
 end
 
 function get_node(sbc::SpectralBroadcasted{CUDASpectralStyle}, ij, slabidx)
-    apply_operator_kernel(sbc.op, axes(sbc), ij, slabidx, _get_node(ij, slabidx, sbc.args...)...)
+    apply_operator_kernel(
+        sbc.op,
+        axes(sbc),
+        ij,
+        slabidx,
+        _get_node(ij, slabidx, sbc.args...)...,
+    )
 end
 
 
-_get_node(ij, slabidx) = ()
-_get_node(ij, slabidx, arg, xargs...) =
+@inline _get_node(ij, slabidx) = ()
+@inline _get_node(ij, slabidx, arg, xargs...) =
     (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
 
 Base.@propagate_inbounds function get_node(scalar, ij, slabidx)
@@ -414,8 +434,7 @@ end
 
 Base.Broadcast.BroadcastStyle(
     ::Type{<:SpectralBroadcasted{Style}},
-) where {Style} =
-    Style()
+) where {Style} = Style()
 
 Base.Broadcast.BroadcastStyle(
     style::AbstractSpectralStyle,
@@ -538,32 +557,34 @@ function apply_operator_kernel(op::Divergence{(1, 2)}, space, ij, slabidx, arg)
     D = Quadratures.differentiation_matrix(FT, QS)
 
     local_geometry = get_local_geometry(space, ij, slabidx)
-    
+
     # allocate temp output
     RT = operator_return_eltype(op, typeof(arg))
     Nf = DataLayouts.typesize(FT, RT)
-    work1_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
-    work2_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+    work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
     Jv¹ = IJF{RT, Nq}(work1_array)
     Jv² = IJF{RT, Nq}(work2_array)
-    i,j = ij.I
-    
-    Jv¹[i,j] = local_geometry.J ⊠ RecursiveApply.rmap(
-        v -> Geometry.contravariant1(v, local_geometry),
-        arg,
-    )
-    Jv²[i,j] = local_geometry.J ⊠ RecursiveApply.rmap(
-        v -> Geometry.contravariant2(v, local_geometry),
-        arg,
-    )
+    i, j = ij.I
+
+    Jv¹[i, j] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant1(v, local_geometry),
+            arg,
+        )
+    Jv²[i, j] =
+        local_geometry.J ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant2(v, local_geometry),
+            arg,
+        )
 
     CUDA.sync_threads()
 
-    D₁Jv¹ = D[i,1] ⊠ Jv¹[1,j]
-    D₂Jv² = D[j,1] ⊠ Jv²[i,1]
-    for k = 2:Nq
-        D₁Jv¹ = D₁Jv¹ ⊞ D[i,k] ⊠ Jv¹[k,j]
-        D₂Jv² = D₂Jv² ⊞ D[j,k] ⊠ Jv²[i,k]
+    D₁Jv¹ = D[i, 1] ⊠ Jv¹[1, j]
+    D₂Jv² = D[j, 1] ⊠ Jv²[i, 1]
+    for k in 2:Nq
+        D₁Jv¹ = D₁Jv¹ ⊞ D[i, k] ⊠ Jv¹[k, j]
+        D₂Jv² = D₂Jv² ⊞ D[j, k] ⊠ Jv²[i, k]
     end
     return RecursiveApply.rdiv(D₁Jv¹ ⊞ D₂Jv², local_geometry.J)
 end
@@ -681,39 +702,47 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(op::WeakDivergence{(1, 2)}, space, ij, slabidx, arg)
+function apply_operator_kernel(
+    op::WeakDivergence{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
     local_geometry = get_local_geometry(space, ij, slabidx)
-    
+
     # allocate temp output
     RT = operator_return_eltype(op, typeof(arg))
     Nf = DataLayouts.typesize(FT, RT)
-    work1_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
-    work2_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+    work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
     WJv¹ = IJF{RT, Nq}(work1_array)
     WJv² = IJF{RT, Nq}(work2_array)
-    i,j = ij.I
-    
-    WJv¹[i,j] = local_geometry.WJ ⊠ RecursiveApply.rmap(
-        v -> Geometry.contravariant1(v, local_geometry),
-        arg,
-    )
-    WJv²[i,j] = local_geometry.WJ ⊠ RecursiveApply.rmap(
-        v -> Geometry.contravariant2(v, local_geometry),
-        arg,
-    )
+    i, j = ij.I
+
+    WJv¹[i, j] =
+        local_geometry.WJ ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant1(v, local_geometry),
+            arg,
+        )
+    WJv²[i, j] =
+        local_geometry.WJ ⊠ RecursiveApply.rmap(
+            v -> Geometry.contravariant2(v, local_geometry),
+            arg,
+        )
 
     CUDA.sync_threads()
 
-    Dᵀ₁WJv¹ = D[1,i] ⊠ WJv¹[1,j]
-    Dᵀ₂WJv² = D[1,j] ⊠ WJv²[i,1]
-    for k = 2:Nq
-        Dᵀ₁WJv¹ = Dᵀ₁WJv¹ ⊞ D[k,i] ⊠ WJv¹[k,j]
-        Dᵀ₂WJv² = Dᵀ₂WJv² ⊞ D[k,j] ⊠ WJv²[i,k]
+    Dᵀ₁WJv¹ = D[1, i] ⊠ WJv¹[1, j]
+    Dᵀ₂WJv² = D[1, j] ⊠ WJv²[i, 1]
+    for k in 2:Nq
+        Dᵀ₁WJv¹ = Dᵀ₁WJv¹ ⊞ D[k, i] ⊠ WJv¹[k, j]
+        Dᵀ₂WJv² = Dᵀ₂WJv² ⊞ D[k, j] ⊠ WJv²[i, k]
     end
     return ⊟(RecursiveApply.rdiv(Dᵀ₁WJv¹ ⊞ Dᵀ₂WJv², local_geometry.WJ))
 end
@@ -800,20 +829,20 @@ function apply_operator_kernel(op::Gradient{(1, 2)}, space, ij, slabidx, arg)
     # allocate temp output
     IT = typeof(arg)
     Nf = DataLayouts.typesize(FT, IT)
-    array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
     work = IJF{IT, Nq}(array)
-    i,j = ij.I
-    work[i,j] = arg
+    i, j = ij.I
+    work[i, j] = arg
 
     CUDA.sync_threads()
 
-    ∂f∂ξ₁ = D[i,1] * work[1,j]
-    ∂f∂ξ₂ = D[j,1] * work[i,1]
-    for k = 2:Nq
-        ∂f∂ξ₁ += D[i,k] * work[k,j]
-        ∂f∂ξ₂ += D[j,k] * work[i,k]
+    ∂f∂ξ₁ = D[i, 1] * work[1, j]
+    ∂f∂ξ₂ = D[j, 1] * work[i, 1]
+    for k in 2:Nq
+        ∂f∂ξ₁ += D[i, k] * work[k, j]
+        ∂f∂ξ₂ += D[j, k] * work[i, k]
     end
-    return Geometry.Covariant12Vector(∂f∂ξ₁,∂f∂ξ₂)
+    return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
 end
 
 
@@ -919,7 +948,13 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(op::WeakGradient{(1, 2)}, space, ij, slabidx, arg)
+function apply_operator_kernel(
+    op::WeakGradient{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -931,20 +966,23 @@ function apply_operator_kernel(op::WeakGradient{(1, 2)}, space, ij, slabidx, arg
     # allocate temp output
     IT = typeof(arg)
     Nf = DataLayouts.typesize(FT, IT)
-    work_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+    work_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
     Wf = IJF{IT, Nq}(work_array)
-    i,j = ij.I
-    Wf[i,j] = W ⊠ arg
+    i, j = ij.I
+    Wf[i, j] = W ⊠ arg
 
     CUDA.sync_threads()
 
-    Dᵀ₁Wf = D[1,i] ⊠ Wf[1,j]
-    Dᵀ₂Wf = D[1,j] ⊠ Wf[i,1]
-    for k = 2:Nq
-        Dᵀ₁Wf = Dᵀ₁Wf ⊞ D[k,i] ⊠ Wf[k,j]
-        Dᵀ₂Wf = Dᵀ₂Wf ⊞ D[k,j] ⊠ Wf[i,k]
+    Dᵀ₁Wf = D[1, i] ⊠ Wf[1, j]
+    Dᵀ₂Wf = D[1, j] ⊠ Wf[i, 1]
+    for k in 2:Nq
+        Dᵀ₁Wf = Dᵀ₁Wf ⊞ D[k, i] ⊠ Wf[k, j]
+        Dᵀ₂Wf = Dᵀ₂Wf ⊞ D[k, j] ⊠ Wf[i, k]
     end
-    return Geometry.Covariant12Vector(⊟(RecursiveApply.rdiv(Dᵀ₁Wf, W)),⊟(RecursiveApply.rdiv(Dᵀ₂Wf, W)))
+    return Geometry.Covariant12Vector(
+        ⊟(RecursiveApply.rdiv(Dᵀ₁Wf, W)),
+        ⊟(RecursiveApply.rdiv(Dᵀ₂Wf, W)),
+    )
 end
 
 
@@ -1099,40 +1137,45 @@ function apply_operator_kernel(op::Curl{(1, 2)}, space, ij, slabidx, arg)
     IT = eltype(arg)
     Nf = DataLayouts.typesize(FT, IT)
     local_geometry = get_local_geometry(space, ij, slabidx)
-    i,j = ij.I
+    i, j = ij.I
 
+    # input data is a Covariant12Vector field
     if RT <: Geometry.Contravariant3Vector
-
-        work1_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
-        work2_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+        work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
         v₁ = IJF{IT, Nq}(work1_array)
         v₂ = IJF{IT, Nq}(work2_array)
-        v₁[i,j] = Geometry.covariant1(arg, local_geometry)
-        v₂[i,j] = Geometry.covariant2(arg, local_geometry)
+        v₁[i, j] = Geometry.covariant1(arg, local_geometry)
+        v₂[i, j] = Geometry.covariant2(arg, local_geometry)
 
         CUDA.sync_threads()
 
-        D₁v₂ = D[i, 1] ⊠ v₂[1,j]
-        D₂v₁ = D[j, 1] ⊠ v₁[i,1]
+        D₁v₂ = D[i, 1] ⊠ v₂[1, j]
+        D₂v₁ = D[j, 1] ⊠ v₁[i, 1]
         for k in 2:Nq
-            D₁v₂ = D₁v₂ ⊠ D[i, k] ⊠ v₂[k,j]
-            D₂v₁ = D₂v₁ ⊠ D[j, k] ⊠ v₁[i,k]
+            D₁v₂ = D₁v₂ ⊞ D[i, k] ⊠ v₂[k, j]
+            D₂v₁ = D₂v₁ ⊞ D[j, k] ⊠ v₁[i, k]
         end
-        return Geometry.Contravariant3Vector(RecursiveApply.rdiv(D₁v₂ ⊟ D₂v₁, local_geometry.J))
+        return Geometry.Contravariant3Vector(
+            RecursiveApply.rdiv(D₁v₂ ⊟ D₂v₁, local_geometry.J),
+        )
     elseif RT <: Geometry.Contravariant12Vector
-        work_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+        work_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
         v₃ = IJF{IT, Nq}(work_array)
-        v₃[i,j] = Geometry.covariant3(arg, local_geometry)
+        v₃[i, j] = Geometry.covariant3(arg, local_geometry)
 
         CUDA.sync_threads()
 
-        D₁v₃ = D[i, 1] ⊠ v₃[1,j]
-        D₂v₃ = D[j, 1] ⊠ v₃[i,1]
+        D₁v₃ = D[i, 1] ⊠ v₃[1, j]
+        D₂v₃ = D[j, 1] ⊠ v₃[i, 1]
         for k in 2:Nq
-            D₁v₃ = D₁v₃ ⊠ D[i, k] ⊠ v₃[k,j]
-            D₂v₃ = D₂v₃ ⊠ D[j, k] ⊠ v₃[i,k]
+            D₁v₃ = D₁v₃ ⊞ D[i, k] ⊠ v₃[k, j]
+            D₂v₃ = D₂v₃ ⊞ D[j, k] ⊠ v₃[i, k]
         end
-        return Geometry.Contravariant12Vector(RecursiveApply.rdiv(D₂v₃,local_geometry.J) ⊟(RecursiveApply.rdiv(D₁v₃,local_geometry.J)))
+        return Geometry.Contravariant12Vector(
+            RecursiveApply.rdiv(D₂v₃, local_geometry.J),
+            ⊟(RecursiveApply.rdiv(D₁v₃, local_geometry.J)),
+        )
     else
         error("invalid return type")
     end
@@ -1290,40 +1333,45 @@ function apply_operator_kernel(op::WeakCurl{(1, 2)}, space, ij, slabidx, arg)
     Nf = DataLayouts.typesize(FT, IT)
     local_geometry = get_local_geometry(space, ij, slabidx)
     W = local_geometry.WJ / local_geometry.J
-    i,j = ij.I
+    i, j = ij.I
 
     if RT <: Geometry.Contravariant3Vector
 
-        work1_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
-        work2_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+        work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
         Wv₁ = IJF{IT, Nq}(work1_array)
         Wv₂ = IJF{IT, Nq}(work2_array)
-        Wv₁[i,j] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i,j] = W ⊠ Geometry.covariant2(arg, local_geometry)
+        Wv₁[i, j] = W ⊠ Geometry.covariant1(arg, local_geometry)
+        Wv₂[i, j] = W ⊠ Geometry.covariant2(arg, local_geometry)
 
         CUDA.sync_threads()
 
-        Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1,j]
-        Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i,1]
+        Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1, j]
+        Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i, 1]
         for k in 2:Nq
-            Dᵀ₁v₂ = Dᵀ₁Wv₂ ⊠ D[k, i] ⊠ Wv₂[k,j]
-            Dᵀ₂v₁ = Dᵀ₂Wv₁ ⊠ D[k, j] ⊠ Wv₁[i,k]
+            Dᵀ₁v₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
+            Dᵀ₂v₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
         end
-        return Geometry.Contravariant3Vector(RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ))
+        return Geometry.Contravariant3Vector(
+            RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ),
+        )
     elseif RT <: Geometry.Contravariant12Vector
-        work_array = CUDA.CuStaticSharedArray(FT, (Nq,Nq,Nf))
+        work_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
         Wv₃ = IJF{IT, Nq}(work_array)
-        Wv₃[i,j] = W ⊠ Geometry.covariant3(arg, local_geometry)
+        Wv₃[i, j] = W ⊠ Geometry.covariant3(arg, local_geometry)
 
         CUDA.sync_threads()
 
-        Dᵀ₁Wv₃ = D[1, i] ⊠ Wv₃[1,j]
-        Dᵀ₂Wv₃ = D[1, j] ⊠ Wv₃[i,1]
+        Dᵀ₁Wv₃ = D[1, i] ⊠ Wv₃[1, j]
+        Dᵀ₂Wv₃ = D[1, j] ⊠ Wv₃[i, 1]
         for k in 2:Nq
-            Dᵀ₁Wv₃ = Dᵀ₁Wv₃ ⊠ D[k, i] ⊠ Wv₃[k,j]
-            Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊠ D[k, j] ⊠ Wv₃[i,k]
+            Dᵀ₁Wv₃ = Dᵀ₁Wv₃ ⊞ D[k, i] ⊠ Wv₃[k, j]
+            Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊞ D[k, j] ⊠ Wv₃[i, k]
         end
-        return Geometry.Contravariant12Vector(RecursiveApply.rdiv(Dᵀ₂Wv₃,local_geometry.WJ) ⊟(RecursiveApply.rdiv(Dᵀ₁Wv₃,local_geometry.WJ)))
+        return Geometry.Contravariant12Vector(
+            RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ),
+            ⊟(RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ)),
+        )
     else
         error("invalid return type")
     end

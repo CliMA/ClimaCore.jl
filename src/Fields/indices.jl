@@ -131,7 +131,7 @@ end
 
 
 
-struct SlabIndex{VIdx,HIdx}
+struct SlabIndex{VIdx, HIdx}
     v::VIdx
     h::HIdx
 end

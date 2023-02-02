@@ -49,11 +49,10 @@ comm_context(topology::Topologies.Topology2D) = topology.context
 comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
     ClimaComms.SingletonCommsContext()
 
-Adapt.adapt_structure(to, field::Field) =
-    Field(
-        Adapt.adapt(to, Fields.field_values(field)),
-        Adapt.adapt(to, axes(field)),
-    )
+Adapt.adapt_structure(to, field::Field) = Field(
+    Adapt.adapt(to, Fields.field_values(field)),
+    Adapt.adapt(to, axes(field)),
+)
 
 
 # Point Field

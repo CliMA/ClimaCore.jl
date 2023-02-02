@@ -20,7 +20,8 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     print(iio, " "^(indent + 2), space.quadrature_style)
 end
 
-Device.device(space::AbstractSpectralElementSpace) = Device.device(topology(space))
+Device.device(space::AbstractSpectralElementSpace) =
+    Device.device(topology(space))
 topology(space::AbstractSpectralElementSpace) = space.topology
 quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 
@@ -177,17 +178,17 @@ struct SpectralElementSpace2D{
 end
 
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
-SpectralElementSpace2D(
-    nothing, # drop topology
-    Adapt.adapt(to, space.quadrature_style),
-    Adapt.adapt(to, space.global_geometry),
-    Adapt.adapt(to, space.local_geometry),
-    Adapt.adapt(to, space.ghost_geometry),
-    Adapt.adapt(to, space.local_dss_weights),
-    Adapt.adapt(to, space.ghost_dss_weights),
-    Adapt.adapt(to, space.internal_surface_geometry),
-    Adapt.adapt(to, space.boundary_surface_geometries),
-)
+    SpectralElementSpace2D(
+        nothing, # drop topology
+        Adapt.adapt(to, space.quadrature_style),
+        Adapt.adapt(to, space.global_geometry),
+        Adapt.adapt(to, space.local_geometry),
+        Adapt.adapt(to, space.ghost_geometry),
+        Adapt.adapt(to, space.local_dss_weights),
+        Adapt.adapt(to, space.ghost_dss_weights),
+        Adapt.adapt(to, space.internal_surface_geometry),
+        Adapt.adapt(to, space.boundary_surface_geometries),
+    )
 
 
 
@@ -788,4 +789,3 @@ function Base.iterate(
         return ((i, j), e), ((i, j), e)
     end
 end
-

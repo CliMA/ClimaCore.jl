@@ -20,8 +20,12 @@ quad = Spaces.Quadratures.GLL{Nq}()
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 
 
-grid_topology_cpu =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(ClimaCore.Device.device(;disablegpu=true)), grid_mesh)
+grid_topology_cpu = Topologies.Topology2D(
+    ClimaComms.SingletonCommsContext(
+        ClimaCore.Device.device(; disablegpu = true),
+    ),
+    grid_mesh,
+)
 grid_space_cpu = Spaces.SpectralElementSpace2D(grid_topology_cpu, quad)
 coords_cpu = Fields.coordinate_field(grid_space_cpu)
 
@@ -31,8 +35,10 @@ grad = Operators.Gradient()
 gradf_cpu = grad.(f_cpu)
 
 
-grid_topology =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(ClimaCore.Device.device()), grid_mesh)
+grid_topology = Topologies.Topology2D(
+    ClimaComms.SingletonCommsContext(ClimaCore.Device.device()),
+    grid_mesh,
+)
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 coords = Fields.coordinate_field(grid_space)
 
