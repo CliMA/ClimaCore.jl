@@ -76,3 +76,58 @@ function Base.copyto!(
     CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copyto!(dest, bc)
     return dest
 end
+
+function knl_mapreduce!(dest, fn, op, src)
+
+    #=
+    nij, nh = size(dest)
+
+    thread_idx = CUDA.threadIdx().x
+    block_idx = CUDA.blockIdx().x
+    block_dim = CUDA.blockDim().x
+
+    # mapping to global idx to make insensitive
+    # to number of blocks / threads per device
+    global_idx = thread_idx + (block_idx - 1) * block_dim
+
+    nx, ny = nij, nij
+    i = global_idx % nx == 0 ? nx : global_idx % nx
+    j = cld(global_idx, nx)
+    h = ((global_idx-1) % (nx*nx)) + 1
+    =#
+
+    i = CUDA.threadIdx().x
+    j = CUDA.threadIdx().y
+
+    h = CUDA.blockIdx().x
+
+    p_dest = slab(dest, h)
+    p_src = slab(src, h)
+
+    if h == 1
+        @inbounds p_dest[i, j] = fn(p_src[i, j])
+    else
+        @inbounds p_dest[i, j] = op(p_dest[i, j], fn(p_src[i, j]))
+    end
+        
+    return nothing
+end
+
+function Base.reduce(
+    op::Op,
+    bc::Union{
+        IJFH{<:Any, Nij, A},
+        Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
+    },
+) where {Op, Nij, A <: CUDA.CuArray}
+    # mapreduce across DataSlab2D
+    _, _, _, _, Nh = size(bc)
+    S = eltype(bc)
+    T = eltype(A)
+    Nf = typesize(T, S)
+    # dest array
+    dest = IJF{S,Nij}(CuArray{T}(undef,Nij, Nij, Nf))
+    CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_reduce!(dest, op, bc)
+    # copy to CPU, and final reduce
+    reduce(op, IJF{S,Nij}(Array(parent(dest))))
+end
