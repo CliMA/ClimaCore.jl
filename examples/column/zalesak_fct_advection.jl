@@ -37,45 +37,36 @@ function linkfig(figpath, alt = "")
     end
 end
 
-function f!(dydt, y, parameters, t, alpha, beta)
-
-    (; w, A, y_td) = parameters
-    y = y.y
-    dydt = dydt.y
-
-    first_order_fluxᶠ = Operators.UpwindBiasedProductC2F(
+function tendency!(yₜ, y, parameters, t)
+    (; w, Δt) = parameters
+    divf2c = Operators.DivergenceF2C(
+        bottom = Operators.SetValue(Geometry.WVector(FT(0))),
+        top = Operators.SetValue(Geometry.WVector(FT(0))),
+    )
+    upwind1 = Operators.UpwindBiasedProductC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
+    upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
-    )
-    divf2c = Operators.DivergenceF2C(
-        bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),
-        top = Operators.SetValue(Geometry.WVector(FT(0.0))),
     )
     FCTZalesak = Operators.FCTZalesak(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
-
-    @. y_td = beta * dydt - alpha * divf2c(first_order_fluxᶠ(w, y))
-    @. dydt =
-        y_td -
-        alpha * divf2c(
-            FCTZalesak(
-                third_order_fluxᶠ(w, y) - first_order_fluxᶠ(w, y),
-                y / alpha,
-                y_td / alpha,
+    @. yₜ.q =
+        -divf2c(
+            upwind1(w, y.q) + FCTZalesak(
+                upwind3(w, y.q) - upwind1(w, y.q),
+                y.q / Δt,
+                y.q / Δt - divf2c(upwind1(w, y.q)),
             ),
         )
-
-    return dydt
 end
 
 # Define a pulse wave or square wave
-pulse(z, t, z₀, zₕ, z₁) = abs(z.z - speed * t) ≤ zₕ ? z₁ : z₀
+pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 FT = Float64
 t₀ = FT(0.0)
@@ -95,61 +86,42 @@ domain = Domains.IntervalDomain(
 )
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
-err = zeros(FT, length(stretch_fns))
-initial_mass = zeros(FT, length(stretch_fns))
-mass = zeros(FT, length(stretch_fns))
-rel_mass_err = zeros(FT, length(stretch_fns))
 plot_string = ["uniform", "stretched"]
 
 for (i, stretch_fn) in enumerate(stretch_fns)
-
     mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-    fs = Spaces.FaceFiniteDifferenceSpace(cs)
-    zc = Fields.coordinate_field(cs)
-
-    # Unitary, constant advective velocity
-    w = Geometry.WVector.(speed .* ones(FT, fs))
+    cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+    face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
+    z = Fields.coordinate_field(cent_space).z
 
     # Initial condition
-    y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
+    q_init = pulse.(z, 0.0, z₀, zₕ, z₁)
+    y = Fields.FieldVector(q = q_init)
 
-    # ClimaTimeSteppers need a FieldVector
-    y0 = Fields.FieldVector(y = y0)
+    # Unitary, constant advective velocity
+    w = Geometry.WVector.(speed .* ones(FT, face_space))
 
-    # Set up parameters needed for time-stepping
-
-    dydt = copy(y0)
-    A = similar(dydt.y)
-    y_td = similar(dydt.y)
-
-    parameters = (; w, A, y_td)
-    # Call the RHS function
-    f!(dydt, y0, parameters, 0.0, Δt, 1)
-    prob =
-        ODEProblem(IncrementingODEFunction(f!), copy(y0), (t₀, t₁), parameters)
-    sol = solve(
-        prob,
-        SSPRK33ShuOsher(),
-        dt = Δt,
-        saveat = Δt,
-        progress = true,
-        adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
+    # Solve the ODE
+    parameters = (; w, Δt)
+    prob = ODEProblem(
+        ClimaODEFunction(; T_exp! = tendency!),
+        y,
+        (t₀, t₁),
+        parameters,
     )
-    computed_result = sol.u[end].y
-    analytical_result = pulse.(zc, t₁, z₀, zₕ, z₁)
-    err[i] = norm(computed_result .- analytical_result)
-    initial_mass[i] = sum(sol.u[1].y)
-    mass[i] = sum(sol.u[end].y)
-    rel_mass_err[i] = norm((mass - initial_mass) / initial_mass)
+    sol = solve(prob, ExplicitAlgorithm(SSP33ShuOsher()), dt = Δt, saveat = Δt)
 
-    @test err[i] ≤ 0.11
-    @test rel_mass_err[i] ≤ 1e1eps()
+    q_final = sol.u[end].q
+    q_analytic = pulse.(z, t₁, z₀, zₕ, z₁)
+    err = norm(q_final .- q_analytic)
+    rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
-    plot(sol.u[end].y)
+    @test err ≤ 0.11
+    @test rel_mass_err ≤ 10eps()
+
+    plot(q_final)
     Plots.png(
-        Plots.plot!(analytical_result, title = "Zalesak FCT"),
+        Plots.plot!(q_analytic, title = "Zalesak FCT"),
         joinpath(
             path,
             "exact_and_computed_advected_square_wave_ZalesakFCT_" *

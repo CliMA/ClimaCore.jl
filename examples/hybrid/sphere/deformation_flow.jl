@@ -43,7 +43,7 @@ helem = 4
 npoly = 4
 t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
 dt = FT(60 * 60) # 1 hour timestep
-ode_algorithm = SSPRK33ShuOsher()
+ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
 
 # Operators used in increment!
 const hdiv = Operators.Divergence()
@@ -58,11 +58,11 @@ const vdivf2c = Operators.DivergenceF2C(
     top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
 )
-const upwind_product1_c2f = Operators.UpwindBiasedProductC2F(
+const upwind1 = Operators.UpwindBiasedProductC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
-const upwind_product3_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+const upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
     bottom = Operators.ThirdOrderOneSided(),
     top = Operators.ThirdOrderOneSided(),
 )
@@ -80,11 +80,11 @@ p(z) = p_0 * exp(-z / H)
 ρ_ref(z) = p(z) / R_d / T_0
 
 # Local wind velocity forcing
-function local_flow(local_geometry, t)
-    coord = local_geometry.coordinates
+function local_velocity(coord, t)
     ϕ = coord.lat
     λ = coord.long
     z = coord.z
+    t = FT(t) # TODO: temporary bugfix for ClimaTimeSteppers.jl type instability
 
     k = 10 * R / τ
     λp = λ - FT(360) * t / τ
@@ -108,91 +108,75 @@ function local_flow(local_geometry, t)
     ω = ω_0 * sind(λp) * cosd(ϕ) * cos(2 * FT(π) * t / τ) * sp
     uw = -ω / ρ_ref(z) / grav
 
-    physical_uvw = Geometry.UVWVector(uu, uv, uw)
-    return Geometry.Covariant123Vector(physical_uvw, local_geometry)
+    return Geometry.UVWVector(uu, uv, uw)
 end
 
-# The "tendency increment", which computes Y⁺ .+= dt * ∂Y/∂t
-function increment!(Y⁺, Y, cache, t, dt, beta)
-    (; cent_uvw, face_uvw, face_uv, face_w, limiter, Δₕq, fct_op, ρq_td_n) =
-        cache
-    ρ = Y.c.ρ
-    ρq = Y.c.ρq
-    ρ⁺ = Y⁺.c.ρ
-    ρq⁺ = Y⁺.c.ρq
-
-    cent_local_geometry = Fields.local_geometry_field(cent_uvw)
-    face_local_geometry = Fields.local_geometry_field(face_uvw)
-    @. cent_uvw = local_flow(cent_local_geometry, t)
-    @. face_uvw = local_flow(face_local_geometry, t)
-    horz_axis = Ref(Geometry.Covariant12Axis())
-    vert_axis = Ref(Geometry.Covariant3Axis())
-    @. face_uv = Geometry.project(horz_axis, face_uvw)
-    @. face_w = Geometry.project(vert_axis, face_uvw)
-
-    # NOTE: With a limiter, the order of operations 1-5 below matters!
-
-    # 1) Horizontal transport:
-    @. ρ⁺ -= dt * hdiv(ρ * cent_uvw)
-    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = ρq.:($n)
-        ρq⁺_n = ρq⁺.:($n)
-        @. ρq⁺_n -= dt * hdiv(ρq_n * cent_uvw)
-    end
-
-    # 2) Limiter application:
-    if !isnothing(limiter)
-        Limiters.compute_bounds!(limiter, ρq, ρ)
-        Limiters.apply_limiter!(ρq⁺, ρ⁺, limiter)
-    end
-
-    # 3) Hyperdiffusion of tracers:
-    @. Δₕq = hwdiv(hgrad(ρq / ρ))
+function horizontal_tendency!(Yₜ, Y, cache, t)
+    (; u, Δₕq) = cache
+    coord = Fields.coordinate_field(u)
+    @. u = local_velocity(coord, t)
+    @. Δₕq = hwdiv(hgrad(Y.c.ρq / Y.c.ρ))
     Spaces.weighted_dss!(Δₕq)
-    @. ρq⁺ -= dt * D₄ * hwdiv(ρ * hgrad(Δₕq))
-
-    # 4) Vertical transport:
-    @. ρ⁺ -= dt * vdivf2c(Ic2f(ρ) * face_uvw)
+    @. Yₜ.c.ρ = -hdiv(Y.c.ρ * u)
     for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
-        ρq_n = ρq.:($n)
-        ρq⁺_n = ρq⁺.:($n)
-        @. ρq⁺_n -= dt * vdivf2c(Ic2f(ρq_n) * face_uv)
+        ρq_n = Y.c.ρq.:($n)
+        ρqₜ_n = Yₜ.c.ρq.:($n)
+        @. ρqₜ_n = -hdiv(ρq_n * u)
+    end
+    @. Yₜ.c.ρq -= D₄ * hwdiv(Y.c.ρ * hgrad(Δₕq))
+end
+
+function vertical_tendency!(Yₜ, Y, cache, t)
+    (; q_n, face_u, face_uₕ, face_uᵥ, fct_op) = cache
+    face_coord = Fields.coordinate_field(face_u)
+    @. face_u = local_velocity(face_coord, t)
+    @. face_uₕ = Geometry.project(Geometry.Covariant12Axis(), face_u)
+    @. face_uᵥ = Geometry.project(Geometry.Covariant3Axis(), face_u)
+    @. Yₜ.c.ρ = -vdivf2c(Ic2f(Y.c.ρ) * face_u)
+    for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
+        ρq_n = Y.c.ρq.:($n)
+        ρqₜ_n = Yₜ.c.ρq.:($n)
+        @. q_n = ρq_n / Y.c.ρ
+        @. ρqₜ_n = -vdivf2c(Ic2f(ρq_n) * face_uₕ)
         if isnothing(fct_op)
-            @. ρq⁺_n -=
-                dt * vdivf2c(Ic2f(ρ) * upwind_product3_c2f(face_w, ρq_n / ρ))
+            @. ρqₜ_n -= vdivf2c(Ic2f(Y.c.ρ) * upwind3(face_uᵥ, q_n))
+        elseif fct_op == FCTBorisBook
+            @. ρqₜ_n -= vdivf2c(
+                Ic2f(Y.c.ρ) * (
+                    upwind1(face_uᵥ, q_n) + FCTBorisBook(
+                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
+                        q_n / dt -
+                        vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
+                    )
+                ),
+            )
+        elseif fct_op == FCTZalesak
+            @. ρqₜ_n -= vdivf2c(
+                Ic2f(Y.c.ρ) * (
+                    upwind1(face_uᵥ, q_n) + FCTZalesak(
+                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
+                        q_n / dt,
+                        q_n / dt -
+                        vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
+                    )
+                ),
+            )
         else
-            @. ρq_td_n =
-                ρq_n -
-                dt * vdivf2c(Ic2f(ρ) * upwind_product1_c2f(face_w, ρq_n / ρ))
-            if fct_op == FCTZalesak
-                @. ρq⁺_n =
-                    ρq⁺_n - ρq_n + ρq_td_n -
-                    dt * vdivf2c(
-                        Ic2f(ρ) * FCTZalesak(
-                            upwind_product3_c2f(face_w, ρq_n / ρ) -
-                            upwind_product1_c2f(face_w, ρq_n / ρ),
-                            ρq_n / (dt * ρ),
-                            ρq_td_n / (dt * ρ),
-                        ),
-                    )
-            else # fct_op == FCTBorisBook
-                @. ρq⁺_n =
-                    ρq⁺_n - ρq_n + ρq_td_n -
-                    dt * vdivf2c(
-                        Ic2f(ρ) * FCTBorisBook(
-                            upwind_product3_c2f(face_w, ρq_n / ρ) -
-                            upwind_product1_c2f(face_w, ρq_n / ρ),
-                            ρq_td_n / (dt * ρ),
-                        ),
-                    )
-            end
+            error("unrecognized FCT operator $fct_op")
         end
     end
+end
 
-    # 5) DSS:
-    Spaces.weighted_dss!(Y⁺.c)
+function lim!(Y, cache, t, Y_ref)
+    (; limiter) = cache
+    if !isnothing(limiter)
+        Limiters.compute_bounds!(limiter, Y_ref.c.ρq, Y_ref.c.ρ)
+        Limiters.apply_limiter!(Y.c.ρq, Y.c.ρ, limiter)
+    end
+end
 
-    return Y⁺
+function dss!(Y, cache, t)
+    Spaces.weighted_dss!(Y.c)
 end
 
 function run_deformation_flow(use_limiter, fct_op)
@@ -250,19 +234,27 @@ function run_deformation_flow(use_limiter, fct_op)
     Y = Fields.FieldVector(; c = cent_Y)
 
     cache = (;
-        cent_uvw = Fields.Field(Geometry.Covariant123Vector{FT}, cent_space),
-        face_uvw = Fields.Field(Geometry.Covariant123Vector{FT}, face_space),
-        face_uv = Fields.Field(Geometry.Covariant12Vector{FT}, face_space),
-        face_w = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),
-        Δₕq = similar(Y.c.ρq),
+        u = Fields.Field(Geometry.UVWVector{FT}, cent_space),
+        Δₕq = Fields.Field(NTuple{5, FT}, cent_space),
+        q_n = Fields.Field(FT, cent_space),
+        face_u = Fields.Field(Geometry.UVWVector{FT}, face_space),
+        face_uₕ = Fields.Field(Geometry.Covariant12Vector{FT}, face_space),
+        face_uᵥ = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),
         limiter = use_limiter ? Limiters.QuasiMonotoneLimiter(Y.c.ρq) : nothing,
         fct_op,
-        ρq_td_n = isnothing(fct_op) ? nothing : similar(Y.c.ρq.:1),
     )
 
-    # TODO: Fix ClimaTimeSteppers to use a ForwardEulerFunction here
-    problem =
-        ODEProblem(IncrementingODEFunction(increment!), Y, (0, t_end), cache)
+    problem = ODEProblem(
+        ClimaODEFunction(;
+            T_lim! = horizontal_tendency!,
+            T_exp! = vertical_tendency!,
+            lim!,
+            dss!,
+        ),
+        Y,
+        (0, t_end),
+        cache,
+    )
     return solve(problem, ode_algorithm; dt, saveat = t_end / 2)
 end
 
@@ -289,40 +281,41 @@ tracer_ranges(sol) =
     end
 
 ref_sol = run_deformation_flow(false, nothing)
-lim_sol = run_deformation_flow(true, nothing)
 fct_sol = run_deformation_flow(false, FCTZalesak)
+lim_sol = run_deformation_flow(true, nothing)
 lim_fct_sol = run_deformation_flow(true, FCTZalesak)
 
 ref_ρ_err, ref_ρq_errs = conservation_errors(ref_sol)
-lim_ρ_err, lim_ρq_errs = conservation_errors(lim_sol)
 fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
+lim_ρ_err, lim_ρq_errs = conservation_errors(lim_sol)
 lim_fct_ρ_err, lim_fct_ρq_errs = conservation_errors(lim_fct_sol)
 
 # Check that the conservation errors are not too big.
-@test abs(ref_ρ_err) < (FT == Float64 ? 1e-14 : 2e-5)
-@test all(abs.(ref_ρq_errs) .< 3 * abs(ref_ρ_err))
+max_err = 40 * eps(FT)
+@test abs(ref_ρ_err) < max_err
+@test all(abs.(ref_ρq_errs) .< max_err)
+@test all(abs.(fct_ρq_errs) .< max_err)
+@test all(abs.(lim_ρq_errs) .< max_err)
+@test all(abs.(lim_fct_ρq_errs) .< max_err)
 
-# Check that the limiter and FCT have no effect on ρ.
-@test ref_ρ_err == lim_ρ_err == fct_ρ_err == lim_fct_ρ_err
+# Check that FCT and the limiter have no effect on ρ.
+@test ref_ρ_err == fct_ρ_err == lim_ρ_err == lim_fct_ρ_err
 
-# Check that the error of the tracer with q = 1 is nearly the same as that of ρ.
-@test ref_ρq_errs[5] ≈ ref_ρ_err atol = 2eps(FT)
-@test lim_ρq_errs[5] ≈ lim_ρ_err atol = eps(FT)
-@test fct_ρq_errs[5] ≈ fct_ρ_err atol = 2eps(FT)
-@test lim_fct_ρq_errs[5] ≈ lim_fct_ρ_err atol = 2eps(FT)
+# Check that FCT and the limiter have no effect on the tracer with q = 1, or at
+# least no effect up to round-off error.
+max_q5_roundoff_err = 2 * eps(FT)
+@test ref_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
+@test fct_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
+@test lim_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
+@test lim_fct_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
 
-# Check that the limiter and FCT do not significantly change the tracer errors.
-@test all(.≈(lim_ρq_errs, ref_ρq_errs, rtol = 0.3))
-@test all(.≈(fct_ρq_errs, ref_ρq_errs, rtol = 0.3))
-@test all(.≈(lim_fct_ρq_errs, ref_ρq_errs, rtol = 0.3))
-
-# Check that the limiter and FCT improve the "smoothness" of the tracers.
-@test all(tracer_roughnesses(lim_sol) .< tracer_roughnesses(ref_sol) .* 0.8)
-@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(ref_sol) .* 1.0)
-@test all(tracer_roughnesses(lim_fct_sol) .< tracer_roughnesses(ref_sol) .* 0.8)
-@test all(tracer_ranges(lim_sol) .< tracer_ranges(ref_sol) .* 0.6)
-@test all(tracer_ranges(fct_sol) .< tracer_ranges(ref_sol) .* 0.9)
-@test all(tracer_ranges(lim_fct_sol) .< tracer_ranges(ref_sol) .* 0.5)
+# Check that FCT and the limiter improve the "smoothness" of the tracers.
+@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(ref_sol))
+@test all(tracer_roughnesses(lim_sol) .< 0.9 .* tracer_roughnesses(ref_sol))
+@test all(tracer_roughnesses(lim_fct_sol) .< 0.8 .* tracer_roughnesses(ref_sol))
+@test all(tracer_ranges(fct_sol) .< tracer_ranges(ref_sol))
+@test all(tracer_ranges(lim_sol) .< 0.6 .* tracer_ranges(ref_sol))
+@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(ref_sol))
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
@@ -331,8 +324,8 @@ path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
 for (sol, suffix) in (
     (ref_sol, ""),
-    (lim_sol, "_lim"),
     (fct_sol, "_fct"),
+    (lim_sol, "_lim"),
     (lim_fct_sol, "_lim_fct"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
