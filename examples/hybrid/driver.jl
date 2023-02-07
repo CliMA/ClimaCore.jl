@@ -157,8 +157,8 @@ save_to_disk_func =
 
 dss_callback = FunctionCallingCallback(func_start = true) do Y, t, integrator
     p = integrator.p
-    Spaces.weighted_dss2!(Y.c, p.ghost_buffer.c)
-    Spaces.weighted_dss2!(Y.f, p.ghost_buffer.f)
+    Spaces.weighted_dss!(Y.c, p.ghost_buffer.c)
+    Spaces.weighted_dss!(Y.f, p.ghost_buffer.f)
 end
 if dt_save_to_disk == 0
     save_to_disk_callback = nothing

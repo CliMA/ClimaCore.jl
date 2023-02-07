@@ -122,9 +122,9 @@ apply_boundary_w =
     Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
 @. w = apply_boundary_w(w)
 # ==========
-Spaces.weighted_dss2!(Yc)
-Spaces.weighted_dss2!(uₕ)
-Spaces.weighted_dss2!(w)
+Spaces.weighted_dss!(Yc)
+Spaces.weighted_dss!(uₕ)
+Spaces.weighted_dss!(w)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
 energy_0 = sum(Y.Yc.ρe)
@@ -192,8 +192,8 @@ function rhs_invariant!(dY, Y, _, t)
     χe = @. dρe = hwdiv(hgrad(h_tot)) # we store χe in dρe
     χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
 
-    Spaces.weighted_dss2!(dρe)
-    Spaces.weighted_dss2!(duₕ)
+    Spaces.weighted_dss!(dρe)
+    Spaces.weighted_dss!(duₕ)
 
     κ₄ = 100.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -262,9 +262,9 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cρ))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
-    Spaces.weighted_dss2!(dY.Yc)
-    Spaces.weighted_dss2!(dY.uₕ)
-    Spaces.weighted_dss2!(dY.w)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
     return dY
 end
 

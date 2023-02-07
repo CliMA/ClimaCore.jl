@@ -148,7 +148,7 @@ function increment!(Y⁺, Y, cache, t, dt, beta)
 
     # 3) Hyperdiffusion of tracers:
     @. Δₕq = hwdiv(hgrad(ρq / ρ))
-    Spaces.weighted_dss2!(Δₕq)
+    Spaces.weighted_dss!(Δₕq)
     @. ρq⁺ -= dt * D₄ * hwdiv(ρ * hgrad(Δₕq))
 
     # 4) Vertical transport:
@@ -190,7 +190,7 @@ function increment!(Y⁺, Y, cache, t, dt, beta)
     end
 
     # 5) DSS:
-    Spaces.weighted_dss2!(Y⁺.c)
+    Spaces.weighted_dss!(Y⁺.c)
 
     return Y⁺
 end

@@ -77,7 +77,7 @@ function dss_unload_perimeter_data_kernel!(
     return nothing
 end
 
-function dss_local2!(
+function dss_local!(
     ::ClimaComms.CUDA,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
@@ -92,7 +92,7 @@ function dss_local2!(
     nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
     nthreads = min(max_threads, nitems)
     nblocks = cld(nitems, nthreads)
-    @cuda threads = (nthreads) blocks = (nblocks) dss_local2_kernel!(
+    @cuda threads = (nthreads) blocks = (nblocks) dss_local_kernel!(
         pperimeter_data,
         topology.local_vertices,
         topology.local_vertex_offset,
@@ -102,7 +102,7 @@ function dss_local2!(
     return nothing
 end
 
-function dss_local2_kernel!(
+function dss_local_kernel!(
     pperimeter_data::AbstractArray{FT, 4},
     local_vertices::AbstractVector{Tuple{Int, Int}},
     local_vertex_offset::AbstractVector{Int},
@@ -158,7 +158,7 @@ function dss_local2_kernel!(
     return nothing
 end
 
-function dss_transform2!(
+function dss_transform!(
     device::ClimaComms.CUDA,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -183,7 +183,7 @@ function dss_transform2!(
     max_threads = 256
     nthreads = min(max_threads, nitems)
     nblocks = cld(nitems, nthreads)
-    @cuda threads = (nthreads) blocks = (nblocks) dss_transform2_kernel!(
+    @cuda threads = (nthreads) blocks = (nblocks) dss_transform_kernel!(
         pperimeter_data,
         pdata,
         p∂ξ∂x,
@@ -199,7 +199,7 @@ function dss_transform2!(
     return nothing
 end
 
-function dss_transform2_kernel!(
+function dss_transform_kernel!(
     pperimeter_data::AbstractArray{FT, 4},
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂ξ∂x::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
@@ -265,7 +265,7 @@ function dss_transform2_kernel!(
     return nothing
 end
 
-function dss_untransform2!(
+function dss_untransform!(
     device::ClimaComms.CUDA,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -289,7 +289,7 @@ function dss_untransform2!(
         max_threads = 256
         nthreads = min(max_threads, nitems)
         nblocks = cld(nitems, nthreads)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_untransform2_kernel!(
+        @cuda threads = (nthreads) blocks = (nblocks) dss_untransform_kernel!(
             pperimeter_data,
             pdata,
             p∂ξ∂x,
@@ -305,7 +305,7 @@ function dss_untransform2!(
     return nothing
 end
 
-function dss_untransform2_kernel!(
+function dss_untransform_kernel!(
     pperimeter_data::AbstractArray{FT, 4},
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂ξ∂x::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
@@ -361,7 +361,7 @@ function dss_untransform2_kernel!(
 end
 
 # TODO: Function stubs, code to be implemented, needed only for distributed GPU runs
-function dss_local_ghost2!(
+function dss_local_ghost!(
     ::ClimaComms.CUDA,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,
@@ -370,15 +370,15 @@ function dss_local_ghost2!(
     return nothing
 end
 
-function fill_send_buffer2!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
+function fill_send_buffer!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
     return nothing
 end
 
-function load_from_recv_buffer2!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
+function load_from_recv_buffer!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
     return nothing
 end
 
-function dss_ghost2!(
+function dss_ghost!(
     ::ClimaComms.CUDA,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,

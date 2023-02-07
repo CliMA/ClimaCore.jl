@@ -68,7 +68,7 @@ end
     yarr .= reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel))
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss2!(y0, dss2_buffer) # DSS2
+    Spaces.weighted_dss!(y0, dss2_buffer) # DSS2
 #! format: off
     @test Array(yarr[:]) == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 
                              14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 18.5, 
@@ -76,7 +76,7 @@ end
                              32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
 #! format: on
 
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @show p
     #=
     @test p == 0
@@ -91,11 +91,11 @@ end
     yx = copy(y0)
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss2!(y0, dss2_buffer)
+    Spaces.weighted_dss!(y0, dss2_buffer)
 
     @test parent(yx) ≈ parent(y0)
 
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @show p
     #@test p == 0
 end

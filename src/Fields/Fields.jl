@@ -315,7 +315,7 @@ function Spaces.variational_solve!(field::Field)
 end
 
 """
-    Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_ghost_buffer(field)])
+    Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_dss_buffer(field)])
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 (i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
@@ -344,35 +344,21 @@ which reduces to
 \\theta = Q \\bar\\theta = Q (Q^\\top W J Q)^{-1} Q^\\top W J f
 ```
 """
-Spaces.weighted_dss!(
-    field::Field,
-    ghost_buffer = Spaces.create_ghost_buffer(field),
-) = Spaces.weighted_dss2!(field, ghost_buffer)
-
-Spaces.weighted_dss_start!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_start2!(field, ghost_buffer)
-
-Spaces.weighted_dss_internal!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_internal2!(field, ghost_buffer)
-
-Spaces.weighted_dss_ghost!(field, ghost_buffer) =
-    Spaces.weighted_dss_ghost2!(field, ghost_buffer)
-
-function Spaces.weighted_dss2!(
+function Spaces.weighted_dss!(
     field::Field,
     dss_buffer = Spaces.create_dss_buffer(field),
 )
-    Spaces.weighted_dss2!(field_values(field), axes(field), dss_buffer)
+    Spaces.weighted_dss!(field_values(field), axes(field), dss_buffer)
     return field
 end
-Spaces.weighted_dss_start2!(field::Field, dss_buffer) =
-    Spaces.weighted_dss_start2!(field_values(field), axes(field), dss_buffer)
+Spaces.weighted_dss_start!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_start!(field_values(field), axes(field), dss_buffer)
 
-Spaces.weighted_dss_internal2!(field::Field, dss_buffer) =
-    Spaces.weighted_dss_internal2!(field_values(field), axes(field), dss_buffer)
+Spaces.weighted_dss_internal!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_internal!(field_values(field), axes(field), dss_buffer)
 
-Spaces.weighted_dss_ghost2!(field::Field, dss_buffer) =
-    Spaces.weighted_dss_ghost2!(field_values(field), axes(field), dss_buffer)
+Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
+    Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
 """
     Spaces.create_ghost_buffer(field::Field)
@@ -393,6 +379,20 @@ function Spaces.create_dss_buffer(field::Field)
         space.horizontal_space : space
     Spaces.create_dss_buffer(field_values(field), hspace)
 end
+# Add definitions for backward compatibility
+Spaces.weighted_dss2!(
+    field::Field,
+    dss_buffer = Spaces.create_dss_buffer(field),
+) = Spaces.weighted_dss!(field, dss_buffer)
+
+Spaces.weighted_dss_start2!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_start!(field, ghost_buffer)
+
+Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_internal!(field, ghost_buffer)
+
+Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
+    Spaces.weighted_dss_ghost!(field, ghost_buffer)
 
 Base.@propagate_inbounds function level(
     field::Union{
