@@ -159,8 +159,8 @@ function rhs!(dY, Y, _, t)
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
 
-    Spaces.weighted_dss2!(dρe)
-    Spaces.weighted_dss2!(duₕ)
+    Spaces.weighted_dss!(dρe)
+    Spaces.weighted_dss!(duₕ)
 
     κ₄ = 1.0e17 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -238,9 +238,9 @@ function rhs!(dY, Y, _, t)
     @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
     @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
-    Spaces.weighted_dss2!(dY.Yc)
-    Spaces.weighted_dss2!(dY.uₕ)
-    Spaces.weighted_dss2!(dY.w)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
 
     return dY
 end

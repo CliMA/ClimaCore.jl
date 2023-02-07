@@ -154,8 +154,8 @@ function rhs_invariant!(dY, Y, _, t)
     χe = @. dρe = hwdiv(hgrad(h_tot)) # we store χe in dρe
     χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
 
-    Spaces.weighted_dss2!(dρe)
-    Spaces.weighted_dss2!(duₕ)
+    Spaces.weighted_dss!(dρe)
+    Spaces.weighted_dss!(duₕ)
 
     κ₄ = 0.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -256,9 +256,9 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρe += hκ₂∇²h_tot
     @. dρe += vκ₂∇²h_tot
 
-    Spaces.weighted_dss2!(dY.Yc)
-    Spaces.weighted_dss2!(dY.uₕ)
-    Spaces.weighted_dss2!(dY.w)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
 
     return dY
 end

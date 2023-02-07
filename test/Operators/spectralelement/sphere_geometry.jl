@@ -37,19 +37,19 @@ end
         for α in [0.0, 45.0, 90.0]
             div = Operators.Divergence()
             u = rotational_field(space, α)
-            divu = Spaces.weighted_dss2!(div.(u))
+            divu = Spaces.weighted_dss!(div.(u))
             @test norm(divu) < 1e-2
 
             # test dss on UVcoordinates
-            uu = Spaces.weighted_dss2!(copy(u))
+            uu = Spaces.weighted_dss!(copy(u))
             @test norm(uu .- u) < 1e-14
 
             uᵢ = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u)
-            uuᵢ = Spaces.weighted_dss2!(copy(uᵢ))
+            uuᵢ = Spaces.weighted_dss!(copy(uᵢ))
             @test norm(uuᵢ .- uᵢ) < 1e-14
 
             uⁱ = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), u)
-            uuⁱ = Spaces.weighted_dss2!(copy(uⁱ))
+            uuⁱ = Spaces.weighted_dss!(copy(uⁱ))
             @test norm(uuⁱ .- uⁱ) < 1e-14
         end
     end

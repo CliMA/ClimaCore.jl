@@ -412,7 +412,7 @@ function SpectralElementSpace2D(
     J = DataLayouts.rebuild(local_geometry.J, DA)
     dss_local_weights = copy(J)
     if quadrature_style isa Quadratures.GLL
-        dss2!(dss_local_weights, topology, quadrature_style)
+        dss!(dss_local_weights, topology, quadrature_style)
     end
     dss_local_weights .= J ./ dss_local_weights
     dss_ghost_weights = copy(J) # not currently used

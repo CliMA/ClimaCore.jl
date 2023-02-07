@@ -39,9 +39,9 @@ function dss_comms!(topology, Y, ghost_buffer)
 end
 
 function weighted_dss_full!(Y, ghost_buffer)
-    Spaces.weighted_dss_start2!(Y, ghost_buffer)
-    Spaces.weighted_dss_internal2!(Y, ghost_buffer)
-    Spaces.weighted_dss_ghost2!(Y, ghost_buffer)
+    Spaces.weighted_dss_start!(Y, ghost_buffer)
+    Spaces.weighted_dss_internal!(Y, ghost_buffer)
+    Spaces.weighted_dss_ghost!(Y, ghost_buffer)
     return nothing
 end
 
@@ -101,7 +101,7 @@ function hybrid3dcubedsphere_dss_profiler(
     # precompile relevant functions
     space = axes(Y.c)
     horizontal_topology = space.horizontal_space.topology
-    Spaces.weighted_dss_internal2!(Y.c, ghost_buffer.c)
+    Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
     weighted_dss_full!(Y.c, ghost_buffer.c)
     Spaces.fill_send_buffer!(
         horizontal_topology,
@@ -109,7 +109,7 @@ function hybrid3dcubedsphere_dss_profiler(
         ghost_buffer.c,
     )
     dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
-    Spaces.weighted_dss2!(Y.c, dss_buffer_c)
+    Spaces.weighted_dss!(Y.c, dss_buffer_c)
     ClimaComms.barrier(comms_ctx)
 
     # timing
@@ -123,7 +123,7 @@ function hybrid3dcubedsphere_dss_profiler(
 
     walltime_dss2_full = @elapsed begin # timing weighted dss2
         for i in 1:nsamples
-            Spaces.weighted_dss2!(Y.c, dss_buffer_c)
+            Spaces.weighted_dss!(Y.c, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -132,7 +132,7 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_internal = @elapsed begin # timing internal dss
         for i in 1:nsamples
-            Spaces.weighted_dss_internal2!(Y.c, ghost_buffer.c)
+            Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -176,13 +176,13 @@ function hybrid3dcubedsphere_dss_profiler(
     for i in 1:nsamplesprofiling # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
-                Spaces.weighted_dss_start2!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_start!(Y.c, ghost_buffer.c)
             end
             @nvtx "internal" color = colorant"blue" begin
-                Spaces.weighted_dss_internal2!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
             end
             @nvtx "ghost" color = colorant"yellow" begin
-                Spaces.weighted_dss_ghost2!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_ghost!(Y.c, ghost_buffer.c)
             end
         end
     end

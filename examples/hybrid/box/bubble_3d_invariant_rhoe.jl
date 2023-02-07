@@ -190,12 +190,12 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
-    Spaces.weighted_dss_start2!(dρe, ghost_buffer.dρe)
-    Spaces.weighted_dss_start2!(duₕ, ghost_buffer.duₕ)
-    Spaces.weighted_dss_internal2!(dρe, ghost_buffer.dρe)
-    Spaces.weighted_dss_internal2!(duₕ, ghost_buffer.duₕ)
-    Spaces.weighted_dss_ghost2!(dρe, ghost_buffer.dρe)
-    Spaces.weighted_dss_ghost2!(duₕ, ghost_buffer.duₕ)
+    Spaces.weighted_dss_start!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_start!(duₕ, ghost_buffer.duₕ)
+    Spaces.weighted_dss_internal!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_internal!(duₕ, ghost_buffer.duₕ)
+    Spaces.weighted_dss_ghost!(dρe, ghost_buffer.dρe)
+    Spaces.weighted_dss_ghost!(duₕ, ghost_buffer.duₕ)
 
     κ₄ = 100.0 # m^4/s
     @. dρe = -κ₄ * hwdiv(cρ * hgrad(χe))
@@ -286,15 +286,15 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     @. dρe += fcc(fw, cρe)
     # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
-    Spaces.weighted_dss_start2!(dY.Yc, ghost_buffer.Yc)
-    Spaces.weighted_dss_start2!(dY.uₕ, ghost_buffer.uₕ)
-    Spaces.weighted_dss_start2!(dY.w, ghost_buffer.w)
-    Spaces.weighted_dss_internal2!(dY.Yc, ghost_buffer.Yc)
-    Spaces.weighted_dss_internal2!(dY.uₕ, ghost_buffer.uₕ)
-    Spaces.weighted_dss_internal2!(dY.w, ghost_buffer.w)
-    Spaces.weighted_dss_ghost2!(dY.Yc, ghost_buffer.Yc)
-    Spaces.weighted_dss_ghost2!(dY.uₕ, ghost_buffer.uₕ)
-    Spaces.weighted_dss_ghost2!(dY.w, ghost_buffer.w)
+    Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_start!(dY.w, ghost_buffer.w)
+    Spaces.weighted_dss_internal!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_internal!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_internal!(dY.w, ghost_buffer.w)
+    Spaces.weighted_dss_ghost!(dY.Yc, ghost_buffer.Yc)
+    Spaces.weighted_dss_ghost!(dY.uₕ, ghost_buffer.uₕ)
+    Spaces.weighted_dss_ghost!(dY.w, ghost_buffer.w)
     return dY
 end
 

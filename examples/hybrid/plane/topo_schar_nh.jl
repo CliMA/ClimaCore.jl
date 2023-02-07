@@ -152,10 +152,10 @@ const u_init = uₕ
 
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-Spaces.weighted_dss2!(Y.Yc)
-Spaces.weighted_dss2!(Y.uₕ)
-Spaces.weighted_dss2!(Y.w)
-Spaces.weighted_dss2!(u_init)
+Spaces.weighted_dss!(Y.Yc)
+Spaces.weighted_dss!(Y.uₕ)
+Spaces.weighted_dss!(Y.w)
+Spaces.weighted_dss!(u_init)
 
 energy_0 = sum(Y.Yc.ρe)
 mass_0 = sum(Y.Yc.ρ)
@@ -278,9 +278,9 @@ function rhs_invariant!(dY, Y, _, t)
     χq = @. dρq = hwdiv(hgrad(cq)) # we store χe in dρe
     χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
 
-    Spaces.weighted_dss2!(dρe)
-    Spaces.weighted_dss2!(duₕ)
-    Spaces.weighted_dss2!(dρq)
+    Spaces.weighted_dss!(dρe)
+    Spaces.weighted_dss!(duₕ)
+    Spaces.weighted_dss!(dρq)
 
     κ₄_dynamic = hyperdiffusivity # m^4/s
     κ₄_tracer = hyperdiffusivity * 0
@@ -383,9 +383,9 @@ function rhs_invariant!(dY, Y, _, t)
     @. duₕ -= β * (uₕ - u_init)
     @. dw -= βf * fw
 
-    Spaces.weighted_dss2!(dY.Yc)
-    Spaces.weighted_dss2!(dY.uₕ)
-    Spaces.weighted_dss2!(dY.w)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
 
     return dY
 end
@@ -399,7 +399,7 @@ using OrdinaryDiffEq
 
 timeend = 3600.0 * 15.0
 function make_dss_func()
-    _dss!(x::Fields.Field) = Spaces.weighted_dss2!(x)
+    _dss!(x::Fields.Field) = Spaces.weighted_dss!(x)
     _dss!(::Any) = nothing
     dss_func(Y, t, integrator) = foreach(_dss!, Fields._values(Y))
     return dss_func
@@ -491,9 +491,9 @@ if tendency_plots
         χe = @. hwdiv(hgrad(h_tot))
         χuₕ = @. hwgrad(hdiv(cuw))
         χq = @. hwdiv(hgrad(cq))
-        Spaces.weighted_dss2!(χe)
-        Spaces.weighted_dss2!(χuₕ)
-        Spaces.weighted_dss2!(χq)
+        Spaces.weighted_dss!(χe)
+        Spaces.weighted_dss!(χuₕ)
+        Spaces.weighted_dss!(χq)
         κ₄_dynamic = hyperdiffusivity
         κ₄_tracer = hyperdiffusivity * 0
         dρeh = @. -κ₄_dynamic * hwdiv(cρ * hgrad(χe))
@@ -610,9 +610,9 @@ if tendency_plots
         χe = @. hwdiv(hgrad(h_tot))
         χuₕ = @. hwgrad(hdiv(cuw))
         χq = @. hwdiv(hgrad(cq))
-        Spaces.weighted_dss2!(χe)
-        Spaces.weighted_dss2!(χuₕ)
-        Spaces.weighted_dss2!(χq)
+        Spaces.weighted_dss!(χe)
+        Spaces.weighted_dss!(χuₕ)
+        Spaces.weighted_dss!(χq)
         κ₄_dynamic = hyperdiffusivity
         κ₄_tracer = hyperdiffusivity * 0
         dρeh = @. -κ₄_dynamic * hwdiv(cρ * hgrad(χe))

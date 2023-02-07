@@ -34,10 +34,10 @@ wdiv = Operators.WeakDivergence()
     u = Geometry.transform.(Ref(Geometry.Contravariant12Axis()), u_local)
 
     div_us = sdiv.(u)
-    Spaces.weighted_dss2!(div_us)
+    Spaces.weighted_dss!(div_us)
 
     div_uw = wdiv.(u)
-    Spaces.weighted_dss2!(div_uw)
+    Spaces.weighted_dss!(div_uw)
 
     div_exact = @. -2 * sind(coords.long) * cosd(coords.lat) / radius
 
@@ -88,10 +88,10 @@ convergence_rate(err, Δh) =
                 )
 
             div_us = sdiv.(u)
-            Spaces.weighted_dss2!(div_us)
+            Spaces.weighted_dss!(div_us)
 
             div_uw = wdiv.(u)
-            Spaces.weighted_dss2!(div_uw)
+            Spaces.weighted_dss!(div_uw)
 
             div_exact = @. -2 * sind(coords.long) * cosd(coords.lat) / radius
 

@@ -196,6 +196,13 @@ function weighted_dss_start! end
 function weighted_dss_internal! end
 function weighted_dss_ghost! end
 
+# for backward compatibility
+function weighted_dss2! end
+function weighted_dss_start2! end
+function weighted_dss_internal2! end
+function weighted_dss_ghost2! end
+function dss2! end
+
 # helper functions for DSS2
 function _get_idx(sizet::NTuple{5, Int}, loc::NTuple{5, Int})
     (n1, n2, n3, n4, n5) = sizet

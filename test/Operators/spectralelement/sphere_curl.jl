@@ -34,10 +34,10 @@ wcurl = Operators.WeakCurl()
     u = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u_local)
 
     curl_us = scurl.(u)
-    Spaces.weighted_dss2!(curl_us)
+    Spaces.weighted_dss!(curl_us)
 
     curl_uw = wcurl.(u)
-    Spaces.weighted_dss2!(curl_uw)
+    Spaces.weighted_dss!(curl_uw)
 
     curl_exact = @. Geometry.Contravariant3Vector(
         -2 * sind(coords.long) * cosd(coords.lat) / radius,
@@ -88,10 +88,10 @@ convergence_rate(err, Δh) =
             u = Geometry.transform.(Ref(Geometry.Covariant12Axis()), u_local)
 
             curl_us = scurl.(u)
-            Spaces.weighted_dss2!(curl_us)
+            Spaces.weighted_dss!(curl_us)
 
             curl_uw = wcurl.(u)
-            Spaces.weighted_dss2!(curl_uw)
+            Spaces.weighted_dss!(curl_uw)
 
             curl_exact = @. Geometry.Contravariant3Vector(
                 -2 * sind(coords.long) * cosd(coords.lat) / radius,

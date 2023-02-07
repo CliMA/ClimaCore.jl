@@ -116,7 +116,7 @@ for (k, ne) in enumerate(ne_seq)
         div = Operators.Divergence()
 
         @. dh = -div(h * u) # strong form of equation
-        Spaces.weighted_dss2!(dh)
+        Spaces.weighted_dss!(dh)
     end
 
     # Set the RHS function

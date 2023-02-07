@@ -300,7 +300,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
 
         # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
         @. ystar.ρq = hwdiv(hgrad(y.ρq / y.ρ))
-        Spaces.weighted_dss2!(ystar.ρq)
+        Spaces.weighted_dss!(ystar.ρq)
         @. ystar.ρq = -D₄ * hwdiv(y.ρ * hgrad(ystar.ρq))
 
         # 4) Vertical Transport:
@@ -311,8 +311,8 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* cuₕ))
 
         # 5) DSS:
-        Spaces.weighted_dss2!(dy.ρ)
-        Spaces.weighted_dss2!(dy.ρq)
+        Spaces.weighted_dss!(dy.ρ)
+        Spaces.weighted_dss!(dy.ρq)
 
         return dy
     end
