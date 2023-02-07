@@ -263,8 +263,11 @@ end
 end
 
 # types aren't isbits
-Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::Type{T}, args...) where {T} =
-    Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
+Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::Type{T},
+    args...,
+) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
 
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # Required for ODE solvers

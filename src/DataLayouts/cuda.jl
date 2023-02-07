@@ -109,7 +109,7 @@ function knl_mapreduce!(dest, fn, op, src)
     else
         @inbounds p_dest[i, j] = op(p_dest[i, j], fn(p_src[i, j]))
     end
-        
+
     return nothing
 end
 
@@ -126,8 +126,8 @@ function Base.reduce(
     T = eltype(A)
     Nf = typesize(T, S)
     # dest array
-    dest = IJF{S,Nij}(CuArray{T}(undef,Nij, Nij, Nf))
+    dest = IJF{S, Nij}(CuArray{T}(undef, Nij, Nij, Nf))
     CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_reduce!(dest, op, bc)
     # copy to CPU, and final reduce
-    reduce(op, IJF{S,Nij}(Array(parent(dest))))
+    reduce(op, IJF{S, Nij}(Array(parent(dest))))
 end
