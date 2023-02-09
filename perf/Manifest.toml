@@ -2,7 +2,7 @@
 
 julia_version = "1.8.5"
 manifest_format = "2.0"
-project_hash = "cfda53d25123cb99ec069d1c878594cba4027c32"
+project_hash = "c0ad60f68ec1662faef9d7318bc407f36b06adb3"
 
 [[deps.AMD]]
 deps = ["Libdl", "LinearAlgebra", "SparseArrays", "Test"]
@@ -203,7 +203,7 @@ uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 version = "0.2.5"
 
 [[deps.ClimaCoreTempestRemap]]
-deps = ["ClimaComms", "ClimaCore", "Dates", "LinearAlgebra", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]
+deps = ["ClimaComms", "ClimaCommsMPI", "ClimaCore", "Dates", "LinearAlgebra", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]
 path = "../lib/ClimaCoreTempestRemap"
 uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
 version = "0.3.7"

@@ -78,7 +78,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     Y = set_initial_condition(space)
     ghost_buffer = Spaces.create_dss_buffer(Y)
     dss_buffer = Spaces.create_dss_buffer(Y)
-    weighted_dss2! = Spaces.weighted_dss2!
+    weighted_dss! = Spaces.weighted_dss!
     nsamples = 10000
     nprofilesamples = 1000
 
@@ -91,7 +91,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
         ghost_buffer,
     )
     dss_comms!(grid_topology, Y, ghost_buffer)
-    Spaces.weighted_dss2!(Y, dss_buffer)
+    Spaces.weighted_dss!(Y, dss_buffer)
     ClimaComms.barrier(context)
 
     # timing
@@ -105,7 +105,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
 
     walltime_dss2_full = @elapsed begin # timing weighted dss2
         for i in 1:nsamples
-            Spaces.weighted_dss2!(Y, dss_buffer)
+            Spaces.weighted_dss!(Y, dss_buffer)
         end
     end
     ClimaComms.barrier(context)

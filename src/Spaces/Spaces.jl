@@ -40,7 +40,7 @@ include("finitedifference.jl")
 include("extruded.jl")
 include("triangulation.jl")
 include("dss_transform.jl")
-include("dss2.jl")
+include("dss.jl")
 
 horizontal_space(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space
 horizontal_space(space::AbstractSpace) = space

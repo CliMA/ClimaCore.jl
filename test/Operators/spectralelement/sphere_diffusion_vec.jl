@@ -15,7 +15,7 @@ function ∇²(u)
     wcurl = Operators.WeakCurl()
     wgrad = Operators.WeakGradient()
 
-    χ = Spaces.weighted_dss2!(
+    χ = Spaces.weighted_dss!(
         @. wgrad(sdiv(u)) - Geometry.Covariant12Vector(
             wcurl(Geometry.Covariant3Vector(scurl(u))),
         )

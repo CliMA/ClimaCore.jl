@@ -18,8 +18,13 @@ FieldStyle(x::Base.Broadcast.Unknown) = x
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(DataStyle(V))
 
+# Broadcasting over scalars (Ref or Tuple)
 Base.Broadcast.BroadcastStyle(
     ::Base.Broadcast.AbstractArrayStyle{0},
+    fs::AbstractFieldStyle,
+) = fs
+Base.Broadcast.BroadcastStyle(
+    ::Base.Broadcast.Style{Tuple},
     fs::AbstractFieldStyle,
 ) = fs
 
@@ -53,15 +58,14 @@ _first(data::DataLayouts.VF) = data[]
 _first(field::Field) = _first_data_layout(field_values(column(field, 1, 1, 1)))
 _first(space::Spaces.AbstractSpace) =
     _first_data_layout(field_values(column(space, 1, 1, 1)))
-_first(bc::Base.Broadcast.Broadcasted) = _first.(bc.args) # Is this case necessary?
-_first(x::Base.RefValue{T}) where {T} = x
-unref(x::Ref{T}) where {T} = x.x
-unref(T) = T
+_first(bc::Base.Broadcast.Broadcasted) = _first(copy(bc))
+_first(x::Ref{T}) where {T} = x.x
+_first(x::Tuple{T}) where {T} = x[1]
 
 function call_with_first(bc)
     # Try calling with first applied to all arguments:
     bc′ = Base.Broadcast.preprocess(nothing, bc)
-    first_args = map(arg -> unref(_first(arg)), bc′.args)
+    first_args = map(arg -> _first(arg), bc′.args)
     bc.f(first_args...)
 end
 
@@ -194,8 +198,8 @@ end
     end
     return space1
 end
-@inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple{}) = space
-@inline Base.Broadcast.broadcast_shape(::Tuple{}, space::AbstractSpace) = space
+@inline Base.Broadcast.broadcast_shape(space::AbstractSpace, ::Tuple) = space
+@inline Base.Broadcast.broadcast_shape(::Tuple, space::AbstractSpace) = space
 
 @inline Base.Broadcast.broadcast_shape(
     pointspace::AbstractPointSpace,
@@ -241,6 +245,12 @@ end
     ::AbstractSpace,
     ::Tuple{},
 )
+    return nothing
+end
+@inline function Base.Broadcast.check_broadcast_shape(
+    ::AbstractSpace,
+    ::Tuple{T},
+) where {T}
     return nothing
 end
 @inline function Base.Broadcast.check_broadcast_shape(
@@ -395,6 +405,13 @@ end
 function Base.Broadcast.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
+)
+    copyto!(Fields.field_values(field), bc)
+    return field
+end
+function Base.Broadcast.copyto!(
+    field::Field,
+    bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
     copyto!(Fields.field_values(field), bc)
     return field

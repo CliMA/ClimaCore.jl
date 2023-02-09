@@ -527,14 +527,15 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     dYdt = similar(Y)
 
     ghost_buffer = Spaces.create_dss_buffer(Y)
-    Spaces.weighted_dss_start2!(Y, ghost_buffer)
-    Spaces.weighted_dss_internal2!(Y, ghost_buffer)
-    Spaces.weighted_dss_ghost2!(Y, ghost_buffer)
+    Spaces.weighted_dss_start!(Y, ghost_buffer)
+    Spaces.weighted_dss_internal!(Y, ghost_buffer)
+    Spaces.weighted_dss_ghost!(Y, ghost_buffer)
 
     parameters =
         (; f = f, h_s = h_s, ghost_buffer = ghost_buffer, params = test.params)
     rhs!(dYdt, Y, parameters, 0.0)
 
+    #=
     # Solve the ODE
     dt = 9 * 60
     T = 86400 * 2
@@ -549,7 +550,7 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-
+    =#
 
     sol = @timev OrdinaryDiffEq.solve!(integrator)
     return nothing

@@ -476,7 +476,7 @@ function rhs!(dYdt, y, parameters, t)
                     wcurl(Geometry.Covariant3Vector(curl(y.u))),
                 )
 
-            Spaces.weighted_dss2!(dYdt, ghost_buffer)
+            Spaces.weighted_dss!(dYdt, ghost_buffer)
 
             @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
             @. dYdt.u =
@@ -494,7 +494,7 @@ function rhs!(dYdt, y, parameters, t)
                     -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) +
                     y.u × (f + curl(y.u))
             end
-            Spaces.weighted_dss2!(dYdt, ghost_buffer)
+            Spaces.weighted_dss!(dYdt, ghost_buffer)
         end
     end
     return dYdt

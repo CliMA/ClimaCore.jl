@@ -189,8 +189,8 @@ function rhs_invariant!(dY, Y, _, t)
             hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
         )
 
-    Spaces.weighted_dss2!(dρθ)
-    Spaces.weighted_dss2!(duₕ)
+    Spaces.weighted_dss!(dρθ)
+    Spaces.weighted_dss!(duₕ)
 
     κ₄ = 100.0 # m^4/s
     @. dρθ = -κ₄ * hwdiv(cρ * hgrad(χθ))
@@ -289,9 +289,9 @@ function rhs_invariant!(dY, Y, _, t)
     @. dρθ += fcc(fw, cρθ)
     # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
 
-    Spaces.weighted_dss2!(dY.Yc)
-    Spaces.weighted_dss2!(dY.uₕ)
-    Spaces.weighted_dss2!(dY.w)
+    Spaces.weighted_dss!(dY.Yc)
+    Spaces.weighted_dss!(dY.uₕ)
+    Spaces.weighted_dss!(dY.w)
 
 
     return dY

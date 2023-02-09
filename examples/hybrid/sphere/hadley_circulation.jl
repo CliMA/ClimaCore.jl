@@ -142,7 +142,7 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
 
     ### HYPERVISCOSITY
     @. ystar.ρq1 = hwdiv(hgrad(ρq1 / ρ))
-    Spaces.weighted_dss2!(ystar.ρq1)
+    Spaces.weighted_dss!(ystar.ρq1)
     @. ystar.ρq1 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq1))
 
     cw = If2c.(w)
@@ -172,8 +172,8 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     # 2) Horizontal transport for ρq1 (includes both horizontal and vertical velocity components)
     @. dρq1 -= alpha * hdiv(cuvw * ρq1) - alpha * ystar.ρq1
 
-    Spaces.weighted_dss2!(dydt.ρ)
-    Spaces.weighted_dss2!(dydt.ρq1)
+    Spaces.weighted_dss!(dydt.ρ)
+    Spaces.weighted_dss!(dydt.ρq1)
 
     return dydt
 end

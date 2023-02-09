@@ -407,10 +407,13 @@ end
 
 # broadcasting scalar assignment
 # Performance optimization for the common identity scalar case: dest .= val
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
-) where {Style <: Base.Broadcast.AbstractArrayStyle{0}}
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+}
     bc = Base.Broadcast.instantiate(
         Base.Broadcast.Broadcasted{Style}(bc.f, bc.args, ()),
     )
@@ -418,7 +421,7 @@ end
     fill!(dest, bc0)
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::DataF{S},
     bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A}
@@ -426,7 +429,7 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
 ) where {S, Nij}
@@ -439,7 +442,7 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::IFH{S, Ni},
     bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
 ) where {S, Ni}
@@ -453,7 +456,7 @@ end
 end
 
 # inline inner slab(::DataSlab2D) copy
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::IJF{S, Nij},
     bc::Union{IJF{S, Nij, A}, Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}},
 ) where {S, Nij, A}
@@ -465,7 +468,7 @@ end
 end
 
 # inline inner slab(::DataSlab1D) copy
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::IF{S, Ni},
     bc::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -477,7 +480,7 @@ end
 end
 
 # inline inner column(::DataColumn) copy
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::VF{S},
     bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
 ) where {S, A}
@@ -489,7 +492,7 @@ end
     return dest
 end
 
-@inline function _serial_copyto!(
+function _serial_copyto!(
     dest::VIFH{S, Ni},
     bc::Union{VIFH{S, Ni, A}, Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
 ) where {S, Ni, A}
@@ -503,7 +506,7 @@ end
     return dest
 end
 
-@inline function _threaded_copyto!(
+function _threaded_copyto!(
     dest::VIFH{S, Ni},
     bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -522,14 +525,14 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::VIFH{S, Ni},
     source::VIFH{S, Ni, A},
 ) where {S, Ni, A}
     return _serial_copyto!(dest, source)
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::VIFH{S, Ni},
     bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
 ) where {S, Ni, A}
@@ -539,7 +542,7 @@ end
     return _serial_copyto!(dest, bc)
 end
 
-@inline function _serial_copyto!(
+function _serial_copyto!(
     dest::VIJFH{S, Nij},
     bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
 ) where {S, Nij, A}
@@ -553,7 +556,7 @@ end
     return dest
 end
 
-@inline function _threaded_copyto!(
+function _threaded_copyto!(
     dest::VIJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}
@@ -572,14 +575,14 @@ end
     return dest
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::VIJFH{S, Nij},
     source::VIJFH{S, Nij, A},
 ) where {S, Nij, A}
     return _serial_copyto!(dest, source)
 end
 
-@inline function Base.copyto!(
+function Base.copyto!(
     dest::VIJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}

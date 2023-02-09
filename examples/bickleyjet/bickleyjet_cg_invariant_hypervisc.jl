@@ -123,7 +123,7 @@ function rhs!(dydt, y, _, t)
         Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
     @. dydt.ρθ = wdiv(grad(y.ρθ / y.ρ))
 
-    Spaces.weighted_dss2!(dydt, ghost_buffer)
+    Spaces.weighted_dss!(dydt, ghost_buffer)
 
     @. dydt.u =
         -D₄ * (
@@ -139,7 +139,7 @@ function rhs!(dydt, y, _, t)
         dydt.u += -grad(g * y.ρ + norm(y.u)^2 / 2) + y.u × curl(y.u)
         dydt.ρθ += -wdiv(y.ρθ * y.u)
     end
-    Spaces.weighted_dss2!(dydt, ghost_buffer)
+    Spaces.weighted_dss!(dydt, ghost_buffer)
     return dydt
 end
 

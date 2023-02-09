@@ -32,7 +32,7 @@ include("ddss_setup.jl")
         (pid - 1) * Nq * Nq * nel
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss2!(y0, dss2_buffer) # DSS2
+    Spaces.weighted_dss!(y0, dss2_buffer) # DSS2
     #=
     [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5,
      18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
@@ -44,7 +44,7 @@ include("ddss_setup.jl")
         @test yarr[:] == [18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 18.5, 23.0, 27.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
     end
 #! format: on
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @test p == 0
 end
 
@@ -56,9 +56,9 @@ end
     yx = copy(y0)
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss2!(y0, dss2_buffer)
+    Spaces.weighted_dss!(y0, dss2_buffer)
 
     @test yx ≈ y0
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @test p == 0
 end

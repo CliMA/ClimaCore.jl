@@ -69,7 +69,7 @@ partition numbers
         (pid - 1) * Nq * Nq * nel
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss2!(y0, dss2_buffer)
+    Spaces.weighted_dss!(y0, dss2_buffer)
 
 #! format: off
     if pid == 1
@@ -87,6 +87,6 @@ partition numbers
                        122.0, 126.5, 120.5, 125.0, 129.5, 108.5, 113.0, 114.0, 126.5, 131.0, 132.0, 129.5, 134.0, 135.0]
     end
 #! format: on
-    p = @allocated Spaces.weighted_dss2!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @test p == 0
 end

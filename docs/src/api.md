@@ -203,17 +203,16 @@ Spaces.dss_interior_faces!
 Spaces.dss_local_vertices!
 Spaces.dss_ghost_faces!
 Spaces.dss_ghost_vertices!
-Spaces.dss_transform2!
-Spaces.dss_untransform2!
-Spaces.dss_local2!
-Spaces.dss_local_ghost2!
-Spaces.dss_ghost2!
+Spaces.dss_local!
+Spaces.dss_local_ghost!
+Spaces.dss_ghost!
 Spaces.create_dss_buffer
 Spaces.DSSBuffer
-Spaces.weighted_dss_start2!
-Spaces.weighted_dss_internal2!
-Spaces.weighted_dss_ghost2!
-Spaces.weighted_dss2!
+Spaces.weighted_dss_start!
+Spaces.weighted_dss_internal!
+Spaces.weighted_dss_ghost!
+Spaces.weighted_dss!
+Spaces.dss!
 Spaces.unique_nodes
 ```
 
