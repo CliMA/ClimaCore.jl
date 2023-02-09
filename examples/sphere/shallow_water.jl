@@ -30,6 +30,9 @@ end
 using ClimaCorePlots
 import Plots
 
+## Plot VTK output on the 2D cubed-sphere
+using ClimaCoreVTK
+
 """
     PhysicalParameters{FT}
 
@@ -135,7 +138,7 @@ Base.@kwdef struct MountainTest{FT, P} <: AbstractTest
     h0::FT = 5960
     "radius of conical mountain"
     a::FT = 20.0
-    "center of mountain long coord, shifted by 180 compared to the paper, 
+    "center of mountain long coord, shifted by 180 compared to the paper,
     because our λ ∈ [-180, 180] (in the paper it was 270, with λ ∈ [0, 360])"
     λc::FT = 90.0
     "latitude coordinate for center of mountain"
@@ -204,7 +207,7 @@ Base.@kwdef struct BarotropicInstabilityTest{FT, P} <: AbstractTest
     αₚ::FT = 19.09859
     "mountain shape parameters"
     βₚ::FT = 3.81971
-    "peak of balanced height field from Tempest 
+    "peak of balanced height field from Tempest
     https://github.com/paullric/tempestmodel/blob/master/test/shallowwater_sphere/BarotropicInstabilityTest.cpp#L86"
     h0::FT = 10158.18617
     "local perturbation peak height"
@@ -523,6 +526,8 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
     α = parse(FT, replace(test_angle_name, "alpha" => ""))
 
+    bubble = true
+
     (!usempi || ClimaComms.iamroot(context)) &&
         println("Test name: $test_name, α = $(α)⁰")
     # Test-specific physical parameters
@@ -549,11 +554,23 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     if usempi
         global_grid_topology =
             Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-        space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-        global_space = Spaces.SpectralElementSpace2D(global_grid_topology, quad)
+        space = Spaces.SpectralElementSpace2D(
+            grid_topology,
+            quad,
+            enable_bubble = bubble,
+        )
+        global_space = Spaces.SpectralElementSpace2D(
+            global_grid_topology,
+            quad,
+            enable_bubble = bubble,
+        )
     else
         global_space =
-            space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+            space = Spaces.SpectralElementSpace2D(
+                grid_topology,
+                quad,
+                enable_bubble = bubble,
+            )
     end
     coords = Fields.coordinate_field(space)
     f = set_coriolis_parameter(space, test)
@@ -612,15 +629,19 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
 
     # post processing
     if !usempi || ClimaComms.iamroot(context)
-        test_params =
-            (test_name = test_name, test_angle_name = test_angle_name, α = α)
+        test_params = (
+            test_name = test_name,
+            test_angle_name = test_angle_name,
+            α = α,
+            bubble = bubble,
+        )
         postprocessing(test, test_params, solution, Y0_global, T, dt)
     end
     return integrator # for use with performance analyzer
 end
 
 function postprocessing(test, test_params, solution, Y0_global, T, dt)
-    (; test_name, test_angle_name, α) = test_params
+    (; test_name, test_angle_name, α, bubble) = test_params
     # post processing (called only from root for distributed runs)
     # Plot variables and auxiliary function
     ENV["GKSwstype"] = "nul"
@@ -640,6 +661,7 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
     end
     @info "Test case: $(test_name)"
     @info "  with α: $(α)⁰"
+    @info "  with enable_bubble: $(bubble)"
     @info "Solution L₂ norm at time t = 0: ", norm(Y0_global.h)
     @info "Solution L₂ norm at time t = $(T): ", norm(solution[end].h)
     @info "Fluid volume at time t = 0: ", sum(Y0_global.h)
@@ -743,6 +765,48 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
             ),
             "Height field at the final time step",
         )
+
+        # Plot the time series
+        times = 0:(10 * dt):T
+        Sol_h = Array{Fields.Field}(undef, length(times))
+        Sol_u = Array{Fields.Field}(undef, length(times))
+        Sol_vort = Array{Fields.Field}(undef, length(times))
+        curl = Operators.Curl()
+
+        for t in 1:length(times)
+            Sol_h[t] = solution[t].h
+            Sol_u[t] = solution[t].u
+            Sol_vort[t] = curl.(solution[t].u).components.data.:1
+        end
+
+        ClimaCoreVTK.writepvd(
+            joinpath(path, "height"),
+            times,
+            (h = Sol_h,),
+            basis = :lagrange,
+        ) #
+        ClimaCoreVTK.writepvd(
+            joinpath(path, "velocity"),
+            times,
+            (u = Sol_u,),
+            basis = :lagrange,
+        )
+        ClimaCoreVTK.writepvd(
+            joinpath(path, "vorticity"),
+            times,
+            (ω = Sol_vort,),
+            basis = :lagrange,
+        )
+
+        ## Plot on a lat-long grid
+        ClimaCoreVTK.writepvd(
+            joinpath(path, "vorticity_lat_long"),
+            times,
+            (ω = Sol_vort,);
+            latlong = true,
+            basis = :point,
+        )
+
     end
     return nothing
 end
