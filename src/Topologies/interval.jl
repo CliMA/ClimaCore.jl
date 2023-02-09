@@ -10,6 +10,8 @@ struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractIntervalTopology
     boundaries::B
 end
 
+Device.device(::IntervalTopology) = ClimaComms.CPU()
+
 function IntervalTopology(mesh::Meshes.IntervalMesh)
     if Domains.isperiodic(mesh.domain)
         boundaries = NamedTuple()

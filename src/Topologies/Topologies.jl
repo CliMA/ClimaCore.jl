@@ -2,6 +2,8 @@ module Topologies
 
 using DocStringExtensions
 
+import ClimaComms
+
 import ..Device
 import ..Geometry
 import ..Domains: Domains, coordinate_type
