@@ -1349,8 +1349,8 @@ function apply_operator_kernel(op::WeakCurl{(1, 2)}, space, ij, slabidx, arg)
         Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1, j]
         Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i, 1]
         for k in 2:Nq
-            Dᵀ₁v₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
-            Dᵀ₂v₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
+            Dᵀ₁Wv₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
+            Dᵀ₂Wv₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
         end
         return Geometry.Contravariant3Vector(
             RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ),
@@ -1369,8 +1369,8 @@ function apply_operator_kernel(op::WeakCurl{(1, 2)}, space, ij, slabidx, arg)
             Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊞ D[k, j] ⊠ Wv₃[i, k]
         end
         return Geometry.Contravariant12Vector(
-            RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ),
-            ⊟(RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ)),
+            ⊟(RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ)),
+            RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ),
         )
     else
         error("invalid return type")
