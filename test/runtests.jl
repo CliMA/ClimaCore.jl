@@ -99,6 +99,7 @@ if "CUDA" in ARGS
     @safetestset "GPU - data" begin @time include("gpu/data.jl") end
     @safetestset "GPU - device" begin @time include("gpu/device.jl") end
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
+    @safetestset "Operators - CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
 end
 
 #! format: on

@@ -30,10 +30,7 @@ grid_space_cpu = Spaces.SpectralElementSpace2D(grid_topology_cpu, quad)
 coords_cpu = Fields.coordinate_field(grid_space_cpu)
 
 f_cpu = sin.(coords_cpu.x .+ 2 .* coords_cpu.y)
-
-grad = Operators.Gradient()
-gradf_cpu = grad.(f_cpu)
-
+g_cpu = Geometry.UVVector.(sin.(coords_cpu.x), 2 .* cos.(coords_cpu.y))
 
 grid_topology = Topologies.Topology2D(
     ClimaComms.SingletonCommsContext(ClimaCore.Device.device()),
@@ -44,10 +41,32 @@ coords = Fields.coordinate_field(grid_space)
 
 CUDA.allowscalar(false)
 f = sin.(coords.x .+ 2 .* coords.y)
+g = Geometry.UVVector.(sin.(coords.x), 2 .* cos.(coords.y))
 
 grad = Operators.Gradient()
-gradf = grad.(f)
+wgrad = Operators.WeakGradient()
 
+@test Array(parent(grad.(f))) ≈ parent(grad.(f_cpu))
+@test Array(parent(wgrad.(f))) ≈ parent(wgrad.(f_cpu))
+
+div = Operators.Divergence()
+wdiv = Operators.WeakDivergence()
+
+@test Array(parent(div.(g))) ≈ parent(div.(g_cpu))
+@test Array(parent(wdiv.(g))) ≈ parent(wdiv.(g_cpu))
+@test Array(parent(div.(grad.(f)))) ≈ parent(div.(grad.(f_cpu))) # composite
+
+curl = Operators.Curl()
+wcurl = Operators.WeakCurl()
+
+@test Array(parent(curl.(Geometry.Covariant12Vector.(g)))) ≈
+      parent(curl.(Geometry.Covariant12Vector.(g_cpu)))
+@test Array(parent(curl.(Geometry.Covariant3Vector.(f)))) ≈
+      parent(curl.(Geometry.Covariant3Vector.(f_cpu)))
+@test Array(parent(wcurl.(Geometry.Covariant12Vector.(g)))) ≈
+      parent(wcurl.(Geometry.Covariant12Vector.(g)))
+@test Array(parent(wcurl.(Geometry.Covariant3Vector.(f)))) ≈
+      parent(wcurl.(Geometry.Covariant3Vector.(f_cpu)))
 
 
 
