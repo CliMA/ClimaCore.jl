@@ -550,9 +550,9 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    =#
 
     sol = @timev OrdinaryDiffEq.solve!(integrator)
+    =#
     return nothing
 end
 

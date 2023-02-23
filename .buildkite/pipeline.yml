@@ -544,6 +544,15 @@ steps:
         artifact_paths:
           - "examples/sphere/output/cg_sphere_shallowwater_rossby_haurwitz_alpha0/*"
 
+      - label: ":flower_playing_cards: CUDA Shallow-water 2D sphere"
+        key: "cuda_shallowwater_2d_cg_sphere"
+        command:
+          - "julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl"
+        artifact_paths:
+          - "examples/sphere/output/cuda_shallowwater_2d_cg_sphere/*"
+        agent:
+          slurm_gpu: 1
+
   - group: "Examples hybrid sphere"
     steps:
 
