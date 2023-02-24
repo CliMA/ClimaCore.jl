@@ -35,6 +35,17 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.broadcastable(field::Field) = field
 
+function Adapt.adapt_structure(
+    to,
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style <: AbstractFieldStyle}
+    Base.Broadcast.Broadcasted{Style}(
+        Adapt.adapt(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
+    )
+end
+
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
@@ -261,8 +272,16 @@ end
     return nothing
 end
 
+# types aren't isbits
+Base.Broadcast.broadcasted(
+    fs::AbstractFieldStyle,
+    ::Type{T},
+    args...,
+) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
+
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # Required for ODE solvers
+
 Base.Broadcast.broadcasted(fs::AbstractFieldStyle, ::typeof(+), args...) =
     Base.Broadcast.broadcasted(fs, RecursiveApply.:⊞, args...)
 

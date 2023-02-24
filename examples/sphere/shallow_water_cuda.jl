@@ -1,6 +1,10 @@
 using CUDA
 using ClimaComms
 using DocStringExtensions
+using LinearAlgebra
+using OrdinaryDiffEq
+
+CUDA.allowscalar(false)
 
 import ClimaCore:
     Device,
@@ -442,6 +446,48 @@ function set_initial_condition(
     return Y
 end
 
+function rhs!(dYdt, y, parameters, t)
+    #@nvtx "rhs!" color = colorant"red" begin
+    (; f, h_s, ghost_buffer, params) = parameters
+    (; D₄, g) = params
+
+    div = Operators.Divergence()
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    wgrad = Operators.WeakGradient()
+    curl = Operators.Curl()
+    wcurl = Operators.WeakCurl()
+
+    # Compute hyperviscosity first
+    #@nvtx "Hyperviscosity (rhs!)" color = colorant"green" begin
+    @. dYdt.h = wdiv(grad(y.h))
+    @. dYdt.u =
+        wgrad(div(y.u)) -
+        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+
+    Spaces.weighted_dss2!(dYdt, ghost_buffer)
+
+    @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
+    # split to avoid "device kernel image is invalid (code 200, ERROR_INVALID_IMAGE)"
+    @. dYdt.u =
+        wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
+            wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
+        )
+    @. dYdt.u = -D₄ * dYdt.u
+    #end
+    #@nvtx "h and u (rhs!)" color = colorant"blue" begin
+    # Add in pieces
+    @. begin
+        dYdt.h += -wdiv(y.h * y.u)
+        dYdt.u += -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) #+
+        dYdt.u += y.u × (f + curl(y.u))
+    end
+    Spaces.weighted_dss2!(dYdt, ghost_buffer)
+    #end
+    #end
+    return dYdt
+end
+
 function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     device = Device.device()
     context = ClimaComms.SingletonCommsContext(device)
@@ -478,11 +524,35 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     f = set_coriolis_parameter(space, test)
     h_s = surface_topography(space, test)
     Y = set_initial_condition(space, test)
+    dYdt = similar(Y)
 
     ghost_buffer = Spaces.create_dss_buffer(Y)
     Spaces.weighted_dss_start!(Y, ghost_buffer)
     Spaces.weighted_dss_internal!(Y, ghost_buffer)
     Spaces.weighted_dss_ghost!(Y, ghost_buffer)
+
+    parameters =
+        (; f = f, h_s = h_s, ghost_buffer = ghost_buffer, params = test.params)
+    rhs!(dYdt, Y, parameters, 0.0)
+
+    #=
+    # Solve the ODE
+    dt = 9 * 60
+    T = 86400 * 2
+
+    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
+    integrator = OrdinaryDiffEq.init(
+        prob,
+        SSPRK33(),
+        dt = dt,
+        saveat = dt,
+        progress = true,
+        adaptive = false,
+        progress_message = (dt, u, p, t) -> t,
+    )
+
+    sol = @timev OrdinaryDiffEq.solve!(integrator)
+    =#
     return nothing
 end
 

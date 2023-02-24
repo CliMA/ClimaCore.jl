@@ -8,10 +8,11 @@ import ..Domains
 import ..Topologies
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf
+import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply
 using ClimaComms
+import Adapt
 
 import StaticArrays, LinearAlgebra, Statistics, InteractiveUtils
 
@@ -48,6 +49,10 @@ comm_context(topology::Topologies.Topology2D) = topology.context
 comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
     ClimaComms.SingletonCommsContext()
 
+Adapt.adapt_structure(to, field::Field) = Field(
+    Adapt.adapt(to, Fields.field_values(field)),
+    Adapt.adapt(to, axes(field)),
+)
 
 
 # Point Field

@@ -1,10 +1,13 @@
 module Operators
 
-import LinearAlgebra
+import LinearAlgebra, Adapt
 
-using StaticArrays
+using StaticArrays, CUDA
+
+import Base.Broadcast: Broadcasted
 
 import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args
+import ..Device
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
 import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
