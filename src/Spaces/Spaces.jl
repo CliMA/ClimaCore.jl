@@ -19,10 +19,11 @@ using Adapt
 using CUDA
 
 import ..slab, ..column, ..level
-import ..Utilities: PlusHalf
+import ..Utilities: PlusHalf, half
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
+using Memoize, WeakValueDicts
 
 abstract type AbstractSpace end
 

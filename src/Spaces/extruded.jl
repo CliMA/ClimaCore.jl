@@ -214,79 +214,32 @@ Base.@propagate_inbounds function column(
     )
 end
 
-Base.@propagate_inbounds function column(
-    space::ExtrudedFiniteDifferenceSpace,
-    i,
-    h,
-)
-    FiniteDifferenceSpace(
-        space.staggering,
-        space.vertical_topology,
-        Geometry.CartesianGlobalGeometry(),
-        column(space.center_local_geometry, i, h),
-        column(space.face_local_geometry, i, h),
-    )
+struct LevelSpace{S, L} <: AbstractSpace
+    space::S
+    level::L
 end
 
+level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer) =
+    LevelSpace(space, v)
+level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf) =
+    LevelSpace(space, v)
 
-Base.@propagate_inbounds function level(
-    space::CenterExtrudedFiniteDifferenceSpace,
-    v::Integer,
+function local_geometry_data(
+    levelspace::LevelSpace{<:CenterExtrudedFiniteDifferenceSpace, <:Integer},
 )
-    horizontal_space = space.horizontal_space
-    if horizontal_space isa SpectralElementSpace1D
-        SpectralElementSpace1D(
-            horizontal_space.topology,
-            horizontal_space.quadrature_style,
-            horizontal_space.global_geometry,
-            level(space.center_local_geometry, v),
-            horizontal_space.dss_weights,
-        )
-    elseif horizontal_space isa SpectralElementSpace2D
-        SpectralElementSpace2D(
-            horizontal_space.topology,
-            horizontal_space.quadrature_style,
-            horizontal_space.global_geometry,
-            level(space.center_local_geometry, v),
-            level(space.center_ghost_geometry, v),
-            horizontal_space.local_dss_weights,
-            horizontal_space.ghost_dss_weights,
-            horizontal_space.internal_surface_geometry,
-            horizontal_space.boundary_surface_geometries,
-        )
-    else
-        error("Unsupported horizontal space")
-    end
+    level(local_geometry_data(levelspace.space), levelspace.level)
 end
-Base.@propagate_inbounds function level(
-    space::FaceExtrudedFiniteDifferenceSpace,
-    v::PlusHalf,
+function local_geometry_data(
+    levelspace::LevelSpace{<:FaceExtrudedFiniteDifferenceSpace, <:PlusHalf},
 )
-    horizontal_space = space.horizontal_space
-    if horizontal_space isa SpectralElementSpace1D
-        @inbounds SpectralElementSpace1D(
-            horizontal_space.topology,
-            horizontal_space.quadrature_style,
-            horizontal_space.global_geometry,
-            level(space.face_local_geometry, v.i + 1),
-            horizontal_space.dss_weights,
-        )
-    elseif horizontal_space isa SpectralElementSpace2D
-        @inbounds SpectralElementSpace2D(
-            horizontal_space.topology,
-            horizontal_space.quadrature_style,
-            horizontal_space.global_geometry,
-            level(space.face_local_geometry, v.i + 1),
-            level(space.face_ghost_geometry, v.i + 1),
-            horizontal_space.local_dss_weights,
-            horizontal_space.ghost_dss_weights,
-            horizontal_space.internal_surface_geometry,
-            horizontal_space.boundary_surface_geometries,
-        )
-    else
-        error("Unsupported horizontal space")
-    end
+    level(local_geometry_data(levelspace.space), levelspace.level + half)
 end
+
+function column(levelspace::LevelSpace, args...)
+    local_geometry = column(local_geometry_data(levelspace), args...)
+    PointSpace(local_geometry)
+end
+
 
 nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
     size(space.center_local_geometry, 4)

@@ -166,7 +166,7 @@ const IntervalSpectralElementSpace1D = SpectralElementSpace1D{
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace2D{
+mutable struct SpectralElementSpace2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -233,7 +233,7 @@ where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
 [`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
-function SpectralElementSpace2D(
+@memoize WeakValueDict function SpectralElementSpace2D(
     topology,
     quadrature_style;
     enable_bubble = false,
