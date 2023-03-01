@@ -66,7 +66,7 @@ end
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(ClimaCore.Device.device()), mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
