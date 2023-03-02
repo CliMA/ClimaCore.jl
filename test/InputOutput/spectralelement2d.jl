@@ -13,6 +13,9 @@ import ClimaCore:
     DataLayouts,
     InputOutput
 
+using CUDA
+CUDA.allowscalar(false)
+
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     x, y = coord.x, coord.y
@@ -65,8 +68,10 @@ end
     Nq = 4
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    device = ClimaCore.Device.device()
+    @info "Using device" device
     grid_topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
@@ -74,9 +79,12 @@ end
 
     # write field vector to hdf5 file
     filename = tempname(pwd())
-    InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
-    reader = InputOutput.HDF5Reader(filename)
+    writer = InputOutput.HDF5Writer(filename, grid_topology.context)
+    InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+    close(writer)
+    reader = InputOutput.HDF5Reader(filename, grid_topology.context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
+    CUDA.allowscalar(true)
     @test restart_Y == Y # test if restart is exact
 end

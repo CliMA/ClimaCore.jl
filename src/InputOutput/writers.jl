@@ -432,16 +432,28 @@ function write!(
 end
 
 """
-    write!(filename, fvpair)
+    write!(writer::HDF5Writer, name => value...)
 
-Write 'FieldVector' data, specified by a pair `fieldvectorname => fieldvector`, to HDF5 file 'filename'.
+Write one or more `name => value` pairs to `writer`.
 """
-function write!(
-    filename::AbstractString,
-    fvpair::Pair{String, <:Fields.FieldVector},
-)
-    hdfwriter = InputOutput.HDF5Writer(filename)
-    InputOutput.write!(hdfwriter, fvpair.second, fvpair.first)
-    Base.close(hdfwriter)
+function write!(writer::HDF5Writer, pairs::Pair...)
+    for (name, value) in pairs
+        write!(writer, value, name)
+    end
     return nothing
+end
+
+
+"""
+    write!(filename::AbstractString, name => value...)
+
+Write one or more `name => value` pairs to the HDF5 file `filename`.
+"""
+function write!(filename::AbstractString, pairs::Pair...)
+    hdfwriter = HDF5Writer(filename)
+    try
+        write!(hdfwriter, pairs...)
+    finally
+        Base.close(hdfwriter)
+    end
 end
