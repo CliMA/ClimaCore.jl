@@ -74,11 +74,15 @@ steps:
         key: "cpu_implicit_stencil_float32"
         command:
           - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+        agents:
+          slurm_time: 2:00:00
 
       - label: ":computer: test implicit_stencil Float64"
         key: "cpu_implicit_stencil_float64"
         command:
           - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
+        agents:
+          slurm_time: 2:00:00
 
       - label: ":computer: test implicit_stencil opt"
         key: "cpu_implicit_stencil_opt"
