@@ -70,10 +70,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     device = ClimaCore.Device.device()
     @info "Using device" device
-    grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(device),
-        mesh,
-    )
+    grid_topology =
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
