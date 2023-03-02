@@ -68,8 +68,10 @@ end
     Nq = 4
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    device = ClimaCore.Device.device()
+    @info "Using device" device
     grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaCore.Device.device()),
+        ClimaComms.SingletonCommsContext(device),
         mesh,
     )
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
