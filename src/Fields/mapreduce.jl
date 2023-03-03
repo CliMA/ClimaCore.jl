@@ -8,16 +8,19 @@ context.
 
 See [`sum`](@ref) for the integral over the full domain.
 """
+local_sum(
+    field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
+    ::ClimaComms.CPU,
+) = Base.reduce(
+    RecursiveApply.radd,
+    Base.Broadcast.broadcasted(
+        RecursiveApply.rmul,
+        Spaces.weighted_jacobian(axes(field)),
+        todata(field),
+    ),
+)
 local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
-    Base.reduce(
-        RecursiveApply.radd,
-        Base.Broadcast.broadcasted(
-            RecursiveApply.rmul,
-            Spaces.weighted_jacobian(axes(field)),
-            todata(field),
-        ),
-    )
-
+    local_sum(field, Device.device(axes(field)))
 """
     sum([f=identity,]v::Field)
 
@@ -36,13 +39,20 @@ where ``v_i`` is the value at each node, and ``f`` is the identity function if n
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}})
+function Base.sum(
+    field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
+    ::ClimaComms.CPU,
+)
     context = comm_context(axes(field))
     data_sum = DataLayouts.DataF(local_sum(field))
     ClimaComms.allreduce!(context, parent(data_sum), +)
     return data_sum[]
 end
-Base.sum(fn, field::Field) = Base.sum(Base.Broadcast.broadcasted(fn, field))
+Base.sum(fn, field::Field, ::ClimaComms.CPU) =
+    Base.sum(Base.Broadcast.broadcasted(fn, field))
+Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
+    Base.sum(field, Device.device(axes(field)))
+Base.sum(fn, field::Field) = Base.sum(fn, field, Device.device(field))
 
 """
     maximum([f=identity,]v::Field)
@@ -51,22 +61,27 @@ Approximate maximum of `v` or `f.(v)` over the domain.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Base.maximum(fn, field::Field)
+function Base.maximum(fn, field::Field, ::ClimaComms.CPU)
     context = comm_context(axes(field))
     data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
     return data_max[]
 end
-Base.maximum(field::Field) = maximum(identity, field)
+Base.maximum(field::Field, device::ClimaComms.CPU) =
+    maximum(identity, field, device)
+Base.maximum(fn, field::Field) = Base.maximum(fn, field, Device.device(field))
+Base.maximum(field::Field) = Base.maximum(field, Device.device(field))
 
-function Base.minimum(fn, field::Field)
+function Base.minimum(fn, field::Field, ::ClimaComms.CPU)
     context = comm_context(axes(field))
     data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
     return data_min[]
 end
-Base.minimum(field::Field) = minimum(identity, field)
-
+Base.minimum(field::Field, device::ClimaComms.CPU) =
+    minimum(identity, field, device)
+Base.minimum(fn, field::Field) = Base.minimum(fn, field, Device.device(field))
+Base.minimum(field::Field) = Base.minimum(field, Device.device(field))
 # somewhat inefficient
 Base.extrema(fn, field::Field) = (minimum(fn, field), maximum(fn, field))
 Base.extrema(field::Field) = extrema(identity, field)
@@ -89,6 +104,7 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
+    ::ClimaComms.CPU,
 )
     space = axes(field)
     context = comm_context(space)
@@ -98,8 +114,13 @@ function Statistics.mean(
     sum_v, area_v = data_combined[]
     RecursiveApply.rdiv(sum_v, area_v)
 end
-Statistics.mean(fn, field::Field) =
+Statistics.mean(fn, field::Field, ::ClimaComms.CPU) =
     Statistics.mean(Base.Broadcast.broadcasted(fn, field))
+
+Statistics.mean(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
+    Statistics.mean(field, Device.device(axes(field)))
+Statistics.mean(fn, field::Field) =
+    Statistics.mean(fn, field, Device.device(axes(field)))
 
 """
     norm(v::Field, p=2; normalize=true)

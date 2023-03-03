@@ -22,6 +22,8 @@ end
 
 Device.device(space::AbstractSpectralElementSpace) =
     Device.device(topology(space))
+Device.device_array_type(space::AbstractSpectralElementSpace) =
+    Device.device_array_type(Device.device(space))
 topology(space::AbstractSpectralElementSpace) = space.topology
 quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 

@@ -69,5 +69,7 @@ If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
 area(space::Spaces.AbstractSpace) =
     ClimaComms.allreduce(comm_context(space), local_area(space), +)
 
+Device.device_array_type(space::AbstractSpace) =
+    Device.device_array_type(Device.device(space))
 
 end # module
