@@ -11,6 +11,8 @@ struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractIntervalTopology
 end
 
 Device.device(::IntervalTopology) = ClimaComms.CPU()
+Device.device_array_type(::IntervalTopology) =
+    Device.device_array_type(ClimaComms.CPU())
 
 function IntervalTopology(mesh::Meshes.IntervalMesh)
     if Domains.isperiodic(mesh.domain)

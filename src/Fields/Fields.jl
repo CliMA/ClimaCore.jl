@@ -1,6 +1,7 @@
 module Fields
 
 import ..comm_context
+import ..Device
 import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
@@ -11,6 +12,7 @@ import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply
+using CUDA
 using ClimaComms
 import Adapt
 
@@ -104,6 +106,11 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 
 # Define the axes field to be the todata(bc) of the return field
 @inline Base.axes(field::Field) = getfield(field, :space)
+
+# Define device and device array type
+Device.device(field::Field) = Device.device(axes(field))
+Device.device_array_type(field::Field) =
+    Device.device_array_type(Device.device(field))
 
 # need to define twice to avoid ambiguities
 @inline Base.dotgetproperty(field::Field, prop) = Base.getproperty(field, prop)
@@ -290,6 +297,7 @@ A `Field` containing the `Δz` values on the same space as the given field.
 Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
 
 include("broadcast.jl")
+include("mapreduce_cuda.jl")
 include("mapreduce.jl")
 include("compat_diffeq.jl")
 include("fieldvector.jl")
