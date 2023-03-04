@@ -87,6 +87,34 @@ function linkfig(figpath, alt = "")
     end
 end
 
+function tendency!(yₜ, y, parameters, t)
+    (; u, Δₕq) = parameters
+    grad = Operators.Gradient()
+    wdiv = Operators.WeakDivergence()
+    coord = Fields.coordinate_field(axes(u))
+    @. u = Geometry.UVVector(
+        -u0 * (coord.y - flow_center.y) * cospi(t / end_time),
+        u0 * (coord.x - flow_center.x) * cospi(t / end_time),
+    )
+    @. Δₕq = wdiv(grad(y.ρq / y.ρ))
+    Spaces.weighted_dss!(Δₕq)
+    @. yₜ.ρ = -wdiv(y.ρ * u)
+    @. yₜ.ρq = -wdiv(y.ρq * u) - D₄ * wdiv(y.ρ * grad(Δₕq))
+end
+
+function lim!(y, parameters, t, y_ref)
+    (; limiter) = parameters
+    if lim_flag
+        Limiters.compute_bounds!(limiter, y_ref.ρq, y_ref.ρ)
+        Limiters.apply_limiter!(y.ρq, y.ρ, limiter)
+    end
+end
+
+function dss!(y, parameters, t)
+    Spaces.weighted_dss!(y.ρ)
+    Spaces.weighted_dss!(y.ρq)
+end
+
 # Set up spatial domain
 domain = Domains.RectangleDomain(
     Domains.IntervalDomain(
@@ -104,9 +132,9 @@ domain = Domains.RectangleDomain(
 # Set up spatial discretization
 ne_seq = 2 .^ (2, 3, 4)
 Δh = zeros(FT, length(ne_seq))
-L1err, L2err, Linferr = zeros(FT, length(ne_seq)),
-zeros(FT, length(ne_seq)),
-zeros(FT, length(ne_seq))
+L1err = zeros(FT, length(ne_seq))
+L2err = zeros(FT, length(ne_seq))
+Linferr = zeros(FT, length(ne_seq))
 Nq = 4
 
 # h-refinement study loop
@@ -116,136 +144,65 @@ for (k, ne) in enumerate(ne_seq)
     quad = Spaces.Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    # Initialize variables needed for limiters
-    n_elems = Topologies.nlocalelems(space.topology)
-    min_q = zeros(n_elems)
-    max_q = zeros(n_elems)
-
-    coords = Fields.coordinate_field(space)
-    Δh[k] = (xmax - xmin) / ne
-
     # Initialize state
-    y0 = map(coords) do coord
-        x, y = coord.x, coord.y
-
-        rd = Vector{Float64}(undef, 2)
-        for i in 1:2
-            rd[i] = Geometry.euclidean_distance(coord, bell_centers[i])
-        end
-
-        # Initialize specific tracer concentration
+    ρ_init = ρ₀ .* ones(space)
+    q_init = map(Fields.coordinate_field(space)) do coord
+        (; x, y) = coord
+        rd = Geometry.euclidean_distance.((coord,), bell_centers)
         if test_name == cylinder_test_name
             if rd[1] <= r0 && abs(x - bell_centers[1].x) >= r0 / 6
-                q = 1.0
+                return 1.0
             elseif rd[2] <= r0 && abs(x - bell_centers[2].x) >= r0 / 6
-                q = 1.0
+                return 1.0
             elseif rd[1] <= r0 &&
                    abs(x - bell_centers[1].x) < r0 / 6 &&
                    (y - bell_centers[1].y) < -5 * r0 / 12
-                q = 1.0
+                return 1.0
             elseif rd[2] <= r0 &&
                    abs(x - bell_centers[2].x) < r0 / 6 &&
                    (y - bell_centers[2].y) > 5 * r0 / 12
-                q = 1.0
+                return 1.0
             else
-                q = 0.1
+                return 0.1
             end
         elseif test_name == gaussian_test_name
-            q = 0.95 * (exp(-5.0 * (rd[1] / r0)^2) + exp(-5.0 * (rd[2] / r0)^2))
+            return 0.95 * (exp(-5.0 * (rd[1] / r0)^2) + exp(-5.0 * (rd[2] / r0)^2))
         else # default test case, cosine bells
             if rd[1] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
+                return 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
             elseif rd[2] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[2] / r0))
+                return 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[2] / r0))
             else
-                q = 0.1
+                return 0.1
             end
         end
-
-        # Initialize air density
-        ρ = ρ₀
-
-        # Tracer density
-        Q = ρ * q
-        return (ρ = ρ, ρq = Q)
     end
-
-    y0 = Fields.FieldVector(ρ = y0.ρ, ρq = y0.ρq)
-
-    function f!(dy, y, parameters, t, alpha, beta)
-
-        # Set up operators
-        grad = Operators.Gradient()
-        wdiv = Operators.WeakDivergence()
-        end_time = parameters.end_time
-
-        # Define the flow
-        coords = Fields.coordinate_field(axes(y.ρq))
-        u = map(coords) do coord
-            local y
-            x, y = coord.x, coord.y
-
-            uu = -u0 * (y - flow_center.y) * cospi(t / end_time)
-            uv = u0 * (x - flow_center.x) * cospi(t / end_time)
-
-            Geometry.UVVector(uu, uv)
-        end
-
-        # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
-        ystar = similar(y)
-        @. ystar.ρq = wdiv(grad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar.ρq)
-        @. ystar.ρq = -D₄ * wdiv(y.ρ * grad(ystar.ρq))
-
-        # Add advective flux divergence
-        @. dy.ρ = beta * dy.ρ - alpha * wdiv(y.ρ * u)                         # contintuity equation
-        @. dy.ρq = beta * dy.ρq - alpha * wdiv(y.ρq * u) + alpha * ystar.ρq   # advection of tracers equation
-
-        if lim_flag
-            Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
-            Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
-        end
-        Spaces.weighted_dss!(dy.ρ)
-        Spaces.weighted_dss!(dy.ρq)
-    end
-
-    # Set up RHS function
-    ystar = copy(y0)
-    parameters = (
-        space = space,
-        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq),
-        end_time = end_time,
-    )
-    f!(ystar, y0, parameters, 0.0, dt, 1)
+    y = Fields.FieldVector(ρ = ρ_init, ρq = ρ_init .* q_init)
 
     # Solve the ODE
+    parameters = (
+        u = Fields.Field(Geometry.UVVector{FT}, space),
+        Δₕq = Fields.Field(FT, space),
+        limiter = Limiters.QuasiMonotoneLimiter(q_init),
+    )
     prob = ODEProblem(
-        IncrementingODEFunction(f!),
-        copy(y0),
+        ClimaODEFunction(; T_lim! = tendency!, lim!, dss!),
+        y,
         (0.0, end_time),
         parameters,
     )
     sol = solve(
         prob,
-        SSPRK33ShuOsher(),
+        ExplicitAlgorithm(SSP33ShuOsher()),
         dt = dt,
         saveat = 0.99 * 800 * dt,
-        progress = true,
-        adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
     )
 
-    L1err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        1,
-    )
-    L2err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-    )
-    Linferr[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        Inf,
-    )
+    q_final = sol.u[end].ρq ./ sol.u[end].ρ
+    Δh[k] = (xmax - xmin) / ne
+    L1err[k] = norm((q_final .- q_init) ./ q_init, 1)
+    L2err[k] = norm((q_final .- q_init) ./ q_init)
+    Linferr[k] = norm((q_final .- q_init) ./ q_init, Inf)
 
     @info "Test case: $(test_name)"
     @info "With limiter: $(lim_flag)"
@@ -253,17 +210,14 @@ for (k, ne) in enumerate(ne_seq)
     @info "Number of elements in domain: $(ne) x $(ne)"
     @info "Number of quadrature points per element: $(Nq) x $(Nq) (p = $(Nq-1))"
     @info "Time step dt = $(dt) (s)"
-    @info "Tracer concentration norm at t = 0 (s): ", norm(y0.ρq ./ y0.ρ)
+    @info "Tracer concentration norm at t = 0 (s): ", norm(q_init)
     @info "Tracer concentration norm at $(n_steps) time steps, t = $(end_time) (s): ",
-    norm(sol.u[end].ρq ./ sol.u[end].ρ)
+    norm(q_final)
     @info "L₁ error at $(n_steps) time steps, t = $(end_time) (s): ", L1err[k]
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
 
-    Plots.png(
-        Plots.plot(sol.u[end].ρq ./ sol.u[end].ρ),
-        joinpath(path, "final_q.png"),
-    )
+    Plots.png(Plots.plot(q_final), joinpath(path, "final_q.png"))
 end
 
 # Print convergence rate info

@@ -153,12 +153,64 @@ function linkfig(figpath, alt = "")
     end
 end
 
+local_velocity(coord, t) = Geometry.UVWVector(
+    -u0 * (coord.y - flow_center.y) * cospi(t / end_time),
+    u0 * (coord.x - flow_center.x) * cospi(t / end_time),
+    u0 * sinpi(coord.z / zmax) * cospi(t / end_time),
+)
+
+function horizontal_tendency!(yₜ, y, parameters, t)
+    (; u, Δₕq) = parameters
+    grad = Operators.Gradient()
+    wdiv = Operators.WeakDivergence()
+    coord = Fields.coordinate_field(axes(u))
+    @. u = local_velocity(coord, t)
+    @. Δₕq = wdiv(grad(y.ρq / y.ρ))
+    Spaces.weighted_dss!(Δₕq)
+    @. yₜ.ρ = -wdiv(y.ρ * u)
+    @. yₜ.ρq = -wdiv(y.ρq * u) - D₄ * wdiv(y.ρ * grad(Δₕq))
+end
+
+function vertical_tendency!(yₜ, y, cache, t)
+    (; face_u) = cache
+    Ic2f = Operators.InterpolateC2F()
+    vdivf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
+    )
+    upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
+        bottom = Operators.ThirdOrderOneSided(),
+        top = Operators.ThirdOrderOneSided(),
+    )
+    ax12 = (Geometry.Covariant12Axis(),)
+    ax3 = (Geometry.Covariant3Axis(),)
+    face_coord = Fields.coordinate_field(face_u)
+    @. face_u = local_velocity(face_coord, t)
+    @. yₜ.ρ = -vdivf2c(Ic2f(y.ρ) * face_u)
+    @. yₜ.ρq =
+        -vdivf2c(Ic2f(y.ρq) * Geometry.project(ax12, face_u)) -
+        vdivf2c(Ic2f(y.ρ) * upwind3(Geometry.project(ax3, face_u), y.ρq / y.ρ))
+end
+
+function lim!(y, parameters, t, y_ref)
+    (; limiter) = parameters
+    if lim_flag
+        Limiters.compute_bounds!(limiter, y_ref.ρq, y_ref.ρ)
+        Limiters.apply_limiter!(y.ρq, y.ρ, limiter)
+    end
+end
+
+function dss!(y, parameters, t)
+    Spaces.weighted_dss!(y.ρ)
+    Spaces.weighted_dss!(y.ρq)
+end
+
 # Set up spatial discretization
 horz_ne_seq = 2 .^ (2, 3, 4, 5)
 Δh = zeros(FT, length(horz_ne_seq))
-L1err, L2err, Linferr = zeros(FT, length(horz_ne_seq)),
-zeros(FT, length(horz_ne_seq)),
-zeros(FT, length(horz_ne_seq))
+L1err = zeros(FT, length(horz_ne_seq))
+L2err = zeros(FT, length(horz_ne_seq))
+Linferr = zeros(FT, length(horz_ne_seq))
 Nij = 3
 
 # h-refinement study loop
@@ -172,189 +224,71 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
         zelems = zelems,
     )
 
-    center_coords = Fields.coordinate_field(hv_center_space)
-    face_coords = Fields.coordinate_field(hv_face_space)
-    Δh[k] = (xmax - xmin) / horz_ne
-
     # Initialize state
-    y0 = map(center_coords) do coord
-        x, y, z = coord.x, coord.y, coord.z
-
-        rd = Vector{Float64}(undef, 2)
-        for i in 1:2
-            rd[i] = Geometry.euclidean_distance(coord, bell_centers[i])
-        end
-
-        # Initialize specific tracer concentration
+    ρ_init = ρ₀ .* ones(hv_center_space)
+    q_init = map(Fields.coordinate_field(hv_center_space)) do coord
+        (; x, y, z) = coord
+        rd = Geometry.euclidean_distance.((coord,), bell_centers)
         if test_name == cylinder_test_name
             if rd[1] <= r0 && abs(x - bell_centers[1].x) >= r0 / 6
-                q = 1.0
+                return 1.0
             elseif rd[2] <= r0 && abs(x - bell_centers[2].x) >= r0 / 6
-                q = 1.0
+                return 1.0
             elseif rd[1] <= r0 &&
                    abs(x - bell_centers[1].x) < r0 / 6 &&
                    (y - bell_centers[1].y) < -5 * r0 / 12
-                q = 1.0
+                return 1.0
             elseif rd[2] <= r0 &&
                    abs(x - bell_centers[2].x) < r0 / 6 &&
                    (y - bell_centers[2].y) > 5 * r0 / 12
-                q = 1.0
+                return 1.0
             else
-                q = 0.1
+                return 0.1
             end
         elseif test_name == gaussian_test_name
-            q = 0.95 * (exp(-5.0 * (rd[1] / r0)^2) + exp(-5.0 * (rd[2] / r0)^2))
+            return 0.95 * (exp(-5.0 * (rd[1] / r0)^2) + exp(-5.0 * (rd[2] / r0)^2))
         else # default test case, cosine bells
             if rd[1] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
+                return 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
             elseif rd[2] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[2] / r0))
+                return 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[2] / r0))
             else
-                q = 0.1
+                return 0.1
             end
         end
-
-        # Initialize air density
-        ρ = ρ₀
-
-        # Tracer density
-        Q = ρ * q
-        return (ρ = ρ, ρq = Q)
     end
-
-    y0 = Fields.FieldVector(ρ = y0.ρ, ρq = y0.ρq)
-
-    function f!(dy, y, parameters, t, alpha, beta)
-
-        end_time = parameters.end_time
-        center_coords = parameters.center_coords
-        face_coords = parameters.face_coords
-        zf = face_coords.z
-        xc, yc = center_coords.x, center_coords.y
-
-        # Define the flow
-        uu = @. -u0 * (yc - flow_center.y) * cospi(t / end_time)
-        uv = @. u0 * (xc - flow_center.x) * cospi(t / end_time)
-        uw = @. u0 * sinpi(zf / zmax) * cospi(t / end_time)
-
-        cuₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
-        fw = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
-
-        # Set up operators
-        # Spectral horizontal operators
-        hgrad = Operators.Gradient()
-        hdiv = Operators.Divergence()
-        hwdiv = Operators.WeakDivergence()
-        # Vertical staggered FD operators
-        first_order_Ic2f = Operators.InterpolateC2F(
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
-        )
-        first_order_If2c = Operators.InterpolateF2C()
-        vdivf2c = Operators.DivergenceF2C(
-            top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
-            bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0.0))),
-        )
-        third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
-            bottom = Operators.ThirdOrderOneSided(),
-            top = Operators.ThirdOrderOneSided(),
-        )
-
-        fuₕ = first_order_Ic2f.(cuₕ)
-        fuvw =
-            Geometry.Contravariant123Vector.(fuₕ) .+
-            Geometry.Contravariant123Vector.(fw)
-        vert_flux_wρ = vdivf2c.(fw .* first_order_Ic2f.(y.ρ))
-        vert_flux_wρq =
-            vdivf2c.(
-                first_order_Ic2f.(y.ρ) .*
-                third_order_upwind_c2f.(fuvw, y.ρq ./ y.ρ),
-            )
-
-        # Compute vertical velocity by interpolating faces to centers
-        cw = first_order_If2c.(fw)        # Covariant3Vector on faces, interpolated to centers
-        cuvw =
-            Geometry.Covariant123Vector.(cuₕ) .+
-            Geometry.Covariant123Vector.(cw)
-
-        ## NOTE: With limiters, the order of the operations 1)-5) below matters!
-
-        # 1) Horizontal Transport:
-        # 1.1) Horizontal part of continuity equation:
-        @. dy.ρ = beta * dy.ρ - alpha * hwdiv(y.ρ * cuvw)
-
-        # 1.2) Horizontal advection of tracer equations:
-        @. dy.ρq = beta * dy.ρq - alpha * hwdiv(y.ρq * cuvw) + alpha * ystar.ρq
-
-        # 2) Apply the limiters:
-        if lim_flag
-            # First compute the min_q/max_q at the current time step
-            Limiters.compute_bounds!(parameters.limiter, y.ρq, y.ρ)
-            # Then apply the limiters
-            Limiters.apply_limiter!(dy.ρq, dy.ρ, parameters.limiter)
-        end
-
-        # 3) Add Hyperdiffusion to the horizontal tracers equation (using weak div)
-        # Set up working variable needed for hyperdiffusion
-        ystar = similar(y)
-
-        # Compute hyperviscosity for the tracer equation by splitting it in two diffusion calls
-        @. ystar.ρq = hwdiv(hgrad(y.ρq / y.ρ))
-        Spaces.weighted_dss!(ystar.ρq)
-        @. ystar.ρq = -D₄ * hwdiv(y.ρ * hgrad(ystar.ρq))
-
-        # 4) Vertical Transport:
-        # 4.1) Vertical part of continuity equation
-        @. dy.ρ -= alpha * vert_flux_wρ
-
-        # 4.2) Vertical advection of tracer equation
-        @. dy.ρ -= alpha * vdivf2c.(first_order_Ic2f.(y.ρ .* cuₕ))
-
-        # 5) DSS:
-        Spaces.weighted_dss!(dy.ρ)
-        Spaces.weighted_dss!(dy.ρq)
-
-        return dy
-    end
-
-    # Set up RHS function
-    ystar = copy(y0)
-    parameters = (
-        horzspace = horzspace,
-        limiter = Limiters.QuasiMonotoneLimiter(y0.ρq),
-        end_time = end_time,
-        center_coords = center_coords,
-        face_coords = face_coords,
-    )
-    f!(ystar, y0, parameters, 0.0, dt, 1)
+    y = Fields.FieldVector(ρ = ρ_init, ρq = ρ_init .* q_init)
 
     # Solve the ODE
+    parameters = (
+        u = Fields.Field(Geometry.UVWVector{FT}, hv_center_space),
+        Δₕq = Fields.Field(FT, hv_center_space),
+        face_u = Fields.Field(Geometry.UVWVector{FT}, hv_face_space),
+        limiter = Limiters.QuasiMonotoneLimiter(q_init),
+    )
     prob = ODEProblem(
-        IncrementingODEFunction(f!),
-        copy(y0),
+        ClimaODEFunction(;
+            T_lim! = horizontal_tendency!,
+            T_exp! = vertical_tendency!,
+            lim!,
+            dss!,
+        ),
+        y,
         (0.0, end_time),
         parameters,
     )
     sol = solve(
         prob,
-        SSPRK33ShuOsher(),
+        ExplicitAlgorithm(SSP33ShuOsher()),
         dt = dt,
         saveat = 0.99 * 80 * dt,
-        progress = true,
-        adaptive = false,
-        progress_message = (dt, u, p, t) -> t,
     )
-    L1err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        1,
-    )
-    L2err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-    )
-    Linferr[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        Inf,
-    )
+
+    q_final = sol.u[end].ρq ./ sol.u[end].ρ
+    Δh[k] = (xmax - xmin) / horz_ne
+    L1err[k] = norm((q_final .- q_init) ./ q_init, 1)
+    L2err[k] = norm((q_final .- q_init) ./ q_init)
+    Linferr[k] = norm((q_final .- q_init) ./ q_init, Inf)
 
     @info "Test case: $(test_name)"
     @info "With limiter: $(lim_flag)"
@@ -362,9 +296,9 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
     @info "Number of elements in XYZ domain: $(horz_ne) x $(horz_ne) x $(zelems)"
     @info "Number of quadrature points per horizontal element: $(Nij) x $(Nij) (p = $(Nij-1))"
     @info "Time step dt = $(dt) (s)"
-    @info "Tracer concentration norm at t = 0 (s): ", norm(y0.ρq ./ y0.ρ)
+    @info "Tracer concentration norm at t = 0 (s): ", norm(q_init)
     @info "Tracer concentration norm at $(n_steps) time steps, t = $(end_time) (s): ",
-    norm(sol.u[end].ρq ./ sol.u[end].ρ)
+    norm(q_final)
     @info "L₁ error at $(n_steps) time steps, t = $(end_time) (s): ", L1err[k]
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]

@@ -82,53 +82,18 @@ function sphere_3D(
     return (hv_center_space, hv_face_space)
 end
 
-# RHS tendency specification
-function rhs!(dydt, y, parameters, t, alpha, beta)
-
-    (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar, y_td) = parameters
-
-    ϕ = coords.lat
-    zc = coords.z
-    zf = face_coords.z
-    ϕf = face_coords.lat
-
-    uu = @. u₀ * cosd(ϕ)
-    uv = @. -(R * w₀ * pi * ρ₀ / K / z_top / ρ_ref(zc)) *
-       sind(K * ϕ) *
-       cosd(ϕ) *
-       cos(pi * zc / z_top) *
-       cos(pi * t / τ)
-    uw = @. (w₀ * ρ₀ / K / ρ_ref(zf)) *
-       (-2 * sind(K * ϕf) * sind(ϕf) + K * cosd(ϕf) * cosd(K * ϕf)) *
-       sin(pi * zf / z_top) *
-       cos(pi * t / τ)
-
-    uₕ = Geometry.Covariant12Vector.(Geometry.UVVector.(uu, uv))
-    w = Geometry.Covariant3Vector.(Geometry.WVector.(uw))
-
-    # aliases
-    ρ = y.ρ
-    ρq1 = y.ρq1
-    dρq1 = dydt.ρq1
-    ρq1_td = y_td.ρq1
-
-    # No change in density: divergence-free flow
-    @. dydt.ρ = beta * dydt.ρ + 0 .* y.ρ
-
-    If2c = Operators.InterpolateF2C()
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
+function tendency!(yₜ, y, parameters, t)
+    (; dt, ρ, u, uₕ, uᵥ, q1, Δₕq1) = parameters
+    Ic2f = Operators.InterpolateC2F()
     vdivf2c = Operators.DivergenceF2C(
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
     )
-    first_order_upwind_c2f = Operators.UpwindBiasedProductC2F(
+    upwind1 = Operators.UpwindBiasedProductC2F(
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    third_order_upwind_c2f = Operators.Upwind3rdOrderBiasedProductC2F(
+    upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
@@ -140,42 +105,53 @@ function rhs!(dydt, y, parameters, t, alpha, beta)
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
 
-    ### HYPERVISCOSITY
-    @. ystar.ρq1 = hwdiv(hgrad(ρq1 / ρ))
-    Spaces.weighted_dss!(ystar.ρq1)
-    @. ystar.ρq1 = -κ₄ * hwdiv(ρ * hgrad(ystar.ρq1))
+    function local_velocity(coord)
+        (; z, lat) = coord
+        U = u₀ * cosd(lat)
+        V =
+            -(R * w₀ * pi * ρ₀ / K / z_top / ρ_ref(z)) *
+            sind(K * lat) *
+            cosd(lat) *
+            cos(pi * z / z_top) *
+            cos(pi * t / τ)
+        W =
+            (w₀ * ρ₀ / K / ρ_ref(z)) *
+            (-2 * sind(K * lat) * sind(lat) + K * cosd(lat) * cosd(K * lat)) *
+            sin(pi * z / z_top) *
+            cos(pi * t / τ)
+        return Geometry.UVWVector(U, V, W)
+    end
+    center_coord = Fields.coordinate_field(uₕ)
+    face_coord = Fields.coordinate_field(uᵥ)
+    @. u = local_velocity(center_coord)
+    @. uₕ = Geometry.project(Geometry.Covariant12Axis(), u)
+    @. uᵥ =
+        Geometry.project(Geometry.Covariant3Axis(), local_velocity(face_coord))
 
-    cw = If2c.(w)
-    cuvw = Geometry.Covariant123Vector.(uₕ) .+ Geometry.Covariant123Vector.(cw)
+    @. q1 = y.ρq1 / ρ
+    @. Δₕq1 = hwdiv(hgrad(q1))
+    Spaces.weighted_dss!(Δₕq1)
 
-    # 1) Vertical transport for ρq1:
-    # 1.1) vertical advection by vertical velocity, corrected by Zalesak FCT:
-    @. ρq1_td =
-        beta * ρq1 -
-        alpha * vdivf2c(Ic2f(ρ) * first_order_upwind_c2f(w, ρq1 / ρ))
+    # Horizontal transport and hyperdiffusion
+    @. yₜ.ρq1 = -hdiv(y.ρq1 * u) - κ₄ * hwdiv(ρ * hgrad(Δₕq1))
 
-    @. dρq1 =
-        beta * (dρq1 - ρq1) + ρq1_td -
-        alpha * vdivf2c(
-            Ic2f(ρ) * FCTZalesak(
-                (
-                    third_order_upwind_c2f(w, ρq1 / ρ) -
-                    first_order_upwind_c2f(w, ρq1 / ρ)
-                ),
-                ρq1 / ρ / alpha,
-                ρq1_td / ρ / alpha,
-            ),
-        )
+    # Vertical transport due to horizontal velocity
+    @. yₜ.ρq1 -= vdivf2c(Ic2f(y.ρq1 * uₕ))
 
-    # 1.2) vertical advection by horizontal velocity:
-    @. dρq1 -= alpha * vdivf2c(Ic2f(uₕ * ρq1))
-    # 2) Horizontal transport for ρq1 (includes both horizontal and vertical velocity components)
-    @. dρq1 -= alpha * hdiv(cuvw * ρq1) - alpha * ystar.ρq1
+    # Vertical transport due to vertical velocity, corrected by Zalesak FCT
+    @. yₜ.ρq1 -= vdivf2c(
+        Ic2f(ρ) * (
+            upwind1(uᵥ, q1) + FCTZalesak(
+                upwind3(uᵥ, q1) - upwind1(uᵥ, q1),
+                q1 / dt,
+                q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ,
+            )
+        ),
+    )
+end
 
-    Spaces.weighted_dss!(dydt.ρ)
-    Spaces.weighted_dss!(dydt.ρq1)
-
-    return dydt
+function dss!(y, parameters, t)
+    Spaces.weighted_dss!(y.ρq1)
 end
 
 const R = 6.37122e6        # radius
@@ -202,62 +178,51 @@ dt = 15.0 * 60.0
 # set up 3D domain
 hv_center_space, hv_face_space = sphere_3D()
 
-# initial conditions
-coords = Fields.coordinate_field(hv_center_space)
-face_coords = Fields.coordinate_field(hv_face_space)
-
 p(z) = p₀ * exp(-z / H)
-ρ_ref(z) = p(z) / R_d / T₀
+ρ_ref(z) = p(z) / (R_d * T₀)
 
-y0 = map(coords) do coord
-    z = coord.z
-
-    z₀ = 0.5 * (z₂ + z₁)
-    if z > z₁ && z < z₂
-        q1 = 0.5 * (1.0 + cos(2pi * (z - z₀) / (z₂ - z₁)))
+# initial conditions
+center_coord = Fields.coordinate_field(hv_center_space)
+ρ = @. ρ_ref(center_coord.z)
+q1_init = map(center_coord) do coord
+    if z₁ < coord.z < z₂
+        z₀ = (z₂ + z₁) / 2
+        return (1.0 + cos(2pi * (coord.z - z₀) / (z₂ - z₁))) / 2
     else
-        q1 = 0.0
+        return 0.0
     end
-
-    ρq1 = ρ_ref(z) * q1
-
-    return (ρ = ρ_ref(z), ρq1 = ρq1, ρq1_td = ρq1)
 end
-
-# IC FieldVector
-y0 = Fields.FieldVector(ρ = y0.ρ, ρq1 = y0.ρq1, ρq1_td = y0.ρq1)
-
-ystar = copy(y0)
-y_td = copy(y0)
-parameters = (; coords, face_coords, τ, u₀, w₀, K, ρ₀, ystar, y_td)
-
-# Set up the initial flow
-rhs!(ystar, y0, parameters, 0.0, dt, 1)
+y = Fields.FieldVector(ρq1 = ρ .* q1_init)
 
 # run!
-prob = ODEProblem(IncrementingODEFunction(rhs!), copy(y0), (0.0, T), parameters)
-sol = solve(
-    prob,
-    SSPRK33ShuOsher(),
-    dt = dt,
-    saveat = dt,
-    progress = true,
-    adaptive = false,
-    progress_message = (dt, u, p, t) -> t,
+parameters = (;
+    dt,
+    ρ,
+    u = Fields.Field(Geometry.UVWVector{Float64}, hv_center_space),
+    uₕ = Fields.Field(Geometry.Covariant12Vector{Float64}, hv_center_space),
+    uᵥ = Fields.Field(Geometry.Covariant3Vector{Float64}, hv_face_space),
+    q1 = Fields.Field(Float64, hv_center_space),
+    Δₕq1 = Fields.Field(Float64, hv_center_space),
 )
+prob = ODEProblem(
+    ClimaODEFunction(; T_exp! = tendency!, dss!),
+    y,
+    (0.0, T),
+    parameters,
+)
+sol = solve(prob, ExplicitAlgorithm(SSP33ShuOsher()), dt = dt, saveat = dt)
 
 q1_error =
-    norm(sol.u[end].ρq1 ./ ρ_ref.(coords.z) .- y0.ρq1 ./ ρ_ref.(coords.z)) /
-    norm(y0.ρq1 ./ ρ_ref.(coords.z))
-initial_mass = sum(y0.ρq1)
+    norm(sol.u[end].ρq1 ./ ρ .- sol.u[1].ρq1 ./ ρ) / norm(sol.u[1].ρq1 ./ ρ)
+initial_mass = sum(sol.u[1].ρq1)
 mass = sum(sol.u[end].ρq1)
-rel_mass_err = norm((mass - initial_mass) / initial_mass)
-@test q1_error ≈ 0.0 atol = 0.32
+rel_mass_err = norm(mass - initial_mass) / initial_mass
+@test q1_error ≈ 0.0 atol = 0.33
 @test rel_mass_err ≈ 0.0 atol = 6e1eps()
 
 Plots.png(
     Plots.plot(
-        sol.u[trunc(Int, end / 2)].ρq1 ./ ρ_ref.(coords.z),
+        sol.u[trunc(Int, end / 2)].ρq1 ./ ρ,
         level = 11,
         clim = (-0.1, 3.5),
     ),
@@ -274,18 +239,13 @@ NCDataset(datafile_cc, "c") do nc
     def_space_coord(nc, hv_face_space, type = "cgll")
     # defines the appropriate dimensions and variables for a time coordinate (by default, unlimited size)
     nc_time = def_time_coord(nc)
-
-    # define variables
-    nc_rho = defVar(nc, "rho", Float64, hv_center_space, ("time",))
+    # defines the variable
     nc_q1 = defVar(nc, "q1", Float64, hv_center_space, ("time",))
 
     # write data to netcdf file
     for i in 1:length(sol.u)
         nc_time[i] = sol.t[i]
-
-        # write fields to file
-        nc_rho[:, i] = sol.u[i].ρ
-        nc_q1[:, i] = sol.u[i].ρq1 ./ sol.u[i].ρ
+        nc_q1[:, i] = sol.u[i].ρq1 ./ ρ
     end
 end
 
@@ -318,7 +278,7 @@ remap_weights(
 
 # apply remap
 datafile_rll = remap_tmpdir * "data_rll.nc"
-apply_remap(datafile_rll, datafile_cc, weightfile, ["rho", "q1"])
+apply_remap(datafile_rll, datafile_cc, weightfile, ["q1"])
 
 # load remapped data and create statistics for plots
 nt = NCDataset(datafile_rll, "r") do nc
