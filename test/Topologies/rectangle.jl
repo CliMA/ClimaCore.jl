@@ -311,3 +311,11 @@ end
         @test getfield(c2, 2) == 0.0
     end
 end
+
+@testset "memoization" begin
+    topology1 = rectangular_grid(3, 3, true, true)
+    topology2 = rectangular_grid(3, 3, true, true)
+    topology3 = rectangular_grid(3, 3, true, false)
+    @test topology1 === topology2
+    @test topology1 !== topology3
+end

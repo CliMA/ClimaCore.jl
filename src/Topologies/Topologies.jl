@@ -9,6 +9,8 @@ import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
 
+using Memoize, WeakValueDicts
+
 """
    AbstractTopology
 
