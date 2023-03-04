@@ -1,6 +1,8 @@
 using Test
 using CUDA
 using ClimaComms
+using Statistics
+using LinearAlgebra
 
 import ClimaCore:
     Device,
@@ -93,5 +95,24 @@ end
     # test minimum
     @test local_min[1] ≈ FT(0)
     @test local_min[1] ≈ local_min_cpu
+    # testing mean
+    meanz = Statistics.mean(Z)
+    meanz_cpu = Statistics.mean(Z_cpu)
+    @test meanz[] ≈ meanz_cpu[]
+    # testing norm
+    norm1z = LinearAlgebra.norm(Z, 1)
+    norm1z_cpu = LinearAlgebra.norm(Z_cpu, 1)
+    @test norm1z[] ≈ norm1z_cpu[]
 
+    norm2z = LinearAlgebra.norm(Z, 2)
+    norm2z_cpu = LinearAlgebra.norm(Z_cpu, 2)
+    @test norm2z[] ≈ norm2z_cpu[]
+
+    norm3z = LinearAlgebra.norm(Z, 3)
+    norm3z_cpu = LinearAlgebra.norm(Z_cpu, 3)
+    @test norm3z[] ≈ norm3z_cpu[]
+
+    norminfz = LinearAlgebra.norm(Z, Inf)
+    norminfz_cpu = LinearAlgebra.norm(Z_cpu, Inf)
+    @test norminfz[] ≈ norminfz_cpu[]
 end
