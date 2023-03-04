@@ -22,10 +22,40 @@ Base.minimum(field::Field, ::ClimaComms.CUDA) =
 Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CUDA,
-) = Base.sum(field) ./ Spaces.local_area(axes(field)) #TODO: distributed support to be added
+) = Base.sum(field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
 
 Statistics.mean(fn, field::Field, ::ClimaComms.CUDA) =
-    Base.sum(fn, field) ./ Spaces.local_area(axes(field)) #TODO: distributed support to be added
+    Base.sum(fn, field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
+
+function LinearAlgebra.norm(
+    field::Field,
+    ::ClimaComms.CUDA,
+    p::Real = 2;
+    normalize = true,
+)
+    if p == 2
+        # currently only one which supports structured types
+        if normalize
+            sqrt.(Statistics.mean(LinearAlgebra.norm_sqr, field))
+        else
+            sqrt.(sum(LinearAlgebra.norm_sqr, field))
+        end
+    elseif p == 1
+        if normalize
+            Statistics.mean(abs, field)
+        else
+            mapreduce_cuda(abs, +, field)
+        end
+    elseif p == Inf
+        Base.maximum(abs, field)
+    else
+        if normalize
+            Statistics.mean(x -> x^p, field) .^ (1 / p)
+        else
+            mapreduce_cuda(x -> x^p, +, field) .^ (1 / p)
+        end
+    end
+end
 
 function mapreduce_cuda(
     f,
@@ -97,7 +127,6 @@ function mapreduce_cuda_kernel!(
     bidx = blockIdx().x
     fidx = blockIdx().y
     effective_blksize = blksize * (n_ops_on_load + 1)
-    #gidx = tidx + (bidx - 1) * effective_blksize + (fidx - 1) * effective_blksize * nblk
     gidx = _get_gidx(tidx, bidx, fidx, effective_blksize, nblk)
     reduction = CUDA.CuStaticSharedArray(T, shmemsize)
     reduction[tidx] = 0

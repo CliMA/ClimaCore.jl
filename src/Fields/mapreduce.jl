@@ -153,7 +153,12 @@ If `normalize=false`, then the denominator term is omitted, and so the result wi
 the norm as described above multiplied by the length/area/volume of ``\\Omega`` to
 the power of ``1/p``.
 """
-function LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true)
+function LinearAlgebra.norm(
+    field::Field,
+    ::ClimaComms.CPU,
+    p::Real = 2;
+    normalize = true,
+)
     if p == 2
         # currently only one which supports structured types
         if normalize
@@ -177,6 +182,13 @@ function LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true)
         end
     end
 end
+LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
+    LinearAlgebra.norm(
+        field,
+        Device.device(axes(field)),
+        p,
+        normalize = normalize,
+    )
 
 function Base.isapprox(
     x::Field,
