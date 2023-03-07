@@ -12,8 +12,7 @@ No surface hypsography.
 struct Flat <: HypsographyAdaption end
 
 
-struct ExtrudedFiniteDifferenceSpace{
-    S <: Staggering,
+mutable struct CenterExtrudedFiniteDifferenceSpace{
     H <: AbstractSpace,
     T <: Topologies.AbstractIntervalTopology,
     A <: HypsographyAdaption,
@@ -21,7 +20,6 @@ struct ExtrudedFiniteDifferenceSpace{
     LG,
     LGG,
 } <: AbstractSpace
-    staggering::S
     horizontal_space::H
     vertical_topology::T
     hypsography::A
@@ -65,33 +63,32 @@ const CenterExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellCenter}
 
 const FaceExtrudedFiniteDifferenceSpace =
-    ExtrudedFiniteDifferenceSpace{CellFace}
+    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace}
 
-const FaceExtrudedFiniteDifferenceSpace2D =
-    ExtrudedFiniteDifferenceSpace{CellFace, <:SpectralElementSpace1D}
-const FaceExtrudedFiniteDifferenceSpace3D =
-    ExtrudedFiniteDifferenceSpace{CellFace, <:SpectralElementSpace2D}
+const ExtrudedFiniteDifferenceSpace = Union{
+    CenterExtrudedFiniteDifferenceSpace,
+    FaceExtrudedFiniteDifferenceSpace,
+}
+
 const CenterExtrudedFiniteDifferenceSpace2D =
-    ExtrudedFiniteDifferenceSpace{CellCenter, <:SpectralElementSpace1D}
+    ExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
 const CenterExtrudedFiniteDifferenceSpace3D =
-    ExtrudedFiniteDifferenceSpace{CellCenter, <:SpectralElementSpace2D}
+    ExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
+const FaceExtrudedFiniteDifferenceSpace2D =
+    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace2D}
+const FaceExtrudedFiniteDifferenceSpace3D =
+    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace3D}
 
+CenterExtrudedFiniteDifferenceSpace(
+    space::CenterExtrudedFiniteDifferenceSpace,
+) = space
+CenterExtrudedFiniteDifferenceSpace(space::FaceExtrudedFiniteDifferenceSpace) =
+    space.center_space
+FaceExtrudedFiniteDifferenceSpace(space::CenterExtrudedFiniteDifferenceSpace) =
+    FaceSpace(space)
+FaceExtrudedFiniteDifferenceSpace(space::FaceExtrudedFiniteDifferenceSpace) =
+    space
 
-function ExtrudedFiniteDifferenceSpace{S}(
-    space::ExtrudedFiniteDifferenceSpace,
-) where {S <: Staggering}
-    ExtrudedFiniteDifferenceSpace(
-        S(),
-        space.horizontal_space,
-        space.vertical_topology,
-        space.hypsography,
-        space.global_geometry,
-        space.center_local_geometry,
-        space.face_local_geometry,
-        space.center_ghost_geometry,
-        space.face_ghost_geometry,
-    )
-end
 function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
@@ -125,19 +122,41 @@ local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_local_geometry
 
 local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.face_local_geometry
+    space.center_space.face_local_geometry
 
 # TODO: will need to be defined for distributed
 ghost_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_ghost_geometry
 ghost_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.face_ghost_geometry
-function ExtrudedFiniteDifferenceSpace(
+    space.center_space.face_ghost_geometry
+
+
+ExtrudedFiniteDifferenceSpace(
+    horizontal_space::AbstractSpace,
+    vertical_space::CenterFiniteDifferenceSpace,
+    hypsography::Flat = Flat(),
+) = CenterExtrudedFiniteDifferenceSpace(
+    horizontal_space,
+    vertical_space,
+    hypsography,
+)
+ExtrudedFiniteDifferenceSpace(
+    horizontal_space::AbstractSpace,
+    vertical_space::FaceFiniteDifferenceSpace,
+    hypsography::Flat = Flat(),
+) = FaceSpace(
+    CenterExtrudedFiniteDifferenceSpace(
+        horizontal_space,
+        vertical_space,
+        hypsography,
+    ),
+)
+
+function CenterExtrudedFiniteDifferenceSpace(
     horizontal_space::H,
     vertical_space::V,
     hypsography::Flat = Flat(),
 ) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
-    staggering = vertical_space.staggering
     vertical_topology = vertical_space.topology
     global_geometry = horizontal_space.global_geometry
     center_local_geometry =
@@ -166,8 +185,7 @@ function ExtrudedFiniteDifferenceSpace(
         center_ghost_geometry = nothing
         face_ghost_geometry = nothing
     end
-    return ExtrudedFiniteDifferenceSpace(
-        staggering,
+    return CenterExtrudedFiniteDifferenceSpace(
         horizontal_space,
         vertical_topology,
         hypsography,
@@ -179,14 +197,23 @@ function ExtrudedFiniteDifferenceSpace(
     )
 end
 
-quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
+quadrature_style(space::CenterExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
+quadrature_style(space::FaceExtrudedFiniteDifferenceSpace) =
+    quadrature_style(space.center_space)
+
+topology(space::CenterExtrudedFiniteDifferenceSpace) =
+    space.horizontal_space.topology
+topology(space::FaceExtrudedFiniteDifferenceSpace) =
+    topology(space.center_space)
 
 topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
 ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.device(topology(space))
-vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
+vertical_topology(space::CenterExtrudedFiniteDifferenceSpace) =
     space.vertical_topology
+vertical_topology(space::FaceExtrudedFiniteDifferenceSpace) =
+    vertical_topology(space.center_space)
 
 Base.@propagate_inbounds function slab(
     space::ExtrudedFiniteDifferenceSpace,
