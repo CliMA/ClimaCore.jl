@@ -50,6 +50,7 @@ end
 |4|
 |_|
 =#
+
 @testset "4x1 element mesh with periodic boundaries on 1 process" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
@@ -77,10 +78,11 @@ end
 #! format: on
 
     p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
-    @show p
-    #=
-    @test p == 0
-    =#
+    if device == ClimaComms.CPU()
+        @test p == 0
+    else
+        @show p
+    end
 end
 
 @testset "4x1 element mesh on 2 processes - vector field" begin
@@ -89,13 +91,15 @@ end
     init_state(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
-
     dss2_buffer = Spaces.create_dss_buffer(y0)
     Spaces.weighted_dss!(y0, dss2_buffer)
 
     @test parent(yx) ≈ parent(y0)
 
     p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
-    @show p
-    #@test p == 0
+    if device == ClimaComms.CPU()
+        @test p == 0
+    else
+        @show p
+    end
 end

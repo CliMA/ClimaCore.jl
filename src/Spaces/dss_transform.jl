@@ -247,27 +247,16 @@ function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
     return nothing
 end
 
-function _representative_slab(data, ::Type{DA}) where {DA}
-    rebuild_flag = DA isa Array ? false : true
-    if isnothing(data)
-        return nothing
-    elseif rebuild_flag
-        return DataLayouts.rebuild(slab(data, 1, 1), Array)
-    else
-        return slab(data, 1, 1)
-    end
-end
-
-_transformed_type(data, local_geometry, local_weights, ::Type{DA}) where {DA} =
-    typeof(
-        dss_transform(
-            _representative_slab(data, DA),
-            _representative_slab(local_geometry, DA),
-            _representative_slab(local_weights, DA),
-            1,
-            1,
+dss_transform_signature(S) = eval(
+    Meta.parse(
+        Base.replace(
+            string(S),
+            "ClimaCore." => "",
+            "Covariant12Vector" => "UVVector",
+            "Contravariant12Vector" => "UVVector",
         ),
-    )
+    ),
+)
 
 struct GhostBuffer{G, D}
     graph_context::G

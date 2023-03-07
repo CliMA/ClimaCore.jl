@@ -45,18 +45,14 @@ function create_dss_buffer(
 ) where {S, Nij}
     @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
     topology = hspace.topology
-    local_geometry = local_geometry_data(hspace)
-    local_weights = hspace.local_dss_weights
     perimeter = Spaces.perimeter(hspace)
-    create_dss_buffer(data, topology, perimeter, local_geometry, local_weights)
+    create_dss_buffer(data, topology, perimeter)
 end
 
 function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     topology,
     perimeter,
-    local_geometry = nothing,
-    local_weights = nothing,
 ) where {S, Nij}
     context =
         topology isa Topologies.Topology2D ? topology.context :
@@ -68,7 +64,7 @@ function create_dss_buffer(
     Nf = cld(length(parent(data)), (Nij * Nij * Nv * nelems))
     nfacedof = Nij - 2
     T = eltype(parent(data))
-    TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
+    TS = dss_transform_signature(S) # extract transformed type
     perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, nelems))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
