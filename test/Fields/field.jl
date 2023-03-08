@@ -322,6 +322,8 @@ end
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
 
+    @test sum(field.x) == FT(π)
+
     field = ones(space) .* π
     sin_field = sin.(field)
     add_field = field .+ field
