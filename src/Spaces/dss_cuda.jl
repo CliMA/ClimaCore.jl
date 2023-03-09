@@ -134,24 +134,19 @@ function dss_local_kernel!(
         sizef = (nlevels, nfidx, nlocalfaces)
         (level, fidx, faceid) =
             _get_idx(sizef, gidx - nlevels * nfidx * nlocalvertices)
-        for idx in 1:nlocalfaces
-            (lidx1, face1, lidx2, face2, reversed) = interior_faces[idx]
-            (first1, inc1, last1) =
-                Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
-            (first2, inc2, last2) = Topologies.perimeter_face_indices_cuda(
-                face2,
-                nfacedof,
-                reversed,
-            )
-            for i in 1:nfacedof
-                ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
-                ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
-                val =
-                    pperimeter_data[level, ip1, fidx, lidx1] +
-                    pperimeter_data[level, ip2, fidx, lidx2]
-                pperimeter_data[level, ip1, fidx, lidx1] = val
-                pperimeter_data[level, ip2, fidx, lidx2] = val
-            end
+        (lidx1, face1, lidx2, face2, reversed) = interior_faces[faceid]
+        (first1, inc1, last1) =
+            Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
+        (first2, inc2, last2) =
+            Topologies.perimeter_face_indices_cuda(face2, nfacedof, reversed)
+        for i in 1:nfacedof
+            ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
+            ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
+            val =
+                pperimeter_data[level, ip1, fidx, lidx1] +
+                pperimeter_data[level, ip2, fidx, lidx2]
+            pperimeter_data[level, ip1, fidx, lidx1] = val
+            pperimeter_data[level, ip2, fidx, lidx2] = val
         end
     end
 
@@ -221,7 +216,8 @@ function dss_transform_kernel!(
         sizet_wt = (Nq, Nq, 1, nelems)
         sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
-        (level, p, elem) = _get_idx(sizet, gidx)
+        (level, p, localelemno) = _get_idx(sizet, gidx)
+        elem = localelems[localelemno]
         (ip, jp) = perimeter[p]
 
         weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
