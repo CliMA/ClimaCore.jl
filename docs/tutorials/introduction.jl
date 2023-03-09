@@ -184,7 +184,7 @@ plot(∇sinx.components.data.:1, clim = (-1, 1))
 # ```math
 # \frac{\partial \xi}{\partial x}
 # ```
-# This can be done calling `ClimaCore.Geometry.LocalVector:
+# This can be done calling `ClimaCore.Geometry.LocalVector`:
 
 ∇sinx_cart = ClimaCore.Geometry.LocalVector.(∇sinx)
 #----------------------------------------------------------------------------
@@ -372,7 +372,7 @@ using OrdinaryDiffEq
 # \frac{\partial y}{\partial t} = \alpha \nabla \cdot \nabla y
 # ```
 #
-# At the bottom we will use a Dirichlet condition ``y(0) = 1``` at the bottom: since we don't actually have a value located at the bottom, we will use a `SetValue` boundary modifier on the inner gradient.
+# At the bottom we will use a Dirichlet condition ``y(0) = 1`` at the bottom: since we don't actually have a value located at the bottom, we will use a `SetValue` boundary modifier on the inner gradient.
 #
 # At the top we will use a Neumann condition ``\frac{\partial y}{\partial z}(10) = 0``. We can do this two equivalent ways:
 #  - a `SetGradient` on the gradient operator
