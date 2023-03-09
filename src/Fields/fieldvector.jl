@@ -258,3 +258,10 @@ LinearAlgebra.ldiv!(x::FieldVector, A::LinearAlgebra.LU, b::FieldVector) =
 
 LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(x))
+
+function LinearAlgebra.norm_sqr(x::FieldVector)
+    Base.sum(value -> LinearAlgebra.norm_sqr(backing_array(value)), _values(x))
+end
+function LinearAlgebra.norm(x::FieldVector)
+    sqrt(LinearAlgebra.norm_sqr(x))
+end

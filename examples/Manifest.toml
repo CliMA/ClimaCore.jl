@@ -1065,9 +1065,9 @@ version = "0.3.1"
 
 [[deps.NVTX_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "ce3269ed42816bf18d500c9f63418d4b0d9f5a3b"
+git-tree-sha1 = "6356167fecf7011357b1f48a0af4294e9a7ad163"
 uuid = "e98f9f5b-d649-5603-91fd-7774390e6439"
-version = "3.1.0+2"
+version = "3.1.0+1"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
