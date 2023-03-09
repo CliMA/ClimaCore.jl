@@ -2,10 +2,10 @@ using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields
+import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, DataLayouts
 
 import ClimaCore.Geometry: Geometry
-import ClimaCore.DataLayouts: IJFH
+import ClimaCore.DataLayouts: IJFH, VF
 
 @testset "1d domain space" begin
     FT = Float64
@@ -51,6 +51,44 @@ import ClimaCore.DataLayouts: IJFH
     @test point_space isa Spaces.PointSpace
     @test Spaces.coordinates_data(point_space)[] ==
           Spaces.column(coord_data, 1, 1)[]
+end
+
+@testset "extruded (2d 1×3) finite difference space" begin
+
+    FT = Float32
+
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(0),
+        Geometry.ZPoint{FT}(10);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    # Generate Horizontal Space
+    horzdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(0),
+        Geometry.XPoint{FT}(10);
+        periodic = true,
+    )
+    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = 5)
+    horztopology = Topologies.IntervalTopology(horzmesh)
+    quad = Spaces.Quadratures.GLL{4}()
+    hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    # Extrusion
+    f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
+    array = parent(Spaces.coordinates_data(c_space))
+    z = Fields.coordinate_field(c_space).z
+    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H 
+
+    # Define test col index
+    colidx = Fields.ColumnIndex{1}((4,), 5)
+    # Here valid `colidx` are `Fields.ColumnIndex{1}((1:4,), 1:5)`
+    @test size(parent(z[colidx])) == (10, 1)
+    @test Fields.field_values(z[colidx]) isa DataLayouts.VF
+    @test Spaces.column(z, 1, 1, 1) isa Fields.Field
+    @test_throws BoundsError Spaces.column(z, 1, 2, 1)
+    @test Spaces.column(z, 1, 2) isa Fields.Field
 end
 
 @testset "finite difference space" begin
