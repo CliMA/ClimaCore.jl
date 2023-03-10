@@ -551,9 +551,10 @@ steps:
       - label: ":flower_playing_cards: CUDA Shallow-water 2D sphere"
         key: "cuda_shallowwater_2d_cg_sphere"
         command:
-          - "nsys profile --trace=nvtx,cuda --output=examples/sphere/output/cuda_shallowwater_2d_cg_sphere/report julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl"
+          - mkdir -p output/$$BUILDKITE_STEP_KEY
+          - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl
         artifact_paths:
-          - "examples/sphere/output/cuda_shallowwater_2d_cg_sphere/*"
+          - output/$$BUILDKITE_STEP_KEY
         agents:
           slurm_gpus: 1
 
