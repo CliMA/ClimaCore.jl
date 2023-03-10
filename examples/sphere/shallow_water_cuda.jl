@@ -4,7 +4,7 @@ using DocStringExtensions
 using LinearAlgebra
 using ClimaTimeSteppers, DiffEqBase
 using DiffEqCallbacks
-#using NVTX
+using NVTX
 
 CUDA.allowscalar(false)
 
@@ -450,7 +450,7 @@ function set_initial_condition(
 end
 
 function rhs!(dYdt, y, parameters, t)
-    begin    #= NVTX.@range "rhs!" =#
+    NVTX.@range "rhs!" begin
         (; f, h_s, ghost_buffer, params) = parameters
         (; D₄, g) = params
 
@@ -462,17 +462,17 @@ function rhs!(dYdt, y, parameters, t)
         wcurl = Operators.WeakCurl()
 
         # Compute hyperviscosity first
-        begin        #= NVTX.@range "hyperviscosity" =#
+        NVTX.@range "hyperviscosity" begin
             @. dYdt.h = wdiv(grad(y.h))
             @. dYdt.u =
                 wgrad(div(y.u)) - Geometry.Covariant12Vector(
                     wcurl(Geometry.Covariant3Vector(curl(y.u))),
                 )
 
-            Spaces.weighted_dss2!(dYdt, ghost_buffer)            #= NVTX.@range "dss" =#
+            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
         end
 
-        begin        #= NVTX.@range "tendency" =#
+        NVTX.@range "tendency" begin
             @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
             # split to avoid "device kernel image is invalid (code 200, ERROR_INVALID_IMAGE)"
             @. dYdt.u =
@@ -485,7 +485,7 @@ function rhs!(dYdt, y, parameters, t)
                 dYdt.u += -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) #+
                 dYdt.u += y.u × (f + curl(y.u))
             end
-            Spaces.weighted_dss2!(dYdt, ghost_buffer)            #= NVTX.@range "dss" =#
+            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
         end
     end
     return dYdt
@@ -547,7 +547,7 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         dt_save;
         atinit = true,
     ) do integrator
-        begin        #= NVTX.@range "saving output" =#
+        NVTX.@range "saving output" begin
             output_dir = "output"
             Y = integrator.u
             t = integrator.t
