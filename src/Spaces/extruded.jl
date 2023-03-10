@@ -170,6 +170,22 @@ Base.@propagate_inbounds function column(
         column(space.face_local_geometry, i, j, h),
     )
 end
+
+Base.@propagate_inbounds function column(
+    space::ExtrudedFiniteDifferenceSpace,
+    i,
+    h,
+)
+    FiniteDifferenceSpace(
+        space.staggering,
+        space.vertical_topology,
+        Geometry.CartesianGlobalGeometry(),
+        column(space.center_local_geometry, i, h),
+        column(space.face_local_geometry, i, h),
+    )
+end
+
+
 Base.@propagate_inbounds function level(
     space::CenterExtrudedFiniteDifferenceSpace,
     v::Integer,
