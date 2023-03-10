@@ -342,9 +342,9 @@ version = "4.1.1"
 
 [[deps.Cthulhu]]
 deps = ["CodeTracking", "FoldingTrees", "InteractiveUtils", "JuliaSyntax", "Preferences", "REPL", "SnoopPrecompile", "TypedSyntax", "UUIDs", "Unicode"]
-git-tree-sha1 = "9928a4c44223c306a2cd4d1e6fff68e7db24a553"
+git-tree-sha1 = "257925325a89ab389988afb7607781f21d34083b"
 uuid = "f68482b8-f384-11e8-15f7-abe071a5a75f"
-version = "2.8.1"
+version = "2.8.2"
 
 [[deps.CubedSphere]]
 deps = ["Elliptic", "FFTW", "Printf", "ProgressBars", "SpecialFunctions", "TaylorSeries", "Test"]
@@ -1173,9 +1173,9 @@ version = "0.3.1"
 
 [[deps.NVTX_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
-git-tree-sha1 = "6356167fecf7011357b1f48a0af4294e9a7ad163"
+git-tree-sha1 = "ce3269ed42816bf18d500c9f63418d4b0d9f5a3b"
 uuid = "e98f9f5b-d649-5603-91fd-7774390e6439"
-version = "3.1.0+1"
+version = "3.1.0+2"
 
 [[deps.NaNMath]]
 deps = ["OpenLibm_jll"]
@@ -1785,9 +1785,9 @@ version = "0.1.0"
 
 [[deps.TypedSyntax]]
 deps = ["CodeTracking", "JuliaSyntax"]
-git-tree-sha1 = "7f48b3cbdbfa552cd20a6a54e8faae80e7063ff0"
+git-tree-sha1 = "0e3cd8cbdd692162a79a2b93d38ddc269ac60f50"
 uuid = "d265eb64-f81a-44ad-a842-4247ee1503de"
-version = "1.0.6"
+version = "1.0.7"
 
 [[deps.URIs]]
 git-tree-sha1 = "074f993b0ca030848b897beff716d93aca60f06a"

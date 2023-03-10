@@ -49,6 +49,7 @@ jobs:
           do
             xvfb-run -a pvpython lib/ClimaCoreVTK/paraview/renderimage.py "$f" "$f.png";
           done
+        continue-on-error: true
       - name: Upload test Artifacts
         uses: actions/upload-artifact@v2
         with:
