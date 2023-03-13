@@ -1,12 +1,13 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.8.5 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411
+  modules: julia/1.8.5 openmpi/4.1.1 cuda/11.3 hdf5/1.12.1-ompi411 nsight-systems/2022.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   JULIA_CUDA_USE_BINARYBUILDER: false
   OPENBLAS_NUM_THREADS: 1
+  JULIA_NVTX_CALLBACKS: gc
 
 steps:
   - label: "initialize"
@@ -516,7 +517,6 @@ steps:
       - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
         key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
         command:
-          - "module load cuda/11.3 nsight-systems/2022.2.1"
           - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
         artifact_paths:
           - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
@@ -554,7 +554,7 @@ steps:
           - mkdir -p output/$$BUILDKITE_STEP_KEY
           - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl
         artifact_paths:
-          - output/$$BUILDKITE_STEP_KEY
+          - output/cuda_shallowwater_2d_cg_sphere
         agents:
           slurm_gpus: 1
 
