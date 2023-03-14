@@ -2,7 +2,9 @@ using CUDA
 using ClimaComms
 using DocStringExtensions
 using LinearAlgebra
-using OrdinaryDiffEq
+using ClimaTimeSteppers, DiffEqBase
+using DiffEqCallbacks
+using NVTX
 
 CUDA.allowscalar(false)
 
@@ -15,7 +17,8 @@ import ClimaCore:
     Operators,
     Spaces,
     Topologies,
-    DataLayouts
+    DataLayouts,
+    InputOutput
 
 """
     PhysicalParameters{FT}
@@ -447,57 +450,56 @@ function set_initial_condition(
 end
 
 function rhs!(dYdt, y, parameters, t)
-    #@nvtx "rhs!" color = colorant"red" begin
-    (; f, h_s, ghost_buffer, params) = parameters
-    (; D₄, g) = params
+    NVTX.@range "rhs!" begin
+        (; f, h_s, ghost_buffer, params) = parameters
+        (; D₄, g) = params
 
-    div = Operators.Divergence()
-    wdiv = Operators.WeakDivergence()
-    grad = Operators.Gradient()
-    wgrad = Operators.WeakGradient()
-    curl = Operators.Curl()
-    wcurl = Operators.WeakCurl()
+        div = Operators.Divergence()
+        wdiv = Operators.WeakDivergence()
+        grad = Operators.Gradient()
+        wgrad = Operators.WeakGradient()
+        curl = Operators.Curl()
+        wcurl = Operators.WeakCurl()
 
-    # Compute hyperviscosity first
-    #@nvtx "Hyperviscosity (rhs!)" color = colorant"green" begin
-    @. dYdt.h = wdiv(grad(y.h))
-    @. dYdt.u =
-        wgrad(div(y.u)) -
-        Geometry.Covariant12Vector(wcurl(Geometry.Covariant3Vector(curl(y.u))))
+        # Compute hyperviscosity first
+        NVTX.@range "hyperviscosity" begin
+            @. dYdt.h = wdiv(grad(y.h))
+            @. dYdt.u =
+                wgrad(div(y.u)) - Geometry.Covariant12Vector(
+                    wcurl(Geometry.Covariant3Vector(curl(y.u))),
+                )
 
-    Spaces.weighted_dss2!(dYdt, ghost_buffer)
+            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
+        end
 
-    @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
-    # split to avoid "device kernel image is invalid (code 200, ERROR_INVALID_IMAGE)"
-    @. dYdt.u =
-        wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
-            wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
-        )
-    @. dYdt.u = -D₄ * dYdt.u
-    #end
-    #@nvtx "h and u (rhs!)" color = colorant"blue" begin
-    # Add in pieces
-    @. begin
-        dYdt.h += -wdiv(y.h * y.u)
-        dYdt.u += -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) #+
-        dYdt.u += y.u × (f + curl(y.u))
+        NVTX.@range "tendency" begin
+            @. dYdt.h = -D₄ * wdiv(grad(dYdt.h))
+            # split to avoid "device kernel image is invalid (code 200, ERROR_INVALID_IMAGE)"
+            @. dYdt.u =
+                wgrad(div(dYdt.u)) - Geometry.Covariant12Vector(
+                    wcurl(Geometry.Covariant3Vector(curl(dYdt.u))),
+                )
+            @. dYdt.u = -D₄ * dYdt.u
+            @. begin
+                dYdt.h += -wdiv(y.h * y.u)
+                dYdt.u += -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) #+
+                dYdt.u += y.u × (f + curl(y.u))
+            end
+            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
+        end
     end
-    Spaces.weighted_dss2!(dYdt, ghost_buffer)
-    #end
-    #end
     return dYdt
 end
 
 function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     device = Device.device()
     context = ClimaComms.SingletonCommsContext(device)
-    println("running serial simulation on $device device")
     # Test case specifications
     test_name = get(ARGS, 1, "steady_state") # default test case to run
     test_angle_name = get(ARGS, 2, "alpha0") # default test case to run
     α = parse(FT, replace(test_angle_name, "alpha" => ""))
 
-    println("Test name: $test_name, α = $(α)⁰")
+    @info "Simulation configuration" device test_name
     # Test-specific physical parameters
     test =
         test_name == "steady_state_compact" ? SteadyStateCompactTest(α) :
@@ -520,11 +522,9 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     quad = Spaces.Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
-    coords = Fields.coordinate_field(space)
     f = set_coriolis_parameter(space, test)
     h_s = surface_topography(space, test)
     Y = set_initial_condition(space, test)
-    dYdt = similar(Y)
 
     ghost_buffer = Spaces.create_dss_buffer(Y)
     Spaces.weighted_dss_start!(Y, ghost_buffer)
@@ -533,27 +533,56 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
 
     parameters =
         (; f = f, h_s = h_s, ghost_buffer = ghost_buffer, params = test.params)
+
+    dYdt = similar(Y)
     rhs!(dYdt, Y, parameters, 0.0)
 
-    #=
     # Solve the ODE
-    dt = 9 * 60
-    T = 86400 * 2
+    dt = FT(60 * 6)
+    T = FT(60 * 60 * 24 * 2)
 
-    prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
-    integrator = OrdinaryDiffEq.init(
+    dt_save = FT(60 * 60)
+
+    save_callback = ClimaTimeSteppers.Callbacks.EveryXSimulationTime(
+        dt_save;
+        atinit = true,
+    ) do integrator
+        NVTX.@range "saving output" begin
+            output_dir = "output"
+            Y = integrator.u
+            t = integrator.t
+            day = floor(Int, t / (60 * 60 * 24))
+            sec = floor(Int, t % (60 * 60 * 24))
+            @info "Saving state" day sec
+            mkpath(output_dir)
+            output_file = joinpath(output_dir, "day$day.$sec.hdf5")
+            hdfwriter = InputOutput.HDF5Writer(output_file, context)
+            InputOutput.HDF5.write_attribute(hdfwriter.file, "time", t)
+            InputOutput.write!(hdfwriter, "Y" => Y)
+            Base.close(hdfwriter)
+        end
+        return nothing
+    end
+
+    prob =
+        ODEProblem(ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, T), parameters)
+    integrator = DiffEqBase.init(
         prob,
-        SSPRK33(),
+        ExplicitAlgorithm(SSP33ShuOsher()),
         dt = dt,
-        saveat = dt,
+        saveat = [],
         progress = true,
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
+        internalnorm = (u, t) -> norm(parent(Y)),
+        callback = CallbackSet(save_callback),
     )
 
-    sol = @timev OrdinaryDiffEq.solve!(integrator)
-    =#
-    return nothing
+    return integrator
 end
 
-shallow_water_driver_cuda(ARGS, Float64)
+integrator = shallow_water_driver_cuda(ARGS, Float64)
+
+if !isinteractive()
+    solve!(integrator)
+end

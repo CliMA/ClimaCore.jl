@@ -575,8 +575,8 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     rhs!(dYdt, Y, parameters, 0.0)
 
     # Solve the ODE
-    dt = 9 * 60
-    T = 86400 * 2
+    dt = 6 * 60
+    T = 60 * 60 * 24 * 2
 
     prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
     integrator = OrdinaryDiffEq.init(
