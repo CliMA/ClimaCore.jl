@@ -91,9 +91,9 @@ Keyword arguments are passed as command-line options. These include:
   - `"cgll"`: continuous GLL finite element method (a single value for colocated nodes)
   - `"dgll"`: discontinuous GLL finite element method (duplicate values for colocated nodes)
 - 'in_np'/'out_np': Order of input and output meshes
-- 'mono': Monotonicity of remapping. Note: must be used with in_np = 1
+- 'mono': Monotonicity of remapping
 
-Set `mono = true` and `in_np = 1` for monotone remapping
+Set `mono = true` for monotone remapping
 Set `verbose=true` to print information.
 
 See [Tempest remap: offline map generation](https://github.com/ClimateGlobalChange/tempestremap/#offline-map-generation)
