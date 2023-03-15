@@ -1,25 +1,6 @@
 include("ddss_setup.jl")
 
-#=
- _ _
-|_|_|
-|_|_|
-=#
-@testset "2x2 element mesh with periodic boundaries" begin
-    Nq = 4
-    space, comms_ctx = distributed_space((2, 2), (true, true), (Nq, 1, 1))
-    init_state(local_geometry, p) = (ρ = 1.0)
-    y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
-
-    nel = Topologies.nlocalelems(Spaces.topology(space))
-    yarr = parent(y0)
-    yarr .=
-        reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
-        (pid - 1) * Nq * Nq * nel
-
-    dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss!(y0, dss2_buffer)
-
+function verify_4process_result(yarr, pid)
     passed = 0
     #=
     output from single process run:
@@ -47,10 +28,43 @@ include("ddss_setup.jl")
         end
     end
 #! format: on
-    passed = ClimaComms.reduce(comms_ctx, passed, +)
-    if pid == 1
-        @test passed == 4#8
-    end
+    return passed
+end
+
+#=
+ _ _
+|_|_|
+|_|_|
+=#
+@testset "2x2 element mesh with periodic boundaries" begin
+    Nq = 4
+    space, comms_ctx = distributed_space((2, 2), (true, true), (Nq, 1, 1))
+    init_state(local_geometry, p) = (ρ = 1.0)
+    y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
+
+    nel = Topologies.nlocalelems(Spaces.topology(space))
+    yarr = parent(y0)
+    yarr .=
+        reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
+        (pid - 1) * Nq * Nq * nel
+
+    dss2_buffer = Spaces.create_dss_buffer(y0) # persistent MPI communication
+    Spaces.weighted_dss!(y0, dss2_buffer)
+
+    passed = ClimaComms.reduce(comms_ctx, verify_4process_result(yarr, pid), +)
+    pid == 1 && @test passed == 4
+    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
+    @test p == 0
+
+    # Add test for dss using non-persistent MPI communication
+    yarr .=
+        reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
+        (pid - 1) * Nq * Nq * nel
+    dss2_buffer_np = Spaces.create_dss_buffer(y0, persistent = false) # non-persistent MPI communication
+    Spaces.weighted_dss!(y0, dss2_buffer_np)
+
+    passed = ClimaComms.reduce(comms_ctx, verify_4process_result(yarr, pid), +)
+    pid == 1 && @test passed == 4
     p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
     @test p == 0
 end

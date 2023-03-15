@@ -42,13 +42,21 @@ Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     hspace::AbstractSpectralElementSpace,
+    ispersistent = true,
 ) where {S, Nij}
     @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
     topology = hspace.topology
     local_geometry = local_geometry_data(hspace)
     local_weights = hspace.local_dss_weights
     perimeter = Spaces.perimeter(hspace)
-    create_dss_buffer(data, topology, perimeter, local_geometry, local_weights)
+    create_dss_buffer(
+        data,
+        topology,
+        perimeter,
+        local_geometry,
+        local_weights,
+        ispersistent,
+    )
 end
 
 function create_dss_buffer(
@@ -57,6 +65,7 @@ function create_dss_buffer(
     perimeter,
     local_geometry = nothing,
     local_weights = nothing,
+    ispersistent = true,
 ) where {S, Nij}
     context =
         topology isa Topologies.Topology2D ? topology.context :
@@ -95,7 +104,7 @@ function create_dss_buffer(
             recv_data,
             buffer_lengths,
             neighbor_pids,
-            persistent = true,
+            persistent = ispersistent,
         )
         send_buf_idx, recv_buf_idx =
             Topologies.compute_ghost_send_recv_idx(topology, Nij)
@@ -179,7 +188,8 @@ function create_dss_buffer(
     )
 end
 
-create_dss_buffer(data::DataLayouts.AbstractData, hspace) = nothing
+create_dss_buffer(data::DataLayouts.AbstractData, hspace, ispersistent = true) =
+    nothing
 
 """
     function weighted_dss!(
