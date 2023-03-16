@@ -116,7 +116,7 @@ steps:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
 
-      - label: "TempestRemap MPI testing"
+      - label: "TempestRemap MPI test"
         key: "write_exodus_mpi"
         command:
           - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
@@ -125,6 +125,18 @@ steps:
           CLIMACORE_DISTRIBUTED: "MPI"
         retry:
           automatic: true
+        agents:
+          slurm_nodes: 3
+          slurm_tasks_per_node: 1
+
+      - label: "TempestRemap distributed remapping test"
+        key: "online_remap_mpi"
+        command:
+          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
+        timeout_in_minutes: 5
+        env:
+          CLIMACORE_DISTRIBUTED: "MPI"
+          CI_OUTPUT_DIR: "output/online_remap"
         agents:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
@@ -412,7 +424,7 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/bubble_2d_rhotheta/*"
-      
+
       - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
         key: "cpu_isothermal_channel_2d_hybrid_rhoe"
         command:
