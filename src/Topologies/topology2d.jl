@@ -35,6 +35,7 @@ struct Topology2D{
     GV,
     GVO,
     BF,
+    RGV,
 } <: AbstractDistributedTopology
     "the ClimaComms context on which the topology is defined"
     context::C
@@ -117,7 +118,7 @@ struct Topology2D{
     neighbor_pids[ghost_vertex_neighbor_loc[j]]"
     ghost_vertex_comm_idx_offset::Vector{Int}
     "representative local ghost vertex (idx, vert) for each unique ghost vertex"
-    repr_ghost_vertex::Vector{Tuple{Int, Int}}
+    repr_ghost_vertex::RGV #Vector{Tuple{Int, Int}}
     "neighbor process location in neighbor_pids for each ghost face"
     ghost_face_neighbor_loc::Vector{Int}
 end
@@ -502,7 +503,7 @@ function Topology2D(
         comm_face_lengths,
         ghost_vertex_neighbor_loc,
         ghost_vertex_comm_idx_offset,
-        repr_ghost_vertex,
+        DA(repr_ghost_vertex),
         ghost_face_neighbor_loc,
     )
 end
@@ -529,13 +530,13 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
         ghost_vertex_neighbor_loc,
         ghost_vertex_comm_idx_offset,
         ghost_faces,
-        repr_ghost_vertex,
         ghost_face_neighbor_loc,
         nglobalvertices,
         nglobalfaces,
     ) = topology
     ghost_vertices = Array(topology.ghost_vertices)
     ghost_vertex_offset = Array(topology.ghost_vertices)
+    repr_ghost_vertex = Array(topology.repr_ghost_vertex)
     nfacedof = Nq - 2
     comm_lengths = comm_vertex_lengths .+ (comm_face_lengths .* nfacedof)
     ghost_face_ugidx = ghost_face_gcidx .+ nglobalvertices # unique id for both vertices and faces
