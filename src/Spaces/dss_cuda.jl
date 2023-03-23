@@ -391,7 +391,7 @@ function dss_local_ghost_kernel!(
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
-    nghostvertices = length(ghost_vertices)
+    nghostvertices = length(ghost_vertex_offset) - 1
     if gidx ≤ nlevels * nfidx * nghostvertices
         sizev = (nlevels, nfidx, nghostvertices)
         (level, fidx, vertexid) = _get_idx(sizev, gidx)
@@ -399,17 +399,17 @@ function dss_local_ghost_kernel!(
         st, en =
             ghost_vertex_offset[vertexid], ghost_vertex_offset[vertexid + 1]
         for idx in st:(en - 1)
-            isghost, idx, vert = ghost_vertices[idx]
+            isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = Topologies.perimeter_vertex_node_index(vert)
-                sum_data += pperimeter_data[level, ip, fidx, idx]
+                sum_data += pperimeter_data[level, ip, fidx, lidx]
             end
         end
         for idx in st:(en - 1)
-            isghost, idx, vert = ghost_vertices[idx]
+            isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = Topologies.perimeter_vertex_node_index(vert)
-                pperimeter_data[level, ip, fidx, idx] = sum_data
+                pperimeter_data[level, ip, fidx, lidx] = sum_data
             end
         end
     end

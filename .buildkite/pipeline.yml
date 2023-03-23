@@ -310,7 +310,7 @@ steps:
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
-        timeout_in_minutes: 5
+        timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
@@ -323,7 +323,7 @@ steps:
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
-        timeout_in_minutes: 5
+        timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
@@ -336,7 +336,7 @@ steps:
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
-        timeout_in_minutes: 5
+        timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
@@ -344,12 +344,38 @@ steps:
           slurm_ntasks: 4
           slurm_gpus: 4
 
-      - label: ":flower_playing_cards: Cubed Sphere dss 4-process test"
-        key: "gpu_ddss4_cs_test"
+      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 2-process test"
+        key: "gpu_ddss_ne32_cs_2processes"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/ddss4_cs.jl"
-        timeout_in_minutes: 5
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACORE_DISTRIBUTED: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 2
+
+      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 3-process test"
+        key: "gpu_ddss_ne32_cs_3processes"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACORE_DISTRIBUTED: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 3
+          slurm_gpus: 3
+
+      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 4-process test"
+        key: "gpu_ddss_ne32_cs_4processes"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"

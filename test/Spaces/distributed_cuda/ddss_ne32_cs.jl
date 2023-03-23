@@ -13,7 +13,7 @@ import ClimaCore:
     Topologies,
     DataLayouts
 
-@testset "DSS on Equiangular Cubed Sphere mesh (ne = 3, 4 process run)" begin
+@testset "DSS on Equiangular Cubed Sphere mesh (ne = 32)" begin
     device = Device.device() #ClimaComms.CUDA()
     context_cuda = ClimaCommsMPI.MPICommsContext(device)
     context_cpu = ClimaCommsMPI.MPICommsContext(ClimaComms.CPU())
@@ -29,7 +29,7 @@ import ClimaCore:
         println("running tests on $device device and CPU with $nprocs procs")
     end
     domain = Domains.SphereDomain(300.0)
-    mesh = Meshes.EquiangularCubedSphere(domain, 3)
+    mesh = Meshes.EquiangularCubedSphere(domain, 32)
     topology_cuda = Topologies.Topology2D(context_cuda, mesh)
     topology_cpu = Topologies.Topology2D(context_cpu, mesh)
     quad = Spaces.Quadratures.GLL{4}()
@@ -42,4 +42,13 @@ import ClimaCore:
     Spaces.weighted_dss!(x_cpu)
 
     @test parent(x_cpu) ≈ Array(parent(x_cuda))
+
+
+    field_cuda = Geometry.Covariant12Vector.(ones(space_cuda), ones(space_cuda))
+    field_cpu = Geometry.Covariant12Vector.(ones(space_cpu), ones(space_cpu))
+
+    Spaces.weighted_dss!(field_cuda)
+    Spaces.weighted_dss!(field_cpu)
+
+    @test parent(field_cpu) ≈ Array(parent(field_cuda))
 end
