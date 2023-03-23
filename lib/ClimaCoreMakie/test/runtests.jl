@@ -33,7 +33,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         ClimaCore.Geometry.UVVector(uu, uv)
     end
 
-    fig = ClimaCoreMakie.viz(u.components.data.:1)
+    fig = ClimaCoreMakie.fieldheatmap(u.components.data.:1)
     @test fig !== nothing
 
     fig_png = joinpath(OUTPUT_DIR, "2D_cubed_sphere.png")
@@ -65,7 +65,7 @@ end
         cos(coord.x + coord.y)
     end
 
-    fig = ClimaCoreMakie.viz(sinxy)
+    fig = ClimaCoreMakie.fieldheatmap(sinxy)
     @test fig !== nothing
 
     fig_png = joinpath(OUTPUT_DIR, "2D_rectangle.png")

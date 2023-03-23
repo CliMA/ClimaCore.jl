@@ -24,9 +24,9 @@ Then load in the backend:
 
     julia> using GLMakie
 
-Finally call `viz`:
+Finally call `fieldheatmap` or `fieldcountourf`:
 
-    julia> ClimaCoreMakie.viz(field, ...)
+    julia> ClimaCoreMakie.fieldheatmap(field, ...)
 
 
 ### Development of the `ClimaCoreMakie` subpackage
