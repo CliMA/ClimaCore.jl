@@ -36,22 +36,15 @@ set_initial_condition(space) =
         return (h = h, u = u)
     end
 
-function dss_comms!(topology, Y, ghost_buffer)
-    Spaces.fill_send_buffer!(topology, Fields.field_values(Y), ghost_buffer)
-    ClimaComms.start(ghost_buffer.graph_context)
-    ClimaComms.finish(ghost_buffer.graph_context)
-    return nothing
-end
-
-function weighted_dss_full!(Y, ghost_buffer)
-    Spaces.weighted_dss_start!(Y, ghost_buffer)
-    Spaces.weighted_dss_internal!(Y, ghost_buffer)
-    Spaces.weighted_dss_ghost!(Y, ghost_buffer)
+function dss_comms!(dss_buffer)
+    ClimaComms.start(dss_buffer.graph_context)
+    ClimaComms.finish(dss_buffer.graph_context)
     return nothing
 end
 
 function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     context = ClimaCommsMPI.MPICommsContext()
+    device = context.device
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
     # log output only from root process
@@ -76,45 +69,34 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
         Topologies.Topology2D(context, mesh, Topologies.spacefillingcurve(mesh))
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     Y = set_initial_condition(space)
-    ghost_buffer = Spaces.create_dss_buffer(Y)
     dss_buffer = Spaces.create_dss_buffer(Y)
     weighted_dss! = Spaces.weighted_dss!
     nsamples = 10000
     nprofilesamples = 1000
 
-    # precompile relevant functions
-    Spaces.weighted_dss_internal!(Y, ghost_buffer)
-    weighted_dss_full!(Y, ghost_buffer)
-    Spaces.fill_send_buffer!(
-        grid_topology,
-        Fields.field_values(Y),
-        ghost_buffer,
-    )
-    dss_comms!(grid_topology, Y, ghost_buffer)
+    # precompile functions
+    Spaces.weighted_dss_start!(Y, dss_buffer)
+    Spaces.weighted_dss_internal!(Y, dss_buffer)
+    Spaces.weighted_dss_ghost!(Y, dss_buffer)
+    Spaces.fill_send_buffer!(device, dss_buffer)
+    dss_comms!(dss_buffer)
     Spaces.weighted_dss!(Y, dss_buffer)
     ClimaComms.barrier(context)
 
     # timing
     walltime_dss_full = @elapsed begin # timing weighted dss
         for i in 1:nsamples
-            weighted_dss_full!(Y, ghost_buffer)
+            Spaces.weighted_dss!(Y, dss_buffer)
         end
     end
     ClimaComms.barrier(context)
     walltime_dss_full /= FT(nsamples)
 
-    walltime_dss2_full = @elapsed begin # timing weighted dss2
-        for i in 1:nsamples
-            Spaces.weighted_dss!(Y, dss_buffer)
-        end
-    end
-    ClimaComms.barrier(context)
-    walltime_dss2_full /= FT(nsamples)
 
     ClimaComms.barrier(context)
     walltime_dss_internal = @elapsed begin # timing internal dss
         for i in 1:nsamples
-            Spaces.weighted_dss_internal!(Y, ghost_buffer)
+            Spaces.weighted_dss_internal!(Y, dss_buffer)
         end
     end
     ClimaComms.barrier(context)
@@ -123,7 +105,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     ClimaComms.barrier(context)
     walltime_dss_comms = @elapsed begin # timing dss_comms
         for i in 1:nsamples
-            dss_comms!(grid_topology, Y, ghost_buffer)
+            dss_comms!(dss_buffer)
         end
     end
     ClimaComms.barrier(context)
@@ -132,39 +114,26 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     ClimaComms.barrier(context)
     walltime_dss_comms_fsb = @elapsed begin # timing dss_fill_send_buffer
         for i in 1:nsamples
-            Spaces.fill_send_buffer!(
-                grid_topology,
-                Fields.field_values(Y),
-                ghost_buffer,
-            )
+            Spaces.fill_send_buffer!(device, dss_buffer)
         end
     end
     ClimaComms.barrier(context)
     walltime_dss_comms_fsb /= FT(nsamples)
 
     ClimaComms.barrier(context)
-    walltime_dss_comms_other = @elapsed begin # timing dss_fill_send_buffer
-        for i in 1:nsamples
-            ClimaComms.start(ghost_buffer.graph_context)
-            ClimaComms.finish(ghost_buffer.graph_context)
-        end
-    end
-    ClimaComms.barrier(context)
-    walltime_dss_comms_other /= FT(nsamples)
-
 
     # profiling
     ClimaComms.barrier(context)
     for i in 1:nprofilesamples # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
-                Spaces.weighted_dss_start!(Y, ghost_buffer)
+                Spaces.weighted_dss_start!(Y, dss_buffer)
             end
             @nvtx "internal" color = colorant"blue" begin
-                Spaces.weighted_dss_internal!(Y, ghost_buffer)
+                Spaces.weighted_dss_internal!(Y, dss_buffer)
             end
             @nvtx "ghost" color = colorant"yellow" begin
-                Spaces.weighted_dss_ghost!(Y, ghost_buffer)
+                Spaces.weighted_dss_ghost!(Y, dss_buffer)
             end
         end
     end
@@ -172,7 +141,7 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
 
     for i in 1:nprofilesamples # profiling dss_comms
         @nvtx "dss-comms-loop" color = colorant"green" begin
-            dss_comms!(grid_topology, Y, ghost_buffer)
+            dss_comms!(dss_buffer)
         end
     end
     ClimaComms.barrier(context)
@@ -181,16 +150,12 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     if iamroot
         println("# of samples = $nsamples")
         println("walltime_dss_full per sample = $walltime_dss_full (sec)")
-        println("walltime_dss2_full per sample = $walltime_dss2_full (sec)")
         println(
             "walltime_dss_internal per sample = $walltime_dss_internal (sec)",
         )
         println("walltime_dss_comms per sample = $walltime_dss_comms (sec)")
         println(
             "walltime_dss_comms_fsb per sample = $walltime_dss_comms_fsb (sec)",
-        )
-        println(
-            "walltime_dss_comms_other per sample = $walltime_dss_comms_other (sec)",
         )
         output_dir = joinpath(Base.@__DIR__, "output")
         mkpath(output_dir)
@@ -204,11 +169,9 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
             nprocs,
             nsamples,
             walltime_dss_full,
-            walltime_dss2_full,
             walltime_dss_internal,
             walltime_dss_comms,
             walltime_dss_comms_fsb,
-            walltime_dss_comms_other,
         )
     end
     return nothing
