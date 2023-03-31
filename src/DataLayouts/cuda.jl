@@ -7,6 +7,9 @@ Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
 Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
     IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
 
+Adapt.adapt_structure(to, data::VIJFH{S, Nij}) where {S, Nij} =
+    VIJFH{S, Nij}(Adapt.adapt(to, parent(data)))
+
 Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
     IFH{S, Ni}(Adapt.adapt(to, parent(data)))
 
@@ -59,10 +62,11 @@ function knl_copyto!(dest, src)
     i = CUDA.threadIdx().x
     j = CUDA.threadIdx().y
 
-    h = CUDA.blockIdx().x
+    v = CUDA.blockIdx().x
+    h = CUDA.blockIdx().y
 
-    p_dest = slab(dest, h)
-    p_src = slab(src, h)
+    p_dest = slab(dest, v, h)
+    p_src = slab(src, v, h)
 
     @inbounds p_dest[i, j] = p_src[i, j]
     return nothing
@@ -73,6 +77,17 @@ function Base.copyto!(
     bc::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, _, Nh = size(bc)
-    CUDA.@cuda threads = (Nij, Nij) blocks = (Nh,) knl_copyto!(dest, bc)
+    CUDA.@cuda threads = (Nij, Nij) blocks = (1, Nh) knl_copyto!(dest, bc)
+    return dest
+end
+
+function Base.copyto!(
+    dest::VIJFH{S, Nij},
+    bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
+) where {S, Nij, A <: CUDA.CuArray}
+    _, _, _, Nv, Nh = size(bc)
+    if Nv > 0 && Nh > 0
+        CUDA.@cuda threads = (Nij, Nij) blocks = (Nv, Nh) knl_copyto!(dest, bc)
+    end
     return dest
 end
