@@ -1,20 +1,31 @@
 abstract type AbstractIntervalTopology <: AbstractTopology end
 
 """
-    IntervalTopology(mesh::IntervalMesh)
+    IntervalTopology([context::SingletonCommsContext,] mesh::IntervalMesh)
 
 A sequential topology on an [`Meshes.IntervalMesh`](@ref).
 """
-struct IntervalTopology{M <: Meshes.IntervalMesh, B} <: AbstractIntervalTopology
+struct IntervalTopology{
+    C <: ClimaComms.AbstractCommsContext,
+    M <: Meshes.IntervalMesh,
+    B,
+} <: AbstractIntervalTopology
+    "the ClimaComms context on which the topology is defined"
+    context::C
     mesh::M
     boundaries::B
 end
 
-Device.device(::IntervalTopology) = ClimaComms.CPU()
-Device.device_array_type(::IntervalTopology) =
-    Device.device_array_type(ClimaComms.CPU())
+Device.device(topology::IntervalTopology) = topology.context.device
+Device.device_array_type(topology::IntervalTopology) =
+    Device.device_array_type(topology.context.device)
 
-function IntervalTopology(mesh::Meshes.IntervalMesh)
+function IntervalTopology(
+    context::ClimaComms.AbstractCommsContext,
+    mesh::Meshes.IntervalMesh,
+)
+    # currently only support SingletonCommsContext
+    @assert context isa ClimaComms.SingletonCommsContext
     if Domains.isperiodic(mesh.domain)
         boundaries = NamedTuple()
     elseif mesh.domain.boundary_names[1] == mesh.domain.boundary_names[2]
@@ -22,8 +33,10 @@ function IntervalTopology(mesh::Meshes.IntervalMesh)
     else
         boundaries = NamedTuple{mesh.domain.boundary_names}((1, 2))
     end
-    IntervalTopology(mesh, boundaries)
+    IntervalTopology(context, mesh, boundaries)
 end
+IntervalTopology(mesh::Meshes.IntervalMesh) =
+    IntervalTopology(ClimaComms.SingletonCommsContext(ClimaComms.CPU()), mesh)
 
 isperiodic(topology::AbstractIntervalTopology) =
     Domains.isperiodic(Topologies.domain(topology))
