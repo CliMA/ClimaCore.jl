@@ -106,8 +106,7 @@ function ExtrudedFiniteDifferenceSpace(
             vertical_space.face_local_geometry,
         )
 
-    if horizontal_space isa SpectralElementSpace2D &&
-       horizontal_space.ghost_geometry !== nothing
+    if horizontal_space isa SpectralElementSpace2D
         center_ghost_geometry =
             product_geometry.(
                 horizontal_space.ghost_geometry,
@@ -133,7 +132,6 @@ function ExtrudedFiniteDifferenceSpace(
         center_ghost_geometry,
         face_ghost_geometry,
     )
-    return nothing
 end
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =

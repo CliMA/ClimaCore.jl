@@ -44,10 +44,12 @@ function FiniteDifferenceSpace{S}(
     # similar to spectral operators
     @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
     FT = eltype(CT)
+    ArrayType = Device.device_array_type(topology)
     face_coordinates = collect(mesh.faces)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     nface = length(face_coordinates) - Topologies.isperiodic(topology)
     ncent = length(face_coordinates) - 1
+    # contstruct on CPU, copy to device at end
     center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
     face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
     for i in 1:ncent
@@ -117,8 +119,8 @@ function FiniteDifferenceSpace{S}(
         S(),
         topology,
         global_geometry,
-        center_local_geometry,
-        face_local_geometry,
+        Adapt.adapt(ArrayType, center_local_geometry),
+        Adapt.adapt(ArrayType, face_local_geometry),
     )
 end
 
