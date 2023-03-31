@@ -18,8 +18,7 @@ using ClimaCore.Geometry
 using Logging
 const usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    using ClimaCommsMPI
-    const comms_ctx = ClimaCommsMPI.MPICommsContext()
+    const comms_ctx = ClimaComms.MPICommsContext()
     const pid, nprocs = ClimaComms.init(comms_ctx)
     if pid == 1
         println("parallel run with $nprocs processes")

@@ -1,6 +1,5 @@
 import ClimaCore
 using ClimaComms
-using ClimaCommsMPI
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces
 using NCDatasets
 using TempestRemap_jll
@@ -10,7 +9,7 @@ using ClimaCoreTempestRemap
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "write_exodus using distributed topology" begin
-    comms_ctx = ClimaCommsMPI.MPICommsContext()
+    comms_ctx = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
 
     # generate CC mesh

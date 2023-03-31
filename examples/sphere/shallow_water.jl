@@ -23,7 +23,6 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 using Logging
 if usempi
     using ClimaComms
-    using ClimaCommsMPI
 else
     import TerminalLoggers
 end
@@ -502,7 +501,7 @@ end
 
 function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
     if usempi
-        context = ClimaCommsMPI.MPICommsContext()
+        context = ClimaComms.MPICommsContext()
         pid, nprocs = ClimaComms.init(context)
         # log output only from root process
         logger_stream = ClimaComms.iamroot(context) ? stderr : devnull

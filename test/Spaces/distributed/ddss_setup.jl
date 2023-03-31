@@ -5,8 +5,7 @@ import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
 using ClimaComms
-using ClimaCommsMPI
-const context = ClimaCommsMPI.MPICommsContext()
+const context = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(context)
 
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI"

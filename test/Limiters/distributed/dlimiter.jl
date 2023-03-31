@@ -6,8 +6,7 @@ using Test
 
 
 using ClimaComms
-using ClimaCommsMPI
-const context = ClimaCommsMPI.MPICommsContext()
+const context = ClimaComms.MPICommsContext()
 ClimaComms.init(context)
 
 FT = Float64

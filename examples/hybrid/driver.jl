@@ -29,8 +29,7 @@ using Logging
 using ClimaComms
 if is_distributed
     if ENV["CLIMACORE_DISTRIBUTED"] == "MPI"
-        using ClimaCommsMPI
-        const comms_ctx = ClimaCommsMPI.MPICommsContext()
+        const comms_ctx = ClimaComms.MPICommsContext()
     else
         error("ENV[\"CLIMACORE_DISTRIBUTED\"] only supports the \"MPI\" option")
     end

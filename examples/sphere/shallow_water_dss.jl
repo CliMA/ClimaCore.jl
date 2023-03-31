@@ -21,7 +21,6 @@ import ClimaCore:
 using Logging
 if usempi
     using ClimaComms
-    using ClimaCommsMPI
 end
 
 set_initial_condition(space) =
@@ -51,7 +50,7 @@ function weighted_dss_full!(Y, ghost_buffer)
 end
 
 function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
-    context = ClimaCommsMPI.MPICommsContext()
+    context = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
     # log output only from root process

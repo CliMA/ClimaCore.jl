@@ -16,8 +16,7 @@ using Logging
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 
 using ClimaComms
-using ClimaCommsMPI
-const comms_ctx = ClimaCommsMPI.MPICommsContext()
+const comms_ctx = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(comms_ctx)
 
 # log output only from root process

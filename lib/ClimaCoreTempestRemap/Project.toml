@@ -5,7 +5,6 @@ version = "0.3.7"
 
 [deps]
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
-ClimaCommsMPI = "5f86816e-8b66-43b2-912e-75384f99de49"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -16,7 +15,7 @@ TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-ClimaComms = "0.3.1"
+ClimaComms = "0.3.1, 0.4"
 ClimaCore = "0.10.25"
 NCDatasets = "0.11, 0.12"
 PkgVersion = "0.1, 0.2"
