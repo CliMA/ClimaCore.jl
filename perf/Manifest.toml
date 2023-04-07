@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.8.5"
+julia_version = "1.8.3"
 manifest_format = "2.0"
 project_hash = "c0ad60f68ec1662faef9d7318bc407f36b06adb3"
 
@@ -156,9 +156,9 @@ version = "4.1.2"
 
 [[deps.CUDA_Driver_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl", "Pkg"]
-git-tree-sha1 = "10ca2b63b496edc09258b3de5d1aa64094b18b1d"
+git-tree-sha1 = "498f45593f6ddc0adff64a9310bb6710e851781b"
 uuid = "4ee394cb-3365-5eb0-8335-949819d2adfc"
-version = "0.5.0+0"
+version = "0.5.0+1"
 
 [[deps.CUDA_Runtime_Discovery]]
 deps = ["Libdl"]
@@ -168,9 +168,9 @@ version = "0.2.0"
 
 [[deps.CUDA_Runtime_jll]]
 deps = ["Artifacts", "CUDA_Driver_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "802b1f2220fd43251d343219adf478e6b7992bd4"
+git-tree-sha1 = "9ac3ffda60eeae5291be20f35ca264eb8e95bbc6"
 uuid = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
-version = "0.5.0+0"
+version = "0.5.0+1"
 
 [[deps.Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "CompilerSupportLibraries_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
@@ -221,7 +221,7 @@ uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 version = "0.2.5"
 
 [[deps.ClimaCoreTempestRemap]]
-deps = ["ClimaComms", "ClimaCommsMPI", "ClimaCore", "Dates", "LinearAlgebra", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]
+deps = ["ClimaComms", "ClimaCommsMPI", "ClimaCore", "Dates", "LinearAlgebra", "MPI", "NCDatasets", "PkgVersion", "TempestRemap_jll", "Test"]
 path = "../lib/ClimaCoreTempestRemap"
 uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
 version = "0.3.7"
@@ -300,7 +300,7 @@ version = "3.46.2"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
-version = "1.0.1+0"
+version = "0.5.2+0"
 
 [[deps.CompositeTypes]]
 git-tree-sha1 = "02d2316b7ffceff992f3096ae48c7829a8aa0638"
