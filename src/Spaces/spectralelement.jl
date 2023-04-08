@@ -151,8 +151,12 @@ end
 
 nlevels(space::SpectralElementSpace1D) = 1
 
-const IntervalSpectralElementSpace1D =
-    SpectralElementSpace1D{<:Topologies.IntervalTopology{<:Meshes.IntervalMesh}}
+const IntervalSpectralElementSpace1D = SpectralElementSpace1D{
+    <:Topologies.IntervalTopology{
+        <:ClimaComms.AbstractCommsContext,
+        <:Meshes.IntervalMesh,
+    },
+}
 
 """
     SpectralElementSpace2D <: AbstractSpace
