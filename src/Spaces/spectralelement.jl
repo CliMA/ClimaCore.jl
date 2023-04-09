@@ -275,6 +275,7 @@ function SpectralElementSpace2D(
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nlelems)
     ghost_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, ngelems)
+    bubble_warn = false
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -316,7 +317,7 @@ function SpectralElementSpace2D(
         # If enabled, apply bubble correction
         if enable_bubble
             if abs(elem_area - high_order_elem_area) ≤ eps(FT)
-                @warn "The numerical and geometric areas of the element are equal. The bubble correction will not be performed."
+                bubble_warn = true
                 for i in 1:Nq, j in 1:Nq
                     ξ = SVector(quad_points[i], quad_points[j])
                     u, ∂u∂ξ = compute_local_geometry(
@@ -405,6 +406,9 @@ function SpectralElementSpace2D(
                 end
             end
         end
+    end
+    if bubble_warn
+        @warn "The numerical and geometric areas of the element are equal. The bubble correction will not be performed."
     end
 
     # alternatively, we could do a ghost exchange here?
