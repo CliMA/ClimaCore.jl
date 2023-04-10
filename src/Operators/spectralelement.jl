@@ -196,7 +196,8 @@ function Base.copyto!(
     },
 )
     Fields.byslab(axes(out)) do slabidx
-        copyto_slab!(out, sbc, slabidx)
+        Base.@_inline_meta
+        @inbounds copyto_slab!(out, sbc, slabidx)
     end
     return out
 end
@@ -207,7 +208,7 @@ end
 
 Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
-function copyto_slab!(out, bc, slabidx)
+@inline function copyto_slab!(out, bc, slabidx)
     space = axes(out)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
