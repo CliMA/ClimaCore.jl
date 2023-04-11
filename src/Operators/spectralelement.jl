@@ -274,15 +274,15 @@ function Base.copyto!(
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
 
-    @cuda threads = (Nq, Nq) blocks = (Nv, Nh) copyto_kernel!(out, sbc)
+    @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_kernel!(out, sbc)
     return out
 end
 
 function copyto_kernel!(out::Fields.SpectralElementField2D, sbc)
     i = threadIdx().x
     j = threadIdx().y
+    h = blockIdx().x
     v = nothing
-    h = blockIdx().y
     ij = CartesianIndex((i, j))
     slabidx = Fields.SlabIndex(v, h)
     result = get_node(sbc, ij, slabidx)
