@@ -54,6 +54,10 @@ const Ic2f = Operators.InterpolateC2F(
     bottom = Operators.Extrapolate(),
     top = Operators.Extrapolate(),
 )
+ᶠwinterp = Operators.WeightedInterpolateC2F(
+    bottom = Operators.Extrapolate(),
+    top = Operators.Extrapolate(),
+)
 const vdivf2c = Operators.DivergenceF2C(
     top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
@@ -133,12 +137,17 @@ function vertical_tendency!(Yₜ, Y, cache, t)
     @. face_uₕ = Geometry.project(Geometry.Covariant12Axis(), face_u)
     @. face_uᵥ = Geometry.project(Geometry.Covariant3Axis(), face_u)
     @. Yₜ.c.ρ = -vdivf2c(Ic2f(Y.c.ρ) * face_u)
+    ᶜJ = Fields.local_geometry_field(axes(Y.c.ρ)).J
     for n in 1:5 # TODO: update RecursiveApply/Operators to eliminate this loop
         ρq_n = Y.c.ρq.:($n)
         ρqₜ_n = Yₜ.c.ρq.:($n)
         @. q_n = ρq_n / Y.c.ρ
         @. ρqₜ_n = -vdivf2c(Ic2f(ρq_n) * face_uₕ)
         if isnothing(fct_op)
+            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * face_uᵥ * Ic2f(q_n))
+        elseif fct_op == upwind1
+            @. ρqₜ_n -= vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n))
+        elseif fct_op == upwind3
             @. ρqₜ_n -= vdivf2c(Ic2f(Y.c.ρ) * upwind3(face_uᵥ, q_n))
         elseif fct_op == FCTBorisBook
             @. ρqₜ_n -= vdivf2c(
@@ -280,42 +289,61 @@ tracer_ranges(sol) =
         return maximum(q_n) - minimum(q_n)
     end
 
-ref_sol = run_deformation_flow(false, nothing)
+third_sol = run_deformation_flow(false, upwind3)
 fct_sol = run_deformation_flow(false, FCTZalesak)
-lim_sol = run_deformation_flow(true, nothing)
+lim_third_sol = run_deformation_flow(true, upwind3)
 lim_fct_sol = run_deformation_flow(true, FCTZalesak)
+lim_first_sol = run_deformation_flow(true, upwind1)
+lim_centered_sol = run_deformation_flow(true, nothing)
 
-ref_ρ_err, ref_ρq_errs = conservation_errors(ref_sol)
+third_ρ_err, third_ρq_errs = conservation_errors(third_sol)
 fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
-lim_ρ_err, lim_ρq_errs = conservation_errors(lim_sol)
+lim_third_ρ_err, lim_third_ρq_errs = conservation_errors(lim_third_sol)
 lim_fct_ρ_err, lim_fct_ρq_errs = conservation_errors(lim_fct_sol)
+lim_first_ρ_err, lim_first_ρq_errs = conservation_errors(lim_first_sol)
+lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
 
 # Check that the conservation errors are not too big.
 max_err = 40 * eps(FT)
-@test abs(ref_ρ_err) < max_err
-@test all(abs.(ref_ρq_errs) .< max_err)
+@test abs(third_ρ_err) < max_err
+@test all(abs.(third_ρq_errs) .< max_err)
 @test all(abs.(fct_ρq_errs) .< max_err)
-@test all(abs.(lim_ρq_errs) .< max_err)
+@test all(abs.(lim_third_ρq_errs) .< max_err)
 @test all(abs.(lim_fct_ρq_errs) .< max_err)
+@test all(abs.(lim_first_ρ_err) .< max_err)
+@test all(abs.(lim_centered_ρq_errs) .< max_err)
 
 # Check that FCT and the limiter have no effect on ρ.
-@test ref_ρ_err == fct_ρ_err == lim_ρ_err == lim_fct_ρ_err
+@test third_ρ_err ==
+      fct_ρ_err ==
+      lim_third_ρ_err ==
+      lim_fct_ρ_err ==
+      lim_first_ρ_err ==
+      lim_centered_ρ_err
 
-# Check that FCT and the limiter have no effect on the tracer with q = 1, or at
+# Check that the different upwinding modes with the limiter have no effect on the tracer with q = 1, or at
 # least no effect up to round-off error.
 max_q5_roundoff_err = 2 * eps(FT)
-@test ref_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
-@test fct_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
-@test lim_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
-@test lim_fct_ρq_errs[5] ≈ ref_ρ_err atol = max_q5_roundoff_err
+@test third_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test fct_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test lim_third_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test lim_fct_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test lim_first_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test lim_centered_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
 
-# Check that FCT and the limiter improve the "smoothness" of the tracers.
-@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(ref_sol))
-@test all(tracer_roughnesses(lim_sol) .< 0.9 .* tracer_roughnesses(ref_sol))
-@test all(tracer_roughnesses(lim_fct_sol) .< 0.8 .* tracer_roughnesses(ref_sol))
-@test all(tracer_ranges(fct_sol) .< tracer_ranges(ref_sol))
-@test all(tracer_ranges(lim_sol) .< 0.6 .* tracer_ranges(ref_sol))
-@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(ref_sol))
+# Check that the different upwinding modes with the limiter improve the "smoothness" of the tracers.
+@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(third_sol))
+@test all(
+    tracer_roughnesses(lim_third_sol) .< 0.9 .* tracer_roughnesses(third_sol),
+)
+@test all(
+    tracer_roughnesses(lim_fct_sol) .< 0.8 .* tracer_roughnesses(third_sol),
+)
+@test all(tracer_ranges(fct_sol) .< tracer_ranges(third_sol))
+@test all(tracer_ranges(lim_third_sol) .< 0.6 .* tracer_ranges(third_sol))
+@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(third_sol))
+@test all(tracer_ranges(lim_first_sol) .< 0.5 .* tracer_ranges(third_sol))
+@test all(tracer_ranges(lim_centered_sol) .< 0.9 .* tracer_ranges(third_sol))
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
@@ -323,9 +351,11 @@ Plots.GRBackend()
 path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
 for (sol, suffix) in (
-    (ref_sol, ""),
+    (lim_centered_sol, "_lim_centered"),
+    (lim_first_sol, "_lim_first"),
+    (third_sol, "_third"),
     (fct_sol, "_fct"),
-    (lim_sol, "_lim"),
+    (lim_third_sol, "_lim_third"),
     (lim_fct_sol, "_lim_fct"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
