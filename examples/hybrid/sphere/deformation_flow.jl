@@ -277,73 +277,90 @@ function conservation_errors(sol)
         (final_tracer_masses .- initial_tracer_masses) ./ initial_tracer_masses,
     )
 end
+
+# Roughness is measure as a deviation from the mean value
 tracer_roughnesses(sol) =
     map(1:5) do n
         q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
         mean_q_n = mean(q_n) # TODO: replace the mean with a low-pass filter
         return mean(abs.(q_n .- mean_q_n))
     end
+
 tracer_ranges(sol) =
     map(1:5) do n
         q_n = sol.u[end].c.ρq.:($n) ./ sol.u[end].c.ρ
         return maximum(q_n) - minimum(q_n)
     end
 
-third_sol = run_deformation_flow(false, upwind3)
+third_upwind_sol = run_deformation_flow(false, upwind3)
 fct_sol = run_deformation_flow(false, FCTZalesak)
-lim_third_sol = run_deformation_flow(true, upwind3)
+lim_third_upwind_sol = run_deformation_flow(true, upwind3)
 lim_fct_sol = run_deformation_flow(true, FCTZalesak)
-lim_first_sol = run_deformation_flow(true, upwind1)
+lim_first_upwind_sol = run_deformation_flow(true, upwind1)
 lim_centered_sol = run_deformation_flow(true, nothing)
 
-third_ρ_err, third_ρq_errs = conservation_errors(third_sol)
+third_upwind_ρ_err, third_upwind_ρq_errs = conservation_errors(third_upwind_sol)
 fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
-lim_third_ρ_err, lim_third_ρq_errs = conservation_errors(lim_third_sol)
+lim_third_upwind_ρ_err, lim_third_upwind_ρq_errs =
+    conservation_errors(lim_third_upwind_sol)
 lim_fct_ρ_err, lim_fct_ρq_errs = conservation_errors(lim_fct_sol)
-lim_first_ρ_err, lim_first_ρq_errs = conservation_errors(lim_first_sol)
+lim_first_upwind_ρ_err, lim_first_upwind_ρq_errs =
+    conservation_errors(lim_first_upwind_sol)
 lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
 
 # Check that the conservation errors are not too big.
 max_err = 40 * eps(FT)
-@test abs(third_ρ_err) < max_err
-@test all(abs.(third_ρq_errs) .< max_err)
+@test abs(third_upwind_ρ_err) < max_err
+@test all(abs.(third_upwind_ρq_errs) .< max_err)
 @test all(abs.(fct_ρq_errs) .< max_err)
-@test all(abs.(lim_third_ρq_errs) .< max_err)
+@test all(abs.(lim_third_upwind_ρq_errs) .< max_err)
 @test all(abs.(lim_fct_ρq_errs) .< max_err)
-@test all(abs.(lim_first_ρ_err) .< max_err)
+@test all(abs.(lim_first_upwind_ρ_err) .< max_err)
 @test all(abs.(lim_centered_ρq_errs) .< max_err)
 
-# Check that FCT and the limiter have no effect on ρ.
-@test third_ρ_err ==
+# Check that the different upwinding modes with the limiter have no effect on ρ.
+@test third_upwind_ρ_err ==
       fct_ρ_err ==
-      lim_third_ρ_err ==
+      lim_third_upwind_ρ_err ==
       lim_fct_ρ_err ==
-      lim_first_ρ_err ==
+      lim_first_upwind_ρ_err ==
       lim_centered_ρ_err
 
 # Check that the different upwinding modes with the limiter have no effect on the tracer with q = 1, or at
 # least no effect up to round-off error.
 max_q5_roundoff_err = 2 * eps(FT)
-@test third_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
-@test fct_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
-@test lim_third_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
-@test lim_fct_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
-@test lim_first_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
-@test lim_centered_ρq_errs[5] ≈ third_ρ_err atol = max_q5_roundoff_err
+@test third_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
+@test fct_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
+@test lim_third_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol =
+    max_q5_roundoff_err
+@test lim_fct_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
+@test lim_first_upwind_ρq_errs[5] ≈ third_upwind_ρ_err atol =
+    max_q5_roundoff_err
+@test lim_centered_ρq_errs[5] ≈ third_upwind_ρ_err atol = max_q5_roundoff_err
 
 # Check that the different upwinding modes with the limiter improve the "smoothness" of the tracers.
-@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(third_sol))
+@test all(tracer_roughnesses(fct_sol) .< tracer_roughnesses(third_upwind_sol))
 @test all(
-    tracer_roughnesses(lim_third_sol) .< 0.9 .* tracer_roughnesses(third_sol),
+    tracer_roughnesses(lim_third_upwind_sol) .<
+    0.9 .* tracer_roughnesses(third_upwind_sol),
 )
 @test all(
-    tracer_roughnesses(lim_fct_sol) .< 0.8 .* tracer_roughnesses(third_sol),
+    tracer_roughnesses(lim_fct_sol) .<
+    0.8 .* tracer_roughnesses(third_upwind_sol),
 )
-@test all(tracer_ranges(fct_sol) .< tracer_ranges(third_sol))
-@test all(tracer_ranges(lim_third_sol) .< 0.6 .* tracer_ranges(third_sol))
-@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(third_sol))
-@test all(tracer_ranges(lim_first_sol) .< 0.5 .* tracer_ranges(third_sol))
-@test all(tracer_ranges(lim_centered_sol) .< 0.9 .* tracer_ranges(third_sol))
+@test all(tracer_ranges(fct_sol) .< tracer_ranges(third_upwind_sol))
+@test all(
+    tracer_ranges(lim_third_upwind_sol) .<
+    0.6 .* tracer_ranges(third_upwind_sol),
+)
+@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(third_upwind_sol))
+@test all(
+    tracer_ranges(lim_first_upwind_sol) .<
+    0.5 .* tracer_ranges(third_upwind_sol),
+)
+@test all(
+    tracer_ranges(lim_centered_sol) .< 0.9 .* tracer_ranges(third_upwind_sol),
+)
 
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
@@ -352,10 +369,10 @@ path = joinpath(@__DIR__, "output", "deformation_flow")
 mkpath(path)
 for (sol, suffix) in (
     (lim_centered_sol, "_lim_centered"),
-    (lim_first_sol, "_lim_first"),
-    (third_sol, "_third"),
+    (lim_first_upwind_sol, "_lim_first_upwind"),
+    (third_upwind_sol, "_third_upwind"),
     (fct_sol, "_fct"),
-    (lim_third_sol, "_lim_third"),
+    (lim_third_upwind_sol, "_lim_third_upwind"),
     (lim_fct_sol, "_lim_fct"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
