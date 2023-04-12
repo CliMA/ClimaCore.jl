@@ -146,27 +146,27 @@ function vertical_tendency!(Yₜ, Y, cache, t)
         if isnothing(fct_op)
             @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * face_uᵥ * Ic2f(q_n))
         elseif fct_op == upwind1
-            @. ρqₜ_n -= vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n))
+            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n))
         elseif fct_op == upwind3
-            @. ρqₜ_n -= vdivf2c(Ic2f(Y.c.ρ) * upwind3(face_uᵥ, q_n))
+            @. ρqₜ_n -= vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind3(face_uᵥ, q_n))
         elseif fct_op == FCTBorisBook
             @. ρqₜ_n -= vdivf2c(
-                Ic2f(Y.c.ρ) * (
+                ᶠwinterp(ᶜJ, Y.c.ρ) * (
                     upwind1(face_uᵥ, q_n) + FCTBorisBook(
                         upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
                         q_n / dt -
-                        vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
+                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
                     )
                 ),
             )
         elseif fct_op == FCTZalesak
             @. ρqₜ_n -= vdivf2c(
-                Ic2f(Y.c.ρ) * (
+                ᶠwinterp(ᶜJ, Y.c.ρ) * (
                     upwind1(face_uᵥ, q_n) + FCTZalesak(
                         upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
                         q_n / dt,
                         q_n / dt -
-                        vdivf2c(Ic2f(Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
+                        vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
                     )
                 ),
             )
