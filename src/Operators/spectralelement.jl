@@ -208,7 +208,7 @@ end
 
 Copy the slab indexed by `slabidx` from `bc` to `out`.
 """
-@inline function copyto_slab!(out, bc, slabidx)
+Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     space = axes(out)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -232,29 +232,29 @@ Recursively evaluate any operators in `bc` at `slabidx`, replacing any
  `IF`/`IJF` data object.
 - if `bc` is a `Field`, return that
 """
-function resolve_operator(
+Base.@propagate_inbounds function resolve_operator(
     bc::SpectralBroadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
     args = _resolve_operator_args(slabidx, bc.args...)
     apply_operator(bc.op, bc.axes, slabidx, args...)
 end
-function resolve_operator(
+Base.@propagate_inbounds function resolve_operator(
     bc::Base.Broadcast.Broadcasted{SlabBlockSpectralStyle},
     slabidx,
 )
     args = _resolve_operator_args(slabidx, bc.args...)
     Base.Broadcast.Broadcasted{SlabBlockSpectralStyle}(bc.f, args, bc.axes)
 end
-resolve_operator(x, slabidx) = x
+@inline resolve_operator(x, slabidx) = x
 
 """
     _resolve_operator(slabidx, args...)
 
 Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
 """
-_resolve_operator_args(slabidx) = ()
-@inline _resolve_operator_args(slabidx, arg, xargs...) = (
+@inline _resolve_operator_args(slabidx) = ()
+Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
     resolve_operator(arg, slabidx),
     _resolve_operator_args(slabidx, xargs...)...,
 )
@@ -273,24 +273,32 @@ function Base.copyto!(
     Nq = Quadratures.degrees_of_freedom(QS)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
-
-    @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_kernel!(out, sbc)
+    # executed
+    @inbounds begin
+        @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_kernel!(out, sbc)
+    end
     return out
 end
 
 function copyto_kernel!(out::Fields.SpectralElementField2D, sbc)
-    i = threadIdx().x
-    j = threadIdx().y
-    h = blockIdx().x
-    v = nothing
-    ij = CartesianIndex((i, j))
-    slabidx = Fields.SlabIndex(v, h)
-    result = get_node(sbc, ij, slabidx)
-    set_node!(out, ij, slabidx, result)
+    @inbounds begin
+        i = threadIdx().x
+        j = threadIdx().y
+        h = blockIdx().x
+        v = nothing
+        ij = CartesianIndex((i, j))
+        slabidx = Fields.SlabIndex(v, h)
+        result = get_node(sbc, ij, slabidx)
+        set_node!(out, ij, slabidx, result)
+    end
     return nothing
 end
 
-function get_node(sbc::SpectralBroadcasted{CUDASpectralStyle}, ij, slabidx)
+Base.@propagate_inbounds function get_node(
+    sbc::SpectralBroadcasted{CUDASpectralStyle},
+    ij,
+    slabidx,
+)
     apply_operator_kernel(
         sbc.op,
         axes(sbc),
@@ -302,7 +310,7 @@ end
 
 
 @inline _get_node(ij, slabidx) = ()
-@inline _get_node(ij, slabidx, arg, xargs...) =
+Base.@propagate_inbounds _get_node(ij, slabidx, arg, xargs...) =
     (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
 
 Base.@propagate_inbounds function get_node(scalar, ij, slabidx)
@@ -320,7 +328,8 @@ Base.@propagate_inbounds function get_node(
         v = slabidx.v
     end
     h = slabidx.h
-    Fields.field_values(field)[i, nothing, nothing, v, h]
+    fv = Fields.field_values(field)
+    return fv[i, nothing, nothing, v, h]
 end
 Base.@propagate_inbounds function get_node(
     field::Fields.Field,
@@ -334,7 +343,8 @@ Base.@propagate_inbounds function get_node(
         v = slabidx.v
     end
     h = slabidx.h
-    Fields.field_values(field)[i, j, nothing, v, h]
+    fv = Fields.field_values(field)
+    return fv[i, j, nothing, v, h]
 end
 
 
@@ -381,7 +391,8 @@ Base.@propagate_inbounds function get_local_geometry(
     else
         v = slabidx.v
     end
-    Spaces.local_geometry_data(space)[i, nothing, nothing, v, h]
+    lgd = Spaces.local_geometry_data(space)
+    return lgd[i, nothing, nothing, v, h]
 end
 Base.@propagate_inbounds function get_local_geometry(
     space::Union{
@@ -398,7 +409,8 @@ Base.@propagate_inbounds function get_local_geometry(
     else
         v = slabidx.v
     end
-    Spaces.local_geometry_data(space)[i, j, nothing, v, h]
+    lgd = Spaces.local_geometry_data(space)
+    return lgd[i, j, nothing, v, h]
 end
 
 Base.@propagate_inbounds function set_node!(
@@ -414,7 +426,8 @@ Base.@propagate_inbounds function set_node!(
         v = slabidx.v
     end
     h = slabidx.h
-    Fields.field_values(field)[i, nothing, nothing, v, h] = val
+    fv = Fields.field_values(field)
+    fv[i, nothing, nothing, v, h] = val
 end
 Base.@propagate_inbounds function set_node!(
     field::Fields.Field,
@@ -429,7 +442,8 @@ Base.@propagate_inbounds function set_node!(
         v = slabidx.v
     end
     h = slabidx.h
-    Fields.field_values(field)[i, j, nothing, v, h] = val
+    fv = Fields.field_values(field)
+    fv[i, j, nothing, v, h] = val
 end
 
 
@@ -512,7 +526,12 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::Divergence{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Divergence{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -551,7 +570,13 @@ function apply_operator(op::Divergence{(1, 2)}, space, slabidx, arg)
 end
 
 
-function apply_operator_kernel(op::Divergence{(1, 2)}, space, ij, slabidx, arg)
+Base.@propagate_inbounds function apply_operator_kernel(
+    op::Divergence{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -703,7 +728,7 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(
+Base.@propagate_inbounds function apply_operator_kernel(
     op::WeakDivergence{(1, 2)},
     space,
     ij,
@@ -714,7 +739,6 @@ function apply_operator_kernel(
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
-
     local_geometry = get_local_geometry(space, ij, slabidx)
 
     # allocate temp output
@@ -797,7 +821,12 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Gradient{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -822,7 +851,13 @@ function apply_operator(op::Gradient{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(op::Gradient{(1, 2)}, space, ij, slabidx, arg)
+Base.@propagate_inbounds function apply_operator_kernel(
+    op::Gradient{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -833,6 +868,7 @@ function apply_operator_kernel(op::Gradient{(1, 2)}, space, ij, slabidx, arg)
     array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
     work = IJF{IT, Nq}(array)
     i, j = ij.I
+
     work[i, j] = arg
 
     CUDA.sync_threads()
@@ -949,7 +985,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(
+Base.@propagate_inbounds function apply_operator_kernel(
     op::WeakGradient{(1, 2)},
     space,
     ij,
@@ -1127,7 +1163,13 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator_kernel(op::Curl{(1, 2)}, space, ij, slabidx, arg)
+Base.@propagate_inbounds function apply_operator_kernel(
+    op::Curl{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
 
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
@@ -1322,7 +1364,13 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
 end
 
 
-function apply_operator_kernel(op::WeakCurl{(1, 2)}, space, ij, slabidx, arg)
+Base.@propagate_inbounds function apply_operator_kernel(
+    op::WeakCurl{(1, 2)},
+    space,
+    ij,
+    slabidx,
+    arg,
+)
 
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
