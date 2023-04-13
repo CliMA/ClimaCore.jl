@@ -68,16 +68,20 @@ function ExtrudedFiniteDifferenceSpace(
 
     if adaption isa LinearAdaption
         z_surface = adaption.surface
-        κ_smooth = eltype(z_surface)(1000)
-        dt = eltype(z_surface)(1e-3)
-        for iter = 1:1000
+        FT = eltype(z_surface)
+        @show extrema(z_surface)
+        κ_smooth = eltype(z_surface)(1e8)
+        dt = eltype(z_surface)(1e-1)
+        for iter = 1:20000
            χzₛ = wdiv.(grad.(z_surface))
            Spaces.weighted_dss!(χzₛ)
-           χ2zₛ= wdiv.(grad.(χzₛ))
-           z_surface .-= κ_smooth .* dt .* χ2zₛ
+           z_surface .+= κ_smooth .* dt .* χzₛ
+           Spaces.weighted_dss!(z_surface)
+           @. z_surface = ifelse(z_surface < FT(0), FT(0), z_surface)
         end
         Spaces.weighted_dss!(z_surface)
         z_surface = Fields.field_values(z_surface)
+        @show extrema(z_surface)
         fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
         fZ = Fields.Field(fZ_data, face_space)
     end
