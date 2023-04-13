@@ -32,9 +32,9 @@ Logging.global_logger(TerminalLoggers.TerminalLogger())
 
 const context = ClimaComms.SingletonCommsContext()
 
-const n_vert = 10
-const n_horz = 4
-const p_horz = 4
+const n_vert = 45
+const n_horz = 16
+const p_horz = 3
 
 const R = 6.4e6 # radius
 const Ω = 7.2921e-5 # Earth rotation (radians / sec)
@@ -76,7 +76,7 @@ earth_spline = NCDataset(data_path) do data
     lon = data["longitude"][:]
     lat = data["latitude"][:]
     # Apply Smoothing
-    smooth_degree = 30
+    smooth_degree = 15
     esmth = imfilter(zlevels, Kernel.gaussian(smooth_degree))
     linear_interpolation(
         (lon, lat),
@@ -182,19 +182,13 @@ function rhs!(dY, Y, parameters, t)
     z = c_coords.z
     fz = f_coords.z
 
-    # 0) update w at the bottom
-
+    # Define Operators 
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
     hwgrad = Operators.WeakGradient()
     hcurl = Operators.Curl()
     hwcurl = Operators.WeakCurl()
-
-    # get u_cov at first interior cell center
-    # constant extrapolation to bottom face 
-    # apply as boundary condition on w for interpolation operator 
-
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -204,20 +198,21 @@ function rhs!(dY, Y, parameters, t)
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-
     f_upwind_product1 = Operators.UpwindBiasedProductC2F()
     f_upwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
 
+
+    # Get cell center Jacobian 
     ᶜJ = Fields.local_geometry_field(axes(cρ)).J
 
+    # Initialise density tendency
     dρ .= 0 .* cρ
-
-    cw = If2c.(fw)
     fuₕ = Ic2f.(cuₕ)
 
+    # Boundary condition (Diagnostic Equation)
     u₁_bc =
         Geometry.contravariant3.(
             Fields.level(fuₕ, ClimaCore.Utilities.half),
@@ -236,6 +231,7 @@ function rhs!(dY, Y, parameters, t)
     apply_boundary_w =
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
     @. fw = apply_boundary_w(fw)
+    cw = If2c.(fw)
 
     cuw = @. Geometry.Covariant123Vector(cuₕ) + Geometry.Covariant123Vector(cw)
     fuw = @. WIc2f(cρ * ᶜJ, Geometry.Contravariant123Vector(cuₕ)) + Geometry.Contravariant123Vector(fw)
@@ -445,8 +441,8 @@ rhs!(dYdt, Y, parameters, 0.0)
 # run!
 using OrdinaryDiffEq
 # Solve the ODE
-T = 3600 * 1
-dt = 3
+dt = 1.0
+T = 2.0
 prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 
 function make_dss_func()

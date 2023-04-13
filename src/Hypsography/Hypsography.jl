@@ -72,6 +72,7 @@ function ExtrudedFiniteDifferenceSpace(
         @show extrema(z_surface)
         κ_smooth = eltype(z_surface)(1e8)
         dt = eltype(z_surface)(1e-1)
+        # ∂ϕ∂t = ∂²ϕ/∂x² |> Operators are the same as those described in the spectral mesh. 
         for iter = 1:20000
            χzₛ = wdiv.(grad.(z_surface))
            Spaces.weighted_dss!(χzₛ)
