@@ -179,6 +179,8 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     ψ = zeros(space)
     u = initial_velocity(space)
     du = initial_velocity(space)
+    ϕ_buffer = Spaces.create_dss_buffer(ϕ)
+    u_buffer = Spaces.create_dss_buffer(u)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
@@ -190,8 +192,10 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     end
 
     kernel_args = (; ϕ, ψ, u, du, f)
+    buffers = (; u_buffer, ϕ_buffer) # cannot reside in CuArray kernels
 
-    return (; array_kernel_args..., kernel_args..., device)
+    arr_args = (; array_kernel_args..., kernel_args..., device)
+    return (; arr_args..., buffers, arr_args)
 end
 
 get_summary(trial, trial_arr) = (;

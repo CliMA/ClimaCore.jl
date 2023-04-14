@@ -15,7 +15,7 @@ include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "ben
 args = setup_kernel_args(["--device", "CUDA"]);
 device = args.device
 trial = benchmark_kernel!(args, kernel_spectral_div_grad!, device; silent=true);
-trial = benchmark_kernel_array!(args, kernel_spectral_wdiv_array!, device; silent=true);
+trial = benchmark_kernel_array!(args.arr_args, kernel_spectral_wdiv_array!, device; silent=true);
 show(stdout, MIME("text/plain"), trial);
 ```
 
@@ -56,7 +56,7 @@ function benchmark_all(ARGS::Vector{String} = ARGS)
     # Run benchmarks for a single kernel with:
     trial = benchmark_kernel!(kernel_args, kernel_spectral_div_grad!, device)
     trial = benchmark_kernel_array!(
-        kernel_args,
+        kernel_args.arr_args,
         kernel_spectral_div_grad_array!,
         kernel_args.device,
     )
@@ -72,6 +72,8 @@ function benchmark_all(ARGS::Vector{String} = ARGS)
         (kernel_spectral_wgrad_div!, kernel_spectral_wgrad_div_array!),
         (kernel_spectral_wcurl_curl!, kernel_spectral_wcurl_curl_array!),
         (kernel_spectral_u_cross_curl_u!, kernel_spectral_u_cross_curl_u_array!),
+        (kernel_scalar_dss!, kernel_scalar_dss_array!),
+        (kernel_vector_dss!, kernel_vector_dss_array!),
     ]
     #! format: on
     silent = true # see BenchmarkTools.@benchmark output with `silent = false`
@@ -82,7 +84,8 @@ function benchmark_all(ARGS::Vector{String} = ARGS)
         key = Symbol(k)
         @info "Benchmarking $key..."
         trial = benchmark_kernel!(kernel_args, k, device; silent)
-        trial_arr = benchmark_kernel_array!(kernel_args, ka, device; silent)
+        trial_arr =
+            benchmark_kernel_array!(kernel_args.arr_args, ka, device; silent)
         bm[key] = get_summary(trial, trial_arr)
     end
 
@@ -107,6 +110,8 @@ function get_best_times()
     best_times[:kernel_spectral_wgrad_div!] = 45716.0644
     best_times[:kernel_spectral_wcurl_curl!] = 119117.6098
     best_times[:kernel_spectral_u_cross_curl_u!] = 76965.9762
+    best_times[:kernel_scalar_dss!] = 8000000 # TODO: update
+    best_times[:kernel_vector_dss!] = 8000000 # TODO: update
     #! format: on
     return best_times
 end
