@@ -195,7 +195,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     buffers = (; u_buffer, ϕ_buffer) # cannot reside in CuArray kernels
 
     arr_args = (; array_kernel_args..., kernel_args..., device)
-    return (; arr_args..., buffers, arr_args)
+    return (; arr_args..., buffers, arr_args, float_type)
 end
 
 get_summary(trial, trial_arr) = (;
