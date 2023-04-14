@@ -71,6 +71,14 @@ steps:
         agents:
           slurm_gres: "gpu:1"
 
+      - label: ":rocket: Spectral element operator benchmarks"
+        key: "gpu_spectral_ops_bm"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_cuda.jl --device CUDA"
+        agents:
+          slurm_gres: "gpu:1"
+
       - label: ":computer: test implicit_stencil Float32"
         key: "cpu_implicit_stencil_float32"
         command:
