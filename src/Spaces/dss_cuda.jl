@@ -35,11 +35,13 @@ function dss_load_perimeter_data_kernel!(
     (nlevels, _, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
 
-    if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = _get_idx(sizep, gidx)
-        (ip, jp) = perimeter[p]
-        data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
-        pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
+    @inbounds begin
+        if gidx ≤ prod(sizep)
+            (level, p, fidx, elem) = _get_idx(sizep, gidx)
+            (ip, jp) = perimeter[p]
+            data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
+            pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
+        end
     end
     return nothing
 end
@@ -72,11 +74,13 @@ function dss_unload_perimeter_data_kernel!(
     (nlevels, nperimeter, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
 
-    if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = _get_idx(sizep, gidx)
-        (ip, jp) = perimeter[p]
-        data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
-        pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+    @inbounds begin
+        if gidx ≤ prod(sizep)
+            (level, p, fidx, elem) = _get_idx(sizep, gidx)
+            (ip, jp) = perimeter[p]
+            data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
+            pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+        end
     end
     return nothing
 end
@@ -117,40 +121,45 @@ function dss_local_kernel!(
     nlocalvertices = length(local_vertex_offset) - 1
     nlocalfaces = length(interior_faces)
     (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
-    if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
-        sizev = (nlevels, nfidx, nlocalvertices)
-        (level, fidx, vertexid) = _get_idx(sizev, gidx)
-        sum_data = FT(0)
-        st, en =
-            local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
-        for idx in st:(en - 1)
-            (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
-            sum_data += pperimeter_data[level, ip, fidx, lidx]
-        end
-        for idx in st:(en - 1)
-            (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
-            pperimeter_data[level, ip, fidx, lidx] = sum_data
-        end
-    elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
-        nfacedof = div(nperimeter - 4, 4)
-        sizef = (nlevels, nfidx, nlocalfaces)
-        (level, fidx, faceid) =
-            _get_idx(sizef, gidx - nlevels * nfidx * nlocalvertices)
-        (lidx1, face1, lidx2, face2, reversed) = interior_faces[faceid]
-        (first1, inc1, last1) =
-            Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
-        (first2, inc2, last2) =
-            Topologies.perimeter_face_indices_cuda(face2, nfacedof, reversed)
-        for i in 1:nfacedof
-            ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
-            ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
-            val =
-                pperimeter_data[level, ip1, fidx, lidx1] +
-                pperimeter_data[level, ip2, fidx, lidx2]
-            pperimeter_data[level, ip1, fidx, lidx1] = val
-            pperimeter_data[level, ip2, fidx, lidx2] = val
+    @inbounds begin
+        if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
+            sizev = (nlevels, nfidx, nlocalvertices)
+            (level, fidx, vertexid) = _get_idx(sizev, gidx)
+            sum_data = FT(0)
+            st, en =
+                local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
+            for idx in st:(en - 1)
+                (lidx, vert) = local_vertices[idx]
+                ip = Topologies.perimeter_vertex_node_index(vert)
+                sum_data += pperimeter_data[level, ip, fidx, lidx]
+            end
+            for idx in st:(en - 1)
+                (lidx, vert) = local_vertices[idx]
+                ip = Topologies.perimeter_vertex_node_index(vert)
+                pperimeter_data[level, ip, fidx, lidx] = sum_data
+            end
+        elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
+            nfacedof = div(nperimeter - 4, 4)
+            sizef = (nlevels, nfidx, nlocalfaces)
+            (level, fidx, faceid) =
+                _get_idx(sizef, gidx - nlevels * nfidx * nlocalvertices)
+            (lidx1, face1, lidx2, face2, reversed) = interior_faces[faceid]
+            (first1, inc1, last1) =
+                Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
+            (first2, inc2, last2) = Topologies.perimeter_face_indices_cuda(
+                face2,
+                nfacedof,
+                reversed,
+            )
+            for i in 1:nfacedof
+                ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
+                ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
+                val =
+                    pperimeter_data[level, ip1, fidx, lidx1] +
+                    pperimeter_data[level, ip2, fidx, lidx2]
+                pperimeter_data[level, ip1, fidx, lidx1] = val
+                pperimeter_data[level, ip2, fidx, lidx2] = val
+            end
         end
     end
 
@@ -214,52 +223,56 @@ function dss_transform_kernel!(
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nlocalelems = length(localelems)
-    if gidx ≤ nlevels * nperimeter * nlocalelems
-        sizet = (nlevels, nperimeter, nlocalelems)
-        sizet_data = (nlevels, Nq, Nq, nfid, nelems)
-        sizet_wt = (Nq, Nq, 1, nelems)
-        sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
+    @inbounds begin
+        if gidx ≤ nlevels * nperimeter * nlocalelems
+            sizet = (nlevels, nperimeter, nlocalelems)
+            sizet_data = (nlevels, Nq, Nq, nfid, nelems)
+            sizet_wt = (Nq, Nq, 1, nelems)
+            sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
-        (level, p, localelemno) = _get_idx(sizet, gidx)
-        elem = localelems[localelemno]
-        (ip, jp) = perimeter[p]
+            (level, p, localelemno) = _get_idx(sizet, gidx)
+            elem = localelems[localelemno]
+            (ip, jp) = perimeter[p]
 
-        weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
-        for fidx in scalarfidx
-            data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
-        end
-        for fidx in covariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-            pperimeter_data[level, p, fidx, elem] =
-                (
-                    p∂ξ∂x[idx11] * pdata[data_idx1] +
-                    p∂ξ∂x[idx12] * pdata[data_idx2]
-                ) * weight
-            pperimeter_data[level, p, fidx + 1, elem] =
-                (
-                    p∂ξ∂x[idx21] * pdata[data_idx1] +
-                    p∂ξ∂x[idx22] * pdata[data_idx2]
-                ) * weight
-        end
-        for fidx in contravariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-            pperimeter_data[level, p, fidx, elem] =
-                (
-                    p∂x∂ξ[idx11] * pdata[data_idx1] +
-                    p∂x∂ξ[idx21] * pdata[data_idx2]
-                ) * weight
-            pperimeter_data[level, p, fidx + 1, elem] =
-                (
-                    p∂x∂ξ[idx12] * pdata[data_idx1] +
-                    p∂x∂ξ[idx22] * pdata[data_idx2]
-                ) * weight
+            weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
+            for fidx in scalarfidx
+                data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
+            end
+            for fidx in covariant12fidx
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pperimeter_data[level, p, fidx, elem] =
+                    (
+                        p∂ξ∂x[idx11] * pdata[data_idx1] +
+                        p∂ξ∂x[idx12] * pdata[data_idx2]
+                    ) * weight
+                pperimeter_data[level, p, fidx + 1, elem] =
+                    (
+                        p∂ξ∂x[idx21] * pdata[data_idx1] +
+                        p∂ξ∂x[idx22] * pdata[data_idx2]
+                    ) * weight
+            end
+            @inbounds for fidx in contravariant12fidx
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pperimeter_data[level, p, fidx, elem] =
+                    (
+                        p∂x∂ξ[idx11] * pdata[data_idx1] +
+                        p∂x∂ξ[idx21] * pdata[data_idx2]
+                    ) * weight
+                pperimeter_data[level, p, fidx + 1, elem] =
+                    (
+                        p∂x∂ξ[idx12] * pdata[data_idx1] +
+                        p∂x∂ξ[idx22] * pdata[data_idx2]
+                    ) * weight
+            end
         end
     end
     return nothing
@@ -318,42 +331,46 @@ function dss_untransform_kernel!(
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nlocalelems = length(localelems)
-    if gidx ≤ nlevels * nperimeter * nlocalelems
-        sizet = (nlevels, nperimeter, nlocalelems)
-        sizet_data = (nlevels, Nq, Nq, nfid, nelems)
-        sizet_wt = (Nq, Nq, 1, nelems)
-        sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
+    @inbounds begin
+        if gidx ≤ nlevels * nperimeter * nlocalelems
+            sizet = (nlevels, nperimeter, nlocalelems)
+            sizet_data = (nlevels, Nq, Nq, nfid, nelems)
+            sizet_wt = (Nq, Nq, 1, nelems)
+            sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
-        (level, p, localelemno) = _get_idx(sizet, gidx)
-        elem = localelems[localelemno]
-        ip, jp = perimeter[p]
-        for fidx in scalarfidx
-            data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
-        end
-        for fidx in covariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-            pdata[data_idx1] =
-                p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
-                p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem]
-            pdata[data_idx2] =
-                p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
-                p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem]
-        end
-        for fidx in contravariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-            pdata[data_idx1] =
-                p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
-                p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
-            pdata[data_idx2] =
-                p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
-                p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+            (level, p, localelemno) = _get_idx(sizet, gidx)
+            elem = localelems[localelemno]
+            ip, jp = perimeter[p]
+            for fidx in scalarfidx
+                data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+            end
+            for fidx in covariant12fidx
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pdata[data_idx1] =
+                    p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
+                    p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem]
+                pdata[data_idx2] =
+                    p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
+                    p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+            end
+            for fidx in contravariant12fidx
+                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                (idx11, idx12, idx21, idx22) =
+                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pdata[data_idx1] =
+                    p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
+                    p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
+                pdata[data_idx2] =
+                    p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
+                    p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+            end
         end
     end
     return nothing
@@ -392,24 +409,26 @@ function dss_local_ghost_kernel!(
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
-    if gidx ≤ nlevels * nfidx * nghostvertices
-        sizev = (nlevels, nfidx, nghostvertices)
-        (level, fidx, vertexid) = _get_idx(sizev, gidx)
-        sum_data = FT(0)
-        st, en =
-            ghost_vertex_offset[vertexid], ghost_vertex_offset[vertexid + 1]
-        for idx in st:(en - 1)
-            isghost, lidx, vert = ghost_vertices[idx]
-            if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
-                sum_data += pperimeter_data[level, ip, fidx, lidx]
+    @inbounds begin
+        if gidx ≤ nlevels * nfidx * nghostvertices
+            sizev = (nlevels, nfidx, nghostvertices)
+            (level, fidx, vertexid) = _get_idx(sizev, gidx)
+            sum_data = FT(0)
+            st, en =
+                ghost_vertex_offset[vertexid], ghost_vertex_offset[vertexid + 1]
+            for idx in st:(en - 1)
+                isghost, lidx, vert = ghost_vertices[idx]
+                if !isghost
+                    ip = Topologies.perimeter_vertex_node_index(vert)
+                    sum_data += pperimeter_data[level, ip, fidx, lidx]
+                end
             end
-        end
-        for idx in st:(en - 1)
-            isghost, lidx, vert = ghost_vertices[idx]
-            if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
-                pperimeter_data[level, ip, fidx, lidx] = sum_data
+            for idx in st:(en - 1)
+                isghost, lidx, vert = ghost_vertices[idx]
+                if !isghost
+                    ip = Topologies.perimeter_vertex_node_index(vert)
+                    pperimeter_data[level, ip, fidx, lidx] = sum_data
+                end
             end
         end
     end
@@ -445,14 +464,16 @@ function fill_send_buffer_kernel!(
     nsend = size(send_buf_idx, 1)
     #sizet = (nsend, nlevels, nfid)
     sizet = (nlevels, nfid, nsend)
-    #if gidx ≤ nsend * nlevels * nfid
-    if gidx ≤ nlevels * nfid * nsend
-        #(isend, level, fidx) = _get_idx(sizet, gidx)
-        (level, fidx, isend) = _get_idx(sizet, gidx)
-        lidx = send_buf_idx[isend, 1]
-        ip = send_buf_idx[isend, 2]
-        idx = level + ((fidx - 1) + (isend - 1) * nfid) * nlevels
-        send_data[idx] = pperimeter_data[level, ip, fidx, lidx]
+    @inbounds begin
+        #if gidx ≤ nsend * nlevels * nfid
+        if gidx ≤ nlevels * nfid * nsend
+            #(isend, level, fidx) = _get_idx(sizet, gidx)
+            (level, fidx, isend) = _get_idx(sizet, gidx)
+            lidx = send_buf_idx[isend, 1]
+            ip = send_buf_idx[isend, 2]
+            idx = level + ((fidx - 1) + (isend - 1) * nfid) * nlevels
+            send_data[idx] = pperimeter_data[level, ip, fidx, lidx]
+        end
     end
     return nothing
 end
@@ -487,13 +508,16 @@ function load_from_recv_buffer_kernel!(
     #sizet = (nrecv, nlevels, nfid)
     sizet = (nlevels, nfid, nrecv)
     #if gidx ≤ nrecv * nlevels * nfid
-    if gidx ≤ nlevels * nfid * nrecv
-        #(irecv, level, fidx) = _get_idx(sizet, gidx)
-        (level, fidx, irecv) = _get_idx(sizet, gidx)
-        lidx = recv_buf_idx[irecv, 1]
-        ip = recv_buf_idx[irecv, 2]
-        idx = level + ((fidx - 1) + (irecv - 1) * nfid) * nlevels
-        CUDA.@atomic pperimeter_data[level, ip, fidx, lidx] += recv_data[idx]
+    @inbounds begin
+        if gidx ≤ nlevels * nfid * nrecv
+            #(irecv, level, fidx) = _get_idx(sizet, gidx)
+            (level, fidx, irecv) = _get_idx(sizet, gidx)
+            lidx = recv_buf_idx[irecv, 1]
+            ip = recv_buf_idx[irecv, 2]
+            idx = level + ((fidx - 1) + (irecv - 1) * nfid) * nlevels
+            CUDA.@atomic pperimeter_data[level, ip, fidx, lidx] +=
+                recv_data[idx]
+        end
     end
     return nothing
 end
@@ -533,19 +557,21 @@ function dss_ghost_kernel!(
     nlevels, _, nfidx, _ = size(pperimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
 
-    if gidx ≤ nlevels * nfidx * nghostvertices
-        (level, fidx, ghostvertexidx) =
-            _get_idx((nlevels, nfidx, nghostvertices), gidx)
-        idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
-        ipresult = Topologies.perimeter_vertex_node_index(lvertresult)
-        result = pperimeter_data[level, ipresult, fidx, idxresult]
-        st, en = ghost_vertex_offset[ghostvertexidx],
-        ghost_vertex_offset[ghostvertexidx + 1]
-        for vertexidx in st:(en - 1)
-            isghost, eidx, lvert = ghost_vertices[vertexidx]
-            if !isghost
-                ip = Topologies.perimeter_vertex_node_index(lvert)
-                pperimeter_data[level, ip, fidx, eidx] = result
+    @inbounds begin
+        if gidx ≤ nlevels * nfidx * nghostvertices
+            (level, fidx, ghostvertexidx) =
+                _get_idx((nlevels, nfidx, nghostvertices), gidx)
+            idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
+            ipresult = Topologies.perimeter_vertex_node_index(lvertresult)
+            result = pperimeter_data[level, ipresult, fidx, idxresult]
+            st, en = ghost_vertex_offset[ghostvertexidx],
+            ghost_vertex_offset[ghostvertexidx + 1]
+            for vertexidx in st:(en - 1)
+                isghost, eidx, lvert = ghost_vertices[vertexidx]
+                if !isghost
+                    ip = Topologies.perimeter_vertex_node_index(lvert)
+                    pperimeter_data[level, ip, fidx, eidx] = result
+                end
             end
         end
     end

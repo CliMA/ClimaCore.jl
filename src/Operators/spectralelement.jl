@@ -477,7 +477,12 @@ Divergence{()}(space) = Divergence{operator_axes(space)}()
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-Base.@propagate_inbounds function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Divergence{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -641,7 +646,12 @@ WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-Base.@propagate_inbounds function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakDivergence{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -671,7 +681,12 @@ Base.@propagate_inbounds function apply_operator(op::WeakDivergence{(1,)}, space
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakDivergence{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -782,7 +797,12 @@ Gradient{()}(space) = Gradient{operator_axes(space)}()
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-Base.@propagate_inbounds function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Gradient{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -905,7 +925,12 @@ WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-Base.@propagate_inbounds function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakGradient{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -933,7 +958,12 @@ Base.@propagate_inbounds function apply_operator(op::WeakGradient{(1,)}, space, 
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakGradient{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1055,7 +1085,12 @@ Curl{()}(space) = Curl{operator_axes(space)}()
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-Base.@propagate_inbounds function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Curl{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1086,7 +1121,12 @@ Base.@propagate_inbounds function apply_operator(op::Curl{(1,)}, space, slabidx,
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::Curl{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1250,7 +1290,12 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-Base.@propagate_inbounds function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakCurl{(1,)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1283,7 +1328,12 @@ Base.@propagate_inbounds function apply_operator(op::WeakCurl{(1,)}, space, slab
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(
+    op::WeakCurl{(1, 2)},
+    space,
+    slabidx,
+    arg,
+)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)

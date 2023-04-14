@@ -12,17 +12,37 @@ Transformations only apply to vector quantities.
 
 See [`Spaces.weighted_dss!`](@ref).
 """
-dss_transform(arg, local_geometry, weight, i, j) =
+Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i, j) =
     dss_transform(arg[i, j], local_geometry[i, j], weight[i, j])
-dss_transform(arg, local_geometry, weight::Nothing, i, j) =
-    dss_transform(arg[i, j], local_geometry[i, j], 1)
-dss_transform(arg, local_geometry::Nothing, weight::Nothing, i, j) = arg[i, j]
+Base.@propagate_inbounds dss_transform(
+    arg,
+    local_geometry,
+    weight::Nothing,
+    i,
+    j,
+) = dss_transform(arg[i, j], local_geometry[i, j], 1)
+Base.@propagate_inbounds dss_transform(
+    arg,
+    local_geometry::Nothing,
+    weight::Nothing,
+    i,
+    j,
+) = arg[i, j]
 
-dss_transform(arg, local_geometry, weight, i) =
+Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i) =
     dss_transform(arg[i], local_geometry[i], weight[i])
-dss_transform(arg, local_geometry, weight::Nothing, i) =
-    dss_transform(arg[i], local_geometry[i], 1)
-dss_transform(arg, local_geometry::Nothing, weight::Nothing, i) = arg[i]
+Base.@propagate_inbounds dss_transform(
+    arg,
+    local_geometry,
+    weight::Nothing,
+    i,
+) = dss_transform(arg[i], local_geometry[i], 1)
+Base.@propagate_inbounds dss_transform(
+    arg,
+    local_geometry::Nothing,
+    weight::Nothing,
+    i,
+) = arg[i]
 
 @inline function dss_transform(
     arg::Tuple{},
@@ -123,14 +143,32 @@ Transform `targ[I...]` back to a value of type `T` after performing direct stiff
 
 See [`Spaces.weighted_dss!`](@ref).
 """
-dss_untransform(::Type{T}, targ, local_geometry, i, j) where {T} =
-    dss_untransform(T, targ, local_geometry[i, j])
-dss_untransform(::Type{T}, targ, local_geometry::Nothing, i, j) where {T} =
-    dss_untransform(T, targ, local_geometry)
-dss_untransform(::Type{T}, targ, local_geometry, i) where {T} =
-    dss_untransform(T, targ, local_geometry[i])
-dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
-    dss_untransform(T, targ, local_geometry)
+Base.@propagate_inbounds dss_untransform(
+    ::Type{T},
+    targ,
+    local_geometry,
+    i,
+    j,
+) where {T} = dss_untransform(T, targ, local_geometry[i, j])
+Base.@propagate_inbounds dss_untransform(
+    ::Type{T},
+    targ,
+    local_geometry::Nothing,
+    i,
+    j,
+) where {T} = dss_untransform(T, targ, local_geometry)
+Base.@propagate_inbounds dss_untransform(
+    ::Type{T},
+    targ,
+    local_geometry,
+    i,
+) where {T} = dss_untransform(T, targ, local_geometry[i])
+Base.@propagate_inbounds dss_untransform(
+    ::Type{T},
+    targ,
+    local_geometry::Nothing,
+    i,
+) where {T} = dss_untransform(T, targ, local_geometry)
 @inline function dss_untransform(
     ::Type{NamedTuple{names, T}},
     targ::NamedTuple{names},
