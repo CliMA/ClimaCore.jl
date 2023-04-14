@@ -1,7 +1,6 @@
 import ClimaCore
 import ClimaCoreTempestRemap as CCTR
 using ClimaComms
-using ClimaCommsMPI
 using MPI
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
 using Test
@@ -11,7 +10,7 @@ using Test
 
 @testset "distributed online remapping" begin
     # general setup
-    comms_ctx = ClimaCommsMPI.MPICommsContext()
+    comms_ctx = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
     OUTPUT_DIR = MPI.bcast(
         mkpath(get(ENV, "CI_OUTPUT_DIR", tempname())),

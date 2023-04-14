@@ -14,7 +14,6 @@ import ClimaCore.Topologies as Topologies
 import ClimaCore.Geometry as Geometry
 import ClimaCore as CC
 import ClimaComms
-import ClimaCommsMPI
 
 using CUDA
 using ArgParse
@@ -148,14 +147,14 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         error("Unknown device: $(args["device"])")
 
     context =
-        args["comms"] == "MPI" ? ClimaCommsMPI.MPICommsContext(device) :
+        args["comms"] == "MPI" ? ClimaComms.MPICommsContext(device) :
         args["comms"] == "Singleton" ?
         ClimaComms.SingletonCommsContext(device) :
         error("Unknown comms: $(args["comms"])")
 
     ClimaComms.init(context)
 
-    if context isa ClimaCommsMPI.MPICommsContext && device isa ClimaComms.CUDA
+    if context isa ClimaComms.MPICommsContext && device isa ClimaComms.CUDA
         # assign GPUs based on local rank
         local_comm = MPI.Comm_split_type(
             context.mpicomm,
