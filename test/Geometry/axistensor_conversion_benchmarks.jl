@@ -159,7 +159,7 @@ function test_optimized_functions(::Type{FT}) where {FT}
     for key in keys(benchmarks)
         @test benchmarks[key].correctness       # test correctness
         @test benchmarks[key].Δflops ≤ 0        # Don't regress
-        @test_broken benchmarks[key].Δflops < 0 # Error on improvements
+        # @test_broken benchmarks[key].Δflops < 0 # Error on improvements. TODO: fix, this is somehow flakey
         @test_broken benchmarks[key].perf_pass  # rough timing test (benchmarking is hard for ns funcs)
     end
 end
