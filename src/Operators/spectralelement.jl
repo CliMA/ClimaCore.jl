@@ -477,7 +477,7 @@ Divergence{()}(space) = Divergence{operator_axes(space)}()
 operator_return_eltype(op::Divergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -641,7 +641,7 @@ WeakDivergence{()}(space) = WeakDivergence{operator_axes(space)}()
 operator_return_eltype(::WeakDivergence{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(Geometry.divergence_result_type, S)
 
-function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -671,7 +671,7 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -782,7 +782,7 @@ Gradient{()}(space) = Gradient{operator_axes(space)}()
 operator_return_eltype(::Gradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -905,7 +905,7 @@ WeakGradient{()}(space) = WeakGradient{operator_axes(space)}()
 operator_return_eltype(::WeakGradient{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.gradient_result_type(Val(I), T), S)
 
-function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -933,7 +933,7 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1055,7 +1055,7 @@ Curl{()}(space) = Curl{operator_axes(space)}()
 operator_return_eltype(::Curl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1086,7 +1086,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1250,7 +1250,7 @@ WeakCurl{()}(space) = WeakCurl{operator_axes(space)}()
 operator_return_eltype(::WeakCurl{I}, ::Type{S}) where {I, S} =
     RecursiveApply.rmaptype(T -> Geometry.curl_result_type(Val(I), T), S)
 
-function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1283,7 +1283,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
+Base.@propagate_inbounds function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
@@ -1336,7 +1336,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
     else
         error("invalid return type")
     end
-    for j in 1:Nq, i in 1:Nq
+    @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
@@ -1365,45 +1365,47 @@ Base.@propagate_inbounds function apply_operator_kernel(
     W = local_geometry.WJ / local_geometry.J
     i, j = ij.I
 
-    if RT <: Geometry.Contravariant3Vector
+    @inbounds begin
+        if RT <: Geometry.Contravariant3Vector
 
-        work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
-        work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
-        Wv₁ = IJF{IT, Nq}(work1_array)
-        Wv₂ = IJF{IT, Nq}(work2_array)
-        Wv₁[i, j] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i, j] = W ⊠ Geometry.covariant2(arg, local_geometry)
+            work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+            work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+            Wv₁ = IJF{IT, Nq}(work1_array)
+            Wv₂ = IJF{IT, Nq}(work2_array)
+            Wv₁[i, j] = W ⊠ Geometry.covariant1(arg, local_geometry)
+            Wv₂[i, j] = W ⊠ Geometry.covariant2(arg, local_geometry)
 
-        CUDA.sync_threads()
+            CUDA.sync_threads()
 
-        Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1, j]
-        Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i, 1]
-        for k in 2:Nq
-            Dᵀ₁Wv₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
-            Dᵀ₂Wv₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
+            Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1, j]
+            Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i, 1]
+            for k in 2:Nq
+                Dᵀ₁Wv₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
+                Dᵀ₂Wv₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
+            end
+            return Geometry.Contravariant3Vector(
+                RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ),
+            )
+        elseif RT <: Geometry.Contravariant12Vector
+            work_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+            Wv₃ = IJF{IT, Nq}(work_array)
+            Wv₃[i, j] = W ⊠ Geometry.covariant3(arg, local_geometry)
+
+            CUDA.sync_threads()
+
+            Dᵀ₁Wv₃ = D[1, i] ⊠ Wv₃[1, j]
+            Dᵀ₂Wv₃ = D[1, j] ⊠ Wv₃[i, 1]
+            for k in 2:Nq
+                Dᵀ₁Wv₃ = Dᵀ₁Wv₃ ⊞ D[k, i] ⊠ Wv₃[k, j]
+                Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊞ D[k, j] ⊠ Wv₃[i, k]
+            end
+            return Geometry.Contravariant12Vector(
+                ⊟(RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ)),
+                RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ),
+            )
+        else
+            error("invalid return type")
         end
-        return Geometry.Contravariant3Vector(
-            RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ),
-        )
-    elseif RT <: Geometry.Contravariant12Vector
-        work_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
-        Wv₃ = IJF{IT, Nq}(work_array)
-        Wv₃[i, j] = W ⊠ Geometry.covariant3(arg, local_geometry)
-
-        CUDA.sync_threads()
-
-        Dᵀ₁Wv₃ = D[1, i] ⊠ Wv₃[1, j]
-        Dᵀ₂Wv₃ = D[1, j] ⊠ Wv₃[i, 1]
-        for k in 2:Nq
-            Dᵀ₁Wv₃ = Dᵀ₁Wv₃ ⊞ D[k, i] ⊠ Wv₃[k, j]
-            Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊞ D[k, j] ⊠ Wv₃[i, k]
-        end
-        return Geometry.Contravariant12Vector(
-            ⊟(RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ)),
-            RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ),
-        )
-    else
-        error("invalid return type")
     end
 end
 
