@@ -1,6 +1,5 @@
 using ClimaCore.DataLayouts
 using ClimaComms
-using ClimaCommsMPI
 using MPI
 
 
