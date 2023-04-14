@@ -4,14 +4,14 @@ julia --project=test
 
 To run all tests:
 ```
-using Revise; using ClimaCore; include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda.jl"))
+using Revise; using ClimaCore; include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_ops.jl"))
 ```
 
 For interactive experimentation:
 ```
 using Revise; using ClimaCore
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda_utils.jl"))
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda_kernels.jl"))
+include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_utils.jl"))
+include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_kernels.jl"))
 args = setup_kernel_args(["--device", "CUDA"]);
 device = args.device
 trial = benchmark_kernel!(args, kernel_spectral_div_grad!, device; silent=true);
@@ -32,7 +32,7 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_cuda_utils.jl",
+        "benchmark_utils.jl",
     ),
 )
 include(
@@ -41,7 +41,16 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_cuda_kernels.jl",
+        "benchmark_kernels.jl",
+    ),
+)
+include(
+    joinpath(
+        pkgdir(CC),
+        "test",
+        "Operators",
+        "spectralelement",
+        "benchmark_times.jl",
     ),
 )
 
@@ -96,26 +105,9 @@ function benchmark_all(ARGS::Vector{String} = ARGS)
     for key in keys(bm)
         println("    best_times[:$key] = $(bm[key].t_mean_float)")
     end
-    return bm
+    return bm, kernel_args
 end
 
-function get_best_times()
-    # To prevent regressions, we test against best times (in nanoseconds).
-    best_times = OrderedCollections.OrderedDict()
-    #! format: off
-    best_times[:kernel_spectral_wdiv!] = 35331.3846
-    best_times[:kernel_spectral_grad!] = 22647.0877
-    best_times[:kernel_spectral_grad_norm!] = 84885.4254
-    best_times[:kernel_spectral_div_grad!] = 42131.9457
-    best_times[:kernel_spectral_wgrad_div!] = 45716.0644
-    best_times[:kernel_spectral_wcurl_curl!] = 119117.6098
-    best_times[:kernel_spectral_u_cross_curl_u!] = 76965.9762
-    best_times[:kernel_scalar_dss!] = 8000000 # TODO: update
-    best_times[:kernel_vector_dss!] = 8000000 # TODO: update
-    #! format: on
-    return best_times
-end
-
-bm = benchmark_all(ARGS)
-best_times = get_best_times()
-test_against_best_times(bm, best_times)
+bm, kernel_args = benchmark_all(ARGS);
+best_times = get_best_times(kernel_args);
+test_against_best_times(bm, best_times);
