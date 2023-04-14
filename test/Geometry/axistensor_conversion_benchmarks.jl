@@ -74,7 +74,7 @@ function total_flops(flops)
     return n_flops
 end
 
-function benchmark_func(args, key, f, flops, ::Type{FT}) where {FT}
+function benchmark_func(args, key, f, flops, ::Type{FT}; print_method_info) where {FT}
     f_ref = reference_func(f)
     # Reference
     result = f_ref(args...) # compile first
@@ -95,13 +95,20 @@ function benchmark_func(args, key, f, flops, ::Type{FT}) where {FT}
     reduced_flops = computed_flops < flops
     Δflops = computed_flops - flops
 
-    # if reduced_flops # only print significant changes
+    if print_method_info
         key_str = replace("$key", "Float64" => "FT", "Float32" => "FT", " " => "")
-        print("Flops (Δ, now, main): (")
-        print_colored(Δflops)
-        print(", $computed_flops, $flops).")
-        print("Time (opt, ref): ($(opt.t_pretty), $(ref.t_pretty)). Key: $key_str\n")
-    # end
+        key_str = join(split(key_str, ",")[2:end], ",")[1:end-1]
+        # For conveniently copying into method_info.jl:
+        println("    ($key_str,$computed_flops),")
+    else
+        key_str = replace("$key", "Float64" => "FT", "Float32" => "FT", " " => "")
+        # if reduced_flops # only print significant changes
+            print("Flops (Δ, now, main): (")
+            print_colored(Δflops)
+            print(", $computed_flops, $flops).")
+            print("Time (opt, ref): ($(opt.t_pretty), $(ref.t_pretty)). Key: $key_str\n")
+        # end
+    end
     bm = (;
         opt,
         ref,
@@ -119,9 +126,9 @@ end
 dict_key(f, args) = (nameof(f), typeof.(args)...)
 
 # expensive/slow. Can we (safely) parallelize this?
-function benchmark_conversions!(benchmarks, f, FT)
+function benchmark_conversions!(benchmarks, f, FT; print_method_info)
     for (args, flops) in func_args(FT, f)
-        benchmarks[dict_key(f, args)] = benchmark_func(args, dict_key(f, args), f, flops, FT)
+        benchmarks[dict_key(f, args)] = benchmark_func(args, dict_key(f, args), f, flops, FT; print_method_info)
     end
     return nothing
 end
@@ -141,7 +148,7 @@ compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
 
-function test_optimized_functions(::Type{FT}) where {FT}
+function test_optimized_functions(::Type{FT}; print_method_info=false) where {FT}
     @info "Testing optimized functions with $FT"
     benchmarks = OrderedCollections.OrderedDict()
     for f in (
@@ -153,7 +160,7 @@ function test_optimized_functions(::Type{FT}) where {FT}
         Geometry.Jcontravariant3,
     )
         @info "Testing optimized $f..."
-        benchmark_conversions!(benchmarks, f, FT)
+        benchmark_conversions!(benchmarks, f, FT; print_method_info)
     end
 
     for key in keys(benchmarks)
@@ -166,8 +173,10 @@ end
 
 # TODO: figure out how to make error checking in `transform` optional
 
+test_optimized_functions(Float64; print_method_info=true)
 @testset "Test optimized functions" begin
     test_optimized_functions(Float64)
 end
+
 
 #! format: on
