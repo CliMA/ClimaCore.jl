@@ -4,14 +4,14 @@ julia --project=test
 
 To run all tests:
 ```
-using Revise; using ClimaCore; include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda.jl"))
+using Revise; using ClimaCore; include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_ops.jl"))
 ```
 
 For interactive experimentation:
 ```
 using Revise; using ClimaCore
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda_utils.jl"))
-include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_cuda_kernels.jl"))
+include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_utils.jl"))
+include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_kernels.jl"))
 args = setup_kernel_args(["--device", "CUDA"]);
 device = args.device
 trial = benchmark_kernel!(args, kernel_spectral_div_grad!, device; silent=true);
@@ -32,7 +32,7 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_cuda_utils.jl",
+        "benchmark_utils.jl",
     ),
 )
 include(
@@ -41,7 +41,7 @@ include(
         "test",
         "Operators",
         "spectralelement",
-        "benchmark_cuda_kernels.jl",
+        "benchmark_kernels.jl",
     ),
 )
 
