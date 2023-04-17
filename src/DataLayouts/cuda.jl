@@ -7,6 +7,9 @@ Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
 Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
     IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
 
+Adapt.adapt_structure(to, data::VIJFH{S, Nij}) where {S, Nij} =
+    VIJFH{S, Nij}(Adapt.adapt(to, parent(data)))
+
 Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
     IFH{S, Ni}(Adapt.adapt(to, parent(data)))
 
