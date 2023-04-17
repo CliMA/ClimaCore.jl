@@ -1,32 +1,42 @@
-using Revise
+#=
+julia --project
+using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
+=#
 using LinearAlgebra, IntervalSets, UnPack
 using ClimaComms
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column
-
+using CUDA
+using ClimaComms: SingletonCommsContext
+import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
 using Test
 
-FT = Float64
-context = ClimaComms.SingletonCommsContext(ClimaComms.CUDA())
-radius = FT(128)
-zlim = (0, 1)
-helem = 4
-zelem = 10
-Nq = 4
+include(joinpath(@__DIR__, "..", "Fields", "util_spaces.jl"))
 
-vertdomain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(zlim[1]),
-    Geometry.ZPoint{FT}(zlim[2]);
-    boundary_tags = (:bottom, :top),
-)
-vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-verttopology = Topologies.IntervalTopology(context, vertmesh)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopology)
+function FieldFromNamedTuple(space, nt::NamedTuple)
+    cmv(z) = nt
+    return cmv.(Fields.coordinate_field(space))
+end
 
-horzdomain = Domains.SphereDomain(radius)
-horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-horztopology = Topologies.Topology2D(context, horzmesh)
-quad = Spaces.Quadratures.GLL{Nq}()
-horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+@testset "CuArray-backed extruded spaces" begin
+    context = SingletonCommsContext(
+        CUDA.functional() ? ClimaComms.CUDA() : ClimaComms.CPU(),
+    )
+    @info context
+    FT = Float64
+    for space in all_spaces(FT; zelem = 10, context)
+        # Y = FieldFromNamedTuple(space, (; v = FT(0)))
+        # X = FieldFromNamedTuple(space, (; v = FT(0)))
+    end
+end
 
-hv_center_space =
-    Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+# @testset "copyto! with CuArray-backed extruded spaces" begin
+#     context = SingletonCommsContext(
+#         CUDA.functional() ? ClimaComms.CUDA() : ClimaComms.CPU(),
+#     )
+#     @info context
+#     FT = Float64
+#     for space in all_spaces(FT; zelem = 10, context)
+#         Y = FieldFromNamedTuple(space, (; v = FT(0)))
+#         X = FieldFromNamedTuple(space, (; v = FT(0)))
+#         @. X.v = Y.v
+#     end
+# end
