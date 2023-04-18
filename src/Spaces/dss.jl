@@ -598,11 +598,11 @@ function dss_transform!(
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
-            weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
+            pw = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
 
             for fidx in scalarfidx, level in 1:nlevels
                 data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-                pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
+                pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * pw
             end
 
             for fidx in covariant12fidx, level in 1:nlevels
@@ -615,12 +615,12 @@ function dss_transform!(
                     (
                         p∂ξ∂x[idx11] * pdata[data_idx1] +
                         p∂ξ∂x[idx12] * pdata[data_idx2]
-                    ) * weight
+                    ) * pw
                 pperimeter_data[level, p, fidx + 1, elem] =
                     (
                         p∂ξ∂x[idx21] * pdata[data_idx1] +
                         p∂ξ∂x[idx22] * pdata[data_idx2]
-                    ) * weight
+                    ) * pw
             end
 
             for fidx in contravariant12fidx, level in 1:nlevels
@@ -633,12 +633,12 @@ function dss_transform!(
                     (
                         p∂x∂ξ[idx11] * pdata[data_idx1] +
                         p∂x∂ξ[idx21] * pdata[data_idx2]
-                    ) * weight
+                    ) * pw
                 pperimeter_data[level, p, fidx + 1, elem] =
                     (
                         p∂x∂ξ[idx12] * pdata[data_idx1] +
                         p∂x∂ξ[idx22] * pdata[data_idx2]
-                    ) * weight
+                    ) * pw
             end
         end
     end
