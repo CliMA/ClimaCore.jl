@@ -5,7 +5,6 @@ agents:
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
-  CUDA_PATH: "/central/software/CUDA/11.2/targets/x86_64-linux" # https://github.com/JuliaGPU/CUDA_Runtime_Discovery.jl/issues/5
   OPENBLAS_NUM_THREADS: 1
   JULIA_NVTX_CALLBACKS: gc
 
