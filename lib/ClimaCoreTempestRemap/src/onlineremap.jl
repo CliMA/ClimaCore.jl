@@ -28,6 +28,7 @@ struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     out_type::String
 end
 
+# This version of this function is used for serial remapping
 function remap!(
     target::IJFH{S, Nqt},
     R::LinearMap,
@@ -215,7 +216,7 @@ function generate_map(
             out_type == "cgll" ? collect(Spaces.unique_nodes(target_space)) :
             collect(Spaces.all_nodes(target_space))
 
-        # re-order our inds to TR's ordering of col/row inds, weights to avoid unnecessary allocations
+        # re-order our inds to TR's ordering of col/row inds and weights to avoid unnecessary allocations
         # extract i, j, e components of TR indexing
         source_unique_idxs_i =
             map(col -> source_unique_idxs[col][1][1], col_indices)

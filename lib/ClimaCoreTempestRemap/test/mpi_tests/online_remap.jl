@@ -132,5 +132,9 @@ using Test
         # compare distributed and serial solutions
         @test parent(restart_field_o_distr) ≈ parent(field_o_singleton) atol =
             1e-20
+
+        # compare distributed and analytical solutions
+        @test parent(restart_field_o_distr) ≈ parent(restart_field_ref) atol =
+            1e-20
     end
 end
