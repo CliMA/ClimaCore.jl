@@ -677,7 +677,7 @@ end
     IJF{SS, Nij}(dataview)
 end
 
-@inline function Base.getindex(
+@propagate_inbounds function Base.getindex(
     data::IJF{S, Nij},
     i::Integer,
     j::Integer,
@@ -685,12 +685,12 @@ end
     v = nothing,
     h = nothing,
 ) where {S, Nij}
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
+    # @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
+    #              throw(BoundsError(data, (i, j)))
     @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(i, j, 1))
 end
 
-@inline function Base.setindex!(
+@propagate_inbounds function Base.setindex!(
     data::IJF{S, Nij},
     val,
     i::Integer,
