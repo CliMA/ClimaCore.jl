@@ -30,3 +30,7 @@ horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
 hv_center_space =
     Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+f = ClimaCore.Fields.coordinate_field(hv_center_space)
+
+f.lat .+ f.long
