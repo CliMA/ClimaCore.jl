@@ -17,6 +17,7 @@ end
 reader = ClimaCore.InputOutput.HDF5Reader(filename)
 diagnostics = ClimaCore.InputOutput.read_field(reader, "diagnostics")
 
+#=
 begin
     T = diagnostics.temperature
     n = ClimaCore.Spaces.nlevels(axes(T))
@@ -29,7 +30,7 @@ begin
     plot(fig[1, 1], level_field, axis = (show_axis = false,))
     fig
 end
-
+=#
 sproj = [
     "+proj=weren",
     "+proj=crast",
@@ -190,16 +191,6 @@ begin
         return
     end
 
-    # manually create the mesh for the 3D Sphere plot:
-
-    field_slice = ClimaCore.level(field, 1)
-    space = axes(field_slice)
-    a, b, c = ClimaCore.Spaces.triangulate(space)
-    triangles = GLTriangleFace.(a, b, c)
-    cf = ClimaCore.Fields.coordinate_field(space)
-    long, lat = vec.(parent.((cf.long, cf.lat)))
-    vertices = Point2f.(long, lat)
-
     # plot level at slider, needs to be any since the  type changes (also the reason why we use map! instead of map)
     field_slice_observable = Observable{Any}()
     map!(
@@ -209,21 +200,21 @@ begin
         level_slider.value,
     )
 
-    # extract the scalar field
-    scalars = map(field_slice_observable) do field_slice
-        Float32.(vec(parent(field_slice)))
-    end
-
-    mesh!(
+    # 2D projection
+    ClimaCoreMakie.fieldheatmap!(
         ax,
-        vertices,
-        triangles;
-        color = scalars,
-        shading = false,
+        field_slice_observable;
         colormap = :balance,
         colorrange = colorrange,
     )
-    plot!(ax2, field_slice_observable, colorrange = colorrange)
+    # 3D sphere plot
+    ClimaCoreMakie.fieldheatmap!(
+        ax2,
+        field_slice_observable,
+        coords = ClimaCore.Geometry.Cartesian123Point,
+        colormap = :balance,
+        colorrange = colorrange,
+    )
 
     fig
 end
