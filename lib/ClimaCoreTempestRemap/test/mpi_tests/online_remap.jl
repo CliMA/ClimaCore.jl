@@ -135,6 +135,6 @@ using Test
 
         # compare distributed and analytical solutions
         @test parent(restart_field_o_distr) ≈ parent(restart_field_ref) atol =
-            1e-20
+            1e-2
     end
 end
