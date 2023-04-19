@@ -1045,15 +1045,13 @@ end
     @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (v, h)))
     Nf = size(array, 4)
-    dataview = @inbounds SubArray(
+    dataview = @inbounds view(
         array,
-        (
-            v,
-            Base.Slice(Base.OneTo(Nij)),
-            Base.Slice(Base.OneTo(Nij)),
-            Base.Slice(Base.OneTo(Nf)),
-            h,
-        ),
+        v,
+        Base.Slice(Base.OneTo(Nij)),
+        Base.Slice(Base.OneTo(Nij)),
+        Base.Slice(Base.OneTo(Nf)),
+        h,
     )
     IJF{S, Nij}(dataview)
 end
