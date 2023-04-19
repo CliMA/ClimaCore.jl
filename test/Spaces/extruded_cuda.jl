@@ -1,36 +1,68 @@
-using Revise
+#=
+julia --project
+using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
+=#
 using LinearAlgebra, IntervalSets, UnPack
 using ClimaComms
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column
-
+using CUDA
+using ClimaComms: SingletonCommsContext
+import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
 using Test
 
-FT = Float64
-context = ClimaComms.SingletonCommsContext(ClimaComms.CUDA())
-radius = FT(128)
-zlim = (0, 1)
-helem = 4
-zelem = 10
-Nq = 4
+include(joinpath(@__DIR__, "..", "Fields", "util_spaces.jl"))
 
-vertdomain = Domains.IntervalDomain(
-    Geometry.ZPoint{FT}(zlim[1]),
-    Geometry.ZPoint{FT}(zlim[2]);
-    boundary_tags = (:bottom, :top),
-)
-vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-verttopology = Topologies.IntervalTopology(context, vertmesh)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopology)
+function FieldFromNamedTuple(space, nt::NamedTuple)
+    FT = Spaces.undertype(space)
+    cmv(z) = (; v = FT(0))
+    return cmv.(Fields.coordinate_field(space))
+end
 
-horzdomain = Domains.SphereDomain(radius)
-horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
-horztopology = Topologies.Topology2D(context, horzmesh)
-quad = Spaces.Quadratures.GLL{Nq}()
-horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+@testset "CuArray-backed extruded spaces" begin
+    context = SingletonCommsContext(
+        CUDA.functional() ? ClimaComms.CUDA() : ClimaComms.CPU(),
+    )
+    collect(all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
+    as = collect(all_spaces(Float64; zelem = 10, context))
+    @test length(as) == 8
+end
 
-hv_center_space =
-    Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+@testset "copyto! with CuArray-backed extruded spaces" begin
+    cpu_context = SingletonCommsContext(ClimaComms.CPU())
+    gpu_context = SingletonCommsContext(ClimaComms.CUDA())
 
-f = ClimaCore.Fields.coordinate_field(hv_center_space)
+    FT = Float64
+    CUDA.allowscalar(true)
+    # TODO: add support and test for all spaces
+    cpuspace = last(all_spaces(FT; zelem = 10, context = cpu_context))
+    gpuspace = last(all_spaces(FT; zelem = 10, context = gpu_context))
 
-f.lat .+ f.long
+    # Test that all geometries match with CPU version:
+    @test_broken all(
+        parent(cpuspace.center_local_geometry) .==
+        Array(parent(gpuspace.center_local_geometry)),
+    )
+    @test_broken all(
+        parent(cpuspace.face_local_geometry) .==
+        Array(parent(gpuspace.face_local_geometry)),
+    )
+    @test all(
+        parent(cpuspace.center_ghost_geometry) .==
+        Array(parent(gpuspace.center_ghost_geometry)),
+    )
+    @test all(
+        parent(cpuspace.face_ghost_geometry) .==
+        Array(parent(gpuspace.face_ghost_geometry)),
+    )
+
+    space = gpuspace
+    Y = Fields.Field(typeof((; v = FT(0))), space)
+    X = Fields.Field(typeof((; v = FT(0))), space)
+    @. Y.v = 0
+    @. X.v = 2
+    @test all(parent(Y.v) .== 0)
+    @test all(parent(X.v) .== 2)
+    CUDA.allowscalar(false)
+    @. X.v = Y.v
+    CUDA.allowscalar(true)
+    @test all(parent(Y.v) .== parent(X.v))
+end
