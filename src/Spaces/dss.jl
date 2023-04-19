@@ -813,7 +813,11 @@ function dss_local_vertices!(
         # for each level
         for level in 1:Nv
             # gather: compute sum over shared vertices
-            sum_data = mapreduce(⊞, vertex) do (lidx, vert)
+            sum_data = mapreduce(
+                ⊞,
+                vertex;
+                init = RecursiveApply.rmap(zero, slab(perimeter_data, 1, 1)[1]),
+            ) do (lidx, vert)
                 ip = Topologies.perimeter_vertex_node_index(vert)
                 perimeter_slab = slab(perimeter_data, level, lidx)
                 perimeter_slab[ip]
@@ -876,18 +880,24 @@ function dss_local_ghost!(
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         (Np, _, _, Nv, _) = size(perimeter_data)
-        zero_data = map(zero, slab(perimeter_data, 1, 1)[1])
         @inbounds for vertex in Topologies.ghost_vertices(topology)
             for level in 1:Nv
                 # gather: compute sum over shared vertices
-                sum_data = mapreduce(⊞, vertex) do (isghost, idx, vert)
+                sum_data = mapreduce(
+                    ⊞,
+                    vertex;
+                    init = RecursiveApply.rmap(
+                        zero,
+                        slab(perimeter_data, 1, 1)[1],
+                    ),
+                ) do (isghost, idx, vert)
                     ip = Topologies.perimeter_vertex_node_index(vert)
                     if !isghost
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
                         perimeter_slab[ip]
                     else
-                        zero_data
+                        RecursiveApply.rmap(zero, slab(perimeter_data, 1, 1)[1])
                     end
                 end
                 for (isghost, idx, vert) in vertex
