@@ -37,14 +37,11 @@ end
     gpuspace = last(all_spaces(FT; zelem = 10, context = gpu_context))
 
     # Test that all geometries match with CPU version:
-    @test_broken all(
-        parent(cpuspace.center_local_geometry) .==
-        Array(parent(gpuspace.center_local_geometry)),
-    )
-    @test_broken all(
-        parent(cpuspace.face_local_geometry) .==
-        Array(parent(gpuspace.face_local_geometry)),
-    )
+    @test parent(cpuspace.center_local_geometry) ≈
+          Array(parent(gpuspace.center_local_geometry)),
+    @test parent(cpuspace.face_local_geometry) ≈
+          Array(parent(gpuspace.face_local_geometry))
+
     @test all(
         parent(cpuspace.center_ghost_geometry) .==
         Array(parent(gpuspace.center_ghost_geometry)),
@@ -61,6 +58,15 @@ end
     @. X.v = 2
     @test all(parent(Y.v) .== 0)
     @test all(parent(X.v) .== 2)
+
+    gpuz = Fields.coordinate_field(gpuspace).z
+    cpuz = Fields.coordinate_field(cpuspace).z
+    pgpuz = parent(gpuz)
+    pcpuz = parent(cpuz)
+    CUDA.copyto!(pgpuz, pcpuz)
+    @. Y.v = gpuz
+    @test all(Array(parent(Y.v)) .== pcpuz)
+
     CUDA.allowscalar(false)
     @. X.v = Y.v
     CUDA.allowscalar(true)
