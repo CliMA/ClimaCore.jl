@@ -96,17 +96,17 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         for (n, wt) in enumerate(R.weights)
             # extract local source indices
             is, js, es = (
-                    view(R.source_local_idxs[1], n)[1],
-                    view(R.source_local_idxs[2], n)[1],
-                    view(R.source_local_idxs[3], n)[1],
-                )
+                view(R.source_local_idxs[1], n)[1],
+                view(R.source_local_idxs[2], n)[1],
+                view(R.source_local_idxs[3], n)[1],
+            )
 
             # extract local target indices
             it, jt, et = (
-                    view(R.target_local_idxs[1], n)[1],
-                    view(R.target_local_idxs[2], n)[1],
-                    view(R.target_local_idxs[3], n)[1],
-                )
+                view(R.target_local_idxs[1], n)[1],
+                view(R.target_local_idxs[2], n)[1],
+                view(R.target_local_idxs[3], n)[1],
+            )
 
             # multiply source data by weights to get target data
             # only use local weights - i.e. et, es != 0

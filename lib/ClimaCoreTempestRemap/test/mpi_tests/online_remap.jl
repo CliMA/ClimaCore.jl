@@ -69,10 +69,7 @@ using Test
 
     if ClimaComms.iamroot(comms_ctx)
         # remap without MPI (for testing comparison) and plot solution
-        R_singleton = CCTR.generate_map(
-            space_o_singleton,
-            space_i_singleton,
-        )
+        R_singleton = CCTR.generate_map(space_o_singleton, space_i_singleton)
         field_o_singleton = Fields.zeros(space_o_singleton)
         CCTR.remap!(field_o_singleton, R_singleton, field_i_singleton)
     end
