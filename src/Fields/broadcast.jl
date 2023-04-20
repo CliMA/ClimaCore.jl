@@ -149,7 +149,7 @@ end
     dest::Field,
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
 )
-    copyto!(field_values(dest), todata(bc))
+    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
     return dest
 end
 

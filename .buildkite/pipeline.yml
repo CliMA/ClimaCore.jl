@@ -122,6 +122,15 @@ steps:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
 
+      - label: "CuArray-backed extruded spaces"
+        key: "extruded_spaces_cuda"
+        command:
+          - julia --color=yes --project=test test/Spaces/extruded_cuda.jl
+        artifact_paths:
+          - output/extruded_spaces_cuda
+        agents:
+          slurm_gpus: 1
+
   - group: "Column examples"
     steps:
 

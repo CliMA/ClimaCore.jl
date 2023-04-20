@@ -295,6 +295,26 @@ function replace_basetype(data::IJFH{S, Nij}, ::Type{T}) where {S, Nij, T}
     S′ = replace_basetype(eltype(array), T, S)
     return IJFH{S′, Nij}(similar(array, T))
 end
+@propagate_inbounds function Base.getindex(
+    data::IJFH{S},
+    I::CartesianIndex{5},
+) where {S}
+    i, j, _, _, h = I.I
+    @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(i, j, 1, h))
+end
+@propagate_inbounds function Base.setindex!(
+    data::IJFH{S},
+    val,
+    I::CartesianIndex{5},
+) where {S}
+    i, j, _, _, h = I.I
+    @inbounds set_struct!(
+        parent(data),
+        convert(S, val),
+        Val(3),
+        CartesianIndex(i, j, 1, h),
+    )
+end
 
 @inline function Base.getindex(data::IJFH{S}, i, j, _, _, h) where {S}
     @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(i, j, 1, h))
@@ -1045,15 +1065,13 @@ end
     @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (v, h)))
     Nf = size(array, 4)
-    dataview = @inbounds SubArray(
+    dataview = @inbounds view(
         array,
-        (
-            v,
-            Base.Slice(Base.OneTo(Nij)),
-            Base.Slice(Base.OneTo(Nij)),
-            Base.Slice(Base.OneTo(Nf)),
-            h,
-        ),
+        v,
+        Base.Slice(Base.OneTo(Nij)),
+        Base.Slice(Base.OneTo(Nij)),
+        Base.Slice(Base.OneTo(Nf)),
+        h,
     )
     IJF{S, Nij}(dataview)
 end
@@ -1081,16 +1099,26 @@ end
     IJFH{S, Nij}(dataview)
 end
 
-@propagate_inbounds function Base.getindex(data::VIJFH, I::CartesianIndex{5})
-    @inbounds data[I[1], I[2], I[4]]
+@propagate_inbounds function Base.getindex(
+    data::VIJFH{S},
+    I::CartesianIndex{5},
+) where {S}
+    i, j, _, v, h = I.I
+    @inbounds get_struct(parent(data), S, Val(4), CartesianIndex(v, i, j, 1, h))
 end
 
 @propagate_inbounds function Base.setindex!(
-    data::VIJFH,
+    data::VIJFH{S},
     val,
     I::CartesianIndex{5},
-)
-    @inbounds data[I[1], I[2], I[4]] = val
+) where {S}
+    i, j, _, v, h = I.I
+    @inbounds set_struct!(
+        parent(data),
+        convert(S, val),
+        Val(4),
+        CartesianIndex(v, i, j, 1, h),
+    )
 end
 
 function gather(
