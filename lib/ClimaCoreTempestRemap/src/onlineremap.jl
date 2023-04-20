@@ -110,7 +110,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
 
             # multiply source data by weights to get target data
             # only use local weights - i.e. et, es != 0
-            if (et != 0) && (es != 0)
+            if (et != 0)
                 for f in 1:Nf
                     target_array[it, jt, f, et] +=
                         wt * source_array[is, js, f, es]
