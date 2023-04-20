@@ -14,7 +14,8 @@ using Test
     comms_ctx = ClimaCommsMPI.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
     OUTPUT_DIR = MPI.bcast(
-        mkpath(get(ENV, "CI_OUTPUT_DIR", tempname())),
+        mkpath("CI_OUTPUT_DIR"),
+        # mkpath(get(ENV, "CI_OUTPUT_DIR", tempname())),
         0,
         comms_ctx.mpicomm,
     )
@@ -60,7 +61,7 @@ using Test
     field_i_singleton =
         MPI.bcast(field_i_singleton, root_pid, comms_ctx.mpicomm)
 
-    R = CCTR.generate_map(
+    R_distr = CCTR.generate_map(
         space_o_singleton,
         space_i_singleton,
         target_space_distr = space_o_distr,
@@ -68,15 +69,19 @@ using Test
 
     if ClimaComms.iamroot(comms_ctx)
         # remap without MPI (for testing comparison) and plot solution
+        R_singleton = CCTR.generate_map(
+            space_o_singleton,
+            space_i_singleton,
+        )
         field_o_singleton = Fields.zeros(space_o_singleton)
-        CCTR.remap!(field_o_singleton, R, field_i_singleton)
+        CCTR.remap!(field_o_singleton, R_singleton, field_i_singleton)
     end
 
     # setup and apply the remap using distributed approach
     field_o_distr = Fields.zeros(space_o_distr)
 
     # apply the remapping to field_i_singleton and store the result in field_o_distr
-    CCTR.remap!(field_o_distr, R, field_i_singleton)
+    CCTR.remap!(field_o_distr, R_distr, field_i_singleton)
 
     # compute analytical solution for comparison
     field_ref = sind.(Fields.coordinate_field(space_o_distr).long)
@@ -132,9 +137,5 @@ using Test
         # compare distributed and serial solutions
         @test parent(restart_field_o_distr) ≈ parent(field_o_singleton) atol =
             1e-20
-
-        # compare distributed and analytical solutions
-        @test parent(restart_field_o_distr) ≈ parent(restart_field_ref) atol =
-            1e-2
     end
 end

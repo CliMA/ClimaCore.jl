@@ -44,14 +44,14 @@ function remap!(
     # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
     for (n, wt) in enumerate(R.weights)
         is, js, es = (
-            view(R.source_local_idxs[1], n),
-            view(R.source_local_idxs[2], n),
-            view(R.source_local_idxs[3], n),
+            view(R.source_local_idxs[1], n)[1],
+            view(R.source_local_idxs[2], n)[1],
+            view(R.source_local_idxs[3], n)[1],
         )
         it, jt, et = (
-            view(R.target_local_idxs[1], n),
-            view(R.target_local_idxs[2], n),
-            view(R.target_local_idxs[3], n),
+            view(R.target_local_idxs[1], n)[1],
+            view(R.target_local_idxs[2], n)[1],
+            view(R.target_local_idxs[3], n)[1],
         )
         for f in 1:Nf
             target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
@@ -95,24 +95,18 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
         for (n, wt) in enumerate(R.weights)
             # extract local source indices
-            is, js, es = map(
-                x -> x[1],
-                (
-                    view(R.source_local_idxs[1], n),
-                    view(R.source_local_idxs[2], n),
-                    view(R.source_local_idxs[3], n),
-                ),
-            )
+            is, js, es = (
+                    view(R.source_local_idxs[1], n)[1],
+                    view(R.source_local_idxs[2], n)[1],
+                    view(R.source_local_idxs[3], n)[1],
+                )
 
             # extract local target indices
-            it, jt, et = map(
-                x -> x[1],
-                (
-                    view(R.target_local_idxs[1], n),
-                    view(R.target_local_idxs[2], n),
-                    view(R.target_local_idxs[3], n),
-                ),
-            )
+            it, jt, et = (
+                    view(R.target_local_idxs[1], n)[1],
+                    view(R.target_local_idxs[2], n)[1],
+                    view(R.target_local_idxs[3], n)[1],
+                )
 
             # multiply source data by weights to get target data
             # only use local weights - i.e. et, es != 0
@@ -237,6 +231,7 @@ function generate_map(
             (target_unique_idxs_i, target_unique_idxs_j, target_unique_idxs_e)
     else
         weights = nothing
+        row_indices = nothing
         source_unique_idxs = nothing
         target_unique_idxs = nothing
     end
@@ -244,6 +239,7 @@ function generate_map(
     if !(comms_ctx isa ClimaComms.SingletonCommsContext)
         root_pid = 0
         weights = MPI.bcast(weights, root_pid, comms_ctx.mpicomm)
+        row_indices = MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
         source_unique_idxs =
             MPI.bcast(source_unique_idxs, root_pid, comms_ctx.mpicomm)
         target_unique_idxs =
@@ -251,55 +247,38 @@ function generate_map(
     end
     ClimaComms.barrier(comms_ctx)
 
-    # Create mappings from unique (TempestRemap convention) to local element indices
-    #  this creats an identity map in the serial case
-    source_local_elem_gidx = source_space.topology.local_elem_gidx # gidx = local_elem_gidx[lidx]
-    source_global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
-    for (lidx, gidx) in enumerate(source_local_elem_gidx)
-        source_global_elem_lidx[gidx] = lidx
-    end
-
-    target_local_elem_gidx = target_space.topology.local_elem_gidx # gidx = local_elem_gidx[lidx]
-    target_global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
-    for (lidx, gidx) in enumerate(target_local_elem_gidx)
-        target_global_elem_lidx[gidx] = lidx
-    end
-
-    # store only the inds local to this process (set inds from other processes to 0)
-    # TODO this is not a great implementation, but we needs the lengths of each array to be = |weights|
-    source_local_idxs = map(vec -> similar(vec), source_unique_idxs)
-    target_local_idxs = map(vec -> similar(vec), target_unique_idxs)
-    for (n, wt) in enumerate(weights)
-        source_elem_gidx = view(source_unique_idxs[3], n)[1]
-        if !(source_elem_gidx in keys(source_global_elem_lidx))
-            is = 0
-            js = 0
-            es = 0
-        else
-            # get global i, j inds but local elem index e
-            is = view(source_unique_idxs[1], n)[1]
-            js = view(source_unique_idxs[2], n)[1]
-            es = source_global_elem_lidx[source_elem_gidx]
+    if target_space_distr != nothing
+        # Create map from unique (TempestRemap convention) to local element indices
+        target_local_elem_gidx = target_space_distr.topology.local_elem_gidx # gidx = local_elem_gidx[lidx]
+        target_global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
+        for (lidx, gidx) in enumerate(target_local_elem_gidx)
+            target_global_elem_lidx[gidx] = lidx
         end
-        source_local_idxs[1][n] = is
-        source_local_idxs[2][n] = js
-        source_local_idxs[3][n] = es
 
-        target_elem_gidx = view(target_unique_idxs[3], n)[1]
-        if !(target_elem_gidx in keys(target_global_elem_lidx))
-            it = 0
-            jt = 0
-            et = 0
-        else
-            # get global i, j inds but local elem index e
-            it = view(target_unique_idxs[1], n)[1]
-            jt = view(target_unique_idxs[2], n)[1]
-            et = target_global_elem_lidx[target_elem_gidx]
+        # store only the inds local to this process (set inds from other processes to 0)
+        # TODO this is not a great implementation, but we needs the lengths of each array to be = |weights|
+        target_local_idxs = map(vec -> similar(vec), target_unique_idxs)
+        for (n, wt) in enumerate(weights)
+            target_elem_gidx = view(target_unique_idxs[3], n)[1]
+            if !(target_elem_gidx in keys(target_global_elem_lidx))
+                it = 0
+                jt = 0
+                et = 0
+            else
+                # get global i, j inds but local elem index e
+                it = view(target_unique_idxs[1], n)[1]
+                jt = view(target_unique_idxs[2], n)[1]
+                et = target_global_elem_lidx[target_elem_gidx]
+            end
+            target_local_idxs[1][n] = it
+            target_local_idxs[2][n] = jt
+            target_local_idxs[3][n] = et
         end
-        target_local_idxs[1][n] = it
-        target_local_idxs[2][n] = jt
-        target_local_idxs[3][n] = et
+    else
+        target_local_idxs = target_unique_idxs
     end
+
+    source_local_idxs = source_unique_idxs
 
     return LinearMap(
         source_space,
