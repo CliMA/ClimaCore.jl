@@ -11,11 +11,9 @@ using Test
 
 include(joinpath(@__DIR__, "..", "Fields", "util_spaces.jl"))
 
-function FieldFromNamedTuple(space, nt::NamedTuple)
-    FT = Spaces.undertype(space)
-    cmv(z) = (; v = FT(0))
-    return cmv.(Fields.coordinate_field(space))
-end
+compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
+compare(cpu, gpu, sym) =
+    all(parent(getproperty(cpu, sym)) .≈ Array(parent(getproperty(gpu, sym))))
 
 @testset "CuArray-backed extruded spaces" begin
     context = SingletonCommsContext(
@@ -33,23 +31,17 @@ end
     FT = Float64
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspace = last(all_spaces(FT; zelem = 10, context = cpu_context))
-    gpuspace = last(all_spaces(FT; zelem = 10, context = gpu_context))
+    cpuspaces = all_spaces(FT; zelem = 10, context = cpu_context)
+    gpuspaces = all_spaces(FT; zelem = 10, context = gpu_context)
+
+    cpuspace = cpuspaces[end] # ExtrudedFiniteDifferenceSpace
+    gpuspace = gpuspaces[end] # ExtrudedFiniteDifferenceSpace
 
     # Test that all geometries match with CPU version:
-    @test parent(cpuspace.center_local_geometry) ≈
-          Array(parent(gpuspace.center_local_geometry)),
-    @test parent(cpuspace.face_local_geometry) ≈
-          Array(parent(gpuspace.face_local_geometry))
-
-    @test all(
-        parent(cpuspace.center_ghost_geometry) .==
-        Array(parent(gpuspace.center_ghost_geometry)),
-    )
-    @test all(
-        parent(cpuspace.face_ghost_geometry) .==
-        Array(parent(gpuspace.face_ghost_geometry)),
-    )
+    @test compare(cpuspace, gpuspace, :center_local_geometry)
+    @test compare(cpuspace, gpuspace, :face_local_geometry)
+    @test compare(cpuspace, gpuspace, :center_ghost_geometry)
+    @test compare(cpuspace, gpuspace, :face_ghost_geometry)
 
     space = gpuspace
     Y = Fields.Field(typeof((; v = FT(0))), space)
@@ -58,15 +50,28 @@ end
     @. X.v = 2
     @test all(parent(Y.v) .== 0)
     @test all(parent(X.v) .== 2)
+    CUDA.allowscalar(false)
+    @. X.v = Y.v
+    CUDA.allowscalar(true)
+    @test all(parent(Y.v) .== parent(X.v))
 
-    gpuz = Fields.coordinate_field(gpuspace).z
-    cpuz = Fields.coordinate_field(cpuspace).z
-    pgpuz = parent(gpuz)
-    pcpuz = parent(cpuz)
-    CUDA.copyto!(pgpuz, pcpuz)
-    @. Y.v = gpuz
-    @test all(Array(parent(Y.v)) .== pcpuz)
 
+    CUDA.allowscalar(true)
+    # TODO: add support and test for all spaces
+    cpuspace = cpuspaces[4] # SpectralElementSpace2D
+    gpuspace = gpuspaces[4] # SpectralElementSpace2D
+
+    # Test that all geometries match with CPU version:
+    @test compare(cpuspace, gpuspace, :local_geometry)
+    @test compare(cpuspace, gpuspace, :ghost_geometry)
+
+    space = gpuspace
+    Y = Fields.Field(typeof((; v = FT(0))), space)
+    X = Fields.Field(typeof((; v = FT(0))), space)
+    @. Y.v = 0
+    @. X.v = 2
+    @test all(parent(Y.v) .== 0)
+    @test all(parent(X.v) .== 2)
     CUDA.allowscalar(false)
     @. X.v = Y.v
     CUDA.allowscalar(true)
