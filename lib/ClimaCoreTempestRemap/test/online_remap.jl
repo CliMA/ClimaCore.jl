@@ -22,9 +22,9 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
     f = 1
     for (n, row) in enumerate(R.row_indices)
         it, jt, et = (
-            view(R.target_idxs[1], n),
-            view(R.target_idxs[2], n),
-            view(R.target_idxs[3], n),
+            view(R.target_local_idxs[1], n),
+            view(R.target_local_idxs[2], n),
+            view(R.target_local_idxs[3], n),
         )
         for f in 1:Nf
             field_array[it, jt, f, et] .= in_array[row]

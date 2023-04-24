@@ -5,33 +5,30 @@ using MPI
 
 
 """
-    LinearMap{T, S, M, C, V, M}
+    LinearMap{S, T, W, I, V}
 
 stores information on the TempestRemap map and the source and target data:
 
 where:
  - `source_space` and `target_space` are ClimaCore's 2D spaces.
- - `weights` is a vector of remapping weights. (length = number of overlap-mesh nodes)
- - `source_idxs` a 3-element Tuple with 3 index vectors, representing (i,j,elem) indices on the source mesh. (length of each index vector = number of overlap-mesh nodes)
- - `target_idxs` is the same as `source_idxs` but for the target mesh.
- - `col_indices` are the source column indices from TempestRemap. (length = number of overlap-mesh nodes)
+ - `weights` is a vector of remapping weights. (length = number of overlap-mesh nodes).
+ - `source_local_idxs` a 3-element Tuple with 3 index vectors, representing local (i,j,elem) indices on the source mesh. (length of each index vector = number of overlap-mesh nodes)
+ - `target_local_idxs` is the same as `source_local_idxs` but for the target mesh.
  - `row_indices` are the target row indices from TempestRemap. (length = number of overlap-mesh nodes)
- - `out_type` string that defines the output type
- - `target_global_elem_lidx` is a mapping from global to local indices on the target space
+ - `out_type` string that defines the output type.
 
 """
-struct LinearMap{S, T, W, I, V, M} # make consistent with / move to regridding.jl
+struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     source_space::S
     target_space::T
     weights::W
-    source_idxs::I
-    target_idxs::I
-    col_indices::V
+    source_local_idxs::I
+    target_local_idxs::I
     row_indices::V
     out_type::String
-    target_global_elem_lidx::M
 end
 
+# This version of this function is used for serial remapping
 function remap!(
     target::IJFH{S, Nqt},
     R::LinearMap,
@@ -47,14 +44,14 @@ function remap!(
     # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
     for (n, wt) in enumerate(R.weights)
         is, js, es = (
-            view(R.source_idxs[1], n),
-            view(R.source_idxs[2], n),
-            view(R.source_idxs[3], n),
+            view(R.source_local_idxs[1], n)[1],
+            view(R.source_local_idxs[2], n)[1],
+            view(R.source_local_idxs[3], n)[1],
         )
         it, jt, et = (
-            view(R.target_idxs[1], n),
-            view(R.target_idxs[2], n),
-            view(R.target_idxs[3], n),
+            view(R.target_local_idxs[1], n)[1],
+            view(R.target_local_idxs[2], n)[1],
+            view(R.target_local_idxs[3], n)[1],
         )
         for f in 1:Nf
             target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
@@ -97,34 +94,30 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         # ideally we would use the tempestremap dgll (redundant node) representation
         # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
         for (n, wt) in enumerate(R.weights)
-            # choose all global source indices
-            #  (for simple distr. remapping with broadcasted source data, no halo exchange)
-            is, js, es = map(
-                x -> x[1],
-                (
-                    view(R.source_idxs[1], n),
-                    view(R.source_idxs[2], n),
-                    view(R.source_idxs[3], n),
-                ),
+            # extract local source indices
+            is, js, es = (
+                view(R.source_local_idxs[1], n)[1],
+                view(R.source_local_idxs[2], n)[1],
+                view(R.source_local_idxs[3], n)[1],
             )
 
-            # choose only the target inds local to this process (skip inds from other processes)
-            target_elem_gidx = view(R.target_idxs[3], n)[1]
-            if !(target_elem_gidx in keys(R.target_global_elem_lidx))
-                continue
-            else
-                # get global i, j inds but local elem index e
-                it = view(R.target_idxs[1], n)[1]
-                jt = view(R.target_idxs[2], n)[1]
-                et = R.target_global_elem_lidx[target_elem_gidx]
+            # extract local target indices
+            it, jt, et = (
+                view(R.target_local_idxs[1], n)[1],
+                view(R.target_local_idxs[2], n)[1],
+                view(R.target_local_idxs[3], n)[1],
+            )
 
+            # multiply source data by weights to get target data
+            # only use local weights - i.e. et, es != 0
+            if (et != 0)
                 for f in 1:Nf
                     target_array[it, jt, f, et] +=
                         wt * source_array[is, js, f, es]
                 end
             end
-
         end
+
         # use unweighted dss to broadcast the so-far unpopulated (redundant) nodes from their unique node counterparts
         # (we could get rid of this if we added the redundant nodes to the matrix)
         # using out_type == "cgll"
@@ -217,7 +210,8 @@ function generate_map(
             out_type == "cgll" ? collect(Spaces.unique_nodes(target_space)) :
             collect(Spaces.all_nodes(target_space))
 
-        # re-order to avoid unnecessary allocations
+        # re-order our inds to TR's ordering of col/row inds and weights to avoid unnecessary allocations
+        # extract i, j, e components of TR indexing
         source_unique_idxs_i =
             map(col -> source_unique_idxs[col][1][1], col_indices)
         source_unique_idxs_j =
@@ -237,44 +231,62 @@ function generate_map(
             (target_unique_idxs_i, target_unique_idxs_j, target_unique_idxs_e)
     else
         weights = nothing
+        row_indices = nothing
         source_unique_idxs = nothing
         target_unique_idxs = nothing
-        col_indices = nothing
-        row_indices = nothing
     end
 
     if !(comms_ctx isa ClimaComms.SingletonCommsContext)
         root_pid = 0
         weights = MPI.bcast(weights, root_pid, comms_ctx.mpicomm)
+        row_indices = MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
         source_unique_idxs =
             MPI.bcast(source_unique_idxs, root_pid, comms_ctx.mpicomm)
         target_unique_idxs =
             MPI.bcast(target_unique_idxs, root_pid, comms_ctx.mpicomm)
-        col_indices = MPI.bcast(col_indices, root_pid, comms_ctx.mpicomm)
-        row_indices = MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
     end
     ClimaComms.barrier(comms_ctx)
 
-    # Create mapping from global to local element indices (for distributed remapping)
-    if (target_space_distr != nothing)
+    if target_space_distr != nothing
+        # Create map from unique (TempestRemap convention) to local element indices
         target_local_elem_gidx = target_space_distr.topology.local_elem_gidx # gidx = local_elem_gidx[lidx]
         target_global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
         for (lidx, gidx) in enumerate(target_local_elem_gidx)
             target_global_elem_lidx[gidx] = lidx
         end
+
+        # store only the inds local to this process (set inds from other processes to 0)
+        # TODO this is not a great implementation, but we needs the lengths of each array to be = |weights|
+        target_local_idxs = map(vec -> similar(vec), target_unique_idxs)
+        for (n, wt) in enumerate(weights)
+            target_elem_gidx = view(target_unique_idxs[3], n)[1]
+            if !(target_elem_gidx in keys(target_global_elem_lidx))
+                it = 0
+                jt = 0
+                et = 0
+            else
+                # get global i, j inds but local elem index e
+                it = view(target_unique_idxs[1], n)[1]
+                jt = view(target_unique_idxs[2], n)[1]
+                et = target_global_elem_lidx[target_elem_gidx]
+            end
+            target_local_idxs[1][n] = it
+            target_local_idxs[2][n] = jt
+            target_local_idxs[3][n] = et
+        end
     else
-        target_global_elem_lidx = nothing
+        target_local_idxs = target_unique_idxs
     end
+
+    source_local_idxs = source_unique_idxs
 
     return LinearMap(
         source_space,
         target_space,
         weights,
-        source_unique_idxs,
-        target_unique_idxs,
-        col_indices,
+        source_local_idxs,
+        target_local_idxs,
         row_indices,
         out_type,
-        target_global_elem_lidx,
     )
 end
