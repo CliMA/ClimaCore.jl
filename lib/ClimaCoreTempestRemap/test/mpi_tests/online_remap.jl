@@ -52,9 +52,11 @@ using Test
         Spaces.SpectralElementSpace2D(topology_o_singleton, quad_o)
 
     # generate test data in the Field format (on non-distributed topo. for non-halo exchange version)
-    field_i_singleton = sind.(Fields.coordinate_field(space_i_singleton).long)
+    # field_i_singleton = sind.(Fields.coordinate_field(space_i_singleton).long)
+    field_i_distr = sind.(Fields.coordinate_field(space_i_distr).long)
 
     # global exchange (no buffer fill/send here) - convert to superhalo in next implementation
+    # TODO update
     root_pid = 0
     ClimaComms.gather(comms_ctx, parent(field_i_singleton))
     field_i_singleton =
@@ -64,10 +66,11 @@ using Test
         space_o_singleton,
         space_i_singleton,
         target_space_distr = space_o_distr,
+        source_space_distr = space_i_distr,
     )
 
     if ClimaComms.iamroot(comms_ctx)
-        # remap without MPI (for testing comparison) and plot solution
+        # remap without MPI (for testing comparison)
         field_o_singleton = Fields.zeros(space_o_singleton)
         CCTR.remap!(field_o_singleton, R, field_i_singleton)
     end
@@ -76,7 +79,7 @@ using Test
     field_o_distr = Fields.zeros(space_o_distr)
 
     # apply the remapping to field_i_singleton and store the result in field_o_distr
-    CCTR.remap!(field_o_distr, R, field_i_singleton)
+    CCTR.remap!(field_o_distr, R, field_i_distr)
 
     # compute analytical solution for comparison
     field_ref = sind.(Fields.coordinate_field(space_o_distr).long)
@@ -129,8 +132,10 @@ using Test
         # savefig(field_ref_fig, OUTPUT_DIR * "/target_data_soln")
         # savefig(field_o_distr_fig, OUTPUT_DIR * "/target_data_mpi")
 
-        # compare distributed and serial solutions
+        # compare distributed solution to serial and analytical solutions
         @test parent(restart_field_o_distr) ≈ parent(field_o_singleton) atol =
+            1e-20
+        @test parent(restart_field_o_distr) ≈ parent(restart_field_ref) atol =
             1e-20
     end
 end
