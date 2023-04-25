@@ -647,14 +647,14 @@ steps:
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
         key: "cpu_3d_deformation_flow"
         command:
-          - "julia --color=yes --project=examples examples/hybrid/sphere/deformation_flow.jl"
+          - "julia --color=yes --check-bounds=yes --project=examples examples/hybrid/sphere/deformation_flow.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/deformation_flow/*"
 
       - label: ":computer: 3D sphere Hadley circulation"
         key: "cpu_3d_hadley_circulation"
         command:
-          - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
+          - "julia --color=yes --check-bounds=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/hadley_circulation/*"
 
