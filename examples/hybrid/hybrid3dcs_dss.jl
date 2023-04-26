@@ -32,19 +32,10 @@ center_initial_condition(local_geometry) =
     center_initial_condition(local_geometry, Val(:ρe))
 
 function dss_comms!(topology, Y, ghost_buffer)
-    Spaces.fill_send_buffer!(topology, Fields.field_values(Y), ghost_buffer)
     ClimaComms.start(ghost_buffer.graph_context)
     ClimaComms.finish(ghost_buffer.graph_context)
     return nothing
 end
-
-function weighted_dss_full!(Y, ghost_buffer)
-    Spaces.weighted_dss_start!(Y, ghost_buffer)
-    Spaces.weighted_dss_internal!(Y, ghost_buffer)
-    Spaces.weighted_dss_ghost!(Y, ghost_buffer)
-    return nothing
-end
-
 
 function hybrid3dcubedsphere_dss_profiler(
     usempi::Bool,
@@ -53,6 +44,7 @@ function hybrid3dcubedsphere_dss_profiler(
     npoly,
 ) where {FT}
     comms_ctx = ClimaCommsMPI.MPICommsContext()
+    device = comms_ctx.device
     pid, nprocs = ClimaComms.init(comms_ctx)
     iamroot = ClimaComms.iamroot(comms_ctx)
     # log output only from root process
@@ -89,10 +81,6 @@ function hybrid3dcubedsphere_dss_profiler(
         c = center_initial_condition(ᶜlocal_geometry),
         f = face_initial_condition(ᶠlocal_geometry),
     )
-    ghost_buffer = (
-        c = Spaces.create_ghost_buffer(Y.c),
-        f = Spaces.create_ghost_buffer(Y.f),
-    )
     dss_buffer_f = Spaces.create_dss_buffer(Y.f)
     dss_buffer_c = Spaces.create_dss_buffer(Y.c)
     nsamples = 10000
@@ -101,38 +89,25 @@ function hybrid3dcubedsphere_dss_profiler(
     # precompile relevant functions
     space = axes(Y.c)
     horizontal_topology = space.horizontal_space.topology
-    Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
-    weighted_dss_full!(Y.c, ghost_buffer.c)
-    Spaces.fill_send_buffer!(
-        horizontal_topology,
-        Fields.field_values(Y.c),
-        ghost_buffer.c,
-    )
-    dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
+    Spaces.weighted_dss_internal!(Y.c, dss_buffer_c)
+    Spaces.fill_send_buffer!(device, dss_buffer_c)
+    dss_comms!(horizontal_topology, Y.c, dss_buffer_c)
     Spaces.weighted_dss!(Y.c, dss_buffer_c)
     ClimaComms.barrier(comms_ctx)
 
     # timing
     walltime_dss_full = @elapsed begin # timing weighted dss
         for i in 1:nsamples
-            weighted_dss_full!(Y.c, ghost_buffer.c)
+            Spaces.weighted_dss!(Y.c, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
     walltime_dss_full /= FT(nsamples)
 
-    walltime_dss2_full = @elapsed begin # timing weighted dss2
-        for i in 1:nsamples
-            Spaces.weighted_dss!(Y.c, dss_buffer_c)
-        end
-    end
-    ClimaComms.barrier(comms_ctx)
-    walltime_dss2_full /= FT(nsamples)
-
     ClimaComms.barrier(comms_ctx)
     walltime_dss_internal = @elapsed begin # timing internal dss
         for i in 1:nsamples
-            Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
+            Spaces.weighted_dss_internal!(Y.c, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -141,7 +116,7 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms = @elapsed begin # timing dss_comms
         for i in 1:nsamples
-            dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
+            dss_comms!(horizontal_topology, Y.c, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -150,25 +125,13 @@ function hybrid3dcubedsphere_dss_profiler(
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms_fsb = @elapsed begin # timing dss_fill_send_buffer
         for i in 1:nsamples
-            Spaces.fill_send_buffer!(
-                horizontal_topology,
-                Fields.field_values(Y.c),
-                ghost_buffer.c,
-            )
+            Spaces.fill_send_buffer!(device, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
     walltime_dss_comms_fsb /= FT(nsamples)
 
     ClimaComms.barrier(comms_ctx)
-    walltime_dss_comms_other = @elapsed begin # timing dss_fill_send_buffer
-        for i in 1:nsamples
-            ClimaComms.start(ghost_buffer.c.graph_context)
-            ClimaComms.finish(ghost_buffer.c.graph_context)
-        end
-    end
-    ClimaComms.barrier(comms_ctx)
-    walltime_dss_comms_other /= FT(nsamples)
 
     # profiling
     ClimaComms.barrier(comms_ctx)
@@ -176,13 +139,13 @@ function hybrid3dcubedsphere_dss_profiler(
     for i in 1:nsamplesprofiling # profiling weighted dss
         @nvtx "dss-loop" color = colorant"green" begin
             @nvtx "start" color = colorant"brown" begin
-                Spaces.weighted_dss_start!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_start!(Y.c, dss_buffer_c)
             end
             @nvtx "internal" color = colorant"blue" begin
-                Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_internal!(Y.c, dss_buffer_c)
             end
             @nvtx "ghost" color = colorant"yellow" begin
-                Spaces.weighted_dss_ghost!(Y.c, ghost_buffer.c)
+                Spaces.weighted_dss_ghost!(Y.c, dss_buffer_c)
             end
         end
     end
@@ -190,7 +153,7 @@ function hybrid3dcubedsphere_dss_profiler(
 
     for i in 1:nsamplesprofiling # profiling dss_comms
         @nvtx "dss-comms-loop" color = colorant"green" begin
-            dss_comms!(horizontal_topology, Y.c, ghost_buffer.c)
+            dss_comms!(horizontal_topology, Y.c, dss_buffer_c)
         end
     end
     ClimaComms.barrier(comms_ctx)
@@ -198,16 +161,12 @@ function hybrid3dcubedsphere_dss_profiler(
     if iamroot
         println("# of samples = $nsamples")
         println("walltime_dss_full per sample = $walltime_dss_full (sec)")
-        println("walltime_dss2_full per sample = $walltime_dss2_full (sec)")
         println(
             "walltime_dss_internal per sample = $walltime_dss_internal (sec)",
         )
         println("walltime_dss_comms per sample = $walltime_dss_comms (sec)")
         println(
             "walltime_dss_comms_fsb per sample = $walltime_dss_comms_fsb (sec)",
-        )
-        println(
-            "walltime_dss_comms_other per sample = $walltime_dss_comms_other (sec)",
         )
         output_dir = joinpath(Base.@__DIR__, "dss_output_$(resolution)_res")
         mkpath(output_dir)
@@ -221,11 +180,9 @@ function hybrid3dcubedsphere_dss_profiler(
             nprocs,
             nsamples,
             walltime_dss_full,
-            walltime_dss2_full,
             walltime_dss_internal,
             walltime_dss_comms,
             walltime_dss_comms_fsb,
-            walltime_dss_comms_other,
         )
     end
 
