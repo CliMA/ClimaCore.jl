@@ -41,8 +41,8 @@ z_top = FT(1.2e4)
 zelem = 36
 helem = 4
 npoly = 4
-t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
 dt = FT(60 * 60) # 1 hour timestep
+t_end = 10dt # 12 days of simulation time
 ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
 
 # Operators used in increment!

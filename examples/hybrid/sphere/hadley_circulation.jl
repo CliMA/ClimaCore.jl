@@ -172,8 +172,8 @@ const z₂ = 5000.0          # upper boundary of tracer layer
 const κ₄ = 1.0e16          # hyperviscosity
 
 # time constants
-T = 86400.0 * 1.0
 dt = 15.0 * 60.0
+T = 10dt
 
 # set up 3D domain
 hv_center_space, hv_face_space = sphere_3D()
