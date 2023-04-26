@@ -3,6 +3,7 @@ module Fields
 import ..comm_context
 import ..Device
 import ..enable_threading
+import ..enable_column_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains

@@ -3,8 +3,10 @@
 """
     enable_threading()
 
-By default returns `false` signifying threading is disabled.
-Enable the threading runtime by redefining the method at the toplevel your experiment file:
+By default returns `false` signifying broadcast
+threading is disabled. Enable the threading
+runtime by redefining the method at the toplevel
+your experiment file:
 
     import ClimaCore: enable_threading
     enable_threading() = true
@@ -12,6 +14,21 @@ Enable the threading runtime by redefining the method at the toplevel your exper
 and running julia with `julia --nthreads=N ...`
 """
 enable_threading() = false
+
+"""
+    enable_column_threading()
+
+By default returns `false` signifying threading for
+`bycolumn` loops is disabled. Enable the threading
+runtime by redefining the method at the toplevel your
+experiment file:
+
+    import ClimaCore: enable_column_threading
+    enable_column_threading() = true
+
+and running julia with `julia --nthreads=N ...`
+"""
+enable_column_threading() = false
 
 """
     slab(data::AbstractData, h::Integer)
