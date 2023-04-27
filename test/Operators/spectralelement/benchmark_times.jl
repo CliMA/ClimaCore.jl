@@ -1,10 +1,10 @@
 function get_best_times((; device, float_type))
     # To prevent regressions, we test against best times (in nanoseconds).
     best_times = Dict()
-    best_times[(:CUDA, :Float64)] = get_best_times_gpu_float64()
-    best_times[(:CPU, :Float64)] = get_best_times_cpu_float64()
-    best_times[(:CUDA, :Float32)] = get_best_times_gpu_float32()
-    best_times[(:CPU, :Float32)] = get_best_times_cpu_float32()
+    best_times[(:CUDADevice, :Float64)] = get_best_times_gpu_float64()
+    best_times[(:CPUDevice, :Float64)] = get_best_times_cpu_float64()
+    best_times[(:CUDADevice, :Float32)] = get_best_times_gpu_float32()
+    best_times[(:CPUDevice, :Float32)] = get_best_times_cpu_float32()
     return best_times[(nameof(typeof(device)), nameof(float_type))]
 end
 
