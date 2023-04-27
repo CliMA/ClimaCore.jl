@@ -85,6 +85,10 @@ end
 function tendency!(yₜ, y, parameters, t)
     (; dt, ρ, u, uₕ, uᵥ, q1, Δₕq1) = parameters
     Ic2f = Operators.InterpolateC2F()
+    ᶠwinterp = Operators.WeightedInterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
     vdivf2c = Operators.DivergenceF2C(
         top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
@@ -131,6 +135,7 @@ function tendency!(yₜ, y, parameters, t)
     @. q1 = y.ρq1 / ρ
     @. Δₕq1 = hwdiv(hgrad(q1))
     Spaces.weighted_dss!(Δₕq1)
+    ᶜJ = Fields.local_geometry_field(axes(ρ)).J
 
     # Horizontal transport and hyperdiffusion
     @. yₜ.ρq1 = -hdiv(y.ρq1 * u) - κ₄ * hwdiv(ρ * hgrad(Δₕq1))
@@ -140,11 +145,11 @@ function tendency!(yₜ, y, parameters, t)
 
     # Vertical transport due to vertical velocity, corrected by Zalesak FCT
     @. yₜ.ρq1 -= vdivf2c(
-        Ic2f(ρ) * (
+        ᶠwinterp(ᶜJ, ρ) * (
             upwind1(uᵥ, q1) + FCTZalesak(
                 upwind3(uᵥ, q1) - upwind1(uᵥ, q1),
                 q1 / dt,
-                q1 / dt - vdivf2c(Ic2f(ρ) * upwind1(uᵥ, q1)) / ρ,
+                q1 / dt - vdivf2c(ᶠwinterp(ᶜJ, ρ) * upwind1(uᵥ, q1)) / ρ,
             )
         ),
     )
