@@ -105,6 +105,8 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
+    CT3 = Geometry.Contravariant3Vector
+    ᶠset_upwind_bcs = Operators.SetBoundaryOperator()
     hdiv = Operators.Divergence()
     hwdiv = Operators.WeakDivergence()
     hgrad = Operators.Gradient()
@@ -145,12 +147,12 @@ function tendency!(yₜ, y, parameters, t)
 
     # Vertical transport due to vertical velocity, corrected by Zalesak FCT
     @. yₜ.ρq1 -= vdivf2c(
-        ᶠwinterp(ᶜJ, ρ) * (
+        ᶠwinterp(ᶜJ, ρ) * ᶠset_upwind_bcs(
             upwind1(uᵥ, q1) + FCTZalesak(
                 upwind3(uᵥ, q1) - upwind1(uᵥ, q1),
                 q1 / dt,
                 q1 / dt - vdivf2c(ᶠwinterp(ᶜJ, ρ) * upwind1(uᵥ, q1)) / ρ,
-            )
+            ),
         ),
     )
 end
