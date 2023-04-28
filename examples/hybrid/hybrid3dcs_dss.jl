@@ -19,7 +19,6 @@ import ClimaCore:
 
 using Logging
 using ClimaComms
-using ClimaCommsMPI
 resolution = get(ARGS, 1, "low")
 npoly = parse(Int, get(ARGS, 2, 4))
 FT = get(ARGS, 3, Float64) == "Float64" ? Float64 : Float32
@@ -52,7 +51,7 @@ function hybrid3dcubedsphere_dss_profiler(
     resolution,
     npoly,
 ) where {FT}
-    comms_ctx = ClimaCommsMPI.MPICommsContext()
+    comms_ctx = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
     iamroot = ClimaComms.iamroot(comms_ctx)
     # log output only from root process

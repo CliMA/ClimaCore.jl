@@ -11,7 +11,7 @@ struct PointSpace{LG} <: AbstractPointSpace
     local_geometry::LG
 end
 
-Device.device(space::PointSpace) = ClimaComms.CPU()
+Device.device(space::PointSpace) = ClimaComms.CPUDevice()
 
 function PointSpace(local_geometry::LG) where {LG <: Geometry.LocalGeometry}
     FT = Geometry.undertype(LG)

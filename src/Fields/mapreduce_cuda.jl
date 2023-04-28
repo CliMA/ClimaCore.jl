@@ -1,35 +1,35 @@
 
 Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
 ) = mapreduce_cuda(identity, +, field, weighting = true) #TODO: distributed support to be added
 
-Base.sum(fn, field::Field, ::ClimaComms.CUDA) =
+Base.sum(fn, field::Field, ::ClimaComms.CUDADevice) =
     mapreduce_cuda(fn, +, field, weighting = true) #TODO: distributed support to be added
 
-Base.maximum(fn, field::Field, ::ClimaComms.CUDA) =
+Base.maximum(fn, field::Field, ::ClimaComms.CUDADevice) =
     mapreduce_cuda(fn, max, field) #TODO: distributed support to be added
 
-Base.maximum(field::Field, ::ClimaComms.CUDA) =
+Base.maximum(field::Field, ::ClimaComms.CUDADevice) =
     mapreduce_cuda(identity, max, field) #TODO: distributed support to be added
 
-Base.minimum(fn, field::Field, ::ClimaComms.CUDA) =
+Base.minimum(fn, field::Field, ::ClimaComms.CUDADevice) =
     mapreduce_cuda(fn, min, field) #TODO: distributed support to be added
 
-Base.minimum(field::Field, ::ClimaComms.CUDA) =
+Base.minimum(field::Field, ::ClimaComms.CUDADevice) =
     mapreduce_cuda(identity, min, field) #TODO: distributed support to be added
 
 Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
 ) = Base.sum(field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
 
-Statistics.mean(fn, field::Field, ::ClimaComms.CUDA) =
+Statistics.mean(fn, field::Field, ::ClimaComms.CUDADevice) =
     Base.sum(fn, field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
 
 function LinearAlgebra.norm(
     field::Field,
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     p::Real = 2;
     normalize = true,
 )

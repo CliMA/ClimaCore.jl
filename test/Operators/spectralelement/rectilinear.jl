@@ -16,15 +16,16 @@ domain = Domains.RectangleDomain(
 
 Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
-
+device = ClimaComms.CPUDevice()
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 grid_topology =
-    Topologies.Topology2D(ClimaComms.SingletonCommsContext(), grid_mesh)
+    Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), grid_mesh)
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 grid_coords = Fields.coordinate_field(grid_space)
 
 ts_mesh = Meshes.RectilinearMesh(domain, 17, 16)
-ts_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), ts_mesh)
+ts_topology =
+    Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), ts_mesh)
 ts_space = Spaces.SpectralElementSpace2D(ts_topology, quad)
 ts_coords = Fields.coordinate_field(ts_space)
 

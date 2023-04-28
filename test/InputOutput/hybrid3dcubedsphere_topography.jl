@@ -14,18 +14,17 @@ using ClimaCore:
 using ClimaComms
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    using ClimaCommsMPI, MPI
-    const comms_ctx = ClimaCommsMPI.MPICommsContext()
+    const comms_ctx = ClimaComms.MPICommsContext(ClimaComms.CPUDevice())
     pid, nprocs = ClimaComms.init(comms_ctx)
     # use same filename on all processes
     # must be accessible by all procs
     filename = tempname(pwd())
-    filename = MPI.bcast(filename, 0, MPI.COMM_WORLD)
+    filename = ClimaComms.MPI.bcast(filename, 0, ClimaComms.MPI.COMM_WORLD)
     if ClimaComms.iamroot(comms_ctx)
         @info "Distributed test" nprocs filename
     end
 else
-    const comms_ctx = ClimaComms.SingletonCommsContext()
+    const comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
     ClimaComms.init(comms_ctx)
     filename = tempname(pwd())
     @info "Single process test" filename

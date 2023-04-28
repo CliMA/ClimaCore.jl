@@ -8,7 +8,7 @@ function _configure_threadblock(nitems)
 end
 
 function dss_load_perimeter_data!(
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     dss_buffer::DSSBuffer,
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     perimeter,
@@ -45,7 +45,7 @@ function dss_load_perimeter_data_kernel!(
 end
 
 function dss_unload_perimeter_data!(
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     dss_buffer::DSSBuffer,
     perimeter,
@@ -82,7 +82,7 @@ function dss_unload_perimeter_data_kernel!(
 end
 
 function dss_local!(
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
     topology::Topologies.Topology2D,
@@ -158,7 +158,7 @@ function dss_local_kernel!(
 end
 
 function dss_transform!(
-    device::ClimaComms.CUDA,
+    device::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -266,7 +266,7 @@ function dss_transform_kernel!(
 end
 
 function dss_untransform!(
-    device::ClimaComms.CUDA,
+    device::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -361,7 +361,7 @@ end
 
 # TODO: Function stubs, code to be implemented, needed only for distributed GPU runs
 function dss_local_ghost!(
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
     topology::Topologies.AbstractTopology,
@@ -416,7 +416,7 @@ function dss_local_ghost_kernel!(
     return nothing
 end
 
-function fill_send_buffer!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
+function fill_send_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     pperimeter_data = parent(perimeter_data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
@@ -457,7 +457,7 @@ function fill_send_buffer_kernel!(
     return nothing
 end
 
-function load_from_recv_buffer!(::ClimaComms.CUDA, dss_buffer::DSSBuffer)
+function load_from_recv_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
     pperimeter_data = parent(perimeter_data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
@@ -500,7 +500,7 @@ end
 
 
 function dss_ghost!(
-    ::ClimaComms.CUDA,
+    ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
     topology::Topologies.Topology2D,

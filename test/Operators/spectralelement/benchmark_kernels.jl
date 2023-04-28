@@ -22,8 +22,9 @@ order of magnitude estimate per problem size.
 
 ##### copyto!
 kernel_copyto!(args) = kernel_copyto!(args, args.device)
-kernel_copyto!(args, ::ClimaComms.CPU) = Base.copyto!(args.ϕ_arr, args.ψ_arr)
-function kernel_copyto!(args, ::ClimaComms.CUDA)
+kernel_copyto!(args, ::ClimaComms.CPUDevice) =
+    Base.copyto!(args.ϕ_arr, args.ψ_arr)
+function kernel_copyto!(args, ::ClimaComms.CUDADevice)
     (; ϕ_arr, ψ_arr) = args
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x

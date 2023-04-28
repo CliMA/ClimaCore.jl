@@ -24,7 +24,8 @@ function rectangular_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    return Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+    device = ClimaComms.CPUDevice()
+    return Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
 end
 
 @testset "opposing face tests" begin

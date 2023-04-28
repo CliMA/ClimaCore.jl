@@ -1,6 +1,5 @@
 using ClimaCore.DataLayouts
 using ClimaComms
-using ClimaCommsMPI
 using MPI
 
 
@@ -238,12 +237,19 @@ function generate_map(
 
     if !(comms_ctx isa ClimaComms.SingletonCommsContext)
         root_pid = 0
-        weights = MPI.bcast(weights, root_pid, comms_ctx.mpicomm)
-        row_indices = MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
-        source_unique_idxs =
-            MPI.bcast(source_unique_idxs, root_pid, comms_ctx.mpicomm)
-        target_unique_idxs =
-            MPI.bcast(target_unique_idxs, root_pid, comms_ctx.mpicomm)
+        weights = ClimaComms.MPI.bcast(weights, root_pid, comms_ctx.mpicomm)
+        row_indices =
+            ClimaComms.MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
+        source_unique_idxs = ClimaComms.MPI.bcast(
+            source_unique_idxs,
+            root_pid,
+            comms_ctx.mpicomm,
+        )
+        target_unique_idxs = ClimaComms.MPI.bcast(
+            target_unique_idxs,
+            root_pid,
+            comms_ctx.mpicomm,
+        )
     end
     ClimaComms.barrier(comms_ctx)
 

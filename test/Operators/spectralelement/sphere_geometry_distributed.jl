@@ -7,7 +7,7 @@ using Test
 
 using StaticArrays, LinearAlgebra
 using Logging
-using ClimaComms, ClimaCommsMPI
+using ClimaComms
 
 function rotational_field(space, α0 = 45.0)
     coords = Fields.coordinate_field(space)
@@ -21,7 +21,7 @@ function rotational_field(space, α0 = 45.0)
 end
 
 @testset "Spherical geometry properties" begin
-    context = ClimaCommsMPI.MPICommsContext()
+    context = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
     # log output only from root process

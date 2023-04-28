@@ -16,8 +16,7 @@ using Logging
 #ENV["CLIMACORE_DISTRIBUTED"] = "MPI" # TODO: remove before merging
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    using ClimaCommsMPI
-    const context = ClimaCommsMPI.MPICommsContext()
+    const context = ClimaComms.MPICommsContext()
     const pid, nprocs = ClimaComms.init(context)
     const iamroot = ClimaComms.iamroot(context)
     iamroot && println("running distributed simulation using $nprocs processes")

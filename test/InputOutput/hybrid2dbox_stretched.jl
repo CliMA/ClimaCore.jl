@@ -1,6 +1,7 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 import ClimaCore
+import ClimaComms
 
 import ClimaCore:
     ClimaCore,
@@ -24,6 +25,7 @@ function hvspace_2D(
     npoly = 4,
 )
     FT = Float64
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
@@ -39,7 +41,7 @@ function hvspace_2D(
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(horzmesh)
+    horztopology = Topologies.IntervalTopology(context, horzmesh)
 
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
@@ -47,7 +49,7 @@ function hvspace_2D(
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space)
+    return (hv_center_space, hv_face_space, context)
 end
 
 # Reference: https://journals.ametsoc.org/view/journals/mwre/140/4/mwr-d-10-05073.1.xml, Section 5a
@@ -90,7 +92,7 @@ end
         T_0 = 273.16, # triple point temperature
     )
     # set up 2D domain - doubly periodic box
-    hv_center_space, hv_face_space = hvspace_2D((-500, 500), (0, 1000))
+    hv_center_space, hv_face_space, context = hvspace_2D((-500, 500), (0, 1000))
 
     Φ(z) = grav * z
 
@@ -108,7 +110,9 @@ end
 
     # write field vector to hdf5 file
     filename = tempname()
-    InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
+    writer = InputOutput.HDF5Writer(filename, context)
+    InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+
     reader = InputOutput.HDF5Reader(filename)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)

@@ -45,14 +45,14 @@ function hvspace_3D(
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    horztopology = Topologies.Topology2D(context, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
-    return (hv_center_space, hv_face_space, horztopology)
+    return (hv_center_space, hv_face_space, horztopology, context)
 end
 
 Φ(z) = grav * z
@@ -103,7 +103,7 @@ end
         T_0 = 273.16, # triple point temperature
     )
     # set up 3D domain - doubly periodic box
-    hv_center_space, hv_face_space, horztopology =
+    hv_center_space, hv_face_space, horztopology, context =
         hvspace_3D((-500, 500), (-500, 500), (0, 1000))
 
     # initial conditions
@@ -121,8 +121,9 @@ end
 
     # write field vector to hdf5 file
     filename = tempname(pwd())
-    InputOutput.write!(filename, "Y" => Y) # write field vector from hdf5 file
-    reader = InputOutput.HDF5Reader(filename)
+    writer = InputOutput.HDF5Writer(filename, context)
+    InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+    reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
     @test restart_Y == Y # test if restart is exact

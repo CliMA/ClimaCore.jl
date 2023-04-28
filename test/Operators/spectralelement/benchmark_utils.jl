@@ -14,7 +14,6 @@ import ClimaCore.Topologies as Topologies
 import ClimaCore.Geometry as Geometry
 import ClimaCore as CC
 import ClimaComms
-import ClimaCommsMPI
 
 using CUDA
 using ArgParse
@@ -25,7 +24,7 @@ using BenchmarkTools
 function benchmark_kernel_array!(
     args,
     kernel_fun!,
-    device::ClimaComms.CPU;
+    device::ClimaComms.CPUDevice;
     silent = true,
 )
     (; ϕ_arr, ψ_arr) = args
@@ -41,7 +40,7 @@ end
 function benchmark_kernel_array!(
     args,
     kernel_fun!,
-    device::ClimaComms.CUDA;
+    device::ClimaComms.CUDADevice;
     silent = true,
 )
     # Taken from: https://cuda.juliagpu.org/stable/tutorials/introduction/
@@ -69,7 +68,7 @@ function benchmark_kernel_array!(
     return trial
 end
 
-function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPU; silent)
+function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPUDevice; silent)
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark $kernel_fun!($args)
     if !silent
@@ -79,7 +78,7 @@ function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPU; silent)
     return trial
 end
 
-function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CUDA; silent)
+function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CUDADevice; silent)
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark CUDA.@sync $kernel_fun!($args)
     if !silent
@@ -143,26 +142,29 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     args = parse_args(ARGS, s)
 
     device =
-        args["device"] == "CUDA" ? ClimaComms.CUDA() :
-        args["device"] == "CPU" ? ClimaComms.CPU() :
+        args["device"] == "CUDA" ? ClimaComms.CUDADevice() :
+        args["device"] == "CPU" ? ClimaComms.CPUDevice() :
         error("Unknown device: $(args["device"])")
 
     context =
-        args["comms"] == "MPI" ? ClimaCommsMPI.MPICommsContext(device) :
+        args["comms"] == "MPI" ? ClimaComms.MPICommsContext(device) :
         args["comms"] == "Singleton" ?
         ClimaComms.SingletonCommsContext(device) :
         error("Unknown comms: $(args["comms"])")
 
     ClimaComms.init(context)
 
-    if context isa ClimaCommsMPI.MPICommsContext && device isa ClimaComms.CUDA
+    if context isa ClimaComms.MPICommsContext &&
+       device isa ClimaComms.CUDADevice
         # assign GPUs based on local rank
-        local_comm = MPI.Comm_split_type(
+        local_comm = ClimaComms.MPI.Comm_split_type(
             context.mpicomm,
-            MPI.COMM_TYPE_SHARED,
-            MPI.Comm_rank(context.mpicomm),
+            ClimaComms.MPI.COMM_TYPE_SHARED,
+            ClimaComms.MPI.Comm_rank(context.mpicomm),
         )
-        CUDA.device!(MPI.Comm_rank(local_comm) % length(CUDA.devices()))
+        CUDA.device!(
+            ClimaComms.MPI.Comm_rank(local_comm) % length(CUDA.devices()),
+        )
     end
     float_type = args["float-type"]
     panel_size = args["panel-size"]
@@ -184,10 +186,10 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
-    array_kernel_args = if device isa ClimaComms.CPU
+    array_kernel_args = if device isa ClimaComms.CPUDevice
         (; ϕ_arr = fill(FT(1), s), ψ_arr = fill(FT(2), s))
     else
-        device isa ClimaComms.CUDA
+        device isa ClimaComms.CUDADevice
         (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
     end
 

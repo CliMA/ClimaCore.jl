@@ -138,8 +138,10 @@ end
             quad = Spaces.Quadratures.GLL{Nq}()
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
 
-            topology =
-                Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+            topology = Topologies.Topology2D(
+                ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+                mesh,
+            )
             space = Spaces.SpectralElementSpace2D(topology, quad)
 
             coords = Fields.coordinate_field(space)
@@ -194,7 +196,7 @@ end
             horzdomain = Domains.RectangleDomain(xdomain, ydomain)
             horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
             horztopology = Topologies.Topology2D(
-                ClimaComms.SingletonCommsContext(),
+                ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
                 horzmesh,
             )
 

@@ -1,7 +1,6 @@
 using Test
 using CUDA
 using ClimaComms
-using ClimaCommsMPI
 import ClimaCore:
     Device,
     Domains,
@@ -14,9 +13,9 @@ import ClimaCore:
     DataLayouts
 
 @testset "DSS on Equiangular Cubed Sphere mesh (ne = 32)" begin
-    device = Device.device() #ClimaComms.CUDA()
-    context_cuda = ClimaCommsMPI.MPICommsContext(device)
-    context_cpu = ClimaCommsMPI.MPICommsContext(ClimaComms.CPU())
+    device = Device.device() #ClimaComms.CUDADevice()
+    context_cuda = ClimaComms.MPICommsContext(device)
+    context_cpu = ClimaComms.MPICommsContext(ClimaComms.CPUDevice())
 
     pid_cuda, nprocs_cuda = ClimaComms.init(context_cuda)
     pid_cpu, nprocs_cpu = ClimaComms.init(context_cpu)

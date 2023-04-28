@@ -6,13 +6,12 @@ import ClimaCore:
 
 using ClimaComms
 using CUDA
-using ClimaCommsMPI
 
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 
 # initializing MPI
 const device = Device.device()
-const context = ClimaCommsMPI.MPICommsContext(device)
+const context = ClimaComms.MPICommsContext(device)
 pid, nprocs = ClimaComms.init(context)
 #=
 local node and face numbering
@@ -54,7 +53,7 @@ partition numbers
     x2min, x2max = -2π, 2π
     # initializing MPI
     device = Device.device()
-    context = ClimaCommsMPI.MPICommsContext(device)
+    context = ClimaComms.MPICommsContext(device)
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
     if iamroot
