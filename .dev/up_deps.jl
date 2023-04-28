@@ -8,8 +8,10 @@ root = dirname(@__DIR__)
 dirs = (
     root,
     joinpath(root, "examples"),
+    joinpath(root, ".dev"),
     joinpath(root, "perf"),
     joinpath(root, "docs"),
+    joinpath(root, "test"),
     joinpath(root, "lib", "ClimaCoreMakie"),
     joinpath(root, "lib", "ClimaCorePlots"),
     joinpath(root, "lib", "ClimaCoreTempestRemap"),
@@ -18,8 +20,15 @@ dirs = (
 
 cd(root) do
     for dir in dirs
-        @info "Updating environment `$dir`"
-        cmd = `$(Base.julia_cmd()) --project=$dir -e 'import Pkg; Pkg.update()'`
+        reldir = relpath(dir, root)
+        @info "Updating environment `$reldir`"
+        cmd = if dir == root
+            `$(Base.julia_cmd()) --project -e """import Pkg; Pkg.update()"""`
+        elseif dir == joinpath(root, ".dev")
+            `$(Base.julia_cmd()) --project=$reldir -e """import Pkg; Pkg.update()"""`
+        else
+            `$(Base.julia_cmd()) --project=$reldir -e """import Pkg; Pkg.develop(;path=\".\"); Pkg.update()"""`
+        end
         run(cmd)
     end
 end
