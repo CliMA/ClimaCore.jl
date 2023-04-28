@@ -19,7 +19,7 @@ if usempi
     # use same filename on all processes
     # must be accessible by all procs
     filename = tempname(pwd())
-    filename = ClimaComms.MPI.bcast(filename, 0, MPI.COMM_WORLD)
+    filename = ClimaComms.MPI.bcast(filename, 0, ClimaComms.MPI.COMM_WORLD)
     if ClimaComms.iamroot(comms_ctx)
         @info "Distributed test" nprocs filename
     end

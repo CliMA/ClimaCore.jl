@@ -156,12 +156,14 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
 
     if context isa ClimaComms.MPICommsContext && device isa ClimaComms.CUDA
         # assign GPUs based on local rank
-        local_comm = MPI.Comm_split_type(
+        local_comm = ClimaComms.MPI.Comm_split_type(
             context.mpicomm,
-            MPI.COMM_TYPE_SHARED,
-            MPI.Comm_rank(context.mpicomm),
+            ClimaComms.MPI.COMM_TYPE_SHARED,
+            ClimaComms.MPI.Comm_rank(context.mpicomm),
         )
-        CUDA.device!(MPI.Comm_rank(local_comm) % length(CUDA.devices()))
+        CUDA.device!(
+            ClimaComms.MPI.Comm_rank(local_comm) % length(CUDA.devices()),
+        )
     end
     float_type = args["float-type"]
     panel_size = args["panel-size"]
