@@ -35,8 +35,10 @@ function IntervalTopology(
     end
     IntervalTopology(context, mesh, boundaries)
 end
-IntervalTopology(mesh::Meshes.IntervalMesh) =
-    IntervalTopology(ClimaComms.SingletonCommsContext(ClimaComms.CPU()), mesh)
+IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
+    ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+    mesh,
+)
 
 isperiodic(topology::AbstractIntervalTopology) =
     Domains.isperiodic(Topologies.domain(topology))

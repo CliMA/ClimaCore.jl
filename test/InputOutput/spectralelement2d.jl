@@ -70,8 +70,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     device = ClimaCore.Device.device()
     @info "Using device" device
-    grid_topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
+    context = ClimaComms.SingletonCommsContext(device)
+    grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
@@ -79,10 +79,10 @@ end
 
     # write field vector to hdf5 file
     filename = tempname(pwd())
-    writer = InputOutput.HDF5Writer(filename, grid_topology.context)
+    writer = InputOutput.HDF5Writer(filename, context)
     InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
     close(writer)
-    reader = InputOutput.HDF5Reader(filename, grid_topology.context)
+    reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
     CUDA.allowscalar(true)

@@ -27,8 +27,10 @@ end
 
         domain = Domains.SphereDomain(radius)
         mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-        grid_topology =
-            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+        grid_topology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+            mesh,
+        )
         quad = Spaces.Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

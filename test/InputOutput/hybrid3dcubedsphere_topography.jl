@@ -14,7 +14,7 @@ using ClimaCore:
 using ClimaComms
 usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
 if usempi
-    const comms_ctx = ClimaComms.MPICommsContext()
+    const comms_ctx = ClimaComms.MPICommsContext(ClimaComms.CPUDevice())
     pid, nprocs = ClimaComms.init(comms_ctx)
     # use same filename on all processes
     # must be accessible by all procs
@@ -24,7 +24,7 @@ if usempi
         @info "Distributed test" nprocs filename
     end
 else
-    const comms_ctx = ClimaComms.SingletonCommsContext()
+    const comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
     ClimaComms.init(comms_ctx)
     filename = tempname(pwd())
     @info "Single process test" filename

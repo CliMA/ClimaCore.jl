@@ -24,8 +24,10 @@ include("sphere_sphericalharmonics.jl")
 
     Ne = 16
     mesh = Meshes.EquiangularCubedSphere(domain, Ne)
-    grid_topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+    grid_topology = Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+        mesh,
+    )
 
     Nq = 6
     quad = Spaces.Quadratures.GLL{Nq}()

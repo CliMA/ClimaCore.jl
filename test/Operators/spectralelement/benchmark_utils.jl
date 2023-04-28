@@ -24,7 +24,7 @@ using BenchmarkTools
 function benchmark_kernel_array!(
     args,
     kernel_fun!,
-    device::ClimaComms.CPU;
+    device::ClimaComms.CPUDevice;
     silent = true,
 )
     (; ϕ_arr, ψ_arr) = args
@@ -40,7 +40,7 @@ end
 function benchmark_kernel_array!(
     args,
     kernel_fun!,
-    device::ClimaComms.CUDA;
+    device::ClimaComms.CUDADevice;
     silent = true,
 )
     # Taken from: https://cuda.juliagpu.org/stable/tutorials/introduction/
@@ -68,7 +68,7 @@ function benchmark_kernel_array!(
     return trial
 end
 
-function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPU; silent)
+function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPUDevice; silent)
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark $kernel_fun!($args)
     if !silent
@@ -78,7 +78,7 @@ function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPU; silent)
     return trial
 end
 
-function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CUDA; silent)
+function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CUDADevice; silent)
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark CUDA.@sync $kernel_fun!($args)
     if !silent
@@ -142,8 +142,8 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     args = parse_args(ARGS, s)
 
     device =
-        args["device"] == "CUDA" ? ClimaComms.CUDA() :
-        args["device"] == "CPU" ? ClimaComms.CPU() :
+        args["device"] == "CUDA" ? ClimaComms.CUDADevice() :
+        args["device"] == "CPU" ? ClimaComms.CPUDevice() :
         error("Unknown device: $(args["device"])")
 
     context =
@@ -154,7 +154,8 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
 
     ClimaComms.init(context)
 
-    if context isa ClimaComms.MPICommsContext && device isa ClimaComms.CUDA
+    if context isa ClimaComms.MPICommsContext &&
+       device isa ClimaComms.CUDADevice
         # assign GPUs based on local rank
         local_comm = ClimaComms.MPI.Comm_split_type(
             context.mpicomm,
@@ -185,10 +186,10 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
-    array_kernel_args = if device isa ClimaComms.CPU
+    array_kernel_args = if device isa ClimaComms.CPUDevice
         (; ϕ_arr = fill(FT(1), s), ψ_arr = fill(FT(2), s))
     else
-        device isa ClimaComms.CUDA
+        device isa ClimaComms.CUDADevice
         (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
     end
 

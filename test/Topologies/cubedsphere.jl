@@ -2,7 +2,7 @@ using ClimaComms
 using ClimaCore: Geometry, Domains, Meshes, Topologies
 using Test
 
-const context = ClimaComms.SingletonCommsContext()
+const context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
 
 @testset "neighboring element tests" begin
     @testset "1 element across each panel" begin

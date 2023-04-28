@@ -189,7 +189,7 @@ end
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
-        # @test_throws BoundsError ∂.(w .* I.(θ))
+        @test_throws BoundsError ∂.(w .* I.(θ))
     end
 end
 

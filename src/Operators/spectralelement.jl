@@ -25,8 +25,8 @@ struct CUDASpectralStyle <: AbstractSpectralStyle end
 
 
 import ClimaComms
-AbstractSpectralStyle(::ClimaComms.CPU) = SlabBlockSpectralStyle
-AbstractSpectralStyle(::ClimaComms.CUDA) = CUDASpectralStyle
+AbstractSpectralStyle(::ClimaComms.CPUDevice) = SlabBlockSpectralStyle
+AbstractSpectralStyle(::ClimaComms.CUDADevice) = CUDASpectralStyle
 
 
 """

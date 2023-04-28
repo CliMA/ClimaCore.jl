@@ -91,10 +91,10 @@ end
     @test result[1] ≈ result_cpu[1]
     # test maximum
     @test local_max[1] ≈ h₀
-    @test local_max[1] ≈ local_max_cpu
+    @test local_max[1] ≈ local_max_cpu[1]
     # test minimum
     @test local_min[1] ≈ FT(0)
-    @test local_min[1] ≈ local_min_cpu
+    @test local_min[1] ≈ local_min_cpu[1]
     # testing mean
     meanz = Statistics.mean(Z)
     meanz_cpu = Statistics.mean(Z_cpu)

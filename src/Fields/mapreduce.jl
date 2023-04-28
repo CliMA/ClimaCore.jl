@@ -10,7 +10,7 @@ See [`sum`](@ref) for the integral over the full domain.
 """
 local_sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.CPU,
+    ::ClimaComms.CPUDevice,
 ) = Base.reduce(
     RecursiveApply.radd,
     Base.Broadcast.broadcasted(
@@ -41,14 +41,14 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.CPU,
+    ::ClimaComms.CPUDevice,
 )
     context = comm_context(axes(field))
     data_sum = DataLayouts.DataF(local_sum(field))
     ClimaComms.allreduce!(context, parent(data_sum), +)
     return data_sum[]
 end
-Base.sum(fn, field::Field, ::ClimaComms.CPU) =
+Base.sum(fn, field::Field, ::ClimaComms.CPUDevice) =
     Base.sum(Base.Broadcast.broadcasted(fn, field))
 Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
     Base.sum(field, Device.device(axes(field)))
@@ -61,24 +61,24 @@ Approximate maximum of `v` or `f.(v)` over the domain.
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
-function Base.maximum(fn, field::Field, ::ClimaComms.CPU)
+function Base.maximum(fn, field::Field, ::ClimaComms.CPUDevice)
     context = comm_context(axes(field))
     data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
     return data_max[]
 end
-Base.maximum(field::Field, device::ClimaComms.CPU) =
+Base.maximum(field::Field, device::ClimaComms.CPUDevice) =
     maximum(identity, field, device)
 Base.maximum(fn, field::Field) = Base.maximum(fn, field, Device.device(field))
 Base.maximum(field::Field) = Base.maximum(field, Device.device(field))
 
-function Base.minimum(fn, field::Field, ::ClimaComms.CPU)
+function Base.minimum(fn, field::Field, ::ClimaComms.CPUDevice)
     context = comm_context(axes(field))
     data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
     return data_min[]
 end
-Base.minimum(field::Field, device::ClimaComms.CPU) =
+Base.minimum(field::Field, device::ClimaComms.CPUDevice) =
     minimum(identity, field, device)
 Base.minimum(fn, field::Field) = Base.minimum(fn, field, Device.device(field))
 Base.minimum(field::Field) = Base.minimum(field, Device.device(field))
@@ -104,7 +104,7 @@ If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
-    ::ClimaComms.CPU,
+    ::ClimaComms.CPUDevice,
 )
     space = axes(field)
     context = comm_context(space)
@@ -114,7 +114,7 @@ function Statistics.mean(
     sum_v, area_v = data_combined[]
     RecursiveApply.rdiv(sum_v, area_v)
 end
-Statistics.mean(fn, field::Field, ::ClimaComms.CPU) =
+Statistics.mean(fn, field::Field, ::ClimaComms.CPUDevice) =
     Statistics.mean(Base.Broadcast.broadcasted(fn, field))
 
 Statistics.mean(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
@@ -155,7 +155,7 @@ the power of ``1/p``.
 """
 function LinearAlgebra.norm(
     field::Field,
-    ::ClimaComms.CPU,
+    ::ClimaComms.CPUDevice,
     p::Real = 2;
     normalize = true,
 )
