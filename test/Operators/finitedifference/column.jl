@@ -189,7 +189,12 @@ end
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
-        @test_throws BoundsError ∂.(w .* I.(θ))
+        are_boundschecks_forced = Base.JLOptions().check_bounds == 1
+        if are_boundschecks_forced
+            @test_throws BoundsError ∂.(w .* I.(θ))
+        else
+            @warn "Bounds check on BoundsError ∂.(w .* I.(θ)) not verified."
+        end
     end
 end
 
