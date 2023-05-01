@@ -12,10 +12,9 @@ using Test
     # general setup
     comms_ctx = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(comms_ctx)
-    OUTPUT_DIR = ClimaComms.MPI.bcast(
+    OUTPUT_DIR = ClimaComms.bcast(
+        comms_ctx,
         mkpath(get(ENV, "CI_OUTPUT_DIR", tempname())),
-        0,
-        comms_ctx.mpicomm,
     )
 
     comms_ctx_singleton = ClimaComms.SingletonCommsContext()
@@ -56,8 +55,7 @@ using Test
     # global exchange (no buffer fill/send here) - convert to superhalo in next implementation
     root_pid = 0
     ClimaComms.gather(comms_ctx, parent(field_i_singleton))
-    field_i_singleton =
-        ClimaComms.MPI.bcast(field_i_singleton, root_pid, comms_ctx.mpicomm)
+    field_i_singleton = ClimaComms.bcast(comms_ctx, field_i_singleton)
 
     R_distr = CCTR.generate_map(
         space_o_singleton,

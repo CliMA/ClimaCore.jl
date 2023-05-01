@@ -235,22 +235,10 @@ function generate_map(
         target_unique_idxs = nothing
     end
 
-    if !(comms_ctx isa ClimaComms.SingletonCommsContext)
-        root_pid = 0
-        weights = ClimaComms.MPI.bcast(weights, root_pid, comms_ctx.mpicomm)
-        row_indices =
-            ClimaComms.MPI.bcast(row_indices, root_pid, comms_ctx.mpicomm)
-        source_unique_idxs = ClimaComms.MPI.bcast(
-            source_unique_idxs,
-            root_pid,
-            comms_ctx.mpicomm,
-        )
-        target_unique_idxs = ClimaComms.MPI.bcast(
-            target_unique_idxs,
-            root_pid,
-            comms_ctx.mpicomm,
-        )
-    end
+    weights = ClimaComms.bcast(comms_ctx, weights)
+    row_indices = ClimaComms.bcast(comms_ctx, row_indices)
+    source_unique_idxs = ClimaComms.bcast(comms_ctx, source_unique_idxs)
+    target_unique_idxs = ClimaComms.bcast(comms_ctx, target_unique_idxs)
     ClimaComms.barrier(comms_ctx)
 
     if target_space_distr != nothing
