@@ -12,22 +12,11 @@ using ClimaCore:
     InputOutput
 
 using ClimaComms
-usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
-if usempi
-    const comms_ctx = ClimaComms.MPICommsContext(ClimaComms.CPUDevice())
-    pid, nprocs = ClimaComms.init(comms_ctx)
-    # use same filename on all processes
-    # must be accessible by all procs
-    filename = tempname(pwd())
-    filename = ClimaComms.MPI.bcast(filename, 0, ClimaComms.MPI.COMM_WORLD)
-    if ClimaComms.iamroot(comms_ctx)
-        @info "Distributed test" nprocs filename
-    end
-else
-    const comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
-    ClimaComms.init(comms_ctx)
-    filename = tempname(pwd())
-    @info "Single process test" filename
+const comms_ctx = ClimaComms.context(ClimaComms.CPUDevice())
+pid, nprocs = ClimaComms.init(comms_ctx)
+filename = ClimaComms.bcast(comms_ctx, tempname(pwd()))
+if ClimaComms.iamroot(comms_ctx)
+    @info "Comms context" comms_ctx nprocs filename
 end
 
 @testset "HDF5 restart test for 3d hybrid cubed sphere" begin
