@@ -20,4 +20,6 @@ include("Hypsography/Hypsography.jl")
 include("Limiters/Limiters.jl")
 include("InputOutput/InputOutput.jl")
 
+include("deprecated.jl")
+
 end # module
