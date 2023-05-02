@@ -123,9 +123,9 @@ struct Topology2D{
     ghost_face_neighbor_loc::Vector{Int}
 end
 
-Device.device(topology::Topology2D) = topology.context.device
-Device.device_array_type(topology::Topology2D) =
-    Device.device_array_type(topology.context.device)
+ClimaComms.device(topology::Topology2D) = topology.context.device
+ClimaComms.array_type(topology::Topology2D) =
+    ClimaComms.array_type(topology.context.device)
 
 """
     spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
@@ -188,7 +188,7 @@ function Topology2D(
 )
     pid = ClimaComms.mypid(context)
     nprocs = ClimaComms.nprocs(context)
-    DA = Device.device_array_type(context.device)
+    DA = ClimaComms.array_type(context.device)
 
     # To make IO easier, we enforce the partitioning to be sequential in the element ordering.
     @assert elempid === nothing
@@ -519,7 +519,7 @@ perimeter_face_indices_cuda(f, nfacedof, reversed = false) =
 
 
 function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
-    DA = Device.device_array_type(topology)
+    DA = ClimaComms.array_type(topology)
     (;
         context,
         neighbor_pids,

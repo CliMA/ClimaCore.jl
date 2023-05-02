@@ -20,10 +20,10 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     print(iio, " "^(indent + 2), space.quadrature_style)
 end
 
-Device.device(space::AbstractSpectralElementSpace) =
-    Device.device(topology(space))
-Device.device_array_type(space::AbstractSpectralElementSpace) =
-    Device.device_array_type(Device.device(space))
+ClimaComms.device(space::AbstractSpectralElementSpace) =
+    ClimaComms.device(topology(space))
+ClimaComms.array_type(space::AbstractSpectralElementSpace) =
+    ClimaComms.array_type(ClimaComms.device(space))
 topology(space::AbstractSpectralElementSpace) = space.topology
 quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
 
@@ -251,7 +251,7 @@ function SpectralElementSpace2D(
 
     ### How to DSS multiple fields?
     # 1. allocate buffers externally
-    DA = Device.device_array_type(topology)
+    DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
     if domain isa Domains.SphereDomain
         CoordType3D = Topologies.coordinate_type(topology)

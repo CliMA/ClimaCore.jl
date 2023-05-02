@@ -20,7 +20,7 @@ local_sum(
     ),
 )
 local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
-    local_sum(field, Device.device(axes(field)))
+    local_sum(field, ClimaComms.device(axes(field)))
 """
     sum([f=identity,]v::Field)
 
@@ -51,8 +51,8 @@ end
 Base.sum(fn, field::Field, ::ClimaComms.CPUDevice) =
     Base.sum(Base.Broadcast.broadcasted(fn, field))
 Base.sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
-    Base.sum(field, Device.device(axes(field)))
-Base.sum(fn, field::Field) = Base.sum(fn, field, Device.device(field))
+    Base.sum(field, ClimaComms.device(axes(field)))
+Base.sum(fn, field::Field) = Base.sum(fn, field, ClimaComms.device(field))
 
 """
     maximum([f=identity,]v::Field)
@@ -69,8 +69,9 @@ function Base.maximum(fn, field::Field, ::ClimaComms.CPUDevice)
 end
 Base.maximum(field::Field, device::ClimaComms.CPUDevice) =
     maximum(identity, field, device)
-Base.maximum(fn, field::Field) = Base.maximum(fn, field, Device.device(field))
-Base.maximum(field::Field) = Base.maximum(field, Device.device(field))
+Base.maximum(fn, field::Field) =
+    Base.maximum(fn, field, ClimaComms.device(field))
+Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
 function Base.minimum(fn, field::Field, ::ClimaComms.CPUDevice)
     context = comm_context(axes(field))
@@ -80,8 +81,9 @@ function Base.minimum(fn, field::Field, ::ClimaComms.CPUDevice)
 end
 Base.minimum(field::Field, device::ClimaComms.CPUDevice) =
     minimum(identity, field, device)
-Base.minimum(fn, field::Field) = Base.minimum(fn, field, Device.device(field))
-Base.minimum(field::Field) = Base.minimum(field, Device.device(field))
+Base.minimum(fn, field::Field) =
+    Base.minimum(fn, field, ClimaComms.device(field))
+Base.minimum(field::Field) = Base.minimum(field, ClimaComms.device(field))
 # somewhat inefficient
 Base.extrema(fn, field::Field) = (minimum(fn, field), maximum(fn, field))
 Base.extrema(field::Field) = extrema(identity, field)
@@ -118,9 +120,9 @@ Statistics.mean(fn, field::Field, ::ClimaComms.CPUDevice) =
     Statistics.mean(Base.Broadcast.broadcasted(fn, field))
 
 Statistics.mean(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
-    Statistics.mean(field, Device.device(axes(field)))
+    Statistics.mean(field, ClimaComms.device(axes(field)))
 Statistics.mean(fn, field::Field) =
-    Statistics.mean(fn, field, Device.device(axes(field)))
+    Statistics.mean(fn, field, ClimaComms.device(axes(field)))
 
 """
     norm(v::Field, p=2; normalize=true)
@@ -185,7 +187,7 @@ end
 LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
     LinearAlgebra.norm(
         field,
-        Device.device(axes(field)),
+        ClimaComms.device(axes(field)),
         p,
         normalize = normalize,
     )

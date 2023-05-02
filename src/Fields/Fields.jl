@@ -1,7 +1,7 @@
 module Fields
 
 import ..comm_context
-import ..Device
+import ClimaComms
 import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
@@ -108,9 +108,9 @@ Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline Base.axes(field::Field) = getfield(field, :space)
 
 # Define device and device array type
-Device.device(field::Field) = Device.device(axes(field))
-Device.device_array_type(field::Field) =
-    Device.device_array_type(Device.device(field))
+ClimaComms.device(field::Field) = ClimaComms.device(axes(field))
+ClimaComms.array_type(field::Field) =
+    ClimaComms.array_type(ClimaComms.device(field))
 
 # need to define twice to avoid ambiguities
 @inline Base.dotgetproperty(field::Field, prop) = Base.getproperty(field, prop)

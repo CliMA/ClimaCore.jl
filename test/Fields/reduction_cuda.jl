@@ -5,7 +5,6 @@ using Statistics
 using LinearAlgebra
 
 import ClimaCore:
-    Device,
     Domains,
     Fields,
     Geometry,
@@ -50,7 +49,7 @@ end
 @testset "test cuda reduction op on surface of sphere" begin
     FT = Float64
 
-    device = Device.device()
+    device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     context_cpu = ClimaComms.SingletonCommsContext() # CPU context for comparison
 

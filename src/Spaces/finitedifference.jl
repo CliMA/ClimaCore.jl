@@ -44,7 +44,7 @@ function FiniteDifferenceSpace{S}(
     # similar to spectral operators
     @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
     FT = eltype(CT)
-    ArrayType = Device.device_array_type(topology)
+    ArrayType = ClimaComms.array_type(topology)
     face_coordinates = collect(mesh.faces)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     nface = length(face_coordinates) - Topologies.isperiodic(topology)
@@ -127,7 +127,7 @@ end
 FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
     FiniteDifferenceSpace{S}(Topologies.IntervalTopology(mesh))
 
-Device.device(space::FiniteDifferenceSpace) = ClimaComms.CPUDevice()
+ClimaComms.device(space::FiniteDifferenceSpace) = ClimaComms.CPUDevice()
 
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
