@@ -24,6 +24,9 @@ field_vars(::Type{FT}) where {FT} = (;
     D = FT(0),
     U = FT(0),
     ∇x = Geometry.Covariant3Vector(FT(0)),
+    ᶠu³ = Geometry.Contravariant3Vector(FT(0)),
+    ᶠuₕ³ = Geometry.Contravariant3Vector(FT(0)),
+    ᶠw = Geometry.Covariant3Vector(FT(0)),
 )
 
 function get_spaces(z_elems, ::Type{FT}) where {FT}
@@ -272,6 +275,15 @@ bc_name(bcs::Tuple) = (:none,)
 
 include("column_benchmark_kernels.jl")
 
+uses_bycolumn(::typeof(op_broadcast_example0!)) = true
+uses_bycolumn(::typeof(op_broadcast_example1!)) = true
+uses_bycolumn(::typeof(op_broadcast_example2!)) = false
+uses_bycolumn(::Any) = false
+
+bcs_tested(c, ::typeof(op_broadcast_example0!)) = ((), )
+bcs_tested(c, ::typeof(op_broadcast_example1!)) = ((), )
+bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((), )
+
 bcs_tested(c, ::typeof(op_GradientF2C!)) = ((), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((), extrapolate_bcs(c))
@@ -367,6 +379,9 @@ function benchmark_operators_base(trials, t_ave, cfield, ffield, h_space)
         op_DivergenceC2F!,
         op_InterpolateF2C!,
         op_InterpolateC2F!,
+        op_broadcast_example0!,
+        op_broadcast_example1!,
+        op_broadcast_example2!,
         op_LeftBiasedC2F!,
         op_LeftBiasedF2C!,
         op_RightBiasedC2F!,
@@ -388,6 +403,9 @@ function benchmark_operators_base(trials, t_ave, cfield, ffield, h_space)
 
     @info "Benchmarking operators, this may take a minute or two..."
     for op in ops
+        if uses_bycolumn(op) && h_space == :no_h_space
+            continue
+        end
         benchmark_func!(t_ave, trials, op, cfield, ffield, h_space, #= verbose = =# false)
     end
 
@@ -410,6 +428,7 @@ function test_results(t_ave)
     @test t_ave[(:no_h_space, op_InterpolateF2C!, :none)] < 332.432*ns*buffer
     @test t_ave[(:no_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 404.5473*ns*buffer
     @test t_ave[(:no_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 400.4656*ns*buffer
+    @test t_ave[(:no_h_space, op_broadcast_example2!, :none)] < 600*ns*buffer
     @test t_ave[(:no_h_space, op_LeftBiasedC2F!, :SetValue)] < 365.2909*ns*buffer
     @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :none)] < 185.358*ns*buffer
     @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :SetValue)] < 221.175*ns*buffer
@@ -437,6 +456,9 @@ function test_results(t_ave)
     @test t_ave[(:has_h_space, op_InterpolateF2C!, :none)] < 436.229*ns*buffer
     @test t_ave[(:has_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 713.735*ns*buffer
     @test t_ave[(:has_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 808.127*ns*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example0!, :none)] < 800*ns*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example1!, :none)] < 39*μs*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example2!, :none)] < 35*μs*buffer
     @test t_ave[(:has_h_space, op_LeftBiasedC2F!, :SetValue)] < 619.749*ns*buffer
     @test t_ave[(:has_h_space, op_LeftBiasedF2C!, :none)] < 276.520*ns*buffer
     @test t_ave[(:has_h_space, op_LeftBiasedF2C!, :SetValue)] < 333.901*ns*buffer

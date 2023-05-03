@@ -106,6 +106,28 @@ function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
     return nothing
 end
 
+function op_broadcast_example0!(c, f, bcs)
+    Fields.bycolumn(axes(f.ᶠu³)) do colidx
+        CT3 = Geometry.Contravariant3Vector
+        @. f.ᶠu³[colidx] = f.ᶠu³[colidx] + f.ᶠu³[colidx]
+    end
+    return nothing
+end
+
+function op_broadcast_example1!(c, f, bcs)
+    Fields.bycolumn(axes(f.ᶠu³)) do colidx
+        CT3 = Geometry.Contravariant3Vector
+        @. f.ᶠu³[colidx] = f.ᶠuₕ³[colidx] + CT3(f.ᶠw[colidx])
+    end
+    return nothing
+end
+
+function op_broadcast_example2!(c, f, bcs)
+    CT3 = Geometry.Contravariant3Vector
+    @. f.ᶠu³ = f.ᶠuₕ³ + CT3(f.ᶠw)
+    return nothing
+end
+
 #=
 #####
 ##### Remaining TODOs
