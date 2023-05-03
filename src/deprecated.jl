@@ -3,9 +3,11 @@ module Device
 using ClimaComms
 using CUDA
 
-Base.@deprecate device(; disablegpu = false) ClimaComms.device(;
-    disablegpu = false,
-) false
+Base.@deprecate device(; disablegpu = false) if disablegpu
+    ClimaComms.CPUDevice()
+else
+    ClimaComms.device()
+end false
 
 Base.@deprecate device_array_type(ctx::ClimaComms.CPUDevice) ClimaComms.array_type(
     ctx,
