@@ -1719,9 +1719,10 @@ function fct_zalesak(
     stable_one = one(eltype(Aⱼ₊₁₂))
 
     if (
-        Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero ||
-        Aⱼ₊₁₂ * (ϕⱼ₊₂ᵗᵈ - ϕⱼ₊₁ᵗᵈ) < stable_zero ||
-        Aⱼ₊₁₂ * (ϕⱼᵗᵈ - ϕⱼ₋₁ᵗᵈ) < stable_zero
+        Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero && (
+            Aⱼ₊₁₂ * (ϕⱼ₊₂ᵗᵈ - ϕⱼ₊₁ᵗᵈ) < stable_zero ||
+            Aⱼ₊₁₂ * (ϕⱼᵗᵈ - ϕⱼ₋₁ᵗᵈ) < stable_zero
+        )
     )
         Aⱼ₊₁₂ = stable_zero
     end

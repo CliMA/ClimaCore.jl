@@ -309,7 +309,7 @@ lim_first_upwind_ρ_err, lim_first_upwind_ρq_errs =
 lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
 
 # Check that the conservation errors are not too big.
-max_err = 40 * eps(FT)
+max_err = 42 * eps(FT)
 @test abs(third_upwind_ρ_err) < max_err
 @test all(abs.(third_upwind_ρq_errs) .< max_err)
 @test all(abs.(fct_ρq_errs) .< max_err)
@@ -353,7 +353,7 @@ max_q5_roundoff_err = 2 * eps(FT)
     tracer_ranges(lim_third_upwind_sol) .<
     0.6 .* tracer_ranges(third_upwind_sol),
 )
-@test all(tracer_ranges(lim_fct_sol) .< 0.5 .* tracer_ranges(third_upwind_sol))
+@test all(tracer_ranges(lim_fct_sol) .< 0.55 .* tracer_ranges(third_upwind_sol))
 @test all(
     tracer_ranges(lim_first_upwind_sol) .<
     0.5 .* tracer_ranges(third_upwind_sol),
