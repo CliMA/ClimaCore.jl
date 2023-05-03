@@ -40,33 +40,41 @@ Base.similar(
     dims::Dims{N},
 ) where {T, N, B} = similar(CUDA.CuArray{T, N, B}, dims)
 
-function knl_copyto!(dest, src)
-
-    #=
-    nij, nh = size(dest)
-
-    thread_idx = CUDA.threadIdx().x
-    block_idx = CUDA.blockIdx().x
-    block_dim = CUDA.blockDim().x
-
-    # mapping to global idx to make insensitive
-    # to number of blocks / threads per device
-    global_idx = thread_idx + (block_idx - 1) * block_dim
-
-    nx, ny = nij, nij
-    i = global_idx % nx == 0 ? nx : global_idx % nx
-    j = cld(global_idx, nx)
-    h = ((global_idx-1) % (nx*nx)) + 1
-    =#
-
+# handles the case where we want to do multiple h per block
+function knl_copyto_multi_h!(dest, src)
     i = CUDA.threadIdx().x
     j = CUDA.threadIdx().y
+    # l is special: we use this to do multiple slabs per block
+    l = CUDA.threadIdx().z
+    Nl = CUDA.blockDim().z
 
-    h = CUDA.blockIdx().x
+    h = Nl * CUDA.blockIdx().x + (l - 1)
     v = CUDA.blockIdx().y
 
-    I = CartesianIndex((i, j, 1, v, h))
+    if h > size(dest, 5)
+        return nothing
+    end
 
+    I = CartesianIndex((i, j, 1, v, h))
+    @inbounds dest[I] = src[I]
+    return nothing
+end
+# handles the case where we want to do multiple v per block
+function knl_copyto_multi_v!(dest, src)
+    i = CUDA.threadIdx().x
+    j = CUDA.threadIdx().y
+    # l is special: we use this to do multiple slabs per block
+    l = CUDA.threadIdx().z
+    Nl = CUDA.blockDim().z
+
+    h = CUDA.blockIdx().x
+    v = Nl * CUDA.blockIdx().y + (l - 1)
+
+    if v > size(dest, 4)
+        return nothing
+    end
+
+    I = CartesianIndex((i, j, 1, v, h))
     @inbounds dest[I] = src[I]
     return nothing
 end
@@ -77,7 +85,11 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, 1) knl_copyto!(dest, bc)
+        Nl = fld(CUDA.warpsize(), Nij * Nij)
+        CUDA.@cuda threads = (Nij, Nij, Nl) blocks = (cld(Nh, Nl), 1) knl_copyto_multi_h!(
+            dest,
+            bc,
+        )
     end
     return dest
 end
@@ -88,7 +100,11 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(bc)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, Nv) knl_copyto!(dest, bc)
+        Nl = fld(CUDA.warpsize(), Nij * Nij)
+        CUDA.@cuda threads = (Nij, Nij, Nl) blocks = (Nh, cld(Nv, Nl)) knl_copyto_multi_v!(
+            dest,
+            bc,
+        )
     end
     return dest
 end
