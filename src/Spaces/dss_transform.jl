@@ -69,6 +69,11 @@ end
     weight,
 ) where {T, N} = arg * weight
 @inline dss_transform(
+    arg::Geometry.AxisTensor{T, N, <:Tuple{}},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) where {T, N} = arg * weight
+@inline dss_transform(
     arg::Geometry.LocalVector,
     local_geometry::Geometry.LocalGeometry,
     weight,
