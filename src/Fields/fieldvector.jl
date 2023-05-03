@@ -189,7 +189,7 @@ end
     (transform_broadcasted(args[1], inds...),)
 @inline transform_bc_args(args::Tuple{}, inds...) = ()
 
-function transform_broadcasted(
+@inline function transform_broadcasted(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
     symb,
     axes,
@@ -200,9 +200,9 @@ function transform_broadcasted(
         axes,
     )
 end
-transform_broadcasted(fv::FieldVector, symb, axes) =
+@inline transform_broadcasted(fv::FieldVector, symb, axes) =
     parent(getfield(_values(fv), symb))
-transform_broadcasted(x, symb, axes) = x
+@inline transform_broadcasted(x, symb, axes) = x
 @inline function Base.copyto!(
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
