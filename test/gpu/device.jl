@@ -11,7 +11,7 @@ using ClimaComms
     @test cuda_context.device == ClimaComms.CUDADevice()
     @test DA == CuArray
 
-    override_device = ClimaComms.device(disablegpu = true)
+    override_device = ClimaComms.CPUDevice()
     override_cuda_context = ClimaComms.SingletonCommsContext(override_device)
     DA = ClimaComms.array_type(override_cuda_context.device)
 

@@ -21,7 +21,7 @@ grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 
 
 grid_topology_cpu = Topologies.Topology2D(
-    ClimaComms.SingletonCommsContext(ClimaComms.device(; disablegpu = true)),
+    ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
     grid_mesh,
 )
 grid_space_cpu = Spaces.SpectralElementSpace2D(grid_topology_cpu, quad)
