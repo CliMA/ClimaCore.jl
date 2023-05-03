@@ -138,8 +138,8 @@ quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
 
 topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
-Device.device(space::ExtrudedFiniteDifferenceSpace) =
-    Device.device(topology(space))
+ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
+    ClimaComms.device(topology(space))
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     space.vertical_topology
 

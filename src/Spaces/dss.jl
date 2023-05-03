@@ -61,7 +61,7 @@ function create_dss_buffer(
     context =
         topology isa Topologies.Topology2D ? topology.context :
         ClimaComms.SingletonCommsContext()
-    DA = Device.device_array_type(topology)
+    DA = ClimaComms.array_type(topology)
     convert_to_array = DA isa Array ? false : true
     (_, _, _, Nv, nelems) = Base.size(data)
     Np = Spaces.nperimeter(perimeter)
@@ -271,7 +271,7 @@ function weighted_dss_start!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
-    device = Device.device(hspace.topology)
+    device = ClimaComms.device(hspace.topology)
     dss_transform!(
         device,
         dss_buffer,
@@ -345,7 +345,7 @@ function weighted_dss_internal!(
             hspace.dss_weights,
         )
     else
-        device = Device.device(hspace.topology)
+        device = ClimaComms.device(hspace.topology)
         dss_transform!(
             device,
             dss_buffer,
@@ -415,7 +415,7 @@ function weighted_dss_ghost!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
-    device = Device.device(hspace.topology)
+    device = ClimaComms.device(hspace.topology)
     ClimaComms.finish(dss_buffer.graph_context)
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(
@@ -1004,7 +1004,7 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(data, topology, quadrature_style)
-    device = Device.device(topology)
+    device = ClimaComms.device(topology)
     perimeter = Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style))
     # create dss buffer
     dss_buffer = create_dss_buffer(data, topology, perimeter)

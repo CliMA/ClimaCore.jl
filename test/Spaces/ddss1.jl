@@ -2,10 +2,10 @@ using Logging
 using Test
 
 import ClimaCore:
-    Device, Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
 using ClimaComms
-const device = Device.device()
+const device = ClimaComms.device()
 const context = ClimaComms.SingletonCommsContext(device)
 
 function distributed_space(

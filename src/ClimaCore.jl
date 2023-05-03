@@ -5,7 +5,6 @@ const VERSION = PkgVersion.@Version
 
 function comm_context end
 
-include("Device.jl")
 include("interface.jl")
 include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")
@@ -20,5 +19,7 @@ include("Operators/Operators.jl")
 include("Hypsography/Hypsography.jl")
 include("Limiters/Limiters.jl")
 include("InputOutput/InputOutput.jl")
+
+include("deprecated.jl")
 
 end # module

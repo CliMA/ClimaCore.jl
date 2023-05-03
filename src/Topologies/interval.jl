@@ -16,9 +16,9 @@ struct IntervalTopology{
     boundaries::B
 end
 
-Device.device(topology::IntervalTopology) = topology.context.device
-Device.device_array_type(topology::IntervalTopology) =
-    Device.device_array_type(topology.context.device)
+ClimaComms.device(topology::IntervalTopology) = topology.context.device
+ClimaComms.array_type(topology::IntervalTopology) =
+    ClimaComms.array_type(topology.context.device)
 
 function IntervalTopology(
     context::ClimaComms.AbstractCommsContext,

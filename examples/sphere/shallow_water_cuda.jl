@@ -9,7 +9,6 @@ using NVTX
 CUDA.allowscalar(false)
 
 import ClimaCore:
-    Device,
     Domains,
     Fields,
     Geometry,
@@ -492,7 +491,7 @@ function rhs!(dYdt, y, parameters, t)
 end
 
 function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
-    device = Device.device()
+    device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     # Test case specifications
     test_name = get(ARGS, 1, "steady_state") # default test case to run

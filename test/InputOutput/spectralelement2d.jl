@@ -68,7 +68,7 @@ end
     Nq = 4
     quad = Spaces.Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    device = ClimaCore.Device.device()
+    device = ClimaComms.device()
     @info "Using device" device
     context = ClimaComms.SingletonCommsContext(device)
     grid_topology = Topologies.Topology2D(context, mesh)

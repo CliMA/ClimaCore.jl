@@ -21,7 +21,7 @@ using CUDA
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
-import ..Device
+import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
 
 abstract type AbstractSpace end
@@ -69,7 +69,7 @@ If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
 area(space::Spaces.AbstractSpace) =
     ClimaComms.allreduce(comm_context(space), local_area(space), +)
 
-Device.device_array_type(space::AbstractSpace) =
-    Device.device_array_type(Device.device(space))
+ClimaComms.array_type(space::AbstractSpace) =
+    ClimaComms.array_type(ClimaComms.device(space))
 
 end # module

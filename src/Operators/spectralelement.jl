@@ -138,7 +138,7 @@ function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
     op = typeof(op)(axes)
-    Style = AbstractSpectralStyle(Device.device(axes))
+    Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return SpectralBroadcasted{Style}(op, args, axes)
 end
 
@@ -154,7 +154,7 @@ function Base.Broadcast.instantiate(
         axes = bc.axes
         Base.Broadcast.check_broadcast_axes(axes, args...)
     end
-    Style = AbstractSpectralStyle(Device.device(axes))
+    Style = AbstractSpectralStyle(ClimaComms.device(axes))
     return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
 end
 

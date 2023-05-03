@@ -2,7 +2,7 @@ using Logging
 using Test
 
 import ClimaCore:
-    Device, Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
 using ClimaComms
 using CUDA
@@ -10,7 +10,7 @@ using CUDA
 ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
 
 # initializing MPI
-const device = Device.device()
+const device = ClimaComms.device()
 const context = ClimaComms.MPICommsContext(device)
 pid, nprocs = ClimaComms.init(context)
 #=
@@ -31,7 +31,7 @@ pid, nprocs = ClimaComms.init(context)
     x1min, x1max = -2π, 2π
     x2min, x2max = -2π, 2π
     # initializing MPI
-    device = Device.device()
+    device = ClimaComms.device()
     context = ClimaComms.MPICommsContext(device)
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
