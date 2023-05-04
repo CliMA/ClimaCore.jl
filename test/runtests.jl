@@ -103,6 +103,8 @@ if "CUDA" in ARGS
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
     @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
     @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/cuda.jl") end
+    @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_sphere_cuda.jl") end
+    @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_3dbox_cuda.jl") end
     @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end
 end
 
