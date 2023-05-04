@@ -310,7 +310,10 @@ include("topology2d.jl")
 @deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
 
 const DistributedTopology2D = Topology2D
-Topology2D(mesh::Meshes.AbstractMesh, args...) =
-    Topology2D(ClimaComms.SingletonCommsContext(), mesh, args...)
+@deprecate Topology2D(mesh::Meshes.AbstractMesh, args...) Topology2D(
+    ClimaComms.SingletonCommsContext(),
+    mesh,
+    args...,
+)
 
 end # module

@@ -19,9 +19,12 @@ import ClimaCore.Spaces as Spaces
 import ClimaCore.Topologies as Topologies
 import ClimaCore.Domains as Domains
 
-function PointSpace(::Type{FT}) where {FT}
+function PointSpace(
+    ::Type{FT};
+    context = ClimaComms.SingletonCommsContext(),
+) where {FT}
     coord = Geometry.XPoint(FT(π))
-    space = Spaces.PointSpace(coord)
+    space = Spaces.PointSpace(context, coord)
     return space
 end
 
@@ -140,7 +143,7 @@ function all_spaces(
     context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
     return [
-        PointSpace(FT),
+        PointSpace(FT; context),
         SpectralElementSpace1D(FT; context),
         SpectralElementSpace2D(FT; context),
         # TODO: add these
