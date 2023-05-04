@@ -16,6 +16,13 @@ struct IntervalTopology{
     boundaries::B
 end
 
+struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
+    boundaries::B
+end
+Adapt.adapt_structure(to, topology::IntervalTopology) =
+    DeviceIntervalTopology(topology.boundaries)
+
+
 ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =
     ClimaComms.array_type(topology.context.device)
@@ -40,8 +47,7 @@ IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
     mesh,
 )
 
-isperiodic(topology::AbstractIntervalTopology) =
-    Domains.isperiodic(Topologies.domain(topology))
+isperiodic(topology::AbstractIntervalTopology) = isempty(topology.boundaries)
 
 function Base.show(io::IO, topology::AbstractIntervalTopology)
     print(io, "IntervalTopology on ", Topologies.mesh(topology))

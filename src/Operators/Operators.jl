@@ -17,6 +17,7 @@ import ..Fields: Fields, Field
 
 using ..RecursiveApply
 
+include("common.jl")
 include("spectralelement.jl")
 include("numericalflux.jl")
 include("finitedifference.jl")

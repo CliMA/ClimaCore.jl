@@ -1195,6 +1195,14 @@ function Base.fill!(data::VIFH, val)
     return data
 end
 
+@propagate_inbounds function Base.getindex(
+    data::VIFH{S},
+    I::CartesianIndex{5},
+) where {S}
+    i, _, _, v, h = I.I
+    @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(v, i, 1, h))
+end
+
 
 @generated function _property_view(
     data::VIFH{S, Ni, A},
