@@ -6,6 +6,7 @@ using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
 using ClimaComms
+using ClimaCommsMPI
 
 struct LinearRemap{T <: AbstractSpace, S <: AbstractSpace, M <: AbstractMatrix}
     target::T
@@ -268,10 +269,29 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+function nxelems(
+    topology::T,
+) where {
+    T <: Union{
+        Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
+        Topologies.Topology2D{<:ClimaCommsMPI.MPICommsContext},
+    },
+}
     size(Meshes.elements(topology.mesh), 1)
-nyelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+end
+function nyelems(
+    topology::T,
+) where {
+    T <: Union{
+        Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
+        Topologies.Topology2D{<:ClimaCommsMPI.MPICommsContext},
+    },
+}
     size(Meshes.elements(topology.mesh), 2)
+end
+# TODO change this back - modified to work with distributed spaces
+# nyelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+#     size(Meshes.elements(topology.mesh), 2)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)
