@@ -1,7 +1,6 @@
 import ClimaCore
 import ClimaCoreTempestRemap as CCTR
 using ClimaComms
-using MPI
 using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
 using Test
 # use these packages for manual inspection of solutions
