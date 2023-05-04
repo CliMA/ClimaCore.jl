@@ -6,7 +6,6 @@ using ..Fields: Field
 using ..DataLayouts
 using SparseArrays, LinearAlgebra
 using ClimaComms
-using ClimaCommsMPI
 
 struct LinearRemap{T <: AbstractSpace, S <: AbstractSpace, M <: AbstractMatrix}
     target::T
@@ -274,7 +273,7 @@ function nxelems(
 ) where {
     T <: Union{
         Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
-        Topologies.Topology2D{<:ClimaCommsMPI.MPICommsContext},
+        Topologies.Topology2D{<:ClimaComms.MPICommsContext},
     },
 }
     size(Meshes.elements(topology.mesh), 1)
@@ -284,7 +283,7 @@ function nyelems(
 ) where {
     T <: Union{
         Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
-        Topologies.Topology2D{<:ClimaCommsMPI.MPICommsContext},
+        Topologies.Topology2D{<:ClimaComms.MPICommsContext},
     },
 }
     size(Meshes.elements(topology.mesh), 2)

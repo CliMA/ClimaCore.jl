@@ -3,7 +3,6 @@
 import ClimaCore
 import ClimaCoreTempestRemap as CCTR
 using ClimaComms
-using ClimaCommsMPI
 using MPI
 using ClimaCore:
     Geometry, Meshes, Domains, Topologies, Spaces, Fields, Operators
@@ -28,7 +27,7 @@ function make_space(
     return space
 end
 
-comms_ctx = ClimaCommsMPI.MPICommsContext()
+comms_ctx = ClimaComms.MPICommsContext()
 pid, nprocs = ClimaComms.init(comms_ctx)
 comm = comms_ctx.mpicomm
 rank = MPI.Comm_rank(comm)
