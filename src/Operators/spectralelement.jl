@@ -41,7 +41,7 @@ Subtypes `Op` of this should define the following:
 
 Additionally, the result type `OpResult <: OperatorSlabResult` of `apply_operator` should define `get_node(::OpResult, ij, slabidx)`.
 """
-abstract type SpectralElementOperator end
+abstract type SpectralElementOperator <: AbstractOperator end
 
 """
     operator_axes(space)
@@ -81,7 +81,7 @@ This is similar to a `Base.Broadcast.Broadcasted` object, except it contains spa
 This is returned by `Base.Broadcast.broadcasted(op::SpectralElementOperator)`.
 """
 struct SpectralBroadcasted{Style, Op, Args, Axes, Work} <:
-       Base.AbstractBroadcasted
+       OperatorBroadcasted{Style}
     op::Op
     args::Args
     axes::Axes
@@ -104,9 +104,6 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
 
 return_space(::SpectralElementOperator, space) = space
 
-Base.axes(sbc::SpectralBroadcasted) =
-    isnothing(sbc.axes) ? return_space(sbc.op, tuplemap(axes, sbc.args)...) :
-    sbc.axes
 
 Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
     Base.Broadcast.broadcasted(SpectralStyle(), op, args...)
@@ -119,12 +116,6 @@ Base.Broadcast.broadcasted(
 
 Base.eltype(sbc::SpectralBroadcasted) =
     operator_return_eltype(sbc.op, tuplemap(eltype, sbc.args)...)
-
-@inline instantiate_args(args::Tuple) =
-    (Base.Broadcast.instantiate(args[1]), instantiate_args(Base.tail(args))...)
-@inline instantiate_args(args::Tuple{Any}) =
-    (Base.Broadcast.instantiate(args[1]),)
-@inline instantiate_args(::Tuple{}) = ()
 
 function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
     op = sbc.op
@@ -158,11 +149,6 @@ function Base.Broadcast.instantiate(
     return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
 end
 
-function Base.similar(sbc::SpectralBroadcasted, ::Type{Eltype}) where {Eltype}
-    space = axes(sbc)
-    return Field(Eltype, space)
-end
-
 function Base.similar(
     bc::Base.Broadcast.Broadcasted{<:AbstractSpectralStyle},
     ::Type{Eltype},
@@ -171,21 +157,7 @@ function Base.similar(
     return Field(Eltype, space)
 end
 
-function Base.copy(sbc::SpectralBroadcasted)
-    # figure out return type
-    dest = similar(sbc, eltype(sbc))
-    # allocate dest
-    copyto!(dest, sbc)
-end
-Base.Broadcast.broadcastable(sbc::SpectralBroadcasted) = sbc
 
-function Base.Broadcast.materialize(sbc::SpectralBroadcasted)
-    copy(Base.Broadcast.instantiate(sbc))
-end
-
-function Base.Broadcast.materialize!(dest, sbc::SpectralBroadcasted)
-    copyto!(dest, Base.Broadcast.instantiate(sbc))
-end
 
 # Functions for SlabBlockSpectralStyle
 function Base.copyto!(
@@ -275,17 +247,26 @@ function Base.copyto!(
     Nv = Spaces.nlevels(space)
     # executed
     @inbounds begin
-        @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_kernel!(out, sbc)
+        @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_spectral_kernel!(
+            out,
+            sbc,
+        )
     end
     return out
 end
 
-function copyto_kernel!(out::Fields.SpectralElementField2D, sbc)
+function copyto_spectral_kernel!(out::Fields.Field, sbc)
     @inbounds begin
         i = threadIdx().x
         j = threadIdx().y
         h = blockIdx().x
-        v = nothing
+        if out isa Fields.SpectralElementField
+            v = nothing
+        elseif out isa Fields.FaceExtrudedFiniteDifferenceField
+            v = blockIdx().y - half
+        else
+            v = blockIdx().y
+        end
         ij = CartesianIndex((i, j))
         slabidx = Fields.SlabIndex(v, h)
         result = get_node(sbc, ij, slabidx)

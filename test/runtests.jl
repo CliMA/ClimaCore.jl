@@ -37,13 +37,14 @@ if !Sys.iswindows()
 
     @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
+    #=
     @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end
     # now part of buildkite
     # @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
     # @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
     # now part of buildkite
     # @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
-
+    =#
     # now part of buildkite
     # @safetestset "Fields" begin @time include("Fields/field.jl") end
     @safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
@@ -100,7 +101,8 @@ if "CUDA" in ARGS
     @safetestset "GPU - device" begin @time include("gpu/device.jl") end
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
-    @safetestset "Operators - CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
+    @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
+    @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/cuda.jl") end
     @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end
 end
 

@@ -32,6 +32,20 @@ struct ExtrudedFiniteDifferenceSpace{
     face_ghost_geometry::LGG
 end
 
+Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
+    ExtrudedFiniteDifferenceSpace(
+        space.staggering,
+        Adapt.adapt(to, space.horizontal_space),
+        Adapt.adapt(to, space.vertical_topology),
+        Adapt.adapt(to, space.hypsography),
+        Adapt.adapt(to, space.global_geometry),
+        Adapt.adapt(to, space.center_local_geometry),
+        Adapt.adapt(to, space.face_local_geometry),
+        Adapt.adapt(to, space.center_ghost_geometry),
+        Adapt.adapt(to, space.face_ghost_geometry),
+    )
+
+
 const CenterExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellCenter}
 

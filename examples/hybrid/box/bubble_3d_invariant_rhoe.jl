@@ -52,7 +52,11 @@ function hvspace_3D(
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(comms_ctx.device),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),

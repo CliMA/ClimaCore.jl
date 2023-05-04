@@ -127,7 +127,16 @@ end
 FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
     FiniteDifferenceSpace{S}(Topologies.IntervalTopology(mesh))
 
-ClimaComms.device(space::FiniteDifferenceSpace) = ClimaComms.CPUDevice()
+ClimaComms.device(space::FiniteDifferenceSpace) =
+    ClimaComms.device(space.topology)
+
+Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
+    space.staggering,
+    Adapt.adapt(to, space.topology),
+    Adapt.adapt(to, space.global_geometry),
+    Adapt.adapt(to, space.center_local_geometry),
+    Adapt.adapt(to, space.face_local_geometry),
+)
 
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}

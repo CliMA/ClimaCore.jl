@@ -1,8 +1,13 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
+import ClimaComms
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
+import CUDA
+CUDA.allowscalar(false)
+
+device = ClimaComms.device()
 
 @testset "Scalar Field FiniteDifferenceSpaces" begin
     for FT in (Float32, Float64)
@@ -14,26 +19,35 @@ import ClimaCore.Domains: Geometry
         @test eltype(domain) === Geometry.ZPoint{FT}
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
-
-        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        topology = Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(device),
+            mesh,
+        )
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
-        @test sum(ones(FT, center_space)) ≈ pi
-        @test sum(ones(FT, face_space)) ≈ pi
+        @test sum(ones(FT, center_space)) ≈ pi broken =
+            device isa ClimaComms.CUDADevice
+        @test sum(ones(FT, face_space)) ≈ pi broken =
+            device isa ClimaComms.CUDADevice
 
         centers = getproperty(Fields.coordinate_field(center_space), :z)
-        @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2
+        @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         faces = getproperty(Fields.coordinate_field(face_space), :z)
-        @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
+        @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶜ = Operators.GradientF2C()
         ∂sin = Geometry.WVector.(∇ᶜ.(sin.(faces)))
-        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         divᶜ = Operators.DivergenceF2C()
         ∂sin = divᶜ.(Geometry.WVector.(sin.(faces)))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2
+        @test ∂sin ≈ cos.(centers) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         # Center -> Face operator
         # first order convergence at boundaries
@@ -42,21 +56,24 @@ import ClimaCore.Domains: Geometry
             right = Operators.SetValue(FT(pi)),
         )
         ∂z = Geometry.WVector.(∇ᶠ.(centers))
-        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT)
+        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT) broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-1
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-1 broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(Geometry.WVector(FT(0))),
             right = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
@@ -75,36 +92,48 @@ end
         @test eltype(domain) === Geometry.ZPoint{FT}
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
+        topology = Topologies.IntervalTopology(
+            ClimaComms.ClimaComms.SingletonCommsContext(),
+            mesh,
+        )
 
-        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(topology)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
-        @test sum(ones(FT, center_space)) ≈ 2pi
-        @test sum(ones(FT, face_space)) ≈ 2pi
+        @test sum(ones(FT, center_space)) ≈ 2pi broken =
+            device isa ClimaComms.CUDADevice
+        @test sum(ones(FT, face_space)) ≈ 2pi broken =
+            device isa ClimaComms.CUDADevice
 
         sinz_c = sin.(Fields.coordinate_field(center_space).z)
         cosz_c = cos.(Fields.coordinate_field(center_space).z)
-        @test sum(sinz_c) ≈ FT(0.0) atol = 1e-2
+        @test sum(sinz_c) ≈ FT(0.0) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         sinz_f = sin.(Fields.coordinate_field(face_space).z)
         cosz_f = cos.(Fields.coordinate_field(face_space).z)
-        @test sum(sinz_f) ≈ FT(0.0) atol = 1e-2
+        @test sum(sinz_f) ≈ FT(0.0) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶜ = Operators.GradientF2C()
         ∂sin = Geometry.WVector.(∇ᶜ.(sinz_f))
-        @test ∂sin ≈ Geometry.WVector.(cosz_c) atol = 1e-2
+        @test ∂sin ≈ Geometry.WVector.(cosz_c) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         divᶜ = Operators.DivergenceF2C()
         ∂sin = divᶜ.(Geometry.WVector.(sinz_f))
-        @test ∂sin ≈ cosz_c atol = 1e-2
+        @test ∂sin ≈ cosz_c atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶠ = Operators.GradientC2F()
         ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
-        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-1
+        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-1 broken =
+            device isa ClimaComms.CUDADevice
 
         ∇ᶠ = Operators.GradientC2F()
         ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
-        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2
+        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2 broken =
+            device isa ClimaComms.CUDADevice
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)

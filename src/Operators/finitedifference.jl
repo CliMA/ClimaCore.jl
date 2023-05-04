@@ -1,135 +1,3 @@
-# The geometry of the staggerd grid used by FiniteDifference in the vertical (sometimes called the C-grid)
-# is (in one dimension) shown below
-
-#         face   cell   face   cell   face
-# left                                        right
-#                 i-1            i
-#                  ↓             ↓
-#           |      ×      |      ×      |
-#           ↑             ↑             ↑
-#          i-1            i            i+1
-
-# Gradient:
-#  scalar => d₃ = D₃ x = Covariant3Vector(x[i+half] - x[i-half])
-# ∂ξ³∂x * d₃
-
-# Divergence: 1/J * D₃ (Jv³):
-#  Jv³ = J * contravariant3(v)
-#  div = 1/J * (Jv³[i+half] - Jv³[i-half])
-
-
-
-#====
-
-interpolate, multiply, gradient
-
-  --->
-ca  fa  fb  cb
-    1 x F
-  x       \
-1           1    Boundary indices
-  \       /
-    2 - 2        --------------
-  /       \
-2           2    Interior indices
-  \       /
-    3 - 3
-  /       \l
-3           3
-
-gradient with dirichlet
-
-ca  fa
-D - 1   modified stencil
-  /
-1
-  \
-    2   regular stencil
-  /
-2
-  \
-    3
-  /
-3
-
-
-c2c laplacian, dirichlet
-
-D - 1
-  /   \
-1       1
-  \   /
-    2   ---------------------
-  /   \
-2       2
-  \   /
-    3
-  /   \
-3
-
-c2c laplacian, neumann
-c   f   c
-
-    N
-      \
-1       1
-  \   /
-    2  ----------------------
-  /   \
-2       2
-  \   /
-    n
-  /   \
-n       n
-      /
-   n+1
-    =N
-
-
-f2f laplacian, dirichlet
-LaplacianF2F(left=Dirichlet(D))(x) = GradientC2F(left=Neumann(0))(GradientF2C(left=Dirichlet(D))(x))
-
-
-dθ/dt = - ∇^2 θ
-  --->
-fa  ca  fb
-D       _   effectively ignored: -dD/dt since is set by equations: use 2-point, 1-sided stencil?
-  \
-    1       boundary window
-  /   \
-2       2
-  \   /
-    2     ---------------
-  /   \
-3       3   interior
-  \   /
-    3
-
-interior_indices1 = 2:...
-interior_indices2 = 3:...
-
-
-f2f laplacian, neumann
-LaplacianF2F(left=Neumann(N))(x) = GradientC2F(left=Dirichlet(N))(GradientF2C(left=nothing)(x))
-
-  --->
-fa  ca  fb
-1   N - 1   set by 1-sided stencil
-  \   /
-    1       boundary window
-  /   \     ---------------
-2       2
-  \   /
-    2
-  /   \
-3       3   interior
-  \   /
-    3
-
-interior_indices1 = 1:n
-interior_indices2 = 2:n-1
-===#
-
 import ..Utilities: PlusHalf, half
 
 left_idx(
@@ -290,7 +158,7 @@ An abstract type for finite difference operators. Instances of this should defin
 
 See also [`BoundaryCondition`](@ref) for how to define the boundaries.
 """
-abstract type FiniteDifferenceOperator end
+abstract type FiniteDifferenceOperator <: AbstractOperator end
 
 return_eltype(::FiniteDifferenceOperator, arg) = eltype(arg)
 
@@ -327,8 +195,69 @@ abstract type AbstractStencilStyle <: Fields.AbstractFieldStyle end
 # the .f field is an operator
 struct StencilStyle <: AbstractStencilStyle end
 
-# the .f field is a function, but one of the args (or their args) is a StencilStyle
-struct CompositeStencilStyle <: AbstractStencilStyle end
+struct ColumnStencilStyle <: AbstractStencilStyle end
+struct CUDAColumnStencilStyle <: AbstractStencilStyle end
+
+AbstractStencilStyle(::ClimaComms.CPU) = ColumnStencilStyle
+AbstractStencilStyle(::ClimaComms.CUDA) = CUDAColumnStencilStyle
+
+"""
+    StencilBroadcasted{Style}(op, args[,axes[, work]])
+
+This is similar to a `Base.Broadcast.Broadcasted` object.
+
+This is returned by `Base.Broadcast.broadcasted(op::FiniteDifferenceOperator)`.
+"""
+struct StencilBroadcasted{Style, Op, Args, Axes} <: OperatorBroadcasted{Style}
+    op::Op
+    args::Args
+    axes::Axes
+end
+StencilBroadcasted{Style}(
+    op::Op,
+    args::Args,
+    axes::Axes = nothing,
+) where {Style, Op, Args, Axes} =
+    StencilBroadcasted{Style, Op, Args, Axes}(op, args, axes)
+
+Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
+    StencilBroadcasted{Style}(
+        sbc.op,
+        Adapt.adapt(to, sbc.args),
+        Adapt.adapt(to, sbc.axes),
+    )
+
+
+function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
+    op = sbc.op
+    # recursively instantiate the arguments to allocate intermediate work arrays
+    args = instantiate_args(sbc.args)
+    # axes: same logic as Broadcasted
+    if sbc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
+        axes = Base.axes(sbc)
+    else
+        axes = sbc.axes
+        Base.Broadcast.check_broadcast_axes(axes, args...)
+    end
+    Style = AbstractStencilStyle(ClimaComms.device(axes))
+    return StencilBroadcasted{Style}(op, args, axes)
+end
+function Base.Broadcast.instantiate(
+    bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
+)
+    # recursively instantiate the arguments to allocate intermediate work arrays
+    args = instantiate_args(bc.args)
+    # axes: same logic as Broadcasted
+    if bc.axes isa Nothing # Not done via dispatch to make it easier to extend instantiate(::Broadcasted{Style})
+        axes = Base.Broadcast.combine_axes(args...)
+    else
+        axes = bc.axes
+        Base.Broadcast.check_broadcast_axes(axes, args...)
+    end
+    Style = AbstractStencilStyle(ClimaComms.device(axes))
+    return Base.Broadcast.Broadcasted{Style}(bc.f, args, axes)
+end
+
 
 
 """
@@ -338,12 +267,6 @@ Defines the element type of the result of operator `Op`
 """
 function return_eltype end
 
-"""
-    return_space(::Op, spaces...)
-
-Defines the space the operator `Op` returns values on.
-"""
-function return_space end
 
 """
     stencil_interior_width(::Op, args...)
@@ -2901,39 +2824,18 @@ Base.@propagate_inbounds function stencil_right_boundary(
 end
 
 
+# code for figuring out boundary widths
+# TODO: should move this to `instantiate` and store this in the StencilBroadcasted object?
 
-stencil_interior_width(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
-    stencil_interior_width(bc.f, bc.args...)
+_stencil_interior_width(bc::StencilBroadcasted) =
+    stencil_interior_width(bc.op, bc.args...)
 
-boundary_width(bc::Base.Broadcast.Broadcasted{StencilStyle}, loc) =
-    has_boundary(bc.f, loc) ?
-    boundary_width(bc.f, get_boundary(bc.f, loc), bc.args...) : 0
-
-@inline function left_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
-    _,
-    loc::LeftBoundaryWindow,
-)
-    space = axes(bc)
-    widths = stencil_interior_width(bc)
-    args_idx = _left_interior_window_idx_args(bc.args, space, loc)
-    args_idx_widths = tuplemap((arg, width) -> arg - width[1], args_idx, widths)
-    return max(
-        max(args_idx_widths...),
-        left_idx(space) + boundary_width(bc, loc),
-    )
-end
-
-@inline function right_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
-    _,
-    loc::RightBoundaryWindow,
-)
-    space = axes(bc)
-    widths = stencil_interior_width(bc)
-    args_idx = _right_interior_window_idx_args(bc.args, space, loc)
-    args_widths = tuplemap((arg, width) -> arg - width[2], args_idx, widths)
-    return min(min(args_widths...), right_idx(space) - boundary_width(bc, loc))
+function boundary_width(bc::StencilBroadcasted, loc)
+    if has_boundary(bc.op, loc)
+        boundary_width(bc.op, get_boundary(bc.op, loc), bc.args...)
+    else
+        0
+    end
 end
 
 @inline _left_interior_window_idx_args(args::Tuple, space, loc) = (
@@ -2944,8 +2846,27 @@ end
     (left_interior_window_idx(args[1], space, loc),)
 @inline _left_interior_window_idx_args(args::Tuple{}, space, loc) = ()
 
+"""
+    left_interior_window_idx(arg, space, loc)
+
+Compute the index of the leftmost point which uses only the interior stencil of the space.
+"""
 @inline function left_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
+    bc::StencilBroadcasted,
+    _,
+    loc::LeftBoundaryWindow,
+)
+    space = axes(bc)
+    widths = _stencil_interior_width(bc)
+    args_idx = _left_interior_window_idx_args(bc.args, space, loc)
+    args_idx_widths = tuplemap((arg, width) -> arg - width[1], args_idx, widths)
+    return max(
+        max(args_idx_widths...),
+        left_idx(space) + boundary_width(bc, loc),
+    )
+end
+@inline function left_interior_window_idx(
+    bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
     _,
     loc::LeftBoundaryWindow,
 )
@@ -2953,6 +2874,20 @@ end
     arg_idxs = _left_interior_window_idx_args(bc.args, space, loc)
     maximum(arg_idxs)
 end
+@inline function left_interior_window_idx(
+    field::Union{
+        Field,
+        Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
+    },
+    _,
+    loc::LeftBoundaryWindow,
+)
+    left_idx(axes(field))
+end
+@inline function left_interior_window_idx(_, space, loc::LeftBoundaryWindow)
+    left_idx(space)
+end
+
 
 @inline _right_interior_window_idx_args(args::Tuple, space, loc) = (
     right_interior_window_idx(args[1], space, loc),
@@ -2963,7 +2898,19 @@ end
 @inline _right_interior_window_idx_args(args::Tuple{}, space, loc) = ()
 
 @inline function right_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{CompositeStencilStyle},
+    bc::StencilBroadcasted,
+    _,
+    loc::RightBoundaryWindow,
+)
+    space = axes(bc)
+    widths = _stencil_interior_width(bc)
+    args_idx = _right_interior_window_idx_args(bc.args, space, loc)
+    args_widths = tuplemap((arg, width) -> arg - width[2], args_idx, widths)
+    return min(min(args_widths...), right_idx(space) - boundary_width(bc, loc))
+end
+
+@inline function right_interior_window_idx(
+    bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
     _,
     loc::RightBoundaryWindow,
 )
@@ -2972,65 +2919,39 @@ end
     minimum(arg_idxs)
 end
 
-@inline function left_interior_window_idx(
-    field::Field,
-    _,
-    loc::LeftBoundaryWindow,
-)
-    left_idx(axes(field))
-end
-
 @inline function right_interior_window_idx(
-    field::Field,
+    field::Union{
+        Field,
+        Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
+    },
     _,
     loc::RightBoundaryWindow,
 )
     right_idx(axes(field))
 end
-
-@inline function left_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{Style},
-    _,
-    loc::LeftBoundaryWindow,
-) where {Style <: Fields.AbstractFieldStyle}
-    left_idx(axes(bc))
-end
-
-@inline function right_interior_window_idx(
-    bc::Base.Broadcast.Broadcasted{Style},
-    _,
-    loc::RightBoundaryWindow,
-) where {Style <: Fields.AbstractFieldStyle}
-    right_idx(axes(bc))
-end
-
-@inline function left_interior_window_idx(_, space, loc::LeftBoundaryWindow)
-    left_idx(space)
-end
-
 @inline function right_interior_window_idx(_, space, loc::RightBoundaryWindow)
     right_idx(space)
 end
 
+
 Base.@propagate_inbounds function getidx(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
+    bc::StencilBroadcasted,
     loc::Interior,
     idx,
     hidx,
 )
-    stencil_interior(bc.f, loc, idx, hidx, bc.args...)
+    stencil_interior(bc.op, loc, idx, hidx, bc.args...)
 end
 
 Base.@propagate_inbounds function getidx(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
+    bc::StencilBroadcasted,
     loc::LeftBoundaryWindow,
     idx,
     hidx,
 )
-    op = bc.f
+    op = bc.op
     space = axes(bc)
-    if has_boundary(bc.f, loc) &&
-       idx < left_idx(space) + boundary_width(bc, loc)
+    if has_boundary(op, loc) && idx < left_idx(space) + boundary_width(bc, loc)
         stencil_left_boundary(
             op,
             get_boundary(op, loc),
@@ -3046,14 +2967,14 @@ Base.@propagate_inbounds function getidx(
 end
 
 Base.@propagate_inbounds function getidx(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
+    bc::StencilBroadcasted,
     loc::RightBoundaryWindow,
     idx,
     hidx,
 )
-    op = bc.f
+    op = bc.op
     space = axes(bc)
-    if has_boundary(bc.f, loc) &&
+    if has_boundary(op, loc) &&
        idx > (right_idx(space) - boundary_width(bc, loc))
         stencil_right_boundary(
             op,
@@ -3071,16 +2992,15 @@ end
 
 # broadcasting a StencilStyle gives a CompositeStencilStyle
 Base.Broadcast.BroadcastStyle(
-    ::Type{<:Base.Broadcast.Broadcasted{StencilStyle}},
-) = CompositeStencilStyle()
+    ::Type{<:StencilBroadcasted{Style}},
+) where {Style} = Style()
 
 Base.Broadcast.BroadcastStyle(
-    ::AbstractStencilStyle,
+    style::AbstractStencilStyle,
     ::Fields.AbstractFieldStyle,
-) = CompositeStencilStyle()
+) = style
 
-Base.eltype(bc::Base.Broadcast.Broadcasted{StencilStyle}) =
-    return_eltype(bc.f, bc.args...)
+Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
 Base.@propagate_inbounds function getidx(
     bc::Fields.CenterFiniteDifferenceField,
@@ -3093,6 +3013,21 @@ Base.@propagate_inbounds function getidx(
         idx = mod1(idx, length(space))
     end
     return @inbounds field_data[idx]
+end
+Base.@propagate_inbounds function getidx(
+    bc::Fields.CenterExtrudedFiniteDifferenceField,
+    ::Location,
+    idx::Integer,
+    hidx,
+)
+    field_data = Fields.field_values(bc)
+    space = axes(bc)
+    v = idx
+    if Topologies.isperiodic(Spaces.vertical_topology(space))
+        v = mod1(v, length(space))
+    end
+    i, j, h = hidx
+    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
 end
 
 Base.@propagate_inbounds function getidx(
@@ -3107,6 +3042,21 @@ Base.@propagate_inbounds function getidx(
         i = mod1(i, length(space))
     end
     return @inbounds field_data[i]
+end
+Base.@propagate_inbounds function getidx(
+    bc::Fields.FaceExtrudedFiniteDifferenceField,
+    ::Location,
+    idx::PlusHalf,
+    hidx,
+)
+    field_data = Fields.field_values(bc)
+    space = axes(bc)
+    v = idx.i + 1
+    if Topologies.isperiodic(space.vertical_topology)
+        v = mod1(i, length(space))
+    end
+    i, j, h = hidx
+    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
 end
 
 # unwap boxed scalars
@@ -3129,17 +3079,6 @@ Base.@propagate_inbounds function getidx(
     hidx,
 )
     getidx(column(field, hidx...), loc, idx)
-    # inferred_getidx_error(typeof(idx), typeof(axes(field)))
-end
-
-function getidx(
-    field::Base.Broadcast.Broadcasted{StencilStyle},
-    ::Location,
-    idx,
-    hidx,
-)
-    space = axes(field)
-    inferred_getidx_error(typeof(idx), typeof(space))
 end
 
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
@@ -3161,7 +3100,6 @@ Base.@propagate_inbounds function getidx(
     idx,
     hidx,
 )
-    #_args = tuplemap(arg -> getidx(arg, loc, idx), bc.args)
     _args = getidx_args(bc.args, loc, idx, hidx)
     bc.f(_args...)
 end
@@ -3209,24 +3147,13 @@ function Base.Broadcast.broadcasted(op::FiniteDifferenceOperator, args...)
     Base.Broadcast.broadcasted(StencilStyle(), op, args...)
 end
 
-# recursively unwrap axes broadcast arguments in a way that is statically reducible by the optimizer
-@inline axes_args(args::Tuple) = (axes(args[1]), axes_args(Base.tail(args))...)
-@inline axes_args(arg::Tuple{Any}) = (axes(arg[1]),)
-@inline axes_args(::Tuple{}) = ()
-
 function Base.Broadcast.broadcasted(
-    ::StencilStyle,
+    ::Style,
     op::FiniteDifferenceOperator,
     args...,
-)
-    _axes = return_space(op, axes_args(args)...)
-    Base.Broadcast.Broadcasted{StencilStyle}(op, args, _axes)
+) where {Style <: AbstractStencilStyle}
+    StencilBroadcasted{Style}(op, args)
 end
-
-Base.Broadcast.instantiate(bc::Base.Broadcast.Broadcasted{StencilStyle}) = bc
-Base.Broadcast._broadcast_getindex_eltype(
-    bc::Base.Broadcast.Broadcasted{StencilStyle},
-) = eltype(bc)
 
 allow_mismatched_fd_spaces() = false
 
@@ -3277,26 +3204,14 @@ function Base.similar(
     return Field(Eltype, sp)
 end
 
-function _serial_copyto!(
-    field_out::Field,
-    bc::Base.Broadcast.Broadcasted{S},
-    Ni::Int,
-    Nj::Int,
-    Nh::Int,
-) where {S <: AbstractStencilStyle}
+function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
         apply_stencil!(field_out, bc, (i, j, h))
     end
     return field_out
 end
 
-function _threaded_copyto!(
-    field_out::Field,
-    bc::Base.Broadcast.Broadcasted{S},
-    Ni::Int,
-    Nj::Int,
-    Nh::Int,
-) where {S <: AbstractStencilStyle}
+function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nj, i in 1:Ni
@@ -3308,9 +3223,42 @@ function _threaded_copyto!(
 end
 
 function Base.copyto!(
+    out::Field,
+    bc::Union{
+        StencilBroadcasted{CUDAColumnStencilStyle},
+        Broadcasted{CUDAColumnStencilStyle},
+    },
+)
+    space = axes(out)
+    if space isa Spaces.ExtrudedFiniteDifferenceSpace
+        QS = Spaces.quadrature_style(space)
+        Nq = Quadratures.degrees_of_freedom(QS)
+        Nh = Topologies.nlocalelems(Spaces.topology(space))
+    else
+        Nq = 1
+        Nh = 1
+    end
+    # executed
+    @cuda threads = (Nq, Nq) blocks = (Nh,) copyto_stencil_kernel!(out, bc)
+    return out
+end
+
+function copyto_stencil_kernel!(out, bc)
+    i = threadIdx().x
+    j = threadIdx().y
+    h = blockIdx().x
+    hidx = (i, j, h)
+    apply_stencil!(out, bc, hidx)
+    return nothing
+end
+
+function Base.copyto!(
     field_out::Field,
-    bc::Base.Broadcast.Broadcasted{S},
-) where {S <: AbstractStencilStyle}
+    bc::Union{
+        StencilBroadcasted{ColumnStencilStyle},
+        Broadcasted{ColumnStencilStyle},
+    },
+)
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)

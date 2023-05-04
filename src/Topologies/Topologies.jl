@@ -2,7 +2,7 @@ module Topologies
 
 using DocStringExtensions
 
-import ClimaComms
+import ClimaComms, Adapt
 
 import ClimaComms
 import ..Geometry

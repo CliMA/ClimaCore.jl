@@ -92,3 +92,14 @@ function Base.copyto!(
     end
     return dest
 end
+
+function Base.copyto!(
+    dest::VF{S},
+    bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
+) where {S, A <: CUDA.CuArray}
+    _, _, _, Nv, Nh = size(bc)
+    if Nv > 0 && Nh > 0
+        CUDA.@cuda threads = (1, 1) blocks = (Nh, Nv) knl_copyto!(dest, bc)
+    end
+    return dest
+end
