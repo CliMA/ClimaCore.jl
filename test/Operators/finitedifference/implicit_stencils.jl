@@ -1,9 +1,44 @@
+#=
+The performance of this test needs to be improved
+because the compiler is doing a lot of inference,
+which makes this test take ~1hr.
+
+# For running all tests:
+```
+julia -O0 --check-bounds=yes --project=test
+push!(ARGS, "--float_type", "Float32")
+include(joinpath("test", "Operators", "finitedifference", "implicit_stencils.jl"))
+```
+
+# For interactive use:
+```julia
+julia -O0 --check-bounds=yes --project=test
+push!(ARGS, "--float_type", "Float32")
+include(joinpath("test", "Operators", "finitedifference", "implicit_stencils_utils.jl"))
+
+# Once launched
+center_space = get_space();
+all_ops = get_all_ops(center_space);
+
+@testset "Test pointwise throws" begin
+    @time test_pointwise_stencils_throws(all_ops)
+end
+@testset "Test pointwise apply" begin
+    @time test_pointwise_stencils_apply(all_ops)
+end
+@testset "Test pointwise compose" begin
+    @time test_pointwise_stencils_compose(all_ops)
+end
+```
+=#
 using Test
 using ClimaComms
 using Random: seed!
+seed!(1) # ensures reproducibility
 
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
 using ClimaCore: Operators
+import ClimaCore.Operators as OP
 
 import ArgParse
 function parse_commandline()
@@ -54,8 +89,7 @@ Base.Broadcast.broadcasted(op::CurriedTwoArgOperator, arg1) =
 Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     CurriedTwoArgOperator(Operators.Operator2Stencil(op.op), op.arg2)
 
-@testset "Pointwise Stencil Construction/Composition/Application" begin
-    seed!(1) # ensures reproducibility
+function get_space()
 
     radius = FT(1e7)
     zmax = FT(1e4)
@@ -78,6 +112,10 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
 
     # TODO: Replace this with a space that includes topography.
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    return center_space
+end
+
+function get_all_ops(center_space)
     center_coords = Fields.coordinate_field(center_space)
     face_coords = Fields.coordinate_field(
         Spaces.FaceExtrudedFiniteDifferenceSpace(center_space),
@@ -85,12 +123,12 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
 
     # We can't use non-zero non-extrapolation BCs because Operator2Stencil
     # does not account for them (it only handles linear transformations).
-    zero_scalar = Operators.SetValue(zero(FT))
-    zero_vector = Operators.SetValue(Geometry.Covariant3Vector(zero(FT)))
-    zero_grad = Operators.SetGradient(Geometry.Covariant3Vector(zero(FT)))
-    zero_div = Operators.SetDivergence(zero(FT))
-    zero_curl = Operators.SetCurl(Geometry.Contravariant3Vector(zero(FT)))
-    extrap = Operators.Extrapolate()
+    zero_scalar = OP.SetValue(zero(FT))
+    zero_vector = OP.SetValue(Geometry.Covariant3Vector(zero(FT)))
+    zero_grad = OP.SetGradient(Geometry.Covariant3Vector(zero(FT)))
+    zero_div = OP.SetDivergence(zero(FT))
+    zero_curl = OP.SetCurl(Geometry.Contravariant3Vector(zero(FT)))
+    extrap = OP.Extrapolate()
 
     # `C` denotes "center" and `F` denotes "face"
     # `S` denotes "scalar" and `V` denotes "vector"
@@ -103,96 +141,125 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     a_CV = map(rand_vector, center_coords)
     a_FV = map(rand_vector, face_coords)
 
-    ops_F2C_ξ2ξ = (
-        Operators.InterpolateF2C(),
-        Operators.LeftBiasedF2C(),
-        Operators.RightBiasedF2C(),
-    )
-    ops_C2F_ξ2ξ = (Operators.InterpolateC2F(bottom = extrap, top = extrap),)
     ops_F2C_S2S = (
-        ops_F2C_ξ2ξ...,
-        Operators.LeftBiasedF2C(bottom = zero_scalar),
-        Operators.RightBiasedF2C(top = zero_scalar),
+        OP.InterpolateF2C(),
+        OP.LeftBiasedF2C(),
+        OP.RightBiasedF2C(),
+        OP.LeftBiasedF2C(bottom = zero_scalar),
+        OP.RightBiasedF2C(top = zero_scalar),
     )
     ops_C2F_S2S = (
-        ops_C2F_ξ2ξ...,
-        Operators.InterpolateC2F(bottom = zero_scalar, top = zero_scalar),
-        Operators.InterpolateC2F(bottom = zero_grad, top = zero_grad),
-        Operators.LeftBiasedC2F(bottom = zero_scalar),
-        Operators.RightBiasedC2F(top = zero_scalar),
+        OP.InterpolateC2F(bottom = extrap, top = extrap),
+        OP.InterpolateC2F(bottom = zero_scalar, top = zero_scalar),
+        OP.InterpolateC2F(bottom = zero_grad, top = zero_grad),
+        OP.LeftBiasedC2F(bottom = zero_scalar),
+        OP.RightBiasedC2F(top = zero_scalar),
     )
     ops_F2C_V2V = (
-        ops_F2C_ξ2ξ...,
-        Operators.LeftBiasedF2C(bottom = zero_vector),
-        Operators.RightBiasedF2C(top = zero_vector),
+        OP.InterpolateF2C(),
+        OP.LeftBiasedF2C(),
+        OP.RightBiasedF2C(),
+        OP.LeftBiasedF2C(bottom = zero_vector),
+        OP.RightBiasedF2C(top = zero_vector),
         CurriedTwoArgOperator(
-            Operators.AdvectionC2C(bottom = zero_vector, top = zero_vector),
+            OP.AdvectionC2C(bottom = zero_vector, top = zero_vector),
             a_CV,
         ),
         CurriedTwoArgOperator(
-            Operators.AdvectionC2C(bottom = extrap, top = extrap),
+            OP.AdvectionC2C(bottom = extrap, top = extrap),
             a_CV,
         ),
         CurriedTwoArgOperator(
-            Operators.FluxCorrectionC2C(bottom = extrap, top = extrap),
+            OP.FluxCorrectionC2C(bottom = extrap, top = extrap),
             a_CV,
         ),
     )
     ops_C2F_V2V = (
-        ops_C2F_ξ2ξ...,
-        Operators.InterpolateC2F(bottom = zero_vector, top = zero_vector),
-        Operators.LeftBiasedC2F(bottom = zero_vector),
-        Operators.RightBiasedC2F(top = zero_vector),
+        OP.InterpolateC2F(bottom = extrap, top = extrap),
+        OP.InterpolateC2F(bottom = zero_vector, top = zero_vector),
+        OP.LeftBiasedC2F(bottom = zero_vector),
+        OP.RightBiasedC2F(top = zero_vector),
         CurriedTwoArgOperator(
-            Operators.FluxCorrectionF2F(bottom = extrap, top = extrap),
+            OP.FluxCorrectionF2F(bottom = extrap, top = extrap),
             a_FV,
         ),
-        Operators.CurlC2F(bottom = zero_vector, top = zero_vector),
-        Operators.CurlC2F(bottom = zero_curl, top = zero_curl),
+        OP.CurlC2F(bottom = zero_vector, top = zero_vector),
+        OP.CurlC2F(bottom = zero_curl, top = zero_curl),
     )
     ops_F2C_S2V = (
-        Operators.GradientF2C(),
-        Operators.GradientF2C(bottom = zero_scalar, top = zero_scalar),
+        OP.GradientF2C(),
+        OP.GradientF2C(bottom = zero_scalar, top = zero_scalar),
     )
     ops_C2F_S2V = (
-        Operators.GradientC2F(bottom = zero_scalar, top = zero_scalar),
-        Operators.GradientC2F(bottom = zero_grad, top = zero_grad),
+        OP.GradientC2F(bottom = zero_scalar, top = zero_scalar),
+        OP.GradientC2F(bottom = zero_grad, top = zero_grad),
     )
     ops_F2C_V2S = (
         CurriedTwoArgOperator(
-            Operators.AdvectionC2C(bottom = zero_scalar, top = zero_scalar),
+            OP.AdvectionC2C(bottom = zero_scalar, top = zero_scalar),
             a_CS,
         ),
         CurriedTwoArgOperator(
-            Operators.AdvectionC2C(bottom = extrap, top = extrap),
+            OP.AdvectionC2C(bottom = extrap, top = extrap),
             a_CS,
         ),
         CurriedTwoArgOperator(
-            Operators.FluxCorrectionC2C(bottom = extrap, top = extrap),
+            OP.FluxCorrectionC2C(bottom = extrap, top = extrap),
             a_CS,
         ),
-        Operators.DivergenceF2C(),
-        Operators.DivergenceF2C(bottom = zero_vector, top = zero_vector),
+        OP.DivergenceF2C(),
+        OP.DivergenceF2C(bottom = zero_vector, top = zero_vector),
     )
     ops_C2F_V2S = (
         CurriedTwoArgOperator(
-            Operators.FluxCorrectionF2F(bottom = extrap, top = extrap),
+            OP.FluxCorrectionF2F(bottom = extrap, top = extrap),
             a_FS,
         ),
-        Operators.DivergenceC2F(bottom = zero_vector, top = zero_vector),
-        Operators.DivergenceC2F(bottom = zero_div, top = zero_div),
+        OP.DivergenceC2F(bottom = zero_vector, top = zero_vector),
+        OP.DivergenceC2F(bottom = zero_div, top = zero_div),
     )
+    return (;
+        extrap,
+        ops_F2C_S2S,
+        ops_C2F_S2S,
+        ops_F2C_V2V,
+        ops_C2F_V2V,
+        ops_F2C_S2V,
+        ops_C2F_S2V,
+        ops_F2C_V2S,
+        ops_C2F_V2S,
+        a_FS,
+        a_CS,
+        a_FV,
+        a_CV,
+    )
+end
 
+function test_pointwise_stencils_throws(all_ops)
+    (; extrap, a_FS, a_FV) = all_ops
     # TODO: Make these test cases work.
     for (a, op) in (
-        (a_FS, Operators.GradientF2C(bottom = extrap, top = extrap)),
-        (a_FV, Operators.DivergenceF2C(bottom = extrap, top = extrap)),
+        (a_FS, OP.GradientF2C(bottom = extrap, top = extrap)),
+        (a_FV, OP.DivergenceF2C(bottom = extrap, top = extrap)),
     )
-        @test_throws ArgumentError Operators.Operator2Stencil(op).(a)
+        @test_throws ArgumentError OP.Operator2Stencil(op).(a)
     end
+end
 
-    apply = Operators.ApplyStencil()
-    compose = Operators.ComposeStencils()
+function test_pointwise_stencils_apply(all_ops)
+    (;
+        ops_F2C_S2S,
+        ops_C2F_S2S,
+        ops_F2C_V2V,
+        ops_C2F_V2V,
+        ops_F2C_S2V,
+        ops_C2F_S2V,
+        ops_F2C_V2S,
+        ops_C2F_V2S,
+    ) = all_ops
+    (; a_FS, a_CS, a_FV, a_CV) = all_ops
+    apply = OP.ApplyStencil()
+    compose = OP.ComposeStencils()
     for (a0, a1, op1s) in (
         (a_FS, a_FS, (ops_F2C_S2S..., ops_F2C_S2V...)),
         (a_CS, a_CS, (ops_C2F_S2S..., ops_C2F_S2V...)),
@@ -200,11 +267,43 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         (a_CS, a_CV, (ops_C2F_V2V..., ops_C2F_V2S...)),
     )
         for op1 in op1s
-            stencil_op1 = Operators.Operator2Stencil(op1)
+            stencil_op1 = OP.Operator2Stencil(op1)
             tested_value = apply.(stencil_op1.(a1), a0)
             @test tested_value ≈ op1.(a1 .* a0) atol = 1e-6
         end
     end
+    return nothing
+end
+
+function get_tested_value(op1, op2, a0, a1, a2)
+    apply = OP.ApplyStencil()
+    compose = OP.ComposeStencils()
+    stencil_op1 = OP.Operator2Stencil(op1)
+    stencil_op2 = OP.Operator2Stencil(op2)
+    tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+    return tested_value
+end
+function get_ref_value(op1, op2, a0, a1, a2)
+    apply = OP.ApplyStencil()
+    compose = OP.ComposeStencils()
+    stencil_op1 = OP.Operator2Stencil(op1)
+    stencil_op2 = OP.Operator2Stencil(op2)
+    ref_value = op2.(a2 .* op1.(a1 .* a0))
+    return ref_value
+end
+
+function test_pointwise_stencils_compose(all_ops)
+    (;
+        ops_F2C_S2S,
+        ops_C2F_S2S,
+        ops_F2C_V2V,
+        ops_C2F_V2V,
+        ops_F2C_S2V,
+        ops_C2F_S2V,
+        ops_F2C_V2S,
+        ops_C2F_V2S,
+    ) = all_ops
+    (; a_FS, a_CS, a_FV, a_CV) = all_ops
     for (a0, a1, a2, op1s, op2s) in (
         (a_FS, a_FS, a_CS, ops_F2C_S2S, (ops_C2F_S2S..., ops_C2F_S2V...)),
         (a_CS, a_CS, a_FS, ops_C2F_S2S, (ops_F2C_S2S..., ops_F2C_S2V...)),
@@ -217,12 +316,34 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     )
         for op1 in op1s
             for op2 in op2s
-                stencil_op1 = Operators.Operator2Stencil(op1)
-                stencil_op2 = Operators.Operator2Stencil(op2)
-                tested_value =
-                    apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-                @test tested_value ≈ op2.(a2 .* op1.(a1 .* a0)) atol = 1e-6
+                # stencil_op1 = OP.Operator2Stencil(op1)
+                # stencil_op2 = OP.Operator2Stencil(op2)
+                # test_op(op1, op2, a0, a1)
+                # tested_value =
+                #     apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+                # ref_value = op2.(a2 .* op1.(a1 .* a0))
+                # @test tested_value ≈ ref_value atol = 1e-6
+                tv = get_tested_value(op1, op2, a0, a1, a2)
+                rv = get_ref_value(op1, op2, a0, a1, a2)
+                @test tv ≈ rv atol = 1e-6
             end
         end
     end
+    return nothing
 end
+
+function main()
+    center_space = get_space()
+    all_ops = get_all_ops(center_space)
+    @testset "Test pointwise throws" begin
+        @time test_pointwise_stencils_throws(all_ops)
+    end
+    @testset "Test pointwise apply" begin
+        @time test_pointwise_stencils_apply(all_ops)
+    end
+    @testset "Test pointwise compose" begin
+        @time test_pointwise_stencils_compose(all_ops)
+    end
+end
+
+main()
