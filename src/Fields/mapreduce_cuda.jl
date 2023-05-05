@@ -108,7 +108,7 @@ function mapreduce_cuda(
             Val(shmemsize),
         )
     end
-    return Array(Array(reduce_cuda)[1, :])
+    return Array(Array(reduce_cuda)[1, :])[1]
 end
 
 function mapreduce_cuda_kernel!(
@@ -116,7 +116,7 @@ function mapreduce_cuda_kernel!(
     f,
     op,
     pdata::AbstractArray{T, N},
-    pwt::AbstractArray{T, 4},
+    pwt::AbstractArray{T, N},
     weighting::Bool,
     n_ops_on_load::Int,
     ::Val{shmemsize},
@@ -132,12 +132,11 @@ function mapreduce_cuda_kernel!(
     reduction[tidx] = 0
     (Nv, Nij, Nf, Nh) = _get_dims(pdata)
     nitems = Nv * Nij * Nij * Nf * Nh
-    iidx, jidx, hidx = _get_idxs(Nv, Nij, Nf, Nh, fidx, gidx)
 
     # load shmem
     if gidx ≤ nitems
         if weighting
-            reduction[tidx] = f(pdata[gidx]) * pwt[iidx, jidx, 1, hidx]
+            reduction[tidx] = f(pdata[gidx]) * pwt[gidx]
             for n_ops in 1:n_ops_on_load
                 gidx2 = _get_gidx(
                     tidx + blksize * n_ops,
@@ -147,12 +146,8 @@ function mapreduce_cuda_kernel!(
                     nblk,
                 )
                 if gidx2 ≤ nitems
-                    iidx2, jidx2, hidx2 =
-                        _get_idxs(Nv, Nij, Nf, Nh, fidx, gidx2)
-                    reduction[tidx] = op(
-                        reduction[tidx],
-                        f(pdata[gidx2]) * pwt[iidx2, jidx2, 1, hidx2],
-                    )
+                    reduction[tidx] =
+                        op(reduction[tidx], f(pdata[gidx2]) * pwt[gidx2])
                 end
             end
         else
@@ -166,8 +161,6 @@ function mapreduce_cuda_kernel!(
                     nblk,
                 )
                 if gidx2 ≤ nitems
-                    iidx2, jidx2, hidx2 =
-                        _get_idxs(Nv, Nij, Nf, Nh, fidx, gidx2)
                     reduction[tidx] = op(reduction[tidx], f(pdata[gidx2]))
                 end
             end
