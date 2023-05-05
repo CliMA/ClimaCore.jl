@@ -63,8 +63,23 @@ function ExtrudedFiniteDifferenceSpace(
     vertical_domain = Topologies.domain(space.vertical_topology)
     z_top = vertical_domain.coord_max.z
 
+    grad = Operators.Gradient()
+    wdiv = Operators.WeakDivergence()
+
     if adaption isa LinearAdaption
-        z_surface = Fields.field_values(adaption.surface)
+        z_surface = adaption.surface
+        FT = eltype(z_surface)
+        κ_smooth = eltype(z_surface)(1e8) # 1e8, 20000 Sphere
+        dt = eltype(z_surface)(1e-1)
+        @info "Apply Laplacian Smoothing"
+        for iter = 1:100
+           χzₛ = wdiv.(grad.(z_surface))
+           Spaces.weighted_dss!(χzₛ)
+           z_surface .+= κ_smooth .* dt .* χzₛ
+           @. z_surface = ifelse(z_surface < FT(0), FT(0), z_surface)
+        end
+        Spaces.weighted_dss!(z_surface)
+        z_surface = Fields.field_values(z_surface)
         fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
         fZ = Fields.Field(fZ_data, face_space)
     end
