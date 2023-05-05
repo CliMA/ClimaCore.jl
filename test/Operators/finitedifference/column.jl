@@ -26,28 +26,22 @@ device = ClimaComms.device()
         center_space = Spaces.CenterFiniteDifferenceSpace(topology)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
-        @test sum(ones(FT, center_space)) ≈ pi broken =
-            device isa ClimaComms.CUDADevice
-        @test sum(ones(FT, face_space)) ≈ pi broken =
-            device isa ClimaComms.CUDADevice
+        @test sum(ones(FT, center_space)) ≈ pi
+        @test sum(ones(FT, face_space)) ≈ pi
 
         centers = getproperty(Fields.coordinate_field(center_space), :z)
-        @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2 broken =
-            device isa ClimaComms.CUDADevice
+        @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2
 
         faces = getproperty(Fields.coordinate_field(face_space), :z)
-        @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2 broken =
-            device isa ClimaComms.CUDADevice
+        @test sum(sin.(faces)) ≈ FT(2.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
         ∂sin = Geometry.WVector.(∇ᶜ.(sin.(faces)))
-        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2 broken =
-            device isa ClimaComms.CUDADevice
+        @test ∂sin ≈ Geometry.WVector.(cos.(centers)) atol = 1e-2
 
         divᶜ = Operators.DivergenceF2C()
         ∂sin = divᶜ.(Geometry.WVector.(sin.(faces)))
-        @test ∂sin ≈ cos.(centers) atol = 1e-2 broken =
-            device isa ClimaComms.CUDADevice
+        @test ∂sin ≈ cos.(centers) atol = 1e-2
 
         # Center -> Face operator
         # first order convergence at boundaries
@@ -56,24 +50,21 @@ device = ClimaComms.device()
             right = Operators.SetValue(FT(pi)),
         )
         ∂z = Geometry.WVector.(∇ᶠ.(centers))
-        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT) broken =
-            device isa ClimaComms.CUDADevice
+        @test ∂z ≈ Geometry.WVector.(ones(FT, face_space)) rtol = 10 * eps(FT)
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetValue(FT(1)),
             right = Operators.SetValue(FT(-1)),
         )
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-1 broken =
-            device isa ClimaComms.CUDADevice
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-1
 
         ∇ᶠ = Operators.GradientC2F(
             left = Operators.SetGradient(Geometry.WVector(FT(0))),
             right = Operators.SetGradient(Geometry.WVector(FT(0))),
         )
         ∂cos = Geometry.WVector.(∇ᶠ.(cos.(centers)))
-        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2 broken =
-            device isa ClimaComms.CUDADevice
+        @test ∂cos ≈ Geometry.WVector.(.-sin.(faces)) atol = 1e-2
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
