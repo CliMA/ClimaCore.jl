@@ -103,26 +103,26 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     a_CV = map(rand_vector, center_coords)
     a_FV = map(rand_vector, face_coords)
 
-    ops_F2C_⍰2⍰ = (
+    ops_F2C_ξ2ξ = (
         Operators.InterpolateF2C(),
         Operators.LeftBiasedF2C(),
         Operators.RightBiasedF2C(),
     )
-    ops_C2F_⍰2⍰ = (Operators.InterpolateC2F(bottom = extrap, top = extrap),)
+    ops_C2F_ξ2ξ = (Operators.InterpolateC2F(bottom = extrap, top = extrap),)
     ops_F2C_S2S = (
-        ops_F2C_⍰2⍰...,
+        ops_F2C_ξ2ξ...,
         Operators.LeftBiasedF2C(bottom = zero_scalar),
         Operators.RightBiasedF2C(top = zero_scalar),
     )
     ops_C2F_S2S = (
-        ops_C2F_⍰2⍰...,
+        ops_C2F_ξ2ξ...,
         Operators.InterpolateC2F(bottom = zero_scalar, top = zero_scalar),
         Operators.InterpolateC2F(bottom = zero_grad, top = zero_grad),
         Operators.LeftBiasedC2F(bottom = zero_scalar),
         Operators.RightBiasedC2F(top = zero_scalar),
     )
     ops_F2C_V2V = (
-        ops_F2C_⍰2⍰...,
+        ops_F2C_ξ2ξ...,
         Operators.LeftBiasedF2C(bottom = zero_vector),
         Operators.RightBiasedF2C(top = zero_vector),
         CurriedTwoArgOperator(
@@ -139,7 +139,7 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         ),
     )
     ops_C2F_V2V = (
-        ops_C2F_⍰2⍰...,
+        ops_C2F_ξ2ξ...,
         Operators.InterpolateC2F(bottom = zero_vector, top = zero_vector),
         Operators.LeftBiasedC2F(bottom = zero_vector),
         Operators.RightBiasedC2F(top = zero_vector),
