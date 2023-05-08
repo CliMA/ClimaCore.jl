@@ -94,7 +94,7 @@ end
 
     # Test div operator
     div = Operators.Divergence()
-    @test parent(div.(x_cpu)) ≈ Array(parent(div.(x_cpu)))
+    @test parent(div.(x_cpu)) ≈ Array(parent(div.(x_gpu)))
 
     # Test curl operator
     curl = Operators.Curl()
