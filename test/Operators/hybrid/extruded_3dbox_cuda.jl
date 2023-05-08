@@ -170,4 +170,8 @@ end
     @test parent(wdiv.(grad.(f_cpu))) ≈ Array(parent(wdiv.(grad.(f_gpu))))
     @test_broken parent(wdiv.(grad.(x_cpu))) ≈
                  Array(parent(wdiv.(grad.(x_gpu))))
+
+    # Test DSS
+    @test parent(Spaces.weighted_dss!(wdiv.(grad.(f_cpu)))) ≈
+          Array(parent(Spaces.weighted_dss!(wdiv.(grad.(f_gpu)))))
 end
