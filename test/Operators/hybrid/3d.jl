@@ -138,7 +138,7 @@ end
     end
 end
 
-@testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve horizontal" begin
+@testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal" begin
 
     # Advection Equation
     # ∂_t f + c ∂_x f  = 0
