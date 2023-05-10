@@ -279,6 +279,14 @@ Base.Broadcast.broadcasted(
     args...,
 ) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
 
+# GPU support for type wrappers, like `Geometry.AxisTensor`s
+Base.Broadcast.broadcasted(
+    fs::Base.Broadcast.DefaultArrayStyle{0},
+    ::Type{T},
+    args...,
+) where {T <: Geometry.AxisTensor} =
+    Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
+
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # Required for ODE solvers
 
