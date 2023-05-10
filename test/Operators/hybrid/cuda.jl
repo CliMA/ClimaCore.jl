@@ -129,5 +129,5 @@ end
     prob = ODEProblem(rhs!, U, (0.0, 2π))
     sol = solve(prob, SSPRK33(), dt = Δt)
 
-    @test Array(parent(U)) ≈ sol.u[end] rtol = 1e-6
+    @test Array(parent(U)) ≈ Array(parent(sol.u[end])) rtol = 1e-6
 end
