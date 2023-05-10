@@ -17,8 +17,8 @@ You can now use ClimaCorePlots in your ClimaCore pkg environment:
 
 To visualize a ClimaCore object, you fist need to install a [Plots.jl backend](http://docs.juliaplots.org/latest/backends/#backends):
 
-    (@v1.8) pkg> add Plots # (default GR backend)
-    (@v1.8) pkg> add Plots, PlotlyJS
+    (@v1.9) pkg> add Plots # (default GR backend)
+    (@v1.9) pkg> add Plots, PlotlyJS
 
 Then load in the backend:
 
