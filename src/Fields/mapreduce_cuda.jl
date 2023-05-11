@@ -64,20 +64,18 @@ function mapreduce_cuda(
     weighting = false,
     opargs...,
 ) where {
-    Nij,
-    A <: AbstractArray,
-    V <:
-    Union{DataLayouts.IJFH{<:Any, Nij, A}, DataLayouts.VIJFH{<:Any, Nij, A}},
+    S,
+    V <: Union{DataLayouts.VF{S}, DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
 }
     data = Fields.field_values(field)
     pdata = parent(data)
     T = eltype(pdata)
-    (_, _, _, Nv, Nh) = size(data)
+    (Ni, Nj, Nk, Nv, Nh) = size(data)
     Nf = div(length(pdata), prod(size(data))) # length of field dimension
-    wt = Spaces.weighted_jacobian(axes(field)) # wt always IJFH layout
+    wt = Spaces.weighted_jacobian(axes(field))
     pwt = parent(wt)
 
-    nitems = Nv * Nij * Nij * Nh
+    nitems = Nv * Ni * Nj * Nk * Nh
     max_threads = 256# 512 1024
     nthreads = min(max_threads, nitems)
     # perform n ops during loading to shmem (this is a tunable parameter)
@@ -108,7 +106,11 @@ function mapreduce_cuda(
             Val(shmemsize),
         )
     end
-    return Array(Array(reduce_cuda)[1, :])[1]
+    if Nf == 1
+        return Array(reduce_cuda)[1, 1]
+    else
+        return DataLayouts.DataF{S}(CuArray(view(reduce_cuda, 1, :)[:]))
+    end
 end
 
 function mapreduce_cuda_kernel!(
@@ -178,12 +180,19 @@ end
            (bidx - 1) * effective_blksize +
            (fidx - 1) * effective_blksize * nblk
 end
+# for VF DataLayout
+@inline function _get_dims(pdata::AbstractArray{FT, 2}) where {FT}
+    (Nv, Nf) = size(pdata)
+    return (Nv, 1, Nf, 1)
+end
 
+# for IJFH DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 4}) where {FT}
     (Nij, _, Nf, Nh) = size(pdata)
     return (1, Nij, Nf, Nh)
 end
 
+# for VIJFH DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 5}) where {FT}
     (Nv, Nij, _, Nf, Nh) = size(pdata)
     return (Nv, Nij, Nf, Nh)

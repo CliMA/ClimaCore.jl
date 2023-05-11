@@ -71,7 +71,7 @@ end
     Nq = 4
     ndof = ne * ne * 6 * Nq * Nq
     println(
-        "running reduction test on $(context.device) device; problem size Ne = $ne; Nq = $Nq; ndof = $ndof; FT = $FT",
+        "running reduction test on $(context.device); problem size Ne = $ne; Nq = $Nq; ndof = $ndof; FT = $FT",
     )
     R = FT(6.37122e6) # radius of earth
     domain = Domains.SphereDomain(R)
@@ -140,7 +140,7 @@ end
     z_elem = 10
     h_elem = 4
     println(
-        "running reduction test on $(context.device) device; h_elem = $h_elem; z_elem = $z_elem; npoly = $npoly; R = $R; z_max = $z_max; FT = $FT",
+        "running reduction test on $(context.device); h_elem = $h_elem; z_elem = $z_elem; npoly = $npoly; R = $R; z_max = $z_max; FT = $FT",
     )
     # horizontal space
     domain = Domains.SphereDomain(R)
@@ -228,4 +228,69 @@ end
     @test LinearAlgebra.norm(Yf, 2) ≈ LinearAlgebra.norm(Yf_cpu, 2)
     @test LinearAlgebra.norm(Yf, 3) ≈ LinearAlgebra.norm(Yf_cpu, 3)
     @test LinearAlgebra.norm(Yf, Inf) ≈ LinearAlgebra.norm(Yf_cpu, Inf)
+end
+
+@testset "test cuda reduction op for single column" begin
+    FT = Float64
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
+    context_cpu = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()) # CPU context for comparison
+
+    z0 = FT(0)
+    z_max = FT(2 * π)
+    z_nelems = 16
+
+    println(
+        "running column reduction test on $(context.device); z_nelems = $z_nelems; z0 = $z0; z_max = $z_max; FT = $FT",
+    )
+
+    domain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(z0),
+        Geometry.ZPoint{FT}(z_max);
+        boundary_tags = (:left, :right),
+    )
+
+    z_mesh = Meshes.IntervalMesh(domain; nelems = z_nelems)
+    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    z_topology_cpu = Topologies.IntervalTopology(context_cpu, z_mesh)
+
+
+    center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
+    face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
+
+    center_space_cpu = Spaces.CenterFiniteDifferenceSpace(z_topology_cpu)
+    face_space_cpu = Spaces.FaceFiniteDifferenceSpace(center_space_cpu)
+
+    Yc = ones(FT, center_space)
+    Yc_cpu = ones(FT, center_space_cpu)
+
+    Yf = ones(FT, face_space)
+    Yf_cpu = ones(FT, face_space_cpu)
+
+    resultc_cpu = Base.sum(Yc_cpu)
+    resultc = Base.sum(Yc)
+
+    resultf_cpu = Base.sum(Yf_cpu)
+    resultf = Base.sum(Yf)
+    # test weighted sum
+    @test resultc ≈ resultc_cpu
+    @test resultc ≈ z_max - z0
+
+    @test resultf ≈ resultf_cpu
+    @test resultf ≈ z_max - z0
+
+    Yc = sin.(getproperty(Fields.coordinate_field(center_space), :z)) .+ 1
+    Yc_cpu =
+        sin.(getproperty(Fields.coordinate_field(center_space_cpu), :z)) .+ 1
+
+
+    @test Base.maximum(identity, Yc) ≈ Base.maximum(identity, Yc_cpu)
+    @test Base.minimum(identity, Yc) ≈ Base.minimum(identity, Yc_cpu)
+
+    @test Statistics.mean(Yc) ≈ Statistics.mean(Yc_cpu)
+
+    @test LinearAlgebra.norm(Yc, 1) ≈ LinearAlgebra.norm(Yc_cpu, 1)
+    @test LinearAlgebra.norm(Yc, 2) ≈ LinearAlgebra.norm(Yc_cpu, 2)
+    @test LinearAlgebra.norm(Yc, 3) ≈ LinearAlgebra.norm(Yc_cpu, 3)
+
+    @test LinearAlgebra.norm(Yc, Inf) ≈ LinearAlgebra.norm(Yc_cpu, Inf)
 end
