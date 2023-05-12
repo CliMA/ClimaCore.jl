@@ -11,12 +11,10 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 
-function FieldFromNamedTuple(space, nt::NamedTuple)
-    cmv(z) = nt
-    return cmv.(Fields.coordinate_field(space))
-end
-
-include(joinpath(@__DIR__, "util_spaces.jl"))
+include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
 
 # https://github.com/CliMA/ClimaCore.jl/issues/946
 @testset "Allocations with broadcasting Scalars" begin
@@ -32,9 +30,9 @@ include(joinpath(@__DIR__, "util_spaces.jl"))
         end
         return nothing
     end
-    for space in all_spaces(FT)
-        bycolumnable(space) || continue
-        Y = FieldFromNamedTuple(space, (; x = FT(2)))
+    for space in TU.all_spaces(FT)
+        TU.bycolumnable(space) || continue
+        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
 
         # Plain broadcast
         Yx = Y.x
@@ -61,8 +59,8 @@ end
         fill!(Y, ((; x = 2.0),))
         nothing
     end
-    for space in all_spaces(FT)
-        Y = FieldFromNamedTuple(space, (; x = FT(2)))
+    for space in TU.all_spaces(FT)
+        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
         allocs_test!(Y)
         p = @allocated allocs_test!(Y)
         @test p == 0
@@ -128,8 +126,8 @@ end
 
 @testset "Allocations StencilCoefs broadcasting" begin
     FT = Float64
-    for space in all_spaces(FT)
-        Y = FieldFromNamedTuple(space, (; x = sc(FT)))
+    for space in TU.all_spaces(FT)
+        Y = TU.FieldFromNamedTuple(space, (; x = sc(FT)))
         allocs_test1!(Y)
         p = @allocated allocs_test1!(Y)
         @test p == 0
@@ -137,7 +135,7 @@ end
         p = @allocated allocs_test2!(Y)
         @test p == 0
 
-        bycolumnable(space) || continue
+        TU.bycolumnable(space) || continue
 
         allocs_test1_column!(Y)
         p = @allocated allocs_test1_column!(Y)
@@ -175,7 +173,7 @@ end
 
 @testset "Allocations StencilCoefs scalar with ComposeStencils broadcasting" begin
     FT = Float64
-    for space in all_spaces(FT)
+    for space in TU.all_spaces(FT)
         space isa Spaces.CenterExtrudedFiniteDifferenceSpace || continue
         cspace = space
         fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
@@ -206,10 +204,10 @@ end
 # https://github.com/CliMA/ClimaCore.jl/issues/983
 @testset "Allocations with fill! and zero eltype broadcasting on FieldVectors" begin
     FT = Float64
-    for space in all_spaces(FT)
+    for space in TU.all_spaces(FT)
         Y = Fields.FieldVector(;
-            c = FieldFromNamedTuple(space, (; x = FT(0))),
-            f = FieldFromNamedTuple(space, (; x = FT(0))),
+            c = TU.FieldFromNamedTuple(space, (; x = FT(0))),
+            f = TU.FieldFromNamedTuple(space, (; x = FT(0))),
         )
 
         Y .= 0 # compile first
