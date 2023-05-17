@@ -3006,6 +3006,7 @@ Base.@propagate_inbounds function getidx(
     bc::Fields.CenterFiniteDifferenceField,
     ::Location,
     idx::Integer,
+    hidx=nothing,
 )
     field_data = Fields.field_values(bc)
     space = axes(bc)
@@ -3034,6 +3035,7 @@ Base.@propagate_inbounds function getidx(
     bc::Fields.FaceFiniteDifferenceField,
     ::Location,
     idx::PlusHalf,
+    hidx=nothing,
 )
     field_data = Fields.field_values(bc)
     space = axes(bc)
@@ -3071,15 +3073,6 @@ end
 # getidx error fallbacks
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
-
-Base.@propagate_inbounds function getidx(
-    field::Fields.Field,
-    loc::Location,
-    idx,
-    hidx,
-)
-    getidx(column(field, hidx...), loc, idx)
-end
 
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
 Base.@propagate_inbounds getidx_args(args::Tuple, loc::Location, idx, hidx) = (
