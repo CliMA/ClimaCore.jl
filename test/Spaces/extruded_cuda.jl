@@ -35,11 +35,8 @@ end
     FT = Float64
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspaces = TU.all_spaces(FT; zelem = 10, context = cpu_context)
-    gpuspaces = TU.all_spaces(FT; zelem = 10, context = gpu_context)
-
-    cpuspace = cpuspaces[end] # ExtrudedFiniteDifferenceSpace
-    gpuspace = gpuspaces[end] # ExtrudedFiniteDifferenceSpace
+    cpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = cpu_context)
+    gpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :center_local_geometry)
@@ -62,8 +59,8 @@ end
 
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspace = cpuspaces[4] # SpectralElementSpace2D
-    gpuspace = gpuspaces[4] # SpectralElementSpace2D
+    cpuspace = TU.SpectralElementSpace2D(FT; context = cpu_context)
+    gpuspace = TU.SpectralElementSpace2D(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :local_geometry)
