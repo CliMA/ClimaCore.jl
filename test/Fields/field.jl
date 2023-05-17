@@ -159,6 +159,13 @@ end
     @test Y.k.z === 3.0
 end
 
+@testset "FieldVector array_type" begin
+    space = TU.PointSpace(Float32)
+    xcenters = Fields.coordinate_field(space).x
+    y = Fields.FieldVector(x = xcenters)
+    @test ClimaComms.array_type(y) == Array
+end
+
 @testset "FieldVector basetype replacement and deepcopy" begin
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
