@@ -91,14 +91,28 @@ end
     # Define hv GPU space
     hv_center_space_gpu, hv_face_space_gpu = hvspace_3D_sphere(gpu_context)
 
-    z = Fields.coordinate_field(hv_face_space_gpu).z
+    coords = Fields.coordinate_field(hv_face_space_gpu)
+    z = coords.z
 
     gradc = Operators.GradientF2C()
 
     @test parent(Geometry.WVector.(gradc.(z))) ≈
           parent(Geometry.WVector.(ones(hv_center_space_gpu)))
-end
 
+
+    hdiv = Operators.Divergence()
+    hwdiv = Operators.WeakDivergence()
+    hgrad = Operators.Gradient()
+    hwgrad = Operators.WeakGradient()
+    hcurl = Operators.Curl()
+    hwcurl = Operators.WeakCurl()
+
+
+    cuₕ = Geometry.Covariant12Vector.(.-coords.lat, coords.long)
+    duₕ = @. hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
+        hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
+    )
+end
 @testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal CUDA" begin
 
     # Advection Equation
