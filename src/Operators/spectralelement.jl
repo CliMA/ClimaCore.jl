@@ -185,8 +185,10 @@ Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
+    fv_out = Fields.field_values(out)
+    space_out = axes(fv_out)
     @inbounds for ij in node_indices(axes(out))
-        set_node!(out, ij, slabidx, get_node(rbc, ij, slabidx))
+        set_node!(space_out, fv_out, ij, slabidx, get_node(rbc, ij, slabidx))
     end
     return nothing
 end
@@ -255,14 +257,16 @@ function Base.copyto!(
     return out
 end
 
-function copyto_spectral_kernel!(out::Fields.Field, sbc)
+function copyto_spectral_kernel!(out_space, out::Fields.Field, sbc)
+    fv_out = Fields.field_values(out)
+    space_out = axes(fv_out)
     @inbounds begin
         i = threadIdx().x
         j = threadIdx().y
         h = blockIdx().x
-        if out isa Fields.SpectralElementField
+        if out_space isa Spaces.SpectralElementSpace
             v = nothing
-        elseif out isa Fields.FaceExtrudedFiniteDifferenceField
+        elseif out_space isa Spaces.FaceExtrudedFiniteDifferenceSpace
             v = blockIdx().y - half
         else
             v = blockIdx().y
@@ -270,7 +274,7 @@ function copyto_spectral_kernel!(out::Fields.Field, sbc)
         ij = CartesianIndex((i, j))
         slabidx = Fields.SlabIndex(v, h)
         result = get_node(sbc, ij, slabidx)
-        set_node!(out, ij, slabidx, result)
+        set_node!(space_out, fv_out, ij, slabidx, result)
     end
     return nothing
 end
@@ -395,35 +399,35 @@ Base.@propagate_inbounds function get_local_geometry(
 end
 
 Base.@propagate_inbounds function set_node!(
-    field::Fields.Field,
+    space,
+    fv::DataLayouts.AbstractData,
     ij::CartesianIndex{1},
     slabidx,
     val,
 )
     i, = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     else
         v = slabidx.v
     end
     h = slabidx.h
-    fv = Fields.field_values(field)
     fv[i, nothing, nothing, v, h] = val
 end
 Base.@propagate_inbounds function set_node!(
-    field::Fields.Field,
+    space,
+    fv::DataLayouts.AbstractData,
     ij::CartesianIndex{2},
     slabidx,
     val,
 )
     i, j = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     else
         v = slabidx.v
     end
     h = slabidx.h
-    fv = Fields.field_values(field)
     fv[i, j, nothing, v, h] = val
 end
 
