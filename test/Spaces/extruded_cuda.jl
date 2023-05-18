@@ -6,10 +6,14 @@ using LinearAlgebra, IntervalSets, UnPack
 using ClimaComms
 using CUDA
 using ClimaComms: SingletonCommsContext
+import ClimaCore
 import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
 using Test
 
-include(joinpath(@__DIR__, "..", "Fields", "util_spaces.jl"))
+include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
 compare(cpu, gpu, sym) =
@@ -19,9 +23,9 @@ compare(cpu, gpu, sym) =
     context = SingletonCommsContext(
         CUDA.functional() ? ClimaComms.CUDADevice() : ClimaComms.CPUDevice(),
     )
-    collect(all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
-    as = collect(all_spaces(Float64; zelem = 10, context))
-    @test length(as) == 8
+    collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
+    as = collect(TU.all_spaces(Float64; zelem = 10, context))
+    @test length(as) == 7
 end
 
 @testset "copyto! with CuArray-backed extruded spaces" begin
@@ -31,11 +35,8 @@ end
     FT = Float64
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspaces = all_spaces(FT; zelem = 10, context = cpu_context)
-    gpuspaces = all_spaces(FT; zelem = 10, context = gpu_context)
-
-    cpuspace = cpuspaces[end] # ExtrudedFiniteDifferenceSpace
-    gpuspace = gpuspaces[end] # ExtrudedFiniteDifferenceSpace
+    cpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = cpu_context)
+    gpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :center_local_geometry)
@@ -58,8 +59,8 @@ end
 
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspace = cpuspaces[4] # SpectralElementSpace2D
-    gpuspace = gpuspaces[4] # SpectralElementSpace2D
+    cpuspace = TU.SpectralElementSpace2D(FT; context = cpu_context)
+    gpuspace = TU.SpectralElementSpace2D(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :local_geometry)

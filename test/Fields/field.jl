@@ -12,27 +12,10 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 
-function FieldFromNamedTuple(space, nt::NamedTuple)
-    cmv(z) = nt
-    return cmv.(Fields.coordinate_field(space))
-end
-
-include(joinpath(@__DIR__, "util_spaces.jl"))
-
-fc_index(
-    i,
-    ::Union{
-        Spaces.FaceExtrudedFiniteDifferenceSpace,
-        Spaces.FaceFiniteDifferenceSpace,
-    },
-) = PlusHalf(i)
-fc_index(
-    i,
-    ::Union{
-        Spaces.CenterExtrudedFiniteDifferenceSpace,
-        Spaces.CenterFiniteDifferenceSpace,
-    },
-) = i
+include(
+    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
+)
+import .TestUtilities as TU
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     domain = Domains.RectangleDomain(
@@ -262,7 +245,7 @@ end
     FT = Float64
     nt =
         (; x = FT(0), y = FT(0), tup = ntuple(i -> (; a = FT(1), b = FT(1)), 2))
-    Y = FieldFromNamedTuple(space, nt)
+    Y = TU.FieldFromNamedTuple(space, nt)
 
     prop_chains = Fields.property_chains(Y)
     @test prop_chains[1] == (:x,)
@@ -289,7 +272,7 @@ end
 ClimaCore.Fields.truncate_printing_field_types() = true
 @testset "Truncated printing" begin
     nt = (; x = Float64(0), y = Float64(0))
-    Y = FieldFromNamedTuple(spectral_space_2D(), nt)
+    Y = TU.FieldFromNamedTuple(spectral_space_2D(), nt)
     @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
           "Field{(:x, :y)} (trunc disp)"
 end
@@ -297,7 +280,7 @@ ClimaCore.Fields.truncate_printing_field_types() = false
 
 @testset "Standard printing" begin
     nt = (; x = Float64(0), y = Float64(0))
-    Y = FieldFromNamedTuple(spectral_space_2D(), nt)
+    Y = TU.FieldFromNamedTuple(spectral_space_2D(), nt)
     s = sprint(show, typeof(Y)) # just make sure this doesn't break
 end
 
@@ -305,7 +288,7 @@ end
     space = spectral_space_2D()
     FT = Float64
     nt = (; x = FT(0), y = FT(0))
-    Y = FieldFromNamedTuple(space, nt)
+    Y = TU.FieldFromNamedTuple(space, nt)
     foo(local_geom) =
         sin(local_geom.coordinates.x * local_geom.coordinates.y) + 3
     Fields.set!(foo, Y.x)
@@ -333,14 +316,11 @@ end
 
 @testset "Level" begin
     FT = Float64
-    for space in all_spaces(FT)
-        (
-            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-            space isa Spaces.FiniteDifferenceSpace
-        ) || continue
-        Y = FieldFromNamedTuple(space, (; x = FT(2)))
-        lg_space = Spaces.level(space, fc_index(1, space))
-        lg_field_space = axes(Fields.level(Y, fc_index(1, space)))
+    for space in TU.all_spaces(FT)
+        TU.levelable(space) || continue
+        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
+        lg_space = Spaces.level(space, TU.fc_index(1, space))
+        lg_field_space = axes(Fields.level(Y, TU.fc_index(1, space)))
         @test all(
             lg_space.local_geometry.coordinates ===
             lg_field_space.local_geometry.coordinates,
@@ -351,16 +331,16 @@ end
 
 @testset "Points from Columns" begin
     FT = Float64
-    for space in all_spaces(FT)
+    for space in TU.all_spaces(FT)
         if space isa Spaces.SpectralElementSpace1D
-            Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
             point_space_from_field = axes(Fields.column(Y.x, 1, 1))
             point_space = Spaces.column(space, 1, 1)
             @test Fields.ones(point_space) ==
                   Fields.ones(point_space_from_field)
         end
         if space isa Spaces.SpectralElementSpace2D
-            Y = FieldFromNamedTuple(space, (; x = FT(1)))
+            Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
             point_space_from_field = axes(Fields.column(Y.x, 1, 1, 1))
             point_space = Spaces.column(space, 1, 1, 1)
             @test Fields.ones(point_space) ==
@@ -386,13 +366,13 @@ end
         end
         nothing
     end
-    for space in all_spaces(FT)
+    for space in TU.all_spaces(FT)
         # Filter out spaces without z coordinates:
-        :z in propertynames(Spaces.coordinates_data(space)) || continue
-        Y = FieldFromNamedTuple(space, (; x = FT(1)))
+        TU.has_z_coordinates(space) || continue
+        Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
         ᶜz_surf =
-            Spaces.level(Fields.coordinate_field(Y.x).z, fc_index(1, space))
-        ᶜx_surf = Spaces.level(Y.x, fc_index(1, space))
+            Spaces.level(Fields.coordinate_field(Y.x).z, TU.fc_index(1, space))
+        ᶜx_surf = Spaces.level(Y.x, TU.fc_index(1, space))
 
         # Still need to define broadcast rules for surface planes with 3D domains
         if nameof(typeof(space)) == :ExtrudedFiniteDifferenceSpace
@@ -408,7 +388,7 @@ end
             domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         end
         # Skip spaces incompatible with Fields.bycolumn:
-        bycolumnable(space) || continue
+        TU.bycolumnable(space) || continue
         column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
         nothing
     end
@@ -463,8 +443,8 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     FT = Float64
     foo = InferenceFoo(2.0)
 
-    for space in all_spaces(FT)
-        Y = FieldFromNamedTuple(space, (; a = FT(0), b = FT(1)))
+    for space in TU.all_spaces(FT)
+        Y = TU.FieldFromNamedTuple(space, (; a = FT(0), b = FT(1)))
         @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
             space,
             ics_foo,
@@ -598,17 +578,13 @@ convergence_rate(err, Δh) =
         return Fields.Field(Fields.field_values(col_copy), axes(col_copy))
     end
     for zelem in (2^2, 2^3, 2^4, 2^5)
-        for space in all_spaces(FT; zelem)
+        for space in TU.all_spaces(FT; zelem)
             # Filter out spaces without z coordinates:
-            :z in propertynames(Spaces.coordinates_data(space)) || continue
+            TU.has_z_coordinates(space) || continue
             # Skip spaces incompatible with Fields.bycolumn:
-            (
-                space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-                space isa Spaces.SpectralElementSpace1D ||
-                space isa Spaces.SpectralElementSpace2D
-            ) || continue
+            TU.bycolumnable(space) || continue
 
-            Y = FieldFromNamedTuple(space, (; y = FT(1)))
+            Y = TU.FieldFromNamedTuple(space, (; y = FT(1)))
             zcf = Fields.coordinate_field(Y.y).z
             Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
@@ -618,7 +594,7 @@ convergence_rate(err, Δh) =
                 results[key] =
                     Dict(:maxerr => 0, :Δz_1 => FT(0), :∫y => [], :y => [])
             end
-            ∫y = Spaces.level(similar(Y.y), fc_index(1, space))
+            ∫y = Spaces.level(similar(Y.y), TU.fc_index(1, space))
             ∫y .= 0
             y = Y.y
             @. y .= 1 + sin(zcf)
@@ -648,12 +624,12 @@ end
 ClimaCore.enable_threading() = false # launching threads allocates
 @testset "Allocation tests for integrals" begin
     FT = Float64
-    for space in all_spaces(FT)
+    for space in TU.all_spaces(FT)
         # Filter out spaces without z coordinates:
-        :z in propertynames(Spaces.coordinates_data(space)) || continue
-        Y = FieldFromNamedTuple(space, (; y = FT(1)))
+        TU.has_z_coordinates(space) || continue
+        Y = TU.FieldFromNamedTuple(space, (; y = FT(1)))
         zcf = Fields.coordinate_field(Y.y).z
-        ∫y = Spaces.level(similar(Y.y), fc_index(1, space))
+        ∫y = Spaces.level(similar(Y.y), TU.fc_index(1, space))
         ∫y .= 0
         y = Y.y
         @. y .= 1 + sin(zcf)
@@ -662,11 +638,7 @@ ClimaCore.enable_threading() = false # launching threads allocates
         p = @allocated Operators.column_integral_definite!(∫y, y)
         @test p == 0
         # Skip spaces incompatible with Fields.bycolumn:
-        (
-            space isa Spaces.ExtrudedFiniteDifferenceSpace ||
-            space isa Spaces.SpectralElementSpace1D ||
-            space isa Spaces.SpectralElementSpace2D
-        ) || continue
+        TU.bycolumnable(space) || continue
         # Explicit bycolumn
         integrate_bycolumn!(∫y, Y) # compile first
         p = @allocated integrate_bycolumn!(∫y, Y)
@@ -679,8 +651,8 @@ ClimaCore.enable_threading() = false
 
 @testset "ncolumns" begin
     FT = Float64
-    for space in all_spaces(FT)
-        bycolumnable(space) || continue
+    for space in TU.all_spaces(FT)
+        TU.bycolumnable(space) || continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
         Nq = Spaces.Quadratures.degrees_of_freedom(
