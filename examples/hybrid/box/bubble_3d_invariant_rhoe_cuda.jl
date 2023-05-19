@@ -37,10 +37,7 @@ function hvspace_3D(
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    verttopo = Topologies.IntervalTopology(
-        comms_ctx,
-        vertmesh,
-    )
+    verttopo = Topologies.IntervalTopology(comms_ctx, vertmesh)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.RectangleDomain(
@@ -154,7 +151,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     hwcurl = Operators.WeakCurl()
 
     dρ .= 0 .* cρ
-
+    #=
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -282,6 +279,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     Spaces.weighted_dss_ghost!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_ghost!(dY.uₕ, ghost_buffer.uₕ)
     Spaces.weighted_dss_ghost!(dY.w, ghost_buffer.w)
+    =#
     return dY
 end
 dYdt = similar(Y);
