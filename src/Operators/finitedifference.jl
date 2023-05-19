@@ -2903,10 +2903,10 @@ Compute the index of the leftmost point which uses only the interior stencil of 
 """
 @inline function left_interior_window_idx(
     bc::StencilBroadcasted,
-    _,
+    parent_space,
     loc::LeftBoundaryWindow,
 )
-    space = axes(bc)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
     widths = _stencil_interior_width(bc)
     args_idx = _left_interior_window_idx_args(bc.args, space, loc)
     args_idx_widths = tuplemap((arg, width) -> arg - width[1], args_idx, widths)
@@ -2917,10 +2917,10 @@ Compute the index of the leftmost point which uses only the interior stencil of 
 end
 @inline function left_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
-    _,
+    parent_space,
     loc::LeftBoundaryWindow,
 )
-    space = axes(bc)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
     arg_idxs = _left_interior_window_idx_args(bc.args, space, loc)
     maximum(arg_idxs)
 end
@@ -2929,10 +2929,11 @@ end
         Field,
         Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
     },
-    _,
+    parent_space,
     loc::LeftBoundaryWindow,
 )
-    left_idx(axes(field))
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    left_idx(space)
 end
 @inline function left_interior_window_idx(_, space, loc::LeftBoundaryWindow)
     left_idx(space)
@@ -2949,10 +2950,10 @@ end
 
 @inline function right_interior_window_idx(
     bc::StencilBroadcasted,
-    _,
+    parent_space,
     loc::RightBoundaryWindow,
 )
-    space = axes(bc)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
     widths = _stencil_interior_width(bc)
     args_idx = _right_interior_window_idx_args(bc.args, space, loc)
     args_widths = tuplemap((arg, width) -> arg - width[2], args_idx, widths)
@@ -2961,10 +2962,10 @@ end
 
 @inline function right_interior_window_idx(
     bc::Base.Broadcast.Broadcasted{<:AbstractStencilStyle},
-    _,
+    parent_space,
     loc::RightBoundaryWindow,
 )
-    space = axes(bc)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
     arg_idxs = _right_interior_window_idx_args(bc.args, space, loc)
     minimum(arg_idxs)
 end
@@ -2974,10 +2975,11 @@ end
         Field,
         Base.Broadcast.Broadcasted{<:Fields.AbstractFieldStyle},
     },
-    _,
+    parent_space,
     loc::RightBoundaryWindow,
 )
-    right_idx(axes(field))
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    right_idx(space)
 end
 @inline function right_interior_window_idx(_, space, loc::RightBoundaryWindow)
     right_idx(space)
@@ -3060,27 +3062,38 @@ Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
 Base.@propagate_inbounds function getidx(
     parent_space,
-    bc::Fields.CenterFiniteDifferenceField,
+    bc::Fields.Field,
     ::Location,
-    idx::Integer,
+    idx,
 )
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    if Topologies.isperiodic(space.topology)
-        idx = mod1(idx, length(space))
+    if space isa Spaces.FaceFiniteDifferenceSpace ||
+       space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+        v = idx + half
+    else
+        v = idx
     end
-    return @inbounds field_data[idx]
+    if Topologies.isperiodic(space.topology)
+        v = mod1(v, length(space))
+    end
+    return @inbounds field_data[v]
 end
 Base.@propagate_inbounds function getidx(
     parent_space,
-    bc::Fields.CenterExtrudedFiniteDifferenceField,
+    bc::Fields.Field,
     ::Location,
     idx::Integer,
     hidx,
 )
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    v = idx
+    if space isa Spaces.FaceFiniteDifferenceSpace ||
+       space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+        v = idx + half
+    else
+        v = idx
+    end
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         v = mod1(v, length(space))
     end
@@ -3088,36 +3101,6 @@ Base.@propagate_inbounds function getidx(
     return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
 end
 
-Base.@propagate_inbounds function getidx(
-    parent_space,
-    bc::Fields.FaceFiniteDifferenceField,
-    ::Location,
-    idx::PlusHalf,
-)
-    field_data = Fields.field_values(bc)
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
-    i = idx.i + 1
-    if Topologies.isperiodic(space.topology)
-        i = mod1(i, length(space))
-    end
-    return @inbounds field_data[i]
-end
-Base.@propagate_inbounds function getidx(
-    parent_space,
-    bc::Fields.FaceExtrudedFiniteDifferenceField,
-    ::Location,
-    idx::PlusHalf,
-    hidx,
-)
-    field_data = Fields.field_values(bc)
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
-    v = idx.i + 1
-    if Topologies.isperiodic(space.vertical_topology)
-        v = mod1(i, length(space))
-    end
-    i, j, h = hidx
-    return @inbounds field_data[CartesianIndex(i, j, 1, v, h)]
-end
 
 # unwap boxed scalars
 @inline getidx(
@@ -3279,22 +3262,37 @@ function Base.similar(
 end
 
 function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
+    space = axes(field_out)
+    bc = strip_space(bc, space)
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        apply_stencil!(axes(field_out), field_out, bc, (i, j, h))
+        apply_stencil!(space, field_out, bc, (i, j, h))
     end
     return field_out
 end
 
 function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
+    space = axes(field_out)
+    bc = strip_space(bc, space)
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nj, i in 1:Ni
-                apply_stencil!(axes(field_out), field_out, bc, (i, j, h))
+                apply_stencil!(space, field_out, bc, (i, j, h))
             end
         end
     end
     return field_out
 end
+
+function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
+    current_space = axes(bc)
+    new_space = placeholder_space(current_space, parent_space)
+    return StencilBroadcasted{Style}(
+        bc.op,
+        map(arg -> strip_space(arg, current_space), bc.args),
+        new_space,
+    )
+end
+
 
 function Base.copyto!(
     out::Field,
@@ -3314,8 +3312,8 @@ function Base.copyto!(
     end
     # executed
     @cuda threads = (Nq, Nq) blocks = (Nh,) copyto_stencil_kernel!(
-        out,
-        bc,
+        strip_space(out, space),
+        strip_space(bc, space),
         axes(out),
     )
     return out
