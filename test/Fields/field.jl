@@ -159,6 +159,13 @@ end
     @test Y.k.z === 3.0
 end
 
+@testset "FieldVector array_type" begin
+    space = TU.PointSpace(Float32)
+    xcenters = Fields.coordinate_field(space).x
+    y = Fields.FieldVector(x = xcenters)
+    @test ClimaComms.array_type(y) == Array
+end
+
 @testset "FieldVector basetype replacement and deepcopy" begin
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
@@ -296,9 +303,10 @@ end
 end
 
 @testset "PointField" begin
+    context = ClimaComms.SingletonCommsContext()
     FT = Float64
     coord = Geometry.XPoint(FT(π))
-    space = Spaces.PointSpace(coord)
+    space = Spaces.PointSpace(context, coord)
     @test parent(Spaces.local_geometry_data(space)) ==
           FT[Geometry.component(coord, 1), 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     field = Fields.coordinate_field(space)
@@ -464,6 +472,7 @@ end
 
 @testset "Δz_field" begin
     FT = Float64
+    context = ClimaComms.SingletonCommsContext()
     x = FT(1)
     y = FT(2)
     z = FT(3)
@@ -501,7 +510,7 @@ end
             components,
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)
-        space = Spaces.PointSpace(local_geometry)
+        space = Spaces.PointSpace(context, local_geometry)
         dz_computed = parent(Fields.Δz_field(space))
         @test length(dz_computed) == 1
         @test dz_computed[1] == expected_dz

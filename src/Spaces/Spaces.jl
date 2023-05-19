@@ -67,7 +67,7 @@ weights ``W_i`` multiplied by the Jacobian determinants ``J_i``:
 If `space` is distributed, this uses a `ClimaComms.allreduce` operation.
 """
 area(space::Spaces.AbstractSpace) =
-    ClimaComms.allreduce(comm_context(space), local_area(space), +)
+    ClimaComms.allreduce(ClimaComms.context(space), local_area(space), +)
 
 ClimaComms.array_type(space::AbstractSpace) =
     ClimaComms.array_type(ClimaComms.device(space))

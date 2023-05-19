@@ -24,3 +24,22 @@ Base.@deprecate device(ctx::Array) false
 Base.@deprecate device(ctx::CUDA.CuArray) ClimaComms.device(ctx) false
 
 end
+
+@deprecate comm_context(field::Fields.Field) ClimaComms.context(field)
+
+@deprecate comm_context(space::Spaces.ExtrudedFiniteDifferenceSpace) ClimaComms.context(
+    space,
+)
+@deprecate comm_context(space::Spaces.SpectralElementSpace2D) ClimaComms.context(
+    space,
+)
+@deprecate comm_context(space::S) where {S <: Spaces.AbstractSpace} ClimaComms.context(
+    space,
+)
+
+@deprecate comm_context(topology::Topologies.Topology2D) ClimaComms.context(
+    topology,
+)
+@deprecate comm_context(topology::T) where {T <: Topologies.AbstractTopology} ClimaComms.context(
+    topology,
+)

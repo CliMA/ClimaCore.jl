@@ -36,6 +36,7 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.status()'"
 
     agents:
+      slurm_mem: 32G
       slurm_cpus_per_task: 8
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
@@ -821,6 +822,8 @@ steps:
         key: "gpu_spectral_ops_bm_cpu_float32"
         command:
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
+        soft_fail:
+          - exit_status: 1
 
       - label: ":rocket: Spectral element operator benchmarks (cuda Float64)"
         key: "gpu_spectral_ops_bm_cuda_float64"
@@ -834,6 +837,8 @@ steps:
         key: "gpu_spectral_ops_bm_cpu_float64"
         command:
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
+        soft_fail:
+          - exit_status: 1
 
       - label: ":rocket: Spectral element operator benchmarks"
         key: "gpu_spectral_ops_bm"

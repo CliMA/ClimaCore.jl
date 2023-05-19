@@ -92,9 +92,14 @@ struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     space_cache::Dict{Any, Any}
 end
 
+@deprecate HDF5Reader(filename::AbstractString) HDF5Reader(
+    filename,
+    ClimaComms.SingletonCommsContext(),
+)
+
 function HDF5Reader(
     filename::AbstractString,
-    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(),
+    context::ClimaComms.AbstractCommsContext,
 )
     if context isa ClimaComms.SingletonCommsContext
         file = h5open(filename, "r")

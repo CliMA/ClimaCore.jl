@@ -265,3 +265,22 @@ end
 function LinearAlgebra.norm(x::FieldVector)
     sqrt(LinearAlgebra.norm_sqr(x))
 end
+
+import ClimaComms
+
+ClimaComms.array_type(x::FieldVector) = _array_type(x)
+
+@inline _array_type(x::FieldVector) = _array_type(x, propertynames(x))
+@inline _array_type(x::FieldVector, pns::Tuple{}) = Any
+
+@inline _array_type(x::Field) = ClimaComms.array_type(x)
+@inline _array_type(x::FieldVector, sym::Symbol) =
+    _array_type(getproperty(x, sym))
+
+@inline _array_type(x::FieldVector, pns::Tuple{Symbol}) =
+    _array_type(getproperty(x, first(pns)))
+
+@inline _array_type(x::FieldVector, pns::Tuple) = promote_type(
+    _array_type(getproperty(x, first(pns))),
+    _array_type(x, Base.tail(pns))...,
+)

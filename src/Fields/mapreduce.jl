@@ -43,7 +43,7 @@ function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CPUDevice,
 )
-    context = comm_context(axes(field))
+    context = ClimaComms.context(axes(field))
     data_sum = DataLayouts.DataF(local_sum(field))
     ClimaComms.allreduce!(context, parent(data_sum), +)
     return data_sum[]
@@ -62,7 +62,7 @@ Approximate maximum of `v` or `f.(v)` over the domain.
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
 function Base.maximum(fn, field::Field, ::ClimaComms.CPUDevice)
-    context = comm_context(axes(field))
+    context = ClimaComms.context(axes(field))
     data_max = DataLayouts.DataF(mapreduce(fn, max, todata(field)))
     ClimaComms.allreduce!(context, parent(data_max), max)
     return data_max[]
@@ -74,7 +74,7 @@ Base.maximum(fn, field::Field) =
 Base.maximum(field::Field) = Base.maximum(field, ClimaComms.device(field))
 
 function Base.minimum(fn, field::Field, ::ClimaComms.CPUDevice)
-    context = comm_context(axes(field))
+    context = ClimaComms.context(axes(field))
     data_min = DataLayouts.DataF(mapreduce(fn, min, todata(field)))
     ClimaComms.allreduce!(context, parent(data_min), min)
     return data_min[]
@@ -109,7 +109,7 @@ function Statistics.mean(
     ::ClimaComms.CPUDevice,
 )
     space = axes(field)
-    context = comm_context(space)
+    context = ClimaComms.context(space)
     data_combined =
         DataLayouts.DataF((local_sum(field), Spaces.local_area(space)))
     ClimaComms.allreduce!(context, parent(data_combined), +)

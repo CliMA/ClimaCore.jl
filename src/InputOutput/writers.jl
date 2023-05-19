@@ -37,9 +37,14 @@ struct HDF5Writer{C <: ClimaComms.AbstractCommsContext} <: AbstractWriter
     cache::Dict{String, String}
 end
 
+@deprecate HDF5Writer(filename::AbstractString) HDF5Writer(
+    filename,
+    ClimaComms.SingletonCommsContext(),
+)
+
 function HDF5Writer(
     filename::AbstractString,
-    context::ClimaComms.AbstractCommsContext = ClimaComms.SingletonCommsContext(),
+    context::ClimaComms.AbstractCommsContext,
 )
     if context isa ClimaComms.SingletonCommsContext
         file = h5open(filename, "w")

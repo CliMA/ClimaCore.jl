@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.10.33"
+version = "0.10.34"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -32,7 +32,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 [compat]
 Adapt = "3"
 BlockArrays = "0.16"
-CUDA = "3, 4"
+CUDA = "3, 4.2.0"
 ClimaComms = "0.4.2"
 CubedSphere = "0.2"
 DataStructures = "0.18"
