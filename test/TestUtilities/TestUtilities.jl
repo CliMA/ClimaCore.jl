@@ -134,7 +134,7 @@ function ExtrudedFaceFiniteDifferenceSpace(
     context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
     cspace = ExtrudedCenterFiniteDifferenceSpace(FT; zelem, context)
-    return Spaces.ExtrudedFaceFiniteDifferenceSpace(cspace)
+    return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
 function all_spaces(
@@ -153,7 +153,7 @@ function all_spaces(
         ColumnFaceFiniteDifferenceSpace(FT; zelem, context),
         SphereSpectralElementSpace(FT; context),
         ExtrudedCenterFiniteDifferenceSpace(FT; zelem, context),
-        # ExtrudedFaceFiniteDifferenceSpace(FT; zelem, context), # errors on sum
+        ExtrudedFaceFiniteDifferenceSpace(FT; zelem, context), # errors on sum
         # TODO: incorporate this list of spaces somehow:
         #     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
         #     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
