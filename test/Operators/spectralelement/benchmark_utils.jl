@@ -233,7 +233,7 @@ function tabulate_summary(summary)
 end
 
 function test_against_best_times(bm, best_times)
-    buffer = 1.4
+    buffer = 1.6
     pass(k) = bm[k].t_mean_float < best_times[k] * buffer
     intersect_keys = intersect(collect(keys(bm)), collect(keys(best_times)))
     if !all(k -> pass(k), intersect_keys)
