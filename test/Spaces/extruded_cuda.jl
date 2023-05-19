@@ -9,11 +9,7 @@ using ClimaComms: SingletonCommsContext
 import ClimaCore
 import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
 using Test
-
-include(
-    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+import TestUtilities as TU
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
 compare(cpu, gpu, sym) =

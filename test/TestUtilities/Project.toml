@@ -1,0 +1,9 @@
+name = "TestUtilities"
+uuid = "5bb42003-d625-4edb-9840-08fc19fb0cd7"
+authors = ["CliMA Contributors <clima-software@caltech.edu>"]
+version = "0.1.0"
+
+[deps]
+ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"

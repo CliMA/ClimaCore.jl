@@ -10,11 +10,7 @@ import ClimaCore:
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
-
-include(
-    joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
-)
-import .TestUtilities as TU
+import TestUtilities as TU
 
 # https://github.com/CliMA/ClimaCore.jl/issues/946
 @testset "Allocations with broadcasting Scalars" begin

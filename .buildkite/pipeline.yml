@@ -19,7 +19,7 @@ steps:
       - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
 
       - echo "--- Instantiate test"
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.develop(path=[\".\",\"test/TestUtilities\"]); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate lib/ClimaCoreTempestRemap"
       - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
