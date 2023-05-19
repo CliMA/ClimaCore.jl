@@ -60,3 +60,41 @@ end
 function Base.Broadcast.materialize!(dest, opbc::OperatorBroadcasted)
     copyto!(dest, Base.Broadcast.instantiate(opbc))
 end
+
+
+# when sending Broadcasted objects to the GPU, we strip out the space
+# information at each level of the broadcast tree and Fields, replacing with
+# PlaceholderSpace. this reduces the amount runtime parameter data we send to
+# the GPU, which is quite limited (~4kB).
+
+# Functions for CUDASpectralStyle
+struct PlaceholderSpace <: Spaces.AbstractSpace end
+
+placeholder_space(current_space::T, parent_space::T) where {T} =
+    PlaceholderSpace()
+placeholder_space(current_space, parent_space) = current_space
+
+reconstruct_placeholder_space(::PlaceholderSpace, parent_space) = parent_space
+reconstruct_placeholder_space(current_space, parent_space) = current_space
+
+
+strip_space(obj, parent_space) = obj
+
+function strip_space(field::Field, parent_space)
+    current_space = axes(field)
+    new_space = placeholder_space(current_space, parent_space)
+    return Field(Fields.field_values(field), new_space)
+end
+
+function strip_space(
+    bc::Base.Broadcast.Broadcasted{Style},
+    parent_space,
+) where {Style}
+    current_space = axes(bc)
+    new_space = placeholder_space(current_space, parent_space)
+    return Base.Broadcast.Broadcasted{Style}(
+        bc.f,
+        map(arg -> strip_space(arg, current_space), bc.args),
+        new_space,
+    )
+end

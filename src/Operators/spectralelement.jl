@@ -186,7 +186,7 @@ Base.@propagate_inbounds function copyto_slab!(out, bc, slabidx)
     Nq = Quadratures.degrees_of_freedom(QS)
     rbc = resolve_operator(bc, slabidx)
     @inbounds for ij in node_indices(axes(out))
-        set_node!(out, ij, slabidx, get_node(rbc, ij, slabidx))
+        set_node!(space, out, ij, slabidx, get_node(space, rbc, ij, slabidx))
     end
     return nothing
 end
@@ -231,8 +231,16 @@ Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
     _resolve_operator_args(slabidx, xargs...)...,
 )
 
+function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
+    current_space = axes(bc)
+    new_space = placeholder_space(current_space, parent_space)
+    return SpectralBroadcasted{Style}(
+        bc.op,
+        map(arg -> strip_space(arg, current_space), bc.args),
+        new_space,
+    )
+end
 
-# Functions for CUDASpectralStyle
 function Base.copyto!(
     out::Field,
     sbc::Union{
@@ -248,80 +256,97 @@ function Base.copyto!(
     # executed
     @inbounds begin
         @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_spectral_kernel!(
-            out,
-            sbc,
+            strip_space(out, space),
+            strip_space(sbc, space),
+            space,
         )
     end
     return out
 end
 
-function copyto_spectral_kernel!(out::Fields.Field, sbc)
+function copyto_spectral_kernel!(out::Fields.Field, sbc, space)
     @inbounds begin
         i = threadIdx().x
         j = threadIdx().y
         h = blockIdx().x
-        if out isa Fields.SpectralElementField
+        if space isa Spaces.AbstractSpectralElementSpace
             v = nothing
-        elseif out isa Fields.FaceExtrudedFiniteDifferenceField
+        elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
             v = blockIdx().y - half
-        else
+        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
             v = blockIdx().y
+        else
+            error("Invalid space")
         end
         ij = CartesianIndex((i, j))
         slabidx = Fields.SlabIndex(v, h)
-        result = get_node(sbc, ij, slabidx)
-        set_node!(out, ij, slabidx, result)
+        result = get_node(space, sbc, ij, slabidx)
+        set_node!(space, out, ij, slabidx, result)
     end
     return nothing
 end
 
 Base.@propagate_inbounds function get_node(
+    parent_space,
     sbc::SpectralBroadcasted{CUDASpectralStyle},
     ij,
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(sbc), parent_space)
     apply_operator_kernel(
         sbc.op,
-        axes(sbc),
+        space,
         ij,
         slabidx,
-        _get_node(ij, slabidx, sbc.args...)...,
+        _get_node(space, ij, slabidx, sbc.args...)...,
     )
 end
 
 
-@inline _get_node(ij, slabidx) = ()
-Base.@propagate_inbounds _get_node(ij, slabidx, arg, xargs...) =
-    (get_node(arg, ij, slabidx), _get_node(ij, slabidx, xargs...)...)
+@inline _get_node(space, ij, slabidx) = ()
+Base.@propagate_inbounds _get_node(space, ij, slabidx, arg, xargs...) = (
+    get_node(space, arg, ij, slabidx),
+    _get_node(space, ij, slabidx, xargs...)...,
+)
 
-Base.@propagate_inbounds function get_node(scalar, ij, slabidx)
+Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
 end
 Base.@propagate_inbounds function get_node(
+    parent_space,
     field::Fields.Field,
     ij::CartesianIndex{1},
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(field), parent_space)
     i, = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
-    else
+    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.AbstractSpectralElementSpace
         v = slabidx.v
+    else
+        error("invalid space")
     end
     h = slabidx.h
     fv = Fields.field_values(field)
     return fv[i, nothing, nothing, v, h]
 end
 Base.@propagate_inbounds function get_node(
+    parent_space,
     field::Fields.Field,
     ij::CartesianIndex{2},
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(field), parent_space)
     i, j = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
-    else
+    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
+           space isa Spaces.AbstractSpectralElementSpace
         v = slabidx.v
+    else
+        error("invalid space")
     end
     h = slabidx.h
     fv = Fields.field_values(field)
@@ -331,13 +356,16 @@ end
 
 
 Base.@propagate_inbounds function get_node(
+    parent_space,
     bc::Base.Broadcast.Broadcasted,
     ij,
     slabidx,
 )
-    bc.f(_get_node(ij, slabidx, bc.args...)...)
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
+    bc.f(_get_node(space, ij, slabidx, bc.args...)...)
 end
 Base.@propagate_inbounds function get_node(
+    space,
     data::Union{DataLayouts.IJF, DataLayouts.IF},
     ij,
     slabidx,
@@ -345,6 +373,7 @@ Base.@propagate_inbounds function get_node(
     data[ij]
 end
 Base.@propagate_inbounds function get_node(
+    space,
     data::StaticArrays.SArray,
     ij,
     slabidx,
@@ -395,13 +424,14 @@ Base.@propagate_inbounds function get_local_geometry(
 end
 
 Base.@propagate_inbounds function set_node!(
+    space,
     field::Fields.Field,
     ij::CartesianIndex{1},
     slabidx,
     val,
 )
     i, = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     else
         v = slabidx.v
@@ -411,13 +441,14 @@ Base.@propagate_inbounds function set_node!(
     fv[i, nothing, nothing, v, h] = val
 end
 Base.@propagate_inbounds function set_node!(
+    space,
     field::Fields.Field,
     ij::CartesianIndex{2},
     slabidx,
     val,
 )
     i, j = Tuple(ij)
-    if field isa Fields.FaceExtrudedFiniteDifferenceField
+    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     else
         v = slabidx.v
@@ -426,7 +457,6 @@ Base.@propagate_inbounds function set_node!(
     fv = Fields.field_values(field)
     fv[i, j, nothing, v, h] = val
 end
-
 
 Base.Broadcast.BroadcastStyle(
     ::Type{<:SpectralBroadcasted{Style}},
@@ -489,7 +519,7 @@ function apply_operator(op::Divergence{(1,)}, space, slabidx, arg)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(arg, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
         Jv¹ =
             local_geometry.J ⊠ RecursiveApply.rmap(
                 v -> Geometry.contravariant1(v, local_geometry),
@@ -524,7 +554,7 @@ Base.@propagate_inbounds function apply_operator(
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(arg, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
         Jv¹ =
             local_geometry.J ⊠ RecursiveApply.rmap(
                 v -> Geometry.contravariant1(v, local_geometry),
@@ -653,7 +683,7 @@ function apply_operator(op::WeakDivergence{(1,)}, space, slabidx, arg)
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(arg, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
         WJv¹ =
             local_geometry.WJ ⊠ RecursiveApply.rmap(
                 v -> Geometry.contravariant1(v, local_geometry),
@@ -683,7 +713,7 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
-        v = get_node(arg, ij, slabidx)
+        v = get_node(space, arg, ij, slabidx)
         WJv¹ =
             local_geometry.WJ ⊠ RecursiveApply.rmap(
                 v -> Geometry.contravariant1(v, local_geometry),
@@ -793,7 +823,7 @@ function apply_operator(op::Gradient{(1,)}, space, slabidx, arg)
     fill!(parent(out), zero(FT))
     @inbounds for i in 1:Nq
         ij = CartesianIndex((i,))
-        x = get_node(arg, ij, slabidx)
+        x = get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             ∂f∂ξ = Geometry.Covariant1Vector(D[ii, i]) ⊗ x
             out[ii] += ∂f∂ξ
@@ -819,7 +849,7 @@ Base.@propagate_inbounds function apply_operator(
 
     @inbounds for j in 1:Nq, i in 1:Nq
         ij = CartesianIndex((i, j))
-        x = get_node(arg, ij, slabidx)
+        x = get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             ∂f∂ξ₁ = Geometry.Covariant12Vector(D[ii, i], zero(eltype(D))) ⊗ x
             out[ii, j] = out[ii, j] ⊞ ∂f∂ξ₁
@@ -918,7 +948,7 @@ function apply_operator(op::WeakGradient{(1,)}, space, slabidx, arg)
         ij = CartesianIndex((i,))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ / local_geometry.J
-        Wx = W ⊠ get_node(arg, ij, slabidx)
+        Wx = W ⊠ get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant1Vector(D[i, ii]) ⊗ Wx
             out[ii] = out[ii] ⊟ Dᵀ₁Wf
@@ -947,7 +977,7 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
         ij = CartesianIndex((i, j))
         local_geometry = get_local_geometry(space, ij, slabidx)
         W = local_geometry.WJ / local_geometry.J
-        Wx = W ⊠ get_node(arg, ij, slabidx)
+        Wx = W ⊠ get_node(space, arg, ij, slabidx)
         for ii in 1:Nq
             Dᵀ₁Wf = Geometry.Covariant12Vector(D[i, ii], zero(eltype(D))) ⊗ Wx
             out[ii, j] = out[ii, j] ⊟ Dᵀ₁Wf
@@ -1068,7 +1098,7 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
         @inbounds for i in 1:Nq
             ij = CartesianIndex((i,))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
                 D₁v₃ = D[ii, i] ⊠ v₃
@@ -1101,7 +1131,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
         @inbounds for j in 1:Nq, i in 1:Nq
             ij = CartesianIndex((i, j))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             v₁ = Geometry.covariant1(v, local_geometry)
             for jj in 1:Nq
                 D₂v₁ = D[jj, j] ⊠ v₁
@@ -1118,7 +1148,7 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
         @inbounds for j in 1:Nq, i in 1:Nq
             ij = CartesianIndex((i, j))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             v₃ = Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
                 D₁v₃ = D[ii, i] ⊠ v₃
@@ -1264,7 +1294,7 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
         @inbounds for i in 1:Nq
             ij = CartesianIndex((i,))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ / local_geometry.J
             Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
@@ -1298,7 +1328,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
         @inbounds for j in 1:Nq, i in 1:Nq
             ij = CartesianIndex((i, j))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ / local_geometry.J
             Wv₁ = W ⊠ Geometry.covariant1(v, local_geometry)
             for jj in 1:Nq
@@ -1317,7 +1347,7 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
         @inbounds for j in 1:Nq, i in 1:Nq
             ij = CartesianIndex((i, j))
             local_geometry = get_local_geometry(space, ij, slabidx)
-            v = get_node(arg, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
             W = local_geometry.WJ / local_geometry.J
             Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
@@ -1447,12 +1477,12 @@ function apply_operator(op::Interpolate{(1,)}, space_out, slabidx, arg)
     @inbounds for i in 1:Nq_out
         # manually inlined rmatmul with slab_getnode
         ij = CartesianIndex((1,))
-        r = Imat[i, 1] ⊠ get_node(arg, ij, slabidx)
+        r = Imat[i, 1] ⊠ get_node(space_in, arg, ij, slabidx)
         for ii in 2:Nq_in
             ij = CartesianIndex((ii,))
             r = RecursiveApply.rmuladd(
                 Imat[i, ii],
-                get_node(arg, ij, slabidx),
+                get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
@@ -1477,12 +1507,12 @@ function apply_operator(op::Interpolate{(1, 2)}, space_out, slabidx, arg)
         # manually inlined rmatmul1 with slab get_node
         # we do this to remove one allocated intermediate array
         ij = CartesianIndex((1, j))
-        r = Imat[i, 1] ⊠ get_node(arg, ij, slabidx)
+        r = Imat[i, 1] ⊠ get_node(space_in, arg, ij, slabidx)
         for ii in 2:Nq_in
             ij = CartesianIndex((ii, j))
             r = RecursiveApply.rmuladd(
                 Imat[i, ii],
-                get_node(arg, ij, slabidx),
+                get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
@@ -1537,13 +1567,13 @@ function apply_operator(op::Restrict{(1,)}, space_out, slabidx, arg)
         # manually inlined rmatmul with slab get_node
         ij = CartesianIndex((1,))
         WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(arg, ij, slabidx))
+        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(space_in, arg, ij, slabidx))
         for ii in 2:Nq_in
             ij = CartesianIndex((ii,))
             WJ = get_local_geometry(space_in, ij, slabidx).WJ
             r = RecursiveApply.rmuladd(
                 ImatT[i, ii],
-                WJ ⊠ get_node(arg, ij, slabidx),
+                WJ ⊠ get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
@@ -1570,13 +1600,13 @@ function apply_operator(op::Restrict{(1, 2)}, space_out, slabidx, arg)
         # manually inlined rmatmul1 with slab get_node
         ij = CartesianIndex((1, j))
         WJ = get_local_geometry(space_in, ij, slabidx).WJ
-        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(arg, ij, slabidx))
+        r = ImatT[i, 1] ⊠ (WJ ⊠ get_node(space_in, arg, ij, slabidx))
         for ii in 2:Nq_in
             ij = CartesianIndex((ii, j))
             WJ = get_local_geometry(space_in, ij, slabidx).WJ
             r = RecursiveApply.rmuladd(
                 ImatT[i, ii],
-                WJ ⊠ get_node(arg, ij, slabidx),
+                WJ ⊠ get_node(space_in, arg, ij, slabidx),
                 r,
             )
         end
