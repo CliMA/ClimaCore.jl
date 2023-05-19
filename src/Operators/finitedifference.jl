@@ -789,10 +789,11 @@ stencil_interior_width(::RightBiasedF2C, arg) = ((half, half),)
 Base.@propagate_inbounds stencil_interior(
     ::RightBiasedF2C,
     loc,
+    space,
     idx,
     hidx,
     arg,
-) = getidx(arg, loc, idx + half, hidx)
+) = getidx(space, arg, loc, idx + half, hidx)
 
 boundary_width(::RightBiasedF2C, ::SetValue, arg) = 1
 Base.@propagate_inbounds function stencil_right_boundary(
@@ -842,14 +843,15 @@ stencil_interior_width(::RightBiased3rdOrderC2F, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
     ::RightBiased3rdOrderC2F,
     loc,
+    space,
     idx,
     hidx,
     arg,
 ) =
     (
-        4 * getidx(arg, loc, idx - half, hidx) +
-        10 * getidx(arg, loc, idx + half, hidx) -
-        2 * getidx(arg, loc, idx + half + 1, hidx)
+        4 * getidx(space, arg, loc, idx - half, hidx) +
+        10 * getidx(space, arg, loc, idx + half, hidx) -
+        2 * getidx(space, arg, loc, idx + half + 1, hidx)
     ) / 12
 
 boundary_width(::RightBiased3rdOrderC2F, ::SetValue, arg) = 1
@@ -899,14 +901,15 @@ stencil_interior_width(::RightBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
     ::RightBiased3rdOrderF2C,
     loc,
+    space,
     idx,
     hidx,
     arg,
 ) =
     (
-        4 * getidx(arg, loc, idx - half, hidx) +
-        10 * getidx(arg, loc, idx + half, hidx) -
-        2 * getidx(arg, loc, idx + half + 1, hidx)
+        4 * getidx(space, arg, loc, idx - half, hidx) +
+        10 * getidx(space, arg, loc, idx + half, hidx) -
+        2 * getidx(space, arg, loc, idx + half + 1, hidx)
     ) / 12
 
 boundary_width(::RightBiased3rdOrderF2C, ::SetValue, arg) = 1
@@ -2199,10 +2202,11 @@ stencil_interior_width(::SetBoundaryOperator, arg) = ((0, 0),)
 Base.@propagate_inbounds stencil_interior(
     ::SetBoundaryOperator,
     loc,
+    space,
     idx,
     hidx,
     arg,
-) = getidx(arg, loc, idx, hidx)
+) = getidx(space, arg, loc, idx, hidx)
 
 boundary_width(::SetBoundaryOperator, ::SetValue, arg) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
@@ -2335,7 +2339,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     @assert idx == left_center_boundary_idx(space)
     Geometry.project(
         Geometery.Covariant3Axis(),
-        stencil_interior(space, op, loc, idx + 1, hidx, arg),
+        stencil_interior(op, loc, space, idx + 1, hidx, arg),
         Geometry.LocalGeometry(space, idx, hidx),
     )
 end
@@ -2351,7 +2355,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     @assert idx == right_center_boundary_idx(space)
     Geometry.project(
         Geometry.Covariant3Axis(),
-        stencil_interior(space, op, loc, idx - 1, hidx, arg),
+        stencil_interior(op, loc, space, idx - 1, hidx, arg),
         Geometry.LocalGeometry(space, idx, hidx),
     )
 end
@@ -2591,7 +2595,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
     arg,
 )
     @assert idx == left_center_boundary_idx(space)
-    stencil_interior(space, op, loc, idx + 1, hidx, arg)
+    stencil_interior(op, loc, space, idx + 1, hidx, arg)
 end
 Base.@propagate_inbounds function stencil_right_boundary(
     op::DivergenceF2C,
@@ -2603,7 +2607,7 @@ Base.@propagate_inbounds function stencil_right_boundary(
     arg,
 )
     @assert idx == right_center_boundary_idx(space)
-    stencil_interior(space, op, loc, idx - 1, hidx, arg)
+    stencil_interior(op, loc, space, idx - 1, hidx, arg)
 end
 
 """
@@ -3201,9 +3205,9 @@ Base.@propagate_inbounds function setidx!(
     hidx,
     val,
 )
-    space = reconstruct_placeholder_space(axes(bc), parent_space)
-    if space isa Space.FaceFiniteDifferenceSpace ||
-       space isa Space.FaceExtrudedFiniteDifferenceSpace
+    space = reconstruct_placeholder_space(axes(field), parent_space)
+    if space isa Spaces.FaceFiniteDifferenceSpace ||
+       space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = idx + half
     else
         v = idx
@@ -3276,7 +3280,7 @@ end
 
 function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        apply_stencil!(field_out, bc, (i, j, h))
+        apply_stencil!(axes(field_out), field_out, bc, (i, j, h))
     end
     return field_out
 end
@@ -3285,7 +3289,7 @@ function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nj, i in 1:Ni
-                apply_stencil!(field_out, bc, (i, j, h))
+                apply_stencil!(axes(field_out), field_out, bc, (i, j, h))
             end
         end
     end
