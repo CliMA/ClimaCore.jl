@@ -70,6 +70,7 @@ end
 # Functions for CUDASpectralStyle
 struct PlaceholderSpace <: Spaces.AbstractSpace end
 
+
 placeholder_space(current_space::T, parent_space::T) where {T} =
     PlaceholderSpace()
 placeholder_space(current_space, parent_space) = current_space
