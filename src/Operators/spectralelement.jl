@@ -493,8 +493,6 @@ Base.@propagate_inbounds function set_node!(
     fv = Fields.field_values(field)
     fv[i, j, nothing, v, h] = val
 end
-set_node!(field, ij, slabidx, val) =
-    set_node!(axes(field), field, ij, slabidx, val)
 
 Base.Broadcast.BroadcastStyle(
     ::Type{<:SpectralBroadcasted{Style}},
