@@ -361,7 +361,7 @@ Base.@propagate_inbounds function get_node(
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.SpectralElementSpace2D
+           space isa Spaces.AbstractSpectralElementSpace
         v = slabidx.v
     else
         error("invalid space")
@@ -380,7 +380,7 @@ Base.@propagate_inbounds function get_node(
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
     elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace ||
-           space isa Spaces.SpectralElementSpace2D
+           space isa Spaces.AbstractSpectralElementSpace
         v = slabidx.v
     else
         error("invalid space")
