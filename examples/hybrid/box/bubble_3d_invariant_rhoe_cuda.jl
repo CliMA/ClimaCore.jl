@@ -58,11 +58,10 @@ function hvspace_3D(
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
     return (hv_center_space, hv_face_space, horztopology)
 end
-@show "before building spaces"
 # set up 3D domain - doubly periodic box
 hv_center_space, hv_face_space, horztopology =
     hvspace_3D(comms_ctx, (-500, 500), (-500, 500), (0, 1000))
-@show "after building spaces"
+
 const MSLP = 1e5 # mean sea level pressure
 const grav = 9.8 # gravitational constant
 const R_d = 287.058 # R dry (gas constant / mol mass dry air)
@@ -151,7 +150,6 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     hwcurl = Operators.WeakCurl()
 
     dρ .= 0 .* cρ
-    #=
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -208,6 +206,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
 
     # explicit part
     dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    #=
     # implicit part
     dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
 
