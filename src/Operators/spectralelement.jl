@@ -231,54 +231,15 @@ Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
     _resolve_operator_args(slabidx, xargs...)...,
 )
 
-
-# Functions for CUDASpectralStyle
-struct PlaceholderSpace <: Spaces.AbstractSpace end
-
-
-strip_space(obj, parent_space) = obj
-
-function strip_space(field::Field, parent_space)
-    current_space = axes(field)
-    if current_space == parent_space
-        new_space = PlaceholderSpace()
-    else
-        new_space = current_space
-    end
-    return Field(Fields.field_values(field), new_space)
-end
-
-function strip_space(
-    bc::Base.Broadcast.Broadcasted{Style},
-    parent_space,
-) where {Style}
-    current_space = axes(bc)
-    if current_space == parent_space
-        new_space = PlaceholderSpace()
-    else
-        new_space = current_space
-    end
-    return Base.Broadcast.Broadcasted{Style}(
-        bc.f,
-        map(arg -> strip_space(arg, current_space), bc.args),
-        new_space,
-    )
-end
-
 function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(bc)
-    if current_space == parent_space
-        new_space = PlaceholderSpace()
-    else
-        new_space = current_space
-    end
+    new_space = placeholder_space(current_space, parent_space)
     return SpectralBroadcasted{Style}(
         bc.op,
         map(arg -> strip_space(arg, current_space), bc.args),
         new_space,
     )
 end
-
 
 function Base.copyto!(
     out::Field,
@@ -326,12 +287,12 @@ function copyto_spectral_kernel!(out::Fields.Field, sbc, space)
 end
 
 Base.@propagate_inbounds function get_node(
-    space,
+    parent_space,
     sbc::SpectralBroadcasted{CUDASpectralStyle},
     ij,
     slabidx,
 )
-
+    space = reconstruct_placeholder_space(axes(sbc), parent_space)
     apply_operator_kernel(
         sbc.op,
         space,
@@ -352,11 +313,12 @@ Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
 end
 Base.@propagate_inbounds function get_node(
-    space,
+    parent_space,
     field::Fields.Field,
     ij::CartesianIndex{1},
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(field), parent_space)
     i, = Tuple(ij)
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
@@ -371,11 +333,12 @@ Base.@propagate_inbounds function get_node(
     return fv[i, nothing, nothing, v, h]
 end
 Base.@propagate_inbounds function get_node(
-    space,
+    parent_space,
     field::Fields.Field,
     ij::CartesianIndex{2},
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(field), parent_space)
     i, j = Tuple(ij)
     if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
         v = slabidx.v + half
@@ -393,11 +356,12 @@ end
 
 
 Base.@propagate_inbounds function get_node(
-    space,
+    parent_space,
     bc::Base.Broadcast.Broadcasted,
     ij,
     slabidx,
 )
+    space = reconstruct_placeholder_space(axes(bc), parent_space)
     bc.f(_get_node(space, ij, slabidx, bc.args...)...)
 end
 Base.@propagate_inbounds function get_node(
