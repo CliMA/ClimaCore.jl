@@ -1,6 +1,5 @@
 module Fields
 
-import ..comm_context
 import ClimaComms
 import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
@@ -38,18 +37,18 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
-comm_context(field::Field) = comm_context(axes(field))
+ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 
-comm_context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    comm_context(space.horizontal_space)
-comm_context(space::Spaces.SpectralElementSpace2D) =
-    comm_context(space.topology)
-comm_context(space::S) where {S <: Spaces.AbstractSpace} =
-    ClimaComms.SingletonCommsContext()
+ClimaComms.context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
+    ClimaComms.context(space.horizontal_space)
+ClimaComms.context(space::Spaces.SpectralElementSpace2D) =
+    ClimaComms.context(space.topology)
+ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
+    ClimaComms.context(space.topology)
 
-comm_context(topology::Topologies.Topology2D) = topology.context
-comm_context(topology::T) where {T <: Topologies.AbstractTopology} =
-    ClimaComms.SingletonCommsContext()
+ClimaComms.context(topology::Topologies.Topology2D) = topology.context
+ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
+    topology.context
 
 Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, Fields.field_values(field)),

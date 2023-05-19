@@ -58,9 +58,7 @@ function create_dss_buffer(
     local_geometry = nothing,
     local_weights = nothing,
 ) where {S, Nij}
-    context =
-        topology isa Topologies.Topology2D ? topology.context :
-        ClimaComms.SingletonCommsContext()
+    context = topology.context
     DA = ClimaComms.array_type(topology)
     convert_to_array = DA isa Array ? false : true
     (_, _, _, Nv, nelems) = Base.size(data)

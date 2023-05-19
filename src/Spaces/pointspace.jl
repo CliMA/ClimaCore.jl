@@ -7,20 +7,35 @@ local_geometry_data(space::AbstractPointSpace) = space.local_geometry
 
 A zero-dimensional space.
 """
-struct PointSpace{LG} <: AbstractPointSpace
+struct PointSpace{C <: ClimaComms.AbstractCommsContext, LG} <:
+       AbstractPointSpace
+    context::C
     local_geometry::LG
 end
 
-ClimaComms.device(space::PointSpace) = ClimaComms.CPUDevice()
+ClimaComms.device(space::PointSpace) = ClimaComms.device(space.context)
+ClimaComms.context(space::PointSpace) = space.context
 
-function PointSpace(local_geometry::LG) where {LG <: Geometry.LocalGeometry}
+@deprecate PointSpace(x::Geometry.LocalGeometry) PointSpace(
+    ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+    x,
+) false
+
+function PointSpace(
+    context::ClimaComms.AbstractCommsContext,
+    local_geometry::LG,
+) where {LG <: Geometry.LocalGeometry}
     FT = Geometry.undertype(LG)
+    # TODO: inherit array type
     local_geometry_data = DataLayouts.DataF{LG}(Array{FT})
     local_geometry_data[] = local_geometry
-    return PointSpace(local_geometry_data)
+    return PointSpace(context, local_geometry_data)
 end
 
-function PointSpace(coord::Geometry.Abstract1DPoint{FT}) where {FT}
+function PointSpace(
+    context::ClimaComms.AbstractCommsContext,
+    coord::Geometry.Abstract1DPoint{FT},
+) where {FT}
     CoordType = typeof(coord)
     AIdx = Geometry.coordinate_axis(CoordType)
     local_geometry = Geometry.LocalGeometry(
@@ -32,5 +47,5 @@ function PointSpace(coord::Geometry.Abstract1DPoint{FT}) where {FT}
             FT(1.0),
         ),
     )
-    return PointSpace(local_geometry)
+    return PointSpace(context, local_geometry)
 end
