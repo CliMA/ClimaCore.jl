@@ -282,5 +282,5 @@ ClimaComms.array_type(x::FieldVector) = _array_type(x)
 
 @inline _array_type(x::FieldVector, pns::Tuple) = promote_type(
     _array_type(getproperty(x, first(pns))),
-    _array_type(x, Base.tail(pns))...,
+    _array_type(x, Base.tail(pns)),
 )

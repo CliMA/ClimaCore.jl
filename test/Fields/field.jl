@@ -164,6 +164,8 @@ end
     xcenters = Fields.coordinate_field(space).x
     y = Fields.FieldVector(x = xcenters)
     @test ClimaComms.array_type(y) == Array
+    y = Fields.FieldVector(x = xcenters, y = xcenters)
+    @test ClimaComms.array_type(y) == Array
 end
 
 @testset "FieldVector basetype replacement and deepcopy" begin
