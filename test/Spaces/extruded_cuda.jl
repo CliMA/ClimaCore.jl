@@ -35,8 +35,8 @@ end
     FT = Float64
     CUDA.allowscalar(true)
     # TODO: add support and test for all spaces
-    cpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = cpu_context)
-    gpuspace = TU.ExtrudedCenterFiniteDifferenceSpace(FT; context = gpu_context)
+    cpuspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = cpu_context)
+    gpuspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :center_local_geometry)
