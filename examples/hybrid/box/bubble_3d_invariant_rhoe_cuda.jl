@@ -205,10 +205,13 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     # negation
 
     # explicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
-    #=
+    fρe = Ic2f.(cρ .* cuₕ)
+    dρ .-= vdivf2c.(fρe)
+    #dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
     # implicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    fρi = Ic2f.(cρ) .* fw
+    dρ .-= vdivf2c.(fρi)
+    #dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
 
     # 2) Momentum equation
 
@@ -232,7 +235,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         ) # Contravariant12Vector in 3D
     fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
-    @. duₕ -= If2c(fω¹² × fu³)
+    #@. duₕ -= If2c(fω¹² × fu³)
 
     # Needed for 3D:
     @. duₕ -=
@@ -253,8 +256,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     # 3) potential temperature
 
     @. dρe -= hdiv(cuvw * (cρe + cp))
-    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
-    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
+    #@. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    #@. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     fcc = Operators.FluxCorrectionC2C(
         bottom = Operators.Extrapolate(),
@@ -265,9 +268,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         top = Operators.Extrapolate(),
     )
 
-    @. dρ += fcc(fw, cρ)
-    @. dρe += fcc(fw, cρe)
-    # dYc.ρuₕ += fcc(w, Yc.ρuₕ)
+    #@. dρ += fcc(fw, cρ)
+    #@. dρe += fcc(fw, cρe)
 
     Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)
@@ -278,7 +280,6 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     Spaces.weighted_dss_ghost!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_ghost!(dY.uₕ, ghost_buffer.uₕ)
     Spaces.weighted_dss_ghost!(dY.w, ghost_buffer.w)
-    =#
     return dY
 end
 dYdt = similar(Y);
