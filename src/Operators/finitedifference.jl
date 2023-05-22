@@ -3083,7 +3083,7 @@ Base.@propagate_inbounds function getidx(
     parent_space,
     bc::Fields.Field,
     ::Location,
-    idx::Integer,
+    idx,
     hidx,
 )
     field_data = Fields.field_values(bc)
@@ -3128,15 +3128,6 @@ end
 @noinline inferred_getidx_error(idx_type::Type, space_type::Type) =
     error("Invalid index type `$idx_type` for field on space `$space_type`")
 
-Base.@propagate_inbounds function getidx(
-    parent_space,
-    field::Fields.Field,
-    loc::Location,
-    idx,
-    hidx,
-)
-    getidx(parent_space, column(field, hidx...), loc, idx)
-end
 
 # recursively unwrap getidx broadcast arguments in a way that is statically reducible by the optimizer
 Base.@propagate_inbounds getidx_args(
@@ -3310,21 +3301,23 @@ function Base.copyto!(
         Nq = 1
         Nh = 1
     end
+    bds = window_bounds(space, bc)
     # executed
     @cuda threads = (Nq, Nq) blocks = (Nh,) copyto_stencil_kernel!(
         strip_space(out, space),
         strip_space(bc, space),
         axes(out),
+        bds,
     )
     return out
 end
 
-function copyto_stencil_kernel!(out, bc, space)
+function copyto_stencil_kernel!(out, bc, space, bds)
     i = threadIdx().x
     j = threadIdx().y
     h = blockIdx().x
     hidx = (i, j, h)
-    apply_stencil!(space, out, bc, hidx)
+    apply_stencil!(space, out, bc, hidx, bds)
     return nothing
 end
 
@@ -3344,18 +3337,10 @@ function Base.copyto!(
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)
 end
 
-Base.@propagate_inbounds function apply_stencil!(space, field_out, bc, hidx)
+function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        @inbounds for idx in
-                      left_idx(space):(left_idx(space) + length(space) - 1)
-            setidx!(
-                space,
-                field_out,
-                idx,
-                hidx,
-                getidx(space, bc, Interior(), idx, hidx),
-            )
-        end
+        li = lw = left_idx(space)
+        ri = rw = left_idx(space) + length(space) - 1
     else
         lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
         rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
@@ -3363,7 +3348,22 @@ Base.@propagate_inbounds function apply_stencil!(space, field_out, bc, hidx)
         lw = left_interior_window_idx(bc, space, lbw)::typeof(li)
         ri = right_idx(space)
         rw = right_interior_window_idx(bc, space, rbw)::typeof(ri)
-        @assert li <= lw <= rw <= ri
+    end
+    @assert li <= lw <= rw <= ri
+    return (li, lw, rw, ri)
+end
+
+
+Base.@propagate_inbounds function apply_stencil!(
+    space,
+    field_out,
+    bc,
+    hidx,
+    (li, lw, rw, ri) = window_bounds(space, bc),
+)
+    if !Topologies.isperiodic(Spaces.vertical_topology(space))
+        # left window
+        lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
         @inbounds for idx in li:(lw - 1)
             setidx!(
                 space,
@@ -3373,15 +3373,20 @@ Base.@propagate_inbounds function apply_stencil!(space, field_out, bc, hidx)
                 getidx(space, bc, lbw, idx, hidx),
             )
         end
-        @inbounds for idx in lw:rw
-            setidx!(
-                space,
-                field_out,
-                idx,
-                hidx,
-                getidx(space, bc, Interior(), idx, hidx),
-            )
-        end
+    end
+    # interior
+    @inbounds for idx in lw:rw
+        setidx!(
+            space,
+            field_out,
+            idx,
+            hidx,
+            getidx(space, bc, Interior(), idx, hidx),
+        )
+    end
+    if !Topologies.isperiodic(Spaces.vertical_topology(space))
+        # right window
+        rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
         @inbounds for idx in (rw + 1):ri
             setidx!(
                 space,
