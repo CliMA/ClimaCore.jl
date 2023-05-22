@@ -16,6 +16,7 @@ import ClimaCore:
     Fields,
     Operators
 using ClimaCore.Geometry
+using ClimaTimeSteppers
 
 device = ClimaComms.device()
 comms_ctx = ClimaComms.SingletonCommsContext(device)
@@ -205,13 +206,9 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     # negation
 
     # explicit part
-    fρe = Ic2f.(cρ .* cuₕ)
-    dρ .-= vdivf2c.(fρe)
-    #dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
     # implicit part
-    fρi = Ic2f.(cρ) .* fw
-    dρ .-= vdivf2c.(fρi)
-    #dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
 
     # 2) Momentum equation
 
@@ -235,7 +232,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         ) # Contravariant12Vector in 3D
     fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
-    #@. duₕ -= If2c(fω¹² × fu³)
+    @. duₕ -= If2c(fω¹² × fu³)
 
     # Needed for 3D:
     @. duₕ -=
@@ -256,8 +253,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
     # 3) potential temperature
 
     @. dρe -= hdiv(cuvw * (cρe + cp))
-    #@. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
-    #@. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
+    @. dρe -= vdivf2c(fw * Ic2f(cρe + cp))
+    @. dρe -= vdivf2c(Ic2f(cuₕ * (cρe + cp)))
 
     fcc = Operators.FluxCorrectionC2C(
         bottom = Operators.Extrapolate(),
@@ -268,8 +265,8 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         top = Operators.Extrapolate(),
     )
 
-    #@. dρ += fcc(fw, cρ)
-    #@. dρe += fcc(fw, cρe)
+    @. dρ += fcc(fw, cρ)
+    @. dρe += fcc(fw, cρe)
 
     Spaces.weighted_dss_start!(dY.Yc, ghost_buffer.Yc)
     Spaces.weighted_dss_start!(dY.uₕ, ghost_buffer.uₕ)
@@ -284,10 +281,13 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
 end
 dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, ghost_buffer, 0.0);
-#=
 # run!
 using OrdinaryDiffEq
 Δt = 0.050
+
+ode_alg = ClimaTimeSteppers.ExplicitAlgorithm(SSP33ShuOsher())
+
+#=
 prob = ODEProblem(rhs_invariant!, Y, (0.0, 700.0), ghost_buffer)
 integrator = OrdinaryDiffEq.init(
     prob,
@@ -297,6 +297,8 @@ integrator = OrdinaryDiffEq.init(
     progress = true,
     progress_message = (dt, u, p, t) -> t,
 );
+=#
+#=
 =#
 #if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 #    throw(:exit_profile)
