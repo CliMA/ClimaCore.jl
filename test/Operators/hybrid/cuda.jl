@@ -84,8 +84,8 @@ function hvspace_3D_sphere(context)
 end
 
 @testset "Finite difference GradientF2C CUDA" begin
-    gpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    device = ClimaComms.device() #ClimaComms.CUDADevice()
+    device = ClimaComms.device()
+    gpu_context = ClimaComms.SingletonCommsContext(device)
     println("running test on $device device")
 
     # Define hv GPU space
@@ -108,10 +108,26 @@ end
     hwcurl = Operators.WeakCurl()
 
 
-    cuₕ = Geometry.Covariant12Vector.(.-coords.lat, coords.long)
+    ccoords = Fields.coordinate_field(hv_center_space_gpu)
+
+    cuₕ = Geometry.Covariant12Vector.(.-ccoords.lat, ccoords.long)
     duₕ = @. hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
         hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
     )
+
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    vdivf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+    )
+
+    cρ = ones(hv_center_space_gpu)
+
+    vdivf2c.(Ic2f.(cρ .* cuₕ))
 end
 @testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal CUDA" begin
 
