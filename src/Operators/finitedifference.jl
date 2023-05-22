@@ -3187,7 +3187,8 @@ Base.@propagate_inbounds function setidx!(
         v = idx
     end
     field_data = Fields.field_values(field)
-    @inbounds column(field_data, hidx...)[v] = val
+    i, j, h = hidx
+    @inbounds field_data[CartesianIndex(i, j, 1, v, h)] = val
     val
 end
 
