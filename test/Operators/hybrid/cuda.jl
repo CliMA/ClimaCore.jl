@@ -84,7 +84,7 @@ function hvspace_3D_sphere(context)
 end
 
 @testset "Finite difference GradientF2C CUDA" begin
-    device = ClimaComms.CPUDevice()
+    device = ClimaComms.device()
     gpu_context = ClimaComms.SingletonCommsContext(device)
     println("running test on $device device")
 

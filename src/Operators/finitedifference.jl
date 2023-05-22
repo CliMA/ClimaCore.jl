@@ -3074,7 +3074,7 @@ Base.@propagate_inbounds function getidx(
     else
         v = idx
     end
-    if Topologies.isperiodic(space.topology)
+    if Topologies.isperiodic(Spaces.vertical_topology(space))
         v = mod1(v, length(space))
     end
     return @inbounds field_data[v]
