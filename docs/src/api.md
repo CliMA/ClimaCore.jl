@@ -248,6 +248,12 @@ Fields.bycolumn
 Fields.Δz_field
 ```
 
+## Hypsography
+
+```@docs
+Hypsography.diffuse_surface_elevation!
+```
+
 ## Limiters
 
 The limiters supertype is
