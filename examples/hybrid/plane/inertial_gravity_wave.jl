@@ -1,8 +1,45 @@
+#=
+julia --threads=8 --project=examples
+ENV["TEST_NAME"] = "plane/inertial_gravity_wave"
+include(joinpath("examples", "hybrid", "driver.jl"))
+=#
 using Printf
 using ProgressLogging
 using ClimaCorePlots, Plots
 
 # Reference paper: https://rmets.onlinelibrary.wiley.com/doi/pdf/10.1002/qj.2105
+
+# min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
+# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
+# min_λx = 2 * π / max_kx = x_max / max_ikx
+# min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
+# max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
+# max_ikz = 2 * z_max / min_λz = upsampling_factor * z_elem
+function ρfb_init_coefs!(::Type{FT}, params) where {FT}
+    (; max_ikz, max_ikx, x_max, z_max, unit_integral) = params
+    (; ρfb_init_array, ᶜρb_init_xz) = params
+    # Since the coefficients are for a modified domain of height 2 * z_max, the
+    # unit integral over the domain must be multiplied by 2 to ensure correct
+    # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
+    # the "true" domain, so the integral of
+    # ᶜintegrand (`ᶜintegrand = ᶜρb_init / ᶜfourier_factor`) should not be modified.
+    # where `ᶜfourier_factor = exp(im * (kx * x + kz * z))`.
+    @inbounds begin
+        Threads.@threads for ikx in (-max_ikx):max_ikx
+            for ikz in (-max_ikz):max_ikz
+                kx::FT = 2 * π / x_max * ikx
+                kz::FT = 2 * π / (2 * z_max) * ikz
+                ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
+                    sum(ᶜρb_init_xz) do nt
+                        (;ρ, x, z) = nt
+                        ρ / exp(im * (kx * x + kz * z))
+                    end / unit_integral
+
+            end
+        end
+    end
+    return nothing
+end
 
 # Constants for switching between different experiment setups
 const is_small_scale = true
@@ -150,7 +187,7 @@ function postprocessing(sol, output_dir)
     v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
     w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
 
-    @inbounds begin
+    @time "print norms" @inbounds begin
         for iframe in (1, length(sol.t))
             t = sol.t[iframe]
             Y = sol.u[iframe]
@@ -208,13 +245,7 @@ function norm_strings(var, var_lin, p)
     )
 end
 
-# min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
-# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
-# min_λx = 2 * π / max_kx = x_max / max_ikx
-# min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
-# max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
-# max_ikz = 2 * z_max / min_λz = upsampling_factor * z_elem
-function ρfb_init_coefs(
+function ρfb_init_coefs_params(
     upsampling_factor = 3,
     max_ikx = upsampling_factor * x_elem ÷ 2,
     max_ikz = upsampling_factor * z_elem,
@@ -246,34 +277,21 @@ function ρfb_init_coefs(
         ᶜbretherton_factor_pρ = @. exp(-δ * ᶜz / 2)
         ᶜρb_init = @. ᶜρ′_init / ᶜbretherton_factor_pρ
     end
+    combine(ρ, lg) = (; ρ, x=lg.coordinates.x, z=lg.coordinates.z)
+    ᶜρb_init_xz = combine.(ᶜρb_init, ᶜlocal_geometry)
 
     # Fourier coefficients of Bretherton transform of initial perturbation
     ρfb_init_array = Array{Complex{FT}}(undef, 2 * max_ikx + 1, 2 * max_ikz + 1)
-    ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
-    ᶜintegrand = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     unit_integral = 2 * sum(one.(ᶜρb_init))
-    # Since the coefficients are for a modified domain of height 2 * z_max, the
-    # unit integral over the domain must be multiplied by 2 to ensure correct
-    # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
-    # the "true" domain, so the integral of ᶜintegrand should not be modified.
-    @inbounds begin
-        @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
-            ikz in (-max_ikz):max_ikz
-
-            kx = 2 * π / x_max * ikx
-            kz = 2 * π / (2 * z_max) * ikz
-            @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
-            @. ᶜintegrand = ᶜρb_init / ᶜfourier_factor
-            ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
-                sum(ᶜintegrand) / unit_integral
-        end
-    end
-    return ρfb_init_array
+    return (; ρfb_init_array, ᶜρb_init_xz, max_ikz, max_ikx, x_max, z_max, unit_integral)
 end
 
 function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜz = ᶜlocal_geometry.coordinates.z
     ᶠz = ᶠlocal_geometry.coordinates.z
+    ρfb_init_array_params = ρfb_init_coefs_params()
+    @time "ρfb_init_coefs!" ρfb_init_coefs!(FT, ρfb_init_array_params)
+    (;ρfb_init_array ) = ρfb_init_array_params
     ᶜp₀ = @. p₀(ᶜz)
     return (;
         # coordinates
@@ -295,7 +313,7 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
         ᶠbretherton_factor_uvwT = (@. exp(δ * ᶠz / 2)),
 
         # Fourier coefficients of Bretherton transform of initial perturbation
-        ρfb_init_array = ρfb_init_coefs(),
+        ρfb_init_array,
 
         # Fourier transform factors
         ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry)),

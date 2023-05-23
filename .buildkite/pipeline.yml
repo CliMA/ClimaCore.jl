@@ -773,7 +773,7 @@ steps:
       - label: ":computer: 2D plane inertial gravity wave"
         key: "cpu_inertial_gravity_wave"
         command:
-          - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+          - "julia --threads 8 --color=yes --project=examples examples/hybrid/driver.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/inertial_gravity_wave/Float32/*"
         env:
@@ -782,7 +782,7 @@ steps:
       - label: ":computer: stretched 2D plane inertial gravity wave"
         key: "cpu_stretch_inertial_gravity_wave"
         command:
-          - "julia --color=yes --project=examples examples/hybrid/driver.jl"
+          - "julia --threads 8 --color=yes --project=examples examples/hybrid/driver.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/stretched_inertial_gravity_wave/Float32/*"
         env:
