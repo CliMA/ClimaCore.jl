@@ -411,4 +411,5 @@ function linear_solution!(Y, lin_cache, t)
     @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))
     @. Y.c.uₕ.components.data.:2 .= ᶜv
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
+    return nothing
 end
