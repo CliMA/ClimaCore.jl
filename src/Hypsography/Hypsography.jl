@@ -6,6 +6,43 @@ import ..Spaces: ExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
 
 using StaticArrays, LinearAlgebra
 
+
+"""
+  laplacian_smoothing!(f,κ,iter)
+Option for laplacian smoothing of generated terrain.
+Compute smoothed profile before assigning the surface
+elevation to the `HypsographyAdaption` type.
+(1) Compute discrete elevation profile f
+(2) Compute laplacian_smoothing!(f, κ, iter). f is mutated.
+(3) Define `Hypsography.LinearAdaption(f)`
+(4) Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
+"""
+function laplacian_smoothing!(f::Fields.Field;
+                              κ::T = 1e8,
+                              maxiter::Int = 100, 
+                              dt::T = 1e-1) where {T}
+  # Define required ops
+  wdiv = Operators.WeakDivergence()
+  grad = Operators.Gradient()
+  FT = eltype(f)
+  # Create dss buffer
+  ghost_buffer = (
+    bf = Spaces.create_dss_buffer(f),
+  )
+  # Apply smoothing
+  for iter = 1:maxiter
+    # Euler steps
+    χf = @. wdiv(grad(f))
+    Spaces.weighted_dss_start!(χf, ghost_buffer.bf)
+    Spaces.weighted_dss_internal!(χf, ghost_buffer.bf)
+    Spaces.weighted_dss_ghost!(χf, ghost_buffer.bf)
+    @. f += κ*dt*χf
+    @. f = ifelse(f < FT(0), FT(0), f)
+  end
+  # Return mutated surface elevation profile
+  return f
+end
+
 """
     LinearAdaption(surface::Field)
 
@@ -69,16 +106,9 @@ function ExtrudedFiniteDifferenceSpace(
     if adaption isa LinearAdaption
         z_surface = adaption.surface
         FT = eltype(z_surface)
-        κ_smooth = eltype(z_surface)(1e8) # 1e8, 20000 Sphere
-        dt = eltype(z_surface)(1e-1)
-        @info "Apply Laplacian Smoothing"
-        for iter = 1:100
-           χzₛ = wdiv.(grad.(z_surface))
-           Spaces.weighted_dss!(χzₛ)
-           z_surface .+= κ_smooth .* dt .* χzₛ
-           @. z_surface = ifelse(z_surface < FT(0), FT(0), z_surface)
-        end
-        Spaces.weighted_dss!(z_surface)
+        @show extrema(z_surface) "Before"
+        laplacian_smoothing!(z_surface, κ=1e8, maxiter=100)
+        @show extrema(z_surface)
         z_surface = Fields.field_values(z_surface)
         fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
         fZ = Fields.Field(fZ_data, face_space)
