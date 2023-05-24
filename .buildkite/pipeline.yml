@@ -778,6 +778,8 @@ steps:
           - "examples/hybrid/plane/output/inertial_gravity_wave/Float32/*"
         env:
           TEST_NAME: "plane/inertial_gravity_wave"
+        agents:
+          slurm_cpus_per_task: 8
 
       - label: ":computer: stretched 2D plane inertial gravity wave"
         key: "cpu_stretch_inertial_gravity_wave"
@@ -788,6 +790,8 @@ steps:
         env:
           TEST_NAME: "plane/inertial_gravity_wave"
           Z_STRETCH: "true"
+        agents:
+          slurm_cpus_per_task: 8
 
   - group: "Performance"
     steps:
