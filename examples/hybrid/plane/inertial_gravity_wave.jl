@@ -31,7 +31,7 @@ function ρfb_init_coefs!(::Type{FT}, params) where {FT}
                 kz::FT = 2 * π / (2 * z_max) * ikz
                 ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
                     sum(ᶜρb_init_xz) do nt
-                        (;ρ, x, z) = nt
+                        (; ρ, x, z) = nt
                         ρ / exp(im * (kx * x + kz * z))
                     end / unit_integral
 
@@ -193,7 +193,8 @@ function postprocessing(sol, output_dir)
             Y = sol.u[iframe]
             linear_solution!(Y_lin, lin_cache, t)
             println("Error norms at time t = $t:")
-            for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
+            for (name, f) in
+                ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
                 var = f(Y)
                 var_lin = f(Y_lin)
                 strings = (
@@ -228,9 +229,17 @@ function postprocessing(sol, output_dir)
             end
         end
         for (ivar, (name, _, _)) in enumerate(anim_vars)
-            mp4(anims[3 * ivar - 2], joinpath(output_dir, "$(name)_lin.mp4"); fps)
+            mp4(
+                anims[3 * ivar - 2],
+                joinpath(output_dir, "$(name)_lin.mp4");
+                fps,
+            )
             mp4(anims[3 * ivar - 1], joinpath(output_dir, "$name.mp4"); fps)
-            mp4(anims[3 * ivar], joinpath(output_dir, "$(name)_rel_err.mp4"); fps)
+            mp4(
+                anims[3 * ivar],
+                joinpath(output_dir, "$(name)_rel_err.mp4");
+                fps,
+            )
         end
     end
 end
@@ -277,13 +286,21 @@ function ρfb_init_coefs_params(
         ᶜbretherton_factor_pρ = @. exp(-δ * ᶜz / 2)
         ᶜρb_init = @. ᶜρ′_init / ᶜbretherton_factor_pρ
     end
-    combine(ρ, lg) = (; ρ, x=lg.coordinates.x, z=lg.coordinates.z)
+    combine(ρ, lg) = (; ρ, x = lg.coordinates.x, z = lg.coordinates.z)
     ᶜρb_init_xz = combine.(ᶜρb_init, ᶜlocal_geometry)
 
     # Fourier coefficients of Bretherton transform of initial perturbation
     ρfb_init_array = Array{Complex{FT}}(undef, 2 * max_ikx + 1, 2 * max_ikz + 1)
     unit_integral = 2 * sum(one.(ᶜρb_init))
-    return (; ρfb_init_array, ᶜρb_init_xz, max_ikz, max_ikx, x_max, z_max, unit_integral)
+    return (;
+        ρfb_init_array,
+        ᶜρb_init_xz,
+        max_ikz,
+        max_ikx,
+        x_max,
+        z_max,
+        unit_integral,
+    )
 end
 
 function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
@@ -291,7 +308,7 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶠz = ᶠlocal_geometry.coordinates.z
     ρfb_init_array_params = ρfb_init_coefs_params()
     @time "ρfb_init_coefs!" ρfb_init_coefs!(FT, ρfb_init_array_params)
-    (;ρfb_init_array ) = ρfb_init_array_params
+    (; ρfb_init_array) = ρfb_init_array_params
     ᶜp₀ = @. p₀(ᶜz)
     return (;
         # coordinates
