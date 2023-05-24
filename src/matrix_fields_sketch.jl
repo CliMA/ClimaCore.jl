@@ -14,6 +14,12 @@ struct BandMatrixRow{ld, bw, T}
 end
 # The parameter bw is the "bandwidth", i.e., the number of nonzero entries.
 
+const DiagonalMatrixRow{T} = BandMatrixRow{0, 1, T}
+const BidiagonalMatrixRow{T} = BandMatrixRow{-1 + half, 2, T}
+const TridiagonalMatrixRow{T} = BandMatrixRow{-1, 3, T}
+const QuaddiagonalMatrixRow{T} = BandMatrixRow{-2 + half, 4, T}
+const PentadiagonalMatrixRow{T} = BandMatrixRow{-2, 5, T}
+
 BandMatrixRow{ld}(entries::Vararg{Any, bw}) where {ld, bw} =
     BandMatrixRow{ld, bw}(entries...)
 BandMatrixRow{ld, bw}(entries::Vararg{Any, bw}) where {ld, bw} =
@@ -83,7 +89,7 @@ Base.promote_rule(
 Base.convert(
     ::Type{BMR},
     row::LinearAlgebra.UniformScaling,
-) where {BMR <: BandMatrixRow} = convert(BMR, BandMatrixRow{0}(row.λ))
+) where {BMR <: BandMatrixRow} = convert(BMR, DiagonalMatrixRow(row.λ))
 
 Base.@propagate_inbounds Base.getindex(row::BandMatrixRow{ld}, d) where {ld} =
     row.entries[d - ld + 1]
@@ -98,6 +104,7 @@ Base.:(==)(row1::LinearAlgebra.UniformScaling, row2::BandMatrixRow) =
     ==(promote(row1, row2)...)
 
 # Define all necessary operations for computing linear combinations of matrices.
+const ScalarQuantity = Union{Number, Geometry.AxisTensor}
 Base.map(f, rows::BMR...) where {ld, BMR <: BandMatrixRow{ld}} =
     BandMatrixRow{ld}(map(f, map(row -> row.entries, rows)...)...)
 for op in (:+, :-)
@@ -113,13 +120,13 @@ for op in (:+, :-)
 end
 for op in (:*, :/)
     @eval begin
-        Base.$op(row::BandMatrixRow, scalar::Number) =
+        Base.$op(row::BandMatrixRow, scalar::ScalarQuantity) =
             map(Base.Fix2($op, scalar), row)
     end
 end
 for op in (:*, :\)
     @eval begin
-        Base.$op(scalar::Number, row::BandMatrixRow) =
+        Base.$op(scalar::ScalarQuantity, row::BandMatrixRow) =
             map(Base.Fix1($op, scalar), row)
     end
 end
@@ -134,13 +141,78 @@ Base.:*(::BandMatrixRow, ::BandMatrixRow) =
 ################################################################################
 
 
-# Common aliases.
-const DiagonalMatrixRow{T} = BandMatrixRow{0, 1, T}
-const BidiagonalMatrixRow{T} = BandMatrixRow{-1 + half, 2, T}
-const TridiagonalMatrixRow{T} = BandMatrixRow{-1, 3, T}
-const QuaddiagonalMatrixRow{T} = BandMatrixRow{-2 + half, 4, T}
-const PentadiagonalMatrixRow{T} = BandMatrixRow{-2, 5, T}
-const ColumnwiseBandMatrixField = Field{<:AbstractData{<:BandMatrixRow}}
+"""
+    Times_eᵀ(value)
+
+Represents the quantity `value * eᵀ`, where `eᵀ` denotes the transpose of a
+basis vector. For example, if `e₃` denotes the basis vector along the
+`Contravariant3Axis`, then we can express `Contravariant3Vector(u³)` as
+`u³ * e₃`. Since `dot(e³, e₃) = 1`, this means that
+`e³ᵀ * Contravariant3Vector(u³) = u³ * e³ᵀ * e₃ = u³`. More precisely,
+`Times_e³ᵀ(value)` represents a quantity that, when multiplied by some
+`AxisVector` `x` defined on a `LocalGeometry` `lg`, returns the quantity
+`value * contravariant3(x, lg)`. There is a subtype of `Times_eᵀ` for each basis
+vector: `Times_e₁ᵀ`, `Times_e₂ᵀ`, `Times_e₃ᵀ`, `Times_e¹ᵀ`, `Times_e²ᵀ`, and
+`Times_e³ᵀ`.
+"""
+struct Times_eᵀ{A, T}
+    value::T
+end
+Times_eᵀ{A}() where {A} = Times_eᵀ{A}(true)
+
+const Times_e₁ᵀ{T} = Times_eᵀ{Geometry.Covariant1Axis, T}
+const Times_e₂ᵀ{T} = Times_eᵀ{Geometry.Covariant2Axis, T}
+const Times_e₃ᵀ{T} = Times_eᵀ{Geometry.Covariant3Axis, T}
+const Times_e¹ᵀ{T} = Times_eᵀ{Geometry.Contravariant1Axis, T}
+const Times_e²ᵀ{T} = Times_eᵀ{Geometry.Contravariant2Axis, T}
+const Times_e³ᵀ{T} = Times_eᵀ{Geometry.Contravariant3Axis, T}
+
+Base.eltype(::Type{Times_eᵀ{A, T}}) where {A, T} = T
+
+"""
+    mul(x, y, lg)
+
+Computes `x * y`, using the `LocalGeometry` `lg` for any `AxisVector`
+projections required by this computation. For example, if `x` is a `Times_e³ᵀ`
+and `y` is an `AxisVector`, then `y` will be projected onto the
+`Contravariant3Axis` for the multiplication. In order to simplify the
+implementation, projecting higher-dimensional `AxisTensor`s is not supported.
+"""
+mul(x, y, _) = x * y
+mul(x, y::Times_eᵀ, lg) = Times_eᵀ(mul(x, y.value, lg))
+mul(x::Times_eᵀ, y, lg) = Times_eᵀ(mul(x.value, y, lg))
+mul(x::Times_eᵀ, y::Times_eᵀ, lg) = Times_eᵀ(mul(x.value, y, lg))
+mul(x::Times_e₁ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.covariant1(y, lg), lg)
+mul(x::Times_e₂ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.covariant2(y, lg), lg)
+mul(x::Times_e₃ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.covariant3(y, lg), lg)
+mul(x::Times_e¹ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.contravariant1(y, lg), lg)
+mul(x::Times_e²ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.contravariant2(y, lg), lg)
+mul(x::Times_e³ᵀ, y::Geometry.AxisVector, lg) =
+    mul(x.value, Geometry.contravariant3(y, lg), lg)
+mul(_::Times_eᵀ, _::Geometry.AxisTensor, _) =
+    error("Multiplying a generic AxisTensor by a Times_eᵀ is not yet supported")
+
+"""
+    mul_type(X, Y)
+
+Computes the result type of `mul(x::X, y::Y, lg)`.
+"""
+mul_type(::Type{X}, ::Type{Y}) where {X, Y} = promote_type(X, Y)
+mul_type(::Type{X}, ::Type{Y}) where {X, Y <: Times_eᵀ} =
+    Times_eᵀ{mul_type(X, eltype(Y))}
+mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y} =
+    Times_eᵀ{mul_type(eltype(X), Y)}
+mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Times_eᵀ} =
+    Times_eᵀ{mul_type(eltype(X), Y)}
+mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisVector} =
+    mul_type(eltype(X), eltype(Y))
+mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisTensor} =
+    error("Multiplying a generic AxisTensor by a Times_eᵀ is not yet supported")
 
 
 ################################################################################
@@ -151,14 +223,18 @@ const ColumnwiseBandMatrixField = Field{<:AbstractData{<:BandMatrixRow}}
 """
     MultiplyColumnwiseBandMatrixField
 
-An operator used to multiply a band matrix field by a scalar field or by another
-band matrix field, i.e., matrix-vector or matrix-matrix multiplication. The `⋅`
-symbol is an alias for `MultiplyColumnwiseBandMatrixField()`.
+An operator that multiplies a columnwise band matrix field (a field of
+`BandMatrixRow`s) by a regular field or by another columnwise band matrix field,
+i.e., matrix-vector or matrix-matrix multiplication. The `⋅` symbol is an alias
+for `MultiplyColumnwiseBandMatrixField()`.
 """
 struct MultiplyColumnwiseBandMatrixField <: FiniteDifferenceOperator end
 const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 #=
+TODO: Rewrite the following derivation in LaTeX and move it into the ClimaCore
+documentation.
+
 Notation:
 
 For any single-column field F, let F[idx] denote the value of F at level idx.
@@ -173,7 +249,7 @@ From the definition of matrix-vector multiplication,
     (M ⋅ V)[idx] = ∑_{idx′} M[idx, idx′] * V[idx′].
 If V[idx] is only defined when left_idx ≤ idx ≤ right_idx, this becomes
     (M ⋅ V)[idx] = ∑_{idx′ ∈ left_idx:right_idx} M[idx, idx′] * V[idx′].
-If M[idx, idx′] is only defined when idx + ld ≤ idx′ ≤ idx + ub, this becomes
+If M[idx, idx′] is only defined when idx + ld ≤ idx′ ≤ idx + ud, this becomes
     (M ⋅ V)[idx] =
         ∑_{idx′ ∈ max(left_idx, idx + ld):min(right_idx, idx + ud)}
             M[idx, idx′] * V[idx′].
@@ -200,65 +276,69 @@ Finally, we can express this in terms of left/right boundaries and an interior:
 
 Matrix-Matrix Multiplication:
 
-Consider a BandMatrixRow field M and another BandMatrixRow field M′.
+Consider a BandMatrixRow field M1 and another BandMatrixRow field M2.
 From the definition of matrix-matrix multiplication,
-    (M ⋅ M′)[idx, idx′] = ∑_{idx′′} M[idx, idx′′] * M′[idx′′, idx′].
-If M′[idx′′] is only defined when left_idx ≤ idx′′ ≤ right_idx, this becomes
-    (M ⋅ M′)[idx, idx′] =
-        ∑_{idx′′ ∈ left_idx:right_idx} M[idx, idx′′] * M′[idx′′, idx′].
-If M[idx, idx′′] is only defined when idx + ld ≤ idx′′ ≤ idx + ud, this becomes
-    (M ⋅ M′)[idx, idx′] =
-        ∑_{idx′′ ∈ max(left_idx, idx + ld):min(right_idx, idx + ud)}
-            M[idx, idx′′] * M′[idx′′, idx′].
-If M′[idx′′, idx′] is only defined when idx′′ + ld′ ≤ idx′ ≤ idx′′ + ud′, or,
-equivalently, when idx′ - ud′ ≤ idx′′ ≤ idx′ - ld′, this becomes
-    (M ⋅ M′)[idx, idx′] =
+    (M1 ⋅ M2)[idx, idx′] = ∑_{idx′′} M1[idx, idx′′] * M2[idx′′, idx′].
+If M2[idx′′] is only defined when left_idx ≤ idx′′ ≤ right_idx, this becomes
+    (M1 ⋅ M2)[idx, idx′] =
+        ∑_{idx′′ ∈ left_idx:right_idx} M1[idx, idx′′] * M2[idx′′, idx′].
+If M1[idx, idx′′] is only defined when idx + ld1 ≤ idx′′ ≤ idx + ud1, this becomes
+    (M1 ⋅ M2)[idx, idx′] =
+        ∑_{idx′′ ∈ max(left_idx, idx + ld1):min(right_idx, idx + ud1)}
+            M1[idx, idx′′] * M2[idx′′, idx′].
+If M2[idx′′, idx′] is only defined when idx′′ + ld2 ≤ idx′ ≤ idx′′ + ud2, or,
+equivalently, when idx′ - ud2 ≤ idx′′ ≤ idx′ - ld2, this becomes
+    (M1 ⋅ M2)[idx, idx′] =
         ∑_{
             idx′′ ∈
-                max(left_idx, idx + ld, idx′ - ud′):
-                min(right_idx, idx + ud, idx′ - ld′)
-        } M[idx, idx′′] * M′[idx′′, idx′].
+                max(left_idx, idx + ld1, idx′ - ud2):
+                min(right_idx, idx + ud1, idx′ - ld2)
+        } M1[idx, idx′′] * M2[idx′′, idx′].
 Replacing the variable idx′ with the variable prod_d = idx′ - idx gives us
-    (M ⋅ M′)[idx, idx + prod_d] =
+    (M1 ⋅ M2)[idx, idx + prod_d] =
         ∑_{
             idx′′ ∈
-                max(left_idx, idx + ld, idx + prod_d - ud′):
-                min(right_idx, idx + ud, idx + prod_d - ld′)
-        } M[idx, idx′′] * M′[idx′′, idx + prod_d].
+                max(left_idx, idx + ld1, idx + prod_d - ud2):
+                min(right_idx, idx + ud1, idx + prod_d - ld2)
+        } M1[idx, idx′′] * M2[idx′′, idx + prod_d].
 Replacing the variable idx′′ with the variable d = idx′′ - idx gives us
-    (M ⋅ M′)[idx, idx + prod_d] =
+    (M1 ⋅ M2)[idx, idx + prod_d] =
         ∑_{
             d ∈
-                max(left_idx - idx, ld, prod_d - ud′):
-                min(right_idx - idx, ud, prod_d - ld′)
-        } M[idx, idx + d] * M′[idx + d, idx + prod_d].
+                max(left_idx - idx, ld1, prod_d - ud2):
+                min(right_idx - idx, ud1, prod_d - ld2)
+        } M1[idx, idx + d] * M2[idx + d, idx + prod_d].
 This can be rewritten using the standard indexing notation as
-    (M ⋅ M′)[idx][prod_d] =
+    (M1 ⋅ M2)[idx][prod_d] =
         ∑_{
             d ∈
-                max(left_idx - idx, ld, prod_d - ud′):
-                min(right_idx - idx, ud, prod_d - ld′)
-        } M[idx][d] * M′[idx + d][prod_d - d].
+                max(left_idx - idx, ld1, prod_d - ud2):
+                min(right_idx - idx, ud1, prod_d - ld2)
+        } M1[idx][d] * M2[idx + d][prod_d - d].
 Finally, we can express this in terms of left/right boundaries and an interior:
-    (M ⋅ M′)[idx][prod_d] =
+    (M1 ⋅ M2)[idx][prod_d] =
         ∑_{
             d ∈
-                if idx < left_idx - ld
-                    max(left_idx - idx, prod_d - ud′):min(ud, prod_d - ld′)
-                elseif idx > right_idx - ud
-                    max(ld, prod_d - ud′):min(right_idx - idx, prod_d - ld′)
+                if idx < left_idx - ld1
+                    max(left_idx - idx, prod_d - ud2):min(ud1, prod_d - ld2)
+                elseif idx > right_idx - ud1
+                    max(ld1, prod_d - ud2):min(right_idx - idx, prod_d - ld2)
                 else
-                    max(ld, prod_d - ud′):min(ud, prod_d - ld′)
+                    max(ld1, prod_d - ud2):min(ud1, prod_d - ld2)
                 end
-        } M[idx][d] * M′[idx + d][prod_d - d].
-We only need to define (M ⋅ M′)[idx][prod_d] when it has a nonzero value in the
+        } M1[idx][d] * M2[idx + d][prod_d - d].
+
+We only need to define (M1 ⋅ M2)[idx][prod_d] when it has a nonzero value in the
 interior, which will be the case when
-    max(ld, prod_d - ud′) ≤ min(ud, prod_d - ld′).
+    max(ld1, prod_d - ud2) ≤ min(ud1, prod_d - ld2).
 This can be rewritten as a system of four inequalities:
-    ld ≤ ud, ld ≤ prod_d - ld′, prod_d - ud′ ≤ ud, prod_d - ud′ ≤ prod_d - ld′.
-By definition, ld ≤ ud and ld′ ≤ ud′, so the first and last inequality are
+    ld1 ≤ ud1,
+    ld1 ≤ prod_d - ld2,
+    prod_d - ud2 ≤ ud1, and
+    prod_d - ud2 ≤ prod_d - ld2.
+By definition, ld1 ≤ ud1 and ld2 ≤ ud2, so the first and last inequality are
 always true. Rearranging the remaining two inequalities gives us
-    ld + ld′ ≤ prod_d ≤ ud + ud′.
+    ld1 + ld2 ≤ prod_d ≤ ud1 + ud2.
 =#
 
 struct TopLeftMatrixCorner <: BoundaryCondition end
@@ -282,26 +362,29 @@ get_boundary(
     ::RightBoundaryWindow{name},
 ) where {name} = BottomRightMatrixCorner()
 
-stencil_interior_width(::MultiplyColumnwiseBandMatrixField, matrix, arg) =
-    ((0, 0), outer_diagonals(eltype(matrix)))
+stencil_interior_width(
+    ::MultiplyColumnwiseBandMatrixField,
+    matrix,
+    mat_or_vec,
+) = ((0, 0), outer_diagonals(eltype(matrix)))
 
 function boundary_width(
     ::MultiplyColumnwiseBandMatrixField,
     ::TopLeftMatrixCorner,
     matrix,
-    arg,
+    mat_or_vec,
 )
     ld = outer_diagonals(eltype(matrix))[1]
-    return max((left_idx(axes(arg)) - ld) - left_idx(axes(matrix)), 0)
+    return max((left_idx(axes(mat_or_vec)) - ld) - left_idx(axes(matrix)), 0)
 end
 function boundary_width(
     ::MultiplyColumnwiseBandMatrixField,
     ::BottomRightMatrixCorner,
     matrix,
-    arg,
+    mat_or_vec,
 )
     ud = outer_diagonals(eltype(matrix))[2]
-    return max(right_idx(axes(matrix)) - (right_idx(axes(arg)) - ud), 0)
+    return max(right_idx(axes(matrix)) - (right_idx(axes(mat_or_vec)) - ud), 0)
 end
 
 function product_matrix_outer_diagonals(matrix1, matrix2)
@@ -310,32 +393,30 @@ function product_matrix_outer_diagonals(matrix1, matrix2)
     return (ld1 + ld2, ud1 + ud2)
 end
 
-# TODO: This is not correct for the same reason as the other two-argument finite
-# difference operators---it assumes that the result of multiplying two values
-# will have the same type as the second value, instead of properly inferring the
-# result type.
-function return_eltype(::MultiplyColumnwiseBandMatrixField, matrix, arg)
+function return_eltype(::MultiplyColumnwiseBandMatrixField, matrix, mat_or_vec)
     eltype(matrix) <: BandMatrixRow ||
-        error("⋅ should only be used after a ColumnwiseBandMatrixField")
-    return if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
-        prod_ld, prod_ud = product_matrix_outer_diagonals(matrix, arg)
-        band_matrix_row_type(prod_ld, prod_ud, eltype(eltype(arg)))
+        error("The first argument of ⋅ must be a band matrix field, but the \
+               given argument is a field with element type $(eltype(matrix))")
+    if eltype(mat_or_vec) <: BandMatrixRow # matrix-matrix multiplication
+        matrix2 = mat_or_vec
+        prod_ld, prod_ud = product_matrix_outer_diagonals(matrix, matrix2)
+        prod_eltype = mul_type(eltype(eltype(matrix)), eltype(eltype(matrix2)))
+        return band_matrix_row_type(prod_ld, prod_ud, prod_eltype)
     else # matrix-vector multiplication
-        eltype(arg)
+        vector = mat_or_vec
+        return mul_type(eltype(eltype(matrix)), eltype(vector))
     end
 end
 
 return_space(::MultiplyColumnwiseBandMatrixField, matrix_space, _) =
     matrix_space
 
-# TODO: Propagate @inbounds through the anonymous functions.
-# TODO: Parallelize the anonymous functions on GPUs.
-Base.@propagate_inbounds function mul_cbm_at_idx(
+Base.@propagate_inbounds function multiply_columnwise_band_matrix_at_index(
     loc,
     idx,
     hidx,
     matrix,
-    arg;
+    mat_or_vec;
     ld = nothing,
     ud = nothing,
 )
@@ -345,19 +426,33 @@ Base.@propagate_inbounds function mul_cbm_at_idx(
     if isnothing(ud)
         ud = outer_diagonals(eltype(matrix))[2]
     end
-    return if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
-        arg_ld, arg_ud = outer_diagonals(eltype(arg))
-        prod_ld, prod_ud = product_matrix_outer_diagonals(matrix, arg)
-        entries = map(prod_ld:prod_ud) do prod_d
-            mapreduce(⊞, max(ld, prod_d - arg_ud):min(ud, prod_d - arg_ld)) do d
-                getidx(matrix, loc, idx, hidx)[d] ⊠
-                getidx(arg, loc, idx + d, hidx)[prod_d - d]
+    if eltype(mat_or_vec) <: BandMatrixRow # matrix-matrix multiplication
+        matrix2 = mat_or_vec
+        ld2, ud2 = outer_diagonals(eltype(matrix2))
+        prod_ld, prod_ud = product_matrix_outer_diagonals(matrix, matrix2)
+        prod_entries = map(prod_ld:prod_ud) do prod_d
+            Base.@_propagate_inbounds_meta
+            mapreduce(⊞, max(ld, prod_d - ud2):min(ud, prod_d - ld2)) do d
+                Base.@_propagate_inbounds_meta
+                lg = Geometry.LocalGeometry(axes(matrix2), idx, hidx)
+                rmap(
+                    (x, y) -> mul(x, y, lg),
+                    getidx(matrix, loc, idx, hidx)[d],
+                    getidx(matrix2, loc, idx + d, hidx)[prod_d - d],
+                )
             end
         end
-        BandMatrixRow{prod_ld}(entries...)
+        return BandMatrixRow{prod_ld}(prod_entries...)
     else # matrix-vector multiplication
-        mapreduce(⊞, ld:ud) do d
-            getidx(matrix, loc, idx, hidx)[d] ⊠ getidx(arg, loc, idx + d, hidx)
+        vector = mat_or_vec
+        return mapreduce(⊞, ld:ud) do d
+            Base.@_propagate_inbounds_meta
+            lg = Geometry.LocalGeometry(axes(vector), idx, hidx)
+            rmap(
+                (x, y) -> mul(x, y, lg),
+                getidx(matrix, loc, idx, hidx)[d],
+                getidx(vector, loc, idx + d, hidx),
+            )
         end
     end
 end
@@ -368,8 +463,8 @@ Base.@propagate_inbounds stencil_interior(
     idx,
     hidx,
     matrix,
-    arg,
-) = mul_cbm_at_idx(loc, idx, hidx, matrix, arg)
+    mat_or_vec,
+) = multiply_columnwise_band_matrix_at_index(loc, idx, hidx, matrix, mat_or_vec)
 
 Base.@propagate_inbounds stencil_left_boundary(
     ::MultiplyColumnwiseBandMatrixField,
@@ -378,8 +473,15 @@ Base.@propagate_inbounds stencil_left_boundary(
     idx,
     hidx,
     matrix,
-    arg,
-) = mul_cbm_at_idx(loc, idx, hidx, matrix, arg; ld = left_idx(axes(arg)) - idx)
+    mat_or_vec,
+) = multiply_columnwise_band_matrix_at_index(
+    loc,
+    idx,
+    hidx,
+    matrix,
+    mat_or_vec;
+    ld = left_idx(axes(mat_or_vec)) - idx,
+)
 
 Base.@propagate_inbounds stencil_right_boundary(
     ::MultiplyColumnwiseBandMatrixField,
@@ -388,8 +490,15 @@ Base.@propagate_inbounds stencil_right_boundary(
     idx,
     hidx,
     matrix,
-    arg,
-) = mul_cbm_at_idx(loc, idx, hidx, matrix, arg; ud = right_idx(axes(arg)) - idx)
+    mat_or_vec,
+) = multiply_columnwise_band_matrix_at_index(
+    loc,
+    idx,
+    hidx,
+    matrix,
+    mat_or_vec;
+    ud = right_idx(axes(mat_or_vec)) - idx,
+)
 
 
 ################################################################################
@@ -620,6 +729,8 @@ function flatten_nested_property_expr(expr::Expr)
     expr.head == :. || error("@block_name only supports expressions with .")
     return (flatten_nested_property_expr(expr.args[1])..., expr.args[2].value)
 end
+
+const ColumnwiseBandMatrixField = Field{<:AbstractData{<:BandMatrixRow}}
 
 const BlockNameAndValueType = Pair{
     <:Tuple{NestedPropertyName, NestedPropertyName},
