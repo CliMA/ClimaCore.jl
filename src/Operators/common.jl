@@ -69,13 +69,50 @@ end
 
 # Functions for CUDASpectralStyle
 struct PlaceholderSpace <: Spaces.AbstractSpace end
+struct CenterPlaceholderSpace <: Spaces.AbstractSpace end
+struct FacePlaceholderSpace <: Spaces.AbstractSpace end
+
 
 placeholder_space(current_space::T, parent_space::T) where {T} =
     PlaceholderSpace()
 placeholder_space(current_space, parent_space) = current_space
+placeholder_space(
+    current_space::Spaces.CenterFiniteDifferenceSpace,
+    parent_space::Spaces.FaceFiniteDifferenceSpace,
+) = CenterPlaceholderSpace()
+placeholder_space(
+    current_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    parent_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+) = CenterPlaceholderSpace()
+placeholder_space(
+    current_space::Spaces.FaceFiniteDifferenceSpace,
+    parent_space::Spaces.CenterFiniteDifferenceSpace,
+) = FacePlaceholderSpace()
+placeholder_space(
+    current_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = FacePlaceholderSpace()
 
-reconstruct_placeholder_space(::PlaceholderSpace, parent_space) = parent_space
-reconstruct_placeholder_space(current_space, parent_space) = current_space
+@inline reconstruct_placeholder_space(::PlaceholderSpace, parent_space) =
+    parent_space
+@inline reconstruct_placeholder_space(
+    ::CenterPlaceholderSpace,
+    parent_space::Spaces.FaceFiniteDifferenceSpace,
+) = Spaces.CenterFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::CenterPlaceholderSpace,
+    parent_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+) = Spaces.CenterExtrudedFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::FacePlaceholderSpace,
+    parent_space::Spaces.CenterFiniteDifferenceSpace,
+) = Spaces.FaceFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(
+    ::FacePlaceholderSpace,
+    parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = Spaces.FaceExtrudedFiniteDifferenceSpace(parent_space)
+@inline reconstruct_placeholder_space(current_space, parent_space) =
+    current_space
 
 
 strip_space(obj, parent_space) = obj

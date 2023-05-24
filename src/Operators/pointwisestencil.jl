@@ -369,22 +369,22 @@ return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
-    coefs = getidx(stencil, loc, idx, hidx)
+function apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
+    coefs = getidx(space, stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
     val = zero(eltype(eltype(stencil)))
     @inbounds for j in 1:length(i_vals)
         i = i_vals[j]
-        val = val ⊞ coefs[i - lbw + 1] ⊠ getidx(arg, loc, idx + i, hidx)
+        val = val ⊞ coefs[i - lbw + 1] ⊠ getidx(space, arg, loc, idx + i, hidx)
     end
     return val
 end
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(::ApplyStencil, loc, idx, hidx, stencil, arg)
+function stencil_interior(::ApplyStencil, loc, space, idx, hidx, stencil, arg)
     lbw, ubw = bandwidths(eltype(stencil))
     i_vals = lbw:ubw
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
@@ -392,6 +392,7 @@ function stencil_left_boundary(
     ::ApplyStencil,
     ::LeftStencilBoundary,
     loc,
+    space,
     idx,
     hidx,
     stencil,
@@ -399,7 +400,7 @@ function stencil_left_boundary(
 )
     ubw = bandwidths(eltype(stencil))[2]
     i_vals = (left_idx(axes(arg)) - idx):ubw
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
@@ -407,6 +408,7 @@ function stencil_right_boundary(
     ::ApplyStencil,
     ::RightStencilBoundary,
     loc,
+    space,
     idx,
     hidx,
     stencil,
@@ -414,7 +416,7 @@ function stencil_right_boundary(
 )
     lbw = bandwidths(eltype(stencil))[1]
     i_vals = lbw:(right_idx(axes(arg)) - idx)
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, idx, hidx)
+    return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
 
@@ -453,11 +455,12 @@ function compose_stencils_at_idx(
     stencil1,
     stencil2,
     loc,
+    space,
     idx,
     hidx,
 ) where {ir_type <: AbstractIndexRangeType}
 
-    coefs1 = getidx(stencil1, loc, idx, hidx)
+    coefs1 = getidx(space, stencil1, loc, idx, hidx)
     lbw1 = bandwidths(eltype(stencil1))[1]
     lbw, ubw = composed_bandwidths(stencil1, stencil2)
     n = (ubw - lbw + 1)::Int
@@ -470,7 +473,7 @@ function compose_stencils_at_idx(
                 val =
                     val ⊞
                     coefs1[i - lbw1 + 1] ⊠
-                    getidx(stencil2, loc, idx + i, hidx)[j - i + lbw1]
+                    getidx(space, stencil2, loc, idx + i, hidx)[j - i + lbw1]
             end
             val
         end
@@ -479,22 +482,33 @@ function compose_stencils_at_idx(
 end
 
 # TODO: find out why using Base.@propagate_inbounds hangs
-function stencil_interior(::ComposeStencils, loc, idx, hidx, stencil1, stencil2)
+function stencil_interior(
+    ::ComposeStencils,
+    loc,
+    space,
+    idx,
+    hidx,
+    stencil1,
+    stencil2,
+)
     return compose_stencils_at_idx(
         IndexRangeInteriorType,
         stencil1,
         stencil2,
         loc,
+        space,
         idx,
         hidx,
     )
 end
+
 
 # TODO: find out why using Base.@propagate_inbounds hangs
 function stencil_left_boundary(
     ::ComposeStencils,
     ::LeftStencilBoundary,
     loc,
+    space,
     idx,
     hidx,
     stencil1,
@@ -505,6 +519,7 @@ function stencil_left_boundary(
         stencil1,
         stencil2,
         loc,
+        space,
         idx,
         hidx,
     )
@@ -515,6 +530,7 @@ function stencil_right_boundary(
     ::ComposeStencils,
     ::RightStencilBoundary,
     loc,
+    space,
     idx,
     hidx,
     stencil1,
@@ -525,6 +541,7 @@ function stencil_right_boundary(
         stencil1,
         stencil2,
         loc,
+        space,
         idx,
         hidx,
     )
