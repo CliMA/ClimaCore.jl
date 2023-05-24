@@ -491,7 +491,24 @@ end
 @inline function Base.getindex(data::IFH{S}, i, _, _, _, h) where {S}
     @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(i, 1, h))
 end
+@inline function Base.getindex(data::IFH{S}, I::CartesianIndex{5}) where {S}
+    i, _, _, _, h = I.I
+    @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(i, 1, h))
+end
 @inline function Base.setindex!(data::IFH{S}, val, i, _, _, _, h) where {S}
+    @inbounds set_struct!(
+        parent(data),
+        convert(S, val),
+        Val(3),
+        CartesianIndex(i, 1, h),
+    )
+end
+@inline function Base.setindex!(
+    data::IFH{S},
+    val,
+    I::CartesianIndex{5},
+) where {S}
+    i, _, _, _, h = I.I
     @inbounds set_struct!(
         parent(data),
         convert(S, val),
@@ -1284,6 +1301,19 @@ end
     @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(v, i, 1, h))
 end
 @inline function Base.setindex!(data::VIFH{S}, val, i, _, _, v, h) where {S}
+    @inbounds set_struct!(
+        parent(data),
+        convert(S, val),
+        Val(3),
+        CartesianIndex(v, i, 1, h),
+    )
+end
+@inline function Base.setindex!(
+    data::VIFH{S},
+    val,
+    I::CartesianIndex{5},
+) where {S}
+    i, _, _, v, h = I.I
     @inbounds set_struct!(
         parent(data),
         convert(S, val),
