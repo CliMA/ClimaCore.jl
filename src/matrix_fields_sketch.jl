@@ -6,13 +6,23 @@ import ClimaCore.Utilities: PlusHalf, half
 
 Stores the nonzero entries in a row of a band matrix, starting with the lowest
 diagonal, which has index `ld`. Supported operations include accessing the entry
-on the diagonal with index `d` by calling `row[d]`, as well as taking linear
-combinations with other band matrix rows.
+on the diagonal with index `d` by calling `row[d]`, taking linear combinations
+with other band matrix rows, and checking for equality with other band matrix
+rows. There are several helpful aliases defined for subtypes of `BandMatrixRow`
+(with `T` denoting the type of the row's entries):
+- `DiagonalMatrixRow{T}`
+- `BidiagonalMatrixRow{T}`
+- `TridiagonalMatrixRow{T}`
+- `QuaddiagonalMatrixRow{T}`
+- `PentadiagonalMatrixRow{T}`
 """
-struct BandMatrixRow{ld, bw, T}
+struct BandMatrixRow{ld, bw, T} # bw is the bandwidth (the number of diagonals)
     entries::NTuple{bw, T}
 end
-# The parameter bw is the "bandwidth", i.e., the number of nonzero entries.
+BandMatrixRow{ld}(entries::Vararg{Any, bw}) where {ld, bw} =
+    BandMatrixRow{ld, bw}(entries...)
+BandMatrixRow{ld, bw}(entries::Vararg{Any, bw}) where {ld, bw} =
+    BandMatrixRow{ld, bw}(promote(entries...))
 
 const DiagonalMatrixRow{T} = BandMatrixRow{0, 1, T}
 const BidiagonalMatrixRow{T} = BandMatrixRow{-1 + half, 2, T}
@@ -20,18 +30,11 @@ const TridiagonalMatrixRow{T} = BandMatrixRow{-1, 3, T}
 const QuaddiagonalMatrixRow{T} = BandMatrixRow{-2 + half, 4, T}
 const PentadiagonalMatrixRow{T} = BandMatrixRow{-2, 5, T}
 
-BandMatrixRow{ld}(entries::Vararg{Any, bw}) where {ld, bw} =
-    BandMatrixRow{ld, bw}(entries...)
-BandMatrixRow{ld, bw}(entries::Vararg{Any, bw}) where {ld, bw} =
-    BandMatrixRow{ld, bw}(promote(entries...)...)
-BandMatrixRow{ld, bw}(entries::Vararg{T, bw}) where {ld, bw, T} =
-    BandMatrixRow{ld, bw, T}(entries)
-
 """
     outer_diagonals(::Type{<:BandMatrixRow})
 
 Gets the indices of the lower and upper diagonals, `ld` and `ud`, of the given
-`BandMatrixRow` type.
+subtype of `BandMatrixRow`.
 """
 outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
     (ld, ld + bw - 1)
@@ -39,8 +42,8 @@ outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
 """
     band_matrix_row_type(ld, ud, T)
 
-Returns the element type of a band matrix that has entries of type `T` on the
-diagonals with indices in the range `ld:ud`.
+A shorthand for getting the subtype of `BandMatrixRow` that has entries of type
+`T` on the diagonals with indices in the range `ld:ud`.
 """
 band_matrix_row_type(ld, ud, T) = BandMatrixRow{ld, ud - ld + 1, T}
 
@@ -103,8 +106,9 @@ Base.:(==)(row1::BandMatrixRow, row2::LinearAlgebra.UniformScaling) =
 Base.:(==)(row1::LinearAlgebra.UniformScaling, row2::BandMatrixRow) =
     ==(promote(row1, row2)...)
 
-# Define all necessary operations for computing linear combinations of matrices.
 const ScalarQuantity = Union{Number, Geometry.AxisTensor}
+
+# Define all necessary operations for computing linear combinations of matrices.
 Base.map(f, rows::BMR...) where {ld, BMR <: BandMatrixRow{ld}} =
     BandMatrixRow{ld}(map(f, map(row -> row.entries, rows)...)...)
 for op in (:+, :-)
@@ -133,7 +137,7 @@ end
 
 # Don't implement the Hadamard product in order to avoid accidental ⋅/* typos.
 Base.:*(::BandMatrixRow, ::BandMatrixRow) =
-    error("Band matrices must be multiplied using ⋅, not *")
+    error("Matrix fields must be multiplied using ⋅, not *")
 
 
 ################################################################################
@@ -142,18 +146,18 @@ Base.:*(::BandMatrixRow, ::BandMatrixRow) =
 
 
 """
-    Times_eᵀ(value)
+    Times_eᵀ([value])
 
 Represents the quantity `value * eᵀ`, where `eᵀ` denotes the transpose of a
 basis vector. For example, if `e₃` denotes the basis vector along the
 `Contravariant3Axis`, then we can express `Contravariant3Vector(u³)` as
 `u³ * e₃`. Since `dot(e³, e₃) = 1`, this means that
-`e³ᵀ * Contravariant3Vector(u³) = u³ * e³ᵀ * e₃ = u³`. More precisely,
-`Times_e³ᵀ(value)` represents a quantity that, when multiplied by some
-`AxisVector` `x` defined on a `LocalGeometry` `lg`, returns the quantity
-`value * contravariant3(x, lg)`. There is a subtype of `Times_eᵀ` for each basis
-vector: `Times_e₁ᵀ`, `Times_e₂ᵀ`, `Times_e₃ᵀ`, `Times_e¹ᵀ`, `Times_e²ᵀ`, and
-`Times_e³ᵀ`.
+`e³ᵀ * Contravariant3Vector(u³) = u³ * e³ᵀ * e₃ = u³`. So, `Times_e³ᵀ(value)`
+represents a quantity that, when multiplied by an `AxisVector` `x` defined on a
+`LocalGeometry` `lg`, returns the quantity `value * contravariant3(x, lg)`.
+There is a subtype of `Times_eᵀ` for every basis vector: `Times_e₁ᵀ`,
+`Times_e₂ᵀ`, `Times_e₃ᵀ`, `Times_e¹ᵀ`, `Times_e²ᵀ`, and `Times_e³ᵀ`. If `value`
+is not specified, it is assumed to be `true` (i.e., the number 1).
 """
 struct Times_eᵀ{A, T}
     value::T
@@ -194,8 +198,8 @@ mul(x::Times_e²ᵀ, y::Geometry.AxisVector, lg) =
     mul(x.value, Geometry.contravariant2(y, lg), lg)
 mul(x::Times_e³ᵀ, y::Geometry.AxisVector, lg) =
     mul(x.value, Geometry.contravariant3(y, lg), lg)
-mul(_::Times_eᵀ, _::Geometry.AxisTensor, _) =
-    error("Multiplying a generic AxisTensor by a Times_eᵀ is not yet supported")
+mul(::Times_eᵀ, ::Geometry.AxisTensor, _) =
+    error("Multiplying a Times_eᵀ by a generic AxisTensor is not yet supported")
 
 """
     mul_type(X, Y)
@@ -212,7 +216,7 @@ mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Times_eᵀ} =
 mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisVector} =
     mul_type(eltype(X), eltype(Y))
 mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisTensor} =
-    error("Multiplying a generic AxisTensor by a Times_eᵀ is not yet supported")
+    error("Multiplying a Times_eᵀ by a generic AxisTensor is not yet supported")
 
 
 ################################################################################
@@ -426,33 +430,32 @@ Base.@propagate_inbounds function multiply_columnwise_band_matrix_at_index(
     if isnothing(ud)
         ud = outer_diagonals(eltype(matrix))[2]
     end
+    space1 = axes(matrix)
+    space2 = axes(mat_or_vec)
     if eltype(mat_or_vec) <: BandMatrixRow # matrix-matrix multiplication
         matrix2 = mat_or_vec
         ld2, ud2 = outer_diagonals(eltype(matrix2))
         prod_ld, prod_ud = product_matrix_outer_diagonals(matrix, matrix2)
         prod_entries = map(prod_ld:prod_ud) do prod_d
             Base.@_propagate_inbounds_meta
-            mapreduce(⊞, max(ld, prod_d - ud2):min(ud, prod_d - ld2)) do d
+            mapreduce(radd, max(ld, prod_d - ud2):min(ud, prod_d - ld2)) do d
                 Base.@_propagate_inbounds_meta
-                lg = Geometry.LocalGeometry(axes(matrix2), idx, hidx)
-                rmap(
-                    (x, y) -> mul(x, y, lg),
-                    getidx(matrix, loc, idx, hidx)[d],
-                    getidx(matrix2, loc, idx + d, hidx)[prod_d - d],
-                )
+                value1 = getidx(space1, matrix, loc, idx, hidx)[d]
+                value2 =
+                    getidx(space2, matrix2, loc, idx + d, hidx)[prod_d - d]
+                value2_lg = Geometry.LocalGeometry(space2, idx + d, hidx)
+                rmap((x, y) -> mul(x, y, value2_lg), value1, value2)
             end
         end
         return BandMatrixRow{prod_ld}(prod_entries...)
     else # matrix-vector multiplication
         vector = mat_or_vec
-        return mapreduce(⊞, ld:ud) do d
+        return mapreduce(radd, ld:ud) do d
             Base.@_propagate_inbounds_meta
-            lg = Geometry.LocalGeometry(axes(vector), idx, hidx)
-            rmap(
-                (x, y) -> mul(x, y, lg),
-                getidx(matrix, loc, idx, hidx)[d],
-                getidx(vector, loc, idx + d, hidx),
-            )
+            value1 = getidx(space1, matrix, loc, idx, hidx)[d]
+            value2 = getidx(space2, vector, loc, idx + d, hidx)
+            value2_lg = Geometry.LocalGeometry(space2, idx + d, hidx)
+            rmap((x, y) -> mul(x, y, value2_lg), value1, value2)
         end
     end
 end
