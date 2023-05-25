@@ -1,8 +1,45 @@
+#=
+julia --threads=8 --project=examples
+ENV["TEST_NAME"] = "plane/inertial_gravity_wave"
+include(joinpath("examples", "hybrid", "driver.jl"))
+=#
 using Printf
 using ProgressLogging
 using ClimaCorePlots, Plots
 
 # Reference paper: https://rmets.onlinelibrary.wiley.com/doi/pdf/10.1002/qj.2105
+
+# min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
+# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
+# min_λx = 2 * π / max_kx = x_max / max_ikx
+# min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
+# max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
+# max_ikz = 2 * z_max / min_λz = upsampling_factor * z_elem
+function ρfb_init_coefs!(::Type{FT}, params) where {FT}
+    (; max_ikz, max_ikx, x_max, z_max, unit_integral) = params
+    (; ρfb_init_array, ᶜρb_init_xz) = params
+    # Since the coefficients are for a modified domain of height 2 * z_max, the
+    # unit integral over the domain must be multiplied by 2 to ensure correct
+    # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
+    # the "true" domain, so the integral of
+    # ᶜintegrand (`ᶜintegrand = ᶜρb_init / ᶜfourier_factor`) should not be modified.
+    # where `ᶜfourier_factor = exp(im * (kx * x + kz * z))`.
+    @inbounds begin
+        Threads.@threads for ikx in (-max_ikx):max_ikx
+            for ikz in (-max_ikz):max_ikz
+                kx::FT = 2 * π / x_max * ikx
+                kz::FT = 2 * π / (2 * z_max) * ikz
+                ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
+                    sum(ᶜρb_init_xz) do nt
+                        (; ρ, x, z) = nt
+                        ρ / exp(im * (kx * x + kz * z))
+                    end / unit_integral
+
+            end
+        end
+    end
+    return nothing
+end
 
 # Constants for switching between different experiment setups
 const is_small_scale = true
@@ -76,7 +113,7 @@ function discrete_hydrostatic_balance!(ᶠΔz, ᶜΔz, grav)
     ᶜp1 = Fields.level(ᶜp, 1)
     ᶜΔz1 = Fields.level(ᶜΔz, 1)
     @. ᶜp1 = p_0 * (1 - δ * ᶜΔz1 / 4) / (1 + δ * ᶜΔz1 / 4)
-    for i in 1:(Spaces.nlevels(axes(ᶜp)) - 1)
+    @inbounds for i in 1:(Spaces.nlevels(axes(ᶜp)) - 1)
         ᶜpi = parent(Fields.level(ᶜp, i))
         ᶜpi1 = parent(Fields.level(ᶜp, i + 1))
         ᶠΔzi1 = parent(Fields.level(ᶠΔz, Spaces.PlusHalf(i)))
@@ -150,21 +187,24 @@ function postprocessing(sol, output_dir)
     v′ = Y -> @. Geometry.UVVector(Y.c.uₕ).components.data.:2 - v₀
     w′ = Y -> @. Geometry.WVector(Y.f.w).components.data.:1
 
-    for iframe in (1, length(sol.t))
-        t = sol.t[iframe]
-        Y = sol.u[iframe]
-        linear_solution!(Y_lin, lin_cache, t)
-        println("Error norms at time t = $t:")
-        for (name, f) in ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
-            var = f(Y)
-            var_lin = f(Y_lin)
-            strings = (
-                norm_strings(var, var_lin, 2)...,
-                norm_strings(var, var_lin, Inf)...,
-            )
-            println("ϕ = $name: ", join(strings, ", "))
+    @time "print norms" @inbounds begin
+        for iframe in (1, length(sol.t))
+            t = sol.t[iframe]
+            Y = sol.u[iframe]
+            linear_solution!(Y_lin, lin_cache, t)
+            println("Error norms at time t = $t:")
+            for (name, f) in
+                ((:ρ′, ρ′), (:T′, T′), (:u′, u′), (:v′, v′), (:w′, w′))
+                var = f(Y)
+                var_lin = f(Y_lin)
+                strings = (
+                    norm_strings(var, var_lin, 2)...,
+                    norm_strings(var, var_lin, Inf)...,
+                )
+                println("ϕ = $name: ", join(strings, ", "))
+            end
+            println()
         end
-        println()
     end
 
     anim_vars = (
@@ -173,24 +213,34 @@ function postprocessing(sol, output_dir)
         (:wprime, w′, is_small_scale ? 0.0042 : 0.0014),
     )
     anims = [Animation() for _ in 1:(3 * length(anim_vars))]
-    @progress "Animations" for iframe in 1:length(sol.t)
-        t = sol.t[iframe]
-        Y = sol.u[iframe]
-        linear_solution!(Y_lin, lin_cache, t)
-        for (ivar, (_, f, lim)) in enumerate(anim_vars)
-            var = f(Y)
-            var_lin = f(Y_lin)
-            var_rel_err = @. (var - var_lin) / (abs(var_lin) + eps(FT))
-            # adding eps(FT) to the denominator prevents divisions by 0
-            frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
-            frame(anims[3 * ivar - 1], plot(var, clim = (-lim, lim)))
-            frame(anims[3 * ivar], plot(var_rel_err, clim = (-10, 10)))
+    @inbounds begin
+        @progress "Animations" for iframe in 1:length(sol.t)
+            t = sol.t[iframe]
+            Y = sol.u[iframe]
+            linear_solution!(Y_lin, lin_cache, t)
+            for (ivar, (_, f, lim)) in enumerate(anim_vars)
+                var = f(Y)
+                var_lin = f(Y_lin)
+                var_rel_err = @. (var - var_lin) / (abs(var_lin) + eps(FT))
+                # adding eps(FT) to the denominator prevents divisions by 0
+                frame(anims[3 * ivar - 2], plot(var_lin, clim = (-lim, lim)))
+                frame(anims[3 * ivar - 1], plot(var, clim = (-lim, lim)))
+                frame(anims[3 * ivar], plot(var_rel_err, clim = (-10, 10)))
+            end
         end
-    end
-    for (ivar, (name, _, _)) in enumerate(anim_vars)
-        mp4(anims[3 * ivar - 2], joinpath(output_dir, "$(name)_lin.mp4"); fps)
-        mp4(anims[3 * ivar - 1], joinpath(output_dir, "$name.mp4"); fps)
-        mp4(anims[3 * ivar], joinpath(output_dir, "$(name)_rel_err.mp4"); fps)
+        for (ivar, (name, _, _)) in enumerate(anim_vars)
+            mp4(
+                anims[3 * ivar - 2],
+                joinpath(output_dir, "$(name)_lin.mp4");
+                fps,
+            )
+            mp4(anims[3 * ivar - 1], joinpath(output_dir, "$name.mp4"); fps)
+            mp4(
+                anims[3 * ivar],
+                joinpath(output_dir, "$(name)_rel_err.mp4");
+                fps,
+            )
+        end
     end
 end
 
@@ -204,13 +254,7 @@ function norm_strings(var, var_lin, p)
     )
 end
 
-# min_λx = 2 * (x_max / x_elem) / upsampling_factor # this should include npoly
-# min_λz = 2 * (FT( / z_)elem) / upsampling_factor
-# min_λx = 2 * π / max_kx = x_max / max_ikx
-# min_λz = 2 * π / max_kz = 2 * z_max / max_ikz
-# max_ikx = x_max / min_λx = upsampling_factor * x_elem / 2
-# max_ikz = 2 * z_max / min_λz = upsampling_factor * z_elem
-function ρfb_init_coefs(
+function ρfb_init_coefs_params(
     upsampling_factor = 3,
     max_ikx = upsampling_factor * x_elem ÷ 2,
     max_ikz = upsampling_factor * z_elem,
@@ -242,32 +286,29 @@ function ρfb_init_coefs(
         ᶜbretherton_factor_pρ = @. exp(-δ * ᶜz / 2)
         ᶜρb_init = @. ᶜρ′_init / ᶜbretherton_factor_pρ
     end
+    combine(ρ, lg) = (; ρ, x = lg.coordinates.x, z = lg.coordinates.z)
+    ᶜρb_init_xz = combine.(ᶜρb_init, ᶜlocal_geometry)
 
     # Fourier coefficients of Bretherton transform of initial perturbation
     ρfb_init_array = Array{Complex{FT}}(undef, 2 * max_ikx + 1, 2 * max_ikz + 1)
-    ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
-    ᶜintegrand = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry))
     unit_integral = 2 * sum(one.(ᶜρb_init))
-    # Since the coefficients are for a modified domain of height 2 * z_max, the
-    # unit integral over the domain must be multiplied by 2 to ensure correct
-    # normalization. On the other hand, ᶜρb_init is assumed to be 0 outside of
-    # the "true" domain, so the integral of ᶜintegrand should not be modified.
-    @progress "ρfb_init" for ikx in (-max_ikx):max_ikx,
-        ikz in (-max_ikz):max_ikz
-
-        kx = 2 * π / x_max * ikx
-        kz = 2 * π / (2 * z_max) * ikz
-        @. ᶜfourier_factor = exp(im * (kx * ᶜx + kz * ᶜz))
-        @. ᶜintegrand = ᶜρb_init / ᶜfourier_factor
-        ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1] =
-            sum(ᶜintegrand) / unit_integral
-    end
-    return ρfb_init_array
+    return (;
+        ρfb_init_array,
+        ᶜρb_init_xz,
+        max_ikz,
+        max_ikx,
+        x_max,
+        z_max,
+        unit_integral,
+    )
 end
 
 function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜz = ᶜlocal_geometry.coordinates.z
     ᶠz = ᶠlocal_geometry.coordinates.z
+    ρfb_init_array_params = ρfb_init_coefs_params()
+    @time "ρfb_init_coefs!" ρfb_init_coefs!(FT, ρfb_init_array_params)
+    (; ρfb_init_array) = ρfb_init_array_params
     ᶜp₀ = @. p₀(ᶜz)
     return (;
         # coordinates
@@ -289,7 +330,7 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
         ᶠbretherton_factor_uvwT = (@. exp(δ * ᶠz / 2)),
 
         # Fourier coefficients of Bretherton transform of initial perturbation
-        ρfb_init_array = ρfb_init_coefs(),
+        ρfb_init_array,
 
         # Fourier transform factors
         ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry)),
@@ -327,7 +368,7 @@ function linear_solution!(Y, lin_cache, t)
     ᶜvb .= FT(0)
     ᶠwb .= FT(0)
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
-    for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
+    @inbounds for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
         kx = 2 * π / x_max * ikx
         kz = 2 * π / (2 * z_max) * ikz
 
@@ -405,4 +446,5 @@ function linear_solution!(Y, lin_cache, t)
     @. Y.c.uₕ = Geometry.Covariant12Vector(Geometry.UVVector(ᶜu, FT(0.0)))
     @. Y.c.uₕ.components.data.:2 .= ᶜv
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
+    return nothing
 end
