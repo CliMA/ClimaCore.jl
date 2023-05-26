@@ -2,7 +2,14 @@ using Logging
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    DataLayouts
 
 using ClimaComms
 const device = ClimaComms.device()
@@ -39,6 +46,9 @@ function distributed_space(
     return (space, context)
 end
 
+init_state_scalar(local_geometry, p) = (; ρ = 1.0)
+init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
+
 #=
  _
 |1|
@@ -61,14 +71,13 @@ end
     @test Topologies.local_neighboring_elements(space.topology, 3) == [2, 4]
     @test Topologies.local_neighboring_elements(space.topology, 4) == [1, 3]
 
-    init_state(local_geometry, p) = (ρ = 1.0)
-    y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
+    y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
     nel = Topologies.nlocalelems(Spaces.topology(space))
     yarr = parent(y0)
     yarr .= reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel))
 
-    dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss!(y0, dss2_buffer) # DSS2
+    dss_buffer = Spaces.create_dss_buffer(y0)
+    Spaces.weighted_dss!(y0, dss_buffer) # DSS2
 #! format: off
     @test Array(yarr[:]) == [18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 18.5, 5.0, 9.5, 9.5, 
                              14.0, 18.5, 9.5, 14.0, 18.5, 9.5, 14.0, 18.5, 18.5, 
@@ -76,26 +85,40 @@ end
                              32.0, 18.5, 27.5, 32.0, 18.5, 27.5, 32.0, 18.5]
 #! format: on
 
-    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
     @show p
     #=
     @test p == 0
     =#
 end
 
-@testset "4x1 element mesh on 2 processes - vector field" begin
+@testset "test if dss is no-op on an empty field" begin
+    Nq = 3
+    space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
+    y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
+
+    dims = (Nq, Nq, 0, 4)
+    array = similar(parent(y0), dims)
+    data = DataLayouts.rebuild(Fields.field_values(y0), array)
+    space = axes(y0)
+    empty_field = similar(y0, Tuple{})
+    dss_buffer = Spaces.create_dss_buffer(empty_field)
+    @test empty_field == Spaces.weighted_dss!(empty_field)
+end
+
+
+@testset "4x1 element mesh on 1 process - vector field" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 2))
-    init_state(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
-    y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))
+    y0 = init_state_vector.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
 
-    dss2_buffer = Spaces.create_dss_buffer(y0)
-    Spaces.weighted_dss!(y0, dss2_buffer)
+    dss_buffer = Spaces.create_dss_buffer(y0)
+    Spaces.weighted_dss!(y0, dss_buffer)
 
     @test parent(yx) ≈ parent(y0)
 
-    p = @allocated Spaces.weighted_dss!(y0, dss2_buffer)
+    p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
     @show p
     #@test p == 0
 end
