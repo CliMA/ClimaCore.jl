@@ -48,8 +48,8 @@ end
 
 function Bretherton_transforms_original!(lin_cache, t, ::Type{FT}) where {FT}
     (; ᶜx, ᶠx, ᶜz, ᶠz) = lin_cache
-    (; x_max, z_max, u₀, δ, cₛ², grav, f, ρₛ) = lin_cache
-    (; ρfb_init_array, ᶜfourier_factor, ᶠfourier_factor) = lin_cache
+    (; x_max, z_max, u₀) = lin_cache
+    (; max_ikx, max_ikz) = lin_cache
     (; ᶜpb, ᶜρb, ᶜub, ᶜvb, ᶠwb) = lin_cache
 
     ᶜpb .= FT(0)
@@ -57,57 +57,24 @@ function Bretherton_transforms_original!(lin_cache, t, ::Type{FT}) where {FT}
     ᶜub .= FT(0)
     ᶜvb .= FT(0)
     ᶠwb .= FT(0)
-    max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
-    @inbounds for ikx in (-max_ikx):max_ikx, ikz in (-max_ikz):max_ikz
-        kx = 2 * π / x_max * ikx
-        kz = 2 * π / (2 * z_max) * ikz
 
-        # Fourier coefficient of ᶜρb_init (for current kx and kz)
-        ρfb_init = ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1]
+    @inbounds begin
+        for ikx in (-max_ikx):max_ikx
+            for ikz in (-max_ikz):max_ikz
+                (; pfb, ρfb, ufb, vfb, wfb) =
+                    Bretherton_transform_coeffs(lin_cache, ikx, ikz, t, FT)
+                # Fourier coefficient of ᶜρb_init (for current kx and kz)
+                kx::FT = 2 * π / x_max * ikx
+                kz::FT = 2 * π / (2 * z_max) * ikz
 
-        # Fourier factors, shifted by u₀ * t along the x-axis
-        @. ᶜfourier_factor = exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz))
-        @. ᶠfourier_factor = exp(im * (kx * (ᶠx - u₀ * t) + kz * ᶠz))
-
-        # roots of a₁(s)
-        p₁ = cₛ² * (kx^2 + kz^2 + δ^2 / 4) + f^2
-        q₁ = grav * kx^2 * (cₛ² * δ - grav) + cₛ² * f^2 * (kz^2 + δ^2 / 4)
-        α² = p₁ / 2 - sqrt(p₁^2 / 4 - q₁)
-        β² = p₁ / 2 + sqrt(p₁^2 / 4 - q₁)
-        α = sqrt(α²)
-        β = sqrt(β²)
-
-        # inverse Laplace transform of s^p/((s^2 + α^2)(s^2 + β^2)) for p ∈ -1:3
-        if α == 0
-            L₋₁ = (β² * t^2 / 2 - 1 + cos(β * t)) / β^4
-            L₀ = (β * t - sin(β * t)) / β^3
-        else
-            L₋₁ =
-                (-cos(α * t) / α² + cos(β * t) / β²) / (β² - α²) + 1 / (α² * β²)
-            L₀ = (sin(α * t) / α - sin(β * t) / β) / (β² - α²)
+                # Fourier factors, shifted by u₀ * t along the x-axis
+                @. ᶜpb += real(pfb * exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz)))
+                @. ᶜρb += real(ρfb * exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz)))
+                @. ᶜub += real(ufb * exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz)))
+                @. ᶜvb += real(vfb * exp(im * (kx * (ᶜx - u₀ * t) + kz * ᶜz)))
+                @. ᶠwb += real(wfb * exp(im * (kx * (ᶠx - u₀ * t) + kz * ᶠz)))
+            end
         end
-        L₁ = (cos(α * t) - cos(β * t)) / (β² - α²)
-        L₂ = (-sin(α * t) * α + sin(β * t) * β) / (β² - α²)
-        L₃ = (-cos(α * t) * α² + cos(β * t) * β²) / (β² - α²)
-
-        # Fourier coefficients of Bretherton transforms of final perturbations
-        C₁ = grav * (grav - cₛ² * (im * kz + δ / 2))
-        C₂ = grav * (im * kz - δ / 2)
-        pfb = -ρfb_init * (L₁ + L₋₁ * f^2) * C₁
-        ρfb =
-            ρfb_init *
-            (L₃ + L₁ * (p₁ + C₂) + L₋₁ * f^2 * (cₛ² * (kz^2 + δ^2 / 4) + C₂))
-        ufb = ρfb_init * L₀ * im * kx * C₁ / ρₛ
-        vfb = -ρfb_init * L₋₁ * im * kx * f * C₁ / ρₛ
-        wfb = -ρfb_init * (L₂ + L₀ * (f^2 + cₛ² * kx^2)) * grav / ρₛ
-
-        # Bretherton transforms of final perturbations
-        @. ᶜpb += real(pfb * ᶜfourier_factor)
-        @. ᶜρb += real(ρfb * ᶜfourier_factor)
-        @. ᶜub += real(ufb * ᶜfourier_factor)
-        @. ᶜvb += real(vfb * ᶜfourier_factor)
-        @. ᶠwb += real(wfb * ᶠfourier_factor)
-        # The imaginary components should be 0 (or at least very close to 0).
     end
     return nothing
 end
@@ -149,6 +116,52 @@ function linear_solution!(Y, lin_cache, t, ::Type{FT}) where {FT}
     @. Y.c.uₕ.components.data.:2 .= ᶜv
     @. Y.f.w = Geometry.Covariant3Vector(Geometry.WVector(ᶠw))
     return nothing
+end
+
+function Bretherton_transform_coeffs(args, ikx, ikz, t, ::Type{FT}) where {FT}
+    (; ᶜρb_init_xz, unit_integral, ρfb_init_array) = args
+    (; max_ikx, max_ikz) = args
+    (; x_max, z_max, u₀, δ, cₛ², grav, f, ρₛ) = args
+
+    # Fourier coefficient of ᶜρb_init (for current kx and kz)
+    kx::FT = 2 * π / x_max * ikx
+    kz::FT = 2 * π / (2 * z_max) * ikz
+
+    ρfb_init = ρfb_init_array[ikx + max_ikx + 1, ikz + max_ikz + 1]
+
+    # roots of a₁(s)
+    p₁ = cₛ² * (kx^2 + kz^2 + δ^2 / 4) + f^2
+    q₁ = grav * kx^2 * (cₛ² * δ - grav) + cₛ² * f^2 * (kz^2 + δ^2 / 4)
+    α² = p₁ / 2 - sqrt(p₁^2 / 4 - q₁)
+    β² = p₁ / 2 + sqrt(p₁^2 / 4 - q₁)
+    α = sqrt(α²)
+    β = sqrt(β²)
+
+    # inverse Laplace transform of s^p/((s^2 + α^2)(s^2 + β^2)) for p ∈ -1:3
+    if α == 0
+        L₋₁ = (β² * t^2 / 2 - 1 + cos(β * t)) / β^4
+        L₀ = (β * t - sin(β * t)) / β^3
+    else
+        L₋₁ = (-cos(α * t) / α² + cos(β * t) / β²) / (β² - α²) + 1 / (α² * β²)
+        L₀ = (sin(α * t) / α - sin(β * t) / β) / (β² - α²)
+    end
+    L₁ = (cos(α * t) - cos(β * t)) / (β² - α²)
+    L₂ = (-sin(α * t) * α + sin(β * t) * β) / (β² - α²)
+    L₃ = (-cos(α * t) * α² + cos(β * t) * β²) / (β² - α²)
+
+    # Fourier coefficients of Bretherton transforms of final perturbations
+    C₁ = grav * (grav - cₛ² * (im * kz + δ / 2))
+    C₂ = grav * (im * kz - δ / 2)
+    pfb = -ρfb_init * (L₁ + L₋₁ * f^2) * C₁
+    ρfb =
+        ρfb_init *
+        (L₃ + L₁ * (p₁ + C₂) + L₋₁ * f^2 * (cₛ² * (kz^2 + δ^2 / 4) + C₂))
+    ufb = ρfb_init * L₀ * im * kx * C₁ / ρₛ
+    vfb = -ρfb_init * L₋₁ * im * kx * f * C₁ / ρₛ
+    wfb = -ρfb_init * (L₂ + L₀ * (f^2 + cₛ² * kx^2)) * grav / ρₛ
+
+    # Bretherton transforms of final perturbations
+    return (; pfb, ρfb, ufb, vfb, wfb)
 end
 
 end # module

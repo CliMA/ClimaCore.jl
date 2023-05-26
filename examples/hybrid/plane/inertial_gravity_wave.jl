@@ -280,7 +280,8 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     ᶠz = ᶠlocal_geometry.coordinates.z
     ρfb_init_array_params = ρfb_init_coefs_params()
     @time "ρfb_init_coefs!" IGWU.ρfb_init_coefs!(FT, ρfb_init_array_params)
-    (; ρfb_init_array) = ρfb_init_array_params
+    (; ρfb_init_array, ᶜρb_init_xz, unit_integral) = ρfb_init_array_params
+    max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
     ᶜp₀ = @. p₀(ᶜz)
     return (;
         # globals
@@ -319,10 +320,10 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
 
         # Fourier coefficients of Bretherton transform of initial perturbation
         ρfb_init_array,
-
-        # Fourier transform factors
-        ᶜfourier_factor = Fields.Field(Complex{FT}, axes(ᶜlocal_geometry)),
-        ᶠfourier_factor = Fields.Field(Complex{FT}, axes(ᶠlocal_geometry)),
+        unit_integral,
+        ᶜρb_init_xz,
+        max_ikx,
+        max_ikz,
 
         # Bretherton transform of final perturbation
         ᶜpb = Fields.Field(FT, axes(ᶜlocal_geometry)),
