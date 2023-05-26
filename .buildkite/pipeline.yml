@@ -7,7 +7,6 @@ env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   OPENBLAS_NUM_THREADS: 1
   JULIA_NVTX_CALLBACKS: gc
-  SLURM_MPI_TYPE: pmi2
 
 steps:
   - label: "initialize"
@@ -89,7 +88,7 @@ steps:
       - label: ":computer: Parallel HDF5 IO tests"
         key: "cpu_parallel_hdf5"
         command:
-          - "srun julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
         timeout_in_minutes: 5
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -102,7 +101,7 @@ steps:
       - label: "TempestRemap MPI test"
         key: "write_exodus_mpi"
         command:
-          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
         timeout_in_minutes: 5
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -115,7 +114,7 @@ steps:
       - label: "TempestRemap distributed remapping test"
         key: "online_remap_mpi"
         command:
-          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
         timeout_in_minutes: 5
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -255,7 +254,7 @@ steps:
       - label: ":computer: MPI Bickley jet CG vector invariant hyperviscosity"
         key: "cpu_mpi_bickleyjet_cg_invariant_hypervisc"
         command:
-          - "srun julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=examples examples/bickleyjet/bickleyjet_cg_invariant_hypervisc.jl"
         artifact_paths:
           - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
         env:
@@ -312,7 +311,7 @@ steps:
         key: "gpu_ddss2_test"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -325,7 +324,7 @@ steps:
         key: "gpu_ddss3_test"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -338,7 +337,7 @@ steps:
         key: "gpu_ddss4_test"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -351,7 +350,7 @@ steps:
         key: "gpu_ddss_ne32_cs_2processes"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -364,7 +363,7 @@ steps:
         key: "gpu_ddss_ne32_cs_3processes"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -377,7 +376,7 @@ steps:
         key: "gpu_ddss_ne32_cs_4processes"
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+          - "srun --mpi=pmi2 julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
           CLIMACORE_DISTRIBUTED: "MPI"
@@ -504,7 +503,7 @@ steps:
       - label: ":computer: MPI Rising Bubble 3D hybrid invariant (ρe)"
         key: "cpu_mpi_rising_bubble_3d_hybrid_invariant_rhoe"
         command:
-          - "srun julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
         env:
@@ -682,7 +681,7 @@ steps:
       - label: ":computer: MPI 3D sphere baroclinic wave (ρe)"
         key: "cpu_mpi_baroclinic_wave_rho_e"
         command:
-          - "srun julia --color=yes --project=examples examples/hybrid/driver.jl"
+          - "srun --mpi=pmi2 julia --color=yes --project=examples examples/hybrid/driver.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
         env:
