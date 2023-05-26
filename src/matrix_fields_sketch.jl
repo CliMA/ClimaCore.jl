@@ -108,7 +108,7 @@ Base.:(==)(row1::LinearAlgebra.UniformScaling, row2::BandMatrixRow) =
 
 const ScalarQuantity = Union{Number, Geometry.AxisTensor}
 
-# Define all necessary operations for computing linear combinations of matrices.
+# Define all necessary operations for computing linear combinations.
 Base.map(f, rows::BMR...) where {ld, BMR <: BandMatrixRow{ld}} =
     BandMatrixRow{ld}(map(f, map(row -> row.entries, rows)...)...)
 for op in (:+, :-)
@@ -146,77 +146,128 @@ Base.:*(::BandMatrixRow, ::BandMatrixRow) =
 
 
 """
-    Times_eᵀ([value])
+    Times_eᵀ{A}([value])
 
-Represents the quantity `value * eᵀ`, where `eᵀ` denotes the transpose of a
-basis vector. For example, if `e₃` denotes the basis vector along the
-`Contravariant3Axis`, then we can express `Contravariant3Vector(u³)` as
-`u³ * e₃`. Since `dot(e³, e₃) = 1`, this means that
-`e³ᵀ * Contravariant3Vector(u³) = u³ * e³ᵀ * e₃ = u³`. So, `Times_e³ᵀ(value)`
-represents a quantity that, when multiplied by an `AxisVector` `x` defined on a
-`LocalGeometry` `lg`, returns the quantity `value * contravariant3(x, lg)`.
-There is a subtype of `Times_eᵀ` for every basis vector: `Times_e₁ᵀ`,
-`Times_e₂ᵀ`, `Times_e₃ᵀ`, `Times_e¹ᵀ`, `Times_e²ᵀ`, and `Times_e³ᵀ`. If `value`
-is not specified, it is assumed to be `true` (i.e., the number 1).
+Represents the quantity `value * eᵀ{A}`, where `eᵀ{A}` denotes the transpose of
+the basis vector along axis `A`. For example, if `e₃` denotes the basis vector
+along the `Contravariant3Axis`, then we can express `Contravariant3Vector(u³)`
+as `u³ * e₃`. Since `dot(e³, e₃) = 1`, this means that
+`e³ᵀ * Contravariant3Vector(u³) = u³ * e³ᵀ * e₃ = u³`. So,
+`x = Times_eᵀ{Contravariant3Axis}(value)` is a quantity that, when
+multiplied by an `AxisVector` `y` defined on a `LocalGeometry` `lg`, returns the
+quantity `value * contravariant3(y, lg)`. This can be done using the `mul`
+function, i.e., `mul(x, y, lg)`. In addition, it is possible to take linear
+combinations of `Times_eᵀ`s. If `value` is not specified, it is assumed to be
+`true` (i.e., the number 1). There is a constant defined for `Times_eᵀ{A}()` for
+each axis `A`: `e₁ᵀ`, `e₂ᵀ`, `e₃ᵀ`, `e¹ᵀ`, `e²ᵀ`, and `e³ᵀ`.
 """
 struct Times_eᵀ{A, T}
     value::T
 end
 Times_eᵀ{A}() where {A} = Times_eᵀ{A}(true)
 
-const Times_e₁ᵀ{T} = Times_eᵀ{Geometry.Covariant1Axis, T}
-const Times_e₂ᵀ{T} = Times_eᵀ{Geometry.Covariant2Axis, T}
-const Times_e₃ᵀ{T} = Times_eᵀ{Geometry.Covariant3Axis, T}
-const Times_e¹ᵀ{T} = Times_eᵀ{Geometry.Contravariant1Axis, T}
-const Times_e²ᵀ{T} = Times_eᵀ{Geometry.Contravariant2Axis, T}
-const Times_e³ᵀ{T} = Times_eᵀ{Geometry.Contravariant3Axis, T}
+const e₁ᵀ = Times_eᵀ{Geometry.Covariant1Axis}()
+const e₂ᵀ = Times_eᵀ{Geometry.Covariant2Axis}()
+const e₃ᵀ = Times_eᵀ{Geometry.Covariant3Axis}()
+const e¹ᵀ = Times_eᵀ{Geometry.Contravariant1Axis}()
+const e²ᵀ = Times_eᵀ{Geometry.Contravariant2Axis}()
+const e³ᵀ = Times_eᵀ{Geometry.Contravariant3Axis}()
 
-Base.eltype(::Type{Times_eᵀ{A, T}}) where {A, T} = T
+function Base.show(io::IO, x::Times_eᵀ{A}) where {A}
+    transpose_string = if A == Geometry.Covariant1Axis
+        "e₁'"
+    elseif A == Geometry.Covariant2Axis
+        "e₂'"
+    elseif A == Geometry.Covariant3Axis
+        "e₃'"
+    elseif A == Geometry.Contravariant1Axis
+        "e¹'"
+    elseif A == Geometry.Contravariant2Axis
+        "e²'"
+    elseif A == Geometry.Contravariant3Axis
+        "e³'"
+    end
+    print(io, "$(x.value) * $transpose_string")
+end
+
+# Define all necessary operations for computing linear combinations.
+for op in (:+, :-)
+    @eval begin
+        Base.$op(x::Times_eᵀ{A}) where {A} = Times_eᵀ{A}($op(x.value))
+        Base.$op(x::Times_eᵀ{A}, y::Times_eᵀ{A}) where {A} =
+            Times_eᵀ{A}($op(x.value, y.value))
+    end
+end
+for op in (:*, :/)
+    @eval begin
+        Base.$op(x::Times_eᵀ{A}, scalar::Number) where {A} =
+            Times_eᵀ{A}($op(x.value, scalar))
+    end
+end
+for op in (:*, :\)
+    @eval begin
+        Base.$op(anything, x::Times_eᵀ{A}) where {A} =
+            Times_eᵀ{A}($op(anything, x.value))
+    end
+end
 
 """
     mul(x, y, lg)
 
 Computes `x * y`, using the `LocalGeometry` `lg` for any `AxisVector`
-projections required by this computation. For example, if `x` is a `Times_e³ᵀ`
-and `y` is an `AxisVector`, then `y` will be projected onto the
-`Contravariant3Axis` for the multiplication. In order to simplify the
-implementation, projecting higher-dimensional `AxisTensor`s is not supported.
+projections required by this computation. For example, if `x` is a multiple of
+`e³ᵀ` and `y` is an `AxisVector`, then `y` will be projected onto the
+`Contravariant3Axis` for the multiplication. In general, `mul(x, y, lg)` is
+just `x * y`, unless `x` is a `Times_eᵀ` and `y` is an `AxisVector`.
 """
 mul(x, y, _) = x * y
-mul(x, y::Times_eᵀ, lg) = Times_eᵀ(mul(x, y.value, lg))
-mul(x::Times_eᵀ, y, lg) = Times_eᵀ(mul(x.value, y, lg))
-mul(x::Times_eᵀ, y::Times_eᵀ, lg) = Times_eᵀ(mul(x.value, y, lg))
-mul(x::Times_e₁ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.covariant1(y, lg), lg)
-mul(x::Times_e₂ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.covariant2(y, lg), lg)
-mul(x::Times_e₃ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.covariant3(y, lg), lg)
-mul(x::Times_e¹ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.contravariant1(y, lg), lg)
-mul(x::Times_e²ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.contravariant2(y, lg), lg)
-mul(x::Times_e³ᵀ, y::Geometry.AxisVector, lg) =
-    mul(x.value, Geometry.contravariant3(y, lg), lg)
-mul(::Times_eᵀ, ::Geometry.AxisTensor, _) =
-    error("Multiplying a Times_eᵀ by a generic AxisTensor is not yet supported")
+mul(x::Times_eᵀ{Geometry.Covariant1Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.covariant1(y, lg)
+mul(x::Times_eᵀ{Geometry.Covariant2Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.covariant2(y, lg)
+mul(x::Times_eᵀ{Geometry.Covariant3Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.covariant3(y, lg)
+mul(x::Times_eᵀ{Geometry.Contravariant1Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.contravariant1(y, lg)
+mul(x::Times_eᵀ{Geometry.Contravariant2Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.contravariant2(y, lg)
+mul(x::Times_eᵀ{Geometry.Contravariant3Axis}, y::Geometry.AxisVector, lg) =
+    x.value * Geometry.contravariant3(y, lg)
 
 """
     mul_type(X, Y)
 
-Computes the result type of `mul(x::X, y::Y, lg)`.
+Computes the result type of `mul(x::X, y::Y, lg)`. Since the value of this
+function is typically just `x * y`, this requires inferring the type of `x * y`
+for all types `X` and `Y` that we will commonly encounter, e.g., `Number`,
+`AxisTensor`, and `Times_eᵀ`.
 """
-mul_type(::Type{X}, ::Type{Y}) where {X, Y} = promote_type(X, Y)
-mul_type(::Type{X}, ::Type{Y}) where {X, Y <: Times_eᵀ} =
-    Times_eᵀ{mul_type(X, eltype(Y))}
-mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y} =
-    Times_eᵀ{mul_type(eltype(X), Y)}
-mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Times_eᵀ} =
-    Times_eᵀ{mul_type(eltype(X), Y)}
-mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisVector} =
-    mul_type(eltype(X), eltype(Y))
-mul_type(::Type{X}, ::Type{Y}) where {X <: Times_eᵀ, Y <: Geometry.AxisTensor} =
-    error("Multiplying a Times_eᵀ by a generic AxisTensor is not yet supported")
+mul_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
+    promote_type(X, Y)
+mul_type(::Type{X}, ::Type{Y}) where {X <: Geometry.AxisTensor, Y <: Number} =
+    tensor_times_number_type(X, Y)
+mul_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Geometry.AxisTensor} =
+    tensor_times_number_type(Y, X)
+mul_type(::Type{X}, ::Type{Y}) where {X, A, T, Y <: Times_eᵀ{A, T}} =
+    Times_eᵀ{A, mul_type(X, T)}
+mul_type(::Type{X}, ::Type{Y}) where {A, T, X <: Times_eᵀ{A, T}, Y <: Number} =
+    Times_eᵀ{A, mul_type(T, Y)}
+mul_type(
+    ::Type{X},
+    ::Type{Y},
+) where {A, T1, X <: Times_eᵀ{A, T1}, T2, Y <: Geometry.AxisVector{T2}} =
+    mul_type(T1, T2)
+
+tensor_times_number_type(
+    ::Type{Geometry.AxisTensor{T1, N, A, S}},
+    ::Type{T2},
+) where {Tup, T1, N, A, S <: StaticArray{Tup, T1, N}, T2 <: Number} =
+    Geometry.AxisTensor{
+        mul_type(T1, T2),
+        N,
+        A,
+        StaticArray{Tup, mul_type(T1, T2), N},
+    }
 
 
 ################################################################################
