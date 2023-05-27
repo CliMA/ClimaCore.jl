@@ -75,6 +75,12 @@ if !Sys.iswindows()
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
     @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
 
+    @safetestset "MatrixFields - BandMatrixRow" begin @time include("MatrixFields/band_matrix_row.jl") end
+    @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
+    @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
+    # now part of buildkite
+    # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
+
     @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
     @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end
 

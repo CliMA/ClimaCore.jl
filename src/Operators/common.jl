@@ -131,7 +131,11 @@ function strip_space(
     new_space = placeholder_space(current_space, parent_space)
     return Base.Broadcast.Broadcasted{Style}(
         bc.f,
-        map(arg -> strip_space(arg, current_space), bc.args),
+        strip_space_args(bc.args, current_space),
         new_space,
     )
 end
+
+strip_space_args(::Tuple{}, space) = ()
+strip_space_args(args::Tuple, space) =
+    (strip_space(args[1], space), strip_space_args(Base.tail(args), space)...)

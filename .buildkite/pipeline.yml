@@ -502,6 +502,32 @@ steps:
         agents:
           slurm_gpus: 1
 
+  - group: "Unit: MatrixFields"
+    steps:
+
+      - label: "Unit: BandMatrixRow"
+        key: unit_band_matrix_row
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/band_matrix_row.jl"
+
+      - label: "Unit: rmul_with_projection"
+        key: unit_rmul_with_projection
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/rmul_with_projection.jl"
+
+      - label: "Unit: field2arrays"
+        key: unit_field2arrays
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field2arrays.jl"
+
+      - label: "Unit: matrix field broadcasting (CPU)"
+        key: unit_matrix_field_broadcasting_cpu
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
+
+      - label: "Unit: matrix field broadcasting (GPU)"
+        key: unit_matrix_field_broadcasting_gpu
+        command: "julia --color=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 20GB
+
   - group: "Unit: Hypsography"
     steps:
 

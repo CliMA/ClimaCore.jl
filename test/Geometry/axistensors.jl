@@ -27,6 +27,12 @@ ClimaCore.Geometry.assert_exact_transform() = true
     @test M[:, 1] == Geometry.Cartesian12Vector(1.0, 0.5)
     @test M[1, :] == Geometry.Covariant12Vector(1.0, 0.0)
 
+    @test x + zero(x) == x
+    @test x' + zero(x') == x'
+
+    @test -x + x * 2 - x / 2 == -x + 2 * x - 2 \ x == x / 2
+    @test -x' + x' * 2 - x' / 2 == -x' + 2 * x' - 2 \ x' == (x / 2)'
+
     @test x * y' ==
           x ⊗ y ==
           Geometry.AxisTensor(
