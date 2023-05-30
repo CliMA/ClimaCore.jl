@@ -106,6 +106,7 @@ function mapreduce_cuda(
             Val(shmemsize),
         )
     end
+    CUDA.synchronize()
     if Nf == 1
         return Array(reduce_cuda)[1, 1]
     else
