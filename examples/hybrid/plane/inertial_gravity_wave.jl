@@ -282,6 +282,11 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
     @time "ρfb_init_coefs!" IGWU.ρfb_init_coefs!(FT, ρfb_init_array_params)
     (; ρfb_init_array, ᶜρb_init_xz, unit_integral) = ρfb_init_array_params
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
+
+    get_xz(lg) = (; x = lg.coordinates.x, z = lg.coordinates.z)
+    ᶠxz = get_xz.(ᶠlocal_geometry)
+    ᶜxz = get_xz.(ᶜlocal_geometry)
+
     ᶜp₀ = @. p₀(ᶜz)
     return (;
         # globals
@@ -305,6 +310,8 @@ function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
         ᶠx = ᶠlocal_geometry.coordinates.x,
         ᶜz,
         ᶠz,
+        ᶜxz,
+        ᶠxz,
 
         # background state
         ᶜp₀,

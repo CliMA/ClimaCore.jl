@@ -35,15 +35,83 @@ function ρfb_init_coefs!(::Type{FT}, params) where {FT}
 end
 
 function Bretherton_transforms!(lin_cache, t, ::Type{FT}) where {FT}
-    # Bretherton_transforms_partial_sums! is fastest because
-    # we can multithread across
-    #       `Iterators.product((-max_ikx):max_ikx, (-max_ikz):max_ikz)`
-    # and apply sums for center and face fields. Using mapreduce requires
-    # two calls and, as a result in ~20 slower.
+    # Bretherton_transforms! is the most computationally
+    # expensive part of this example and was therefore
+    # optimized a bit.
+    # Bretherton_transforms_original!(lin_cache, t, FT)
+    Bretherton_transforms_threaded_mapreduce!(lin_cache, t, FT)
+end
 
-    Bretherton_transforms_original!(lin_cache, t, FT)
-    # Bretherton_transforms_partial_sums!(lin_cache, t, FT)
-    # Bretherton_transforms_threaded_mapreduce!(lin_cache, t, FT)
+import ThreadsX
+function Bretherton_transforms_threaded_mapreduce!(
+    lin_cache,
+    t,
+    ::Type{FT},
+) where {FT}
+    # @info "Computing Bretherton_transforms! (threaded mapreduce)..."
+    (; ᶠwb) = lin_cache
+    (; ᶜx, ᶠx, ᶜz, ᶠz, ᶠxz, ᶜxz) = lin_cache
+    (; ᶜρb_init_xz, ρfb_init_array, unit_integral, x_max, z_max) = lin_cache
+    (; max_ikx, max_ikz, u₀) = lin_cache
+    combine(ᶜpb, ᶜρb, ᶜub, ᶜvb) = (; ᶜpb, ᶜρb, ᶜub, ᶜvb)
+    ᶜbretherton_fields =
+        combine.(lin_cache.ᶜpb, lin_cache.ᶜρb, lin_cache.ᶜub, lin_cache.ᶜvb)
+
+    # TODO: could we, and is it advantageous to, combine
+    #       this into a single mapreduce call?
+    ip = Iterators.product((-max_ikx):max_ikx, (-max_ikz):max_ikz)
+    bc_add = (a, b) -> a .+ b
+    ᶠwb .= ThreadsX.mapreduce(
+        bc_add,
+        ip;
+        init = zeros(FT, axes(ᶠwb)),
+    ) do (ikx, ikz)
+        (; pfb, ρfb, ufb, vfb, wfb) =
+            Bretherton_transform_coeffs(lin_cache, ikx, ikz, t, FT)
+
+        # Fourier coefficient of ᶜρb_init (for current kx and kz)
+        kx::FT = 2 * π / x_max * ikx
+        kz::FT = 2 * π / (2 * z_max) * ikz
+
+        # Fourier factors, shifted by u₀ * t along the x-axis
+        map(ᶠxz) do nt
+            real(wfb * exp(im * (kx * (nt.x - u₀ * t) + kz * nt.z)))
+        end
+    end
+
+    bc_add = (a, b) -> a .+ b
+    zeroᶜbretherton_fields =
+        zeros(eltype(ᶜbretherton_fields), axes(ᶜbretherton_fields))
+    ᶜbretherton_fields .= ThreadsX.mapreduce(
+        bc_add,
+        ip;
+        init = zeroᶜbretherton_fields,
+    ) do (ikx, ikz)
+        (; pfb, ρfb, ufb, vfb, wfb) =
+            Bretherton_transform_coeffs(lin_cache, ikx, ikz, t, FT)
+
+        # Fourier coefficient of ᶜρb_init (for current kx and kz)
+        kx::FT = 2 * π / x_max * ikx
+        kz::FT = 2 * π / (2 * z_max) * ikz
+
+        # Fourier factors, shifted by u₀ * t along the x-axis
+        map(ᶜxz) do nt
+            ᶜpb::FT = real(pfb * exp(im * (kx * (nt.x - u₀ * t) + kz * nt.z)))
+            ᶜρb::FT =
+                real(ρfb * exp(im * (kx * (nt.x - u₀ * t) + kz * nt.z)))
+            ᶜub::FT =
+                real(ufb * exp(im * (kx * (nt.x - u₀ * t) + kz * nt.z)))
+            ᶜvb::FT =
+                real(vfb * exp(im * (kx * (nt.x - u₀ * t) + kz * nt.z)))
+            (; ᶜpb, ᶜρb, ᶜub, ᶜvb)
+        end
+    end
+
+    lin_cache.ᶜpb .= ᶜbretherton_fields.ᶜpb
+    lin_cache.ᶜρb .= ᶜbretherton_fields.ᶜρb
+    lin_cache.ᶜub .= ᶜbretherton_fields.ᶜub
+    lin_cache.ᶜvb .= ᶜbretherton_fields.ᶜvb
+    return nothing
 end
 
 function Bretherton_transforms_original!(lin_cache, t, ::Type{FT}) where {FT}
