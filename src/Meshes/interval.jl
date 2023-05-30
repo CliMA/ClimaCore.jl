@@ -191,13 +191,16 @@ function IntervalMesh(
     domain::IntervalDomain{CT},
     stretch::GeneralizedExponentialStretching{FT};
     nelems::Int,
+    FT_solve = Float64,
+    tol = 1e-3,
     reverse_mode::Bool = false,
 ) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
     if nelems ≤ 1
         throw(ArgumentError("`nelems` must be ≥ 2"))
     end
 
-    dz_bottom, dz_top = stretch.dz_bottom, stretch.dz_top
+    dz_bottom = FT_solve(stretch.dz_bottom)
+    dz_top = FT_solve(stretch.dz_top)
     if !(dz_bottom ≤ dz_top) && !reverse_mode
         throw(ArgumentError("dz_bottom must be ≤ dz_top"))
     end
@@ -222,20 +225,22 @@ function IntervalMesh(
     exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log(1 - (1 - exp(-1 / h)) * ζ)
 
     # nondimensional vertical coordinate (]0.0, 1.0])
-    ζ_n = LinRange(one(FT), nelems, nelems) / nelems
+    ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
     # find bottom height variation
     find_bottom(h) = dz_bottom - z_top * exp_stretch(ζ_n[1], h)
     # we use linearization
     # h_bottom ≈ -dz_bottom / (z_top - z_bottom) / log(1 - 1/nelems)
     # to approx bracket the lower / upper bounds of root sol
-    guess₋ = -dz_bottom / (z_top - z_bottom) / log(1 - FT(1 / (nelems - 1)))
-    guess₊ = -dz_bottom / (z_top - z_bottom) / log(1 - FT(1 / (nelems + 1)))
+    guess₋ =
+        -dz_bottom / (z_top - z_bottom) / log(1 - FT_solve(1 / (nelems - 1)))
+    guess₊ =
+        -dz_bottom / (z_top - z_bottom) / log(1 - FT_solve(1 / (nelems + 1)))
     h_bottom_sol = RootSolvers.find_zero(
         find_bottom,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT(1e-3)),
+        RootSolvers.ResidualTolerance(FT_solve(tol)),
     )
     if h_bottom_sol.converged !== true
         error(
@@ -249,13 +254,13 @@ function IntervalMesh(
     # we use the linearization
     # h_top ≈ (z_top - dz_top) / z_top / log(nelem)
     # to approx braket the lower, upper bounds of root sol
-    guess₋ = ((z_top - z_bottom) - dz_top) / z_top / FT(log(nelems + 1))
-    guess₊ = ((z_top - z_bottom) - dz_top) / z_top / FT(log(nelems - 1))
+    guess₋ = ((z_top - z_bottom) - dz_top) / z_top / FT_solve(log(nelems + 1))
+    guess₊ = ((z_top - z_bottom) - dz_top) / z_top / FT_solve(log(nelems - 1))
     h_top_sol = RootSolvers.find_zero(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT(1e-3)),
+        RootSolvers.ResidualTolerance(FT_solve(1e-3)),
     )
     if h_top_sol.converged !== true
         error(
@@ -271,7 +276,7 @@ function IntervalMesh(
     faces = (z_bottom + (z_top - z_bottom)) * exp_stretch.(ζ_n, h)
 
     # add the bottom level
-    faces = [z_bottom; faces...]
+    faces = FT_solve[z_bottom; faces...]
     if reverse_mode
         reverse!(faces)
         faces = map(f -> eltype(faces)(-f), faces)
