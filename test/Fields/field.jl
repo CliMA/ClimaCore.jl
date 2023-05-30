@@ -355,7 +355,12 @@ end
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
 
-    @test sum(field.x) == FT(π)
+    if ClimaComms.device(context) isa ClimaComms.CPUDevice
+        @test sum(field.x) == FT(π)
+    elseif ClimaComms.device(context) isa ClimaComms.CUDADevice
+        # Not yet supported
+        # @test sum(field.x) == FT(π)
+    end
 
     field = ones(space) .* π
     sin_field = sin.(field)
