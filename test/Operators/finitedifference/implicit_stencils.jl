@@ -13,10 +13,10 @@ include(joinpath("test", "Operators", "finitedifference", "implicit_stencils.jl"
 # For interactive use:
 ```julia
 julia -O0 --check-bounds=yes --project=test
-push!(ARGS, "--float_type", "Float32")
+push!(ARGS, "--float_type", "Float32");
 include(joinpath("test", "Operators", "finitedifference", "implicit_stencils_utils.jl"))
-
-const FT = parsed_args["float_type"] == "Float64" ? Float64 : Float32
+(s, parsed_args) = parse_commandline();
+const FT = parsed_args["float_type"] == "Float64" ? Float64 : Float32;
 
 # Once launched
 center_space = get_space(FT);
