@@ -94,6 +94,46 @@ end
     @test axes(point_field) isa Spaces.PointSpace
 end
 
+# Requires `--check-bounds=yes`
+@testset "Constructing & broadcasting over empty fields" begin
+    FT = Float32
+    for space in TU.all_spaces(FT)
+        f = TU.FieldFromNamedTuple(space, (;))
+        @. f += f
+    end
+
+    function test_broken_throws(f)
+        try
+            @. f += 1
+            # we want to throw exception, test is broken
+            @test_broken false
+        catch
+            # we want to throw exception, unexpected pass
+            @test_broken true
+        end
+    end
+    empty_field(space) = TU.FieldFromNamedTuple(space, (;))
+
+    # Broadcasting over the wrong size should error
+    test_broken_throws(empty_field(TU.PointSpace(FT)))
+    test_broken_throws(empty_field(TU.SpectralElementSpace1D(FT)))
+    test_broken_throws(empty_field(TU.SpectralElementSpace2D(FT)))
+    test_broken_throws(empty_field(TU.ColumnCenterFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(TU.ColumnFaceFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(TU.SphereSpectralElementSpace(FT)))
+    test_broken_throws(empty_field(TU.CenterExtrudedFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(TU.FaceExtrudedFiniteDifferenceSpace(FT)))
+
+    # TODO: performance optimization: shouldn't we do
+    #       nothing when broadcasting over empty fields?
+    #       This is otherwise a performance penalty if
+    #       users regularly rely on empty fields. In particular:
+    #        - does iterating over empty fields load data?
+    #        - what is the overhead in iterating over empty fields?
+    #        - what is the use case of anything useful that can be
+    #          done by iterating over empty fields?
+end
+
 @testset "Broadcasting interception for tuple-valued fields" begin
     n1 = n2 = 1
     Nij = 4

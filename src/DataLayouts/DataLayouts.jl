@@ -356,21 +356,23 @@ end
 end
 
 @inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
-    @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
+    @boundscheck (1 <= h <= size(parent(data), 4)) ||
+                 throw(BoundsError(data, (h,)))
     dataview = @inbounds view(parent(data), :, :, :, h)
     IJF{S, Nij}(dataview)
 end
 
 @inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
-    @boundscheck (v >= 1 && 1 <= h <= length(data)) ||
+    @boundscheck (v >= 1 && 1 <= h <= size(parent(data), 4)) ||
                  throw(BoundsError(data, (v, h)))
     dataview = @inbounds view(parent(data), :, :, :, h)
     IJF{S, Nij}(dataview)
 end
 
 @inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
-    @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= length(data)) ||
-                 throw(BoundsError(data, (i, j, h)))
+    @boundscheck (
+        1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= size(parent(data), 4)
+    ) || throw(BoundsError(data, (i, j, h)))
     dataview = @inbounds view(parent(data), i, j, :, h)
     DataF{S}(dataview)
 end
@@ -449,14 +451,15 @@ function Base.fill!(data::IFH, val)
 end
 
 @inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
-    @boundscheck (1 <= h <= length(data)) || throw(BoundsError(data, (h,)))
+    @boundscheck (1 <= h <= size(parent(data), 3)) ||
+                 throw(BoundsError(data, (h,)))
     dataview = @inbounds view(parent(data), :, :, h)
     IF{S, Ni}(dataview)
 end
 Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
-    @boundscheck (1 <= h <= length(data) && 1 <= i <= Ni) ||
+    @boundscheck (1 <= h <= size(parent(data), 3) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
     dataview = @inbounds view(parent(data), i, :, h)
     DataF{S}(dataview)
@@ -969,7 +972,7 @@ end
 end
 
 @inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
-    @boundscheck (1 <= v <= length(parent(data))) ||
+    @boundscheck (1 <= v <= size(parent(data), 1)) ||
                  throw(BoundsError(data, (v,)))
     @inbounds set_struct!(
         parent(data),
