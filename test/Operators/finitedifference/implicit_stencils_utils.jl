@@ -222,20 +222,24 @@ function test_pointwise_stencils_apply(all_ops)
         ops_C2F_V2S,
     ) = all_ops
     (; a_FS, a_CS, a_FV, a_CV) = all_ops
+    apply_single(a_FS, a_FS, ops_F2C_S2S)
+    apply_single(a_FS, a_FS, ops_F2C_S2V)
+    apply_single(a_CS, a_CS, ops_C2F_S2S)
+    apply_single(a_CS, a_CS, ops_C2F_S2V)
+    apply_single(a_FS, a_FV, ops_F2C_V2V)
+    apply_single(a_FS, a_FV, ops_F2C_V2S)
+    apply_single(a_CS, a_CV, ops_C2F_V2V)
+    apply_single(a_CS, a_CV, ops_C2F_V2S)
+end
+
+function apply_single(a0, a1, op1s)
     apply = OP.ApplyStencil()
     compose = OP.ComposeStencils()
-    for (a0, a1, op1s) in (
-        (a_FS, a_FS, (ops_F2C_S2S..., ops_F2C_S2V...)),
-        (a_CS, a_CS, (ops_C2F_S2S..., ops_C2F_S2V...)),
-        (a_FS, a_FV, (ops_F2C_V2V..., ops_F2C_V2S...)),
-        (a_CS, a_CV, (ops_C2F_V2V..., ops_C2F_V2S...)),
-    )
-        for op1 in op1s
-            stencil_op1 = OP.Operator2Stencil(op1)
-            tested_value = apply.(stencil_op1.(a1), a0)
-            ref_value = op1.(a1 .* a0)
-            @test tested_value ≈ ref_value atol = 1e-6
-        end
+    for op1 in op1s
+        stencil_op1 = OP.Operator2Stencil(op1)
+        tested_value = apply.(stencil_op1.(a1), a0)
+        ref_value = op1.(a1 .* a0)
+        @test tested_value ≈ ref_value atol = 1e-6
     end
     return nothing
 end
@@ -269,29 +273,37 @@ function test_pointwise_stencils_compose(all_ops)
         ops_C2F_V2S,
     ) = all_ops
     (; a_FS, a_CS, a_FV, a_CV) = all_ops
-    for (a0, a1, a2, op1s, op2s) in (
-        (a_FS, a_FS, a_CS, ops_F2C_S2S, (ops_C2F_S2S..., ops_C2F_S2V...)),
-        (a_CS, a_CS, a_FS, ops_C2F_S2S, (ops_F2C_S2S..., ops_F2C_S2V...)),
-        (a_FS, a_FS, a_CV, ops_F2C_S2S, (ops_C2F_V2V..., ops_C2F_V2S...)),
-        (a_CS, a_CS, a_FV, ops_C2F_S2S, (ops_F2C_V2V..., ops_F2C_V2S...)),
-        (a_FS, a_FV, a_CS, ops_F2C_V2S, (ops_C2F_S2S..., ops_C2F_S2V...)),
-        (a_CS, a_CV, a_FS, ops_C2F_V2S, (ops_F2C_S2S..., ops_F2C_S2V...)),
-        (a_FS, a_FV, a_CV, ops_F2C_V2S, (ops_C2F_V2V..., ops_C2F_V2S...)),
-        (a_CS, a_CV, a_FV, ops_C2F_V2S, (ops_F2C_V2V..., ops_F2C_V2S...)),
-    )
-        for op1 in op1s
-            for op2 in op2s
-                # stencil_op1 = OP.Operator2Stencil(op1)
-                # stencil_op2 = OP.Operator2Stencil(op2)
-                # test_op(op1, op2, a0, a1)
-                # tested_value =
-                #     apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-                # ref_value = op2.(a2 .* op1.(a1 .* a0))
-                # @test tested_value ≈ ref_value atol = 1e-6
-                tv = get_tested_value(op1, op2, a0, a1, a2)
-                rv = get_ref_value(op1, op2, a0, a1, a2)
-                @test tv ≈ rv atol = 1e-6
-            end
+    compose_single(a_FS, a_FS, a_CS, ops_F2C_S2S, ops_C2F_S2S)
+    compose_single(a_FS, a_FS, a_CS, ops_F2C_S2S, ops_C2F_S2V)
+    compose_single(a_CS, a_CS, a_FS, ops_C2F_S2S, ops_F2C_S2S)
+    compose_single(a_CS, a_CS, a_FS, ops_C2F_S2S, ops_F2C_S2V)
+    compose_single(a_FS, a_FS, a_CV, ops_F2C_S2S, ops_C2F_V2V)
+    compose_single(a_FS, a_FS, a_CV, ops_F2C_S2S, ops_C2F_V2S)
+    compose_single(a_CS, a_CS, a_FV, ops_C2F_S2S, ops_F2C_V2V)
+    compose_single(a_CS, a_CS, a_FV, ops_C2F_S2S, ops_F2C_V2S)
+    compose_single(a_FS, a_FV, a_CS, ops_F2C_V2S, ops_C2F_S2S)
+    compose_single(a_FS, a_FV, a_CS, ops_F2C_V2S, ops_C2F_S2V)
+    compose_single(a_CS, a_CV, a_FS, ops_C2F_V2S, ops_F2C_S2S)
+    compose_single(a_CS, a_CV, a_FS, ops_C2F_V2S, ops_F2C_S2V)
+    compose_single(a_FS, a_FV, a_CV, ops_F2C_V2S, ops_C2F_V2V)
+    compose_single(a_FS, a_FV, a_CV, ops_F2C_V2S, ops_C2F_V2S)
+    compose_single(a_CS, a_CV, a_FV, ops_C2F_V2S, ops_F2C_V2V)
+    compose_single(a_CS, a_CV, a_FV, ops_C2F_V2S, ops_F2C_V2S)
+end
+
+function compose_single(a0, a1, a2, op1s, op2s)
+    for op1 in op1s
+        for op2 in op2s
+            # stencil_op1 = OP.Operator2Stencil(op1)
+            # stencil_op2 = OP.Operator2Stencil(op2)
+            # test_op(op1, op2, a0, a1)
+            # tested_value =
+            #     apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+            # ref_value = op2.(a2 .* op1.(a1 .* a0))
+            # @test tested_value ≈ ref_value atol = 1e-6
+            tv = get_tested_value(op1, op2, a0, a1, a2)
+            rv = get_ref_value(op1, op2, a0, a1, a2)
+            @test tv ≈ rv atol = 1e-6
         end
     end
     return nothing
