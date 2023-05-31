@@ -29,13 +29,13 @@ authors:
   - name: Jia He
     orcid: XXXX
     affiliation: 1
+  - name: Akshay Sridhar
+    orcid: XXXX
+    affiliation: 1
   - name: Dennis Yatunin
     orcid: XXXX
     affiliation: 1
   - name: Ben Mackay
-    orcid: XXXX
-    affiliation: 1
-  - name: Akshay Sridhar
     orcid: XXXX
     affiliation: 1
   - name: Simon Danish ?
@@ -44,13 +44,13 @@ authors:
   - name: Kiran Pamnany
     orcid: XXXX
     affiliation: 3
+  - name: Julia Sloan
+    orcid: XXXX
+    affiliation: 1
   - name: Toby Bischoff
     orcid: XXXX
     affiliation: 1
   - name: LenkaNovak
-    orcid: XXXX
-    affiliation: 1
-  - name: Julia Sloan
     orcid: XXXX
     affiliation: 1
   - name: Daniel (Zhengyu) Huang
@@ -77,7 +77,7 @@ affiliations:
    index: 4
  - name: University of California Davis
    index: 5
-date: 10 January 2023
+date: 31 May 2023
 bibliography: paper.bib
 ---
 
@@ -95,14 +95,14 @@ The Climate Modelling Alliance ([CliMA](https://clima.caltech.edu/)) is developi
 
 <!-- A Statement of need section that clearly illustrates the research purpose of the software and places it in the context of related work. -->
 
-Earth system model dynamical cores are traditionally hard-coded to specific equation sets, with fixed spatial and temporal discretizations, and specific geometries, such as spherical geometries for general circulation models (GCM) or Cartesian ones for large-eddy simulations (LES) (see, for instance, the High Order Method Modeling Environment (HOMME) used by the Energy Exascale Earth System Model (E3SM) [@E3SM]).
+Earth system model dynamical cores are traditionally hard-coded to specific equation sets, with fixed spatial and temporal discretizations, and specific geometries, such as spherical geometries for general circulation models (GCM) in the atmosphere or Cartesian ones for large-eddy simulations (LES) (see, for instance, the High Order Method Modeling Environment (HOMME) used by the Energy Exascale Earth System Model (E3SM) [@E3SM]).
 
 `ClimaCore.jl` aims to be a more flexible approach, inspired by other mathematical software libraries for constructing spatial discretizations of partial differential equations (PDEs), such as PETSc [@petsc-web-page; @petsc-user-ref; @petsc-efficient], libCEED [@libceed-joss-paper; @libceed-user-manual], MFEM [@MFEMlibrary; @mfem-paper], deal.II [@dealII92], Firedrake [@firedrake], and FeniCS [@FeniCS].
 
 However, ESMs tend to have some specific properties, some of which can leverage modern heterogenous architectures (including CPUs and GPUs) or modern ML/AI tools, that there are advantages to developing a new library
 
   - very skewed aspect ratio for the atmosphere component: O(100km) in the horizontal vs O(10m) in the vertical;
-  - implicit-explicit (IMEX) timestepping, with only the vertical parts handled implicitly: horizontally-explicit, vertically-implicit (HEVI) schemes;
+  - implicit-explicit (IMEX) timestepping, with only the vertical components of the governing equations handled implicitly: horizontally-explicit, vertically-implicit (HEVI) schemes;
   - use of different discertizations in each dimension, for example our current atmosphere model uses a specral element discretization in the horizontal, with a staggered finite difference discretization in the verfical;
   - don't need a fully unstructured mesh: 3D meshes are constucted by extruding a 2D mesh;
   - distributed parallely only in the horizontal direction;
@@ -131,11 +131,11 @@ However, ESMs tend to have some specific properties, some of which can leverage 
 ## Technical aims and current support
 * Support both large-eddy simulation (LES) and general circulation model (GCM) configurations for the atmosphere.
 * A suite of tools for constructing space discretizations.
-* Horizontal spectral elements:
+* Horizontal spatial discretization:
     - Supports both continuous Galerkin (CG) and discontinuous Galerkin (DG) spectral element discretizations.
-* Flexible choice of vertical discretization (currently staggered finite differences)
-* Support for different geometries (Cartesian, spherical), with governing equations discretized in terms of covariant  vectors for curvilinear, non-orthogonal systems and Cartesian vectors for Euclidean spaces.
-* `Field` abstraction:
+* Flexible choice of vertical discretization: currently staggered finite differences.
+* Support for different geometries (Cartesian, spherical), with governing equations discretized in terms of covariant/contravariant  vectors for curvilinear, non-orthogonal systems and Cartesian vectors for Euclidean spaces.
+* `Field` abstraction: a data structure to describe a mathematical field defined on a given space. It can be:
     - Scalar, vector or struct-valued
     - Stores values, geometry, and mesh information
     - Flexible memory layouts: Array-of-Structs (AoS), Struct-of-Arrays (SoA),Array-of-Struct-of-Arrays (AoSoA)
@@ -154,27 +154,40 @@ However, ESMs tend to have some specific properties, some of which can leverage 
 
 
 
-# Tentative TODOs
-Draft of a "white paper" that briefly mentions all the nice properties of the library:  extensibility, composability, ease-of-use, library-reuse, (performance-portability?), (scalability?). This will give ClimaCore its proper DOI and citability tool.
+# Tentative TODOs to have the package in order
+Draft of a "white paper" that briefly mentions all the nice properties of the library:  extensibility, composability, ease-of-use, library-reuse, performance-portability, scalability, GPU support.
 
 Improve Docs:
 - [x] Getting started/How to guide
-- [x] Contributing guide + Code of Conduct (?)
+- [x] Contributing guide + Code of Conduct
 - [ ] Examples documentation (equations set, what to expect from each example, artifacts, if included)
 
 
 Improve Unit Tests:
-- [ ] Unit tests: strive for best code coverage: e.g., double check that all operators are tested
-
-Examples:
-- [ ] Address memory usage and OoM issues when examples are run locally
+- [x] Unit tests: strive for best code coverage: e.g., double check that all operators are tested
 
 
 Performance:
 - [ ] Distributed computing capability (re-run latest scaling studies)
-- [ ] Multi-threading capability?
-- [ ] Might include initial GPU support?
 
+Cleanup:
+- [ ] Remove dead code, comments and TODOs
+
+
+# TODOs for the paper
+- [x] Abstract/Summary
+- [x] Statement of need
+- [x] Introduction
+- [ ] APIs
+   - [ ] high-level API
+   - [ ] low-level API
+- Performance Portability (ClimaComms)
+  - [ ] Multi-threading capability
+  - [ ] Include initial GPU support
+  - [ ] GPU support
+
+
+- [ ] References
 
 <!-- Acknowledgement of any financial support. -->
 # Acknowledgements
