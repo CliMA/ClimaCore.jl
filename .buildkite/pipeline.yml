@@ -790,6 +790,7 @@ steps:
           TEST_NAME: "plane/inertial_gravity_wave"
         agents:
           slurm_cpus_per_task: 8
+          slurm_mem: 20GB
 
       - label: ":computer: stretched 2D plane inertial gravity wave"
         key: "cpu_stretch_inertial_gravity_wave"
@@ -802,6 +803,7 @@ steps:
           Z_STRETCH: "true"
         agents:
           slurm_cpus_per_task: 8
+          slurm_mem: 20GB
 
   - group: "Performance"
     steps:

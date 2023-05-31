@@ -63,7 +63,9 @@ function create_dss_buffer(
     convert_to_array = DA isa Array ? false : true
     (_, _, _, Nv, nelems) = Base.size(data)
     Np = Spaces.nperimeter(perimeter)
-    Nf = cld(length(parent(data)), (Nij * Nij * Nv * nelems))
+    Nf =
+        length(parent(data)) == 0 ? 0 :
+        cld(length(parent(data)), (Nij * Nij * Nv * nelems))
     nfacedof = Nij - 2
     T = eltype(parent(data))
     TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
@@ -269,6 +271,7 @@ function weighted_dss_start!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
+    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(hspace.topology)
     dss_transform!(
         device,
@@ -335,6 +338,7 @@ function weighted_dss_internal!(
     hspace::AbstractSpectralElementSpace,
     dss_buffer::Union{DSSBuffer, Nothing},
 )
+    length(parent(data)) == 0 && return nothing
     if hspace isa SpectralElementSpace1D
         dss_1d!(
             hspace.topology,
@@ -413,6 +417,7 @@ function weighted_dss_ghost!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
+    length(parent(data)) == 0 && return data
     device = ClimaComms.device(hspace.topology)
     ClimaComms.finish(dss_buffer.graph_context)
     load_from_recv_buffer!(device, dss_buffer)
@@ -1002,6 +1007,7 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(data, topology, quadrature_style)
+    length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology)
     perimeter = Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style))
     # create dss buffer
