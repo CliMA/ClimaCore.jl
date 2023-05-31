@@ -18,6 +18,14 @@ include("Hypsography/Hypsography.jl")
 include("Limiters/Limiters.jl")
 include("InputOutput/InputOutput.jl")
 
+using Requires
+function __init__()
+    @require Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7" include(
+        joinpath("weak_deps", "Krylov.jl"),
+    )
+    return nothing
+end
+
 include("deprecated.jl")
 
 end # module
