@@ -182,6 +182,36 @@ function get_all_ops(center_space)
         OP.DivergenceC2F(bottom = zero_vector, top = zero_vector),
         OP.DivergenceC2F(bottom = zero_div, top = zero_div),
     )
+
+
+    # apply size assertions
+    @assert length(ops_F2C_S2S) == 5
+    @assert length(ops_F2C_S2V) == 2
+    @assert length(ops_C2F_S2S) == 5
+    @assert length(ops_C2F_S2V) == 2
+    @assert length(ops_F2C_V2V) == 8
+    @assert length(ops_F2C_V2S) == 5
+    @assert length(ops_C2F_V2V) == 7
+    @assert length(ops_C2F_V2S) == 3
+
+    # Compose size assertions
+    @assert (length(ops_F2C_S2S), length(ops_C2F_S2S)) == (5, 5)
+    @assert (length(ops_F2C_S2S), length(ops_C2F_S2V)) == (5, 2)
+    @assert (length(ops_C2F_S2S), length(ops_F2C_S2S)) == (5, 5)
+    @assert (length(ops_C2F_S2S), length(ops_F2C_S2V)) == (5, 2)
+    @assert (length(ops_F2C_S2S), length(ops_C2F_V2V)) == (5, 7)
+    @assert (length(ops_F2C_S2S), length(ops_C2F_V2S)) == (5, 3)
+    @assert (length(ops_C2F_S2S), length(ops_F2C_V2V)) == (5, 8)
+    @assert (length(ops_C2F_S2S), length(ops_F2C_V2S)) == (5, 5)
+    @assert (length(ops_F2C_V2S), length(ops_C2F_S2S)) == (5, 5)
+    @assert (length(ops_F2C_V2S), length(ops_C2F_S2V)) == (5, 2)
+    @assert (length(ops_C2F_V2S), length(ops_F2C_S2S)) == (3, 5)
+    @assert (length(ops_C2F_V2S), length(ops_F2C_S2V)) == (3, 2)
+    @assert (length(ops_F2C_V2S), length(ops_C2F_V2V)) == (5, 7)
+    @assert (length(ops_F2C_V2S), length(ops_C2F_V2S)) == (5, 3)
+    @assert (length(ops_C2F_V2S), length(ops_F2C_V2V)) == (3, 8)
+    @assert (length(ops_C2F_V2S), length(ops_F2C_V2S)) == (3, 5)
+
     return (;
         extrap,
         ops_F2C_S2S,
@@ -210,126 +240,28 @@ function test_pointwise_stencils_throws(all_ops)
     end
 end
 
-#! format: off
-function test_pointwise_stencils_apply(all_ops)
-    (;
-        ops_F2C_S2S,
-        ops_C2F_S2S,
-        ops_F2C_V2V,
-        ops_C2F_V2V,
-        ops_F2C_S2V,
-        ops_C2F_S2V,
-        ops_F2C_V2S,
-        ops_C2F_V2S,
-    ) = all_ops
-    (; a_FS, a_CS, a_FV, a_CV) = all_ops
-    # Manually unroll for better inference:
-    @assert length(ops_F2C_S2S) == 5
-    @assert length(ops_F2C_S2V) == 2
-    @assert length(ops_C2F_S2S) == 5
-    @assert length(ops_C2F_S2V) == 2
-    @assert length(ops_F2C_V2V) == 8
-    @assert length(ops_F2C_V2S) == 5
-    @assert length(ops_C2F_V2V) == 7
-    @assert length(ops_C2F_V2S) == 3
-
-    Base.Cartesian.@nexprs 5 i -> apply_single(a_FS, a_FS, ops_F2C_S2S[i])
-    Base.Cartesian.@nexprs 2 i -> apply_single(a_FS, a_FS, ops_F2C_S2V[i])
-    Base.Cartesian.@nexprs 5 i -> apply_single(a_CS, a_CS, ops_C2F_S2S[i])
-    Base.Cartesian.@nexprs 2 i -> apply_single(a_CS, a_CS, ops_C2F_S2V[i])
-    Base.Cartesian.@nexprs 8 i -> apply_single(a_FS, a_FV, ops_F2C_V2V[i])
-    Base.Cartesian.@nexprs 5 i -> apply_single(a_FS, a_FV, ops_F2C_V2S[i])
-    Base.Cartesian.@nexprs 7 i -> apply_single(a_CS, a_CV, ops_C2F_V2V[i])
-    Base.Cartesian.@nexprs 3 i -> apply_single(a_CS, a_CV, ops_C2F_V2S[i])
-end
-#! format: on
-
 function apply_single(a0, a1, op1)
     apply = OP.ApplyStencil()
     compose = OP.ComposeStencils()
     stencil_op1 = OP.Operator2Stencil(op1)
     tested_value = apply.(stencil_op1.(a1), a0)
     ref_value = op1.(a1 .* a0)
-    # @test tested_value ≈ ref_value atol = 1e-6
+    @test tested_value ≈ ref_value atol = 1e-6
     return nothing
 end
 
-function get_tested_value(op1, op2, a0, a1, a2)
+function compose_single(ctr, a0, a1, a2, op1, op2)
+    if mod(ctr[1], 10) == 0 # print less frequently
+        p = trunc((ctr[1] / 330 * 100), digits = 2)
+        println("Testing compose operators. $p% complete")
+    end
     apply = OP.ApplyStencil()
     compose = OP.ComposeStencils()
     stencil_op1 = OP.Operator2Stencil(op1)
     stencil_op2 = OP.Operator2Stencil(op2)
     tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-    return tested_value
-end
-function get_ref_value(op1, op2, a0, a1, a2)
-    apply = OP.ApplyStencil()
-    compose = OP.ComposeStencils()
-    stencil_op1 = OP.Operator2Stencil(op1)
-    stencil_op2 = OP.Operator2Stencil(op2)
     ref_value = op2.(a2 .* op1.(a1 .* a0))
-    return ref_value
-end
-
-#! format: off
-function test_pointwise_stencils_compose(all_ops)
-    (;
-        ops_F2C_S2S,
-        ops_C2F_S2S,
-        ops_F2C_V2V,
-        ops_C2F_V2V,
-        ops_F2C_S2V,
-        ops_C2F_S2V,
-        ops_F2C_V2S,
-        ops_C2F_V2S,
-    ) = all_ops
-    (; a_FS, a_CS, a_FV, a_CV) = all_ops
-    @assert (length(ops_F2C_S2S), length(ops_C2F_S2S)) == (5, 5)
-    @assert (length(ops_F2C_S2S), length(ops_C2F_S2V)) == (5, 2)
-    @assert (length(ops_C2F_S2S), length(ops_F2C_S2S)) == (5, 5)
-    @assert (length(ops_C2F_S2S), length(ops_F2C_S2V)) == (5, 2)
-    @assert (length(ops_F2C_S2S), length(ops_C2F_V2V)) == (5, 7)
-    @assert (length(ops_F2C_S2S), length(ops_C2F_V2S)) == (5, 3)
-    @assert (length(ops_C2F_S2S), length(ops_F2C_V2V)) == (5, 8)
-    @assert (length(ops_C2F_S2S), length(ops_F2C_V2S)) == (5, 5)
-    @assert (length(ops_F2C_V2S), length(ops_C2F_S2S)) == (5, 5)
-    @assert (length(ops_F2C_V2S), length(ops_C2F_S2V)) == (5, 2)
-    @assert (length(ops_C2F_V2S), length(ops_F2C_S2S)) == (3, 5)
-    @assert (length(ops_C2F_V2S), length(ops_F2C_S2V)) == (3, 2)
-    @assert (length(ops_F2C_V2S), length(ops_C2F_V2V)) == (5, 7)
-    @assert (length(ops_F2C_V2S), length(ops_C2F_V2S)) == (5, 3)
-    @assert (length(ops_C2F_V2S), length(ops_F2C_V2V)) == (3, 8)
-    @assert (length(ops_C2F_V2S), length(ops_F2C_V2S)) == (3, 5)
-
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_FS, a_FS, a_CS, ops_F2C_S2S[i], ops_C2F_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(a_FS, a_FS, a_CS, ops_F2C_S2S[i], ops_C2F_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_CS, a_CS, a_FS, ops_C2F_S2S[i], ops_F2C_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(a_CS, a_CS, a_FS, ops_C2F_S2S[i], ops_F2C_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(a_FS, a_FS, a_CV, ops_F2C_S2S[i], ops_C2F_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(a_FS, a_FS, a_CV, ops_F2C_S2S[i], ops_C2F_V2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 8 j -> compose_single(a_CS, a_CS, a_FV, ops_C2F_S2S[i], ops_F2C_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_CS, a_CS, a_FV, ops_C2F_S2S[i], ops_F2C_V2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_FS, a_FV, a_CS, ops_F2C_V2S[i], ops_C2F_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(a_FS, a_FV, a_CS, ops_F2C_V2S[i], ops_C2F_S2V[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_CS, a_CV, a_FS, ops_C2F_V2S[i], ops_F2C_S2S[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 2 j -> compose_single(a_CS, a_CV, a_FS, ops_C2F_V2S[i], ops_F2C_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(a_FS, a_FV, a_CV, ops_F2C_V2S[i], ops_C2F_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(a_FS, a_FV, a_CV, ops_F2C_V2S[i], ops_C2F_V2S[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 8 j -> compose_single(a_CS, a_CV, a_FV, ops_C2F_V2S[i], ops_F2C_V2V[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(a_CS, a_CV, a_FV, ops_C2F_V2S[i], ops_F2C_V2S[j])
-end
-#! format: on
-
-function compose_single(a0, a1, a2, op1, op2)
-    # stencil_op1 = OP.Operator2Stencil(op1)
-    # stencil_op2 = OP.Operator2Stencil(op2)
-    # test_op(op1, op2, a0, a1)
-    # tested_value =
-    #     apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-    # ref_value = op2.(a2 .* op1.(a1 .* a0))
-    # @test tested_value ≈ ref_value atol = 1e-6
-    tv = get_tested_value(op1, op2, a0, a1, a2)
-    rv = get_ref_value(op1, op2, a0, a1, a2)
-    # @test tv ≈ rv atol = 1e-6
+    @test tested_value ≈ ref_value atol = 1e-6
+    ctr[1] += 1
     return nothing
 end
