@@ -16,25 +16,20 @@ import ClimaCore:
     Operators
 using ClimaCore.Geometry
 using Logging
-const usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
-if usempi
-    const comms_ctx = ClimaComms.MPICommsContext()
-    const pid, nprocs = ClimaComms.init(comms_ctx)
-    if pid == 1
-        println("parallel run with $nprocs processes")
-    end
-    logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
 
-    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
-    atexit() do
-        global_logger(prev_logger)
-    end
+using CUDA
+CUDA.allowscalar(false)
+
+comms_ctx = ClimaComms.context()
+ClimaComms.init(comms_ctx)
+if ClimaComms.iamroot(comms_ctx)
+    Logging.global_logger(Logging.ConsoleLogger(stderr, Logging.Info))
 else
-    const comms_ctx = ClimaComms.SingletonCommsContext()
-    using Logging: global_logger
-    using TerminalLoggers: TerminalLogger
-    global_logger(TerminalLogger())
+    Logging.global_logger(Logging.NullLogger())
 end
+
+@info "Context information" device = comms_ctx.device context = comms_ctx nprocs =
+    ClimaComms.nprocs(comms_ctx)
 
 function hvspace_3D(
     xlim = (-π, π),
@@ -44,6 +39,7 @@ function hvspace_3D(
     yelem = 4,
     zelem = 16,
     npoly = 3;
+    comms_ctx = comms_ctx,
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -133,12 +129,10 @@ uₕ = map(_ -> Geometry.Covariant12Vector(0.0, 0.0), coords)
 w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
 Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-energy_0 = usempi ? ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρe), +) : sum(Y.Yc.ρe)
-mass_0 = usempi ? ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρ), +) : sum(Y.Yc.ρ)
+energy_0 = ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρe), +)
+mass_0 = ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρ), +)
 
-if !usempi || (usempi && ClimaComms.iamroot(comms_ctx))
-    @show (energy_0, mass_0)
-end
+@info "summary" energy_0 mass_0
 ghost_buffer = (
     dρe = Spaces.create_dss_buffer(Yc.ρe),
     duₕ = Spaces.create_dss_buffer(Y.uₕ),
@@ -176,9 +170,10 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         bottom = Operators.Extrapolate(),
         top = Operators.Extrapolate(),
     )
-    cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
-    cuvw = Geometry.Covariant123Vector.(cuₕ) .+ Geometry.Covariant123Vector.(cw)
+    # fuₕ = Ic2f.(cuₕ)
+    cuvw =
+        Geometry.Covariant123Vector.(cuₕ) .+
+        Geometry.Covariant123Vector.(If2c.(fw))
 
     ce = @. cρe / cρ
     cI = @. ce - Φ(z) - (norm(cuvw)^2) / 2
@@ -314,6 +309,7 @@ integrator = OrdinaryDiffEq.init(
     saveat = 10.0,
     progress = true,
     progress_message = (dt, u, p, t) -> t,
+    internalnorm = (u, t) -> norm(u),
 );
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
@@ -325,19 +321,12 @@ t_diff = @elapsed sol_invariant = OrdinaryDiffEq.solve!(integrator)
 FT = Float64
 Es = FT[]
 Mass = FT[]
-if usempi
-    for sol_step in sol_invariant.u
-        Es_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρe), +)
-        Mass_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρ), +)
-        if ClimaComms.iamroot(comms_ctx)
-            push!(Es, Es_step)
-            push!(Mass, Mass_step)
-        end
-    end
-else
-    for sol_step in sol_invariant.u
-        push!(Es, sum(sol_step.Yc.ρe))
-        push!(Mass, sum(sol_step.Yc.ρ))
+for sol_step in sol_invariant.u
+    Es_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρe), +)
+    Mass_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρ), +)
+    if ClimaComms.iamroot(comms_ctx)
+        push!(Es, Es_step)
+        push!(Mass, Mass_step)
     end
 end
 
@@ -349,7 +338,7 @@ dir = "bubble_3d_invariant_rhoe"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
-if !usempi || ClimaComms.iamroot(comms_ctx)
+if ClimaComms.iamroot(comms_ctx)
     println("Walltime = $t_diff seconds")
     # post-processing
     Plots.png(
@@ -379,3 +368,16 @@ if !usempi || ClimaComms.iamroot(comms_ctx)
         "Mass",
     )
 end
+
+
+#=
+cpu_hv_center_space, cpu_hv_face_space, cpu_horztopology =
+    hvspace_3D((-500, 500), (-500, 500), (0, 1000); comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()))
+
+plotfield = ones(cpu_hv_center_space)
+
+copyto!(parent(plotfield), parent(integrator.sol.u[30].Yc.ρe))
+
+
+png(plot(plotfield, slice=(:,0.0,:)), "slice.png")
+=#
