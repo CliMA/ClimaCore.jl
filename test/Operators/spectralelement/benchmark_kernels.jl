@@ -97,7 +97,8 @@ kernel_spectral_u_cross_curl_u_array!(args) = kernel_copyto!(args)
 function kernel_spectral_u_cross_curl_u!(args)
     (; u, f, du) = args
     curl = Operators.Curl()
-    @. du = u × (f + curl(u))
+    CT12 = Geometry.Contravariant12Vector
+    @. du = CT12(u) × (f + curl(u))
     return
 end
 
@@ -120,5 +121,16 @@ function kernel_vector_dss!(args)
     Spaces.weighted_dss_start!(u, u_buffer)
     Spaces.weighted_dss_internal!(u, u_buffer)
     Spaces.weighted_dss_ghost!(u, u_buffer)
+    return
+end
+
+##### field dss!
+kernel_field_dss_array!(args) = kernel_copyto!(args)
+function kernel_field_dss!(args)
+    (; ϕψ_buffer) = args.buffers
+    (; ϕψ) = args
+    Spaces.weighted_dss_start!(ϕψ, ϕψ_buffer)
+    Spaces.weighted_dss_internal!(ϕψ, ϕψ_buffer)
+    Spaces.weighted_dss_ghost!(ϕψ, ϕψ_buffer)
     return
 end

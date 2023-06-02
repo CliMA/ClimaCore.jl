@@ -105,13 +105,29 @@ function create_space(
     float_type = Float64,
     panel_size = 9,
     poly_nodes = 4,
+    z_elem = 10,
+    space_type,
 )
     earth_radius = float_type(6.37122e6)
-    domain = Domains.SphereDomain(earth_radius)
-    mesh = Meshes.EquiangularCubedSphere(domain, panel_size)
+    hdomain = Domains.SphereDomain(earth_radius)
+    hmesh = Meshes.EquiangularCubedSphere(hdomain, panel_size)
+    htopology = Topologies.Topology2D(context, hmesh)
     quad = Spaces.Quadratures.GLL{poly_nodes}()
-    topology = Topologies.Topology2D(context, mesh)
-    space = Spaces.SpectralElementSpace2D(topology, quad)
+    space = if space_type == "SpectralElementSpace2D"
+        Spaces.SpectralElementSpace2D(htopology, quad)
+    elseif space_type == "ExtrudedFiniteDifferenceSpace"
+        zlim = (0, 30e3)
+        vertdomain = Domains.IntervalDomain(
+            Geometry.ZPoint{float_type}(zlim[1]),
+            Geometry.ZPoint{float_type}(zlim[2]);
+            boundary_tags = (:bottom, :top),
+        )
+        vertmesh = Meshes.IntervalMesh(vertdomain, nelems = z_elem)
+        vtopology = Topologies.IntervalTopology(context, vertmesh)
+        vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
+        hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+        Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+    end
     return space
 end
 
@@ -134,6 +150,14 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         help = "Number of elements across each panel"
         arg_type = Int
         default = 8
+        "--z_elem"
+        help = "Number of vertical elements (for extruded spaces)"
+        arg_type = Int
+        default = 10
+        "--space-type"
+        help = "Space type [`SpectralElementSpace2D` (default) `ExtrudedFiniteDifferenceSpace`]"
+        arg_type = String
+        default = "SpectralElementSpace2D"
         "--poly-nodes"
         help = "Number of nodes in each dimension to use in the polynomial approximation. Polynomial degree = poly-nodes - 1."
         arg_type = Int
@@ -169,20 +193,33 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     float_type = args["float-type"]
     panel_size = args["panel-size"]
     poly_nodes = args["poly-nodes"]
-    space = create_space(context; float_type, panel_size, poly_nodes)
+    space_type = args["space-type"]
+    z_elem = args["z_elem"]
+    space = create_space(
+        context;
+        float_type,
+        panel_size,
+        poly_nodes,
+        space_type,
+        z_elem,
+    )
+    space_name = nameof(typeof(space))
     if ClimaComms.iamroot(context)
         nprocs = ClimaComms.nprocs(context)
-        @info "Setting up benchmark" device context float_type panel_size poly_nodes
+        @info "Setting up benchmark" device context float_type panel_size poly_nodes space_name
     end
 
     # Fields
     FT = float_type
     ϕ = zeros(space)
     ψ = zeros(space)
+    combine(ϕ, ψ) = (; ϕ, ψ)
+    ϕψ = combine.(ϕ, ψ)
     u = initial_velocity(space)
     du = initial_velocity(space)
     ϕ_buffer = Spaces.create_dss_buffer(ϕ)
     u_buffer = Spaces.create_dss_buffer(u)
+    ϕψ_buffer = Spaces.create_dss_buffer(ϕψ)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
@@ -193,8 +230,8 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
     end
 
-    kernel_args = (; ϕ, ψ, u, du, f)
-    buffers = (; u_buffer, ϕ_buffer) # cannot reside in CuArray kernels
+    kernel_args = (; ϕ, ψ, u, du, f, ϕψ)
+    buffers = (; u_buffer, ϕ_buffer, ϕψ_buffer) # cannot reside in CuArray kernels
 
     arr_args = (; array_kernel_args..., kernel_args..., device)
     return (; arr_args..., buffers, arr_args, float_type)

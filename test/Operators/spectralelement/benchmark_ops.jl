@@ -12,17 +12,17 @@ For interactive experimentation:
 using Revise; using ClimaCore
 include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_utils.jl"))
 include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_kernels.jl"))
-args = setup_kernel_args(["--device", "CUDA"]);
-device = args.device
-trial = benchmark_kernel!(args, kernel_spectral_div_grad!, device; silent=true);
-trial = benchmark_kernel_array!(args.arr_args, kernel_spectral_wdiv_array!, device; silent=true);
+kernel_args = setup_kernel_args(["--float-type", "Float64"]);
+device = kernel_args.device
+trial = benchmark_kernel!(kernel_args, kernel_spectral_div_grad!, device; silent=true);
+trial = benchmark_kernel_array!(kernel_args.arr_args, kernel_spectral_wdiv_array!, device; silent=true);
 show(stdout, MIME("text/plain"), trial);
 ```
 
 Notes:
 ```
 using CUDA
-CUDA.@profile kernel_spectral_div_grad!(args)
+CUDA.@profile kernel_spectral_div_grad!(kernel_args)
 ```
 =#
 import ClimaCore as CC
@@ -58,8 +58,8 @@ include(
 ##### Compare timings
 #####
 
-function benchmark_all(ARGS::Vector{String} = ARGS)
-    kernel_args = setup_kernel_args(ARGS)
+function benchmark_all(kernel_args = setup_kernel_args(ARGS))
+
     device = kernel_args.device
     #=
     # Run benchmarks for a single kernel with:
@@ -105,9 +105,28 @@ function benchmark_all(ARGS::Vector{String} = ARGS)
     for key in keys(bm)
         println("    best_times[:$key] = $(bm[key].t_mean_float)")
     end
-    return bm, kernel_args
+    return bm
 end
 
-bm, kernel_args = benchmark_all(ARGS);
+kernel_args = setup_kernel_args(ARGS);
+bm = benchmark_all(kernel_args);
 best_times = get_best_times(kernel_args);
 test_against_best_times(bm, best_times);
+
+using JET
+@testset "DSS performance" begin
+    kernel_scalar_dss!(kernel_args) # compile+test works
+    kernel_vector_dss!(kernel_args) # compile+test works
+    kernel_field_dss!(kernel_args) # compile+test works
+    # Allocation tests
+    p = @allocated kernel_scalar_dss!(kernel_args)
+    @test p == 0
+    p = @allocated kernel_vector_dss!(kernel_args)
+    @test p == 0
+    p = @allocated kernel_field_dss!(kernel_args)
+    @test p == 0
+    # Inference tests
+    # JET.@test_opt kernel_scalar_dss!(kernel_args)
+    # JET.@test_opt kernel_vector_dss!(kernel_args)
+    # JET.@test_opt kernel_field_dss!(kernel_args)
+end
