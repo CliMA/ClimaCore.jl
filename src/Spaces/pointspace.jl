@@ -16,20 +16,23 @@ end
 ClimaComms.device(space::PointSpace) = ClimaComms.device(space.context)
 ClimaComms.context(space::PointSpace) = space.context
 
-@deprecate PointSpace(x::Geometry.LocalGeometry) PointSpace(
-    ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
-    x,
-) false
+PointSpace(x::Geometry.LocalGeometry) = PointSpace(ClimaComms.CPUDevice(), x)
+PointSpace(x::Geometry.AbstractPoint) = PointSpace(ClimaComms.CPUDevice(), x)
+
+function PointSpace(device::ClimaComms.AbstractDevice, x)
+    context = ClimaComms.SingletonCommsContext(device)
+    return PointSpace(context, x)
+end
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,
     local_geometry::LG,
 ) where {LG <: Geometry.LocalGeometry}
     FT = Geometry.undertype(LG)
-    # TODO: inherit array type
+    ArrayType = ClimaComms.array_type(ClimaComms.device(context))
     local_geometry_data = DataLayouts.DataF{LG}(Array{FT})
     local_geometry_data[] = local_geometry
-    return PointSpace(context, local_geometry_data)
+    return PointSpace(context, Adapt.adapt(ArrayType, local_geometry_data))
 end
 
 function PointSpace(
