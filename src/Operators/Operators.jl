@@ -26,5 +26,6 @@ include("operator2stencil.jl")
 include("pointwisestencil.jl")
 include("remapping.jl")
 include("integrals.jl")
+include("arrayinterpolate.jl")
 
 end # module

@@ -80,6 +80,7 @@ if !Sys.iswindows()
 
     @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
 
+    @safetestset "Array interpolation" begin @time include("Operators/arrayinterpolate.jl") end
     # now part of buildkite
     # @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
     # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
