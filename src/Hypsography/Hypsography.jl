@@ -6,6 +6,7 @@ import ..Spaces: ExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
 
 using StaticArrays, LinearAlgebra
 
+
 """
     LinearAdaption(surface::Field)
 
@@ -62,6 +63,9 @@ function ExtrudedFiniteDifferenceSpace(
 
     vertical_domain = Topologies.domain(space.vertical_topology)
     z_top = vertical_domain.coord_max.z
+
+    grad = Operators.Gradient()
+    wdiv = Operators.WeakDivergence()
 
     if adaption isa LinearAdaption
         z_surface = Fields.field_values(adaption.surface)
@@ -156,7 +160,44 @@ function ExtrudedFiniteDifferenceSpace(
     )
 end
 
+"""
+    diffuse_surface_elevation!(f::Field; κ::T, iter::Int, dt::T)
 
+Option for 2nd order diffusive smoothing of generated terrain.
+Mutate (smooth) a given elevation profile `f` before assigning the surface
+elevation to the `HypsographyAdaption` type. A spectral second-order diffusion 
+operator is applied with forward-Euler updates to generate
+profiles for each new iteration. Steps to generate smoothed terrain (
+represented as a ClimaCore Field) are as follows: 
+- Compute discrete elevation profile f
+- Compute diffuse_surface_elevation!(f, κ, iter). f is mutated.
+- Define `Hypsography.LinearAdaption(f)`
+- Define `ExtrudedFiniteDifferenceSpace` with new surface elevation.
+Default diffusion parameters are appropriate for spherical arrangements. 
+For `zmax-zsfc` == 𝒪(10^4), κ == 𝒪(10^8), dt == 𝒪(10⁻¹).
+"""
+function diffuse_surface_elevation!(
+    f::Fields.Field;
+    κ::T = 1e8,
+    maxiter::Int = 100,
+    dt::T = 1e-1,
+) where {T}
+    # Define required ops
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    FT = eltype(f)
+    # Create dss buffer
+    ghost_buffer = (bf = Spaces.create_dss_buffer(f),)
+    # Apply smoothing
+    for iter in 1:maxiter
+        # Euler steps
+        χf = @. wdiv(grad(f))
+        Spaces.weighted_dss!(χf, ghost_buffer.bf)
+        @. f += κ * dt * χf
+    end
+    # Return mutated surface elevation profile
+    return f
+end
 
 function reconstruct_metric(
     ∂x∂ξ::Geometry.Axis2Tensor{

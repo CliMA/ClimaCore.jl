@@ -12,18 +12,29 @@ import ClimaCore:
     Topologies,
     Hypsography
 
-function warp_test_2d(coord)
+using ClimaCore.Utilities: half
+
+function warp_sin_2d(coord)
     x = Geometry.component(coord, 1)
     eltype(x)(0.5) * sin(x)
 end
-function nowarp_test_2d(coord)
+function warp_sinsq_2d(coord)
+    x = Geometry.component(coord, 1)
+    eltype(x)(0.5) * sin(x)^2
+end
+function flat_test_2d(coord)
     x = Geometry.component(coord, 1)
     eltype(x)(0) * sin(x)
 end
-function warp_test_3d(coord)
+function warp_sincos_3d(coord)
     x = Geometry.component(coord, 1)
     y = Geometry.component(coord, 2)
     eltype(x)(0.5) * sin(x)^2 * cos(y)^2
+end
+function warp_sinsq_3d(coord)
+    x = Geometry.component(coord, 1)
+    y = Geometry.component(coord, 2)
+    eltype(x)(0.5) * sin(x)^2 * sin(y)^2
 end
 function warpedspace_2D(
     FT = Float64,
@@ -33,7 +44,8 @@ function warpedspace_2D(
     velem = 10,
     npoly = 5;
     stretch = Meshes.Uniform(),
-    warp_fn = warp_test_2d,
+    warp_fn = warp_sin_2d,
+    test_smoothing = false,
 )
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -56,6 +68,18 @@ function warpedspace_2D(
 
     # Extrusion
     z_surface = warp_fn.(Fields.coordinate_field(hspace))
+    # An Euler step defines the diffusion coefficient 
+    # (See e.g. cfl condition for diffusive terms).
+    x_array = parent(Fields.coordinate_field(hspace).x)
+    dx = x_array[2] - x_array[1]
+    κ = FT(1 / helem)
+    test_smoothing ?
+    Hypsography.diffuse_surface_elevation!(
+        z_surface;
+        κ,
+        maxiter = 10^5,
+        dt = FT(dx / 100),
+    ) : nothing
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
@@ -65,6 +89,7 @@ function warpedspace_2D(
 
     return (c_space, f_space)
 end
+
 function hybridspace_2D(
     FT = Float64,
     xlim = (0, π),
@@ -110,7 +135,8 @@ function warpedspace_3D(
     zelem = 10,
     npoly = 5;
     stretch = Meshes.Uniform(),
-    warp_fn = warp_test_3d,
+    warp_fn = warp_sincos_3d,
+    test_smoothing = false,
 )
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -140,6 +166,16 @@ function warpedspace_3D(
 
     # Extrusion
     z_surface = warp_fn.(Fields.coordinate_field(hspace))
+    x_array = parent(Fields.coordinate_field(hspace).x)
+    dx = x_array[2] - x_array[1]
+    κ = FT(1 / max(xelem, yelem))
+    test_smoothing ?
+    Hypsography.diffuse_surface_elevation!(
+        z_surface;
+        κ,
+        maxiter = 10^5,
+        dt = FT(dx / 100),
+    ) : nothing
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
@@ -172,15 +208,55 @@ end
                 nh,
                 nl,
                 np;
-                warp_fn = warp_test_2d,
+                warp_fn = warp_sin_2d,
             )
             ʷᶜcoords = Fields.coordinate_field(ʷhv_center_space)
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
-
             z₀ = ClimaCore.Fields.level(ʷᶜcoords.z, 1)
-            # Check ∫ₓ(z_sfc)dx == known value from warp_test_2d
+            # Check ∫ₓ(z_sfc)dx == known value from warp_sin_2d
             @test sum(z₀ .- zmax / 2nl) - FT(1) <= FT(0.1 / np * nh * nl)
             @test abs(maximum(z₀) - FT(0.5)) <= FT(0.125)
+        end
+    end
+end
+
+@testset "2D Extruded Terrain Laplacian Smoothing" begin
+    # Test smoothing for known parameters
+    for FT in (Float32, Float64)
+        # Extruded FD-Spectral Hybrid
+        xmin, xmax = FT(0), FT(π)
+        zmin, zmax = FT(0), FT(1)
+        levels = [5, 10]
+        polynom = 3:2:10
+        horzelem = 5:2:10
+        for nl in levels, np in polynom, nh in horzelem
+            # Test Against Steady State Analytical Solution
+            ʷhv_center_space, ʷhv_face_space = warpedspace_2D(
+                FT,
+                (xmin, xmax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                warp_fn = warp_sinsq_2d,
+                test_smoothing = true,
+            )
+            ʳhv_center_space, ʳhv_face_space = warpedspace_2D(
+                FT,
+                (xmin, xmax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                warp_fn = warp_sinsq_2d,
+                test_smoothing = false,
+            )
+            ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
+            ʷᶠʳcoords = Fields.coordinate_field(ʳhv_face_space)
+            ᶠz₀ = ClimaCore.Fields.level(ʷᶠcoords.z, half)
+            @test minimum(ᶠz₀) >= FT(0)
+            @test maximum(ᶠz₀) <= FT(0.5)
+            @test maximum(@. abs.(ᶠz₀ .- one(ᶠz₀) .* FT.(1 / 4))) <= FT(1e-2)
         end
     end
 end
@@ -199,7 +275,7 @@ end
             horzelem,
             levels,
             polynom;
-            warp_fn = nowarp_test_2d,
+            warp_fn = flat_test_2d,
         )
         ⁿᶜcoords = Fields.coordinate_field(ⁿhv_center_space)
         ⁿᶠcoords = Fields.coordinate_field(ⁿhv_face_space)
@@ -252,10 +328,56 @@ end
             ᶜcoords = Fields.coordinate_field(hv_center_space)
             ᶠcoords = Fields.coordinate_field(hv_face_space)
             z₀ = ClimaCore.Fields.level(ᶜcoords.z, 1)
-            # Check ∫ₛ(z_sfc)dS == known value from warp_test_3d
+            # Check ∫ₛ(z_sfc)dS == known value from warp_sincos_3d
             # Assumes uniform stretching
             @test sum(z₀ .- zmax / 2nl) - FT(π^2 / 8) <= FT(0.1 / np * nh * nl)
             @test abs(maximum(z₀) - FT(0.5)) <= FT(0.125)
+        end
+    end
+end
+
+@testset "3D Extruded Terrain Laplacian Smoothing" begin
+    # Test smoothing for known parameters
+    for FT in (Float32, Float64)
+        # Extruded FD-Spectral Hybrid
+        xmin, xmax = FT(0), FT(π)
+        ymin, ymax = FT(0), FT(π)
+        zmin, zmax = FT(0), FT(1)
+        levels = [5]
+        polynom = 3:2:10
+        horzelem = 5:2:10
+        for nl in levels, np in polynom, nh in horzelem
+            # Test Against Steady State Analytical Solution
+            ʷhv_center_space, ʷhv_face_space = warpedspace_3D(
+                FT,
+                (xmin, xmax),
+                (ymin, ymax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                warp_fn = warp_sinsq_3d,
+                test_smoothing = true,
+            )
+            ʳhv_center_space, ʳhv_face_space = warpedspace_3D(
+                FT,
+                (xmin, xmax),
+                (ymin, ymax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                warp_fn = warp_sinsq_3d,
+                test_smoothing = false,
+            )
+            ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
+            ʷᶠʳcoords = Fields.coordinate_field(ʳhv_face_space)
+            ᶠz₀ = ClimaCore.Fields.level(ʷᶠcoords.z, half)
+            @test minimum(ᶠz₀) >=
+                  minimum(ClimaCore.Fields.level(ʷᶠʳcoords.z, half))
+            @test maximum(ᶠz₀) <=
+                  maximum(ClimaCore.Fields.level(ʷᶠʳcoords.z, half))
+            @test maximum(@. abs.(ᶠz₀ .- one(ᶠz₀) .* FT.(1 / 8))) <= FT(1e-2)
         end
     end
 end
