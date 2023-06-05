@@ -838,8 +838,6 @@ steps:
         key: "gpu_spectral_ops_bm_cpu_float32"
         command:
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
-        soft_fail:
-          - exit_status: 1
 
       - label: ":rocket: Spectral element operator benchmarks (cuda Float64)"
         key: "gpu_spectral_ops_bm_cuda_float64"
@@ -853,15 +851,11 @@ steps:
         key: "gpu_spectral_ops_bm_cpu_float64"
         command:
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
-        soft_fail:
-          - exit_status: 1
 
       - label: ":rocket: Spectral element operator benchmarks (extruded CPU Float64)"
         key: "gpu_spectral_ops_bm_extruded_cpu_float64"
         command:
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
-        soft_fail:
-          - exit_status: 1
 
       - label: ":rocket: Spectral element operator benchmarks"
         key: "gpu_spectral_ops_bm"
