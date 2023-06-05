@@ -57,22 +57,22 @@ end
     #! format: off
     @time begin
     ctr = Int[0]
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CS, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CS, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FS, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FS, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CV, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CV, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_V2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 8 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FV, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FV, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_V2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CS, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_S2S[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CS, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_S2V[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FS, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_S2S[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FS, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_S2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CV, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_V2V[j])
-    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CV, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_V2S[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 8 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FV, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_V2V[j])
-    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FV, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_V2S[j])
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CS, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_S2S[j], i, j, 1)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CS, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_S2V[j], i, j, 2)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FS, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_S2S[j], i, j, 3)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FS, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_S2V[j], i, j, 4)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CV, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_V2V[j], i, j, 5)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FS, all_ops.a_CV, all_ops.ops_F2C_S2S[i], all_ops.ops_C2F_V2S[j], i, j, 6)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 8 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FV, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_V2V[j], i, j, 7)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CS, all_ops.a_FV, all_ops.ops_C2F_S2S[i], all_ops.ops_F2C_V2S[j], i, j, 8)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CS, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_S2S[j], i, j, 9)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CS, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_S2V[j], i, j, 10)
+    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FS, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_S2S[j], i, j, 11)
+    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 2 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FS, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_S2V[j], i, j, 12)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 7 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CV, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_V2V[j], i, j, 13)
+    Base.Cartesian.@nexprs 5 i -> Base.Cartesian.@nexprs 3 j -> compose_single(ctr, all_ops.a_FS, all_ops.a_FV, all_ops.a_CV, all_ops.ops_F2C_V2S[i], all_ops.ops_C2F_V2S[j], i, j, 14)
+    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 8 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FV, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_V2V[j], i, j, 15)
+    Base.Cartesian.@nexprs 3 i -> Base.Cartesian.@nexprs 5 j -> compose_single(ctr, all_ops.a_CS, all_ops.a_CV, all_ops.a_FV, all_ops.ops_C2F_V2S[i], all_ops.ops_F2C_V2S[j], i, j, 16)
     end
     #! format: on
 end

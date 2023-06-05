@@ -240,7 +240,7 @@ function test_pointwise_stencils_throws(all_ops)
     end
 end
 
-function apply_single(a0, a1, op1)
+function apply_single(@nospecialize(a0), @nospecialize(a1), @nospecialize(op1))
     apply = OP.ApplyStencil()
     compose = OP.ComposeStencils()
     stencil_op1 = OP.Operator2Stencil(op1)
@@ -250,18 +250,30 @@ function apply_single(a0, a1, op1)
     return nothing
 end
 
-function compose_single(ctr, a0, a1, a2, op1, op2)
-    if mod(ctr[1], 10) == 0 # print less frequently
-        p = trunc((ctr[1] / 330 * 100), digits = 2)
-        println("Testing compose operators. $p% complete")
+function compose_single(ctr, @nospecialize(a0), @nospecialize(a1), @nospecialize(a2), @nospecialize(op1), @nospecialize(op2), i, j, k)
+    p = trunc((ctr[1] / 330 * 100), digits = 2)
+    Δt = @elapsed begin
+        apply = OP.ApplyStencil()
+        compose = OP.ComposeStencils()
+        stencil_op1 = OP.Operator2Stencil(op1)
+        stencil_op2 = OP.Operator2Stencil(op2)
+        tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
+        ref_value = op2.(a2 .* op1.(a1 .* a0))
+        @test tested_value ≈ ref_value atol = 1e-6
+        ctr[1] += 1
     end
+    # if mod(ctr[1], 10) == 0 # print less frequently
+        println("Testing compose operators. $p% complete. Δt=$Δt, (i,j,k)=($i,$j,$k)")
+    # end
+    return nothing
+end
+
+function compose_single_jet(ctr, @nospecialize(a0), @nospecialize(a1), @nospecialize(a2), @nospecialize(op1), @nospecialize(op2), i, j, k)
     apply = OP.ApplyStencil()
     compose = OP.ComposeStencils()
     stencil_op1 = OP.Operator2Stencil(op1)
     stencil_op2 = OP.Operator2Stencil(op2)
     tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
     ref_value = op2.(a2 .* op1.(a1 .* a0))
-    @test tested_value ≈ ref_value atol = 1e-6
-    ctr[1] += 1
     return nothing
 end
