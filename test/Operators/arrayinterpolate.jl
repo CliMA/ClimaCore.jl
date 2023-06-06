@@ -4,6 +4,48 @@ using ClimaCore:
 using IntervalSets
 using Test
 
+@testset "2D extruded" begin
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_tags = (:bottom, :top),
+    )
+
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+    verttopo = Topologies.IntervalTopology(vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+
+    horzdomain = Domains.IntervalDomain(
+        Geometry.XPoint(-500.0) .. Geometry.XPoint(500.0),
+        periodic = true,
+    )
+
+    quad = Spaces.Quadratures.GLL{4}()
+    horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
+    horztopology = Topologies.IntervalTopology(horzmesh)
+    horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+
+    coords = Fields.coordinate_field(hv_center_space)
+
+    xpts = range(Geometry.XPoint(-500.0), Geometry.XPoint(500.0), length = 21)
+    zpts = range(Geometry.ZPoint(0.0), Geometry.ZPoint(1000.0), length = 21)
+
+
+    interp_x = Operators.interpolate_array(coords.x, xpts, zpts)
+    @test interp_x ≈ [x.x for x in xpts, z in zpts]
+
+    interp_z = Operators.interpolate_array(coords.z, xpts, zpts)
+    @test interp_z[:, 2:(end - 1)] ≈ [z.z for x in xpts, z in zpts[2:(end - 1)]]
+    @test interp_z[:, 1] ≈ [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
+    @test interp_z[:, end] ≈ [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
+
+end
+
+
 @testset "3D box" begin
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
