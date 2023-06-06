@@ -119,6 +119,8 @@ using JET
     kernel_vector_dss!(kernel_args) # compile+test works
     kernel_field_dss!(kernel_args) # compile+test works
     kernel_ntuple_field_dss!(kernel_args) # compile+test works
+    kernel_ntuple_floats_dss!(kernel_args) # compile+test works
+    kernel_complicated_field_dss!(kernel_args) # compile+test works
     # TODO: widen these tests to the GPU.
     if kernel_args.device isa ClimaComms.CPUDevice
         # Allocation tests
@@ -130,10 +132,16 @@ using JET
         @test p == 0
         p = @allocated kernel_ntuple_field_dss!(kernel_args)
         @test p == 0
+        p = @allocated kernel_ntuple_floats_dss!(kernel_args)
+        @test p == 0
+        p = @allocated kernel_complicated_field_dss!(kernel_args)
+        @test_broken p == 0
         # Inference tests
         JET.@test_opt kernel_scalar_dss!(kernel_args)
         JET.@test_opt kernel_vector_dss!(kernel_args)
         JET.@test_opt kernel_field_dss!(kernel_args)
         JET.@test_opt kernel_ntuple_field_dss!(kernel_args)
+        JET.@test_opt kernel_ntuple_floats_dss!(kernel_args)
+        # JET.@test_opt kernel_complicated_field_dss!(kernel_args) # failing
     end
 end
