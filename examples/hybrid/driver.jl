@@ -23,16 +23,14 @@ face_initial_condition(local_geometry) = (;)
 postprocessing(sol, output_dir) = nothing
 
 ################################################################################
-is_distributed = get(ENV, "CLIMACOMMS_CONTEXT", "") == "MPI"
+
+using ClimaComms
+const comms_ctx = ClimaComms.context()
+is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 
 using Logging
-using ClimaComms
+
 if is_distributed
-    if ENV["CLIMACOMMS_CONTEXT"] == "MPI"
-        const comms_ctx = ClimaComms.MPICommsContext()
-    else
-        error("ENV[\"CLIMACOMMS_CONTEXT\"] only supports the \"MPI\" option")
-    end
     const pid, nprocs = ClimaComms.init(comms_ctx)
     logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
