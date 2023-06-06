@@ -108,7 +108,7 @@ Extrapolate
 ## Interpolation
 
 ```@docs
-array_interpolate
+interpolate_array
 ```
 
 ## Internal APIs
