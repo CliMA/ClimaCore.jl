@@ -93,7 +93,7 @@ interpolate_array(field, longpts, latpts, zpts)
 !!! note
     Hypsography is not currently handled correctly.
 """
-interpolate_array
+function interpolate_array end
 
 function interpolate_array(
     field::Fields.ExtrudedFiniteDifferenceField,
