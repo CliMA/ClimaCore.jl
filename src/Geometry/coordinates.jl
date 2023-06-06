@@ -10,6 +10,8 @@ The following types are supported:
 - `XYPoint(x, y)`
 - `XZPoint(x, z)`
 - `XYZPoint(x, y, z)`
+- `LatPoint(lat)`
+- `LongPoint(long)`
 - `LatLongPoint(lat, long)`
 - `LatLongZPoint(lat, long, z)`
 - `Cartesian1Point(x1)`
@@ -119,6 +121,8 @@ Cartesian123Point(pt::Cartesian12Point{FT}) where {FT} =
 Cartesian123Point(pt::Cartesian13Point{FT}) where {FT} =
     Cartesian123Point(pt.x1, zero(FT), pt.x3)
 
+@pointtype LatPoint lat
+@pointtype LongPoint long
 @pointtype LatLongPoint lat long
 @pointtype LatLongZPoint lat long z
 
@@ -129,6 +133,10 @@ product_coordinates(yp::YPoint, zp::ZPoint) = YZPoint(promote(yp.y, zp.z)...)
 product_coordinates(xyp::XYPoint, zp::ZPoint) =
     XYZPoint(promote(xyp.x, xyp.y, zp.z)...)
 
+product_coordinates(latp::LatPoint, longp::LongPoint) =
+    LatLongPoint(promote(latp.lat, longp.long)...)
+product_coordinates(longp::LongPoint, latp::LatPoint) =
+    LatLongPoint(promote(latp.lat, longp.long)...)
 product_coordinates(latlongp::LatLongPoint, zp::ZPoint) =
     LatLongZPoint(promote(latlongp.lat, latlongp.long, zp.z)...)
 

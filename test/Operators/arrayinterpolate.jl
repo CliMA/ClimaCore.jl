@@ -52,3 +52,56 @@ using Test
     @test interp_z[:, :, end] ≈
           [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts, y in ypts]
 end
+
+
+@testset "3D sphere" begin
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint(0.0),
+        Geometry.ZPoint(1000.0);
+        boundary_tags = (:bottom, :top),
+    )
+
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
+    verttopo = Topologies.IntervalTopology(vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
+
+    horzdomain = Domains.SphereDomain(1e6)
+
+    quad = Spaces.Quadratures.GLL{4}()
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 6)
+    horztopology = Topologies.Topology2D(horzmesh)
+    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+
+
+    coords = Fields.coordinate_field(hv_center_space)
+
+    longpts = range(
+        Geometry.LongPoint(-180.0),
+        Geometry.LongPoint(180.0),
+        length = 21,
+    )
+    latpts =
+        range(Geometry.LatPoint(-80.0), Geometry.LatPoint(80.0), length = 21)
+    zpts = range(Geometry.ZPoint(0.0), Geometry.ZPoint(1000.0), length = 21)
+
+
+    interp_sin_long =
+        Operators.interpolate_array(sind.(coords.long), longpts, latpts, zpts)
+    @test interp_sin_long ≈
+          [sind(x.long) for x in longpts, y in latpts, z in zpts] rtol = 0.01
+
+    interp_lat = Operators.interpolate_array(coords.lat, longpts, latpts, zpts)
+    @test interp_lat ≈ [y.lat for x in longpts, y in latpts, z in zpts] rtol = 0.01
+
+    interp_z = Operators.interpolate_array(coords.z, longpts, latpts, zpts)
+
+    @test interp_z[:, :, 2:(end - 1)] ≈
+          [z.z for x in longpts, y in latpts, z in zpts[2:(end - 1)]]
+    @test interp_z[:, :, 1] ≈
+          [1000.0 * (0 / 30 + 1 / 30) / 2 for x in longpts, y in latpts]
+    @test interp_z[:, :, end] ≈
+          [1000.0 * (29 / 30 + 30 / 30) / 2 for x in longpts, y in latpts]
+end
