@@ -46,6 +46,16 @@ IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
     ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
     mesh,
 )
+function adaptcontext(
+    context::ClimaComms.AbstractCommsContext,
+    topology::IntervalTopology,
+)
+    if context === ClimaComms.context(topology)
+        return context
+    end
+    return IntervalTopology(context, topology.mesh)
+end
+
 
 isperiodic(topology::AbstractIntervalTopology) = isempty(topology.boundaries)
 

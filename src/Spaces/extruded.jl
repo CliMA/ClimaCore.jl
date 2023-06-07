@@ -148,6 +148,26 @@ function ExtrudedFiniteDifferenceSpace(
     )
 end
 
+function adaptcontext(
+    context::ClimaComms.AbstractCommsContext,
+    space::ExtrudedFiniteDifferenceSpace{S},
+) where {S}
+    if context === ClimaComms.context(space)
+        return space
+    end
+    horizontal_space = adaptcontext(context, space.horizontal_space)
+    vertical_topology = adaptcontext(
+        ClimaComms.SingletonCommsContext(context.device),
+        space.vertical_topology,
+    )
+    vertical_space = FiniteDifferenceSpace{S}(vertical_topology)
+    return ExtrudedFiniteDifferenceSpace(
+        horizontal_space,
+        vertical_space,
+        space.hypsography,
+    )
+end
+
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     space.horizontal_space.quadrature_style
 

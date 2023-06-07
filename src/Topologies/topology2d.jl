@@ -623,6 +623,16 @@ function compute_ghost_send_recv_idx(topology::Topology2D, Nq)
     return DA(send_buf_idx), DA(recv_buf_idx)
 end
 
+function adaptcontext(
+    context::ClimaComms.AbstractCommsContext,
+    topology::Topology2D,
+)
+    if context === topology.context
+        return topology
+    end
+    return Topology2D(context, topology.mesh, topology.elemorder)
+end
+
 domain(topology::Topology2D) = domain(topology.mesh)
 nelems(topology::Topology2D) = length(topology.elemorder)
 nlocalelems(topology::Topology2D) = length(topology.local_elem_gidx)

@@ -2,7 +2,7 @@ module Fields
 
 import ClimaComms
 import ..enable_threading
-import ..slab, ..slab_args, ..column, ..column_args, ..level
+import ..slab, ..slab_args, ..column, ..column_args, ..level, ..adaptcontext
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
@@ -49,6 +49,19 @@ ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
 ClimaComms.context(topology::Topologies.Topology2D) = topology.context
 ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
     topology.context
+
+function adaptcontext(context::ClimaComms.SingletonCommsContext, field::Field)
+    if context === ClimaComms.context(field)
+        return field
+    end
+    @assert ClimaComms.context(field) isa ClimaComms.SingletonCommsContext # TODO: support gather on MPICommsContext
+    return Field(
+        Adapt.adapt(ClimaComms.array_type(context.device), field_values(field)),
+        adaptcontext(context, axes(field)),
+    )
+end
+
+
 
 Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, Fields.field_values(field)),

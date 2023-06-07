@@ -18,7 +18,7 @@ using ClimaComms
 using Adapt
 using CUDA
 
-import ..slab, ..column, ..level
+import ..slab, ..column, ..level, ..adaptcontext
 import ..Utilities: PlusHalf
 import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
 import ClimaComms

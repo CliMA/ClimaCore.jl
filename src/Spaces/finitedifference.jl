@@ -124,6 +124,17 @@ function FiniteDifferenceSpace{S}(
     )
 end
 
+function adaptcontext(
+    context::ClimaComms.AbstractCommsContext,
+    space::FiniteDifferenceSpace{S},
+) where {S}
+    if context === ClimaComms.context(space)
+        return space
+    end
+    return FiniteDifferenceSpace{S}(adaptcontext(context, space.topology))
+end
+
+
 FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
     FiniteDifferenceSpace{S}(Topologies.IntervalTopology(mesh))
 

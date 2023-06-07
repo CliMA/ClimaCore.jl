@@ -54,3 +54,5 @@ Base.@propagate_inbounds column_args(args::Tuple{Any}, inds...) =
 Base.@propagate_inbounds column_args(args::Tuple{}, inds...) = ()
 
 function level end
+
+function adaptcontext end
