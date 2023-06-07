@@ -32,4 +32,24 @@ import ClimaCore:
     Spaces.weighted_dss!(x_cpu)
 
     @test parent(x_cpu) ≈ Array(parent(x))
+    wrong_field = map(Fields.coordinate_field(space)) do cf
+        (; a = Float64(0))
+    end
+    wrong_buffer = Spaces.create_dss_buffer(wrong_field)
+    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss!(
+        x,
+        wrong_buffer,
+    )
+    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_start!(
+        x,
+        wrong_buffer,
+    )
+    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_internal!(
+        x,
+        wrong_buffer,
+    )
+    @test_throws ErrorException("Incorrect buffer eltype") Spaces.weighted_dss_ghost!(
+        x,
+        wrong_buffer,
+    )
 end
