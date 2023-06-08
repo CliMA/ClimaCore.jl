@@ -36,7 +36,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_1_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -51,7 +51,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_2_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -66,7 +66,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_4_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -81,7 +81,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_8_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -96,7 +96,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_16_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -111,7 +111,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_32_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central
@@ -126,7 +126,7 @@ steps:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_64_processes.jld2"
     env:
       TEST_NAME: "sphere/held_suarez_rhotheta_scaling"
-      CLIMACORE_DISTRIBUTED: "MPI"
+      CLIMACOMMS_CONTEXT: "MPI"
     agents:
       config: cpu
       queue: central

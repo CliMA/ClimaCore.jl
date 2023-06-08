@@ -1,4 +1,4 @@
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
+ENV["CLIMACOMMS_CONTEXT"] = "MPI"
 usempi = true
 npoly = parse(Int, get(ARGS, 1, 4))
 FT = get(ARGS, 2, Float64) == "Float64" ? Float64 : Float32

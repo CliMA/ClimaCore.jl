@@ -1,4 +1,4 @@
-ENV["CLIMACORE_DISTRIBUTED"] = "MPI"
+ENV["CLIMACOMMS_CONTEXT"] = "MPI"
 ENV["TEST_NAME"] = "sphere/baroclinic_wave_rhoe"
 usempi = true
 using LinearAlgebra
