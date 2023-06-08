@@ -384,12 +384,12 @@ Spaces.create_ghost_buffer(field::Field) = Spaces.create_dss_buffer(field)
 
 Create a buffer for communicating neighbour information of `field`.
 """
-function Spaces.create_dss_buffer(field::Field)
+function Spaces.create_dss_buffer(field::Field, ispersistent = true)
     space = axes(field)
     hspace =
         space isa Spaces.ExtrudedFiniteDifferenceSpace ?
         space.horizontal_space : space
-    Spaces.create_dss_buffer(field_values(field), hspace)
+    Spaces.create_dss_buffer(field_values(field), hspace, ispersistent)
 end
 # Add definitions for backward compatibility
 Spaces.weighted_dss2!(
