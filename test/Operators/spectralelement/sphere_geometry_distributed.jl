@@ -1,4 +1,3 @@
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
 using LinearAlgebra, IntervalSets, UnPack
 import ClimaCore:
     Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields

@@ -1,5 +1,3 @@
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
-usempi = true
 npoly = parse(Int, get(ARGS, 1, 4))
 FT = get(ARGS, 2, Float64) == "Float64" ? Float64 : Float32
 using LinearAlgebra
@@ -19,9 +17,7 @@ import ClimaCore:
     DataLayouts
 
 using Logging
-if usempi
-    using ClimaComms
-end
+using ClimaComms
 
 set_initial_condition(space) =
     map(Fields.local_geometry_field(space)) do local_geometry
@@ -49,7 +45,7 @@ function weighted_dss_full!(Y, ghost_buffer)
     return nothing
 end
 
-function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
+function shallow_water_dss_profiler(::Type{FT}, npoly) where {FT}
     context = ClimaComms.MPICommsContext()
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
@@ -213,4 +209,4 @@ function shallow_water_dss_profiler(usempi::Bool, ::Type{FT}, npoly) where {FT}
     return nothing
 end
 
-shallow_water_dss_profiler(usempi, FT, npoly)
+shallow_water_dss_profiler(FT, npoly)

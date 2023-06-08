@@ -1,5 +1,4 @@
 using ClimaComms
-usempi = get(ENV, "CLIMACOMMS_CONTEXT", "") == "MPI"
 using LinearAlgebra
 using Colors
 using DocStringExtensions
@@ -21,11 +20,8 @@ import OrdinaryDiffEq
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
-if usempi
-    using ClimaComms
-else
-    import TerminalLoggers
-end
+using ClimaComms
+import TerminalLoggers
 using ClimaCorePlots
 import Plots
 
@@ -499,9 +495,10 @@ function rhs!(dYdt, y, parameters, t)
     return dYdt
 end
 
-function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
+function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
+    context = ClimaComms.context()
+    usempi = context isa ClimaComms.MPICommsContext
     if usempi
-        context = ClimaComms.MPICommsContext()
         pid, nprocs = ClimaComms.init(context)
         # log output only from root process
         logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
@@ -513,7 +510,6 @@ function shallow_water_driver(ARGS, usempi::Bool, ::Type{FT}) where {FT}
             println("running distributed simulation using $nprocs processes")
         end
     else
-        context = ClimaComms.SingletonCommsContext()
         global_logger(TerminalLoggers.TerminalLogger())
         println("running serial simulation")
     end
@@ -746,7 +742,7 @@ function postprocessing(test, test_params, solution, Y0_global, T, dt)
     return nothing
 end
 
-integrator = shallow_water_driver(ARGS, usempi, Float64)
+integrator = shallow_water_driver(ARGS, Float64)
 
 if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)

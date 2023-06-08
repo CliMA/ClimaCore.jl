@@ -8,7 +8,6 @@ using ClimaComms
 const context = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(context)
 
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
 # log output only from root process
 logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
 prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))

@@ -7,8 +7,6 @@ import ClimaCore:
 using ClimaComms
 using CUDA
 
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
-
 # initializing MPI
 const device = ClimaComms.device()
 const context = ClimaComms.MPICommsContext(device)
