@@ -6,7 +6,7 @@ using DocStringExtensions
 # Fields
 $(DocStringExtensions.FIELDS)
 """
-struct DSSBuffer{G, D, A, B, VI}
+struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
     "Array for storing perimeter data"
@@ -164,22 +164,38 @@ function create_dss_buffer(
             push!(scalarfidx, 1)
         end
     end
-    return DSSBuffer(
+    scalarfidx = DA(scalarfidx)
+    covariant12fidx = DA(covariant12fidx)
+    contravariant12fidx = DA(contravariant12fidx)
+    G = typeof(graph_context)
+    D = typeof(perimeter_data)
+    A = typeof(send_data)
+    B = typeof(send_buf_idx)
+    VI = typeof(scalarfidx)
+    return DSSBuffer{S, G, D, A, B, VI}(
         graph_context,
         perimeter_data,
         send_data,
         recv_data,
         send_buf_idx,
         recv_buf_idx,
-        DA(scalarfidx),
-        DA(covariant12fidx),
-        DA(contravariant12fidx),
+        scalarfidx,
+        covariant12fidx,
+        contravariant12fidx,
         internal_elems,
         perimeter_elems,
     )
 end
 
+Base.eltype(::DSSBuffer{S}) where {S} = S
+
 create_dss_buffer(data::DataLayouts.AbstractData, hspace) = nothing
+
+assert_same_eltype(::DataLayouts.AbstractData, ::DSSBuffer) =
+    error("Incorrect buffer eltype")
+assert_same_eltype(::DataLayouts.AbstractData{S}, ::DSSBuffer{S}) where {S} =
+    nothing
+assert_same_eltype(::DataLayouts.AbstractData, ::Nothing) = nothing
 
 """
     function weighted_dss!(
@@ -216,6 +232,7 @@ function weighted_dss!(
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     dss_buffer::Union{DSSBuffer, Nothing},
 )
+    assert_same_eltype(data, dss_buffer)
     weighted_dss_start!(data, space, dss_buffer)
     weighted_dss_internal!(data, space, dss_buffer)
     weighted_dss_ghost!(data, space, dss_buffer)
@@ -271,6 +288,7 @@ function weighted_dss_start!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
+    assert_same_eltype(data, dss_buffer)
     length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(hspace.topology)
     dss_transform!(
@@ -338,6 +356,7 @@ function weighted_dss_internal!(
     hspace::AbstractSpectralElementSpace,
     dss_buffer::Union{DSSBuffer, Nothing},
 )
+    assert_same_eltype(data, dss_buffer)
     length(parent(data)) == 0 && return nothing
     if hspace isa SpectralElementSpace1D
         dss_1d!(
@@ -417,6 +436,7 @@ function weighted_dss_ghost!(
     hspace::SpectralElementSpace2D{<:Topology2D},
     dss_buffer::DSSBuffer,
 )
+    assert_same_eltype(data, dss_buffer)
     length(parent(data)) == 0 && return data
     device = ClimaComms.device(hspace.topology)
     ClimaComms.finish(dss_buffer.graph_context)
