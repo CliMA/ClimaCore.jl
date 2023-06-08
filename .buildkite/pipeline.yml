@@ -91,7 +91,7 @@ steps:
           - "srun julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
         timeout_in_minutes: 5
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
         retry:
           automatic: true
         agents:
@@ -104,7 +104,7 @@ steps:
           - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
         timeout_in_minutes: 5
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
         retry:
           automatic: true
         agents:
@@ -117,7 +117,7 @@ steps:
           - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
         timeout_in_minutes: 5
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           CI_OUTPUT_DIR: "output/online_remap"
         agents:
           slurm_nodes: 3
@@ -258,7 +258,7 @@ steps:
         artifact_paths:
           - "examples/bickleyjet/output/cg_invariant_hypervisc/*"
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
 
@@ -314,7 +314,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
@@ -327,7 +327,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
@@ -340,7 +340,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
@@ -353,7 +353,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
@@ -366,7 +366,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
@@ -379,7 +379,7 @@ steps:
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
@@ -517,7 +517,7 @@ steps:
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_invariant_rhoe/*"
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
 
@@ -615,7 +615,7 @@ steps:
         artifact_paths:
           - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
         env:
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
           NPROCS: 2
         agents:
           slurm_nodes: 1
@@ -696,7 +696,7 @@ steps:
           - "examples/hybrid/sphere/output/baroclinic_wave_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
-          CLIMACORE_DISTRIBUTED: "MPI"
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
 

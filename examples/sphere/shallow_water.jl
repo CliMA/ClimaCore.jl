@@ -1,5 +1,5 @@
 using ClimaComms
-usempi = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+usempi = get(ENV, "CLIMACOMMS_CONTEXT", "") == "MPI"
 using LinearAlgebra
 using Colors
 using DocStringExtensions

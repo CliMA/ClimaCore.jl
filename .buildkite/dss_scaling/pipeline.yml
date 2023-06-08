@@ -45,7 +45,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_1_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 1
       agents:
         config: cpu
@@ -64,7 +64,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_2_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 2
       agents:
         config: cpu
@@ -83,7 +83,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_4_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 4
       agents:
         config: cpu
@@ -102,7 +102,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_8_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 8
       agents:
         config: cpu
@@ -121,7 +121,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_16_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 16
       agents:
         config: cpu
@@ -140,7 +140,7 @@ steps:
         - "examples/sphere/output/dss_scaling_data_32_processes*.jld2"
       env:
         TEST_NAME: "BarotropicInstabilityTest"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 32
       agents:
         config: cpu
@@ -179,7 +179,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_1_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 1
       agents:
         config: cpu
@@ -198,7 +198,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_2_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 2
       agents:
         config: cpu
@@ -217,7 +217,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_4_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 4
       agents:
         config: cpu
@@ -236,7 +236,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_8_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 8
       agents:
         config: cpu
@@ -255,7 +255,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_16_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 16
       agents:
         config: cpu
@@ -274,7 +274,7 @@ steps:
         - "examples/hybrid/dss_output_low_res/dss_scaling_data_32_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 32
       agents:
         config: cpu
@@ -316,7 +316,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_1_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 1
       agents:
         config: cpu
@@ -336,7 +336,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_2_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 2
       agents:
         config: cpu
@@ -356,7 +356,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_4_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 4
       agents:
         config: cpu
@@ -376,7 +376,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_8_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 8
       agents:
         config: cpu
@@ -395,7 +395,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_16_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 16
       agents:
         config: cpu
@@ -414,7 +414,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_32_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 32
       agents:
         config: cpu
@@ -432,7 +432,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_64_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 64
       agents:
         config: cpu
@@ -451,7 +451,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_128_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 128
       agents:
         config: cpu
@@ -470,7 +470,7 @@ steps:
         - "examples/hybrid/dss_output_high_res/dss_scaling_data_256_processes*.jld2"
       env:
         TEST_NAME: "Hybrid3DcubedsphereDSS"
-        CLIMACORE_DISTRIBUTED: "MPI"
+        CLIMACOMMS_CONTEXT: "MPI"
         NPROCS: 256
       agents:
         config: cpu

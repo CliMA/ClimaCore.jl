@@ -23,15 +23,15 @@ face_initial_condition(local_geometry) = (;)
 postprocessing(sol, output_dir) = nothing
 
 ################################################################################
-is_distributed = get(ENV, "CLIMACORE_DISTRIBUTED", "") == "MPI"
+is_distributed = get(ENV, "CLIMACOMMS_CONTEXT", "") == "MPI"
 
 using Logging
 using ClimaComms
 if is_distributed
-    if ENV["CLIMACORE_DISTRIBUTED"] == "MPI"
+    if ENV["CLIMACOMMS_CONTEXT"] == "MPI"
         const comms_ctx = ClimaComms.MPICommsContext()
     else
-        error("ENV[\"CLIMACORE_DISTRIBUTED\"] only supports the \"MPI\" option")
+        error("ENV[\"CLIMACOMMS_CONTEXT\"] only supports the \"MPI\" option")
     end
     const pid, nprocs = ClimaComms.init(comms_ctx)
     logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
