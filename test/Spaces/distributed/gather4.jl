@@ -13,8 +13,6 @@ import ClimaCore:
 
 using Logging
 
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
-
 using ClimaComms
 const comms_ctx = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(comms_ctx)

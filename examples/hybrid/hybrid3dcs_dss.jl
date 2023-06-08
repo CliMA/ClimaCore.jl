@@ -1,6 +1,4 @@
-ENV["CLIMACOMMS_CONTEXT"] = "MPI"
 ENV["TEST_NAME"] = "sphere/baroclinic_wave_rhoe"
-usempi = true
 using LinearAlgebra
 using Colors
 using JLD2
@@ -46,7 +44,6 @@ end
 
 
 function hybrid3dcubedsphere_dss_profiler(
-    usempi::Bool,
     ::Type{FT},
     resolution,
     npoly,
@@ -231,4 +228,4 @@ function hybrid3dcubedsphere_dss_profiler(
     return nothing
 end
 
-hybrid3dcubedsphere_dss_profiler(usempi, FT, resolution, npoly)
+hybrid3dcubedsphere_dss_profiler(FT, resolution, npoly)

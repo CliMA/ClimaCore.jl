@@ -13,10 +13,9 @@ import ClimaCore:
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
-#ENV["CLIMACOMMS_CONTEXT"] = "MPI" # TODO: remove before merging
-usempi = get(ENV, "CLIMACOMMS_CONTEXT", "") == "MPI"
+const context = ClimaComms.context()
+usempi = context isa ClimaComms.MPICommsContext
 if usempi
-    const context = ClimaComms.MPICommsContext()
     const pid, nprocs = ClimaComms.init(context)
     const iamroot = ClimaComms.iamroot(context)
     iamroot && println("running distributed simulation using $nprocs processes")
@@ -28,7 +27,6 @@ if usempi
         global_logger(prev_logger)
     end
 else
-    const context = ClimaComms.SingletonCommsContext()
     import TerminalLoggers
     global_logger(TerminalLoggers.TerminalLogger())
 end
