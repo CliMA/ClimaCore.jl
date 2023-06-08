@@ -39,6 +39,7 @@ if is_distributed
     @info "Setting up distributed run on $nprocs \
         processor$(nprocs == 1 ? "" : "s")"
 else
+    const comms_ctx = ClimaComms.SingletonCommsContext()
     using TerminalLoggers: TerminalLogger
     prev_logger = global_logger(TerminalLogger())
 end
@@ -93,12 +94,7 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    if is_distributed
-        h_space =
-            make_distributed_horizontal_space(horizontal_mesh, npoly, comms_ctx)
-    else
-        h_space = make_horizontal_space(horizontal_mesh, npoly)
-    end
+    h_space = make_horizontal_space(horizontal_mesh, npoly, comms_ctx)
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
@@ -205,7 +201,11 @@ walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
-        global_h_space = make_horizontal_space(horizontal_mesh, npoly)
+        global_h_space = make_horizontal_space(
+            horizontal_mesh,
+            npoly,
+            ClimaComms.SingletonCommsContext(),
+        )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
         global_Y_c_type = Fields.Field{
