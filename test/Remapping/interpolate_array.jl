@@ -1,8 +1,11 @@
 
+using ClimaComms
 using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Spaces, Fields, Remapping
 using IntervalSets
 using Test
+
+device = ClimaComms.CPUDevice()
 
 @testset "2D extruded" begin
     vertdomain = Domains.IntervalDomain(
@@ -12,7 +15,10 @@ using Test
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
-    verttopo = Topologies.IntervalTopology(vertmesh)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.IntervalDomain(
@@ -22,7 +28,10 @@ using Test
 
     quad = Spaces.Quadratures.GLL{4}()
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
-    horztopology = Topologies.IntervalTopology(horzmesh)
+    horztopology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
     hv_center_space =
@@ -54,7 +63,10 @@ end
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
-    verttopo = Topologies.IntervalTopology(vertmesh)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.RectangleDomain(
@@ -66,7 +78,10 @@ end
 
     quad = Spaces.Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -104,14 +119,20 @@ end
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
-    verttopo = Topologies.IntervalTopology(vertmesh)
+    verttopo = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.SphereDomain(1e6)
 
     quad = Spaces.Quadratures.GLL{4}()
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 6)
-    horztopology = Topologies.Topology2D(horzmesh)
+    horztopology = Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(device),
+        horzmesh,
+    )
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
