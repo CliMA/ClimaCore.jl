@@ -1022,6 +1022,9 @@ function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
     VIJFH{S, Nij, typeof(array)}(array)
 end
 
+rebuild(data::VIJFH{S, Nij}, array::AbstractArray{T, 5}) where {S, Nij, T} =
+    VIJFH{S, Nij}(array)
+
 function replace_basetype(data::VIJFH{S, Nij}, ::Type{T}) where {S, Nij, T}
     array = parent(data)
     S′ = replace_basetype(eltype(array), T, S)
