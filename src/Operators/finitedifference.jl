@@ -38,6 +38,7 @@ right_face_boundary_idx(arg) = right_face_boundary_idx(axes(arg))
 left_center_boundary_idx(arg) = left_center_boundary_idx(axes(arg))
 right_center_boundary_idx(arg) = right_center_boundary_idx(axes(arg))
 
+# unlike getidx, we allow extracting the face local geometry from the center space, and vice-versa
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Union{
         Spaces.FiniteDifferenceSpace,
@@ -46,10 +47,12 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     idx::Integer,
     hidx,
 )
+    v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        idx = mod1(idx, length(space))
+        v = mod1(v, length(space))
     end
-    @inbounds column(space.center_local_geometry, hidx...)[idx]
+    i, j, h = hidx
+    return @inbounds space.center_local_geometry[CartesianIndex(i, j, 1, v, h)]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Union{
@@ -59,11 +62,12 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
     idx::PlusHalf,
     hidx,
 )
-    i = idx.i + 1
+    v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        i = mod1(i, length(space))
+        v = mod1(v, length(space))
     end
-    @inbounds column(space.face_local_geometry, hidx...)[i]
+    i, j, h = hidx
+    return @inbounds space.face_local_geometry[CartesianIndex(i, j, 1, v, h)]
 end
 
 
