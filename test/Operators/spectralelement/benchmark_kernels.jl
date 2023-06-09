@@ -105,43 +105,41 @@ end
 ##### scalar dss!
 kernel_scalar_dss_array!(args) = kernel_copyto!(args)
 function kernel_scalar_dss!(args)
-    (; ϕ_buffer) = args.buffers
-    (; ϕ) = args
-    Spaces.weighted_dss_start!(ϕ, ϕ_buffer)
-    Spaces.weighted_dss_internal!(ϕ, ϕ_buffer)
-    Spaces.weighted_dss_ghost!(ϕ, ϕ_buffer)
-    return
+    Spaces.weighted_dss!(args.ϕ, args.buffers.ϕ_buffer)
+    return nothing
 end
 
 ##### vector dss!
 kernel_vector_dss_array!(args) = kernel_copyto!(args)
 function kernel_vector_dss!(args)
-    (; u_buffer) = args.buffers
-    (; u) = args
-    Spaces.weighted_dss_start!(u, u_buffer)
-    Spaces.weighted_dss_internal!(u, u_buffer)
-    Spaces.weighted_dss_ghost!(u, u_buffer)
-    return
+    Spaces.weighted_dss!(args.u, args.buffers.u_buffer)
+    return nothing
 end
 
 ##### field dss!
 kernel_field_dss_array!(args) = kernel_copyto!(args)
 function kernel_field_dss!(args)
-    (; ϕψ_buffer) = args.buffers
-    (; ϕψ) = args
-    Spaces.weighted_dss_start!(ϕψ, ϕψ_buffer)
-    Spaces.weighted_dss_internal!(ϕψ, ϕψ_buffer)
-    Spaces.weighted_dss_ghost!(ϕψ, ϕψ_buffer)
-    return
+    Spaces.weighted_dss!(args.ϕψ, args.buffers.ϕψ_buffer)
+    return nothing
 end
 
 ##### ntuple_field dss!
 kernel_ntuple_field_dss_array!(args) = kernel_copyto!(args)
 function kernel_ntuple_field_dss!(args)
-    (; nt_ϕψ_buffer) = args.buffers
-    (; nt_ϕψ) = args
-    Spaces.weighted_dss_start!(nt_ϕψ, nt_ϕψ_buffer)
-    Spaces.weighted_dss_internal!(nt_ϕψ, nt_ϕψ_buffer)
-    Spaces.weighted_dss_ghost!(nt_ϕψ, nt_ϕψ_buffer)
-    return
+    Spaces.weighted_dss!(args.nt_ϕψ, args.buffers.nt_ϕψ_buffer)
+    return nothing
+end
+
+##### ntuple_floats dss!
+kernel_ntuple_floats_dss_array!(args) = kernel_copyto!(args)
+function kernel_ntuple_floats_dss!(args)
+    Spaces.weighted_dss!(args.nt_ϕψ_ft, args.buffers.nt_ϕψ_ft_buffer)
+    return nothing
+end
+
+##### complicated_field dss!
+kernel_complicated_field_dss_array!(args) = kernel_copyto!(args)
+function kernel_complicated_field_dss!(args)
+    Spaces.weighted_dss!(args.f_comp, args.buffers.f_comp_buffer)
+    return nothing
 end

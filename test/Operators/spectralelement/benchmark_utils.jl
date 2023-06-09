@@ -12,6 +12,7 @@ import ClimaCore.Meshes as Meshes
 import ClimaCore.Spaces as Spaces
 import ClimaCore.Topologies as Topologies
 import ClimaCore.Geometry as Geometry
+import ClimaCore.Fields as Fields
 import ClimaCore as CC
 import ClimaComms
 
@@ -215,14 +216,36 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     ψ = zeros(space)
     combine(ϕ, ψ) = (; ϕ, ψ)
     combine_nt(ϕ, ψ) = ntuple(i -> (; ϕ, ψ), 2)
+    combine_nt_ft(ϕ::T) where {T} = ntuple(i -> T(0), 2)
+
+    complicated_field(::Type{T}) where {T} = (;
+        ρ = T(0),
+        uₕ = Geometry.Covariant12Vector(T(0), T(0)),
+        ρe_tot = T(0),
+        ρq_tot = T(0),
+        sgs⁰ = (; ρatke = T(0)),
+        sgsʲs = ntuple(1) do i
+            (; ρa = T(0), ρae_tot = T(0), ρaq_tot = T(0))
+        end,
+    )
+
+    function FieldFromNamedTuple(space, nt::NamedTuple)
+        cmv(z) = nt
+        return cmv.(Fields.coordinate_field(space))
+    end
+
     ϕψ = combine.(ϕ, ψ)
     nt_ϕψ = combine_nt.(ϕ, ψ)
+    nt_ϕψ_ft = combine_nt_ft.(ϕ)
+    f_comp = FieldFromNamedTuple(space, complicated_field(FT))
     u = initial_velocity(space)
     du = initial_velocity(space)
     ϕ_buffer = Spaces.create_dss_buffer(ϕ)
     u_buffer = Spaces.create_dss_buffer(u)
     ϕψ_buffer = Spaces.create_dss_buffer(ϕψ)
     nt_ϕψ_buffer = Spaces.create_dss_buffer(nt_ϕψ)
+    nt_ϕψ_ft_buffer = Spaces.create_dss_buffer(nt_ϕψ_ft)
+    f_comp_buffer = Spaces.create_dss_buffer(f_comp)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
@@ -233,9 +256,16 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
     end
 
-    kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ)
+    kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ, nt_ϕψ_ft, f_comp)
     # buffers cannot reside in CuArray kernels
-    buffers = (; u_buffer, ϕ_buffer, ϕψ_buffer, nt_ϕψ_buffer)
+    buffers = (;
+        u_buffer,
+        ϕ_buffer,
+        ϕψ_buffer,
+        nt_ϕψ_buffer,
+        nt_ϕψ_ft_buffer,
+        f_comp_buffer,
+    )
 
     arr_args = (; array_kernel_args..., kernel_args..., device)
     return (; arr_args..., buffers, arr_args, float_type)
