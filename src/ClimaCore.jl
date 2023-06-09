@@ -17,6 +17,7 @@ include("Operators/Operators.jl")
 include("Hypsography/Hypsography.jl")
 include("Limiters/Limiters.jl")
 include("InputOutput/InputOutput.jl")
+include("Remapping/Remapping.jl")
 
 using Requires
 function __init__()

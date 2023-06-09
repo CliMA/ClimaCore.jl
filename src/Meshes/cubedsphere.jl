@@ -275,12 +275,34 @@ function containing_element(
     y = refindex(ϕy, ne)
     return CartesianIndex(x, y, panel)
 end
+containing_element(mesh::AbstractCubedSphere, coord::Geometry.LatLongPoint) =
+    containing_element(
+        mesh,
+        Geometry.Cartesian123Point(
+            coord,
+            Geometry.SphericalGlobalGeometry(mesh.domain.radius),
+        ),
+    )
+
 
 reference_coordinates(
     mesh::AbstractCubedSphere,
     elem::CartesianIndex{3},
     coord::Geometry.Cartesian123Point,
 ) = reference_coordinates(mesh, elem, coord, mesh.localelementmap)
+
+reference_coordinates(
+    mesh::AbstractCubedSphere,
+    elem::CartesianIndex{3},
+    coord::Geometry.LatLongPoint,
+) = reference_coordinates(
+    mesh,
+    elem,
+    Geometry.Cartesian123Point(
+        coord,
+        Geometry.SphericalGlobalGeometry(mesh.domain.radius),
+    ),
+)
 
 function reference_coordinates(
     mesh::AbstractCubedSphere,

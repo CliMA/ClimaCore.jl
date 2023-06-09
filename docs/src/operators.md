@@ -105,6 +105,11 @@ SetDivergence
 Extrapolate
 ```
 
+## Interpolation
+
+```@docs
+interpolate_array
+```
 
 ## Internal APIs
 
