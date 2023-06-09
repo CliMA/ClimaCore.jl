@@ -137,7 +137,8 @@ end
 function postprocessing(sol, output_dir)
     ᶜlocal_geometry = Fields.local_geometry_field(sol.u[1].c)
     ᶠlocal_geometry = Fields.local_geometry_field(sol.u[1].f)
-    lin_cache = linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
+    lin_cache =
+        linear_solution_cache(comms_ctx, ᶜlocal_geometry, ᶠlocal_geometry)
     Y_lin = similar(sol.u[1])
 
     ρ′ = Y -> @. Y.c.ρ - p₀(ᶜlocal_geometry.coordinates.z) / (R_d * T₀)
@@ -227,6 +228,7 @@ function norm_strings(var, var_lin, p)
 end
 
 function ρfb_init_coefs_params(
+    comms_ctx,
     upsampling_factor = 3,
     max_ikx = upsampling_factor * x_elem ÷ 2,
     max_ikz = upsampling_factor * z_elem,
@@ -234,7 +236,7 @@ function ρfb_init_coefs_params(
     # upsampled coordinates (more upsampling gives more accurate coefficients)
     horizontal_mesh =
         periodic_line_mesh(; x_max, x_elem = upsampling_factor * x_elem)
-    h_space = make_horizontal_space(horizontal_mesh, npoly)
+    h_space = make_horizontal_space(horizontal_mesh, npoly, comms_ctx)
     center_space, _ = make_hybrid_spaces(
         h_space,
         z_max,
@@ -275,10 +277,10 @@ function ρfb_init_coefs_params(
     )
 end
 
-function linear_solution_cache(ᶜlocal_geometry, ᶠlocal_geometry)
+function linear_solution_cache(comms_ctx, ᶜlocal_geometry, ᶠlocal_geometry)
     ᶜz = ᶜlocal_geometry.coordinates.z
     ᶠz = ᶠlocal_geometry.coordinates.z
-    ρfb_init_array_params = ρfb_init_coefs_params()
+    ρfb_init_array_params = ρfb_init_coefs_params(comms_ctx)
     @time "ρfb_init_coefs!" IGWU.ρfb_init_coefs!(FT, ρfb_init_array_params)
     (; ρfb_init_array, ᶜρb_init_xz, unit_integral) = ρfb_init_array_params
     max_ikx, max_ikz = (size(ρfb_init_array) .- 1) .÷ 2
