@@ -40,7 +40,7 @@ Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple) where {F} = tuplemap(x -> rmap(fn, x), X)
+rmap(fn::F, X::Tuple) where {F} = map(x -> rmap(fn, x), X)
 rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
 rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
     (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
@@ -61,7 +61,7 @@ The return type of `rmap(fn, X::T)`.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
 rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    Tuple{tuplemap(fn, tuple(T.parameters...))...}
+    Tuple{map(fn, tuple(T.parameters...))...}
 rmaptype(
     fn::F,
     ::Type{T},
