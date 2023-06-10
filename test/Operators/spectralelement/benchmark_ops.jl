@@ -135,13 +135,13 @@ using JET
         p = @allocated kernel_ntuple_floats_dss!(kernel_args)
         @test p == 0
         p = @allocated kernel_complicated_field_dss!(kernel_args)
-        @test_broken p == 0
+        @test p == 0
         # Inference tests
         JET.@test_opt kernel_scalar_dss!(kernel_args)
         JET.@test_opt kernel_vector_dss!(kernel_args)
         JET.@test_opt kernel_field_dss!(kernel_args)
         JET.@test_opt kernel_ntuple_field_dss!(kernel_args)
         JET.@test_opt kernel_ntuple_floats_dss!(kernel_args)
-        # JET.@test_opt kernel_complicated_field_dss!(kernel_args) # failing
+        JET.@test_opt kernel_complicated_field_dss!(kernel_args)
     end
 end
