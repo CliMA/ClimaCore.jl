@@ -258,7 +258,7 @@ function compose_single(ctr, @nospecialize(a0), @nospecialize(a1), @nospecialize
         stencil_op1 = OP.Operator2Stencil(op1)
         stencil_op2 = OP.Operator2Stencil(op2)
         tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-        ref_value = op2.(a2 .* op1.(a1 .* a0))
+        ref_value = op2.(a2 .* op1.(a1 .* a0))::typeof(tested_value)
         @test tested_value ≈ ref_value atol = 1e-6
         ctr[1] += 1
     end
@@ -274,6 +274,6 @@ function compose_single_jet(ctr, @nospecialize(a0), @nospecialize(a1), @nospecia
     stencil_op1 = OP.Operator2Stencil(op1)
     stencil_op2 = OP.Operator2Stencil(op2)
     tested_value = apply.(compose.(stencil_op2.(a2), stencil_op1.(a1)), a0)
-    ref_value = op2.(a2 .* op1.(a1 .* a0))
+    ref_value = op2.(a2 .* op1.(a1 .* a0))::typeof(tested_value)
     return nothing
 end
