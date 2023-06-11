@@ -193,15 +193,19 @@ LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
     )
 
 function Base.isapprox(
-    x::Field,
-    y::Field;
+    x::T,
+    y::T;
     atol::Real = 0,
     rtol::Real = Base.rtoldefault(eltype(parent(x)), eltype(parent(y)), atol),
     nans::Bool = false,
     norm::Function = LinearAlgebra.norm,
-)
-    d = norm(x .- y)
-    return isfinite(d) && d <= max(atol, rtol * max(norm(x), norm(y)))
+) where {T <: Field}
+    Δ = (x .- y)
+    FT = Spaces.undertype(axes(x))
+    d = norm(Δ)::FT
+    nx = norm(x)::FT
+    ny = norm(y)::FT
+    return isfinite(d) && d <= max(atol, rtol * max(nx, ny))
 end
 
 Base.:(==)(field1::Field, field2::Field) =
