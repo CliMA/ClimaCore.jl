@@ -2913,7 +2913,7 @@ Compute the index of the leftmost point which uses only the interior stencil of 
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     widths = _stencil_interior_width(bc)
     args_idx = _left_interior_window_idx_args(bc.args, space, loc)
-    args_idx_widths = tuplemap((arg, width) -> arg - width[1], args_idx, widths)
+    args_idx_widths = map((arg, width) -> arg - width[1], args_idx, widths)
     return max(
         max(args_idx_widths...),
         left_idx(space) + boundary_width(bc, loc),
@@ -2960,7 +2960,7 @@ end
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     widths = _stencil_interior_width(bc)
     args_idx = _right_interior_window_idx_args(bc.args, space, loc)
-    args_widths = tuplemap((arg, width) -> arg - width[2], args_idx, widths)
+    args_widths = map((arg, width) -> arg - width[2], args_idx, widths)
     return min(min(args_widths...), right_idx(space) - boundary_width(bc, loc))
 end
 

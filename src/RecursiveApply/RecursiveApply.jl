@@ -7,31 +7,7 @@ To extend to another type `T`, define `RecursiveApply.rmap(fn, args::T...)`
 """
 module RecursiveApply
 
-export ⊞, ⊠, ⊟, tuplemap
-
-"""
-    tuplemap(fn::Function, tup)
-
-A `map` impl for mapping function `fn` a tuple argument `tup`
-
-Currently just calls `Base.map` behind the scenes but is left
-stubbed out for potential specialization in the future.
-"""
-@inline function tuplemap(fn::F, tup::Tuple) where {F}
-    map(fn, tup)
-end
-
-"""
-    tuplemap(fn::Function, tup1, tup2)
-
-A `map` impl for mapping function `fn` over `tup1`, `tup2` tuple arguments.
-
-Currently just calls `Base.map` behind the scenes but is left
-stubbed out for potential specialization in the future.
-"""
-@inline function tuplemap(fn::F, tup1::Tuple, tup2::Tuple) where {F}
-    map(fn, tup1, tup2)
-end
+export ⊞, ⊠, ⊟
 
 """
     rmap(fn, X...)

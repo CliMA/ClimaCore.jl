@@ -78,7 +78,7 @@ function Base.showerror(io::IO, err::BroadcastInferenceError)
     print(io, "BroadcastInferenceError: cannot infer eltype.\n")
     bc = err.bc
     f = bc.f
-    eltypes = tuplemap(eltype, bc.args)
+    eltypes = map(eltype, bc.args)
     if !hasmethod(f, eltypes)
         print(io, "  function $(f) does not have a method for $(eltypes)")
     else
