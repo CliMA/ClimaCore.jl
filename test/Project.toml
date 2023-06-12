@@ -17,7 +17,6 @@ IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 HDF5_jll = "0234f1f7-429e-5d53-9886-15a909be8d59"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
@@ -37,4 +36,3 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 HDF5_jll = "~1.12"
-LinearSolve = "1"
