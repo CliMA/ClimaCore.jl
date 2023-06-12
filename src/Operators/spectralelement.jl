@@ -115,7 +115,7 @@ Base.Broadcast.broadcasted(
 ) = SpectralBroadcasted{SpectralStyle}(op, args)
 
 Base.eltype(sbc::SpectralBroadcasted) =
-    operator_return_eltype(sbc.op, tuplemap(eltype, sbc.args)...)
+    operator_return_eltype(sbc.op, map(eltype, sbc.args)...)
 
 function Base.Broadcast.instantiate(sbc::SpectralBroadcasted)
     op = sbc.op

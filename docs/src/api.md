@@ -227,7 +227,6 @@ Spaces.local_area
 
 ```@docs
 RecursiveApply
-RecursiveApply.tuplemap
 ```
 
 ## Fields
