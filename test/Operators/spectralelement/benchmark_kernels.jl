@@ -143,3 +143,10 @@ function kernel_complicated_field_dss!(args)
     Spaces.weighted_dss!(args.f_comp, args.buffers.f_comp_buffer)
     return nothing
 end
+
+##### complicated_field2 dss!
+kernel_complicated_field2_dss_array!(args) = kernel_copyto!(args)
+function kernel_complicated_field2_dss!(args)
+    Spaces.weighted_dss!(args.f_comp2, args.buffers.f_comp2_buffer)
+    return nothing
+end
