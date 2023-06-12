@@ -468,6 +468,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe), custom resolution"
+        key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe_custom"
+        command:
+          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
+        artifact_paths:
+          - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe_custom/*"
+        agents:
+          slurm_gpus: 1
 
       - label: ":computer: Density current 2D hybrid invariant total energy"
         key: "cpu_density_current_2d_hybrid_invariant_total_energy"
