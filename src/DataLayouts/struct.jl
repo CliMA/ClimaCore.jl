@@ -92,6 +92,10 @@ parent_array_type(::Type{<:MArray{S, T, N, L}}) where {S, T, N, L} =
 parent_array_type(::Type{<:SubArray{T, N, A}}) where {T, N, A} =
     parent_array_type(A)
 
+# ReshapedArray is needed for converting between arrays and fields for RRTMGP:
+parent_array_type(::Type{<:Base.ReshapedArray{T, N, P}}) where {T, N, P} =
+    parent_array_type(P)
+
 """
     promote_parent_array_type(::Type{<:AbstractArray}, ::Type{<:AbstractArray})
 
