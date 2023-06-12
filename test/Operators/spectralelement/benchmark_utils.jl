@@ -229,6 +229,13 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         end,
     )
 
+    complicated_field2(::Type{T}) where {T} = (;
+        u₃ = Geometry.Covariant3Vector(T(0)),
+        sgsʲs = ntuple(1) do i
+            (; u₃ = Geometry.Covariant3Vector(T(0)))
+        end,
+    )
+
     function FieldFromNamedTuple(space, nt::NamedTuple)
         cmv(z) = nt
         return cmv.(Fields.coordinate_field(space))
@@ -238,6 +245,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     nt_ϕψ = combine_nt.(ϕ, ψ)
     nt_ϕψ_ft = combine_nt_ft.(ϕ)
     f_comp = FieldFromNamedTuple(space, complicated_field(FT))
+    f_comp2 = FieldFromNamedTuple(space, complicated_field2(FT))
     u = initial_velocity(space)
     du = initial_velocity(space)
     ϕ_buffer = Spaces.create_dss_buffer(ϕ)
@@ -246,6 +254,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     nt_ϕψ_buffer = Spaces.create_dss_buffer(nt_ϕψ)
     nt_ϕψ_ft_buffer = Spaces.create_dss_buffer(nt_ϕψ_ft)
     f_comp_buffer = Spaces.create_dss_buffer(f_comp)
+    f_comp2_buffer = Spaces.create_dss_buffer(f_comp2)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
@@ -256,7 +265,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
     end
 
-    kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ, nt_ϕψ_ft, f_comp)
+    kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ, nt_ϕψ_ft, f_comp, f_comp2)
     # buffers cannot reside in CuArray kernels
     buffers = (;
         u_buffer,
@@ -265,6 +274,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         nt_ϕψ_buffer,
         nt_ϕψ_ft_buffer,
         f_comp_buffer,
+        f_comp2_buffer,
     )
 
     arr_args = (; array_kernel_args..., kernel_args..., device)
