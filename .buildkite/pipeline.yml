@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.8.5 ucx/1.13.1_cuda-11.2 cuda/11.2 openmpi/4.1.5_cuda-11.2 hdf5/1.12.2-ompi415 nsight-systems/2022.2.1
+  modules: julia/1.8.5 cuda/11.8 ucx/1.14.1_cuda-11.8 openmpi/4.1.5_cuda-11.8 hdf5/1.12.2-ompi415 nsight-systems/2022.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
@@ -65,7 +65,7 @@ steps:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
         agents:
-          slurm_gres: "gpu:p100:1"
+          slurm_gpus: 1
 
       - label: ":computer: test implicit_stencil Float32"
         key: "cpu_implicit_stencil_float32"
@@ -833,7 +833,8 @@ steps:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
         agents:
-          slurm_gres: "gpu:1"
+          slurm_gpus: 1
+
 
       - label: ":rocket: Spectral element operator benchmarks (CPU Float32)"
         key: "gpu_spectral_ops_bm_cpu_float32"
@@ -846,7 +847,7 @@ steps:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
         agents:
-          slurm_gres: "gpu:1"
+          slurm_gpus: 1
 
       - label: ":rocket: Spectral element operator benchmarks (CPU Float64)"
         key: "gpu_spectral_ops_bm_cpu_float64"
@@ -864,7 +865,7 @@ steps:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
         agents:
-          slurm_gres: "gpu:1"
+          slurm_gpus: 1
 
   - group: "Analysis"
     steps:
