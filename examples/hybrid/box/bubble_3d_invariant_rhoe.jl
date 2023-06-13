@@ -358,13 +358,13 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     resolution = get(ARGS, 2, "low")
     if resolution == "custom"
         args = (
-            FT(get(ARGS, 3, 1000)),
-            FT(get(ARGS, 4, 1000)),
-            get(ARGS, 5, 4),
-            get(ARGS, 6, 16),
-            get(ARGS, 7, 3),
-            FT(get(ARGS, 8, 0.05)),
-            FT(get(ARGS, 9, 700.0)),
+            parse(FT, get(ARGS, 3, "1000")),
+            parse(FT, get(ARGS, 4, "1000")),
+            parse(Int, get(ARGS, 5, "4")),
+            parse(Int, get(ARGS, 6, "16")),
+            parse(Int, get(ARGS, 7, "3")),
+            parse(FT, get(ARGS, 8, "0.05")),
+            parse(FT, get(ARGS, 9, "700.0")),
         )
     else
         args = ()
