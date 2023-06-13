@@ -71,7 +71,9 @@ function get_space(::Type{FT}) where {FT}
         boundary_tags = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vtopology =
+        Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(), vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
 
     # TODO: Replace this with a space that includes topography.
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)

@@ -285,8 +285,8 @@ Bandwidths of Matrix-Matrix Product
 
 abstract type PointwiseStencilOperator <: FiniteDifferenceOperator end
 
-struct LeftStencilBoundary <: BoundaryCondition end
-struct RightStencilBoundary <: BoundaryCondition end
+struct LeftStencilBoundary <: AbstractBoundaryCondition end
+struct RightStencilBoundary <: AbstractBoundaryCondition end
 
 abstract type AbstractIndexRangeType end
 struct IndexRangeInteriorType <: AbstractIndexRangeType end
@@ -337,23 +337,75 @@ get_boundary(
 stencil_interior_width(::PointwiseStencilOperator, stencil, arg) =
     ((0, 0), bandwidths(eltype(stencil)))
 
-function boundary_width(
-    ::PointwiseStencilOperator,
-    ::LeftStencilBoundary,
+function left_interior_idx(
+    space::Union{
+        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+    },
+    op::PointwiseStencilOperator,
+    bc::LeftStencilBoundary,
     stencil,
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
-    return max((left_idx(axes(arg)) - lbw) - left_idx(axes(stencil)), 0)
+    if lbw isa Integer
+        return left_idx(space) - lbw
+    elseif lbw isa PlusHalf
+        return left_idx(space) - lbw + half
+    end
 end
-function boundary_width(
-    ::PointwiseStencilOperator,
-    ::RightStencilBoundary,
+function left_interior_idx(
+    space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+    op::PointwiseStencilOperator,
+    bc::LeftStencilBoundary,
     stencil,
     arg,
 )
-    ubw = bandwidths(eltype(stencil))[2]
-    return max(right_idx(axes(stencil)) - (right_idx(axes(arg)) - ubw), 0)
+    lbw = bandwidths(eltype(stencil))[1]
+    if lbw isa Integer
+        return left_idx(space) - lbw
+    elseif lbw isa PlusHalf
+        return left_idx(space) - lbw - half
+    end
+end
+
+
+@inline function right_interior_idx(
+    space::Union{
+        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+    },
+    op::PointwiseStencilOperator,
+    bc::RightStencilBoundary,
+    stencil,
+    arg,
+)
+    rbw = bandwidths(eltype(stencil))[2]
+    if rbw isa Integer
+        return right_idx(space) - rbw
+    elseif rbw isa PlusHalf
+        return right_idx(space) - rbw - half
+    end
+end
+@inline function right_interior_idx(
+    space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+    op::PointwiseStencilOperator,
+    bc::RightStencilBoundary,
+    stencil,
+    arg,
+)
+    rbw = bandwidths(eltype(stencil))[2]
+    if rbw isa Integer
+        return right_idx(space) - rbw
+    elseif rbw isa PlusHalf
+        return right_idx(space) - rbw + half
+    end
 end
 
 ##
@@ -399,7 +451,8 @@ function stencil_left_boundary(
     arg,
 )
     ubw = bandwidths(eltype(stencil))[2]
-    i_vals = (left_idx(axes(arg)) - idx):ubw
+    arg_space = reconstruct_placeholder_space(axes(arg), space)
+    i_vals = (left_idx(arg_space) - idx):ubw
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
@@ -415,8 +468,14 @@ function stencil_right_boundary(
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
-    i_vals = lbw:(right_idx(axes(arg)) - idx)
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
+    arg_space = reconstruct_placeholder_space(axes(arg), space)
+    i_vals = lbw:(right_idx(arg_space) - idx)
+    return try
+        apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
+    catch e
+        @show idx lbw right_idx(arg_space) eltype(stencil)
+        rethrow(e)
+    end
 end
 
 

@@ -85,8 +85,18 @@ return_space(op::Operator2Stencil, spaces...) = return_space(op.op, spaces...)
 stencil_interior_width(op::Operator2Stencil, args...) =
     stencil_interior_width(op.op, args...)
 
-boundary_width(op::Operator2Stencil, bc::BoundaryCondition, args...) =
-    boundary_width(op.op, bc, args...)
+left_interior_idx(
+    space::AbstractSpace,
+    op::Operator2Stencil,
+    bc::AbstractBoundaryCondition,
+    args...,
+) = left_interior_idx(space, op.op, bc, args...)
+right_interior_idx(
+    space::AbstractSpace,
+    op::Operator2Stencil,
+    bc::AbstractBoundaryCondition,
+    args...,
+) = right_interior_idx(space, op.op, bc, args...)
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_interior(
