@@ -1265,31 +1265,20 @@ steps:
   - group: "Analysis"
     steps:
 
-      - label: "Analysis: Allocations analysis"
-        key: "cpu_allocations"
-        command:
-          - "julia --color=yes --project=perf perf/allocs.jl"
-        artifact_paths:
-          - "perf/allocations_output/*"
-
       - label: "Analysis: Flamegraph profile"
         key: "cpu_flamegraph"
-        depends_on: "cpu_allocations"  # TODO: is this necessary?
-        allow_dependency_failure: true # TODO: is this necessary?
-        command:
-          - "julia --color=yes --project=perf perf/flame.jl"
+        command: "julia --color=yes --project=perf perf/flame.jl"
         artifact_paths:
           - "perf/output/*"
 
       - label: "Analysis: Benchmark step!"
         key: "cpu_benchmark"
-        command:
-          - "julia --color=yes --project=perf perf/benchmark.jl"
+        command: "julia --color=yes --project=perf perf/benchmark.jl"
 
       - label: "Analysis: Invalidations"
         key: "cpu_invalidations"
-        command:
-          - "julia --color=yes --project=perf perf/invalidations.jl"
+        command: "julia --color=yes --project=perf perf/invalidations.jl"
+
   - wait
 
   - label: ":chart_with_downwards_trend: build history"
