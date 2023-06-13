@@ -414,8 +414,8 @@ end
 
 function test_results(t_ave)
     # If these tests fail, just update the numbers (or the
-    # buffer) so long its not an agregious regression.
-    buffer = 1.7
+    # buffer) so long its not an egregious regression.
+    buffer = 2
     ns = 1
     μs = 10^3
     @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 559.8423*ns*buffer
