@@ -44,28 +44,125 @@ steps:
 
   - wait
 
-  - group: "Unit tests"
+  - group: "Unit: Package-wide"
     steps:
 
-      - label: ":computer: unit tests"
-        key: "cpu_unittests"
-        command:
-          - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl"
+      - label: "Unit: aqua"
+        key: unit_aqua
+        command: "julia --color=yes --check-bounds=yes --project=test test/aqua.jl"
 
-      - label: ":computer: unit tests expensive"
-        key: "cpu_unittests_expensive"
-        command:
-          - "julia --color=yes --check-bounds=yes --project=test test/runtests_expensive.jl"
-        env:
-          OMPI_MCA_rmaps_base_oversubscribe: 1
-
-      - label: ":flower_playing_cards: unit tests"
-        key: "gpu_unittests"
+      - label: "Unit: cuda"
+        key: unit_cuda_functional
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=test test/runtests.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=test test/gpu/cuda.jl CUDA"
         agents:
           slurm_gpus: 1
+
+  - group: "Unit: RecursiveApply"
+    steps:
+
+      - label: "Unit: recursive"
+        key: unit_recursive
+        command: "julia --color=yes --check-bounds=yes --project=test test/recursive.jl"
+
+  - group: "Unit: Utilities"
+    steps:
+
+      - label: "Unit: plushalf"
+        key: unit_plushalf
+        command: "julia --color=yes --check-bounds=yes --project=test test/Utilities/plushalf.jl"
+
+  - group: "Unit: DataLayouts"
+    steps:
+
+      - label: "Unit: data0d"
+        key: unit_data0d
+        command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data0d.jl"
+
+      - label: "Unit: data1d"
+        key: unit_data1d
+        command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1d.jl"
+
+      - label: "Unit: data2d"
+        key: unit_data2d
+        command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2d.jl"
+
+      - label: "Unit: data1dx"
+        key: unit_data1dx
+        command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data1dx.jl"
+
+      - label: "Unit: data2dx"
+        key: unit_data2dx
+        command: "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/data2dx.jl"
+
+      - label: "Unit: data cuda"
+        key: unit_data_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+  - group: "Unit: Geometry"
+    steps:
+
+      - label: "Unit: geometry"
+        key: unit_geometry
+        command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/geometry.jl"
+
+      - label: "Unit: axistensors"
+        key: unit_axistensors
+        command: "julia --color=yes --check-bounds=yes --project=test test/Geometry/axistensors.jl"
+
+  - group: "Unit: Meshes"
+    steps:
+
+      - label: "Unit: interval"
+        key: unit_interval
+        command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/interval.jl"
+
+      - label: "Unit: meshes rectangle"
+        key: unit_meshes_rectangle
+        command: "julia --color=yes --check-bounds=yes --project=test test/Meshes/rectangle.jl"
+
+  - group: "Unit: Topologies"
+    steps:
+
+      - label: "Unit: topo rectangle"
+        key: unit_topo_rectangle
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle.jl"
+
+      - label: "Unit: rectangle sfc"
+        key: unit_rectangle_sfc
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle_sfc.jl"
+
+      - label: "Unit: cubedsphere"
+        key: unit_cubedsphere
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/cubedsphere.jl"
+
+      - label: "Unit: cubedsphere sfc"
+        key: unit_cubedsphere_sfc
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/cubedsphere_sfc.jl"
+
+      - label: "Unit: topologies distributed"
+        key: unit_topologies_distributed
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Topologies/dtopo4.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 4
+
+  - group: "Unit: Spaces"
+    steps:
+
+      - label: "Unit: quadrature"
+        key: unit_quadrature
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/quadrature.jl"
+
+      - label: "Unit: spaces"
+        key: unit_spaces
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
 
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
@@ -76,37 +173,351 @@ steps:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
 
-      - label: ":computer: test implicit_stencil Float32"
-        key: "cpu_implicit_stencil_float32"
+      - label: "Unit: ddss1"
+        key: unit_ddss1
         command:
-          - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Spaces/ddss1.jl CUDA"
         agents:
-          slurm_time: 2:00:00
+          slurm_gpus: 1
 
-      - label: ":flower_playing_cards: test implicit_stencil Float32"
-        key: "gpu_implicit_stencil_float32"
+      - label: "Unit: ddss1 cs"
+        key: unit_ddss1_cs
         command:
-          - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Spaces/ddss1_cs.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: sphere"
+        key: unit_sphere
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/sphere.jl"
+
+      - label: "Unit: terrain warp"
+        key: unit_terrain_warp
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/terrain_warp.jl"
+
+      - label: "Unit: distributed dss2"
+        key: unit_distributed_dss2
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/ddss2.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+
+      - label: "Unit: distributed dss3"
+        key: unit_distributed_dss3
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/ddss3.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 3
+
+      - label: "Unit: distributed dss4"
+        key: unit_distributed_dss4
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/ddss4.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 4
+
+      - label: "Unit: distributed gather"
+        key: unit_distributed_gather4
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/gather4.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 4
+
+      - label: "Unit: cuda extruded spaces"
+        key: "extruded_spaces_cuda"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/extruded_cuda.jl CUDA"
+        artifact_paths:
+          - output/extruded_spaces_cuda
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: cuda dss 2-process test"
+        key: "gpu_ddss2_test"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 2
+
+      - label: "Unit: cuda dss 3-process test"
+        key: "gpu_ddss3_test"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 3
+          slurm_gpus: 3
+
+      - label: "Unit: cuda dss 4-process test"
+        key: "gpu_ddss4_test"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 4
+          slurm_gpus: 4
+
+      - label: "Unit: cuda Cubed Sphere dss; ne = 32; 2-process test"
+        key: "gpu_ddss_ne32_cs_2processes"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 2
+
+      - label: "Unit: cuda Cubed Sphere dss; ne = 32; 3-process test"
+        key: "gpu_ddss_ne32_cs_3processes"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 3
+          slurm_gpus: 3
+
+      - label: "Unit: cuda Cubed Sphere dss; ne = 32; 4-process test"
+        key: "gpu_ddss_ne32_cs_4processes"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
+        timeout_in_minutes: 15
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          JULIA_CUDA_MEMORY_POOL: "none"
+        agents:
+          slurm_ntasks: 4
+          slurm_gpus: 4
+
+  - group: "Unit: Fields"
+    steps:
+
+      - label: "Unit: field"
+        key: unit_field
+        command: "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
+
+      - label: "Unit: fielddiffeq"
+        key: unit_fielddiffeq
+        command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
+
+      - label: "Unit: reduction cuda"
+        key: unit_reduction_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Fields/reduction_cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+  - group: "Unit: Operators"
+    steps:
+
+      - label: "Unit: rectilinear"
+        key: unit_rectilinear
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear.jl"
+
+      - label: "Unit: diffusion2d"
+        key: unit_diffusion2d
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/diffusion2d.jl"
+
+      - label: "Unit: sphere geometry"
+        key: unit_sphere_geometry
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry.jl"
+
+      - label: "Unit: sphere gradient"
+        key: unit_sphere_gradient
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_gradient.jl"
+
+      - label: "Unit: sphere divergence"
+        key: unit_sphere_divergence
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_divergence.jl"
+
+      - label: "Unit: sphere curl"
+        key: unit_sphere_curl
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_curl.jl"
+
+      - label: "Unit: sphere diffusion"
+        key: unit_sphere_diffusion
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion.jl"
+
+      - label: "Unit: sphere diffusion vec"
+        key: unit_sphere_diffusion_vec
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_diffusion_vec.jl"
+
+      - label: "Unit: sphere hyperdiffusion"
+        key: unit_sphere_hyperdiffusion
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion.jl"
+
+      - label: "Unit: sphere hyperdiffusion vec"
+        key: unit_sphere_hyperdiffusion_vec
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
+
+      - label: "Unit: column"
+        key: unit_column
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/column.jl"
+
+      - label: "Unit: wfact"
+        key: unit_wfact
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/wfact.jl"
+
+      - label: "Unit: linsolve"
+        key: unit_linsolve
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/linsolve.jl"
+
+      - label: "Unit: hyb ops 2d"
+        key: unit_hyb_ops_2d
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/2d.jl"
+
+      - label: "Unit: hyb ops 3d"
+        key: unit_hyb_ops_3d
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
+
+      - label: "Unit: remapping"
+        key: unit_remapping
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/remapping.jl"
+
+      - label: "Unit: run sphere geometry distributed (2)"
+        key: unit_run_sphere_geometry_distributed2
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry_distributed.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+
+      - label: "Unit: run sphere geometry distributed (3)"
+        key: unit_run_sphere_geometry_distributed3
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry_distributed.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 3
+
+      - label: "Unit: run sphere geometry distributed (4)"
+        key: unit_run_sphere_geometry_distributed4
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_geometry_distributed.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 4
+
+      - label: "Unit: rectilinear cuda"
+        key: unit_rectilinear_cuda
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear_cuda.jl"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: hybrid operators cuda"
+        key: unit_ops_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: extruded sphere cuda"
+        key: unit_extruded_sphere_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/extruded_sphere_cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: extruded 3dbox cuda"
+        key: unit_extruded_3dbox_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/extruded_3dbox_cuda.jl CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: implicit stencil Float32"
+        key: "cpu_implicit_stencil_float32"
+        command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+
+      - label: "Unit: implicit stencil Float64"
+        key: "cpu_implicit_stencil_float64"
+        command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
+
+      - label: "Unit: implicit stencil Float32"
+        key: "gpu_implicit_stencil_float32"
+        command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
         agents:
           slurm_time: 2:00:00
           gpus: 1
 
-      - label: ":computer: test implicit_stencil Float64"
-        key: "cpu_implicit_stencil_float64"
-        command:
-          - "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float64"
-        agents:
-          slurm_time: 2:00:00
+  - group: "Unit: Hypsography"
+    steps:
 
-      - label: ":computer: test implicit_stencil opt"
-        key: "cpu_implicit_stencil_opt"
-        command:
-          - "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_implicit_stencils.jl"
+      - label: "Unit: hypsography 2d"
+        key: unit_hypsography_2d
+        command: "julia --color=yes --check-bounds=yes --project=test test/Hypsography/2d.jl"
 
-      - label: ":computer: Parallel HDF5 IO tests"
+      - label: "Unit: 3dsphere"
+        key: unit_3dsphere
+        command: "julia --color=yes --check-bounds=yes --project=test test/Hypsography/3dsphere.jl"
+
+  - group: "Unit: InputOutput"
+    steps:
+
+      - label: "Unit: spectralelement2d"
+        key: unit_spectralelement2d
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/spectralelement2d.jl"
+
+      - label: "Unit: hybrid2dbox"
+        key: unit_hybrid2dbox
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid2dbox.jl"
+
+      - label: "Unit: hybrid2dbox topography"
+        key: unit_hybrid2dbox_topography
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid2dbox_topography.jl"
+
+      - label: "Unit: hybrid2dbox stretched"
+        key: unit_hybrid2dbox_stretched
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid2dbox_stretched.jl"
+
+      - label: "Unit: hybrid3dbox"
+        key: unit_hybrid3dbox
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid3dbox.jl"
+
+      - label: "Unit: hybrid3dcubedsphere"
+        key: unit_hybrid3dcubedsphere
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+
+      - label: "Unit: hybrid3dcubedsphere topography"
+        key: unit_hybrid3dcubedsphere_topography
+        command: "julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid3dcubedsphere_topography.jl"
+
+      - label: "Unit: Parallel HDF5 IO tests"
         key: "cpu_parallel_hdf5"
-        command:
-          - "srun julia --color=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/InputOutput/hybrid3dcubedsphere.jl"
         timeout_in_minutes: 5
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -116,10 +527,34 @@ steps:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
 
-      - label: "TempestRemap MPI test"
+  - group: "Unit: Remapping"
+    steps:
+
+      - label: "Unit: interpolate array"
+        key: unit_interpolate_array
+        command: "julia --color=yes --check-bounds=yes --project=test test/Remapping/interpolate_array.jl"
+
+  - group: "Unit: Limiters"
+    steps:
+
+      - label: "Unit: limiter"
+        key: unit_limiter
+        command: "julia --color=yes --check-bounds=yes --project=test test/Limiters/limiter.jl"
+
+      - label: "Unit: distributed limiters"
+        key: unit_limiters_distributed
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Limiters/distributed/dlimiter.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 3
+
+  - group: "Unit: lib/ClimaCoreTempestRemap"
+    steps:
+
+      - label: "Unit: lib/TempestRemap MPI test"
         key: "write_exodus_mpi"
-        command:
-          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
+        command: "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
         timeout_in_minutes: 5
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -129,10 +564,9 @@ steps:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
 
-      - label: "TempestRemap distributed remapping test"
+      - label: "Unit: lib/TempestRemap distributed remapping test"
         key: "online_remap_mpi"
-        command:
-          - "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
+        command: "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
         timeout_in_minutes: 5
         env:
           CLIMACOMMS_CONTEXT: "MPI"
@@ -141,16 +575,94 @@ steps:
           slurm_nodes: 3
           slurm_tasks_per_node: 1
 
-      - label: "CuArray-backed extruded spaces"
-        key: "extruded_spaces_cuda"
+  # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
+  # TODO: use perf env for perf jobs, or merge test/perf envs
+  - group: "Perf: Geometry"
+    steps:
+
+      - label: "Perf: Axis tensor conversion benchmarks"
+        key: "cpu_axis_tensor_conversion_perf_bm"
+        command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
+
+  - group: "Perf: Fields"
+    steps:
+
+      - label: "Perf: Field broadcast"
+        key: "cpu_field_perf"
+        command: "julia --color=yes --project=test test/Fields/field_opt.jl"
+
+  - group: "Perf: Operators"
+    steps:
+
+      - label: "Perf: SEM operators"
+        key: perf_SEM
+        command: "julia --color=yes --project=test test/Operators/spectralelement/opt.jl"
+
+      - label: "Perf: FD operators"
+        key: perf_FD
+        command: "julia --color=yes --project=test test/Operators/finitedifference/opt.jl"
+
+        # TODO: combine this with FD operators above
+      - label: "Perf: FD operators from the wild"
+        key: perf_FD_ops_examples
+        command: "julia --color=yes --project=test test/Operators/finitedifference/opt_examples.jl"
+
+      - label: "Perf: dss"
+        key: perf_dss
+        command: "julia --color=yes --project=test test/Operators/hybrid/dss_opt.jl"
+
+      - label: "Perf: hybrid operators"
+        key: perf_hybrid_ops
+        command: "julia --color=yes --project=test test/Operators/hybrid/opt.jl"
+
+      - label: "Perf: implicit stencil"
+        key: "perf_cpu_implicit_stencil"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/opt_implicit_stencils.jl"
+
+      - label: "Perf: FD operator benchmarks"
+        key: "perf_fd_ops"
+        command: "julia --color=yes --project=test test/Operators/finitedifference/column_benchmark.jl"
+        agents:
+        soft_fail:
+          - exit_status: 1
+
+      - label: "Perf: SEM operator benchmarks (cuda Float32)"
+        key: "perf_gpu_spectral_ops_cuda_float32"
         command:
-          - julia --color=yes --project=test test/Spaces/extruded_cuda.jl
-        artifact_paths:
-          - output/extruded_spaces_cuda
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
         agents:
           slurm_gpus: 1
 
-  - group: "Column examples"
+      - label: "Perf: SEM operator benchmarks (CPU Float32)"
+        key: "perf_gpu_spectral_ops_cpu_float32"
+        command: "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
+
+      - label: "Perf: SEM operator benchmarks (cuda Float64)"
+        key: "perf_gpu_spectral_ops_cuda_float64"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: SEM operator benchmarks (CPU Float64)"
+        key: "perf_gpu_spectral_ops_cpu_float64"
+        command: "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
+
+      - label: "Perf: SEM operator benchmarks (extruded CPU Float64)"
+        key: "perf_gpu_spectral_ops_extruded_cpu_float64"
+        command: "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
+
+      - label: "Perf: SEM operator benchmarks"
+        key: "perf_gpu_spectral_ops"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
+        agents:
+          slurm_gpus: 1
+
+  - group: "Examples: Column"
     steps:
 
       - label: ":computer: Column Heat Diffusion Eq"
@@ -246,7 +758,7 @@ steps:
         soft_fail:
           - exit_status: 1
 
-  - group: "Spectral element"
+  - group: "Examples: Spectral element"
     steps:
       - label: ":computer: Bickley jet CG"
         key: "cpu_bickleyjet_cg"
@@ -322,88 +834,7 @@ steps:
         artifact_paths:
           - "examples/plane/output/plane_advection_limiter_cylinders_D0/*"
 
-  - group: "Distributed CUDA DSS tests"
-    steps:
-
-      - label: ":flower_playing_cards: dss 2-process test"
-        key: "gpu_ddss2_test"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 2
-          slurm_gpus: 2
-
-      - label: ":flower_playing_cards: dss 3-process test"
-        key: "gpu_ddss3_test"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 3
-          slurm_gpus: 3
-
-      - label: ":flower_playing_cards: dss 4-process test"
-        key: "gpu_ddss4_test"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 4
-          slurm_gpus: 4
-
-      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 2-process test"
-        key: "gpu_ddss_ne32_cs_2processes"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 2
-          slurm_gpus: 2
-
-      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 3-process test"
-        key: "gpu_ddss_ne32_cs_3processes"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 3
-          slurm_gpus: 3
-
-      - label: ":flower_playing_cards: Cubed Sphere dss; ne = 32; 4-process test"
-        key: "gpu_ddss_ne32_cs_4processes"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
-        timeout_in_minutes: 15
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
-        agents:
-          slurm_ntasks: 4
-          slurm_gpus: 4
-
-  - group: "Hybrid examples"
+  - group: "Examples: Hybrid"
     steps:
 
       - label: ":computer: 3D Box limiters advection cosine bells"
@@ -547,7 +978,7 @@ steps:
         agents:
           slurm_ntasks: 2
 
-  - group: "Sphere examples"
+  - group: "Examples: Sphere"
     steps:
 
       - label: ":computer: Solid body sphere cosine bell alpha0"
@@ -678,7 +1109,7 @@ steps:
         agents:
           slurm_gpus: 1
 
-  - group: "Examples hybrid sphere"
+  - group: "Examples: hybrid sphere"
     steps:
 
       - label: ":computer: 3D sphere deformation flow w/ limiter & FCT"
@@ -803,7 +1234,7 @@ steps:
         env:
           TEST_NAME: "sphere/held_suarez_rhoe_int"
 
-  - group: "Examples hybrid plane"
+  - group: "Examples: hybrid plane"
     steps:
 
       - label: ":computer: 2D plane inertial gravity wave"
@@ -831,78 +1262,17 @@ steps:
           slurm_cpus_per_task: 8
           slurm_mem: 20GB
 
-  - group: "Performance"
-    steps:
-
-      - label: ":computer: Field broadcast performance"
-        key: "cpu_field_perf"
-        command:
-          - "julia --color=yes --project=test test/Fields/field_opt.jl"
-
-      - label: ":computer: Column performance benchmarks"
-        key: "cpu_column_perf_bm"
-        command:
-          - "julia --color=yes --project=test test/Operators/finitedifference/column_benchmark.jl"
-        agents:
-        soft_fail:
-          - exit_status: 1
-
-      - label: ":rocket::computer: Axis tensor conversion performance benchmarks"
-        key: "cpu_axis_tensor_conversion_perf_bm"
-        command:
-          - "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
-
-      - label: ":rocket: Spectral element operator benchmarks (cuda Float32)"
-        key: "gpu_spectral_ops_bm_cuda_float32"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
-        agents:
-          slurm_gpus: 1
-
-
-      - label: ":rocket: Spectral element operator benchmarks (CPU Float32)"
-        key: "gpu_spectral_ops_bm_cpu_float32"
-        command:
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
-
-      - label: ":rocket: Spectral element operator benchmarks (cuda Float64)"
-        key: "gpu_spectral_ops_bm_cuda_float64"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
-        agents:
-          slurm_gpus: 1
-
-      - label: ":rocket: Spectral element operator benchmarks (CPU Float64)"
-        key: "gpu_spectral_ops_bm_cpu_float64"
-        command:
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
-
-      - label: ":rocket: Spectral element operator benchmarks (extruded CPU Float64)"
-        key: "gpu_spectral_ops_bm_extruded_cpu_float64"
-        command:
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
-
-      - label: ":rocket: Spectral element operator benchmarks"
-        key: "gpu_spectral_ops_bm"
-        command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
-        agents:
-          slurm_gpus: 1
-
   - group: "Analysis"
     steps:
 
-      - label: ":rocket::computer: Allocations analysis"
+      - label: "Analysis: Allocations analysis"
         key: "cpu_allocations"
         command:
           - "julia --color=yes --project=perf perf/allocs.jl"
         artifact_paths:
           - "perf/allocations_output/*"
 
-      - label: ":rocket::computer: Flamegraph profile"
+      - label: "Analysis: Flamegraph profile"
         key: "cpu_flamegraph"
         depends_on: "cpu_allocations"  # TODO: is this necessary?
         allow_dependency_failure: true # TODO: is this necessary?
@@ -911,12 +1281,12 @@ steps:
         artifact_paths:
           - "perf/output/*"
 
-      - label: ":rocket::computer: Benchmark step!"
+      - label: "Analysis: Benchmark step!"
         key: "cpu_benchmark"
         command:
           - "julia --color=yes --project=perf perf/benchmark.jl"
 
-      - label: ":rocket::computer: Invalidations"
+      - label: "Analysis: Invalidations"
         key: "cpu_invalidations"
         command:
           - "julia --color=yes --project=perf perf/invalidations.jl"
