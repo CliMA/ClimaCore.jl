@@ -1917,6 +1917,7 @@ Base.@propagate_inbounds function stencil_interior(
     ∂θ₃ = RecursiveApply.rdiv(θ⁺ ⊟ θ⁻, 2)
     return w³ ⊠ ∂θ₃
 end
+boundary_width(::AdvectionF2F, ::AbstractBoundaryCondition) = 1
 
 """
     A = AdvectionC2C(;boundaries)

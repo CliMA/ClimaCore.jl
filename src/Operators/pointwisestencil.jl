@@ -470,12 +470,7 @@ function stencil_right_boundary(
     lbw = bandwidths(eltype(stencil))[1]
     arg_space = reconstruct_placeholder_space(axes(arg), space)
     i_vals = lbw:(right_idx(arg_space) - idx)
-    return try
-        apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
-    catch e
-        @show idx lbw right_idx(arg_space) eltype(stencil)
-        rethrow(e)
-    end
+    apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
 
