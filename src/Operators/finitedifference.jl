@@ -1076,6 +1076,8 @@ Base.@propagate_inbounds function stencil_interior(
     RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
 end
 
+boundary_width(::WeightedInterpolateF2C, ::AbstractBoundaryCondition) = 0
+
 """
     WI = WeightedInterpolateC2F(; boundaries)
     WI.(w, x)
@@ -1132,7 +1134,7 @@ Base.@propagate_inbounds function stencil_interior(
     RecursiveApply.rdiv((w⁺ ⊠ a⁺) ⊞ (w⁻ ⊠ a⁻), (w⁺ ⊞ w⁻))
 end
 
-boundary_width(::WeightedInterpolateC2F, ::SetValue) = 1
+boundary_width(::WeightedInterpolateC2F, ::AbstractBoundaryCondition) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::SetValue,
@@ -1160,7 +1162,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     getidx(space, bc.val, loc, nothing, hidx)
 end
 
-boundary_width(::WeightedInterpolateC2F, ::SetGradient) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::SetGradient,
@@ -1198,7 +1199,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     a⁻ ⊞ RecursiveApply.rdiv(v₃, 2)
 end
 
-boundary_width(::WeightedInterpolateC2F, ::Extrapolate) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::WeightedInterpolateC2F,
     bc::Extrapolate,
@@ -1313,7 +1313,7 @@ Base.@propagate_inbounds function stencil_interior(
     return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, a⁺))
 end
 
-boundary_width(::UpwindBiasedProductC2F, ::SetValue) = 1
+boundary_width(::UpwindBiasedProductC2F, ::AbstractBoundaryCondition) = 1
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::UpwindBiasedProductC2F,
@@ -1354,8 +1354,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     )
     return Geometry.Contravariant3Vector(upwind_biased_product(vᶠ, a⁻, aᴿᴮ))
 end
-
-boundary_width(::UpwindBiasedProductC2F, ::Extrapolate) = 1
 
 Base.@propagate_inbounds function stencil_left_boundary(
     op::UpwindBiasedProductC2F,
@@ -1461,7 +1459,8 @@ Base.@propagate_inbounds function stencil_interior(
     )
 end
 
-boundary_width(::Upwind3rdOrderBiasedProductC2F, ::FirstOrderOneSided) = 2
+boundary_width(::Upwind3rdOrderBiasedProductC2F, ::AbstractBoundaryCondition) =
+    2
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
@@ -1503,8 +1502,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(upwind_biased_product(v, a⁻, a⁺))
 
 end
-
-boundary_width(::Upwind3rdOrderBiasedProductC2F, ::ThirdOrderOneSided) = 2
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::Upwind3rdOrderBiasedProductC2F,
@@ -1642,7 +1639,7 @@ Base.@propagate_inbounds function stencil_interior(
     return Geometry.Contravariant3Vector(fct_boris_book(vᶠ, a⁻⁻, a⁻, a⁺, a⁺⁺))
 end
 
-boundary_width(::FCTBorisBook, ::FirstOrderOneSided) = 2
+boundary_width(::FCTBorisBook, ::AbstractBoundaryCondition) = 2
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::FCTBorisBook,
@@ -1835,7 +1832,7 @@ Base.@propagate_inbounds function stencil_interior(
     )
 end
 
-boundary_width(::FCTZalesak, ::FirstOrderOneSided) = 2
+boundary_width(::FCTZalesak, ::AbstractBoundaryCondition) = 2
 
 Base.@propagate_inbounds function stencil_left_boundary(
     ::FCTZalesak,
@@ -1989,7 +1986,7 @@ Base.@propagate_inbounds function stencil_interior(
     return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
 end
 
-boundary_width(::AdvectionC2C, ::SetValue) = 1
+boundary_width(::AdvectionC2C, ::AbstractBoundaryCondition) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::AdvectionC2C,
     bc::SetValue,
@@ -2043,7 +2040,6 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return RecursiveApply.rdiv((w³⁺ ⊠ ∂θ₃⁺) ⊞ (w³⁻ ⊠ ∂θ₃⁻), 2)
 end
 
-boundary_width(::AdvectionC2C, ::Extrapolate) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::AdvectionC2C,
     ::Extrapolate,
@@ -2128,7 +2124,7 @@ Base.@propagate_inbounds function stencil_interior(
     return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
 end
 
-boundary_width(::FluxCorrectionC2C, ::Extrapolate) = 1
+boundary_width(::FluxCorrectionC2C, ::AbstractBoundaryCondition) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::FluxCorrectionC2C,
     ::Extrapolate,
@@ -2213,7 +2209,7 @@ Base.@propagate_inbounds function stencil_interior(
     return (abs(w³⁺) ⊠ ∂θ₃⁺) ⊟ (abs(w³⁻) ⊠ ∂θ₃⁻)
 end
 
-boundary_width(::FluxCorrectionF2F, ::Extrapolate) = 1
+boundary_width(::FluxCorrectionF2F, ::AbstractBoundaryCondition) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     ::FluxCorrectionF2F,
     ::Extrapolate,
