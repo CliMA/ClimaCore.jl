@@ -27,7 +27,7 @@ end
 
 @testset "Aqua tests (additional)" begin
     Aqua.test_undefined_exports(ClimaCore)
-    # Aqua.test_stale_deps(ClimaCore) # failing
+    Aqua.test_stale_deps(ClimaCore)
     Aqua.test_deps_compat(ClimaCore)
     Aqua.test_project_extras(ClimaCore)
     # Aqua.test_project_toml_formatting(ClimaCore) # failing
