@@ -316,7 +316,9 @@ function stencil_interior end
     boundary_width(::Op, ::BC, args...)
 
 Defines the width of a boundary condition `BC` on an operator `Op`. This is the
-number of locations that are used in a modified stencil.
+number of locations that are used in a modified stencil. Either this function,
+or [`left_interior_idx`](@ref) and [`right_interior_idx`](@ref) should be
+defined for a specific `Op`/`BC` combination.
 """
 function boundary_width end
 
@@ -2956,6 +2958,17 @@ end
 _stencil_interior_width(bc::StencilBroadcasted) =
     stencil_interior_width(bc.op, bc.args...)
 
+"""
+    left_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::AbstractBoundaryCondition, args..)
+
+The index of the left-most interior point of the operator `op` with boundary
+`bc` when used with arguments `args...`. By default, this is
+```julia
+left_idx(space) + boundary_width(op, bc)
+```
+but can be overwritten for specific stencil types (e.g. if the stencil is
+assymetric).
+"""
 @inline function left_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
@@ -2964,6 +2977,18 @@ _stencil_interior_width(bc::StencilBroadcasted) =
 )
     left_idx(space) + boundary_width(op, bc)
 end
+
+"""
+    right_interior_idx(space::AbstractSpace, op::FiniteDifferenceOperator, bc::AbstractBoundaryCondition, args..)
+
+The index of the right-most interior point of the operator `op` with boundary
+`bc` when used with arguments `args...`. By default, this is
+```julia
+right_idx(space) + boundary_width(op, bc)
+```
+but can be overwritten for specific stencil types (e.g. if the stencil is
+assymetric).
+"""
 @inline function right_interior_idx(
     space::AbstractSpace,
     op::FiniteDifferenceOperator,
