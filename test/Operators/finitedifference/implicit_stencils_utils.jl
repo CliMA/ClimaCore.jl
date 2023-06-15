@@ -71,7 +71,9 @@ function get_space(::Type{FT}) where {FT}
         boundary_tags = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vtopology =
+        Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(), vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
 
     # TODO: Replace this with a space that includes topography.
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
@@ -206,7 +208,11 @@ function test_pointwise_stencils_throws(all_ops)
         (a_FS, OP.GradientF2C(bottom = extrap, top = extrap)),
         (a_FV, OP.DivergenceF2C(bottom = extrap, top = extrap)),
     )
-        @test_throws ArgumentError OP.Operator2Stencil(op).(a)
+        if ClimaComms.device(a_FS) isa ClimaComms.CUDADevice
+            @test_throws "InvalidIRError" OP.Operator2Stencil(op).(a)
+        else
+            @test_throws ArgumentError OP.Operator2Stencil(op).(a)
+        end
     end
 end
 
@@ -281,6 +287,7 @@ function test_pointwise_stencils_compose(all_ops)
     )
         for op1 in op1s
             for op2 in op2s
+                GC.gc()
                 # stencil_op1 = OP.Operator2Stencil(op1)
                 # stencil_op2 = OP.Operator2Stencil(op2)
                 # test_op(op1, op2, a0, a1)

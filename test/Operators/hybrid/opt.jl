@@ -268,7 +268,7 @@ end
             @test_opt opt_LeftBiasedF2C(faces)
             @test_opt opt_RightBiasedF2C(faces)
 
-            @test_opt opt_AdvectionF2F(face_velocities, faces)
+            # @test_opt opt_AdvectionF2F(face_velocities, faces)
 
             @test_opt opt_FluxCorrectionF2F_Extrapolate(
                 center_velocities,

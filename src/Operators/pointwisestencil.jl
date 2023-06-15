@@ -285,33 +285,56 @@ Bandwidths of Matrix-Matrix Product
 
 abstract type PointwiseStencilOperator <: FiniteDifferenceOperator end
 
-struct LeftStencilBoundary <: BoundaryCondition end
-struct RightStencilBoundary <: BoundaryCondition end
+struct LeftStencilBoundary <: AbstractBoundaryCondition end
+struct RightStencilBoundary <: AbstractBoundaryCondition end
 
 abstract type AbstractIndexRangeType end
 struct IndexRangeInteriorType <: AbstractIndexRangeType end
 struct IndexRangeLeftType <: AbstractIndexRangeType end
 struct IndexRangeRightType <: AbstractIndexRangeType end
 
-function get_range(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeInteriorType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
     a = lbw1 + max(0, j - bw2)
     b = ubw1 + min(0, j - bw1)
     return a:b
 end
 
-function get_range(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeLeftType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    min_i = left_idx(axes(stencil2)) - idx
+    stencil2_space = reconstruct_placeholder_space(axes(stencil2), space)
+    min_i = left_idx(stencil2_space) - idx
     a = max(lbw1 + max(0, j - bw2), min_i)
     b = (ubw1 + min(0, j - bw1))
     return a:b
 end
 
-function get_range(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeRightType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    stencil2_space = reconstruct_placeholder_space(axes(stencil2), space)
     a = lbw1 + max(0, j - bw2)
-    max_i = right_idx(axes(stencil2)) - idx
+    max_i = right_idx(stencil2_space) - idx
     b = min(ubw1 + min(0, j - bw1), max_i)
     return a:b
 end
@@ -337,23 +360,67 @@ get_boundary(
 stencil_interior_width(::PointwiseStencilOperator, stencil, arg) =
     ((0, 0), bandwidths(eltype(stencil)))
 
-function boundary_width(
-    ::PointwiseStencilOperator,
-    ::LeftStencilBoundary,
+# given a stencil of left-bandwidth lbw, what is the index of the leftmost interior point?
+left_interior_idx_bandwidth(space::AbstractSpace, lbw::Integer) =
+    left_idx(space) - lbw
+
+left_interior_idx_bandwidth(
+    space::Union{
+        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+    },
+    lbw::PlusHalf,
+) = left_idx(space) - lbw + half
+
+left_interior_idx_bandwidth(
+    space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+    lbw::PlusHalf,
+) = left_idx(space) - lbw - half
+
+
+function left_interior_idx(
+    space::AbstractSpace,
+    op::PointwiseStencilOperator,
+    bc::LeftStencilBoundary,
     stencil,
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
-    return max((left_idx(axes(arg)) - lbw) - left_idx(axes(stencil)), 0)
+    left_interior_idx_bandwidth(space, lbw)
 end
-function boundary_width(
-    ::PointwiseStencilOperator,
-    ::RightStencilBoundary,
+
+right_interior_idx_bandwidth(space::AbstractSpace, rbw::Integer) =
+    right_idx(space) - rbw
+
+right_interior_idx_bandwidth(
+    space::Union{
+        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceExtrudedFiniteDifferenceSpace,
+    },
+    rbw::PlusHalf,
+) = right_idx(space) - rbw - half
+
+right_interior_idx_bandwidth(
+    space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+    rbw::PlusHalf,
+) = right_idx(space) - rbw + half
+
+
+@inline function right_interior_idx(
+    space::AbstractSpace,
+    op::PointwiseStencilOperator,
+    bc::RightStencilBoundary,
     stencil,
     arg,
 )
-    ubw = bandwidths(eltype(stencil))[2]
-    return max(right_idx(axes(stencil)) - (right_idx(axes(arg)) - ubw), 0)
+    rbw = bandwidths(eltype(stencil))[2]
+    right_interior_idx_bandwidth(space, rbw)
 end
 
 ##
@@ -399,7 +466,8 @@ function stencil_left_boundary(
     arg,
 )
     ubw = bandwidths(eltype(stencil))[2]
-    i_vals = (left_idx(axes(arg)) - idx):ubw
+    arg_space = reconstruct_placeholder_space(axes(arg), space)
+    i_vals = (left_idx(arg_space) - idx):ubw
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
@@ -415,8 +483,9 @@ function stencil_right_boundary(
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
-    i_vals = lbw:(right_idx(axes(arg)) - idx)
-    return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
+    arg_space = reconstruct_placeholder_space(axes(arg), space)
+    i_vals = lbw:(right_idx(arg_space) - idx)
+    apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
 
@@ -469,7 +538,7 @@ function compose_stencils_at_idx(
         ntuple(Val(n)) do j
             Base.@_inline_meta
             val = zero(zeroT)
-            for i in get_range(ir_type, stencil1, stencil2, idx, j)
+            for i in get_range(ir_type, space, stencil1, stencil2, idx, j)
                 val =
                     val ⊞
                     coefs1[i - lbw1 + 1] ⊠

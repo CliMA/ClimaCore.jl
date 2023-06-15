@@ -98,7 +98,7 @@ ThirdOrderOneSided
 ## Finite difference boundary conditions
 
 ```@docs
-BoundaryCondition
+AbstractBoundaryCondition
 SetValue
 SetGradient
 SetDivergence
