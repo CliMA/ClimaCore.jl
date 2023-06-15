@@ -272,7 +272,6 @@ function stencil_right_boundary(
     velocity,
     arg,
 )
-    space = axes(arg)
     w³⁻ = Geometry.contravariant3(
         getidx(space, velocity, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
@@ -319,7 +318,6 @@ function stencil_right_boundary(
     velocity,
     arg,
 )
-    space = axes(arg)
     w³⁻ = Geometry.contravariant3(
         getidx(space, velocity, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),
@@ -387,8 +385,6 @@ function stencil_right_boundary(
     velocity,
     arg,
 )
-
-    space = axes(arg)
     w³⁻ = Geometry.contravariant3(
         getidx(space, velocity, loc, idx - half, hidx),
         Geometry.LocalGeometry(space, idx - half, hidx),

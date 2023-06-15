@@ -293,25 +293,48 @@ struct IndexRangeInteriorType <: AbstractIndexRangeType end
 struct IndexRangeLeftType <: AbstractIndexRangeType end
 struct IndexRangeRightType <: AbstractIndexRangeType end
 
-function get_range(::Type{IndexRangeInteriorType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeInteriorType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
     a = lbw1 + max(0, j - bw2)
     b = ubw1 + min(0, j - bw1)
     return a:b
 end
 
-function get_range(::Type{IndexRangeLeftType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeLeftType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
-    min_i = left_idx(axes(stencil2)) - idx
+    stencil2_space = reconstruct_placeholder_space(axes(stencil2), space)
+    min_i = left_idx(stencil2_space) - idx
     a = max(lbw1 + max(0, j - bw2), min_i)
     b = (ubw1 + min(0, j - bw1))
     return a:b
 end
 
-function get_range(::Type{IndexRangeRightType}, stencil1, stencil2, idx, j)
+function get_range(
+    ::Type{IndexRangeRightType},
+    space,
+    stencil1,
+    stencil2,
+    idx,
+    j,
+)
     lbw1, ubw1, bw1, bw2 = bandwidth_info(stencil1, stencil2)
+    stencil2_space = reconstruct_placeholder_space(axes(stencil2), space)
     a = lbw1 + max(0, j - bw2)
-    max_i = right_idx(axes(stencil2)) - idx
+    max_i = right_idx(stencil2_space) - idx
     b = min(ubw1 + min(0, j - bw1), max_i)
     return a:b
 end
@@ -523,7 +546,7 @@ function compose_stencils_at_idx(
         ntuple(Val(n)) do j
             Base.@_inline_meta
             val = zero(zeroT)
-            for i in get_range(ir_type, stencil1, stencil2, idx, j)
+            for i in get_range(ir_type, space, stencil1, stencil2, idx, j)
                 val =
                     val ⊞
                     coefs1[i - lbw1 + 1] ⊠

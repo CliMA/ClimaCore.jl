@@ -43,7 +43,7 @@ function main(::Type{FT}) where {FT}
     center_space = get_space(FT)
     all_ops = get_all_ops(center_space)
     @testset "Test pointwise throws" begin
-        #      @time test_pointwise_stencils_throws(all_ops)
+        @time test_pointwise_stencils_throws(all_ops)
     end
     @testset "Test pointwise apply" begin
         @time test_pointwise_stencils_apply(all_ops)
