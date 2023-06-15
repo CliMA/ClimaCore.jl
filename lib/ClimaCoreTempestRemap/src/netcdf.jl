@@ -255,7 +255,7 @@ storing a field on `space`, along with any further dimensions specified in
 """
 function NCDatasets.defVar(
     nc::NCDataset,
-    name,
+    name::NCDatasets.SymbolOrString,
     T::DataType,
     space::Spaces.AbstractSpace,
     extradims = (),
@@ -276,7 +276,7 @@ returned.
 """
 function NCDatasets.defVar(
     nc::NCDataset,
-    name,
+    name::NCDatasets.SymbolOrString,
     field::Fields.Field,
     extradims = (),
 )
