@@ -26,6 +26,8 @@ using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
 
 abstract type AbstractSpace end
 
+issubspace(::AbstractSpace, ::AbstractSpace) = false
+
 undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 

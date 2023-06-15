@@ -32,6 +32,21 @@ struct ExtrudedFiniteDifferenceSpace{
     face_ghost_geometry::LGG
 end
 
+function issubspace(
+    hspace::AbstractSpectralElementSpace,
+    extruded_space::ExtrudedFiniteDifferenceSpace,
+)
+    if hspace === extruded_space.horizontal_space
+        return true
+    end
+    # TODO: improve level handling
+    return Spaces.topology(hspace) ===
+           Spaces.topology(extruded_space.horizontal_space) &&
+           quadrature_style(hspace) ===
+           quadrature_style(extruded_space.horizontal_space)
+end
+
+
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(
         space.staggering,

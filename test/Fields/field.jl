@@ -430,18 +430,8 @@ end
         ᶜx_surf = Spaces.level(Y.x, TU.fc_index(1, space))
 
         # Still need to define broadcast rules for surface planes with 3D domains
-        if nameof(typeof(space)) == :ExtrudedFiniteDifferenceSpace
-            @test_broken begin
-                try
-                    domain_surface_bc!(Y.x, ᶜz_surf)
-                    true
-                catch
-                    false
-                end
-            end
-        else
-            domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
-        end
+        domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
+
         # Skip spaces incompatible with Fields.bycolumn:
         TU.bycolumnable(space) || continue
         column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
