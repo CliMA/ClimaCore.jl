@@ -37,8 +37,8 @@ const r0 = R / 2     # bells radius
 const ρ₀ = 1.0       # air density
 const D₄ = 6.6e14    # hyperdiffusion coefficient
 const u0 = 2 * pi * R / (86400 * 12)
-const T = 86400 * 12 # simulation period in seconds (12 days)
-const n_steps = 1200
+const T = 86400 * 120 # simulation period in seconds (12 days)
+const n_steps = 12000 
 const dt = T / n_steps
 const centers = [
     Geometry.LatLongPoint(0.0, rad2deg(5 * pi / 6) - 180.0),
@@ -88,7 +88,7 @@ end
 
 # Set up spatial discretization
 FT = Float64
-ne_seq = (5, 10, 20)
+ne_seq = (6, 16)
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr, relative_errors = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
@@ -142,17 +142,17 @@ for (k, ne) in enumerate(ne_seq)
                    (ϕ - centers[2].lat) * R > rad2deg(5 * r0 / 12)
                 q = 1.0
             else
-                q = 0.1
+                q = 0.0
             end
         elseif test_name == gaussian_test_name
             q = 0.95 * (exp(-(rd[1] / r0)^2) + exp(-(rd[2] / r0)^2))
         else # default test case, cosine bells
             if rd[1] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[1] / r0))
+                q = 0.0 + 1.0 * (1 / 2) * (1 + cospi(rd[1] / r0))
             elseif rd[2] < r0
-                q = 0.1 + 0.9 * (1 / 2) * (1 + cospi(rd[2] / r0))
+                q = 0.0 + 1.0 * (1 / 2) * (1 + cospi(rd[2] / r0))
             else
-                q = 0.1
+                q = 0.0
             end
         end
 
@@ -223,17 +223,9 @@ for (k, ne) in enumerate(ne_seq)
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
     )
-    L1err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        1,
-    )
-    L2err[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-    )
-    Linferr[k] = norm(
-        (sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) ./ (y0.ρq ./ y0.ρ),
-        Inf,
-    )
+    L1err[k] = norm(sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ, 1) / norm(y0.ρq ./ y0.ρ, 1)
+    L2err[k] = norm(sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ) / norm(y0.ρq ./ y0.ρ)
+    Linferr[k] = norm(sol.u[end].ρq ./ sol.u[end].ρ .- y0.ρq ./ y0.ρ, Inf) / norm(y0.ρq ./ y0.ρ, Inf)
 
     @info "Test case: $(test_name)"
     @info "With limiter: $(lim_flag)"
@@ -244,6 +236,8 @@ for (k, ne) in enumerate(ne_seq)
     @info "Tracer concentration norm at t = 0 (s): ", norm(y0.ρq ./ y0.ρ)
     @info "Tracer concentration norm at $(n_steps) time steps, t = $(end_time) (s): ",
     norm(sol.u[end].ρq ./ sol.u[end].ρ)
+    @info "Tracer concentration extrema at at $(n_steps) time steps, t = $(end_time) (s): ",
+    extrema(sol.u[end].ρq ./ sol.u[end].ρ)
     @info "L₁ error at $(n_steps) time steps, t = $(end_time) (s): ", L1err[k]
     @info "L₂ error at $(n_steps) time steps, t = $(end_time) (s): ", L2err[k]
     @info "L∞ error at $(n_steps) time steps, t = $(end_time) (s): ", Linferr[k]
