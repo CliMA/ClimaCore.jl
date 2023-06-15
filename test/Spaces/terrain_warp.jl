@@ -1,5 +1,6 @@
 using Test
 using ClimaComms
+using IntervalSets
 
 import ClimaCore:
     ClimaCore,
@@ -36,17 +37,17 @@ function warp_sinsq_3d(coord)
     y = Geometry.component(coord, 2)
     eltype(x)(0.5) * sin(x)^2 * sin(y)^2
 end
-function warpedspace_2D(
-    FT = Float64,
-    xlim = (0, π),
-    zlim = (0, 1),
-    helem = 2,
-    velem = 10,
-    npoly = 5;
-    stretch = Meshes.Uniform(),
-    warp_fn = warp_sin_2d,
-    test_smoothing = false,
+function generate_base_spaces(
+    xlim,
+    zlim,
+    helem,
+    velem,
+    npoly,
+    stretch = Meshes.Uniform();
+    ndims = 3,
 )
+    comms_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    FT = eltype(xlim)
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
@@ -56,22 +57,43 @@ function warpedspace_2D(
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
     # Generate Horizontal Space
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-    horztopology = Topologies.IntervalTopology(horzmesh)
     quad = Spaces.Quadratures.GLL{npoly + 1}()
-    hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
+    if ndims == 2
+        horzdomain = Domains.IntervalDomain(
+            Geometry.XPoint{FT}(xlim[1]),
+            Geometry.XPoint{FT}(xlim[2]);
+            periodic = true,
+        )
+        horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
+        horztopology = Topologies.IntervalTopology(comms_context, horzmesh)
+        hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    elseif ndims == 3
+        horzdomain = Domains.RectangleDomain(
+            Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+            Geometry.YPoint{FT}(xlim[1]) .. Geometry.YPoint{FT}(xlim[2]),
+            x1periodic = true,
+            x2periodic = true,
+        )
+        # Assume same number of elems (helem) in (x,y) directions
+        horzmesh = Meshes.RectilinearMesh(horzdomain, helem, helem)
+        horztopology = Topologies.Topology2D(comms_context, horzmesh)
+        hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+    end
+    return vert_face_space, hspace
+end
+function generate_smoothed_orography(
+    hspace,
+    warp_fn::Function,
+    helem;
+    test_smoothing::Bool = false,
+)
     # Extrusion
     z_surface = warp_fn.(Fields.coordinate_field(hspace))
     # An Euler step defines the diffusion coefficient 
     # (See e.g. cfl condition for diffusive terms).
     x_array = parent(Fields.coordinate_field(hspace).x)
     dx = x_array[2] - x_array[1]
+    FT = eltype(x_array)
     κ = FT(1 / helem)
     test_smoothing ?
     Hypsography.diffuse_surface_elevation!(
@@ -80,16 +102,47 @@ function warpedspace_2D(
         maxiter = 10^5,
         dt = FT(dx / 100),
     ) : nothing
+    return z_surface
+end
+
+function get_adaptation(adaption, z_surface::Fields.Field)
+    if adaption <: Hypsography.LinearAdaption
+        return adaption(z_surface)
+    elseif adaption <: Hypsography.SLEVEAdaption
+        return adaption(
+            z_surface,
+            eltype(z_surface)(0.75),
+            eltype(z_surface)(0.60),
+        )
+    end
+end
+
+function warpedspace_2D(
+    FT = Float64,
+    xlim = (0, π),
+    zlim = (0, 1),
+    helem = 2,
+    velem = 10,
+    npoly = 5,
+    stretch = Meshes.Uniform();
+    warp_fn = warp_sin_2d,
+    test_smoothing = false,
+    adaption = Hypsography.LinearAdaption,
+)
+    vert_face_space, hspace =
+        generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
+    z_surface =
+        generate_smoothed_orography(hspace, warp_fn, helem; test_smoothing)
+    mesh_adapt = get_adaptation(adaption, z_surface)
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
+        mesh_adapt,
     )
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
 
     return (c_space, f_space)
 end
-
 function hybridspace_2D(
     FT = Float64,
     xlim = (0, π),
@@ -99,87 +152,38 @@ function hybridspace_2D(
     npoly = 5;
     stretch = Meshes.Uniform(),
 )
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
-
-    # Generate Horizontal Space
-    horzdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]);
-        periodic = true,
-    )
-    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-    horztopology = Topologies.IntervalTopology(horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
+    vert_face_space, hspace =
+        generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
     # Extrusion
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
 
     return (c_space, f_space)
 end
-
 function warpedspace_3D(
     FT = Float64,
     xlim = (0, π),
     ylim = (0, π),
     zlim = (0, 1),
-    xelem = 2,
-    yelem = 2,
-    zelem = 10,
+    helem = 2,
+    velem = 10,
     npoly = 5;
     stretch = Meshes.Uniform(),
     warp_fn = warp_sincos_3d,
     test_smoothing = false,
+    adaption = Hypsography.LinearAdaption,
 )
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = zelem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
-
-    # Generate Horizontal Space
-    xdomain = Domains.IntervalDomain(
-        Geometry.XPoint{FT}(xlim[1]),
-        Geometry.XPoint{FT}(xlim[2]),
-        periodic = true,
-    )
-    ydomain = Domains.IntervalDomain(
-        Geometry.YPoint{FT}(ylim[1]),
-        Geometry.YPoint{FT}(ylim[2]),
-        periodic = true,
-    )
-    horzdomain = Domains.RectangleDomain(xdomain, ydomain)
-    horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    horztopology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
-    hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+    vert_face_space, hspace =
+        generate_base_spaces(xlim, zlim, helem, velem, npoly)
 
     # Extrusion
-    z_surface = warp_fn.(Fields.coordinate_field(hspace))
-    x_array = parent(Fields.coordinate_field(hspace).x)
-    dx = x_array[2] - x_array[1]
-    κ = FT(1 / max(xelem, yelem))
-    test_smoothing ?
-    Hypsography.diffuse_surface_elevation!(
-        z_surface;
-        κ,
-        maxiter = 10^5,
-        dt = FT(dx / 100),
-    ) : nothing
+    z_surface =
+        generate_smoothed_orography(hspace, warp_fn, helem; test_smoothing)
+    mesh_adapt = get_adaptation(adaption, z_surface)
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vert_face_space,
-        Hypsography.LinearAdaption(z_surface),
+        mesh_adapt,
     )
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
 
@@ -199,17 +203,6 @@ end
         for nl in levels, np in polynom, nh in horzelem
             ʷhv_center_space, ʷhv_face_space =
                 warpedspace_2D(FT, (xmin, xmax), (zmin, zmax), nh, nl, np;)
-            hv_center_space, hv_face_space =
-                hybridspace_2D(FT, (xmin, xmax), (zmin, zmax), nh, nl, np)
-            ⁿhv_center_space, ⁿhv_face_space = warpedspace_2D(
-                FT,
-                (xmin, xmax),
-                (zmin, zmax),
-                nh,
-                nl,
-                np;
-                warp_fn = warp_sin_2d,
-            )
             ʷᶜcoords = Fields.coordinate_field(ʷhv_center_space)
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             z₀ = ClimaCore.Fields.level(ʷᶜcoords.z, 1)
@@ -321,7 +314,6 @@ end
                 (ymin, ymax),
                 (zmin, zmax),
                 nh,
-                nh,
                 nl,
                 np;
             )
@@ -378,6 +370,98 @@ end
             @test maximum(ᶠz₀) <=
                   maximum(ClimaCore.Fields.level(ʷᶠʳcoords.z, half))
             @test maximum(@. abs.(ᶠz₀ .- one(ᶠz₀) .* FT.(1 / 8))) <= FT(1e-2)
+        end
+    end
+end
+
+@testset "Interior Mesh `Adaption` ηₕ Test" begin
+    # Test interior mesh in different adaptation types
+    for meshadapt in (Hypsography.SLEVEAdaption,)
+        for FT in (Float32, Float64)
+            xmin, xmax = FT(0), FT(π)
+            zmin, zmax = FT(0), FT(1)
+            nl = 10
+            np = 3
+            nh = 4
+            ʷhv_center_space, ʷhv_face_space = warpedspace_2D(
+                FT,
+                (xmin, xmax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                warp_fn = warp_sin_2d,
+                adaption = meshadapt,
+            )
+            hv_center_space, hv_face_space =
+                hybridspace_2D(FT, (xmin, xmax), (zmin, zmax), nh, nl, np)
+            ʷᶜcoords = Fields.coordinate_field(ʷhv_center_space)
+            ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
+            ᶜcoords = Fields.coordinate_field(hv_center_space)
+            ᶠcoords = Fields.coordinate_field(hv_face_space)
+            # Check ηₛ = 0.75 is correctly applied. 
+            # Expectation: ≈zero difference between unwarped and warped coordinates for η >= ηₕ, where η = z / zₜ
+            r1 =
+                (
+                    parent(ʷᶜcoords)[8:10, :, 2, :] .-
+                    parent(ᶜcoords)[8:10, :, 2, :]
+                ) ./ parent(ᶜcoords)[8:10, :, 2, :]
+            @test maximum(r1) <= FT(0.015)
+        end
+    end
+end
+
+@testset "Interior Mesh `Adaption` (ηₕ=1, s=1) Test" begin
+    # Test interior mesh in different adaptation types
+    for meshadapt in (Hypsography.SLEVEAdaption,)
+        for FT in (Float32, Float64)
+            xlim = (FT(0), FT(π))
+            zlim = (FT(0), FT(1))
+            nl = 10
+            np = 3
+            nh = 4
+            vertdomain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(zlim[1]),
+                Geometry.ZPoint{FT}(zlim[2]);
+                boundary_names = (:bottom, :top),
+            )
+            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
+            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+
+            horzdomain = Domains.IntervalDomain(
+                Geometry.XPoint{FT}(xlim[1]),
+                Geometry.XPoint{FT}(xlim[2]);
+                periodic = true,
+            )
+            horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
+            horztopology = Topologies.IntervalTopology(horzmesh)
+
+            quad = Spaces.Quadratures.GLL{np + 1}()
+            hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+
+            # Generate surface elevation profile
+            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
+            # Generate space with known mesh-warp parameters ηₕ = 1; s = 1
+            fspace = Spaces.ExtrudedFiniteDifferenceSpace(
+                hspace,
+                vert_face_space,
+                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(1)),
+            )
+            for i in 1:(nl + 1)
+                z_extracted = Fields.Field(
+                    Fields.level(fspace.face_local_geometry.coordinates.z, i),
+                    fspace,
+                )
+                η = FT((i - 1) / 10)
+                z_surface_known =
+                    @. FT(η) + z_surface * FT(sinh(1 - η) / sinh(1))
+                @test maximum(
+                    abs.(
+                        Fields.field_values(z_extracted) .-
+                        Fields.field_values(z_surface_known)
+                    ),
+                ) <= FT(1e-6)
+            end
         end
     end
 end

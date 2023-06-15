@@ -250,6 +250,8 @@ Fields.Δz_field
 ## Hypsography
 
 ```@docs
+Hypsography.LinearAdaption
+Hypsography.SLEVEAdaption
 Hypsography.diffuse_surface_elevation!
 ```
 
