@@ -360,75 +360,67 @@ get_boundary(
 stencil_interior_width(::PointwiseStencilOperator, stencil, arg) =
     ((0, 0), bandwidths(eltype(stencil)))
 
-function left_interior_idx(
+# given a stencil of left-bandwidth lbw, what is the index of the leftmost interior point?
+left_interior_idx_bandwidth(space::AbstractSpace, lbw::Integer) =
+    left_idx(space) - lbw
+
+left_interior_idx_bandwidth(
     space::Union{
         Spaces.FaceFiniteDifferenceSpace,
         Spaces.FaceExtrudedFiniteDifferenceSpace,
     },
+    lbw::PlusHalf,
+) = left_idx(space) - lbw + half
+
+left_interior_idx_bandwidth(
+    space::Union{
+        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.CenterExtrudedFiniteDifferenceSpace,
+    },
+    lbw::PlusHalf,
+) = left_idx(space) - lbw - half
+
+
+function left_interior_idx(
+    space::AbstractSpace,
     op::PointwiseStencilOperator,
     bc::LeftStencilBoundary,
     stencil,
     arg,
 )
     lbw = bandwidths(eltype(stencil))[1]
-    if lbw isa Integer
-        return left_idx(space) - lbw
-    elseif lbw isa PlusHalf
-        return left_idx(space) - lbw + half
-    end
-end
-function left_interior_idx(
-    space::Union{
-        Spaces.CenterFiniteDifferenceSpace,
-        Spaces.CenterExtrudedFiniteDifferenceSpace,
-    },
-    op::PointwiseStencilOperator,
-    bc::LeftStencilBoundary,
-    stencil,
-    arg,
-)
-    lbw = bandwidths(eltype(stencil))[1]
-    if lbw isa Integer
-        return left_idx(space) - lbw
-    elseif lbw isa PlusHalf
-        return left_idx(space) - lbw - half
-    end
+    left_interior_idx_bandwidth(space, lbw)
 end
 
+right_interior_idx_bandwidth(space::AbstractSpace, rbw::Integer) =
+    right_idx(space) - rbw
 
-@inline function right_interior_idx(
+right_interior_idx_bandwidth(
     space::Union{
         Spaces.FaceFiniteDifferenceSpace,
         Spaces.FaceExtrudedFiniteDifferenceSpace,
     },
-    op::PointwiseStencilOperator,
-    bc::RightStencilBoundary,
-    stencil,
-    arg,
-)
-    rbw = bandwidths(eltype(stencil))[2]
-    if rbw isa Integer
-        return right_idx(space) - rbw
-    elseif rbw isa PlusHalf
-        return right_idx(space) - rbw - half
-    end
-end
-@inline function right_interior_idx(
+    rbw::PlusHalf,
+) = right_idx(space) - rbw - half
+
+right_interior_idx_bandwidth(
     space::Union{
         Spaces.CenterFiniteDifferenceSpace,
         Spaces.CenterExtrudedFiniteDifferenceSpace,
     },
+    rbw::PlusHalf,
+) = right_idx(space) - rbw + half
+
+
+@inline function right_interior_idx(
+    space::AbstractSpace,
     op::PointwiseStencilOperator,
     bc::RightStencilBoundary,
     stencil,
     arg,
 )
     rbw = bandwidths(eltype(stencil))[2]
-    if rbw isa Integer
-        return right_idx(space) - rbw
-    elseif rbw isa PlusHalf
-        return right_idx(space) - rbw + half
-    end
+    right_interior_idx_bandwidth(space, rbw)
 end
 
 ##
