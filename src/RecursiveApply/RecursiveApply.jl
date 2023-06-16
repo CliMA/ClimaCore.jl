@@ -15,15 +15,18 @@ export ⊞, ⊠, ⊟
 @generated tail_params(::Type{T}) where {T} =
     :($(Tuple{Base.tail((T.parameters...,))...}))
 
-# This is a type-stable version of map(T′ -> rmaptype(fn, T′), T.parameters) or
-# map((T1′, T2′) -> rmaptype(fn, T1′, T2′), T1.parameters, T2.parameters), where
+# Applying `rmaptype` returns `Tuple{...}` for tuple
+# types, which cannot follow the recursion pattern as
+# it cannot be splatted, so we add a separate method,
+# `rmaptype_Tuple`, for the part of the recursion.
 rmaptype_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
+rmaptype_Tuple(fn::F, ::Type{T}) where {F, E, T <: Tuple{E}} =
+    (rmaptype(fn, first_param(T)), )
 rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    (rmaptype(fn, first_param(T)), rmaptype_Tuple(rmaptype, fn, tail_params(T))...)
+    (rmaptype(fn, first_param(T)), rmaptype_Tuple(fn, tail_params(T))...)
 
 rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
 rmaptype_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
-
 rmaptype_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
     (
         rmaptype(fn, first_param(T1), first_param(T2)),

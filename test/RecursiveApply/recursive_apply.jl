@@ -71,4 +71,9 @@ end
         @test typeof(rz) == nt
         @inferred RecursiveApply.rmap(RecursiveApply.rzero, nt)
     end
+    for nt in nested_types
+        rz = RecursiveApply.rmaptype(identity, nt)
+        @test rz == nt
+        @inferred RecursiveApply.rmaptype(zero, nt)
+    end
 end
