@@ -144,7 +144,12 @@ Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 energy_0 = sum(Y.Yc.ρe)
 mass_0 = sum(Y.Yc.ρ)
 
-function rhs_invariant!(dY, Y, _, t)
+function rhs_invariant!(dY, Y, p, t)
+
+    (; fρ, ᶠ∇ᵥuₕ, ᶜ∇ᵥw, ᶠ∇ᵥh_tot, ᶜ∇ₕuₕ, ᶠ∇ₕw, ᶜ∇ₕh_tot) = p
+    (; hκ₂∇²uₕ, vκ₂∇²uₕ, hκ₂∇²w, vκ₂∇²w, hκ₂∇²h_tot) = p
+    (; vκ₂∇²h_tot, cE, fu¹, fu³, fu, cω², fω², h_tot) = p
+    (; ce, cI, cT, cp, cuw, cw, u₃_bc, fuₕ, coords) = p
 
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
@@ -172,10 +177,10 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.Extrapolate(),
     )
 
-    dρ .= 0 .* cρ
+    @. dρ = 0 * cρ
 
-    cw = If2c.(fw)
-    fuₕ = Ic2f.(cuₕ)
+    @. cw = If2c(fw)
+    @. fuₕ = Ic2f(cuₕ)
     # ==========
     u₁_bc = Fields.level(fuₕ, ClimaCore.Utilities.half)
     gⁱʲ =
@@ -186,25 +191,26 @@ function rhs_invariant!(dY, Y, _, t)
     g13 = gⁱʲ.components.data.:3
     g11 = gⁱʲ.components.data.:1
     g33 = gⁱʲ.components.data.:4
-    gratio = g13 ./ g33
-    u₃_bc = Geometry.Covariant3Vector.(-1 .* gratio .* u₁_bc.components.data.:1)
+    u₁_bc₁ = u₁_bc.components.data.:1
+    @. u₃_bc = Geometry.Covariant3Vector(-1 * g13 / g33 * u₁_bc₁)
     apply_boundary_w =
         Operators.SetBoundaryOperator(bottom = Operators.SetValue(u₃_bc))
     @. fw = apply_boundary_w(fw)
     Spaces.weighted_dss!(fw)
     # ==========
-    cw = If2c.(fw)
-    cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
+    @. cw = If2c(fw)
+    @. cuw = Geometry.Covariant13Vector(cuₕ) + Geometry.Covariant13Vector(cw)
 
-    ce = @. cρe / cρ
-    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
-    cT = @. cI / C_v + T_0
-    cp = @. cρ * R_d * cT
+    @. ce = cρe / cρ
+    @. cI = ce - Φ(z) - (norm(cuw)^2) / 2
+    @. cT = cI / C_v + T_0
+    @. cp = cρ * R_d * cT
 
-    h_tot = @. ce + cp / cρ # Total enthalpy at cell centers
+    @. h_tot = ce + cp / cρ # Total enthalpy at cell centers
 
     ### HYPERVISCOSITY
     # 1) compute hyperviscosity coefficients
+    # Move to cache if necessary
     χe = @. dρe = hwdiv(hgrad(h_tot)) # we store χe in dρe
     χuₕ = @. duₕ = hwgrad(hdiv(cuₕ))
 
@@ -216,10 +222,10 @@ function rhs_invariant!(dY, Y, _, t)
     @. duₕ = -κ₄ * (hwgrad(hdiv(χuₕ)))
 
     # 1) Mass conservation
-    dw .= fw .* 0
+    @. dw = fw * 0
 
     # 1.a) horizontal divergence
-    dρ .-= hdiv.(cρ .* (cuw))
+    @. dρ -= hdiv(cρ * (cuw))
 
     # 1.b) vertical divergence
     vdivf2c = Operators.DivergenceF2C(
@@ -235,9 +241,9 @@ function rhs_invariant!(dY, Y, _, t)
     # negation
 
     # explicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ .* cuₕ))
+    @. dρ -= vdivf2c(Ic2f(cρ * cuₕ))
     # implicit part
-    dρ .-= vdivf2c.(Ic2f.(cρ) .* fw)
+    @. dρ -= vdivf2c(Ic2f(cρ) * fw)
 
     # 2) Momentum equation
 
@@ -249,11 +255,11 @@ function rhs_invariant!(dY, Y, _, t)
         top = Operators.SetCurl(Geometry.Contravariant2Vector(0.0)),
     )
 
-    fω² = hcurl.(fw)
-    fω² .+= vcurlc2f.(cuₕ)
+    @. fω² = hcurl(fw)
+    @. fω² += vcurlc2f(cuₕ)
 
-    cω² = hcurl.(cw) # Compute new center curl
-    cω² .+= If2c.(vcurlc2f.(cuₕ)) # Compute new centerl curl
+    @. cω² = hcurl(cw) # Compute new center curl
+    @. cω² += If2c(vcurlc2f(cuₕ)) # Compute new centerl curl
 
     # Linearly interpolate the horizontal velocities multiplying the curl terms from centers to faces 
     # (i.e., u_f^i = (u_c^{i+1} + u_c^{i})/2)
@@ -262,11 +268,12 @@ function rhs_invariant!(dY, Y, _, t)
     # cross product
     # convert to contravariant
     # these will need to be modified with topography
-    fu =
-        Geometry.Covariant13Vector.(Ic2f.(cuₕ)) .+
-        Geometry.Covariant13Vector.(fw)
-    fu¹ = Geometry.project.(Ref(Geometry.Contravariant1Axis()), fu)
-    fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
+    @. fu =
+        Geometry.Covariant13Vector(Ic2f(cuₕ)) + Geometry.Covariant13Vector(fw)
+    contra1 = (Geometry.Contravariant1Axis(),)
+    contra3 = (Geometry.Contravariant3Axis(),)
+    @. fu¹ = Geometry.project(contra1, fu)
+    @. fu³ = Geometry.project(contra3, fu)
 
     @. duₕ -= If2c(fω² × fu³)
     @. dw -= fω² × fu¹ # Covariant3Vector on faces
@@ -278,7 +285,7 @@ function rhs_invariant!(dY, Y, _, t)
     )
     @. dw -= vgradc2f(cp) / Ic2f(cρ)
 
-    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+    @. cE = (norm(cuw)^2) / 2 + Φ(z)
     @. duₕ -= hgrad(cE)
     @. dw -= vgradc2f(cE)
 
@@ -289,23 +296,23 @@ function rhs_invariant!(dY, Y, _, t)
 
     # Uniform 2nd order diffusion
     ∂c = Operators.GradientF2C()
-    fρ = @. Ic2f(cρ)
+    @. fρ = Ic2f(cρ)
     κ₂ = 0.0 # m^2/s
 
-    ᶠ∇ᵥuₕ = @. vgradc2f(cuₕ.components.data.:1)
-    ᶜ∇ᵥw = @. ∂c(fw.components.data.:1)
-    ᶠ∇ᵥh_tot = @. vgradc2f(h_tot)
+    @. ᶠ∇ᵥuₕ = vgradc2f(cuₕ.components.data.:1)
+    @. ᶜ∇ᵥw = ∂c(fw.components.data.:1)
+    @. ᶠ∇ᵥh_tot = vgradc2f(h_tot)
 
-    ᶜ∇ₕuₕ = @. hgrad(cuₕ.components.data.:1)
-    ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
-    ᶜ∇ₕh_tot = @. hgrad(h_tot)
+    @. ᶜ∇ₕuₕ = hgrad(cuₕ.components.data.:1)
+    @. ᶠ∇ₕw = hgrad(fw.components.data.:1)
+    @. ᶜ∇ₕh_tot = hgrad(h_tot)
 
-    hκ₂∇²uₕ = @. hwdiv(κ₂ * ᶜ∇ₕuₕ)
-    vκ₂∇²uₕ = @. vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
-    hκ₂∇²w = @. hwdiv(κ₂ * ᶠ∇ₕw)
-    vκ₂∇²w = @. vdivc2f(κ₂ * ᶜ∇ᵥw)
-    hκ₂∇²h_tot = @. hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
-    vκ₂∇²h_tot = @. vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
+    @. hκ₂∇²uₕ = hwdiv(κ₂ * ᶜ∇ₕuₕ)
+    @. vκ₂∇²uₕ = vdivf2c(κ₂ * ᶠ∇ᵥuₕ)
+    @. hκ₂∇²w = hwdiv(κ₂ * ᶠ∇ₕw)
+    @. vκ₂∇²w = vdivc2f(κ₂ * ᶜ∇ᵥw)
+    @. hκ₂∇²h_tot = hwdiv(cρ * κ₂ * ᶜ∇ₕh_tot)
+    @. vκ₂∇²h_tot = vdivf2c(fρ * κ₂ * ᶠ∇ᵥh_tot)
 
     dfw = dY.w.components.data.:1
     dcu = dY.uₕ.components.data.:1
@@ -325,14 +332,120 @@ function rhs_invariant!(dY, Y, _, t)
     return dY
 end
 
+function get_cache(Y)
+    cρ = Y.Yc.ρ # scalar on centers
+    fw = Y.w # Covariant3Vector on faces
+    cuₕ = Y.uₕ # Covariant1Vector on centers
+    cρe = Y.Yc.ρe
+
+    z = coords.z
+
+    # 0) update w at the bottom
+    # fw = -g^31 cuₕ/ g^33
+
+    hwdiv = Operators.WeakDivergence()
+    hgrad = Operators.Gradient()
+    hcurl = Operators.Curl()
+
+    If2c = Operators.InterpolateF2C()
+    Ic2f = Operators.InterpolateC2F(
+        bottom = Operators.Extrapolate(),
+        top = Operators.Extrapolate(),
+    )
+
+    fuₕ = Ic2f.(cuₕ)
+    # ==========
+    u₁_bc = Fields.level(fuₕ, ClimaCore.Utilities.half)
+    gⁱʲ =
+        Fields.level(
+            Fields.local_geometry_field(hv_face_space),
+            ClimaCore.Utilities.half,
+        ).gⁱʲ
+    g13 = gⁱʲ.components.data.:3
+    g11 = gⁱʲ.components.data.:1
+    g33 = gⁱʲ.components.data.:4
+
+    u₁_bc₁ = u₁_bc.components.data.:1
+    u₃_bc = @. Geometry.Covariant3Vector(-1 * g13 / g33 * u₁_bc₁)
+    # ==========
+    cw = If2c.(fw)
+    cuw = Geometry.Covariant13Vector.(cuₕ) .+ Geometry.Covariant13Vector.(cw)
+
+    ce = @. cρe / cρ
+    cI = @. ce - Φ(z) - (norm(cuw)^2) / 2
+    cT = @. cI / C_v + T_0
+    cp = @. cρ * R_d * cT
+    h_tot = @. ce + cp / cρ # Total enthalpy at cell centers
+    # 1.b) vertical divergence
+    vdivf2c = Operators.DivergenceF2C(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+    )
+    vdivc2f = Operators.DivergenceC2F(
+        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
+    )
+
+    fω² = hcurl.(fw)
+    cω² = hcurl.(cw) # Compute new center curl
+
+    # Linearly interpolate the horizontal velocities multiplying the curl terms from centers to faces 
+    # (i.e., u_f^i = (u_c^{i+1} + u_c^{i})/2)
+    # Leave the horizontal curl terms (living on faces) untouched.
+
+    # cross product
+    # convert to contravariant
+    # these will need to be modified with topography
+    fu =
+        Geometry.Covariant13Vector.(Ic2f.(cuₕ)) .+
+        Geometry.Covariant13Vector.(fw)
+    fu¹ = Geometry.project.(Ref(Geometry.Contravariant1Axis()), fu)
+    fu³ = Geometry.project.(Ref(Geometry.Contravariant3Axis()), fu)
+
+    vgradc2f = Operators.GradientC2F(
+        bottom = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+        top = Operators.SetGradient(Geometry.Covariant3Vector(0.0)),
+    )
+
+    cE = @. (norm(cuw)^2) / 2 + Φ(z)
+
+    # Uniform 2nd order diffusion
+    ∂c = Operators.GradientF2C()
+    fρ = @. Ic2f(cρ)
+
+    ᶠ∇ᵥuₕ = @. vgradc2f(cuₕ.components.data.:1)
+    ᶜ∇ᵥw = @. ∂c(fw.components.data.:1)
+    ᶠ∇ᵥh_tot = @. vgradc2f(h_tot)
+
+    ᶜ∇ₕuₕ = @. hgrad(cuₕ.components.data.:1)
+    ᶠ∇ₕw = @. hgrad(fw.components.data.:1)
+    ᶜ∇ₕh_tot = @. hgrad(h_tot)
+
+    hκ₂∇²uₕ = @. hwdiv(ᶜ∇ₕuₕ)
+    vκ₂∇²uₕ = @. vdivf2c(ᶠ∇ᵥuₕ)
+    hκ₂∇²w = @. hwdiv(ᶠ∇ₕw)
+    vκ₂∇²w = @. vdivc2f(ᶜ∇ᵥw)
+    hκ₂∇²h_tot = @. hwdiv(cρ * ᶜ∇ₕh_tot)
+    vκ₂∇²h_tot = @. vdivf2c(fρ * ᶠ∇ᵥh_tot)
+
+    p1 = (; fρ, ᶠ∇ᵥuₕ, ᶜ∇ᵥw, ᶠ∇ᵥh_tot, ᶜ∇ₕuₕ, ᶠ∇ₕw, ᶜ∇ₕh_tot)
+    p2 = (; hκ₂∇²uₕ, vκ₂∇²uₕ, hκ₂∇²w, vκ₂∇²w, hκ₂∇²h_tot)
+    p3 = (; vκ₂∇²h_tot, cE, fu¹, fu³, fu, cω², fω², h_tot)
+    p4 = (; ce, cI, cT, cp, cuw, cw, u₃_bc, fuₕ, coords)
+
+    return merge(p1, p2, p3, p4)
+end
+
+p = get_cache(Y);
+
 dYdt = similar(Y);
-rhs_invariant!(dYdt, Y, nothing, 0.0);
+rhs_invariant!(dYdt, Y, p, 0.0);
 
 # run!
 using OrdinaryDiffEq
 timeend = 3600.0 * 3
 Δt = 0.05
-prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend))
+prob = ODEProblem(rhs_invariant!, Y, (0.0, timeend), p)
 integrator = OrdinaryDiffEq.init(
     prob,
     SSPRK33(),
