@@ -15,17 +15,6 @@ export ⊞, ⊠, ⊟
 @generated tail_params(::Type{T}) where {T} =
     :($(Tuple{Base.tail((T.parameters...,))...}))
 
-# This is a type-stable version of map(x -> rmap(fn, x), X) or
-# map((x, y) -> rmap(fn, x, y), X, Y).
-rmap_tuple(fn::F, X) where {F} =
-    isempty(X) ? () : (rmap(fn, first(X)), rmap_tuple(fn, Base.tail(X))...)
-rmap_tuple(fn::F, X, Y) where {F} =
-    isempty(X) || isempty(Y) ? () :
-    (
-        rmap(fn, first(X), first(Y)),
-        rmap_tuple(fn, Base.tail(X), Base.tail(Y))...,
-    )
-
 # This is a type-stable version of map(T′ -> rmaptype(fn, T′), T.parameters) or
 # map((T1′, T2′) -> rmaptype(fn, T1′, T2′), T1.parameters, T2.parameters), where
 rmap_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
@@ -47,12 +36,20 @@ rmap_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
 Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
-rmap(fn::F, X::Tuple) where {F} = rmap_tuple(fn, X)
+rmap(fn::F, X::Tuple{}) where {F} = ()
+rmap(fn::F, X::Tuple) where {F} =
+    (rmap(fn, first(X)), rmap(fn, Base.tail(X))...)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
 
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} = rmap_tuple(fn, X, Y)
+rmap(fn::F, X::Tuple{}, Y::Tuple{}) where {F} = ()
+rmap(fn::F, X::Tuple{}, Y::Tuple) where {F} = ()
+rmap(fn::F, X::Tuple, Y::Tuple{}) where {F} = ()
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} = (
+        rmap(fn, first(X), first(Y)),
+        rmap(fn, Base.tail(X), Base.tail(Y))...,
+    )
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
