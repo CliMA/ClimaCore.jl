@@ -25,6 +25,7 @@ rmaptype_Tuple(fn::F, ::Type{T}) where {F, E, T <: Tuple{E}} =
 rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
     (rmaptype(fn, first_param(T)), rmaptype_Tuple(fn, tail_params(T))...)
 
+rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{Tuple{}}) = ()
 rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
 rmaptype_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
 rmaptype_Tuple(
@@ -33,7 +34,7 @@ rmaptype_Tuple(
     ::Type{T2},
 ) where {F, T1 <: Tuple, T2 <: Tuple} = (
     rmaptype(fn, first_param(T1), first_param(T2)),
-    rmaptype_Tuple(rmaptype, fn, tail_params(T1), tail_params(T2))...,
+    rmaptype_Tuple(fn, tail_params(T1), tail_params(T2))...,
 )
 
 """
