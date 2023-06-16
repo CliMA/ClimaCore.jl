@@ -17,17 +17,17 @@ export ⊞, ⊠, ⊟
 
 # This is a type-stable version of map(T′ -> rmaptype(fn, T′), T.parameters) or
 # map((T1′, T2′) -> rmaptype(fn, T1′, T2′), T1.parameters, T2.parameters), where
-rmap_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
-rmap_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    (rmaptype(fn, first_param(T)), rmap_Tuple(rmaptype, fn, tail_params(T))...)
+rmaptype_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
+rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
+    (rmaptype(fn, first_param(T)), rmaptype_Tuple(rmaptype, fn, tail_params(T))...)
 
-rmap_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
-rmap_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
+rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
+rmaptype_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
 
-rmap_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
+rmaptype_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
     (
         rmaptype(fn, first_param(T1), first_param(T2)),
-        rmap_Tuple(rmaptype, fn, tail_params(T1), tail_params(T2))...,
+        rmaptype_Tuple(rmaptype, fn, tail_params(T1), tail_params(T2))...,
     )
 
 """
@@ -66,13 +66,13 @@ Recursively apply `fn` to each type parameter of the type `T`, or to each type
 parameter of the types `T1` and `T2`, where `fn` returns a type.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
-rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} = Tuple{rmap_Tuple(fn, T)...}
+rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} = Tuple{rmaptype_Tuple(fn, T)...}
 rmaptype(fn::F, ::Type{T}) where {F, names, Tup, T <: NamedTuple{names, Tup}} =
     NamedTuple{names, rmaptype(fn, Tup)}
 
 rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1, T2} = fn(T1, T2)
 rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
-    Tuple{rmap_Tuple(fn, T1, T2)...}
+    Tuple{rmaptype_Tuple(fn, T1, T2)...}
 rmaptype(
     fn::F,
     ::Type{T1},
