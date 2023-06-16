@@ -9,6 +9,52 @@ module RecursiveApply
 
 export ⊞, ⊠, ⊟
 
+# These functions need to be generated for type stability (since T.parameters is
+# a SimpleVector, the compiler cannot always infer its size and elements).
+first_param(::Type{T}) where {T} =
+    if @generated
+        :($(first(T.parameters)))
+    else
+        first(T.parameters)
+    end
+tail_params(::Type{T}) where {T} =
+    if @generated
+        :($(Tuple{Base.tail((T.parameters...,))...}))
+    else
+        Tuple{Base.tail((T.parameters...,))...}
+    end
+
+# This is a type-stable version of map(x -> rmap(fn, x), X) or
+# map((x, y) -> rmap(fn, x, y), X, Y).
+rmap_tuple(fn::F, X) where {F} =
+    isempty(X) ? () : (rmap(fn, first(X)), rmap_tuple(fn, Base.tail(X))...)
+rmap_tuple(fn::F, X, Y) where {F} =
+    isempty(X) || isempty(Y) ? () :
+    (
+        rmap(fn, first(X), first(Y)),
+        rmap_tuple(fn, Base.tail(X), Base.tail(Y))...,
+    )
+
+# This is a type-stable version of map(T′ -> rfunc(fn, T′), T.parameters) or
+# map((T1′, T2′) -> rfunc(fn, T1′, T2′), T1.parameters, T2.parameters), where
+# rfunc can be either rmaptype or rmap_type2value.
+rmap_Tuple(rfunc::R, fn::F, ::Type{Tuple{}}) where {R, F, T} = ()
+rmap_Tuple(rfunc::R, fn::F, ::Type{T}) where {R, F, T <: Tuple} =
+    (rfunc(fn, first_param(T)), rmap_Tuple(rfunc, fn, tail_params(T))...)
+
+rmap_Tuple(_, _, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
+rmap_Tuple(_, _, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
+
+rmap_Tuple(
+    rfunc::R,
+    fn::F,
+    ::Type{T1},
+    ::Type{T2},
+) where {R, F, T1 <: Tuple, T2 <: Tuple} = (
+    rfunc(fn, first_param(T1), first_param(T2)),
+    rmap_Tuple(rfunc, fn, tail_params(T1), tail_params(T2))...,
+)
+
 """
     rmap(fn, X...)
 
@@ -16,10 +62,8 @@ Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
-rmap(fn::F, X::Tuple) where {F} = map(x -> rmap(fn, x), X)
-rmap(fn, X::Tuple{}, Y::Tuple{}) = ()
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
-    (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
+rmap(fn::F, X::Tuple) where {F} = rmap_tuple(fn, X)
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} = rmap_tuple(fn, X, Y)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
@@ -32,17 +76,53 @@ rmax(X, Y) = rmap(max, X, Y)
 
 """
     rmaptype(fn, T)
+    rmaptype(fn, T1, T2)
 
-The return type of `rmap(fn, X::T)`.
+Recursively apply `fn` to each type parameter of the type `T`, or to each type
+parameter of the types `T1` and `T2`, where `fn` returns a type.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
+rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1, T2} = fn(T1, T2)
 rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
-    Tuple{map(fn, tuple(T.parameters...))...}
+    Tuple{rmap_Tuple(rmaptype, fn, T)...}
+rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
+    Tuple{rmap_Tuple(rmaptype, fn, T1, T2)...}
+rmaptype(fn::F, ::Type{T}) where {F, names, Tup, T <: NamedTuple{names, Tup}} =
+    NamedTuple{names, rmaptype(fn, Tup)}
 rmaptype(
     fn::F,
+    ::Type{T1},
+    ::Type{T2},
+) where {
+    F,
+    names,
+    Tup1,
+    Tup2,
+    T1 <: NamedTuple{names, Tup1},
+    T2 <: NamedTuple{names, Tup2},
+} = NamedTuple{names, rmaptype(fn, Tup1, Tup2)}
+
+"""
+    rmap_type2value(fn, T)
+
+Recursively apply `fn` to each type parameter of the type `T`, where `fn`
+returns a value instead of a type.
+"""
+rmap_type2value(fn::F, ::Type{T}) where {F, T} = fn(T)
+rmap_type2value(fn::F, ::Type{T}) where {F, T <: Tuple} =
+    rmap_Tuple(rmap_type2value, fn, T)
+rmap_type2value(
+    fn::F,
     ::Type{T},
-) where {F, T <: NamedTuple{names, tup}} where {names, tup} =
-    NamedTuple{names, rmaptype(fn, tup)}
+) where {F, names, Tup, T <: NamedTuple{names, Tup}} =
+    NamedTuple{names}(rmap_type2value(fn, Tup))
+
+"""
+    rzero(T)
+
+Recursively compute the zero value of type `T`.
+"""
+rzero(::Type{T}) where {T} = rmap_type2value(zero, T)
 
 """
     rmul(X, Y)
