@@ -67,6 +67,15 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: distributed cuda spaces"
+        key: "gpu_distributed_extruded_cuda_spaces"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/space_construction.jl CUDA"
+        agents:
+          slurm_gpus_per_task: 1
+          slurm_ntasks: 3
+
       - label: ":computer: test implicit_stencil Float32"
         key: "cpu_implicit_stencil_float32"
         command:
