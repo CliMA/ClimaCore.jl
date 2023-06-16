@@ -470,8 +470,8 @@ steps:
         key: "gpu_implicit_stencil_float32"
         command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
         agents:
-          slurm_time: 2:00:00
-          gpus: 1
+          slurm_mem: 20GB
+          slurm_gpus: 1
 
   - group: "Unit: Hypsography"
     steps:

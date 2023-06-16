@@ -263,7 +263,7 @@ function get_ref_value(op1, op2, a0, a1, a2)
     return ref_value
 end
 
-function test_pointwise_stencils_compose(all_ops)
+function test_pointwise_stencils_compose(all_ops; full = false)
     (;
         ops_F2C_S2S,
         ops_C2F_S2S,
@@ -285,6 +285,10 @@ function test_pointwise_stencils_compose(all_ops)
         (a_FS, a_FV, a_CV, ops_F2C_V2S, (ops_C2F_V2V..., ops_C2F_V2S...)),
         (a_CS, a_CV, a_FV, ops_C2F_V2S, (ops_F2C_V2V..., ops_F2C_V2S...)),
     )
+        if !full
+            op1s = op1s[1:2]
+            op2s = op2s[1:2]
+        end
         for op1 in op1s
             for op2 in op2s
                 GC.gc()
