@@ -47,11 +47,12 @@ rmap_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
 Recursively apply `fn` to each element of `X`
 """
 rmap(fn::F, X) where {F} = fn(X)
-rmap(fn::F, X, Y) where {F} = fn(X, Y)
 rmap(fn::F, X::Tuple) where {F} = rmap_tuple(fn, X)
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} = rmap_tuple(fn, X, Y)
 rmap(fn::F, X::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X)))
+
+rmap(fn::F, X, Y) where {F} = fn(X, Y)
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} = rmap_tuple(fn, X, Y)
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
@@ -68,12 +69,13 @@ Recursively apply `fn` to each type parameter of the type `T`, or to each type
 parameter of the types `T1` and `T2`, where `fn` returns a type.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
-rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1, T2} = fn(T1, T2)
 rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} = Tuple{rmap_Tuple(fn, T)...}
-rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
-    Tuple{rmap_Tuple(fn, T1, T2)...}
 rmaptype(fn::F, ::Type{T}) where {F, names, Tup, T <: NamedTuple{names, Tup}} =
     NamedTuple{names, rmaptype(fn, Tup)}
+
+rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1, T2} = fn(T1, T2)
+rmaptype(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
+    Tuple{rmap_Tuple(fn, T1, T2)...}
 rmaptype(
     fn::F,
     ::Type{T1},
