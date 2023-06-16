@@ -21,17 +21,20 @@ export ⊞, ⊠, ⊟
 # `rmaptype_Tuple`, for the part of the recursion.
 rmaptype_Tuple(fn::F, ::Type{Tuple{}}) where {F} = ()
 rmaptype_Tuple(fn::F, ::Type{T}) where {F, E, T <: Tuple{E}} =
-    (rmaptype(fn, first_param(T)), )
+    (rmaptype(fn, first_param(T)),)
 rmaptype_Tuple(fn::F, ::Type{T}) where {F, T <: Tuple} =
     (rmaptype(fn, first_param(T)), rmaptype_Tuple(fn, tail_params(T))...)
 
 rmaptype_Tuple(_, ::Type{Tuple{}}, ::Type{T}) where {T <: Tuple} = ()
 rmaptype_Tuple(_, ::Type{T}, ::Type{Tuple{}}) where {T <: Tuple} = ()
-rmaptype_Tuple(fn::F, ::Type{T1}, ::Type{T2}) where {F, T1 <: Tuple, T2 <: Tuple} =
-    (
-        rmaptype(fn, first_param(T1), first_param(T2)),
-        rmaptype_Tuple(rmaptype, fn, tail_params(T1), tail_params(T2))...,
-    )
+rmaptype_Tuple(
+    fn::F,
+    ::Type{T1},
+    ::Type{T2},
+) where {F, T1 <: Tuple, T2 <: Tuple} = (
+    rmaptype(fn, first_param(T1), first_param(T2)),
+    rmaptype_Tuple(rmaptype, fn, tail_params(T1), tail_params(T2))...,
+)
 
 """
     rmap(fn, X...)
@@ -49,10 +52,8 @@ rmap(fn::F, X, Y) where {F} = fn(X, Y)
 rmap(fn::F, X::Tuple{}, Y::Tuple{}) where {F} = ()
 rmap(fn::F, X::Tuple{}, Y::Tuple) where {F} = ()
 rmap(fn::F, X::Tuple, Y::Tuple{}) where {F} = ()
-rmap(fn::F, X::Tuple, Y::Tuple) where {F} = (
-        rmap(fn, first(X), first(Y)),
-        rmap(fn, Base.tail(X), Base.tail(Y))...,
-    )
+rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
+    (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
 rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
     NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
 
@@ -69,7 +70,8 @@ Recursively apply `fn` to each type parameter of the type `T`, or to each type
 parameter of the types `T1` and `T2`, where `fn` returns a type.
 """
 rmaptype(fn::F, ::Type{T}) where {F, T} = fn(T)
-rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} = Tuple{rmaptype_Tuple(fn, T)...}
+rmaptype(fn::F, ::Type{T}) where {F, T <: Tuple} =
+    Tuple{rmaptype_Tuple(fn, T)...}
 rmaptype(fn::F, ::Type{T}) where {F, names, Tup, T <: NamedTuple{names, Tup}} =
     NamedTuple{names, rmaptype(fn, Tup)}
 
