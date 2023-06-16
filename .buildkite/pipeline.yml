@@ -62,9 +62,9 @@ steps:
   - group: "Unit: RecursiveApply"
     steps:
 
-      - label: "Unit: recursive"
-        key: unit_recursive
-        command: "julia --color=yes --check-bounds=yes --project=test test/recursive.jl"
+      - label: "Unit: RecursiveApply"
+        key: unit_recursive_apply
+        command: "julia --color=yes --check-bounds=yes --project=test test/RecursiveApply/recursive_apply.jl"
 
   - group: "Unit: Utilities"
     steps:

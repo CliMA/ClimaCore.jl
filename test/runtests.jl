@@ -11,7 +11,7 @@ Stacktrace:
  [1] pkgerror(msg::String)
 =#
 if !Sys.iswindows()
-    @safetestset "Recursive" begin @time include("recursive.jl") end
+    @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end
     @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
 
     @safetestset "DataLayouts 0D" begin @time include("DataLayouts/data0d.jl") end
