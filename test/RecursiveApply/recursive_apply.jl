@@ -38,3 +38,49 @@ end
               RecursiveApply.rmul(x, FT(2))
     end
 end
+
+@testset "Highly nested types" begin
+    FT = Float64
+    nested_types = [
+        FT,
+        Tuple{FT, FT},
+        NamedTuple{(:ϕ, :ψ), Tuple{FT, FT}},
+        Tuple{
+            NamedTuple{(:ϕ, :ψ), Tuple{FT, FT}},
+            NamedTuple{(:ϕ, :ψ), Tuple{FT, FT}},
+        },
+        Tuple{FT, FT},
+        NamedTuple{
+            (:ρ, :uₕ, :ρe_tot, :ρq_tot, :sgs⁰, :sgsʲs),
+            Tuple{
+                FT,
+                Tuple{FT, FT},
+                FT,
+                FT,
+                NamedTuple{(:ρatke,), Tuple{FT}},
+                Tuple{NamedTuple{(:ρa, :ρae_tot, :ρaq_tot), Tuple{FT, FT, FT}}},
+            },
+        },
+        NamedTuple{
+            (:u₃, :sgsʲs),
+            Tuple{Tuple{FT}, Tuple{NamedTuple{(:u₃,), Tuple{Tuple{FT}}}}},
+        },
+    ]
+    for nt in nested_types
+        rz = RecursiveApply.rmap(RecursiveApply.rzero, nt)
+        @test typeof(rz) == nt
+        @inferred RecursiveApply.rmap(RecursiveApply.rzero, nt)
+
+        rz = RecursiveApply.rmap((x, y) -> RecursiveApply.rzero(x), nt, nt)
+        @test typeof(rz) == nt
+        @inferred RecursiveApply.rmap((x, y) -> RecursiveApply.rzero(x), nt, nt)
+
+        rz = RecursiveApply.rmaptype(identity, nt)
+        @test rz == nt
+        @inferred RecursiveApply.rmaptype(zero, nt)
+
+        rz = RecursiveApply.rmaptype((x, y) -> identity(x), nt, nt)
+        @test rz == nt
+        @inferred RecursiveApply.rmaptype((x, y) -> zero(x), nt, nt)
+    end
+end
