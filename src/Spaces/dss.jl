@@ -836,7 +836,7 @@ function dss_local_vertices!(
             sum_data = mapreduce(
                 ⊞,
                 vertex;
-                init = RecursiveApply.rmap(zero, slab(perimeter_data, 1, 1)[1]),
+                init = RecursiveApply.rzero(eltype(slab(perimeter_data, 1, 1))),
             ) do (lidx, vert)
                 ip = Topologies.perimeter_vertex_node_index(vert)
                 perimeter_slab = slab(perimeter_data, level, lidx)
@@ -906,9 +906,8 @@ function dss_local_ghost!(
                 sum_data = mapreduce(
                     ⊞,
                     vertex;
-                    init = RecursiveApply.rmap(
-                        zero,
-                        slab(perimeter_data, 1, 1)[1],
+                    init = RecursiveApply.rzero(
+                        eltype(slab(perimeter_data, 1, 1)),
                     ),
                 ) do (isghost, idx, vert)
                     ip = Topologies.perimeter_vertex_node_index(vert)
