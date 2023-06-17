@@ -20,11 +20,17 @@ RectilinearMesh(domain::RectangleDomain, n1::Int, n2::Int) = RectilinearMesh(
     IntervalMesh(domain.interval2; nelems = n2),
 )
 
-function Base.show(io::IO, mesh::RectilinearMesh)
+function Base.summary(io::IO, mesh::RectilinearMesh)
     n1 = nelements(mesh.intervalmesh1)
     n2 = nelements(mesh.intervalmesh2)
-    print(io, n1, "×", n2, "-element RectilinearMesh of ", domain(mesh))
+    print(io, n1, "×", n2, "-element RectilinearMesh")
 end
+function Base.show(io::IO, mesh::RectilinearMesh)
+    summary(io, mesh)
+    print(io, " of ", domain(mesh))
+end
+
+
 domain(mesh::RectilinearMesh) =
     RectangleDomain(domain(mesh.intervalmesh1), domain(mesh.intervalmesh2))
 nelements(mesh::RectilinearMesh) =

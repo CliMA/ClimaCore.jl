@@ -42,6 +42,37 @@ mesh in the horizontal domain.
 
 """
 abstract type AbstractTopology end
+
+function Base.summary(io::IO, topology::AbstractTopology)
+    print(io, nameof(typeof(topology)))
+end
+
+# TODO: move this to ClimaComms
+function print_device(io::IO, device::ClimaComms.AbstractDevice)
+    print(io, nameof(typeof(device)))
+end
+
+function print_context(io::IO, context::ClimaComms.SingletonCommsContext)
+    print(io, "SingletonCommsContext using ")
+    print_device(io, context.device)
+end
+
+function print_context(io::IO, context::ClimaComms.MPICommsContext)
+    if ClimaComms.MPI.Initialized()
+        print(
+            io,
+            "MPICommsContext with ",
+            ClimaComms.nprocs(context),
+            " processes",
+        )
+    else
+        print(io, "MPICommsContext (uninitialized)")
+    end
+    print(io, " using ")
+    print_device(io, context.device)
+end
+
+
 abstract type AbstractDistributedTopology <: AbstractTopology end
 
 coordinate_type(topology::AbstractTopology) = coordinate_type(domain(topology))
