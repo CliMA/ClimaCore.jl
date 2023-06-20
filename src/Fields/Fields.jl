@@ -426,6 +426,8 @@ Base.@propagate_inbounds function level(
     Field(data, hspace)
 end
 
+Base.getindex(field::Field, ::Colon) = field
+
 Base.@propagate_inbounds Base.getindex(field::PointField) =
     getindex(field_values(field))
 Base.@propagate_inbounds Base.setindex!(field::PointField, val) =
