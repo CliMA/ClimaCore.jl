@@ -46,8 +46,14 @@ end
 """
     Fields.bycolumn(fn, space)
 
-Call `fn(colidx)` to every [`ColumnIndex`](@ref) `colidx` of `space`. This can be used to apply
-multiple column-wise operations in a single pass, making use of multiple threads.
+Call `fn(colidx)` to every [`ColumnIndex`](@ref) `colidx` of `space`. This can
+be used to apply multiple column-wise operations in a single pass, making use of
+multiple threads.
+
+!!! note
+
+    On GPUs this will simply evaluate `f` once with `colidx=:` (i.e. it doesn't
+    perform evaluation by columns). This may change in future.
 
 # Example
 
@@ -61,7 +67,15 @@ bycolumn(axes(f)) do colidx
 end
 ```
 """
-function bycolumn(fn, space::Spaces.SpectralElementSpace1D)
+function bycolumn(fn, space::Spaces.AbstractSpace)
+    bycolumn(fn, space, ClimaComms.device(space))
+end
+
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace1D,
+    ::ClimaComms.CPUDevice,
+)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
@@ -81,7 +95,11 @@ function bycolumn(fn, space::Spaces.SpectralElementSpace1D)
     end
     return nothing
 end
-function bycolumn(fn, space::Spaces.SpectralElementSpace2D)
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace2D,
+    ::ClimaComms.CPUDevice,
+)
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
@@ -101,8 +119,18 @@ function bycolumn(fn, space::Spaces.SpectralElementSpace2D)
     end
     return nothing
 end
-bycolumn(fn, space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    bycolumn(fn, space.horizontal_space)
+bycolumn(
+    fn,
+    space::Spaces.ExtrudedFiniteDifferenceSpace,
+    device::ClimaComms.CPUDevice,
+) = bycolumn(fn, space.horizontal_space, device)
+
+
+function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
+    fn(:)
+end
+
+
 
 """
     ncolumns(::Field)
