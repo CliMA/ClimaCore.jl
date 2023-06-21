@@ -192,6 +192,10 @@ end
                parent(Spaces.local_geometry_data(space2))
            )
             warn_mismatched_spaces(typeof(space1), typeof(space2))
+        elseif Spaces.issubspace(space2, space1)
+            return space1
+        elseif Spaces.issubspace(space1, space2)
+            return space2
         else
             error_mismatched_spaces(typeof(space1), typeof(space2))
         end
@@ -229,6 +233,9 @@ end
                parent(Spaces.local_geometry_data(space2))
            )
             warn_mismatched_spaces(typeof(space1), typeof(space2))
+        elseif Spaces.issubspace(space2, space1) ||
+               Spaces.issubspace(space1, space2)
+            nothing
         else
             error_mismatched_spaces(typeof(space1), typeof(space2))
         end

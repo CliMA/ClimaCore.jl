@@ -426,25 +426,17 @@ end
         TU.has_z_coordinates(space) || continue
         Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
         ᶜz_surf =
-            Spaces.level(Fields.coordinate_field(Y.x).z, TU.fc_index(1, space))
-        ᶜx_surf = Spaces.level(Y.x, TU.fc_index(1, space))
+            Spaces.level(Fields.coordinate_field(Y).z, TU.fc_index(1, space))
+        ᶜx_surf = copy(Spaces.level(Y.x, TU.fc_index(1, space)))
 
         # Still need to define broadcast rules for surface planes with 3D domains
-        if nameof(typeof(space)) == :ExtrudedFiniteDifferenceSpace
-            @test_broken begin
-                try
-                    domain_surface_bc!(Y.x, ᶜz_surf)
-                    true
-                catch
-                    false
-                end
-            end
-        else
-            domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
-        end
+        domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
+
         # Skip spaces incompatible with Fields.bycolumn:
         TU.bycolumnable(space) || continue
-        column_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
+        Yc = TU.FieldFromNamedTuple(space, (; x = FT(1)))
+        column_surface_bc!(Yc.x, ᶜz_surf, ᶜx_surf)
+        @test Y.x == Yc.x
         nothing
     end
     nothing
