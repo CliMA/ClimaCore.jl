@@ -18,6 +18,23 @@ struct LinearAdaption{F <: Union{Fields.Field, Nothing}} <: HypsographyAdaption
     surface::F
 end
 
+"""
+    SLEVEAdaption(surface::Field, ηₕ::FT, s::FT)
+
+Locate vertical levels using an exponential function between the surface field and the top
+of the domain, using the method of [Schar2002](@cite). This method is modified
+such no warping is applied above some user defined parameter 0 ≤ ηₕ < 1.0, where the lower and upper 
+bounds represent the domain bottom and top respectively. `s` governs the decay rate. 
+If the decay-scale is poorly specified (i.e., `s * zₜ` is lower than the maximum 
+surface elevation), a warning is thrown and `s` is adjusted such that it `szₜ > maximum(z_surface)`. 
+"""
+struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
+    # Union can be removed once deprecation removed.
+    surface::F
+    ηₕ::FT
+    s::FT
+end
+
 # deprecated in 0.10.12
 LinearAdaption() = LinearAdaption(nothing)
 
@@ -66,10 +83,30 @@ function ExtrudedFiniteDifferenceSpace(
 
     grad = Operators.Gradient()
     wdiv = Operators.WeakDivergence()
+    z_surface = Fields.field_values(adaption.surface)
 
+    FT = eltype(z_surface)
+
+    # TODO: Function dispatch
     if adaption isa LinearAdaption
-        z_surface = Fields.field_values(adaption.surface)
         fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
+        fZ = Fields.Field(fZ_data, face_space)
+    elseif adaption isa SLEVEAdaption
+        ηₕ = adaption.ηₕ
+        s = adaption.s
+        @assert FT(0) <= ηₕ <= FT(1)
+        @assert s >= FT(0)
+        η = @. z_ref ./ z_top
+        if s * z_top <= maximum(z_surface)
+            @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). 
+                   \n Returning (5/3)*max(zₛ)"
+            s = @. maximum(z_surface) / z_top * eltype(z_surface) * (5 // 3)
+        end
+        fZ_data = @. ifelse(
+            η <= ηₕ,
+            η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+            η * z_top,
+        )
         fZ = Fields.Field(fZ_data, face_space)
     end
 
