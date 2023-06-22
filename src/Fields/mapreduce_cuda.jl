@@ -1,31 +1,56 @@
 
-Base.sum(
+function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CUDADevice,
-) = mapreduce_cuda(identity, +, field, weighting = true) #TODO: distributed support to be added
+)
+    context = ClimaComms.context(axes(field))
+    localsum = mapreduce_cuda(identity, +, field, weighting = true)
+    ClimaComms.allreduce!(context, parent(localsum), +)
+    return localsum[]
+end
 
-Base.sum(fn, field::Field, ::ClimaComms.CUDADevice) =
-    mapreduce_cuda(fn, +, field, weighting = true) #TODO: distributed support to be added
+function Base.sum(fn, field::Field, ::ClimaComms.CUDADevice)
+    context = ClimaComms.context(axes(field))
+    localsum = mapreduce_cuda(fn, +, field, weighting = true)
+    ClimaComms.allreduce!(context, parent(localsum), +)
+    return localsum[]
+end
 
-Base.maximum(fn, field::Field, ::ClimaComms.CUDADevice) =
-    mapreduce_cuda(fn, max, field) #TODO: distributed support to be added
+function Base.maximum(fn, field::Field, ::ClimaComms.CUDADevice)
+    context = ClimaComms.context(axes(field))
+    localmax = mapreduce_cuda(fn, max, field)
+    ClimaComms.allreduce!(context, parent(localmax), max)
+    return localmax[]
+end
 
-Base.maximum(field::Field, ::ClimaComms.CUDADevice) =
-    mapreduce_cuda(identity, max, field) #TODO: distributed support to be added
+function Base.maximum(field::Field, ::ClimaComms.CUDADevice)
+    context = ClimaComms.context(axes(field))
+    localmax = mapreduce_cuda(identity, max, field)
+    ClimaComms.allreduce!(context, parent(localmax), max)
+    return localmax[]
+end
 
-Base.minimum(fn, field::Field, ::ClimaComms.CUDADevice) =
-    mapreduce_cuda(fn, min, field) #TODO: distributed support to be added
+function Base.minimum(fn, field::Field, ::ClimaComms.CUDADevice)
+    context = ClimaComms.context(axes(field))
+    localmin = mapreduce_cuda(fn, min, field)
+    ClimaComms.allreduce!(context, parent(localmin), min)
+    return localmin[]
+end
 
-Base.minimum(field::Field, ::ClimaComms.CUDADevice) =
-    mapreduce_cuda(identity, min, field) #TODO: distributed support to be added
+function Base.minimum(field::Field, ::ClimaComms.CUDADevice)
+    context = ClimaComms.context(axes(field))
+    localmin = mapreduce_cuda(identity, min, field)
+    ClimaComms.allreduce!(context, parent(localmin), min)
+    return localmin[]
+end
 
 Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CUDADevice,
-) = Base.sum(field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
+) = Base.sum(field) ./ Base.sum(ones(axes(field)))
 
 Statistics.mean(fn, field::Field, ::ClimaComms.CUDADevice) =
-    Base.sum(fn, field) ./ Base.sum(ones(axes(field))) #TODO: distributed support to be added
+    Base.sum(fn, field) ./ Base.sum(ones(axes(field)))
 
 function LinearAlgebra.norm(
     field::Field,
@@ -35,10 +60,11 @@ function LinearAlgebra.norm(
 )
     if p == 2
         # currently only one which supports structured types
+        # TODO: perform map without allocation new field
         if normalize
-            sqrt.(Statistics.mean(LinearAlgebra.norm_sqr, field))
+            sqrt.(Statistics.mean(LinearAlgebra.norm_sqr.(field)))
         else
-            sqrt.(sum(LinearAlgebra.norm_sqr, field))
+            sqrt.(sum(LinearAlgebra.norm_sqr.(field)))
         end
     elseif p == 1
         if normalize
@@ -106,11 +132,7 @@ function mapreduce_cuda(
             Val(shmemsize),
         )
     end
-    if Nf == 1
-        return Array(reduce_cuda)[1, 1]
-    else
-        return DataLayouts.DataF{S}(CuArray(view(reduce_cuda, 1, :)[:]))
-    end
+    return DataLayouts.DataF{S}(Array(Array(reduce_cuda)[1, :]))
 end
 
 function mapreduce_cuda_kernel!(
