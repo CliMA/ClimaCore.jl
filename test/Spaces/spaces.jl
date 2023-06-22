@@ -93,7 +93,7 @@ end
 
 @testset "finite difference space" begin
     FT = Float64
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0) .. Geometry.ZPoint{FT}(5),
         boundary_names = (:bottom, :top),
@@ -140,7 +140,7 @@ end
 
 @testset "1×1 domain space" begin
     FT = Float32
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),

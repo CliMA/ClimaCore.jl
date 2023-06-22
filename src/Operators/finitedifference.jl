@@ -216,8 +216,8 @@ struct StencilStyle <: AbstractStencilStyle end
 struct ColumnStencilStyle <: AbstractStencilStyle end
 struct CUDAColumnStencilStyle <: AbstractStencilStyle end
 
-AbstractStencilStyle(::ClimaComms.CPU) = ColumnStencilStyle
-AbstractStencilStyle(::ClimaComms.CUDA) = CUDAColumnStencilStyle
+AbstractStencilStyle(::ClimaComms.AbstractCPUDevice) = ColumnStencilStyle
+AbstractStencilStyle(::ClimaComms.CUDADevice) = CUDAColumnStencilStyle
 
 """
     StencilBroadcasted{Style}(op, args[,axes[, work]])
@@ -3467,7 +3467,9 @@ function Base.copyto!(
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)
-    if enable_threading() && Nh > 1
+    context = ClimaComms.context(axes(field_out))
+    device = ClimaComms.device(context)
+    if (device isa ClimaComms.CPUMultiThreaded) && Nh > 1
         return _threaded_copyto!(field_out, bc, Ni, Nj, Nh)
     end
     return _serial_copyto!(field_out, bc, Ni, Nj, Nh)

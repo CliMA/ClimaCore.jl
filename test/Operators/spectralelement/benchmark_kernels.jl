@@ -22,7 +22,7 @@ order of magnitude estimate per problem size.
 
 ##### copyto!
 kernel_copyto!(args) = kernel_copyto!(args, args.device)
-kernel_copyto!(args, ::ClimaComms.CPUDevice) =
+kernel_copyto!(args, ::ClimaComms.AbstractCPUDevice) =
     Base.copyto!(args.ϕ_arr, args.ψ_arr)
 function kernel_copyto!(args, ::ClimaComms.CUDADevice)
     (; ϕ_arr, ψ_arr) = args

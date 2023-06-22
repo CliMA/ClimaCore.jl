@@ -46,7 +46,8 @@ function generate_base_spaces(
     stretch = Meshes.Uniform();
     ndims = 3,
 )
-    comms_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    device = ClimaComms.CPUSingleThreaded()
+    comms_context = ClimaComms.SingletonCommsContext(device)
     FT = eltype(xlim)
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),

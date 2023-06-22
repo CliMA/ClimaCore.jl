@@ -21,7 +21,8 @@ compare(cpu, gpu, sym) =
 
 @testset "CuArray-backed extruded spaces" begin
     context = SingletonCommsContext(
-        CUDA.functional() ? ClimaComms.CUDADevice() : ClimaComms.CPUDevice(),
+        CUDA.functional() ? ClimaComms.CUDADevice() :
+        ClimaComms.CPUSingleThreaded(),
     )
     collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
     as = collect(TU.all_spaces(Float64; zelem = 10, context))
@@ -29,7 +30,7 @@ compare(cpu, gpu, sym) =
 end
 
 @testset "copyto! with CuArray-backed extruded spaces" begin
-    cpu_context = SingletonCommsContext(ClimaComms.CPUDevice())
+    cpu_context = SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     gpu_context = SingletonCommsContext(ClimaComms.CUDADevice())
 
     FT = Float64

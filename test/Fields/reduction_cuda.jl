@@ -19,7 +19,8 @@ include("reduction_cuda_utils.jl")
 @testset "test cuda reduction op on surface of sphere" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    context_cpu = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()) # CPU context for comparison
+    context_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
 
     # Set up discretization
     ne = 72
@@ -87,7 +88,8 @@ end
 @testset "test cuda reduction op for extruded 3D domain (hollow sphere)" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    context_cpu = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()) # CPU context for comparison
+    context_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
     R = FT(6.371229e6)
 
     npoly = 4
@@ -188,7 +190,8 @@ end
 @testset "test cuda reduction op for single column" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    context_cpu = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()) # CPU context for comparison
+    context_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
 
     z0 = FT(0)
     z_max = FT(2 * π)

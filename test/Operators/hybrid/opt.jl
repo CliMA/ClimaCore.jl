@@ -227,7 +227,7 @@ function hspace2d(FT)
     quad = Spaces.Quadratures.GLL{Nq}()
     hmesh = Meshes.RectilinearMesh(hdomain, 3, 3)
     htopology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
         hmesh,
     )
     return Spaces.SpectralElementSpace2D(htopology, quad)

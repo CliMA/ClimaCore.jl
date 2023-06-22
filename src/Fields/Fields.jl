@@ -1,7 +1,6 @@
 module Fields
 
 import ClimaComms
-import ..enable_threading
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains

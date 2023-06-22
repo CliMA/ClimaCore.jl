@@ -139,7 +139,9 @@ end
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
 
             topology = Topologies.Topology2D(
-                ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+                ClimaComms.SingletonCommsContext(
+                    ClimaComms.CPUSingleThreaded(),
+                ),
                 mesh,
             )
             space = Spaces.SpectralElementSpace2D(topology, quad)
@@ -196,7 +198,9 @@ end
             horzdomain = Domains.RectangleDomain(xdomain, ydomain)
             horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
             horztopology = Topologies.Topology2D(
-                ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+                ClimaComms.SingletonCommsContext(
+                    ClimaComms.CPUSingleThreaded(),
+                ),
                 horzmesh,
             )
 

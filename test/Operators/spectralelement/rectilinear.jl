@@ -16,7 +16,7 @@ domain = Domains.RectangleDomain(
 
 Nq = 5
 quad = Spaces.Quadratures.GLL{Nq}()
-device = ClimaComms.CPUDevice()
+device = ClimaComms.CPUSingleThreaded()
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 grid_topology =
     Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), grid_mesh)

@@ -24,7 +24,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
         mesh,
     )
     quad = Spaces.Quadratures.GLL{Nq}()

@@ -13,7 +13,8 @@ import ClimaCore:
 @testset "DSS on Equiangular Cubed Sphere mesh (ne = 3, serial run)" begin
     device = ClimaComms.device() #ClimaComms.CUDADevice()
     context = ClimaComms.SingletonCommsContext(device)
-    context_cpu = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    context_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
 
     println("running test on $device device")
 

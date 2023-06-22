@@ -25,7 +25,7 @@ using BenchmarkTools
 function benchmark_kernel_array!(
     args,
     kernel_fun!,
-    device::ClimaComms.CPUDevice;
+    device::ClimaComms.AbstractCPUDevice;
     silent = true,
 )
     (; ϕ_arr, ψ_arr) = args
@@ -69,7 +69,12 @@ function benchmark_kernel_array!(
     return trial
 end
 
-function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CPUDevice; silent)
+function benchmark_kernel!(
+    args,
+    kernel_fun!,
+    ::ClimaComms.AbstractCPUDevice;
+    silent,
+)
     kernel_fun!(args) # compile first
     trial = BenchmarkTools.@benchmark $kernel_fun!($args)
     if !silent
@@ -168,7 +173,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
 
     device =
         args["device"] == "CUDA" ? ClimaComms.CUDADevice() :
-        args["device"] == "CPU" ? ClimaComms.CPUDevice() :
+        args["device"] == "CPU" ? ClimaComms.CPUSingleThreaded() :
         error("Unknown device: $(args["device"])")
 
     context =
@@ -253,7 +258,7 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
-    array_kernel_args = if device isa ClimaComms.CPUDevice
+    array_kernel_args = if device isa ClimaComms.AbstractCPUDevice
         (; ϕ_arr = fill(FT(1), s), ψ_arr = fill(FT(2), s))
     else
         device isa ClimaComms.CUDADevice

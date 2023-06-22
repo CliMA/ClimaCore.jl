@@ -14,7 +14,7 @@ TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-ClimaComms = "0.4.2"
+ClimaComms = "0.5"
 ClimaCore = "0.10.25"
 NCDatasets = "0.11, 0.12"
 PkgVersion = "0.1, 0.2"

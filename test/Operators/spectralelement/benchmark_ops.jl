@@ -123,7 +123,7 @@ using JET
     kernel_complicated_field_dss!(kernel_args) # compile+test works
     kernel_complicated_field2_dss!(kernel_args) # compile+test works
     # TODO: widen these tests to the GPU.
-    if kernel_args.device isa ClimaComms.CPUDevice
+    if kernel_args.device isa ClimaComms.AbstractCPUDevice
         # Allocation tests
         p = @allocated kernel_scalar_dss!(kernel_args)
         @test p == 0

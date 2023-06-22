@@ -355,7 +355,7 @@ end
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
 
-    if ClimaComms.device(context) isa ClimaComms.CPUDevice
+    if ClimaComms.device(context) isa ClimaComms.AbstractCPUDevice
         @test sum(field.x) == FT(π)
     elseif ClimaComms.device(context) isa ClimaComms.CUDADevice
         # Not yet supported
@@ -669,7 +669,6 @@ convergence_rate(err, Δh) =
     @test 2 < sum(abs.(cr)) / length(cr) < 2.01
 end
 
-ClimaCore.enable_threading() = false # launching threads allocates
 @testset "Allocation tests for integrals" begin
     FT = Float64
     for space in TU.all_spaces(FT)
@@ -695,7 +694,6 @@ ClimaCore.enable_threading() = false # launching threads allocates
     end
     nothing
 end
-ClimaCore.enable_threading() = false
 
 @testset "ncolumns" begin
     FT = Float64

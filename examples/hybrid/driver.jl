@@ -74,9 +74,6 @@ if z_stretch_string == "stretched"
     test_file_name = "$(z_stretch_string)_$(test_file_name)"
 end
 
-import ClimaCore: enable_threading
-enable_threading() = false
-
 if haskey(ENV, "RESTART_FILE")
     restart_file_name = ENV["RESTART_FILE"]
     if is_distributed

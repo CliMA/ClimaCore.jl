@@ -4,12 +4,12 @@ using ClimaComms
 using CUDA
 
 Base.@deprecate device(; disablegpu = false) if disablegpu
-    ClimaComms.CPUDevice()
+    ClimaComms.CPUSingleThreaded()
 else
     ClimaComms.device()
 end false
 
-Base.@deprecate device_array_type(ctx::ClimaComms.CPUDevice) ClimaComms.array_type(
+Base.@deprecate device_array_type(ctx::ClimaComms.AbstractCPUDevice) ClimaComms.array_type(
     ctx,
 ) false
 Base.@deprecate device_array_type(ctx::ClimaComms.CUDADevice) ClimaComms.array_type(

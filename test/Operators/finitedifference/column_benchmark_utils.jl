@@ -8,7 +8,6 @@ import OrderedCollections
 using ClimaCore.Geometry: ⊗
 
 import ClimaCore
-ClimaCore.enable_threading() = false
 
 import ClimaCore: Domains, Meshes, Spaces, Fields, Operators, Topologies
 import ClimaCore.Domains: Geometry

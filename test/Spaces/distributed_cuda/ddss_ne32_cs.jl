@@ -14,7 +14,7 @@ import ClimaCore:
 @testset "DSS on Equiangular Cubed Sphere mesh (ne = 32)" begin
     device = ClimaComms.device() #ClimaComms.CUDADevice()
     context_cuda = ClimaComms.MPICommsContext(device)
-    context_cpu = ClimaComms.MPICommsContext(ClimaComms.CPUDevice())
+    context_cpu = ClimaComms.MPICommsContext(ClimaComms.CPUSingleThreaded())
 
     pid_cuda, nprocs_cuda = ClimaComms.init(context_cuda)
     pid_cpu, nprocs_cpu = ClimaComms.init(context_cpu)

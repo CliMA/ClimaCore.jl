@@ -482,8 +482,8 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     Plots.GRBackend()
 
     dir =
-        comms_ctx.device isa ClimaComms.CPUDevice ? "bubble_3d_invariant_rhoe" :
-        "gpu_bubble_3d_invariant_rhoe"
+        comms_ctx.device isa ClimaComms.AbstractCPUDevice ?
+        "bubble_3d_invariant_rhoe" : "gpu_bubble_3d_invariant_rhoe"
     path = joinpath(@__DIR__, "output", dir)
     mkpath(path)
 
@@ -525,7 +525,9 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
             cpu_hv_center_space, cpu_hv_face_space, cpu_horztopology =
                 hvspace_3D(
                     sim_params,
-                    ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+                    ClimaComms.SingletonCommsContext(
+                        ClimaComms.CPUSingleThreaded(),
+                    ),
                 )
 
             plotfield = ones(cpu_hv_center_space)
