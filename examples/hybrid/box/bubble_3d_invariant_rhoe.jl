@@ -199,7 +199,8 @@ end
 
 function rhs_invariant!(dY, Y, ghost_buffer, t)
     (; C_p, C_v, MSLP, grav, R_d, T_0) = ghost_buffer.params
-    (; z, κ₄, cω³, fω¹², fu¹², cuvw, cE, ce, cI, cT, cp, ch_tot) = ghost_buffer
+    (; z, κ₄, cω³, fω¹², fu¹², fu³, cuvw, cE, ce, cI, cT, cp, ch_tot) =
+        ghost_buffer
     cρ = Y.Yc.ρ # scalar on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers
@@ -301,7 +302,7 @@ function rhs_invariant!(dY, Y, ghost_buffer, t)
         Geometry.Contravariant12Vector.(
             Geometry.Covariant123Vector.(Ic2f.(cuₕ)),
         ) # Contravariant12Vector in 3D
-    fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
+    fu³ .= Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(fw))
     @. dw -= fω¹² × fu¹² # Covariant3Vector on faces
     @. duₕ -= If2c(fω¹² × fu³)
 
@@ -370,11 +371,11 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         args = ()
     end
 
-    if ClimaComms.iamroot(comms_ctx)
-        @info "Context information" device = comms_ctx.device context =
-            comms_ctx nprocs = ClimaComms.nprocs(comms_ctx) Float_type = FT resolution =
-            resolution
-    end
+    logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
+    prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
+
+    @info "Context information" device = comms_ctx.device context = comms_ctx nprocs =
+        ClimaComms.nprocs(comms_ctx) Float_type = FT resolution = resolution
 
     sim_params = SimulationParameters(FT, resolution, args...)
     (; lxy, lz) = sim_params
@@ -395,12 +396,11 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     w = map(_ -> Geometry.Covariant3Vector(0.0), face_coords)
     Y = Fields.FieldVector(Yc = Yc, uₕ = uₕ, w = w)
 
-    energy_0 = ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρe), +)
-    mass_0 = ClimaComms.reduce(comms_ctx, sum(Y.Yc.ρ), +)
+    energy_0 = sum(Y.Yc.ρe)
+    mass_0 = sum(Y.Yc.ρ)
     κ₄ = compute_κ₄(sim_params)
 
-    @info "summary" energy_0 mass_0 κ₄
-
+    @info "Initial condition" energy_0 mass_0 κ₄
     If2c = Operators.InterpolateF2C()
     Ic2f = Operators.InterpolateC2F(
         bottom = Operators.Extrapolate(),
@@ -429,6 +429,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         fu¹² = Geometry.Contravariant12Vector.(
             Geometry.Covariant123Vector.(Ic2f.(Y.uₕ))
         ),
+        fu³ = Geometry.Contravariant3Vector.(Geometry.Covariant123Vector.(Y.w)),
         cuvw = cuvw,
         cE = cE,
         ce = ce,
@@ -466,20 +467,23 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     Es = FT[]
     Mass = FT[]
     for sol_step in sol_invariant.u
-        Es_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρe), +)
-        Mass_step = ClimaComms.reduce(comms_ctx, sum(sol_step.Yc.ρ), +)
+        Es_step = sum(sol_step.Yc.ρe)
+        Mass_step = sum(sol_step.Yc.ρ)
         if ClimaComms.iamroot(comms_ctx)
             push!(Es, Es_step)
             push!(Mass, Mass_step)
         end
     end
 
+    @info "summary" Es[end] Mass[end]
     #-----------------------------------
 
     ENV["GKSwstype"] = "nul"
     Plots.GRBackend()
 
-    dir = "bubble_3d_invariant_rhoe"
+    dir =
+        comms_ctx.device isa ClimaComms.CPUDevice ? "bubble_3d_invariant_rhoe" :
+        "gpu_bubble_3d_invariant_rhoe"
     path = joinpath(@__DIR__, "output", dir)
     mkpath(path)
 
@@ -539,4 +543,4 @@ end
 
 comms_ctx = ClimaComms.context()
 ClimaComms.init(comms_ctx)
-bubble_3d_invariant_ρe(ARGS, comms_ctx, FloatType)
+sol_invariant = bubble_3d_invariant_ρe(ARGS, comms_ctx, FloatType)

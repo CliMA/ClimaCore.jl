@@ -334,6 +334,15 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: distributed reduction cuda"
+        key: unit_distributed_reduction_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Fields/reduction_cuda_distributed.jl"
+        agents:
+          slurm_gpus_per_task: 1
+          slurm_ntasks: 2
+
   - group: "Unit: Operators"
     steps:
 
@@ -912,7 +921,7 @@ steps:
         command:
           - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
-          - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*"
+          - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_low_*"
         agents:
           slurm_gpus: 1
 
@@ -921,7 +930,7 @@ steps:
         command:
           - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
         artifact_paths:
-          - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe_custom/*"
+          - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_custom_*"
         agents:
           slurm_gpus: 1
 
