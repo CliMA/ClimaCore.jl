@@ -521,6 +521,17 @@ function SpectralElementSpace2D(
     )
 end
 
+function adaptcontext(
+    context::ClimaComms.AbstractCommsContext,
+    space::SpectralElementSpace2D,
+)
+    if context === ClimaComms.context(space)
+        return space
+    end
+    topology = adaptcontext(context, space.topology)
+    SpectralElementSpace2D(topology, space.quadrature_style)
+end
+
 nlevels(space::SpectralElementSpace2D) = 1
 perimeter(space::SpectralElementSpace2D) =
     Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
