@@ -32,7 +32,7 @@ import .TestUtilities as TU
     end
     for space in TU.all_spaces(FT)
         TU.bycolumnable(space) || continue
-        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
+        Y = fill((; x = FT(2)), space)
 
         # Plain broadcast
         Yx = Y.x
@@ -56,11 +56,11 @@ end
         nothing
     end
     function callfill!(Y)
-        fill!(Y, ((; x = 2.0),))
+        fill!(Y, (; x = 2.0))
         nothing
     end
     for space in TU.all_spaces(FT)
-        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
+        Y = fill((; x = FT(2)), space)
         allocs_test!(Y)
         p = @allocated allocs_test!(Y)
         @test p == 0
@@ -127,7 +127,7 @@ end
 @testset "Allocations StencilCoefs broadcasting" begin
     FT = Float64
     for space in TU.all_spaces(FT)
-        Y = TU.FieldFromNamedTuple(space, (; x = sc(FT)))
+        Y = fill((; x = sc(FT)), space)
         allocs_test1!(Y)
         p = @allocated allocs_test1!(Y)
         @test p == 0
@@ -206,8 +206,8 @@ end
     FT = Float64
     for space in TU.all_spaces(FT)
         Y = Fields.FieldVector(;
-            c = TU.FieldFromNamedTuple(space, (; x = FT(0))),
-            f = TU.FieldFromNamedTuple(space, (; x = FT(0))),
+            c = fill((; x = FT(0)), space),
+            f = fill((; x = FT(0)), space),
         )
 
         Y .= 0 # compile first

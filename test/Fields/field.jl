@@ -98,7 +98,7 @@ end
 @testset "Constructing & broadcasting over empty fields" begin
     FT = Float32
     for space in TU.all_spaces(FT)
-        f = TU.FieldFromNamedTuple(space, (;))
+        f = fill((;), space)
         @. f += f
     end
 
@@ -112,7 +112,7 @@ end
             @test_broken true
         end
     end
-    empty_field(space) = TU.FieldFromNamedTuple(space, (;))
+    empty_field(space) = fill((;), space)
 
     # Broadcasting over the wrong size should error
     test_broken_throws(empty_field(TU.PointSpace(FT)))
@@ -294,7 +294,7 @@ end
     FT = Float64
     nt =
         (; x = FT(0), y = FT(0), tup = ntuple(i -> (; a = FT(1), b = FT(1)), 2))
-    Y = TU.FieldFromNamedTuple(space, nt)
+    Y = fill(nt, space)
 
     prop_chains = Fields.property_chains(Y)
     @test prop_chains[1] == (:x,)
@@ -321,7 +321,7 @@ end
 ClimaCore.Fields.truncate_printing_field_types() = true
 @testset "Truncated printing" begin
     nt = (; x = Float64(0), y = Float64(0))
-    Y = TU.FieldFromNamedTuple(spectral_space_2D(), nt)
+    Y = fill(nt, spectral_space_2D())
     @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
           "Field{(:x, :y)} (trunc disp)"
 end
@@ -329,7 +329,7 @@ ClimaCore.Fields.truncate_printing_field_types() = false
 
 @testset "Standard printing" begin
     nt = (; x = Float64(0), y = Float64(0))
-    Y = TU.FieldFromNamedTuple(spectral_space_2D(), nt)
+    Y = fill(nt, spectral_space_2D())
     s = sprint(show, typeof(Y)) # just make sure this doesn't break
 end
 
@@ -337,7 +337,7 @@ end
     space = spectral_space_2D()
     FT = Float64
     nt = (; x = FT(0), y = FT(0))
-    Y = TU.FieldFromNamedTuple(space, nt)
+    Y = fill(nt, space)
     foo(local_geom) =
         sin(local_geom.coordinates.x * local_geom.coordinates.y) + 3
     Fields.set!(foo, Y.x)
@@ -373,7 +373,7 @@ end
     FT = Float64
     for space in TU.all_spaces(FT)
         TU.levelable(space) || continue
-        Y = TU.FieldFromNamedTuple(space, (; x = FT(2)))
+        Y = fill((; x = FT(2)), space)
         lg_space = Spaces.level(space, TU.fc_index(1, space))
         lg_field_space = axes(Fields.level(Y, TU.fc_index(1, space)))
         @test all(
@@ -388,14 +388,14 @@ end
     FT = Float64
     for space in TU.all_spaces(FT)
         if space isa Spaces.SpectralElementSpace1D
-            Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
+            Y = fill((; x = FT(1)), space)
             point_space_from_field = axes(Fields.column(Y.x, 1, 1))
             point_space = Spaces.column(space, 1, 1)
             @test Fields.ones(point_space) ==
                   Fields.ones(point_space_from_field)
         end
         if space isa Spaces.SpectralElementSpace2D
-            Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
+            Y = fill((; x = FT(1)), space)
             point_space_from_field = axes(Fields.column(Y.x, 1, 1, 1))
             point_space = Spaces.column(space, 1, 1, 1)
             @test Fields.ones(point_space) ==
@@ -424,7 +424,7 @@ end
     for space in TU.all_spaces(FT)
         # Filter out spaces without z coordinates:
         TU.has_z_coordinates(space) || continue
-        Y = TU.FieldFromNamedTuple(space, (; x = FT(1)))
+        Y = fill((; x = FT(1)), space)
         ᶜz_surf =
             Spaces.level(Fields.coordinate_field(Y).z, TU.fc_index(1, space))
         ᶜx_surf = copy(Spaces.level(Y.x, TU.fc_index(1, space)))
@@ -434,7 +434,7 @@ end
 
         # Skip spaces incompatible with Fields.bycolumn:
         TU.bycolumnable(space) || continue
-        Yc = TU.FieldFromNamedTuple(space, (; x = FT(1)))
+        Yc = fill((; x = FT(1)), space)
         column_surface_bc!(Yc.x, ᶜz_surf, ᶜx_surf)
         @test Y.x == Yc.x
         nothing
@@ -491,7 +491,7 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     foo = InferenceFoo(2.0)
 
     for space in TU.all_spaces(FT)
-        Y = TU.FieldFromNamedTuple(space, (; a = FT(0), b = FT(1)))
+        Y = fill((; a = FT(0), b = FT(1)), space)
         @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
             space,
             ics_foo,
@@ -632,7 +632,7 @@ convergence_rate(err, Δh) =
             # Skip spaces incompatible with Fields.bycolumn:
             TU.bycolumnable(space) || continue
 
-            Y = TU.FieldFromNamedTuple(space, (; y = FT(1)))
+            Y = fill((; y = FT(1)), space)
             zcf = Fields.coordinate_field(Y.y).z
             Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
@@ -675,7 +675,7 @@ ClimaCore.enable_threading() = false # launching threads allocates
     for space in TU.all_spaces(FT)
         # Filter out spaces without z coordinates:
         TU.has_z_coordinates(space) || continue
-        Y = TU.FieldFromNamedTuple(space, (; y = FT(1)))
+        Y = fill((; y = FT(1)), space)
         zcf = Fields.coordinate_field(Y.y).z
         ∫y = Spaces.level(similar(Y.y), TU.fc_index(1, space))
         ∫y .= 0

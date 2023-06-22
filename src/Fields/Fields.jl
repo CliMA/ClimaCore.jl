@@ -230,6 +230,24 @@ function Base.copyto!(dest::Field{V, M}, src::Field{V, M}) where {V, M}
     return dest
 end
 
+"""
+    fill!(field::Field, value)
+
+Fill `field` with `value`.
+"""
+function Base.fill!(field::Field, value)
+    fill!(field_values(field), value)
+    return field
+end
+"""
+    fill(value, space::AbstractSpace)
+
+Create a new `Field` on `space` and fill it with `value`.
+"""
+function Base.fill(value::FT, space::AbstractSpace) where {FT}
+    field = Field(FT, space)
+    return fill!(field, value)
+end
 
 """
     zeros(space::AbstractSpace)

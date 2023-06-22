@@ -236,16 +236,11 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
         end,
     )
 
-    function FieldFromNamedTuple(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
-
     ϕψ = combine.(ϕ, ψ)
     nt_ϕψ = combine_nt.(ϕ, ψ)
     nt_ϕψ_ft = combine_nt_ft.(ϕ)
-    f_comp = FieldFromNamedTuple(space, complicated_field(FT))
-    f_comp2 = FieldFromNamedTuple(space, complicated_field2(FT))
+    f_comp = fill(complicated_field(FT), space)
+    f_comp2 = fill(complicated_field2(FT), space)
     u = initial_velocity(space)
     du = initial_velocity(space)
     ϕ_buffer = Spaces.create_dss_buffer(ϕ)

@@ -192,9 +192,4 @@ fc_index(
 
 has_z_coordinates(space) = :z in propertynames(Spaces.coordinates_data(space))
 
-function FieldFromNamedTuple(space, nt::NamedTuple)
-    cmv(z) = nt
-    return cmv.(Fields.coordinate_field(space))
-end
-
 end

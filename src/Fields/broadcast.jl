@@ -442,5 +442,3 @@ function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
         ),
     )
 end
-
-Base.fill!(field::Fields.Field, val) = field .= val
