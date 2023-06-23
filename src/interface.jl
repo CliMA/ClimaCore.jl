@@ -14,10 +14,9 @@ and running julia with `julia --nthreads=N ...`
 This function is deprecated in version `0.10.42`.
 Please use the ClimaComms context for threading.
 """
-function enable_threading()
-    @warn "Use ClimaComms context for threading"
-    return false
-end
+enable_threading() = false
+Base.@deprecate enable_threading() deprecated_enable_threading() false
+deprecated_enable_threading() = false
 
 """
     slab(data::AbstractData, h::Integer)
