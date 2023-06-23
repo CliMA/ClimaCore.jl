@@ -18,7 +18,7 @@ import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray, SArray
 import ClimaComms
 
-import ..enable_threading, ..slab, ..slab_args, ..column, ..column_args, ..level
+import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, level, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
 
 include("struct.jl")
