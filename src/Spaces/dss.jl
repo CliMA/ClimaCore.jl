@@ -566,7 +566,7 @@ end
 
 """
     function dss_transform!(
-        ::ClimaComms.CPUDevice,
+        ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
         ∂ξ∂x::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
@@ -596,7 +596,7 @@ Arguments:
 Part of [`Spaces.weighted_dss!`](@ref).
 """
 function dss_transform!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -669,7 +669,7 @@ function dss_transform!(
 end
 """
     function dss_untransform!(
-        ::ClimaComms.CPUDevice,
+        ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
         ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -697,7 +697,7 @@ Part of [`Spaces.weighted_dss!`](@ref).
 """
 
 function dss_untransform!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
@@ -763,7 +763,7 @@ function dss_untransform!(
 end
 
 function dss_load_perimeter_data!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     dss_buffer::DSSBuffer,
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     perimeter::Perimeter2D{Nq},
@@ -782,7 +782,7 @@ function dss_load_perimeter_data!(
 end
 
 function dss_unload_perimeter_data!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     dss_buffer::DSSBuffer,
     perimeter::Perimeter2D{Nq},
@@ -802,7 +802,7 @@ end
 
 """
     function dss_local!(
-        ::ClimaComms.CPUDevice,
+        ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
         topology::Topologies.AbstractTopology,
@@ -813,7 +813,7 @@ Performs DSS on local vertices and faces.
 Part of [`Spaces.weighted_dss!`](@ref).
 """
 function dss_local!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
     topology::Topologies.Topology2D,
@@ -879,7 +879,7 @@ function dss_local_faces!(
 end
 """
     function dss_local_ghost!(
-        ::ClimaComms.CPUDevice,
+        ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
         topology::Topologies.AbstractTopology,
@@ -892,7 +892,7 @@ vertices of a unique ghost vertex and stores the value in each of the local vert
 Part of [`Spaces.weighted_dss!`](@ref).
 """
 function dss_local_ghost!(
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,
     topology::Topologies.AbstractTopology,
@@ -934,7 +934,7 @@ function dss_local_ghost!(
 end
 """
     dss_ghost!(
-        device::ClimaComms.CPUDevice,
+        device::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
         topology::Topologies.AbstractTopology,
@@ -946,7 +946,7 @@ the representative ghost vertex.
 Part of [`Spaces.weighted_dss!`](@ref).
 """
 function dss_ghost!(
-    device::ClimaComms.CPUDevice,
+    device::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,
     topology::Topologies.AbstractTopology,
@@ -979,14 +979,17 @@ function dss_ghost!(
 end
 
 """
-    fill_send_buffer!(::ClimaComms.CPUDevice, dss_buffer::DSSBuffer)
+    fill_send_buffer!(::ClimaComms.AbstractCPUDevice, dss_buffer::DSSBuffer)
 
 Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
 representative vertices which store result of "ghost local" DSS are loaded.
 
 Part of [`Spaces.weighted_dss!`](@ref).
 """
-function fill_send_buffer!(::ClimaComms.CPUDevice, dss_buffer::DSSBuffer)
+function fill_send_buffer!(
+    ::ClimaComms.AbstractCPUDevice,
+    dss_buffer::DSSBuffer,
+)
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
     Nf = cld(length(parent(perimeter_data)), (Nv * Np * nelems))
@@ -1004,7 +1007,7 @@ function fill_send_buffer!(::ClimaComms.CPUDevice, dss_buffer::DSSBuffer)
     return nothing
 end
 """
-    load_from_recv_buffer!(::ClimaComms.CPUDevice, dss_buffer::DSSBuffer)
+    load_from_recv_buffer!(::ClimaComms.AbstractCPUDevice, dss_buffer::DSSBuffer)
 
 Adds data from the recv buffer to the corresponding location in `perimeter_data`.
 For ghost vertices, this data is added only to the representative vertices. The values are 
@@ -1012,7 +1015,10 @@ then scattered to other local vertices corresponding to each unique ghost vertex
 
 Part of [`Spaces.weighted_dss!`](@ref).
 """
-function load_from_recv_buffer!(::ClimaComms.CPUDevice, dss_buffer::DSSBuffer)
+function load_from_recv_buffer!(
+    ::ClimaComms.AbstractCPUDevice,
+    dss_buffer::DSSBuffer,
+)
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
     Nf = cld(length(parent(perimeter_data)), (Nv * Np * nelems))

@@ -37,7 +37,7 @@ In the runscript, one needs to specify the following environmant variable:
 * `OUTPUT_DIR`: the directory for jld2 data being saved at;
 * `RESTART_FILE`: if run from a pre-existing jld2 data saved from a previous simulation.
 
-Meanwhile, to enable multithreads, one needs to change [here](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/driver.jl#L51) in `driver.jl` to be `enable_threading() = true`.
+Meanwhile, to enable multithreads, one needs to launch with the desired number of threads (e.g., `julia --threads=8`).
 
 To use `sphere/held_suarez_rhoe` as an example, one needs to modify [these lines](https://github.com/CliMA/ClimaCore.jl/blob/main/examples/hybrid/sphere/held_suarez_rhoe.jl#L6-L16) into the specific setup. In particular, `dt_save_to_disk=FT(0)` means no jld2 outputs. A non-zero value specifies the frequency in seconds to save the data into jld2 files.
 

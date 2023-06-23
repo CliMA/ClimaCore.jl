@@ -45,7 +45,8 @@ function get_space(context)
 end
 
 @testset "GPU extruded 3d hybrid box strong grad, div and curl" begin
-    cpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    cpu_context =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     gpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
     device = ClimaComms.device() #ClimaComms.CUDADevice()
     println("running test on $device device")
@@ -105,7 +106,8 @@ end
 end
 
 @testset "GPU extruded 3d hybrid box weak grad, div, curl and wdiv(grad)" begin
-    cpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    cpu_context =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     gpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
     device = ClimaComms.device() #ClimaComms.CUDADevice()
     println("running test on $device device")

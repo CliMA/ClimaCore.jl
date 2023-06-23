@@ -26,7 +26,7 @@ using OrdinaryDiffEq
 
     mesh = Meshes.RectilinearMesh(domain, 10, 10)
     grid_topology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice()),
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
         mesh,
     )
 

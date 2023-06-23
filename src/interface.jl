@@ -10,8 +10,14 @@ Enable the threading runtime by redefining the method at the toplevel your exper
     enable_threading() = true
 
 and running julia with `julia --nthreads=N ...`
+
+This function is deprecated in version `0.10.42`.
+Please use the ClimaComms context for threading.
 """
-enable_threading() = false
+function enable_threading()
+    @warn "Use ClimaComms context for threading"
+    return false
+end
 
 """
     slab(data::AbstractData, h::Integer)

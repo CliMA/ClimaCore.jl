@@ -5,7 +5,7 @@ using ClimaCore:
 using IntervalSets
 using Test
 
-device = ClimaComms.CPUDevice()
+device = ClimaComms.CPUSingleThreaded()
 
 @testset "2D extruded" begin
     vertdomain = Domains.IntervalDomain(

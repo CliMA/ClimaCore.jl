@@ -12,7 +12,7 @@ using ClimaCore:
     InputOutput
 
 using ClimaComms
-const comms_ctx = ClimaComms.context(ClimaComms.CPUDevice())
+const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
 pid, nprocs = ClimaComms.init(comms_ctx)
 filename = ClimaComms.bcast(comms_ctx, tempname(pwd()))
 if ClimaComms.iamroot(comms_ctx)

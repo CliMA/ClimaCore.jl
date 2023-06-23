@@ -24,7 +24,7 @@ function rectangular_grid(
         x2boundary = x2periodic ? nothing : (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
-    device = ClimaComms.CPUDevice()
+    device = ClimaComms.CPUSingleThreaded()
     return Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
 end
 

@@ -74,22 +74,30 @@ end
 function bycolumn(
     fn,
     space::Spaces.SpectralElementSpace1D,
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        if enable_threading()
-            Threads.@threads for h in 1:Nh
-                for i in 1:Nq
-                    fn(ColumnIndex((i,), h))
-                end
+        for h in 1:Nh
+            for i in 1:Nq
+                fn(ColumnIndex((i,), h))
             end
-        else
-            for h in 1:Nh
-                for i in 1:Nq
-                    fn(ColumnIndex((i,), h))
-                end
+        end
+    end
+    return nothing
+end
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace1D,
+    ::ClimaComms.CPUMultiThreaded,
+)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for i in 1:Nq
+                fn(ColumnIndex((i,), h))
             end
         end
     end
@@ -98,22 +106,30 @@ end
 function bycolumn(
     fn,
     space::Spaces.SpectralElementSpace2D,
-    ::ClimaComms.CPUDevice,
+    ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
     Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
-        if enable_threading()
-            Threads.@threads for h in 1:Nh
-                for j in 1:Nq, i in 1:Nq
-                    fn(ColumnIndex((i, j), h))
-                end
+        for h in 1:Nh
+            for j in 1:Nq, i in 1:Nq
+                fn(ColumnIndex((i, j), h))
             end
-        else
-            for h in 1:Nh
-                for j in 1:Nq, i in 1:Nq
-                    fn(ColumnIndex((i, j), h))
-                end
+        end
+    end
+    return nothing
+end
+function bycolumn(
+    fn,
+    space::Spaces.SpectralElementSpace2D,
+    ::ClimaComms.CPUMultiThreaded,
+)
+    Nh = Topologies.nlocalelems(space)
+    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for j in 1:Nq, i in 1:Nq
+                fn(ColumnIndex((i, j), h))
             end
         end
     end
@@ -122,7 +138,7 @@ end
 bycolumn(
     fn,
     space::Spaces.ExtrudedFiniteDifferenceSpace,
-    device::ClimaComms.CPUDevice,
+    device::ClimaComms.AbstractCPUDevice,
 ) = bycolumn(fn, space.horizontal_space, device)
 
 
@@ -187,13 +203,40 @@ Base.@propagate_inbounds function slab(
     slab(field, slabidx.v + half, slabidx.h)
 end
 
-function byslab(fn, space::Spaces.AbstractSpectralElementSpace)
+function byslab(fn, space::Spaces.AbstractSpace)
+    byslab(fn, ClimaComms.device(space), space)
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUSingleThreaded,
+    space::Spaces.AbstractSpectralElementSpace,
+)
     Nh = Topologies.nlocalelems(space.topology)::Int
     @inbounds for h in 1:Nh
         fn(SlabIndex(nothing, h))
     end
 end
-function byslab(fn, space::Spaces.CenterExtrudedFiniteDifferenceSpace)
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUMultiThreaded,
+    space::Spaces.AbstractSpectralElementSpace,
+)
+    Nh = Topologies.nlocalelems(space.topology)::Int
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            fn(SlabIndex(nothing, h))
+        end
+    end
+end
+
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUSingleThreaded,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
     @inbounds begin
@@ -204,11 +247,48 @@ function byslab(fn, space::Spaces.CenterExtrudedFiniteDifferenceSpace)
         end
     end
 end
-function byslab(fn, space::Spaces.FaceExtrudedFiniteDifferenceSpace)
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUMultiThreaded,
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
+            for v in 1:Nv
+                fn(SlabIndex(v, h))
+            end
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUSingleThreaded,
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+)
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
     @inbounds begin
         for h in 1:Nh
+            for v in 1:Nv
+                fn(SlabIndex(v - half, h))
+            end
+        end
+    end
+end
+
+function byslab(
+    fn,
+    ::ClimaComms.CPUMultiThreaded,
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+)
+    Nh = Topologies.nlocalelems(Spaces.topology(space))
+    Nv = Spaces.nlevels(space)
+    @inbounds begin
+        Threads.@threads for h in 1:Nh
             for v in 1:Nv
                 fn(SlabIndex(v - half, h))
             end

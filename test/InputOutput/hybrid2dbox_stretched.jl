@@ -25,7 +25,7 @@ function hvspace_2D(
     npoly = 4,
 )
     FT = Float64
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUDevice())
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);

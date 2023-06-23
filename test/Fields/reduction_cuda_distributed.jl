@@ -20,7 +20,7 @@ include("reduction_cuda_utils.jl")
 @testset "test distributed cuda reduction op on surface of sphere" begin
     FT = Float64
     context = ClimaComms.context()
-    context_cpu = ClimaComms.context(ClimaComms.CPUDevice()) # CPU context for comparison
+    context_cpu = ClimaComms.context(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
     ClimaComms.init(context)
     ClimaComms.init(context_cpu)
 
@@ -90,7 +90,7 @@ end
 @testset "test cuda reduction op for extruded 3D domain (hollow sphere)" begin
     FT = Float64
     context = ClimaComms.context()
-    context_cpu = ClimaComms.context(ClimaComms.CPUDevice()) # CPU context for comparison
+    context_cpu = ClimaComms.context(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
     ClimaComms.init(context)
     ClimaComms.init(context_cpu)
 
