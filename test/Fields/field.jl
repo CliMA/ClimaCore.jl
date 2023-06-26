@@ -94,6 +94,25 @@ end
     @test axes(point_field) isa Spaces.PointSpace
 end
 
+# https://github.com/CliMA/ClimaCore.jl/issues/1126
+function pow_n(f)
+    @. f.x = f.x^2
+    return nothing
+end
+@testset "Broadcasting with ^n" begin
+    FT = Float32
+    for space in TU.all_spaces(FT)
+        f = fill((; x = FT(1)), space)
+        pow_n(f) # Compile first
+        p_allocated = @allocated pow_n(f)
+        if space isa PointSpace
+            @test p_allocated == 0
+        else
+            @test_broken p_allocated == 0
+        end
+    end
+end
+
 # Requires `--check-bounds=yes`
 @testset "Constructing & broadcasting over empty fields" begin
     FT = Float32
