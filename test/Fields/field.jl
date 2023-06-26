@@ -105,11 +105,7 @@ end
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
-        if space isa PointSpace
-            @test p_allocated == 0
-        else
-            @test_broken p_allocated == 0
-        end
+        @test p_allocated == 0
     end
 end
 

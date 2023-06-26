@@ -294,6 +294,13 @@ Base.Broadcast.broadcasted(
 ) where {T <: Geometry.AxisTensor} =
     Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
 
+Base.Broadcast.broadcasted(
+    ::typeof(Base.literal_pow),
+    ::typeof(^),
+    f::Field,
+    ::Val{n},
+) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
+
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # Required for ODE solvers
 
