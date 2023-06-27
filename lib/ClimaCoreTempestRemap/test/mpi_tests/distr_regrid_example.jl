@@ -6,6 +6,7 @@ using ClimaComms
 using MPI
 using ClimaCore:
     Geometry, Meshes, Domains, Topologies, Spaces, Fields, Operators
+using IntervalSets
 
 using ClimaCore.Spaces: Quadratures
 using SparseArrays
@@ -33,6 +34,8 @@ comm = comms_ctx.mpicomm
 rank = MPI.Comm_rank(comm)
 root_pid = 0
 
+comms_ctx_serial = ClimaComms.SingletonCommsContext()
+
 # construct domain
 domain = Domains.RectangleDomain(
     Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
@@ -42,26 +45,38 @@ domain = Domains.RectangleDomain(
 )
 
 # construct distributed source space
-source_nq = 2
+source_nq = 3
 source_nex = 1
 source_ney = 2
 source_space = make_space(domain, source_nq, source_nex, source_ney, comms_ctx)
+source_space_serial = make_space(domain, source_nq, source_nex, source_ney, comms_ctx_serial)
 
 # construct distributed target space
-target_nq = 2
+target_nq = 3
 target_nex = 1
 target_ney = 3
 target_space = make_space(domain, target_nq, target_nex, target_ney, comms_ctx)
+target_space_serial = make_space(domain, target_nq, target_nex, target_ney, comms_ctx_serial)
 
 # generate weights (no remapping in x direction, so we really only need y_weights)
+# TODO
 if ClimaComms.iamroot(comms_ctx)
-    x_weights = Operators.x_overlap(target_space, source_space)
-    y_weights = Operators.y_overlap(target_space, source_space)
-    weights = kron(x_weights, y_weights)
+    # x_weights = Operators.x_overlap(target_space, source_space) # TODO doesn't work distributedly
+    # y_weights = Operators.y_overlap(target_space, source_space)
+    # weights = kron(x_weights, y_weights)
+    weights = Operators.overlap(target_space, source_space)
+    arr = [1, 2, 3]
 else
-    weights = nothing
+    weights = nothing # TODO I think weights should be initialized as a SparseMatrixCSC but not sure how since we don't have the row/col lengths
+    arr = nothing
 end
-MPI.bcast(weights, root_pid, comm)
+ClimaComms.bcast(comms_ctx, weights)
+ClimaComms.bcast(comms_ctx, arr)
+ClimaComms.barrier(comms_ctx)
+# MPI.Bcast!(weights, root_pid, comm)
+# MPI.Barrier(comm)
+@show arr
+@show weights
 
 # TODO reorder weights produced by kronecker product - or manually create weights from x_weights, y_weights
 
@@ -136,6 +151,10 @@ Nf = size(source_array, 3) # Nf is number of fields being remapped
 # loop over rows in weight matrix, compute dot prod for each row
 # TODO convert these to sparse representations later on
 send_row_sums = FT.(zeros(weights.m))
+
+@show target_ind_to_pid
+@show weights.m
+
 local_rows = findall(j -> target_ind_to_pid[j] == pid, collect(1:(weights.m)))
 n_local_rows = length(local_rows)
 local_row_sums = FT.(zeros(n_local_rows))
