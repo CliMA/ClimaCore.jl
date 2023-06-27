@@ -466,3 +466,49 @@ end
         end
     end
 end
+@testset "Interior Mesh `Adaption`: Test Warnings" begin
+    # Test interior mesh in different adaptation types
+    for meshadapt in (Hypsography.SLEVEAdaption,)
+        for FT in (Float32, Float64)
+            xlim = (FT(0), FT(π))
+            zlim = (FT(0), FT(1))
+            nl = 10
+            np = 3
+            nh = 4
+            vertdomain = Domains.IntervalDomain(
+                Geometry.ZPoint{FT}(zlim[1]),
+                Geometry.ZPoint{FT}(zlim[2]);
+                boundary_names = (:bottom, :top),
+            )
+            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
+            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+
+            horzdomain = Domains.IntervalDomain(
+                Geometry.XPoint{FT}(xlim[1]),
+                Geometry.XPoint{FT}(xlim[2]);
+                periodic = true,
+            )
+            horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
+            horztopology = Topologies.IntervalTopology(horzmesh)
+
+            quad = Spaces.Quadratures.GLL{np + 1}()
+            hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+
+            # Generate surface elevation profile
+            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
+            # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
+            # Scale height is poorly specified, so code should throw warning.
+            @test_logs (
+                :warn,
+                "Decay scale (s*z_top = 0.1) must be higher than max surface elevation (max(z_surface) = 0.5). Returning s = FT(0.8). Scale height is therefore s=0.8 m.",
+            )
+            (
+                fspace = Spaces.ExtrudedFiniteDifferenceSpace(
+                    hspace,
+                    vert_face_space,
+                    Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
+                )
+            )
+        end
+    end
+end
