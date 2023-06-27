@@ -26,7 +26,7 @@ const parameters = (
     k = 0.5, # Sinusoidal wavenumber
     ρ₀ = 1.0, # reference density
     c = 2,
-    g = 10,
+    g = 9.81,
     γ = 1.4,
 )
 
@@ -58,29 +58,28 @@ space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 Iquad = Spaces.Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
-function init_state(coord, p)
+function init_state(coord, parameters)
     x, y = coord.x, coord.y
     # set initial state
-    ρ = p.ρ₀
+    ρ = parameters.ρ₀
 
     # set initial velocity
     U₁ = cosh(y)^(-2)
 
-    # Ψ′ = exp(-(x2 + p.l / 10)^2 / 2p.l^2) * cos(p.k * x) * cos(p.k * y)
+    # Ψ′ = exp(-(x2 + parameters.l / 10)^2 / 2parameters.l^2) * cos(parameters.k * x) * cos(parameters.k * y)
     # Vortical velocity fields (u₁′, u₂′) = (-∂²Ψ′, ∂¹Ψ′)
-    gaussian = exp(-(y + p.l / 10)^2 / 2p.l^2)
-    u₁′ = gaussian * (y + p.l / 10) / p.l^2 * cos(p.k * x) * cos(p.k * x)
-    u₁′ += p.k * gaussian * cos(p.k * x) * sin(p.k * y)
-    u₂′ = -p.k * gaussian * sin(p.k * x) * cos(p.k * y)
-    u0 = U₁ + p.ϵ * u₁′
-    v0 = p.ϵ * u₂′
+    gaussian = exp(-(y + parameters.l / 10)^2 / 2parameters.l^2)
+    u₁′ = gaussian * (y + parameters.l / 10) / parameters.l^2 * cos(parameters.k * x) * cos(parameters.k * x)
+    u₁′ += parameters.k * gaussian * cos(parameters.k * x) * sin(parameters.k * y)
+    u₂′ = -parameters.k * gaussian * sin(parameters.k * x) * cos(parameters.k * y)
+    u0 = U₁ + parameters.ϵ * u₁′
+    v0 = parameters.ϵ * u₂′
     u = Geometry.UVVector(u0, v0)
-    # set initial tracer
-    θ = sin(p.k * y)
+     
+    # Assume T = T₀, thus initial internal energy is zero.
+    ρe = ρ * (u0^2 + v0^2) / 2 + parameters.g * ρ^2 / 2
 
-    e = ρ * (u0^2 + v0^2) / 2 + p.g * ρ^2 / 2
-
-    return (ρ = ρ, ρu = ρ * u, ρe = ρ * e)
+    return (ρ = ρ, ρu = ρ * u, ρe = ρe, Φ = parameters.g)
 end
 
 y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
@@ -91,33 +90,71 @@ y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))
      β₄ = similar(ρ),
     )
 function flux(state, p)
-    ρ, ρu, ρθ = state.ρ, state.ρu, state.ρθ
+    ρ, ρu, ρe = state.ρ, state.ρu, state.ρe
     u = ρu / ρ
-    return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ * u)
+    return (ρ = ρu, ρu = ((ρu ⊗ u) + (parameters.g * ρ^2 / 2) * I), ρe = ρe * u)
 end
 
 # gz == g in this problem.
 # Compute β function. 
 function compute_entropy(ρ, pressure, p)
-    return log(pressure) - log(ρ^p.γ)
+    return log(pressure) - log(ρ^parameters.γ)
 end
-function beta(state, p)
-    ρ, ρu, ρe = state.ρ, state.ρu, state.ρe
-    pressure = 1/2 * ρ^2 * p.g
-    s = compute_entropy(ρ, pressure, p)
-    b = ρ / 2pressure
-    u = ρu/ρ
-    β₁= (p.γ-s)/(p.γ-1)-b*(LinearAlgebra.norm_sqr(u)-2*p.g)
-    β₂= 2*b*u.u
-    β₃= 2*b*u.v
-    β₄= -2*b
-    return β = (;β₁, β₂, β₃, β₄)
+function compute_pressure(ρ, ρu, ρe, Φ, parameters)
+    γ = parameters.γ
+    # @. (γ - 1) * (ρe - dot(ρu, ρu) / 2ρ - ρ * Φ)
+    @. (parameters.g * ρ^2 / 2)
+end
+
+function state_to_entropy_variables!(
+    entropy,
+    state,
+    parameters,
+)
+    ρ, ρu, ρe, Φ = state.ρ, state.ρu, state.ρe, state.Φ
+
+    γ = parameters.γ
+
+    pressure = compute_pressure(ρ, ρu, ρe, Φ, parameters)
+    s = @. log(pressure / ρ^γ)
+    b = @. ρ / 2pressure
+    u = @. ρu / ρ
+
+    @. entropy.ρ = (γ - s) / (γ - 1) - (dot(u, u) - 2Φ) * b
+    @. entropy.ρu = 2b * u
+    @. entropy.ρe = -2b
+    @. entropy.Φ = 2ρ * b
+end
+
+function entropy_variables_to_state!(
+    state,
+    entropy,
+    parameters,
+)
+    FT = eltype(state)
+    β = entropy
+    γ = FT(gamma(param_set))
+
+    b = -β.ρe / 2
+    ρ = β.Φ / (2b)
+    ρu = ρ * β.ρu / (2b)
+
+    p = ρ / (2b)
+    s = log(p / ρ^γ)
+    Φ = dot(ρu, ρu) / (2 * ρ^2) - ((γ - s) / (γ - 1) - β.ρ) / (2b)
+
+    ρe = p / (γ - 1) + dot(ρu, ρu) / (2ρ) + ρ * Φ
+
+    y.ρ = ρ
+    y.ρu = ρu
+    y.ρe = ρe
+    y.Φ = Φ
 end
 
 function energy(state, p)
     ρ, ρu = state.ρ, state.ρu
     u = ρu / ρ
-    return ρ * (u.u^2 + u.v^2) / 2 + p.g * ρ^2 / 2
+    return ρ * (u.u^2 + u.v^2) / 2 + parameters.g * ρ^2 / 2
 end
 
 function total_energy(y, parameters)
@@ -208,7 +245,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
     #  K = DSS scatter (i.e. duplicates points at element boundaries)
     #  K y = stored input vector (with duplicated values)
     #  I = interpolation to higher-order space
-    #  D = derivative operator
+    #  D = derivative operatoea
     #  H = suffix for higher-order space operations
     #  W = Quadrature weights
     #  J = Jacobian determinant of the transformation `ξ` to `x`
