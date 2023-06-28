@@ -98,9 +98,8 @@ function ExtrudedFiniteDifferenceSpace(
         @assert s >= FT(0)
         η = @. z_ref ./ z_top
         if s * z_top <= maximum(z_surface)
-            @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). 
-                   \n Returning (5/3)*max(zₛ)"
-            s = @. maximum(z_surface) / z_top * eltype(z_surface) * (5 // 3)
+            @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
+            s = @. FT(8 / 10)
         end
         fZ_data = @. ifelse(
             η <= ηₕ,
