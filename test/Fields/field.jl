@@ -109,6 +109,49 @@ end
     end
 end
 
+function ifelse_broadcast_allocating(a, b, c)
+    FT = eltype(a)
+    @. a = ifelse(true || c < b * FT(1), FT(0), c)
+    return nothing
+end
+
+function ifelse_broadcast_or(a, b, c)
+    FT = eltype(a)
+    val = FT(1)
+    @. a = ifelse(true || c < b * val, FT(0), c)
+    return nothing
+end
+
+function ifelse_broadcast_simple(a, b, c)
+    FT = eltype(a)
+    @. a = ifelse(c < b * FT(1), FT(0), c)
+    return nothing
+end
+
+@testset "Broadcasting ifelse" begin
+    FT = Float32
+    for space in (
+        TU.CenterExtrudedFiniteDifferenceSpace(FT),
+        TU.ColumnCenterFiniteDifferenceSpace(FT),
+    )
+        a = Fields.level(fill(FT(0), space), 1)
+        b = Fields.level(fill(FT(2), space), 1)
+        c = Fields.level(fill(FT(3), space), 1)
+
+        ifelse_broadcast_allocating(a, b, c)
+        p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
+        @test_broken p_allocated == 0
+
+        ifelse_broadcast_or(a, b, c)
+        p_allocated = @allocated ifelse_broadcast_or(a, b, c)
+        @test p_allocated == 0
+
+        ifelse_broadcast_simple(a, b, c)
+        p_allocated = @allocated ifelse_broadcast_simple(a, b, c)
+        @test p_allocated == 0
+    end
+end
+
 # Requires `--check-bounds=yes`
 @testset "Constructing & broadcasting over empty fields" begin
     FT = Float32
