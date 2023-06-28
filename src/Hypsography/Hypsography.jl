@@ -1,8 +1,8 @@
 module Hypsography
 
 import ..slab, ..column
-import ..Geometry, ..Domains, ..Topologies, ..Spaces, ..Fields, ..Operators
-import ..Spaces: ExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
+import ..Geometry, ..Domains, ..Topologies, ..Spaces, ..Fields, ..Operators, ..DataLayouts
+import ..Spaces: ExtrudedFiniteDifferenceSpace, FaceExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
 
 using StaticArrays, LinearAlgebra
 
@@ -11,11 +11,16 @@ using StaticArrays, LinearAlgebra
     LinearAdaption(surface::Field)
 
 Locate the levels by linear interpolation between the surface field and the top
-of the domain, using the method of [GalChen1975](@cite).
+of the domain, using the method of [GalChen1975](@cite). Requires a height-limit
+ηₕ (0≤ηₕ≤1) above which no warping is applied. 
 """
-struct LinearAdaption{F <: Union{Fields.Field, Nothing}} <: HypsographyAdaption
+struct LinearAdaption{F <: Union{Fields.Field, Nothing}, FT <: Real} <: HypsographyAdaption
     # Union can be removed once deprecation removed.
     surface::F
+    ηₕ::FT
+end
+function LinearAdaption(surface::F; ηₕ=1) where {F <: Fields.Field}
+    return LinearAdaption(surface, ηₕ)
 end
 
 """
@@ -33,6 +38,62 @@ struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
     surface::F
     ηₕ::FT
     s::FT
+end
+
+
+"""
+    generate_warped_coordinates(z_surface::Field, 
+                                z_ref::Field,
+                                z_top::FT, 
+                                face_space::FaceExtrudedFiniteDifferenceSpace,
+                                adaption::HypsographyAdaption)
+
+Generate warped coordinates given a surface elevation profile `z_surface`, 
+a domain top coordinate `z_top` and the base (unwarped) coordinate field
+`z_ref`. For undefined warp types, the unwarped coordinate field is returned.
+"""
+function generate_warped_coordinates(z_surface::FD, 
+                                     z_top::FT, 
+                                     face_space::FE, 
+                                     adaption::A) where{FD <:Union{DataLayouts.AbstractData, Nothing}, 
+                                     FE <: FaceExtrudedFiniteDifferenceSpace, 
+                                     FT <: Real, 
+                                     A <: HypsographyAdaption}
+    z_ref = Spaces.coordinates_data(face_space).z
+    return Fields.Field(z_ref, face_space)
+end
+function generate_warped_coordinates(z_surface::FD, 
+                                    z_top::FT, 
+                                    face_space::FE, 
+                                    adaption::LinearAdaption) 
+    where{FD<:Union{DataLayouts.AbstractData, Nothing}, FE<:FaceExtrudedFiniteDifferenceSpace, FT <: Real}
+    z_ref = Spaces.coordinates_data(face_space).z
+    ηₕ = adaption.ηₕ
+    fZ_data = @. ifelse(
+        z_ref / z_top <= ηₕ,
+        z_ref + (1 - z_ref / z_top) * z_surface,
+        z_ref,
+    )
+    return Fields.Field(fZ_data, face_space)
+end
+function generate_warped_coordinates(z_surface::FD, z_top::FT, face_space::FE, adaption::SLEVEAdaption) 
+    where{FD <: Union{DataLayouts.AbstractData, Nothing}, FE <: FaceExtrudedFiniteDifferenceSpace, FT <: Real}
+    z_ref = Spaces.coordinates_data(face_space).z
+    ηₕ = adaption.ηₕ
+    s = adaption.s
+    @assert FT(0) <= ηₕ <= FT(1)
+    @assert s >= FT(0)
+    η = @. z_ref ./ z_top
+    if s * z_top <= maximum(z_surface)
+        @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
+        s = @. FT(8 / 10)
+    end
+    fZ_data = @. ifelse(
+        η <= ηₕ,
+        η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+        η * z_top,
+    )
+    return Fields.Field(fZ_data, face_space)
 end
 
 # deprecated in 0.10.12
@@ -74,9 +135,8 @@ function ExtrudedFiniteDifferenceSpace(
         vertical_space,
         Flat(),
     )
-    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+    face_space = FaceExtrudedFiniteDifferenceSpace(space)
     coord_type = eltype(Spaces.coordinates_data(face_space))
-    z_ref = Spaces.coordinates_data(face_space).z
 
     vertical_domain = Topologies.domain(space.vertical_topology)
     z_top = vertical_domain.coord_max.z
@@ -87,27 +147,7 @@ function ExtrudedFiniteDifferenceSpace(
 
     FT = eltype(z_surface)
 
-    # TODO: Function dispatch
-    if adaption isa LinearAdaption
-        fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
-        fZ = Fields.Field(fZ_data, face_space)
-    elseif adaption isa SLEVEAdaption
-        ηₕ = adaption.ηₕ
-        s = adaption.s
-        @assert FT(0) <= ηₕ <= FT(1)
-        @assert s >= FT(0)
-        η = @. z_ref ./ z_top
-        if s * z_top <= maximum(z_surface)
-            @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
-            s = @. FT(8 / 10)
-        end
-        fZ_data = @. ifelse(
-            η <= ηₕ,
-            η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
-            η * z_top,
-        )
-        fZ = Fields.Field(fZ_data, face_space)
-    end
+    fZ = generate_warped_coordinates(z_surface, z_top, face_space, adaption)
 
     # Take the horizontal gradient for the Z surface field
     # for computing updated ∂x∂ξ₃₁, ∂x∂ξ₃₂ terms
@@ -270,5 +310,4 @@ function reconstruct_metric(
         ]
     )
 end
-
 end
