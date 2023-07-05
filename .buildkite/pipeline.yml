@@ -482,6 +482,18 @@ steps:
           slurm_mem: 20GB
           slurm_gpus: 1
 
+      - label: "Unit: Thomas Algorithm"
+        key: "cpu_thomas_algorithm"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=examples test/Operators/thomas_algorithm.jl"
+
+      - label: "Unit: Thomas Algorithm"
+        key: "gpu_thomas_algorithm"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=examples test/Operators/thomas_algorithm.jl"
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: Hypsography"
     steps:
 

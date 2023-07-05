@@ -35,7 +35,7 @@ if is_distributed
     logger_stream = ClimaComms.iamroot(comms_ctx) ? stderr : devnull
     prev_logger = global_logger(ConsoleLogger(logger_stream, Logging.Info))
     @info "Setting up distributed run on $nprocs \
-        processor$(nprocs == 1 ? "" : "s")"
+        processor$(nprocs == 1 ? "" : "s") on a $(comms_ctx.device) device"
 else
     using TerminalLoggers: TerminalLogger
     prev_logger = global_logger(TerminalLogger())

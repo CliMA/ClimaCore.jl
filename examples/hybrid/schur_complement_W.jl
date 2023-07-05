@@ -154,16 +154,7 @@ function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
 
         @. xᶠ𝕄 = bᶠ𝕄 + dtγ * (apply(∂ᶠ𝕄ₜ∂ᶜρ, bᶜρ) + apply(∂ᶠ𝕄ₜ∂ᶜ𝔼, bᶜ𝔼))
 
-        # TODO: Do this with stencil_solve!.
-        Ni, Nj, _, _, Nh = size(Spaces.local_geometry_data(axes(xᶜρ)))
-        for h in 1:Nh, j in 1:Nj, i in 1:Ni
-            xᶠ𝕄_column_view = parent(Spaces.column(xᶠ𝕄, i, j, h))
-            S_column = Spaces.column(S, i, j, h)
-            @views S_column_array.dl .= parent(S_column.coefs.:1)[2:end]
-            S_column_array.d .= parent(S_column.coefs.:2)
-            @views S_column_array.du .= parent(S_column.coefs.:3)[1:(end - 1)]
-            ldiv!(lu!(S_column_array), xᶠ𝕄_column_view)
-        end
+        Operators.column_thomas_solve!(S, xᶠ𝕄)
 
         @. xᶜρ = -bᶜρ + dtγ * apply(∂ᶜρₜ∂ᶠ𝕄, xᶠ𝕄)
         @. xᶜ𝔼 = -bᶜ𝔼 + dtγ * apply(∂ᶜ𝔼ₜ∂ᶠ𝕄, xᶠ𝕄)
