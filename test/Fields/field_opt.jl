@@ -188,6 +188,45 @@ end
 end
 nothing
 
+function test_assign_svec!(uₕ_phys, uₕ)
+    @. uₕ_phys = StaticArrays.SVector(
+        Geometry.UVVector(uₕ).components.data.:1,
+        Geometry.UVVector(uₕ).components.data.:2,
+    )
+    return nothing
+end
+
+function test_assign_tup!(uₕ_phys_tup, uₕ)
+    @. uₕ_phys_tup = tuple(
+        Geometry.UVVector(uₕ).components.data.:1,
+        Geometry.UVVector(uₕ).components.data.:2,
+    )
+    return nothing
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/1015
+@testset "Allocations when assigning SArrays and Tuples" begin
+    FT = Float32
+    for space in TU.all_spaces(FT)
+        f = fill(
+            (;
+                uₕ = Geometry.Covariant12Vector(FT(0), FT(0)),
+                uₕ_phys = StaticArrays.SVector(FT(0), FT(0)),
+                uₕ_phys_tup = (FT(0), FT(0)),
+            ),
+            space,
+        )
+
+        test_assign_svec!(f.uₕ_phys, f.uₕ) # compile first
+        p = @allocated test_assign_svec!(f.uₕ_phys, f.uₕ)
+        @test_broken p == 0
+
+        test_assign_tup!(f.uₕ_phys_tup, f.uₕ) # compile first
+        p = @allocated test_assign_tup!(f.uₕ_phys_tup, f.uₕ)
+        @test_broken p == 0
+    end
+end
+
 function allocs_test_scalar_with_compose!(S, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶜρₜ∂ᶠ𝕄)
     Fields.bycolumn(axes(S)) do colidx
         allocs_test_scalar_with_compose_column!(
