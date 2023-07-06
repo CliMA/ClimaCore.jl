@@ -1,4 +1,5 @@
 using Test
+import ClimaTimeSteppers as CTS
 using ClimaCorePlots, Plots
 using ClimaCore.DataLayouts
 
@@ -15,7 +16,8 @@ t_end = FT(60 * 60)
 dt = FT(5)
 dt_save_to_sol = FT(50)
 dt_save_to_disk = FT(0) # 0 means don't save to disk
-ode_algorithm = OrdinaryDiffEq.SSPRK33
+ode_algorithm = CTS.SSP33ShuOsher
+jacobian_flags = (; ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = :exact, ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact)
 
 additional_cache(ᶜlocal_geometry, ᶠlocal_geometry, dt) = merge(
     hyperdiffusion_cache(ᶜlocal_geometry, ᶠlocal_geometry; κ₄ = FT(2e17)),

@@ -24,6 +24,7 @@ postprocessing(sol, output_dir) = nothing
 
 ################################################################################
 
+import ClimaTimeSteppers as CTS
 using ClimaComms
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
@@ -145,13 +146,14 @@ end
 callback =
     CallbackSet(dss_callback, save_to_disk_callback, additional_callbacks...)
 
-problem = SplitODEProblem(
-    ODEFunction(
-        implicit_tendency!;
-        jac_kwargs(ode_algo, Y, jacobian_flags)...,
-        tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
+problem = ODE.ODEProblem(
+    CTS.ClimaODEFunction(;
+        T_imp! = ODEFunction(
+            implicit_tendency!;
+            jac_kwargs(ode_algo, Y, jacobian_flags)...,
+        ),
+        T_exp! = remaining_tendency!,
     ),
-    remaining_tendency!,
     Y,
     (t_start, t_end),
     p,
