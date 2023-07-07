@@ -6,7 +6,7 @@ using ClimaCore.Utilities: half
 const compose = Operators.ComposeStencils()
 const apply = Operators.ApplyStencil()
 
-struct SchurComplementW{F, FT, J1, J2, J3, J4, S, A}
+struct SchurComplementW{F, FT, J1, J2, J3, J4, S}
     # whether this struct is used to compute Wfact_t or Wfact
     transform::Bool
 
@@ -25,7 +25,6 @@ struct SchurComplementW{F, FT, J1, J2, J3, J4, S, A}
 
     # cache for the Schur complement linear solve
     S::S
-    S_column_array::A
 
     # whether to test the Jacobian and linear solver
     test::Bool
@@ -53,11 +52,6 @@ function SchurComplementW(Y, transform, flags, test = false)
     S_eltype = Operators.StencilCoefs{-1, 1, NTuple{3, FT}}
     S = Fields.Field(S_eltype, face_space)
     N = Spaces.nlevels(face_space)
-    S_column_array = Tridiagonal(
-        Array{FT}(undef, N - 1),
-        Array{FT}(undef, N),
-        Array{FT}(undef, N - 1),
-    )
 
     SchurComplementW{
         typeof(flags),
@@ -67,7 +61,6 @@ function SchurComplementW(Y, transform, flags, test = false)
         typeof(∂ᶠ𝕄ₜ∂ᶜρ),
         typeof(∂ᶠ𝕄ₜ∂ᶠ𝕄),
         typeof(S),
-        typeof(S_column_array),
     }(
         transform,
         flags,
@@ -78,7 +71,6 @@ function SchurComplementW(Y, transform, flags, test = false)
         ∂ᶠ𝕄ₜ∂ᶜρ,
         ∂ᶠ𝕄ₜ∂ᶠ𝕄,
         S,
-        S_column_array,
         test,
     )
 end
@@ -112,7 +104,7 @@ Note: The matrix S = A31 A13 + A32 A23 + A33 - I is the "Schur complement" of
 function linsolve!(::Type{Val{:init}}, f, u0; kwargs...)
     function _linsolve!(x, A, b, update_matrix = false; kwargs...)
         (; dtγ_ref, ∂ᶜρₜ∂ᶠ𝕄, ∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶠ𝕄ₜ∂ᶜ𝔼, ∂ᶠ𝕄ₜ∂ᶜρ, ∂ᶠ𝕄ₜ∂ᶠ𝕄) = A
-        (; S, S_column_array) = A
+        (; S) = A
         dtγ = dtγ_ref[]
 
         xᶜρ = x.c.ρ
