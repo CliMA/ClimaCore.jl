@@ -144,6 +144,14 @@ Similar to `fieldoffset(S,i)`, but gives result in multiples of `sizeof(T)` inst
 fieldtypeoffset(::Type{T}, ::Type{S}, i) where {T, S} =
     Int(div(fieldoffset(S, i), sizeof(T)))
 
+@generated function fieldtypeoffset(
+    ::Type{T},
+    ::Type{S},
+    ::Val{i},
+) where {T, S, i}
+    return :(Int(div(fieldoffset(S, i), sizeof(T))))
+end
+
 """
     typesize(T,S)
 

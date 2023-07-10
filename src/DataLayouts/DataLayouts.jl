@@ -207,7 +207,7 @@ end
 ) where {S, Nij, Nk, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJKFVH{$SS, $Nij, $Nk}(
@@ -337,7 +337,7 @@ Base.length(data::IJFH) = size(parent(data), 4)
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJFH{$SS, $Nij}(
@@ -473,7 +473,7 @@ Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IFH{$SS, $Ni}(
@@ -581,7 +581,7 @@ end
 ) where {S, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(DataF{$SS}(@inbounds view(parent(data), $field_byterange)))
@@ -699,7 +699,7 @@ end
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IJF{$SS, $Nij}(
@@ -832,7 +832,7 @@ end
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(IF{$SS, $Ni}(@inbounds view(parent(data), :, $field_byterange)))
@@ -934,7 +934,7 @@ end
 @generated function _property_view(data::VF{S, A}, ::Val{Idx}) where {S, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(VF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
@@ -1059,7 +1059,7 @@ end
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(VIJFH{$SS, $Nij}(
@@ -1233,7 +1233,7 @@ end
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
     T = eltype(A)
-    offset = fieldtypeoffset(T, S, Idx)
+    offset = fieldtypeoffset(T, S, Val(Idx))
     nbytes = typesize(T, SS)
     field_byterange = (offset + 1):(offset + nbytes)
     return :(VIFH{$SS, $Ni}(
