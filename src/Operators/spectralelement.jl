@@ -313,6 +313,14 @@ Base.@propagate_inbounds function get_node(space, scalar, ij, slabidx)
     scalar[]
 end
 Base.@propagate_inbounds function get_node(
+    space,
+    scalar::Tuple{<:Any},
+    ij,
+    slabidx,
+)
+    scalar[1]
+end
+Base.@propagate_inbounds function get_node(
     parent_space,
     field::Fields.Field,
     ij::CartesianIndex{1},
