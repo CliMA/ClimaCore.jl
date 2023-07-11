@@ -301,6 +301,8 @@ Base.Broadcast.broadcasted(
     ::Val{n},
 ) where {n} = Base.Broadcast.broadcasted(x -> Base.literal_pow(^, x, Val(n)), f)
 
+Base.Broadcast.broadcasted(::Type{T}, x::Number) where {T <: Number} = x
+
 # Specialize handling of +, *, muladd, so that we can support broadcasting over NamedTuple element types
 # Required for ODE solvers
 
