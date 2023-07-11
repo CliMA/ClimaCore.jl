@@ -35,7 +35,7 @@ face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
 =#
 face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
-function _linsolve!(x, A, b, update_matrix = false; kwargs...)
+function test_linsolve!(x, A, b, update_matrix = false; kwargs...)
 
     FT = Spaces.undertype(axes(x.c))
 
@@ -88,11 +88,11 @@ W = SchurComplementW(Y, use_transform, jacobi_flags)
 
 using JET
 using Test
-@time _linsolve!(Y, W, b)
-@time _linsolve!(Y, W, b)
+@time test_linsolve!(Y, W, b)
+@time test_linsolve!(Y, W, b)
 
 @testset "JET test for `apply` in linsolve! kernel" begin
-    @test_opt _linsolve!(Y, W, b)
+    @test_opt test_linsolve!(Y, W, b)
 end
 
 ClimaCore.Operators.allow_mismatched_fd_spaces() = false
