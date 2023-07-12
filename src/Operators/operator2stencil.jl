@@ -166,7 +166,7 @@ end
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_interior(
-    ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiasedC2F}},
+    ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiased1stOrderC2F}},
     loc,
     space,
     idx,
@@ -177,7 +177,7 @@ function stencil_interior(
     return StencilCoefs{-half, -half}((val⁻,))
 end
 stencil_left_boundary(
-    ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiasedC2F}},
+    ::Operator2Stencil{<:Union{LeftBiasedF2C, LeftBiased1stOrderC2F}},
     bc::SetValue,
     loc,
     space,
@@ -189,7 +189,7 @@ stencil_left_boundary(
 
 # TODO: find out why using Base.@propagate_inbounds blows up compilation time
 function stencil_interior(
-    ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiasedC2F}},
+    ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiased1stOrderC2F}},
     loc,
     space,
     idx,
@@ -200,7 +200,7 @@ function stencil_interior(
     return StencilCoefs{half, half}((val⁺,))
 end
 stencil_right_boundary(
-    ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiasedC2F}},
+    ::Operator2Stencil{<:Union{RightBiasedF2C, RightBiased1stOrderC2F}},
     bc::SetValue,
     loc,
     space,

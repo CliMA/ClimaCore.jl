@@ -67,16 +67,16 @@ const upwind1 = Operators.UpwindBiasedProductC2F(
     top = Operators.Extrapolate(),
 )
 const upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-    bottom = Operators.ThirdOrderOneSided(),
-    top = Operators.ThirdOrderOneSided(),
+    bottom = Operators.OneSided3rdOrder(),
+    top = Operators.OneSided3rdOrder(),
 )
 const FCTZalesak = Operators.FCTZalesak(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
+    bottom = Operators.OneSided1stOrder(),
+    top = Operators.OneSided1stOrder(),
 )
 const FCTBorisBook = Operators.FCTBorisBook(
-    bottom = Operators.FirstOrderOneSided(),
-    top = Operators.FirstOrderOneSided(),
+    bottom = Operators.OneSided1stOrder(),
+    top = Operators.OneSided1stOrder(),
 )
 
 # Reference pressure and density

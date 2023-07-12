@@ -123,18 +123,18 @@ function set_vec_value_bcs(c)
 end
 
 function set_upwind_biased_bcs(c)
-    return (;bottom = Operators.FirstOrderOneSided(),
-             top = Operators.FirstOrderOneSided())
+    return (;bottom = Operators.OneSided1stOrder(),
+             top = Operators.OneSided1stOrder())
 end
 
 function set_upwind_biased_bcs(c)
-    return (;bottom = Operators.ThirdOrderOneSided(),
-             top = Operators.ThirdOrderOneSided())
+    return (;bottom = Operators.OneSided3rdOrder(),
+             top = Operators.OneSided3rdOrder())
 end
 
 function set_upwind_biased_3_bcs(c)
-    return (;bottom = Operators.ThirdOrderOneSided(),
-             top = Operators.ThirdOrderOneSided())
+    return (;bottom = Operators.OneSided3rdOrder(),
+             top = Operators.OneSided3rdOrder())
 end
 
 function set_top_value_bc(c)
@@ -225,9 +225,9 @@ bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
 bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((), )
 bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
-bcs_tested(c, ::typeof(op_LeftBiasedC2F!)) = (set_bot_value_bc(c),)
+bcs_tested(c, ::typeof(op_LeftBiased1stOrderC2F!)) = (set_bot_value_bc(c),)
 bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((), set_bot_value_bc(c))
-bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
+bcs_tested(c, ::typeof(op_RightBiased1stOrderC2F!)) = (set_top_value_bc(c),)
 bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((), set_top_value_bc(c))
 bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c), set_curl_value_bcs(c))
 bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
@@ -322,9 +322,9 @@ function benchmark_operators_base(trials, t_ave, cfield, ffield)
         op_broadcast_example0!,
         op_broadcast_example1!,
         op_broadcast_example2!,
-        op_LeftBiasedC2F!,
+        op_LeftBiased1stOrderC2F!,
         op_LeftBiasedF2C!,
-        op_RightBiasedC2F!,
+        op_RightBiased1stOrderC2F!,
         op_RightBiasedF2C!,
         op_CurlC2F!,
         #### Mixed / adaptive
@@ -358,6 +358,7 @@ function test_results(t_ave)
     buffer = 2
     ns = 1
     μs = 10^3
+<<<<<<< HEAD
     ms = 10^6
     @test t_ave[(:FiniteDifferenceSpace, op_GradientF2C!, :none)] ≤ 253.100*ns*buffer
     @test t_ave[(:FiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue)] ≤ 270.448*ns*buffer
@@ -418,6 +419,87 @@ function test_results(t_ave)
     @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue)] ≤ 3.663*ms*buffer
     @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] ≤ 7.470*ms*buffer
     @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] ≤ 7.251*ms*buffer
+=======
+    @test t_ave[(:no_h_space, op_GradientF2C!, :none)] < 559.8423*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 569.8995*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientC2F!, :SetGradient, :SetGradient)] < 250.761*ns*buffer
+    @test t_ave[(:no_h_space, op_GradientC2F!, :SetValue, :SetValue)] < 248.521*ns*buffer
+    @test t_ave[(:no_h_space, op_DivergenceF2C!, :none)] < 1.550*μs*buffer
+    @test t_ave[(:no_h_space, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 1.587*μs*buffer
+    @test t_ave[(:no_h_space, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 1.565*μs*buffer
+    @test t_ave[(:no_h_space, op_InterpolateF2C!, :none)] < 332.432*ns*buffer
+    @test t_ave[(:no_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 404.5473*ns*buffer
+    @test t_ave[(:no_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 400.4656*ns*buffer
+    @test t_ave[(:no_h_space, op_broadcast_example2!, :none)] < 600*ns*buffer
+    @test t_ave[(:no_h_space, op_LeftBiased1stOrderC2F!, :SetValue)] < 365.2909*ns*buffer
+    @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :none)] < 185.358*ns*buffer
+    @test t_ave[(:no_h_space, op_LeftBiasedF2C!, :SetValue)] < 221.175*ns*buffer
+    @test t_ave[(:no_h_space, op_RightBiased1stOrderC2F!, :SetValue)] < 138.649*ns*buffer
+    @test t_ave[(:no_h_space, op_RightBiasedF2C!, :none)] < 186.417*ns*buffer
+    @test t_ave[(:no_h_space, op_RightBiasedF2C!, :SetValue)] < 189.139*ns*buffer
+    @test t_ave[(:no_h_space, op_CurlC2F!, :SetCurl, :SetCurl)] < 2.884*μs*buffer
+    @test t_ave[(:no_h_space, op_CurlC2F!, :SetValue, :SetValue)] < 2.926*μs*buffer
+    @test t_ave[(:no_h_space, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 697.341*ns*buffer
+    @test t_ave[(:no_h_space, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 659.267*ns*buffer
+    @test t_ave[(:no_h_space, op_divUpwind3rdOrderBiasedProductC2F!, :OneSided3rdOrder, :OneSided3rdOrder, :SetValue, :SetValue)] < 4.483*μs*buffer
+    @test t_ave[(:no_h_space, op_divgrad_CC!, :SetValue, :SetValue, :none)] < 1.607*μs*buffer
+    @test t_ave[(:no_h_space, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 1.529*μs*buffer
+    @test t_ave[(:no_h_space, op_div_interp_CC!, :SetValue, :SetValue, :none)] < 1.510*μs*buffer
+    @test t_ave[(:no_h_space, op_div_interp_FF!, :none, :SetValue, :SetValue)] < 1.523*μs*buffer
+    @test t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 4.637*μs*buffer
+    @test t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 4.618*μs*buffer
+    @test t_ave[(:has_h_space, op_GradientF2C!, :none)] < 441.097*ns*buffer
+    @test t_ave[(:has_h_space, op_GradientF2C!, :SetValue, :SetValue)] < 724.818*ns*buffer
+    @test t_ave[(:has_h_space, op_GradientC2F!, :SetGradient, :SetGradient)] < 346.544*ns*buffer
+    @test t_ave[(:has_h_space, op_GradientC2F!, :SetValue, :SetValue)] < 327.835*ns*buffer
+    @test t_ave[(:has_h_space, op_DivergenceF2C!, :none)] < 1.884*μs*buffer
+    @test t_ave[(:has_h_space, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 1.953*μs*buffer
+    @test t_ave[(:has_h_space, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 1.858*μs*buffer
+    @test t_ave[(:has_h_space, op_InterpolateF2C!, :none)] < 436.229*ns*buffer
+    @test t_ave[(:has_h_space, op_InterpolateC2F!, :SetValue, :SetValue)] < 713.735*ns*buffer
+    @test t_ave[(:has_h_space, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] < 808.127*ns*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example0!, :none)] < 800*ns*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example1!, :none)] < 39*μs*buffer
+    @test t_ave[(:has_h_space, op_broadcast_example2!, :none)] < 35*μs*buffer
+    @test t_ave[(:has_h_space, op_LeftBiased1stOrderC2F!, :SetValue)] < 619.749*ns*buffer
+    @test t_ave[(:has_h_space, op_LeftBiasedF2C!, :none)] < 276.520*ns*buffer
+    @test t_ave[(:has_h_space, op_LeftBiasedF2C!, :SetValue)] < 333.901*ns*buffer
+    @test t_ave[(:has_h_space, op_RightBiased1stOrderC2F!, :SetValue)] < 245.966*ns*buffer
+    @test t_ave[(:has_h_space, op_RightBiasedF2C!, :none)] < 277.616*ns*buffer
+    @test t_ave[(:has_h_space, op_RightBiasedF2C!, :SetValue)] < 280.969*ns*buffer
+    @test t_ave[(:has_h_space, op_CurlC2F!, :SetCurl, :SetCurl)] < 3.078*μs*buffer
+    @test t_ave[(:has_h_space, op_CurlC2F!, :SetValue, :SetValue)] < 3.159*μs*buffer
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 5.197*μs*buffer
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 5.304*μs*buffer
+    @test t_ave[(:has_h_space, op_divUpwind3rdOrderBiasedProductC2F!, :OneSided3rdOrder, :OneSided3rdOrder, :SetValue, :SetValue)] < 14.304*μs*buffer
+    @test t_ave[(:has_h_space, op_divgrad_CC!, :SetValue, :SetValue, :none)] < 8.593*μs*buffer
+    @test t_ave[(:has_h_space, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 8.597*μs*buffer
+    @test t_ave[(:has_h_space, op_div_interp_CC!, :SetValue, :SetValue, :none)] < 1.735*μs*buffer
+    @test t_ave[(:has_h_space, op_div_interp_FF!, :none, :SetValue, :SetValue)] < 1.744*μs*buffer
+    @test t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 70.819*μs*buffer
+    @test t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 72.569*μs*buffer
+
+    # Broken tests
+    @test_broken t_ave[(:no_h_space, op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[(:no_h_space, op_CurlC2F!, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(:no_h_space, op_divUpwind3rdOrderBiasedProductC2F!, :OneSided3rdOrder, :OneSided3rdOrder, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 500
+    @test_broken t_ave[(:no_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500 # different with/without h_space
+    @test_broken t_ave[(:has_h_space, op_DivergenceF2C!, :none)] < 500
+    @test_broken t_ave[(:has_h_space, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] < 500
+    @test_broken t_ave[(:has_h_space, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] < 500
+    @test_broken t_ave[(:has_h_space, op_CurlC2F!, :SetCurl, :SetCurl)] < 500
+    @test_broken t_ave[(:has_h_space, op_CurlC2F!, :SetValue, :SetValue)] < 500
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] < 800
+    @test t_ave[(:has_h_space, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] < 800
+    @test_broken t_ave[(:has_h_space, op_divUpwind3rdOrderBiasedProductC2F!, :OneSided3rdOrder, :OneSided3rdOrder, :SetValue, :SetValue)] < 500
+    @test_broken t_ave[(:has_h_space, op_divgrad_CC!, :SetValue, :SetValue, :none)] < 500
+    @test_broken t_ave[(:has_h_space, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] < 500
+    @test t_ave[(:has_h_space, op_div_interp_CC!, :SetValue, :SetValue, :none)] < 800
+    @test t_ave[(:has_h_space, op_div_interp_FF!, :none, :SetValue, :SetValue)] < 800
+    @test_broken t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] < 500
+    @test_broken t_ave[(:has_h_space, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] < 500 # different with/without h_space
+>>>>>>> 4e596372 (non-product upwinding)
 end
 
 #! format: on

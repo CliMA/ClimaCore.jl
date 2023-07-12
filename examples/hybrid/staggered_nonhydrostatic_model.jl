@@ -52,8 +52,8 @@ const ᶜFC = Operators.FluxCorrectionC2C(
 )
 const ᶠupwind_product1 = Operators.UpwindBiasedProductC2F()
 const ᶠupwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
-    bottom = Operators.ThirdOrderOneSided(),
-    top = Operators.ThirdOrderOneSided(),
+    bottom = Operators.OneSided3rdOrder(),
+    top = Operators.OneSided3rdOrder(),
 )
 
 const ᶜinterp_stencil = Operators.Operator2Stencil(ᶜinterp)

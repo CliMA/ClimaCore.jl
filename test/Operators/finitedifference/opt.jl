@@ -110,13 +110,13 @@ function opt_WeightedInterpolateC2F_Extrapolate(weights, center_field)
     return identity.(WI.(weights, center_field))
 end
 
-function opt_LeftBiasedC2F(center_field)
-    LB = Operators.LeftBiasedC2F(left = Operators.SetValue(0.0))
+function opt_LeftBiased1stOrderC2F(center_field)
+    LB = Operators.LeftBiased1stOrderC2F(left = Operators.SetValue(0.0))
     return LB.(identity.(center_field))
 end
 
-function opt_RightBiasedC2F(center_field)
-    RB = Operators.RightBiasedC2F(right = Operators.SetValue(0.0))
+function opt_RightBiased1stOrderC2F(center_field)
+    RB = Operators.RightBiased1stOrderC2F(right = Operators.SetValue(0.0))
     return RB.(identity.(center_field))
 end
 
@@ -272,8 +272,8 @@ end
                 centers,
             )
 
-            @test_opt opt_LeftBiasedC2F(centers)
-            @test_opt opt_RightBiasedC2F(centers)
+            @test_opt opt_LeftBiased1stOrderC2F(centers)
+            @test_opt opt_RightBiased1stOrderC2F(centers)
 
             @test_opt opt_UpwindBiasedProductC2F_SetValue(
                 face_velocities,

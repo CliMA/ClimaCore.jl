@@ -731,7 +731,7 @@ end
     @test conv_adv_wc[3] ≈ 2 atol = 0.1
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided + DivergenceF2C SetValue BCs, constant w" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with OneSided1stOrder + DivergenceF2C SetValue BCs, constant w" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
@@ -761,8 +761,8 @@ end
             s = sin.(centers)
 
             third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-                bottom = Operators.FirstOrderOneSided(),
-                top = Operators.FirstOrderOneSided(),
+                bottom = Operators.OneSided1stOrder(),
+                top = Operators.OneSided1stOrder(),
             )
 
             divf2c = Operators.DivergenceF2C(
@@ -792,7 +792,7 @@ end
     end
 end
 
-@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with ThirdOrderOneSided + DivergenceF2C SetValue BCs, varying sign w" begin
+@testset "Upwind3rdOrderBiasedProductC2F + DivergenceF2C on (uniform and stretched) non-periodic mesh, with OneSided3rdOrder + DivergenceF2C SetValue BCs, varying sign w" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
@@ -821,8 +821,8 @@ end
             c = sin.(centers)
 
             third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-                bottom = Operators.ThirdOrderOneSided(),
-                top = Operators.ThirdOrderOneSided(),
+                bottom = Operators.OneSided3rdOrder(),
+                top = Operators.OneSided3rdOrder(),
             )
 
             divf2c = Operators.DivergenceF2C(
@@ -903,7 +903,7 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
-@testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided BCs" begin
+@testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with OneSided1stOrder BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
@@ -938,8 +938,8 @@ end
                 top = Operators.Extrapolate(),
             )
             third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-                bottom = Operators.FirstOrderOneSided(),
-                top = Operators.FirstOrderOneSided(),
+                bottom = Operators.OneSided1stOrder(),
+                top = Operators.OneSided1stOrder(),
             )
 
             divf2c = Operators.DivergenceF2C(
@@ -973,7 +973,7 @@ end
     end
 end
 
-@testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with ThirdOrderOneSided BCs" begin
+@testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with OneSided3rdOrder BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
@@ -1006,8 +1006,8 @@ end
                 top = Operators.Extrapolate(),
             )
             third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-                bottom = Operators.ThirdOrderOneSided(),
-                top = Operators.ThirdOrderOneSided(),
+                bottom = Operators.OneSided3rdOrder(),
+                top = Operators.OneSided3rdOrder(),
             )
 
             divf2c = Operators.DivergenceF2C(
@@ -1066,13 +1066,13 @@ end
     fyp = parent(fy)
 
     # C2F biased operators
-    LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
+    LBC2F = Operators.LeftBiased1stOrderC2F(; bottom = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
     fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
     @test all(fy_ref .== fyp)
 
-    RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
+    RBC2F = Operators.RightBiased1stOrderC2F(; top = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
     fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
