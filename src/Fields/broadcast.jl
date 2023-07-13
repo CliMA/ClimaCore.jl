@@ -419,7 +419,7 @@ function Base.Broadcast.broadcasted(
         fs,
         V,
         arg,
-        Ref(space.global_geometry),
+        tuple(space.global_geometry),
         local_geometry_field(space),
     )
 end
