@@ -65,6 +65,8 @@ Base.Broadcast.BroadcastStyle(
     ds::DataStyle,
 ) = ds
 
+Base.Broadcast.BroadcastStyle(::Base.Broadcast.Style{Tuple}, ds::DataStyle) = ds
+
 Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
     ::DataFStyle{A2},
