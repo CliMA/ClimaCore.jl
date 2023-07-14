@@ -448,7 +448,9 @@ function set_initial_condition(
     return Y
 end
 
-function rhs!(dYdt, y, parameters, t)
+function rhs!(dYdt_fv, y_fv, parameters, t)
+    dYdt = dYdt_fv.c
+    y = y_fv.c
     NVTX.@range "rhs!" begin
         (; f, h_s, ghost_buffer, params) = parameters
         (; D₄, g) = params
@@ -487,7 +489,7 @@ function rhs!(dYdt, y, parameters, t)
             NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
         end
     end
-    return dYdt
+    return dYdt_fv
 end
 
 function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
@@ -523,12 +525,12 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     f = set_coriolis_parameter(space, test)
     h_s = surface_topography(space, test)
-    Y = set_initial_condition(space, test)
+    Y = Fields.FieldVector(; c = set_initial_condition(space, test))
 
-    ghost_buffer = Spaces.create_dss_buffer(Y)
-    Spaces.weighted_dss_start!(Y, ghost_buffer)
-    Spaces.weighted_dss_internal!(Y, ghost_buffer)
-    Spaces.weighted_dss_ghost!(Y, ghost_buffer)
+    ghost_buffer = Spaces.create_dss_buffer(Y.c)
+    Spaces.weighted_dss_start!(Y.c, ghost_buffer)
+    Spaces.weighted_dss_internal!(Y.c, ghost_buffer)
+    Spaces.weighted_dss_ghost!(Y.c, ghost_buffer)
 
     parameters =
         (; f = f, h_s = h_s, ghost_buffer = ghost_buffer, params = test.params)
