@@ -99,27 +99,11 @@ else
     )
 end
 p = get_cache(ᶜlocal_geometry, ᶠlocal_geometry, Y, dt, upwinding_mode)
-if ode_algorithm <: Union{
-    OrdinaryDiffEq.OrdinaryDiffEqImplicitAlgorithm,
-    OrdinaryDiffEq.OrdinaryDiffEqAdaptiveImplicitAlgorithm,
-}
-    use_transform = !(ode_algorithm in (Rosenbrock23, Rosenbrock32))
-    W = SchurComplementW(Y, use_transform, jacobian_flags, test_implicit_solver)
-    jac_kwargs =
-        use_transform ? (; jac_prototype = W, Wfact_t = Wfact!) :
-        (; jac_prototype = W, Wfact = Wfact!)
 
-    alg_kwargs = (; linsolve = linsolve!)
-    if ode_algorithm <: Union{
-        OrdinaryDiffEq.OrdinaryDiffEqNewtonAlgorithm,
-        OrdinaryDiffEq.OrdinaryDiffEqNewtonAdaptiveAlgorithm,
-    }
-        alg_kwargs =
-            (; alg_kwargs..., nlsolve = NLNewton(; max_iter = max_newton_iters))
-    end
-else
-    jac_kwargs = alg_kwargs = (;)
-end
+include("ode_config.jl")
+
+ode_algo =
+    ode_configuration(FT; ode_name = string(ode_algorithm), max_newton_iters)
 
 if haskey(ENV, "OUTPUT_DIR")
     output_dir = ENV["OUTPUT_DIR"]
@@ -164,7 +148,7 @@ callback =
 problem = SplitODEProblem(
     ODEFunction(
         implicit_tendency!;
-        jac_kwargs...,
+        jac_kwargs(ode_algo, Y, jacobian_flags)...,
         tgrad = (∂Y∂t, Y, p, t) -> (∂Y∂t .= FT(0)),
     ),
     remaining_tendency!,
@@ -174,7 +158,7 @@ problem = SplitODEProblem(
 )
 integrator = OrdinaryDiffEq.init(
     problem,
-    ode_algorithm(; alg_kwargs...);
+    ode_algo;
     saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
     callback = callback,
     dt = dt,
