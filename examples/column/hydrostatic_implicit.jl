@@ -1,4 +1,5 @@
 using LinearAlgebra
+import ClimaTimeSteppers as CTS
 import ClimaCore:
     Fields,
     Domains,
@@ -233,11 +234,12 @@ ndays = 1.0
 
 # Solve the ODE operator
 prob = ODEProblem(
-    ODEFunction(
-        tendency!,
-        jac = jacobian!,
-        jac_prototype = zeros(length(Y), length(Y)),
-        tgrad = (dT, Y, p, t) -> fill!(dT, 0),
+    CTS.ClimaODEFunction(;
+        T_imp! = ODEFunction(;
+            Wfact = jacobian!,
+            tendency!,
+            jac_prototype = zeros(length(Y), length(Y)),
+        ),
     ),
     Y,
     (0.0, 60 * 60 * 24 * ndays),
@@ -246,7 +248,7 @@ prob = ODEProblem(
 sol = solve(
     prob,
     # ImplicitEuler(),
-    Rosenbrock23(linsolve = linsolve!),
+    CTS.IMEXAlgorithm(CTS.ARS343(), CTS.NewtonsMethod()),
     dt = Δt,
     saveat = 60 * 60, # save every hour
     progress = true,
