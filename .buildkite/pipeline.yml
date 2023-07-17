@@ -322,6 +322,14 @@ steps:
         key: unit_field
         command: "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
 
+      - label: "Unit: field cuda"
+        key: unit_field_cuda
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: fielddiffeq"
         key: unit_fielddiffeq
         command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"

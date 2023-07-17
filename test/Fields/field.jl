@@ -27,8 +27,9 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
         x2boundary = (:south, :north),
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    device = ClimaComms.CPUSingleThreaded()
     grid_topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -101,11 +102,17 @@ function pow_n(f)
 end
 @testset "Broadcasting with ^n" begin
     FT = Float32
-    for space in TU.all_spaces(FT)
+    device = ClimaComms.CPUSingleThreaded() # fill is broken on gpu
+    context = ClimaComms.SingletonCommsContext(device)
+    for space in TU.all_spaces(FT; context)
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
-        @test p_allocated == 0
+        if space isa Spaces.SpectralElementSpace1D
+            @test p_allocated == 0
+        else
+            @test p_allocated == 0 broken = (device isa ClimaComms.CUDADevice)
+        end
     end
 end
 
@@ -130,9 +137,11 @@ end
 
 @testset "Broadcasting ifelse" begin
     FT = Float32
+    device = ClimaComms.CPUSingleThreaded() # broken on gpu
+    context = ClimaComms.SingletonCommsContext(device)
     for space in (
-        TU.CenterExtrudedFiniteDifferenceSpace(FT),
-        TU.ColumnCenterFiniteDifferenceSpace(FT),
+        TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+        TU.ColumnCenterFiniteDifferenceSpace(FT; context),
     )
         a = Fields.level(fill(FT(0), space), 1)
         b = Fields.level(fill(FT(2), space), 1)
@@ -258,28 +267,32 @@ end
 end
 
 @testset "FieldVector array_type" begin
-    space = TU.PointSpace(Float32)
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
+    space = TU.PointSpace(Float32; context)
     xcenters = Fields.coordinate_field(space).x
     y = Fields.FieldVector(x = xcenters)
-    @test ClimaComms.array_type(y) == Array
+    @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
     y = Fields.FieldVector(x = xcenters, y = xcenters)
-    @test ClimaComms.array_type(y) == Array
+    @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
 end
 
 @testset "FieldVector basetype replacement and deepcopy" begin
+    device = ClimaComms.CPUSingleThreaded() # constructing space_vijfh is broken
+    context = ClimaComms.SingletonCommsContext(device)
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
         periodic = true,
     )
     mesh_z = Meshes.IntervalMesh(domain_z; nelems = 10)
-    topology_z = Topologies.IntervalTopology(mesh_z)
+    topology_z = Topologies.IntervalTopology(context, mesh_z)
 
     domain_x = Domains.IntervalDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
         periodic = true,
     )
     mesh_x = Meshes.IntervalMesh(domain_x; nelems = 10)
-    topology_x = Topologies.IntervalTopology(mesh_x)
+    topology_x = Topologies.IntervalTopology(context, mesh_x)
 
     domain_xy = Domains.RectangleDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
@@ -288,8 +301,7 @@ end
         x2periodic = true,
     )
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
-    topology_xy =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh_xy)
+    topology_xy = Topologies.Topology2D(context, mesh_xy)
 
     quad = Spaces.Quadratures.GLL{4}()
 
@@ -403,7 +415,8 @@ end
 end
 
 @testset "PointField" begin
-    context = ClimaComms.SingletonCommsContext()
+    device = ClimaComms.CPUSingleThreaded() # a bunch of cuda pieces are broken
+    context = ClimaComms.SingletonCommsContext(device)
     FT = Float64
     coord = Geometry.XPoint(FT(π))
     space = Spaces.PointSpace(context, coord)
@@ -547,8 +560,9 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     end
     FT = Float64
     foo = InferenceFoo(2.0)
-
-    for space in TU.all_spaces(FT)
+    device = ClimaComms.CPUSingleThreaded() # cuda fill is broken
+    context = ClimaComms.SingletonCommsContext(device)
+    for space in TU.all_spaces(FT; context)
         Y = fill((; a = FT(0), b = FT(1)), space)
         @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
             space,
@@ -608,26 +622,28 @@ end
         )
         local_geometry = Geometry.LocalGeometry(coord, FT(1.0), FT(1.0), at)
         space = Spaces.PointSpace(context, local_geometry)
-        dz_computed = parent(Fields.Δz_field(space))
+        dz_computed = Array(parent(Fields.Δz_field(space)))
         @test length(dz_computed) == 1
         @test dz_computed[1] == expected_dz
     end
 end
 
 @testset "scalar assignment" begin
+    device = ClimaComms.CPUSingleThreaded() # constructing space_vijfh is broken
+    context = ClimaComms.SingletonCommsContext(device)
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
         periodic = true,
     )
     mesh_z = Meshes.IntervalMesh(domain_z; nelems = 10)
-    topology_z = Topologies.IntervalTopology(mesh_z)
+    topology_z = Topologies.IntervalTopology(context, mesh_z)
 
     domain_x = Domains.IntervalDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
         periodic = true,
     )
     mesh_x = Meshes.IntervalMesh(domain_x; nelems = 10)
-    topology_x = Topologies.IntervalTopology(mesh_x)
+    topology_x = Topologies.IntervalTopology(context, mesh_x)
 
     domain_xy = Domains.RectangleDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
@@ -636,8 +652,7 @@ end
         x2periodic = true,
     )
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
-    topology_xy =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh_xy)
+    topology_xy = Topologies.Topology2D(context, mesh_xy)
 
     quad = Spaces.Quadratures.GLL{4}()
 
@@ -683,8 +698,10 @@ convergence_rate(err, Δh) =
         col_copy = similar(y[Fields.ColumnIndex((1, 1), 1)])
         return Fields.Field(Fields.field_values(col_copy), axes(col_copy))
     end
+    device = ClimaComms.CPUSingleThreaded()
+    context = ClimaComms.SingletonCommsContext(device)
     for zelem in (2^2, 2^3, 2^4, 2^5)
-        for space in TU.all_spaces(FT; zelem)
+        for space in TU.all_spaces(FT; zelem, context)
             # Filter out spaces without z coordinates:
             TU.has_z_coordinates(space) || continue
             # Skip spaces incompatible with Fields.bycolumn:
@@ -729,7 +746,9 @@ end
 
 @testset "Allocation tests for integrals" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
+    device = ClimaComms.CPUSingleThreaded()
+    context = ClimaComms.SingletonCommsContext(device)
+    for space in TU.all_spaces(FT; context)
         # Filter out spaces without z coordinates:
         TU.has_z_coordinates(space) || continue
         Y = fill((; y = FT(1)), space)
