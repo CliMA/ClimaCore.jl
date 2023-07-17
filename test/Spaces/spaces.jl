@@ -99,7 +99,8 @@ end
 
 @testset "finite difference space" begin
     FT = Float64
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0) .. Geometry.ZPoint{FT}(5),
         boundary_names = (:bottom, :top),
@@ -148,7 +149,8 @@ end
 
 @testset "1×1 domain space" begin
     FT = Float32
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
     domain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         Geometry.YPoint{FT}(-2) .. Geometry.YPoint{FT}(8),
@@ -200,8 +202,11 @@ end
     @test length(space.boundary_surface_geometries) == 2
     @test keys(space.boundary_surface_geometries) == (:south, :north)
     @test sum(parent(space.boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(space.boundary_surface_geometries.north.normal)[1, :, 1] ≈
-          [0.0, 1.0]
+    @test Array(parent(space.boundary_surface_geometries.north.normal))[
+        1,
+        :,
+        1,
+    ] ≈ [0.0, 1.0]
 
     point_space = Spaces.column(space, 1, 1, 1)
     @test point_space isa Spaces.PointSpace
@@ -210,7 +215,8 @@ end
 end
 
 @testset "2D perimeter iterator on 2×2 rectangular mesh" begin
-    context = ClimaComms.SingletonCommsContext()
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
             Geometry.XPoint(-2π),
