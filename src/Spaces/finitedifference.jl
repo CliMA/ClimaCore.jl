@@ -212,14 +212,12 @@ Base.@propagate_inbounds function level(
     v::PlusHalf,
 )
     @inbounds local_geometry = level(local_geometry_data(space), v.i + 1)
-    context = ClimaComms.context(space)
-    PointSpace(context, local_geometry)
+    PointSpace(local_geometry)
 end
 Base.@propagate_inbounds function level(
     space::CenterFiniteDifferenceSpace,
     v::Int,
 )
     local_geometry = level(local_geometry_data(space), v)
-    context = ClimaComms.context(space)
-    PointSpace(context, local_geometry)
+    PointSpace(local_geometry)
 end
