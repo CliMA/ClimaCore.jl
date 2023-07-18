@@ -234,6 +234,8 @@ bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), extrapo
 bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased_3_bcs(c), extrapolate_bcs(c))
 
 # Composed operators (bcs handled case-by-case)
+bcs_tested(c, ::typeof(op_divUpwind1stOrderBiasedProductC2F!)) =
+    ((; inner = set_upwind_biased_3_bcs(c), outer = set_value_contra3_bcs(c)), )
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
     ((; inner = set_upwind_biased_3_bcs(c), outer = set_value_contra3_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_CC!)) =

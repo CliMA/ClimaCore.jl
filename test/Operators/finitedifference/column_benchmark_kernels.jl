@@ -99,13 +99,24 @@ function op_divgrad_uₕ!(c, f, bcs)
     @. c.uₕ2 = div(f.y * grad(c.uₕ))
     return nothing
 end
-function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
+function op_divUpwind3rdOrderBiasedProductC2F_old!(c, f, bcs)
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs.inner)
     divf2c = Operators.DivergenceF2C(bcs.outer)
     @. c.y = divf2c(upwind(f.w, c.x))
     return nothing
 end
-
+function op_divUpwind1sOrderBiasedProductC2F!(c, f, bcs)
+    upwind = Operators.Upwind1stOrderC2F(bcs.inner)
+    divf2c = Operators.DivergenceF2C(bcs.outer)
+    @. c.y = divf2c(f.w * upwind(f.w, c.x))
+    return nothing
+end
+function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
+    upwind = Operators.Upwind3rdOrderC2F(bcs.inner)
+    divf2c = Operators.DivergenceF2C(bcs.outer)
+    @. c.y = divf2c(f.w * upwind(f.w, c.x))
+    return nothing
+end
 function op_broadcast_example0!(c, f, bcs)
     Fields.bycolumn(axes(f.ᶠu³)) do colidx
         CT3 = Geometry.Contravariant3Vector
