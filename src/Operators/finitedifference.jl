@@ -3438,22 +3438,32 @@ function Base.copyto!(
         Nh = 1
     end
     bounds = window_bounds(space, bc)
+
+    max_threads = 256
+    nitems = Nq * Nq * Nh
+    nthreads = min(max_threads, nitems)
+    nblocks = cld(nitems, nthreads)
     # executed
-    @cuda threads = (Nq, Nq) blocks = (Nh,) copyto_stencil_kernel!(
+    @cuda threads = (nthreads) blocks = (nblocks,) copyto_stencil_kernel!(
         strip_space(out, space),
         strip_space(bc, space),
         axes(out),
         bounds,
+        Nq,
+        Nh,
     )
     return out
 end
 
-function copyto_stencil_kernel!(out, bc, space, bds)
-    i = threadIdx().x
-    j = threadIdx().y
-    h = blockIdx().x
-    hidx = (i, j, h)
-    apply_stencil!(space, out, bc, hidx, bds)
+function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh)
+    gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    if gid ≤ Nq * Nq * Nh
+        h = cld(gid, Nq * Nq)
+        j = cld(gid - (h - 1) * Nq * Nq, Nq)
+        i = gid - (h - 1) * Nq * Nq - (j - 1) * Nq
+        hidx = (i, j, h)
+        apply_stencil!(space, out, bc, hidx, bds)
+    end
     return nothing
 end
 
