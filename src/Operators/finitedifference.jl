@@ -3438,13 +3438,7 @@ function Base.copyto!(
         Nh = 1
     end
     bounds = window_bounds(space, bc)
-
-    max_threads = 256
-    nitems = Nq * Nq * Nh
-    nthreads = min(max_threads, nitems)
-    nblocks = cld(nitems, nthreads)
-    # executed
-    @cuda threads = (nthreads) blocks = (nblocks,) copyto_stencil_kernel!(
+    args = (
         strip_space(out, space),
         strip_space(bc, space),
         axes(out),
@@ -3452,6 +3446,17 @@ function Base.copyto!(
         Nq,
         Nh,
     )
+    kernel = @cuda launch = false copyto_stencil_kernel!(args...)
+    kernel_config = CUDA.launch_configuration(kernel.fun)
+    max_threads = kernel_config.threads
+    nitems = Nq * Nq * Nh
+    nthreads = min(max_threads, nitems)
+    nblocks = cld(nitems, nthreads)
+    # executed
+    @cuda threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
+        args...,
+    )
+
     return out
 end
 

@@ -68,13 +68,8 @@ function compute_kinetic_ca!(
     #end
 end
 
-function initialize_mwe()
-
-    FT = Float64
-
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    context_cpu =
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
+function initialize_mwe(device, ::Type{FT}) where {FT}
+    context = ClimaComms.SingletonCommsContext(device)
     R = FT(6.371229e6)
 
     npoly = 3
@@ -82,7 +77,7 @@ function initialize_mwe()
     z_elem = 10
     h_elem = 12
     println(
-        "running KE tuning test on $(context.device); h_elem = $h_elem; z_elem = $z_elem; npoly = $npoly; R = $R; z_max = $z_max; FT = $FT",
+        "initializing on $(context.device); h_elem = $h_elem; z_elem = $z_elem; npoly = $npoly; R = $R; z_max = $z_max; FT = $FT",
     )
     # horizontal space
     domain = Domains.SphereDomain(R)
@@ -92,14 +87,8 @@ function initialize_mwe()
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    horizontal_topology_cpu = Topologies.Topology2D(
-        context_cpu,
-        horizontal_mesh,
-        Topologies.spacefillingcurve(horizontal_mesh),
-    )
     quad = Spaces.Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
-    h_space_cpu = Spaces.SpectralElementSpace2D(horizontal_topology_cpu, quad)
 
     # vertical space
     z_domain = Domains.IntervalDomain(
@@ -109,42 +98,27 @@ function initialize_mwe()
     )
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
     z_topology = Topologies.IntervalTopology(context, z_mesh)
-    z_topology_cpu = Topologies.IntervalTopology(context_cpu, z_mesh)
 
     z_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
-    z_center_space_cpu = Spaces.CenterFiniteDifferenceSpace(z_topology_cpu)
 
     z_face_space = Spaces.FaceFiniteDifferenceSpace(z_topology)
-    z_face_space_cpu = Spaces.FaceFiniteDifferenceSpace(z_topology_cpu)
 
     hv_center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
 
-    hv_center_space_cpu =
-        Spaces.ExtrudedFiniteDifferenceSpace(h_space_cpu, z_center_space_cpu)
-    hv_face_space_cpu =
-        Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space_cpu)
-
-    # CPU
-    ᶜlocal_geometry_cpu = Fields.local_geometry_field(hv_center_space_cpu)
-    ᶠlocal_geometry_cpu = Fields.local_geometry_field(hv_face_space_cpu)
-    uₕ_cpu = center_initial_condition(ᶜlocal_geometry_cpu, R)
-    uᵥ_cpu = face_initial_condition(ᶠlocal_geometry_cpu)
-    κ_cpu = init_scalar_field(hv_center_space_cpu)
-
-    # GPU
     ᶜlocal_geometry = Fields.local_geometry_field(hv_center_space)
     ᶠlocal_geometry = Fields.local_geometry_field(hv_face_space)
     uₕ = center_initial_condition(ᶜlocal_geometry, R)
     uᵥ = face_initial_condition(ᶠlocal_geometry)
     κ = init_scalar_field(hv_center_space)
 
-    return (; κ = κ, uₕ = uₕ, uᵥ = uᵥ, κ_cpu, uₕ_cpu = uₕ_cpu, uᵥ_cpu = uᵥ_cpu)
+    return (; κ = κ, uₕ = uₕ, uᵥ = uᵥ)
 end
 
-function profile_compute_kinetic()
-    κ, uₕ, uᵥ, κ_cpu, uₕ_cpu, uᵥ_cpu = initialize_mwe()
+function profile_compute_kinetic(::Type{FT}) where {FT}
+    κ, uₕ, uᵥ = initialize_mwe(ClimaComms.CUDADevice(), FT)
+    κ_cpu, uₕ_cpu, uᵥ_cpu = initialize_mwe(ClimaComms.CPUSingleThreaded(), FT)
     # compute kinetic energy
     κ = compute_kinetic_ca!(κ, uₕ, uᵥ)
     κ_cpu = compute_kinetic_ca!(κ_cpu, uₕ_cpu, uᵥ_cpu)
@@ -155,9 +129,9 @@ function profile_compute_kinetic()
 
     for i in 1:nreps
         NVTX.@range "compute_kinetic_ca!" color = colorant"blue" payload = i begin
-            κ = compute_kinetic_ca!(κ, uₕ, uᵥ)
+            CUDA.@sync κ = compute_kinetic_ca!(κ, uₕ, uᵥ)
         end
     end
 end
 
-profile_compute_kinetic()
+profile_compute_kinetic(Float64)
