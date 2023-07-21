@@ -12,7 +12,8 @@ import ClimaCore:
     Operators,
     Spaces,
     Topologies,
-    DataLayouts
+    DataLayouts,
+    RecursiveApply
 
 const C1 = ClimaCore.Geometry.Covariant1Vector
 const C2 = ClimaCore.Geometry.Covariant2Vector
@@ -22,6 +23,8 @@ const C123 = ClimaCore.Geometry.Covariant123Vector
 const CT123 = Geometry.Contravariant123Vector
 const ᶜinterp = Operators.InterpolateF2C()
 const ᶠinterp = Operators.InterpolateC2F()
+
+const ⊞ = RecursiveApply.radd
 
 init_uθ(ϕ, z, R) = 1.0 / R
 init_vθ(ϕ, z, R) = 1.0 / R
@@ -66,6 +69,92 @@ function compute_kinetic_ca!(
             2 * dot(CT123(uₕ), ᶜinterp(C123(uᵥ)))
         )
     #end
+end
+
+function compute_kinetic_ref!(
+    κ::Fields.Field,
+    uₕ::Fields.Field,
+    uᵥ::Fields.Field,
+)
+    hvc_lgd = Spaces.local_geometry_data(axes(uₕ)) # local geometry data for center extruded FD space
+    hvf_lgd = Spaces.local_geometry_data(axes(uᵥ)) # local geometry data for face extruded FD space
+
+    κ_val = Fields.field_values(κ)   # field values
+    uₕ_val = Fields.field_values(uₕ)
+    uᵥ_val = Fields.field_values(uᵥ)
+
+
+    (Nq, _, _, Nvc, Nh) = size(uₕ_val) # query dimensions
+    (Nq, _, _, Nvf, Nh) = size(uᵥ_val)
+
+    nitems = Nvc * Nq * Nq * Nh # # of items that can be independently processed
+    max_threads = 256
+    nthreads = min(max_threads, nitems)
+    nblocks = cld(nitems, nthreads)
+
+    @cuda threads = (nthreads,) blocks = (nblocks,) compute_kinetic_ref_kernel!(
+        κ_val,
+        uₕ_val,
+        uᵥ_val,
+        hvc_lgd,
+        hvf_lgd,
+        (Nq, Nvc, Nh),
+    )
+
+    return κ
+end
+
+function compute_kinetic_ref_kernel!(
+    κ_val,
+    uₕ_val,
+    uᵥ_val,
+    hvc_lgd,
+    hvf_lgd,
+    dims,
+)
+    gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    (Nq, Nvc, Nh) = dims
+    if gid ≤ Nvc * Nq * Nq * Nh
+        h = cld(gid, Nvc * Nq * Nq)
+        offset = (h - 1) * Nvc * Nq * Nq
+        j = cld(gid - offset, Nvc * Nq)
+        offset += (j - 1) * Nvc * Nq
+        i = cld(gid - offset, Nvc)
+        vc = gid - offset - (i - 1) * Nvc
+
+        idx = CartesianIndex((i, j, 1, vc, h))
+        idx⁻ = idx
+        idx⁺ = CartesianIndex((i, j, 1, vc + 1, h))
+
+        c_lgd = hvc_lgd[i, j, nothing, vc, h]
+
+        f_lgd⁺ = hvf_lgd[i, j, nothing, vc + 1, h]
+        f_lgd⁻ = hvf_lgd[i, j, nothing, vc, h]
+
+        uₕ_val_idx = uₕ_val[idx]
+        uᵥ_val_idx⁺ = uᵥ_val[idx⁺]
+        uᵥ_val_idx⁻ = uᵥ_val[idx⁻]
+
+        uₕ_c = C123(uₕ_val_idx, c_lgd)
+        uₕ_ct = CT123(uₕ_val_idx, c_lgd)
+
+        uᵥ_c⁺ = C123(uᵥ_val_idx⁺, f_lgd⁺)
+        uᵥ_c⁻ = C123(uᵥ_val_idx⁻, f_lgd⁻)
+        uᵥ_c = RecursiveApply.rdiv(uᵥ_c⁺ ⊞ uᵥ_c⁻, 2)
+
+        uᵥ_ct⁺ = CT123(uᵥ_val_idx⁺, f_lgd⁺)
+        uᵥ_ct⁻ = CT123(uᵥ_val_idx⁻, f_lgd⁻)
+
+        κ_val[idx] =
+            (
+                dot(uₕ_c, uₕ_ct) ⊞ RecursiveApply.rdiv(
+                    dot(uᵥ_c⁺, uᵥ_ct⁺) ⊞ dot(uᵥ_c⁻, uᵥ_ct⁻),
+                    2,
+                ) ⊞ 2 * dot(uₕ_ct, uᵥ_c)
+            ) / 2
+    end
+
+    return nothing
 end
 
 function initialize_mwe(device, ::Type{FT}) where {FT}
@@ -125,6 +214,14 @@ function profile_compute_kinetic(::Type{FT}) where {FT}
 
     @show Array(parent(κ)) ≈ parent(κ_cpu)
 
+
+    κ_ref, uₕ_ref, uᵥ_ref = initialize_mwe(ClimaComms.CUDADevice(), FT)
+
+    @show "before ref version" maximum(parent(κ_ref))
+
+    κ_ref = compute_kinetic_ref!(κ_ref, uₕ_ref, uᵥ_ref)
+    @show "after ref version" maximum(parent(κ_ref))
+
     nreps = 10
 
     for i in 1:nreps
@@ -132,6 +229,21 @@ function profile_compute_kinetic(::Type{FT}) where {FT}
             CUDA.@sync κ = compute_kinetic_ca!(κ, uₕ, uᵥ)
         end
     end
+
+    for i in 1:nreps
+        NVTX.@range "compute_kinetic_ref!" color = colorant"green" payload = i begin
+            CUDA.@sync κ_ref = compute_kinetic_ref!(κ_ref, uₕ_ref, uᵥ_ref)
+        end
+    end
+
+
+    for i in 1:nreps
+        t_ca = CUDA.@elapsed κ = compute_kinetic_ca!(κ, uₕ, uᵥ)
+        t_ref =
+            CUDA.@elapsed κ_ref = compute_kinetic_ref!(κ_ref, uₕ_ref, uᵥ_ref)
+        println("t_ca = $t_ca (sec); t_ref = $t_ref (sec)")
+    end
+
 end
 
 profile_compute_kinetic(Float64)
