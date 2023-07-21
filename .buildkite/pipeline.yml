@@ -939,7 +939,8 @@ steps:
       - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe)"
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe"
         command:
-          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
+#          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
+          - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
           - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_low_*"
         agents:
@@ -948,7 +949,8 @@ steps:
       - label: ":flower_playing_cards: Rising Bubble 3D hybrid invariant (ρe), custom resolution"
         key: "gpu_rising_bubble_3d_hybrid_invariant_rhoe_custom"
         command:
-          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
+#          - "nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
+          - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
         artifact_paths:
           - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_custom_*"
         agents:
@@ -1097,7 +1099,8 @@ steps:
       - label: ":computer: MPI Shallow-water 2D sphere barotropic instability alpha0"
         key: "cpu_mpi_shallowwater_2d_cg_sphere_barotropic_alpha0"
         command:
-          - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+#          - "nsys profile --trace=nvtx,mpi --mpi-impl=openmpi --output=examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/report.%q{NPROCS} mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
+          - "mpiexec julia --color=yes --project=examples examples/sphere/shallow_water.jl barotropic_instability"
         artifact_paths:
           - "examples/sphere/output/cg_sphere_shallowwater_barotropic_instability_alpha0/*"
         env:
@@ -1132,7 +1135,8 @@ steps:
         key: "cuda_shallowwater_2d_cg_sphere"
         command:
           - mkdir -p output/$$BUILDKITE_STEP_KEY
-          - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl
+#          - nsys profile --trace=nvtx,cuda --output=output/$$BUILDKITE_STEP_KEY/report julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl
+          - julia --color=yes --project=examples examples/sphere/shallow_water_cuda.jl
         artifact_paths:
           - output/cuda_shallowwater_2d_cg_sphere
         agents:

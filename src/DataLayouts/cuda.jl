@@ -97,7 +97,11 @@ end
 function Base.fill!(
     dest::IJFH{S, Nij, A},
     val,
-) where {S, Nij, A <: CUDA.CuArray}
+) where {
+    S,
+    Nij,
+    A <: Union{CUDA.CuArray, SubArray{<:Any, <:Any, <:CUDA.CuArray}},
+}
     _, _, _, _, Nh = size(dest)
     if Nh > 0
         CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, 1) knl_fill!(dest, val)
