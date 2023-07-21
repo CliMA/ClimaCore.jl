@@ -93,6 +93,13 @@ rmaptype(
 } = NamedTuple{names, rmaptype(fn, Tup1, Tup2)}
 
 """
+    rpromote_type(Ts...)
+
+Recursively apply `promote_type` to the input types.
+"""
+rpromote_type(Ts...) = reduce((T1, T2) -> rmaptype(promote_type, T1, T2), Ts)
+
+"""
     rzero(T)
 
 Recursively compute the zero value of type `T`.
@@ -104,6 +111,17 @@ rzero(::Type{T}) where {T <: Tuple} =
     (rzero(first_param(T)), rzero(tail_params(T))...)
 rzero(::Type{Tup}) where {names, T, Tup <: NamedTuple{names, T}} =
     NamedTuple{names}(rzero(T))
+
+"""
+    rconvert(T, X)
+
+Identical to `convert(T, X)`, but with improved type stability for nested types.
+"""
+rconvert(::Type{T}, X::T) where {T} = X
+rconvert(::Type{T}, X) where {T} =
+    rmap((zero_value, x) -> convert(typeof(zero_value), x), rzero(T), X)
+# TODO: Remove this function once Julia's default convert function is
+# type-stable for nested Tuple/NamedTuple types.
 
 """
     rmul(X, Y)

@@ -1,4 +1,4 @@
-Base.map(fn, field::Field) = Base.broadcast(fn, field)
+Base.map(fn, fields::Field...) = Base.broadcast(fn, fields...)
 
 """
     Fields.local_sum(v::Field)

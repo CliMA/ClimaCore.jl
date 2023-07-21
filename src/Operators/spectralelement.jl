@@ -236,7 +236,7 @@ function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     new_space = placeholder_space(current_space, parent_space)
     return SpectralBroadcasted{Style}(
         bc.op,
-        map(arg -> strip_space(arg, current_space), bc.args),
+        strip_space_args(bc.args, current_space),
         new_space,
     )
 end

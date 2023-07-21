@@ -75,6 +75,7 @@ withenv("GKSwstype" => "nul") do
             "Mathematical Framework" => "math_framework.md",
             "Installation and How-to Guides" => "installation_instructions.md",
             "Operators" => "operators.md",
+            "MatrixFields" => "matrix_fields.md",
             "API" => "api.md",
             "Developer docs" => ["Performance tips" => "performance_tips.md"],
             "Tutorials" => [
