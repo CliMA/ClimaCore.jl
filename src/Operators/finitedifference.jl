@@ -2418,7 +2418,7 @@ Base.@propagate_inbounds function stencil_left_boundary(
 )
     @assert idx == left_center_boundary_idx(space)
     Geometry.project(
-        Geometery.Covariant3Axis(),
+        Geometry.Covariant3Axis(),
         stencil_interior(op, loc, space, idx + 1, hidx, arg),
         Geometry.LocalGeometry(space, idx, hidx),
     )
@@ -3326,7 +3326,12 @@ Base.@propagate_inbounds function setidx!(
 end
 
 function Base.Broadcast.broadcasted(op::FiniteDifferenceOperator, args...)
-    Base.Broadcast.broadcasted(StencilStyle(), op, args...)
+    args′ = map(Base.Broadcast.broadcastable, args)
+    style = Base.Broadcast.result_style(
+        StencilStyle(),
+        Base.Broadcast.combine_styles(args′...),
+    )
+    Base.Broadcast.broadcasted(style, op, args′...)
 end
 
 function Base.Broadcast.broadcasted(

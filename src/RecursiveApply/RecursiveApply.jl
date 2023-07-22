@@ -98,6 +98,7 @@ rmaptype(
 Recursively apply `promote_type` to the input types.
 """
 rpromote_type(Ts...) = reduce((T1, T2) -> rmaptype(promote_type, T1, T2), Ts)
+rpromote_type() = Union{}
 
 """
     rzero(T)

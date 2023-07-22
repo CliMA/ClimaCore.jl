@@ -105,8 +105,14 @@ Adapt.adapt_structure(to, sbc::SpectralBroadcasted{Style}) where {Style} =
 return_space(::SpectralElementOperator, space) = space
 
 
-Base.Broadcast.broadcasted(op::SpectralElementOperator, args...) =
-    Base.Broadcast.broadcasted(SpectralStyle(), op, args...)
+function Base.Broadcast.broadcasted(op::SpectralElementOperator, args...)
+    args′ = map(Base.Broadcast.broadcastable, args)
+    style = Base.Broadcast.result_style(
+        SpectralStyle(),
+        Base.Broadcast.combine_styles(args′...),
+    )
+    Base.Broadcast.broadcasted(style, op, args′...)
+end
 
 Base.Broadcast.broadcasted(
     ::SpectralStyle,

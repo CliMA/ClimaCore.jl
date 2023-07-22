@@ -60,8 +60,12 @@ function test_field_broadcast(;
         end
 
         result = get_result()
+        result_copy = copy(result)
         time = @benchmark set_result!(result)
         time_rounded = round(time; sigdigits = 2)
+
+        # Test that set_result! sets the same value as get_result.
+        @test result == result_copy
 
         if isnothing(ref_set_result!)
             @info "$test_name:\n\tTime = $time_rounded s (reference \
@@ -127,8 +131,12 @@ function test_field_broadcast_against_array_reference(;
         end
 
         result = get_result()
+        result_copy = copy(result)
         time = @benchmark set_result!(result)
         time_rounded = round(time; sigdigits = 2)
+
+        # Test that set_result! sets the same value as get_result.
+        @test result == result_copy
 
         ref_result = similar(result)
         temp_value_fields = map(similar, get_temp_value_fields())
