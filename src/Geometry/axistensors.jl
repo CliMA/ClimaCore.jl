@@ -112,6 +112,9 @@ Base.checkindex(::Type{Bool}, ax::AbstractAxis, i) =
 Base.lastindex(ax::AbstractAxis) = length(ax)
 Base.getindex(m::AbstractAxis, i::Int) = i
 
+# this is for getting the length without needing to call length(A.instance)
+_length(::Type{<:AbstractAxis{I}}) where {I} = length(I)
+
 
 """
     AxisTensor(axes, components)
@@ -269,10 +272,30 @@ Base.propertynames(x::AxisVector) = symbols(axes(x, 1))
     end
 end
 
+const AdjointAxisTensor{T, N, A, S} = Adjoint{T, AxisTensor{T, N, A, S}}
+
+Base.show(io::IO, a::AdjointAxisTensor{T, N, A, S}) where {T, N, A, S} =
+    print(io, "adjoint($(a'))")
+
+components(a::AdjointAxisTensor) = components(parent(a))'
+
+Base.zero(a::AdjointAxisTensor) = zero(typeof(a))
+Base.zero(::Type{AdjointAxisTensor{T, N, A, S}}) where {T, N, A, S} =
+    zero(AxisTensor{T, N, A, S})'
+
+@inline +(a::AdjointAxisTensor) = (+a')'
+@inline -(a::AdjointAxisTensor) = (-a')'
+@inline +(a::AdjointAxisTensor, b::AdjointAxisTensor) = (a' + b')'
+@inline -(a::AdjointAxisTensor, b::AdjointAxisTensor) = (a' - b')'
+@inline *(a::Number, b::AdjointAxisTensor) = (a * b')'
+@inline *(a::AdjointAxisTensor, b::Number) = (a' * b)'
+@inline /(a::AdjointAxisTensor, b::Number) = (a' / b)'
+@inline \(a::Number, b::AdjointAxisTensor) = (a \ b')'
+
+@inline (==)(a::AdjointAxisTensor, b::AdjointAxisTensor) = a' == b'
 
 const AdjointAxisVector{T, A1, S} = Adjoint{T, AxisVector{T, A1, S}}
 
-components(va::AdjointAxisVector) = components(parent(va))'
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int) =
     getindex(components(va), i)
 Base.@propagate_inbounds Base.getindex(va::AdjointAxisVector, i::Int, j::Int) =
@@ -286,7 +309,6 @@ Axis2Tensor(
 ) = AxisTensor(axes, components)
 
 const AdjointAxis2Tensor{T, A, S} = Adjoint{T, Axis2Tensor{T, A, S}}
-components(va::AdjointAxis2Tensor) = components(parent(va))'
 
 const Axis2TensorOrAdj{T, A, S} =
     Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}

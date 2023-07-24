@@ -3415,7 +3415,7 @@ function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
     new_space = placeholder_space(current_space, parent_space)
     return StencilBroadcasted{Style}(
         bc.op,
-        map(arg -> strip_space(arg, current_space), bc.args),
+        strip_space_args(bc.args, current_space),
         new_space,
     )
 end

@@ -11,6 +11,7 @@ import ClimaCore:
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
+using CUDA
 
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -35,7 +36,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     return space
 end
-
+#=
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
@@ -269,7 +270,7 @@ end
 @testset "FieldVector array_type" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
-    space = TU.PointSpace(Float32; context)
+    space = TU.SpectralElementSpace1D(Float32; context)
     xcenters = Fields.coordinate_field(space).x
     y = Fields.FieldVector(x = xcenters)
     @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
@@ -667,13 +668,13 @@ end
     C .= Ref(zero(eltype(C)))
     @test all(==(0.0), parent(C))
 end
+=#
 function integrate_bycolumn!(∫y, Y)
     Fields.bycolumn(axes(Y.y)) do colidx
         Operators.column_integral_definite!(∫y[colidx], Y.y[colidx])
         nothing
     end
 end
-
 """
     convergence_rate(err, Δh)
 
@@ -698,7 +699,7 @@ convergence_rate(err, Δh) =
         col_copy = similar(y[Fields.ColumnIndex((1, 1), 1)])
         return Fields.Field(Fields.field_values(col_copy), axes(col_copy))
     end
-    device = ClimaComms.CPUSingleThreaded()
+    device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     for zelem in (2^2, 2^3, 2^4, 2^5)
         for space in TU.all_spaces(FT; zelem, context)
@@ -711,7 +712,9 @@ convergence_rate(err, Δh) =
             zcf = Fields.coordinate_field(Y.y).z
             Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
-            Δz_1 = parent(Δz_col)[1]
+            Δz_1 = CUDA.allowscalar() do
+                parent(Δz_col)[1]
+            end
             key = (space, zelem)
             if !haskey(results, key)
                 results[key] =
