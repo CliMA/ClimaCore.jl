@@ -25,6 +25,18 @@ LocalVector(
     local_geometry::LocalGeometry{I},
 ) where {T, I} = local_geometry.∂ξ∂x' * u
 
+# conversions between Covariant and Contravariant vectors
+Contravariant123Vector(
+    u::CovariantVector{T, (1, 2)},
+    local_geometry::LocalGeometry{(1, 2, 3)},
+) where {T} = local_geometry.gⁱʲ * Covariant123Vector(u[1], u[2], zero(u[1]))
+
+Contravariant123Vector(
+    u::CovariantVector{T, (3,)},
+    local_geometry::LocalGeometry{(1, 2, 3)},
+) where {T} =
+    local_geometry.gⁱʲ * Covariant123Vector(zero(u[1]), zero(u[1]), u[1])
+
 # Converting to specific dimension types
 (::Type{<:ContravariantVector{<:Any, I}})(
     u::ContravariantVector{<:Any, I},
