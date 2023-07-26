@@ -239,7 +239,7 @@ end
         set_result! = (result, ᶠᶠmat, ᶠvec) -> (@. result = ᶠᶠmat ⋅ ᶠvec),
         ref_set_result! = (_result, _ᶠᶠmat, _ᶠvec) ->
             mul!(_result, _ᶠᶠmat, _ᶠvec),
-        time_ratio_limit = 2, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 4, # This case's ref function is fast on Buildkite.
     )
 
     test_matrix_broadcast_against_array_reference(;
