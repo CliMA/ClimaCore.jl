@@ -7,7 +7,7 @@
 ContravariantVector(u::ContravariantVector, ::LocalGeometry) = u
 CovariantVector(u::CovariantVector, ::LocalGeometry) = u
 LocalVector(u::LocalVector, ::LocalGeometry) = u
-
+# conversions between Covariant/Contravariant vectors and local vectors
 ContravariantVector(
     u::LocalVector{T, I},
     local_geometry::LocalGeometry{I},
@@ -36,6 +36,16 @@ Contravariant123Vector(
     local_geometry::LocalGeometry{(1, 2, 3)},
 ) where {T} =
     local_geometry.gⁱʲ * Covariant123Vector(zero(u[1]), zero(u[1]), u[1])
+
+ContravariantVector(
+    u::CovariantVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.gⁱʲ * u
+
+CovariantVector(
+    u::ContravariantVector{T, I},
+    local_geometry::LocalGeometry{I},
+) where {T, I} = local_geometry.gᵢⱼ * u
 
 # Converting to specific dimension types
 (::Type{<:ContravariantVector{<:Any, I}})(
