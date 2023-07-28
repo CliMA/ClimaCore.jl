@@ -804,15 +804,6 @@ steps:
         artifact_paths:
           - "examples/column/output/hydrostatic_discrete/*"
 
-      - label: ":computer: Column Hydrostatic Balance Eq - implicit"
-        key: "cpu_column_hydrostatic_implicit"
-        command:
-          - "julia --color=yes --project=examples examples/column/hydrostatic_implicit.jl"
-        artifact_paths:
-          - "examples/column/output/hydrostatic_implicit/*"
-        soft_fail:
-          - exit_status: 1
-
   - group: "Examples: Spectral element"
     steps:
       - label: ":computer: Bickley jet CG"
