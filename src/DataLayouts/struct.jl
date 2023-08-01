@@ -187,7 +187,11 @@ Base.@propagate_inbounds @generated function get_struct(
                 array,
                 fieldtype(S, $i),
                 Val($D),
-                offset_index(start_index, Val($D), $(fieldtypeoffset(T, S, i))),
+                offset_index(
+                    start_index,
+                    Val($D),
+                    $(fieldtypeoffset(T, S, Val(i))),
+                ),
             )),
         )
     end
