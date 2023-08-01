@@ -60,10 +60,11 @@ fps = 2
 horizontal_mesh = periodic_line_mesh(; x_max, x_elem = x_elem)
 
 # Additional values required for driver
+# dt may need tweaking for is_small_scale = false
 dt = is_small_scale ? FT(1.5) : FT(20)
 t_end = is_small_scale ? FT(60 * 60 * 0.5) : FT(60 * 60 * 8)
 dt_save_to_sol = t_end / (animation_duration * fps)
-ode_algorithm = OrdinaryDiffEq.Rosenbrock23
+ode_algorithm = CTS.SSP333
 jacobian_flags = (;
     ∂ᶜ𝔼ₜ∂ᶠ𝕄_mode = ᶜ𝔼_name == :ρe ? :no_∂ᶜp∂ᶜK : :exact,
     ∂ᶠ𝕄ₜ∂ᶜρ_mode = :exact,
