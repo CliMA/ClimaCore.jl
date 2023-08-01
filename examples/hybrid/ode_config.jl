@@ -70,15 +70,7 @@ function ode_configuration(
     elseif !is_implicit_type(alg_or_tableau)
         return alg_or_tableau()
     elseif is_ordinary_diffeq_newton(alg_or_tableau)
-        if max_newton_iters == 1
-            error("OridinaryDiffEq requires at least 2 Newton iterations")
-        end
-        # κ like a relative tolerance; its default value in ODE is 0.01
-        nlsolve = ODE.NLNewton(;
-            κ = max_newton_iters == 2 ? Inf : 0.01,
-            max_iter = max_newton_iters,
-        )
-        return alg_or_tableau(; linsolve = linsolve!, nlsolve)
+        error("Unsupported option")
     elseif is_imex_CTS_algo_type(alg_or_tableau)
         newtons_method = CTS.NewtonsMethod(; max_iters = max_newton_iters)
         return CTS.IMEXAlgorithm(alg_or_tableau(), newtons_method)
