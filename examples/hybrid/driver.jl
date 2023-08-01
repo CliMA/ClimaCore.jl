@@ -178,6 +178,7 @@ end
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
