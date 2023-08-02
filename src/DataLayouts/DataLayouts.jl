@@ -940,15 +940,8 @@ end
     return :(VF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
 end
 
-@inline function Base.getproperty(data::VF{S}, i::Integer) where {S}
-    array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + nbytes))
-    VF{SS}(dataview)
-end
+Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
+    _property_view(data, Val(i))
 
 @inline function Base.getindex(data::VF{S}, v::Integer) where {S}
     @boundscheck 1 <= v <= size(parent(data), 1) ||
