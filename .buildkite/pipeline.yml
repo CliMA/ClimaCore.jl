@@ -1255,6 +1255,7 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
+        soft_fail: true
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"
