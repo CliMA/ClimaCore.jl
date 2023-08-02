@@ -3437,70 +3437,37 @@ function Base.copyto!(
         Nh = 1
     end
     (li, lw, rw, ri) = bounds = window_bounds(space, bc)
-    ninteriornodes = rw - lw + 1
-
+    Nv = ri - li + 1
     max_threads = 256
-    nitemsbdy = Nq * Nq * Nh # # of independent boundary items
-    nitemsint = ninteriornodes * Nq * Nq * Nh # # of independent interior items
-    (nthreadsbdy, nblocksbdy) = Spaces._configure_threadblock(nitemsbdy)
-    (nthreadsint, nblocksint) = Spaces._configure_threadblock(nitemsint)
-    isnotperiodic = !Topologies.isperiodic(Spaces.vertical_topology(space))
-    strip_space_out = strip_space(out, space)
-    strip_space_bc = strip_space(bc, space)
-    # left and right windows, if applicable
-    isnotperiodic &&
-        @cuda threads = (nthreadsbdy,) blocks = (nblocksbdy,) copyto_stencil_bdy_kernel!(
-            strip_space_out,
-            strip_space_bc,
-            axes(out),
-            bounds,
-            Nq,
-            Nh,
-        )
-    # interior nodes
-    @cuda threads = (nthreadsint,) blocks = (nblocksint,) copyto_stencil_interior_kernel!(
-        strip_space_out,
-        strip_space_bc,
+    nitems = Nv * Nq * Nq * Nh # # of independent interior items
+    (nthreads, nblocks) = Spaces._configure_threadblock(max_threads, nitems)
+    @cuda threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
+        strip_space(out, space),
+        strip_space(bc, space),
         axes(out),
         bounds,
-        ninteriornodes,
         Nq,
         Nh,
+        Nv,
     )
     return out
 end
 
-function copyto_stencil_bdy_kernel!(out, bc, space, bds, Nq, Nh)
+function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
     gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    if gid ≤ Nq * Nq * Nh
+    if gid ≤ Nv * Nq * Nq * Nh
         (li, lw, rw, ri) = bds
-        hidx = Spaces._get_idx((Nq, Nq, Nh), gid)
-        lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
-        rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
-        @inbounds for idx in li:(lw - 1)
-            setidx!(space, out, idx, hidx, getidx(space, bc, lbw, idx, hidx))
-        end
-        @inbounds for idx in (rw + 1):ri
-            setidx!(space, out, idx, hidx, getidx(space, bc, rbw, idx, hidx))
-        end
-    end
-    return nothing
-end
-
-function copyto_stencil_interior_kernel!(out, bc, space, bds, nnodes, Nq, Nh)
-    gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    if gid ≤ nnodes * Nq * Nq * Nh
-        (_, lw, rw, _) = bds
-        (ndidx, i, j, h) = Spaces._get_idx((nnodes, Nq, Nq, Nh), gid)
+        (v, i, j, h) = Spaces._get_idx((Nv, Nq, Nq, Nh), gid)
         hidx = (i, j, h)
-        ndidx += lw - 1
-        setidx!(
-            space,
-            out,
-            ndidx,
-            hidx,
-            getidx(space, bc, Interior(), ndidx, hidx),
-        )
+        idx = (li:ri)[v]
+        window =
+            idx < lw ? LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
+            (
+                idx > rw ?
+                RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
+                Interior()
+            )
+        setidx!(space, out, idx, hidx, getidx(space, bc, window, idx, hidx))
     end
     return nothing
 end
