@@ -36,7 +36,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     return space
 end
-#=
+
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
@@ -668,7 +668,7 @@ end
     C .= Ref(zero(eltype(C)))
     @test all(==(0.0), parent(C))
 end
-=#
+
 function integrate_bycolumn!(∫y, Y)
     Fields.bycolumn(axes(Y.y)) do colidx
         Operators.column_integral_definite!(∫y[colidx], Y.y[colidx])
