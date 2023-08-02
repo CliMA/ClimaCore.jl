@@ -3439,7 +3439,7 @@ function Base.copyto!(
     (li, lw, rw, ri) = bounds = window_bounds(space, bc)
     Nv = ri - li + 1
     max_threads = 256
-    nitems = Nv * Nq * Nq * Nh # # of independent interior items
+    nitems = Nv * Nq * Nq * Nh # # of independent items
     (nthreads, nblocks) = Spaces._configure_threadblock(max_threads, nitems)
     @cuda threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
         strip_space(out, space),
@@ -3459,7 +3459,7 @@ function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
         (li, lw, rw, ri) = bds
         (v, i, j, h) = Spaces._get_idx((Nv, Nq, Nq, Nh), gid)
         hidx = (i, j, h)
-        idx = (li:ri)[v]
+        idx = v - 1 + li
         window =
             idx < lw ? LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
             (
@@ -3471,6 +3471,7 @@ function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
     end
     return nothing
 end
+
 
 function Base.copyto!(
     field_out::Field,

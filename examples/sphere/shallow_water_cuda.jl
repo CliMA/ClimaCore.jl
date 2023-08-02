@@ -3,6 +3,8 @@ using ClimaComms
 using DocStringExtensions
 using LinearAlgebra
 using ClimaTimeSteppers, DiffEqBase
+import OrdinaryDiffEq as ODE
+import ClimaTimeSteppers as CTS
 using DiffEqCallbacks
 using NVTX
 
@@ -564,12 +566,15 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         end
         return nothing
     end
-
-    prob =
-        ODEProblem(ClimaODEFunction(; T_exp! = rhs!), Y, (0.0, T), parameters)
-    integrator = DiffEqBase.init(
+    prob = ODE.ODEProblem(
+        CTS.ClimaODEFunction(; T_exp! = rhs!),
+        Y,
+        (FT(0), T),
+        parameters,
+    )
+    integrator = ODE.init(
         prob,
-        ExplicitAlgorithm(SSP33ShuOsher()),
+        CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,
         saveat = [],
         progress = true,

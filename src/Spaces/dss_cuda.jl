@@ -1,7 +1,6 @@
 
 _max_threads_cuda() = 256
 
-
 function _configure_threadblock(max_threads, nitems)
     nthreads = min(max_threads, nitems)
     nblocks = cld(nitems, nthreads)
