@@ -1,11 +1,14 @@
 
 _max_threads_cuda() = 256
 
-function _configure_threadblock(nitems)
-    nthreads = min(_max_threads_cuda(), nitems)
+function _configure_threadblock(max_threads, nitems)
+    nthreads = min(max_threads, nitems)
     nblocks = cld(nitems, nthreads)
     return (nthreads, nblocks)
 end
+
+_configure_threadblock(nitems) =
+    _configure_threadblock(_max_threads_cuda(), nitems)
 
 function dss_load_perimeter_data!(
     ::ClimaComms.CUDADevice,

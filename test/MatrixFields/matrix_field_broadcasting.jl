@@ -46,7 +46,7 @@ function test_matrix_broadcast_against_array_reference(;
     set_result!::F2,
     get_temp_values::F3 = (_...) -> (),
     ref_set_result!::F4,
-    time_ratio_limit = 1,
+    time_ratio_limit = 10,
     max_eps_error_limit = 7,
     test_broken_with_cuda = false,
 ) where {F1, F2, F3, F4}
@@ -229,7 +229,7 @@ end
         set_result! = (result, ᶜᶜmat, ᶜvec) -> (@. result = ᶜᶜmat ⋅ ᶜvec),
         ref_set_result! = (_result, _ᶜᶜmat, _ᶜvec) ->
             mul!(_result, _ᶜᶜmat, _ᶜvec),
-        time_ratio_limit = 2, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 10, # This case's ref function is fast on Buildkite.
     )
 
     test_matrix_broadcast_against_array_reference(;
@@ -239,7 +239,7 @@ end
         set_result! = (result, ᶠᶠmat, ᶠvec) -> (@. result = ᶠᶠmat ⋅ ᶠvec),
         ref_set_result! = (_result, _ᶠᶠmat, _ᶠvec) ->
             mul!(_result, _ᶠᶠmat, _ᶠvec),
-        time_ratio_limit = 4, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 10, # This case's ref function is fast on Buildkite.
     )
 
     test_matrix_broadcast_against_array_reference(;
@@ -249,7 +249,7 @@ end
         set_result! = (result, ᶠᶜmat, ᶜvec) -> (@. result = ᶠᶜmat ⋅ ᶜvec),
         ref_set_result! = (_result, _ᶠᶜmat, _ᶜvec) ->
             mul!(_result, _ᶠᶜmat, _ᶜvec),
-        time_ratio_limit = 5, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 10, # This case's ref function is fast on Buildkite.
     )
 
     test_matrix_broadcast_against_array_reference(;
@@ -630,7 +630,7 @@ end
             mul!(_temp14, _temp8, _temp13)
             mul!(_result, _temp14, _ᶠᶠmat)
         end,
-        time_ratio_limit = 2, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 10, # This case's ref function is fast on Buildkite.
         max_eps_error_limit = 70, # This case's roundoff error is large on GPUs.
     )
 

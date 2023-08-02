@@ -3420,7 +3420,6 @@ function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
     )
 end
 
-
 function Base.copyto!(
     out::Field,
     bc::Union{
@@ -3437,25 +3436,42 @@ function Base.copyto!(
         Nq = 1
         Nh = 1
     end
-    bounds = window_bounds(space, bc)
-    # executed
-    @cuda threads = (Nq, Nq) blocks = (Nh,) copyto_stencil_kernel!(
+    (li, lw, rw, ri) = bounds = window_bounds(space, bc)
+    Nv = ri - li + 1
+    max_threads = 256
+    nitems = Nv * Nq * Nq * Nh # # of independent items
+    (nthreads, nblocks) = Spaces._configure_threadblock(max_threads, nitems)
+    @cuda threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
         strip_space(out, space),
         strip_space(bc, space),
         axes(out),
         bounds,
+        Nq,
+        Nh,
+        Nv,
     )
     return out
 end
 
-function copyto_stencil_kernel!(out, bc, space, bds)
-    i = threadIdx().x
-    j = threadIdx().y
-    h = blockIdx().x
-    hidx = (i, j, h)
-    apply_stencil!(space, out, bc, hidx, bds)
+function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
+    gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    if gid ≤ Nv * Nq * Nq * Nh
+        (li, lw, rw, ri) = bds
+        (v, i, j, h) = Spaces._get_idx((Nv, Nq, Nq, Nh), gid)
+        hidx = (i, j, h)
+        idx = v - 1 + li
+        window =
+            idx < lw ? LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
+            (
+                idx > rw ?
+                RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
+                Interior()
+            )
+        setidx!(space, out, idx, hidx, getidx(space, bc, window, idx, hidx))
+    end
     return nothing
 end
+
 
 function Base.copyto!(
     field_out::Field,
