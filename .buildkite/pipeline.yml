@@ -1175,6 +1175,8 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/hadley_circulation/*"
+        agents:
+          slurm_mem: 20GB
 
       - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e_float64"
