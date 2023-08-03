@@ -13,24 +13,25 @@ function apply_kernel!(cfield, ffield)
 end
 
 function apply_kernel_loop!(cfield, ffield)
-    for _ in 1:100000
+    for _ in 1:10
         apply_kernel!(cfield, ffield) # compile
     end
 end
 
-import Profile
-import PProf
-
-# (; cfield, ffield) = get_fields(1000, Float64, :no_h_space)
-(; cfield, ffield) = get_fields(1000, Float64, :has_h_space)
+cspace = TU.ColumnCenterFiniteDifferenceSpace(Float64; zelem = 1000)
+fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
+cfield = fill(field_vars(Float64), cspace)
+ffield = fill(field_vars(Float64), fspace)
 apply_kernel_loop!(cfield, ffield) # compile
 
-Profile.clear_malloc_data()
-prof = Profile.@profile begin
-    apply_kernel_loop!(cfield, ffield)
-end
-PProf.pprof()
+import Profile
+@info "collect profile"
+Profile.clear()
+prof = Profile.@profile apply_kernel_loop!(cfield, ffield)
+results = Profile.fetch()
+Profile.clear()
 
-# http://localhost:57599/ui/flamegraph?tf
+import ProfileCanvas
+ProfileCanvas.html_file(joinpath("flame.html"), results)
 
 nothing
