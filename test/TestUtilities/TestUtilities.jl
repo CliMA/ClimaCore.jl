@@ -155,7 +155,7 @@ function all_spaces(
         ColumnFaceFiniteDifferenceSpace(FT; zelem, context),
         SphereSpectralElementSpace(FT; context),
         CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
-        # FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem), # errors on sum
+        FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
         # TODO: incorporate this list of spaces somehow:
         #     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
         #     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
