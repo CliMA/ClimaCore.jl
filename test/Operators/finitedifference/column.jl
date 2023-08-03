@@ -1054,15 +1054,10 @@ end
     zc = getproperty(Fields.coordinate_field(cs), :z)
     zf = getproperty(Fields.coordinate_field(fs), :z)
 
-    function field_wrapper(space, nt::NamedTuple)
-        cmv(z) = nt
-        return cmv.(Fields.coordinate_field(space))
-    end
-
     field_vars() = (; y = FT(0))
 
-    cfield = field_wrapper(cs, field_vars())
-    ffield = field_wrapper(fs, field_vars())
+    cfield = fill(field_vars(), cs)
+    ffield = fill(field_vars(), fs)
 
     cy = cfield.y
     fy = ffield.y

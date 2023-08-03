@@ -19,11 +19,6 @@ Base.@propagate_inbounds Base.getindex(
 a_bcs(::Type{FT}, i::Int) where {FT} =
     (; bottom = Operators.SetValue(FT(0)), top = Operators.Extrapolate())
 
-function field_wrapper(space, nt::NamedTuple)
-    cmv(z) = nt
-    return cmv.(Fields.coordinate_field(space))
-end
-
 function alloc_test_f2c_interp(cfield, ffield)
     (; fx, fy, fz, fϕ, fψ) = ffield
     (; cx, cy, cz, cϕ, cψ) = cfield
@@ -462,10 +457,10 @@ end
         (; fx = FT(0), fy = FT(0), fz = FT(0), fϕ = FT(0), fψ = FT(0))
     cntfield_vars() = (; nt = ntuple(i -> cfield_vars(), n_tuples))
     fntfield_vars() = (; nt = ntuple(i -> ffield_vars(), n_tuples))
-    cfield = field_wrapper(cs, cfield_vars())
-    ffield = field_wrapper(fs, ffield_vars())
-    ntcfield = field_wrapper(cs, cntfield_vars())
-    ntffield = field_wrapper(fs, fntfield_vars())
+    cfield = fill(cfield_vars(), cs)
+    ffield = fill(ffield_vars(), fs)
+    ntcfield = fill(cntfield_vars(), cs)
+    ntffield = fill(fntfield_vars(), fs)
     wvec_glob = Geometry.WVector
 
     alloc_test_f2c_interp(cfield, ffield)

@@ -69,8 +69,8 @@ function get_column_spaces(z_elems, ::Type{FT}) where {FT}
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = getproperty(Fields.coordinate_field(cs), :z)
     zf = getproperty(Fields.coordinate_field(fs), :z)
-    cfield = field_wrapper(cs, field_vars(FT))
-    ffield = field_wrapper(fs, field_vars(FT))
+    cfield = fill(field_vars(FT), cs)
+    ffield = fill(field_vars(FT), fs)
 
     return (;cs, fs)
 end
@@ -88,14 +88,9 @@ function get_fields(z_elems, ::Type{FT}, h_space) where {FT}
     end
     zc = getproperty(Fields.coordinate_field(cs), :z)
     zf = getproperty(Fields.coordinate_field(fs), :z)
-    cfield = field_wrapper(cs, field_vars(FT))
-    ffield = field_wrapper(fs, field_vars(FT))
+    cfield = fill(field_vars(FT), cs)
+    ffield = fill(field_vars(FT), fs)
     return (; cfield, ffield)
-end
-
-function field_wrapper(space, nt::NamedTuple)
-    cmv(z) = nt
-    return cmv.(Fields.coordinate_field(space))
 end
 
 #####
