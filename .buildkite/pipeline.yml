@@ -37,7 +37,7 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.status()'"
 
     agents:
-      slurm_mem: 32G
+      slurm_mem: 80G
       slurm_cpus_per_task: 8
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
