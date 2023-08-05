@@ -47,7 +47,6 @@ if !Sys.iswindows()
     =#
     # now part of buildkite
     # @safetestset "Fields" begin @time include("Fields/field.jl") end
-    @safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
 
     @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
     @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end

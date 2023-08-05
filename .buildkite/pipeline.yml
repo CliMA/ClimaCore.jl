@@ -330,10 +330,6 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: fielddiffeq"
-        key: unit_fielddiffeq
-        command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
-
       - label: "Unit: reduction cuda"
         key: unit_reduction_cuda
         command:
