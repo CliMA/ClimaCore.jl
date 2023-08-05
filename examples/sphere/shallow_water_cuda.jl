@@ -2,7 +2,7 @@ using CUDA
 using ClimaComms
 using DocStringExtensions
 using LinearAlgebra
-using ClimaTimeSteppers, DiffEqBase
+using ClimaTimeSteppers
 import OrdinaryDiffEq as ODE
 import ClimaTimeSteppers as CTS
 using DiffEqCallbacks

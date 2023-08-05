@@ -5,7 +5,6 @@ import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
 
 using OrdinaryDiffEq: ODEProblem, solve
-using DiffEqBase
 using ClimaTimeSteppers
 
 import Logging
