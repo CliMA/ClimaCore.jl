@@ -13,7 +13,6 @@ import ClimaCore:
     slab
 import ClimaCore.Geometry: ⊗
 using OrdinaryDiffEq: ODEProblem, solve
-using DiffEqBase
 using ClimaTimeSteppers
 
 import Logging
