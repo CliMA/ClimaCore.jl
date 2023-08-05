@@ -26,6 +26,7 @@ postprocessing(sol, output_dir) = nothing
 
 import ClimaTimeSteppers as CTS
 using ClimaComms
+import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 
@@ -143,8 +144,11 @@ else
         initial_affect = true,
     )
 end
-callback =
-    CallbackSet(dss_callback, save_to_disk_callback, additional_callbacks...)
+callback = SciMLBase.CallbackSet(
+    dss_callback,
+    save_to_disk_callback,
+    additional_callbacks...,
+)
 
 problem = ODE.ODEProblem(
     CTS.ClimaODEFunction(;
