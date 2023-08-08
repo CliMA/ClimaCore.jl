@@ -38,6 +38,9 @@ steps:
       - echo "--- Instantiate status"
       - "julia --project -e 'using Pkg; Pkg.status()'"
 
+      - echo "--- Trigger precompilation"
+      - "julia --project=examples examples/trigger_precompilation.jl"
+
     agents:
       slurm_mem: 80G
       slurm_cpus_per_task: 8
