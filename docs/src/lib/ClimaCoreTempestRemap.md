@@ -31,7 +31,7 @@ write_exodus
 ```@docs
 def_time_coord
 def_space_coord
-NCDatasets.defVar(::NCDatasets.NCDataset, ::Any, field::Fields.Field)
+NCDatasets.defVar(::NCDatasets.NCDataset, ::NCDatasets.SymbolOrString, field::Fields.Field)
 Base.setindex!(::NCDatasets.CFVariable, ::Fields.Field, ::Colon)
 ```
 

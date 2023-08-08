@@ -22,7 +22,7 @@ local_sum(
 local_sum(field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}}) =
     local_sum(field, ClimaComms.device(axes(field)))
 """
-    sum([f=identity,]v::Field)
+    sum([f=identity,] v::Field)
 
 Approximate integration of `v` or `f.(v)` over the domain. In an `AbstractSpectralElementSpace`,
 an integral over the entire space is computed by summation over the elements of the integrand
@@ -39,6 +39,7 @@ where ``v_i`` is the value at each node, and ``f`` is the identity function if n
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
+Base.sum(field::Field) = Base.sum(identity, field)
 function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.AbstractCPUDevice,
@@ -104,6 +105,7 @@ where ``v_i`` is the Field value at each node, and ``f`` is the identity functio
 
 If `v` is a distributed field, this uses a `ClimaComms.allreduce` operation.
 """
+Statistics.mean(field::Field) = Statistics.mean(identity, field)
 function Statistics.mean(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.AbstractCPUDevice,
@@ -155,6 +157,14 @@ If `normalize=false`, then the denominator term is omitted, and so the result wi
 the norm as described above multiplied by the length/area/volume of ``\\Omega`` to
 the power of ``1/p``.
 """
+LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
+    LinearAlgebra.norm(
+        field,
+        ClimaComms.device(axes(field)),
+        p,
+        normalize = normalize,
+    )
+
 function LinearAlgebra.norm(
     field::Field,
     ::ClimaComms.AbstractCPUDevice,
@@ -184,13 +194,6 @@ function LinearAlgebra.norm(
         end
     end
 end
-LinearAlgebra.norm(field::Field, p::Real = 2; normalize = true) =
-    LinearAlgebra.norm(
-        field,
-        ClimaComms.device(axes(field)),
-        p,
-        normalize = normalize,
-    )
 
 function Base.isapprox(
     x::T,
