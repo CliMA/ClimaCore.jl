@@ -45,7 +45,7 @@ jobs:
       uses: julia-actions/setup-julia@v1
       if: steps.filter.outputs.run_test == 'true'
       with:
-        version: 1.8
+        version: [1.8, 1.9]
 
     - name: Cache artifacts
       uses: julia-actions/cache@v1
