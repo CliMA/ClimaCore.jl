@@ -1,6 +1,6 @@
+timedwait(() -> false, Float64(hash(@__FILE__)) / 10e16)
 using Test
 import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
-
 @testset "VIJFH" begin
     Nv = 10 # number of vertical levels
     Nij = 4 # Nij × Nij nodal points per element

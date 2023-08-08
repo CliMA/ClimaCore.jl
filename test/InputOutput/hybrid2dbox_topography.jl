@@ -1,3 +1,4 @@
+timedwait(() -> false, Float64(hash(@__FILE__)) / 10e16)
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra, UnPack
 import ClimaCore

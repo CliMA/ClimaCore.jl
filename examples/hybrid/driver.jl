@@ -1,3 +1,10 @@
+if haskey(ENV, "TEST_NAME")
+    test_dir, test_file_name = split(ENV["TEST_NAME"], '/')
+    test_file = joinpath(test_dir, test_file_name)
+else
+    error("ENV[\"TEST_NAME\"] required (e.g., \"sphere/baroclinic_wave_rhoe\")")
+end
+timedwait(() -> false, Float64(hash(string(@__FILE__, test_file))) / 10e17)
 # Test-specific definitions (may be overwritten in each test case file)
 # TODO: Allow some of these to be enironment variables or command line arguments
 upwinding_mode = :none
@@ -65,11 +72,6 @@ else
     z_stretch_string = "uniform"
 end
 
-if haskey(ENV, "TEST_NAME")
-    test_dir, test_file_name = split(ENV["TEST_NAME"], '/')
-else
-    error("ENV[\"TEST_NAME\"] required (e.g., \"sphere/baroclinic_wave_rhoe\")")
-end
 include(joinpath(test_dir, "$test_file_name.jl"))
 
 if z_stretch_string == "stretched"

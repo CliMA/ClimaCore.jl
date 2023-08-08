@@ -1,6 +1,6 @@
+timedwait(() -> false, Float64(hash(@__FILE__)) / 10e16)
 using Test
 using JET
-
 using ClimaCore.DataLayouts
 using StaticArrays
 using ClimaCore.DataLayouts: get_struct, set_struct!

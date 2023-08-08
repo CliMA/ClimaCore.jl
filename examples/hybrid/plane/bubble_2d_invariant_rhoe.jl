@@ -1,3 +1,4 @@
+timedwait(() -> false, Float64(hash(@__FILE__)) / 10e16)
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using Test
