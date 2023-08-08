@@ -225,7 +225,9 @@ end
             center_values = ones(FT, center_space)
             center_velocities = Geometry.WVector.(center_values)
 
-            filter(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+            filter18(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+            filter19(@nospecialize f) = f !== Base.mapreduce_empty
+            filter = VERSION ≤ v"1.9" ? filter18 : filter19
 
             # face space operators
             @test_opt function_filter = filter sum(ones(FT, face_space))
