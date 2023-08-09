@@ -13,7 +13,7 @@ Supertype for all limiters.
 
 # Interfaces
 
-- [`quasimonotone_limiter!`](@ref)
+- [`apply_limiter!`](@ref)
 """
 abstract type AbstractLimiter end
 

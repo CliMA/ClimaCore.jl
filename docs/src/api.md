@@ -122,6 +122,17 @@ Topologies.AbstractTopology
 Topologies.IntervalTopology
 Topologies.Topology2D
 Topologies.spacefillingcurve
+Topologies.nelems
+Topologies.nneighbors
+Topologies.nsendelems
+Topologies.nghostelems
+Topologies.localelemindex
+Topologies.face_node_index
+Topologies.ghost_faces
+Topologies.vertex_node_index
+Topologies.local_vertices
+Topologies.ghost_vertices
+Topologies.neighbors
 ```
 
 ### Interfaces
@@ -199,15 +210,13 @@ Spaces.Quadratures.orthonormal_poly
 ```@docs
 Spaces.dss_transform
 Spaces.dss_untransform
-Spaces.dss_interior_faces!
 Spaces.dss_local_vertices!
-Spaces.dss_ghost_faces!
-Spaces.dss_ghost_vertices!
 Spaces.dss_local!
 Spaces.dss_local_ghost!
 Spaces.dss_ghost!
 Spaces.create_dss_buffer
 Spaces.DSSBuffer
+Spaces.create_ghost_buffer
 Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!
 Spaces.weighted_dss_ghost!
@@ -303,3 +312,4 @@ InputOutput.read_field
 ```@docs
 Remapping.interpolate_array
 ```
+
