@@ -9,13 +9,6 @@ import ClimaCore.Operators: half, PlusHalf
 
 const n_tuples = 3
 
-# Hack we're using in TurbulenceConvection
-# for handling ntuple fields:
-Base.@propagate_inbounds Base.getindex(
-    field::Fields.FiniteDifferenceField,
-    i::Integer,
-) = Base.getproperty(field, i)
-
 a_bcs(::Type{FT}, i::Int) where {FT} =
     (; bottom = Operators.SetValue(FT(0)), top = Operators.Extrapolate())
 
@@ -337,8 +330,8 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
 
     # Compile first
     @inbounds for i in 1:n_tuples
-        cnt_i = cnt[i]
-        fnt_i = fnt[i]
+        cnt_i = cnt.:($i)
+        fnt_i = fnt.:($i)
         cxnt = cnt_i.cx
         fxnt = fnt_i.fx
         cynt = cnt_i.cy
@@ -354,8 +347,8 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
 
     @inbounds for i in 1:n_tuples
         p_i = @allocated begin
-            cnt_i = cnt[i]
-            fnt_i = fnt[i]
+            cnt_i = cnt.:($i)
+            fnt_i = fnt.:($i)
         end
         @test p_i == 0
         cxnt = cnt_i.cx
@@ -402,8 +395,8 @@ function alloc_test_nested_expressions_13(
 
     # Compile first
     @inbounds for i in 1:n_tuples
-        cnt_i = cnt[i]
-        fnt_i = fnt[i]
+        cnt_i = cnt.:($i)
+        fnt_i = fnt.:($i)
         cxnt = cnt_i.cx
         fxnt = fnt_i.fx
         fynt = fnt_i.fy
@@ -417,8 +410,8 @@ function alloc_test_nested_expressions_13(
     end
 
     @inbounds for i in 1:n_tuples
-        cnt_i = cnt[i]
-        fnt_i = fnt[i]
+        cnt_i = cnt.:($i)
+        fnt_i = fnt.:($i)
         cxnt = cnt_i.cx
         fxnt = fnt_i.fx
         fynt = fnt_i.fy
