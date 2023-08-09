@@ -513,6 +513,10 @@ steps:
         key: unit_field2arrays
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field2arrays.jl"
 
+      - label: "Unit: matrix multiplication at boundaries"
+        key: unit_matrix_multiplication_at_boundaries
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_multiplication_at_boundaries.jl"
+
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
