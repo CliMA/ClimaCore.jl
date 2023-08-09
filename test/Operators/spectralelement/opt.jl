@@ -99,7 +99,9 @@ end
 
 @static if @isdefined(var"@test_opt")
 
-    filter(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+    filter18(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
+    filter19(@nospecialize f) = f !== Base.mapreduce_empty
+    filter = VERSION ≤ v"1.9" ? filter18 : filter19
 
     function test_operators(field, vfield)
         @test_opt opt_Gradient(field)
