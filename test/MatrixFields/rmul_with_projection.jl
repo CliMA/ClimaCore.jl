@@ -1,10 +1,8 @@
-using Test
-using JET
-using Random: seed!
 using StaticArrays: @SMatrix
 
-import ClimaCore: Geometry
 import ClimaCore.MatrixFields: rmul_with_projection, rmul_return_type
+
+include("matrix_field_test_utils.jl")
 
 function test_rmul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
     result = rmul_with_projection(x, y, lg)
@@ -73,8 +71,7 @@ end
     test_rmul_with_projection(cotensor, cotensor, lg, cotensor * cotensor)
 
     # Test some combinations of complicated nested values.
-    T(value1, value2, value3) =
-        (; a = (), b = value1, c = (value2, (; d = (value3,)), (;)))
+    T = nested_type
     test_rmul_with_projection(
         number,
         T(covector, vector, tensor),
