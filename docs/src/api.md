@@ -209,14 +209,18 @@ Spaces.Quadratures.orthonormal_poly
 
 ```@docs
 Spaces.dss_transform
+Spaces.dss_transform!
+Spaces.dss_untransform!
 Spaces.dss_untransform
 Spaces.dss_local_vertices!
 Spaces.dss_local!
 Spaces.dss_local_ghost!
 Spaces.dss_ghost!
 Spaces.create_dss_buffer
+Spaces.fill_send_buffer!
 Spaces.DSSBuffer
 Spaces.create_ghost_buffer
+Spaces.load_from_recv_buffer!
 Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!
 Spaces.weighted_dss_ghost!
@@ -305,11 +309,23 @@ InputOutput.read_mesh
 InputOutput.read_topology
 InputOutput.read_space
 InputOutput.read_field
+InputOutput.defaultname
 ```
 
 ## Remapping
 
 ```@docs
 Remapping.interpolate_array
+```
+
+## ClimaCoreMakie
+
+```@meta
+CurrentModule = ClimaCoreMakie
+```
+
+```@docs
+ClimaCoreMakie.fieldheatmap
+ClimaCoreMakie.fieldcontourf
 ```
 
