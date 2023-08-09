@@ -1,18 +1,6 @@
-using Test
-using JET
 using LinearAlgebra: I
 
-using ClimaCore.MatrixFields
-import ClimaCore: Geometry
-
-macro test_all(expression)
-    return quote
-        local test_func() = $(esc(expression))
-        @test test_func()                   # correctness
-        @test (@allocated test_func()) == 0 # allocations
-        @test_opt test_func()               # type instabilities
-    end
-end
+include("matrix_field_test_utils.jl")
 
 @testset "BandMatrixRow Unit Tests" begin
     @test_all DiagonalMatrixRow(1) ==
@@ -41,14 +29,14 @@ end
               TridiagonalMatrixRow(1, 0, 1) / 2 - I ==
               zero(PentadiagonalMatrixRow{Int})
 
-    T(value) = (; a = (), b = value, c = (value, (; d = (value,)), (;)))
-    @test_all QuaddiagonalMatrixRow(T(0.5), T(1), T(1), T(1 // 2)) +
-              BidiagonalMatrixRow(T(-0.5), T(-1 // 2)) ==
-              QuaddiagonalMatrixRow(T(1), T(1), T(1), T(1)) / 2
-    @test_all PentadiagonalMatrixRow(T(0), T(0.5), T(1), T(1 // 2), T(0)) -
-              TridiagonalMatrixRow(T(1), T(0), T(1)) / 2 -
-              0.5 * DiagonalMatrixRow(T(2)) ==
-              PentadiagonalMatrixRow(T(0), T(0), T(0), T(0), T(0))
+    NT = nested_type
+    @test_all QuaddiagonalMatrixRow(NT(0.5), NT(1), NT(1), NT(1 // 2)) +
+              BidiagonalMatrixRow(NT(-0.5), NT(-1 // 2)) ==
+              QuaddiagonalMatrixRow(NT(1), NT(1), NT(1), NT(1)) / 2
+    @test_all PentadiagonalMatrixRow(NT(0), NT(0.5), NT(1), NT(1 // 2), NT(0)) -
+              TridiagonalMatrixRow(NT(1), NT(0), NT(1)) / 2 -
+              0.5 * DiagonalMatrixRow(NT(2)) ==
+              PentadiagonalMatrixRow(NT(0), NT(0), NT(0), NT(0), NT(0))
 
     @test_throws "Cannot promote" BidiagonalMatrixRow(1, 1) + I
     @test_throws "Cannot promote" BidiagonalMatrixRow(1, 1) +
