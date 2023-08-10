@@ -48,6 +48,9 @@ Gauss-Legendre-Lobatto quadrature using `Nq` quadrature points.
 """
 struct GLL{Nq} <: QuadratureStyle end
 
+Base.show(io::IO, ::GLL{Nq}) where {Nq} =
+    print(io, Nq, "-point Gauss-Legendre-Lobatto quadrature")
+
 @inline polynomial_degree(::GLL{Nq}) where {Nq} = Int(Nq - 1)
 @inline degrees_of_freedom(::GLL{Nq}) where {Nq} = Int(Nq)
 
@@ -62,6 +65,8 @@ end
 Gauss-Legendre quadrature using `Nq` quadrature points.
 """
 struct GL{Nq} <: QuadratureStyle end
+Base.show(io::IO, ::GL{Nq}) where {Nq} =
+    print(io, Nq, "-point Gauss-Legendre quadrature")
 
 @inline polynomial_degree(::GL{Nq}) where {Nq} = Int(Nq - 1)
 @inline degrees_of_freedom(::GL{Nq}) where {Nq} = Int(Nq)

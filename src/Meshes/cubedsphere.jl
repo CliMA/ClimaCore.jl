@@ -77,18 +77,15 @@ sphere.
 struct NormalizedBilinearMap <: LocalElementMap end
 
 
-Base.show(io::IO, mesh::AbstractCubedSphere) = print(
-    io,
-    mesh.ne,
-    "×",
-    mesh.ne,
-    "×",
-    6,
-    "-element ",
-    nameof(typeof(mesh)),
-    " of ",
-    mesh.domain,
-)
+function Base.summary(io::IO, mesh::AbstractCubedSphere)
+    ne = mesh.ne
+    print(io, ne, "×", ne, "×", 6, "-element ", nameof(typeof(mesh)))
+end
+function Base.show(io::IO, mesh::AbstractCubedSphere)
+    summary(io, mesh)
+    print(io, " of ", mesh.domain)
+end
+
 
 domain(mesh::AbstractCubedSphere) = mesh.domain
 elements(mesh::AbstractCubedSphere) = CartesianIndices((mesh.ne, mesh.ne, 6))

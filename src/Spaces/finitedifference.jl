@@ -30,7 +30,10 @@ function Base.show(io::IO, space::FiniteDifferenceSpace)
         "FaceFiniteDifferenceSpace",
         ":",
     )
-    print(iio, " "^(indent + 2), Spaces.topology(space))
+    print(iio, " "^(indent + 2), "context: ")
+    Topologies.print_context(iio, space.topology.context)
+    println(iio)
+    print(iio, " "^(indent + 2), "mesh: ", space.topology.mesh)
 end
 
 function FiniteDifferenceSpace{S}(

@@ -26,8 +26,12 @@ domain(mesh::IntervalMesh) = mesh.domain
 nelements(mesh::IntervalMesh) = length(mesh.faces) - 1
 elements(mesh::IntervalMesh) = Base.OneTo(nelements(mesh))
 
+function Base.summary(io::IO, mesh::IntervalMesh)
+    print(io, nelements(mesh), "-element IntervalMesh")
+end
 function Base.show(io::IO, mesh::IntervalMesh)
-    print(io, nelements(mesh), "-element IntervalMesh of ")
+    summary(io, mesh)
+    print(io, " of ")
     print(io, mesh.domain)
 end
 

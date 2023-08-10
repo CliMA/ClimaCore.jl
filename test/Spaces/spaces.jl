@@ -21,6 +21,12 @@ import ClimaCore.DataLayouts: IJFH, VF
 
     space = Spaces.SpectralElementSpace1D(topology, quad)
 
+    @test repr(space) === """
+    SpectralElementSpace1D:
+      context: SingletonCommsContext using CPUSingleThreaded
+      mesh: 1-element IntervalMesh of IntervalDomain: x ∈ [-3.0,5.0] (periodic)
+      quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
+
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
 
@@ -99,17 +105,19 @@ end
         boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
-    topology = Topologies.IntervalTopology(mesh)
+    topology = Topologies.IntervalTopology(context, mesh)
 
-    for Space in
-        [Spaces.CenterFiniteDifferenceSpace, Spaces.FaceFiniteDifferenceSpace]
-        space = Spaces.CenterFiniteDifferenceSpace(topology)
-        coord_data = Spaces.coordinates_data(space)
-        point_space = Spaces.level(space, 1)
-        @test point_space isa Spaces.PointSpace
-        @test Spaces.coordinates_data(point_space)[] ==
-              Spaces.level(coord_data, 1)[]
-    end
+    space = Spaces.CenterFiniteDifferenceSpace(topology)
+    @test repr(space) == """
+    CenterFiniteDifferenceSpace:
+      context: SingletonCommsContext using CPUSingleThreaded
+      mesh: 1-element IntervalMesh of IntervalDomain: z ∈ [0.0,5.0] (:bottom, :top)"""
+
+    coord_data = Spaces.coordinates_data(space)
+    point_space = Spaces.level(space, 1)
+    @test point_space isa Spaces.PointSpace
+    @test Spaces.coordinates_data(point_space)[] ==
+          Spaces.level(coord_data, 1)[]
 
     x_max = FT(0)
     y_max = FT(1)
@@ -155,6 +163,11 @@ end
     points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    @test repr(space) == """
+    SpectralElementSpace2D:
+      context: SingletonCommsContext using CPUSingleThreaded
+      mesh: 1×1-element RectilinearMesh of RectangleDomain: x ∈ [-3.0,5.0] (periodic) × y ∈ [-2.0,8.0] (:south, :north)
+      quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
 
     coord_data = Spaces.coordinates_data(space)
     array = parent(coord_data)

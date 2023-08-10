@@ -49,8 +49,12 @@ IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
 
 isperiodic(topology::AbstractIntervalTopology) = isempty(topology.boundaries)
 
-function Base.show(io::IO, topology::AbstractIntervalTopology)
-    print(io, "IntervalTopology on ", Topologies.mesh(topology))
+function Base.show(io::IO, topology::IntervalTopology)
+    println(io, nameof(typeof(topology)))
+    print(io, "  context: ")
+    print_context(io, topology.context)
+    println(io)
+    print(io, "  mesh: ", topology.mesh)
 end
 
 function mesh(topology::AbstractIntervalTopology)
