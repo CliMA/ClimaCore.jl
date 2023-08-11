@@ -6,7 +6,7 @@
 
 ### Flux Limiters advection
 
-The 2D Cartesian advection/transport example in [`examples/plane/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/plane/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D Cartesian domain.
+The 2D Cartesian advection/transport example in [`examples/plane/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/plane/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D Cartesian domain.
 
 #### Equations and discretizations
 
@@ -64,7 +64,7 @@ Because this is a purely 2D problem, there is no staggered vertical discretizati
 - ``wD`` is the [discrete horizontal weak spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakDivergence), called `wdiv` in the example code.
 - ``G`` is the [discrete horizontal strong spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Gradient), called `grad` in the example code.
 
-To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
+To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Spaces.weighted_dss!) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
 - ``g_1(\rho, q) = wD(G_h(q))``
 - ``DSS(\rho, q) = DSS(g_1(\rho q))``
 - ``g_2(\rho, q) = -\nu_4 wD(\rho G_h(\rho q))``
@@ -101,7 +101,7 @@ Because this is a fully 2D problem, the application of limiters does not affect 
 
 ### Flux Limiters advection
 
-The 3D Cartesian advection/transport example in [`examples/hybrid/box/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/box/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid Cartesian domain. It also demonstrates the usage of the high-order upwinding scheme in the vertical direction, called [`Upwind3rdOrderBiasedProductC2F`](@ref).
+The 3D Cartesian advection/transport example in [`examples/hybrid/box/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/box/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid Cartesian domain. It also demonstrates the usage of the high-order upwinding scheme in the vertical direction, called [`Upwind3rdOrderBiasedProductC2F`](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Upwind3rdOrderBiasedProductC2F).
 
 #### Equations and discretizations
 
@@ -177,7 +177,7 @@ We make use of the following operators
   - This example uses advective fluxes equal to zero at the top and bottom boundaries.
 - ``G_h`` is the [discrete horizontal spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Gradient), called `hgrad` in the example code.
 
-To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD_h``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
+To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD_h``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Spaces.weighted_dss!) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
 - ``g_1(\rho, q) = wD_h(G_h(q))``
 - ``DSS(\rho, q) = DSS(g_1(\rho q))``
 - ``g_2(\rho, q) = -\nu_4 wD_h(\rho G_h(\rho q))``
@@ -230,7 +230,7 @@ Because this is a Cartesian 3D problem, the application of limiters does not aff
 
 ### Flux Limiters advection
 
-The 2D sphere advection/transport example in [`examples/sphere/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/sphere/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D spherical domain.
+The 2D sphere advection/transport example in [`examples/sphere/limiters_advection.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/sphere/limiters_advection.jl) demonstrates the application of flux limiters in the horizontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a 2D spherical domain.
 
 #### Equations and discretizations
 
@@ -288,7 +288,7 @@ Because this is a purely 2D problem, there is no staggered vertical discretizati
 - ``wD`` is the [discrete horizontal weak spectral divergence](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakDivergence), called `wdiv` in the example code.
 - ``G`` is the [discrete horizontal strong spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Gradient), called `grad` in the example code.
 
-To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
+To discretize the hyperdiffusion operator, ``g(\rho, q) = - \nu_4 [\nabla^4 (\rho q)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Spaces.weighted_dss!) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q)]``, with:
 - ``g_1(\rho, q) = wD(G_h(q))``
 - ``DSS(\rho, q) = DSS(g_1(\rho q))``
 - ``g_2(\rho, q) = -\nu_4 wD(\rho G_h(\rho q))``
@@ -401,7 +401,7 @@ Because this is a purely 2D problem, there is no staggered vertical discretizati
 - ``wCurl`` is the [discrete weak curl](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.WeakCurl), called `wcurl` in the example code.
 
 
-To discretize the hyperdiffusion operator, ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h, \boldsymbol{u})]``, in the horizontal direction, we compose the weak divergence, ``wD``, and the gradient operator, ``G``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(h, \boldsymbol{u}) \circ DSS(h, \boldsymbol{u}) \circ g_1(h, \boldsymbol{u})]``. Moreover, when ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h)]``, i.e., the operator is applied to a scalar field only, it is discretized composing the following operations:
+To discretize the hyperdiffusion operator, ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h, \boldsymbol{u})]``, in the horizontal direction, we compose the weak divergence, ``wD``, and the gradient operator, ``G``, twice, with an intermediate call to [`weighted_dss!`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Spaces.weighted_dss!) between the two compositions, as in ``[g_2(h, \boldsymbol{u}) \circ DSS(h, \boldsymbol{u}) \circ g_1(h, \boldsymbol{u})]``. Moreover, when ``g(h, \boldsymbol{u}) = - \nu_4 [\nabla^4 (h)]``, i.e., the operator is applied to a scalar field only, it is discretized composing the following operations:
 - ``g_1(h) = wD(G(h))``
 - ``DSS(g_1(h))``
 - ``g_2(h) = -\nu_4 wD(G(h))``
@@ -428,7 +428,7 @@ This suite of examples contains five different test cases:
 
 ### Deformation Flow with Flux Limiters
 
-The 3D sphere advection/transport example in [`examples/hybrid/sphere/deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/deformation_flow.jl) demonstrates the application of flux limiters in the horziontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/previews/PR729/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the flux-corrected transport in the vertical direction; by default, it uses `FCTZalesak`.
+The 3D sphere advection/transport example in [`examples/hybrid/sphere/deformation_flow.jl`](https://github.com/CliMA/ClimaCore.jl/tree/main/examples/hybrid/sphere/deformation_flow.jl) demonstrates the application of flux limiters in the horziontal direction, namely [`QuasiMonotoneLimiter`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Limiters.QuasiMonotoneLimiter), in a hybrid 3D spherical domain. It also demonstrates the usage of the flux-corrected transport in the vertical direction; by default, it uses `FCTZalesak`.
 
 #### Equations and discretizations
 
@@ -505,7 +505,7 @@ We make use of the following operators
   - This example uses advective fluxes equal to zero at the top and bottom boundaries.
 - ``G_h`` is the [discrete horizontal spectral gradient](https://clima.github.io/ClimaCore.jl/stable/operators/#ClimaCore.Operators.Gradient), called `hgrad` in the example code.
 
-To discretize the hyperdiffusion operator for each tracer concentration, ``g(\rho, q_i) = - \nu_4 [\nabla^4 (\rho q_i)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD_h``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](@ref) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q_i)]``, with:
+To discretize the hyperdiffusion operator for each tracer concentration, ``g(\rho, q_i) = - \nu_4 [\nabla^4 (\rho q_i)]``, in the horizontal direction, we compose the horizontal weak divergence, ``wD_h``, and the horizontal gradient operator, ``G_h``, twice, with an intermediate call to [`weighted_dss!`](https://clima.github.io/ClimaCore.jl/stable/api/#ClimaCore.Spaces.weighted_dss!) between the two compositions, as in ``[g_2(\rho, g) \circ DSS(\rho, q) \circ g_1(\rho, q_i)]``, with:
 - ``g_1(\rho, q_i) = wD_h(G_h(q_i))``
 - ``DSS(\rho, q_i) = DSS(g_1(\rho q_i))``
 - ``g_2(\rho, q_i) = -\nu_4 wD_h(\rho G_h(\rho q_i))``

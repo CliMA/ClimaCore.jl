@@ -56,7 +56,7 @@ withenv("GKSwstype" => "nul") do
     Documenter.makedocs(
         bib,
         sitename = "ClimaCore.jl",
-        strict = [:example_block],
+        strict = true,
         format = format,
         checkdocs = :exports,
         clean = true,
