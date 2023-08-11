@@ -94,7 +94,9 @@ all_columns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
 #     Spaces.all_nodes(Spaces.horizontal_space(axes(field)))
 
 column_map(f::F, field) where {F} =
-    map((((i, j), h),) -> f(Spaces.column(field, i, j, h)), all_columns(field))
+    Iterators.map(all_columns(field)) do ((i, j), h)
+        f(Spaces.column(field, i, j, h))
+    end
 
 """
     field2arrays(field)
@@ -104,7 +106,7 @@ Converts a field defined on a `FiniteDifferenceSpace` or on an
 corresponds to a column of the field. This is done by calling
 `column_field2array` on each of the field's columns.
 """
-field2arrays(field) = column_map(column_field2array, field)
+field2arrays(field) = collect(column_map(column_field2array, field))
 
 """
     field2arrays_view(field)
