@@ -80,6 +80,7 @@ if !Sys.iswindows()
     @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
     # now part of buildkite
     # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
+    # @safetestset "MatrixFields - operator matrices" begin @time include("MatrixFields/operator_matrices.jl") end
 
     @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
     @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end

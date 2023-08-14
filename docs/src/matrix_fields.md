@@ -20,6 +20,12 @@ BandMatrixRow
 MultiplyColumnwiseBandMatrixField
 ```
 
+## Operator Matrices
+
+```@docs
+operator_matrix
+```
+
 ## Internals
 
 ```@docs
@@ -31,6 +37,8 @@ mul_return_type
 rmul_return_type
 matrix_shape
 column_axes
+AbstractLazyOperator
+replace_lazy_operator
 ```
 
 ## Utilities

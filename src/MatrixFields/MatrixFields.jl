@@ -48,10 +48,16 @@ export DiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
 
+# Types that are teated as single values when using matrix fields.
+const SingleValue =
+    Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
+
 include("band_matrix_row.jl")
 include("rmul_with_projection.jl")
 include("matrix_shape.jl")
 include("matrix_multiplication.jl")
+include("lazy_operators.jl")
+include("operator_matrices.jl")
 include("field2arrays.jl")
 
 const ColumnwiseBandMatrixField{V, S} = Fields.Field{

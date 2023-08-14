@@ -1,6 +1,3 @@
-const SingleValue =
-    Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
-
 """
     mul_with_projection(x, y, lg)
 

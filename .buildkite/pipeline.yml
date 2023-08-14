@@ -533,6 +533,17 @@ steps:
           slurm_gpus: 1
           slurm_mem: 40GB
 
+      - label: "Unit: operator matrices (CPU)"
+        key: unit_operator_matrices_cpu
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/operator_matrices.jl"
+
+      - label: "Unit: operator matrices (GPU)"
+        key: unit_operator_matrices_gpu
+        command: "julia --color=yes --project=test test/MatrixFields/operator_matrices.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 40GB
+
   - group: "Unit: Hypsography"
     steps:
 
