@@ -56,30 +56,29 @@ function gen_weights(
 
     # generate weights on serial spaces
     weights = Operators.overlap(target_space_serial, source_space_serial)
+    return weights
 end
 
-# TODO combine this with col_offsets function?
-# Calculate the number of nonzero values (weights) on each pid
-function calc_counts(weights, source_space, nprocs)
-    # create map from source linear ind to pid
-    s_inds = collect(Spaces.all_nodes(source_space))
-    s_lind_to_pid = zeros(Int, weights.n)
-
-    # extract element number for each linear index, use this to get pid
-    for (ind_lin, ind_ije) in enumerate(s_inds)
-        elem = ind_ije[2]
-        pid = source_space.topology.elempid[elem]
-        s_lind_to_pid[ind_lin] = pid
+# Calculate the total number of nodes on each pid for this space
+function node_counts_by_pid(space)#::Spaces.SpectralElementSpace2D)
+    nprocs = ClimaComms.nprocs(space.topology.context)
+    # count how many elements each process is responsible for
+    elem_counts = zeros(Int, nprocs + 1)
+    elempid = space.topology.elempid
+    # counts for all pids are offset by 1 to match sparse matrix `colptr` setup
+    for pid in elempid
+        elem_counts[pid + 1] += 1
     end
 
-    # get number of nonzero weights on each process
-    nzval_counts = zeros(Int, nprocs)
-    for ind_lin in LinearIndices(s_inds)
-        pid = s_lind_to_pid[ind_lin]
-        nzval_counts[pid] += weights.colptr[ind_lin + 1] - weights.colptr[ind_lin]
-    end
+    # calculate number of nodes per element
+    nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
 
-    return nzval_counts
+    # number of nodes = number of elements * nq ^ 2
+    node_counts = elem_counts .* (nq ^ 2)
+    # 1st value is 1 to match sparse matrix `colptr` setup
+    node_counts[1] = 1
+    # return cumulative sum of node counts
+    return cumsum(node_counts)
 end
 
 # Calculate the number of columns containing weights on each process
@@ -114,28 +113,13 @@ function calc_col_offsets(weights, source_space, nprocs)
         col_offsets[p] = offset
         offset += num_cols[p]
     end
-
     return col_offsets
 end
 
 # Scatter data where each process receives one value
 #  Use for counts and column offest
 function scatter_length1(data, comms_ctx, inplace::Bool)
-    # if ClimaComms.iamroot(comms_ctx)
-    #     # set up buffer to send 1 value to each pid
-    #     sendbuf = MPI.UBuffer(data, Int(1))
-    #     # if inplace, don't modify root recvbuf
-    #     #  when exchanging counts, want root to retain info about all processes
-    #     recvbuf = inplace ? MPI.IN_PLACE : MPI.Buffer(zeros(Int, 1))
-    # else
-    #     # send nothing on non-root processes
-    #     sendbuf = nothing
-    #     # create receive buffer of length 1 on each process
-    #     recvbuf = MPI.Buffer(zeros(Int, 1))
-    # end
-
-    # # scatter data to all processes
-    # MPI.Scatter!(sendbuf, recvbuf, comms_ctx.mpicomm)
+    # scatter data to all processes
     if ClimaComms.iamroot(comms_ctx)
         # set up buffer to send 1 value to each pid
         sendbuf = MPI.UBuffer(data, Int(1))
@@ -146,8 +130,6 @@ function scatter_length1(data, comms_ctx, inplace::Bool)
         MPI.Scatter!(nothing, recvbuf, comms_ctx.mpicomm)
         return recvbuf.data
     end
-
-    # return recvbuf.data
 end
 
 # Scatter data where each process receives multiple values
@@ -169,35 +151,51 @@ end
 
 # Take weight matrix mapping between serial spaces, distribute among processes
 function distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
-    comm = comms_ctx.mpicomm
-    # calculate number of nonzero vals (weights) on each pid to fill counts
+    # calculate number of source space nodes on each pid
+    node_counts = node_counts_by_pid(source_space)
+    @show node_counts
+
     if ClimaComms.iamroot(comms_ctx)
-        counts = calc_counts(weights, source_space, nprocs)
+        # broadcast weight column pointers to all processes
+        MPI.Bcast!(weights.colptr, comms_ctx.mpicomm)
+
         col_offsets = calc_col_offsets(weights, source_space, nprocs)
         nzvals = weights.nzval
         row_vals = weights.rowval
     else
-        counts = nothing
         col_offsets = nothing
         nzvals = nothing
         row_vals = nothing
     end
-    # scatter to each process (counts will be used to create receive buffer lengths)
-    #  do this in place so root retains info about all pids' counts
-    n_weights_mypid = scatter_length1(counts, comms_ctx, true)[1]
+
+    # scatter to each process (node_counts will be used to create receive buffer lengths)
+    #  do this in place so root retains info about all pids' node_counts
+    count_mypid = scatter_length1(node_counts, comms_ctx, true)[1]
     col_offset = scatter_length1(col_offsets, comms_ctx, false)[1]
 
+    # TODO col_offset looks okay but not count_mypid
+    @show (pid, count_mypid)
+    @show (pid, col_offset)
+
+    # use node counts and col pointers to get number of nonzero weights on each process
+    #  use this for receive buffer lengths
+    col_offset = colptrs[node_counts[pid]]
+    next_col_offset = colptrs[node_counts[pid + 1]]
+    n_weights = next_col_offset - col_offset
+
     # scatter weights
-    weights = scatterv_exchange(nzvals, comms_ctx, counts, n_weights_mypid)
+    weight_vals = scatterv_exchange(nzvals, comms_ctx, node_counts, count_mypid)
 
     # scatter row indices
-    row_inds = scatterv_exchange(row_vals, comms_ctx, counts, n_weights_mypid)1
+    row_inds = scatterv_exchange(row_vals, comms_ctx, node_counts, count_mypid)
 
-    @show weights
+    # TODO these values are wrong on all processes
+    @show weight_vals
     @show row_inds
     @show col_offsets
-    return weights, row_inds, col_offsets
+    return weight_vals, row_inds, col_offsets
 end
+
 
 
 # set up MPI info
