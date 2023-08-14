@@ -823,6 +823,15 @@ function dss_local!(
     return nothing
 end
 
+"""
+    dss_local_vertices!(
+        perimeter_data::DataLayouts.VIFH,
+        perimeter::Perimeter2D,
+        topology::Topologies.Topology2D,
+    )
+
+Apply dss to local vertices.
+"""
 function dss_local_vertices!(
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,

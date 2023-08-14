@@ -94,6 +94,12 @@ function write!(writer::HDF5Writer, obj, name = defaultname(obj))
 end
 
 # Domains
+"""
+    defaultname(obj)
+
+Default name of object for InputOutput writers.
+"""
+function defaultname end
 defaultname(::Domains.SphereDomain) = "sphere"
 function defaultname(domain::Domains.IntervalDomain)
     Domains.coordinate_type(domain) <: Geometry.XPoint && return "x-interval"

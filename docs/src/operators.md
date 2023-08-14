@@ -33,15 +33,6 @@ Interpolate
 Restrict
 ```
 
-### DSS
-```@docs
-Spaces.weighted_dss!
-Spaces.create_ghost_buffer
-Spaces.weighted_dss_start!
-Spaces.weighted_dss_internal!
-Spaces.weighted_dss_ghost!
-```
-
 ## Finite difference operators
 
 Finite difference operators are similar with some subtle differences:
@@ -99,6 +90,7 @@ ThirdOrderOneSided
 
 ```@docs
 AbstractBoundaryCondition
+SetCurl
 SetValue
 SetGradient
 SetDivergence
@@ -115,4 +107,6 @@ stencil_interior
 boundary_width
 stencil_left_boundary
 stencil_right_boundary
+left_interior_idx
+right_interior_idx
 ```

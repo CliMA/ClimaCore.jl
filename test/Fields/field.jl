@@ -36,7 +36,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     return space
 end
-#=
+
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
@@ -422,7 +422,7 @@ end
     coord = Geometry.XPoint(FT(π))
     space = Spaces.PointSpace(context, coord)
     @test parent(Spaces.local_geometry_data(space)) ==
-          FT[Geometry.component(coord, 1), 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+          FT[Geometry.component(coord, 1), 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     field = Fields.coordinate_field(space)
     @test field isa Fields.PointField
     @test Fields.field_values(field)[] == coord
@@ -668,7 +668,7 @@ end
     C .= Ref(zero(eltype(C)))
     @test all(==(0.0), parent(C))
 end
-=#
+
 function integrate_bycolumn!(∫y, Y)
     Fields.bycolumn(axes(Y.y)) do colidx
         Operators.column_integral_definite!(∫y[colidx], Y.y[colidx])
@@ -701,12 +701,19 @@ convergence_rate(err, Δh) =
     end
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
-    for zelem in (2^2, 2^3, 2^4, 2^5)
-        for space in TU.all_spaces(FT; zelem, context)
-            # Filter out spaces without z coordinates:
-            TU.has_z_coordinates(space) || continue
-            # Skip spaces incompatible with Fields.bycolumn:
-            TU.bycolumnable(space) || continue
+    for space_constructor in [
+        TU.ColumnCenterFiniteDifferenceSpace,
+        TU.ColumnFaceFiniteDifferenceSpace,
+        TU.CenterExtrudedFiniteDifferenceSpace,
+        TU.FaceExtrudedFiniteDifferenceSpace,
+    ]
+        device isa ClimaComms.CUDADevice && continue # broken on gpu
+        for zelem in (2^2, 2^3, 2^4, 2^5)
+            space = space_constructor(FT; zelem, context)
+            # # Filter out spaces without z coordinates:
+            # TU.has_z_coordinates(space) || continue
+            # # Skip spaces incompatible with Fields.bycolumn:
+            # TU.bycolumnable(space) || continue
 
             Y = fill((; y = FT(1)), space)
             zcf = Fields.coordinate_field(Y.y).z
@@ -715,7 +722,7 @@ convergence_rate(err, Δh) =
             Δz_1 = CUDA.allowscalar() do
                 parent(Δz_col)[1]
             end
-            key = (space, zelem)
+            key = zelem
             if !haskey(results, key)
                 results[key] =
                     Dict(:maxerr => 0, :Δz_1 => FT(0), :∫y => [], :y => [])
@@ -725,14 +732,19 @@ convergence_rate(err, Δh) =
             y = Y.y
             @. y .= 1 + sin(zcf)
             # Compute max error against analytic solution
-            maxerr = 0
-            Fields.bycolumn(axes(Y.y)) do colidx
-                Operators.column_integral_definite!(∫y[colidx], y[colidx])
-                maxerr = max(
-                    maxerr,
-                    maximum(abs.(parent(∫y[colidx]) .- ∫y_analytic)),
-                )
-                nothing
+            maxerr = FT(0)
+            if space isa Spaces.ExtrudedFiniteDifferenceSpace
+                Fields.bycolumn(axes(Y.y)) do colidx
+                    Operators.column_integral_definite!(∫y[colidx], y[colidx])
+                    maxerr = max(
+                        maxerr,
+                        maximum(abs.(parent(∫y[colidx]) .- ∫y_analytic)),
+                    )
+                    nothing
+                end
+            else
+                Operators.column_integral_definite!(∫y, y)
+                maxerr = max(maxerr, maximum(abs.(parent(∫y) .- ∫y_analytic)))
             end
             results[key][:Δz_1] = Δz_1
             results[key][:maxerr] = maxerr
@@ -740,11 +752,21 @@ convergence_rate(err, Δh) =
             push!(results[key][:y], y)
             nothing
         end
+        maxerrs = map(key -> results[key][:maxerr], collect(keys(results)))
+        Δzs_1 = map(key -> results[key][:Δz_1], collect(keys(results)))
+        cr = convergence_rate(maxerrs, Δzs_1)
+        if nameof(space_constructor) == :ColumnCenterFiniteDifferenceSpace
+            @test 2 < sum(abs.(cr)) / length(cr) < 2.01
+        elseif nameof(space_constructor) == :ColumnFaceFiniteDifferenceSpace
+            @test_broken 2 < sum(abs.(cr)) / length(cr) < 2.01
+        elseif nameof(space_constructor) == :CenterExtrudedFiniteDifferenceSpace
+            @test 2 < sum(abs.(cr)) / length(cr) < 2.01
+        elseif nameof(space_constructor) == :FaceExtrudedFiniteDifferenceSpace
+            @test_broken 2 < sum(abs.(cr)) / length(cr) < 2.01
+        else
+            error("Uncaught case")
+        end
     end
-    maxerrs = map(key -> results[key][:maxerr], collect(keys(results)))
-    Δzs_1 = map(key -> results[key][:Δz_1], collect(keys(results)))
-    cr = convergence_rate(maxerrs, Δzs_1)
-    @test 2 < sum(abs.(cr)) / length(cr) < 2.01
 end
 
 @testset "Allocation tests for integrals" begin

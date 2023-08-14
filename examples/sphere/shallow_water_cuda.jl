@@ -2,7 +2,8 @@ using CUDA
 using ClimaComms
 using DocStringExtensions
 using LinearAlgebra
-using ClimaTimeSteppers, DiffEqBase
+using ClimaTimeSteppers
+import SciMLBase
 import OrdinaryDiffEq as ODE
 import ClimaTimeSteppers as CTS
 using DiffEqCallbacks
@@ -581,7 +582,7 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         adaptive = false,
         progress_message = (dt, u, p, t) -> t,
         internalnorm = (u, t) -> norm(parent(Y)),
-        callback = CallbackSet(save_callback),
+        callback = SciMLBase.CallbackSet(save_callback),
     )
 
     return integrator
@@ -590,5 +591,5 @@ end
 integrator = shallow_water_driver_cuda(ARGS, Float64)
 
 if !isinteractive()
-    solve!(integrator)
+    SciMLBase.solve!(integrator)
 end

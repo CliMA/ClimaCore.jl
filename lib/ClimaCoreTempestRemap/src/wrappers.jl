@@ -37,8 +37,8 @@ end
 """
     overlap_mesh(outfile::AbstractString, meshfile_a::AbstractString, meshfile_b::AbstractString; verbose=false)
 
-Create the overlap mesh of `meshfile_a` and `meshfile_b` and write it to `outfile`. All
-files should be in Exodus format.
+Create the overlap mesh of `meshfile_a` and `meshfile_b` and
+write it to `outfile`. All files should be in Exodus format.
 
 Set `verbose=true` to print information.
 
@@ -82,8 +82,8 @@ end
     )
 
 Create a file `weightfile` in SCRIP format containing the remapping weights from
-`meshfile_in` to `meshfile_out`, where `overlap_meshfile` is constructed via
-[`overlap_meshfile(meshfile_overlap, meshfile_in, meshfile_out)`](@ref).
+`meshfile_in` to `meshfile_out`, where `meshfile_overlap` is constructed via
+[`overlap_mesh`](@ref).
 
 Keyword arguments are passed as command-line options. These include:
 - `in_type` / `out_type`: the type of the input and output mesh:

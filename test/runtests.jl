@@ -47,7 +47,6 @@ if !Sys.iswindows()
     =#
     # now part of buildkite
     # @safetestset "Fields" begin @time include("Fields/field.jl") end
-    @safetestset "Fields diffeq" begin @time include("Fields/fielddiffeq.jl") end
 
     @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
     @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
@@ -78,6 +77,7 @@ if !Sys.iswindows()
     @safetestset "MatrixFields - BandMatrixRow" begin @time include("MatrixFields/band_matrix_row.jl") end
     @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
     @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
+    @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
     # now part of buildkite
     # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
 

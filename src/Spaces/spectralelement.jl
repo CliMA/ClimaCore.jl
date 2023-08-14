@@ -15,9 +15,12 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     println(io, nameof(typeof(space)), ":")
     if hasfield(typeof(space), :topology)
         # some reduced spaces (like slab space) do not have topology
-        println(iio, " "^(indent + 2), space.topology)
+        print(iio, " "^(indent + 2), "context: ")
+        Topologies.print_context(iio, space.topology.context)
+        println(iio)
+        println(iio, " "^(indent + 2), "mesh: ", space.topology.mesh)
     end
-    print(iio, " "^(indent + 2), space.quadrature_style)
+    print(iio, " "^(indent + 2), "quadrature: ", space.quadrature_style)
 end
 
 ClimaComms.device(space::AbstractSpectralElementSpace) =

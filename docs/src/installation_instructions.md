@@ -6,8 +6,8 @@ command prompt and
 
 ```julia
 julia> ]
-(v1.8) pkg> add ClimaCore
-(v1.8) pkg> instantiate
+(v1.9) pkg> add ClimaCore
+(v1.9) pkg> instantiate
 ```
 
 This will install the latest tagged release of the package.
@@ -17,15 +17,15 @@ This will install the latest tagged release of the package.
 
     ```julia
     julia> ]
-    (v1.8) pkg> add ClimaCore#main
-    (v1.8) pkg> instantiate
+    (v1.9) pkg> add ClimaCore#main
+    (v1.9) pkg> instantiate
     ```
 
 You can run the tests via the package manager by:
 
 ```julia
 julia> ]
-(v1.8) pkg> test ClimaCore
+(v1.9) pkg> test ClimaCore
 ```
 
 # Running examples

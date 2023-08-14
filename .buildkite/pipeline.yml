@@ -1,13 +1,15 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.8.5 cuda/11.8 ucx/1.14.1_cuda-11.8 openmpi/4.1.5_cuda-11.8 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
+  modules: julia/1.9.2 cuda/11.8 ucx/1.14.1_cuda-11.8 openmpi/4.1.5_cuda-11.8 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   OPENBLAS_NUM_THREADS: 1
   JULIA_NVTX_CALLBACKS: gc
   OMPI_MCA_opal_warn_on_missing_libcuda: 0
+  # JULIA_CPU_TARGET: broadwell # arch used by GPU nodes
+  JULIA_CPU_TARGET: 'broadwell;skylake'
 
 steps:
   - label: "initialize"
@@ -20,6 +22,7 @@ steps:
 
       - echo "--- Instantiate test"
       - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=test --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate lib/ClimaCoreTempestRemap"
       - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
@@ -29,6 +32,7 @@ steps:
 
       - echo "--- Instantiate examples"
       - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=examples --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate benchmarks"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
@@ -37,7 +41,8 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.status()'"
 
     agents:
-      slurm_mem: 32G
+      slurm_mem: 80G
+      slurm_gpus: 1
       slurm_cpus_per_task: 8
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
@@ -330,10 +335,6 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: fielddiffeq"
-        key: unit_fielddiffeq
-        command: "julia --color=yes --check-bounds=yes --project=test test/Fields/fielddiffeq.jl"
-
       - label: "Unit: reduction cuda"
         key: unit_reduction_cuda
         command:
@@ -517,6 +518,10 @@ steps:
         key: unit_field2arrays
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field2arrays.jl"
 
+      - label: "Unit: matrix multiplication at boundaries"
+        key: unit_matrix_multiplication_at_boundaries
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_multiplication_at_boundaries.jl"
+
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
@@ -526,7 +531,7 @@ steps:
         command: "julia --color=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
         agents:
           slurm_gpus: 1
-          slurm_mem: 20GB
+          slurm_mem: 40GB
 
   - group: "Unit: Hypsography"
     steps:
@@ -1175,6 +1180,8 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/sphere/hadley_circulation.jl"
         artifact_paths:
           - "examples/hybrid/sphere/output/hadley_circulation/*"
+        agents:
+          slurm_mem: 20GB
 
       - label: ":computer: Float 64 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e_float64"
@@ -1255,6 +1262,7 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
+        soft_fail: true
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"

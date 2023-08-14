@@ -127,6 +127,21 @@ ClimaComms.device(topology::Topology2D) = topology.context.device
 ClimaComms.array_type(topology::Topology2D) =
     ClimaComms.array_type(topology.context.device)
 
+function Base.show(io::IO, topology::Topology2D)
+    indent = get(io, :indent, 0)
+    println(io, nameof(typeof(topology)))
+    print(io, " "^(indent + 2), "context: ")
+    print_context(io, topology.context)
+    println(io)
+    println(io, " "^(indent + 2), "mesh: ", topology.mesh)
+    print(io, " "^(indent + 2), "elemorder: ")
+    if topology.elemorder isa CartesianIndices
+        print(io, topology.elemorder)
+    else
+        summary(io, topology.elemorder)
+    end
+end
+
 """
     spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
 

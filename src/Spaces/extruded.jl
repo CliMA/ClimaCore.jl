@@ -102,8 +102,24 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         "FaceExtrudedFiniteDifferenceSpace",
         ":",
     )
-    println(iio, " "^(indent + 2), space.horizontal_space)
-    print(iio, " "^(indent + 2), space.vertical_topology)
+    print(iio, " "^(indent + 2), "context: ")
+    Topologies.print_context(iio, space.horizontal_space.topology.context)
+    println(iio)
+    println(iio, " "^(indent + 2), "horizontal:")
+    println(
+        iio,
+        " "^(indent + 4),
+        "mesh: ",
+        space.horizontal_space.topology.mesh,
+    )
+    println(
+        iio,
+        " "^(indent + 4),
+        "quadrature: ",
+        space.horizontal_space.quadrature_style,
+    )
+    println(iio, " "^(indent + 2), "vertical:")
+    print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end
 local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_local_geometry

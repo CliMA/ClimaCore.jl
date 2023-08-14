@@ -26,7 +26,7 @@ compare(cpu, gpu, sym) =
     )
     collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
     as = collect(TU.all_spaces(Float64; zelem = 10, context))
-    @test length(as) == 7
+    @test length(as) == 8
 end
 
 @testset "copyto! with CuArray-backed extruded spaces" begin

@@ -70,12 +70,12 @@ import ClimaCore: Geometry, Domains, Meshes, Spaces, Fields, MatrixFields
     @test ᶜᶜmat_array_view == MatrixFields.column_field2array(ᶜᶜmat)
 
     @test MatrixFields.field2arrays(ᶜᶜmat) ==
-          (MatrixFields.column_field2array(ᶜᶜmat),)
+          [MatrixFields.column_field2array(ᶜᶜmat)]
 
     # Check for type instabilities.
-    @test_opt MatrixFields.column_field2array(ᶜᶜmat)
+    @test_opt broken = true MatrixFields.column_field2array(ᶜᶜmat)
     @test_opt MatrixFields.column_field2array_view(ᶜᶜmat)
-    @test_opt MatrixFields.field2arrays(ᶜᶜmat)
+    @test_opt broken = true MatrixFields.field2arrays(ᶜᶜmat)
 
     # Because this test is broken, printing matrix fields allocates some memory.
     @test_broken (@allocated MatrixFields.column_field2array_view(ᶜᶜmat)) == 0

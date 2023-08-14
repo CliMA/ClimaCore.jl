@@ -26,6 +26,7 @@ postprocessing(sol, output_dir) = nothing
 
 import ClimaTimeSteppers as CTS
 using ClimaComms
+import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
 
@@ -143,8 +144,11 @@ else
         initial_affect = true,
     )
 end
-callback =
-    CallbackSet(dss_callback, save_to_disk_callback, additional_callbacks...)
+callback = SciMLBase.CallbackSet(
+    dss_callback,
+    save_to_disk_callback,
+    additional_callbacks...,
+)
 
 problem = ODE.ODEProblem(
     CTS.ClimaODEFunction(;
@@ -178,6 +182,7 @@ end
 @info "on a vertical $z_stretch_string grid"
 
 walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
     if ClimaComms.iamroot(comms_ctx)
@@ -215,7 +220,7 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         end
     end
     if ClimaComms.iamroot(comms_ctx)
-        sol = DiffEqBase.sensitivity_solution(sol, global_sol_u, sol.t)
+        sol = SciMLBase.sensitivity_solution(sol, global_sol_u, sol.t)
         output_file =
             joinpath(output_dir, "scaling_data_$(nprocs)_processes.jld2")
         println("writing performance data to $output_file")

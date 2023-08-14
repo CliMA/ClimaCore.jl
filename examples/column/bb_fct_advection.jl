@@ -1,7 +1,6 @@
 using Test
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve
-using DiffEqBase
 using ClimaTimeSteppers
 
 import ClimaCore:

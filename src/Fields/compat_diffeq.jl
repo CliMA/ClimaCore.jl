@@ -1,4 +1,4 @@
-import DiffEqBase, RecursiveArrayTools, Static
+import RecursiveArrayTools, Static
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions
@@ -50,50 +50,3 @@ function RecursiveArrayTools.recursivefill!(field::Field, value)
     RecursiveArrayTools.recursivefill!(parent(field), value)
     return field
 end
-
-
-function DiffEqBase.calculate_residuals!(
-    out::Fields.Field,
-    ũ::Fields.Field,
-    u₀::Fields.Field,
-    u₁::Fields.Field,
-    α,
-    ρ,
-    internalnorm,
-    t,
-    thread::Union{Static.False, Static.True},
-)
-    DiffEqBase.calculate_residuals!(
-        parent(out),
-        parent(ũ),
-        parent(u₀),
-        parent(u₁),
-        α,
-        ρ,
-        internalnorm,
-        t,
-        thread,
-    )
-end
-
-@inline function calculate_residuals!(
-    out,
-    ũ,
-    u₀,
-    u₁,
-    α,
-    ρ,
-    internalnorm,
-    t,
-    thread::Union{Static.False, Static.True},
-)
-    @. out = calculate_residuals(ũ, u₀, u₁, α, ρ, internalnorm, t, thread)
-    nothing
-end
-
-
-# Play nice with DiffEq ArrayPartition
-DiffEqBase.UNITLESS_ABS2(field::Field) =
-    sum(DiffEqBase.UNITLESS_ABS2, parent(field))
-DiffEqBase.recursive_length(field::Field) = 1
-DiffEqBase.NAN_CHECK(field::Field) = DiffEqBase.NAN_CHECK(parent(field))

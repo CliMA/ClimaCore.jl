@@ -68,10 +68,11 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
     if eltype(eltype(field)) <: Number
+        shape = typeof(matrix_shape(field)).name.name
         if field isa Fields.FiniteDifferenceField
-            println(io, " that corresponds to the matrix")
+            println(io, " that corresponds to the $shape matrix")
         else
-            println(io, " whose first column corresponds to the matrix")
+            println(io, " whose first column corresponds to the $shape matrix")
         end
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)

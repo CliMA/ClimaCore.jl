@@ -26,6 +26,16 @@ struct LinearMap{S, T, W, I, V} # make consistent with / move to regridding.jl
     out_type::String
 end
 
+
+"""
+    remap!(target::IJFH{S, Nqt}, R::LinearMap, source::IJFH{S, Nqs})
+    remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
+
+Applies the remapping `R` to a `source`
+Field and stores the result in `target`.
+"""
+function remap! end
+
 # This version of this function is used for serial remapping
 function remap!(
     target::IJFH{S, Nqt},

@@ -11,6 +11,10 @@ A domain represents a region of space.
 """
 abstract type AbstractDomain end
 
+function Base.summary(io::IO, domain::AbstractDomain)
+    print(io, nameof(typeof(domain)))
+end
+
 const BCTagType = Union{Nothing, Tuple{Symbol, Symbol}}
 
 float_type(domain::AbstractDomain) = float_type(coordinate_type(domain))
@@ -65,17 +69,25 @@ IntervalDomain(coords::ClosedInterval; kwargs...) =
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
 
-function Base.show(io::IO, domain::IntervalDomain)
+function print_interval(io::IO, domain::IntervalDomain{CT}) where {CT}
     print(
         io,
-        nameof(typeof(domain)),
-        "($(domain.coord_min), $(domain.coord_max); ",
+        fieldname(CT, 1),
+        " ∈ [",
+        Geometry.component(domain.coord_min, 1),
+        ",",
+        Geometry.component(domain.coord_max, 1),
+        "] ",
     )
     if isperiodic(domain)
-        print(io, "periodic=true)")
+        print(io, "(periodic)")
     else
-        print(io, "boundary_names = $(domain.boundary_names))")
+        print(io, domain.boundary_names)
     end
+end
+function Base.show(io::IO, domain::IntervalDomain)
+    print(io, nameof(typeof(domain)), ": ")
+    print_interval(io, domain)
 end
 
 struct RectangleDomain{I1 <: IntervalDomain, I2 <: IntervalDomain} <:
@@ -119,12 +131,12 @@ end
 
 
 function Base.show(io::IO, domain::RectangleDomain)
-    indent = get(io, :indent, 0)
-    println(io, nameof(typeof(domain)), "(")
-    println(io, " "^(indent + 2), domain.interval1)
-    println(io, " "^(indent + 2), domain.interval2)
-    print(io, " "^indent, ")")
+    print(io, nameof(typeof(domain)), ": ")
+    print_interval(io, domain.interval1)
+    print(io, " × ")
+    print_interval(io, domain.interval2)
 end
+
 coordinate_type(domain::RectangleDomain) = typeof(
     Geometry.product_coordinates(
         domain.interval1.coord_min,
@@ -141,7 +153,7 @@ struct SphereDomain{FT} <: AbstractDomain where {FT <: AbstractFloat}
     radius::FT
 end
 Base.show(io::IO, domain::SphereDomain) =
-    print(io, nameof(typeof(domain)), "($(domain.radius))")
+    print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
 boundary_names(::SphereDomain) = ()
 coordinate_type(::SphereDomain{FT}) where {FT} = Geometry.Cartesian123Point{FT}
