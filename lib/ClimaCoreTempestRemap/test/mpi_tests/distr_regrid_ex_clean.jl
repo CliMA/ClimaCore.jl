@@ -81,43 +81,8 @@ function node_counts_by_pid(space::Spaces.SpectralElementSpace2D)
     return cumsum(node_counts)
 end
 
-# Calculate the number of columns containing weights on each process
-function calc_col_offsets(weights, source_space, nprocs)
-    s_inds = collect(Spaces.all_nodes(source_space))
-    # create map from source column ind to pid
-    s_col_to_pid = zeros(Int, weights.n)
-
-    # extract element number for each linear index, use this to get pid
-    for (ind_lin, ind_ije) in enumerate(s_inds)
-        col = ind_ije[1][2]
-
-        # if col is unseen, continue
-        if s_col_to_pid[col] == 0
-            elem = ind_ije[2]
-            pid = source_space.topology.elempid[elem]
-
-            s_col_to_pid[col] = pid
-        end
-    end
-
-    # get number of columns on each process
-    num_cols = zeros(Int, nprocs)
-    for p in 1:nprocs
-        num_cols[p] = count(c -> c == p, s_col_to_pid)
-    end
-
-    # go through columns and accumulate offset for each pid
-    col_offsets = zeros(Int, nprocs)
-    offset = Int(1)
-    for p in 1:nprocs
-        col_offsets[p] = offset
-        offset += num_cols[p]
-    end
-    return col_offsets
-end
-
 # Scatter data where each process receives multiple values
-function scatterv_exchange(data, send_counts, recv_length, comms_ctx)
+function scatterv_exchange(data, send_counts, recv_length, comms_ctx, data_type)
     if ClimaComms.iamroot(comms_ctx)
         # set up buffer to send `length` values to each pid
         sendbuf = MPI.VBuffer(data, send_counts)
@@ -126,7 +91,7 @@ function scatterv_exchange(data, send_counts, recv_length, comms_ctx)
         sendbuf = nothing
     end
     # create receive buffer of specified length on each process
-    recvbuf = MPI.Buffer(zeros(Int, recv_length))
+    recvbuf = MPI.Buffer(zeros(data_type, recv_length))
 
     # scatter data to all processes
     MPI.Scatterv!(sendbuf, recvbuf, comms_ctx.mpicomm)
@@ -134,52 +99,60 @@ function scatterv_exchange(data, send_counts, recv_length, comms_ctx)
 end
 
 # Calculate the number of nonzero weights on each process
-function n_weights_by_pid(node_counts, col_offsets, nprocs)
+function n_weights_by_pid(node_counts, colptrs, nprocs)
     n_weights = zeros(Int, nprocs)
 
     for p in 1:nprocs
-        n_weights[p] = col_offsets[node_counts[p + 1]] - col_offsets[node_counts[p]]
+        n_weights[p] = colptrs[node_counts[p + 1]] - colptrs[node_counts[p]]
     end
+
     return n_weights
+end
+
+# Return range of colptrs for weights on this process
+#  This contains all column pointers for this process, and
+#  one additional bound, as in the CSC sparse matrix representation
+function colptrs_my_pid(node_counts, colptrs, nprocs)
+    colptrs_pid = zeros(Int, nprocs)
+    # `node_counts` contains cumulative sum, so can be used for range
+    for p in 1:nprocs
+        colptrs_pid = colptrs[node_counts[pid]:node_counts[pid + 1]]
+    end
+    return colptrs_pid
 end
 
 # Take weight matrix mapping between serial spaces, distribute among processes
 function distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
     # calculate number of source space nodes on each pid
     node_counts = node_counts_by_pid(source_space)
-    @show node_counts
 
     if ClimaComms.iamroot(comms_ctx)
-        # broadcast weight column pointers to all processes
-        col_offsets = weights.colptr
+        # extract weight matrix fields
+        colptrs = weights.colptr
+        nzvals = weights.nzval
+        rowvals = weights.rowval
     else
-        col_offsets = nothing
+        colptrs = nothing
+        nzvals = nothing
+        rowvals = nothing
     end
-    # ClimaComms.bcast(comms_ctx, col_offsets)
-    MPI.bcast(col_offsets, comms_ctx.mpicomm)
 
-    ClimaComms.barrier(comms_ctx)
-    @show "after barrier"
-    @show col_offsets
+    # broadcast weight column pointers to all processes
+    colptrs = MPI.bcast(colptrs, comms_ctx.mpicomm)
 
-    # use node counts and col pointers to get number of nonzero weights on each process
-    #  use this for receive buffer lengths
-    # col_offset = col_offsets[node_counts[pid]]
-    # next_col_offset = col_offsets[node_counts[pid + 1]]
-    # n_weights = next_col_offset - col_offset
-    n_weights = n_weights_by_pid(node_counts, col_offsets, nprocs)
+    # extract only the column pointers needed on this process
+    colptrs_pid = colptrs_my_pid(node_counts, colptrs, nprocs)
 
-    # scatter weights
-    weight_vals = scatterv_exchange(weights.nzval, n_weights, n_weights[pid], comms_ctx)
+    # get number of nonzero weights on each process - use for send and receive buffer lengths
+    n_weights = n_weights_by_pid(node_counts, colptrs, nprocs)
 
-    # scatter row indices
-    row_inds = scatterv_exchange(weights.rowval, n_weights, n_weights[pid], comms_ctx)
+    # scatter weights and row indices
+    send_counts = n_weights
+    recv_length = n_weights[pid]
+    weight_vals = scatterv_exchange(nzvals, send_counts, recv_length, comms_ctx, FT)
+    row_inds = scatterv_exchange(rowvals, send_counts, recv_length, comms_ctx, Int)
 
-    # TODO these values are the same on all processes
-    @show weight_vals
-    @show row_inds
-    @show col_offsets
-    return weight_vals, row_inds, col_offsets
+    return weight_vals, row_inds, colptrs_pid
 end
 
 
@@ -211,16 +184,33 @@ target_nex = 1
 target_ney = 3
 target_space = make_space(domain, target_nq, target_nex, target_ney, comms_ctx)
 
-# generate weights matrix on root process
+# STEP 1: generate weights matrix on root process
 if ClimaComms.iamroot(comms_ctx)
     weights = gen_weights(source_space, target_space)
 else
     weights = nothing
 end
 
-# distribute (scatter) weights to all processes
+# STEP 2: distribute (scatter) weights to all processes
 weights, row_inds, col_offsets = distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
 
-# @show weights
-# @show row_inds
-# @show col_offsets
+@show weights
+@show row_inds
+@show col_offsets
+
+
+
+# TODO STEP 3: construct weight matrix on each process (SparseMatrixCSC)
+
+
+# Note now we have weight matrix divided by columns into sub matrices
+#  now we have to to separate weight matrix by rows for receive side
+#  any row with nonzero value needs to be sent
+
+# v1: assume each chunk of rows all has to be sent (no rows all zero - dense)
+# need target_ind_to_pid (map of row ind to pid)
+# need number of rows to receive on each process (should be in unclean example)
+# need number of rows to send to each process
+# with dense assumption, array containing number of values to send to each process is same on each process
+
+# TODO construct send/recv buffers for source data
