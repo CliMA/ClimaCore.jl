@@ -46,10 +46,7 @@ end
 # Given two distr spaces, generate a weight matrix mapping between
 #  the two associated serial spaces
 # Note: this function should only be called by the root process
-function gen_weights(
-    source_space,
-    target_space,
-)
+function gen_weights(source_space, target_space)
     # construct serial spaces from distributed space info
     source_space_serial = distr_to_serial_space(source_space)
     target_space_serial = distr_to_serial_space(target_space)
@@ -74,7 +71,7 @@ function node_counts_by_pid(space::Spaces.SpectralElementSpace2D)
     nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
 
     # number of nodes = number of elements * nq ^ 2
-    node_counts = elem_counts .* (nq ^ 2)
+    node_counts = elem_counts .* (nq^2)
     # 1st value is 1 to match sparse matrix `colptr` setup
     node_counts[1] = 1
     # return cumulative sum of node counts
@@ -149,10 +146,28 @@ function distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
     # scatter weights and row indices
     send_counts = n_weights
     recv_length = n_weights[pid]
-    weight_vals = scatterv_exchange(nzvals, send_counts, recv_length, comms_ctx, FT)
-    row_inds = scatterv_exchange(rowvals, send_counts, recv_length, comms_ctx, Int)
+    weight_vals =
+        scatterv_exchange(nzvals, send_counts, recv_length, comms_ctx, FT)
+    row_inds =
+        scatterv_exchange(rowvals, send_counts, recv_length, comms_ctx, Int)
 
     return weight_vals, row_inds, colptrs_pid
+end
+
+# Given nonzero values, their row indices, and column pointers, construct a sparsematrix
+function to_sparse(nzval, rowval, colptr)
+    # convert colptr to column indices
+    len = colptr[end] - 1
+    colval = zeros(Int, len)
+    col = 1
+    for i in 1:len
+        if i == colptr[col + 1]
+            col += 1
+        end
+        colval[i] = col
+    end
+
+    return spase(rowval, colval, nzval)
 end
 
 
@@ -192,7 +207,8 @@ else
 end
 
 # STEP 2: distribute (scatter) weights to all processes
-weights, row_inds, col_offsets = distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
+weights, row_inds, col_offsets =
+    distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
 
 @show weights
 @show row_inds
@@ -200,8 +216,9 @@ weights, row_inds, col_offsets = distr_weights(weights, source_space, target_spa
 
 
 
-# TODO STEP 3: construct weight matrix on each process (SparseMatrixCSC)
-
+# TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
+# TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
+weights = to_sparse(weights, row_inds, col_offsets)
 
 # Note now we have weight matrix divided by columns into sub matrices
 #  now we have to to separate weight matrix by rows for receive side
@@ -213,4 +230,4 @@ weights, row_inds, col_offsets = distr_weights(weights, source_space, target_spa
 # need number of rows to send to each process
 # with dense assumption, array containing number of values to send to each process is same on each process
 
-# TODO construct send/recv buffers for source data
+# TODO STEP 4: construct send/recv buffers for source data
