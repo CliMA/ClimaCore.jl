@@ -81,10 +81,22 @@ function overlap(
     target::T,
     source::S,
 ) where {
-    T <:
-    SpectralElementSpace2D{<:Topology2D{<:Union{ClimaComms.SingletonCommsContext, ClimaComms.MPICommsContext}}},
-    S <:
-    SpectralElementSpace2D{<:Topology2D{<:Union{ClimaComms.SingletonCommsContext, ClimaComms.MPICommsContext}}},
+    T <: SpectralElementSpace2D{
+        <:Topology2D{
+            <:Union{
+                ClimaComms.SingletonCommsContext,
+                ClimaComms.MPICommsContext,
+            },
+        },
+    },
+    S <: SpectralElementSpace2D{
+        <:Topology2D{
+            <:Union{
+                ClimaComms.SingletonCommsContext,
+                ClimaComms.MPICommsContext,
+            },
+        },
+    },
 }
     @assert (
         typeof(Spaces.topology(target).mesh) <: Meshes.RectilinearMesh &&

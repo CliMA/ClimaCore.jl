@@ -54,14 +54,16 @@ source_nex = 1
 source_ney = 2
 source_space = make_space(domain, source_nq, source_nex, source_ney, comms_ctx)
 # TODO does this have to be on root?
-source_space_serial = make_space(domain, source_nq, source_nex, source_ney, comms_ctx_serial)
+source_space_serial =
+    make_space(domain, source_nq, source_nex, source_ney, comms_ctx_serial)
 
 # construct distributed target space
 target_nq = 3
 target_nex = 1
 target_ney = 3
 target_space = make_space(domain, target_nq, target_nex, target_ney, comms_ctx)
-target_space_serial = make_space(domain, target_nq, target_nex, target_ney, comms_ctx_serial)
+target_space_serial =
+    make_space(domain, target_nq, target_nex, target_ney, comms_ctx_serial)
 
 # generate source data on source space
 source_data = Fields.ones(source_space)
