@@ -243,7 +243,33 @@ function profile_compute_kinetic(::Type{FT}) where {FT}
             CUDA.@elapsed κ_ref = compute_kinetic_ref!(κ_ref, uₕ_ref, uᵥ_ref)
         println("t_ca = $t_ca (sec); t_ref = $t_ref (sec)")
     end
-
+    return nothing
 end
 
-profile_compute_kinetic(Float64)
+#profile_compute_kinetic(Float64)
+
+function profile_compute_divergence(::Type{FT}) where {FT}
+    κ, uₕ, uᵥ = initialize_mwe(ClimaComms.CUDADevice(), FT)
+    κ_cpu, uₕ_cpu, uᵥ_cpu = initialize_mwe(ClimaComms.CPUSingleThreaded(), FT)
+    hdiv = Operators.Divergence()
+    horz_div_cpu = hdiv.(uₕ_cpu)
+    horz_div = hdiv.(uₕ)
+
+    nreps = 100
+
+    for i in 1:nreps
+        t_div = CUDA.@elapsed horz_div .= hdiv.(uₕ)
+        println("t_div = $t_div (sec)")
+    end
+
+    for i in 1:nreps
+        NVTX.@range "compute_horizontal_divergence!" color = colorant"blue" payload =
+            i begin
+            CUDA.@sync horz_div .= hdiv.(uₕ)
+        end
+    end
+
+    return nothing
+end
+
+profile_compute_divergence(Float64)
