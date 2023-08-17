@@ -53,11 +53,11 @@ function column_field2array(field::Fields.FiniteDifferenceField)
             last_row = matrix_d < n_cols - n_rows ? n_rows : n_cols - matrix_d
 
             diagonal_data_view = view(diagonal_data, first_row:last_row)
-            @allowscalar copyto!(matrix_diagonal, diagonal_data_view)
+            CUDA.@allowscalar copyto!(matrix_diagonal, diagonal_data_view)
         end
         return matrix
     else # field represents a vector
-        return @allowscalar Array(column_field2array_view(field))
+        return CUDA.@allowscalar Array(column_field2array_view(field))
     end
 end
 
