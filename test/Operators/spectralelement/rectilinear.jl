@@ -340,3 +340,35 @@ end
         @test ∇⁴y_ref ≈ ∇⁴y rtol = 2e-2
     end
 end
+
+
+@testset "vector hyperdiffusion 3d" begin
+    for (topology, space, coords) in (grid_test_setup, ts_test_setup)
+        k = 2
+        l = 3
+
+        yₕ = @. Geometry.Covariant12Vector.(
+            Geometry.UVVector(sin(k * coords.x + l * coords.y), 0.0)
+        )
+        yᵥ = @. Geometry.Covariant3Vector.(
+            Geometry.WVector(sin(k * coords.x + l * coords.y))
+        )
+
+        curl = Operators.Curl()
+        wcurl = Operators.WeakCurl()
+
+        @test Geometry.Contravariant123Vector.(curl.(yₕ)) .+
+              Geometry.Contravariant123Vector.(curl.(yᵥ)) ≈
+              curl.(
+            Geometry.Covariant123Vector.(yₕ) .+
+            Geometry.Covariant123Vector.(yᵥ)
+        )
+        @test Geometry.Contravariant123Vector.(wcurl.(yₕ)) .+
+              Geometry.Contravariant123Vector.(wcurl.(yᵥ)) ≈
+              wcurl.(
+            Geometry.Covariant123Vector.(yₕ) .+
+            Geometry.Covariant123Vector.(yᵥ)
+        )
+
+    end
+end

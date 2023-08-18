@@ -1177,6 +1177,29 @@ function apply_operator(op::Curl{(1, 2)}, space, slabidx, arg)
                     Geometry.Contravariant12Vector(D₂v₃, zero(D₂v₃))
             end
         end
+    elseif RT <: Geometry.Contravariant123Vector
+        @inbounds for j in 1:Nq, i in 1:Nq
+            ij = CartesianIndex((i, j))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            v₁ = Geometry.covariant1(v, local_geometry)
+            v₂ = Geometry.covariant2(v, local_geometry)
+            v₃ = Geometry.covariant3(v, local_geometry)
+            for ii in 1:Nq
+                D₁v₃ = D[ii, i] ⊠ v₃
+                D₁v₂ = D[ii, i] ⊠ v₂
+                out[ii, j] =
+                    out[ii, j] ⊞
+                    Geometry.Contravariant123Vector(zero(D₁v₃), ⊟(D₁v₃), D₁v₂)
+            end
+            for jj in 1:Nq
+                D₂v₃ = D[jj, j] ⊠ v₃
+                D₂v₁ = D[jj, j] ⊠ v₁
+                out[i, jj] =
+                    out[i, jj] ⊞
+                    Geometry.Contravariant123Vector(D₂v₃, zero(D₂v₃), ⊟(D₂v₁))
+            end
+        end
     else
         error("invalid return type")
     end
@@ -1243,6 +1266,34 @@ Base.@propagate_inbounds function apply_operator_kernel(
         return Geometry.Contravariant12Vector(
             RecursiveApply.rdiv(D₂v₃, local_geometry.J),
             ⊟(RecursiveApply.rdiv(D₁v₃, local_geometry.J)),
+        )
+    elseif RT <: Geometry.Contravariant123Vector
+        work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work3_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        v₁ = IJF{IT, Nq}(work1_array)
+        v₂ = IJF{IT, Nq}(work2_array)
+        v₃ = IJF{IT, Nq}(work3_array)
+        v₁[i, j] = Geometry.covariant1(arg, local_geometry)
+        v₂[i, j] = Geometry.covariant2(arg, local_geometry)
+        v₃[i, j] = Geometry.covariant3(arg, local_geometry)
+
+        CUDA.sync_threads()
+
+        D₁v₂ = D[i, 1] ⊠ v₂[1, j]
+        D₂v₁ = D[j, 1] ⊠ v₁[i, 1]
+        D₁v₃ = D[i, 1] ⊠ v₃[1, j]
+        D₂v₃ = D[j, 1] ⊠ v₃[i, 1]
+        @simd for k in 2:Nq
+            D₁v₂ = D₁v₂ ⊞ D[i, k] ⊠ v₂[k, j]
+            D₂v₁ = D₂v₁ ⊞ D[j, k] ⊠ v₁[i, k]
+            D₁v₃ = D₁v₃ ⊞ D[i, k] ⊠ v₃[k, j]
+            D₂v₃ = D₂v₃ ⊞ D[j, k] ⊠ v₃[i, k]
+        end
+        return Geometry.Contravariant123Vector(
+            RecursiveApply.rdiv(D₂v₃, local_geometry.J),
+            ⊟(RecursiveApply.rdiv(D₁v₃, local_geometry.J)),
+            RecursiveApply.rdiv(D₁v₂ ⊟ D₂v₁, local_geometry.J),
         )
     else
         error("invalid return type")
@@ -1377,6 +1428,36 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
                     Geometry.Contravariant12Vector(⊟(Dᵀ₂Wv₃), zero(Dᵀ₂Wv₃))
             end
         end
+    elseif RT <: Geometry.Contravariant123Vector
+        @inbounds for j in 1:Nq, i in 1:Nq
+            ij = CartesianIndex((i, j))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            W = local_geometry.WJ / local_geometry.J
+            Wv₁ = W ⊠ Geometry.covariant1(v, local_geometry)
+            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
+            for ii in 1:Nq
+                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
+                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
+                out[ii, j] =
+                    out[ii, j] ⊞ Geometry.Contravariant123Vector(
+                        zero(Dᵀ₁Wv₃),
+                        Dᵀ₁Wv₃,
+                        ⊟(Dᵀ₁Wv₂),
+                    )
+            end
+            for jj in 1:Nq
+                Dᵀ₂Wv₃ = D[j, jj] ⊠ Wv₃
+                Dᵀ₂Wv₁ = D[j, jj] ⊠ Wv₁
+                out[i, jj] =
+                    out[i, jj] ⊞ Geometry.Contravariant123Vector(
+                        ⊟(Dᵀ₂Wv₃),
+                        zero(Dᵀ₂Wv₃),
+                        Dᵀ₂Wv₁,
+                    )
+            end
+        end
     else
         error("invalid return type")
     end
@@ -1445,6 +1526,34 @@ Base.@propagate_inbounds function apply_operator_kernel(
         return Geometry.Contravariant12Vector(
             ⊟(RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ)),
             RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ),
+        )
+    elseif RT <: Geometry.Contravariant123Vector
+        work1_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work2_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        work3_array = CUDA.CuStaticSharedArray(FT, (Nq, Nq, Nf))
+        Wv₁ = IJF{IT, Nq}(work1_array)
+        Wv₂ = IJF{IT, Nq}(work2_array)
+        Wv₃ = IJF{IT, Nq}(work3_array)
+        Wv₁[i, j] = W ⊠ Geometry.covariant1(arg, local_geometry)
+        Wv₂[i, j] = W ⊠ Geometry.covariant2(arg, local_geometry)
+        Wv₃[i, j] = W ⊠ Geometry.covariant3(arg, local_geometry)
+
+        CUDA.sync_threads()
+
+        Dᵀ₁Wv₂ = D[1, i] ⊠ Wv₂[1, j]
+        Dᵀ₂Wv₁ = D[1, j] ⊠ Wv₁[i, 1]
+        Dᵀ₁Wv₃ = D[1, i] ⊠ Wv₃[1, j]
+        Dᵀ₂Wv₃ = D[1, j] ⊠ Wv₃[i, 1]
+        @simd for k in 2:Nq
+            Dᵀ₁Wv₂ = Dᵀ₁Wv₂ ⊞ D[k, i] ⊠ Wv₂[k, j]
+            Dᵀ₂Wv₁ = Dᵀ₂Wv₁ ⊞ D[k, j] ⊠ Wv₁[i, k]
+            Dᵀ₁Wv₃ = Dᵀ₁Wv₃ ⊞ D[k, i] ⊠ Wv₃[k, j]
+            Dᵀ₂Wv₃ = Dᵀ₂Wv₃ ⊞ D[k, j] ⊠ Wv₃[i, k]
+        end
+        return Geometry.Contravariant123Vector(
+            ⊟(RecursiveApply.rdiv(Dᵀ₂Wv₃, local_geometry.WJ)),
+            RecursiveApply.rdiv(Dᵀ₁Wv₃, local_geometry.WJ),
+            RecursiveApply.rdiv(Dᵀ₂Wv₁ ⊟ Dᵀ₁Wv₂, local_geometry.WJ),
         )
     else
         error("invalid return type")
