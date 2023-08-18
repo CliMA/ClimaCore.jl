@@ -82,27 +82,6 @@ function scatterv_exchange(
     return recvbuf.data
 end
 
-# Exchange data from all processes to all processes
-function all_to_allv_exchange(
-    data::Array{T},
-    send_lengths::Array{Int},
-    recv_lengths::Array{Int},
-    comms_ctx::ClimaComms.AbstractCommsContext,
-) where {T}
-    # set up buffer to send `send_lengths` values to each pid
-    @show data
-    @show send_lengths
-    @show recv_lengths
-    sendbuf = MPI.VBuffer(data, send_lengths)
-
-    # set up receive buffer of specified length on each process
-    recvbuf = MPI.VBuffer(data, recv_lengths)
-
-    # perform information exchange
-    MPI.Alltoallv!(sendbuf, recvbuf, comms_ctx.mpicomm)
-    return recvbuf.data
-end
-
 # Calculate the total number of nodes on each pid for this space
 function node_counts_by_pid(
     space::Spaces.SpectralElementSpace2D;
@@ -273,38 +252,3 @@ weights, row_inds, col_offsets =
 # TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
 # TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
 weights = to_sparse(weights, row_inds, col_offsets)
-
-# Note now we have weight matrix divided by columns into sub matrices
-#  now we have to to separate weight matrix by rows for receive side
-#  any row with nonzero value needs to be sent
-
-# v1: assume each chunk of rows all has to be sent (no rows all zero - dense)
-# need target_ind_to_pid (map of row ind to pid)
-# need number of rows to receive on each process (should be in unclean example)
-# need number of rows to send to each process (find by exchanging receive lengths?)
-# with dense assumption, array containing number of values to send to each process is same on each process
-
-# TODO STEP 4: construct send/recv buffers for source data
-# Generate source data on source space
-source_data = Fields.ones(source_space)
-
-# Calculate the number of nodes on the target space for each pid
-# this gives the total number of nodes each process needs, but we need to subtract number of nodes it already has (?)
-node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
-
-# Receive buffer length is the number of target space nodes for this pid
-# TODO this will expect total number of nodes needed on pid from every other pid
-#  seems like we should divide by nprocs, but we need to consider how many elements on each pid (may not divide evenly)
-# src_data_recv_lengths = [(node_counts_tgt[pid] - node_counts_src[pid]) for i in 1:nprocs]
-src_data_recv_lengths = [node_counts_tgt[pid] for i in 1:nprocs]
-# Send buffer lengths is number of target space nodes for each pid
-# src_data_send_lengths = [(node_counts_tgt[i] - node_counts_src[i]) for i in 1:nprocs]
-src_data_send_lengths = [node_counts_tgt[i] for i in 1:nprocs]
-
-# TODO is it okay to use parent here? what will happen to ordering?
-source_data_exchanged = all_to_allv_exchange(
-    parent(source_data),
-    src_data_send_lengths,
-    src_data_recv_lengths,
-    comms_ctx,
-)
