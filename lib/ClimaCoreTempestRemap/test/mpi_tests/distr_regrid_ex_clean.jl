@@ -188,8 +188,6 @@ function to_sparse(
     nzval::Array{T},
     rowval::Array{Int},
     colptr::Array{Int},
-    m::Int,
-    n::Int,
 ) where {T}
     # reset row indices to start at 1
     rowval .-= minimum(rowval) - 1
@@ -258,15 +256,16 @@ weights, row_inds, col_offsets =
 # @show col_offsets
 
 
-
 # TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
 # TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
-node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
-m_rows = node_counts_tgt[pid]
-n_cols = length(parent(source_data))
-weights = to_sparse(weights, row_inds, col_offsets, m_rows, n_cols)
+weights = to_sparse(weights, row_inds, col_offsets)
 @show weights
+
 
 # STEP 4: multiply weight matrix and source data
 source_data_vec = vec(parent(source_data))
 target_data = weights * parent(source_data_vec)
+
+
+# STEP 5: exchange multiplied products
+node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
