@@ -268,9 +268,5 @@ weights = to_sparse(weights, row_inds, col_offsets, m_rows, n_cols)
 @show weights
 
 # STEP 4: multiply weight matrix and source data
-
-# source_data_vec = vec(parent(source_data))
-# @show weights
-# @show source_data_vec
-# target_data = weights * parent(source_data_vec)
-# @show target_data
+source_data_vec = vec(parent(source_data))
+target_data = weights * parent(source_data_vec)
