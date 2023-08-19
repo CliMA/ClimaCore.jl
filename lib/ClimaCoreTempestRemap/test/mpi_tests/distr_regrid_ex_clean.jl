@@ -188,16 +188,23 @@ function to_sparse(
     nzval::Array{T},
     rowval::Array{Int},
     colptr::Array{Int},
+    m::Int,
+    n::Int,
 ) where {T}
+    # reset row indices to start at 1
+    rowval .-= minimum(rowval) - 1
+
     # convert colptr to column indices
-    len = length(rowval)
+    len = length(nzval)
     colval = zeros(Int, len)
     col = 1
+    # store column ind for each nonzero value, incrementing when next colptr passed
+    col_offset = colptr[1]
     for i in 1:len
-        if i == colptr[col + 1]
+        colval[i] = col
+        if col_offset + i == colptr[col + 1]
             col += 1
         end
-        colval[i] = col
     end
 
     return sparse(rowval, colval, nzval)
@@ -232,6 +239,9 @@ target_nex = 1
 target_ney = 3
 target_space = make_space(domain, target_nq, target_nex, target_ney, comms_ctx)
 
+# construct source data
+source_data = Fields.ones(source_space)
+
 # STEP 1: generate weights matrix on root process
 if ClimaComms.iamroot(comms_ctx)
     weights = gen_weights(source_space, target_space)
@@ -251,4 +261,16 @@ weights, row_inds, col_offsets =
 
 # TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
 # TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
-weights = to_sparse(weights, row_inds, col_offsets)
+node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
+m_rows = node_counts_tgt[pid]
+n_cols = length(parent(source_data))
+weights = to_sparse(weights, row_inds, col_offsets, m_rows, n_cols)
+@show weights
+
+# STEP 4: multiply weight matrix and source data
+
+# source_data_vec = vec(parent(source_data))
+# @show weights
+# @show source_data_vec
+# target_data = weights * parent(source_data_vec)
+# @show target_data
