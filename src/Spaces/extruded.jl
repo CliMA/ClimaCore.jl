@@ -241,6 +241,7 @@ Base.@propagate_inbounds function level(
             horizontal_space.global_geometry,
             level(space.center_local_geometry, v),
             horizontal_space.dss_weights,
+            horizontal_space.differentiation_matrix,
         )
     elseif horizontal_space isa SpectralElementSpace2D
         SpectralElementSpace2D(
@@ -253,6 +254,7 @@ Base.@propagate_inbounds function level(
             horizontal_space.ghost_dss_weights,
             horizontal_space.internal_surface_geometry,
             horizontal_space.boundary_surface_geometries,
+            horizontal_space.differentiation_matrix,
         )
     else
         error("Unsupported horizontal space")
@@ -270,6 +272,7 @@ Base.@propagate_inbounds function level(
             horizontal_space.global_geometry,
             level(space.face_local_geometry, v.i + 1),
             horizontal_space.dss_weights,
+            horizontal_space.differentiation_matrix,
         )
     elseif horizontal_space isa SpectralElementSpace2D
         @inbounds SpectralElementSpace2D(
@@ -282,6 +285,7 @@ Base.@propagate_inbounds function level(
             horizontal_space.ghost_dss_weights,
             horizontal_space.internal_surface_geometry,
             horizontal_space.boundary_surface_geometries,
+            horizontal_space.differentiation_matrix,
         )
     else
         error("Unsupported horizontal space")
