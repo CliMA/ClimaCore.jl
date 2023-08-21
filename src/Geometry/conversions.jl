@@ -37,7 +37,6 @@ Contravariant123Vector(
 ) where {T} =
     local_geometry.gⁱʲ * Covariant123Vector(zero(u[1]), zero(u[1]), u[1])
 
-
 ContravariantVector(
     u::CovariantVector{T, I},
     local_geometry::LocalGeometry{I},

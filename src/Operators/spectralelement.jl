@@ -260,34 +260,40 @@ function Base.copyto!(
     Nh = Topologies.nlocalelems(Spaces.topology(space))
     Nv = Spaces.nlevels(space)
     # executed
+    max_threads = 256
+    nitems = Nv * Nq * Nq * Nh # # of independent items
+    (nthreads, nblocks) = Spaces._configure_threadblock(max_threads, nitems)
     @inbounds begin
-        @cuda threads = (Nq, Nq) blocks = (Nh, Nv) copyto_spectral_kernel!(
+        @cuda threads = (nthreads,) blocks = (nblocks,) copyto_spectral_kernel!(
             strip_space(out, space),
             strip_space(sbc, space),
             space,
+            Nv,
+            Nq,
+            Nh,
         )
     end
     return out
 end
 
-function copyto_spectral_kernel!(out::Fields.Field, sbc, space)
+function copyto_spectral_kernel!(out::Fields.Field, sbc, space, Nv, Nq, Nh)
     @inbounds begin
-        i = threadIdx().x
-        j = threadIdx().y
-        h = blockIdx().x
-        if space isa Spaces.AbstractSpectralElementSpace
-            v = nothing
-        elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-            v = blockIdx().y - half
-        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-            v = blockIdx().y
-        else
-            error("Invalid space")
+        gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+        if gid ≤ Nv * Nq * Nq * Nh
+            (v, i, j, h) = Spaces._get_idx((Nv, Nq, Nq, Nh), gid)
+            if space isa Spaces.AbstractSpectralElementSpace
+                slabidx = Fields.SlabIndex(nothing, h)
+            elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+                slabidx = Fields.SlabIndex(v - half, h)
+            elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
+                slabidx = Fields.SlabIndex(v, h)
+            else
+                error("Invalid space")
+            end
+            ij = CartesianIndex((i, j))
+            result = get_node(space, sbc, ij, slabidx)
+            set_node!(space, out, ij, slabidx, result)
         end
-        ij = CartesianIndex((i, j))
-        slabidx = Fields.SlabIndex(v, h)
-        result = get_node(space, sbc, ij, slabidx)
-        set_node!(space, out, ij, slabidx, result)
     end
     return nothing
 end
