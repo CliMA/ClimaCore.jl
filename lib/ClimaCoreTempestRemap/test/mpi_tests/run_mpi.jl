@@ -11,5 +11,5 @@ function runmpi(file; ntasks = 1)
 end
 
 if !Sys.iswindows()
-    runmpi(joinpath(@__DIR__, "distr_regrid_example.jl"), ntasks = 2)
+    runmpi(joinpath(@__DIR__, "distr_regrid_ex_clean.jl"), ntasks = 2)
 end

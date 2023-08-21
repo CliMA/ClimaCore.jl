@@ -82,6 +82,28 @@ function scatterv_exchange(
     return recvbuf.data
 end
 
+# Exchange data from all processes to all processes
+function all_to_allv_exchange!(
+    send_data::Array{T},
+    recv_data::Array{T},
+    send_lengths::Array{Int},
+    recv_lengths::Array{Int},
+    comms_ctx::ClimaComms.AbstractCommsContext,
+) where {T}
+    # set up buffer to send `send_lengths` values to each pid
+    @show length(send_data)
+    @show send_lengths
+    @show recv_lengths
+    ClimaComms.barrier(comms_ctx)
+    sendbuf = MPI.VBuffer(send_data, send_lengths)
+
+    # set up receive buffer of specified length on each process
+    recvbuf = MPI.VBuffer(recv_data, recv_lengths)
+
+    # perform information exchange
+    MPI.Alltoallv!(sendbuf, recvbuf, comms_ctx.mpicomm)
+end
+
 # Calculate the total number of nodes on each pid for this space
 function node_counts_by_pid(
     space::Spaces.SpectralElementSpace2D;
@@ -185,27 +207,18 @@ end
 
 # Given nonzero values, their row indices, and column pointers, construct a sparsematrix
 function to_sparse(
+    m::Int,
     nzval::Array{T},
     rowval::Array{Int},
     colptr::Array{Int},
 ) where {T}
-    # reset row indices to start at 1
-    rowval .-= minimum(rowval) - 1
+    # reset column pointers to start at 1 on all processes
+    colptr .-= colptr[1] - 1
 
-    # convert colptr to column indices
-    len = length(nzval)
-    colval = zeros(Int, len)
-    col = 1
-    # store column ind for each nonzero value, incrementing when next colptr passed
-    col_offset = colptr[1]
-    for i in 1:len
-        colval[i] = col
-        if col_offset + i == colptr[col + 1]
-            col += 1
-        end
-    end
+    # get number of columns on this pid
+    n = length(colptr) - 1
 
-    return sparse(rowval, colval, nzval)
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 
@@ -251,21 +264,44 @@ end
 weights, row_inds, col_offsets =
     distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
 
-# @show weights
-# @show row_inds
-# @show col_offsets
-
 
 # TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
 # TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
-weights = to_sparse(weights, row_inds, col_offsets)
-@show weights
+# node_counts_src = node_counts_by_pid(source_space, is_cumul = false)
+node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
+m = sum(node_counts_tgt)
 
+weights = to_sparse(m, weights, row_inds, col_offsets)
+
+# set up for matrix multiplication
+# send_data = zeros(length(vec(parent(source_data))))
 
 # STEP 4: multiply weight matrix and source data
-source_data_vec = vec(parent(source_data))
-target_data = weights * parent(source_data_vec)
+# TODO allocate send/recv buffers ahead of time, then multiply in place w mul!
+# TODO steps 1-3 done ahead of time, 4 every time we remap
+send_data = weights * vec(parent(source_data))
+# mul!(send_data, weights, vec(parent(source_data)))
 
 
 # STEP 5: exchange multiplied products
-node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
+# Send buffer lengths is number of target space nodes for each pid
+tgt_data_send_lengths = [node_counts_tgt[i] for i in 1:nprocs]
+# Receive buffer length is the number of target space nodes for this pid
+tgt_data_recv_lengths = [node_counts_tgt[pid] for i in 1:nprocs]
+
+# TODO allocate this before
+recv_data = zeros(node_counts_tgt[pid], nprocs)
+
+all_to_allv_exchange!(
+    send_data,
+    recv_data,
+    tgt_data_send_lengths,
+    tgt_data_recv_lengths,
+    comms_ctx,
+)
+
+@show recv_data
+
+result = sum(recv_data, dims = 2)
+
+@show result
