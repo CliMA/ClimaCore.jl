@@ -8,6 +8,7 @@ using ClimaCore:
 using ClimaCore.Spaces: Quadratures
 
 using IntervalSets
+using LinearAlgebra
 using MPI
 using SparseArrays
 
@@ -17,9 +18,9 @@ FT = Float64
 function make_space(
     domain::Domains.RectangleDomain,
     nq::Int,
-    nxelems::Int = 1,
-    nyelems::Int = 1,
-    comms_ctx = ClimaComms.SingletonCommsContext(),
+    nxelems::Int,
+    nyelems::Int,
+    comms_ctx::ClimaComms.AbstractCommsContext,
 )
     nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
@@ -77,30 +78,27 @@ function scatterv_exchange(
     # create receive buffer of specified length on each process
     recvbuf = MPI.Buffer(zeros(data_type, recv_length))
 
-    # scatter data to all processes
+    # scatter data to all processes, storing result in recvbuf
     MPI.Scatterv!(sendbuf, recvbuf, comms_ctx.mpicomm)
     return recvbuf.data
 end
 
 # Exchange data from all processes to all processes
 function all_to_allv_exchange!(
-    send_data::Array{T},
     recv_data::Array{T},
-    send_lengths::Array{Int},
+    send_data::Array{T},
     recv_lengths::Array{Int},
+    send_lengths::Array{Int},
     comms_ctx::ClimaComms.AbstractCommsContext,
 ) where {T}
     # set up buffer to send `send_lengths` values to each pid
-    @show length(send_data)
-    @show send_lengths
-    @show recv_lengths
     ClimaComms.barrier(comms_ctx)
     sendbuf = MPI.VBuffer(send_data, send_lengths)
 
     # set up receive buffer of specified length on each process
     recvbuf = MPI.VBuffer(recv_data, recv_lengths)
 
-    # perform information exchange
+    # perform information exchange, storing result in recvbuf
     MPI.Alltoallv!(sendbuf, recvbuf, comms_ctx.mpicomm)
 end
 
@@ -221,6 +219,30 @@ function to_sparse(
     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
+function online_remap!(
+    remapped_data::Fields.Field,
+    recv_data::Array{T},
+    send_data::Array{T},
+    recv_lengths::Array{Int},
+    send_lengths::Array{Int},
+    source_data::Fields.Field,
+    comms_ctx::ClimaComms.AbstractCommsContext,
+) where {T}
+    # Multiply weight matrix and source data, store in pre-allocated array
+    mul!(send_data, weights, vec(parent(source_data)))
+
+    # Exchange multiplied products between processes
+    all_to_allv_exchange!(
+        recv_data,
+        send_data,
+        tgt_data_recv_lengths,
+        tgt_data_send_lengths,
+        comms_ctx,
+    )
+    # Sum over rows and store result in pre-allocated field
+    sum!(vec(parent(remapped_data)), recv_data)
+end
+
 
 
 # set up MPI info
@@ -255,53 +277,66 @@ source_data = Fields.ones(source_space)
 
 # STEP 1: generate weights matrix on root process
 if ClimaComms.iamroot(comms_ctx)
-    weights = gen_weights(source_space, target_space)
+    weights_serial = gen_weights(source_space, target_space)
 else
-    weights = nothing
+    weights_serial = nothing
 end
+
 
 # STEP 2: distribute (scatter) weights to all processes
 weights, row_inds, col_offsets =
-    distr_weights(weights, source_space, target_space, comms_ctx, nprocs)
+    distr_weights(weights_serial, source_space, target_space, comms_ctx, nprocs)
 
 
-# TODO STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
-# TODO should we just return column inds from distr_weights so we don't have to reconstruct here?
-# node_counts_src = node_counts_by_pid(source_space, is_cumul = false)
+# STEP 3: reconstruct weight matrix on each process (SparseMatrixCSC)
 node_counts_tgt = node_counts_by_pid(target_space, is_cumul = false)
 m = sum(node_counts_tgt)
-
 weights = to_sparse(m, weights, row_inds, col_offsets)
 
-# set up for matrix multiplication
-# send_data = zeros(length(vec(parent(source_data))))
+# set up for matrix multiplication to avoid multiple allocations
+remapped_data = Fields.ones(target_space)
+send_data = zeros(weights.m)
+recv_data = zeros(node_counts_tgt[pid], nprocs)
 
-# STEP 4: multiply weight matrix and source data
-# TODO allocate send/recv buffers ahead of time, then multiply in place w mul!
-# TODO steps 1-3 done ahead of time, 4 every time we remap
-send_data = weights * vec(parent(source_data))
-# mul!(send_data, weights, vec(parent(source_data)))
-
-
-# STEP 5: exchange multiplied products
 # Send buffer lengths is number of target space nodes for each pid
 tgt_data_send_lengths = [node_counts_tgt[i] for i in 1:nprocs]
 # Receive buffer length is the number of target space nodes for this pid
 tgt_data_recv_lengths = [node_counts_tgt[pid] for i in 1:nprocs]
 
-# TODO allocate this before
-recv_data = zeros(node_counts_tgt[pid], nprocs)
 
-all_to_allv_exchange!(
-    send_data,
+# STEP 4: perform online remapping
+online_remap!(
+    remapped_data,
     recv_data,
-    tgt_data_send_lengths,
+    send_data,
     tgt_data_recv_lengths,
+    tgt_data_send_lengths,
+    source_data,
     comms_ctx,
 )
 
-@show recv_data
 
-result = sum(recv_data, dims = 2)
+# Compare to serial remapping
+# TODO gather distributed results to root for comparison
+if ClimaComms.iamroot(comms_ctx)
+    # construct serial spaces from distributed space info
+    source_space_serial = distr_to_serial_space(source_space)
+    target_space_serial = distr_to_serial_space(target_space)
 
-@show result
+    # construct source data
+    source_data_serial = Fields.ones(source_space_serial)
+
+    # perform serial remapping
+    recv_data_serial = zeros(weights.m)
+    remapped_data_serial = Fields.ones(target_space_serial)
+    mul!(recv_data_serial, weights_serial, vec(parent(source_data_serial)))
+    sum!(vec(parent(remapped_data_serial)), recv_data_serial)
+
+    @show sum(parent(remapped_data_serial))
+end
+
+@show sum(parent(remapped_data))
+
+# TODO gather distributed results (gatherv!), compare to serial result
+
+# TODO time distr vs serial - run online remap many times
