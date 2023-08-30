@@ -1392,6 +1392,31 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
                 out[ii] = out[ii] ⊞ Geometry.Contravariant2Vector(⊟(D₁v₃))
             end
         end
+    elseif RT <: Geometry.Contravariant3Vector
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            v₂ = Geometry.covariant2(v, local_geometry)
+            for ii in 1:Nq
+                D₁v₂ = D[ii, i] ⊠ v₂
+                out[ii] = out[ii] ⊞ Geometry.Contravariant3Vector(D₁v₂)
+            end
+        end
+    elseif RT <: Geometry.Contravariant23Vector
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            v₂ = Geometry.covariant2(v, local_geometry)
+            v₃ = Geometry.covariant3(v, local_geometry)
+            for ii in 1:Nq
+                D₁v₃ = D[ii, i] ⊠ v₃
+                D₁v₂ = D[ii, i] ⊠ v₂
+                out[ii] =
+                    out[ii] ⊞ Geometry.Contravariant23Vector(⊟(D₁v₃), D₁v₂)
+            end
+        end
     else
         error("invalid return type: $RT")
     end
@@ -1663,7 +1688,34 @@ function apply_operator(op::WeakCurl{(1,)}, space, slabidx, arg)
             Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
             for ii in 1:Nq
                 Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
-                out[ii] = out[ii] ⊞ Geometry.Contravariant2Vector(⊟(Dᵀ₁Wv₃))
+                out[ii] = out[ii] ⊞ Geometry.Contravariant2Vector(Dᵀ₁Wv₃)
+            end
+        end
+    elseif RT <: Geometry.Contravariant3Vector
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            W = local_geometry.WJ / local_geometry.J
+            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            for ii in 1:Nq
+                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
+                out[ii] = out[ii] ⊞ Geometry.Contravariant3Vector(⊟(Dᵀ₁Wv₂))
+            end
+        end
+    elseif RT <: Geometry.Contravariant23Vector
+        @inbounds for i in 1:Nq
+            ij = CartesianIndex((i,))
+            local_geometry = get_local_geometry(space, ij, slabidx)
+            v = get_node(space, arg, ij, slabidx)
+            W = local_geometry.WJ / local_geometry.J
+            Wv₃ = W ⊠ Geometry.covariant3(v, local_geometry)
+            Wv₂ = W ⊠ Geometry.covariant2(v, local_geometry)
+            for ii in 1:Nq
+                Dᵀ₁Wv₃ = D[i, ii] ⊠ Wv₃
+                Dᵀ₁Wv₂ = D[i, ii] ⊠ Wv₂
+                out[ii] =
+                    out[ii] ⊞ Geometry.Contravariant23Vector(Dᵀ₁Wv₃, ⊟(Dᵀ₁Wv₂))
             end
         end
     else

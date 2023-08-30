@@ -588,12 +588,23 @@ Curl is only defined for `CovariantVector`` field input types.
     ::Val{(1, 2)},
     ::Type{Covariant123Vector{FT}},
 ) where {FT} = Contravariant123Vector{FT}
+
+
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant1Vector{FT}}) where {FT} =
-    Contravariant1Vector{FT}
+    Contravariant1Vector{FT} # not strictly correct: should be a zero Vector
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant2Vector{FT}}) where {FT} =
     Contravariant3Vector{FT}
 @inline curl_result_type(::Val{(1,)}, ::Type{Covariant3Vector{FT}}) where {FT} =
     Contravariant2Vector{FT}
+@inline curl_result_type(
+    ::Val{(1,)},
+    ::Type{Covariant13Vector{FT}},
+) where {FT} = Contravariant2Vector{FT}
+@inline curl_result_type(
+    ::Val{(1,)},
+    ::Type{Covariant123Vector{FT}},
+) where {FT} = Contravariant23Vector{FT}
+
 @inline curl_result_type(
     ::Val{(3,)},
     ::Type{Covariant12Vector{FT}},
@@ -631,8 +642,18 @@ _norm_sqr(u::Contravariant3Vector, ::LocalGeometry{(1, 2)}) =
     LinearAlgebra.norm_sqr(u.u³)
 
 
+_norm_sqr(
+    u::Axis2Tensor{T, A, S},
+    local_geometry::LocalGeometry,
+) where {T, A <: Tuple{LocalAxis, LocalAxis}, S} =
+    LinearAlgebra.norm_sqr(components(u))
+_norm_sqr(
+    u::Axis2Tensor{T, A, S},
+    local_geometry::LocalGeometry,
+) where {T, A <: Tuple{CartesianAxis, CartesianAxis}, S} =
+    LinearAlgebra.norm_sqr(components(u))
 
-_norm(u::AxisVector, local_geometry::LocalGeometry) =
+_norm(u::AxisTensor, local_geometry::LocalGeometry) =
     sqrt(_norm_sqr(u, local_geometry))
 
 _cross(u::AxisVector, v::AxisVector, local_geometry::LocalGeometry) = _cross(
