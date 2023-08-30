@@ -395,6 +395,10 @@ steps:
         key: unit_sphere_hyperdiffusion_vec
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
 
+      - label: "Unit: spec ops plane"
+        key: unit_spec_ops_plane
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/plane.jl"
+
       - label: "Unit: column"
         key: unit_column
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/column.jl"
