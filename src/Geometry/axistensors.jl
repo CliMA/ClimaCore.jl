@@ -313,6 +313,18 @@ const AdjointAxis2Tensor{T, A, S} = Adjoint{T, Axis2Tensor{T, A, S}}
 const Axis2TensorOrAdj{T, A, S} =
     Union{Axis2Tensor{T, A, S}, AdjointAxis2Tensor{T, A, S}}
 
+@inline +(
+    a::Axis2Tensor{Ta, Tuple{A1, A2}, Sa},
+    b::Adjoint{Tb, Axis2Tensor{Tb, Tuple{A2, A2}, Sb}},
+) where {Ta, Tb, A1, A2, Sa, Sb} =
+    AxisTensor(a.axes, components(a) + components(b))
+
+@inline +(
+    a::Adjoint{Ta, Axis2Tensor{Ta, Tuple{A1, A2}, Sa}},
+    b::Axis2Tensor{Tb, Tuple{A2, A2}, Sb},
+) where {Ta, Tb, A1, A2, Sa, Sb} =
+    AxisTensor(b.axes, components(a) + components(b))
+
 # based on 1st dimension
 const Covariant2Tensor{T, A, S} =
     Axis2Tensor{T, A, S} where {T, A <: Tuple{CovariantAxis, AbstractAxis}, S}
@@ -397,6 +409,16 @@ function LinearAlgebra.norm(x::AxisVector)
 end
 function LinearAlgebra.norm_sqr(x::AxisVector)
     check_dual(axes(x, 1), axes(x, 1))
+    LinearAlgebra.norm_sqr(components(x))
+end
+function LinearAlgebra.norm(x::Axis2TensorOrAdj)
+    check_dual(axes(x, 1), axes(x, 1))
+    check_dual(axes(x, 2), axes(x, 2))
+    LinearAlgebra.norm(components(x))
+end
+function LinearAlgebra.norm_sqr(x::Axis2TensorOrAdj)
+    check_dual(axes(x, 1), axes(x, 1))
+    check_dual(axes(x, 2), axes(x, 2))
     LinearAlgebra.norm_sqr(components(x))
 end
 
