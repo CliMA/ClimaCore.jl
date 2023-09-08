@@ -1,7 +1,8 @@
 abstract type AbstractWriter end
 
 """
-    HDF5Writer(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
+    HDF5Writer(filename::AbstractString[, context::ClimaComms.AbstractCommsContext];
+               overwrite::Bool = true)
 
 An `AbstractWriter` for writing to HDF5-formatted files using the ClimaCore
 storage conventions. An internal cache is used to avoid writing duplicate
@@ -11,6 +12,10 @@ load the data from the file.
 The optional `context` can be used for writing distributed fields: in this case,
 the `MPICommsContext` used passed as an argument: this must match the context
 used for distributing the `Field`.
+
+The writer overwrites or appends to existing files depending on the value of the
+`overwrite` keyword argument. When `overwrite` is `false`, the writer appends to
+`filename` if the file already exists, otherwise it creates a new one.
 
 !!! note
 
@@ -44,12 +49,15 @@ end
 
 function HDF5Writer(
     filename::AbstractString,
-    context::ClimaComms.AbstractCommsContext,
+    context::ClimaComms.AbstractCommsContext;
+    overwrite::Bool = true,
 )
+    mode = overwrite ? "w" : "cw"
+
     if context isa ClimaComms.SingletonCommsContext
-        file = h5open(filename, "w")
+        file = h5open(filename, mode)
     else
-        file = h5open(filename, "w", context.mpicomm)
+        file = h5open(filename, mode, context.mpicomm)
     end
     write_attribute(file, "ClimaCore version", string(VERSION))
     cache = Dict{String, String}()
