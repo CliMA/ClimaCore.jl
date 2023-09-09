@@ -69,6 +69,12 @@ function create_dss_buffer(
     nfacedof = Nij - 2
     T = eltype(parent(data))
     TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
+    # Add TS for Covariant123Vector
+    # For DSS of Covariant123Vector, the third component is treated like a scalar
+    # and is not transformed
+    if eltype(data) <: Geometry.Covariant123Vector
+        TS = Geometry.UVWVector{T}
+    end
     perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, nelems))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
@@ -113,6 +119,7 @@ function create_dss_buffer(
         Geometry.UVWVector,
         Geometry.Covariant12Vector,
         Geometry.Covariant3Vector,
+        Geometry.Covariant123Vector,
         Geometry.Contravariant12Vector,
         Geometry.Contravariant3Vector,
     }
@@ -129,6 +136,9 @@ function create_dss_buffer(
                 @assert fieldtype <: supportedvectortypes
                 if fieldtype <: Geometry.Covariant12Vector
                     push!(covariant12fidx, offset + 1)
+                elseif fieldtype <: Geometry.Covariant123Vector
+                    push!(covariant12fidx, offset + 1)
+                    push!(scalarfidx, offset + 3)
                 elseif fieldtype <: Geometry.Contravariant12Vector
                     push!(contravariant12fidx, offset + 1)
                 else
@@ -153,6 +163,9 @@ function create_dss_buffer(
             @assert S <: supportedvectortypes
             if S <: Geometry.Covariant12Vector
                 push!(covariant12fidx, 1)
+            elseif S <: Geometry.Covariant123Vector
+                push!(covariant12fidx, 1)
+                push!(scalarfidx, 3)
             elseif S <: Geometry.Contravariant12Vector
                 push!(contravariant12fidx, 1)
             else

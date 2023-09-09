@@ -434,6 +434,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 2
+          slurm_mem: 20GB
 
       - label: "Unit: run sphere geometry distributed (3)"
         key: unit_run_sphere_geometry_distributed3
@@ -442,6 +443,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 3
+          slurm_mem: 20GB
 
       - label: "Unit: run sphere geometry distributed (4)"
         key: unit_run_sphere_geometry_distributed4
@@ -450,6 +452,7 @@ steps:
           CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_ntasks: 4
+          slurm_mem: 20GB
 
       - label: "Unit: rectilinear cuda"
         key: unit_rectilinear_cuda
