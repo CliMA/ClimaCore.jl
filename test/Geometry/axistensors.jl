@@ -1,4 +1,4 @@
-using Test
+using Test, JET
 using ClimaCore.Geometry, ClimaCore.DataLayouts
 using LinearAlgebra, StaticArrays
 import ClimaCore
@@ -11,6 +11,9 @@ ClimaCore.Geometry.assert_exact_transform() = true
     @test x.u₁ === 1.0
     @test x.u₂ === 2.0
     @test x.u₃ === 0.0
+
+    f(x) = x.u₁ + x.u₂ + x.u₃
+    @test_opt f(x)
 
     M = Geometry.Axis2Tensor(
         (Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()),
