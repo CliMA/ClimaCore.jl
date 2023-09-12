@@ -86,12 +86,15 @@ end
     end
 end
 
-@testset "NamedTuples and vectors" begin
+@testset "NamedTuples and axis tensors" begin
     FT = Float64
     nt = (; a = FT(1), b = FT(2))
     uv = Geometry.UVVector(FT(1), FT(2))
-    @test_broken rz = RecursiveApply.rmap(*, nt, uv)
-    @test_broken typeof(rz) ==
-                 NamedTuple{(:a, :b), Tuple{UVVector{FT}, UVVector{FT}}}
-    @test_broken @inferred RecursiveApply.rmap(*, nt, uv)
+    @test rz = RecursiveApply.rmap(*, nt, uv)
+    @test typeof(rz) == NamedTuple{(:a, :b), Tuple{UVVector{FT}, UVVector{FT}}}
+    @test @inferred RecursiveApply.rmap(*, nt, uv)
+    @test rz.a.u == 1
+    @test rz.a.v == 2
+    @test rz.b.u == 1
+    @test rz.b.v == 4
 end
