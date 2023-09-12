@@ -2,6 +2,7 @@ using JET
 using Test
 
 using ClimaCore.RecursiveApply
+using ClimaCore.Geometry
 
 @static if @isdefined(var"@test_opt") # v1.7 and higher
     @testset "RecursiveApply optimization test" begin
@@ -83,4 +84,14 @@ end
         @test rz == nt
         @inferred RecursiveApply.rmaptype((x, y) -> zero(x), nt, nt)
     end
+end
+
+@testset "NamedTuples and vectors" begin
+    FT = Float64
+    nt = (; a = FT(1), b = FT(2))
+    uv = Geometry.UVVector(FT(1), FT(2))
+    @test_broken rz = RecursiveApply.rmap(*, nt, uv)
+    @test_broken typeof(rz) ==
+                 NamedTuple{(:a, :b), Tuple{UVVector{FT}, UVVector{FT}}}
+    @test_broken @inferred RecursiveApply.rmap(*, nt, uv)
 end
