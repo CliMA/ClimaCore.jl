@@ -90,11 +90,11 @@ end
     FT = Float64
     nt = (; a = FT(1), b = FT(2))
     uv = Geometry.UVVector(FT(1), FT(2))
-    @test rz = RecursiveApply.rmap(*, nt, uv)
+    rz = RecursiveApply.rmap(*, nt, uv)
     @test typeof(rz) == NamedTuple{(:a, :b), Tuple{UVVector{FT}, UVVector{FT}}}
-    @test @inferred RecursiveApply.rmap(*, nt, uv)
+    @inferred RecursiveApply.rmap(*, nt, uv)
     @test rz.a.u == 1
     @test rz.a.v == 2
-    @test rz.b.u == 1
+    @test rz.b.u == 2
     @test rz.b.v == 4
 end
