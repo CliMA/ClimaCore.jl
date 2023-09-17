@@ -46,8 +46,8 @@ rmap(fn::F, X) where {F} = fn(X)
 rmap(fn::F, X::Tuple{}) where {F} = ()
 rmap(fn::F, X::Tuple) where {F} =
     (rmap(fn, first(X)), rmap(fn, Base.tail(X))...)
-rmap(fn::F, X::NamedTuple{names}) where {F, names} =
-    NamedTuple{names}(rmap(fn, Tuple(X)))
+rmap(fn::F, X::NamedTuple) where {F} =
+    NamedTuple{nt_names(X)}(rmap(fn, Tuple(X)))
 
 rmap(fn::F, X, Y) where {F} = fn(X, Y)
 rmap(fn::F, X::Tuple{}, Y::Tuple{}) where {F} = ()
@@ -55,20 +55,35 @@ rmap(fn::F, X::Tuple{}, Y) where {F} = ()
 rmap(fn::F, X, Y::Tuple{}) where {F} = ()
 rmap(fn::F, X::Tuple, Y::Tuple) where {F} =
     (rmap(fn, first(X), first(Y)), rmap(fn, Base.tail(X), Base.tail(Y))...)
+rmap(fn::F, X::Tuple, Y::Tuple{}) where {F} =
+    (rmap(fn, first(X)), rmap(fn, Base.tail(X))...)
 
+rmap(fn::F, X::Tuple{}, Y::Tuple) where {F} =
+    (rmap(fn, first(Y)), rmap(fn, Base.tail(Y))...)
 rmap(fn::F, X, Y::Tuple) where {F} =
     (rmap(fn, X, first(Y)), rmap(fn, X, Base.tail(Y))...)
 
 rmap(fn::F, X::Tuple, Y) where {F} =
     (rmap(fn, first(X), Y), rmap(fn, Base.tail(X), Y)...)
 
-rmap(fn::F, X::NamedTuple{names}, Y::NamedTuple{names}) where {F, names} =
-    NamedTuple{names}(rmap(fn, Tuple(X), Tuple(Y)))
-rmap(fn::F, X::NamedTuple{names}, Y) where {F, names} =
-    NamedTuple{names}(rmap(fn, Tuple(X), Y))
-rmap(fn::F, X, Y::NamedTuple{names}) where {F, names} =
-    NamedTuple{names}(rmap(fn, X, Tuple(Y)))
+function rmap(fn::F, X::NamedTuple, Y::NamedTuple) where {F}
+    @assert nt_names(X) === nt_names(Y)
+    return NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Tuple(Y)))
+end
+rmap(fn::F, X::NamedTuple, Y) where {F} =
+    NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Y))
+rmap(fn::F, X::NamedTuple, Y::Tuple) where {F} =
+    NamedTuple{nt_names(X)}(rmap(fn, Tuple(X), Y))
+rmap(fn::F, X::NamedTuple, Y::Tuple{}) where {F} =
+    NamedTuple{nt_names(X)}(rmap(fn, Tuple(X)))
+rmap(fn::F, X, Y::NamedTuple) where {F} =
+    NamedTuple{nt_names(Y)}(rmap(fn, X, Tuple(Y)))
+rmap(fn::F, X::Tuple, Y::NamedTuple) where {F} =
+    NamedTuple{nt_names(Y)}(rmap(fn, X, Tuple(Y)))
+rmap(fn::F, X::Tuple{}, Y::NamedTuple) where {F} =
+    NamedTuple{nt_names(Y)}(rmap(fn, Tuple(Y)))
 
+nt_names(::NamedTuple{names}) where {names} = names
 
 rmin(X, Y) = rmap(min, X, Y)
 rmax(X, Y) = rmap(max, X, Y)
