@@ -67,8 +67,10 @@ coordinate_axis(coord::AbstractPoint) = coordinate_axis(typeof(coord))
     @inbounds begin
         if I[1] == i
             return 1
-        else
+        elseif I[2] == i
             return 2
+        else
+            return nothing
         end
     end
 end
@@ -79,8 +81,10 @@ end
             return 1
         elseif I[2] == i
             return 2
-        else
+        elseif I[3] == i
             return 3
+        else
+            return nothing
         end
     end
 end

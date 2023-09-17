@@ -83,6 +83,9 @@ macro pointtype(name, fields...)
             Base.eltype(::Type{$name{FT}}) where {FT} = FT
             unionalltype(::$name{FT}) where {FT} = $name
             unionalltype(::Type{$name{FT}}) where {FT} = $name
+            function Base.:(==)(x::$name, y::$name)
+                (&)($([:(x.$field == y.$field) for field in fields]...))
+            end
             Base.promote_rule(
                 ::Type{$name{FT1}},
                 ::Type{$name{FT2}},
@@ -206,15 +209,13 @@ function Base.lerpi(
 ) where {T <: Abstract1DPoint}
     T(Base.lerpi(j, d, component(a, 1), component(b, 1)))
 end
-function Base.:(==)(p1::T, p2::T) where {T <: AbstractPoint}
-    return components(p1) == components(p2)
-end
 
 function Base.isapprox(p1::T, p2::T; kwargs...) where {T <: AbstractPoint}
     return isapprox(components(p1), components(p2); kwargs...)
 end
 Base.isless(x::T, y::T) where {T <: Abstract1DPoint} =
     isless(component(x, 1), component(y, 1))
+Base.isless(x::Abstract1DPoint, y::Abstract1DPoint) = isless(promote(x, y)...)
 
 
 """

@@ -9,6 +9,8 @@ using LinearAlgebra, UnPack, StaticArrays
             Geometry.XPoint(one(FT)),
             Geometry.YPoint(one(FT)),
             Geometry.ZPoint(one(FT)),
+            Geometry.LatPoint(one(FT)),
+            Geometry.LongPoint(one(FT)),
         )
             @test Geometry.ncomponents(pt) == 1
             @test Geometry.components(pt) isa SVector{1, FT}
@@ -18,8 +20,21 @@ using LinearAlgebra, UnPack, StaticArrays
             @test Geometry.coordinate(pt, 1) === pt
             @test_throws Exception Geometry.coordinate(pt, 2)
             @test pt * FT(2) == typeof(pt)(one(FT) * FT(2))
+            @test pt == pt
+            @test pt != pt * FT(2)
+            @test !(pt < pt)
+            @test pt < pt * FT(2)
+            @test pt <= pt
+            @test pt <= pt * FT(2)
         end
     end
+
+    @test Geometry.LongPoint(1.0) == Geometry.LongPoint(1.0f0)
+    @test Geometry.LongPoint(0.0) != Geometry.LongPoint(1.0f0)
+    @test Geometry.LongPoint(1.0) != Geometry.LatPoint(1.0)
+    @test Geometry.LongPoint(1.0) != Geometry.LatPoint(1.0f0)
+    @test Geometry.LongPoint(0.0) < Geometry.LongPoint(1.0f0)
+    @test Geometry.LongPoint(1.0) <= Geometry.LongPoint(1.0f0)
 end
 
 @testset "2D XY,XZ Points" begin
