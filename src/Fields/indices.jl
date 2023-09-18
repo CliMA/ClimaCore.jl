@@ -17,7 +17,13 @@ end
 
 Base.@propagate_inbounds Base.getindex(field::Field, colidx::ColumnIndex) =
     column(field, colidx)
-
+Base.@propagate_inbounds function Base.getindex(
+    fv::FieldVector{T},
+    colidx::ColumnIndex,
+) where {T}
+    values = map(x -> x[colidx], _values(fv))
+    return FieldVector{T, typeof(values)}(values)
+end
 Base.@propagate_inbounds function column(
     field::SpectralElementField1D,
     colidx::ColumnIndex{1},

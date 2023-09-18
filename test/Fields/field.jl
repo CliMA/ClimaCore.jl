@@ -1,4 +1,6 @@
 using Test
+using JET
+
 using ClimaComms
 using OrderedCollections
 using StaticArrays, IntervalSets
@@ -12,6 +14,7 @@ using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
 using CUDA
+using CUDA: @allowscalar
 
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -265,6 +268,40 @@ end
 
     Y.k.z = 3.0
     @test Y.k.z === 3.0
+end
+
+function call_getcolumn(fv, colidx)
+    @allowscalar fvcol = fv[colidx]
+    nothing
+end
+function call_getproperty(fv)
+    fva = fv.c.a
+    nothing
+end
+@testset "FieldVector getindex" begin
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32)
+    fspace = Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    c = fill((a = Float32(1), b = Float32(2)), cspace)
+    f = fill((x = Float32(1), y = Float32(2)), fspace)
+    fv = Fields.FieldVector(; c, f)
+    colidx = Fields.ColumnIndex((1, 1), 1) # arbitrary index
+
+    @allowscalar @test all(parent(fv.c.a[colidx]) .== Float32(1))
+    @allowscalar @test all(parent(fv.f.y[colidx]) .== Float32(2))
+    @allowscalar @test propertynames(fv) == propertynames(fv[colidx])
+
+    # JET tests
+    # prerequisite
+    call_getproperty(fv) # compile first
+    @test_opt call_getproperty(fv)
+
+    call_getcolumn(fv, colidx) # compile first
+    @test_opt call_getcolumn(fv, colidx)
+    p = @allocated call_getcolumn(fv, colidx)
+    device = ClimaComms.device()
+    if ClimaComms.SingletonCommsContext(device) isa ClimaComms.AbstractCPUDevice
+        @test p ≤ 32
+    end
 end
 
 @testset "FieldVector array_type" begin
