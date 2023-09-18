@@ -542,7 +542,7 @@ steps:
         command: "julia --color=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
         agents:
           slurm_gpus: 1
-          slurm_mem: 40GB
+          slurm_mem: 80GB
 
       - label: "Unit: operator matrices (CPU)"
         key: unit_operator_matrices_cpu
