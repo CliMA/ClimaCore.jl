@@ -70,6 +70,13 @@ function Base.close(hdfwriter::HDF5Writer)
     return nothing
 end
 
+"""
+    write_attributes!(writer::AbstractWriter, name::AbstractString, data::Dict)
+
+Write `data` as attributes to the object at `name` in the given HDF5 file.
+"""
+write_attributes!(writer::HDF5Writer, name::AbstractString, data::Dict) =
+    h5writeattr(writer.file.filename, name, data)
 
 function cartesianindices_to_matrix(elemorder)
     m, n = length(elemorder), length(eltype(elemorder))
