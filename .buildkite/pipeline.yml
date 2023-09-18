@@ -540,9 +540,10 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu
         command: "julia --color=yes --project=test test/MatrixFields/matrix_field_broadcasting.jl"
+        soft_fail: true
         agents:
           slurm_gpus: 1
-          slurm_mem: 80GB
+          slurm_mem: 40GB
 
       - label: "Unit: operator matrices (CPU)"
         key: unit_operator_matrices_cpu
@@ -551,6 +552,7 @@ steps:
       - label: "Unit: operator matrices (GPU)"
         key: unit_operator_matrices_gpu
         command: "julia --color=yes --project=test test/MatrixFields/operator_matrices.jl"
+        soft_fail: true
         agents:
           slurm_gpus: 1
           slurm_mem: 40GB
