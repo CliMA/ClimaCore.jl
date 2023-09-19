@@ -49,65 +49,73 @@ CovariantVector(
 ) where {T, I} = local_geometry.gᵢⱼ * u
 
 # Converting to specific dimension types
-(::Type{<:ContravariantVector{<:Any, I}})(
+@inline (::Type{<:ContravariantVector{<:Any, I}})(
     u::ContravariantVector{<:Any, I},
     ::LocalGeometry{I},
 ) where {I} = u
 
-(::Type{<:ContravariantVector{<:Any, I}})(
+@inline (::Type{<:ContravariantVector{<:Any, I}})(
     u::ContravariantVector,
     ::LocalGeometry,
 ) where {I} = project(ContravariantAxis{I}(), u)
 
-(::Type{<:ContravariantVector{<:Any, I}})(
+@inline (::Type{<:ContravariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} =
     project(ContravariantAxis{I}(), ContravariantVector(u, local_geometry))
 
-(::Type{<:CovariantVector{<:Any, I}})(
+@inline (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector{<:Any, I},
     ::LocalGeometry{I},
 ) where {I} = u
 
-(::Type{<:CovariantVector{<:Any, I}})(
+@inline (::Type{<:CovariantVector{<:Any, I}})(
     u::CovariantVector,
     ::LocalGeometry,
 ) where {I} = project(CovariantAxis{I}(), u)
 
-(::Type{<:CovariantVector{<:Any, I}})(
+@inline (::Type{<:CovariantVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} = project(CovariantAxis{I}(), CovariantVector(u, local_geometry))
 
-(::Type{<:LocalVector{<:Any, I}})(
+@inline (::Type{<:LocalVector{<:Any, I}})(
     u::LocalVector{<:Any, I},
     ::LocalGeometry{I},
 ) where {I} = u
 
-(::Type{<:LocalVector{<:Any, I}})(u::LocalVector, ::LocalGeometry) where {I} =
-    project(LocalAxis{I}(), u)
+@inline (::Type{<:LocalVector{<:Any, I}})(
+    u::LocalVector,
+    ::LocalGeometry,
+) where {I} = project(LocalAxis{I}(), u)
 
-(::Type{<:LocalVector{<:Any, I}})(
+@inline (::Type{<:LocalVector{<:Any, I}})(
     u::AxisVector,
     local_geometry::LocalGeometry,
 ) where {I} = project(LocalAxis{I}(), LocalVector(u, local_geometry))
 
 # Generic N-axis conversion functions,
 # Convert to specific local geometry dimension then convert vector type
-LocalVector(u::CovariantVector, local_geometry::LocalGeometry{I}) where {I} =
+@inline LocalVector(
+    u::CovariantVector,
+    local_geometry::LocalGeometry{I},
+) where {I} =
     project(LocalAxis{I}(), project(CovariantAxis{I}(), u), local_geometry)
 
-LocalVector(
+@inline LocalVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
 ) where {I} =
     project(LocalAxis{I}(), project(ContravariantAxis{I}(), u), local_geometry)
 
-CovariantVector(u::LocalVector, local_geometry::LocalGeometry{I}) where {I} =
+@inline CovariantVector(
+    u::LocalVector,
+    local_geometry::LocalGeometry{I},
+) where {I} =
     project(CovariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
-CovariantVector(
+@inline CovariantVector(
     u::ContravariantVector,
     local_geometry::LocalGeometry{I},
 ) where {I} = project(
@@ -116,13 +124,13 @@ CovariantVector(
     local_geometry,
 )
 
-ContravariantVector(
+@inline ContravariantVector(
     u::LocalVector,
     local_geometry::LocalGeometry{I},
 ) where {I} =
     project(ContravariantAxis{I}(), project(LocalAxis{I}(), u), local_geometry)
 
-ContravariantVector(
+@inline ContravariantVector(
     u::CovariantVector,
     local_geometry::LocalGeometry{I},
 ) where {I} = project(

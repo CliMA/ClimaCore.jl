@@ -609,10 +609,13 @@ end
             push!(vals, val)
         end
     end
-    return :(@inbounds Axis2Tensor(
-        (ato, axes(x, 2)),
-        SMatrix{$(length(Ito)), $M}($(vals...)),
-    ))
+    quote
+        Base.@_propagate_inbounds_meta
+        @inbounds Axis2Tensor(
+            (ato, axes(x, 2)),
+            SMatrix{$(length(Ito)), $M}($(vals...)),
+        )
+    end
 end
 
 @inline transform(ato::CovariantAxis, v::CovariantTensor) = _project(ato, v)
