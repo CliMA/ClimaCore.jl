@@ -47,12 +47,12 @@ function tendency!(yₜ, y, parameters, t)
         top = Operators.Extrapolate(),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.OneSided3rdOrder(),
+        top = Operators.OneSided3rdOrder(),
     )
     FCTZalesak = Operators.FCTZalesak(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.OneSided1stOrder(),
+        top = Operators.OneSided1stOrder(),
     )
     @. yₜ.q =
         -divf2c(

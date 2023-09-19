@@ -230,8 +230,8 @@ function rhs_invariant!(dY, Y, _, t)
 
     f_upwind_product1 = Operators.UpwindBiasedProductC2F()
     f_upwind_product3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.FirstOrderOneSided(),
-        top = Operators.FirstOrderOneSided(),
+        bottom = Operators.OneSided1stOrder(),
+        top = Operators.OneSided1stOrder(),
     )
 
     dρ .= 0 .* cρ

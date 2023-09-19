@@ -118,8 +118,8 @@ function get_all_ops(center_space)
         OP.InterpolateC2F(bottom = extrap, top = extrap),
         OP.InterpolateC2F(bottom = zero_scalar, top = zero_scalar),
         OP.InterpolateC2F(bottom = zero_grad, top = zero_grad),
-        OP.LeftBiasedC2F(bottom = zero_scalar),
-        OP.RightBiasedC2F(top = zero_scalar),
+        OP.LeftBiased1stOrderC2F(bottom = zero_scalar),
+        OP.RightBiased1stOrderC2F(top = zero_scalar),
     )
     ops_F2C_V2V = (
         OP.InterpolateF2C(),
@@ -143,8 +143,8 @@ function get_all_ops(center_space)
     ops_C2F_V2V = (
         OP.InterpolateC2F(bottom = extrap, top = extrap),
         OP.InterpolateC2F(bottom = zero_vector, top = zero_vector),
-        OP.LeftBiasedC2F(bottom = zero_vector),
-        OP.RightBiasedC2F(top = zero_vector),
+        OP.LeftBiased1stOrderC2F(bottom = zero_vector),
+        OP.RightBiased1stOrderC2F(top = zero_vector),
         CurriedTwoArgOperator(
             OP.FluxCorrectionF2F(bottom = extrap, top = extrap),
             a_FV,

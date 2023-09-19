@@ -164,7 +164,7 @@ function alloc_test_nested_expressions_1(cfield, ffield)
     (; cx, cy, cz, cϕ, cψ) = cfield
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
-    LB = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(1))
+    LB = Operators.LeftBiased1stOrderC2F(; bottom = Operators.SetValue(1))
     @. cz = cx * cy * ∇c(wvec(LB(cy))) * ∇c(wvec(LB(cx))) * cϕ * cψ # Compile first
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(LB(cy))) * ∇c(wvec(LB(cx))) * cϕ * cψ
@@ -177,7 +177,7 @@ function alloc_test_nested_expressions_2(cfield, ffield)
     (; cx, cy, cz, cϕ, cψ) = cfield
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
-    RB = Operators.RightBiasedC2F(; top = Operators.SetValue(1))
+    RB = Operators.RightBiased1stOrderC2F(; top = Operators.SetValue(1))
     @. cz = cx * cy * ∇c(wvec(RB(cy))) * ∇c(wvec(RB(cx))) * cϕ * cψ # Compile first
     p = @allocated begin
         @. cz = cx * cy * ∇c(wvec(RB(cy))) * ∇c(wvec(RB(cx))) * cϕ * cψ
@@ -191,7 +191,7 @@ function alloc_test_nested_expressions_3(cfield, ffield)
     Ic = Operators.InterpolateF2C()
     ∇c = Operators.DivergenceF2C()
     wvec = Geometry.WVector
-    LB = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(1))
+    LB = Operators.LeftBiased1stOrderC2F(; bottom = Operators.SetValue(1))
     #! format: off
     @. cz = cx * cy * ∇c(wvec(LB(Ic(fy) * cx))) * ∇c(wvec(LB(Ic(fy) * cx))) * cϕ * cψ # Compile first
     p = @allocated begin
@@ -485,12 +485,12 @@ end
     alloc_test_c2f_interp(
         cfield,
         ffield,
-        Operators.LeftBiasedC2F(; bottom = Operators.SetValue(0)),
+        Operators.LeftBiased1stOrderC2F(; bottom = Operators.SetValue(0)),
     )
     alloc_test_c2f_interp(
         cfield,
         ffield,
-        Operators.RightBiasedC2F(; top = Operators.SetValue(0)),
+        Operators.RightBiased1stOrderC2F(; top = Operators.SetValue(0)),
     )
 
     alloc_test_derivative(

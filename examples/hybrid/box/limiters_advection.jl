@@ -178,8 +178,8 @@ function vertical_tendency!(yₜ, y, cache, t)
         bottom = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
     )
     upwind3 = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.OneSided3rdOrder(),
+        top = Operators.OneSided3rdOrder(),
     )
     ax12 = (Geometry.Covariant12Axis(),)
     ax3 = (Geometry.Covariant3Axis(),)

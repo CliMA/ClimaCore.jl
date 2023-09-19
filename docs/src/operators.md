@@ -56,14 +56,14 @@ InterpolateC2F
 InterpolateF2C
 WeightedInterpolateC2F
 WeightedInterpolateF2C
-UpwindBiasedProductC2F
-Upwind3rdOrderBiasedProductC2F
+LeftBiased1stOrderC2F
+RightBiased1stOrderC2F
+LeftBiased3rdOrderC2F
+RightBiased3rdOrderC2F
+Upwind1stOrderC2F
+Upwind3rdOrderC2F
 FCTBorisBook
 FCTZalesak
-LeftBiasedC2F
-RightBiasedC2F
-LeftBiasedF2C
-RightBiasedF2C
 ```
 
 ### Derivative operators
@@ -82,8 +82,6 @@ CurlC2F
 
 ```@docs
 SetBoundaryOperator
-FirstOrderOneSided
-ThirdOrderOneSided
 ```
 
 ## Finite difference boundary conditions
@@ -95,6 +93,8 @@ SetValue
 SetGradient
 SetDivergence
 Extrapolate
+OneSided1stOrder
+OneSided3rdOrder
 ```
 
 ## Internal APIs

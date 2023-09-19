@@ -45,8 +45,8 @@ function f!(dydt, y, parameters, t)
         top = Operators.Extrapolate(),
     )
     third_order_fluxᶠ = Operators.Upwind3rdOrderBiasedProductC2F(
-        bottom = Operators.ThirdOrderOneSided(),
-        top = Operators.ThirdOrderOneSided(),
+        bottom = Operators.OneSided3rdOrder(),
+        top = Operators.OneSided3rdOrder(),
     )
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0.0))),

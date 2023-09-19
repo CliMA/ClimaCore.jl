@@ -31,8 +31,8 @@ function op_InterpolateC2F!(c, f, bcs)
     @. f.x = interp(c.y)
     return nothing
 end
-function op_LeftBiasedC2F!(c, f, bcs)
-    interp = Operators.LeftBiasedC2F(bcs)
+function op_LeftBiased1stOrderC2F!(c, f, bcs)
+    interp = Operators.LeftBiased1stOrderC2F(bcs)
     @. f.x = interp(c.y)
     return nothing
 end
@@ -41,8 +41,8 @@ function op_LeftBiasedF2C!(c, f, bcs = ())
     @. c.x = interp(f.y)
     return nothing
 end
-function op_RightBiasedC2F!(c, f, bcs)
-    interp = Operators.RightBiasedC2F(bcs)
+function op_RightBiased1stOrderC2F!(c, f, bcs)
+    interp = Operators.RightBiased1stOrderC2F(bcs)
     @. f.x = interp(c.y)
     return nothing
 end
@@ -99,13 +99,24 @@ function op_divgrad_uₕ!(c, f, bcs)
     @. c.uₕ2 = div(f.y * grad(c.uₕ))
     return nothing
 end
-function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
+function op_divUpwind3rdOrderBiasedProductC2F_old!(c, f, bcs)
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs.inner)
     divf2c = Operators.DivergenceF2C(bcs.outer)
     @. c.y = divf2c(upwind(f.w, c.x))
     return nothing
 end
-
+function op_divUpwind1sOrderBiasedProductC2F!(c, f, bcs)
+    upwind = Operators.Upwind1stOrderC2F(bcs.inner)
+    divf2c = Operators.DivergenceF2C(bcs.outer)
+    @. c.y = divf2c(f.w * upwind(f.w, c.x))
+    return nothing
+end
+function op_divUpwind3rdOrderBiasedProductC2F!(c, f, bcs)
+    upwind = Operators.Upwind3rdOrderC2F(bcs.inner)
+    divf2c = Operators.DivergenceF2C(bcs.outer)
+    @. c.y = divf2c(f.w * upwind(f.w, c.x))
+    return nothing
+end
 function op_broadcast_example0!(c, f, bcs)
     Fields.bycolumn(axes(f.ᶠu³)) do colidx
         CT3 = Geometry.Contravariant3Vector
@@ -162,9 +173,9 @@ GradientF2C
 GradientC2F
 InterpolateF2C
 InterpolateC2F
-LeftBiasedC2F
+LeftBiased1stOrderC2F
 LeftBiasedF2C
-RightBiasedC2F
+RightBiased1stOrderC2F
 RightBiasedF2C
 
 # Additional operators
