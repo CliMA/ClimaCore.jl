@@ -91,6 +91,7 @@ if !Sys.iswindows()
     # @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
     # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
 
+    @safetestset "InputOutput - hdf5" begin @time include("InputOutput/hdf5.jl") end
     @safetestset "InputOutput - spectralelement2d" begin @time include("InputOutput/spectralelement2d.jl") end
     @safetestset "InputOutput - hybrid2dbox" begin @time include("InputOutput/hybrid2dbox.jl") end
     @safetestset "InputOutput - hybrid2dbox_topography" begin @time include("InputOutput/hybrid2dbox_topography.jl") end

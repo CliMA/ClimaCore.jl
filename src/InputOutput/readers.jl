@@ -396,3 +396,11 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         error("Unsupported type $type")
     end
 end
+
+"""
+    read_attributes(reader::AbstractReader, name::AbstractString, data::Dict)
+
+Return the attributes associated to the object at `name` in the given HDF5 file.
+"""
+read_attributes(reader::HDF5Reader, name::AbstractString) =
+    h5readattr(reader.file.filename, name)
