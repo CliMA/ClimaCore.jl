@@ -149,9 +149,11 @@ coordinate_type(domain::RectangleDomain) = typeof(
 
 A domain representing the surface of a sphere with radius `radius`.
 """
-struct SphereDomain{FT} <: AbstractDomain where {FT <: AbstractFloat}
+struct SphereDomain{FT <: AbstractFloat} <: AbstractDomain
     radius::FT
 end
+SphereDomain(radius) = SphereDomain(float(radius))
+
 Base.show(io::IO, domain::SphereDomain) =
     print(io, nameof(typeof(domain)), ": radius = ", domain.radius)
 
