@@ -15,7 +15,8 @@ struct FaceSpace{C <: AbstractSpace}
     center_space::C
 end
 
-const FaceFiniteDifferenceSpace = FaceSpace{C <: CenterFiniteDifferenceSpace}
+const FaceFiniteDifferenceSpace =
+    FaceSpace{C} where {C <: CenterFiniteDifferenceSpace}
 
 const FiniteDifferenceSpace =
     Union{CenterFiniteDifferenceSpace, FaceFiniteDifferenceSpace}
