@@ -8,7 +8,7 @@ struct CellCenter <: Staggering end
 """ Cell face location """
 struct CellFace <: Staggering end
 
-struct FiniteDifferenceSpace{
+mutable struct FiniteDifferenceSpace{
     S <: Staggering,
     T <: Topologies.AbstractIntervalTopology,
     GG,

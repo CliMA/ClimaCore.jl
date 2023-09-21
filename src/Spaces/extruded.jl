@@ -12,7 +12,7 @@ No surface hypsography.
 struct Flat <: HypsographyAdaption end
 
 
-struct ExtrudedFiniteDifferenceSpace{
+mutable struct ExtrudedFiniteDifferenceSpace{
     S <: Staggering,
     H <: AbstractSpace,
     T <: Topologies.AbstractIntervalTopology,

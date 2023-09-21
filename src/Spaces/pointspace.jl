@@ -7,7 +7,7 @@ local_geometry_data(space::AbstractPointSpace) = space.local_geometry
 
 A zero-dimensional space.
 """
-struct PointSpace{LG <: DataLayouts.Data0D} <: AbstractPointSpace
+mutable struct PointSpace{LG <: DataLayouts.Data0D} <: AbstractPointSpace
     local_geometry::LG
 end
 

@@ -80,7 +80,7 @@ Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 
 A one-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace1D{
+mutable struct SpectralElementSpace1D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -166,7 +166,7 @@ const IntervalSpectralElementSpace1D = SpectralElementSpace1D{
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace2D{
+mutable struct SpectralElementSpace2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -618,7 +618,7 @@ end
 
 A view into a `SpectralElementSpace2D` for a single slab.
 """
-struct SpectralElementSpaceSlab{Q, G} <: AbstractSpectralElementSpace
+mutable struct SpectralElementSpaceSlab{Q, G} <: AbstractSpectralElementSpace
     quadrature_style::Q
     local_geometry::G
 end
