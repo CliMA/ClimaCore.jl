@@ -92,8 +92,10 @@ end
 
 BlockArrays.blockaxes(fv::FieldVector) =
     (BlockArrays.BlockRange(1:length(_values(fv))),)
-Base.axes(fv::FieldVector) =
-    (BlockArrays.blockedrange(map(length ∘ backing_array, Tuple(_values(fv)))),)
+Base.axes(fv::FieldVector) = map(
+    BlockArrays.blockedrange ∘ Base.OneTo ∘ length ∘ backing_array,
+    Tuple(_values(fv)),
+)
 
 Base.@propagate_inbounds Base.getindex(
     fv::FieldVector,
