@@ -146,7 +146,6 @@ function interpolate_array(
     for (iy, ycoord) in enumerate(ypts), (ix, xcoord) in enumerate(xpts)
 
         hcoord = Geometry.product_coordinates(xcoord, ycoord)
-
         helem = Meshes.containing_element(horz_mesh, hcoord)
         ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
         quad = Spaces.quadrature_style(space)
@@ -162,4 +161,22 @@ function interpolate_array(
         end
     end
     return array
+end
+
+"""
+    interpolate_column(field, zpts, (WI1, WI2), gidx)
+
+Interpolate the given `field` on the given points assuming the given interpolation_matrix
+and global index in the topology.
+
+The coefficients `(WI1, WI2)` are computed with `Spaces.Quadratures.interpolation_matrix`.
+See also `interpolate_array`.
+"""
+function interpolate_column(
+    field::Fields.ExtrudedFiniteDifferenceField,
+    zpts,
+    (WI1, WI2),
+    gidx,
+)
+    return [interpolate_slab_level(field, gidx, (WI1, WI2), z) for z in zpts]
 end
