@@ -161,6 +161,10 @@ AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
     components::AbstractArray{<:Any, N},
 ) where {N, A} = AxisTensor(A.instance, components)
 
+# conversion of components
+AxisTensor{T, N, A, S}(a::AxisTensor{<:Any, N, A, <:Any}) where {T, N, A, S} =
+    AxisTensor(axes(a), S(components(a)))
+Base.convert(::Type{T}, a::AxisTensor) where {T <: AxisTensor} = T(a)
 
 Base.axes(a::AxisTensor) = getfield(a, :axes)
 Base.axes(::Type{AxisTensor{T, N, A, S}}) where {T, N, A, S} = A.instance
