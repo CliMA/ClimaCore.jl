@@ -117,7 +117,7 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(bc)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, Nv) knl_copyto!(dest, bc)
+        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, Nv) knl_copyto!(dest, bc)
     end
     return dest
 end
