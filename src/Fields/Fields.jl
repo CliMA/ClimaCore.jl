@@ -5,7 +5,7 @@ import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
-import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
+import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, ColumnIndex
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
 
@@ -37,13 +37,6 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
-
-ClimaComms.context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.context(space.horizontal_space)
-ClimaComms.context(space::Spaces.SpectralElementSpace2D) =
-    ClimaComms.context(space.topology)
-ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
-    ClimaComms.context(space.topology)
 
 ClimaComms.context(topology::Topologies.Topology2D) = topology.context
 ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
@@ -403,9 +396,7 @@ Create a buffer for communicating neighbour information of `field`.
 """
 function Spaces.create_dss_buffer(field::Field)
     space = axes(field)
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        space.horizontal_space : space
+    hspace = Spaces.horizontal_space(space)
     Spaces.create_dss_buffer(field_values(field), hspace)
 end
 # Add definitions for backward compatibility

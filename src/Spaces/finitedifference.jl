@@ -11,15 +11,26 @@ mutable struct CenterFiniteDifferenceSpace{
     face_local_geometry::LG
 end
 
-struct FaceSpace{C <: AbstractSpace}
+struct FaceSpace{C <: AbstractSpace} <: AbstractSpace
     center_space::C
 end
+
+face_space(space::CenterFiniteDifferenceSpace) = FaceSpace(space)
+face_space(space::FaceSpace) = space
+
+center_space(space::CenterFiniteDifferenceSpace) = space
+center_space(space::FaceSpace) = space.center_space
 
 const FaceFiniteDifferenceSpace =
     FaceSpace{C} where {C <: CenterFiniteDifferenceSpace}
 
 const FiniteDifferenceSpace =
     Union{CenterFiniteDifferenceSpace, FaceFiniteDifferenceSpace}
+
+FaceFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
+    face_space(space)
+CenterFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
+        center_space(space)
 
 function Base.show(io::IO, space::FiniteDifferenceSpace)
     indent = get(io, :indent, 0)
@@ -127,7 +138,7 @@ end
 end
 
 FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
-    FaceFiniteDifferenceSpace(CenterFiniteDifferenceSpace(topology))
+    face_space(CenterFiniteDifferenceSpace(topology))
 
 CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
     CenterFiniteDifferenceSpace(Topologies.IntervalTopology(mesh))
@@ -136,7 +147,7 @@ FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
 
 
 ClimaComms.device(space::FiniteDifferenceSpace) =
-    ClimaComms.device(space.topology)
+    ClimaComms.device(Spaces.center_space(space).topology)
 
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
     space.staggering,
@@ -150,15 +161,15 @@ CenterFiniteDifferenceSpace(face_space::FaceFiniteDifferenceSpace) =
     face_space.center_space
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
-topology(space::FiniteDifferenceSpace) = space.topology
-vertical_topology(space::FiniteDifferenceSpace) = space.topology
+topology(space::FiniteDifferenceSpace) = center_space(space).topology
+vertical_topology(space::FiniteDifferenceSpace) = center_space(space).topology
 nlevels(space::FiniteDifferenceSpace) = length(space)
 
-local_geometry_data(center_space::CenterFiniteDifferenceSpace) =
+local_geometry_data(space::CenterFiniteDifferenceSpace) =
     space.center_local_geometry
 
-local_geometry_data(face_space::FaceFiniteDifferenceSpace) =
-    face_space.center_space.face_local_geometry
+local_geometry_data(space::FaceFiniteDifferenceSpace) =
+    center_space(space).face_local_geometry
 
 Base.@deprecate z_component(::Type{T}) where {T} Δz_metric_component(T) false
 
@@ -192,13 +203,13 @@ function Δz_data(space::AbstractSpace)
     )
 end
 
-function left_boundary_name(space::FiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.topology(space))
+function left_boundary_name(space::AbstractSpace)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[1]
 end
 
-function right_boundary_name(space::FiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.topology(space))
+function right_boundary_name(space::AbstractSpace)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[2]
 end
 

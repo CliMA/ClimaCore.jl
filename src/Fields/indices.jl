@@ -1,19 +1,3 @@
-"""
-    ColumnIndex(ij,h)
-
-An index into a column of a field. This can be used as an argument to `getindex`
-of a `Field`, to return a field on that column.
-
-# Example
-```julia
-colidx = ColumnIndex((1,1),1)
-field[colidx]
-```
-"""
-struct ColumnIndex{N}
-    ij::NTuple{N, Int}
-    h::Int
-end
 
 Base.@propagate_inbounds Base.getindex(field::Field, colidx::ColumnIndex) =
     column(field, colidx)
@@ -145,7 +129,7 @@ bycolumn(
     fn,
     space::Spaces.ExtrudedFiniteDifferenceSpace,
     device::ClimaComms.AbstractCPUDevice,
-) = bycolumn(fn, space.horizontal_space, device)
+) = bycolumn(fn, Spaces.horizontal_space(space), device)
 
 
 function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
@@ -164,7 +148,7 @@ Number of columns in a given space.
 ncolumns(field::Field) = ncolumns(axes(field))
 
 ncolumns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ncolumns(space.horizontal_space)
+    ncolumns(Spaces.horizontal_space(space))
 
 function ncolumns(space::Spaces.SpectralElementSpace1D)
     Nh = Topologies.nlocalelems(space)

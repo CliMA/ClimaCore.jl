@@ -366,7 +366,7 @@ function write_new!(
     write_attribute(
         group,
         "horizontal_space",
-        write!(writer, space.horizontal_space),
+        write!(writer, Spaces.horizontal_space(space)),
     )
     write_attribute(
         group,

@@ -2,35 +2,35 @@ import ..Utilities: PlusHalf, half
 
 left_idx(
     space::Union{
-        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.AbstractFiniteDifferenceSpace,
         Spaces.CenterExtrudedFiniteDifferenceSpace,
     },
 ) = left_center_boundary_idx(space)
 right_idx(
     space::Union{
-        Spaces.CenterFiniteDifferenceSpace,
+        Spaces.AbstractFiniteDifferenceSpace,
         Spaces.CenterExtrudedFiniteDifferenceSpace,
     },
 ) = right_center_boundary_idx(space)
 left_idx(
     space::Union{
-        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceSpace{<:Spaces.AbstractFiniteDifferenceSpace},
         Spaces.FaceExtrudedFiniteDifferenceSpace,
     },
 ) = left_face_boundary_idx(space)
 right_idx(
     space::Union{
-        Spaces.FaceFiniteDifferenceSpace,
+        Spaces.FaceSpace{<:Spaces.AbstractFiniteDifferenceSpace},
         Spaces.FaceExtrudedFiniteDifferenceSpace,
     },
 ) = right_face_boundary_idx(space)
 
 left_center_boundary_idx(space::Spaces.AbstractSpace) = 1
 right_center_boundary_idx(space::Spaces.AbstractSpace) =
-    size(space.center_local_geometry, 4)
+    size(Spaces.local_geometry_data(Spaces.center_space(space)), 4)
 left_face_boundary_idx(space::Spaces.AbstractSpace) = half
 right_face_boundary_idx(space::Spaces.AbstractSpace) =
-    size(space.face_local_geometry, 4) - half
+    size(Spaces.local_geometry_data(Spaces.face_space(space)), 4) - half
 
 
 left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))
@@ -52,7 +52,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    return @inbounds space.center_local_geometry[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds Spaces.center_space(space).center_local_geometry[CartesianIndex(i, j, 1, v, h)]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::Union{
@@ -67,7 +67,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    return @inbounds space.face_local_geometry[CartesianIndex(i, j, 1, v, h)]
+    return @inbounds Spaces.center_space(space).face_local_geometry[CartesianIndex(i, j, 1, v, h)]
 end
 
 
@@ -349,12 +349,8 @@ struct InterpolateF2C{BCS} <: InterpolationOperator
 end
 InterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
 
-return_space(::InterpolateF2C, space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-return_space(
-    ::InterpolateF2C,
-    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+return_space(::InterpolateF2C, space::Spaces.FaceSpace) =
+    Spaces.center_space(space)
 
 stencil_interior_width(::InterpolateF2C, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -406,11 +402,11 @@ end
 InterpolateC2F(; kwargs...) = InterpolateC2F(NamedTuple(kwargs))
 
 return_space(::InterpolateC2F, space::Spaces.CenterFiniteDifferenceSpace) =
-    Spaces.FaceFiniteDifferenceSpace(space)
+    Spaces.face_space(space)
 return_space(
     ::InterpolateC2F,
     space::Spaces.CenterExtrudedFiniteDifferenceSpace,
-) = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+) = Spaces.face_space(space)
 
 stencil_interior_width(::InterpolateC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -597,10 +593,8 @@ struct LeftBiasedF2C{BCS} <: InterpolationOperator
 end
 LeftBiasedF2C(; kwargs...) = LeftBiasedF2C(NamedTuple(kwargs))
 
-return_space(::LeftBiasedF2C, space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-return_space(::LeftBiasedF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
-    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+return_space(::LeftBiasedF2C, space::Spaces.FaceSpace) =
+    Spaces.center_space(space)
 
 stencil_interior_width(::LeftBiasedF2C, arg) = ((-half, -half),)
 Base.@propagate_inbounds stencil_interior(
@@ -729,12 +723,8 @@ struct LeftBiased3rdOrderF2C{BCS} <: InterpolationOperator
 end
 LeftBiased3rdOrderF2C(; kwargs...) = LeftBiased3rdOrderF2C(NamedTuple(kwargs))
 
-return_space(::LeftBiased3rdOrderF2C, space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-return_space(
-    ::LeftBiased3rdOrderF2C,
-    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+return_space(::LeftBiased3rdOrderF2C, space::Spaces.FaceSpace) =
+    Spaces.center_space(space)
 
 stencil_interior_width(::LeftBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
@@ -860,12 +850,8 @@ struct RightBiasedF2C{BCS} <: InterpolationOperator
 end
 RightBiasedF2C(; kwargs...) = RightBiasedF2C(NamedTuple(kwargs))
 
-return_space(::RightBiasedF2C, space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-return_space(
-    ::RightBiasedF2C,
-    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+return_space(::RightBiasedF2C, space::Spaces.FaceSpace) =
+    Spaces.center_space(space)
 
 stencil_interior_width(::RightBiasedF2C, arg) = ((half, half),)
 Base.@propagate_inbounds stencil_interior(
@@ -1051,14 +1037,9 @@ WeightedInterpolateF2C(; kwargs...) = WeightedInterpolateF2C(NamedTuple(kwargs))
 
 return_space(
     ::WeightedInterpolateF2C,
-    weight_space::Spaces.FaceFiniteDifferenceSpace,
-    arg_space::Spaces.FaceFiniteDifferenceSpace,
-) = Spaces.CenterFiniteDifferenceSpace(arg_space)
-return_space(
-    ::WeightedInterpolateF2C,
-    weight_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-    arg_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-) = Spaces.CenterExtrudedFiniteDifferenceSpace(arg_space)
+    weight_space::Spaces.FaceSpace,
+    arg_space::Spaces.FaceSpace,
+) = Spaces.center_space(arg_space)
 
 stencil_interior_width(::WeightedInterpolateF2C, weight, arg) =
     ((-half, half), (-half, half))
@@ -2352,10 +2333,8 @@ struct GradientF2C{BCS} <: GradientOperator
 end
 GradientF2C(; kwargs...) = GradientF2C(NamedTuple(kwargs))
 
-return_space(::GradientF2C, space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-return_space(::GradientF2C, space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
-    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+return_space(::GradientF2C, space::Spaces.FaceSpace) =
+    Spaces.center_space(space)
 
 stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -3177,10 +3156,7 @@ Base.Broadcast.BroadcastStyle(
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
 function vidx(
-    space::Union{
-        Spaces.FaceFiniteDifferenceSpace,
-        Spaces.FaceExtrudedFiniteDifferenceSpace,
-    },
+    space::Spaces.FaceSpace,
     idx,
 )
     @assert idx isa PlusHalf
@@ -3194,6 +3170,7 @@ function vidx(
     space::Union{
         Spaces.CenterFiniteDifferenceSpace,
         Spaces.CenterExtrudedFiniteDifferenceSpace,
+        Spaces.CenterColumnSpace,
     },
     idx,
 )

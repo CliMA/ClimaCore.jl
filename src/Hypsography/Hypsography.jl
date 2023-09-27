@@ -185,7 +185,7 @@ function ExtrudedFiniteDifferenceSpace(
 
     return Spaces.ExtrudedFiniteDifferenceSpace(
         space.staggering,
-        space.horizontal_space,
+        Spaces.horizontal_space(space),
         space.vertical_topology,
         adaption,
         space.global_geometry,

@@ -30,25 +30,39 @@ mutable struct CenterExtrudedFiniteDifferenceSpace{
     face_ghost_geometry::LGG
 end
 
+face_space(space::CenterExtrudedFiniteDifferenceSpace) = 
+    FaceSpace(space)
+center_space(space::CenterExtrudedFiniteDifferenceSpace) = 
+    space
+
+
+const FaceExtrudedFiniteDifferenceSpace =
+    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace}
+
+const ExtrudedFiniteDifferenceSpace = Union{
+    CenterExtrudedFiniteDifferenceSpace,
+    FaceExtrudedFiniteDifferenceSpace,
+}
+
 function issubspace(
     hspace::AbstractSpectralElementSpace,
     extruded_space::ExtrudedFiniteDifferenceSpace,
 )
-    if hspace === extruded_space.horizontal_space
+    if hspace === extruded_Spaces.horizontal_space(space)
         return true
     end
     # TODO: improve level handling
     return Spaces.topology(hspace) ===
-           Spaces.topology(extruded_space.horizontal_space) &&
+           Spaces.topology(Spaces.horizontal_space(extrued_space)) &&
            quadrature_style(hspace) ===
-           quadrature_style(extruded_space.horizontal_space)
+           quadrature_style(Spaces.horizontal_space(extrued_space))
 end
 
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(
         space.staggering,
-        Adapt.adapt(to, space.horizontal_space),
+        Adapt.adapt(to, Spaces.horizontal_space(space)),
         Adapt.adapt(to, space.vertical_topology),
         Adapt.adapt(to, space.hypsography),
         Adapt.adapt(to, space.global_geometry),
@@ -59,21 +73,11 @@ Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     )
 
 
-const CenterExtrudedFiniteDifferenceSpace =
-    ExtrudedFiniteDifferenceSpace{CellCenter}
-
-const FaceExtrudedFiniteDifferenceSpace =
-    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace}
-
-const ExtrudedFiniteDifferenceSpace = Union{
-    CenterExtrudedFiniteDifferenceSpace,
-    FaceExtrudedFiniteDifferenceSpace,
-}
 
 const CenterExtrudedFiniteDifferenceSpace2D =
-    ExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
+    CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
 const CenterExtrudedFiniteDifferenceSpace3D =
-    ExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
+    CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
 const FaceExtrudedFiniteDifferenceSpace2D =
     FaceSpace{<:CenterExtrudedFiniteDifferenceSpace2D}
 const FaceExtrudedFiniteDifferenceSpace3D =
@@ -89,7 +93,7 @@ FaceExtrudedFiniteDifferenceSpace(space::CenterExtrudedFiniteDifferenceSpace) =
 FaceExtrudedFiniteDifferenceSpace(space::FaceExtrudedFiniteDifferenceSpace) =
     space
 
-function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
+function Base.show(io::IO, space::CenterExtrudedFiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(
@@ -122,7 +126,7 @@ local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
     space.center_local_geometry
 
 local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.center_space.face_local_geometry
+    center_space(space).face_local_geometry
 
 # TODO: will need to be defined for distributed
 ghost_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
@@ -147,16 +151,16 @@ ExtrudedFiniteDifferenceSpace(
 ) = FaceSpace(
     CenterExtrudedFiniteDifferenceSpace(
         horizontal_space,
-        vertical_space,
+        center_space(vertical_space),
         hypsography,
     ),
 )
 
-function CenterExtrudedFiniteDifferenceSpace(
-    horizontal_space::H,
-    vertical_space::V,
+@memoize WeakValueDict function CenterExtrudedFiniteDifferenceSpace(
+    horizontal_space::AbstractSpace,
+    vertical_space::CenterFiniteDifferenceSpace,
     hypsography::Flat = Flat(),
-) where {H <: AbstractSpace, V <: FiniteDifferenceSpace}
+)
     vertical_topology = vertical_space.topology
     global_geometry = horizontal_space.global_geometry
     center_local_geometry =
@@ -207,7 +211,7 @@ topology(space::CenterExtrudedFiniteDifferenceSpace) =
 topology(space::FaceExtrudedFiniteDifferenceSpace) =
     topology(space.center_space)
 
-topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
+topology(space::ExtrudedFiniteDifferenceSpace) = topology(horizontal_space(space))
 ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.device(topology(space))
 vertical_topology(space::CenterExtrudedFiniteDifferenceSpace) =
@@ -221,25 +225,88 @@ Base.@propagate_inbounds function slab(
     h,
 )
     SpectralElementSpaceSlab(
-        space.horizontal_space.quadrature_style,
+        Spaces.horizontal_space(space).quadrature_style,
         slab(local_geometry_data(space), v, h),
     )
 end
 
-Base.@propagate_inbounds function column(
+"""
+    ColumnIndex(ij,h)
+
+An index into a column of a field. This can be used as an argument to `getindex`
+of a `Field`, to return a field on that column.
+
+# Example
+```julia
+colidx = ColumnIndex((1,1),1)
+field[colidx]
+```
+"""
+struct ColumnIndex{N}
+    ij::NTuple{N, Int}
+    h::Int
+end
+
+
+
+struct CenterColumnSpace{S<:CenterExtrudedFiniteDifferenceSpace, C<:ColumnIndex} <: AbstractFiniteDifferenceSpace
+    space::S
+    column::C
+end
+
+const FaceColumnSpace = FaceSpace{<:CenterColumnSpace}
+
+const ColumnSpace = Union{
+    CenterColumnSpace,
+    FaceColumnSpace,
+}
+
+face_space(space::CenterColumnSpace) = 
+    FaceSpace(space)
+center_space(space::CenterColumnSpace) = 
+    space
+
+full_space(colspace::CenterColumnSpace) = colspace.space
+full_space(colspace::FaceColumnSpace) = FaceSpace(center_space(colspace).space)
+
+column(
+    space::CenterExtrudedFiniteDifferenceSpace,
+    colidx::ColumnIndex
+) =
+    CenterColumnSpace(space, colidx)
+
+column(
+    space::FaceExtrudedFiniteDifferenceSpace,
+    colidx::ColumnIndex
+) =
+    FaceSpace(CenterColumnSpace(center_space(space), colidx))
+    
+
+vertical_topology(space::ColumnSpace) = vertical_topology(full_space(space))
+
+function local_geometry_data(
+    columnspace::ColumnSpace,
+)
+    column(local_geometry_data(full_space(columnspace)), center_space(columnspace).column)
+end
+
+
+
+ClimaComms.device(columnspace::ColumnSpace) =
+    ClimaComms.device(full_space(columnspace))
+ClimaComms.context(columnspace::ColumnSpace) =
+    ClimaComms.context(full_space(columnspace))
+
+
+# TODO: deprecate these
+column(
     space::ExtrudedFiniteDifferenceSpace,
     i,
     j,
     h,
-)
-    FiniteDifferenceSpace(
-        space.staggering,
-        space.vertical_topology,
-        Geometry.CartesianGlobalGeometry(),
-        column(space.center_local_geometry, i, j, h),
-        column(space.face_local_geometry, i, j, h),
-    )
-end
+) = 
+    column(space, ColumnIndex((i, j), h))
+
 
 struct LevelSpace{S, L} <: AbstractSpace
     space::S
@@ -272,14 +339,14 @@ nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
     size(space.center_local_geometry, 4)
 
 nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
-    size(space.face_local_geometry, 4)
+    size(center_space(space).face_local_geometry, 4)
 
 function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(space.vertical_topology)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[1]
 end
 function right_boundary_name(space::ExtrudedFiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(space.vertical_topology)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[2]
 end
 function blockmat(
@@ -368,12 +435,12 @@ function product_geometry(
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(cspace.horizontal_space)
+    h_iter = eachslabindex(cSpaces.horizontal_space(space))
     Nv = size(cspace.center_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end
 function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(fspace.horizontal_space)
+    h_iter = eachslabindex(fSpaces.horizontal_space(space))
     Nv = size(fspace.face_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end

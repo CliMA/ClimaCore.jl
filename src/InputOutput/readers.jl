@@ -16,8 +16,6 @@ using ..Spaces:
     Spaces,
     Spaces.Quadratures,
     Spaces.Quadratures.GLL,
-    Spaces.CellCenter,
-    Spaces.CellFace,
     SpectralElementSpace1D,
     SpectralElementSpace2D,
     CenterExtrudedFiniteDifferenceSpace,
