@@ -1,53 +1,35 @@
-abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
-mutable struct CenterFiniteDifferenceSpace{
+"""
+    FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
+    FiniteDifferenceGrid(mesh::Meshes.IntervalMesh)
+
+Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
+`IntervalMesh`). 
+
+This is an object which contains all the necessary geometric information.
+
+To avoid unnecessary duplication, we memoize the construction of the grid.
+"""
+mutable struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
     GG,
     LG,
-} <: AbstractFiniteDifferenceSpace
+} <: AbstractFiniteDifferenceGrid
     topology::T
     global_geometry::GG
     center_local_geometry::LG
     face_local_geometry::LG
 end
 
-struct FaceSpace{C <: AbstractSpace} <: AbstractSpace
-    center_space::C
-end
+topology(grid::FiniteDifferenceGrid) = grid.topology
 
-face_space(space::CenterFiniteDifferenceSpace) = FaceSpace(space)
-face_space(space::FaceSpace) = space
+ClimaComms.context(grid::FiniteDifferenceGrid) =
+    ClimaComms.context(topology(grid))
+ClimaComms.device(grid::FiniteDifferenceGrid) =
+    ClimaComms.device(topology(grid))
 
-center_space(space::CenterFiniteDifferenceSpace) = space
-center_space(space::FaceSpace) = space.center_space
 
-const FaceFiniteDifferenceSpace =
-    FaceSpace{C} where {C <: CenterFiniteDifferenceSpace}
-
-const FiniteDifferenceSpace =
-    Union{CenterFiniteDifferenceSpace, FaceFiniteDifferenceSpace}
-
-FaceFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-    face_space(space)
-CenterFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-        center_space(space)
-
-function Base.show(io::IO, space::FiniteDifferenceSpace)
-    indent = get(io, :indent, 0)
-    iio = IOContext(io, :indent => indent + 2)
-    println(
-        io,
-        space isa CenterFiniteDifferenceSpace ? "CenterFiniteDifferenceSpace" :
-        "FaceFiniteDifferenceSpace",
-        ":",
-    )
-    print(iio, " "^(indent + 2), "context: ")
-    Topologies.print_context(iio, space.topology.context)
-    println(iio)
-    print(iio, " "^(indent + 2), "mesh: ", space.topology.mesh)
-end
-
-@memoize WeakValueDict function CenterFiniteDifferenceSpace(
+@memoize WeakValueDict function FiniteDifferenceGrid(
     topology::Topologies.IntervalTopology,
 )
     global_geometry = Geometry.CartesianGlobalGeometry()
@@ -129,7 +111,7 @@ end
             ),
         )
     end
-    return CenterFiniteDifferenceSpace(
+    return FiniteDifferenceGrid(
         topology,
         global_geometry,
         Adapt.adapt(ArrayType, center_local_geometry),
@@ -137,17 +119,74 @@ end
     )
 end
 
-FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
-    face_space(CenterFiniteDifferenceSpace(topology))
-
-CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
-    CenterFiniteDifferenceSpace(Topologies.IntervalTopology(mesh))
-FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
-    FaceFiniteDifferenceSpace(Topologies.IntervalTopology(mesh))
+FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceGrid(Topologies.IntervalTopology(mesh))
 
 
-ClimaComms.device(space::FiniteDifferenceSpace) =
-    ClimaComms.device(Spaces.center_space(space).topology)
+
+
+
+
+
+abstract type Staggering end
+
+"""
+    CellCenter()
+    
+Cell center location 
+"""
+struct CellCenter <: Staggering end
+
+"""
+    CellFace()
+
+Cell face location
+"""
+struct CellFace <: Staggering end
+
+abstract type AbstractFiniteDifferenceSpace<: AbstractSpace end
+
+"""
+    FiniteDifferenceSpace(staggering::Staggering, grid::FiniteDifferenceGrid)
+
+"""
+struct FiniteDifferenceSpace{
+    S <: Staggering,
+    G <: AbstractFiniteDifferenceGrid
+} <: AbstractFiniteDifferenceSpace
+    staggering::S
+    grid::G
+end
+
+const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
+const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
+
+function Base.show(io::IO, space::FiniteDifferenceSpace)
+    indent = get(io, :indent, 0)
+    iio = IOContext(io, :indent => indent + 2)
+    println(
+        io,
+        space isa CenterFiniteDifferenceSpace ? "CenterFiniteDifferenceSpace" :
+        "FaceFiniteDifferenceSpace",
+        ":",
+    )
+    print(iio, " "^(indent + 2), "context: ")
+    Topologies.print_context(iio, ClimaComms.context(space))
+    println(iio)
+    print(iio, " "^(indent + 2), "mesh: ", topology(space).mesh)
+end
+
+
+
+FiniteDifferenceSpace{S}(grid::FiniteDifferenceGrid) where {S<:Staggering}=
+    FiniteDifferenceSpace(S(), grid)
+FiniteDifferenceSpace{S}(topology::Topologies.IntervalTopology) where {S<:Staggering}=
+    FiniteDifferenceSpace{S}(FiniteDifferenceGrid(topology))
+FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S<:Staggering}=
+    FiniteDifferenceSpace{S}(FiniteDifferenceGrid(mesh))
+
+
+
 
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
     space.staggering,
@@ -157,19 +196,15 @@ Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
     Adapt.adapt(to, space.face_local_geometry),
 )
 
-CenterFiniteDifferenceSpace(face_space::FaceFiniteDifferenceSpace) =
-    face_space.center_space
+nlevels(space::FiniteDifferenceSpace) = length(space)
+# TODO: deprecate?
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
-topology(space::FiniteDifferenceSpace) = center_space(space).topology
-vertical_topology(space::FiniteDifferenceSpace) = center_space(space).topology
-nlevels(space::FiniteDifferenceSpace) = length(space)
 
-local_geometry_data(space::CenterFiniteDifferenceSpace) =
-    space.center_local_geometry
+topology(space::FiniteDifferenceSpace) = topology(space.grid)
+vertical_topology(space::FiniteDifferenceSpace) = topology(space.grid)
 
-local_geometry_data(space::FaceFiniteDifferenceSpace) =
-    center_space(space).face_local_geometry
+
 
 Base.@deprecate z_component(::Type{T}) where {T} Δz_metric_component(T) false
 

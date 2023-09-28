@@ -12,16 +12,25 @@ No surface hypsography.
 struct Flat <: HypsographyAdaption end
 
 
-mutable struct CenterExtrudedFiniteDifferenceSpace{
+"""
+    ExtrudedFiniteDifferenceGrid(
+        horizontal_space::AbstractSpace,
+        vertical_space::FiniteDifferenceSpace,
+        hypsography::HypsographyAdaption = Flat(),
+    )
+
+Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spaces.
+"""
+mutable struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractSpace,
     T <: Topologies.AbstractIntervalTopology,
     A <: HypsographyAdaption,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     LGG,
-} <: AbstractSpace
+}
     horizontal_space::H
-    vertical_topology::T
+    vertical_topology::T # should we cache the vertical grid?
     hypsography::A
     global_geometry::GG
     center_local_geometry::LG
@@ -30,20 +39,81 @@ mutable struct CenterExtrudedFiniteDifferenceSpace{
     face_ghost_geometry::LGG
 end
 
-face_space(space::CenterExtrudedFiniteDifferenceSpace) = 
-    FaceSpace(space)
-center_space(space::CenterExtrudedFiniteDifferenceSpace) = 
-    space
+@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+    horizontal_space::AbstractSpace,
+    vertical_grid::FiniteDifferenceGrid,
+    hypsography::Flat = Flat(),
+)
+    vertical_topology = vertical_grid.topology
+    global_geometry = horizontal_space.global_geometry
+    center_local_geometry =
+        product_geometry.(
+            horizontal_space.local_geometry,
+            vertical_space.center_local_geometry,
+        )
+    face_local_geometry =
+        product_geometry.(
+            horizontal_space.local_geometry,
+            vertical_space.face_local_geometry,
+        )
+
+    if horizontal_space isa SpectralElementSpace2D
+        center_ghost_geometry =
+            product_geometry.(
+                horizontal_space.ghost_geometry,
+                vertical_space.center_local_geometry,
+            )
+        face_ghost_geometry =
+            product_geometry.(
+                horizontal_space.ghost_geometry,
+                vertical_space.face_local_geometry,
+            )
+    else
+        center_ghost_geometry = nothing
+        face_ghost_geometry = nothing
+    end
+    return ExtrudedFiniteDifferenceGrid(
+        horizontal_space,
+        vertical_topology,
+        hypsography,
+        global_geometry,
+        center_local_geometry,
+        face_local_geometry,
+        center_ghost_geometry,
+        face_ghost_geometry,
+    )
+end
 
 
-const FaceExtrudedFiniteDifferenceSpace =
-    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace}
 
-const ExtrudedFiniteDifferenceSpace = Union{
-    CenterExtrudedFiniteDifferenceSpace,
-    FaceExtrudedFiniteDifferenceSpace,
-}
 
+
+struct ExtudedFiniteDifferenceSpace{S<:Staggering,G<:ExtrudedFiniteDifferenceGrid} <: AbstractSpace
+    space::S
+    grid::G
+end
+
+const FaceExtrudedFiniteDifferenceSpace = ExtrudedFiniteDifferenceSpace{CellFace}
+const CenterExtrudedFiniteDifferenceSpace = ExtrudedFiniteDifferenceSpace{CellCenter}
+
+
+ExtrudedFiniteDifferenceSpace{S}(grid::ExtrudedFiniteDifferenceGrid) where {S<:Staggering}=
+    ExtrudedFiniteDifferenceSpace(S(), grid)
+ExtrudedFiniteDifferenceSpace{S}(space::ExtrudedFiniteDifferenceSpace) where {S<:Staggering}=
+    ExtrudedFiniteDifferenceSpace{S}(space.grid)
+
+ExtrudedFiniteDifferenceSpace{S}(
+    horizontal_space::AbstractSpace,
+    vertical_space::FiniteDifferenceSpace,
+    hypsography::HypsographyAdaption = Flat(),
+) = ExtrudedFiniteDifferenceSpace{S}(
+    ExtrudedFiniteDifferenceGrid(
+        horizontal_space,
+        vertical_space,
+        hypsography,
+    )
+)
+    
 function issubspace(
     hspace::AbstractSpectralElementSpace,
     extruded_space::ExtrudedFiniteDifferenceSpace,
@@ -79,21 +149,11 @@ const CenterExtrudedFiniteDifferenceSpace2D =
 const CenterExtrudedFiniteDifferenceSpace3D =
     CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
 const FaceExtrudedFiniteDifferenceSpace2D =
-    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace2D}
+    FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
 const FaceExtrudedFiniteDifferenceSpace3D =
-    FaceSpace{<:CenterExtrudedFiniteDifferenceSpace3D}
+    FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
 
-CenterExtrudedFiniteDifferenceSpace(
-    space::CenterExtrudedFiniteDifferenceSpace,
-) = space
-CenterExtrudedFiniteDifferenceSpace(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.center_space
-FaceExtrudedFiniteDifferenceSpace(space::CenterExtrudedFiniteDifferenceSpace) =
-    FaceSpace(space)
-FaceExtrudedFiniteDifferenceSpace(space::FaceExtrudedFiniteDifferenceSpace) =
-    space
-
-function Base.show(io::IO, space::CenterExtrudedFiniteDifferenceSpace)
+function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(
@@ -122,86 +182,20 @@ function Base.show(io::IO, space::CenterExtrudedFiniteDifferenceSpace)
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end
+
 local_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
-    space.center_local_geometry
-
+    space.grid.center_local_geometry
 local_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    center_space(space).face_local_geometry
+    space.grid.face_local_geometry
 
-# TODO: will need to be defined for distributed
 ghost_geometry_data(space::CenterExtrudedFiniteDifferenceSpace) =
-    space.center_ghost_geometry
+    space.grid.center_ghost_geometry
 ghost_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
-    space.center_space.face_ghost_geometry
+    space.grid.face_ghost_geometry
 
 
-ExtrudedFiniteDifferenceSpace(
-    horizontal_space::AbstractSpace,
-    vertical_space::CenterFiniteDifferenceSpace,
-    hypsography::Flat = Flat(),
-) = CenterExtrudedFiniteDifferenceSpace(
-    horizontal_space,
-    vertical_space,
-    hypsography,
-)
-ExtrudedFiniteDifferenceSpace(
-    horizontal_space::AbstractSpace,
-    vertical_space::FaceFiniteDifferenceSpace,
-    hypsography::Flat = Flat(),
-) = FaceSpace(
-    CenterExtrudedFiniteDifferenceSpace(
-        horizontal_space,
-        center_space(vertical_space),
-        hypsography,
-    ),
-)
 
-@memoize WeakValueDict function CenterExtrudedFiniteDifferenceSpace(
-    horizontal_space::AbstractSpace,
-    vertical_space::CenterFiniteDifferenceSpace,
-    hypsography::Flat = Flat(),
-)
-    vertical_topology = vertical_space.topology
-    global_geometry = horizontal_space.global_geometry
-    center_local_geometry =
-        product_geometry.(
-            horizontal_space.local_geometry,
-            vertical_space.center_local_geometry,
-        )
-    face_local_geometry =
-        product_geometry.(
-            horizontal_space.local_geometry,
-            vertical_space.face_local_geometry,
-        )
-
-    if horizontal_space isa SpectralElementSpace2D
-        center_ghost_geometry =
-            product_geometry.(
-                horizontal_space.ghost_geometry,
-                vertical_space.center_local_geometry,
-            )
-        face_ghost_geometry =
-            product_geometry.(
-                horizontal_space.ghost_geometry,
-                vertical_space.face_local_geometry,
-            )
-    else
-        center_ghost_geometry = nothing
-        face_ghost_geometry = nothing
-    end
-    return CenterExtrudedFiniteDifferenceSpace(
-        horizontal_space,
-        vertical_topology,
-        hypsography,
-        global_geometry,
-        center_local_geometry,
-        face_local_geometry,
-        center_ghost_geometry,
-        face_ghost_geometry,
-    )
-end
-
-quadrature_style(space::CenterExtrudedFiniteDifferenceSpace) =
+quadrature_style(space::ExtrudedFiniteDifferenceGrid ) =
     space.horizontal_space.quadrature_style
 quadrature_style(space::FaceExtrudedFiniteDifferenceSpace) =
     quadrature_style(space.center_space)
@@ -249,7 +243,7 @@ end
 
 
 
-struct CenterColumnSpace{S<:CenterExtrudedFiniteDifferenceSpace, C<:ColumnIndex} <: AbstractFiniteDifferenceSpace
+struct ColumnGrid{G<:, C<:ColumnIndex} <: AbstractFiniteDifferenceGrid
     space::S
     column::C
 end
