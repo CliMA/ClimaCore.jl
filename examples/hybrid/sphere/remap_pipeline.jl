@@ -52,10 +52,8 @@ function remap2latlon(filein, nc_dir, nlat, nlon)
 
     # reconstruct space, obtain Nq from space
     cspace = axes(Y.c)
-    hspace = cspace.horizontal_space
-    Nq = Spaces.Quadratures.degrees_of_freedom(
-        cspace.horizontal_space.quadrature_style,
-    )
+    hspace = Spaces.horizontal_space(cspace)
+    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
 
     # create a temporary dir for intermediate data
     remap_tmpdir = nc_dir * "remaptmp/"

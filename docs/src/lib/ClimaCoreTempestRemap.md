@@ -95,7 +95,7 @@ end
 
 # write out our cubed sphere mesh
 meshfile_cc = "mesh_cubedsphere.g"
-write_exodus(meshfile_cc, cspace.horizontal_space.topology)
+write_exodus(meshfile_cc, Spaces.horizontal_space(cspace).topology)
 
 # write out RLL mesh
 nlat = 90

@@ -36,21 +36,20 @@ function issubspace(
     hspace::AbstractSpectralElementSpace,
     extruded_space::ExtrudedFiniteDifferenceSpace,
 )
-    if hspace === extruded_space.horizontal_space
+    ehspace = Spaces.horizontal_space(extruded_space)
+    if hspace === ehspace
         return true
     end
     # TODO: improve level handling
-    return Spaces.topology(hspace) ===
-           Spaces.topology(extruded_space.horizontal_space) &&
-           quadrature_style(hspace) ===
-           quadrature_style(extruded_space.horizontal_space)
+    return Spaces.topology(hspace) === Spaces.topology(ehspace) &&
+           quadrature_style(hspace) === quadrature_style(ehspace)
 end
 
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(
         space.staggering,
-        Adapt.adapt(to, space.horizontal_space),
+        Adapt.adapt(to, Spaces.horizontal_space(space)),
         Adapt.adapt(to, space.vertical_topology),
         Adapt.adapt(to, space.hypsography),
         Adapt.adapt(to, space.global_geometry),
@@ -82,7 +81,7 @@ function ExtrudedFiniteDifferenceSpace{S}(
 ) where {S <: Staggering}
     ExtrudedFiniteDifferenceSpace(
         S(),
-        space.horizontal_space,
+        Spaces.horizontal_space(space),
         space.vertical_topology,
         space.hypsography,
         space.global_geometry,
@@ -103,21 +102,12 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    Topologies.print_context(iio, space.horizontal_space.topology.context)
+    hspace = Spaces.horizontal_space(space)
+    Topologies.print_context(iio, hspace.topology.context)
     println(iio)
     println(iio, " "^(indent + 2), "horizontal:")
-    println(
-        iio,
-        " "^(indent + 4),
-        "mesh: ",
-        space.horizontal_space.topology.mesh,
-    )
-    println(
-        iio,
-        " "^(indent + 4),
-        "quadrature: ",
-        space.horizontal_space.quadrature_style,
-    )
+    println(iio, " "^(indent + 4), "mesh: ", hspace.topology.mesh)
+    println(iio, " "^(indent + 4), "quadrature: ", hspace.quadrature_style)
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end
@@ -180,9 +170,10 @@ function ExtrudedFiniteDifferenceSpace(
 end
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
-    space.horizontal_space.quadrature_style
+    Spaces.horizontal_space(space).quadrature_style
 
-topology(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space.topology
+topology(space::ExtrudedFiniteDifferenceSpace) =
+    Spaces.horizontal_space(space).topology
 ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.device(topology(space))
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
@@ -194,7 +185,7 @@ Base.@propagate_inbounds function slab(
     h,
 )
     SpectralElementSpaceSlab(
-        space.horizontal_space.quadrature_style,
+        Spaces.horizontal_space(space).quadrature_style,
         slab(local_geometry_data(space), v, h),
     )
 end
@@ -233,7 +224,7 @@ Base.@propagate_inbounds function level(
     space::CenterExtrudedFiniteDifferenceSpace,
     v::Integer,
 )
-    horizontal_space = space.horizontal_space
+    horizontal_space = Spaces.horizontal_space(space)
     if horizontal_space isa SpectralElementSpace1D
         SpectralElementSpace1D(
             horizontal_space.topology,
@@ -262,7 +253,7 @@ Base.@propagate_inbounds function level(
     space::FaceExtrudedFiniteDifferenceSpace,
     v::PlusHalf,
 )
-    horizontal_space = space.horizontal_space
+    horizontal_space = Spaces.horizontal_space(space)
     if horizontal_space isa SpectralElementSpace1D
         @inbounds SpectralElementSpace1D(
             horizontal_space.topology,
@@ -388,12 +379,12 @@ function product_geometry(
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(cspace.horizontal_space)
+    h_iter = eachslabindex(Spaces.horizontal_space(cspace))
     Nv = size(cspace.center_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end
 function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(fspace.horizontal_space)
+    h_iter = eachslabindex(Spaces.horizontal_space(fspace))
     Nv = size(fspace.face_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end
