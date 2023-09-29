@@ -164,19 +164,19 @@ function interpolate_array(
 end
 
 """
-    interpolate_column(field, zpts, (WI1, WI2), gidx)
+    interpolate_column(field, zpts, weights, gidx)
 
 Interpolate the given `field` on the given points assuming the given interpolation_matrix
 and global index in the topology.
 
-The coefficients `(WI1, WI2)` are computed with `Spaces.Quadratures.interpolation_matrix`.
+The coefficients `weights` are computed with `Spaces.Quadratures.interpolation_matrix`.
 See also `interpolate_array`.
 """
 function interpolate_column(
     field::Fields.ExtrudedFiniteDifferenceField,
     zpts,
-    (WI1, WI2),
+    weights,
     gidx,
 )
-    return [interpolate_slab_level(field, gidx, (WI1, WI2), z) for z in zpts]
+    return [interpolate_slab_level(field, gidx, weights, z) for z in zpts]
 end

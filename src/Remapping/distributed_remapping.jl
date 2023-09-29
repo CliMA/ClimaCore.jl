@@ -76,7 +76,15 @@ function target_hcoords_pid_bitmask(target_hcoords, topology, pid)
     return pid_hcoord.(target_hcoords) .== pid
 end
 
-struct Remapper{T <: ClimaComms.AbstractCommsContext, T1, T2, T3, T4, T5}
+struct Remapper{
+    T <: ClimaComms.AbstractCommsContext,
+    T1,
+    T2,
+    T3,
+    T4,
+    T5,
+    T6 <: Spaces.AbstractSpace,
+}
     comms_ctx::T
 
     # Target points that are on the process where this object is defined
@@ -94,19 +102,23 @@ struct Remapper{T <: ClimaComms.AbstractCommsContext, T1, T2, T3, T4, T5}
     # the vertical column of the interpolated data.
     local_target_hcoords_bitmask::T3
 
-    # Coefficients (WI1, WI2) used for the interpolation. Array of tuples.
+    # Coefficients (WI1[, WI2]) used for the interpolation. Array of tuples.
     interpolation_coeffs::T4
 
     # Local indices the element of each local_target_hcoords in the given topology
     local_indices::T5
+
+    # Space over which the remapper is defined
+    space::T6
 end
 
 """
    Remapper(target_hcoords, target_zcoords, space)
 
-
 Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
 to the Cartesian product of `target_hcoords` with `target_zcoords`.
+
+`target_zcoords` can be `nothing` for interpolation on horizontal spaces.
 
 The `Remapper` is designed to not be tied to any particular `Field`. You can use the same
 `Remapper` for any `Field` as long as they are all defined on the same `topology`.
@@ -119,36 +131,67 @@ function Remapper(target_hcoords, target_zcoords, space)
     comms_ctx = ClimaComms.context(space)
     pid = ClimaComms.mypid(comms_ctx)
     FT = Spaces.undertype(space)
-    topology = space.horizontal_space.topology
+    horizontal_topology = Spaces.topology(space)
 
-    local_target_hcoords_bitmask =
-        target_hcoords_pid_bitmask(target_hcoords, topology, pid)
+    is_1d = typeof(horizontal_topology) <: Topologies.IntervalTopology
 
-    # Extract the coordinate we own. This will flatten the matrix.
+    # For IntervalTopology, all the points belong to the same process and there's no notion
+    # of containing pid
+    if is_1d
+        # a .== a is an easy way to make a bitmask of the same shape as `a` filled with true
+        local_target_hcoords_bitmask = target_hcoords .== target_hcoords
+    else
+        local_target_hcoords_bitmask =
+            target_hcoords_pid_bitmask(target_hcoords, horizontal_topology, pid)
+    end
+
+    # Extract the coordinate we own (as a MPI process). This will flatten the matrix.
     local_target_hcoords = target_hcoords[local_target_hcoords_bitmask]
 
-    horz_mesh = topology.mesh
+    horz_mesh = horizontal_topology.mesh
 
     interpolation_coeffs = map(local_target_hcoords) do hcoord
         helem = Meshes.containing_element(horz_mesh, hcoord)
-        ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
-        WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
-        WI2 = Spaces.Quadratures.interpolation_matrix(SVector(ξ2), quad_points)
-        return (WI1, WI2)
+        ξ = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+        WI1 = Spaces.Quadratures.interpolation_matrix(
+            SVector(ξ[1]),
+            quad_points,
+        )
+        if is_1d
+            return (WI1,)
+        else
+            WI2 = Spaces.Quadratures.interpolation_matrix(
+                SVector(ξ[2]),
+                quad_points,
+            )
+            return (WI1, WI2)
+        end
     end
 
-    # We need to obtain the local index from the global, so we prepare a lookup table
-    global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
-    for (lidx, gidx) in enumerate(topology.local_elem_gidx)
-        global_elem_lidx[gidx] = lidx
+    # For 2D meshes, we have a notion of local and global indices. This is not the case for
+    # 1D meshes, which are much simpler. For 1D meshes, the "index" is the same as the
+    # element number, for 2D ones, we have to do some work.
+    if is_1d
+        local_indices = map(local_target_hcoords) do hcoord
+            return Meshes.containing_element(horz_mesh, hcoord)
+        end
+    else
+        # We need to obtain the local index from the global, so we prepare a lookup table
+        global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
+        for (lidx, gidx) in enumerate(horizontal_topology.local_elem_gidx)
+            global_elem_lidx[gidx] = lidx
+        end
+
+        local_indices = map(local_target_hcoords) do hcoord
+            helem = Meshes.containing_element(horz_mesh, hcoord)
+            return global_elem_lidx[horizontal_topology.orderindex[helem]]
+        end
     end
 
-    local_indices = map(local_target_hcoords) do hcoord
-        helem = Meshes.containing_element(horz_mesh, hcoord)
-        return global_elem_lidx[topology.orderindex[helem]]
-    end
+    # We represent interpolation onto an horizontal slab as an empty list of zcoords
+    isnothing(target_zcoords) && (target_zcoords = [])
 
     return Remapper(
         comms_ctx,
@@ -157,6 +200,7 @@ function Remapper(target_hcoords, target_zcoords, space)
         local_target_hcoords_bitmask,
         interpolation_coeffs,
         local_indices,
+        space,
     )
 end
 
@@ -165,11 +209,6 @@ end
    interpolate(remapper, field)
 
 Interpolate the given `field` as prescribed by `remapper`.
-
-NOTE: We are assuming that the worker is defined on the topology associated to the field.
-This is usually the case, so that we can have one worker for many fields. This assumption is
-not checked, so it is your responsibility to ensure that it holds true. Failure to do so
-will result in errors.
 
 Example
 ========
@@ -192,45 +231,56 @@ int1 = interpolate(remapper, field1)
 int2 = interpolate(remapper, field2)
 
 ```
-
 """
 function interpolate(remapper::Remapper, field::T) where {T <: Fields.Field}
-    # Prepare the output
+
+    axes(field) == remapper.space ||
+        error("Field is defined on a different space than remapper")
 
     FT = eltype(field)
 
-    # We have to add one extra dimension with respect to the bitmask because we are going to store
-    # the values for the columns
-    out_local_array = zeros(
-        FT,
-        (
-            size(remapper.local_target_hcoords_bitmask)...,
-            length(remapper.target_zcoords),
-        ),
-    )
+    if length(remapper.target_zcoords) == 0
+        out_local_array = zeros(FT, size(remapper.local_target_hcoords_bitmask))
+        interpolated_values = [
+            interpolate_slab(field, Fields.SlabIndex(nothing, gidx), weights) for (gidx, weights) in
+            zip(remapper.local_indices, remapper.interpolation_coeffs)
+        ]
 
-    # interpolated_values is an array of arrays properly ordered according to the bitmask
+        # out_local_array[remapper.local_target_hcoords_bitmask] returns a view on space we
+        # want to write on
+        out_local_array[remapper.local_target_hcoords_bitmask] .=
+            interpolated_values
+    else
+        # We have to add one extra dimension with respect to the bitmask because we are going to store
+        # the values for the columns
+        out_local_array = zeros(
+            FT,
+            (
+                size(remapper.local_target_hcoords_bitmask)...,
+                length(remapper.target_zcoords),
+            ),
+        )
 
-    # `stack` stacks along the first dimension, so we need to transpose (') to make sure
-    # that we have the correct shape
-    interpolated_values =
-        stack(
-            interpolate_column(
-                field,
-                remapper.target_zcoords,
-                (WI1, WI2),
-                gidx,
-            ) for (hcoord, gidx, (WI1, WI2)) in zip(
-                remapper.local_target_hcoords,
-                remapper.local_indices,
-                remapper.interpolation_coeffs,
-            )
-        )'
+        # interpolated_values is an array of arrays properly ordered according to the bitmask
 
-    # out_local_array[remapper.local_target_hcoords_bitmask, :] returns a view on space we
-    # want to write on
-    out_local_array[remapper.local_target_hcoords_bitmask, :] .=
-        interpolated_values
+        # `stack` stacks along the first dimension, so we need to transpose (') to make sure
+        # that we have the correct shape
+        interpolated_values =
+            stack(
+                interpolate_column(
+                    field,
+                    remapper.target_zcoords,
+                    weights,
+                    gidx,
+                ) for (gidx, weights) in
+                zip(remapper.local_indices, remapper.interpolation_coeffs)
+            )'
+
+        # out_local_array[remapper.local_target_hcoords_bitmask, :] returns a view on space we
+        # want to write on
+        out_local_array[remapper.local_target_hcoords_bitmask, :] .=
+            interpolated_values
+    end
 
     # Next, we have to send all the out_arrays to root and sum them up to obtain the final
     # answer. Only the root will return something
