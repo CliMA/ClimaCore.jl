@@ -42,32 +42,16 @@ Base.similar(
 
 function knl_copyto!(dest, src)
 
-    #=
-    nij, nh = size(dest)
-
-    thread_idx = CUDA.threadIdx().x
-    block_idx = CUDA.blockIdx().x
-    block_dim = CUDA.blockDim().x
-
-    # mapping to global idx to make insensitive
-    # to number of blocks / threads per device
-    global_idx = thread_idx + (block_idx - 1) * block_dim
-
-    nx, ny = nij, nij
-    i = global_idx % nx == 0 ? nx : global_idx % nx
-    j = cld(global_idx, nx)
-    h = ((global_idx-1) % (nx*nx)) + 1
-    =#
-
     i = CUDA.threadIdx().x
     j = CUDA.threadIdx().y
 
     h = CUDA.blockIdx().x
-    v = CUDA.blockIdx().y
+    v = CUDA.blockDim().z * (CUDA.blockIdx().y - 1) + CUDA.threadIdx().z
 
-    I = CartesianIndex((i, j, 1, v, h))
-
-    @inbounds dest[I] = src[I]
+    if v <= size(dest, 4)
+        I = CartesianIndex((i, j, 1, v, h))
+        @inbounds dest[I] = src[I]
+    end
     return nothing
 end
 
@@ -76,11 +60,12 @@ function knl_fill!(dest, val)
     j = CUDA.threadIdx().y
 
     h = CUDA.blockIdx().x
-    v = CUDA.blockIdx().y
+    v = CUDA.blockDim().z * (CUDA.blockIdx().y - 1) + CUDA.threadIdx().z
 
-    I = CartesianIndex((i, j, 1, v, h))
-
-    @inbounds dest[I] = val
+    if v <= size(dest, 4)
+        I = CartesianIndex((i, j, 1, v, h))
+        @inbounds dest[I] = val
+    end
     return nothing
 end
 
@@ -117,7 +102,10 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(bc)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, Nv) knl_copyto!(dest, bc)
+        Nv_per_block = fld(256, Nij * Nij)
+        Nv_blocks = cld(Nv, Nv_per_block)
+        CUDA.@cuda always_inline = true threads = (Nij, Nij, Nv_per_block) blocks =
+            (Nh, Nv_blocks) knl_copyto!(dest, bc)
     end
     return dest
 end
@@ -127,7 +115,10 @@ function Base.fill!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(dest)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, Nv) knl_fill!(dest, val)
+        Nv_per_block = fld(256, Nij * Nij)
+        Nv_blocks = cld(Nv, Nv_per_block)
+        CUDA.@cuda always_inline = true threads = (Nij, Nij, Nv_per_block) blocks =
+            (Nh, Nv_blocks) knl_fill!(dest, val)
     end
     return dest
 end
