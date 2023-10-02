@@ -25,6 +25,9 @@ import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
 using Memoize, WeakValueDicts
 
+abstract type AbstractGrid end
+
+
 abstract type AbstractSpace end
 
 issubspace(::AbstractSpace, ::AbstractSpace) = false

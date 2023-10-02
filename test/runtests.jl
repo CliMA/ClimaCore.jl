@@ -35,7 +35,7 @@ if !Sys.iswindows()
     @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
     # now part of buildkite
     # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-
+    =#
     @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
     #=
@@ -69,7 +69,6 @@ if !Sys.iswindows()
     # now part of buildkite
     # @time include("Operators/finitedifference/implicit_stencils.jl")
     # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
-=#
     @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
     @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/3d.jl") end
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end

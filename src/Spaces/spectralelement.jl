@@ -5,6 +5,7 @@ Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
 
 local_geometry_data(space::AbstractSpectralElementSpace) = local_geometry_data(space.grid)
 ghost_geometry_data(space::AbstractSpectralElementSpace) = ghost_geometry_data(space.grid)
+quadrature_style(space::AbstractSpectralElementSpace) = quadrature_style(space.grid)
 
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
@@ -13,68 +14,25 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(space)), ":")
-    if hasfield(typeof(space), :topology)
+    grid = space.grid
+    if hasfield(typeof(grid), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")
-        Topologies.print_context(iio, space.topology.context)
+        Topologies.print_context(iio, grid.topology.context)
         println(iio)
-        println(iio, " "^(indent + 2), "mesh: ", space.topology.mesh)
+        println(iio, " "^(indent + 2), "mesh: ", grid.topology.mesh)
     end
-    print(iio, " "^(indent + 2), "quadrature: ", space.quadrature_style)
+    print(iio, " "^(indent + 2), "quadrature: ", grid.quadrature_style)
 end
 
 ClimaComms.device(space::AbstractSpectralElementSpace) =
     ClimaComms.device(topology(space))
 ClimaComms.array_type(space::AbstractSpectralElementSpace) =
     ClimaComms.array_type(ClimaComms.device(space))
-topology(space::AbstractSpectralElementSpace) = space.topology
-quadrature_style(space::AbstractSpectralElementSpace) = space.quadrature_style
+topology(space::AbstractSpectralElementSpace) = topology(space.grid)
 
-abstract type AbstractPerimeter end
 
-"""
-    Perimeter2D <: AbstractPerimeter
-
-Iterate over the perimeter degrees of freedom of a 2D spectral element.
-"""
-struct Perimeter2D{Nq} <: AbstractPerimeter end
-
-"""
-    Perimeter2D(Nq)
-
-Construct a perimeter iterator for a 2D spectral element of degree `(Nq-1)`.
-"""
-Perimeter2D(Nq) = Perimeter2D{Nq}()
-Adapt.adapt_structure(to, x::Perimeter2D) = x
-
-function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
-    if loc < 5
-        return (Topologies.vertex_node_index(loc, Nq), loc + 1)
-    elseif loc ≤ nperimeter2d(Nq)
-        f = cld(loc - 4, Nq - 2)
-        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
-    else
-        return nothing
-    end
-end
-
-function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
-    if loc < 1 || loc > nperimeter2d(Nq)
-        return (-1, -1)
-    elseif loc < 5
-        return Topologies.vertex_node_index(loc, Nq)
-    else
-        f = cld(loc - 4, Nq - 2)
-        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return Topologies.face_node_index(f, Nq, 1 + n)
-    end
-end
-
-nperimeter2d(Nq) = 4 + (Nq - 2) * 4
-nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
-Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
-
+abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
 """
     SpectralElementGrid1D
@@ -87,7 +45,7 @@ mutable struct SpectralElementGrid1D{
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     D,
-} <: AbstractSpectralElementSpace
+} <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
     global_geometry::GG
@@ -154,7 +112,8 @@ end
 end
 
 local_geometry_data(grid::SpectralElementGrid1D) = grid.local_geometry
-
+topology(grid::SpectralElementGrid1D) = grid.topology
+quadrature_style(grid::SpectralElementGrid1D) = grid.quadrature_style
 
 
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
@@ -191,7 +150,7 @@ mutable struct SpectralElementGrid2D{
     D,
     IS,
     BS,
-} 
+} <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
     global_geometry::GG
@@ -203,11 +162,12 @@ mutable struct SpectralElementGrid2D{
     boundary_surface_geometries::BS
 end
 
-struct DeviceSpectralElementGrid2D{Q,GG,LG}
+struct DeviceSpectralElementGrid2D{Q,GG,LG} <: AbstractGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
-end
+end 
+
 Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
     DeviceSpectralElementGrid2D(
             Adapt.adapt(to, grid.quadrature_style),
@@ -543,7 +503,8 @@ end
 
 local_geometry_data(grid::SpectralElementGrid2D) = grid.local_geometry
 ghost_geometry_data(grid::SpectralElementGrid2D) = grid.ghost_geometry
-
+topology(grid::SpectralElementGrid2D) = grid.topology
+quadrature_style(grid::SpectralElementGrid2D) = grid.quadrature_style
 
 
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
@@ -551,11 +512,13 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
 end
 
 SpectralElementSpace2D(topology::Topologies.Topology2D, quadrature_style) =
-SpectralElementSpace2D(SpectralElementGrid2D(topology, quadrature_style))
+    SpectralElementSpace2D(SpectralElementGrid2D(topology, quadrature_style))
 
 nlevels(space::SpectralElementSpace2D) = 1
 perimeter(space::SpectralElementSpace2D) =
-    Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
+    Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style(space)))
+
+
 
     #=
 const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
@@ -719,8 +682,8 @@ function setup_comms(
 end
 
 function all_nodes(space::SpectralElementSpace2D)
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
-    nelem = Topologies.nlocalelems(space.topology)
+    Nq = Quadratures.degrees_of_freedom(quadrature_style(space))
+    nelem = Topologies.nlocalelems(topology(space))
     Iterators.product(Iterators.product(1:Nq, 1:Nq), 1:nelem)
 end
 
@@ -733,7 +696,7 @@ first `((i,j), e)` triple.
 This function is experimental, and may change in future.
 """
 unique_nodes(space::SpectralElementSpace2D) =
-    unique_nodes(space, space.quadrature_style)
+    unique_nodes(space, quadrature_style(space))
 
 unique_nodes(space::SpectralElementSpace2D, quad::Quadratures.QuadratureStyle) =
     UniqueNodeIterator(space)
@@ -827,3 +790,49 @@ function Base.iterate(
         return ((i, j), e), ((i, j), e)
     end
 end
+
+
+abstract type AbstractPerimeter end
+
+"""
+    Perimeter2D <: AbstractPerimeter
+
+Iterate over the perimeter degrees of freedom of a 2D spectral element.
+"""
+struct Perimeter2D{Nq} <: AbstractPerimeter end
+
+"""
+    Perimeter2D(Nq)
+
+Construct a perimeter iterator for a 2D spectral element of degree `(Nq-1)`.
+"""
+Perimeter2D(Nq) = Perimeter2D{Nq}()
+Adapt.adapt_structure(to, x::Perimeter2D) = x
+
+function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 5
+        return (Topologies.vertex_node_index(loc, Nq), loc + 1)
+    elseif loc ≤ nperimeter2d(Nq)
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
+    else
+        return nothing
+    end
+end
+
+function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 1 || loc > nperimeter2d(Nq)
+        return (-1, -1)
+    elseif loc < 5
+        return Topologies.vertex_node_index(loc, Nq)
+    else
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return Topologies.face_node_index(f, Nq, 1 + n)
+    end
+end
+
+nperimeter2d(Nq) = 4 + (Nq - 2) * 4
+nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
+Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)

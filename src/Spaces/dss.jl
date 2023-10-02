@@ -43,10 +43,10 @@ function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     hspace::AbstractSpectralElementSpace,
 ) where {S, Nij}
-    @assert hspace.quadrature_style isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
-    topology = hspace.topology
+    @assert quadrature_style(hspace) isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
+    topology = topology(hspace)
     local_geometry = local_geometry_data(hspace)
-    local_weights = hspace.local_dss_weights
+    local_weights = hspace.grid.local_dss_weights
     perimeter = Spaces.perimeter(hspace)
     create_dss_buffer(data, topology, perimeter, local_geometry, local_weights)
 end
@@ -303,7 +303,7 @@ function weighted_dss_start!(
 )
     assert_same_eltype(data, dss_buffer)
     length(parent(data)) == 0 && return nothing
-    device = ClimaComms.device(hspace.topology)
+    device = ClimaComms.device(topology(hspace))
     dss_transform!(
         device,
         dss_buffer,
@@ -317,7 +317,7 @@ function weighted_dss_start!(
         device,
         dss_buffer.perimeter_data,
         Spaces.perimeter(hspace),
-        hspace.topology,
+        topology(hspace),
     )
     fill_send_buffer!(device, dss_buffer)
     ClimaComms.start(dss_buffer.graph_context)
@@ -373,13 +373,13 @@ function weighted_dss_internal!(
     length(parent(data)) == 0 && return nothing
     if hspace isa SpectralElementSpace1D
         dss_1d!(
-            hspace.topology,
+            topology(hspace),
             data,
             local_geometry_data(space),
             hspace.dss_weights,
         )
     else
-        device = ClimaComms.device(hspace.topology)
+        device = ClimaComms.device(topology(hspace))
         dss_transform!(
             device,
             dss_buffer,
@@ -393,7 +393,7 @@ function weighted_dss_internal!(
             device,
             dss_buffer.perimeter_data,
             Spaces.perimeter(hspace),
-            hspace.topology,
+            topology(hspace),
         )
         dss_untransform!(
             device,
@@ -451,14 +451,14 @@ function weighted_dss_ghost!(
 )
     assert_same_eltype(data, dss_buffer)
     length(parent(data)) == 0 && return data
-    device = ClimaComms.device(hspace.topology)
+    device = ClimaComms.device(topology(hspace))
     ClimaComms.finish(dss_buffer.graph_context)
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(
         device,
         dss_buffer.perimeter_data,
         Spaces.perimeter(hspace),
-        hspace.topology,
+        topology(hspace),
     )
     dss_untransform!(
         device,

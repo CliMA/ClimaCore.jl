@@ -54,7 +54,7 @@ LinearAdaption() = LinearAdaption(nothing)
 )
 
 # linear coordinates
-function ExtrudedFiniteDifferenceSpace(
+function ExtrudedFiniteDifferenceGrid(
     horizontal_space::Spaces.AbstractSpace,
     vertical_space::Spaces.FiniteDifferenceSpace,
     adaption::HypsographyAdaption,
