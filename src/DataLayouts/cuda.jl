@@ -115,7 +115,7 @@ function Base.fill!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(dest)
     if Nv > 0 && Nh > 0
-        Nv_per_block = fld(256, Nij * Nij)
+        Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
         CUDA.@cuda always_inline = true threads = (Nij, Nij, Nv_per_block) blocks =
             (Nh, Nv_blocks) knl_fill!(dest, val)
