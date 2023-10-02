@@ -127,8 +127,6 @@ FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
 
 
 
-
-
 abstract type Staggering end
 
 """
@@ -144,6 +142,17 @@ struct CellCenter <: Staggering end
 Cell face location
 """
 struct CellFace <: Staggering end
+
+# accessors
+
+local_geometry_data(::CellCenter, grid::FiniteDifferenceGrid) =
+    grid.center_local_geometry
+local_geometry_data(::CellFace, grid::FiniteDifferenceGrid) =
+    grid.face_local_geometry
+
+
+
+
 
 abstract type AbstractFiniteDifferenceSpace<: AbstractSpace end
 
@@ -161,6 +170,10 @@ end
 
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
+
+local_geometry_data(space::AbstractFiniteDifferenceSpace) =
+    local_geometry_data(space.staggering, space.grid)
+
 
 function Base.show(io::IO, space::FiniteDifferenceSpace)
     indent = get(io, :indent, 0)

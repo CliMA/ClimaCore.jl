@@ -3,8 +3,8 @@ abstract type AbstractSpectralElementSpace <: AbstractSpace end
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
     Topologies.nlocalelems(Spaces.topology(space))
 
-local_geometry_data(space::AbstractSpectralElementSpace) = space.local_geometry
-ghost_geometry_data(space::AbstractSpectralElementSpace) = space.ghost_geometry
+local_geometry_data(space::AbstractSpectralElementSpace) = local_geometry_data(space.grid)
+ghost_geometry_data(space::AbstractSpectralElementSpace) = ghost_geometry_data(space.grid)
 
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
@@ -152,6 +152,9 @@ end
         dss_weights,
     )
 end
+
+local_geometry_data(grid::SpectralElementGrid1D) = grid.local_geometry
+
 
 
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
@@ -536,6 +539,12 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
         boundary_surface_geometries,
     )
 end
+
+
+local_geometry_data(grid::SpectralElementGrid2D) = grid.local_geometry
+ghost_geometry_data(grid::SpectralElementGrid2D) = grid.ghost_geometry
+
+
 
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G
