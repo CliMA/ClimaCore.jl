@@ -88,32 +88,44 @@ end
 
 
 
-struct ExtudedFiniteDifferenceSpace{S<:Staggering,G<:ExtrudedFiniteDifferenceGrid} <: AbstractSpace
-    space::S
+struct ExtrudedFiniteDifferenceSpace{
+    S <: Staggering,
+    G <: ExtrudedFiniteDifferenceGrid,
+} <: AbstractSpace
+    staggering::S
     grid::G
 end
 
-const FaceExtrudedFiniteDifferenceSpace = ExtrudedFiniteDifferenceSpace{CellFace}
-const CenterExtrudedFiniteDifferenceSpace = ExtrudedFiniteDifferenceSpace{CellCenter}
+const FaceExtrudedFiniteDifferenceSpace =
+    ExtrudedFiniteDifferenceSpace{CellFace}
+const CenterExtrudedFiniteDifferenceSpace =
+    ExtrudedFiniteDifferenceSpace{CellCenter}
 
 
-ExtrudedFiniteDifferenceSpace{S}(grid::ExtrudedFiniteDifferenceGrid) where {S<:Staggering}=
-    ExtrudedFiniteDifferenceSpace(S(), grid)
-ExtrudedFiniteDifferenceSpace{S}(space::ExtrudedFiniteDifferenceSpace) where {S<:Staggering}=
-    ExtrudedFiniteDifferenceSpace{S}(space.grid)
+ExtrudedFiniteDifferenceSpace{S}(
+    grid::ExtrudedFiniteDifferenceGrid,
+) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace(S(), grid)
+ExtrudedFiniteDifferenceSpace{S}(
+    space::ExtrudedFiniteDifferenceSpace,
+) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(space.grid)
+
+
+face_space(space::ExtrudedFiniteDifferenceSpace) =
+    ExtrudedFiniteDifferenceSpace{CellFace}(space)
+center_space(space::ExtrudedFiniteDifferenceSpace) =
+    ExtrudedFiniteDifferenceSpace{CellCenter}(space)
+
+
+
 
 ExtrudedFiniteDifferenceSpace{S}(
     horizontal_space::AbstractSpace,
     vertical_space::FiniteDifferenceSpace,
     hypsography::HypsographyAdaption = Flat(),
-) = ExtrudedFiniteDifferenceSpace{S}(
-    ExtrudedFiniteDifferenceGrid(
-        horizontal_space,
-        vertical_space,
-        hypsography,
-    )
+) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(
+    ExtrudedFiniteDifferenceGrid(horizontal_space, vertical_space, hypsography),
 )
-    
+
 function issubspace(
     hspace::AbstractSpectralElementSpace,
     extruded_space::ExtrudedFiniteDifferenceSpace,
@@ -194,24 +206,18 @@ ghost_geometry_data(space::FaceExtrudedFiniteDifferenceSpace) =
     space.grid.face_ghost_geometry
 
 
+quadrature_style(space::ExtrudedFiniteDifferenceGrid) =
+    space.grid.horizontal_space.quadrature_style
+topology(space::ExtrudedFiniteDifferenceSpace) =
+    space.grid.horizontal_space.topology
 
-quadrature_style(space::ExtrudedFiniteDifferenceGrid ) =
-    space.horizontal_space.quadrature_style
-quadrature_style(space::FaceExtrudedFiniteDifferenceSpace) =
-    quadrature_style(space.center_space)
-
-topology(space::CenterExtrudedFiniteDifferenceSpace) =
-    space.horizontal_space.topology
-topology(space::FaceExtrudedFiniteDifferenceSpace) =
-    topology(space.center_space)
-
-topology(space::ExtrudedFiniteDifferenceSpace) = topology(horizontal_space(space))
 ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.device(topology(space))
-vertical_topology(space::CenterExtrudedFiniteDifferenceSpace) =
-    space.vertical_topology
-vertical_topology(space::FaceExtrudedFiniteDifferenceSpace) =
-    vertical_topology(space.center_space)
+    ClimaComms.device(space.grid)
+ClimaComms.context(space::ExtrudedFiniteDifferenceSpace) =
+    ClimaComms.context(space.grid)
+
+vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
+    space.grid.vertical_topology
 
 Base.@propagate_inbounds function slab(
     space::ExtrudedFiniteDifferenceSpace,
@@ -242,63 +248,39 @@ struct ColumnIndex{N}
 end
 
 
-
-struct ColumnGrid{G<:, C<:ColumnIndex} <: AbstractFiniteDifferenceGrid
-    space::S
-    column::C
-end
-
-const FaceColumnSpace = FaceSpace{<:CenterColumnSpace}
-
-const ColumnSpace = Union{
-    CenterColumnSpace,
-    FaceColumnSpace,
-}
-
-face_space(space::CenterColumnSpace) = 
-    FaceSpace(space)
-center_space(space::CenterColumnSpace) = 
-    space
-
-full_space(colspace::CenterColumnSpace) = colspace.space
-full_space(colspace::FaceColumnSpace) = FaceSpace(center_space(colspace).space)
-
-column(
-    space::CenterExtrudedFiniteDifferenceSpace,
-    colidx::ColumnIndex
-) =
-    CenterColumnSpace(space, colidx)
-
-column(
-    space::FaceExtrudedFiniteDifferenceSpace,
-    colidx::ColumnIndex
-) =
-    FaceSpace(CenterColumnSpace(center_space(space), colidx))
-    
-
-vertical_topology(space::ColumnSpace) = vertical_topology(full_space(space))
-
-function local_geometry_data(
-    columnspace::ColumnSpace,
-)
-    column(local_geometry_data(full_space(columnspace)), center_space(columnspace).column)
+struct ColumnGrid{G <: ExtrudedFiniteDifferenceGrid, C <: ColumnIndex} <:
+       AbstractFiniteDifferenceGrid
+    full_grid::G
+    colidx::C
 end
 
 
+column(grid::ExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
+    ColumnGrid(grid, colidx)
 
-ClimaComms.device(columnspace::ColumnSpace) =
-    ClimaComms.device(full_space(columnspace))
-ClimaComms.context(columnspace::ColumnSpace) =
-    ClimaComms.context(full_space(columnspace))
+
+function column(space::ExtrudedFiniteDifferenceSpace, colidx::ColumnIndex)
+    column_grid = column(space.grid, colidx)
+    FiniteDifferenceSpace(space.staggering, column_grid)
+end
+
+vertical_topology(colgrid::ColumnGrid) = colgrid.full_grid.vertical_topology
+
+function center_local_geometry_data(colgrid::ColumnGrid)
+    column(center_local_geometry_data(colgrid.full_grid), colgrid.colidx)
+end
+function face_local_geometry_data(colgrid::ColumnGrid)
+    column(face_local_geometry(colgrid.full_grid), colgrid.colidx)
+end
+
+topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
+
+ClimaComms.device(colgrid::ColumnGrid) = ClimaComms.device(colgrid.full_grid)
+ClimaComms.context(colgrid::ColumnGrid) = ClimaComms.context(colgrid.full_grid)
 
 
 # TODO: deprecate these
-column(
-    space::ExtrudedFiniteDifferenceSpace,
-    i,
-    j,
-    h,
-) = 
+column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
     column(space, ColumnIndex((i, j), h))
 
 

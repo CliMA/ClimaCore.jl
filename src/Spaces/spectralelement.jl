@@ -75,12 +75,13 @@ nperimeter2d(Nq) = 4 + (Nq - 2) * 4
 nperimeter(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 Base.length(::Perimeter2D{Nq}) where {Nq} = nperimeter2d(Nq)
 
+
 """
-    SpectralElementSpace1D <: AbstractSpace
+    SpectralElementGrid1D
 
 A one-dimensional space: within each element the space is represented as a polynomial.
 """
-struct SpectralElementSpace1D{
+mutable struct SpectralElementGrid1D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -94,9 +95,9 @@ struct SpectralElementSpace1D{
     dss_weights::D
 end
 
-function SpectralElementSpace1D(
+@memoize WeakValueDict function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
-    quadrature_style,
+    quadrature_style::Quadratures.QuadratureStyle,
 )
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
@@ -143,7 +144,7 @@ function SpectralElementSpace1D(
     dss_1d!(topology, dss_weights)
     dss_weights = one(FT) ./ dss_weights
 
-    return SpectralElementSpace1D(
+    return SpectralElementGrid1D(
         topology,
         quadrature_style,
         global_geometry,
@@ -152,21 +153,34 @@ function SpectralElementSpace1D(
     )
 end
 
+
+struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
+    grid::G
+end
+
+function SpectralElementSpace1D(
+    topology::Topologies.IntervalTopology,
+    quadrature_style::Quadratures.QuadratureStyle,
+)
+    grid = SpectralElementGrid1D(topology, quadrature_style)
+    SpectralElementSpace1D(grid)
+end
+
+
+
+
 nlevels(space::SpectralElementSpace1D) = 1
 
-const IntervalSpectralElementSpace1D = SpectralElementSpace1D{
-    <:Topologies.IntervalTopology{
-        <:ClimaComms.AbstractCommsContext,
-        <:Meshes.IntervalMesh,
-    },
-}
+
+
+
 
 """
     SpectralElementSpace2D <: AbstractSpace
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-mutable struct SpectralElementSpace2D{
+mutable struct SpectralElementGrid2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -174,7 +188,7 @@ mutable struct SpectralElementSpace2D{
     D,
     IS,
     BS,
-} <: AbstractSpectralElementSpace
+} 
     topology::T
     quadrature_style::Q
     global_geometry::GG
@@ -186,18 +200,17 @@ mutable struct SpectralElementSpace2D{
     boundary_surface_geometries::BS
 end
 
-Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
-    SpectralElementSpace2D(
-        nothing, # drop topology
-        Adapt.adapt(to, space.quadrature_style),
-        Adapt.adapt(to, space.global_geometry),
-        Adapt.adapt(to, space.local_geometry),
-        Adapt.adapt(to, space.ghost_geometry),
-        Adapt.adapt(to, space.local_dss_weights),
-        Adapt.adapt(to, space.ghost_dss_weights),
-        Adapt.adapt(to, space.internal_surface_geometry),
-        Adapt.adapt(to, space.boundary_surface_geometries),
-    )
+struct DeviceSpectralElementGrid2D{Q,GG,LG}
+    quadrature_style::Q
+    global_geometry::GG
+    local_geometry::LG
+end
+Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
+    DeviceSpectralElementGrid2D(
+            Adapt.adapt(to, grid.quadrature_style),
+            Adapt.adapt(to, grid.global_geometry),
+            Adapt.adapt(to, grid.local_geometry),
+        )
 
 
 
@@ -233,7 +246,7 @@ where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
 [`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
-@memoize WeakValueDict function SpectralElementSpace2D(
+@memoize WeakValueDict function SpectralElementGrid2D(
     topology,
     quadrature_style;
     enable_bubble = false,
@@ -511,7 +524,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
         internal_surface_geometry = nothing
         boundary_surface_geometries = nothing
     end
-    return SpectralElementSpace2D(
+    return SpectralElementGrid2D(
         topology,
         quadrature_style,
         global_geometry,
@@ -524,10 +537,18 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     )
 end
 
+struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
+    grid::G
+end
+
+SpectralElementSpace2D(topology::Topologies.Topology2D, quadrature_style) =
+SpectralElementSpace2D(SpectralElementGrid2D(topology, quadrature_style))
+
 nlevels(space::SpectralElementSpace2D) = 1
 perimeter(space::SpectralElementSpace2D) =
     Perimeter2D(Quadratures.degrees_of_freedom(space.quadrature_style))
 
+    #=
 const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
     <:Topologies.Topology2D{
         <:ClimaComms.AbstractCommsContext,
@@ -541,7 +562,7 @@ const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
         <:Meshes.AbstractCubedSphere,
     },
 }
-
+=#
 function compute_local_geometry(
     global_geometry::Geometry.SphericalGlobalGeometry,
     topology,

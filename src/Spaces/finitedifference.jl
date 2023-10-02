@@ -1,3 +1,4 @@
+abstract type AbstractFiniteDifferenceGrid end
 
 """
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
@@ -180,13 +181,17 @@ end
 
 FiniteDifferenceSpace{S}(grid::FiniteDifferenceGrid) where {S<:Staggering}=
     FiniteDifferenceSpace(S(), grid)
+FiniteDifferenceSpace{S}(space::FiniteDifferenceSpace) where {S<:Staggering}=
+    FiniteDifferenceSpace(S(), space.grid)
 FiniteDifferenceSpace{S}(topology::Topologies.IntervalTopology) where {S<:Staggering}=
     FiniteDifferenceSpace{S}(FiniteDifferenceGrid(topology))
 FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S<:Staggering}=
     FiniteDifferenceSpace{S}(FiniteDifferenceGrid(mesh))
 
-
-
+face_space(space::FiniteDifferenceSpace) =
+    FiniteDifferenceSpace{CellFace}(space)
+center_space(space::FiniteDifferenceSpace) =
+    FiniteDifferenceSpace{CellCenter}(space)
 
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
     space.staggering,
