@@ -125,10 +125,9 @@ function vtk_cells_linear(gridspace::Spaces.SpectralElementSpace2D)
 end
 
 function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
-    Nq = Spaces.Quadratures.degrees_of_freedom(
-        gridspace.horizontal_space.quadrature_style,
-    )
-    Nh = Topologies.nlocalelems(gridspace.horizontal_space)
+    hspace = Spaces.horizontal_space(gridspace)
+    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
+    Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
     ind = LinearIndices((1:Nv, 1:Nq, 1:Nh)) # assume VIFH
     cells = [
@@ -145,10 +144,9 @@ function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
     return vec(cells)
 end
 function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace3D)
-    Nq = Spaces.Quadratures.degrees_of_freedom(
-        gridspace.horizontal_space.quadrature_style,
-    )
-    Nh = Topologies.nlocalelems(gridspace.horizontal_space)
+    hspace = Spaces.horizontal_space(gridspace)
+    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
+    Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
     ind = LinearIndices((1:Nv, 1:Nq, 1:Nq, 1:Nh)) # assumes VIJFH
     cells = [
@@ -199,7 +197,7 @@ function vtk_grid_space(space::Spaces.SpectralElementSpace2D)
 end
 function vtk_grid_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
-    horizontal_space = vtk_grid_space(space.horizontal_space)
+    horizontal_space = vtk_grid_space(Spaces.horizontal_space(space))
     vertical_space = Spaces.FaceFiniteDifferenceSpace(space.vertical_topology)
     return Spaces.ExtrudedFiniteDifferenceSpace(
         horizontal_space,
@@ -241,7 +239,7 @@ function vtk_cell_space(gridspace::Spaces.SpectralElementSpace2D)
 end
 function vtk_cell_space(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
-    horizontal_space = vtk_cell_space(gridspace.horizontal_space)
+    horizontal_space = vtk_cell_space(Spaces.horizontal_space(gridspace))
     vertical_space =
         Spaces.CenterFiniteDifferenceSpace(gridspace.vertical_topology)
     return Spaces.ExtrudedFiniteDifferenceSpace(

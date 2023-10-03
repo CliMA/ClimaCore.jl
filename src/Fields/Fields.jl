@@ -39,7 +39,7 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 
 ClimaComms.context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.context(space.horizontal_space)
+    ClimaComms.context(Spaces.horizontal_space(space))
 ClimaComms.context(space::Spaces.SpectralElementSpace2D) =
     ClimaComms.context(space.topology)
 ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
@@ -403,9 +403,7 @@ Create a buffer for communicating neighbour information of `field`.
 """
 function Spaces.create_dss_buffer(field::Field)
     space = axes(field)
-    hspace =
-        space isa Spaces.ExtrudedFiniteDifferenceSpace ?
-        space.horizontal_space : space
+    hspace = Spaces.horizontal_space(space)
     Spaces.create_dss_buffer(field_values(field), hspace)
 end
 # Add definitions for backward compatibility
