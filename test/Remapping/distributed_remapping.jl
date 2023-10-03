@@ -5,7 +5,7 @@ using IntervalSets
 import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Remapping
 using ClimaComms
-const context = ClimaComms.MPICommsContext()
+const context = ClimaComms.context()
 const pid, nprocs = ClimaComms.init(context)
 const device = ClimaComms.CPUSingleThreaded()
 

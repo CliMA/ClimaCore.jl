@@ -153,7 +153,7 @@ function Remapper(target_hcoords, target_zcoords, space)
     interpolation_coeffs = map(local_target_hcoords) do hcoord
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
-        return interpolation_weights(horz_mesh, helem, hcoord, quad_points)
+        return interpolation_weights(horz_mesh, hcoord, quad_points)
     end
 
     # For 2D meshes, we have a notion of local and global indices. This is not the case for

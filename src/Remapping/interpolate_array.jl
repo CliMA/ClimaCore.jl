@@ -111,8 +111,8 @@ function interpolate_array(
 
     FT = Spaces.undertype(space)
     for (ix, xcoord) in enumerate(xpts)
-        helem = Meshes.containing_element(horz_mesh, hcoord)
         hcoord = xcoord
+        helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
         weights = interpolation_weights(horz_mesh, hcoord, quad_points)
@@ -142,8 +142,8 @@ function interpolate_array(
 
     FT = Spaces.undertype(space)
     for (iy, ycoord) in enumerate(ypts), (ix, xcoord) in enumerate(xpts)
-        helem = Meshes.containing_element(horz_mesh, hcoord)
         hcoord = Geometry.product_coordinates(xcoord, ycoord)
+        helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
         weights = interpolation_weights(horz_mesh, hcoord, quad_points)
