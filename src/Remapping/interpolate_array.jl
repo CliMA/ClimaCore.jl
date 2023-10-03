@@ -111,17 +111,15 @@ function interpolate_array(
 
     FT = Spaces.undertype(space)
     for (ix, xcoord) in enumerate(xpts)
-
-        hcoord = xcoord
         helem = Meshes.containing_element(horz_mesh, hcoord)
-        ξ1, = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+        hcoord = xcoord
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
-        WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
+        weights = interpolation_weights(horz_mesh, hcoord, quad_points)
         h = helem
 
         for (iz, zcoord) in enumerate(zpts)
-            array[ix, iz] = interpolate_slab_level(field, h, (WI1,), zcoord)
+            array[ix, iz] = interpolate_slab_level(field, h, weights, zcoord)
         end
     end
     return array
@@ -144,23 +142,51 @@ function interpolate_array(
 
     FT = Spaces.undertype(space)
     for (iy, ycoord) in enumerate(ypts), (ix, xcoord) in enumerate(xpts)
-
-        hcoord = Geometry.product_coordinates(xcoord, ycoord)
         helem = Meshes.containing_element(horz_mesh, hcoord)
-        ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+        hcoord = Geometry.product_coordinates(xcoord, ycoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
-        WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
-        WI2 = Spaces.Quadratures.interpolation_matrix(SVector(ξ2), quad_points)
+        weights = interpolation_weights(horz_mesh, hcoord, quad_points)
         gidx = horz_topology.orderindex[helem]
         h = gidx
 
         for (iz, zcoord) in enumerate(zpts)
             array[ix, iy, iz] =
-                interpolate_slab_level(field, h, (WI1, WI2), zcoord)
+                interpolate_slab_level(field, h, weights, zcoord)
         end
     end
     return array
+end
+
+"""
+    interpolation_weights(horz_mesh, hcoord, quad_points)
+
+Return the weights (tuple of arrays) to interpolate fields onto `hcoord` on the
+given mesh and quadrature points.
+"""
+function interpolation_weights end
+
+function interpolation_weights(
+    horz_mesh::Meshes.AbstractMesh2D,
+    hcoord,
+    quad_points,
+)
+    helem = Meshes.containing_element(horz_mesh, hcoord)
+    ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+    WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
+    WI2 = Spaces.Quadratures.interpolation_matrix(SVector(ξ2), quad_points)
+    return (WI1, WI2)
+end
+
+function interpolation_weights(
+    horz_mesh::Meshes.AbstractMesh1D,
+    hcoord,
+    quad_points,
+)
+    helem = Meshes.containing_element(horz_mesh, hcoord)
+    ξ1, = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
+    WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
+    return (WI1,)
 end
 
 """

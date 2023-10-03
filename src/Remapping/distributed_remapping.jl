@@ -151,23 +151,9 @@ function Remapper(target_hcoords, target_zcoords, space)
     horz_mesh = horizontal_topology.mesh
 
     interpolation_coeffs = map(local_target_hcoords) do hcoord
-        helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
         quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
-        ξ = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
-        WI1 = Spaces.Quadratures.interpolation_matrix(
-            SVector(ξ[1]),
-            quad_points,
-        )
-        if is_1d
-            return (WI1,)
-        else
-            WI2 = Spaces.Quadratures.interpolation_matrix(
-                SVector(ξ[2]),
-                quad_points,
-            )
-            return (WI1, WI2)
-        end
+        return interpolation_weights(horz_mesh, helem, hcoord, quad_points)
     end
 
     # For 2D meshes, we have a notion of local and global indices. This is not the case for
