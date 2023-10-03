@@ -328,16 +328,6 @@ function interpcoord(elemrange, x::Real)
 end
 
 """
-    Spaces.variational_solve!(field)
-
-Divide `field` by the mass matrix.
-"""
-function Spaces.variational_solve!(field::Field)
-    Spaces.variational_solve!(field_values(field), axes(field))
-    return field
-end
-
-"""
     Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_dss_buffer(field)])
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place

@@ -44,11 +44,16 @@ function create_dss_buffer(
     hspace::AbstractSpectralElementSpace,
 ) where {S, Nij}
     @assert quadrature_style(hspace) isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
-    topology = topology(hspace)
     local_geometry = local_geometry_data(hspace)
-    local_weights = hspace.grid.local_dss_weights
+    local_weights = local_dss_weights(hspace)
     perimeter = Spaces.perimeter(hspace)
-    create_dss_buffer(data, topology, perimeter, local_geometry, local_weights)
+    create_dss_buffer(
+        data,
+        topology(hspace),
+        perimeter,
+        local_geometry,
+        local_weights,
+    )
 end
 
 function create_dss_buffer(
@@ -309,7 +314,7 @@ function weighted_dss_start!(
         dss_buffer,
         data,
         local_geometry_data(space),
-        hspace.local_dss_weights,
+        local_dss_weights(hspace),
         Spaces.perimeter(hspace),
         dss_buffer.perimeter_elems,
     )
@@ -376,7 +381,7 @@ function weighted_dss_internal!(
             topology(hspace),
             data,
             local_geometry_data(space),
-            hspace.dss_weights,
+            local_dss_weights(space),
         )
     else
         device = ClimaComms.device(topology(hspace))
@@ -385,7 +390,7 @@ function weighted_dss_internal!(
             dss_buffer,
             data,
             local_geometry_data(space),
-            hspace.local_dss_weights,
+            local_dss_weights(space),
             Spaces.perimeter(hspace),
             dss_buffer.internal_elems,
         )

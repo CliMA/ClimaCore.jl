@@ -27,7 +27,6 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     A <: HypsographyAdaption,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
-    LGG,
 } <: AbstractGrid
     horizontal_grid::H
     vertical_topology::T # should we cache the vertical grid?
@@ -35,12 +34,10 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     global_geometry::GG
     center_local_geometry::LG
     face_local_geometry::LG
-    center_ghost_geometry::LGG
-    face_ghost_geometry::LGG
 end
 
 @memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D,SpectralElementGrid2D},
+    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat = Flat(),
 )
@@ -57,21 +54,6 @@ end
             vertical_grid.face_local_geometry,
         )
 
-    if horizontal_grid isa SpectralElementGrid2D
-        center_ghost_geometry =
-            product_geometry.(
-                horizontal_grid.ghost_geometry,
-                vertical_grid.center_local_geometry,
-            )
-        face_ghost_geometry =
-            product_geometry.(
-                horizontal_grid.ghost_geometry,
-                vertical_grid.face_local_geometry,
-            )
-    else
-        center_ghost_geometry = nothing
-        face_ghost_geometry = nothing
-    end
     return ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
         vertical_topology,
@@ -79,8 +61,6 @@ end
         global_geometry,
         center_local_geometry,
         face_local_geometry,
-        center_ghost_geometry,
-        face_ghost_geometry,
     )
 end
 
@@ -122,7 +102,10 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace{S}(grid)
 end
 
-
+local_dss_weights(grid::ExtrudedFiniteDifferenceGrid) =
+    local_dss_weights(grid.horizontal_grid)
+local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
+    local_dss_weights(space.grid)
 
 face_space(space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace{CellFace}(space)
@@ -165,8 +148,6 @@ Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
         Adapt.adapt(to, space.global_geometry),
         Adapt.adapt(to, space.center_local_geometry),
         Adapt.adapt(to, space.face_local_geometry),
-        Adapt.adapt(to, space.center_ghost_geometry),
-        Adapt.adapt(to, space.face_ghost_geometry),
     )
 
 
@@ -218,30 +199,30 @@ local_geometry_data(::CellFace, grid::ExtrudedFiniteDifferenceGrid) =
 local_geometry_data(space::ExtrudedFiniteDifferenceSpace) =
     local_geometry_data(space.staggering, space.grid)
 
-ghost_geometry_data(::CellCenter, grid::ExtrudedFiniteDifferenceGrid) =
-    grid.center_ghost_geometry
-ghost_geometry_data(::CellFace, grid::ExtrudedFiniteDifferenceGrid) =
-    grid.face_ghost_geometry
-ghost_geometry_data(space::ExtrudedFiniteDifferenceSpace) =
-    ghost_geometry_data(space.staggering, space.grid)
-
-
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     quadrature_style(space.grid)
-topology(grid::ExtrudedFiniteDifferenceGrid) =
-    grid.horizontal_space.topology
-topology(space::ExtrudedFiniteDifferenceSpace) =
-    space.grid.horizontal_space.topology
+topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
+topology(space::ExtrudedFiniteDifferenceSpace) = topology(space.grid)
+
+
+ClimaComms.device(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.device(topology(grid))
+ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
+    ClimaComms.context(topology(grid))
 
 ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.device(space.grid)
 ClimaComms.context(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.context(space.grid)
 
+horizontal_space(space::ExtrudedFiniteDifferenceSpace) =
+    AbstractSpectralElementSpace(space.grid.horizontal_grid)
+
+vertical_topology(grid::ExtrudedFiniteDifferenceGrid) = grid.vertical_topology
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
-    space.grid.vertical_topology
+    vertical_topology(space.grid)
 
 Base.@propagate_inbounds function slab(
     space::ExtrudedFiniteDifferenceSpace,
@@ -290,12 +271,8 @@ end
 
 vertical_topology(colgrid::ColumnGrid) = colgrid.full_grid.vertical_topology
 
-function center_local_geometry_data(colgrid::ColumnGrid)
-    column(center_local_geometry_data(colgrid.full_grid), colgrid.colidx)
-end
-function face_local_geometry_data(colgrid::ColumnGrid)
-    column(face_local_geometry(colgrid.full_grid), colgrid.colidx)
-end
+local_geometry_data(staggering::Staggering, colgrid::ColumnGrid) =
+    column(local_geometry_data(staggering, colgrid.full_grid), colgrid.colidx)
 
 topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
@@ -335,11 +312,8 @@ function column(levelspace::LevelSpace, args...)
 end
 
 
-nlevels(space::CenterExtrudedFiniteDifferenceSpace) =
-    size(space.center_local_geometry, 4)
-
-nlevels(space::FaceExtrudedFiniteDifferenceSpace) =
-    size(center_space(space).face_local_geometry, 4)
+nlevels(space::ExtrudedFiniteDifferenceSpace) =
+    size(local_geometry_data(space), 4)
 
 function left_boundary_name(space::ExtrudedFiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.vertical_topology(space))

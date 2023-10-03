@@ -2,14 +2,19 @@ import ..Utilities: PlusHalf, half
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
-const AllFaceFiniteDifferenceSpace =
-    Union{Spaces.FaceFiniteDifferenceSpace, Spaces.FaceExtrudedFiniteDifferenceSpace}
-const AllCenterFiniteDifferenceSpace =
-    Union{Spaces.CenterFiniteDifferenceSpace, Spaces.CenterExtrudedFiniteDifferenceSpace}
+const AllFaceFiniteDifferenceSpace = Union{
+    Spaces.FaceFiniteDifferenceSpace,
+    Spaces.FaceExtrudedFiniteDifferenceSpace,
+}
+const AllCenterFiniteDifferenceSpace = Union{
+    Spaces.CenterFiniteDifferenceSpace,
+    Spaces.CenterExtrudedFiniteDifferenceSpace,
+}
 
 
 
-left_idx(space::AllCenterFiniteDifferenceSpace) = left_center_boundary_idx(space)
+left_idx(space::AllCenterFiniteDifferenceSpace) =
+    left_center_boundary_idx(space)
 right_idx(space::AllCenterFiniteDifferenceSpace) =
     right_center_boundary_idx(space)
 left_idx(space::AllFaceFiniteDifferenceSpace) = left_face_boundary_idx(space)
@@ -39,13 +44,8 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    return @inbounds Spaces.center_space(space).center_local_geometry[CartesianIndex(
-        i,
-        j,
-        1,
-        v,
-        h,
-    )]
+    local_geom = Spaces.local_geometry_data(Spaces.CellCenter(), space.grid)
+    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
     space::AllFiniteDifferenceSpace,
@@ -57,13 +57,8 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    return @inbounds Spaces.center_space(space).face_local_geometry[CartesianIndex(
-        i,
-        j,
-        1,
-        v,
-        h,
-    )]
+    local_geom = Spaces.local_geometry_data(Spaces.CellFace(), space.grid)
+    return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
 end
 
 

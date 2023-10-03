@@ -36,7 +36,9 @@ undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
-
+coordinates_data(grid::AbstractGrid) = local_geometry_data(grid).coordinates
+coordinates_data(staggering, grid::AbstractGrid) =
+    local_geometry_data(staggering, grid).coordinates
 
 ClimaComms.context(space::Spaces.AbstractSpace) =
     ClimaComms.context(Spaces.topology(space))
@@ -52,11 +54,6 @@ include("triangulation.jl")
 include("dss_transform.jl")
 include("dss.jl")
 
-horizontal_space(space::CenterExtrudedFiniteDifferenceSpace) = 
-    space.horizontal_space
-horizontal_space(space::FaceExtrudedFiniteDifferenceSpace) =
-    horizontal_space(center_space(space))
-horizontal_space(space::AbstractSpace) = space
 
 weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
 

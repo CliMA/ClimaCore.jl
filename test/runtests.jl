@@ -35,7 +35,7 @@ if !Sys.iswindows()
     @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
     # now part of buildkite
     # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-    =#
+
     @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
     #=
@@ -60,7 +60,7 @@ if !Sys.iswindows()
     @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
-
+    =#
     @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
     @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
     @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end

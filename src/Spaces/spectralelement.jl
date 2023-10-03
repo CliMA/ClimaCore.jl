@@ -3,9 +3,11 @@ abstract type AbstractSpectralElementSpace <: AbstractSpace end
 Topologies.nlocalelems(space::AbstractSpectralElementSpace) =
     Topologies.nlocalelems(Spaces.topology(space))
 
-local_geometry_data(space::AbstractSpectralElementSpace) = local_geometry_data(space.grid)
-ghost_geometry_data(space::AbstractSpectralElementSpace) = ghost_geometry_data(space.grid)
-quadrature_style(space::AbstractSpectralElementSpace) = quadrature_style(space.grid)
+local_geometry_data(space::AbstractSpectralElementSpace) =
+    local_geometry_data(space.grid)
+
+quadrature_style(space::AbstractSpectralElementSpace) =
+    quadrature_style(space.grid)
 
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
@@ -30,6 +32,7 @@ ClimaComms.device(space::AbstractSpectralElementSpace) =
 ClimaComms.array_type(space::AbstractSpectralElementSpace) =
     ClimaComms.array_type(ClimaComms.device(space))
 topology(space::AbstractSpectralElementSpace) = topology(space.grid)
+horizontal_space(space::AbstractSpectralElementSpace) = space
 
 
 abstract type AbstractSpectralElementGrid <: AbstractGrid end
@@ -115,6 +118,8 @@ local_geometry_data(grid::SpectralElementGrid1D) = grid.local_geometry
 topology(grid::SpectralElementGrid1D) = grid.topology
 quadrature_style(grid::SpectralElementGrid1D) = grid.quadrature_style
 
+local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
+
 
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G
@@ -128,7 +133,8 @@ function SpectralElementSpace1D(
     SpectralElementSpace1D(grid)
 end
 
-
+AbstractSpectralElementSpace(grid::SpectralElementGrid1D) =
+    SpectralElementSpace1D(grid)
 
 
 nlevels(space::SpectralElementSpace1D) = 1
@@ -155,25 +161,23 @@ mutable struct SpectralElementGrid2D{
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
-    ghost_geometry::LG
     local_dss_weights::D
-    ghost_dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
 end
 
-struct DeviceSpectralElementGrid2D{Q,GG,LG} <: AbstractGrid
+struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
-end 
+end
 
 Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
     DeviceSpectralElementGrid2D(
-            Adapt.adapt(to, grid.quadrature_style),
-            Adapt.adapt(to, grid.global_geometry),
-            Adapt.adapt(to, grid.local_geometry),
-        )
+        Adapt.adapt(to, grid.quadrature_style),
+        Adapt.adapt(to, grid.global_geometry),
+        Adapt.adapt(to, grid.local_geometry),
+    )
 
 
 
@@ -253,7 +257,6 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
     local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nlelems)
-    ghost_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, ngelems)
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -388,7 +391,6 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     # alternatively, we could do a ghost exchange here?
     if topology isa Topologies.Topology2D
         for (ridx, elem) in enumerate(Topologies.ghostelems(topology))
-            ghost_geometry_slab = slab(ghost_geometry, ridx)
             for i in 1:Nq, j in 1:Nq
                 ξ = SVector(quad_points[i], quad_points[j])
                 u, ∂u∂ξ = compute_local_geometry(
@@ -401,12 +403,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
                 J = det(Geometry.components(∂u∂ξ))
                 WJ = J * quad_weights[i] * quad_weights[j]
 
-                ghost_geometry_slab[i, j] =
-                    Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
             end
-        end
-        if !isnothing(ghost_geometry) && DA ≠ Array
-            ghost_geometry = DataLayouts.rebuild(ghost_geometry, DA)
         end
     end
     # dss_weights = J ./ dss(J)
@@ -416,7 +413,6 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
         dss!(dss_local_weights, topology, quadrature_style)
     end
     dss_local_weights .= J ./ dss_local_weights
-    dss_ghost_weights = copy(J) # not currently used
 
     SG = Geometry.SurfaceGeometry{
         FT,
@@ -492,9 +488,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
         quadrature_style,
         global_geometry,
         DataLayouts.rebuild(local_geometry, DA),
-        ghost_geometry,
         dss_local_weights,
-        dss_ghost_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
     )
@@ -502,14 +496,18 @@ end
 
 
 local_geometry_data(grid::SpectralElementGrid2D) = grid.local_geometry
-ghost_geometry_data(grid::SpectralElementGrid2D) = grid.ghost_geometry
 topology(grid::SpectralElementGrid2D) = grid.topology
 quadrature_style(grid::SpectralElementGrid2D) = grid.quadrature_style
 
+local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G
 end
+
+AbstractSpectralElementSpace(grid::SpectralElementGrid2D) =
+    SpectralElementSpace2D(grid)
+
 
 SpectralElementSpace2D(topology::Topologies.Topology2D, quadrature_style) =
     SpectralElementSpace2D(SpectralElementGrid2D(topology, quadrature_style))
@@ -518,21 +516,27 @@ nlevels(space::SpectralElementSpace2D) = 1
 perimeter(space::SpectralElementSpace2D) =
     Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style(space)))
 
+local_geometry_data(space::SpectralElementSpace2D) =
+    local_geometry_data(space.grid)
+topology(space::SpectralElementSpace2D) = topology(space.grid)
+quadrature_style(space::SpectralElementSpace2D) = quadrature_style(space.grid)
+
+local_dss_weights(space::SpectralElementSpace2D) = local_dss_weights(space.grid)
 
 
-    #=
+#=
 const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.Topology2D{
-        <:ClimaComms.AbstractCommsContext,
-        <:Meshes.RectilinearMesh,
-    },
+<:Topologies.Topology2D{
+    <:ClimaComms.AbstractCommsContext,
+    <:Meshes.RectilinearMesh,
+},
 }
 
 const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
-    <:Topologies.Topology2D{
-        <:ClimaComms.AbstractCommsContext,
-        <:Meshes.AbstractCubedSphere,
-    },
+<:Topologies.Topology2D{
+    <:ClimaComms.AbstractCommsContext,
+    <:Meshes.AbstractCubedSphere,
+},
 }
 =#
 function compute_local_geometry(
@@ -600,10 +604,6 @@ function compute_surface_geometry(
     sWJ = norm(n)
     n = n / sWJ
     return Geometry.SurfaceGeometry(sWJ, n)
-end
-
-function variational_solve!(data, space::AbstractSpace)
-    data .= RecursiveApply.rdiv.(data, space.local_geometry.WJ)
 end
 
 """

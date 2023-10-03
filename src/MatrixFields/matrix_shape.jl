@@ -17,8 +17,8 @@ matrix_shape(matrix_field, matrix_space = axes(matrix_field)) = _matrix_shape(
 )
 
 _matrix_shape(::Type{Int}, _) = Square()
-#_matrix_shape(::Type{PlusHalf{Int}}, ::Spaces.CellCenter) = FaceToCenter()
-#_matrix_shape(::Type{PlusHalf{Int}}, ::Spaces.CellFace) = CenterToFace()
+_matrix_shape(::Type{PlusHalf{Int}}, ::Spaces.CellCenter) = FaceToCenter()
+_matrix_shape(::Type{PlusHalf{Int}}, ::Spaces.CellFace) = CenterToFace()
 
 """
     column_axes(matrix_field, [matrix_space])

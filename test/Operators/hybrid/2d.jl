@@ -308,7 +308,8 @@ end
         hv_center_space, hv_face_space =
             hvspace_2D(xlim = (-1, 1), zlim = (-1, 1), helem = n, velem = n)
         ccoords = Fields.coordinate_field(hv_center_space)
-        bcoords = Fields.coordinate_field(Spaces.horizontal_space(hv_center_space))
+        bcoords =
+            Fields.coordinate_field(Spaces.horizontal_space(hv_center_space))
 
         Δh[k] = 1.0 / n
 

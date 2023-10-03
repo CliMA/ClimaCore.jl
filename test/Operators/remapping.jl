@@ -174,14 +174,14 @@ end
             @test monotone(R)
 
             @testset "Scalar Remap Operator Application" begin
-                n = length(source.local_geometry)
+                n = length(Spaces.local_geometry_data(source))
                 source_field =
                     Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
                 @test vec(parent(target_field)) ≈
-                      ones(length(target.local_geometry))
+                      ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
                 vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
@@ -245,14 +245,14 @@ end
             @test monotone(R)
 
             @testset "Scalar Remap Operator Application" begin
-                n = length(source.local_geometry)
+                n = length(Spaces.local_geometry_data(source))
                 source_field =
                     Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
                 @test vec(parent(target_field)) ≈
-                      ones(length(target.local_geometry))
+                      ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
                 vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
@@ -299,14 +299,14 @@ end
             @test monotone(R)
 
             @testset "Scalar Remap Operator Application" begin
-                n = length(source.local_geometry)
+                n = length(Spaces.local_geometry_data(source))
                 source_field =
                     Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
                 @test vec(parent(target_field)) ≈
-                      ones(length(target.local_geometry))
+                      ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
                 vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
@@ -374,14 +374,14 @@ end
             @test monotone(R)
 
             @testset "Scalar Remap Operator Application" begin
-                n = length(source.local_geometry)
+                n = length(Spaces.local_geometry_data(source))
                 source_field =
                     Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
                 @test vec(parent(target_field)) ≈
-                      ones(length(target.local_geometry))
+                      ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
                 vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]

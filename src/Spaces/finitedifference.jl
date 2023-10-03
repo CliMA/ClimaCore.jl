@@ -1,4 +1,4 @@
-abstract type AbstractFiniteDifferenceGrid end
+abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
@@ -23,6 +23,7 @@ mutable struct FiniteDifferenceGrid{
 end
 
 topology(grid::FiniteDifferenceGrid) = grid.topology
+Meshes.domain(grid::FiniteDifferenceGrid) = Meshes.domain(topology(grid))
 
 ClimaComms.context(grid::FiniteDifferenceGrid) =
     ClimaComms.context(topology(grid))
@@ -125,8 +126,6 @@ FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
 
 
 
-
-
 abstract type Staggering end
 
 """
@@ -154,7 +153,7 @@ local_geometry_data(::CellFace, grid::FiniteDifferenceGrid) =
 
 
 
-abstract type AbstractFiniteDifferenceSpace<: AbstractSpace end
+abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
 """
     FiniteDifferenceSpace(staggering::Staggering, grid::FiniteDifferenceGrid)
@@ -162,7 +161,7 @@ abstract type AbstractFiniteDifferenceSpace<: AbstractSpace end
 """
 struct FiniteDifferenceSpace{
     S <: Staggering,
-    G <: AbstractFiniteDifferenceGrid
+    G <: AbstractFiniteDifferenceGrid,
 } <: AbstractFiniteDifferenceSpace
     staggering::S
     grid::G
@@ -171,8 +170,12 @@ end
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 
-local_geometry_data(space::AbstractFiniteDifferenceSpace) =
+local_geometry_data(space::FiniteDifferenceSpace) =
     local_geometry_data(space.staggering, space.grid)
+
+ClimaComms.context(space::FiniteDifferenceSpace) =
+    ClimaComms.context(space.grid)
+ClimaComms.device(space::FiniteDifferenceSpace) = ClimaComms.device(space.grid)
 
 
 function Base.show(io::IO, space::FiniteDifferenceSpace)
@@ -192,13 +195,15 @@ end
 
 
 
-FiniteDifferenceSpace{S}(grid::FiniteDifferenceGrid) where {S<:Staggering}=
+FiniteDifferenceSpace{S}(grid::FiniteDifferenceGrid) where {S <: Staggering} =
     FiniteDifferenceSpace(S(), grid)
-FiniteDifferenceSpace{S}(space::FiniteDifferenceSpace) where {S<:Staggering}=
+FiniteDifferenceSpace{S}(space::FiniteDifferenceSpace) where {S <: Staggering} =
     FiniteDifferenceSpace(S(), space.grid)
-FiniteDifferenceSpace{S}(topology::Topologies.IntervalTopology) where {S<:Staggering}=
+FiniteDifferenceSpace{S}(
+    topology::Topologies.IntervalTopology,
+) where {S <: Staggering} =
     FiniteDifferenceSpace{S}(FiniteDifferenceGrid(topology))
-FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S<:Staggering}=
+FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
     FiniteDifferenceSpace{S}(FiniteDifferenceGrid(mesh))
 
 face_space(space::FiniteDifferenceSpace) =
