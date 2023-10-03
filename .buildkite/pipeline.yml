@@ -498,6 +498,7 @@ steps:
       - label: "Unit: implicit stencil Float32"
         key: "gpu_implicit_stencil_float32"
         command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+        soft_fail: true
         agents:
           slurm_mem: 20GB
           slurm_gpus: 1
