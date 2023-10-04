@@ -30,6 +30,12 @@ abstract type AbstractGrid end
 
 abstract type AbstractSpace end
 
+grid(space::AbstractSpace) = space.grid
+staggering(space::AbstractSpace) = nothing
+
+function space end
+
+
 issubspace(::AbstractSpace, ::AbstractSpace) = false
 
 undertype(space::AbstractSpace) =

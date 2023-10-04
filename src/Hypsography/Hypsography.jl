@@ -192,7 +192,7 @@ LinearAdaption() = LinearAdaption(nothing)
 
     return ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
-        Spaces.topology(vertical_grid),
+        vertical_grid,
         adaption,
         ref_grid.global_geometry,
         center_local_geometry,

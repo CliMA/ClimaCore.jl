@@ -23,13 +23,13 @@ Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spa
 """
 mutable struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
-    T <: Topologies.AbstractIntervalTopology,
+    V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
 } <: AbstractGrid
     horizontal_grid::H
-    vertical_topology::T # should we cache the vertical grid?
+    vertical_grid::V
     hypsography::A
     global_geometry::GG
     center_local_geometry::LG
@@ -41,7 +41,6 @@ end
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat = Flat(),
 )
-    vertical_topology = vertical_grid.topology
     global_geometry = horizontal_grid.global_geometry
     center_local_geometry =
         product_geometry.(
@@ -56,7 +55,7 @@ end
 
     return ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
-        vertical_topology,
+        vertical_grid,
         hypsography,
         global_geometry,
         center_local_geometry,
@@ -74,6 +73,10 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
     grid::G
 end
+
+
+space(staggering::Staggering, grid::ExtrudedFiniteDifferenceGrid) =
+    ExtrudedFiniteDifferenceSpace(staggering, grid)
 
 const FaceExtrudedFiniteDifferenceSpace =
     ExtrudedFiniteDifferenceSpace{CellFace}
@@ -113,7 +116,7 @@ center_space(space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace{CellCenter}(space)
 
 
-
+staggering(space::ExtrudedFiniteDifferenceSpace) = space.staggering
 
 ExtrudedFiniteDifferenceSpace{S}(
     horizontal_space::AbstractSpace,
@@ -217,10 +220,11 @@ ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
 ClimaComms.context(space::ExtrudedFiniteDifferenceSpace) =
     ClimaComms.context(space.grid)
 
-horizontal_space(space::ExtrudedFiniteDifferenceSpace) =
-    AbstractSpectralElementSpace(space.grid.horizontal_grid)
+horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
+    space(nothing, full_space.grid.horizontal_grid)
 
-vertical_topology(grid::ExtrudedFiniteDifferenceGrid) = grid.vertical_topology
+vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
+    topology(grid.vertical_grid)
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     vertical_topology(space.grid)
 
@@ -269,12 +273,12 @@ function column(space::ExtrudedFiniteDifferenceSpace, colidx::ColumnIndex)
     FiniteDifferenceSpace(space.staggering, column_grid)
 end
 
-vertical_topology(colgrid::ColumnGrid) = colgrid.full_grid.vertical_topology
+topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
+vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
 local_geometry_data(staggering::Staggering, colgrid::ColumnGrid) =
     column(local_geometry_data(staggering, colgrid.full_grid), colgrid.colidx)
 
-topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
 ClimaComms.device(colgrid::ColumnGrid) = ClimaComms.device(colgrid.full_grid)
 ClimaComms.context(colgrid::ColumnGrid) = ClimaComms.context(colgrid.full_grid)

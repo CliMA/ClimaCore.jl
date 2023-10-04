@@ -87,7 +87,7 @@ struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     domain_cache::Dict{Any, Any}
     mesh_cache::Dict{Any, Any}
     topology_cache::Dict{Any, Any}
-    space_cache::Dict{Any, Any}
+    grid_cache::Dict{Any, Any}
 end
 
 @deprecate HDF5Reader(filename::AbstractString) HDF5Reader(
@@ -128,7 +128,7 @@ function Base.close(hdfreader::HDF5Reader)
     empty!(hdfreader.domain_cache)
     empty!(hdfreader.mesh_cache)
     empty!(hdfreader.topology_cache)
-    empty!(hdfreader.space_cache)
+    empty!(hdfreader.grid_cache)
     close(hdfreader.file)
     return nothing
 end
@@ -304,6 +304,58 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
 end
 
 
+
+"""
+    read_grid(reader::AbstractReader, name)
+
+Reads a space named `name` from `reader`, or from the reader cache if it has
+already been read.
+"""
+function read_grid(reader, name)
+    Base.get!(reader.grid_cache, name) do
+        read_grid_new(reader, name)
+    end
+end
+
+function read_grid_new(reader, name)
+    group = reader.file["grids/$name"]
+    type = attrs(group)["type"]
+    if type in ("SpectralElementGrid1D", "SpectralElementGrid2D")
+        npts = attrs(group)["quadrature_num_points"]
+        quadrature_style =
+            _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
+        topology = read_topology(reader, attrs(group)["topology"])
+        if type == "SpectralElementGrid1D"
+            return Spaces.SpectralElementGrid1D(topology, quadrature_style)
+        else
+            return Spaces.SpectralElementGrid2D(topology, quadrature_style)
+        end
+    elseif type == "FiniteDifferenceGrid"
+        topology = read_topology(reader, attrs(group)["topology"])
+        return Spaces.FiniteDifferenceGrid(topology)
+    elseif type == "ExtrudedFiniteDifferenceGrid"
+        vertical_grid =
+            read_grid(reader, attrs(group)["vertical_grid"])
+        horizontal_grid =
+            read_grid(reader, attrs(group)["horizontal_grid"])
+        hypsography_type = get(attrs(group), "hypsography_type", "Flat")
+        if hypsography_type == "Flat"
+            hypsography = Spaces.Flat()
+        elseif hypsography_type == "LinearAdaption"
+            hypsography = Hypsography.LinearAdaption(
+                read_field(reader, attrs(group)["hypsography_surface"]),
+            )
+        else
+            error("Unsupported hypsography type $hypsography_type")
+        end
+        return Spaces.ExtrudedFiniteDifferenceGrid(
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+        )
+    end
+end
+
 """
     read_space(reader::AbstractReader, name)
 
@@ -368,7 +420,18 @@ function read_field(reader::HDF5Reader, name::AbstractString)
     obj = reader.file["fields/$name"]
     type = attrs(obj)["type"]
     if type == "Field"
-        space = read_space(reader, attrs(obj)["space"])
+        if haskey(attrs(obj), "grid")
+            grid = read_grid(reader, attrs(obj)["grid"])
+            staggering = get(attrs(obj), "staggering", nothing)
+            if staggering == "CellCenter"
+                staggering = Spaces.CellCenter()
+            elseif staggering == "CellFace"
+                staggering = Spaces.CellFace()
+            end
+            space = Spaces.space(staggering, grid)
+        else
+            space = read_space(reader, attrs(obj)["space"])
+        end
         topology = Spaces.topology(space)
         if topology isa Topologies.Topology2D
             nd = ndims(obj)

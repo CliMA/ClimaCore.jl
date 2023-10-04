@@ -133,9 +133,8 @@ function SpectralElementSpace1D(
     SpectralElementSpace1D(grid)
 end
 
-AbstractSpectralElementSpace(grid::SpectralElementGrid1D) =
+space(::Nothing, grid::SpectralElementGrid1D) =
     SpectralElementSpace1D(grid)
-
 
 nlevels(space::SpectralElementSpace1D) = 1
 
@@ -505,7 +504,7 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G
 end
 
-AbstractSpectralElementSpace(grid::SpectralElementGrid2D) =
+space(::Nothing, grid::SpectralElementGrid2D) =
     SpectralElementSpace2D(grid)
 
 

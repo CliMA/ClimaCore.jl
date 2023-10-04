@@ -286,15 +286,13 @@ function write_new!(
     return name
 end
 
-# Spaces
+# Grids
 #
-defaultname(::Spaces.SpectralElementSpace1D) = "horizontal_space"
-defaultname(::Spaces.SpectralElementSpace2D) = "horizontal_space"
-defaultname(::Spaces.CenterExtrudedFiniteDifferenceSpace) =
-    "center_extruded_finite_difference_space"
-defaultname(::Spaces.FaceExtrudedFiniteDifferenceSpace) =
-    "face_extruded_finite_difference_space"
-defaultname(space::Spaces.FiniteDifferenceSpace) = defaultname(space.topology)
+defaultname(::Spaces.SpectralElementGrid1D) = "horizontal_grid"
+defaultname(::Spaces.SpectralElementGrid2D) = "horizontal_grid"
+defaultname(::Spaces.ExtrudedFiniteDifferenceGrid) =
+    "extruded_finite_difference_grid"
+defaultname(grid::Spaces.FiniteDifferenceGrid) = defaultname(grid.topology)
 
 
 """
@@ -304,11 +302,11 @@ Write `SpectralElementSpace1D` data to HDF5.
 """
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.SpectralElementSpace1D,
+    space::Spaces.SpectralElementGrid1D,
     name::AbstractString = defaultname(space),
 )
-    group = create_group(writer.file, "spaces/$name")
-    write_attribute(group, "type", "SpectralElementSpace1D")
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "SpectralElementGrid1D")
     write_attribute(
         group,
         "quadrature_type",
@@ -325,11 +323,11 @@ end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.SpectralElementSpace2D,
+    space::Spaces.SpectralElementGrid2D,
     name::AbstractString = defaultname(space),
 )
-    group = create_group(writer.file, "spaces/$name")
-    write_attribute(group, "type", "SpectralElementSpace2D")
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "SpectralElementGrid2D")
     write_attribute(
         group,
         "quadrature_type",
@@ -346,32 +344,31 @@ end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.FiniteDifferenceSpace,
+    space::Spaces.FiniteDifferenceGrid,
     name::AbstractString = defaultname(space),
 )
-    group = create_group(writer.file, "spaces/$name")
-    write_attribute(group, "type", "FiniteDifferenceSpace")
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "FiniteDifferenceGrid")
     write_attribute(group, "topology", write!(writer, space.topology))
-    return group
+    return name
 end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    space::Spaces.ExtrudedFiniteDifferenceGrid,
     name::AbstractString = defaultname(space),
 )
-    group = create_group(writer.file, "spaces/$name")
-    write_attribute(group, "type", "ExtrudedFiniteDifferenceSpace")
-    write_attribute(group, "staggering", "CellCenter")
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "ExtrudedFiniteDifferenceGrid")
     write_attribute(
         group,
-        "horizontal_space",
-        write!(writer, Spaces.horizontal_space(space)),
+        "horizontal_grid",
+        write!(writer, space.horizontal_grid),
     )
     write_attribute(
         group,
-        "vertical_topology",
-        write!(writer, space.vertical_topology),
+        "vertical_grid",
+        write!(writer, space.vertical_grid),
     )
     if space.hypsography isa Hypsography.LinearAdaption
         write_attribute(group, "hypsography_type", "LinearAdaption")
@@ -384,28 +381,12 @@ function write_new!(
     return name
 end
 
-function write_new!(
-    writer::HDF5Writer,
-    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
-    name::AbstractString = defaultname(space),
-)
-    group = create_group(writer.file, name)
-    group = create_group(writer.file, "spaces/$name")
-    write_attribute(group, "type", "ExtrudedFiniteDifferenceSpace")
-    write_attribute(group, "staggering", "CellFace")
-    write_attribute(
-        group,
-        "center_space",
-        write!(writer, Spaces.CenterExtrudedFiniteDifferenceSpace(space)),
-    )
-    return name
-end
-
-
 # write fields
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     space = axes(field)
-    space_name = write!(writer, space)
+    staggering = Spaces.staggering(space)
+    grid = Spaces.grid(space)
+    grid_name = write!(writer, grid)
 
     array = parent(field)
     topology = Spaces.topology(space)
@@ -440,7 +421,11 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
         string(nameof(typeof(Fields.field_values(field)))),
     )
     write_attribute(dataset, "value_type", string(eltype(field)))
-    write_attribute(dataset, "space", space_name)
+    write_attribute(dataset, "grid", grid_name)
+    if !isnothing(staggering)
+        write_attribute(dataset, "staggering", string(nameof(typeof(staggering))))
+    end
+
     return name
 end
 

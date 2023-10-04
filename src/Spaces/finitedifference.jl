@@ -170,6 +170,10 @@ end
 const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
 const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
 
+staggering(space::FiniteDifferenceSpace) = space.staggering
+space(staggering::Staggering, grid::AbstractFiniteDifferenceGrid) =
+    FiniteDifferenceSpace(staggering, grid)
+
 local_geometry_data(space::FiniteDifferenceSpace) =
     local_geometry_data(space.staggering, space.grid)
 
