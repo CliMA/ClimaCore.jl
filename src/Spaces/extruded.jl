@@ -1,130 +1,61 @@
-#####
-##### Hybrid mesh
-#####
-
-abstract type HypsographyAdaption end
-
-"""
-    Flat()
-
-No surface hypsography.
-"""
-struct Flat <: HypsographyAdaption end
-
-
-"""
-    ExtrudedFiniteDifferenceGrid(
-        horizontal_space::AbstractSpace,
-        vertical_space::FiniteDifferenceSpace,
-        hypsography::HypsographyAdaption = Flat(),
-    )
-
-Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spaces.
-"""
-mutable struct ExtrudedFiniteDifferenceGrid{
-    H <: AbstractGrid,
-    V <: FiniteDifferenceGrid,
-    A <: HypsographyAdaption,
-    GG <: Geometry.AbstractGlobalGeometry,
-    LG,
-} <: AbstractGrid
-    horizontal_grid::H
-    vertical_grid::V
-    hypsography::A
-    global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
-end
-
-@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
-    vertical_grid::FiniteDifferenceGrid,
-    hypsography::Flat = Flat(),
-)
-    global_geometry = horizontal_grid.global_geometry
-    center_local_geometry =
-        product_geometry.(
-            horizontal_grid.local_geometry,
-            vertical_grid.center_local_geometry,
-        )
-    face_local_geometry =
-        product_geometry.(
-            horizontal_grid.local_geometry,
-            vertical_grid.face_local_geometry,
-        )
-
-    return ExtrudedFiniteDifferenceGrid(
-        horizontal_grid,
-        vertical_grid,
-        hypsography,
-        global_geometry,
-        center_local_geometry,
-        face_local_geometry,
-    )
-end
-
-
 
 
 struct ExtrudedFiniteDifferenceSpace{
+    G <: Grids.ExtrudedFiniteDifferenceGrid,
     S <: Staggering,
-    G <: ExtrudedFiniteDifferenceGrid,
 } <: AbstractSpace
-    staggering::S
     grid::G
+    staggering::S
 end
 
-
-space(staggering::Staggering, grid::ExtrudedFiniteDifferenceGrid) =
+space(staggering::Staggering, grid::Grids.ExtrudedFiniteDifferenceGrid) =
     ExtrudedFiniteDifferenceSpace(staggering, grid)
 
-const FaceExtrudedFiniteDifferenceSpace =
-    ExtrudedFiniteDifferenceSpace{CellFace}
-const CenterExtrudedFiniteDifferenceSpace =
-    ExtrudedFiniteDifferenceSpace{CellCenter}
+const FaceExtrudedFiniteDifferenceSpace{G} =
+    ExtrudedFiniteDifferenceSpace{G,CellFace}
+const CenterExtrudedFiniteDifferenceSpace{G} =
+    ExtrudedFiniteDifferenceSpace{G,CellCenter}
 
-
+#=
 ExtrudedFiniteDifferenceSpace{S}(
-    grid::ExtrudedFiniteDifferenceGrid,
+    grid::Grids.ExtrudedFiniteDifferenceGrid,
 ) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace(S(), grid)
 ExtrudedFiniteDifferenceSpace{S}(
     space::ExtrudedFiniteDifferenceSpace,
 ) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(space.grid)
-
+=#
 
 function ExtrudedFiniteDifferenceSpace(
     horizontal_space::AbstractSpace,
-    vertical_space::FiniteDifferenceSpace{S},
-    hypsography::HypsographyAdaption = Flat(),
-) where {S <: Staggering}
-    grid = ExtrudedFiniteDifferenceGrid(
+    vertical_space::FiniteDifferenceSpace,
+    hypsography::Grids.HypsographyAdaption = Grids.Flat(),
+)
+    grid = Grids.ExtrudedFiniteDifferenceGrid(
         horizontal_space.grid,
         vertical_space.grid,
         hypsography,
     )
-    return ExtrudedFiniteDifferenceSpace{S}(grid)
+    return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
 end
 
-local_dss_weights(grid::ExtrudedFiniteDifferenceGrid) =
-    local_dss_weights(grid.horizontal_grid)
 local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
-    local_dss_weights(space.grid)
-
-face_space(space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace{CellFace}(space)
-center_space(space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace{CellCenter}(space)
-
+    local_dss_weights(grid(space))
 
 staggering(space::ExtrudedFiniteDifferenceSpace) = space.staggering
+
+space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =
+    ExtrudedFiniteDifferenceSpace(grid(space), staggering)
+
+#=
 
 ExtrudedFiniteDifferenceSpace{S}(
     horizontal_space::AbstractSpace,
     vertical_space::FiniteDifferenceSpace,
     hypsography::HypsographyAdaption = Flat(),
 ) where {S <: Staggering} = ExtrudedFiniteDifferenceSpace{S}(
-    ExtrudedFiniteDifferenceGrid(horizontal_space, vertical_space, hypsography),
+    Grids.ExtrudedFiniteDifferenceGrid(horizontal_space, vertical_space, hypsography),
 )
+=#
 
 #=
 function issubspace(
@@ -144,16 +75,11 @@ end
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(
+        Adapt.adapt(to, space.grid),
         space.staggering,
-        Adapt.adapt(to, Spaces.horizontal_space(space)),
-        Adapt.adapt(to, space.vertical_topology),
-        Adapt.adapt(to, space.hypsography),
-        Adapt.adapt(to, space.global_geometry),
-        Adapt.adapt(to, space.center_local_geometry),
-        Adapt.adapt(to, space.face_local_geometry),
     )
 
-
+#=
 
 const CenterExtrudedFiniteDifferenceSpace2D =
     CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
@@ -163,7 +89,7 @@ const FaceExtrudedFiniteDifferenceSpace2D =
     FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
 const FaceExtrudedFiniteDifferenceSpace3D =
     FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
-
+=#
 function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
@@ -194,39 +120,27 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end
 
-
-local_geometry_data(::CellCenter, grid::ExtrudedFiniteDifferenceGrid) =
-    grid.center_local_geometry
-local_geometry_data(::CellFace, grid::ExtrudedFiniteDifferenceGrid) =
-    grid.face_local_geometry
-local_geometry_data(space::ExtrudedFiniteDifferenceSpace) =
-    local_geometry_data(space.staggering, space.grid)
-
-quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
-    quadrature_style(grid.horizontal_grid)
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
     quadrature_style(space.grid)
-topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
 topology(space::ExtrudedFiniteDifferenceSpace) = topology(space.grid)
 
 
-ClimaComms.device(grid::ExtrudedFiniteDifferenceGrid) =
-    ClimaComms.device(topology(grid))
-ClimaComms.context(grid::ExtrudedFiniteDifferenceGrid) =
-    ClimaComms.context(topology(grid))
-
-ClimaComms.device(space::ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.device(space.grid)
-ClimaComms.context(space::ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.context(space.grid)
-
 horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
-    space(nothing, full_space.grid.horizontal_grid)
+    space(full_space.grid.horizontal_grid, nothing)
 
-vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
-    topology(grid.vertical_grid)
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
     vertical_topology(space.grid)
+
+
+
+function column(space::ExtrudedFiniteDifferenceSpace, colidx::Grids.ColumnIndex)
+    column_grid = column(space.grid, colidx)
+    FiniteDifferenceSpace(column_grid, space.staggering)
+end
+
+
+
+
 
 Base.@propagate_inbounds function slab(
     space::ExtrudedFiniteDifferenceSpace,
@@ -239,49 +153,6 @@ Base.@propagate_inbounds function slab(
     )
 end
 
-"""
-    ColumnIndex(ij,h)
-
-An index into a column of a field. This can be used as an argument to `getindex`
-of a `Field`, to return a field on that column.
-
-# Example
-```julia
-colidx = ColumnIndex((1,1),1)
-field[colidx]
-```
-"""
-struct ColumnIndex{N}
-    ij::NTuple{N, Int}
-    h::Int
-end
-
-
-struct ColumnGrid{G <: ExtrudedFiniteDifferenceGrid, C <: ColumnIndex} <:
-       AbstractFiniteDifferenceGrid
-    full_grid::G
-    colidx::C
-end
-
-
-column(grid::ExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
-    ColumnGrid(grid, colidx)
-
-
-function column(space::ExtrudedFiniteDifferenceSpace, colidx::ColumnIndex)
-    column_grid = column(space.grid, colidx)
-    FiniteDifferenceSpace(space.staggering, column_grid)
-end
-
-topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
-vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
-
-local_geometry_data(staggering::Staggering, colgrid::ColumnGrid) =
-    column(local_geometry_data(staggering, colgrid.full_grid), colgrid.colidx)
-
-
-ClimaComms.device(colgrid::ColumnGrid) = ClimaComms.device(colgrid.full_grid)
-ClimaComms.context(colgrid::ColumnGrid) = ClimaComms.context(colgrid.full_grid)
 
 
 # TODO: deprecate these

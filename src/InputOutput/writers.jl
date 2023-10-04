@@ -288,11 +288,11 @@ end
 
 # Grids
 #
-defaultname(::Spaces.SpectralElementGrid1D) = "horizontal_grid"
-defaultname(::Spaces.SpectralElementGrid2D) = "horizontal_grid"
-defaultname(::Spaces.ExtrudedFiniteDifferenceGrid) =
+defaultname(::Grids.SpectralElementGrid1D) = "horizontal_grid"
+defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
+defaultname(::Grids.ExtrudedFiniteDifferenceGrid) =
     "extruded_finite_difference_grid"
-defaultname(grid::Spaces.FiniteDifferenceGrid) = defaultname(grid.topology)
+defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
 
 
 """
@@ -302,7 +302,7 @@ Write `SpectralElementSpace1D` data to HDF5.
 """
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.SpectralElementGrid1D,
+    space::Grids.SpectralElementGrid1D,
     name::AbstractString = defaultname(space),
 )
     group = create_group(writer.file, "grids/$name")
@@ -315,7 +315,7 @@ function write_new!(
     write_attribute(
         group,
         "quadrature_num_points",
-        Spaces.Quadratures.degrees_of_freedom(space.quadrature_style),
+        Quadratures.degrees_of_freedom(space.quadrature_style),
     )
     write_attribute(group, "topology", write!(writer, space.topology))
     return name
@@ -323,7 +323,7 @@ end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.SpectralElementGrid2D,
+    space::Grids.SpectralElementGrid2D,
     name::AbstractString = defaultname(space),
 )
     group = create_group(writer.file, "grids/$name")
@@ -336,7 +336,7 @@ function write_new!(
     write_attribute(
         group,
         "quadrature_num_points",
-        Spaces.Quadratures.degrees_of_freedom(space.quadrature_style),
+        Quadratures.degrees_of_freedom(space.quadrature_style),
     )
     write_attribute(group, "topology", write!(writer, space.topology))
     return name
@@ -344,7 +344,7 @@ end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.FiniteDifferenceGrid,
+    space::Grids.FiniteDifferenceGrid,
     name::AbstractString = defaultname(space),
 )
     group = create_group(writer.file, "grids/$name")
@@ -355,7 +355,7 @@ end
 
 function write_new!(
     writer::HDF5Writer,
-    space::Spaces.ExtrudedFiniteDifferenceGrid,
+    space::Grids.ExtrudedFiniteDifferenceGrid,
     name::AbstractString = defaultname(space),
 )
     group = create_group(writer.file, "grids/$name")

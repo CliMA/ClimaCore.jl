@@ -5,7 +5,8 @@ import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
-import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, ColumnIndex
+import ..Grids: ColumnIndex
+import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
 

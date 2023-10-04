@@ -20,20 +20,49 @@ using CUDA
 
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
-import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
+import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+
+import ..Grids:
+    Staggering, CellFace, CellCenter, 
+    topology, local_geometry_data
+
 import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
-using Memoize, WeakValueDicts
 
-abstract type AbstractGrid end
+"""
+    AbstractSpace
+
+Should define
+- `grid`
+- `staggering`
 
 
+- `space` constructor
+
+"""
 abstract type AbstractSpace end
 
-grid(space::AbstractSpace) = space.grid
-staggering(space::AbstractSpace) = nothing
+function grid end
+function staggering end
 
-function space end
+
+ClimaComms.context(space::AbstractSpace) =
+    ClimaComms.context(grid(space))
+ClimaComms.device(space::AbstractSpace) =
+    ClimaComms.device(grid(space))
+
+topology(space::AbstractSpace) = topology(grid(space))
+vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
+
+
+local_geometry_data(space::AbstractSpace) =
+    local_geometry_data(grid(space), staggering(space))
+
+space(refspace::AbstractSpace, staggering::Staggering) =
+    space(grid(refspace), staggering)
+
+
+
 
 
 issubspace(::AbstractSpace, ::AbstractSpace) = false
@@ -42,15 +71,9 @@ undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
-coordinates_data(grid::AbstractGrid) = local_geometry_data(grid).coordinates
-coordinates_data(staggering, grid::AbstractGrid) =
+coordinates_data(grid::Grids.AbstractGrid) = local_geometry_data(grid).coordinates
+coordinates_data(staggering, grid::Grids.AbstractGrid) =
     local_geometry_data(staggering, grid).coordinates
-
-ClimaComms.context(space::Spaces.AbstractSpace) =
-    ClimaComms.context(Spaces.topology(space))
-
-include("quadrature.jl")
-import .Quadratures
 
 include("pointspace.jl")
 include("spectralelement.jl")

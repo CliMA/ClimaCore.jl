@@ -14,8 +14,6 @@ using ..Meshes:
 using ..Topologies: Topologies, IntervalTopology
 using ..Spaces:
     Spaces,
-    Spaces.Quadratures,
-    Spaces.Quadratures.GLL,
     SpectralElementSpace1D,
     SpectralElementSpace2D,
     CenterExtrudedFiniteDifferenceSpace,
@@ -142,10 +140,10 @@ end
 
 function _scan_quadrature_style(quadraturestring::AbstractString, npts)
     @assert quadraturestring ∈ ("GLL", "GL", "Uniform", "ClosedUniform")
-    quadraturestring == "GLL" && return Spaces.Quadratures.GLL{npts}()
-    quadraturestring == "GL" && return Spaces.Quadratures.GL{npts}()
-    quadraturestring == "Uniform" && return Spaces.Quadratures.Uniform{npts}()
-    return Spaces.Quadratures.ClosedUniform{npts}()
+    quadraturestring == "GLL" && return Quadratures.GLL{npts}()
+    quadraturestring == "GL" && return Quadratures.GL{npts}()
+    quadraturestring == "Uniform" && return Quadratures.Uniform{npts}()
+    return Quadratures.ClosedUniform{npts}()
 end
 
 function _scan_data_layout(layoutstring::AbstractString)

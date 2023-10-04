@@ -1,9 +1,11 @@
 module Hypsography
 
 import ..slab, ..column
-import ..Geometry, ..Domains, ..Topologies, ..Spaces, ..Fields, ..Operators
+import ..Geometry, ..Domains, ..Topologies, ..Grids, ..Spaces, ..Fields, ..Operators
 import ..Spaces:
-    ExtrudedFiniteDifferenceSpace,
+    ExtrudedFiniteDifferenceSpace
+    
+import ..Grids:
     ExtrudedFiniteDifferenceGrid,
     HypsographyAdaption,
     Flat
@@ -59,8 +61,8 @@ LinearAdaption() = LinearAdaption(nothing)
 
 # linear coordinates
 @memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Spaces.AbstractGrid,
-    vertical_grid::Spaces.FiniteDifferenceGrid,
+    horizontal_grid::Grids.AbstractGrid,
+    vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,
 )
     if adaption isa LinearAdaption
@@ -73,7 +75,7 @@ LinearAdaption() = LinearAdaption(nothing)
     end
 
     # construct initial flat space, then mutate
-    ref_grid = Spaces.ExtrudedFiniteDifferenceGrid(
+    ref_grid = Grids.ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
         vertical_grid,
         Flat(),

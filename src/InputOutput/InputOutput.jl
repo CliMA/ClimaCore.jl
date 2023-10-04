@@ -1,15 +1,17 @@
 module InputOutput
 
 using HDF5, ClimaComms
-import ..Geometry
-import ..DataLayouts
-import ..Domains
-import ..Meshes
-import ..Topologies
-import ..Spaces
-import ..Fields
-import ..Hypsography
-import ..VERSION
+import ..Geometry,
+    ..DataLayouts,
+    ..Domains,
+    ..Meshes,
+    ..Topologies,
+    ..Quadratures,
+    ..Grids,
+    ..Spaces,
+    ..Fields,
+    ..Hypsography
+import .. VERSION
 
 include("writers.jl")
 include("readers.jl")
