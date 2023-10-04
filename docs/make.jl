@@ -8,6 +8,7 @@ import ClimaCore,
 
 if !@isdefined(TUTORIALS)
     TUTORIALS = ["introduction"]
+    DSS = ["dss_tutorial"]
 end
 
 rm(joinpath(@__DIR__, "src", "tutorials"), force = true, recursive = true)
