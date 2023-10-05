@@ -185,13 +185,13 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
-           allow_mismatched_diagonalized_spaces() &&
-           (
-               parent(Spaces.local_geometry_data(space1)) ==
-               parent(Spaces.local_geometry_data(space2))
-           )
-            warn_mismatched_spaces(typeof(space1), typeof(space2))
+        if is_diagonalized_spaces(typeof(space1), typeof(space2))
+            if size(Spaces.local_geometry_data(space1)) ==
+               size(Spaces.local_geometry_data(space2))
+                return space1
+            else
+                error_mismatched_spaces(typeof(space1), typeof(space2))
+            end
         elseif Spaces.issubspace(space2, space1)
             return space1
         elseif Spaces.issubspace(space1, space2)
