@@ -3419,11 +3419,25 @@ function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
     current_space = axes(bc)
     new_space = placeholder_space(current_space, parent_space)
     return StencilBroadcasted{Style}(
-        bc.op,
+        strip_space(bc.op, current_space),
         strip_space_args(bc.args, current_space),
         new_space,
     )
 end
+
+function strip_space(op::FiniteDifferenceOperator, parent_space)
+    op
+end
+
+function strip_space(op::DivergenceF2C, parent_space)
+    DivergenceF2C(map(bc -> strip_space(bc, parent_space), op.bcs))
+end
+
+
+function strip_space(bc::SetValue, parent_space)
+    SetValue(strip_space(bc.val, parent_space))
+end
+
 
 function Base.copyto!(
     out::Field,
