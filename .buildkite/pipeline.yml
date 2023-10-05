@@ -226,6 +226,18 @@ steps:
         agents:
           slurm_ntasks: 4
 
+      - label: "Unit: distributed remapping"
+        key: distributed_remapping
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+
+      - label: "Unit: distributed remapping (1 process)"
+        key: distributed_remapping_1proc
+        command: "julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+
       - label: "Unit: distributed gather"
         key: unit_distributed_gather4
         command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/gather4.jl"

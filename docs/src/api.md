@@ -316,6 +316,7 @@ InputOutput.defaultname
 
 ```@docs
 Remapping.interpolate_array
+Remapping.interpolate
 ```
 
 ## ClimaCoreMakie
