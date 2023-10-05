@@ -59,7 +59,16 @@ function HDF5Writer(
     else
         file = h5open(filename, mode, context.mpicomm)
     end
-    write_attribute(file, "ClimaCore version", string(VERSION))
+    # Add an attribute to the file if it doesn't already exist
+    if haskey(attributes(file), "ClimaCore version")
+        file_version = VersionNumber(attrs(file)["ClimaCore version"])
+        current_version = VERSION
+        if file_version != current_version
+            @warn "$filename was written using a different version of ClimaCore than is currently loaded" file_version current_version
+        end
+    else
+        write_attribute(file, "ClimaCore version", string(VERSION))
+    end
     cache = Dict{String, String}()
     return HDF5Writer(file, context, cache)
 end
