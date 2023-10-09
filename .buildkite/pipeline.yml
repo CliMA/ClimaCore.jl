@@ -435,6 +435,12 @@ steps:
         key: unit_hyb_ops_3d
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
 
+      - label: "Unit: hyb ops 3d CUDA"
+        key: unit_hyb_ops_3d_cuda
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: remapping"
         key: unit_remapping
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/remapping.jl"
