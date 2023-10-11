@@ -34,9 +34,9 @@ macro benchmark(expression)
     end
 end
 
-const ignore_cuda = (AnyFrameModule(CUDA),)
-
-is_using_cuda() = ClimaComms.device() isa ClimaComms.CUDADevice
+const comms_device = ClimaComms.device()
+const using_cuda = comms_device isa ClimaComms.CUDADevice
+const ignore_cuda = using_cuda ? (AnyFrameModule(CUDA),) : ()
 
 # Test the allocating and non-allocating versions of a field broadcast against
 # a reference non-allocating implementation. Ensure that they are performant,
@@ -53,7 +53,7 @@ function test_field_broadcast(;
     test_broken_with_cuda = false,
 ) where {F1, F2, F3}
     @testset "$test_name" begin
-        if test_broken_with_cuda && is_using_cuda()
+        if test_broken_with_cuda && using_cuda
             @test_throws CUDA.InvalidIRError get_result()
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
@@ -94,14 +94,13 @@ function test_field_broadcast(;
         # the allocations they incur.
         @test_opt ignored_modules = ignore_cuda get_result()
         @test_opt ignored_modules = ignore_cuda set_result!(result)
-        @test is_using_cuda() || (@allocated set_result!(result)) == 0
+        using_cuda || @test (@allocated set_result!(result)) == 0
 
         if !isnothing(ref_set_result!)
             # Test ref_set_result! for type instabilities and allocations to
             # ensure that the performance comparison is fair.
             @test_opt ignored_modules = ignore_cuda ref_set_result!(ref_result)
-            @test is_using_cuda() ||
-                  (@allocated ref_set_result!(ref_result)) == 0
+            using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
         end
     end
 end
@@ -124,7 +123,7 @@ function test_field_broadcast_against_array_reference(;
     test_broken_with_cuda = false,
 ) where {F1, F2, F3}
     @testset "$test_name" begin
-        if test_broken_with_cuda && is_using_cuda()
+        if test_broken_with_cuda && using_cuda
             @test_throws CUDA.InvalidIRError get_result()
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
@@ -177,12 +176,12 @@ function test_field_broadcast_against_array_reference(;
         # the allocations they incur.
         @test_opt ignored_modules = ignore_cuda get_result()
         @test_opt ignored_modules = ignore_cuda set_result!(result)
-        @test is_using_cuda() || (@allocated set_result!(result)) == 0
+        using_cuda || @test (@allocated set_result!(result)) == 0
 
         # Test ref_set_result! for type instabilities and allocations to ensure
         # that the performance comparison is fair.
         @test_opt ignored_modules = ignore_cuda call_ref_set_result!()
-        @test is_using_cuda() || (@allocated call_ref_set_result!()) == 0
+        using_cuda || @test (@allocated call_ref_set_result!()) == 0
     end
 end
 
@@ -192,7 +191,7 @@ function test_spaces(::Type{FT}) where {FT}
     velem = 20 # This should be big enough to test high-bandwidth matrices.
     helem = npoly = 1 # These should be small enough for the tests to be fast.
 
-    comms_ctx = ClimaComms.SingletonCommsContext()
+    comms_ctx = ClimaComms.SingletonCommsContext(comms_device)
     hdomain = Domains.SphereDomain(FT(10))
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(comms_ctx, hmesh)
@@ -208,7 +207,7 @@ function test_spaces(::Type{FT}) where {FT}
     vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
     sfc_coord = Fields.coordinate_field(hspace)
     hypsography =
-        is_using_cuda() ? Hypsography.Flat() :
+        using_cuda ? Hypsography.Flat() :
         Hypsography.LinearAdaption(
             @. cosd(sfc_coord.lat) + cosd(sfc_coord.long) + 1
         ) # TODO: FD operators don't currently work with hypsography on GPUs.

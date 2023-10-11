@@ -784,7 +784,7 @@ op_matrix_row_type(op::Operators.DivergenceOperator, ::Type{FT}) where {FT} =
     uses_extrapolate(op) ? QuaddiagonalMatrixRow{Adjoint{FT, C3{FT}}} :
     BidiagonalMatrixRow{Adjoint{FT, C3{FT}}}
 Base.@propagate_inbounds function op_matrix_interior_row(
-    op::Operators.DivergenceOperator,
+    ::Operators.DivergenceOperator,
     space,
     loc,
     idx,

@@ -26,6 +26,18 @@ MultiplyColumnwiseBandMatrixField
 operator_matrix
 ```
 
+# Linear Solvers
+
+```@docs
+FieldMatrixSolverAlgorithm
+FieldMatrixSolver
+field_matrix_solve!
+BlockDiagonalSolve
+BlockLowerTriangularSolve
+SchurComplementSolve
+ApproximateFactorizationSolve
+```
+
 ## Internals
 
 ```@docs
@@ -39,6 +51,12 @@ matrix_shape
 column_axes
 AbstractLazyOperator
 replace_lazy_operator
+FieldName
+@name
+FieldNameTree
+FieldNameSet
+FieldNameDict
+field_vector_view
 ```
 
 ## Utilities

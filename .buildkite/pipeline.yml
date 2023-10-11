@@ -570,6 +570,23 @@ steps:
           slurm_gpus: 1
           slurm_mem: 40GB
 
+      - label: "Unit: field names"
+        key: unit_field_names
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field_names.jl"
+
+      - label: "Unit: field matrix solvers (CPU)"
+        key: unit_field_matrix_solvers_cpu
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field_matrix_solvers.jl"
+        agents:
+          slurm_mem: 40GB
+
+      - label: "Unit: field matrix solvers (GPU)"
+        key: unit_field_matrix_solvers_gpu
+        command: "julia --color=yes --project=test test/MatrixFields/field_matrix_solvers.jl"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 40GB
+
   - group: "Unit: Hypsography"
     steps:
 
