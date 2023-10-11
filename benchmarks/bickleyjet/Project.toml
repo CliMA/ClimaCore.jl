@@ -6,5 +6,5 @@ Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 
 [compat]
 BenchmarkTools = "1"
-CUDA = "3, 4, 5"
+CUDA = "3, 4"
 Plots = "1"
