@@ -240,10 +240,15 @@ StencilBroadcasted{Style}(
 
 Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
     StencilBroadcasted{Style}(
-        sbc.op,
+        Adapt.adapt(to, sbc.op),
         Adapt.adapt(to, sbc.args),
         Adapt.adapt(to, sbc.axes),
     )
+
+function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
+    op
+end
+
 
 
 function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
@@ -2689,6 +2694,15 @@ Base.@propagate_inbounds function stencil_right_boundary(
     @assert idx == right_center_boundary_idx(space)
     stencil_interior(op, loc, space, idx - 1, hidx, arg)
 end
+
+function Adapt.adapt_structure(to, op::DivergenceF2C)
+    DivergenceF2C(map(bc -> Adapt.adapt_structure(to, bc), op.bcs))
+end
+
+function Adapt.adapt_structure(to, bc::SetValue)
+    SetValue(Adapt.adapt_structure(to, bc.val))
+end
+
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)

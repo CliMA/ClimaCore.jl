@@ -18,6 +18,8 @@ import ClimaCore.Geometry: WVector
 import ClimaCore.Utilities: half
 import ClimaCore.DataLayouts: level
 
+device = ClimaComms.device()
+
 @testset "sphere divergence" begin
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -26,12 +28,16 @@ import ClimaCore.DataLayouts: level
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopology)
 
     horzdomain = Domains.SphereDomain(30.0)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
     horztopology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+        ClimaComms.SingletonCommsContext(device),
         horzmesh,
     )
     quad = Spaces.Quadratures.GLL{3 + 1}()
@@ -53,7 +59,8 @@ function hvspace_3D(
     xelem = 4,
     yelem = 4,
     zelem = 16,
-    npoly = 7,
+    npoly = 7;
+    device = ClimaComms.device(),
 )
     FT = Float64
     vertdomain = Domains.IntervalDomain(
@@ -62,7 +69,11 @@ function hvspace_3D(
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopology = Topologies.IntervalTopology(
+        ClimaComms.SingletonCommsContext(device),
+        vertmesh,
+    )
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopology)
 
     horzdomain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
@@ -72,7 +83,7 @@ function hvspace_3D(
     )
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
     horztopology = Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+        ClimaComms.SingletonCommsContext(device),
         horzmesh,
     )
 
@@ -105,7 +116,8 @@ end
 
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
 
-    hv_center_space, hv_face_space = hvspace_3D()
+    hv_center_space, hv_face_space =
+        hvspace_3D(; device = ClimaComms.CPUSingleThreaded())
     V =
         Geometry.UVWVector.(
             zeros(Float64, hv_face_space),
@@ -181,8 +193,12 @@ end
     #
     # NOTE: the equation setup is only correct for Cartesian domains!
 
-    hv_center_space, hv_face_space =
-        hvspace_3D((-1.0, 1.0), (-1.0, 1.0), (-1.0, 1.0))
+    hv_center_space, hv_face_space = hvspace_3D(
+        (-1.0, 1.0),
+        (-1.0, 1.0),
+        (-1.0, 1.0);
+        device = ClimaComms.CPUSingleThreaded(),
+    )
 
     abstract type BCtag end
     struct ZeroFlux <: BCtag end
