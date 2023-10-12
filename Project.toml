@@ -31,7 +31,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 Adapt = "3"
-BandedMatrices = "0.17"
+BandedMatrices = "0.17, 1"
 BlockArrays = "0.16"
 CUDA = "3, 4.2"
 ClimaComms = "0.5"
