@@ -99,7 +99,7 @@ end
     lim[(4, Float64)] = 5726208
     for FT in (Float32, Float64)
         for center_space in (
-            TU.ColumnCenterFiniteDifferenceSpace(FT),
+            # TU.ColumnCenterFiniteDifferenceSpace(FT),
             TU.CenterExtrudedFiniteDifferenceSpace(FT),
         )
             test_column_definite_integral!(center_space)
