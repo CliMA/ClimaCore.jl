@@ -98,21 +98,31 @@ end
     lim[(3, Float64)] = 5455872
     lim[(4, Float64)] = 5726208
     for FT in (Float32, Float64)
-        for center_space in (
-            TU.ColumnCenterFiniteDifferenceSpace(FT),
-            TU.CenterExtrudedFiniteDifferenceSpace(FT),
-        )
-            test_column_definite_integral!(center_space)
-            test_column_integral_indefinite!(center_space)
-        end
+        # for center_space in (
+        #     TU.ColumnCenterFiniteDifferenceSpace(FT),
+        #     TU.CenterExtrudedFiniteDifferenceSpace(FT),
+        # )
+        #     test_column_definite_integral!(center_space)
+        #     test_column_integral_indefinite!(center_space)
+        # end
 
-        for (i, space) in enumerate((
-            TU.ColumnCenterFiniteDifferenceSpace(FT),
-            TU.ColumnFaceFiniteDifferenceSpace(FT),
-            TU.CenterExtrudedFiniteDifferenceSpace(FT),
-            TU.FaceExtrudedFiniteDifferenceSpace(FT),
-        ))
-            test_column_mapreduce!(space, lim[(i, FT)])
-        end
+        # for (i, space) in enumerate((
+        #     TU.ColumnCenterFiniteDifferenceSpace(FT),
+        #     TU.ColumnFaceFiniteDifferenceSpace(FT),
+        #     TU.CenterExtrudedFiniteDifferenceSpace(FT),
+        #     TU.FaceExtrudedFiniteDifferenceSpace(FT),
+        # ))
+        #     test_column_mapreduce!(space, lim[(i, FT)])
+        # end
+        test_column_definite_integral!(TU.ColumnCenterFiniteDifferenceSpace(FT))
+        test_column_definite_integral!(TU.CenterExtrudedFiniteDifferenceSpace(FT))
+        test_column_integral_indefinite!(TU.ColumnCenterFiniteDifferenceSpace(FT))
+        test_column_integral_indefinite!(TU.CenterExtrudedFiniteDifferenceSpace(FT))
+
+        test_column_mapreduce!(TU.ColumnCenterFiniteDifferenceSpace(FT), lim[(1, FT)])
+        test_column_mapreduce!(TU.ColumnFaceFiniteDifferenceSpace(FT), lim[(2, FT)])
+        test_column_mapreduce!(TU.CenterExtrudedFiniteDifferenceSpace(FT), lim[(3, FT)])
+        test_column_mapreduce!(TU.FaceExtrudedFiniteDifferenceSpace(FT), lim[(4, FT)])
+
     end
 end
