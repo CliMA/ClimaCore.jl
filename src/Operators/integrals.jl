@@ -16,11 +16,12 @@ function column_integral_definite!(
     ∫field::Fields.Field,
     ᶜfield::Fields.Field,
 )
+    space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
     nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks column_integral_definite_kernel!(
-        ∫field,
-        ᶜfield,
+        strip_space(∫field, space),
+        strip_space(ᶜfield, space),
     )
 end
 
@@ -39,10 +40,13 @@ function column_integral_definite_kernel!(
     return nothing
 end
 
-column_integral_definite_kernel!(
-    ∫field::Fields.PointField,
+function column_integral_definite_kernel!(
+    ∫field,
     ᶜfield::Fields.CenterFiniteDifferenceField,
-) = _column_integral_definite!(∫field, ᶜfield)
+)
+    _column_integral_definite!(∫field, ᶜfield)
+    return nothing
+end
 
 column_integral_definite!(
     ::ClimaComms.AbstractCPUDevice,
@@ -60,18 +64,19 @@ column_integral_definite!(
 ) = _column_integral_definite!(∫field, ᶜfield)
 
 function _column_integral_definite!(
-    ∫field::Fields.PointField,
+    ∫field,
     ᶜfield::Fields.ColumnField,
 )
-    space = axes(ᶜfield)
-    Δz = Fields.Δz_field(space)
-    first_level = Operators.left_idx(space)
-    last_level = Operators.right_idx(space)
-    ∫field[] = rzero(eltype(∫field))
+    Δz = Fields.Δz_field(ᶜfield)
+    first_level = Operators.left_idx(axes(ᶜfield))
+    last_level = Operators.right_idx(axes(ᶜfield))
+    ∫field_data = Fields.field_values(∫field)
+    Base.setindex!(∫field_data, rzero(eltype(∫field)))
     @inbounds for level in first_level:last_level
-        ∫field[] =
-            ∫field[] ⊞ Fields.level(ᶜfield, level)[] ⊠ Fields.level(Δz, level)[]
+        val = ∫field_data[] ⊞ Fields.level(ᶜfield, level)[] ⊠ Fields.level(Δz, level)[]
+        Base.setindex!(∫field_data, val)
     end
+    return nothing
 end
 
 """
