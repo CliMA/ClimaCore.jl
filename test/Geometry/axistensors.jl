@@ -15,6 +15,10 @@ ClimaCore.Geometry.assert_exact_transform() = true
     f(x) = x.u₁ + x.u₂ + x.u₃
     @test_opt f(x)
 
+    ref = Ref(zero(x))
+    ref[] = Geometry.Covariant12Vector(1, 2) # Int components instead of Float64
+    @test ref[] == x
+
     M = Geometry.Axis2Tensor(
         (Geometry.Cartesian12Axis(), Geometry.Covariant12Axis()),
         [1.0 0.0; 0.5 2.0],

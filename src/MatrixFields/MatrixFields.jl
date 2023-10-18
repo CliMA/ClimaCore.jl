@@ -2,7 +2,7 @@
     MatrixFields
 
 This module adds support for defining and manipulating `Field`s that represent
-matrices. Specifically, it specifies the `BandMatrixRow` type, which can be used
+matrices. Specifically, it adds the `BandMatrixRow` type, which can be used
 to store the entries of a band matrix. A `Field` of `BandMatrixRow`s on a
 `FiniteDifferenceSpace` can be interpreted as a band matrix by vertically
 concatenating the `BandMatrixRow`s. Similarly, a `Field` of `BandMatrixRow`s on
@@ -19,46 +19,60 @@ for them:
 - Integration with `RecursiveApply`, e.g., the entries of `matrix_field` can be
     `Tuple`s or `NamedTuple`s instead of single values, which allows
     `matrix_field` to represent multiple band matrices at the same time
+- Integration with `Operators`, e.g., the `matrix_field` that gets applied to
+    the argument of any `FiniteDifferenceOperator` `op` can be obtained using
+    the `FiniteDifferenceOperator` `operator_matrix(op)`
 - Conversions to native array types, e.g., `field2arrays(matrix_field)` can
     convert each column of `matrix_field` into a `BandedMatrix` from
     `BandedMatrices.jl`
 - Custom printing, e.g., `matrix_field` gets displayed as a `BandedMatrix`,
     specifically, as the `BandedMatrix` that corresponds to its first column
+
+This module also adds support for defining and manipulating sparse block
+matrices of `Field`s. Specifically, it adds the `FieldMatrix` type, which is a
+dictionary that maps pairs of `FieldName`s to `ColumnwiseBandMatrixField`s or
+multiples of `LinearAlgebra.I`. This comes with the following functionality:
+- Addition and subtraction, e.g., `@. field_matrix1 + field_matrix2`
+- Matrix-vector multiplication, e.g., `@. field_matrix * field_vector`
+- Matrix-matrix multiplication, e.g., `@. field_matrix1 * field_matrix2`
+- Integration with `RecursiveApply`, e.g., the entries of `field_matrix` can be
+    specified either as matrix `Field`s of `Tuple`s or `NamedTuple`s, or as
+    separate matrix `Field`s of single values
+- The ability to solve linear equations using `FieldMatrixSolver`, which is a
+    generalization of `ldiv!` that is designed to optimize solver performance
 """
 module MatrixFields
 
-import CUDA: @allowscalar
-import LinearAlgebra: UniformScaling, Adjoint, AdjointAbsVec
+import CUDA
+import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
+import ClimaComms
 
 import ..Utilities: PlusHalf, half
 import ..RecursiveApply:
     rmap, rmaptype, rpromote_type, rzero, rconvert, radd, rsub, rmul, rdiv
+import ..RecursiveApply: ⊠, ⊞, ⊟
 import ..DataLayouts: AbstractData
 import ..Geometry
 import ..Spaces
 import ..Fields
 import ..Operators
 
-export ⋅
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
     TridiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
+export FieldVectorKeys, FieldVectorView, FieldVectorViewBroadcasted
+export FieldMatrixKeys, FieldMatrix, FieldMatrixBroadcasted
+export ⋅, FieldMatrixSolver, field_matrix_solve!
 
 # Types that are teated as single values when using matrix fields.
 const SingleValue =
     Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
 
 include("band_matrix_row.jl")
-include("rmul_with_projection.jl")
-include("matrix_shape.jl")
-include("matrix_multiplication.jl")
-include("lazy_operators.jl")
-include("operator_matrices.jl")
-include("field2arrays.jl")
 
 const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     V,
@@ -71,6 +85,19 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     },
 }
 
+include("rmul_with_projection.jl")
+include("matrix_shape.jl")
+include("matrix_multiplication.jl")
+include("lazy_operators.jl")
+include("operator_matrices.jl")
+include("field2arrays.jl")
+include("unrolled_functions.jl")
+include("field_name.jl")
+include("field_name_set.jl")
+include("field_name_dict.jl")
+include("field_matrix_solver.jl")
+include("single_field_solver.jl")
+
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
     if eltype(eltype(field)) <: Number
@@ -82,7 +109,10 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
-        @allowscalar Base.print_array(io, column_field2array_view(column_field))
+        CUDA.@allowscalar Base.print_array(
+            io,
+            column_field2array_view(column_field),
+        )
     else
         # When a BandedMatrix with non-number entries is printed, it currently
         # either prints in an illegible format (e.g., if it has AxisTensor or

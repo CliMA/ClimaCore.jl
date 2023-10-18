@@ -135,3 +135,9 @@ Base.:*(value::SingleValue, row::BandMatrixRow) =
 
 Base.:/(row::BandMatrixRow, value::Number) =
     map(entry -> rdiv(entry, value), row)
+
+inv(row::DiagonalMatrixRow) = DiagonalMatrixRow(inv(row[0]))
+inv(::BandMatrixRow{ld, bw}) where {ld, bw} = error(
+    "The inverse of a matrix with $bw diagonals is (usually) a dense matrix, \
+     so it cannot be represented using BandMatrixRows",
+)

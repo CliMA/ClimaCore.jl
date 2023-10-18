@@ -78,9 +78,11 @@ if !Sys.iswindows()
     @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
     @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
     @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
+    @safetestset "MatrixFields - field names" begin @time include("MatrixFields/field_names.jl") end
     # now part of buildkite
     # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
     # @safetestset "MatrixFields - operator matrices" begin @time include("MatrixFields/operator_matrices.jl") end
+    # @safetestset "MatrixFields - field matrix solvers" begin @time include("MatrixFields/field_matrix_solvers.jl") end
 
     @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
     @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end

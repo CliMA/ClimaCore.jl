@@ -101,21 +101,12 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    Topologies.print_context(iio, space.horizontal_space.topology.context)
+    hspace = Spaces.horizontal_space(space)
+    Topologies.print_context(iio, hspace.topology.context)
     println(iio)
     println(iio, " "^(indent + 2), "horizontal:")
-    println(
-        iio,
-        " "^(indent + 4),
-        "mesh: ",
-        space.horizontal_space.topology.mesh,
-    )
-    println(
-        iio,
-        " "^(indent + 4),
-        "quadrature: ",
-        space.horizontal_space.quadrature_style,
-    )
+    println(iio, " "^(indent + 4), "mesh: ", hspace.topology.mesh)
+    println(iio, " "^(indent + 4), "quadrature: ", hspace.quadrature_style)
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end
@@ -284,12 +275,12 @@ function product_geometry(
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(cSpaces.horizontal_space(space))
+    h_iter = eachslabindex(Spaces.horizontal_space(cspace))
     Nv = size(cspace.center_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end
 function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
-    h_iter = eachslabindex(fSpaces.horizontal_space(space))
+    h_iter = eachslabindex(Spaces.horizontal_space(fspace))
     Nv = size(fspace.face_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end

@@ -53,10 +53,9 @@ withenv("GKSwstype" => "nul") do
         collapselevel = 1,
     )
 
-    Documenter.makedocs(
-        bib,
+    Documenter.makedocs(;
+        plugins = [bib],
         sitename = "ClimaCore.jl",
-        strict = true,
         format = format,
         checkdocs = :exports,
         clean = true,

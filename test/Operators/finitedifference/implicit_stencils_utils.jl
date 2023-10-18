@@ -301,7 +301,11 @@ function test_pointwise_stencils_compose(all_ops; full = false)
                 # @test tested_value ≈ ref_value atol = 1e-6
                 tv = get_tested_value(op1, op2, a0, a1, a2)
                 rv = get_ref_value(op1, op2, a0, a1, a2)
-                @test tv ≈ rv atol = 1e-6
+                _atol = 1e-6
+                if !isapprox(tv, rv; atol = _atol)
+                    @show maximum(abs.(tv .- rv))
+                end
+                @test tv ≈ rv atol = _atol
             end
         end
     end

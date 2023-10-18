@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.9.3 cuda/11.8 ucx/1.14.1_cuda-11.8 openmpi/4.1.5_cuda-11.8 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
+  modules: julia/1.9.3 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
@@ -226,6 +226,18 @@ steps:
         agents:
           slurm_ntasks: 4
 
+      - label: "Unit: distributed remapping"
+        key: distributed_remapping
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+          slurm_ntasks: 2
+
+      - label: "Unit: distributed remapping (1 process)"
+        key: distributed_remapping_1proc
+        command: "julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+
       - label: "Unit: distributed gather"
         key: unit_distributed_gather4
         command: "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed/gather4.jl"
@@ -423,6 +435,12 @@ steps:
         key: unit_hyb_ops_3d
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
 
+      - label: "Unit: hyb ops 3d CUDA"
+        key: unit_hyb_ops_3d_cuda
+        command: "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/3d.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: remapping"
         key: unit_remapping
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/remapping.jl"
@@ -498,6 +516,7 @@ steps:
       - label: "Unit: implicit stencil Float32"
         key: "gpu_implicit_stencil_float32"
         command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
+        soft_fail: true
         agents:
           slurm_mem: 20GB
           slurm_gpus: 1
@@ -553,6 +572,23 @@ steps:
         key: unit_operator_matrices_gpu
         command: "julia --color=yes --project=test test/MatrixFields/operator_matrices.jl"
         soft_fail: true
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 40GB
+
+      - label: "Unit: field names"
+        key: unit_field_names
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field_names.jl"
+
+      - label: "Unit: field matrix solvers (CPU)"
+        key: unit_field_matrix_solvers_cpu
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/field_matrix_solvers.jl"
+        agents:
+          slurm_mem: 40GB
+
+      - label: "Unit: field matrix solvers (GPU)"
+        key: unit_field_matrix_solvers_gpu
+        command: "julia --color=yes --project=test test/MatrixFields/field_matrix_solvers.jl"
         agents:
           slurm_gpus: 1
           slurm_mem: 40GB

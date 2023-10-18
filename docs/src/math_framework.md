@@ -8,10 +8,10 @@ _Vector_ can mean a few things depending on context:
 
 - In Julia, a `Vector` is just an ordered collection of values (i.e., a container).
 - In mathematics, a vector is an element of a _vector space_: a set of objects,
-which may be added together and multiplied by a scalar.
-- In physics, a vector typically refers to a directional quantity: that is
-something with both a _direction_ and a _magnitude_. This is the best way to
-think of vectors in ClimaCore,jl.
+  which may be added together and multiplied by a scalar.
+- In physics, a vector typically refers to a directional quantity: that
+  something with both a _direction_ and a _magnitude_. This is the best way to
+  think of vectors in ClimaCore.jl.
 
 A _vector field_ is then a vector-valued field: that is an assignment of a
 vector to each point in a space. For instance, a vector field in the plane can
@@ -32,10 +32,12 @@ in orthogonal (Cartesian) and curvilinear coordinate systems.
 
 The easiest basis to use is the "UVW" basis, which can be defined in both Cartesian
 or spherical domains:
+
 - in a Cartesian domain, it is the usual Cartesian orthogonal vector basis
-(U along the X-axis, V along the Y-axis, W along the Z-axis).
+  (U along the X-axis, V along the Y-axis, W along the Z-axis).
+
 - in a spherical domain, it is the orthogonal basis relative to spherical
-(curvilinear) coordinates:
+  (curvilinear) coordinates:
   - U is the zonal (eastward) component
   - V is the meridonal (northward) component
   - W is the radial component

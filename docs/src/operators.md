@@ -7,7 +7,7 @@ CurrentModule = ClimaCore.Operators
 _Operators_ can compute spatial derivative operations.
 
  - for performance reasons, we need to be able to "fuse" multiple operators and
- function applications
+   function applications
  - Julia provides a tool for this: **broadcasting**, with a very flexible API
 
 Can think of operators are "pseudo-functions": can't be called directly, but
