@@ -124,7 +124,6 @@ The `Remapper` is designed to not be tied to any particular `Field`. You can use
 `Remapper` for any `Field` as long as they are all defined on the same `topology`.
 
 `Remapper` is the main argument to the `interpolate` function.
-
 """
 function Remapper(target_hcoords, target_zcoords, space)
 
@@ -192,9 +191,18 @@ end
 
 
 """
-   interpolate(remapper, field)
+   interpolate(remapper, field; physical_z = false)
 
 Interpolate the given `field` as prescribed by `remapper`.
+
+
+Keyword arguments
+==================
+
+- `physical_z`: When `true`, interpolate to the physical z coordinates, taking into account
+                hypsography. If `false` (the default), interpolation will be based on the
+                reference z coordinate, i.e. will correspond to constant model levels.
+                `NaN`s are returned for values that are below the surface.
 
 Example
 ========
@@ -218,7 +226,11 @@ int2 = interpolate(remapper, field2)
 
 ```
 """
-function interpolate(remapper::Remapper, field::T) where {T <: Fields.Field}
+function interpolate(
+    remapper::Remapper,
+    field::T;
+    physical_z = false,
+) where {T <: Fields.Field}
 
     axes(field) == remapper.space ||
         error("Field is defined on a different space than remapper")
@@ -257,7 +269,8 @@ function interpolate(remapper::Remapper, field::T) where {T <: Fields.Field}
                     field,
                     remapper.target_zcoords,
                     weights,
-                    gidx,
+                    gidx;
+                    physical_z,
                 ) for (gidx, weights) in
                 zip(remapper.local_indices, remapper.interpolation_coeffs)
             )'

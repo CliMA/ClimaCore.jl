@@ -32,6 +32,24 @@ function interpolate_slab(
     return x
 end
 
+"""
+    interpolate_slab_level(
+                           field::Fields.Field,
+                           h::Integer,
+                           Is::Tuple,
+                           zcoord,
+                           )
+
+Vertically interpolate the given `field` on `zcoord`.
+
+The field is linearly interpolated across two neighboring vertical elements.
+
+For centered-valued fields, if `zcoord` is in the top (bottom) half of a top (bottom)
+element in a column, no interpolation is performed and the value at the cell center is
+returned. Effectively, this means that the interpolation is first-order accurate across the
+column, but zeroth-order accurate close to the boundaries.
+
+"""
 function interpolate_slab_level(
     field::Fields.Field,
     h::Integer,
@@ -197,12 +215,56 @@ and global index in the topology.
 
 The coefficients `weights` are computed with `Spaces.Quadratures.interpolation_matrix`.
 See also `interpolate_array`.
+
+Keyword arguments
+==================
+
+- `physical_z`: When `true`, the given `zpts` are interpreted as "from mean sea
+                            level" (instead of "from surface") and hypsography is
+                            interpolated. `NaN`s are returned for values that are below the
+                            surface.
+
 """
 function interpolate_column(
     field::Fields.ExtrudedFiniteDifferenceField,
     zpts,
     weights,
-    gidx,
+    gidx;
+    physical_z = false,
 )
-    return [interpolate_slab_level(field, gidx, weights, z) for z in zpts]
+    space = axes(field)
+    FT = Spaces.undertype(space)
+
+    # When we don't have hypsography, there is no notion of "interpolating hypsography". In
+    # this case, the reference vertical points coincide with the physical ones. Setting
+    # physical_z = false ensures that zpts_ref = zpts
+    if space.hypsography isa Spaces.Flat
+        physical_z = false
+    end
+
+    # If we physical_z, we have to move the z coordinates from physical to
+    # reference ones.
+    if physical_z
+        # We are hardcoding the transformation from Hypsography.LinearAdaption
+        space.hypsography isa Hypsography.LinearAdaption ||
+            error("Cannot interpolate $(space.hypsography) hypsography")
+
+        z_surface = interpolate_slab(
+            space.hypsography.surface,
+            Fields.SlabIndex(nothing, gidx),
+            weights,
+        )
+        z_top = Spaces.vertical_topology(space).mesh.domain.coord_max.z
+        zpts_ref = [
+            Geometry.ZPoint((z.z - z_surface) / (1 - z_surface / z_top)) for
+            z in zpts
+        ]
+    else
+        zpts_ref = zpts
+    end
+
+    return [
+        z.z >= 0 ? interpolate_slab_level(field, gidx, weights, z) : FT(NaN) for
+        z in zpts_ref
+    ]
 end
