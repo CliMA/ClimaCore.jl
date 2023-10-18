@@ -65,17 +65,16 @@ column_integral_definite!(
     ᶜfield::Fields.CenterFiniteDifferenceField,
 ) = _column_integral_definite!(∫field, ᶜfield)
 
-function _column_integral_definite!(
-    ∫field,
-    ᶜfield::Fields.ColumnField,
-)
+function _column_integral_definite!(∫field, ᶜfield::Fields.ColumnField)
     Δz = Fields.Δz_field(ᶜfield)
     first_level = Operators.left_idx(axes(ᶜfield))
     last_level = Operators.right_idx(axes(ᶜfield))
     ∫field_data = Fields.field_values(∫field)
     Base.setindex!(∫field_data, rzero(eltype(∫field)))
     @inbounds for level in first_level:last_level
-        val = ∫field_data[] ⊞ Fields.level(ᶜfield, level)[] ⊠ Fields.level(Δz, level)[]
+        val =
+            ∫field_data[] ⊞
+            Fields.level(ᶜfield, level)[] ⊠ Fields.level(Δz, level)[]
         Base.setindex!(∫field_data, val)
     end
     return nothing
@@ -197,7 +196,7 @@ function column_mapreduce_device!(
         # reduced_field,
         strip_space(reduced_field, axes(reduced_field)),
         # fields...,
-        map(field->strip_space(field, axes(field)), fields)...,
+        map(field -> strip_space(field, axes(field)), fields)...,
     )
 end
 
@@ -218,12 +217,8 @@ function column_mapreduce_kernel_extruded!(
     return nothing
 end
 
-column_mapreduce_kernel!(
-    fn::F,
-    op::O,
-    reduced_field,
-    fields...,
-) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
+column_mapreduce_kernel!(fn::F, op::O, reduced_field, fields...) where {F, O} =
+    _column_mapreduce!(fn, op, reduced_field, fields...)
 
 column_mapreduce_device!(
     ::ClimaComms.AbstractCPUDevice,
@@ -245,12 +240,7 @@ column_mapreduce_device!(
     fields::Fields.FiniteDifferenceField...,
 ) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
 
-function _column_mapreduce!(
-    fn::F,
-    op::O,
-    reduced_field,
-    fields...,
-) where {F, O}
+function _column_mapreduce!(fn::F, op::O, reduced_field, fields...) where {F, O}
     space = axes(first(fields))
     for field in Base.tail(fields) # Base.rest breaks on the gpu
         axes(field) === space ||
@@ -263,13 +253,23 @@ function _column_mapreduce!(
     # out the rest of this function, the first line alone allocates memory.
     # This problem is not fixed by replacing map with ntuple or unrolled_map.
     fields_data = map(field -> Fields.field_values(field), fields)
-    first_level_values =
-        map(field_data -> (@inbounds data_level(field_data, space, first_level)[]), fields_data)
+    first_level_values = map(
+        field_data ->
+            (@inbounds data_level(field_data, space, first_level)[]),
+        fields_data,
+    )
     reduced_field_data = Fields.field_values(reduced_field)
     Base.setindex!(reduced_field_data, fn(first_level_values...))
     for level in (first_level + 1):last_level
-        values = map(field_data -> (@inbounds data_level(field_data, space, level)[]), fields_data)
-        Base.setindex!(reduced_field_data, op(reduced_field_data[], fn(values...)))
+        values = map(
+            field_data ->
+                (@inbounds data_level(field_data, space, level)[]),
+            fields_data,
+        )
+        Base.setindex!(
+            reduced_field_data,
+            op(reduced_field_data[], fn(values...)),
+        )
     end
     return nothing
 end
@@ -304,5 +304,7 @@ right_boundary_idx(n, ::Operators.FacePlaceholderSpace) = n - Utilities.half
 
 left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = 1
 right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = n
-left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) = Utilities.half
-right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) = n - Utilities.half
+left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) =
+    Utilities.half
+right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) =
+    n - Utilities.half

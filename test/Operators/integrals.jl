@@ -37,7 +37,9 @@ function test_column_definite_integral!(center_space, alloc_lim)
     @test_opt ignored_modules = cuda column_integral_definite!(∫u_test, ᶜu)
 
     @test (@allocated column_integral_definite!(∫u_test, ᶜu)) ≤ alloc_lim
-    alloc_lim==0 || @test_broken (@allocated column_integral_definite!(∫u_test, ᶜu)) < alloc_lim
+    alloc_lim == 0 ||
+        @test_broken (@allocated column_integral_definite!(∫u_test, ᶜu)) <
+                     alloc_lim
 end
 
 function test_column_integral_indefinite!(center_space, alloc_lim)
@@ -58,10 +60,12 @@ function test_column_integral_indefinite!(center_space, alloc_lim)
     @test_opt ignored_modules = cuda column_integral_indefinite!(ᶠ∫u_test, ᶜu)
 
     @test (@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu)) ≤ alloc_lim
-    alloc_lim==0 || @test_broken (@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu)) < alloc_lim
+    alloc_lim == 0 ||
+        @test_broken (@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu)) <
+                     alloc_lim
 end
 
-function test_column_mapreduce!(space, alloc_lim; broken=false)
+function test_column_mapreduce!(space, alloc_lim; broken = false)
     z_field = Fields.coordinate_field(space).z
     z_top_field = Fields.level(z_field, Operators.right_idx(space))
     sin_field = @. sin(pi * z_field / z_top_field)
@@ -77,20 +81,23 @@ function test_column_mapreduce!(space, alloc_lim; broken=false)
     broken || @test max_relative_error <= 0.004 # Less than 0.4% error.
 
     cuda = (AnyFrameModule(CUDA),)
-    broken || ClimaComms.device() isa ClimaComms.CUDADevice ||
+    broken ||
+        ClimaComms.device() isa ClimaComms.CUDADevice ||
         @test_opt ignored_modules = cuda column_mapreduce!(args...)
 
     # TODO: column_mapreduce! currently allocates memory
-    broken || ClimaComms.device() isa ClimaComms.CUDADevice ||
+    broken ||
+        ClimaComms.device() isa ClimaComms.CUDADevice ||
         @test (@allocated column_mapreduce!(args...)) ≤ alloc_lim
-    broken || ClimaComms.device() isa ClimaComms.CUDADevice ||
+    broken ||
+        ClimaComms.device() isa ClimaComms.CUDADevice ||
         @test_broken (@allocated column_mapreduce!(args...)) < alloc_lim
 end
 
 @testset "Integral operations unit tests" begin
     # device = ClimaComms.CPUSingleThreaded();
-    device = ClimaComms.device();
-    context = ClimaComms.SingletonCommsContext(device);
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
     broken = device isa ClimaComms.CUDADevice
     if device isa ClimaComms.CPUSingleThreaded
         i_lim = Dict()
@@ -129,14 +136,40 @@ end
     end
 
     for FT in (Float32, Float64)
-        test_column_definite_integral!(TU.ColumnCenterFiniteDifferenceSpace(FT; context), i_lim[(1, FT)])
-        test_column_definite_integral!(TU.CenterExtrudedFiniteDifferenceSpace(FT; context), i_lim[(2, FT)])
-        test_column_integral_indefinite!(TU.ColumnCenterFiniteDifferenceSpace(FT; context), i_lim[(3, FT)])
-        test_column_integral_indefinite!(TU.CenterExtrudedFiniteDifferenceSpace(FT; context), i_lim[(4, FT)])
+        test_column_definite_integral!(
+            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            i_lim[(1, FT)],
+        )
+        test_column_definite_integral!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            i_lim[(2, FT)],
+        )
+        test_column_integral_indefinite!(
+            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            i_lim[(3, FT)],
+        )
+        test_column_integral_indefinite!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            i_lim[(4, FT)],
+        )
 
-        test_column_mapreduce!(TU.ColumnCenterFiniteDifferenceSpace(FT; context), lim[(1, FT)])
-        test_column_mapreduce!(TU.ColumnFaceFiniteDifferenceSpace(FT; context), lim[(2, FT)])
-        test_column_mapreduce!(TU.CenterExtrudedFiniteDifferenceSpace(FT; context), lim[(3, FT)]; broken=broken)
-        test_column_mapreduce!(TU.FaceExtrudedFiniteDifferenceSpace(FT; context), lim[(4, FT)]; broken=broken)
+        test_column_mapreduce!(
+            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            lim[(1, FT)],
+        )
+        test_column_mapreduce!(
+            TU.ColumnFaceFiniteDifferenceSpace(FT; context),
+            lim[(2, FT)],
+        )
+        test_column_mapreduce!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            lim[(3, FT)];
+            broken = broken,
+        )
+        test_column_mapreduce!(
+            TU.FaceExtrudedFiniteDifferenceSpace(FT; context),
+            lim[(4, FT)];
+            broken = broken,
+        )
     end
 end
