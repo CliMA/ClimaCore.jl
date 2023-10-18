@@ -26,7 +26,7 @@ function column_integral_definite!(
 end
 
 function column_integral_definite_kernel!(
-    ∫field::Fields.SpectralElementField,
+    ∫field,
     ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
 )
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
@@ -232,14 +232,14 @@ column_mapreduce_device!(
     ::ClimaComms.AbstractCPUDevice,
     fn::F,
     op::O,
-    reduced_field::Fields.PointField,
+    reduced_field,
     fields::Fields.FiniteDifferenceField...,
 ) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
 
 function _column_mapreduce!(
     fn::F,
     op::O,
-    reduced_field::Fields.PointField,
+    reduced_field,
     fields::Fields.ColumnField...,
 ) where {F, O}
     space = axes(first(fields))
