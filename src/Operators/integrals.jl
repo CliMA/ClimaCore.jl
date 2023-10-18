@@ -1,4 +1,6 @@
 import ..RecursiveApply: rzero, ⊠, ⊞
+import ..Utilities
+import ..DataLayouts
 
 """
     column_integral_definite!(∫field::Field, ᶜfield::Field)
@@ -184,22 +186,29 @@ function column_mapreduce_device!(
 ) where {F, O}
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
     nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks column_mapreduce_kernel!(
+    kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
+        column_mapreduce_kernel_extruded!
+    else
+        column_mapreduce_kernel!
+    end
+    @cuda threads = nthreads blocks = nblocks kernel!(
         fn,
         op,
-        reduced_field,
-        fields...,
+        # reduced_field,
+        strip_space(reduced_field, axes(reduced_field)),
+        # fields...,
+        map(field->strip_space(field, axes(field)), fields)...,
     )
 end
 
-function column_mapreduce_kernel!(
+function column_mapreduce_kernel_extruded!(
     fn::F,
     op::O,
-    reduced_field::Fields.SpectralElementField,
-    fields::Fields.ExtrudedFiniteDifferenceField...,
+    reduced_field,
+    fields...,
 ) where {F, O}
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(field))
+    Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
     if idx <= Ni * Nj * Nh
         i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
         reduced_field_column = Spaces.column(reduced_field, i, j, h)
@@ -212,8 +221,8 @@ end
 column_mapreduce_kernel!(
     fn::F,
     op::O,
-    reduced_field::Fields.PointField,
-    fields::Fields.FiniteDifferenceField...,
+    reduced_field,
+    fields...,
 ) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
 
 column_mapreduce_device!(
@@ -232,7 +241,7 @@ column_mapreduce_device!(
     ::ClimaComms.AbstractCPUDevice,
     fn::F,
     op::O,
-    reduced_field,
+    reduced_field::Fields.PointField,
     fields::Fields.FiniteDifferenceField...,
 ) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
 
@@ -240,24 +249,60 @@ function _column_mapreduce!(
     fn::F,
     op::O,
     reduced_field,
-    fields::Fields.ColumnField...,
+    fields...,
 ) where {F, O}
     space = axes(first(fields))
-    for field in Base.rest(fields)
+    for field in Base.tail(fields) # Base.rest breaks on the gpu
         axes(field) === space ||
             error("All inputs to column_mapreduce must lie on the same space")
     end
-    first_level = Operators.left_idx(space)
-    last_level = Operators.right_idx(space)
+    (_, _, _, Nv, _) = size(Fields.field_values(first(fields)))
+    first_level = left_boundary_idx(Nv, space)
+    last_level = right_boundary_idx(Nv, space)
     # TODO: This code is allocating memory. In particular, even if we comment
     # out the rest of this function, the first line alone allocates memory.
     # This problem is not fixed by replacing map with ntuple or unrolled_map.
+    fields_data = map(field -> Fields.field_values(field), fields)
     first_level_values =
-        map(field -> (@inbounds Fields.level(field, first_level)[]), fields)
-    reduced_field[] = fn(first_level_values...)
+        map(field_data -> (@inbounds data_level(field_data, space, first_level)[]), fields_data)
+    reduced_field_data = Fields.field_values(reduced_field)
+    Base.setindex!(reduced_field_data, fn(first_level_values...))
     for level in (first_level + 1):last_level
-        values = map(field -> (@inbounds Fields.level(field, level)[]), fields)
-        reduced_field[] = op(reduced_field[], fn(values...))
+        values = map(field_data -> (@inbounds data_level(field_data, space, level)[]), fields_data)
+        Base.setindex!(reduced_field_data, op(reduced_field_data[], fn(values...)))
     end
     return nothing
 end
+
+import ..Utilities
+Base.@propagate_inbounds data_level(
+    data,
+    ::Operators.CenterPlaceholderSpace,
+    v::Int,
+) = DataLayouts.level(data, v)
+Base.@propagate_inbounds data_level(
+    data,
+    ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter},
+    v::Int,
+) = DataLayouts.level(data, v)
+
+Base.@propagate_inbounds data_level(
+    data,
+    ::Operators.FacePlaceholderSpace,
+    v::Utilities.PlusHalf,
+) = DataLayouts.level(data, v.i + 1)
+Base.@propagate_inbounds data_level(
+    data,
+    ::Spaces.FiniteDifferenceSpace{Spaces.CellFace},
+    v::Utilities.PlusHalf,
+) = DataLayouts.level(data, v.i + 1)
+
+left_boundary_idx(n, ::Operators.CenterPlaceholderSpace) = 1
+right_boundary_idx(n, ::Operators.CenterPlaceholderSpace) = n
+left_boundary_idx(n, ::Operators.FacePlaceholderSpace) = Utilities.half
+right_boundary_idx(n, ::Operators.FacePlaceholderSpace) = n - Utilities.half
+
+left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = 1
+right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = n
+left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) = Utilities.half
+right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) = n - Utilities.half
