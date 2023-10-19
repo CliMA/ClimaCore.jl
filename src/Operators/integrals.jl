@@ -53,7 +53,7 @@ end
 column_integral_definite!(
     ::ClimaComms.AbstractCPUDevice,
     ∫field::Fields.SpectralElementField,
-    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
+    ᶜfield::Fields.ExtrudedFiniteDifferenceField,
 ) =
     Fields.bycolumn(axes(ᶜfield)) do colidx
         _column_integral_definite!(∫field[colidx], ᶜfield[colidx])
@@ -62,7 +62,7 @@ column_integral_definite!(
 column_integral_definite!(
     ::ClimaComms.AbstractCPUDevice,
     ∫field::Fields.PointField,
-    ᶜfield::Fields.CenterFiniteDifferenceField,
+    ᶜfield::Fields.FiniteDifferenceField,
 ) = _column_integral_definite!(∫field, ᶜfield)
 
 function _column_integral_definite!(∫field, ᶜfield::Fields.ColumnField)
