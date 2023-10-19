@@ -33,13 +33,13 @@ function check_single_field_solver(A, b)
     )
 end
 
-single_field_solver_cache(::UniformScaling, _) = nothing
+single_field_solver_cache(::UniformScaling, b) = similar(b, Tuple{})
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
     cache_eltype =
         ud == 0 ? Tuple{} :
         Tuple{x_eltype(A, b), ntuple(_ -> unit_eltype(A), Val(ud))...}
-    return similar(A, cache_eltype)
+    return similar(b, cache_eltype)
 end
 
 single_field_solve!(_, x, A::UniformScaling, b) = x .= inv(A.λ) .* b

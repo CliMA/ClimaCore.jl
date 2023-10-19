@@ -39,7 +39,24 @@ struct FieldNameSet{
         values::NTuple{<:Any, T},
         name_tree::Union{FieldNameTree, Nothing} = nothing,
     ) where {T}
-        check_values(values, name_tree)
+        unrolled_foreach(values) do value
+            (isnothing(name_tree) || is_valid_value(value, name_tree)) || error(
+                "Invalid FieldNameSet value: $value is incompatible with the \
+                 FieldNameTree",
+            )
+            n_duplicate_values = length(unrolled_filter(isequal(value), values))
+            n_duplicate_values == 1 || error(
+                "Duplicate FieldNameSet values: $n_duplicate_values copies of \
+                $value have been passed to a FieldNameSet constructor",
+            )
+            overlapping_values = unrolled_filter(values) do value′
+                value′ != value && is_overlapping_value(value, value′)
+            end
+            isempty(overlapping_values) || error(
+                "Overlapping FieldNameSet values: $value cannot be in the same \
+                FieldNameSet as $(values_string(overlapping_values))",
+            )
+        end
         return new{T, typeof(values), typeof(name_tree)}(values, name_tree)
     end
 end
@@ -47,14 +64,12 @@ end
 const FieldVectorKeys = FieldNameSet{FieldName}
 const FieldMatrixKeys = FieldNameSet{FieldNamePair}
 
-function Base.show(io::IO, set::FieldNameSet{T}) where {T}
-    type_string(::Type{FieldName}) = "FieldVectorKeys"
-    type_string(::Type{FieldNamePair}) = "FieldMatrixKeys"
-    type_string(::Type{T}) where {T} = "FieldNameSet{$T}"
-    # Do not print the FieldNameTree, since the current implementation ensures
-    # that it will be the same across all FieldNameSets that are used together.
-    name_tree_str = isnothing(set.name_tree) ? "" : "; <FieldNameTree>"
-    print(io, "$(type_string(T))($(join(set.values, ", "))$name_tree_str)")
+# Do not print the FieldNameTree, since the current implementation ensures that
+# it will be the same across all FieldNameSets that are used together.
+function Base.show(io::IO, set::FieldNameSet)
+    T = eltype(set)
+    name_tree_string = isnothing(set.name_tree) ? "" : "; <FieldNameTree>"
+    print(io, "$(FieldNameSet{T})($(join(set.values, ", "))$name_tree_string)")
 end
 
 Base.length(set::FieldNameSet) = length(set.values)
@@ -69,6 +84,10 @@ Base.foreach(f::F, set::FieldNameSet) where {F} =
 Base.in(value, set::FieldNameSet) =
     is_value_in_set(value, set.values, set.name_tree)
 
+Base.:(==)(set1::FieldNameSet, set2::FieldNameSet) =
+    unrolled_all(value -> unrolled_in(value, set2.values), set1.values) &&
+    unrolled_all(value -> unrolled_in(value, set1.values), set2.values)
+
 function Base.issubset(set1::FieldNameSet, set2::FieldNameSet)
     name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
     unrolled_all(set1.values) do value
@@ -76,11 +95,15 @@ function Base.issubset(set1::FieldNameSet, set2::FieldNameSet)
     end
 end
 
-Base.:(==)(set1::FieldNameSet, set2::FieldNameSet) =
-    unrolled_all(value -> unrolled_in(value, set2.values), set1.values) &&
-    unrolled_all(value -> unrolled_in(value, set1.values), set2.values)
+function Base.union(set1::FieldNameSet, set2::FieldNameSet)
+    T = combine_eltypes(eltype(set1), eltype(set2))
+    name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
+    result_values = union_values(set1.values, set2.values, name_tree)
+    return FieldNameSet{T}(result_values, name_tree)
+end
 
-function Base.intersect(set1::FieldNameSet{T}, set2::FieldNameSet{T}) where {T}
+function Base.intersect(set1::FieldNameSet, set2::FieldNameSet)
+    T = combine_eltypes(eltype(set1), eltype(set2))
     name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
     all_values = union_values(set1.values, set2.values, name_tree)
     result_values = unrolled_filter(all_values) do value
@@ -90,13 +113,8 @@ function Base.intersect(set1::FieldNameSet{T}, set2::FieldNameSet{T}) where {T}
     return FieldNameSet{T}(result_values, name_tree)
 end
 
-function Base.union(set1::FieldNameSet{T}, set2::FieldNameSet{T}) where {T}
-    name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
-    result_values = union_values(set1.values, set2.values, name_tree)
-    return FieldNameSet{T}(result_values, name_tree)
-end
-
-function Base.setdiff(set1::FieldNameSet{T}, set2::FieldNameSet{T}) where {T}
+function Base.setdiff(set1::FieldNameSet, set2::FieldNameSet)
+    T = combine_eltypes(eltype(set1), eltype(set2))
     name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
     all_values = union_values(set1.values, set2.values, name_tree)
     result_values = unrolled_filter(all_values) do value
@@ -104,6 +122,9 @@ function Base.setdiff(set1::FieldNameSet{T}, set2::FieldNameSet{T}) where {T}
     end
     return FieldNameSet{T}(result_values, name_tree)
 end
+
+replace_name_tree(set::FieldNameSet, name_tree) =
+    FieldNameSet{eltype(set)}(set.values, name_tree)
 
 set_string(set) = values_string(set.values)
 
@@ -117,9 +138,9 @@ function corresponding_matrix_keys(set::FieldVectorKeys)
     return FieldMatrixKeys(result_values, set.name_tree)
 end
 
-function cartesian_product(set1::FieldVectorKeys, set2::FieldVectorKeys)
-    name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
-    result_values = unrolled_product(set1.values, set2.values)
+function cartesian_product(row_set::FieldVectorKeys, col_set::FieldVectorKeys)
+    name_tree = combine_name_trees(row_set.name_tree, col_set.name_tree)
+    result_values = unrolled_product(row_set.values, col_set.values)
     return FieldMatrixKeys(result_values, name_tree)
 end
 
@@ -138,12 +159,16 @@ end
 
 function matrix_diagonal_keys(set::FieldMatrixKeys)
     result_values′ = unrolled_filter(set.values) do name_pair
-        names_are_overlapping(name_pair[1], name_pair[2])
+        is_overlapping_name(name_pair[1], name_pair[2])
     end
     result_values = unrolled_map(result_values′) do name_pair
-        name_pair[1] == name_pair[2] ? name_pair :
-        is_child_value(name_pair[1], name_pair[2]) ?
-        (name_pair[1], name_pair[1]) : (name_pair[2], name_pair[2])
+        if name_pair[1] == name_pair[2]
+            name_pair
+        elseif is_child_value(name_pair[1], name_pair[2])
+            (name_pair[1], name_pair[1])
+        else
+            (name_pair[2], name_pair[2])
+        end
     end
     return FieldMatrixKeys(result_values, set.name_tree)
 end
@@ -172,10 +197,10 @@ because we cannot extract internal columns from FieldNameDict entries.
 =#
 function matrix_product_keys(set1::FieldMatrixKeys, set2::FieldNameSet)
     name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
-    result_values′ = unrolled_mapflatten(set1.values) do name_pair1
+    result_values′ = unrolled_flatmap(set1.values) do name_pair1
         overlapping_set2_values = unrolled_filter(set2.values) do value2
             row_name2 = eltype(set2) <: FieldName ? value2 : value2[1]
-            names_are_overlapping(name_pair1[2], row_name2)
+            is_overlapping_name(name_pair1[2], row_name2)
         end
         unrolled_map(overlapping_set2_values) do value2
             row_name2 = eltype(set2) <: FieldName ? value2 : value2[1]
@@ -191,8 +216,8 @@ function matrix_product_keys(set1::FieldMatrixKeys, set2::FieldNameSet)
             end
         end
     end
+    # Removing the overlaps here can trigger multiplication case 4.
     result_values = unique_and_non_overlapping_values(result_values′, name_tree)
-    # Note: the modification of result_values may trigger multiplication case 4.
     return FieldNameSet{eltype(set2)}(result_values, name_tree)
 end
 function summand_names_for_matrix_product(
@@ -203,15 +228,15 @@ function summand_names_for_matrix_product(
     product_row_name = eltype(set2) <: FieldName ? product_key : product_key[1]
     name_tree = combine_name_trees(set1.name_tree, set2.name_tree)
     overlapping_set1_values = unrolled_filter(set1.values) do name_pair1
-        names_are_overlapping(product_row_name, name_pair1[1])
+        is_overlapping_name(product_row_name, name_pair1[1])
     end
-    result_values = unrolled_mapflatten(overlapping_set1_values) do name_pair1
+    result_values = unrolled_flatmap(overlapping_set1_values) do name_pair1
         overlapping_set2_values = unrolled_filter(set2.values) do value2
             row_name2 = eltype(set2) <: FieldName ? value2 : value2[1]
-            names_are_overlapping(name_pair1[2], row_name2) &&
+            is_overlapping_name(name_pair1[2], row_name2) &&
                 (
                     eltype(set2) <: FieldName ||
-                    names_are_overlapping(product_key[2], value2[2])
+                    is_overlapping_name(product_key[2], value2[2])
                 ) &&
                 (
                     is_child_name(name_pair1[2], row_name2) ||
@@ -248,27 +273,12 @@ end
 
 # Internal functions:
 
-check_values(values, name_tree) =
-    unrolled_foreach(values) do value
-        (isnothing(name_tree) || is_valid_value(value, name_tree)) || error(
-            "Invalid FieldNameSet value: $value is incompatible with name_tree",
-        )
-        duplicate_values = unrolled_filter(isequal(value), values)
-        length(duplicate_values) == 1 || error(
-            "Duplicate FieldNameSet values: $(length(duplicate_values)) copies \
-             of $value have been passed to a FieldNameSet constructor",
-        )
-        overlapping_values = unrolled_filter(values) do value′
-            value != value′ && values_are_overlapping(value, value′)
-        end
-        isempty(overlapping_values) || error(
-            "Overlapping FieldNameSet values: $value cannot be in the same \
-             FieldNameSet as $(values_string(overlapping_values))",
-        )
-    end
-
 values_string(values) =
     length(values) == 2 ? join(values, " and ") : join(values, ", ", ", and ")
+
+combine_eltypes(T1, T2) =
+    T1 == T2 ? T1 :
+    errror("Mismatched FieldNameSets: Cannot combine a $T1 with a $T2")
 
 combine_name_trees(::Nothing, ::Nothing) = nothing
 combine_name_trees(name_tree1, ::Nothing) = name_tree1
@@ -295,16 +305,16 @@ is_valid_value(name_pair::FieldNamePair, name_tree) =
     is_valid_name(name_pair[1], name_tree) &&
     is_valid_name(name_pair[2], name_tree)
 
-values_are_overlapping(name1::FieldName, name2::FieldName) =
-    names_are_overlapping(name1, name2)
-values_are_overlapping(name_pair1::FieldNamePair, name_pair2::FieldNamePair) =
-    names_are_overlapping(name_pair1[1], name_pair2[1]) &&
-    names_are_overlapping(name_pair1[2], name_pair2[2])
-
 is_child_value(name1::FieldName, name2::FieldName) = is_child_name(name1, name2)
 is_child_value(name_pair1::FieldNamePair, name_pair2::FieldNamePair) =
     is_child_name(name_pair1[1], name_pair2[1]) &&
     is_child_name(name_pair1[2], name_pair2[2])
+
+is_overlapping_value(name1::FieldName, name2::FieldName) =
+    is_overlapping_name(name1, name2)
+is_overlapping_value(name_pair1::FieldNamePair, name_pair2::FieldNamePair) =
+    is_overlapping_name(name_pair1[1], name_pair2[1]) &&
+    is_overlapping_name(name_pair1[2], name_pair2[2])
 
 is_value_in_set(value, values, name_tree) =
     unrolled_in(value, values) ||
@@ -316,21 +326,20 @@ function unique_and_non_overlapping_values(values, name_tree)
     overlapping_values, non_overlapping_values =
         unrolled_split(unique_values) do value
             unrolled_any(unique_values) do value′
-                value != value′ && values_are_overlapping(value, value′)
+                value != value′ && is_overlapping_value(value, value′)
             end
         end
     isempty(overlapping_values) && return unique_values
     isnothing(name_tree) &&
         error("Missing FieldNameTree: Cannot eliminate overlaps among \
                $(values_string(overlapping_values)) without a FieldNameTree")
-    expanded_overlapping_values =
-        unrolled_mapflatten(overlapping_values) do value
-            values_overlapping_with_value =
-                unrolled_filter(overlapping_values) do value′
-                    value != value′ && values_are_overlapping(value, value′)
-                end
-            expand_child_values(value, values_overlapping_with_value, name_tree)
-        end
+    expanded_overlapping_values = unrolled_flatmap(overlapping_values) do value
+        values_overlapping_with_value =
+            unrolled_filter(overlapping_values) do value′
+                value != value′ && is_overlapping_value(value, value′)
+            end
+        expand_child_values(value, values_overlapping_with_value, name_tree)
+    end
     no_longer_overlapping_values = unique_and_non_overlapping_values(
         expanded_overlapping_values,
         name_tree,
@@ -349,14 +358,14 @@ function union_values(values1, values2, name_tree)
     overlapping_values1, non_overlapping_values1 =
         unrolled_split(values1) do value1
             unrolled_any(unique_values2) do value2
-                values_are_overlapping(value1, value2)
+                is_overlapping_value(value1, value2)
             end
         end
     isempty(overlapping_values1) && return (values1..., unique_values2...)
     overlapping_values2, non_overlapping_values2 =
         unrolled_split(unique_values2) do value2
             unrolled_any(values1) do value1
-                values_are_overlapping(value1, value2)
+                is_overlapping_value(value1, value2)
             end
         end
     isnothing(name_tree) && error(
@@ -364,18 +373,18 @@ function union_values(values1, values2, name_tree)
          $overlapping_values1 and $overlapping_values2 without a FieldNameTree",
     )
     expanded_overlapping_values1 =
-        unrolled_mapflatten(overlapping_values1) do value1
+        unrolled_flatmap(overlapping_values1) do value1
             values2_overlapping_value1 =
                 unrolled_filter(overlapping_values2) do value2
-                    values_are_overlapping(value1, value2)
+                    is_overlapping_value(value1, value2)
                 end
             expand_child_values(value1, values2_overlapping_value1, name_tree)
         end
     expanded_overlapping_values2 =
-        unrolled_mapflatten(overlapping_values2) do value2
+        unrolled_flatmap(overlapping_values2) do value2
             values1_overlapping_value2 =
                 unrolled_filter(overlapping_values1) do value1
-                    values_are_overlapping(value1, value2)
+                    is_overlapping_value(value1, value2)
                 end
             expand_child_values(value2, values1_overlapping_value2, name_tree)
         end
@@ -423,14 +432,10 @@ function expand_child_values(
         unrolled_product(row_name_children, col_name_children)
     elseif length(row_name_children) > 1 && length(col_name_children) == 1 ||
            length(row_name_children) > 0 && length(col_name_children) == 0
-        unrolled_map(row_name_children) do row_name_child
-            (row_name_child, col_name)
-        end
+        unrolled_product(row_name_children, (col_name,))
     elseif length(row_name_children) == 1 && length(col_name_children) > 1 ||
            length(row_name_children) == 0 && length(col_name_children) > 0
-        unrolled_map(col_name_children) do col_name_child
-            (row_name, col_name_child)
-        end
+        unrolled_product((row_name,), col_name_children)
     else # length(row_name_children) == 0 && length(col_name_children) == 0
         (name_pair,)
     end

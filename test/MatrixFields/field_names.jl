@@ -56,10 +56,10 @@ const x = (; foo = Foo(0), a = (; b = 1, c = ((; d = 2), (;), ((), nothing))))
     @test_all MatrixFields.is_child_name(@name(a.c.:(1).d), @name(a))
     @test_all !MatrixFields.is_child_name(@name(a.c.:(1).d), @name(foo))
 
-    @test_all MatrixFields.names_are_overlapping(@name(a), @name(a.c.:(1).d))
-    @test_all MatrixFields.names_are_overlapping(@name(a.c.:(1).d), @name(a))
-    @test_all !MatrixFields.names_are_overlapping(@name(foo), @name(a.c.:(1).d))
-    @test_all !MatrixFields.names_are_overlapping(@name(a.c.:(1).d), @name(foo))
+    @test_all MatrixFields.is_overlapping_name(@name(a), @name(a.c.:(1).d))
+    @test_all MatrixFields.is_overlapping_name(@name(a.c.:(1).d), @name(a))
+    @test_all !MatrixFields.is_overlapping_name(@name(foo), @name(a.c.:(1).d))
+    @test_all !MatrixFields.is_overlapping_name(@name(a.c.:(1).d), @name(foo))
 
     @test_all MatrixFields.extract_internal_name(@name(a.c.:(1).d), @name(a)) ==
               @name(c.:(1).d)
@@ -97,11 +97,11 @@ end
               (@name(a.b), @name(a.c))
     @test_all MatrixFields.child_names(@name(a.c), name_tree) ==
               (@name(a.c.:(1)), @name(a.c.:(2)), @name(a.c.:(3)))
-    @test_throws "does not contain any child names" MatrixFields.child_names(
+    @test_throws "does not have child names" MatrixFields.child_names(
         @name(a.c.:(2)),
         name_tree,
     )
-    @test_throws "does not contain the name" MatrixFields.child_names(
+    @test_throws "is not a valid name" MatrixFields.child_names(
         @name(foo.invalid_name),
         name_tree,
     )
@@ -189,16 +189,28 @@ end
     )
 
     @testset "FieldNameSet Basic Operations" begin
-        @test string(v_set1) ==
-              "FieldVectorKeys(@name(foo), @name(a.c); <FieldNameTree>)"
-        @test string(drop_tree(v_set1)) ==
-              "FieldVectorKeys(@name(foo), @name(a.c))"
-        @test string(m_set1) ==
-              "FieldMatrixKeys((@name(foo), @name(a.c)), (@name(a.b), \
-               @name(foo)); <FieldNameTree>)"
-        @test string(drop_tree(m_set1)) ==
-              "FieldMatrixKeys((@name(foo), @name(a.c)), (@name(a.b), \
-               @name(foo)))"
+        # We need to use endswith instead of == in the following tests to
+        # account for module qualifiers that may or may not get printed,
+        # depending on how these tests are run.
+
+        @test endswith(
+            string(v_set1),
+            "FieldVectorKeys(@name(foo), @name(a.c); <FieldNameTree>)",
+        )
+        @test endswith(
+            string(drop_tree(v_set1)),
+            "FieldVectorKeys(@name(foo), @name(a.c))",
+        )
+        @test endswith(
+            string(m_set1),
+            "FieldMatrixKeys((@name(foo), @name(a.c)), \
+             (@name(a.b), @name(foo)); <FieldNameTree>)",
+        )
+        @test endswith(
+            string(drop_tree(m_set1)),
+            "FieldMatrixKeys((@name(foo), @name(a.c)), \
+             (@name(a.b), @name(foo)))",
+        )
 
         @test_all map(name -> (name, name), v_set1) ==
                   ((@name(foo), @name(foo)), (@name(a.c), @name(a.c)))
@@ -671,18 +683,22 @@ end
         a = random_field(typeof(x_FT.a), face_space),
     )
 
-    matrix = MatrixFields.FieldMatrix(
-        (@name(foo), @name(foo)) => -I,
-        (@name(a), @name(a)) =>
-            random_field(DiagonalMatrixRow{FT}, face_space),
-        (@name(foo), @name(a.b)) => random_field(
-            BidiagonalMatrixRow{typeof(x_FT.foo)},
-            center_space,
+    matrix = MatrixFields.replace_name_tree(
+        MatrixFields.FieldMatrix(
+            (@name(foo), @name(foo)) => -I,
+            (@name(a), @name(a)) =>
+                random_field(DiagonalMatrixRow{FT}, face_space),
+            (@name(foo), @name(a.b)) => random_field(
+                BidiagonalMatrixRow{typeof(x_FT.foo)},
+                center_space,
+            ),
+            (@name(a), @name(foo._value)) => random_field(
+                QuaddiagonalMatrixRow{typeof(x_FT.a)},
+                face_space,
+            ),
         ),
-        (@name(a), @name(foo._value)) =>
-            random_field(QuaddiagonalMatrixRow{typeof(x_FT.a)}, face_space);
-        name_tree = MatrixFields.FieldNameTree(vector),
-    )
+        MatrixFields.FieldNameTree(vector),
+    ) # Add a FieldNameTree in order to fully test the behavior of getindex.
 
     @test_all MatrixFields.field_vector_view(vector) ==
               MatrixFields.FieldVectorView(

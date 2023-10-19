@@ -60,7 +60,7 @@ function FieldMatrixSolver(
     b::Fields.FieldVector,
 )
     b_view = field_vector_view(b)
-    A_with_tree = FieldMatrix(pairs(A)...; keys(b_view).name_tree)
+    A_with_tree = replace_name_tree(A, keys(b_view).name_tree)
     cache = field_matrix_solver_cache(alg, A_with_tree, b_view)
     check_field_matrix_solver(alg, cache, A_with_tree, b_view)
     return FieldMatrixSolver(alg, cache)
@@ -84,7 +84,7 @@ function field_matrix_solve!(
         "The linear system cannot be solved because x and b have incompatible \
          keys: $(set_string(keys(x_view))) vs. $(set_string(keys(b_view)))",
     )
-    A_with_tree = FieldMatrix(pairs(A)...; keys(b_view).name_tree)
+    A_with_tree = replace_name_tree(A, keys(b_view).name_tree)
     check_field_matrix_solver(alg, cache, A_with_tree, b_view)
     run_field_matrix_solver!(alg, cache, x_view, A_with_tree, b_view)
     return x
@@ -120,7 +120,7 @@ function similar_to_x(A, b)
     entries = map(matrix_row_keys(keys(A))) do name
         similar(b[name], x_eltype(A[name, name], b[name]))
     end
-    return FieldVectorView(matrix_row_keys(keys(A)), entries)
+    return FieldNameDict(matrix_row_keys(keys(A)), entries)
 end
 
 ################################################################################
@@ -135,10 +135,9 @@ lazy_sub(As...) = Base.Broadcast.broadcasted(-, As...)
 """
     lazy_mul(A, args...)
 
-Constructs an un-materialized `FieldMatrixBroadcasted` that represents the
-product `@. *(A, args...)`. This involves regular broadcasting when `A` is a
-`FieldMatrix` or `FieldMatrixBroadcasted`, but it has more complex behavior for
-other objects like the [`LazySchurComplement`](@ref).
+Constructs a lazy `FieldMatrix` that represents the product `@. *(A, args...)`.
+This involves regular broadcasting when `A` is a `FieldMatrix`, but it has more
+complex behavior for other objects like the [`LazySchurComplement`](@ref).
 """
 lazy_mul(A, args...) = Base.Broadcast.broadcasted(*, A, args...)
 
@@ -234,7 +233,7 @@ function field_matrix_solver_cache(::BlockDiagonalSolve, A, b)
     caches = map(matrix_row_keys(keys(A))) do name
         single_field_solver_cache(A[name, name], b[name])
     end
-    return FieldNameDict{FieldName}(matrix_row_keys(keys(A)), caches)
+    return FieldNameDict(matrix_row_keys(keys(A)), caches)
 end
 
 function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)

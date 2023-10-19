@@ -8,7 +8,7 @@ import ..Topologies
 import ..Grids: ColumnIndex
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, UnrolledFunctions
 
 using ..RecursiveApply
 using CUDA

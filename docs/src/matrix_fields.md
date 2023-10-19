@@ -73,6 +73,7 @@ FieldNameSet
 FieldNameDict
 field_vector_view
 concrete_field_vector
+is_lazy
 lazy_main_diagonal
 lazy_mul
 LazySchurComplement
