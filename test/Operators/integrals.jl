@@ -76,8 +76,44 @@ function test_column_integral_indefinite!(center_space, alloc_lim)
     test_allocs(alloc_lim, allocs, "test_column_integral_indefinite!")
 end
 
-function test_column_mapreduce!(space, alloc_lim; broken = false)
-    broken && return
+function test_column_integral_indefinite_fn!(center_space, alloc_lim)
+    face_space = center_to_face_space(center_space)
+    ᶜz = Fields.coordinate_field(center_space).z
+    ᶠz = Fields.coordinate_field(face_space).z
+    FT = Spaces.undertype(center_space)
+
+    ᶜu = Dict()
+    ᶠ∫u_ref = Dict()
+    ᶠ∫u_test = Dict()
+
+
+    # ᶜu = map(z -> (; one = one(z), powers = (z, z^2, z^3)), ᶜz)
+    # ᶠ∫u_ref = map(z -> (; one = z, powers = (z^2 / 2, z^3 / 3, z^4 / 4)), ᶠz)
+    # ᶠ∫u_test = similar(ᶠ∫u_ref)
+
+    for (i, fn) in enumerate(((ϕ, z) -> z, (ϕ, z) -> z^2, (ϕ, z) -> z^3))
+        ᶜu = ᶜz .^ i
+        ᶠ∫u_ref = ᶠz .^ (i + 1) ./ (i + 1)
+        ᶠ∫u_test = similar(ᶠ∫u_ref)
+
+        column_integral_indefinite!(fn, ᶠ∫u_test)
+        ref_array =
+            parent(Fields.level(ᶠ∫u_ref, Operators.right_idx(face_space)))
+        test_array =
+            parent(Fields.level(ᶠ∫u_test, Operators.right_idx(face_space)))
+        max_relative_error =
+            maximum(@. abs((ref_array - test_array) / ref_array))
+        @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
+
+        # @test_opt column_integral_indefinite!(fn, ᶠ∫u_test)
+
+        allocs = @allocated column_integral_indefinite!(fn, ᶠ∫u_test)
+        test_allocs(alloc_lim, allocs, "test_column_integral_indefinite_fn!")
+    end
+
+end
+
+function test_column_mapreduce!(space, alloc_lim)
     z_field = Fields.coordinate_field(space).z
     z_top_field = Fields.level(z_field, Operators.right_idx(space))
     sin_field = @. sin(pi * z_field / z_top_field)
@@ -137,7 +173,7 @@ end
 
         i_lim[(1, Float64)] = 1936
         i_lim[(2, Float64)] = 4720
-        i_lim[(3, Float64)] = 2368
+        i_lim[(3, Float64)] = 2544
         i_lim[(4, Float64)] = 8176
 
         lim = Dict()
@@ -173,26 +209,30 @@ end
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
             i_lim[(4, FT)],
         )
+        broken || test_column_integral_indefinite_fn!(
+            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            i_lim[(3, FT)],
+        )
+        broken || test_column_integral_indefinite_fn!(
+            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            i_lim[(4, FT)],
+        )
 
-        test_column_mapreduce!(
+        broken || test_column_mapreduce!(
             TU.ColumnCenterFiniteDifferenceSpace(FT; context),
             lim[(1, FT)],
-            broken = broken,
         )
-        test_column_mapreduce!(
+        broken || test_column_mapreduce!(
             TU.ColumnFaceFiniteDifferenceSpace(FT; context),
             lim[(2, FT)],
-            broken = broken,
         )
-        test_column_mapreduce!(
+        broken || test_column_mapreduce!(
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-            lim[(3, FT)];
-            broken = broken,
+            lim[(3, FT)],
         )
-        test_column_mapreduce!(
+        broken || test_column_mapreduce!(
             TU.FaceExtrudedFiniteDifferenceSpace(FT; context),
-            lim[(4, FT)];
-            broken = broken,
+            lim[(4, FT)],
         )
     end
 end
