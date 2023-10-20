@@ -11,6 +11,11 @@ import ..Topologies:
     load_from_recv_buffer!
 
 
+perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
+    Quadratures.degrees_of_freedom(quadrature_style(space)),
+)
+
+
 """
     create_dss_buffer(
         data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},

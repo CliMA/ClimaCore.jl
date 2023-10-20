@@ -8,8 +8,8 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
 end
 
-space(staggering::Staggering, grid::Grids.ExtrudedFiniteDifferenceGrid) =
-    ExtrudedFiniteDifferenceSpace(staggering, grid)
+space(grid::Grids.ExtrudedFiniteDifferenceGrid, staggering::Staggering) =
+    ExtrudedFiniteDifferenceSpace(grid, staggering)
 
 const FaceExtrudedFiniteDifferenceSpace{G} =
     ExtrudedFiniteDifferenceSpace{G, CellFace}
@@ -38,11 +38,16 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
 end
 
+FaceExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
+    ExtrudedFiniteDifferenceSpace(space.grid, CellFace())
+CenterExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
+    ExtrudedFiniteDifferenceSpace(space.grid, CellCenter())
+
 local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
     local_dss_weights(grid(space))
 
 staggering(space::ExtrudedFiniteDifferenceSpace) = space.staggering
-
+grid(space::ExtrudedFiniteDifferenceSpace) = space.grid
 space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =
     ExtrudedFiniteDifferenceSpace(grid(space), staggering)
 
@@ -145,7 +150,7 @@ end
 
 # TODO: deprecate these
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
-    column(space, ColumnIndex((i, j), h))
+    column(space, Grids.ColumnIndex((i, j), h))
 
 
 struct LevelSpace{S, L} <: AbstractSpace
@@ -185,90 +190,6 @@ end
 function right_boundary_name(space::ExtrudedFiniteDifferenceSpace)
     boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[2]
-end
-function blockmat(
-    a::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.UAxis, Geometry.Covariant1Axis},
-        SMatrix{1, 1, FT, 1},
-    },
-    b::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
-        SMatrix{1, 1, FT, 1},
-    },
-) where {FT}
-    A = Geometry.components(a)
-    B = Geometry.components(b)
-    Geometry.AxisTensor(
-        (Geometry.UWAxis(), Geometry.Covariant13Axis()),
-        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
-    )
-end
-
-function blockmat(
-    a::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.VAxis, Geometry.Covariant2Axis},
-        SMatrix{1, 1, FT, 1},
-    },
-    b::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
-        SMatrix{1, 1, FT, 1},
-    },
-) where {FT}
-    A = Geometry.components(a)
-    B = Geometry.components(b)
-    Geometry.AxisTensor(
-        (Geometry.VWAxis(), Geometry.Covariant23Axis()),
-        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
-    )
-end
-
-function blockmat(
-    a::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
-        SMatrix{2, 2, FT, 4},
-    },
-    b::Geometry.Axis2Tensor{
-        FT,
-        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
-        SMatrix{1, 1, FT, 1},
-    },
-) where {FT}
-    A = Geometry.components(a)
-    B = Geometry.components(b)
-    Geometry.AxisTensor(
-        (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
-        SMatrix{3, 3}(
-            A[1, 1],
-            A[2, 1],
-            zero(FT),
-            A[1, 2],
-            A[2, 2],
-            zero(FT),
-            zero(FT),
-            zero(FT),
-            B[1, 1],
-        ),
-    )
-end
-
-function product_geometry(
-    horizontal_local_geometry::Geometry.LocalGeometry,
-    vertical_local_geometry::Geometry.LocalGeometry,
-)
-    coordinates = Geometry.product_coordinates(
-        horizontal_local_geometry.coordinates,
-        vertical_local_geometry.coordinates,
-    )
-    J = horizontal_local_geometry.J * vertical_local_geometry.J
-    WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    ∂x∂ξ =
-        blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
-    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
 
 function eachslabindex(cspace::CenterExtrudedFiniteDifferenceSpace)

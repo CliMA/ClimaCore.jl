@@ -51,14 +51,10 @@ FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
 CenterFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellCenter())
 
-FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) = FiniteDifferenceSpace(
-    Grids.FiniteDifferenceGrid(Grids.FiniteDifferenceGrid(mesh)),
-    CellFace(),
-)
-CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) = FiniteDifferenceSpace(
-    Grids.FiniteDifferenceGrid(Grids.FiniteDifferenceGrid(mesh)),
-    CellCenter(),
-)
+FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellFace())
+CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellCenter())
 
 
 

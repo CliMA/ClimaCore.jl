@@ -51,3 +51,89 @@ end
 
 undertype(::Type{LocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
+
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UAxis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.UWAxis(), Geometry.Covariant13Axis()),
+        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
+    )
+end
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.VAxis, Geometry.Covariant2Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.VWAxis(), Geometry.Covariant23Axis()),
+        SMatrix{2, 2}(A[1, 1], zero(FT), zero(FT), B[1, 1]),
+    )
+end
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
+        SMatrix{3, 3}(
+            A[1, 1],
+            A[2, 1],
+            zero(FT),
+            A[1, 2],
+            A[2, 2],
+            zero(FT),
+            zero(FT),
+            zero(FT),
+            B[1, 1],
+        ),
+    )
+end
+
+function product_geometry(
+    horizontal_local_geometry::Geometry.LocalGeometry,
+    vertical_local_geometry::Geometry.LocalGeometry,
+)
+    coordinates = Geometry.product_coordinates(
+        horizontal_local_geometry.coordinates,
+        vertical_local_geometry.coordinates,
+    )
+    J = horizontal_local_geometry.J * vertical_local_geometry.J
+    WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
+    ∂x∂ξ =
+        blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
+    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
+end

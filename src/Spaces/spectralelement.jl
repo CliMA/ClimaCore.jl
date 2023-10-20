@@ -16,6 +16,8 @@ nlevels(space::AbstractSpectralElementSpace) = 1
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
 
+staggering(space::AbstractSpectralElementSpace) = nothing
+
 function Base.show(io::IO, space::AbstractSpectralElementSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
