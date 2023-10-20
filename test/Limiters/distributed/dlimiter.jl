@@ -68,6 +68,7 @@ q_ref = map(
 total_ρq = sum(ρq)
 
 limiter = Limiters.QuasiMonotoneLimiter(ρq)
+@test_broken !isnothing(limiter.ghost_buffer)
 
 Limiters.compute_bounds!(limiter, ρq_ref, ρ)
 Limiters.apply_limiter!(ρq, ρ, limiter)
