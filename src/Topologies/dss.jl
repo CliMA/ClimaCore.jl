@@ -34,40 +34,25 @@ end
 """
     create_dss_buffer(
         data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-        hspace::AbstractSpectralElementSpace,
+        topology::Topology2D,
+        local_geometry = nothing,
+        local_weights = nothing,
     ) where {S, Nij}
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    hspace::AbstractSpectralElementSpace,
-) where {S, Nij}
-    @assert quadrature_style(hspace) isa Spaces.Quadratures.GLL "DSS2 is only compatible with GLL quadrature"
-    local_geometry = local_geometry_data(hspace)
-    local_weights = local_dss_weights(hspace)
-    perimeter = Spaces.perimeter(hspace)
-    create_dss_buffer(
-        data,
-        topology(hspace),
-        perimeter,
-        local_geometry,
-        local_weights,
-    )
-end
-
-function create_dss_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    topology,
-    perimeter,
+    topology::Topology2D,
     local_geometry = nothing,
     local_weights = nothing,
 ) where {S, Nij}
-    context = topology.context
+    perimeter = Perimeter2D(Nij)
+    context = ClimaComms.context(topology)
     DA = ClimaComms.array_type(topology)
     convert_to_array = DA isa Array ? false : true
     (_, _, _, Nv, nelems) = Base.size(data)
-    Np = Spaces.nperimeter(perimeter)
+    Np =length(perimeter)
     Nf =
         length(parent(data)) == 0 ? 0 :
         cld(length(parent(data)), (Nij * Nij * Nv * nelems))
@@ -87,7 +72,7 @@ function create_dss_buffer(
         send_buf_idx, recv_buf_idx = Int[], Int[]
         send_data, recv_data = DA{T}(undef, 0), DA{T}(undef, 0)
         send_buf_idx, recv_buf_idx = DA{Int}(undef, 0), DA{Int}(undef, 0)
-        internal_elems = DA{Int}(1:Topologies.nelems(topology))
+        internal_elems = DA{Int}(1:nelems(topology))
         perimeter_elems = DA{Int}(undef, 0)
     else
         (; comm_vertex_lengths, comm_face_lengths) = topology
@@ -109,7 +94,7 @@ function create_dss_buffer(
             persistent = true,
         )
         send_buf_idx, recv_buf_idx =
-            Topologies.compute_ghost_send_recv_idx(topology, Nij)
+            compute_ghost_send_recv_idx(topology, Nij)
         internal_elems = DA(topology.internal_elems)
         perimeter_elems = DA(topology.perimeter_elems)
     end
@@ -207,276 +192,11 @@ end
 
 Base.eltype(::DSSBuffer{S}) where {S} = S
 
-create_dss_buffer(data::DataLayouts.AbstractData, hspace) = nothing
-
 assert_same_eltype(::DataLayouts.AbstractData, ::DSSBuffer) =
     error("Incorrect buffer eltype")
 assert_same_eltype(::DataLayouts.AbstractData{S}, ::DSSBuffer{S}) where {S} =
     nothing
 assert_same_eltype(::DataLayouts.AbstractData, ::Nothing) = nothing
-
-"""
-    function weighted_dss!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
-
-Computes weighted dss of `data`. 
-
-It comprises of the following steps:
-
-1). [`Spaces.weighted_dss_start!`](@ref)
-
-2). [`Spaces.weighted_dss_internal!`](@ref)
-
-3). [`Spaces.weighted_dss_ghost!`](@ref)
-"""
-function weighted_dss!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-)
-    assert_same_eltype(data, dss_buffer)
-    weighted_dss_start!(data, space, dss_buffer)
-    weighted_dss_internal!(data, space, dss_buffer)
-    weighted_dss_ghost!(data, space, dss_buffer)
-end
-
-"""
-    weighted_dss_start!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
-
-It comprises of the following steps:
-
-1). Apply [`Spaces.dss_transform!`](@ref) on perimeter elements. This weights and tranforms vector 
-fields to physical basis if needed. Scalar fields are weighted. The transformed and/or weighted 
-perimeter `data` is stored in `perimeter_data`.
-
-2). Apply [`Spaces.dss_local_ghost!`](@ref)
-This computes partial weighted DSS on ghost vertices, using only the information from `local` vertices.
-
-3). [`Spaces.fill_send_buffer!`](@ref) 
-Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
-representative ghost vertices which store result of "ghost local" DSS are loaded.
-
-4). Start DSS communication with neighboring processes
-"""
-weighted_dss_start!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_start!(data, space, horizontal_space(space), dss_buffer)
-
-function weighted_dss_start!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    space::Union{
-        Spaces.SpectralElementSpace2D,
-        Spaces.ExtrudedFiniteDifferenceSpace,
-    },
-    hspace::SpectralElementSpace2D{<:Topology2D},
-    dss_buffer::DSSBuffer,
-)
-    assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
-    device = ClimaComms.device(topology(hspace))
-    dss_transform!(
-        device,
-        dss_buffer,
-        data,
-        local_geometry_data(space),
-        local_dss_weights(hspace),
-        Spaces.perimeter(hspace),
-        dss_buffer.perimeter_elems,
-    )
-    dss_local_ghost!(
-        device,
-        dss_buffer.perimeter_data,
-        Spaces.perimeter(hspace),
-        topology(hspace),
-    )
-    fill_send_buffer!(device, dss_buffer)
-    ClimaComms.start(dss_buffer.graph_context)
-    return nothing
-end
-
-weighted_dss_start!(data, space, hspace, dss_buffer) = nothing
-"""
-    weighted_dss_internal!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::DSSBuffer,
-    )
-
-1). Apply [`Spaces.dss_transform!`](@ref) on interior elements. Local elements are split into interior 
-and perimeter elements to facilitate overlapping of communication with computation.
-
-2). Probe communication
-
-3). [`Spaces.dss_local!`](@ref) computes the weighted DSS on local vertices and faces.
-"""
-weighted_dss_internal!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_internal!(data, space, horizontal_space(space), dss_buffer)
-
-function weighted_dss_internal!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::AbstractSpectralElementSpace,
-    dss_buffer::Union{DSSBuffer, Nothing},
-)
-    assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
-    if hspace isa SpectralElementSpace1D
-        dss_1d!(
-            topology(hspace),
-            data,
-            local_geometry_data(space),
-            local_dss_weights(space),
-        )
-    else
-        device = ClimaComms.device(topology(hspace))
-        dss_transform!(
-            device,
-            dss_buffer,
-            data,
-            local_geometry_data(space),
-            local_dss_weights(space),
-            Spaces.perimeter(hspace),
-            dss_buffer.internal_elems,
-        )
-        dss_local!(
-            device,
-            dss_buffer.perimeter_data,
-            Spaces.perimeter(hspace),
-            topology(hspace),
-        )
-        dss_untransform!(
-            device,
-            dss_buffer,
-            data,
-            local_geometry_data(space),
-            Spaces.perimeter(hspace),
-            dss_buffer.internal_elems,
-        )
-    end
-    return nothing
-end
-"""
-    weighted_dss_ghost!(
-        data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
-        },
-        space::Union{
-            AbstractSpectralElementSpace,
-            ExtrudedFiniteDifferenceSpace,
-        },
-        dss_buffer::Union{DSSBuffer, Nothing},
-    )
-
-1). Finish communications.
-
-2). Call [`Spaces.load_from_recv_buffer!`](@ref)
-After the communication is complete, this adds data from the recv buffer to the corresponding location in 
-`perimeter_data`. For ghost vertices, this data is added only to the representative vertices. The values are 
-then scattered to other local vertices corresponding to each unique ghost vertex in `dss_local_ghost`.
-
-3). Call [`Spaces.dss_untransform!`](@ref) on all local elements.
-This transforms the DSS'd local vectors back to Covariant12 vectors, and copies the DSS'd data from the
-`perimeter_data` to `data`.
-"""
-weighted_dss_ghost!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_ghost!(data, space, horizontal_space(space), dss_buffer)
-
-function weighted_dss_ghost!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::SpectralElementSpace2D{<:Topology2D},
-    dss_buffer::DSSBuffer,
-)
-    assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return data
-    device = ClimaComms.device(topology(hspace))
-    ClimaComms.finish(dss_buffer.graph_context)
-    load_from_recv_buffer!(device, dss_buffer)
-    dss_ghost!(
-        device,
-        dss_buffer.perimeter_data,
-        Spaces.perimeter(hspace),
-        topology(hspace),
-    )
-    dss_untransform!(
-        device,
-        dss_buffer,
-        data,
-        local_geometry_data(space),
-        Spaces.perimeter(hspace),
-        dss_buffer.perimeter_elems,
-    )
-    return data
-end
-
-weighted_dss_ghost!(data, space, hspace, dss_buffer) = data
 
 """
     function dss_transform!(
@@ -823,7 +543,7 @@ end
         ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
-        topology::Topologies.AbstractTopology,
+        topology::AbstractTopology,
     )
 
 Performs DSS on local vertices and faces.
@@ -834,7 +554,7 @@ function dss_local!(
     ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
-    topology::Topologies.Topology2D,
+    topology::Topology2D,
 )
     dss_local_vertices!(perimeter_data, perimeter, topology)
     dss_local_faces!(perimeter_data, perimeter, topology)
@@ -845,7 +565,7 @@ end
     dss_local_vertices!(
         perimeter_data::DataLayouts.VIFH,
         perimeter::Perimeter2D,
-        topology::Topologies.Topology2D,
+        topology::Topology2D,
     )
 
 Apply dss to local vertices.
@@ -853,10 +573,10 @@ Apply dss to local vertices.
 function dss_local_vertices!(
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
-    topology::Topologies.Topology2D,
+    topology::Topology2D,
 )
     Nv = size(perimeter_data, 4)
-    @inbounds for vertex in Topologies.local_vertices(topology)
+    @inbounds for vertex in local_vertices(topology)
         # for each level
         for level in 1:Nv
             # gather: compute sum over shared vertices
@@ -865,14 +585,14 @@ function dss_local_vertices!(
                 vertex;
                 init = RecursiveApply.rzero(eltype(slab(perimeter_data, 1, 1))),
             ) do (lidx, vert)
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 perimeter_slab = slab(perimeter_data, level, lidx)
                 perimeter_slab[ip]
             end
             # scatter: assign sum to shared vertices
             for (lidx, vert) in vertex
                 perimeter_slab = slab(perimeter_data, level, lidx)
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 perimeter_slab[ip] = sum_data
             end
         end
@@ -883,15 +603,15 @@ end
 function dss_local_faces!(
     perimeter_data::DataLayouts.VIFH,
     perimeter::Perimeter2D,
-    topology::Topologies.Topology2D,
+    topology::Topology2D,
 )
     (Np, _, _, Nv, _) = size(perimeter_data)
     nfacedof = div(Np - 4, 4)
 
     @inbounds for (lidx1, face1, lidx2, face2, reversed) in
-                  Topologies.interior_faces(topology)
-        pr1 = Topologies.perimeter_face_indices(face1, nfacedof, false)
-        pr2 = Topologies.perimeter_face_indices(face2, nfacedof, reversed)
+                  interior_faces(topology)
+        pr1 = perimeter_face_indices(face1, nfacedof, false)
+        pr2 = perimeter_face_indices(face2, nfacedof, reversed)
         for level in 1:Nv
             perimeter_slab1 = slab(perimeter_data, level, lidx1)
             perimeter_slab2 = slab(perimeter_data, level, lidx2)
@@ -909,7 +629,7 @@ end
         ::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
-        topology::Topologies.AbstractTopology,
+        topology::AbstractTopology,
     )
 
 Computes the "local" part of ghost vertex dss. (i.e. it computes the summation of all the shared local
@@ -922,12 +642,12 @@ function dss_local_ghost!(
     ::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,
-    topology::Topologies.AbstractTopology,
+    topology::AbstractTopology,
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         (Np, _, _, Nv, _) = size(perimeter_data)
-        @inbounds for vertex in Topologies.ghost_vertices(topology)
+        @inbounds for vertex in ghost_vertices(topology)
             for level in 1:Nv
                 # gather: compute sum over shared vertices
                 sum_data = mapreduce(
@@ -937,7 +657,7 @@ function dss_local_ghost!(
                         eltype(slab(perimeter_data, 1, 1)),
                     ),
                 ) do (isghost, idx, vert)
-                    ip = Topologies.perimeter_vertex_node_index(vert)
+                    ip = perimeter_vertex_node_index(vert)
                     if !isghost
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
@@ -948,7 +668,7 @@ function dss_local_ghost!(
                 end
                 for (isghost, idx, vert) in vertex
                     if !isghost
-                        ip = Topologies.perimeter_vertex_node_index(vert)
+                        ip = perimeter_vertex_node_index(vert)
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
                         perimeter_slab[ip] = sum_data
@@ -964,7 +684,7 @@ end
         device::ClimaComms.AbstractCPUDevice,
         perimeter_data::DataLayouts.VIFH,
         perimeter::AbstractPerimeter,
-        topology::Topologies.AbstractTopology,
+        topology::AbstractTopology,
     )
 
 Sets the value for all local vertices of each unique ghost vertex, in `perimeter_data`, to that of 
@@ -976,16 +696,16 @@ function dss_ghost!(
     device::ClimaComms.AbstractCPUDevice,
     perimeter_data::DataLayouts.VIFH,
     perimeter::AbstractPerimeter,
-    topology::Topologies.AbstractTopology,
+    topology::AbstractTopology,
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         nlevels = size(perimeter_data, 4)
-        perimeter_vertex_node_index = Topologies.perimeter_vertex_node_index
-        perimeter_face_indices = Topologies.perimeter_face_indices
+        perimeter_vertex_node_index = perimeter_vertex_node_index
+        perimeter_face_indices = perimeter_face_indices
         (; repr_ghost_vertex) = topology
         @inbounds for (i, vertex) in
-                      enumerate(Topologies.ghost_vertices(topology))
+                      enumerate(ghost_vertices(topology))
             idxresult, lvertresult = repr_ghost_vertex[i]
             ipresult = perimeter_vertex_node_index(lvertresult)
             for level in 1:nlevels
@@ -1098,7 +818,7 @@ end
 dss2!(data, topology, quadrature_style) = dss!(data, topology, quadrature_style)
 
 function dss_1d!(
-    htopology::Topologies.AbstractTopology,
+    htopology::AbstractTopology,
     data,
     local_geometry_data = nothing,
     dss_weights = nothing,
@@ -1108,7 +828,7 @@ function dss_1d!(
     idx1 = CartesianIndex(1, 1, 1, 1, 1)
     idx2 = CartesianIndex(Nq, 1, 1, 1, 1)
     @inbounds for (elem1, face1, elem2, face2, reversed) in
-                  Topologies.interior_faces(htopology)
+                  interior_faces(htopology)
         for level in 1:Nv
             @assert face1 == 1 && face2 == 2 && !reversed
             local_geometry_slab1 = slab(local_geometry_data, level, elem1)
