@@ -128,7 +128,7 @@ function weighted_dss_start!(
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
     },
-    hspace::SpectralElementSpace2D{<:Topologies.Topology2D},
+    hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,
 )
     assert_same_eltype(data, dss_buffer)
@@ -154,7 +154,12 @@ function weighted_dss_start!(
     return nothing
 end
 
-weighted_dss_start!(data, space, hspace, dss_buffer::Nothing) = nothing
+weighted_dss_start!(
+    data,
+    space,
+    hspace::SpectralElementSpace1D,
+    dss_buffer::Nothing,
+) = nothing
 
 """
     weighted_dss_internal!(

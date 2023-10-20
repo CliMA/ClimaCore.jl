@@ -5,6 +5,24 @@ import ClimaCore.Geometry: Geometry
 using StaticArrays
 using IntervalSets
 
+@testset "Perimeter2D iterator" begin
+    @test collect(Topologies.Perimeter2D(4)) == [
+        (1, 1)
+        (4, 1)
+        (4, 4)
+        (1, 4)
+        (2, 1)
+        (3, 1)
+        (4, 2)
+        (4, 3)
+        (3, 4)
+        (2, 4)
+        (1, 3)
+        (1, 2)
+    ]
+end
+
+
 function rectangular_grid(
     n1,
     n2,

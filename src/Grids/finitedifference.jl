@@ -141,6 +141,7 @@ FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
 
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology
+vertical_topology(grid::FiniteDifferenceGrid) = grid.topology
 
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry

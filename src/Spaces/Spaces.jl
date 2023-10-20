@@ -28,6 +28,7 @@ import ..Grids:
     CellFace,
     CellCenter,
     topology,
+    vertical_topology,
     local_geometry_data,
     local_dss_weights,
     quadrature_style

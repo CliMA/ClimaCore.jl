@@ -733,30 +733,35 @@ Construct a perimeter iterator for a 2D spectral element with `Nq` nodes per
 dimension (i.e. polynomial degree `Nq-1`).
 """
 Perimeter2D(Nq) = Perimeter2D{Nq}()
+
 Adapt.adapt_structure(to, x::Perimeter2D) = x
 
-Base.length(::Perimeter2D{Nq}) where {Nq} = 4 + (Nq - 1) * 4
+Base.IteratorEltype(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasEltype()
+Base.eltype(::Type{Perimeter2D{Nq}}) where {Nq} = Tuple{Int, Int}
+
+Base.IteratorSize(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasLength()
+Base.length(::Perimeter2D{Nq}) where {Nq} = 4 + (Nq - 2) * 4
 
 function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
-    if loc <= 5
+    if loc <= 4
         return (vertex_node_index(loc, Nq), loc + 1)
     elseif loc ≤ length(perimeter)
         f = cld(loc - 4, Nq - 2)
         n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return (Topologies.face_node_index(f, Nq, 1 + n), loc + 1)
+        return (face_node_index(f, Nq, 1 + n), loc + 1)
     else
         return nothing
     end
 end
 
 function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
-    if loc < 1 || loc > nperimeter2d(Nq)
+    if loc < 1 || loc > length(perimeter)
         return (-1, -1)
-    elseif loc < 5
-        return Topologies.vertex_node_index(loc, Nq)
+    elseif loc <= 4
+        return vertex_node_index(loc, Nq)
     else
         f = cld(loc - 4, Nq - 2)
         n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
-        return Topologies.face_node_index(f, Nq, 1 + n)
+        return face_node_index(f, Nq, 1 + n)
     end
 end

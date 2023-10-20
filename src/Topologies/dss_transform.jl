@@ -230,11 +230,6 @@ end
     Geometry.transform(ax, targ, local_geometry)
 end
 
-function weighted_dss! end
-function weighted_dss_start! end
-function weighted_dss_internal! end
-function weighted_dss_ghost! end
-
 # helper functions for DSS2
 function _get_idx(sizet::NTuple{5, Int}, loc::NTuple{5, Int})
     (n1, n2, n3, n4, n5) = sizet

@@ -22,13 +22,13 @@ right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
 right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
-    Spaces.local_geometry_data(Spaces.space(space, Spaces.CallCenter())),
+    Spaces.local_geometry_data(Spaces.space(space, Spaces.CellCenter())),
     4,
 )
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
     size(
-        Spaces.local_geometry_data(Spaces.space(space, Spaces.CallFace())),
+        Spaces.local_geometry_data(Spaces.space(space, Spaces.CellFace())),
         4,
     ) - half
 
@@ -49,7 +49,8 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    local_geom = Spaces.local_geometry_data(Spaces.CellCenter(), space.grid)
+    local_geom =
+        Grids.local_geometry_data(Spaces.grid(space), Grids.CellCenter())
     return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
 end
 Base.@propagate_inbounds function Geometry.LocalGeometry(
@@ -62,7 +63,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
         v = mod1(v, length(space))
     end
     i, j, h = hidx
-    local_geom = Spaces.local_geometry_data(Spaces.CellFace(), space.grid)
+    local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
     return @inbounds local_geom[CartesianIndex(i, j, 1, v, h)]
 end
 
@@ -351,7 +352,7 @@ end
 InterpolateF2C(; kwargs...) = InterpolateF2C(NamedTuple(kwargs))
 
 return_space(::InterpolateF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::InterpolateF2C, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -587,7 +588,7 @@ end
 LeftBiasedF2C(; kwargs...) = LeftBiasedF2C(NamedTuple(kwargs))
 
 return_space(::LeftBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::LeftBiasedF2C, arg) = ((-half, -half),)
 Base.@propagate_inbounds stencil_interior(
@@ -647,7 +648,7 @@ end
 LeftBiased3rdOrderC2F(; kwargs...) = LeftBiased3rdOrderC2F(NamedTuple(kwargs))
 
 return_space(::LeftBiased3rdOrderC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::LeftBiased3rdOrderC2F, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
@@ -711,7 +712,7 @@ end
 LeftBiased3rdOrderF2C(; kwargs...) = LeftBiased3rdOrderF2C(NamedTuple(kwargs))
 
 return_space(::LeftBiased3rdOrderF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::LeftBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
@@ -775,7 +776,7 @@ end
 RightBiasedC2F(; kwargs...) = RightBiasedC2F(NamedTuple(kwargs))
 
 return_space(::RightBiasedC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::RightBiasedC2F, arg) = ((half, half),)
 Base.@propagate_inbounds stencil_interior(
@@ -834,7 +835,7 @@ end
 RightBiasedF2C(; kwargs...) = RightBiasedF2C(NamedTuple(kwargs))
 
 return_space(::RightBiasedF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::RightBiasedF2C, arg) = ((half, half),)
 Base.@propagate_inbounds stencil_interior(
@@ -896,7 +897,7 @@ end
 RightBiased3rdOrderC2F(; kwargs...) = RightBiased3rdOrderC2F(NamedTuple(kwargs))
 
 return_space(::RightBiased3rdOrderC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::RightBiased3rdOrderC2F, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
@@ -948,7 +949,7 @@ end
 RightBiased3rdOrderF2C(; kwargs...) = RightBiased3rdOrderF2C(NamedTuple(kwargs))
 
 return_space(::RightBiased3rdOrderF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::RightBiased3rdOrderF2C, arg) = ((-half - 1, half + 1),)
 Base.@propagate_inbounds stencil_interior(
@@ -2254,7 +2255,7 @@ end
 GradientF2C(; kwargs...) = GradientF2C(NamedTuple(kwargs))
 
 return_space(::GradientF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::GradientF2C, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -2367,7 +2368,7 @@ end
 GradientC2F(; kwargs...) = GradientC2F(NamedTuple(kwargs))
 
 return_space(::GradientC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::GradientC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -2491,7 +2492,7 @@ end
 DivergenceF2C(; kwargs...) = DivergenceF2C(NamedTuple(kwargs))
 
 return_space(::DivergenceF2C, space::AllFaceFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallCenter())
+    Spaces.space(space, Spaces.CellCenter())
 
 stencil_interior_width(::DivergenceF2C, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -2623,7 +2624,7 @@ end
 DivergenceC2F(; kwargs...) = DivergenceC2F(NamedTuple(kwargs))
 
 return_space(::DivergenceC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 stencil_interior_width(::DivergenceC2F, arg) = ((-half, half),)
 Base.@propagate_inbounds function stencil_interior(
@@ -2767,7 +2768,7 @@ end
 CurlC2F(; kwargs...) = CurlC2F(NamedTuple(kwargs))
 
 return_space(::CurlC2F, space::AllCenterFiniteDifferenceSpace) =
-    Spaces.space(space, Spaces.CallFace())
+    Spaces.space(space, Spaces.CellFace())
 
 fd3_curl(u₊::Geometry.Covariant1Vector, u₋::Geometry.Covariant1Vector, invJ) =
     Geometry.Contravariant2Vector((u₊.u₁ - u₋.u₁) * invJ)

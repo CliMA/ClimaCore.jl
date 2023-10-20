@@ -45,13 +45,13 @@ function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     topology::Topology2D,
     local_geometry::Union{
-        DataLayouts.IJFH{S, Nij},
-        DataLayouts.VIJFH{S, Nij},
+        DataLayouts.IJFH{<:Any, Nij},
+        DataLayouts.VIJFH{<:Any, Nij},
         Nothing,
     } = nothing,
     local_weights::Union{
-        DataLayouts.IJFH{S, Nij},
-        DataLayouts.VIJFH{S, Nij},
+        DataLayouts.IJFH{<:Any, Nij},
+        DataLayouts.VIJFH{<:Any, Nij},
         Nothing,
     } = nothing,
 ) where {S, Nij}

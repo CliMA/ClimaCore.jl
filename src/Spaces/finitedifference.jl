@@ -19,7 +19,7 @@ grid(space::AbstractFiniteDifferenceSpace) = space.grid
 staggering(space::FiniteDifferenceSpace) = space.staggering
 
 space(grid::Grids.AbstractFiniteDifferenceGrid, staggering::Staggering) =
-    FiniteDifferenceSpace(staggering, grid)
+    FiniteDifferenceSpace(grid, staggering)
 
 function Base.show(io::IO, space::FiniteDifferenceSpace)
     indent = get(io, :indent, 0)
@@ -42,9 +42,9 @@ CenterFiniteDifferenceSpace(grid::Grids.AbstractFiniteDifferenceGrid) =
     FiniteDifferenceSpace(grid, CellCenter())
 
 FaceFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-    FiniteDifferenceSpace(space, CellFace())
+    FiniteDifferenceSpace(space.grid, CellFace())
 CenterFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-    FiniteDifferenceSpace(space, CellCenter())
+    FiniteDifferenceSpace(space.grid, CellCenter())
 
 FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellFace())
