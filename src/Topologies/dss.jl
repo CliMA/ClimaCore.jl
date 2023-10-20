@@ -44,18 +44,26 @@ Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     topology::Topology2D,
-    local_geometry = nothing,
-    local_weights = nothing,
+    local_geometry::Union{
+        DataLayouts.IJFH{S, Nij},
+        DataLayouts.VIJFH{S, Nij},
+        Nothing,
+    } = nothing,
+    local_weights::Union{
+        DataLayouts.IJFH{S, Nij},
+        DataLayouts.VIJFH{S, Nij},
+        Nothing,
+    } = nothing,
 ) where {S, Nij}
-    perimeter = Perimeter2D(Nij)
+    perimeter::Perimeter2D = Perimeter2D(Nij)
     context = ClimaComms.context(topology)
     DA = ClimaComms.array_type(topology)
     convert_to_array = DA isa Array ? false : true
-    (_, _, _, Nv, nelems) = Base.size(data)
-    Np =length(perimeter)
+    (_, _, _, Nv, Nh) = Base.size(data)
+    Np = length(perimeter)
     Nf =
         length(parent(data)) == 0 ? 0 :
-        cld(length(parent(data)), (Nij * Nij * Nv * nelems))
+        cld(length(parent(data)), (Nij * Nij * Nv * Nh))
     nfacedof = Nij - 2
     T = eltype(parent(data))
     TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
@@ -65,7 +73,7 @@ function create_dss_buffer(
     if eltype(data) <: Geometry.Covariant123Vector
         TS = Geometry.UVWVector{T}
     end
-    perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, nelems))
+    perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]
@@ -93,8 +101,7 @@ function create_dss_buffer(
             neighbor_pids,
             persistent = true,
         )
-        send_buf_idx, recv_buf_idx =
-            compute_ghost_send_recv_idx(topology, Nij)
+        send_buf_idx, recv_buf_idx = compute_ghost_send_recv_idx(topology, Nij)
         internal_elems = DA(topology.internal_elems)
         perimeter_elems = DA(topology.perimeter_elems)
     end
@@ -704,8 +711,7 @@ function dss_ghost!(
         perimeter_vertex_node_index = perimeter_vertex_node_index
         perimeter_face_indices = perimeter_face_indices
         (; repr_ghost_vertex) = topology
-        @inbounds for (i, vertex) in
-                      enumerate(ghost_vertices(topology))
+        @inbounds for (i, vertex) in enumerate(ghost_vertices(topology))
             idxresult, lvertresult = repr_ghost_vertex[i]
             ipresult = perimeter_vertex_node_index(lvertresult)
             for level in 1:nlevels
@@ -784,16 +790,19 @@ function load_from_recv_buffer!(
 end
 
 """
-    dss!(data, topology, quadrature_style)
+    dss!(data, topology)
 
 Computed unweighted/pure DSS of `data`.
 """
-function dss!(data, topology, quadrature_style)
+function dss!(
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    topology::Topology2D,
+) where {S, Nij}
     length(parent(data)) == 0 && return nothing
     device = ClimaComms.device(topology)
-    perimeter = Perimeter2D(Quadratures.degrees_of_freedom(quadrature_style))
+    perimeter = Perimeter2D(Nij)
     # create dss buffer
-    dss_buffer = create_dss_buffer(data, topology, perimeter)
+    dss_buffer = create_dss_buffer(data, topology)
     # load perimeter data from data
     dss_load_perimeter_data!(device, dss_buffer, data, perimeter)
     # compute local dss for ghost dof
@@ -814,8 +823,6 @@ function dss!(data, topology, quadrature_style)
     dss_unload_perimeter_data!(device, data, dss_buffer, perimeter)
     return nothing
 end
-
-dss2!(data, topology, quadrature_style) = dss!(data, topology, quadrature_style)
 
 function dss_1d!(
     htopology::AbstractTopology,

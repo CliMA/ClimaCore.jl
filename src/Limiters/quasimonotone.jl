@@ -51,7 +51,7 @@ end
 function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq))))
     q_bounds = make_q_bounds(Fields.field_values(ρq))
     ghost_buffer =
-        Spaces.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
+        Topologies.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
     return QuasiMonotoneLimiter(q_bounds, similar(q_bounds), ghost_buffer, rtol)
 end
 

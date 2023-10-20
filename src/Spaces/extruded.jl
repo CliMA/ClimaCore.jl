@@ -12,9 +12,9 @@ space(staggering::Staggering, grid::Grids.ExtrudedFiniteDifferenceGrid) =
     ExtrudedFiniteDifferenceSpace(staggering, grid)
 
 const FaceExtrudedFiniteDifferenceSpace{G} =
-    ExtrudedFiniteDifferenceSpace{G,CellFace}
+    ExtrudedFiniteDifferenceSpace{G, CellFace}
 const CenterExtrudedFiniteDifferenceSpace{G} =
-    ExtrudedFiniteDifferenceSpace{G,CellCenter}
+    ExtrudedFiniteDifferenceSpace{G, CellCenter}
 
 #=
 ExtrudedFiniteDifferenceSpace{S}(
@@ -74,10 +74,7 @@ end
 =#
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace(
-        Adapt.adapt(to, space.grid),
-        space.staggering,
-    )
+    ExtrudedFiniteDifferenceSpace(Adapt.adapt(to, space.grid), space.staggering)
 
 #=
 

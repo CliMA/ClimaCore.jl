@@ -1,4 +1,4 @@
-import ..Topologies: 
+import ..Topologies:
     DSSBuffer,
     create_dss_buffer,
     assert_same_eltype,
@@ -23,7 +23,12 @@ function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
     hspace::AbstractSpectralElementSpace,
 ) where {S, Nij}
-    create_dss_buffer(data, topology(hspace), local_geometry_data(hspace), local_dss_weights(hspace))
+    create_dss_buffer(
+        data,
+        topology(hspace),
+        local_geometry_data(hspace),
+        local_dss_weights(hspace),
+    )
 end
 
 

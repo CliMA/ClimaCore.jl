@@ -11,7 +11,7 @@ import ..Geometry,
     ..Spaces,
     ..Fields,
     ..Hypsography
-import .. VERSION
+import ..VERSION
 
 include("writers.jl")
 include("readers.jl")

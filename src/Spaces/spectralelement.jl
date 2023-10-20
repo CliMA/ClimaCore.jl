@@ -12,7 +12,7 @@ local_dss_weights(space::AbstractSpectralElementSpace) =
 
 horizontal_space(space::AbstractSpectralElementSpace) = space
 nlevels(space::AbstractSpectralElementSpace) = 1
-    
+
 eachslabindex(space::AbstractSpectralElementSpace) =
     1:Topologies.nlocalelems(Spaces.topology(space))
 
@@ -39,6 +39,7 @@ struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid1D, ::Nothing) =
     SpectralElementSpace1D(grid)
+grid(space::Spaces.SpectralElementSpace1D) = space.grid
 
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
@@ -56,7 +57,7 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
-
+grid(space::Spaces.SpectralElementSpace2D) = space.grid
 
 function SpectralElementSpace2D(
     topology::Topologies.Topology2D,

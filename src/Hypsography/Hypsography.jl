@@ -1,14 +1,11 @@
 module Hypsography
 
 import ..slab, ..column
-import ..Geometry, ..Domains, ..Topologies, ..Grids, ..Spaces, ..Fields, ..Operators
-import ..Spaces:
-    ExtrudedFiniteDifferenceSpace
-    
-import ..Grids:
-    ExtrudedFiniteDifferenceGrid,
-    HypsographyAdaption,
-    Flat
+import ..Geometry,
+    ..Domains, ..Topologies, ..Grids, ..Spaces, ..Fields, ..Operators
+import ..Spaces: ExtrudedFiniteDifferenceSpace
+
+import ..Grids: ExtrudedFiniteDifferenceGrid, HypsographyAdaption, Flat
 
 using StaticArrays, LinearAlgebra, Memoize, WeakValueDicts
 

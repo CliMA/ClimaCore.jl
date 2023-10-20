@@ -374,11 +374,7 @@ function write_new!(
         "horizontal_grid",
         write!(writer, space.horizontal_grid),
     )
-    write_attribute(
-        group,
-        "vertical_grid",
-        write!(writer, space.vertical_grid),
-    )
+    write_attribute(group, "vertical_grid", write!(writer, space.vertical_grid))
     if space.hypsography isa Hypsography.LinearAdaption
         write_attribute(group, "hypsography_type", "LinearAdaption")
         write_attribute(
@@ -432,7 +428,11 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     write_attribute(dataset, "value_type", string(eltype(field)))
     write_attribute(dataset, "grid", grid_name)
     if !isnothing(staggering)
-        write_attribute(dataset, "staggering", string(nameof(typeof(staggering))))
+        write_attribute(
+            dataset,
+            "staggering",
+            string(nameof(typeof(staggering))),
+        )
     end
 
     return name

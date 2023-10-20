@@ -20,11 +20,16 @@ using CUDA
 
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
-import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
+import ..DataLayouts,
+    ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 
 import ..Grids:
-    Staggering, CellFace, CellCenter, 
-    topology, local_geometry_data
+    Staggering,
+    CellFace,
+    CellCenter,
+    topology,
+    local_geometry_data,
+    quadrature_style
 
 import ClimaComms
 using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
@@ -46,10 +51,8 @@ function grid end
 function staggering end
 
 
-ClimaComms.context(space::AbstractSpace) =
-    ClimaComms.context(grid(space))
-ClimaComms.device(space::AbstractSpace) =
-    ClimaComms.device(grid(space))
+ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
+ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
 
 topology(space::AbstractSpace) = topology(grid(space))
 vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
@@ -71,7 +74,8 @@ undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
-coordinates_data(grid::Grids.AbstractGrid) = local_geometry_data(grid).coordinates
+coordinates_data(grid::Grids.AbstractGrid) =
+    local_geometry_data(grid).coordinates
 coordinates_data(staggering, grid::Grids.AbstractGrid) =
     local_geometry_data(staggering, grid).coordinates
 

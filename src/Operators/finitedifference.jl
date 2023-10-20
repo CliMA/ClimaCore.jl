@@ -21,11 +21,16 @@ left_idx(space::AllFaceFiniteDifferenceSpace) = left_face_boundary_idx(space)
 right_idx(space::AllFaceFiniteDifferenceSpace) = right_face_boundary_idx(space)
 
 left_center_boundary_idx(space::AllFiniteDifferenceSpace) = 1
-right_center_boundary_idx(space::AllFiniteDifferenceSpace) =
-    size(Spaces.local_geometry_data(Spaces.space(space, Spaces.CallCenter())), 4)
+right_center_boundary_idx(space::AllFiniteDifferenceSpace) = size(
+    Spaces.local_geometry_data(Spaces.space(space, Spaces.CallCenter())),
+    4,
+)
 left_face_boundary_idx(space::AllFiniteDifferenceSpace) = half
 right_face_boundary_idx(space::AllFiniteDifferenceSpace) =
-    size(Spaces.local_geometry_data(Spaces.space(space, Spaces.CallFace())), 4) - half
+    size(
+        Spaces.local_geometry_data(Spaces.space(space, Spaces.CallFace())),
+        4,
+    ) - half
 
 
 left_face_boundary_idx(arg) = left_face_boundary_idx(axes(arg))

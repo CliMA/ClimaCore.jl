@@ -219,7 +219,6 @@ Spaces.dss_ghost!
 Spaces.create_dss_buffer
 Spaces.fill_send_buffer!
 Spaces.DSSBuffer
-Spaces.create_ghost_buffer
 Spaces.load_from_recv_buffer!
 Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!

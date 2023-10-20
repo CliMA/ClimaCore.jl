@@ -332,10 +332,8 @@ function read_grid_new(reader, name)
         topology = read_topology(reader, attrs(group)["topology"])
         return Spaces.FiniteDifferenceGrid(topology)
     elseif type == "ExtrudedFiniteDifferenceGrid"
-        vertical_grid =
-            read_grid(reader, attrs(group)["vertical_grid"])
-        horizontal_grid =
-            read_grid(reader, attrs(group)["horizontal_grid"])
+        vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
+        horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
         hypsography_type = get(attrs(group), "hypsography_type", "Flat")
         if hypsography_type == "Flat"
             hypsography = Spaces.Flat()

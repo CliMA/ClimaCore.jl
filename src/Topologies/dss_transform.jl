@@ -235,13 +235,6 @@ function weighted_dss_start! end
 function weighted_dss_internal! end
 function weighted_dss_ghost! end
 
-# for backward compatibility
-function weighted_dss2! end
-function weighted_dss_start2! end
-function weighted_dss_internal2! end
-function weighted_dss_ghost2! end
-function dss2! end
-
 # helper functions for DSS2
 function _get_idx(sizet::NTuple{5, Int}, loc::NTuple{5, Int})
     (n1, n2, n3, n4, n5) = sizet
@@ -286,7 +279,10 @@ function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
     return nothing
 end
 
-function _representative_slab(data, ::Type{DA}) where {DA}
+function _representative_slab(
+    data::Union{DataLayouts.AbstractData, Nothing},
+    ::Type{DA},
+) where {DA}
     rebuild_flag = DA isa Array ? false : true
     if isnothing(data)
         return nothing
@@ -297,17 +293,23 @@ function _representative_slab(data, ::Type{DA}) where {DA}
     end
 end
 
-_transformed_type(data, local_geometry, local_weights, ::Type{DA}) where {DA} =
-    typeof(
-        dss_transform(
-            _representative_slab(data, DA),
-            _representative_slab(local_geometry, DA),
-            _representative_slab(local_weights, DA),
-            1,
-            1,
-        ),
-    )
+_transformed_type(
+    data::DataLayouts.AbstractData,
+    local_geometry::Union{DataLayouts.AbstractData, Nothing},
+    local_weights::Union{DataLayouts.AbstractData, Nothing},
+    ::Type{DA},
+) where {DA} = typeof(
+    dss_transform(
+        _representative_slab(data, DA),
+        _representative_slab(local_geometry, DA),
+        _representative_slab(local_weights, DA),
+        1,
+        1,
+    ),
+)
 
+# currently only used in limiters (but not actually functional)
+# see https://github.com/CliMA/ClimaCore.jl/issues/1511
 struct GhostBuffer{G, D}
     graph_context::G
     send_data::D

@@ -333,7 +333,7 @@ end
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 (i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
-for communication in a distributed setting, see [`Spaces.create_ghost_buffer`](@ref).
+for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
 ``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
@@ -375,13 +375,6 @@ Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
 """
-    Spaces.create_ghost_buffer(field::Field)
-
-Create a buffer for communicating neighbour information of `field`.
-"""
-Spaces.create_ghost_buffer(field::Field) = Spaces.create_dss_buffer(field)
-
-"""
     Spaces.create_dss_buffer(field::Field)
 
 Create a buffer for communicating neighbour information of `field`.
@@ -391,20 +384,6 @@ function Spaces.create_dss_buffer(field::Field)
     hspace = Spaces.horizontal_space(space)
     Spaces.create_dss_buffer(field_values(field), hspace)
 end
-# Add definitions for backward compatibility
-Spaces.weighted_dss2!(
-    field::Field,
-    dss_buffer = Spaces.create_dss_buffer(field),
-) = Spaces.weighted_dss!(field, dss_buffer)
-
-Spaces.weighted_dss_start2!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_start!(field, ghost_buffer)
-
-Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_internal!(field, ghost_buffer)
-
-Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
-    Spaces.weighted_dss_ghost!(field, ghost_buffer)
 
 Base.@propagate_inbounds function level(
     field::Union{

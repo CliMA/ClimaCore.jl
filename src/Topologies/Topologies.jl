@@ -4,11 +4,12 @@ using DocStringExtensions
 
 import ClimaComms, Adapt, CUDA
 
-import ClimaComms
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
 import ..DataLayouts
+import ..slab, ..column, ..level
+
 
 using Memoize, WeakValueDicts
 
