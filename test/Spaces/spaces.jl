@@ -2,9 +2,8 @@ using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, DataLayouts
-
-import ClimaCore.Geometry: Geometry
+import ClimaCore:
+    slab, Domains, Meshes, Topologies, Spaces, Fields, DataLayouts, Geometry
 import ClimaCore.DataLayouts: IJFH, VF
 
 @testset "1d domain space" begin

@@ -29,6 +29,7 @@ import ..Grids:
     CellCenter,
     topology,
     local_geometry_data,
+    local_dss_weights,
     quadrature_style
 
 import ClimaComms

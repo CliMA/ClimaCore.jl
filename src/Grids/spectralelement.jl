@@ -478,7 +478,8 @@ local_geometry_data(grid::AbstractSpectralElementGrid, ::Nothing) =
     grid.local_geometry
 
 quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
-local_dss_weights(grid::AbstractSpectralElementGrid) = grid.dss_weights
+local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
+local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
 
 
