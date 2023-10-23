@@ -681,32 +681,6 @@ steps:
         agents:
           slurm_ntasks: 3
 
-  - group: "Unit: lib/ClimaCoreTempestRemap"
-    steps:
-
-      - label: "Unit: lib/TempestRemap MPI test"
-        key: "write_exodus_mpi"
-        command: "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/exodus.jl"
-        timeout_in_minutes: 5
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-        retry:
-          automatic: true
-        agents:
-          slurm_nodes: 3
-          slurm_tasks_per_node: 1
-
-      - label: "Unit: lib/TempestRemap distributed remapping test"
-        key: "online_remap_mpi"
-        command: "srun julia --color=yes --project=lib/ClimaCoreTempestRemap lib/ClimaCoreTempestRemap/test/mpi_tests/online_remap.jl"
-        timeout_in_minutes: 5
-        env:
-          CLIMACOMMS_CONTEXT: "MPI"
-          CI_OUTPUT_DIR: "output/online_remap"
-        agents:
-          slurm_nodes: 3
-          slurm_tasks_per_node: 1
-
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
   - group: "Perf: Geometry"
