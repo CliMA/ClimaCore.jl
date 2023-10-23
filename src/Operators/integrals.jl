@@ -304,7 +304,5 @@ right_boundary_idx(n, ::Operators.FacePlaceholderSpace) = n - Utilities.half
 
 left_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = 1
 right_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = n
-left_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) =
-    Utilities.half
-right_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) =
-    n - Utilities.half
+left_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = Utilities.half
+right_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = n - Utilities.half
