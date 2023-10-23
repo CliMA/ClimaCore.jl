@@ -427,13 +427,12 @@ function fill_send_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     if nsend > 0
         nitems = nsend * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.synchronize() # CUDA MPI uses a separate stream. This will synchronize across streams
         @cuda threads = (nthreads) blocks = (nblocks) fill_send_buffer_kernel!(
             send_data,
             send_buf_idx,
             pperimeter_data,
         )
-        CUDA.synchronize() # CUDA MPI uses a separate stream. This will synchronize across streams
+        CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
     end
     return nothing
 end
@@ -468,13 +467,11 @@ function load_from_recv_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     if nrecv > 0
         nitems = nrecv * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.synchronize()
         @cuda threads = (nthreads) blocks = (nblocks) load_from_recv_buffer_kernel!(
             pperimeter_data,
             recv_data,
             recv_buf_idx,
         )
-        CUDA.synchronize()
     end
     return nothing
 end
