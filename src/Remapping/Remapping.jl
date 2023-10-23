@@ -4,7 +4,13 @@ using LinearAlgebra, StaticArrays
 
 import ClimaComms
 import ..DataLayouts,
-    ..Geometry, ..Spaces, ..Topologies, ..Meshes, ..Operators, ..Fields
+    ..Geometry,
+    ..Spaces,
+    ..Topologies,
+    ..Meshes,
+    ..Operators,
+    ..Fields,
+    ..Hypsography
 
 using ..RecursiveApply
 

@@ -521,6 +521,18 @@ steps:
           slurm_mem: 20GB
           slurm_gpus: 1
 
+      - label: "Unit: Integrals (CPU)"
+        key: "cpu_integrals"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/integrals.jl"
+
+      - label: "Unit: Integrals (GPU)"
+        key: "gpu_integrals"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=test test/Operators/integrals.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: Thomas Algorithm"
         key: "cpu_thomas_algorithm"
         command:
@@ -779,6 +791,18 @@ steps:
         command:
           - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: Integrals (CPU)"
+        key: "cpu_integrals_perf"
+        command:
+          - "julia --color=yes --project=test test/Operators/integrals.jl"
+
+      - label: "Perf: Integrals (GPU)"
+        key: "gpu_integrals_perf"
+        command:
+          - "julia --color=yes --project=test test/Operators/integrals.jl"
         agents:
           slurm_gpus: 1
 
