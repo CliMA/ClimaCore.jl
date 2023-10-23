@@ -1,6 +1,8 @@
-import ..RecursiveApply: rzero, ⊠, ⊞
+import ..RecursiveApply: rzero, ⊠, ⊞, radd, rmul
 import ..Utilities
 import ..DataLayouts
+import RootSolvers
+import ClimaComms
 
 """
     column_integral_definite!(∫field::Field, ᶜfield::Field)
@@ -86,6 +88,21 @@ end
 Sets `ᶠ∫field```(z) = \\int_0^z\\,```ᶜfield```(z')\\,dz'``. The input `ᶜfield`
 must lie on a cell-center space, and the output `ᶠ∫field` must lie on the
 corresponding cell-face space.
+
+    column_integral_indefinite!(
+        f::Function,
+        ᶠ∫field::Fields.ColumnField,
+        ϕ₀ = 0,
+        average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
+    )
+
+The indefinite integral `ᶠ∫field = ϕ(z) = ∫ f(ϕ,z) dz` given:
+
+- `f` the integral integrand function (which may be a function)
+- `ᶠ∫field` the resulting (scalar) field `ϕ(z)`
+- `ϕ₀` (optional) the boundary condition
+- `average` (optional) a function to compute the cell center
+   average between two cell faces (`ϕ⁻, ϕ⁺`).
 """
 column_integral_indefinite!(ᶠ∫field::Fields.Field, ᶜfield::Fields.Field) =
     column_integral_indefinite!(ClimaComms.device(ᶠ∫field), ᶠ∫field, ᶜfield)
@@ -153,6 +170,94 @@ function _column_integral_indefinite!(
             Fields.level(ᶜfield, level - half)[] ⊠
             Fields.level(ᶜΔz, level - half)[]
     end
+end
+
+dual_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
+    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
+dual_space(space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
+    Spaces.FaceExtrudedFiniteDifferenceSpace(space)
+
+dual_space(space::Spaces.FaceFiniteDifferenceSpace) =
+    Spaces.CenterFiniteDifferenceSpace(space)
+dual_space(space::Spaces.CenterFiniteDifferenceSpace) =
+    Spaces.FaceFiniteDifferenceSpace(space)
+
+# First, dispatch on device:
+column_integral_indefinite!(
+    f::Function,
+    ᶠ∫field::Fields.Field,
+    ϕ₀ = zero(eltype(ᶠ∫field)),
+    average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
+) = column_integral_indefinite!(
+    f,
+    ClimaComms.device(ᶠ∫field),
+    ᶠ∫field,
+    ϕ₀,
+    average,
+)
+
+#####
+##### CPU
+#####
+
+column_integral_indefinite!(
+    f::Function,
+    ::ClimaComms.AbstractCPUDevice,
+    ᶠ∫field,
+    args...,
+) = column_integral_indefinite_cpu!(f, ᶠ∫field, args...)
+
+column_integral_indefinite!(
+    f::Function,
+    ::ClimaComms.AbstractCPUDevice,
+    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
+    args...,
+) =
+    Fields.bycolumn(axes(ᶠ∫field)) do colidx
+        column_integral_indefinite_cpu!(f, ᶠ∫field[colidx], args...)
+    end
+
+#=
+Function-based signature, solve for ϕ:
+```
+∂ϕ/∂z = f(ϕ,z)
+(ᶠϕ^{k+1}-ᶠϕ^{k})/ᶜΔz = ᶜf(ᶜϕ̄,ᶜz)
+ᶜϕ̄ = (ϕ^{k+1}+ϕ^{k})/2
+(ᶠϕ^{k+1}-ᶠϕ^{k})/ᶜΔz = ᶜf((ᶠϕ^{k+1}+ᶠϕ^{k})/2,ᶜz)
+root equation: (_ϕ-ϕ^{k})/Δz = f((_ϕ+ϕ^{k})/2,ᶜz)
+```
+=#
+function column_integral_indefinite_cpu!(
+    f::Function,
+    ᶠ∫field::Fields.ColumnField,
+    ϕ₀ = zero(eltype(ᶠ∫field)),
+    average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
+)
+    cspace = dual_space(axes(ᶠ∫field))
+    ᶜzfield = Fields.coordinate_field(cspace)
+    face_space = axes(ᶠ∫field)
+    first_level = Operators.left_idx(face_space)
+    last_level = Operators.right_idx(face_space)
+    ᶜΔzfield = Fields.Δz_field(ᶜzfield)
+    @inbounds Fields.level(ᶠ∫field, first_level)[] = ϕ₀
+    ϕ₁ = ϕ₀
+    @inbounds for level in (first_level + 1):last_level
+        ᶜz = Fields.level(ᶜzfield.z, level - half)[]
+        ᶜΔz = Fields.level(ᶜΔzfield, level - half)[]
+        ϕ₀ = ϕ₁
+        root_eq(_x) = (_x - ϕ₀) / ᶜΔz - f(average(_x, ϕ₀), ᶜz)
+        sol = RootSolvers.find_zero(
+            root_eq,
+            RootSolvers.NewtonsMethodAD(ϕ₀),
+            RootSolvers.CompactSolution(),
+        )
+        ϕ₁ = sol.root
+        f₁ = f(average(ϕ₀, ϕ₁), ᶜz)
+        ᶜintegrand_lev = f₁
+        @inbounds Fields.level(ᶠ∫field, level)[] =
+            radd(Fields.level(ᶠ∫field, level - 1)[], rmul(ᶜintegrand_lev, ᶜΔz))
+    end
+    return nothing
 end
 
 """
