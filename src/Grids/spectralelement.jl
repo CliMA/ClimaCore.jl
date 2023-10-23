@@ -105,8 +105,6 @@ mutable struct SpectralElementGrid2D{
 end
 
 
-
-
 """
     SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
 
@@ -482,6 +480,19 @@ local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
 local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
 
+const RectilinearSpectralElementGrid2D = SpectralElementGrid2D{
+    <:Topologies.Topology2D{
+        <:ClimaComms.AbstractCommsContext,
+        <:Meshes.RectilinearMesh,
+    },
+}
+
+const CubedSphereSpectralElementGrid2D = SpectralElementGrid2D{
+    <:Topologies.Topology2D{
+        <:ClimaComms.AbstractCommsContext,
+        <:Meshes.AbstractCubedSphere,
+    },
+}
 
 ## GPU compatibility
 

@@ -71,6 +71,11 @@ end
 
 
 
+const RectilinearSpectralElementSpace2D =
+    SpectralElementSpace2D{<:Grids.RectilinearSpectralElementGrid2D}
+const CubedSphereSpectralElementSpace2D =
+    SpectralElementSpace2D{<:Grids.CubedSphereSpectralElementGrid2D}
+
 
 
 

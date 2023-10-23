@@ -251,12 +251,7 @@ RecipesBase.@recipe function f(
     field::Fields.Field{<:Any, S};
     hinterpolate = 0,
     ncolors = 256,
-) where {
-    S <: Spaces.ExtrudedFiniteDifferenceSpace{
-        <:Any,
-        <:Spaces.IntervalSpectralElementSpace1D,
-    },
-}
+) where {S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
     hcoord, vcoord, data = _slice_triplot(field, hinterpolate, ncolors)
     coord_symbols = propertynames(Fields.coordinate_field(axes(field)))
 
@@ -364,7 +359,7 @@ RecipesBase.@recipe function f(
     hinterpolate = 0,
     ncolors = 256,
 ) where {
-    S <: Spaces.ExtrudedFiniteDifferenceSpace{
+    S <: Spaces.ExtrudedFiniteDifferenceSpace3D{
         <:Any,
         <:Spaces.RectilinearSpectralElementSpace2D,
     },

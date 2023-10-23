@@ -87,12 +87,11 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
 # Cubed Sphere Fields
-#=
+
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
-=#
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)

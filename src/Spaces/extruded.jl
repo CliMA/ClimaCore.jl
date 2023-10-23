@@ -81,17 +81,28 @@ end
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(Adapt.adapt(to, space.grid), space.staggering)
 
-#=
+const ExtrudedFiniteDifferenceSpace2D = ExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
+}
+const ExtrudedFiniteDifferenceSpace3D = ExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
+}
 
 const CenterExtrudedFiniteDifferenceSpace2D =
-    CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
+    CenterExtrudedFiniteDifferenceSpace{
+        <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
+    }
 const CenterExtrudedFiniteDifferenceSpace3D =
-    CenterExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
-const FaceExtrudedFiniteDifferenceSpace2D =
-    FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace1D}
-const FaceExtrudedFiniteDifferenceSpace3D =
-    FaceExtrudedFiniteDifferenceSpace{<:SpectralElementSpace2D}
-=#
+    CenterExtrudedFiniteDifferenceSpace{
+        <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
+    }
+const FaceExtrudedFiniteDifferenceSpace2D = FaceExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
+}
+const FaceExtrudedFiniteDifferenceSpace3D = FaceExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
+}
+
 function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
