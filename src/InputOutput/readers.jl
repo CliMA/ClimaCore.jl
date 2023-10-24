@@ -324,19 +324,19 @@ function read_grid_new(reader, name)
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         topology = read_topology(reader, attrs(group)["topology"])
         if type == "SpectralElementGrid1D"
-            return Spaces.SpectralElementGrid1D(topology, quadrature_style)
+            return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
-            return Spaces.SpectralElementGrid2D(topology, quadrature_style)
+            return Grids.SpectralElementGrid2D(topology, quadrature_style)
         end
     elseif type == "FiniteDifferenceGrid"
         topology = read_topology(reader, attrs(group)["topology"])
-        return Spaces.FiniteDifferenceGrid(topology)
+        return Grids.FiniteDifferenceGrid(topology)
     elseif type == "ExtrudedFiniteDifferenceGrid"
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
         horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
         hypsography_type = get(attrs(group), "hypsography_type", "Flat")
         if hypsography_type == "Flat"
-            hypsography = Spaces.Flat()
+            hypsography = Grids.Flat()
         elseif hypsography_type == "LinearAdaption"
             hypsography = Hypsography.LinearAdaption(
                 read_field(reader, attrs(group)["hypsography_surface"]),
@@ -344,7 +344,7 @@ function read_grid_new(reader, name)
         else
             error("Unsupported hypsography type $hypsography_type")
         end
-        return Spaces.ExtrudedFiniteDifferenceGrid(
+        return Grids.ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
             hypsography,
@@ -420,9 +420,9 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             grid = read_grid(reader, attrs(obj)["grid"])
             staggering = get(attrs(obj), "staggering", nothing)
             if staggering == "CellCenter"
-                staggering = Spaces.CellCenter()
+                staggering = Grids.CellCenter()
             elseif staggering == "CellFace"
-                staggering = Spaces.CellFace()
+                staggering = Grids.CellFace()
             end
             space = Spaces.space(staggering, grid)
         else
