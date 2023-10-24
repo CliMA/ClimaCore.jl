@@ -26,7 +26,7 @@ Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    hspace::AbstractSpectralElementSpace,
+    hspace::SpectralElementSpace2D,
 ) where {S, Nij}
     create_dss_buffer(
         data,
@@ -36,6 +36,12 @@ function create_dss_buffer(
     )
 end
 
+function create_dss_buffer(
+    data::Union{DataLayouts.IFH{S, Nij}, DataLayouts.VIFH{S, Nij}},
+    hspace::SpectralElementSpace1D,
+) where {S, Nij}
+    nothing
+end
 
 """
     function weighted_dss!(
