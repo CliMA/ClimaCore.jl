@@ -424,7 +424,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             elseif staggering == "CellFace"
                 staggering = Grids.CellFace()
             end
-            space = Spaces.space(staggering, grid)
+            space = Spaces.space(grid, staggering)
         else
             space = read_space(reader, attrs(obj)["space"])
         end
