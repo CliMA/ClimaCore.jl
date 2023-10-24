@@ -33,7 +33,7 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
     # broadcast to the redundant nodes using unweighted dss
     topology = Spaces.topology(axes(field))
     hspace = Spaces.horizontal_space(axes(field))
-    quadrature_style = hspace.quadrature_style
+    quadrature_style = Spaces.quadrature_rule(hspace)
     Spaces.dss2!(Fields.field_values(field), topology, quadrature_style)
     return field
 end

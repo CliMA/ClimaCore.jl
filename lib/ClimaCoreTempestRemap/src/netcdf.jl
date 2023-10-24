@@ -53,7 +53,7 @@ def_space_coord(
     nc::NCDataset,
     space::Spaces.SpectralElementSpace2D;
     type = "dgll",
-) = def_space_coord(nc, space, space.topology.mesh; type)
+) = def_space_coord(nc, space, Spaces.topology(space).mesh; type)
 
 function def_space_coord(
     nc::NCDataset,
