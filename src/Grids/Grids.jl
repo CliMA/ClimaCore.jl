@@ -60,7 +60,7 @@ function vertical_topology end
 ClimaComms.context(grid::AbstractGrid) = ClimaComms.context(topology(grid))
 ClimaComms.device(grid::AbstractGrid) = ClimaComms.device(topology(grid))
 
-Meshes.domain(grid::AbstractGrid) = Meshes.domain(Topologies.topology(grid))
+Meshes.domain(grid::AbstractGrid) = Meshes.domain(topology(grid))
 
 include("finitedifference.jl")
 include("spectralelement.jl")

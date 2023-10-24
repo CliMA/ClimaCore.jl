@@ -326,7 +326,7 @@ function write_new!(
         "quadrature_num_points",
         Quadratures.degrees_of_freedom(Spaces.quadrature_style(space)),
     )
-    write_attribute(group, "topology", write!(writer, space.topology))
+    write_attribute(group, "topology", write!(writer, Spaces.topology(space)))
     return name
 end
 
@@ -347,7 +347,7 @@ function write_new!(
         "quadrature_num_points",
         Quadratures.degrees_of_freedom(Spaces.quadrature_style(space)),
     )
-    write_attribute(group, "topology", write!(writer, space.topology))
+    write_attribute(group, "topology", write!(writer, Spaces.topology(space)))
     return name
 end
 
@@ -358,7 +358,7 @@ function write_new!(
 )
     group = create_group(writer.file, "grids/$name")
     write_attribute(group, "type", "FiniteDifferenceGrid")
-    write_attribute(group, "topology", write!(writer, space.topology))
+    write_attribute(group, "topology", write!(writer, Spaces.topology(space)))
     return name
 end
 

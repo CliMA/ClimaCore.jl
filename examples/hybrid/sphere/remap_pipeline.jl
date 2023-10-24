@@ -97,7 +97,7 @@ function remap2latlon(filein, nc_dir, nlat, nlon)
 
     # write out our cubed sphere mesh
     meshfile_cc = remap_tmpdir * "mesh_cubedsphere.g"
-    write_exodus(meshfile_cc, hspace.topology)
+    write_exodus(meshfile_cc, Spaces.topology(hspace))
 
     meshfile_rll = remap_tmpdir * "mesh_rll.g"
     rll_mesh(meshfile_rll; nlat = nlat, nlon = nlon)

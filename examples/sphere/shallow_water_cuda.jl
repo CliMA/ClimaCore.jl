@@ -473,7 +473,7 @@ function rhs!(dYdt_fv, y_fv, parameters, t)
                     wcurl(Geometry.Covariant3Vector(curl(y.u))),
                 )
 
-            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
+            NVTX.@range "dss" Spaces.weighted_dss!(dYdt, ghost_buffer)
         end
 
         NVTX.@range "tendency" begin
@@ -489,7 +489,7 @@ function rhs!(dYdt_fv, y_fv, parameters, t)
                 dYdt.u += -grad(g * (y.h + h_s) + norm(y.u)^2 / 2) #+
                 dYdt.u += y.u × (f + curl(y.u))
             end
-            NVTX.@range "dss" Spaces.weighted_dss2!(dYdt, ghost_buffer)
+            NVTX.@range "dss" Spaces.weighted_dss!(dYdt, ghost_buffer)
         end
     end
     return dYdt_fv

@@ -94,7 +94,7 @@ function hybrid3dcubedsphere_dss_profiler(
 
     # precompile relevant functions
     space = axes(Y.c)
-    horizontal_topology = space.horizontal_space.topology
+    horizontal_topology = Spaces.topology(space)
     Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
     weighted_dss_full!(Y.c, ghost_buffer.c)
     Spaces.fill_send_buffer!(

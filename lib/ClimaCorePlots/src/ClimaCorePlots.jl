@@ -99,7 +99,7 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     #TODO: assumes VIFH layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
 
-    hspace = space.horizontal_space
+    hspace = Spaces.horizontal_space(space)
 
     quad = Spaces.quadrature_style(hspace)
     quad_name = Base.typename(typeof(quad)).name
@@ -196,7 +196,7 @@ function _slice_triplot(field, hinterpolate, ncolors)
     Ni, Nj, _, Nv, Nh = size(data)
 
     space = axes(field)
-    htopology = Spaces.topology(space.horizontal_space)
+    htopology = Spaces.topology(space)
     hdomain = Topologies.domain(htopology)
     vdomain = Topologies.domain(space.vertical_topology)
 
@@ -278,7 +278,7 @@ function _slice_along(field, coord)
         )
     end
     space = axes(field)
-    hspace = space.horizontal_space
+    hspace = Spaces.horizontal_space(space)
     htopo = ClimaCore.Spaces.topology(hspace)
     hmesh = htopo.mesh
     linear_idx = LinearIndices(ClimaCore.Meshes.elements(hmesh))

@@ -38,10 +38,15 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
 end
 
+FaceExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
+    ExtrudedFiniteDifferenceSpace(grid, CellFace())
+CenterExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
+    ExtrudedFiniteDifferenceSpace(grid, CellCenter())
 FaceExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(space.grid, CellFace())
 CenterExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(space.grid, CellCenter())
+
 
 local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
     local_dss_weights(grid(space))
@@ -115,10 +120,10 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     )
     print(iio, " "^(indent + 2), "context: ")
     hspace = Spaces.horizontal_space(space)
-    Topologies.print_context(iio, hspace.topology.context)
+    Topologies.print_context(iio, Spaces.topology(hspace).context)
     println(iio)
     println(iio, " "^(indent + 2), "horizontal:")
-    println(iio, " "^(indent + 4), "mesh: ", hspace.topology.mesh)
+    println(iio, " "^(indent + 4), "mesh: ", Spaces.topology(hspace).mesh)
     println(iio, " "^(indent + 4), "quadrature: ", quadrature_style(hspace))
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)

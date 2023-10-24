@@ -203,28 +203,28 @@ function Base.iterate(
         # this also doesn't deal with the case where eo == e
         if j == 1
             # face 1
-            eo, _, _ = Topologies.opposing_face(space.topology, e, 1)
+            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 1)
             if 0 < eo < e
                 continue
             end
         end
         if i == Nq
             # face 2
-            eo, _, _ = Topologies.opposing_face(space.topology, e, 2)
+            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 2)
             if 0 < eo < e
                 continue
             end
         end
         if j == Nq
             # face 3
-            eo, _, _ = Topologies.opposing_face(space.topology, e, 3)
+            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 3)
             if 0 < eo < e
                 continue
             end
         end
         if i == 1
             # face 4
-            eo, _, _ = Topologies.opposing_face(space.topology, e, 4)
+            eo, _, _ = Topologies.opposing_face(Spaces.topology(space), e, 4)
             if 0 < eo < e
                 continue
             end

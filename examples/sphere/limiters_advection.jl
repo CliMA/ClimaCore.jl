@@ -107,7 +107,7 @@ for (k, ne) in enumerate(ne_seq)
         Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble = true)
 
     # Initialize variables needed for limiters
-    n_elems = Topologies.nlocalelems(space.topology)
+    n_elems = Topologies.nlocalelems(Spaces.topology(space))
     min_q = zeros(n_elems)
     max_q = zeros(n_elems)
 

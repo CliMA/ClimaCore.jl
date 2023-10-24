@@ -71,9 +71,7 @@ function remap!(
     # using out_type == "cgll"
     if R.out_type == "cgll"
         topology = Spaces.topology(R.target_space)
-        hspace = Spaces.horizontal_space(R.target_space)
-        quadrature_style = Spaces.quadrature_style(hspace)
-        Spaces.dss2!(target, topology, quadrature_style)
+        Topologies.dss!(target, topology)
     end
     return target
 end
@@ -131,13 +129,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         # using out_type == "cgll"
         if R.out_type == "cgll"
             topology = Spaces.topology(axes(target))
-            hspace = Spaces.horizontal_space(axes(target))
-            quadrature_style = Spaces.quadrature_style(hspace)
-            Spaces.dss2!(
-                Fields.field_values(target),
-                topology,
-                quadrature_style,
-            )
+            Topologies.dss!(Fields.field_values(target), topology)
         end
         return target
     end

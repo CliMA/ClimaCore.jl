@@ -1,7 +1,12 @@
 abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
 """
-    FiniteDifferenceSpace(staggering::Staggering, grid::Grids.FiniteDifferenceGrid)
+    FiniteDifferenceSpace(
+        grid::Grids.FiniteDifferenceGrid,
+        staggering::Staggering, 
+    )
+
+
 
 """
 struct FiniteDifferenceSpace{
@@ -11,6 +16,11 @@ struct FiniteDifferenceSpace{
     grid::G
     staggering::S
 end
+FiniteDifferenceSpace(
+    topology::Topologies.IntervalTopology,
+    staggering::Staggering,
+) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), staggering)
+
 
 const FaceFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellFace}
 const CenterFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellCenter}

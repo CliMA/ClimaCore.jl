@@ -17,11 +17,15 @@ include("ddss_setup.jl")
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == 2
 
-    @test Topologies.local_neighboring_elements(space.topology, 1) == [2]
-    @test Topologies.local_neighboring_elements(space.topology, 2) == [1]
+    @test Topologies.local_neighboring_elements(Spaces.topology(space), 1) ==
+          [2]
+    @test Topologies.local_neighboring_elements(Spaces.topology(space), 2) ==
+          [1]
 
-    @test Topologies.ghost_neighboring_elements(space.topology, 1) == [2]
-    @test Topologies.ghost_neighboring_elements(space.topology, 2) == [1]
+    @test Topologies.ghost_neighboring_elements(Spaces.topology(space), 1) ==
+          [2]
+    @test Topologies.ghost_neighboring_elements(Spaces.topology(space), 2) ==
+          [1]
 
     init_state(local_geometry, p) = (ρ = 1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))

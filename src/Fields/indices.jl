@@ -214,7 +214,7 @@ function byslab(
     ::ClimaComms.CPUMultiThreaded,
     space::Spaces.AbstractSpectralElementSpace,
 )
-    Nh = Topologies.nlocalelems(space.topology)::Int
+    Nh = Topologies.nlocalelems(Spaces.topology(space))::Int
     @inbounds begin
         Threads.@threads for h in 1:Nh
             fn(SlabIndex(nothing, h))

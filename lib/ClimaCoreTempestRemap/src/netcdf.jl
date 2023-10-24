@@ -224,13 +224,17 @@ end
 
 function def_space_coord(
     nc::NCDataset,
-    space::Spaces.ExtrudedFiniteDifferenceSpace{S};
+    space::Spaces.ExtrudedFiniteDifferenceSpace;
     type = "dgll",
-) where {S <: Spaces.Staggering}
-    hvar = def_space_coord(nc, space.horizontal_space; type = type)
+)
+    staggering = Spaces.staggering(space)
+    hvar = def_space_coord(nc, Spaces.horizontal_space(space); type = type)
     vvar = def_space_coord(
         nc,
-        Spaces.FiniteDifferenceSpace{S}(space.vertical_topology),
+        Spaces.FiniteDifferenceSpace(
+            Spaces.vertical_topology(space),
+            staggering,
+        ),
     )
     (hvar..., vvar...)
 end
@@ -332,7 +336,7 @@ function Base.setindex!(
 )
     nc = NCDataset(var)
     space = axes(field)
-    hspace = space.horizontal_space
+    hspace = Spaces.horizontal_space(space)
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(hspace)
     elseif nc.attrib["node_type"] == "dgll"
