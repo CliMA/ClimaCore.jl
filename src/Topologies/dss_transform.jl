@@ -10,7 +10,7 @@ Transformations only apply to vector quantities.
 - `local_geometry[I...]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
 - `weight[I...]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
-See [`Spaces.weighted_dss!`](@ref).
+See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i, j) =
     dss_transform(arg[i, j], local_geometry[i, j], weight[i, j])
@@ -146,7 +146,7 @@ end
 
 Transform `targ[I...]` back to a value of type `T` after performing direct stiffness summation (DSS).
 
-See [`Spaces.weighted_dss!`](@ref).
+See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 Base.@propagate_inbounds dss_untransform(
     ::Type{T},

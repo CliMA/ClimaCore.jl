@@ -36,6 +36,9 @@ end
 
 
 # 1D
+"""
+    SpectralElementSpace1D(grid::SpectralElementGrid1D)
+"""
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G
 end
@@ -54,6 +57,9 @@ end
 
 
 # 2D
+"""
+    SpectralElementSpace2D(grid::SpectralElementGrid1D)
+"""
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G
 end

@@ -4,6 +4,7 @@ using DocStringExtensions
 
 import ClimaComms, Adapt, CUDA
 
+import ..ClimaCore
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates

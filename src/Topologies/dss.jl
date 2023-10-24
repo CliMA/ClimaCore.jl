@@ -229,7 +229,7 @@ Arguments:
 - `perimeter`: perimeter iterator
 - `localelems`: list of local elements to perform transformation operations on
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_transform!(
     device::ClimaComms.AbstractDevice,
@@ -281,7 +281,7 @@ Arguments:
 - `perimeter`: perimeter iterator
 - `localelems`: list of local elements to perform transformation operations on
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_untransform!(
     device::ClimaComms.AbstractDevice,
@@ -338,7 +338,7 @@ Arguments:
 - `covariant12fidx`: field index for Covariant12 vector fields in the data layout
 - `localelems`: list of local elements to perform transformation operations on
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_transform!(
     ::ClimaComms.AbstractCPUDevice,
@@ -438,7 +438,7 @@ Arguments:
 - `scalarfidx`: field index for scalar fields in the data layout
 - `covariant12fidx`: field index for Covariant12 vector fields in the data layout
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 
 function dss_untransform!(
@@ -555,7 +555,7 @@ end
 
 Performs DSS on local vertices and faces.
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_local!(
     ::ClimaComms.AbstractCPUDevice,
@@ -643,7 +643,7 @@ Computes the "local" part of ghost vertex dss. (i.e. it computes the summation o
 vertices of a unique ghost vertex and stores the value in each of the local vertex locations in 
 `perimeter_data`)
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_local_ghost!(
     ::ClimaComms.AbstractCPUDevice,
@@ -697,7 +697,7 @@ end
 Sets the value for all local vertices of each unique ghost vertex, in `perimeter_data`, to that of 
 the representative ghost vertex.
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_ghost!(
     device::ClimaComms.AbstractCPUDevice,
@@ -737,7 +737,7 @@ end
 Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
 representative vertices which store result of "ghost local" DSS are loaded.
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function fill_send_buffer!(
     ::ClimaComms.AbstractCPUDevice,
@@ -766,7 +766,7 @@ Adds data from the recv buffer to the corresponding location in `perimeter_data`
 For ghost vertices, this data is added only to the representative vertices. The values are 
 then scattered to other local vertices corresponding to each unique ghost vertex in `dss_local_ghost`.
 
-Part of [`Spaces.weighted_dss!`](@ref).
+Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function load_from_recv_buffer!(
     ::ClimaComms.AbstractCPUDevice,
