@@ -103,3 +103,14 @@ Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
 
 quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =
     grid.quadrature_style
+
+## aliases
+
+const ExtrudedSpectralElementGrid2D =
+    ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid1D}
+const ExtrudedSpectralElementGrid3D =
+    ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid2D}
+const ExtrudedRectilinearSpectralElementGrid3D =
+    ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid2D}
+const ExtrudedCubedSphereSpectralElementGrid3D =
+    ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}

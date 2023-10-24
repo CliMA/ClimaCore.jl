@@ -61,7 +61,7 @@ RecipesBase.@recipe function f(
     (xcoords, xdata)
 end
 
-RecipesBase.@recipe function f(space::Spaces.SpectralElementSpace2D;)
+RecipesBase.@recipe function f(space::Spaces.RectilinearSpectralElementSpace2D;)
     quad = Spaces.quadrature_style(space)
     quad_name = Base.typename(typeof(quad)).name
     dof = Spaces.Quadratures.degrees_of_freedom(quad)
@@ -152,7 +152,7 @@ RecipesBase.@recipe function f(field::Fields.FiniteDifferenceField)
 end
 
 RecipesBase.@recipe function f(
-    field::Fields.SpectralElementField2D;
+    field::Fields.RectilinearSpectralElementField2D;
     interpolate = 10,
 )
     @assert interpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
@@ -198,7 +198,7 @@ function _slice_triplot(field, hinterpolate, ncolors)
     space = axes(field)
     htopology = Spaces.topology(space)
     hdomain = Topologies.domain(htopology)
-    vdomain = Topologies.domain(space.vertical_topology)
+    vdomain = Topologies.domain(Spaces.vertical_topology(space))
 
     @assert Nj == 1
 
@@ -249,10 +249,10 @@ end
 
 # 2D hybrid plot
 RecipesBase.@recipe function f(
-    field::Fields.Field{<:Any, S};
+    field::Fields.ExtrudedSpectralElementField2D;
     hinterpolate = 0,
     ncolors = 256,
-) where {S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+)
     hcoord, vcoord, data = _slice_triplot(field, hinterpolate, ncolors)
     coord_symbols = propertynames(Fields.coordinate_field(axes(field)))
 
@@ -301,7 +301,7 @@ function _slice_along(field, coord)
     hidx = axis == 1 ? linear_idx[slice_h, 1] : linear_idx[1, slice_h]
 
     # find the node idx we want to slice along the given axis element
-    hcoord_data = hspace.local_geometry.coordinates
+    hcoord_data = Spaces.local_geometry_data(hspace).coordinates
     hdata = ClimaCore.slab(hcoord_data, hidx)
     hnode_idx = 1
     for i in axes(hdata)[axis]
@@ -320,8 +320,9 @@ function _slice_along(field, coord)
         htopo_ortho,
         ClimaCore.Spaces.quadrature_style(hspace),
     )
-    vspace_ortho =
-        ClimaCore.Spaces.CenterFiniteDifferenceSpace(space.vertical_topology)
+    vspace_ortho = ClimaCore.Spaces.CenterFiniteDifferenceSpace(
+        Spaces.vertical_topology(space),
+    )
 
     if space.staggering === ClimaCore.Spaces.CellFace
         vspace_ortho = ClimaCore.Spaces.FaceFiniteDifferenceSpace(slice_vspace)
@@ -355,16 +356,11 @@ end
 
 # 3D hybrid plot
 RecipesBase.@recipe function f(
-    field::Fields.Field{<:Any, S};
+    field::Fields.ExtrudedFiniteDifferenceField3D;
     slice = nothing,
     hinterpolate = 0,
     ncolors = 256,
-) where {
-    S <: Spaces.ExtrudedFiniteDifferenceSpace3D{
-        <:Any,
-        <:Spaces.RectilinearSpectralElementSpace2D,
-    },
-}
+)
     if slice === nothing
         error("must specify coordinate axis slice for 3D hybrid plots")
     end
@@ -499,15 +495,10 @@ RecipesBase.@recipe function f(
 end
 
 RecipesBase.@recipe function f(
-    field::Fields.Field{<:Any, S};
+    field::Fields.ExtrudedCubedSphereSpectralElementField3D;
     level = nothing,
     hinterpolate = 10,
-) where {
-    S <: Spaces.ExtrudedFiniteDifferenceSpace{
-        <:Any,
-        <:Spaces.CubedSphereSpectralElementSpace2D,
-    },
-}
+)
     @assert hinterpolate ≥ 1 "number of element quadrature points for uniform interpolation must be ≥ 1"
 
     space = axes(field)

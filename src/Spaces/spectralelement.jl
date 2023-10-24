@@ -69,16 +69,6 @@ function SpectralElementSpace2D(
     SpectralElementSpace2D(grid)
 end
 
-
-
-const RectilinearSpectralElementSpace2D =
-    SpectralElementSpace2D{<:Grids.RectilinearSpectralElementGrid2D}
-const CubedSphereSpectralElementSpace2D =
-    SpectralElementSpace2D{<:Grids.CubedSphereSpectralElementGrid2D}
-
-
-
-
 """
     SpectralElementSpaceSlab <: AbstractSpace
 
@@ -232,3 +222,9 @@ function Base.iterate(
         return ((i, j), e), ((i, j), e)
     end
 end
+
+## aliases
+const RectilinearSpectralElementSpace2D =
+    SpectralElementSpace2D{<:Grids.RectilinearSpectralElementGrid2D}
+const CubedSphereSpectralElementSpace2D =
+    SpectralElementSpace2D{<:Grids.CubedSphereSpectralElementGrid2D}

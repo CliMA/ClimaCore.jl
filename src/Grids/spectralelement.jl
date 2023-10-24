@@ -480,23 +480,7 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
 local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
-
-const RectilinearSpectralElementGrid2D = SpectralElementGrid2D{
-    <:Topologies.Topology2D{
-        <:ClimaComms.AbstractCommsContext,
-        <:Meshes.RectilinearMesh,
-    },
-}
-
-const CubedSphereSpectralElementGrid2D = SpectralElementGrid2D{
-    <:Topologies.Topology2D{
-        <:ClimaComms.AbstractCommsContext,
-        <:Meshes.AbstractCubedSphere,
-    },
-}
-
 ## GPU compatibility
-
 struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG
@@ -509,3 +493,9 @@ Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
         Adapt.adapt(to, grid.global_geometry),
         Adapt.adapt(to, grid.local_geometry),
     )
+
+## aliases
+const RectilinearSpectralElementGrid2D =
+    SpectralElementGrid2D{<:Topologies.RectilinearTopology2D}
+const CubedSphereSpectralElementGrid2D =
+    SpectralElementGrid2D{<:Topologies.CubedSphereTopology2D}

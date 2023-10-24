@@ -765,3 +765,10 @@ function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
         return face_node_index(f, Nq, 1 + n)
     end
 end
+
+
+## aliases
+const RectilinearTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.RectilinearMesh}
+const CubedSphereTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.AbstractCubedSphere}

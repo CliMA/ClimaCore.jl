@@ -48,7 +48,7 @@ Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, axes(field)),
 )
 
-
+## aliases
 # Point Field
 const PointField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
@@ -77,6 +77,14 @@ const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+const ExtrudedFiniteDifferenceField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+const ExtrudedFiniteDifferenceField3D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -86,12 +94,40 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+#
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+const ExtrudedSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedSpectralElementSpace2D}
+
+const RectilinearSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.RectilinearSpectralElementSpace2D}
+const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedRectilinearSpectralElementSpace3D,
+}
+
+
 # Cubed Sphere Fields
 
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
+const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedCubedSphereSpectralElementSpace3D,
+}
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)

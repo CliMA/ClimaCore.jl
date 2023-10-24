@@ -90,8 +90,12 @@ const ExtrudedFiniteDifferenceSpace2D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
 }
 const ExtrudedFiniteDifferenceSpace3D = ExtrudedFiniteDifferenceSpace{
-    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
+    <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid2D},
 }
+const ExtrudedSpectralElementSpace2D =
+    ExtrudedFiniteDifferenceSpace{<:Grids.ExtrudedSpectralElementGrid2D}
+const ExtrudedSpectralElementSpace3D =
+    ExtrudedFiniteDifferenceSpace{<:Grids.ExtrudedSpectralElementGrid3D}
 
 const CenterExtrudedFiniteDifferenceSpace2D =
     CenterExtrudedFiniteDifferenceSpace{
@@ -168,32 +172,14 @@ end
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
     column(space, Grids.ColumnIndex((i, j), h))
 
-
-struct LevelSpace{S, L} <: AbstractSpace
-    space::S
-    level::L
-end
-
-level(space::CenterExtrudedFiniteDifferenceSpace, v::Integer) =
-    LevelSpace(space, v)
-level(space::FaceExtrudedFiniteDifferenceSpace, v::PlusHalf) =
-    LevelSpace(space, v)
-
-function local_geometry_data(
-    levelspace::LevelSpace{<:CenterExtrudedFiniteDifferenceSpace, <:Integer},
-)
-    level(local_geometry_data(levelspace.space), levelspace.level)
-end
-function local_geometry_data(
-    levelspace::LevelSpace{<:FaceExtrudedFiniteDifferenceSpace, <:PlusHalf},
-)
-    level(local_geometry_data(levelspace.space), levelspace.level + half)
-end
-
-function column(levelspace::LevelSpace, args...)
-    local_geometry = column(local_geometry_data(levelspace), args...)
-    PointSpace(local_geometry)
-end
+level(space::CenterExtrudedFiniteDifferenceSpace2D, v::Integer) =
+    SpectralElementSpace1D(level(grid(space), v))
+level(space::FaceExtrudedFiniteDifferenceSpace2D, v::PlusHalf) =
+    SpectralElementSpace1D(level(grid(space), v))
+level(space::CenterExtrudedFiniteDifferenceSpace3D, v::Integer) =
+    SpectralElementSpace2D(level(grid(space), v))
+level(space::FaceExtrudedFiniteDifferenceSpace3D, v::PlusHalf) =
+    SpectralElementSpace2D(level(grid(space), v))
 
 
 nlevels(space::ExtrudedFiniteDifferenceSpace) =
@@ -218,3 +204,12 @@ function eachslabindex(fspace::FaceExtrudedFiniteDifferenceSpace)
     Nv = size(fspace.face_local_geometry, 4)
     return Iterators.product(1:Nv, h_iter)
 end
+
+
+## aliases
+const ExtrudedRectilinearSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedRectilinearSpectralElementGrid3D,
+}
+const ExtrudedCubedSphereSpectralElementSpace3D = ExtrudedFiniteDifferenceSpace{
+    <:Grids.ExtrudedCubedSphereSpectralElementGrid3D,
+}
