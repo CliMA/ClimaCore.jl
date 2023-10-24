@@ -147,3 +147,4 @@ local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
+global_geometry(grid::FiniteDifferenceGrid) = grid.global_geometry

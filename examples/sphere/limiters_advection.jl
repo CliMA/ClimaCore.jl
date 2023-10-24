@@ -113,7 +113,7 @@ for (k, ne) in enumerate(ne_seq)
 
     coords = Fields.coordinate_field(space)
     Δh[k] = 2 * R / ne
-    global_geom = space.global_geometry
+    global_geom = Spaces.global_geometry(space)
 
     # Initialize state
     y0 = map(coords) do coord

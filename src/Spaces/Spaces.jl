@@ -30,6 +30,7 @@ import ..Grids:
     topology,
     vertical_topology,
     local_geometry_data,
+    global_geometry,
     local_dss_weights,
     quadrature_style
 
@@ -62,6 +63,8 @@ vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
 
 local_geometry_data(space::AbstractSpace) =
     local_geometry_data(grid(space), staggering(space))
+
+global_geometry(space::AbstractSpace) = global_geometry(grid(space))
 
 space(refspace::AbstractSpace, staggering::Staggering) =
     space(grid(refspace), staggering)

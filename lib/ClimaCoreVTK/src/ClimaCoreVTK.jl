@@ -52,7 +52,7 @@ function WriteVTK.vtk_grid(
         coords =
             Geometry.Cartesian123Point.(
                 Fields.coordinate_field(gridspace),
-                Ref(gridspace.global_geometry),
+                Ref(Spaces.global_geometry(gridspace)),
             )
         coord_vecs = (
             vec(parent(coords.x1)),

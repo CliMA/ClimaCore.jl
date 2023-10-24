@@ -77,6 +77,8 @@ local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry
 local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
+global_geometry(grid::AbstractExtrudedFiniteDifferenceGrid) =
+    grid.global_geometry
 
 quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
     quadrature_style(grid.horizontal_grid)

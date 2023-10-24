@@ -474,6 +474,7 @@ topology(grid::AbstractSpectralElementGrid) = grid.topology
 
 local_geometry_data(grid::AbstractSpectralElementGrid, ::Nothing) =
     grid.local_geometry
+global_geometry(grid::AbstractSpectralElementGrid) = grid.global_geometry
 
 quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights

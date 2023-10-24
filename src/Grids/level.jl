@@ -20,3 +20,4 @@ local_geometry_data(colgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
         local_geometry_data(levelgrid.full_grid, CellFace()),
         levelgrid.level + half,
     )
+global_geometry(levlgrid::LevelGrid) = global_geometry(levlgrid.full_grid)

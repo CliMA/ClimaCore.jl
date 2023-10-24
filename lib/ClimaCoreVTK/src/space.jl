@@ -197,7 +197,8 @@ end
 function vtk_grid_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
     horizontal_space = vtk_grid_space(Spaces.horizontal_space(space))
-    vertical_space = Spaces.FaceFiniteDifferenceSpace(space.vertical_topology)
+    vertical_space =
+        Spaces.FaceFiniteDifferenceSpace(Spaces.vertical_topology(space))
     return Spaces.ExtrudedFiniteDifferenceSpace(
         horizontal_space,
         vertical_space,
@@ -246,7 +247,7 @@ function vtk_cell_space(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
     horizontal_space = vtk_cell_space(Spaces.horizontal_space(gridspace))
     vertical_space =
-        Spaces.CenterFiniteDifferenceSpace(gridspace.vertical_topology)
+        Spaces.CenterFiniteDifferenceSpace(Spaces.vertical_topology(gridspace))
     return Spaces.ExtrudedFiniteDifferenceSpace(
         horizontal_space,
         vertical_space,

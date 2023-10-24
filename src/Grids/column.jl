@@ -45,3 +45,4 @@ local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) = column(
     local_geometry_data(colgrid.full_grid, staggering::Staggering),
     colgrid.colidx,
 )
+global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
