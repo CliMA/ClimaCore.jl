@@ -31,7 +31,8 @@ RecipesBase.@recipe function f(
     coord_field = Fields.coordinate_field(space)
 
     lagrange_quad = Spaces.Quadratures.ClosedUniform{Nu}()
-    dataspace = Spaces.SpectralElementSpace1D(space.topology, lagrange_quad)
+    dataspace =
+        Spaces.SpectralElementSpace1D(Spaces.topology(space), lagrange_quad)
     interp = Operators.Interpolate(dataspace)
     ifield = interp.(field)
 

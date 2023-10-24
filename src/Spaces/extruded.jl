@@ -119,7 +119,12 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
     println(iio)
     println(iio, " "^(indent + 2), "horizontal:")
     println(iio, " "^(indent + 4), "mesh: ", hspace.topology.mesh)
-    println(iio, " "^(indent + 4), "quadrature: ", hspace.quadrature_style)
+    println(
+        iio,
+        " "^(indent + 4),
+        "quadrature: ",
+        Spaces.quadrature_rule(hspace),
+    )
     println(iio, " "^(indent + 2), "vertical:")
     print(iio, " "^(indent + 4), "mesh: ", space.vertical_topology.mesh)
 end

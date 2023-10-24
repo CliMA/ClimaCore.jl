@@ -170,15 +170,15 @@ function generate_map(
     out_type = "cgll",
 )
     if (target_space_distr != nothing)
-        comms_ctx = target_space_distr.topology.context
+        comms_ctx = ClimaComms.context(target_space_distr)
     else
-        comms_ctx = target_space.topology.context
+        comms_ctx = ClimaComms.context(target_space)
     end
 
     if ClimaComms.iamroot(comms_ctx)
         # write meshes and generate weights on root process (using global indices)
-        write_exodus(meshfile_source, source_space.topology)
-        write_exodus(meshfile_target, target_space.topology)
+        write_exodus(meshfile_source, Spaces.topology(source_space))
+        write_exodus(meshfile_target, Spaces.topology(target_space))
         overlap_mesh(meshfile_overlap, meshfile_source, meshfile_target)
         remap_weights(
             weightfile,

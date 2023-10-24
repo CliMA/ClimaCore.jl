@@ -104,7 +104,7 @@ Base.@propagate_inbounds function slab(
     h,
 )
     SpectralElementSpaceSlab(
-        space.quadrature_style,
+        Spaces.quadrature_rule(space),
         slab(space.local_geometry, v, h),
     )
 end
@@ -154,7 +154,7 @@ Base.eltype(iter::UniqueNodeIterator{<:SpectralElementSpace2D}) =
 function Base.length(iter::UniqueNodeIterator{<:SpectralElementSpace2D})
     space = iter.space
     topology = space.topology
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_rule(space))
 
     nelem = Topologies.nlocalelems(topology)
     nvert = length(Topologies.local_vertices(topology))
@@ -178,7 +178,7 @@ function Base.iterate(
     ((i, j), e),
 )
     space = iter.space
-    Nq = Quadratures.degrees_of_freedom(space.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_rule(space))
     while true
         # find next node
         i += 1
