@@ -319,12 +319,12 @@ function write_new!(
     write_attribute(
         group,
         "quadrature_type",
-        string(nameof(typeof(Spaces.quadrature_rule(space)))),
+        string(nameof(typeof(Spaces.quadrature_style(space)))),
     )
     write_attribute(
         group,
         "quadrature_num_points",
-        Quadratures.degrees_of_freedom(Spaces.quadrature_rule(space)),
+        Quadratures.degrees_of_freedom(Spaces.quadrature_style(space)),
     )
     write_attribute(group, "topology", write!(writer, space.topology))
     return name
@@ -340,12 +340,12 @@ function write_new!(
     write_attribute(
         group,
         "quadrature_type",
-        string(nameof(typeof(Spaces.quadrature_rule(space)))),
+        string(nameof(typeof(Spaces.quadrature_style(space)))),
     )
     write_attribute(
         group,
         "quadrature_num_points",
-        Quadratures.degrees_of_freedom(Spaces.quadrature_rule(space)),
+        Quadratures.degrees_of_freedom(Spaces.quadrature_style(space)),
     )
     write_attribute(group, "topology", write!(writer, space.topology))
     return name

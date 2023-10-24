@@ -72,7 +72,7 @@ function remap!(
     if R.out_type == "cgll"
         topology = Spaces.topology(R.target_space)
         hspace = Spaces.horizontal_space(R.target_space)
-        quadrature_style = Spaces.quadrature_rule(hspace)
+        quadrature_style = Spaces.quadrature_style(hspace)
         Spaces.dss2!(target, topology, quadrature_style)
     end
     return target
@@ -132,7 +132,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         if R.out_type == "cgll"
             topology = Spaces.topology(axes(target))
             hspace = Spaces.horizontal_space(axes(target))
-            quadrature_style = Spaces.quadrature_rule(hspace)
+            quadrature_style = Spaces.quadrature_style(hspace)
             Spaces.dss2!(
                 Fields.field_values(target),
                 topology,
@@ -187,11 +187,11 @@ function generate_map(
             meshfile_overlap;
             in_type = in_type,
             in_np = Spaces.Quadratures.degrees_of_freedom(
-                Spaces.quadrature_rule(source_space),
+                Spaces.quadrature_style(source_space),
             ),
             out_type = out_type,
             out_np = Spaces.Quadratures.degrees_of_freedom(
-                Spaces.quadrature_rule(target_space),
+                Spaces.quadrature_style(target_space),
             ),
         )
 
