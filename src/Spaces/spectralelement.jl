@@ -22,15 +22,14 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     indent = get(io, :indent, 0)
     iio = IOContext(io, :indent => indent + 2)
     println(io, nameof(typeof(space)), ":")
-    grid = space.grid
-    if hasfield(typeof(grid), :topology)
+    if hasfield(typeof(grid(space)), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")
-        Topologies.print_context(iio, grid.topology.context)
+        Topologies.print_context(iio, grid(space).topology.context)
         println(iio)
-        println(iio, " "^(indent + 2), "mesh: ", grid.topology.mesh)
+        println(iio, " "^(indent + 2), "mesh: ", grid(space).topology.mesh)
     end
-    print(iio, " "^(indent + 2), "quadrature: ", grid.quadrature_style)
+    print(iio, " "^(indent + 2), "quadrature: ", grid(space).quadrature_style)
 end
 
 
@@ -44,7 +43,7 @@ struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid1D, ::Nothing) =
     SpectralElementSpace1D(grid)
-grid(space::Spaces.SpectralElementSpace1D) = space.grid
+grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
 
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
@@ -99,7 +98,7 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
-grid(space::Spaces.SpectralElementSpace2D) = space.grid
+grid(space::Spaces.SpectralElementSpace2D) = getfield(space, :grid)
 
 function SpectralElementSpace2D(
     topology::Topologies.Topology2D,
@@ -155,16 +154,16 @@ end
         return nothing
     elseif name == :internal_surface_geometry
         Base.depwarn(
-            "`space.internal_surface_geometry` is deprecated, use `space.grid.internal_surface_geometry` instead",
+            "`space.internal_surface_geometry` is deprecated, use `Spaces.grid(space).internal_surface_geometry` instead",
             :getproperty,
         )
-        return space.grid.internal_surface_geometry
+        return grid(space).internal_surface_geometry
     elseif name == :boundary_surface_geometries
         Base.depwarn(
-            "`space.boundary_surface_geometries` is deprecated, use `space.grid.boundary_surface_geometries` instead",
+            "`space.boundary_surface_geometries` is deprecated, use `Spaces.grid(space).boundary_surface_geometries` instead",
             :getproperty,
         )
-        return space.grid.boundary_surface_geometries
+        return grid(space).boundary_surface_geometries
     end
     return getfield(space, name)
 end

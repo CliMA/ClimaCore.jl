@@ -31,8 +31,8 @@ function ExtrudedFiniteDifferenceSpace(
     hypsography::Grids.HypsographyAdaption = Grids.Flat(),
 )
     grid = Grids.ExtrudedFiniteDifferenceGrid(
-        horizontal_space.grid,
-        vertical_space.grid,
+        grid(horizontal_space),
+        grid(vertical_space),
         hypsography,
     )
     return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
@@ -99,16 +99,16 @@ FaceExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
 CenterExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
     ExtrudedFiniteDifferenceSpace(grid, CellCenter())
 FaceExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace(space.grid, CellFace())
+    ExtrudedFiniteDifferenceSpace(grid(space), CellFace())
 CenterExtrudedFiniteDifferenceSpace(space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace(space.grid, CellCenter())
+    ExtrudedFiniteDifferenceSpace(grid(space), CellCenter())
 
 
 local_dss_weights(space::ExtrudedFiniteDifferenceSpace) =
     local_dss_weights(grid(space))
 
-staggering(space::ExtrudedFiniteDifferenceSpace) = space.staggering
-grid(space::ExtrudedFiniteDifferenceSpace) = space.grid
+staggering(space::ExtrudedFiniteDifferenceSpace) = getfield(space, :staggering)
+grid(space::ExtrudedFiniteDifferenceSpace) = getfield(space, :grid)
 space(space::ExtrudedFiniteDifferenceSpace, staggering::Staggering) =
     ExtrudedFiniteDifferenceSpace(grid(space), staggering)
 
@@ -140,7 +140,10 @@ end
 =#
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
-    ExtrudedFiniteDifferenceSpace(Adapt.adapt(to, space.grid), space.staggering)
+    ExtrudedFiniteDifferenceSpace(
+        Adapt.adapt(to, grid(space)),
+        staggering(space),
+    )
 
 const ExtrudedFiniteDifferenceSpace2D = ExtrudedFiniteDifferenceSpace{
     <:Grids.ExtrudedFiniteDifferenceGrid{<:Grids.SpectralElementGrid1D},
@@ -190,20 +193,20 @@ function Base.show(io::IO, space::ExtrudedFiniteDifferenceSpace)
 end
 
 quadrature_style(space::ExtrudedFiniteDifferenceSpace) =
-    quadrature_style(space.grid)
-topology(space::ExtrudedFiniteDifferenceSpace) = topology(space.grid)
+    quadrature_style(grid(space))
+topology(space::ExtrudedFiniteDifferenceSpace) = topology(grid(space))
 
 
 horizontal_space(full_space::ExtrudedFiniteDifferenceSpace) =
-    space(full_space.grid.horizontal_grid, nothing)
+    space(grid(full_space).horizontal_grid, nothing)
 
 vertical_topology(space::ExtrudedFiniteDifferenceSpace) =
-    vertical_topology(space.grid)
+    vertical_topology(grid(space))
 
 
 
 function column(space::ExtrudedFiniteDifferenceSpace, colidx::Grids.ColumnIndex)
-    column_grid = column(space.grid, colidx)
+    column_grid = column(grid(space), colidx)
     FiniteDifferenceSpace(column_grid, space.staggering)
 end
 

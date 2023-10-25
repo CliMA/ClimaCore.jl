@@ -25,8 +25,8 @@ FiniteDifferenceSpace(
 const FaceFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellFace}
 const CenterFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellCenter}
 
-grid(space::AbstractFiniteDifferenceSpace) = space.grid
-staggering(space::FiniteDifferenceSpace) = space.staggering
+grid(space::AbstractFiniteDifferenceSpace) = getfield(space, :grid)
+staggering(space::FiniteDifferenceSpace) = getfield(space, :staggering)
 
 space(grid::Grids.AbstractFiniteDifferenceGrid, staggering::Staggering) =
     FiniteDifferenceSpace(grid, staggering)
@@ -52,9 +52,9 @@ CenterFiniteDifferenceSpace(grid::Grids.AbstractFiniteDifferenceGrid) =
     FiniteDifferenceSpace(grid, CellCenter())
 
 FaceFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-    FiniteDifferenceSpace(space.grid, CellFace())
+    FiniteDifferenceSpace(grid(space), CellFace())
 CenterFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
-    FiniteDifferenceSpace(space.grid, CellCenter())
+    FiniteDifferenceSpace(grid(space), CellCenter())
 
 FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellFace())
@@ -96,7 +96,7 @@ CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
 end
 
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
-    FiniteDifferenceSpace(Adapt.adapt(to, space.grid), space.staggering)
+    FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
 
 
