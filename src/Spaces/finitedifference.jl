@@ -153,12 +153,12 @@ Base.@propagate_inbounds function level(
     v::PlusHalf,
 )
     @inbounds local_geometry = level(local_geometry_data(space), v.i + 1)
-    PointSpace(local_geometry)
+    PointSpace(ClimaComms.device(space), local_geometry)
 end
 Base.@propagate_inbounds function level(
     space::CenterFiniteDifferenceSpace,
     v::Int,
 )
     local_geometry = level(local_geometry_data(space), v)
-    PointSpace(local_geometry)
+    PointSpace(ClimaComms.device(space), local_geometry)
 end

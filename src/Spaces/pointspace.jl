@@ -17,12 +17,11 @@ ClimaComms.device(space::PointSpace) =
 ClimaComms.context(space::PointSpace) =
     ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
 
-#=
+
 PointSpace(x::Geometry.LocalGeometry) =
     PointSpace(ClimaComms.CPUSingleThreaded(), x)
 PointSpace(x::Geometry.AbstractPoint) =
     PointSpace(ClimaComms.CPUSingleThreaded(), x)
-=#
 
 function PointSpace(device::ClimaComms.AbstractDevice, x)
     context = ClimaComms.SingletonCommsContext(device)
