@@ -12,6 +12,7 @@ dirs = (
     joinpath(root, "perf"),
     joinpath(root, "docs"),
     joinpath(root, "test"),
+    joinpath(root, "benchmarks", "bickleyjet"),
     joinpath(root, "lib", "ClimaCoreMakie"),
     joinpath(root, "lib", "ClimaCorePlots"),
     joinpath(root, "lib", "ClimaCoreTempestRemap"),
