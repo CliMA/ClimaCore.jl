@@ -2,7 +2,8 @@ module Topologies
 
 using DocStringExtensions
 
-import ClimaComms, Adapt, CUDA
+import ClimaComms, Adapt
+using CUDA
 
 import ..ClimaCore
 import ..Geometry
