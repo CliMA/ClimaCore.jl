@@ -38,7 +38,10 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
 end
 
-function Base.getproperty(space::ExtrudedFiniteDifferenceSpace, name::Symbol)
+@inline function Base.getproperty(
+    space::ExtrudedFiniteDifferenceSpace,
+    name::Symbol,
+)
     if name == :horizontal_space
         Base.depwarn(
             "`space.horizontal_space` is deprecated, use `Spaces.horizontal_space(space)` instead",

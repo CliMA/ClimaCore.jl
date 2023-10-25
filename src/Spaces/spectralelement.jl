@@ -55,7 +55,7 @@ function SpectralElementSpace1D(
 end
 
 
-function Base.getproperty(space::SpectralElementSpace1D, name::Symbol)
+@inline function Base.getproperty(space::SpectralElementSpace1D, name::Symbol)
     if name == :topology
         Base.depwarn(
             "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
@@ -110,7 +110,7 @@ function SpectralElementSpace2D(
     SpectralElementSpace2D(grid)
 end
 
-function Base.getproperty(space::SpectralElementSpace2D, name::Symbol)
+@inline function Base.getproperty(space::SpectralElementSpace2D, name::Symbol)
     if name == :topology
         Base.depwarn(
             "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
