@@ -12,6 +12,7 @@ import ..Geometry,
     ..Fields,
     ..Hypsography
 import ..VERSION
+import ..Utilities: PlusHalf, half
 
 include("writers.jl")
 include("readers.jl")
