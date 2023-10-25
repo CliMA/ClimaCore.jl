@@ -673,6 +673,14 @@ steps:
         key: unit_limiter
         command: "julia --color=yes --check-bounds=yes --project=test test/Limiters/limiter.jl"
 
+      - label: "Unit: limiter cuda"
+        key: unit_limiter_gpu
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Limiters/limiter.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: distributed limiters"
         key: unit_limiters_distributed
         command: "srun julia --color=yes --check-bounds=yes --project=test test/Limiters/distributed/dlimiter.jl"
