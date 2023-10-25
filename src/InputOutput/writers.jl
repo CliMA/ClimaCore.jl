@@ -302,7 +302,8 @@ defaultname(::Grids.SpectralElementGrid2D) = "horizontal_grid"
 defaultname(::Grids.ExtrudedFiniteDifferenceGrid) =
     "extruded_finite_difference_grid"
 defaultname(grid::Grids.FiniteDifferenceGrid) = defaultname(grid.topology)
-
+defaultname(grid::Grids.LevelGrid) =
+    "$(defaultname(grid.full_grid)): level $(grid.level)"
 
 """
     write_new!(writer, space, name)
@@ -382,6 +383,23 @@ function write_new!(
             "hypsography_surface",
             write!(writer, space.hypsography.surface, "_z_surface/$name"),
         )
+    end
+    return name
+end
+
+
+function write_new!(
+    writer::HDF5Writer,
+    space::Grids.LevelGrid,
+    name::AbstractString = defaultname(space),
+)
+    group = create_group(writer.file, "grids/$name")
+    write_attribute(group, "type", "LevelGrid")
+    write_attribute(group, "full_grid", write!(writer, space.full_grid))
+    if space.level isa PlusHalf
+        write_attribute(group, "level + half", space.level.value)
+    else
+        write_attribute(group, "level", space.level)
     end
     return name
 end
