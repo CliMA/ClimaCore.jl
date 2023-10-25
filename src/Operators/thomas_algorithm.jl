@@ -27,7 +27,7 @@ function thomas_algorithm_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         thomas_algorithm!(Spaces.column(A, i, j, h), Spaces.column(b, i, j, h))
     end
     return nothing

@@ -63,7 +63,7 @@ function single_field_solve_kernel!(cache, x, A, b)
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         _single_field_solve!(
             Spaces.column(cache, i, j, h),
             Spaces.column(x, i, j, h),

@@ -293,7 +293,7 @@ weighted_dss_ghost!(
 function weighted_dss_ghost!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    hspace::SpectralElementSpace2D{<:Topologies.Topology2D},
+    hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,
 )
     assert_same_eltype(data, dss_buffer)

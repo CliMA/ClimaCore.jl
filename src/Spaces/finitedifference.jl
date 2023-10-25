@@ -66,7 +66,7 @@ FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
 CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellCenter())
 
-function Base.getproperty(space::FiniteDifferenceSpace, name::Symbol)
+@inline function Base.getproperty(space::FiniteDifferenceSpace, name::Symbol)
     if name == :topology
         Base.depwarn(
             "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
