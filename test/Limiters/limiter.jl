@@ -1,3 +1,9 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Limiters", "limiter.jl"))
+=#
+import CUDA
+CUDA.allowscalar(false)
 using ClimaComms
 using ClimaCore:
     DataLayouts, Fields, Domains, Geometry, Topologies, Meshes, Spaces, Limiters
@@ -6,7 +12,7 @@ using ClimaCore: slab
 using Test
 
 # 2D mesh setup
-function rectangular_mesh(
+function rectangular_mesh_space(
     n1,
     n2,
     x1periodic,
@@ -16,6 +22,9 @@ function rectangular_mesh(
     x1max = 1.0,
     x2min = 0.0,
     x2max = 1.0,
+    Nij,
+    device = ClimaComms.device(),
+    comms_ctx = ClimaComms.SingletonCommsContext(device),
 )
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
@@ -33,7 +42,10 @@ function rectangular_mesh(
                 x2periodic ? nothing : (:south, :north),
         ),
     )
-    return Meshes.RectilinearMesh(domain, n1, n2)
+    mesh = Meshes.RectilinearMesh(domain, n1, n2)
+    topology = Topologies.Topology2D(comms_ctx, mesh)
+    quad = Spaces.Quadratures.GLL{Nij}()
+    return Spaces.SpectralElementSpace2D(topology, quad)
 end
 
 # 2D x 1D hybrid function space setup
@@ -46,6 +58,8 @@ function hvspace_3D(
     yelems = 8,
     zelems = 16,
     Nij = 4,
+    device = ClimaComms.device(),
+    comms_ctx = ClimaComms.SingletonCommsContext(device),
 )
 
     xdomain = Domains.IntervalDomain(
@@ -61,8 +75,7 @@ function hvspace_3D(
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelems, yelems)
-    horztopology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(), horzmesh)
+    horztopology = Topologies.Topology2D(comms_ctx, horzmesh)
 
     zdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -70,7 +83,9 @@ function hvspace_3D(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelems)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    z_topology = Topologies.IntervalTopology(comms_ctx, vertmesh)
+
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
 
     quad = Spaces.Quadratures.GLL{Nij}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
@@ -86,24 +101,24 @@ end
 
     Nij = 4
     n1 = n2 = 5
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.SingletonCommsContext(device)
 
     for FT in (Float64, Float32)
         lim_tol = FT(5e-14)
-        mesh = rectangular_mesh(
+        space = rectangular_mesh_space(
             n1,
             n2,
             false,
-            false,
+            false;
             FT = FT,
             x1min = 0.0,
             x1max = 2.0 * n1,
             x2min = 0.0,
             x2max = 3.0 * n2,
+            Nij,
+            comms_ctx,
         )
-        topology =
-            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-        quad = Spaces.Quadratures.GLL{Nij}()
-        space = Spaces.SpectralElementSpace2D(topology, quad)
 
         # Initialize fields
         ρ = map(coord -> exp(-coord.y), Fields.coordinate_field(space))
@@ -113,23 +128,24 @@ end
         limiter = Limiters.QuasiMonotoneLimiter(ρq)
         Limiters.compute_bounds!(limiter, ρq, ρ)
 
+        is_cpu = device isa ClimaComms.AbstractCPUDevice
         for h2 in 1:n2
             for h1 in 1:n1
                 s = slab(limiter.q_bounds, h1 + n1 * (h2 - 1))
-                q_min = s[1]
-                q_max = s[2]
-                @test q_min.x ≈ 2 * (h1 - 1)
-                @test q_min.y ≈ 3 * (h2 - 1)
-                @test q_max.x ≈ 2 * h1
-                @test q_max.y ≈ 3 * h2
+                CUDA.@allowscalar q_min = s[1]
+                CUDA.@allowscalar q_max = s[2]
+                is_cpu && @test q_min.x ≈ 2 * (h1 - 1)
+                is_cpu && @test q_min.y ≈ 3 * (h2 - 1)
+                is_cpu && @test q_max.x ≈ 2 * h1
+                is_cpu && @test q_max.y ≈ 3 * h2
 
                 s_nbr = slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1))
-                q_min = s_nbr[1]
-                q_max = s_nbr[2]
-                @test q_min.x ≈ 2 * max(h1 - 2, 0)
-                @test q_min.y ≈ 3 * max(h2 - 2, 0)
-                @test q_max.x ≈ 2 * min(h1 + 1, n1)
-                @test q_max.y ≈ 3 * min(h2 + 1, n2)
+                CUDA.@allowscalar q_min = s_nbr[1]
+                CUDA.@allowscalar q_max = s_nbr[2]
+                is_cpu && @test q_min.x ≈ 2 * max(h1 - 2, 0)
+                is_cpu && @test q_min.y ≈ 3 * max(h2 - 2, 0)
+                is_cpu && @test q_max.x ≈ 2 * min(h1 + 1, n1)
+                is_cpu && @test q_max.y ≈ 3 * min(h2 + 1, n2)
             end
         end
     end
@@ -167,14 +183,14 @@ end
 @testset "Optimization-based limiter on a 1×1 elem 2D domain space" begin
 
     Nij = 2
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.SingletonCommsContext(device)
+    gpu_broken = device isa ClimaComms.CUDADevice
 
     for FT in (Float32,)
         lim_tol = FT(5e-14)
-        mesh = rectangular_mesh(1, 1, false, false; FT = FT)
-        topology =
-            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-        quad = Spaces.Quadratures.GLL{Nij}()
-        space = Spaces.SpectralElementSpace2D(topology, quad)
+        space =
+            rectangular_mesh_space(1, 1, false, false; FT = FT, Nij, comms_ctx)
 
         # Initialize fields
         ρ = ones(FT, space)
@@ -194,8 +210,9 @@ end
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)
         Limiters.apply_limiter!(ρq, ρ, limiter)
 
-        @test parent(ρq)[:, :, 1, 1] ≈
-              [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT)
+        @test Array(parent(ρq))[:, :, 1, 1] ≈
+              [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT) broken =
+            gpu_broken
         # Check mass conservation after application of limiter
         @test sum(ρq) ≈ initial_Q_mass rtol = 10eps(FT)
     end
@@ -204,13 +221,12 @@ end
 @testset "Optimization-based limiter on a 3×3 elem 2D domain space" begin
 
     Nij = 5
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.SingletonCommsContext(device)
 
     for FT in (Float64, Float32)
-        mesh = rectangular_mesh(3, 3, false, false; FT = FT)
-        topology =
-            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-        quad = Spaces.Quadratures.GLL{Nij}()
-        space = Spaces.SpectralElementSpace2D(topology, quad)
+        space =
+            rectangular_mesh_space(3, 3, false, false; FT = FT, Nij, comms_ctx)
 
         x_scale = FT(1.2)
         y_scale = FT(1.5)
@@ -228,17 +244,19 @@ end
         )
         ρq_ref = ρ .⊠ q_ref
 
-        total_ρq = sum(ρq)
+        if device isa ClimaComms.AbstractCPUDevice
+            total_ρq = sum(ρq) # broken on the GPU
 
-        limiter = Limiters.QuasiMonotoneLimiter(ρq)
+            limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
-        Limiters.compute_bounds!(limiter, ρq_ref, ρ)
-        Limiters.apply_limiter!(ρq, ρ, limiter)
-        q = RecursiveApply.rdiv.(ρq, ρ)
+            Limiters.compute_bounds!(limiter, ρq_ref, ρ)
+            Limiters.apply_limiter!(ρq, ρ, limiter)
+            q = RecursiveApply.rdiv.(ρq, ρ)
 
-        @test sum(ρq.x) ≈ total_ρq.x
-        @test sum(ρq.y) ≈ total_ρq.y
-        @test all(FT(0) .<= parent(ρq) .<= FT(1))
+            @test sum(ρq.x) ≈ total_ρq.x
+            @test sum(ρq.y) ≈ total_ρq.y
+            @test all(FT(0) .<= parent(ρq) .<= FT(1))
+        end
     end
 end
 
@@ -247,10 +265,12 @@ end
     Nij = 5
     n1 = n2 = 3
     n3 = 3
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.SingletonCommsContext(device)
 
     for FT in (Float64, Float32)
         horzspace, hv_center_space, hv_face_space = hvspace_3D(
-            FT,
+            FT;
             xlim = (FT(0), FT(1)),
             ylim = (FT(0), FT(1)),
             zlim = (FT(0), FT(2)),
@@ -258,6 +278,7 @@ end
             xelems = n1,
             yelems = n2,
             zelems = n3,
+            comms_ctx,
         )
 
         x_scale = FT(1.2)
@@ -279,16 +300,18 @@ end
         )
         ρq_ref = ρ .⊠ q_ref
 
-        total_ρq = sum(ρq)
+        if device isa ClimaComms.AbstractCPUDevice
+            total_ρq = sum(ρq)
 
-        limiter = Limiters.QuasiMonotoneLimiter(ρq)
+            limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
-        Limiters.compute_bounds!(limiter, ρq_ref, ρ)
-        Limiters.apply_limiter!(ρq, ρ, limiter)
-        q = RecursiveApply.rdiv.(ρq, ρ)
+            Limiters.compute_bounds!(limiter, ρq_ref, ρ)
+            Limiters.apply_limiter!(ρq, ρ, limiter)
+            q = RecursiveApply.rdiv.(ρq, ρ)
 
-        @test sum(ρq.x) ≈ total_ρq.x
-        @test sum(ρq.y) ≈ total_ρq.y
-        @test all(FT(0) .<= parent(ρq) .<= FT(1))
+            @test sum(ρq.x) ≈ total_ρq.x
+            @test sum(ρq.y) ≈ total_ρq.y
+            @test all(FT(0) .<= parent(ρq) .<= FT(1))
+        end
     end
 end

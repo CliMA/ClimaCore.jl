@@ -1,3 +1,6 @@
+import ClimaComms
+import CUDA
+
 """
     QuasiMonotoneLimiter
 
@@ -85,12 +88,30 @@ storing it in `limiter.q_bounds`.
 Part of [`compute_bounds!`](@ref).
 """
 function compute_element_bounds!(limiter::QuasiMonotoneLimiter, ρq, ρ)
+    compute_element_bounds!(limiter, ρq, ρ, ClimaComms.device(ρ))
+end
+
+function compute_element_bounds!(
+    limiter::QuasiMonotoneLimiter,
+    ρq,
+    ρ,
+    ::ClimaComms.CUDADevice,
+) end
+
+function compute_element_bounds!(
+    limiter::QuasiMonotoneLimiter,
+    ρq,
+    ρ,
+    ::ClimaComms.AbstractCPUDevice,
+)
+    ρ_data = Fields.field_values(ρ)
+    ρq_data = Fields.field_values(ρq)
     q_bounds = limiter.q_bounds
-    (Ni, Nj, _, Nv, Nh) = size(ρq)
+    (Ni, Nj, _, Nv, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
-            slab_ρq = slab(ρq, v, h)
-            slab_ρ = slab(ρ, v, h)
+            slab_ρq = slab(ρq_data, v, h)
+            slab_ρ = slab(ρ_data, v, h)
             local q_min, q_max
             for j in 1:Nj
                 for i in 1:Ni
@@ -120,10 +141,21 @@ neighbors.
 
 Part of [`compute_bounds!`](@ref).
 """
+compute_neighbor_bounds_local!(limiter::QuasiMonotoneLimiter, ρ) =
+    compute_neighbor_bounds_local!(limiter, ρ, ClimaComms.device(ρ))
+
 function compute_neighbor_bounds_local!(
     limiter::QuasiMonotoneLimiter,
-    topology::Topologies.AbstractTopology,
+    ρ,
+    ::ClimaComms.CUDADevice,
+) end
+
+function compute_neighbor_bounds_local!(
+    limiter::QuasiMonotoneLimiter,
+    ρ,
+    ::ClimaComms.AbstractCPUDevice,
 )
+    topology = Spaces.topology(axes(ρ))
     q_bounds = limiter.q_bounds
     q_bounds_nbr = limiter.q_bounds_nbr
     (_, _, _, Nv, Nh) = size(q_bounds_nbr)
@@ -199,33 +231,19 @@ function compute_bounds!(
     ρq::Fields.Field,
     ρ::Fields.Field,
 )
-    topology = Spaces.topology(axes(ρq))
-    compute_bounds!(
-        limiter,
-        Fields.field_values(ρq),
-        Fields.field_values(ρ),
-        topology,
-    )
-end
-function compute_bounds!(
-    limiter::QuasiMonotoneLimiter,
-    ρq,
-    ρ,
-    topology::Topologies.AbstractTopology,
-)
     compute_element_bounds!(limiter, ρq, ρ)
     if limiter.ghost_buffer isa Spaces.GhostBuffer
         Spaces.fill_send_buffer!(
-            topology,
+            Spaces.topology(axes(ρq)),
             limiter.q_bounds,
             limiter.ghost_buffer,
         )
         ClimaComms.start(limiter.ghost_buffer.graph_context)
     end
-    compute_neighbor_bounds_local!(limiter, topology)
+    compute_neighbor_bounds_local!(limiter, ρ)
     if limiter.ghost_buffer isa Spaces.GhostBuffer
-        ClimaComms.finish(ghost_buffer.graph_context)
-        compute_neighbor_bounds_ghost!(limiter, topology)
+        ClimaComms.finish(limiter.ghost_buffer.graph_context)
+        compute_neighbor_bounds_ghost!(limiter, Spaces.topology(axes(ρq)))
     end
 end
 
@@ -240,10 +258,24 @@ on the concentration `q` and density `ρ` as an optimal weight. This iterates
 over each element, calling [`apply_limit_slab!`](@ref). If the limiter fails to
 converge for any element, a warning is issued.
 """
+apply_limiter!(
+    ρq::Fields.Field,
+    ρ::Fields.Field,
+    limiter::QuasiMonotoneLimiter,
+) = apply_limiter!(ρq, ρ, limiter, ClimaComms.device(ρ))
+
 function apply_limiter!(
     ρq::Fields.Field,
     ρ::Fields.Field,
     limiter::QuasiMonotoneLimiter,
+    ::ClimaComms.CUDADevice,
+) end
+
+function apply_limiter!(
+    ρq::Fields.Field,
+    ρ::Fields.Field,
+    limiter::QuasiMonotoneLimiter,
+    ::ClimaComms.AbstractCPUDevice,
 )
     (; q_bounds_nbr, rtol) = limiter
 
