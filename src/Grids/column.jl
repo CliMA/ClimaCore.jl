@@ -43,6 +43,7 @@ vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
 
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) = column(
     local_geometry_data(colgrid.full_grid, staggering::Staggering),
-    colgrid.colidx,
+    colgrid.colidx.ij...,
+    colgrid.colidx.h,
 )
 global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
