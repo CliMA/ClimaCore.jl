@@ -38,6 +38,59 @@ function ExtrudedFiniteDifferenceSpace(
     return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
 end
 
+function Base.getproperty(space::ExtrudedFiniteDifferenceSpace, name::Symbol)
+    if name == :horizontal_space
+        Base.depwarn(
+            "`space.horizontal_space` is deprecated, use `Spaces.horizontal_space(space)` instead",
+            :getproperty,
+        )
+        return horizontal_space(space)
+    elseif name == :vertical_topology
+        Base.depwarn(
+            "`space.vertical_topology` is deprecated, use `Spaces.vertical_topology(space)` instead",
+            :getproperty,
+        )
+        return vertical_topology(space)
+    elseif name == :hypsography
+        Base.depwarn(
+            "`space.hypsography` is deprecated, use `Spaces.grid(space).hypsography` instead",
+            :getproperty,
+        )
+        return grid(space).hypsography
+    elseif name == :global_geometry
+        Base.depwarn(
+            "`space.global_geometry` is deprecated, use `Spaces.global_geometry(space)` instead",
+            :getproperty,
+        )
+        return global_geometry(space)
+    elseif name == :center_local_geometry
+        Base.depwarn(
+            "`space.center_local_geometry` is deprecated, use `Spaces.local_geometry_data(grid(space), Grids.CellCenter())` instead",
+            :getproperty,
+        )
+        return local_geometry_data(space, Grids.CellCenter())
+    elseif name == :face_local_geometry
+        Base.depwarn(
+            "`space.face_local_geometry` is deprecated, use `Spaces.local_geometry_data(grid(space), Grids.CellFace())` instead",
+            :getproperty,
+        )
+        return local_geometry_data(space, Grids.CellFace())
+    elseif name == :center_ghost_geometry
+        Base.depwarn(
+            "`space.center_ghost_geometry` is deprecated, use `nothing` instead",
+            :getproperty,
+        )
+        return nothing
+    elseif name == :face_ghost_geometry
+        Base.depwarn(
+            "`space.face_ghost_geometry` is deprecated, use `nothing` instead",
+            :getproperty,
+        )
+        return nothing
+    end
+    return getfield(space, name)
+end
+
 FaceExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
     ExtrudedFiniteDifferenceSpace(grid, CellFace())
 CenterExtrudedFiniteDifferenceSpace(grid::Grids.ExtrudedFiniteDifferenceGrid) =
