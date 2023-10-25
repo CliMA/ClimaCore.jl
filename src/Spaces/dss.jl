@@ -7,6 +7,7 @@ import ..Topologies:
     dss_untransform!,
     dss_local!,
     dss_local_ghost!,
+    dss_ghost!,
     fill_send_buffer!,
     load_from_recv_buffer!
 
