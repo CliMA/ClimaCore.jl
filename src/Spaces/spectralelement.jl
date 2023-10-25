@@ -69,9 +69,10 @@ grid(space::Spaces.SpectralElementSpace2D) = space.grid
 
 function SpectralElementSpace2D(
     topology::Topologies.Topology2D,
-    quadrature_style::Quadratures.QuadratureStyle,
+    quadrature_style::Quadratures.QuadratureStyle;
+    kwargs...,
 )
-    grid = Grids.SpectralElementGrid2D(topology, quadrature_style)
+    grid = Grids.SpectralElementGrid2D(topology, quadrature_style; kwargs...)
     SpectralElementSpace2D(grid)
 end
 
