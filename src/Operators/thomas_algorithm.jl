@@ -38,10 +38,14 @@ thomas_algorithm_kernel!(
     b::Fields.FiniteDifferenceField,
 ) = thomas_algorithm!(A, b)
 
-thomas_algorithm!(
+function thomas_algorithm!(
     A::Fields.ExtrudedFiniteDifferenceField,
     b::Fields.ExtrudedFiniteDifferenceField,
-) = Fields.bycolumn(colidx -> thomas_algorithm!(A[colidx], b[colidx]), axes(A))
+)
+    Fields.bycolumn(axes(A)) do colidx
+        thomas_algorithm!(A[colidx], b[colidx])
+    end
+end
 
 function thomas_algorithm!(
     A::Fields.FiniteDifferenceField,

@@ -129,6 +129,12 @@ function issubspace(
 )
     return grid(hspace) === grid(extruded_space).horizontal_grid
 end
+function issubspace(
+    level_space::SpectralElementSpace2D{<:Grids.LevelGrid},
+    extruded_space::ExtrudedFiniteDifferenceSpace,
+)
+    return grid(level_space).full_grid === grid(extruded_space)
+end
 
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
@@ -222,6 +228,8 @@ end
 # TODO: deprecate these
 column(space::ExtrudedFiniteDifferenceSpace, i, j, h) =
     column(space, Grids.ColumnIndex((i, j), h))
+column(space::ExtrudedFiniteDifferenceSpace, i, h) =
+    column(space, Grids.ColumnIndex((i,), h))
 
 level(space::CenterExtrudedFiniteDifferenceSpace2D, v::Integer) =
     SpectralElementSpace1D(level(grid(space), v))
