@@ -6,6 +6,7 @@ import ClimaComms
 import ..DataLayouts,
     ..Geometry,
     ..Spaces,
+    ..Grids,
     ..Topologies,
     ..Meshes,
     ..Operators,
