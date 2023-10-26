@@ -35,7 +35,7 @@ function ExtrudedFiniteDifferenceSpace(
         grid(vertical_space),
         hypsography,
     )
-    return ExtrudedFiniteDifferenceSpace(grid, vertical_space.staggering)
+    return ExtrudedFiniteDifferenceSpace(grid_space, vertical_space.staggering)
 end
 
 @inline function Base.getproperty(
