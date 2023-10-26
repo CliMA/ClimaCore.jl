@@ -34,6 +34,7 @@ struct Topology2D{
     LVO,
     GV,
     GVO,
+    VI,
     BF,
     RGV,
 } <: AbstractDistributedTopology
@@ -81,9 +82,9 @@ struct Topology2D{
     ghost_vertex_offset::GVO
 
     "a vector of the lidx of neighboring local elements of each element"
-    local_neighbor_elem::Vector{Int}
+    local_neighbor_elem::VI
     "the index into `local_neighbor_elem` for the start of each element"
-    local_neighbor_elem_offset::Vector{Int}
+    local_neighbor_elem_offset::VI
     "a vector of the ridx of neighboring ghost elements of each element"
     ghost_neighbor_elem::Vector{Int}
     "the index into `ghost_neighbor_elem` for the start of each element"
@@ -503,8 +504,8 @@ function Topology2D(
         DA(local_vertex_offset),
         DA(ghost_vertices),
         DA(ghost_vertex_offset),
-        local_neighbor_elem,
-        local_neighbor_elem_offset,
+        DA(local_neighbor_elem),
+        DA(local_neighbor_elem_offset),
         ghost_neighbor_elem,
         ghost_neighbor_elem_offset,
         boundaries,
