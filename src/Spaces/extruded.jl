@@ -30,7 +30,7 @@ function ExtrudedFiniteDifferenceSpace(
     vertical_space::FiniteDifferenceSpace,
     hypsography::Grids.HypsographyAdaption = Grids.Flat(),
 )
-    grid = Grids.ExtrudedFiniteDifferenceGrid(
+    grid_space = Grids.ExtrudedFiniteDifferenceGrid(
         grid(horizontal_space),
         grid(vertical_space),
         hypsography,
