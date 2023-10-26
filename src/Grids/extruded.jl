@@ -85,8 +85,9 @@ quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
 
 
 ## GPU compatibility
-struct DeviceExtrudedFiniteDifferenceGrid{Q, GG, LG} <:
+struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG} <:
        AbstractExtrudedFiniteDifferenceGrid
+    vertical_topology::VT
     quadrature_style::Q
     global_geometry::GG
     center_local_geometry::LG
@@ -95,6 +96,7 @@ end
 
 Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
     DeviceExtrudedFiniteDifferenceGrid(
+        Adapt.adapt(to, vertical_topology(grid)),
         Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
         Adapt.adapt(to, grid.global_geometry),
         Adapt.adapt(to, grid.center_local_geometry),
@@ -103,6 +105,8 @@ Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
 
 quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =
     grid.quadrature_style
+vertical_topology(grid::DeviceExtrudedFiniteDifferenceGrid) =
+    grid.vertical_topology
 
 ## aliases
 

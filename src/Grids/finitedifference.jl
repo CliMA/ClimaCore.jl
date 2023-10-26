@@ -148,3 +148,28 @@ local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
 global_geometry(grid::FiniteDifferenceGrid) = grid.global_geometry
+
+## GPU compatibility
+struct DeviceFiniteDifferenceGrid{T, GG, LG} <: AbstractFiniteDifferenceGrid
+    topology::T
+    global_geometry::GG
+    center_local_geometry::LG
+    face_local_geometry::LG
+end
+
+Adapt.adapt_structure(to, grid::FiniteDifferenceGrid) =
+    DeviceFiniteDifferenceGrid(
+        Adapt.adapt(to, grid.topology),
+        Adapt.adapt(to, grid.global_geometry),
+        Adapt.adapt(to, grid.center_local_geometry),
+        Adapt.adapt(to, grid.face_local_geometry),
+    )
+
+topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
+vertical_topology(grid::DeviceFiniteDifferenceGrid) = grid.topology
+
+local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellCenter) =
+    grid.center_local_geometry
+local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellFace) =
+    grid.face_local_geometry
+global_geometry(grid::DeviceFiniteDifferenceGrid) = grid.global_geometry
