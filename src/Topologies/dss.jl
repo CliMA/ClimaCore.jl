@@ -708,8 +708,6 @@ function dss_ghost!(
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         nlevels = size(perimeter_data, 4)
-        perimeter_vertex_node_index = perimeter_vertex_node_index
-        perimeter_face_indices = perimeter_face_indices
         (; repr_ghost_vertex) = topology
         @inbounds for (i, vertex) in enumerate(ghost_vertices(topology))
             idxresult, lvertresult = repr_ghost_vertex[i]

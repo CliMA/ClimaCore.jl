@@ -168,6 +168,19 @@ end
     return getfield(space, name)
 end
 
+
+Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
+    SpectralElementSpace2D(Adapt.adapt(to, grid(space)))
+
+
+function issubspace(
+    hspace::SpectralElementSpace2D{<:Grids.SpectralElementGrid2D},
+    level_space::SpectralElementSpace2D{<:Grids.LevelGrid},
+)
+    return grid(hspace) === grid(level_space).full_grid.horizontal_grid
+end
+
+
 """
     SpectralElementSpaceSlab <: AbstractSpace
 
@@ -186,6 +199,11 @@ const SpectralElementSpaceSlab2D =
 
 nlevels(space::SpectralElementSpaceSlab1D) = 1
 nlevels(space::SpectralElementSpaceSlab2D) = 1
+
+
+
+
+
 
 Base.@propagate_inbounds function slab(
     space::AbstractSpectralElementSpace,

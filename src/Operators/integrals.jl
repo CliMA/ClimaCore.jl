@@ -22,7 +22,7 @@ function column_integral_definite!(
 )
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks column_integral_definite_kernel!(
         strip_space(∫field, space),
         strip_space(ᶜfield, space),
@@ -113,7 +113,7 @@ function column_integral_indefinite!(
     ᶜfield::Fields.Field,
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
         ᶠ∫field,
         ᶜfield,
@@ -289,7 +289,7 @@ function column_mapreduce_device!(
     fields::Fields.Field...,
 ) where {F, O}
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
         column_mapreduce_kernel_extruded!
     else

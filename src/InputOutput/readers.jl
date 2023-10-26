@@ -388,7 +388,7 @@ function read_space_new(reader, name)
                 read_space(reader, attrs(group)["horizontal_space"])
             hypsography_type = get(attrs(group), "hypsography_type", "Flat")
             if hypsography_type == "Flat"
-                hypsography = Spaces.Flat()
+                hypsography = Grids.Flat()
             elseif hypsography_type == "LinearAdaption"
                 hypsography = Hypsography.LinearAdaption(
                     read_field(reader, attrs(group)["hypsography_surface"]),

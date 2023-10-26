@@ -86,7 +86,7 @@ quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
 
 ## GPU compatibility
 struct DeviceExtrudedFiniteDifferenceGrid{Q, GG, LG} <:
-       AbstractSpectralElementGrid
+       AbstractExtrudedFiniteDifferenceGrid
     quadrature_style::Q
     global_geometry::GG
     center_local_geometry::LG

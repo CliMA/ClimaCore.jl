@@ -3332,7 +3332,7 @@ function Base.copyto!(
     Nv = ri - li + 1
     max_threads = 256
     nitems = Nv * Nq * Nq * Nh # # of independent items
-    (nthreads, nblocks) = Spaces._configure_threadblock(max_threads, nitems)
+    (nthreads, nblocks) = Topologies._configure_threadblock(max_threads, nitems)
     @cuda always_inline = true threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
         strip_space(out, space),
         strip_space(bc, space),

@@ -128,12 +128,12 @@ function dss_local_kernel!(
             local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
+            ip = perimeter_vertex_node_index(vert)
             sum_data += pperimeter_data[level, ip, fidx, lidx]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
+            ip = perimeter_vertex_node_index(vert)
             pperimeter_data[level, ip, fidx, lidx] = sum_data
         end
     elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
@@ -404,14 +404,14 @@ function dss_local_ghost_kernel!(
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 sum_data += pperimeter_data[level, ip, fidx, lidx]
             end
         end
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 pperimeter_data[level, ip, fidx, lidx] = sum_data
             end
         end
@@ -537,14 +537,14 @@ function dss_ghost_kernel!(
         (level, fidx, ghostvertexidx) =
             _get_idx((nlevels, nfidx, nghostvertices), gidx)
         idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
-        ipresult = Topologies.perimeter_vertex_node_index(lvertresult)
+        ipresult = perimeter_vertex_node_index(lvertresult)
         result = pperimeter_data[level, ipresult, fidx, idxresult]
         st, en = ghost_vertex_offset[ghostvertexidx],
         ghost_vertex_offset[ghostvertexidx + 1]
         for vertexidx in st:(en - 1)
             isghost, eidx, lvert = ghost_vertices[vertexidx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(lvert)
+                ip = perimeter_vertex_node_index(lvert)
                 pperimeter_data[level, ip, fidx, eidx] = result
             end
         end

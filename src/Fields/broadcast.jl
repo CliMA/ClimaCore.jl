@@ -153,20 +153,6 @@ end
     return dest
 end
 
-allow_mismatched_diagonalized_spaces() = false
-
-@noinline function warn_mismatched_spaces(
-    space1::Type{S},
-    space2::Type{S},
-) where {S <: AbstractSpace}
-    @warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance"
-    return nothing
-end
-
-is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
-
-is_diagonalized_spaces(::Type, ::Type) = false
-
 @noinline function error_mismatched_spaces(
     space1::Type{S},
     space2::Type{S},
@@ -185,14 +171,7 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
-           allow_mismatched_diagonalized_spaces() &&
-           (
-               parent(Spaces.local_geometry_data(space1)) ==
-               parent(Spaces.local_geometry_data(space2))
-           )
-            warn_mismatched_spaces(typeof(space1), typeof(space2))
-        elseif Spaces.issubspace(space2, space1)
+        if Spaces.issubspace(space2, space1)
             return space1
         elseif Spaces.issubspace(space1, space2)
             return space2
@@ -226,15 +205,8 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
-           allow_mismatched_diagonalized_spaces() &&
-           (
-               parent(Spaces.local_geometry_data(space1)) ==
-               parent(Spaces.local_geometry_data(space2))
-           )
-            warn_mismatched_spaces(typeof(space1), typeof(space2))
-        elseif Spaces.issubspace(space2, space1) ||
-               Spaces.issubspace(space1, space2)
+        if Spaces.issubspace(space2, space1) ||
+           Spaces.issubspace(space1, space2)
             nothing
         else
             error_mismatched_spaces(typeof(space1), typeof(space2))
@@ -449,3 +421,12 @@ function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
         ),
     )
 end
+
+
+# TODO: deprecate these
+
+allow_mismatched_diagonalized_spaces() = false
+
+is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
+
+is_diagonalized_spaces(::Type, ::Type) = false

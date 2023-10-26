@@ -1,7 +1,7 @@
 
 
 struct ExtrudedFiniteDifferenceSpace{
-    G <: Grids.ExtrudedFiniteDifferenceGrid,
+    G <: Grids.AbstractExtrudedFiniteDifferenceGrid,
     S <: Staggering,
 } <: AbstractSpace
     grid::G
@@ -71,13 +71,13 @@ end
             "`space.center_local_geometry` is deprecated, use `Spaces.local_geometry_data(grid(space), Grids.CellCenter())` instead",
             :getproperty,
         )
-        return local_geometry_data(space, Grids.CellCenter())
+        return local_geometry_data(grid(space), Grids.CellCenter())
     elseif name == :face_local_geometry
         Base.depwarn(
             "`space.face_local_geometry` is deprecated, use `Spaces.local_geometry_data(grid(space), Grids.CellFace())` instead",
             :getproperty,
         )
-        return local_geometry_data(space, Grids.CellFace())
+        return local_geometry_data(grid(space), Grids.CellFace())
     elseif name == :center_ghost_geometry
         Base.depwarn(
             "`space.center_ghost_geometry` is deprecated, use `nothing` instead",
@@ -123,21 +123,13 @@ ExtrudedFiniteDifferenceSpace{S}(
 )
 =#
 
-#=
 function issubspace(
     hspace::AbstractSpectralElementSpace,
     extruded_space::ExtrudedFiniteDifferenceSpace,
 )
-    if hspace === extruded_Spaces.horizontal_space(space)
-        return true
-    end
-    # TODO: improve level handling
-    return Spaces.topology(hspace) ===
-           Spaces.topology(Spaces.horizontal_space(extrued_space)) &&
-           quadrature_style(hspace) ===
-           quadrature_style(Spaces.horizontal_space(extrued_space))
+    return grid(hspace) === grid(extruded_space).horizontal_grid
 end
-=#
+
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
     ExtrudedFiniteDifferenceSpace(

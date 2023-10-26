@@ -238,7 +238,7 @@ function interpolate_column(
     # When we don't have hypsography, there is no notion of "interpolating hypsography". In
     # this case, the reference vertical points coincide with the physical ones. Setting
     # physical_z = false ensures that zpts_ref = zpts
-    if space.hypsography isa Spaces.Flat
+    if space.hypsography isa Grids.Flat
         physical_z = false
     end
 
