@@ -280,7 +280,7 @@ function call_getproperty(fv)
 end
 @testset "FieldVector getindex" begin
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32)
-    fspace = Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     c = fill((a = Float32(1), b = Float32(2)), cspace)
     f = fill((x = Float32(1), y = Float32(2)), fspace)
     fv = Fields.FieldVector(; c, f)
