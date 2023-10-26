@@ -128,26 +128,26 @@ end
         limiter = Limiters.QuasiMonotoneLimiter(ρq)
         Limiters.compute_bounds!(limiter, ρq, ρ)
 
-        is_cpu = device isa ClimaComms.AbstractCPUDevice
-        for h2 in 1:n2
-            for h1 in 1:n1
-                s = slab(limiter.q_bounds, h1 + n1 * (h2 - 1))
-                CUDA.@allowscalar q_min = s[1]
-                CUDA.@allowscalar q_max = s[2]
-                is_cpu && @test q_min.x ≈ 2 * (h1 - 1)
-                is_cpu && @test q_min.y ≈ 3 * (h2 - 1)
-                is_cpu && @test q_max.x ≈ 2 * h1
-                is_cpu && @test q_max.y ≈ 3 * h2
-
-                s_nbr = slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1))
-                CUDA.@allowscalar q_min = s_nbr[1]
-                CUDA.@allowscalar q_max = s_nbr[2]
-                is_cpu && @test q_min.x ≈ 2 * max(h1 - 2, 0)
-                is_cpu && @test q_min.y ≈ 3 * max(h2 - 2, 0)
-                is_cpu && @test q_max.x ≈ 2 * min(h1 + 1, n1)
-                is_cpu && @test q_max.y ≈ 3 * min(h2 + 1, n2)
-            end
+        is_gpu = device isa ClimaComms.CUDADevice
+        S = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
+            (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
+        @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) broken = is_gpu # q_min
+        @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) broken = is_gpu # q_min
+        @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) broken = is_gpu # q_max
+        @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) broken = is_gpu # q_max
+
+        SN = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
+            (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
+        end
+        @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN)) broken =
+            is_gpu # q_min
+        @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN)) broken =
+            is_gpu # q_min
+        @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN)) broken =
+            is_gpu # q_max
+        @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN)) broken =
+            is_gpu # q_max
     end
 end
 
@@ -223,6 +223,7 @@ end
     Nij = 5
     device = ClimaComms.device()
     comms_ctx = ClimaComms.SingletonCommsContext(device)
+    is_gpu = device isa ClimaComms.CUDADevice
 
     for FT in (Float64, Float32)
         space =
@@ -244,19 +245,17 @@ end
         )
         ρq_ref = ρ .⊠ q_ref
 
-        if device isa ClimaComms.AbstractCPUDevice
-            total_ρq = sum(ρq) # broken on the GPU
+        total_ρq = (; x = sum(ρq.x), y = sum(ρq.y))
 
-            limiter = Limiters.QuasiMonotoneLimiter(ρq)
+        limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
-            Limiters.compute_bounds!(limiter, ρq_ref, ρ)
-            Limiters.apply_limiter!(ρq, ρ, limiter)
-            q = RecursiveApply.rdiv.(ρq, ρ)
+        Limiters.compute_bounds!(limiter, ρq_ref, ρ)
+        Limiters.apply_limiter!(ρq, ρ, limiter)
+        q = RecursiveApply.rdiv.(ρq, ρ)
 
-            @test sum(ρq.x) ≈ total_ρq.x
-            @test sum(ρq.y) ≈ total_ρq.y
-            @test all(FT(0) .<= parent(ρq) .<= FT(1))
-        end
+        @test sum(ρq.x) ≈ total_ρq.x
+        @test sum(ρq.y) ≈ total_ρq.y
+        @test all(FT(0) .<= Array(parent(ρq)) .<= FT(1)) broken = is_gpu
     end
 end
 
@@ -267,6 +266,7 @@ end
     n3 = 3
     device = ClimaComms.device()
     comms_ctx = ClimaComms.SingletonCommsContext(device)
+    is_gpu = device isa ClimaComms.CUDADevice
 
     for FT in (Float64, Float32)
         horzspace, hv_center_space, hv_face_space = hvspace_3D(
@@ -300,18 +300,16 @@ end
         )
         ρq_ref = ρ .⊠ q_ref
 
-        if device isa ClimaComms.AbstractCPUDevice
-            total_ρq = sum(ρq)
+        total_ρq = (; x = sum(ρq.x), y = sum(ρq.y))
 
-            limiter = Limiters.QuasiMonotoneLimiter(ρq)
+        limiter = Limiters.QuasiMonotoneLimiter(ρq)
 
-            Limiters.compute_bounds!(limiter, ρq_ref, ρ)
-            Limiters.apply_limiter!(ρq, ρ, limiter)
-            q = RecursiveApply.rdiv.(ρq, ρ)
+        Limiters.compute_bounds!(limiter, ρq_ref, ρ)
+        Limiters.apply_limiter!(ρq, ρ, limiter)
+        q = RecursiveApply.rdiv.(ρq, ρ)
 
-            @test sum(ρq.x) ≈ total_ρq.x
-            @test sum(ρq.y) ≈ total_ρq.y
-            @test all(FT(0) .<= parent(ρq) .<= FT(1))
-        end
+        @test sum(ρq.x) ≈ total_ρq.x
+        @test sum(ρq.y) ≈ total_ρq.y
+        @test all(FT(0) .<= Array(parent(ρq)) .<= FT(1)) broken = is_gpu
     end
 end
