@@ -397,7 +397,7 @@ function write_new!(
     write_attribute(group, "type", "LevelGrid")
     write_attribute(group, "full_grid", write!(writer, space.full_grid))
     if space.level isa PlusHalf
-        write_attribute(group, "level + half", space.level - half)
+        write_attribute(group, "level_half", space.level - half)
     else
         write_attribute(group, "level", space.level)
     end
