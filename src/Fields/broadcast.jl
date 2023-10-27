@@ -154,7 +154,7 @@ end
 end
 
 @noinline function error_mismatched_spaces(space1::Type, space2::Type)
-    error("Broacasted spaces are not the same ClimaCore.Spaces type")
+    error("Broacasted spaces are not the same.")
 end
 
 @inline function Base.Broadcast.broadcast_shape(

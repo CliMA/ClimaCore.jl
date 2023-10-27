@@ -24,3 +24,7 @@ local_geometry_data(levelgrid::LevelGrid{<:Any, PlusHalf{Int}}, ::Nothing) =
         levelgrid.level + half,
     )
 global_geometry(levlgrid::LevelGrid) = global_geometry(levlgrid.full_grid)
+
+## GPU compatibility
+Adapt.adapt_structure(to, grid::LevelGrid) =
+    LevelGrid(Adapt.adapt(to, grid.full_grid), grid.level)

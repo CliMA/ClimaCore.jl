@@ -28,14 +28,16 @@ end
 
 A view into a column of a `ExtrudedFiniteDifferenceGrid`. This can be used as an
 """
-struct ColumnGrid{G <: ExtrudedFiniteDifferenceGrid, C <: ColumnIndex} <:
-       AbstractFiniteDifferenceGrid
+struct ColumnGrid{
+    G <: AbstractExtrudedFiniteDifferenceGrid,
+    C <: ColumnIndex,
+} <: AbstractFiniteDifferenceGrid
     full_grid::G
     colidx::C
 end
 
 
-column(grid::ExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
+column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
     ColumnGrid(grid, colidx)
 
 topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
