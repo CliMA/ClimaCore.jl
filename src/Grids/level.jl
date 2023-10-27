@@ -1,5 +1,5 @@
 struct LevelGrid{
-    G <: ExtrudedFiniteDifferenceGrid,
+    G <: AbstractExtrudedFiniteDifferenceGrid,
     L <: Union{Int, PlusHalf{Int}},
 } <: AbstractGrid
     full_grid::G
@@ -9,8 +9,10 @@ end
 quadrature_style(levelgrid::LevelGrid) =
     quadrature_style(levelgrid.full_grid.horizontal_grid)
 
-level(grid::ExtrudedFiniteDifferenceGrid, level::Union{Int, PlusHalf{Int}}) =
-    LevelGrid(grid, level)
+level(
+    grid::AbstractExtrudedFiniteDifferenceGrid,
+    level::Union{Int, PlusHalf{Int}},
+) = LevelGrid(grid, level)
 
 topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 

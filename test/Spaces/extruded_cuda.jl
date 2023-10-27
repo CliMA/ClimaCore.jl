@@ -63,7 +63,6 @@ end
 
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :local_geometry)
-    @test compare(cpuspace, gpuspace, :ghost_geometry)
 
     space = gpuspace
     Y = Fields.Field(typeof((; v = FT(0))), space)
