@@ -409,6 +409,23 @@ Spaces.weighted_dss_internal!(field::Field, dss_buffer) =
 Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
+
+# Add definitions for backward compatibility
+Spaces.weighted_dss2!(
+    field::Field,
+    dss_buffer = Spaces.create_dss_buffer(field),
+) = Spaces.weighted_dss!(field, dss_buffer)
+
+Spaces.weighted_dss_start2!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_start!(field, ghost_buffer)
+
+Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
+    Spaces.weighted_dss_internal!(field, ghost_buffer)
+
+Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
+    Spaces.weighted_dss_ghost!(field, ghost_buffer)
+
+
 """
     Spaces.create_dss_buffer(field::Field)
 
