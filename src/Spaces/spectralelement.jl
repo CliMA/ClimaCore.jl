@@ -43,6 +43,8 @@ struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid1D, ::Nothing) =
     SpectralElementSpace1D(grid)
+space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid2D}, ::Nothing) =
+    SpectralElementSpace1D(grid)
 grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
 
 function SpectralElementSpace1D(
@@ -98,6 +100,9 @@ struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
 end
 space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
+space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid3D}, ::Nothing) =
+    SpectralElementSpace2D(grid)
+
 grid(space::Spaces.SpectralElementSpace2D) = getfield(space, :grid)
 
 function SpectralElementSpace2D(
@@ -237,7 +242,7 @@ function all_nodes(space::SpectralElementSpace2D)
 end
 
 """
-    unique_nodes(space::SpectralElementField2D)
+    unique_nodes(space::SpectralElementSpace2D)
 
 An iterator over the unique nodes of `space`. Each node is represented by the
 first `((i,j), e)` triple.
