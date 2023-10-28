@@ -349,6 +349,14 @@ function read_grid_new(reader, name)
             vertical_grid,
             hypsography,
         )
+    elseif type == "LevelGrid"
+        full_grid = read_grid(reader, attrs(group)["full_grid"])
+        if haskey(attrs(group), "level")
+            level = attrs(group)["level"]
+        else
+            level = attrs(group)["level_half"] + half
+        end
+        return Grids.LevelGrid(full_grid, level)
     else
         error("Unsupported grid type $type")
     end
@@ -404,16 +412,8 @@ function read_space_new(reader, name)
                 hypsography,
             )
         end
-    elseif type == "LevelGrid"
-        full_grid = read_grid(reader, attrs(group)["full_grid"])
-        if haskey(attrs(group), "level")
-            level = attrs(group)["level"]
-        else
-            level = attrs(group)["level_half"] + half
-        end
-        return Grids.LevelGrid(full_grid, level)
     else
-        error("Unsupported grid type $type")
+        error("Unsupported space type $type")
     end
 end
 
