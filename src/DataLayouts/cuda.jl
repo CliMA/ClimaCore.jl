@@ -10,6 +10,9 @@ Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
 Adapt.adapt_structure(to, data::VIJFH{S, Nij}) where {S, Nij} =
     VIJFH{S, Nij}(Adapt.adapt(to, parent(data)))
 
+Adapt.adapt_structure(to, data::VIFH{S, Ni, A}) where {S, Ni, A} =
+    VIFH{S, Ni}(Adapt.adapt(to, parent(data)))
+
 Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
     IFH{S, Ni}(Adapt.adapt(to, parent(data)))
 
