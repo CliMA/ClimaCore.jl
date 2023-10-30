@@ -126,28 +126,33 @@ end
         ρq = ρ .* q
 
         limiter = Limiters.QuasiMonotoneLimiter(ρq)
-        Limiters.compute_bounds!(limiter, ρq, ρ)
+        Limiters.compute_element_bounds!(limiter, ρq, ρ)
 
         is_gpu = device isa ClimaComms.CUDADevice
         S = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
-        @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) broken = is_gpu # q_min
-        @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) broken = is_gpu # q_min
-        @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) broken = is_gpu # q_max
-        @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) broken = is_gpu # q_max
+        CUDA.@allowscalar begin
+            @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) broken = is_gpu # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) broken = is_gpu # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) broken = is_gpu # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) broken = is_gpu # q_max
+        end
 
+        Limiters.compute_neighbor_bounds_local!(limiter, ρ)
         SN = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
         end
-        @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN)) broken =
-            is_gpu # q_min
-        @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN)) broken =
-            is_gpu # q_min
-        @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN)) broken =
-            is_gpu # q_max
-        @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN)) broken =
-            is_gpu # q_max
+        CUDA.@allowscalar begin
+            @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN)) broken =
+                is_gpu # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN)) broken =
+                is_gpu # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN)) broken =
+                is_gpu # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN)) broken =
+                is_gpu # q_max
+        end
     end
 end
 
