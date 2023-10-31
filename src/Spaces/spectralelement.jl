@@ -86,12 +86,14 @@ struct SpectralElementSpace1D{
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     D,
+    DM,
 } <: AbstractSpectralElementSpace
     topology::T
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
+    differentiation_matrix::DM
 end
 
 function SpectralElementSpace1D(
@@ -149,6 +151,7 @@ function SpectralElementSpace1D(
         global_geometry,
         local_geometry,
         dss_weights,
+        Quadratures.differentiation_matrix(FT, quadrature_style),
     )
 end
 
@@ -174,6 +177,7 @@ struct SpectralElementSpace2D{
     D,
     IS,
     BS,
+    DM,
 } <: AbstractSpectralElementSpace
     topology::T
     quadrature_style::Q
@@ -184,6 +188,7 @@ struct SpectralElementSpace2D{
     ghost_dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
+    differentiation_matrix::DM
 end
 
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
@@ -197,6 +202,7 @@ Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
         Adapt.adapt(to, space.ghost_dss_weights),
         Adapt.adapt(to, space.internal_surface_geometry),
         Adapt.adapt(to, space.boundary_surface_geometries),
+        Adapt.adapt(to, space.differentiation_matrix),
     )
 
 
@@ -521,6 +527,7 @@ function SpectralElementSpace2D(
         dss_ghost_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
+        DA(Quadratures.differentiation_matrix(FT, quadrature_style)),
     )
 end
 
