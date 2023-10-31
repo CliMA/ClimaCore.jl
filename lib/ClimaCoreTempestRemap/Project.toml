@@ -7,6 +7,7 @@ version = "0.3.9"
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+IntervalSets = "8197267c-284f-5f27-9208-e0e47529a953"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 PkgVersion = "eebad327-c553-4316-9ea0-9fa01ccd7688"
@@ -23,3 +24,4 @@ julia = "1.7"
 
 [extras]
 CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
+MPIPreferences = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"

@@ -81,10 +81,22 @@ function overlap(
     target::T,
     source::S,
 ) where {
-    T <:
-    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
-    S <:
-    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
+    T <: SpectralElementSpace2D{
+        <:Topology2D{
+            <:Union{
+                ClimaComms.SingletonCommsContext,
+                ClimaComms.MPICommsContext,
+            },
+        },
+    },
+    S <: SpectralElementSpace2D{
+        <:Topology2D{
+            <:Union{
+                ClimaComms.SingletonCommsContext,
+                ClimaComms.MPICommsContext,
+            },
+        },
+    },
 }
     @assert (
         typeof(Spaces.topology(target).mesh) <: Meshes.RectilinearMesh &&
@@ -268,10 +280,29 @@ end
 
 nxelems(topology::Topologies.IntervalTopology) =
     Topologies.nlocalelems(topology)
-nxelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+function nxelems(
+    topology::T,
+) where {
+    T <: Union{
+        Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
+        Topologies.Topology2D{<:ClimaComms.MPICommsContext},
+    },
+}
     size(Meshes.elements(topology.mesh), 1)
-nyelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+end
+function nyelems(
+    topology::T,
+) where {
+    T <: Union{
+        Topologies.Topology2D{<:ClimaComms.SingletonCommsContext},
+        Topologies.Topology2D{<:ClimaComms.MPICommsContext},
+    },
+}
     size(Meshes.elements(topology.mesh), 2)
+end
+# TODO change this back - modified to work with distributed spaces
+# nyelems(topology::Topologies.Topology2D{<:ClimaComms.SingletonCommsContext}) =
+#     size(Meshes.elements(topology.mesh), 2)
 
 xcomponent(x::Geometry.XPoint) = Geometry.component(x, 1)
 xcomponent(xy::Geometry.XYPoint) = Geometry.component(xy, 1)
