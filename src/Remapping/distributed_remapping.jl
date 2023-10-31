@@ -239,10 +239,17 @@ function interpolate(
 
     if length(remapper.target_zcoords) == 0
         out_local_array = zeros(FT, size(remapper.local_target_hcoords_bitmask))
-        interpolated_values = [
-            interpolate_slab(field, Fields.SlabIndex(nothing, gidx), weights) for (gidx, weights) in
-            zip(remapper.local_indices, remapper.interpolation_coeffs)
-        ]
+
+        interpolated_values = zeros(FT, length(remapper.local_indices))
+        slab_indices =
+            [Fields.SlabIndex(nothing, gidx) for gidx in remapper.local_indices]
+
+        interpolate_slab!(
+            interpolated_values,
+            field,
+            slab_indices,
+            remapper.interpolation_coeffs,
+        )
 
         # out_local_array[remapper.local_target_hcoords_bitmask] returns a view on space we
         # want to write on

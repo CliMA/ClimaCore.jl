@@ -1,35 +1,209 @@
-function interpolate_slab(
-    field::Fields.Field,
-    slabidx::Fields.SlabIndex,
-    (I1,)::Tuple{<:AbstractArray},
-)
-    space = axes(field)
-    x = zero(eltype(field))
-    QS = Spaces.quadrature_style(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(QS)
+"""
+    interpolate_slab!(output_array, field, slab_indices, weights)
 
-    for i in 1:Nq
-        ij = CartesianIndex((i,))
-        x += I1[i] * Operators.get_node(space, field, ij, slabidx)
+Interpolate horizontal field on the given `slab_indices` using the given interpolation
+`weights`.
+
+`interpolate_slab!` interpolates several values at a fixed `z` coordinate. For this reason,
+it requires several slab indices and weights.
+
+"""
+interpolate_slab!(output_array, field::Fields.Field, slab_indices, weights) =
+    interpolate_slab!(
+        output_array,
+        field::Fields.Field,
+        slab_indices,
+        weights,
+        ClimaComms.device(field),
+    )
+
+
+# CPU kernel for 3D configurations
+function interpolate_slab!(
+    output_array,
+    field::Fields.Field,
+    slab_indices,
+    weights::AbstractArray{Tuple{A, A}},
+    device::ClimaComms.AbstractCPUDevice,
+) where {A}
+    space = axes(field)
+    FT = Spaces.undertype(space)
+
+    for index in 1:length(output_array)
+        (I1, I2) = weights[index]
+        Nq1, Nq2 = length(I1), length(I2)
+
+        output_array[index] = zero(FT)
+
+        for j in 1:Nq2, i in 1:Nq1
+            ij = CartesianIndex((i, j))
+            output_array[index] +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, slab_indices[index])
+        end
     end
-    return x
 end
 
-function interpolate_slab(
+# CPU kernel for 2D configurations
+function interpolate_slab!(
+    output_array,
     field::Fields.Field,
-    slabidx::Fields.SlabIndex,
-    (I1, I2)::Tuple{<:AbstractArray, <:AbstractArray},
+    slab_indices,
+    weights::AbstractArray{Tuple{A}},
+    device::ClimaComms.AbstractCPUDevice,
+) where {A}
+    space = axes(field)
+    FT = Spaces.undertype(space)
+
+    for index in 1:length(output_array)
+        (I1,) = weights[index]
+        Nq = length(I1)
+
+        output_array[index] = zero(FT)
+
+        for i in 1:Nq
+            ij = CartesianIndex((i,))
+            output_array[index] +=
+                I1[i] *
+                Operators.get_node(space, field, ij, slab_indices[index])
+        end
+    end
+end
+
+# GPU
+function interpolate_slab!(
+    output_array,
+    field::Fields.Field,
+    slab_indices,
+    weights,
+    device::ClimaComms.CUDADevice,
 )
     space = axes(field)
-    x = zero(eltype(field))
-    QS = Spaces.quadrature_style(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(QS)
+    FT = Spaces.undertype(space)
 
-    for j in 1:Nq, i in 1:Nq
-        ij = CartesianIndex((i, j))
-        x += I1[i] * I2[j] * Operators.get_node(space, field, ij, slabidx)
+    output_cuarray = CuArray(zeros(FT, length(output_array)))
+    cuweights = CuArray(weights)
+    cuslab_indices = CuArray(slab_indices)
+
+    nitems = length(output_array)
+    nthreads, nblocks = Spaces._configure_threadblock(nitems)
+
+    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
+        output_cuarray,
+        field,
+        cuslab_indices,
+        cuweights,
+    )
+
+    output_array .= Array(output_cuarray)
+end
+
+# GPU kernel for 3D configurations
+function interpolate_slab_kernel!(
+    output_array,
+    field,
+    slab_indices,
+    weights::AbstractArray{Tuple{A, A}},
+) where {A}
+    index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    space = axes(field)
+    FT = Spaces.undertype(space)
+
+    if index <= length(output_array)
+        I1, I2 = weights[index]
+        Nq1, Nq2 = length(I1), length(I2)
+
+        output_array[index] = zero(FT)
+
+        for j in 1:Nq2, i in 1:Nq1
+            ij = CartesianIndex((i, j))
+            output_array[index] +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, slab_indices[index])
+        end
     end
-    return x
+    return nothing
+end
+
+# GPU kernel for 2D configurations
+function interpolate_slab_kernel!(
+    output_array,
+    field,
+    slab_indices,
+    weights::AbstractArray{Tuple{A}},
+) where {A}
+    index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    space = axes(field)
+    FT = Spaces.undertype(space)
+
+    if index <= length(output_array)
+        I1, = weights[index]
+        Nq = length(I1)
+
+        output_array[index] = zero(FT)
+
+        for i in 1:Nq
+            ij = CartesianIndex((i))
+            output_array[index] +=
+                I1[i] *
+                Operators.get_node(space, field, ij, slab_indices[index])
+        end
+    end
+    return nothing
+end
+
+"""
+    vertical_indices_ref_coordinate(space, zcoord)
+
+Return the vertical indices of the elements below and above `zcoord`.
+
+Return also the correct reference coordinate `zcoord` for vertical interpolation.
+"""
+function vertical_indices end
+
+function vertical_indices_ref_coordinate(
+    space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    zcoord,
+)
+    vert_topology = Spaces.vertical_topology(space)
+    vert_mesh = vert_topology.mesh
+
+    velem = Meshes.containing_element(vert_mesh, zcoord)
+    ξ3, = Meshes.reference_coordinates(vert_mesh, velem, zcoord)
+    v_lo, v_hi = velem - half, velem + half
+    return v_lo, v_hi, ξ3
+end
+
+function vertical_indices_ref_coordinate(
+    space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    zcoord,
+)
+    vert_topology = Spaces.vertical_topology(space)
+    vert_mesh = vert_topology.mesh
+    Nz = Spaces.nlevels(space)
+
+    velem = Meshes.containing_element(vert_mesh, zcoord)
+    ξ3, = Meshes.reference_coordinates(vert_mesh, velem, zcoord)
+    if ξ3 < 0
+        if Topologies.isperiodic(Spaces.vertical_topology(space))
+            v_lo = mod1(velem - 1, Nz)
+        else
+            v_lo = max(velem - 1, 1)
+        end
+        v_hi = velem
+        ξ3 = ξ3 + 1
+    else
+        v_lo = velem
+        if Topologies.isperiodic(Spaces.vertical_topology(space))
+            v_hi = mod1(velem + 1, Nz)
+        else
+            v_hi = min(velem + 1, Nz)
+        end
+        ξ3 = ξ3 - 1
+    end
+    return v_lo, v_hi, ξ3
 end
 
 """
@@ -37,10 +211,13 @@ end
                            field::Fields.Field,
                            h::Integer,
                            Is::Tuple,
-                           zcoord,
+                           zpts;
+                           fill_value = eltype(field)(NaN)
                            )
 
-Vertically interpolate the given `field` on `zcoord`.
+Vertically interpolate the given `field` on `zpts`.
+
+`interpolate_slab_level!` interpolates several values at a fixed horizontal coordinate.
 
 The field is linearly interpolated across two neighboring vertical elements.
 
@@ -49,46 +226,191 @@ element in a column, no interpolation is performed and the value at the cell cen
 returned. Effectively, this means that the interpolation is first-order accurate across the
 column, but zeroth-order accurate close to the boundaries.
 
+Return `fill_value` when the vertical coordinate is negative.
+
 """
-function interpolate_slab_level(
+function interpolate_slab_level!(
+    output_array,
     field::Fields.Field,
     h::Integer,
     Is::Tuple,
-    zcoord,
+    vertical_indices_ref_coordinates,
+)
+    device = ClimaComms.device(field)
+
+    interpolate_slab_level!(
+        output_array,
+        field,
+        vertical_indices_ref_coordinates,
+        h,
+        Is,
+        device,
+    )
+end
+
+# CPU kernel for 3D configurations
+function interpolate_slab_level!(
+    output_array,
+    field::Fields.Field,
+    vidx_ref_coordinates,
+    h::Integer,
+    (I1, I2)::Tuple{<:AbstractArray, <:AbstractArray},
+    device::ClimaComms.AbstractCPUDevice,
 )
     space = axes(field)
-    vert_topology = Spaces.vertical_topology(space)
-    vert_mesh = vert_topology.mesh
-    Nz = Spaces.nlevels(space)
+    FT = Spaces.undertype(space)
+    Nq1, Nq2 = length(I1), length(I2)
 
-    velem = Meshes.containing_element(vert_mesh, zcoord)
-    ξ3, = Meshes.reference_coordinates(vert_mesh, velem, zcoord)
-    if space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-        v_lo = velem - half
-        v_hi = velem + half
-    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-        if ξ3 < 0
-            if Topologies.isperiodic(Spaces.vertical_topology(space))
-                v_lo = mod1(velem - 1, Nz)
-            else
-                v_lo = max(velem - 1, 1)
-            end
-            v_hi = velem
-            ξ3 = ξ3 + 1
-        else
-            v_lo = velem
-            if Topologies.isperiodic(Spaces.vertical_topology(space))
-                v_hi = mod1(velem + 1, Nz)
-            else
-                v_hi = min(velem + 1, Nz)
-            end
-            ξ3 = ξ3 - 1
+    for index in 1:length(vidx_ref_coordinates)
+        v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+
+        f_lo = zero(FT)
+        f_hi = zero(FT)
+
+        for j in 1:Nq2, i in 1:Nq1
+            ij = CartesianIndex((i, j))
+            f_lo +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
+            f_hi +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
         end
+
+        output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
     end
-    f_lo = interpolate_slab(field, Fields.SlabIndex(v_lo, h), Is)
-    f_hi = interpolate_slab(field, Fields.SlabIndex(v_hi, h), Is)
-    return ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
 end
+
+# CPU kernel for 2D configurations
+function interpolate_slab_level!(
+    output_array,
+    field::Fields.Field,
+    vidx_ref_coordinates,
+    h::Integer,
+    (I1,)::Tuple{<:AbstractArray},
+    device::ClimaComms.AbstractCPUDevice,
+)
+    space = axes(field)
+    FT = Spaces.undertype(space)
+    Nq = length(I1)
+
+    for index in 1:length(vidx_ref_coordinates)
+        v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+
+        f_lo = zero(FT)
+        f_hi = zero(FT)
+
+        for i in 1:Nq
+            ij = CartesianIndex((i,))
+            f_lo +=
+                I1[i] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
+            f_hi +=
+                I1[i] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+        end
+        output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
+    end
+end
+
+# GPU
+function interpolate_slab_level!(
+    output_array,
+    field::Fields.Field,
+    vidx_ref_coordinates,
+    h::Integer,
+    Is::Tuple,
+    device::ClimaComms.CUDADevice,
+)
+    cuvidx_ref_coordinates = CuArray(vidx_ref_coordinates)
+
+    output_cuarray = CuArray(
+        zeros(Spaces.undertype(axes(field)), length(vidx_ref_coordinates)),
+    )
+
+    nitems = length(vidx_ref_coordinates)
+    nthreads, nblocks = Spaces._configure_threadblock(nitems)
+    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
+        output_cuarray,
+        field,
+        cuvidx_ref_coordinates,
+        h,
+        Is,
+    )
+    output_array .= Array(output_cuarray)
+end
+
+# GPU kernel for 3D configurations
+function interpolate_slab_level_kernel!(
+    output_array,
+    field,
+    vidx_ref_coordinates,
+    h,
+    (I1, I2)::Tuple{<:AbstractArray, <:AbstractArray},
+)
+    index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    space = axes(field)
+    FT = Spaces.undertype(space)
+    Nq1, Nq2 = length(I1), length(I2)
+
+    if index <= length(vidx_ref_coordinates)
+        v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+
+        f_lo = zero(FT)
+        f_hi = zero(FT)
+
+        for j in 1:Nq2, i in 1:Nq1
+            ij = CartesianIndex((i, j))
+            f_lo +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
+            f_hi +=
+                I1[i] *
+                I2[j] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+        end
+        output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
+    end
+    return nothing
+end
+
+# GPU kernel for 2D configurations
+function interpolate_slab_level_kernel!(
+    output_array,
+    field,
+    vidx_ref_coordinates,
+    h,
+    (I1,)::Tuple{<:AbstractArray},
+)
+    index = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    space = axes(field)
+    FT = Spaces.undertype(space)
+    Nq = length(I1)
+
+    if index <= length(vidx_ref_coordinates)
+        v_lo, v_hi, ξ3 = vidx_ref_coordinates[index]
+
+        f_lo = zero(FT)
+        f_hi = zero(FT)
+
+        for i in 1:Nq
+            ij = CartesianIndex((i,))
+            f_lo +=
+                I1[i] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_lo, h))
+            f_hi +=
+                I1[i] *
+                Operators.get_node(space, field, ij, Fields.SlabIndex(v_hi, h))
+        end
+
+        output_array[index] = ((1 - ξ3) * f_lo + (1 + ξ3) * f_hi) / 2
+    end
+    return nothing
+end
+
 
 """
     interpolate_array(field, xpts, ypts)
@@ -128,6 +450,10 @@ function interpolate_array(
     array = zeros(T, length(xpts), length(zpts))
 
     FT = Spaces.undertype(space)
+
+    vertical_indices_ref_coordinates =
+        [vertical_indices_ref_coordinate(space, zcoord) for zcoord in zpts]
+
     for (ix, xcoord) in enumerate(xpts)
         hcoord = xcoord
         helem = Meshes.containing_element(horz_mesh, hcoord)
@@ -136,9 +462,13 @@ function interpolate_array(
         weights = interpolation_weights(horz_mesh, hcoord, quad_points)
         h = helem
 
-        for (iz, zcoord) in enumerate(zpts)
-            array[ix, iz] = interpolate_slab_level(field, h, weights, zcoord)
-        end
+        interpolate_slab_level!(
+            view(array, ix, :),
+            field,
+            h,
+            weights,
+            vertical_indices_ref_coordinates,
+        )
     end
     return array
 end
@@ -159,6 +489,10 @@ function interpolate_array(
     array = zeros(T, length(xpts), length(ypts), length(zpts))
 
     FT = Spaces.undertype(space)
+
+    vertical_indices_ref_coordinates =
+        [vertical_indices_ref_coordinate(space, zcoord) for zcoord in zpts]
+
     for (iy, ycoord) in enumerate(ypts), (ix, xcoord) in enumerate(xpts)
         hcoord = Geometry.product_coordinates(xcoord, ycoord)
         helem = Meshes.containing_element(horz_mesh, hcoord)
@@ -168,10 +502,13 @@ function interpolate_array(
         gidx = horz_topology.orderindex[helem]
         h = gidx
 
-        for (iz, zcoord) in enumerate(zpts)
-            array[ix, iy, iz] =
-                interpolate_slab_level(field, h, weights, zcoord)
-        end
+        interpolate_slab_level!(
+            view(array, ix, iy, :),
+            field,
+            h,
+            weights,
+            vertical_indices_ref_coordinates,
+        )
     end
     return array
 end
@@ -228,12 +565,12 @@ Keyword arguments
 function interpolate_column(
     field::Fields.ExtrudedFiniteDifferenceField,
     zpts,
-    weights,
+    Is,
     gidx;
     physical_z = false,
+    fill_value = Spaces.undertype(axes(field))(NaN),
 )
     space = axes(field)
-    FT = Spaces.undertype(space)
 
     # When we don't have hypsography, there is no notion of "interpolating hypsography". In
     # this case, the reference vertical points coincide with the physical ones. Setting
@@ -242,29 +579,62 @@ function interpolate_column(
         physical_z = false
     end
 
-    # If we physical_z, we have to move the z coordinates from physical to
-    # reference ones.
+    output_array = zeros(Spaces.undertype(space), length(zpts))
+
+    # If we have physical_z, we have to move the z coordinates from physical to reference
+    # ones. We also have to deal with the fact that the output_array is not going to be
+    # fully obtained through interpolation, and the head of it will be simply a collection
+    # of `fill_values` (up to the surface). When we have topography, we compute the
+    # reference z and take the positive ones (above the surface). Then, we the top of
+    # `output_array` with `fill_value` and the rest with interpolated ones. To achieve this,
+    # we have to make sure that we are passing around views of the same array (as opposed to
+    # copied of it).
     if physical_z
         # We are hardcoding the transformation from Hypsography.LinearAdaption
         space.hypsography isa Hypsography.LinearAdaption ||
             error("Cannot interpolate $(space.hypsography) hypsography")
 
-        z_surface = interpolate_slab(
+        FT = Spaces.undertype(axes(field))
+
+        # interpolate_slab! takes a vector
+        z_surface = [zero(FT)]
+
+        interpolate_slab!(
+            z_surface,
             space.hypsography.surface,
-            Fields.SlabIndex(nothing, gidx),
-            weights,
+            [Fields.SlabIndex(nothing, gidx)],
+            [Is],
         )
+        z_surface = z_surface[]
         z_top = Spaces.vertical_topology(space).mesh.domain.coord_max.z
+
         zpts_ref = [
             Geometry.ZPoint((z.z - z_surface) / (1 - z_surface / z_top)) for
-            z in zpts
+            z in zpts if z.z > z_surface
         ]
+
+        # When zpts = zpts_ref, all the points are above the surface
+        num_points_below_surface = length(zpts) - length(zpts_ref)
+
+        fill!(
+            (@view output_array[1:(1 + num_points_below_surface)]),
+            fill_value,
+        )
     else
         zpts_ref = zpts
+        num_points_below_surface = 0
     end
 
-    return [
-        z.z >= 0 ? interpolate_slab_level(field, gidx, weights, z) : FT(NaN) for
-        z in zpts_ref
-    ]
+    vertical_indices_ref_coordinates =
+        [vertical_indices_ref_coordinate(space, zcoord) for zcoord in zpts_ref]
+
+    interpolate_slab_level!(
+        (@view output_array[(1 + num_points_below_surface):end]),
+        field,
+        gidx,
+        Is,
+        vertical_indices_ref_coordinates,
+    )
+
+    return output_array
 end
