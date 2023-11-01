@@ -1,5 +1,5 @@
 #####
-##### Hybrid mesh
+##### Hybrid grid
 #####
 
 abstract type HypsographyAdaption end
