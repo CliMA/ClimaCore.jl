@@ -812,6 +812,13 @@ steps:
         artifact_paths:
           - "examples/column/output/advect/*"
 
+      - label: ":computer: Column van Leer Advection Eq"
+        key: "cpu_van_leer_column_advect"
+        command:
+          - "julia --color=yes --project=examples examples/column/van_leer_advection.jl"
+        artifact_paths:
+          - "examples/column/output/van_leer_advection/*"
+
       - label: ":computer: Column FCT Advection Eq"
         key: "cpu_fct_column_advect"
         command:

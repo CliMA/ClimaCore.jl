@@ -1873,6 +1873,182 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
 
+"""
+    U = VanLeer(;boundaries)
+    U.(A, Φ, Φᵗᵈ)
+
+
+"""
+struct VanLeer{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+VanLeer(; kwargs...) = VanLeer(NamedTuple(kwargs))
+
+return_eltype(::VanLeer, A, Φ, Φᵗᵈ) =
+    Geometry.Contravariant3Vector{eltype(eltype(A))}
+
+return_space(
+    ::VanLeer,
+    A_space::Spaces.FaceFiniteDifferenceSpace,
+    Φ_space::Spaces.CenterFiniteDifferenceSpace,
+    Φᵗᵈ_space::Spaces.CenterFiniteDifferenceSpace,
+) = A_space
+return_space(
+    ::VanLeer,
+    A_space::Spaces.FaceExtrudedFiniteDifferenceSpace,
+    Φ_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+    Φᵗᵈ_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
+) = A_space
+
+function fct_zalesak(
+    Aⱼ₋₁₂,
+    Aⱼ₊₁₂,
+    Aⱼ₊₃₂,
+    ϕⱼ₋₁,
+    ϕⱼ,
+    ϕⱼ₊₁,
+    ϕⱼ₊₂,
+    ϕⱼ₋₁ᵗᵈ,
+    ϕⱼᵗᵈ,
+    ϕⱼ₊₁ᵗᵈ,
+    ϕⱼ₊₂ᵗᵈ,
+)
+    # 1/dt is in ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ
+
+    stable_zero = zero(eltype(Aⱼ₊₁₂))
+    stable_one = one(eltype(Aⱼ₊₁₂))
+
+    if (
+        Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero && (
+            Aⱼ₊₁₂ * (ϕⱼ₊₂ᵗᵈ - ϕⱼ₊₁ᵗᵈ) < stable_zero ||
+            Aⱼ₊₁₂ * (ϕⱼᵗᵈ - ϕⱼ₋₁ᵗᵈ) < stable_zero
+        )
+    )
+        Aⱼ₊₁₂ = stable_zero
+    end
+    ϕⱼᵐᵃˣ = max(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
+    ϕⱼᵐⁱⁿ = min(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
+    Pⱼ⁺ = max(stable_zero, Aⱼ₋₁₂) - min(stable_zero, Aⱼ₊₁₂)
+    Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ)
+    Rⱼ⁺ = (Pⱼ⁺ > stable_zero ? min(stable_one, Qⱼ⁺ / Pⱼ⁺) : stable_zero)
+    Pⱼ⁻ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₋₁₂)
+    Qⱼ⁻ = (ϕⱼᵗᵈ - ϕⱼᵐⁱⁿ)
+    Rⱼ⁻ = (Pⱼ⁻ > stable_zero ? min(stable_one, Qⱼ⁻ / Pⱼ⁻) : stable_zero)
+
+    ϕⱼ₊₁ᵐᵃˣ = max(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
+    ϕⱼ₊₁ᵐⁱⁿ = min(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
+    Pⱼ₊₁⁺ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₊₃₂)
+    Qⱼ₊₁⁺ = (ϕⱼ₊₁ᵐᵃˣ - ϕⱼ₊₁ᵗᵈ)
+    Rⱼ₊₁⁺ = (Pⱼ₊₁⁺ > stable_zero ? min(stable_one, Qⱼ₊₁⁺ / Pⱼ₊₁⁺) : stable_zero)
+    Pⱼ₊₁⁻ = max(stable_zero, Aⱼ₊₃₂) - min(stable_zero, Aⱼ₊₁₂)
+    Qⱼ₊₁⁻ = (ϕⱼ₊₁ᵗᵈ - ϕⱼ₊₁ᵐⁱⁿ)
+    Rⱼ₊₁⁻ = (Pⱼ₊₁⁻ > stable_zero ? min(stable_one, Qⱼ₊₁⁻ / Pⱼ₊₁⁻) : stable_zero)
+
+    Cⱼ₊₁₂ = (Aⱼ₊₁₂ ≥ stable_zero ? min(Rⱼ₊₁⁺, Rⱼ⁻) : min(Rⱼ⁺, Rⱼ₊₁⁻))
+
+    return Cⱼ₊₁₂ * Aⱼ₊₁₂
+
+end
+
+stencil_interior_width(::VanLeer, A_space, Φ_space, Φᵗᵈ_space) =
+    ((-1, 1), (-half - 1, half + 1), (-half - 1, half + 1))
+
+Base.@propagate_inbounds function stencil_interior(
+    ::AdvectionF2F,
+    loc,
+    space,
+    idx,
+    hidx,
+    velocity,
+    arg,
+)
+
+
+Base.@propagate_inbounds function stencil_interior(
+    ::VanLeer,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+    Φᵗᵈ_field,
+)
+    # cell center variables
+    ϕⱼ₋₁ = getidx(space, Φ_field, loc, idx - half - 1, hidx)
+    ϕⱼ = getidx(space, Φ_field, loc, idx - half, hidx)
+    ϕⱼ₊₁ = getidx(space, Φ_field, loc, idx + half, hidx)
+    ϕⱼ₊₂ = getidx(space, Φ_field, loc, idx + half + 1, hidx)
+    # cell center variables
+    ϕⱼ₋₁ᵗᵈ = getidx(space, Φᵗᵈ_field, loc, idx - half - 1, hidx)
+    ϕⱼᵗᵈ = getidx(space, Φᵗᵈ_field, loc, idx - half, hidx)
+    ϕⱼ₊₁ᵗᵈ = getidx(space, Φᵗᵈ_field, loc, idx + half, hidx)
+    ϕⱼ₊₂ᵗᵈ = getidx(space, Φᵗᵈ_field, loc, idx + half + 1, hidx)
+    # cell face variables
+    Aⱼ₊₁₂ = Geometry.contravariant3(
+        getidx(space, A_field, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    Aⱼ₋₁₂ = Geometry.contravariant3(
+        getidx(space, A_field, loc, idx - 1, hidx),
+        Geometry.LocalGeometry(space, idx - 1, hidx),
+    )
+    Aⱼ₊₃₂ = Geometry.contravariant3(
+        getidx(space, A_field, loc, idx + 1, hidx),
+        Geometry.LocalGeometry(space, idx + 1, hidx),
+    )
+
+    return Geometry.Contravariant3Vector(
+        fct_zalesak(
+            Aⱼ₋₁₂,
+            Aⱼ₊₁₂,
+            Aⱼ₊₃₂,
+            ϕⱼ₋₁,
+            ϕⱼ,
+            ϕⱼ₊₁,
+            ϕⱼ₊₂,
+            ϕⱼ₋₁ᵗᵈ,
+            ϕⱼᵗᵈ,
+            ϕⱼ₊₁ᵗᵈ,
+            ϕⱼ₊₂ᵗᵈ,
+        ),
+    )
+end
+
+boundary_width(::VanLeer, ::AbstractBoundaryCondition) = 2
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::VanLeer,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+    Φᵗᵈ_field,
+)
+    @assert idx <= left_face_boundary_idx(space) + 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::VanLeer,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+    Φᵗᵈ_field,
+)
+    @assert idx <= right_face_boundary_idx(space) - 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+end
+
 
 
 """
