@@ -1,5 +1,9 @@
+using CUDA
 import ClimaComms
 import CUDA
+import ..Operators
+import ..RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
+import Adapt
 
 """
     QuasiMonotoneLimiter
@@ -50,6 +54,12 @@ struct QuasiMonotoneLimiter{D, G, FT}
     rtol::FT
 end
 
+Adapt.adapt_structure(to, lim::QuasiMonotoneLimiter) = QuasiMonotoneLimiter(
+    Adapt.adapt(to, lim.q_bounds),
+    Adapt.adapt(to, lim.q_bounds_nbr),
+    Adapt.adapt(to, lim.ghost_buffer),
+    lim.rtol,
+)
 
 function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq))))
     q_bounds = make_q_bounds(Fields.field_values(ρq))
