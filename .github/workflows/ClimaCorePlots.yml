@@ -1,13 +1,7 @@
 name: ClimaCorePlots CI
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ClimaCorePlots.yml"
-      - "lib/ClimaCorePlots/**"
-  push:
-    branches:
-      - staging
-      - trying
+
 jobs:
   lib-climacore-plots:
     runs-on: ubuntu-20.04

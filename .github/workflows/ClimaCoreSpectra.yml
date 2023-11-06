@@ -1,13 +1,7 @@
 name: ClimaCoreSpectra CI
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ClimaCoreSpectra.yml"
-      - "lib/ClimaCoreSpectra/**"
-  push:
-    branches:
-      - staging
-      - trying
+
 jobs:
   lib-climacore-spectra:
     runs-on: ubuntu-20.04
