@@ -1,13 +1,7 @@
 name: ClimaCoreVTK CI
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ClimaCoreVTK.yml"
-      - "lib/ClimaCoreVTK/**"
-  push:
-    branches:
-      - staging
-      - trying
+
 jobs:
   lib-climacore-vtk:
     runs-on: ubuntu-20.04

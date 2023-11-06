@@ -1,13 +1,7 @@
 name: ClimaCoreTempestRemap CI
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ClimaCoreTempestRemap.yml"
-      - "lib/ClimaCoreTempestRemap/**"
-  push:
-    branches:
-      - staging
-      - trying
+
 jobs:
   lib-climacore-tempestremap:
     runs-on: ubuntu-20.04

@@ -2,13 +2,7 @@ name: Unit Tests
 
 on:
   pull_request:
-    paths:
-      - '.github/workflows/Linux-UnitTests.yml'
-      - 'src/**'
-      - 'test/**'
-      - 'Project.toml'
-      - 'Manifest.toml'
-      - '!lib/**'
+
 jobs:
   test:
     runs-on: ubuntu-20.04
