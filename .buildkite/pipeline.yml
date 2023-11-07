@@ -5,16 +5,22 @@ agents:
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
   OPENBLAS_NUM_THREADS: 1
   JULIA_NVTX_CALLBACKS: gc
-  OMPI_MCA_opal_warn_on_missing_libcuda: 0
-  # JULIA_CPU_TARGET: broadwell # arch used by GPU nodes
   JULIA_CPU_TARGET: 'broadwell;skylake'
+  OMPI_MCA_opal_warn_on_missing_libcuda: 0
 
 steps:
   - label: "initialize"
     key: "init_cpu_env"
     command:
+      - |
+        if [ -n "$$CLEAR_DEPOT" ]; then
+          echo "--- Clearing depot"
+          rm -rf ${JULIA_DEPOT_PATH}
+        fi
+
       - echo "--- Instantiate project"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
@@ -43,9 +49,9 @@ steps:
     agents:
       slurm_mem: 80G
       slurm_gpus: 1
-      slurm_cpus_per_task: 8
+      slurm_cpus_per_task: 12
     env:
-      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_NUM_PRECOMPILE_TASKS: 12
 
   - wait
 
@@ -59,7 +65,7 @@ steps:
       - label: "Unit: cuda"
         key: unit_cuda_functional
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/gpu/cuda.jl CUDA"
         agents:
           slurm_gpus: 1
