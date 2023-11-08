@@ -172,14 +172,6 @@ Depending on the content changed in the PR, some CI checks that
 are not necessary will be skipped.  For example doc only changes
 do not require the unit tests to be run.
 
-### The merge process
-
-We use [`bors`](https://bors.tech/) to manage merging PR's in the the `ClimaCore.jl` repo.
-If you're a collaborator and have the necessary permissions, you can type
-`bors try` in a comment on a PR to have integration test suite run on that
-PR, or `bors r+` to try and merge the code.  Bors ensures that all integration tests
-for a given PR always pass before merging into `master`.
-
 ### Integration testing
 
 Currently a number of checks are run during integration testing before being
