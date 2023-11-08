@@ -79,9 +79,9 @@ version = "0.21.4"
 
 [[deps.JuliaFormatter]]
 deps = ["CSTParser", "CommonMark", "DataStructures", "Glob", "Pkg", "PrecompileTools", "Tokenize"]
-git-tree-sha1 = "80031f6e58b09b0de4553bf63d9a36ec5db57967"
+git-tree-sha1 = "3d5b5b539e4606dcca0e6a467b98a64c8da4850b"
 uuid = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
-version = "1.0.39"
+version = "1.0.42"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -189,9 +189,9 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
 
 [[deps.Tokenize]]
-git-tree-sha1 = "90538bf898832b6ebd900fa40f223e695970e3a5"
+git-tree-sha1 = "0454d9a9bad2400c7ccad19ca832a2ef5a8bc3a1"
 uuid = "0796e94c-ce3b-5d07-9a54-7f471281c624"
-version = "0.5.25"
+version = "0.5.26"
 
 [[deps.URIs]]
 git-tree-sha1 = "67db6cc7b3821e19ebe75791a9dd19c9b1188f2b"
