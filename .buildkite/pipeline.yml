@@ -9,6 +9,7 @@ env:
   JULIA_CPU_TARGET: 'broadwell;skylake'
   JULIA_NVTX_CALLBACKS: gc
   JULIA_CUDA_MEMORY_POOL: none
+  JULIA_MPI_HAS_CUDA: "true"
   OPENBLAS_NUM_THREADS: 1
   OMPI_MCA_opal_warn_on_missing_libcuda: 0
   MPITRAMPOLINE_LIB: /home/spjbyrne/mpiwrapper/lib64/libmpiwrapper.so
