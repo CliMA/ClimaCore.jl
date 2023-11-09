@@ -1,16 +1,20 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.9.4 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
+  modules: julia/1.9.4 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 nsight-systems/2023.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
-  OPENBLAS_NUM_THREADS: 1
-  JULIA_NVTX_CALLBACKS: gc
   JULIA_CPU_TARGET: 'broadwell;skylake'
+  JULIA_NVTX_CALLBACKS: gc
+  JULIA_CUDA_MEMORY_POOL: none
+  JULIA_MPI_HAS_CUDA: "true"
+  OPENBLAS_NUM_THREADS: 1
   OMPI_MCA_opal_warn_on_missing_libcuda: 0
+  MPITRAMPOLINE_LIB: /groups/esm/software/MPIwrapper/ompi4.1.5_cuda-12.2/lib64/libmpiwrapper.so
+  MPITRAMPOLINE_MPIEXEC: /groups/esm/software/MPIwrapper/ompi4.1.5_cuda-12.2/bin/mpiwrapperexec
 
 steps:
   - label: "initialize"
@@ -282,7 +286,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -295,7 +298,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -308,7 +310,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -321,7 +322,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -334,7 +334,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -347,7 +346,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
