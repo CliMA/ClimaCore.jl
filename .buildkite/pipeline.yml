@@ -787,13 +787,6 @@ steps:
         command:
           - "julia --color=yes --project=test test/Operators/integrals.jl"
 
-      - label: "Perf: Integrals (GPU)"
-        key: "gpu_integrals_perf"
-        command:
-          - "julia --color=yes --project=test test/Operators/integrals.jl"
-        agents:
-          slurm_gpus: 1
-
   - group: "Examples: Column"
     steps:
 
