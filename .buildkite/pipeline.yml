@@ -58,6 +58,7 @@ steps:
       slurm_cpus_per_task: 12
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 12
+      JULIA_DEBUG: ""
 
   - wait
 
