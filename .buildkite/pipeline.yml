@@ -5,8 +5,9 @@ agents:
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
-  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
+  # JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
+  JULIA_DEBUG: "loading"
   OPENBLAS_NUM_THREADS: 1
   JULIA_NVTX_CALLBACKS: gc
   JULIA_CPU_TARGET: 'broadwell;skylake'
@@ -53,6 +54,7 @@ steps:
       slurm_cpus_per_task: 12
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 12
+      JULIA_DEBUG: ""
 
   - wait
 
