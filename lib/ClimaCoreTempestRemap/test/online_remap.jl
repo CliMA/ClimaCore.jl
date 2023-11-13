@@ -93,7 +93,7 @@ end
     # apply the remap
     field_o = ClimaCoreTempestRemap.remap(R, field_i)
 
-    # TEST_1: error between our `apply!` in ClimaCoe and `apply_remap` in TempestRemap
+    # TEST_1: error between our `apply!` in ClimaCore and `apply_remap` in TempestRemap
 
     # write test data for offline map apply for comparison
     datafile_in = joinpath(OUTPUT_DIR, "data_in.nc")
