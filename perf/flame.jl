@@ -6,7 +6,8 @@ ENV["CI_PERF_SKIP_RUN"] = true # we only need haskey(ENV, "CI_PERF_SKIP_RUN") ==
 
 import ClimaCore
 
-filename = joinpath(EXAMPLE_DIR, "hybrid", "plane", "bubble_2d_rhotheta.jl")
+filename =
+    joinpath(EXAMPLE_DIR, "hybrid", "plane", "bubble_2d_invariant_rhoe.jl")
 
 try
     include(filename)

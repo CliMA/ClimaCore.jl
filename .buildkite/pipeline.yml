@@ -974,13 +974,6 @@ steps:
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_slotted_spheres_D0/*"
 
-      - label: ":computer: Rising Bubble 2D hybrid (ρθ)"
-        key: "cpu_rising_bubble_2d_hybrid_rhotheta"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/bubble_2d_rhotheta/*"
-
       - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
         key: "cpu_isothermal_channel_2d_hybrid_rhoe"
         command:
@@ -994,13 +987,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
-
-      - label: ":computer: Rising Bubble 2D hybrid invariant (ρθ)"
-        key: "cpu_rising_bubble_2d_hybrid_invariant_rhotheta"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/bubble_2d_invariant_rhotheta/*"
 
       - label: ":computer: Rising Bubble 2D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_2d_hybrid_invariant_rhoe"
@@ -1050,13 +1036,6 @@ steps:
         artifact_paths:
           - "examples/hybrid/plane/output/dc_invariant_etot/*"
 
-      - label: ":computer: Density current 2D hybrid invariant total energy (topography mesh interface)"
-        key: "cpu_density_current_2d_hybrid_invariant_total_energy_no-warp_topography"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/topo_dc_2dinvariant_rhoe.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/dc_invariant_etot_topo/*"
-
       - label: ":computer: Nonhydrostatic Agnesi Mountain total energy (topography mesh interface)"
         key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
         command:
@@ -1070,13 +1049,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/plane/topo_schar_nh.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/schar_etot_nh/*"
-
-      - label: ":computer: Density current 2D hybrid invariant potential temperature"
-        key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/density_current_2dinvariant_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/dc_rhotheta/*"
 
       - label: ":computer: Density current 2D hybrid conservative form potential temperature"
         key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"
