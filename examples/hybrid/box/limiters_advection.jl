@@ -172,6 +172,7 @@ end
 
 function vertical_tendency!(yₜ, y, cache, t)
     (; face_u) = cache
+    FT = Spaces.undertype(axes(y.ρ))
     Ic2f = Operators.InterpolateC2F()
     vdivf2c = Operators.DivergenceF2C(
         top = Operators.SetValue(Geometry.Contravariant3Vector(FT(0))),
