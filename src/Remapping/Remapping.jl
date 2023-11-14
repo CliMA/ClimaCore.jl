@@ -13,6 +13,7 @@ import ..DataLayouts,
     ..Hypsography
 
 using ..RecursiveApply
+using CUDA
 
 include("interpolate_array.jl")
 include("distributed_remapping.jl")

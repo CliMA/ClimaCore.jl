@@ -238,12 +238,25 @@ steps:
         command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CPU"
         agents:
           slurm_ntasks: 2
 
       - label: "Unit: distributed remapping (1 process)"
         key: distributed_remapping_1proc
         command: "julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CPU"
+
+      - label: "Unit: distributed remapping with CUDA"
+        key: distributed_remapping_gpu
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 1
 
       - label: "Unit: distributed gather"
         key: unit_distributed_gather4
