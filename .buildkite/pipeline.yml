@@ -57,10 +57,10 @@ steps:
     agents:
       slurm_mem: 80G
       slurm_gpus: 1
-      slurm_cpus_per_task: 12
+      slurm_cpus_per_task: 6
       slurm_time: "4:00:00"
     env:
-      JULIA_NUM_PRECOMPILE_TASKS: 12
+      JULIA_NUM_PRECOMPILE_TASKS: 6
       JULIA_DEBUG: ""
 
   - wait
