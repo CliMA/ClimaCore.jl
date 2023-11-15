@@ -11,6 +11,3 @@ julia = "1.7"
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
-
-[extras]
-CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
