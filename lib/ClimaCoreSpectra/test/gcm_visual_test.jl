@@ -14,7 +14,7 @@ using FFTW
 # Adapted from: https://github.com/CliMA/ClimateMachine.jl/blob/master/test/Common/Spectra/spherical_helper_test.jl
 include(joinpath(@__DIR__, "spherical_helper.jl"))
 
-FT = Float64
+const FT = Float64
 # -- TEST 1: power_spectrum_1d
 n_gauss_lats = 32
 

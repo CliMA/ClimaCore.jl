@@ -94,9 +94,10 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     cs = Spaces.CenterFiniteDifferenceSpace(mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = Fields.coordinate_field(cs)
+    O = ones(FT, fs)
 
     # Unitary, constant advective velocity
-    w = Geometry.WVector.(speed .* ones(FT, fs))
+    w = Geometry.WVector.(speed .* O)
 
     # Initial condition
     y0 = pulse.(zc, 0.0, z₀, zₕ, z₁)
