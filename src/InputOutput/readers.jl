@@ -441,12 +441,13 @@ function read_field(reader::HDF5Reader, name::AbstractString)
             space = read_space(reader, attrs(obj)["space"])
         end
         topology = Spaces.topology(space)
+        ArrayType = ClimaComms.array_type(topology)
         if topology isa Topologies.Topology2D
             nd = ndims(obj)
             localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
-            data = obj[localidx...]
+            data = ArrayType(obj[localidx...])
         else
-            data = read(obj)
+            data = ArrayType(read(obj))
         end
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
