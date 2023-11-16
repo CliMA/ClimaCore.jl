@@ -1,25 +1,35 @@
 abstract type AbstractFiniteDifferenceSpace <: AbstractSpace end
 
-abstract type Staggering end
+"""
+    FiniteDifferenceSpace(
+        grid::Grids.FiniteDifferenceGrid,
+        staggering::Staggering, 
+    )
 
-""" Cell center location """
-struct CellCenter <: Staggering end
 
-""" Cell face location """
-struct CellFace <: Staggering end
 
+"""
 struct FiniteDifferenceSpace{
+    G <: Grids.AbstractFiniteDifferenceGrid,
     S <: Staggering,
-    T <: Topologies.AbstractIntervalTopology,
-    GG,
-    LG,
 } <: AbstractFiniteDifferenceSpace
+    grid::G
     staggering::S
-    topology::T
-    global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
 end
+FiniteDifferenceSpace(
+    topology::Topologies.IntervalTopology,
+    staggering::Staggering,
+) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), staggering)
+
+
+const FaceFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellFace}
+const CenterFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellCenter}
+
+grid(space::AbstractFiniteDifferenceSpace) = getfield(space, :grid)
+staggering(space::FiniteDifferenceSpace) = getfield(space, :staggering)
+
+space(grid::Grids.AbstractFiniteDifferenceGrid, staggering::Staggering) =
+    FiniteDifferenceSpace(grid, staggering)
 
 function Base.show(io::IO, space::FiniteDifferenceSpace)
     indent = get(io, :indent, 0)
@@ -31,142 +41,70 @@ function Base.show(io::IO, space::FiniteDifferenceSpace)
         ":",
     )
     print(iio, " "^(indent + 2), "context: ")
-    Topologies.print_context(iio, space.topology.context)
+    Topologies.print_context(iio, ClimaComms.context(space))
     println(iio)
-    print(iio, " "^(indent + 2), "mesh: ", space.topology.mesh)
+    print(iio, " "^(indent + 2), "mesh: ", topology(space).mesh)
 end
 
-function FiniteDifferenceSpace{S}(
-    topology::Topologies.IntervalTopology,
-) where {S <: Staggering}
-    global_geometry = Geometry.CartesianGlobalGeometry()
-    mesh = topology.mesh
-    CT = Meshes.coordinate_type(mesh)
-    AIdx = Geometry.coordinate_axis(CT)
-    # TODO: FD operators  hardcoded to work over the 3-axis, need to generalize
-    # similar to spectral operators
-    @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
-    FT = eltype(CT)
-    ArrayType = ClimaComms.array_type(topology)
-    face_coordinates = collect(mesh.faces)
-    LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
-    nface = length(face_coordinates) - Topologies.isperiodic(topology)
-    ncent = length(face_coordinates) - 1
-    # contstruct on CPU, copy to device at end
-    center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
-    face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
-    for i in 1:ncent
-        # centers
-        coord⁻ = Geometry.component(face_coordinates[i], 1)
-        coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
-        # at the moment we use a "discrete Jacobian"
-        # ideally we should use the continuous quantity via the derivative of the warp function
-        # could we just define this then as deriv on the mesh element coordinates?
-        coord = (coord⁺ + coord⁻) / 2
-        Δcoord = coord⁺ - coord⁻
-        J = Δcoord
-        WJ = Δcoord
-        ∂x∂ξ = SMatrix{1, 1}(J)
-        center_local_geometry[i] = Geometry.LocalGeometry(
-            CT(coord),
-            J,
-            WJ,
-            Geometry.AxisTensor(
-                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-                ∂x∂ξ,
-            ),
+FaceFiniteDifferenceSpace(grid::Grids.AbstractFiniteDifferenceGrid) =
+    FiniteDifferenceSpace(grid, CellFace())
+CenterFiniteDifferenceSpace(grid::Grids.AbstractFiniteDifferenceGrid) =
+    FiniteDifferenceSpace(grid, CellCenter())
+
+FaceFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
+    FiniteDifferenceSpace(grid(space), CellFace())
+CenterFiniteDifferenceSpace(space::FiniteDifferenceSpace) =
+    FiniteDifferenceSpace(grid(space), CellCenter())
+
+FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellFace())
+CenterFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellCenter())
+
+FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellFace())
+CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellCenter())
+
+@inline function Base.getproperty(space::FiniteDifferenceSpace, name::Symbol)
+    if name == :topology
+        Base.depwarn(
+            "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
+            :getproperty,
         )
-    end
-    for i in 1:nface
-        coord = Geometry.component(face_coordinates[i], 1)
-        if i == 1
-            # bottom face
-            if Topologies.isperiodic(topology)
-                Δcoord⁺ =
-                    Geometry.component(face_coordinates[2], 1) -
-                    Geometry.component(face_coordinates[1], 1)
-                Δcoord⁻ =
-                    Geometry.component(face_coordinates[end], 1) -
-                    Geometry.component(face_coordinates[end - 1], 1)
-                J = (Δcoord⁺ + Δcoord⁻) / 2
-                WJ = J
-            else
-                coord⁺ = Geometry.component(face_coordinates[2], 1)
-                J = coord⁺ - coord
-                WJ = J / 2
-            end
-        elseif !Topologies.isperiodic(topology) && i == nface
-            # top face
-            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
-            J = coord - coord⁻
-            WJ = J / 2
-        else
-            coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
-            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
-            J = (coord⁺ - coord⁻) / 2
-            WJ = J
-        end
-        ∂x∂ξ = SMatrix{1, 1}(J)
-        ∂ξ∂x = SMatrix{1, 1}(inv(J))
-        face_local_geometry[i] = Geometry.LocalGeometry(
-            CT(coord),
-            J,
-            WJ,
-            Geometry.AxisTensor(
-                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-                ∂x∂ξ,
-            ),
+        return topology(space)
+    elseif name == :global_geometry
+        Base.depwarn(
+            "`space.global_geometry` is deprecated, use `Spaces.global_geometry(space)` instead",
+            :getproperty,
         )
+        return global_geometry(space)
+    elseif name == :center_local_geometry
+        Base.depwarn(
+            "`space.center_local_geometry` is deprecated, use `local_geometry_data(grid(space), Grids.CellCenter())` instead",
+            :getproperty,
+        )
+        return local_geometry_data(space, Grids.CellCenter())
+    elseif name == :face_local_geometry
+        Base.depwarn(
+            "`space.face_local_geometry` is deprecated, use `local_geometry_data(grid(space), Grids.CellFace())` instead",
+            :getproperty,
+        )
+        return local_geometry_data(space, Grids.CellFace())
     end
-    return FiniteDifferenceSpace(
-        S(),
-        topology,
-        global_geometry,
-        Adapt.adapt(ArrayType, center_local_geometry),
-        Adapt.adapt(ArrayType, face_local_geometry),
-    )
+    return getfield(space, name)
 end
 
-FiniteDifferenceSpace{S}(mesh::Meshes.IntervalMesh) where {S <: Staggering} =
-    FiniteDifferenceSpace{S}(Topologies.IntervalTopology(mesh))
+Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
+    FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
-ClimaComms.device(space::FiniteDifferenceSpace) =
-    ClimaComms.device(space.topology)
 
-Adapt.adapt_structure(to, space::FiniteDifferenceSpace) = FiniteDifferenceSpace(
-    space.staggering,
-    Adapt.adapt(to, space.topology),
-    Adapt.adapt(to, space.global_geometry),
-    Adapt.adapt(to, space.center_local_geometry),
-    Adapt.adapt(to, space.face_local_geometry),
-)
 
-const CenterFiniteDifferenceSpace = FiniteDifferenceSpace{CellCenter}
-const FaceFiniteDifferenceSpace = FiniteDifferenceSpace{CellFace}
-
-function FiniteDifferenceSpace{S}(
-    space::FiniteDifferenceSpace,
-) where {S <: Staggering}
-    FiniteDifferenceSpace(
-        S(),
-        space.topology,
-        space.global_geometry,
-        space.center_local_geometry,
-        space.face_local_geometry,
-    )
-end
-
+nlevels(space::FiniteDifferenceSpace) = length(space)
+# TODO: deprecate?
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
 
-topology(space::FiniteDifferenceSpace) = space.topology
-vertical_topology(space::FiniteDifferenceSpace) = space.topology
-nlevels(space::FiniteDifferenceSpace) = length(space)
 
-local_geometry_data(space::CenterFiniteDifferenceSpace) =
-    space.center_local_geometry
-
-local_geometry_data(space::FaceFiniteDifferenceSpace) =
-    space.face_local_geometry
 
 Base.@deprecate z_component(::Type{T}) where {T} Δz_metric_component(T) false
 
@@ -200,13 +138,13 @@ function Δz_data(space::AbstractSpace)
     )
 end
 
-function left_boundary_name(space::FiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.topology(space))
+function left_boundary_name(space::AbstractSpace)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[1]
 end
 
-function right_boundary_name(space::FiniteDifferenceSpace)
-    boundaries = Topologies.boundaries(Spaces.topology(space))
+function right_boundary_name(space::AbstractSpace)
+    boundaries = Topologies.boundaries(Spaces.vertical_topology(space))
     propertynames(boundaries)[2]
 end
 

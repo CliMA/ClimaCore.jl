@@ -208,7 +208,7 @@ function rhs!(dydt, y, (parameters, numflux), t)
     dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
     M = Spaces.Quadratures.cutoff_filter_matrix(
         Float64,
-        space.quadrature_style,
+        Spaces.quadrature_style(space),
         3,
     )
     Operators.tensor_product!(dydt_data, M)

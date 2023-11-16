@@ -55,6 +55,7 @@ import ..RecursiveApply:
 import ..RecursiveApply: ⊠, ⊞, ⊟
 import ..DataLayouts: AbstractData
 import ..Geometry
+import ..Topologies
 import ..Spaces
 import ..Fields
 import ..Operators

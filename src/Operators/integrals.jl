@@ -22,7 +22,7 @@ function column_integral_definite!(
 )
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks column_integral_definite_kernel!(
         strip_space(∫field, space),
         strip_space(ᶜfield, space),
@@ -36,7 +36,7 @@ function column_integral_definite_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         ∫field_column = Spaces.column(∫field, i, j, h)
         ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
         _column_integral_definite!(∫field_column, ᶜfield_column)
@@ -113,7 +113,7 @@ function column_integral_indefinite!(
     ᶜfield::Fields.Field,
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
         ᶠ∫field,
         ᶜfield,
@@ -127,7 +127,7 @@ function column_integral_indefinite_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         ᶠ∫field_column = Spaces.column(ᶠ∫field, i, j, h)
         ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
         _column_integral_indefinite!(ᶠ∫field_column, ᶜfield_column)
@@ -289,7 +289,7 @@ function column_mapreduce_device!(
     fields::Fields.Field...,
 ) where {F, O}
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
         column_mapreduce_kernel_extruded!
     else
@@ -314,7 +314,7 @@ function column_mapreduce_kernel_extruded!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         reduced_field_column = Spaces.column(reduced_field, i, j, h)
         field_columns = map(field -> Spaces.column(field, i, j, h), fields)
         _column_mapreduce!(fn, op, reduced_field_column, field_columns...)
@@ -387,7 +387,7 @@ Base.@propagate_inbounds data_level(
 ) = DataLayouts.level(data, v)
 Base.@propagate_inbounds data_level(
     data,
-    ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter},
+    ::Spaces.CenterFiniteDifferenceSpace,
     v::Int,
 ) = DataLayouts.level(data, v)
 
@@ -398,7 +398,7 @@ Base.@propagate_inbounds data_level(
 ) = DataLayouts.level(data, v.i + 1)
 Base.@propagate_inbounds data_level(
     data,
-    ::Spaces.FiniteDifferenceSpace{Spaces.CellFace},
+    ::Spaces.FaceFiniteDifferenceSpace,
     v::Utilities.PlusHalf,
 ) = DataLayouts.level(data, v.i + 1)
 
@@ -407,9 +407,7 @@ right_boundary_idx(n, ::Operators.CenterPlaceholderSpace) = n
 left_boundary_idx(n, ::Operators.FacePlaceholderSpace) = Utilities.half
 right_boundary_idx(n, ::Operators.FacePlaceholderSpace) = n - Utilities.half
 
-left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = 1
-right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellCenter}) = n
-left_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) =
-    Utilities.half
-right_boundary_idx(n, ::Spaces.FiniteDifferenceSpace{Spaces.CellFace}) =
-    n - Utilities.half
+left_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = 1
+right_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = n
+left_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = Utilities.half
+right_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = n - Utilities.half

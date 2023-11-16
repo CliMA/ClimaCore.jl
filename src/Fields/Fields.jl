@@ -5,6 +5,7 @@ import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
+import ..Grids: ColumnIndex
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half
@@ -38,13 +39,6 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 
-ClimaComms.context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.context(Spaces.horizontal_space(space))
-ClimaComms.context(space::Spaces.SpectralElementSpace2D) =
-    ClimaComms.context(space.topology)
-ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
-    ClimaComms.context(space.topology)
-
 ClimaComms.context(topology::Topologies.Topology2D) = topology.context
 ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
     topology.context
@@ -54,7 +48,7 @@ Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, axes(field)),
 )
 
-
+## aliases
 # Point Field
 const PointField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
@@ -83,6 +77,14 @@ const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+const ExtrudedFiniteDifferenceField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+const ExtrudedFiniteDifferenceField3D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -92,12 +94,40 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+#
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+const ExtrudedSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedSpectralElementSpace2D}
+
+const RectilinearSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.RectilinearSpectralElementSpace2D}
+const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedRectilinearSpectralElementSpace3D,
+}
+
+
 # Cubed Sphere Fields
+
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
-
+const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedCubedSphereSpectralElementSpace3D,
+}
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)
@@ -334,21 +364,11 @@ function interpcoord(elemrange, x::Real)
 end
 
 """
-    Spaces.variational_solve!(field)
-
-Divide `field` by the mass matrix.
-"""
-function Spaces.variational_solve!(field::Field)
-    Spaces.variational_solve!(field_values(field), axes(field))
-    return field
-end
-
-"""
     Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_dss_buffer(field)])
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 (i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
-for communication in a distributed setting, see [`Spaces.create_ghost_buffer`](@ref).
+for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
 ``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
@@ -389,23 +409,7 @@ Spaces.weighted_dss_internal!(field::Field, dss_buffer) =
 Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
-"""
-    Spaces.create_ghost_buffer(field::Field)
 
-Create a buffer for communicating neighbour information of `field`.
-"""
-Spaces.create_ghost_buffer(field::Field) = Spaces.create_dss_buffer(field)
-
-"""
-    Spaces.create_dss_buffer(field::Field)
-
-Create a buffer for communicating neighbour information of `field`.
-"""
-function Spaces.create_dss_buffer(field::Field)
-    space = axes(field)
-    hspace = Spaces.horizontal_space(space)
-    Spaces.create_dss_buffer(field_values(field), hspace)
-end
 # Add definitions for backward compatibility
 Spaces.weighted_dss2!(
     field::Field,
@@ -420,6 +424,18 @@ Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
 
 Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
     Spaces.weighted_dss_ghost!(field, ghost_buffer)
+
+
+"""
+    Spaces.create_dss_buffer(field::Field)
+
+Create a buffer for communicating neighbour information of `field`.
+"""
+function Spaces.create_dss_buffer(field::Field)
+    space = axes(field)
+    hspace = Spaces.horizontal_space(space)
+    Spaces.create_dss_buffer(field_values(field), hspace)
+end
 
 Base.@propagate_inbounds function level(
     field::Union{

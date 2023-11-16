@@ -83,22 +83,31 @@ partition numbers
     CUDA.@allowscalar begin
         if pid == 1
             # gidx 1
-            @test Topologies.local_neighboring_elements(space.topology, 1) ==
-                  [2, 5, 6]
-            @test Topologies.ghost_neighboring_elements(space.topology, 1) == []
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == [2, 5, 6]
+            @test Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == []
             # gidx 6
-            @test Topologies.local_neighboring_elements(space.topology, 6) ==
-                  [1, 2, 3, 5]
-            @test space.topology.recv_elem_gidx[Topologies.ghost_neighboring_elements(
-                space.topology,
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                6,
+            ) == [1, 2, 3, 5]
+            @test Spaces.topology(space).recv_elem_gidx[Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
                 6,
             )] == [7, 9, 10, 11]
         elseif pid == 2
             # gidx 7
-            @test Topologies.local_neighboring_elements(space.topology, 1) ==
-                  [2, 4, 5]
-            @test space.topology.recv_elem_gidx[Topologies.ghost_neighboring_elements(
-                space.topology,
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == [2, 4, 5]
+            @test Spaces.topology(space).recv_elem_gidx[Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
                 1,
             )] == [2, 3, 4, 6, 12]
         end

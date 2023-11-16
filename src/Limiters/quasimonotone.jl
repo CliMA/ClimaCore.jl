@@ -64,7 +64,7 @@ Adapt.adapt_structure(to, lim::QuasiMonotoneLimiter) = QuasiMonotoneLimiter(
 function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq))))
     q_bounds = make_q_bounds(Fields.field_values(ρq))
     ghost_buffer =
-        Spaces.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
+        Topologies.create_ghost_buffer(q_bounds, Spaces.topology(axes(ρq)))
     return QuasiMonotoneLimiter(q_bounds, similar(q_bounds), ghost_buffer, rtol)
 end
 
@@ -308,7 +308,7 @@ function compute_neighbor_bounds_ghost!(
 )
     q_bounds_nbr = limiter.q_bounds_nbr
     (_, _, _, Nv, Nh) = size(q_bounds_nbr)
-    if limiter.ghost_buffer isa Spaces.GhostBuffer
+    if limiter.ghost_buffer isa Topologies.GhostBuffer
         q_bounds_ghost = limiter.ghost_buffer.recv_data
 
         for h in 1:Nh
@@ -349,7 +349,7 @@ function compute_bounds!(
     ρ::Fields.Field,
 )
     compute_element_bounds!(limiter, ρq, ρ)
-    if limiter.ghost_buffer isa Spaces.GhostBuffer
+    if limiter.ghost_buffer isa Topologies.GhostBuffer
         Spaces.fill_send_buffer!(
             Spaces.topology(axes(ρq)),
             limiter.q_bounds,
@@ -358,7 +358,7 @@ function compute_bounds!(
         ClimaComms.start(limiter.ghost_buffer.graph_context)
     end
     compute_neighbor_bounds_local!(limiter, ρ)
-    if limiter.ghost_buffer isa Spaces.GhostBuffer
+    if limiter.ghost_buffer isa Topologies.GhostBuffer
         ClimaComms.finish(limiter.ghost_buffer.graph_context)
         compute_neighbor_bounds_ghost!(limiter, Spaces.topology(axes(ρq)))
     end

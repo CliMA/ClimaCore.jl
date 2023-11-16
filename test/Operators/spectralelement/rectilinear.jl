@@ -47,20 +47,20 @@ ts_test_setup = (ts_topology, ts_space, ts_coords)
         interpolated_field = I.(f)
         Spaces.weighted_dss!(interpolated_field)
 
-        @test axes(interpolated_field).quadrature_style == Iquad
-        @test axes(interpolated_field).topology == topology
+        @test Spaces.quadrature_style(axes(interpolated_field)) == Iquad
+        @test Spaces.topology(axes(interpolated_field)) == topology
 
         restrict_field = R.(f)
         Spaces.weighted_dss!(restrict_field)
 
-        @test axes(restrict_field).quadrature_style == quad
-        @test axes(restrict_field).topology == topology
+        @test Spaces.quadrature_style(axes(restrict_field)) == quad
+        @test Spaces.topology(axes(restrict_field)) == topology
 
         interp_restrict_field = R.(I.(f))
         Spaces.weighted_dss!(interp_restrict_field)
 
-        @test axes(interp_restrict_field).quadrature_style == quad
-        @test axes(interp_restrict_field).topology == topology
+        @test Spaces.quadrature_style(axes(interp_restrict_field)) == quad
+        @test Spaces.topology(axes(interp_restrict_field)) == topology
 
         @test norm(interp_restrict_field .- f) ≤ 3.0e-4
     end

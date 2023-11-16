@@ -23,7 +23,7 @@ Internally, we can refer to elements in several different ways:
 - `ridx`: "receive index": an index into the receive buffer of a ghost element.
     - `recv_elem_gidx[ridx] == gidx`
 """
-struct Topology2D{
+mutable struct Topology2D{
     C <: ClimaComms.AbstractCommsContext,
     M <: Meshes.AbstractMesh{2},
     EO,
@@ -195,7 +195,7 @@ function simple_partition(nelems::Int, npart::Int)
     return partition, ranges
 end
 
-function Topology2D(
+@memoize WeakValueDict function Topology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
     elemorder = Meshes.elements(mesh),
@@ -719,3 +719,57 @@ boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
 boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
+
+
+
+
+abstract type AbstractPerimeter end
+
+struct Perimeter2D{Nq} <: AbstractPerimeter end
+
+"""
+    Perimeter2D(Nq)
+
+Construct a perimeter iterator for a 2D spectral element with `Nq` nodes per
+dimension (i.e. polynomial degree `Nq-1`).
+"""
+Perimeter2D(Nq) = Perimeter2D{Nq}()
+
+Adapt.adapt_structure(to, x::Perimeter2D) = x
+
+Base.IteratorEltype(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasEltype()
+Base.eltype(::Type{Perimeter2D{Nq}}) where {Nq} = Tuple{Int, Int}
+
+Base.IteratorSize(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasLength()
+Base.length(::Perimeter2D{Nq}) where {Nq} = 4 + (Nq - 2) * 4
+
+function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc <= 4
+        return (vertex_node_index(loc, Nq), loc + 1)
+    elseif loc ≤ length(perimeter)
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return (face_node_index(f, Nq, 1 + n), loc + 1)
+    else
+        return nothing
+    end
+end
+
+function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 1 || loc > length(perimeter)
+        return (-1, -1)
+    elseif loc <= 4
+        return vertex_node_index(loc, Nq)
+    else
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return face_node_index(f, Nq, 1 + n)
+    end
+end
+
+
+## aliases
+const RectilinearTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.RectilinearMesh}
+const CubedSphereTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.AbstractCubedSphere}

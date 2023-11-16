@@ -22,7 +22,7 @@ function plot_vertices(
         space,
         ClimaCore.Geometry.Cartesian123Point.(
             ClimaCore.Fields.coordinate_field(space),
-            Ref(space.global_geometry),
+            Ref(Spaces.global_geometry(space)),
         ),
     )
 end

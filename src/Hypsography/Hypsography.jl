@@ -1,10 +1,13 @@
 module Hypsography
 
 import ..slab, ..column
-import ..Geometry, ..Domains, ..Topologies, ..Spaces, ..Fields, ..Operators
-import ..Spaces: ExtrudedFiniteDifferenceSpace, HypsographyAdaption, Flat
+import ..Geometry,
+    ..Domains, ..Topologies, ..Grids, ..Spaces, ..Fields, ..Operators
+import ..Spaces: ExtrudedFiniteDifferenceSpace
 
-using StaticArrays, LinearAlgebra
+import ..Grids: ExtrudedFiniteDifferenceGrid, HypsographyAdaption, Flat
+
+using StaticArrays, LinearAlgebra, Memoize, WeakValueDicts
 
 
 """
@@ -54,35 +57,35 @@ LinearAdaption() = LinearAdaption(nothing)
 )
 
 # linear coordinates
-function ExtrudedFiniteDifferenceSpace(
-    horizontal_space::Spaces.AbstractSpace,
-    vertical_space::Spaces.FiniteDifferenceSpace,
+@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+    horizontal_grid::Grids.AbstractGrid,
+    vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,
 )
     if adaption isa LinearAdaption
         if isnothing(adaption.surface)
             error("LinearAdaption requires a Field argument")
         end
-        if axes(adaption.surface) !== horizontal_space
+        if axes(adaption.surface).grid !== horizontal_grid
             error("Terrain must be defined on the horizontal space")
         end
     end
 
     # construct initial flat space, then mutate
-    space = Spaces.ExtrudedFiniteDifferenceSpace(
-        horizontal_space,
-        vertical_space,
+    ref_grid = Grids.ExtrudedFiniteDifferenceGrid(
+        horizontal_grid,
+        vertical_grid,
         Flat(),
     )
-    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(space)
-    coord_type = eltype(Spaces.coordinates_data(face_space))
-    z_ref = Spaces.coordinates_data(face_space).z
+    face_ref_space = Spaces.FaceExtrudedFiniteDifferenceSpace(ref_grid)
+    face_ref_coords = Spaces.coordinates_data(face_ref_space)
+    coord_type = eltype(face_ref_coords)
+    z_ref = face_ref_coords.z
 
-    vertical_domain = Topologies.domain(space.vertical_topology)
+    vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max.z
 
     grad = Operators.Gradient()
-    wdiv = Operators.WeakDivergence()
     z_surface = Fields.field_values(adaption.surface)
 
     FT = eltype(z_surface)
@@ -90,7 +93,7 @@ function ExtrudedFiniteDifferenceSpace(
     # TODO: Function dispatch
     if adaption isa LinearAdaption
         fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
-        fZ = Fields.Field(fZ_data, face_space)
+        fZ = Fields.Field(fZ_data, face_ref_space)
     elseif adaption isa SLEVEAdaption
         ηₕ = adaption.ηₕ
         s = adaption.s
@@ -106,7 +109,7 @@ function ExtrudedFiniteDifferenceSpace(
             η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
             η * z_top,
         )
-        fZ = Fields.Field(fZ_data, face_space)
+        fZ = Fields.Field(fZ_data, face_ref_space)
     end
 
     # Take the horizontal gradient for the Z surface field
@@ -127,12 +130,15 @@ function ExtrudedFiniteDifferenceSpace(
     c∇Z = If2c.(f∇Z)
     Spaces.weighted_dss!(c∇Z)
 
-    Ni, Nj, _, Nv, Nh = size(space.center_local_geometry)
+    face_local_geometry = copy(ref_grid.face_local_geometry)
+    center_local_geometry = copy(ref_grid.center_local_geometry)
+
+    Ni, Nj, _, Nv, Nh = size(center_local_geometry)
     for h in 1:Nh, j in 1:Nj, i in 1:Ni
-        face_column = column(space.face_local_geometry, i, j, h)
+        face_column = column(face_local_geometry, i, j, h)
         fZ_column = column(Fields.field_values(fZ), i, j, h)
         f∇Z_column = column(Fields.field_values(f∇Z), i, j, h)
-        center_column = column(space.center_local_geometry, i, j, h)
+        center_column = column(center_local_geometry, i, j, h)
         cZ_column = column(Fields.field_values(cZ), i, j, h)
         c∇Z_column = column(Fields.field_values(c∇Z), i, j, h)
 
@@ -183,16 +189,13 @@ function ExtrudedFiniteDifferenceSpace(
         end
     end
 
-    return Spaces.ExtrudedFiniteDifferenceSpace(
-        space.staggering,
-        space.horizontal_space,
-        space.vertical_topology,
+    return ExtrudedFiniteDifferenceGrid(
+        horizontal_grid,
+        vertical_grid,
         adaption,
-        space.global_geometry,
-        space.center_local_geometry,
-        space.face_local_geometry,
-        space.center_ghost_geometry,
-        space.face_ghost_geometry,
+        ref_grid.global_geometry,
+        center_local_geometry,
+        face_local_geometry,
     )
 end
 

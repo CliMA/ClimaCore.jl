@@ -5,6 +5,24 @@ import ClimaCore.Geometry: Geometry
 using StaticArrays
 using IntervalSets
 
+@testset "Perimeter2D iterator" begin
+    @test collect(Topologies.Perimeter2D(4)) == [
+        (1, 1)
+        (4, 1)
+        (4, 4)
+        (1, 4)
+        (2, 1)
+        (3, 1)
+        (4, 2)
+        (4, 3)
+        (3, 4)
+        (2, 4)
+        (1, 3)
+        (1, 2)
+    ]
+end
+
+
 function rectangular_grid(
     n1,
     n2,
@@ -310,4 +328,12 @@ end
         @test getfield(c2, 1) ≈ big(1.0) / big(3.0) rtol = eps(BigFloat)
         @test getfield(c2, 2) == 0.0
     end
+end
+
+@testset "memoization" begin
+    topology1 = rectangular_grid(3, 3, true, true)
+    topology2 = rectangular_grid(3, 3, true, true)
+    topology3 = rectangular_grid(3, 3, true, false)
+    @test topology1 === topology2
+    @test topology1 !== topology3
 end

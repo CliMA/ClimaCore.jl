@@ -215,15 +215,6 @@ end
 @inline _dataview(pdata::AbstractArray{FT, 5}, fidx) where {FT} =
     view(pdata, :, :, :, fidx:fidx, :)
 
-@inline function _get_idxs(Nv, Nij, Nf, Nh, fidx, gidx)
-    hidx = cld(gidx, Nv * Nij * Nij * Nf)
-    offset = ((hidx - 1) * Nf + (fidx - 1)) * Nv * Nij * Nij
-    jidx = cld(gidx - offset, Nv * Nij)
-    offset += (jidx - 1) * Nv * Nij
-    iidx = cld(gidx - offset, Nv)
-    return (iidx, jidx, hidx)
-end
-
 @inline function _cuda_reduce!(op, reduction, tidx, reduction_size, N)
     if reduction_size > N
         if tidx ≤ reduction_size - N

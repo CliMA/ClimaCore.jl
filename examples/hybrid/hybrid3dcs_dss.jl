@@ -85,10 +85,8 @@ function hybrid3dcubedsphere_dss_profiler(
         c = center_initial_condition(ᶜlocal_geometry),
         f = face_initial_condition(ᶠlocal_geometry),
     )
-    ghost_buffer = (
-        c = Spaces.create_ghost_buffer(Y.c),
-        f = Spaces.create_ghost_buffer(Y.f),
-    )
+    ghost_buffer =
+        (c = Spaces.create_dss_buffer(Y.c), f = Spaces.create_dss_buffer(Y.f))
     dss_buffer_f = Spaces.create_dss_buffer(Y.f)
     dss_buffer_c = Spaces.create_dss_buffer(Y.c)
     nsamples = 10000
@@ -96,7 +94,7 @@ function hybrid3dcubedsphere_dss_profiler(
 
     # precompile relevant functions
     space = axes(Y.c)
-    horizontal_topology = space.horizontal_space.topology
+    horizontal_topology = Spaces.topology(space)
     Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
     weighted_dss_full!(Y.c, ghost_buffer.c)
     Spaces.fill_send_buffer!(

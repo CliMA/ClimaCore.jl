@@ -299,7 +299,7 @@ function benchmark_operators(z_elems, ::Type{FT}) where {FT}
     benchmark_operators_base(trials, t_ave, cfield, ffield)
 
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems)
-    fspace = Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
     benchmark_operators_base(trials, t_ave, cfield, ffield)

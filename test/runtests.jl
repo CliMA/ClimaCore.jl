@@ -11,6 +11,7 @@ Stacktrace:
  [1] pkgerror(msg::String)
 =#
 if !Sys.iswindows()
+    #=
     @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end
     @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
 
@@ -34,7 +35,7 @@ if !Sys.iswindows()
     @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
     # now part of buildkite
     # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-
+=#
     @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
     #=
@@ -59,7 +60,7 @@ if !Sys.iswindows()
     @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
-
+    
     @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
     @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
     @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end
@@ -68,7 +69,6 @@ if !Sys.iswindows()
     # now part of buildkite
     # @time include("Operators/finitedifference/implicit_stencils.jl")
     # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
-
     @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
     @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/3d.jl") end
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end

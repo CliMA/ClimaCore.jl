@@ -21,7 +21,7 @@ function dss_load_perimeter_data!(
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nitems = nlevels * nperimeter * nfid * nelems
     nthreads, nblocks = _configure_threadblock(nitems)
-    @cuda threads = (nthreads) blocks = (nblocks) dss_load_perimeter_data_kernel!(
+    CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_load_perimeter_data_kernel!(
         pperimeter_data,
         pdata,
         perimeter,
@@ -58,7 +58,7 @@ function dss_unload_perimeter_data!(
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nitems = nlevels * nperimeter * nfid * nelems
     nthreads, nblocks = _configure_threadblock(nitems)
-    @cuda threads = (nthreads) blocks = (nblocks) dss_unload_perimeter_data_kernel!(
+    CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_unload_perimeter_data_kernel!(
         pdata,
         pperimeter_data,
         perimeter,
@@ -98,7 +98,7 @@ function dss_local!(
 
         nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_local_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_local_kernel!(
             pperimeter_data,
             topology.local_vertices,
             topology.local_vertex_offset,
@@ -128,12 +128,12 @@ function dss_local_kernel!(
             local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
+            ip = perimeter_vertex_node_index(vert)
             sum_data += pperimeter_data[level, ip, fidx, lidx]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
-            ip = Topologies.perimeter_vertex_node_index(vert)
+            ip = perimeter_vertex_node_index(vert)
             pperimeter_data[level, ip, fidx, lidx] = sum_data
         end
     elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
@@ -184,7 +184,7 @@ function dss_transform!(
         (nlevels, nperimeter, _, _) = size(pperimeter_data)
         nitems = nlevels * nperimeter * nlocalelems
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_transform_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_transform_kernel!(
             pperimeter_data,
             pdata,
             p∂ξ∂x,
@@ -290,7 +290,7 @@ function dss_untransform!(
         (nlevels, nperimeter, _, _) = size(pperimeter_data)
         nitems = nlevels * nperimeter * nlocalelems
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_untransform_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_untransform_kernel!(
             pperimeter_data,
             pdata,
             p∂ξ∂x,
@@ -376,7 +376,7 @@ function dss_local_ghost!(
         max_threads = 256
         nitems = nlevels * nfid * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_local_ghost_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_local_ghost_kernel!(
             pperimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
@@ -404,14 +404,14 @@ function dss_local_ghost_kernel!(
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 sum_data += pperimeter_data[level, ip, fidx, lidx]
             end
         end
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(vert)
+                ip = perimeter_vertex_node_index(vert)
                 pperimeter_data[level, ip, fidx, lidx] = sum_data
             end
         end
@@ -427,7 +427,7 @@ function fill_send_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     if nsend > 0
         nitems = nsend * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) fill_send_buffer_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) fill_send_buffer_kernel!(
             send_data,
             send_buf_idx,
             pperimeter_data,
@@ -467,7 +467,7 @@ function load_from_recv_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     if nrecv > 0
         nitems = nrecv * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) load_from_recv_buffer_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) load_from_recv_buffer_kernel!(
             pperimeter_data,
             recv_data,
             recv_buf_idx,
@@ -511,7 +511,7 @@ function dss_ghost!(
         nlevels, _, nfidx, _ = size(pperimeter_data)
         nitems = nlevels * nfidx * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) dss_ghost_kernel!(
+        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_ghost_kernel!(
             pperimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
@@ -537,14 +537,14 @@ function dss_ghost_kernel!(
         (level, fidx, ghostvertexidx) =
             _get_idx((nlevels, nfidx, nghostvertices), gidx)
         idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
-        ipresult = Topologies.perimeter_vertex_node_index(lvertresult)
+        ipresult = perimeter_vertex_node_index(lvertresult)
         result = pperimeter_data[level, ipresult, fidx, idxresult]
         st, en = ghost_vertex_offset[ghostvertexidx],
         ghost_vertex_offset[ghostvertexidx + 1]
         for vertexidx in st:(en - 1)
             isghost, eidx, lvert = ghost_vertices[vertexidx]
             if !isghost
-                ip = Topologies.perimeter_vertex_node_index(lvert)
+                ip = perimeter_vertex_node_index(lvert)
                 pperimeter_data[level, ip, fidx, eidx] = result
             end
         end

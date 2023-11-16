@@ -87,7 +87,7 @@ function interpolate_slab!(
     cuslab_indices = CuArray(slab_indices)
 
     nitems = length(output_array)
-    nthreads, nblocks = Spaces._configure_threadblock(nitems)
+    nthreads, nblocks = Topologies._configure_threadblock(nitems)
 
     @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
         output_cuarray,
@@ -331,7 +331,7 @@ function interpolate_slab_level!(
     )
 
     nitems = length(vidx_ref_coordinates)
-    nthreads, nblocks = Spaces._configure_threadblock(nitems)
+    nthreads, nblocks = Topologies._configure_threadblock(nitems)
     @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
         output_cuarray,
         field,
@@ -575,7 +575,7 @@ function interpolate_column(
     # When we don't have hypsography, there is no notion of "interpolating hypsography". In
     # this case, the reference vertical points coincide with the physical ones. Setting
     # physical_z = false ensures that zpts_ref = zpts
-    if space.hypsography isa Spaces.Flat
+    if space.hypsography isa Grids.Flat
         physical_z = false
     end
 

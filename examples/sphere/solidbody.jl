@@ -87,7 +87,7 @@ for (k, ne) in enumerate(ne_seq)
 
     Δh[k] = 2 * R / ne
 
-    global_geom = space.global_geometry
+    global_geom = Spaces.global_geometry(space)
 
     h_init = map(coords) do coord
         rd = Geometry.great_circle_distance(coord, center, global_geom)

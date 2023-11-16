@@ -280,7 +280,7 @@ function call_getproperty(fv)
 end
 @testset "FieldVector getindex" begin
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32)
-    fspace = Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     c = fill((a = Float32(1), b = Float32(2)), cspace)
     f = fill((x = Float32(1), y = Float32(2)), fspace)
     fv = Fields.FieldVector(; c, f)
@@ -551,22 +551,10 @@ end
     nothing
 end
 
-@testset "Broadcasting same spaces different instances" begin
+@testset "Memoization of spaces" begin
     space1 = spectral_space_2D()
     space2 = spectral_space_2D()
-    field1 = ones(space1)
-    field2 = 2 .* ones(space2)
-    @test Fields.is_diagonalized_spaces(typeof(space1), typeof(space2))
-    @test_throws ErrorException(
-        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
-    ) field1 .= field2
-
-    # turn warning on
-    Fields.allow_mismatched_diagonalized_spaces() = true
-    @test_warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance" field1 .=
-        field2
-    @test parent(field1) == parent(field2)
-    Fields.allow_mismatched_diagonalized_spaces() = false
+    @test space1 === space2
 end
 
 struct InferenceFoo{FT}

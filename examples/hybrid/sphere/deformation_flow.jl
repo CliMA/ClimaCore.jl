@@ -216,7 +216,7 @@ function run_deformation_flow(use_limiter, fct_op)
             Geometry.LatLongZPoint(ϕ_c, λ_c1, FT(0)),
             Geometry.LatLongZPoint(ϕ_c, λ_c2, FT(0)),
         )
-        horz_geometry = horz_space.global_geometry
+        horz_geometry = Spaces.global_geometry(horz_space)
         rds = map(centers) do center
             Geometry.great_circle_distance(coord, center, horz_geometry)
         end

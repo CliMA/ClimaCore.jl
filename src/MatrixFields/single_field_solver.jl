@@ -50,7 +50,7 @@ single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(cache, x, A, b)
 function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     CUDA.@cuda threads = nthreads blocks = nblocks single_field_solve_kernel!(
         cache,
         x,
@@ -63,7 +63,7 @@ function single_field_solve_kernel!(cache, x, A, b)
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         _single_field_solve!(
             Spaces.column(cache, i, j, h),
             Spaces.column(x, i, j, h),

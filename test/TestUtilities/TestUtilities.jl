@@ -135,7 +135,7 @@ function FaceExtrudedFiniteDifferenceSpace(
     context = ClimaComms.SingletonCommsContext(),
 ) where {FT}
     cspace = CenterExtrudedFiniteDifferenceSpace(FT; zelem, context, helem)
-    return Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    return Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 end
 
 function all_spaces(

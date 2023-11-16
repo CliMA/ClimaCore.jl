@@ -103,13 +103,13 @@ end
 
     @test parent(Fields.field_values(level(coord.x, half))) == parent(
         Fields.field_values(
-            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+            Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
     )
     @test parent(Fields.field_values(level(coord.z, half))) ==
           parent(
         Fields.field_values(
-            Fields.coordinate_field(hv_face_space.horizontal_space).x,
+            Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
     ) .* 0
 end
@@ -208,7 +208,7 @@ end
 
     struct ZeroFieldFlux <: BCtag end
     function bc_divF2C_bottom!(::ZeroFieldFlux, dY, Y, p, t)
-        space = axes(Y.h).horizontal_space
+        space = Spaces.horizontal_space(axes(Y.h))
         FT = Spaces.undertype(space)
         zeroflux = Fields.zeros(FT, space)
         return Operators.SetValue(

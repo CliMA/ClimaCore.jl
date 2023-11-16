@@ -250,7 +250,7 @@ end
 
 # write out our cubed sphere mesh
 meshfile_cc = remap_tmpdir * "mesh_cubedsphere.g"
-write_exodus(meshfile_cc, hv_center_space.horizontal_space.topology)
+write_exodus(meshfile_cc, Spaces.topology(hv_center_space))
 
 # write out RLL mesh
 nlat = 90

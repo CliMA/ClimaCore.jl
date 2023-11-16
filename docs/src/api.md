@@ -184,7 +184,6 @@ Spaces.Δz_metric_component
 ```@docs
 Spaces.SpectralElementSpace1D
 Spaces.SpectralElementSpace2D
-Spaces.SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
 Spaces.SpectralElementSpaceSlab
 ```
 
@@ -192,40 +191,39 @@ Spaces.SpectralElementSpaceSlab
 
 
 ```@docs
-Spaces.Quadratures.QuadratureStyle
-Spaces.Quadratures.GLL
-Spaces.Quadratures.GL
-Spaces.Quadratures.Uniform
-Spaces.Quadratures.degrees_of_freedom
-Spaces.Quadratures.polynomial_degree
-Spaces.Quadratures.quadrature_points
-Spaces.Quadratures.barycentric_weights
-Spaces.Quadratures.interpolation_matrix
-Spaces.Quadratures.differentiation_matrix
-Spaces.Quadratures.orthonormal_poly
+Quadratures.QuadratureStyle
+Quadratures.GLL
+Quadratures.GL
+Quadratures.Uniform
+Quadratures.degrees_of_freedom
+Quadratures.polynomial_degree
+Quadratures.quadrature_points
+Quadratures.barycentric_weights
+Quadratures.interpolation_matrix
+Quadratures.differentiation_matrix
+Quadratures.orthonormal_poly
 ```
 
 #### Internals
 
 ```@docs
-Spaces.dss_transform
-Spaces.dss_transform!
-Spaces.dss_untransform!
-Spaces.dss_untransform
-Spaces.dss_local_vertices!
-Spaces.dss_local!
-Spaces.dss_local_ghost!
-Spaces.dss_ghost!
-Spaces.create_dss_buffer
-Spaces.fill_send_buffer!
-Spaces.DSSBuffer
-Spaces.create_ghost_buffer
-Spaces.load_from_recv_buffer!
+Topologies.dss_transform
+Topologies.dss_transform!
+Topologies.dss_untransform!
+Topologies.dss_untransform
+Topologies.dss_local_vertices!
+Topologies.dss_local!
+Topologies.dss_local_ghost!
+Topologies.dss_ghost!
+Topologies.create_dss_buffer
+Topologies.fill_send_buffer!
+Topologies.DSSBuffer
+Topologies.load_from_recv_buffer!
+Topologies.dss!
 Spaces.weighted_dss_start!
 Spaces.weighted_dss_internal!
 Spaces.weighted_dss_ghost!
 Spaces.weighted_dss!
-Spaces.dss!
 Spaces.unique_nodes
 ```
 
