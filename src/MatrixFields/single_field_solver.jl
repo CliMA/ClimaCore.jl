@@ -22,7 +22,7 @@ unit_eltype(::Type{T_A}) where {T_A} =
 ################################################################################
 
 check_single_field_solver(::UniformScaling, _) = nothing
-function check_single_field_solver(A::ColumnwiseBandMatrixField, b)
+function check_single_field_solver(A, b)
     matrix_shape(A) == Square() || error(
         "Cannot solve linear system because a diagonal entry in A is not a \
          square matrix",

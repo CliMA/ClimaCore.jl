@@ -1,3 +1,4 @@
+import Logging: Debug
 import LinearAlgebra: I, norm
 import ClimaCore.Utilities: half
 import ClimaCore.RecursiveApply: ⊠
@@ -13,8 +14,9 @@ function test_field_matrix_solver(;
     alg,
     A,
     b,
-    ignore_approximation_error = false,
-    skip_correctness_test = false,
+    use_rel_error = false,
+    solve_inference_is_broken = false,
+    mul_is_allocating = false,
 )
     @testset "$test_name" begin
         x = similar(b)
@@ -30,21 +32,13 @@ function test_field_matrix_solver(;
         time_ratio = solve_time_rounded / mul_time_rounded
         time_ratio_rounded = round(time_ratio; sigdigits = 2)
 
-        # If possible, test that A * (inv(A) * b) == b.
-        if skip_correctness_test
-            relative_error =
-                norm(abs.(parent(b_test) .- parent(b))) / norm(parent(b))
-            relative_error_rounded = round(relative_error; sigdigits = 2)
-            error_string = "Relative Error = $(relative_error_rounded * 100) %"
+        error_vector = abs.(parent(b_test) .- parent(b))
+        if use_rel_error
+            rel_error = norm(error_vector) / norm(parent(b))
+            rel_error_rounded = round(rel_error; sigdigits = 2)
+            error_string = "Relative Error = $rel_error_rounded"
         else
-            if ignore_approximation_error
-                @assert alg isa MatrixFields.ApproximateFactorizationSolve
-                b_view = MatrixFields.field_vector_view(b)
-                A₁, A₂ =
-                    MatrixFields.approximate_factors(alg.name_pairs₁, A, b_view)
-                @. b_test = A₁ * A₂ * x
-            end
-            max_error = maximum(abs.(parent(b_test) .- parent(b)))
+            max_error = maximum(error_vector)
             max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
             error_string = "Maximum Error = $max_eps_error eps"
         end
@@ -53,14 +47,31 @@ function test_field_matrix_solver(;
                Multiplication Time = $mul_time_rounded s (Ratio = \
                $time_ratio_rounded)\n\t$error_string"
 
-        skip_correctness_test || @test max_eps_error <= 3
+        if use_rel_error
+            @test rel_error < 1e-6
+        else
+            @test max_eps_error <= 3
+        end
 
-        @test_opt ignored_modules = ignore_cuda FieldMatrixSolver(alg, A, b)
-        @test_opt ignored_modules = ignore_cuda field_matrix_solve!(args...)
-        @test_opt ignored_modules = ignore_cuda field_matrix_mul!(b, A, x)
+        # In addition to ignoring the type instabilities from CUDA, ignore those
+        # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
+        ignored = (
+            ignore_cuda...,
+            using_cuda ? AnyFrameModule(CUDA.CUBLAS) :
+            AnyFrameModule(MatrixFields.KrylovKit),
+            AnyFrameModule(Base.CoreLogging),
+        )
+        @test_opt ignored_modules = ignored FieldMatrixSolver(alg, A, b)
+        @test_opt ignored_modules = ignored field_matrix_solve!(args...) skip =
+            solve_inference_is_broken
+        @test_opt ignored_modules = ignored field_matrix_mul!(b, A, x)
 
-        using_cuda || @test @allocated(field_matrix_solve!(args...)) == 0
-        using_cuda || @test @allocated(field_matrix_mul!(b, A, x)) == 0
+        if !using_cuda
+            @test @allocated(field_matrix_solve!(args...)) == 0 broken =
+                solve_inference_is_broken
+            @test @allocated(field_matrix_mul!(b, A, x)) == 0 broken =
+                mul_is_allocating
+        end
     end
 end
 
@@ -111,11 +122,15 @@ end
 
     # TODO: Add a simple test where typeof(x) != typeof(b).
 
+    # Note: The round-off error of StationaryIterativeSolve can be much larger
+    # on GPUs, so n_iters often has to be increased when using_cuda is true.
+
     for alg in (
         MatrixFields.BlockDiagonalSolve(),
         MatrixFields.BlockLowerTriangularSolve(@name(c)),
-        MatrixFields.SchurComplementSolve(@name(f)),
-        MatrixFields.ApproximateFactorizationSolve((@name(c), @name(c))),
+        MatrixFields.BlockArrowheadSolve(@name(c)),
+        MatrixFields.ApproximateBlockArrowheadIterativeSolve(@name(c)),
+        MatrixFields.StationaryIterativeSolve(; n_iters = using_cuda ? 28 : 18),
     )
         test_field_matrix_solver(;
             test_name = "$(typeof(alg).name.name) for a block diagonal matrix \
@@ -154,9 +169,9 @@ end
     )
 
     test_field_matrix_solver(;
-        test_name = "SchurComplementSolve for a block matrix with diagonal, \
+        test_name = "BlockArrowheadSolve for a block matrix with diagonal, \
                      quad-diagonal, bi-diagonal, and penta-diagonal blocks",
-        alg = MatrixFields.SchurComplementSolve(@name(f)),
+        alg = MatrixFields.BlockArrowheadSolve(@name(c)),
         A = MatrixFields.FieldMatrix(
             (@name(c), @name(c)) => ᶜᶜmat1,
             (@name(c), @name(f)) => ᶜᶠmat4,
@@ -166,14 +181,14 @@ end
         b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec),
     )
 
+    # Since test_field_matrix_solver runs the solver many times with the same
+    # values of x, A, and b for benchmarking, setting correlated_solves to true
+    # is equivalent to setting n_iters to some very large number.
     test_field_matrix_solver(;
-        test_name = "ApproximateFactorizationSolve for a block matrix with \
-                     tri-diagonal, quad-diagonal, bi-diagonal, and \
-                     penta-diagonal blocks",
-        alg = MatrixFields.ApproximateFactorizationSolve(
-            (@name(c), @name(c));
-            alg₂ = MatrixFields.SchurComplementSolve(@name(f)),
-        ),
+        test_name = "StationaryIterativeSolve with correlated_solves for a \
+                     block matrix with tri-diagonal, quad-diagonal, \
+                     bi-diagonal, and penta-diagonal blocks",
+        alg = MatrixFields.StationaryIterativeSolve(; correlated_solves = true),
         A = MatrixFields.FieldMatrix(
             (@name(c), @name(c)) => ᶜᶜmat3,
             (@name(c), @name(f)) => ᶜᶠmat4,
@@ -181,8 +196,153 @@ end
             (@name(f), @name(f)) => ᶠᶠmat5,
         ),
         b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec),
-        ignore_approximation_error = true,
     )
+
+    # Each of the scaled identity matrices below was chosen to minimize the
+    # value of ρ(I - P⁻¹ * A), which was found by setting print_radius to true.
+    # Each value of n_iters below was then chosen to be the smallest value for
+    # which the relative error was less than 1e-6.
+    scaled_identity_matrix(scalar) =
+        MatrixFields.FieldMatrix((@name(), @name()) => scalar * I)
+    for (P_name, alg) in (
+        (
+            "no (identity matrix)",
+            MatrixFields.StationaryIterativeSolve(;
+                n_iters = using_cuda ? 10 : 7,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.3777
+        (
+            "Richardson (damped identity matrix)",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.CustomPreconditioner(
+                    scaled_identity_matrix(FT(1.12)),
+                ),
+                n_iters = using_cuda ? 8 : 7,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.2294
+        (
+            "Jacobi (diagonal)",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.MainDiagonalPreconditioner(),
+                n_iters = using_cuda ? 8 : 6,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.3241
+        (
+            "damped Jacobi (diagonal)",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.WeightedPreconditioner(
+                    scaled_identity_matrix(FT(1.08)),
+                    MatrixFields.MainDiagonalPreconditioner(),
+                ),
+                n_iters = using_cuda ? 8 : 7,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.2249
+        (
+            "block Jacobi (diagonal)",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.BlockDiagonalPreconditioner(),
+                n_iters = 7,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.1450
+        (
+            "damped block Jacobi (diagonal)",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.WeightedPreconditioner(
+                    scaled_identity_matrix(FT(1.002)),
+                    MatrixFields.BlockDiagonalPreconditioner(),
+                ),
+                n_iters = 7,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.1427
+        (
+            "block arrowhead",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.BlockArrowheadPreconditioner(@name(c)),
+                n_iters = 6,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.1356
+        (
+            "damped block arrowhead",
+            MatrixFields.StationaryIterativeSolve(;
+                P_alg = MatrixFields.BlockArrowheadPreconditioner(
+                    @name(c);
+                    P_alg₁ = MatrixFields.WeightedPreconditioner(
+                        scaled_identity_matrix(FT(1.0001)),
+                        MatrixFields.MainDiagonalPreconditioner(),
+                    ),
+                ),
+                n_iters = 6,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.1355
+        (
+            "block arrowhead Schur complement",
+            MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+                @name(c);
+                n_iters = 3,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.0009
+        (
+            "damped block arrowhead Schur complement",
+            MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+                @name(c);
+                P_alg₁ = MatrixFields.WeightedPreconditioner(
+                    scaled_identity_matrix(FT(1.09)),
+                    MatrixFields.MainDiagonalPreconditioner(),
+                ),
+                n_iters = 2,
+            ),
+        ), # ρ(I - P⁻¹ * A) ≈ 0.000006
+    )
+        test_field_matrix_solver(;
+            test_name = "approximate iterative solve with $P_name \
+                         preconditioning for a block matrix with tri-diagonal, \
+                         quad-diagonal, bi-diagonal, and penta-diagonal blocks",
+            alg,
+            A = MatrixFields.FieldMatrix(
+                (@name(c), @name(c)) => ᶜᶜmat3,
+                (@name(c), @name(f)) => ᶜᶠmat4,
+                (@name(f), @name(c)) => ᶠᶜmat2,
+                (@name(f), @name(f)) => ᶠᶠmat5,
+            ),
+            b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec),
+            use_rel_error = true,
+        )
+    end
+
+    @testset "approximate iterative solve with debugging" begin
+        # Recreate the setup from the previous unit test.
+        alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+            @name(c);
+            P_alg₁ = MatrixFields.WeightedPreconditioner(
+                scaled_identity_matrix(FT(1.09)),
+                MatrixFields.MainDiagonalPreconditioner(),
+            ),
+            n_iters = 2,
+        )
+        A = MatrixFields.FieldMatrix(
+            (@name(c), @name(c)) => ᶜᶜmat3,
+            (@name(c), @name(f)) => ᶜᶠmat4,
+            (@name(f), @name(c)) => ᶠᶜmat2,
+            (@name(f), @name(f)) => ᶠᶠmat5,
+        )
+        b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec)
+
+        x = similar(b)
+        solver = FieldMatrixSolver(alg, A, b)
+        args = (solver, x, A, b)
+
+        # Compare the debugging logs to RegEx strings. Note that debugging the
+        # spectral radius is currently not possible on GPUs.
+        spectral_radius_logs =
+            using_cuda ? () : ((:debug, r"ρ\(I \- inv\(P\) \* A\) ≈"),)
+        error_norm_logs = (
+            (:debug, r"||x[0] - x'||₂ ≈"),
+            (:debug, r"||x[1] - x'||₂ ≈"),
+            (:debug, r"||x[2] - x'||₂ ≈"),
+        )
+        logs = (spectral_radius_logs..., error_norm_logs...)
+        @test_logs logs... min_level = Debug field_matrix_solve!(args...)
+    end
 end
 
 @testset "FieldMatrixSolver ClimaAtmos-Based Tests" begin
@@ -249,7 +409,7 @@ end
     test_field_matrix_solver(;
         test_name = "similar solve to ClimaAtmos's dry dycore with implicit \
                      acoustic waves",
-        alg = MatrixFields.SchurComplementSolve(@name(f)),
+        alg = MatrixFields.BlockArrowheadSolve(@name(c)),
         A = MatrixFields.FieldMatrix(
             (@name(c.ρ), @name(c.ρ)) => I,
             (@name(c.ρe_tot), @name(c.ρe_tot)) => I,
@@ -266,11 +426,9 @@ end
     test_field_matrix_solver(;
         test_name = "similar solve to ClimaAtmos's dry dycore with implicit \
                      acoustic waves and diffusion",
-        alg = MatrixFields.ApproximateFactorizationSolve(
-            (@name(c), @name(f)),
-            (@name(f), @name(c)),
-            (@name(f), @name(f));
-            alg₁ = MatrixFields.SchurComplementSolve(@name(f)),
+        alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+            @name(c);
+            n_iters = 6,
         ),
         A = MatrixFields.FieldMatrix(
             (@name(c.ρ), @name(c.ρ)) => I,
@@ -283,17 +441,15 @@ end
             (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
         ),
         b = b_dry_dycore,
-        ignore_approximation_error = true,
+        solve_inference_is_broken = true, # TODO: Fix this.
     )
 
     test_field_matrix_solver(;
         test_name = "similar solve to ClimaAtmos's moist dycore + diagnostic \
                      EDMF with implicit acoustic waves and SGS fluxes",
-        alg = MatrixFields.ApproximateFactorizationSolve(
-            (@name(c), @name(f)),
-            (@name(f), @name(c)),
-            (@name(f), @name(f));
-            alg₁ = MatrixFields.SchurComplementSolve(@name(f)),
+        alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+            @name(c);
+            n_iters = 6,
         ),
         A = MatrixFields.FieldMatrix(
             (@name(c.ρ), @name(c.ρ)) => I,
@@ -310,73 +466,71 @@ end
             (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
         ),
         b = b_moist_dycore_diagnostic_edmf,
-        ignore_approximation_error = true,
+        solve_inference_is_broken = true, # TODO: Fix this.
     )
 
-    # TODO: This unit test is currently broken.
-    # test_field_matrix_solver(;
-    #     test_name = "similar solve to ClimaAtmos's moist dycore + prognostic \
-    #                  EDMF + prognostic surface temperature with implicit \
-    #                  acoustic waves and SGS fluxes",
-    #     alg = MatrixFields.BlockLowerTriangularSolve(
-    #         @name(c.sgsʲs),
-    #         @name(f.sgsʲs);
-    #         alg₁ = MatrixFields.SchurComplementSolve(@name(f)),
-    #         alg₂ = MatrixFields.ApproximateFactorizationSolve(
-    #             (@name(c), @name(f)),
-    #             (@name(f), @name(c)),
-    #             (@name(f), @name(f));
-    #             alg₁ = MatrixFields.SchurComplementSolve(@name(f)),
-    #         ),
-    #     ),
-    #     A = MatrixFields.FieldMatrix(
-    #         # GS-GS blocks:
-    #         (@name(sfc), @name(sfc)) => I,
-    #         (@name(c.ρ), @name(c.ρ)) => I,
-    #         (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
-    #         (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
-    #         (@name(c.ρχ), @name(c.ρχ)) => ᶜᶜmat3,
-    #         (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3,
-    #         (@name(c.ρ), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.ρe_tot), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.ρatke), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
-    #         (@name(f.u₃), @name(c.ρ)) => ᶠᶜmat2_u₃_scalar,
-    #         (@name(f.u₃), @name(c.ρe_tot)) => ᶠᶜmat2_u₃_scalar,
-    #         (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
-    #         # GS-SGS blocks:
-    #         (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρae_tot)) => ᶜᶜmat3,
-    #         (@name(c.ρχ.ρq_tot), @name(c.sgsʲs.:(1).ρaχ.ρaq_tot)) => ᶜᶜmat3,
-    #         (@name(c.ρχ.ρq_liq), @name(c.sgsʲs.:(1).ρaχ.ρaq_liq)) => ᶜᶜmat3,
-    #         (@name(c.ρχ.ρq_ice), @name(c.sgsʲs.:(1).ρaχ.ρaq_ice)) => ᶜᶜmat3,
-    #         (@name(c.ρχ.ρq_rai), @name(c.sgsʲs.:(1).ρaχ.ρaq_rai)) => ᶜᶜmat3,
-    #         (@name(c.ρχ.ρq_sno), @name(c.sgsʲs.:(1).ρaχ.ρaq_sno)) => ᶜᶜmat3,
-    #         (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
-    #         (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
-    #         (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_ρχ_scalar,
-    #         (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
-    #         (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρχ_u₃,
-    #         (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_uₕ_u₃,
-    #         (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => ᶠᶜmat2_u₃_scalar,
-    #         (@name(f.u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
-    #         # SGS-SGS blocks:
-    #         (@name(c.sgsʲs.:(1).ρa), @name(c.sgsʲs.:(1).ρa)) => I,
-    #         (@name(c.sgsʲs.:(1).ρae_tot), @name(c.sgsʲs.:(1).ρae_tot)) => I,
-    #         (@name(c.sgsʲs.:(1).ρaχ), @name(c.sgsʲs.:(1).ρaχ)) => I,
-    #         (@name(c.sgsʲs.:(1).ρa), @name(f.sgsʲs.:(1).u₃)) =>
-    #             ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.sgsʲs.:(1).ρae_tot), @name(f.sgsʲs.:(1).u₃)) =>
-    #             ᶜᶠmat2_scalar_u₃,
-    #         (@name(c.sgsʲs.:(1).ρaχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρaχ_u₃,
-    #         (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρa)) =>
-    #             ᶠᶜmat2_u₃_scalar,
-    #         (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρae_tot)) =>
-    #             ᶠᶜmat2_u₃_scalar,
-    #         (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
-    #     ),
-    #     b = b_moist_dycore_prognostic_edmf_prognostic_surface,
-    #     skip_correctness_test = true,
-    # )
+    test_field_matrix_solver(;
+        test_name = "similar solve to ClimaAtmos's moist dycore + prognostic \
+                     EDMF + prognostic surface temperature with implicit \
+                     acoustic waves and SGS fluxes",
+        alg = MatrixFields.BlockLowerTriangularSolve(
+            @name(c.sgsʲs),
+            @name(f.sgsʲs);
+            alg₁ = MatrixFields.BlockArrowheadSolve(@name(c)),
+            alg₂ = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+                @name(c);
+                n_iters = 6,
+            ),
+        ),
+        A = MatrixFields.FieldMatrix(
+            # GS-GS blocks:
+            (@name(sfc), @name(sfc)) => I,
+            (@name(c.ρ), @name(c.ρ)) => I,
+            (@name(c.ρe_tot), @name(c.ρe_tot)) => ᶜᶜmat3,
+            (@name(c.ρatke), @name(c.ρatke)) => ᶜᶜmat3,
+            (@name(c.ρχ), @name(c.ρχ)) => ᶜᶜmat3,
+            (@name(c.uₕ), @name(c.uₕ)) => ᶜᶜmat3,
+            (@name(c.ρ), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+            (@name(c.ρe_tot), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+            (@name(c.ρatke), @name(f.u₃)) => ᶜᶠmat2_scalar_u₃,
+            (@name(c.ρχ), @name(f.u₃)) => ᶜᶠmat2_ρχ_u₃,
+            (@name(f.u₃), @name(c.ρ)) => ᶠᶜmat2_u₃_scalar,
+            (@name(f.u₃), @name(c.ρe_tot)) => ᶠᶜmat2_u₃_scalar,
+            (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
+            # GS-SGS blocks:
+            (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρae_tot)) => ᶜᶜmat3,
+            (@name(c.ρχ.ρq_tot), @name(c.sgsʲs.:(1).ρaχ.ρaq_tot)) => ᶜᶜmat3,
+            (@name(c.ρχ.ρq_liq), @name(c.sgsʲs.:(1).ρaχ.ρaq_liq)) => ᶜᶜmat3,
+            (@name(c.ρχ.ρq_ice), @name(c.sgsʲs.:(1).ρaχ.ρaq_ice)) => ᶜᶜmat3,
+            (@name(c.ρχ.ρq_rai), @name(c.sgsʲs.:(1).ρaχ.ρaq_rai)) => ᶜᶜmat3,
+            (@name(c.ρχ.ρq_sno), @name(c.sgsʲs.:(1).ρaχ.ρaq_sno)) => ᶜᶜmat3,
+            (@name(c.ρe_tot), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
+            (@name(c.ρatke), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3,
+            (@name(c.ρχ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_ρχ_scalar,
+            (@name(c.uₕ), @name(c.sgsʲs.:(1).ρa)) => ᶜᶜmat3_uₕ_scalar,
+            (@name(c.ρe_tot), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
+            (@name(c.ρatke), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_scalar_u₃,
+            (@name(c.ρχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρχ_u₃,
+            (@name(c.uₕ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_uₕ_u₃,
+            (@name(f.u₃), @name(c.sgsʲs.:(1).ρa)) => ᶠᶜmat2_u₃_scalar,
+            (@name(f.u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
+            # SGS-SGS blocks:
+            (@name(c.sgsʲs.:(1).ρa), @name(c.sgsʲs.:(1).ρa)) => I,
+            (@name(c.sgsʲs.:(1).ρae_tot), @name(c.sgsʲs.:(1).ρae_tot)) => I,
+            (@name(c.sgsʲs.:(1).ρaχ), @name(c.sgsʲs.:(1).ρaχ)) => I,
+            (@name(c.sgsʲs.:(1).ρa), @name(f.sgsʲs.:(1).u₃)) =>
+                ᶜᶠmat2_scalar_u₃,
+            (@name(c.sgsʲs.:(1).ρae_tot), @name(f.sgsʲs.:(1).u₃)) =>
+                ᶜᶠmat2_scalar_u₃,
+            (@name(c.sgsʲs.:(1).ρaχ), @name(f.sgsʲs.:(1).u₃)) => ᶜᶠmat2_ρaχ_u₃,
+            (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρa)) =>
+                ᶠᶜmat2_u₃_scalar,
+            (@name(f.sgsʲs.:(1).u₃), @name(c.sgsʲs.:(1).ρae_tot)) =>
+                ᶠᶜmat2_u₃_scalar,
+            (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
+        ),
+        b = b_moist_dycore_prognostic_edmf_prognostic_surface,
+        solve_inference_is_broken = true, # TODO: Fix this.
+        mul_is_allocating = true, # And also this.
+    )
 end

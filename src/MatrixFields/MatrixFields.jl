@@ -44,9 +44,11 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 module MatrixFields
 
 import CUDA
-import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv
+import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
+import RecursiveArrayTools: recursive_bottom_eltype
+import KrylovKit
 import ClimaComms
 
 import ..Utilities: PlusHalf, half
@@ -96,8 +98,9 @@ include("unrolled_functions.jl")
 include("field_name.jl")
 include("field_name_set.jl")
 include("field_name_dict.jl")
-include("field_matrix_solver.jl")
 include("single_field_solver.jl")
+include("field_matrix_solver.jl")
+include("field_matrix_iterative_solver.jl")
 
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")

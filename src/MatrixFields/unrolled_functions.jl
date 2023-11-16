@@ -48,6 +48,8 @@ unrolled_any(f::F, values) where {F} =
 unrolled_all(f::F, values) where {F} =
     unrolled_foldl(&, unrolled_map(f, values), true)
 
+unrolled_in(value, values) = unrolled_any(isequal(value), values)
+
 unrolled_filter(f::F, values) where {F} =
     unrolled_foldl(values, ()) do filtered_values, value
         f(value) ? (filtered_values..., value) : filtered_values
@@ -68,6 +70,14 @@ unrolled_flatten(values) =
 
 unrolled_mapflatten(f::F, values) where {F} =
     unrolled_flatten(unrolled_map(f, values))
+
+unrolled_product(values1, values2) =
+    unrolled_mapflatten(values1) do value1
+        unrolled_map(value2 -> (value1, value2), values2)
+    end
+
+unrolled_split(f::F, values) where {F} =
+    (unrolled_filter(f, values), unrolled_filter(value -> !f(value), values))
 
 function unrolled_findonly(f::F, values) where {F}
     filtered_values = unrolled_filter(f, values)
