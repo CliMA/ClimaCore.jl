@@ -126,28 +126,28 @@ end
         ρq = ρ .* q
 
         limiter = Limiters.QuasiMonotoneLimiter(ρq)
-        Limiters.compute_bounds!(limiter, ρq, ρ)
+        Limiters.compute_element_bounds!(limiter, ρq, ρ)
 
-        is_gpu = device isa ClimaComms.CUDADevice
         S = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
-        @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) broken = is_gpu # q_min
-        @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) broken = is_gpu # q_min
-        @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) broken = is_gpu # q_max
-        @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) broken = is_gpu # q_max
+        CUDA.@allowscalar begin
+            @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * T[2], S)) # q_max
+        end
 
+        Limiters.compute_neighbor_bounds_local!(limiter, ρ)
         SN = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
         end
-        @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN)) broken =
-            is_gpu # q_min
-        @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN)) broken =
-            is_gpu # q_min
-        @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN)) broken =
-            is_gpu # q_max
-        @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN)) broken =
-            is_gpu # q_max
+        CUDA.@allowscalar begin
+            @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
+            @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
+            @test all(map(T -> T[3][2].y ≈ 3 * min(T[2] + 1, n2), SN))  # q_max
+        end
     end
 end
 
@@ -211,8 +211,7 @@ end
         Limiters.apply_limiter!(ρq, ρ, limiter)
 
         @test Array(parent(ρq))[:, :, 1, 1] ≈
-              [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT) broken =
-            gpu_broken
+              [FT(0.0) FT(0.0); FT(0.950005) FT(0.950005)] rtol = 10eps(FT)
         # Check mass conservation after application of limiter
         @test sum(ρq) ≈ initial_Q_mass rtol = 10eps(FT)
     end
@@ -223,7 +222,6 @@ end
     Nij = 5
     device = ClimaComms.device()
     comms_ctx = ClimaComms.SingletonCommsContext(device)
-    is_gpu = device isa ClimaComms.CUDADevice
 
     for FT in (Float64, Float32)
         space =
@@ -255,7 +253,8 @@ end
 
         @test sum(ρq.x) ≈ total_ρq.x
         @test sum(ρq.y) ≈ total_ρq.y
-        @test all(FT(0) .<= Array(parent(ρq)) .<= FT(1)) broken = is_gpu
+        @test maximum(Array(parent(ρq))) ≈ 1 rtol = eps(FT)
+        @test minimum(Array(parent(ρq))) ≈ 0 rtol = eps(FT)
     end
 end
 
@@ -266,7 +265,6 @@ end
     n3 = 3
     device = ClimaComms.device()
     comms_ctx = ClimaComms.SingletonCommsContext(device)
-    is_gpu = device isa ClimaComms.CUDADevice
 
     for FT in (Float64, Float32)
         horzspace, hv_center_space, hv_face_space = hvspace_3D(
@@ -310,6 +308,7 @@ end
 
         @test sum(ρq.x) ≈ total_ρq.x
         @test sum(ρq.y) ≈ total_ρq.y
-        @test all(FT(0) .<= Array(parent(ρq)) .<= FT(1)) broken = is_gpu
+        @test maximum(Array(parent(ρq))) ≤ 1
+        @test minimum(Array(parent(ρq))) ≥ 0
     end
 end

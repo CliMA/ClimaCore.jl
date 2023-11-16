@@ -1,13 +1,7 @@
 name: ClimaCoreMakie CI
 on:
   pull_request:
-    paths:
-      - ".github/workflows/ClimaCoreMakie.yml"
-      - "lib/ClimaCoreMakie/**"
-  push:
-    branches:
-      - staging
-      - trying
+
 jobs:
   lib-climacore-makie:
     runs-on: ubuntu-20.04

@@ -31,7 +31,7 @@ end
     Aqua.test_deps_compat(ClimaCore)
     Aqua.test_project_extras(ClimaCore)
     # Aqua.test_project_toml_formatting(ClimaCore) # failing
-    Aqua.test_piracy(ClimaCore)
+    Aqua.test_piracies(ClimaCore)
 end
 
 nothing

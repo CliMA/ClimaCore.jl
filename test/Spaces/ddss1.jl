@@ -1,5 +1,7 @@
 using Logging
 using Test
+import CUDA
+CUDA.allowscalar(false)
 
 import ClimaCore:
     Domains,
@@ -66,14 +68,25 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == 4
 
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 1) ==
-          [2, 4]
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 2) ==
-          [1, 3]
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 3) ==
-          [2, 4]
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 4) ==
-          [1, 3]
+
+    CUDA.@allowscalar begin
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            1,
+        ) == [2, 4]
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            2,
+        ) == [1, 3]
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            3,
+        ) == [2, 4]
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            4,
+        ) == [1, 3]
+    end
 
     y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
     nel = Topologies.nlocalelems(Spaces.topology(space))

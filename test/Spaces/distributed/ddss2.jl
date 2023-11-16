@@ -1,3 +1,5 @@
+import CUDA
+CUDA.allowscalar(false)
 include("ddss_setup.jl")
 
 #=
@@ -17,15 +19,25 @@ include("ddss_setup.jl")
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == 2
 
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 1) ==
-          [2]
-    @test Topologies.local_neighboring_elements(Spaces.topology(space), 2) ==
-          [1]
+    CUDA.@allowscalar begin
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            1,
+        ) == [2]
+        @test Topologies.local_neighboring_elements(
+            Spaces.topology(space),
+            2,
+        ) == [1]
 
-    @test Topologies.ghost_neighboring_elements(Spaces.topology(space), 1) ==
-          [2]
-    @test Topologies.ghost_neighboring_elements(Spaces.topology(space), 2) ==
-          [1]
+        @test Topologies.ghost_neighboring_elements(
+            Spaces.topology(space),
+            1,
+        ) == [2]
+        @test Topologies.ghost_neighboring_elements(
+            Spaces.topology(space),
+            2,
+        ) == [1]
+    end
 
     init_state(local_geometry, p) = (ρ = 1.0)
     y0 = init_state.(Fields.local_geometry_field(space), Ref(nothing))

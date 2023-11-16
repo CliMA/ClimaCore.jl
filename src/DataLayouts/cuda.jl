@@ -10,6 +10,9 @@ Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
 Adapt.adapt_structure(to, data::VIJFH{S, Nij}) where {S, Nij} =
     VIJFH{S, Nij}(Adapt.adapt(to, parent(data)))
 
+Adapt.adapt_structure(to, data::VIFH{S, Ni, A}) where {S, Ni, A} =
+    VIFH{S, Ni}(Adapt.adapt(to, parent(data)))
+
 Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
     IFH{S, Ni}(Adapt.adapt(to, parent(data)))
 
@@ -139,5 +142,17 @@ function Base.fill!(dest::VF{S, A}, val) where {S, A <: CUDA.CuArray}
     if Nv > 0 && Nh > 0
         CUDA.@cuda threads = (1, 1) blocks = (Nh, Nv) knl_fill!(dest, val)
     end
+    return dest
+end
+
+function Base.copyto!(
+    dest::DataF{S},
+    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+) where {S, A <: CUDA.CuArray}
+    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_copyto!(dest, bc)
+    return dest
+end
+function Base.fill!(dest::DataF{S, A}, val) where {S, A <: CUDA.CuArray}
+    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_fill!(dest, val)
     return dest
 end

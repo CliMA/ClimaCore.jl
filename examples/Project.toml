@@ -34,6 +34,3 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 OrdinaryDiffEq = "6"
 Plots = "1"
 SciMLBase = "1, 2"
-
-[extras]
-CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
