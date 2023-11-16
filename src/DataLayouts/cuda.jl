@@ -144,3 +144,15 @@ function Base.fill!(dest::VF{S, A}, val) where {S, A <: CUDA.CuArray}
     end
     return dest
 end
+
+function Base.copyto!(
+    dest::DataF{S},
+    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+) where {S, A <: CUDA.CuArray}
+    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_copyto!(dest, bc)
+    return dest
+end
+function Base.fill!(dest::DataF{S, A}, val) where {S, A <: CUDA.CuArray}
+    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_fill!(dest, val)
+    return dest
+end
