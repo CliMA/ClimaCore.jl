@@ -269,7 +269,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     type = attrs(group)["type"]
     if type == "IntervalTopology"
         mesh = read_mesh(reader, attrs(group)["mesh"])
-        return Topologies.IntervalTopology(mesh)
+        return Topologies.IntervalTopology(reader.context, mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
