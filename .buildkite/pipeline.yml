@@ -278,6 +278,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: cuda point spaces"
+        key: "point_space_cuda"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/point_cuda.jl CUDA"
+        artifact_paths:
+          - output/point_cuda
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
         command:
