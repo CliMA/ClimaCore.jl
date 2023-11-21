@@ -1,5 +1,5 @@
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:
     ClimaCore,

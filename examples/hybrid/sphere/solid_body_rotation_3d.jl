@@ -14,7 +14,6 @@ import ClimaCore:
     Fields,
     Operators
 import ClimaCore.Utilities: half
-import UnPack
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -95,7 +94,7 @@ function init_sbr_thermo(z)
 end
 
 function rhs!(dY, Y, parameters, t)
-    UnPack.@unpack c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE = parameters
+    (; c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE) = parameters
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers

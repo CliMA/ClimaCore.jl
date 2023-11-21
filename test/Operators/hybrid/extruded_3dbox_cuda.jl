@@ -2,7 +2,7 @@
 julia --project
 using Revise; include(joinpath("test", "Spaces", "extruded_3dbox_cuda.jl"))
 =#
-using LinearAlgebra, IntervalSets, UnPack
+using LinearAlgebra, IntervalSets
 using CUDA
 using ClimaComms, ClimaCore
 import ClimaCore:

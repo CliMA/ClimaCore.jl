@@ -1,5 +1,3 @@
-using UnPack
-
 using OrdinaryDiffEq:
     AbstractNLSolver,
     isnewton,
@@ -76,7 +74,7 @@ function nlsolve!(
         update_W!(nlsolver, integrator, cache, γW, repeat_step)
     end
 
-    @unpack maxiters, κ, fast_convergence_cutoff = nlsolver
+    (; maxiters, κ, fast_convergence_cutoff) = nlsolver
 
     initialize!(nlsolver, integrator)
     nlsolver.status = Divergence
