@@ -1,7 +1,7 @@
 push!(LOAD_PATH, joinpath(@__DIR__, "..", ".."))
 
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:
     ClimaCore,

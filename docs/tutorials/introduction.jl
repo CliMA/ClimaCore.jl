@@ -15,7 +15,6 @@ using ClimaComms,
     ClimaCorePlots,
     LinearAlgebra,
     IntervalSets,
-    UnPack,
     Plots,
     OrdinaryDiffEq
 #----------------------------------------------------------------------------
@@ -464,7 +463,7 @@ parameters = (
 
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
-    @unpack x, y = coord
+    (; x, y) = coord
     ## set initial state
     ρ = p.ρ₀
 
@@ -501,7 +500,7 @@ Plots.plot(y0.ρθ)
 
 function shallow_water_tendency!(dydt, y, _, t)
 
-    @unpack D₄, g = parameters
+    (; D₄, g) = parameters
 
     sdiv = ClimaCore.Operators.Divergence()
     wdiv = ClimaCore.Operators.WeakDivergence()

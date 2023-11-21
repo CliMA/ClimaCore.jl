@@ -12,7 +12,7 @@ using Test
 using Adapt
 using ClimaComms
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack, OrdinaryDiffEq
+using StaticArrays, IntervalSets, LinearAlgebra, OrdinaryDiffEq
 using DocStringExtensions
 
 import ClimaCore:

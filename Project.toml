@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.10.56"
+version = "0.11.0"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -28,7 +28,6 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 WeakValueDicts = "897b6980-f191-5a31-bcb0-bf3c4585e0c1"
 
 [compat]
@@ -46,8 +45,8 @@ GilbertCurves = "0.1"
 HDF5 = "0.16, 0.17"
 InteractiveUtils = "1"
 IntervalSets = "0.5, 0.6, 0.7"
-Memoize = "0.4"
 LinearAlgebra = "1"
+Memoize = "0.4"
 PkgVersion = "0.1, 0.2, 0.3"
 RecursiveArrayTools = "2"
 Requires = "1"
@@ -56,6 +55,5 @@ SparseArrays = "1"
 Static = "0.4, 0.5, 0.6, 0.7, 0.8"
 StaticArrays = "1"
 Statistics = "1"
-UnPack = "1"
 WeakValueDicts = "0.1"
 julia = "1.8"

@@ -2,7 +2,7 @@
 julia --project
 using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
 =#
-using LinearAlgebra, IntervalSets, UnPack
+using LinearAlgebra, IntervalSets
 using ClimaComms
 using CUDA
 using ClimaComms: SingletonCommsContext

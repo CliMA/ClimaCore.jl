@@ -1,5 +1,5 @@
 using LinearAlgebra
-using UnPack, StaticArrays, IntervalSets
+using StaticArrays, IntervalSets
 
 import ClimaCore: Fields, Domains, Meshes, Topologies, Spaces
 import ClimaCore: slab
@@ -29,7 +29,7 @@ domain = Domains.RectangleDomain(
 
 
 function init_state(coord, p)
-    @unpack x, y = coord
+    (; x, y) = coord
     # set initial state
     ρ = p.ρ₀
 
@@ -51,7 +51,7 @@ function init_state(coord, p)
 end
 
 function flux(state, p)
-    @unpack ρ, ρu, ρθ = state
+    (; ρ, ρu, ρθ) = state
     u = ρu / ρ
     return (ρ = ρu, ρu = ((ρu ⊗ u) + (p.g * ρ^2 / 2) * I), ρθ = ρθ * u)
 end

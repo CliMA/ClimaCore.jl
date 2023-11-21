@@ -1,6 +1,6 @@
 using Test
 using ClimaComms
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using StaticArrays, IntervalSets, LinearAlgebra
 import ClimaCore
 import ClimaCore:
     ClimaCore,

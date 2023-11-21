@@ -1,4 +1,4 @@
-using LinearAlgebra, IntervalSets, UnPack
+using LinearAlgebra, IntervalSets
 using ClimaComms
 import ClimaCore:
     Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields

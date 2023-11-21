@@ -1,6 +1,6 @@
 using Test
 using ClimaCore.Geometry
-using LinearAlgebra, UnPack, StaticArrays
+using LinearAlgebra, StaticArrays
 
 @testset "1D X,Y,Z Points" begin
 
@@ -113,7 +113,7 @@ end
     state = (ρ = 2.0, ρu = Geometry.UVVector(1.0, 2.0), ρθ = 0.5)
 
     function flux(state, g)
-        @unpack ρ, ρu, ρθ = state
+        (; ρ, ρu, ρθ) = state
         u = ρu / ρ
         return (ρ = ρu, ρu = (ρu ⊗ u) + (g * ρ^2 / 2) * I, ρθ = ρθ * u)
     end
