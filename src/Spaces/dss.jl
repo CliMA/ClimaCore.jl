@@ -2,6 +2,7 @@ import ..Topologies:
     DSSBuffer,
     create_dss_buffer,
     assert_same_eltype,
+    dss!,
     dss_1d!,
     dss_transform!,
     dss_untransform!,
