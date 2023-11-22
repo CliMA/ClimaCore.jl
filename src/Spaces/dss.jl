@@ -334,4 +334,4 @@ function weighted_dss_ghost2! end
 function dss2! end
 
 
-dss2!(data, topology, quadrature_style) = dss!(data, topology, quadrature_style)
+dss2!(data, topology, quadrature_style) = dss!(data, topology)
