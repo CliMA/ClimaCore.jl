@@ -4,6 +4,7 @@ using PkgVersion
 const VERSION = PkgVersion.@Version
 
 include("interface.jl")
+include("devices.jl")
 include("Utilities/Utilities.jl")
 include("RecursiveApply/RecursiveApply.jl")
 include("DataLayouts/DataLayouts.jl")

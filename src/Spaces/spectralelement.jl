@@ -235,14 +235,14 @@ Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =
 
 Base.@propagate_inbounds function column(space::SpectralElementSpace1D, i, h)
     local_geometry = column(local_geometry_data(space), i, h)
-    PointSpace(local_geometry)
+    PointSpace(ClimaComms.context(space), local_geometry)
 end
 Base.@propagate_inbounds column(space::SpectralElementSpace1D, i, j, h) =
     column(space, i, h)
 
 Base.@propagate_inbounds function column(space::SpectralElementSpace2D, i, j, h)
     local_geometry = column(local_geometry_data(space), i, j, h)
-    PointSpace(local_geometry)
+    PointSpace(ClimaComms.context(space), local_geometry)
 end
 
 function all_nodes(space::SpectralElementSpace2D)

@@ -7,21 +7,18 @@ local_geometry_data(space::AbstractPointSpace) = space.local_geometry
 
 A zero-dimensional space.
 """
-struct PointSpace{LG <: DataLayouts.Data0D} <: AbstractPointSpace
+struct PointSpace{
+    C <: ClimaComms.AbstractCommsContext,
+    LG <: DataLayouts.Data0D,
+} <: AbstractPointSpace
+    context::C
     local_geometry::LG
 end
 
-# not strictly correct, but it is needed for mapreduce
-ClimaComms.device(space::PointSpace) =
-    ClimaComms.device(ClimaComms.context(space))
-ClimaComms.context(space::PointSpace) =
-    ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+ClimaComms.device(space::PointSpace) = ClimaComms.device(space.context)
+ClimaComms.context(space::PointSpace) = space.context
 
-
-PointSpace(x::Geometry.LocalGeometry) =
-    PointSpace(ClimaComms.CPUSingleThreaded(), x)
-PointSpace(x::Geometry.AbstractPoint) =
-    PointSpace(ClimaComms.CPUSingleThreaded(), x)
+PointSpace(x::T) where {T} = PointSpace(ClimaComms.context(), x)
 
 function PointSpace(device::ClimaComms.AbstractDevice, x)
     context = ClimaComms.SingletonCommsContext(device)
@@ -36,12 +33,12 @@ function PointSpace(
     ArrayType = ClimaComms.array_type(ClimaComms.device(context))
     local_geometry_data = DataLayouts.DataF{LG}(Array{FT})
     local_geometry_data[] = local_geometry
-    return PointSpace(Adapt.adapt(ArrayType, local_geometry_data))
+    return PointSpace(context, Adapt.adapt(ArrayType, local_geometry_data))
 end
 
 
 Adapt.adapt_structure(to, space::PointSpace) =
-    PointSpace(Adapt.adapt(to, space.local_geometry))
+    PointSpace(DeviceSideContext(), Adapt.adapt(to, space.local_geometry))
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,

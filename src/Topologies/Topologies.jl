@@ -12,6 +12,7 @@ import ..Meshes: Meshes, domain, coordinates
 import ..DataLayouts
 import ..slab, ..column, ..level
 
+import ..DeviceSideDevice, ..DeviceSideContext
 
 using Memoize, WeakValueDicts
 
