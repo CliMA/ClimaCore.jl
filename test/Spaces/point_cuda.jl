@@ -20,4 +20,7 @@ compare(cpu, gpu, sym) =
     # Test that all geometries match with CPU version:
     @test compare(cpuspace, gpuspace, :local_geometry)
 
+    @test ClimaComms.device(gpuspace) == ClimaComms.CUDADevice()
+    @test ClimaComms.context(gpuspace) == gpu_context
+
 end
