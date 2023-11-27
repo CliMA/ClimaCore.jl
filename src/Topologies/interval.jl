@@ -23,6 +23,8 @@ end
 Adapt.adapt_structure(to, topology::IntervalTopology) =
     DeviceIntervalTopology(topology.boundaries)
 
+ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
+ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
 
 ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =

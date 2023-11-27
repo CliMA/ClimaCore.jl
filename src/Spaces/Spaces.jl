@@ -23,6 +23,8 @@ import ..Utilities: PlusHalf, half
 import ..DataLayouts,
     ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 
+import ..DeviceSideDevice, ..DeviceSideContext
+
 import ..Grids:
     Staggering,
     CellFace,
