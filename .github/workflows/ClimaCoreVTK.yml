@@ -26,11 +26,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get -y install paraview python3-paraview
       - name: Install Julia dependencies
-        shell: julia --project=monorepo {0}
         run: |
-          using Pkg;
-          # dev mono repo versions
-          pkg"dev . lib/ClimaCoreVTK"
+          julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())/lib/ClimaCoreVTK")'
       - name: Run the tests
         env:
           CI_OUTPUT_DIR: output
