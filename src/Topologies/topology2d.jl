@@ -113,9 +113,9 @@ mutable struct Topology2D{
     "neighbor process locations in neighbor_pids for each of the ghost vertices"
     ghost_vertex_neighbor_loc::Vector{Int}
     "offset array for `ghost_vertex_neighbor_loc`
-    a ragged array representation: for i = 1:length(ghost_vertex_gcidx), we have that 
+    a ragged array representation: for i = 1:length(ghost_vertex_gcidx), we have that
     for j = ghost_vertex_comm_idx_offset[i]:ghost_vertex_comm_idx_offset[i+1]-1
-    the ghost vertex ghost_vertex_gcidx[i] should get sent to 
+    the ghost vertex ghost_vertex_gcidx[i] should get sent to
     neighbor_pids[ghost_vertex_neighbor_loc[j]]"
     ghost_vertex_comm_idx_offset::Vector{Int}
     "representative local ghost vertex (idx, vert) for each unique ghost vertex"
@@ -124,7 +124,7 @@ mutable struct Topology2D{
     ghost_face_neighbor_loc::Vector{Int}
 end
 
-ClimaComms.device(topology::Topology2D) = topology.context.device
+ClimaComms.device(topology::Topology2D) = ClimaComms.device(topology.context)
 ClimaComms.array_type(topology::Topology2D) =
     ClimaComms.array_type(topology.context.device)
 
