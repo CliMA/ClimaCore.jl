@@ -487,6 +487,9 @@ struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
     local_geometry::LG
 end
 
+ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
+ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()
+
 Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
     DeviceSpectralElementGrid2D(
         Adapt.adapt(to, grid.quadrature_style),

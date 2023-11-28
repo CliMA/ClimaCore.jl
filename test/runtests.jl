@@ -110,6 +110,7 @@ end
 if "CUDA" in ARGS
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
     @safetestset "GPU - data" begin @time include("DataLayouts/cuda.jl") end
+    @safetestset "GPU - spaces" begin @time include("Spaces/spaces.jl") end
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
     @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
