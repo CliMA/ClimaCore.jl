@@ -1,10 +1,23 @@
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
+using Adapt
 
 import ClimaCore:
-    slab, Domains, Meshes, Topologies, Spaces, Fields, DataLayouts, Geometry
+    slab,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    DataLayouts,
+    Geometry,
+    DeviceSideContext,
+    DeviceSideDevice
+
 import ClimaCore.DataLayouts: IJFH, VF
+
+on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
 @testset "1d domain space" begin
     FT = Float64
@@ -20,11 +33,15 @@ import ClimaCore.DataLayouts: IJFH, VF
 
     space = Spaces.SpectralElementSpace1D(topology, quad)
 
-    @test repr(space) === """
+    device = ClimaComms.device()
+
+    expected_repr = """
     SpectralElementSpace1D:
-      context: SingletonCommsContext using CPUSingleThreaded
+      context: SingletonCommsContext using $(nameof(typeof(device)))
       mesh: 1-element IntervalMesh of IntervalDomain: x ∈ [-3.0,5.0] (periodic)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
+
+    @test repr(space) === expected_repr
 
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
@@ -58,7 +75,7 @@ import ClimaCore.DataLayouts: IJFH, VF
           Spaces.column(coord_data, 1, 1)[]
 end
 
-@testset "extruded (2d 1×3) finite difference space" begin
+on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
 
     FT = Float32
 
@@ -67,7 +84,8 @@ end
         Geometry.ZPoint{FT}(10);
         boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
+    vertmesh =
+        Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
     # Generate Horizontal Space
     horzdomain = Domains.IntervalDomain(
@@ -78,13 +96,14 @@ end
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = 5)
     horztopology = Topologies.IntervalTopology(horzmesh)
     quad = Spaces.Quadratures.GLL{4}()
+
     hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
     # Extrusion
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
     array = parent(Spaces.coordinates_data(c_space))
     z = Fields.coordinate_field(c_space).z
-    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H 
+    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
 
     # Define test col index
     colidx = Fields.ColumnIndex{1}((4,), 5)
@@ -143,6 +162,17 @@ end
           [((1, 1), 1);;; ((1, 1), 2);;; ((1, 1), 3);;; ((1, 1), 4)]
     @test length(Spaces.unique_nodes(hspace)) == 4
     @test length(Spaces.all_nodes(hspace)) == 4
+
+    if on_gpu
+        adapted_space = adapt(space)(space)
+        @test ClimaComms.context(adapted_space) == DeviceSideContext()
+        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+
+        adapted_hspace = adapt(hspace)(hspace)
+        @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
+        @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
+    end
+
 end
 
 @testset "1×1 domain space" begin
@@ -180,6 +210,11 @@ end
     local_geometry_slab = slab(space.grid.local_geometry, 1)
     dss_weights_slab = slab(space.grid.local_dss_weights, 1)
 
+    if on_gpu
+        adapted_space = adapt(space)(space)
+        @test ClimaComms.context(adapted_space) == DeviceSideContext()
+        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+    end
 
     for i in 1:4, j in 1:4
         @test Geometry.components(local_geometry_slab[i, j].∂x∂ξ) ≈
@@ -252,6 +287,7 @@ end
         @test (ip, jp) == reference[p] # face_node_index also counts the bordering vertex dof
     end
 end
+
 
 #=
 @testset "dss on 2×2 rectangular mesh (unstructured)" begin
