@@ -34,8 +34,23 @@ FieldMatrixSolver
 field_matrix_solve!
 BlockDiagonalSolve
 BlockLowerTriangularSolve
-SchurComplementSolve
-ApproximateFactorizationSolve
+BlockArrowheadSolve
+SchurComplementReductionSolve
+LazyFieldMatrixSolverAlgorithm
+StationaryIterativeSolve
+ApproximateBlockArrowheadIterativeSolve
+```
+
+# Preconditioners
+
+```@docs
+PreconditionerAlgorithm
+MainDiagonalPreconditioner
+BlockDiagonalPreconditioner
+BlockArrowheadPreconditioner
+BlockArrowheadSchurComplementPreconditioner
+WeightedPreconditioner
+CustomPreconditioner
 ```
 
 ## Internals
@@ -57,6 +72,19 @@ FieldNameTree
 FieldNameSet
 FieldNameDict
 field_vector_view
+concrete_field_vector
+lazy_main_diagonal
+lazy_mul
+LazySchurComplement
+field_matrix_solver_cache
+check_field_matrix_solver
+run_field_matrix_solver!
+solver_algorithm
+lazy_preconditioner
+preconditioner_cache
+check_preconditioner
+lazy_or_concrete_preconditioner
+apply_preconditioner
 ```
 
 ## Utilities

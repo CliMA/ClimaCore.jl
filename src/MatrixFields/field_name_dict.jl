@@ -44,11 +44,14 @@ struct FieldNameDict{T1, T2, K <: FieldNameSet{T1}, E <: NTuple{<:Any, T2}} <:
     ) where {T1, T2, N} =
         new{T1, T2, typeof(keys), typeof(entries)}(keys, entries)
 end
-FieldNameDict{T1, T2}(key_entry_pairs::Pair{<:T1, <:T2}...) where {T1, T2} =
-    FieldNameDict{T1, T2}(
-        FieldNameSet{T1}(unrolled_map(pair -> pair[1], key_entry_pairs)),
-        unrolled_map(pair -> pair[2], key_entry_pairs),
-    )
+function FieldNameDict{T1, T2}(
+    key_entry_pairs::Pair{<:T1, <:T2}...;
+    name_tree = nothing,
+) where {T1, T2}
+    keys = unrolled_map(pair -> pair[1], key_entry_pairs)
+    entries = unrolled_map(pair -> pair[2], key_entry_pairs)
+    return FieldNameDict{T1, T2}(FieldNameSet{T1}(keys, name_tree), entries)
+end
 FieldNameDict{T1}(args...) where {T1} = FieldNameDict{T1, Any}(args...)
 
 const FieldVectorView = FieldNameDict{FieldName, Fields.Field}
@@ -66,8 +69,24 @@ const FieldMatrixBroadcasted = FieldNameDict{
 dict_type(::FieldNameDict{T1, T2}) where {T1, T2} = FieldNameDict{T1, T2}
 
 function Base.show(io::IO, dict::FieldNameDict)
-    strings = map((key, value) -> "    $key => $value", pairs(dict))
-    print(io, "$(dict_type(dict))($(join(strings, ",\n")))")
+    print(io, "$(dict_type(dict)) with $(length(dict)) entries:")
+    for (key, entry) in dict
+        print(io, "\n  $key => ")
+        if entry isa Fields.Field
+            print(io, eltype(entry), "-valued Field:")
+            Fields._show_compact_field(io, entry, "    ", true)
+        elseif entry isa UniformScaling
+            if entry.λ == 1
+                print(io, "I")
+            elseif entry.λ == -1
+                print(io, "-I")
+            else
+                print(io, "$(entry.λ) * I")
+            end
+        else
+            print(io, entry)
+        end
+    end
 end
 
 Base.keys(dict::FieldNameDict) = dict.keys
@@ -118,18 +137,18 @@ function get_internal_entry(
     # See note above matrix_product_keys in field_name_set.jl for more details.
     T = eltype(eltype(entry))
     if name_pair == (@name(), @name())
-        # multiplication case 1, either argument
         entry
-    elseif broadcasted_has_field(T, name_pair[1]) && name_pair[2] == @name()
+    elseif name_pair[1] == name_pair[2]
+        # multiplication case 3 or 4, first argument
+        @assert T <: SingleValue && !broadcasted_has_field(T, name_pair[1])
+        entry
+    elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
         # multiplication case 2 or 4, second argument
         Base.broadcasted(entry) do matrix_row
             map(matrix_row) do matrix_row_entry
                 broadcasted_get_field(matrix_row_entry, name_pair[1])
             end
         end # Note: This assumes that the entry is in a FieldMatrixBroadcasted.
-    elseif T <: SingleValue && name_pair[1] == name_pair[2]
-        # multiplication case 3 or 4, first argument
-        entry
     else
         unsupported_internal_entry_error(entry, name_pair)
     end
@@ -168,13 +187,7 @@ end
 function check_diagonal_matrix(matrix, error_message_start = "The matrix")
     check_block_diagonal_matrix(matrix, error_message_start)
     non_diagonal_entry_pairs = unrolled_filter(pairs(matrix)) do pair
-        !(
-            pair[2] isa UniformScaling ||
-            pair[2] isa ColumnwiseBandMatrixField &&
-            eltype(pair[2]) <: DiagonalMatrixRow ||
-            pair[2] isa Base.AbstractBroadcasted &&
-            eltype(pair[2]) <: DiagonalMatrixRow
-        )
+        !(pair[2] isa UniformScaling || eltype(pair[2]) <: DiagonalMatrixRow)
     end
     non_diagonal_entry_keys =
         FieldMatrixKeys(unrolled_map(pair -> pair[1], non_diagonal_entry_pairs))
@@ -185,15 +198,85 @@ function check_diagonal_matrix(matrix, error_message_start = "The matrix")
 end
 
 """
-    field_vector_view(x)
+    lazy_main_diagonal(matrix)
 
-Constructs a `FieldVectorView` that contains all the top-level `Field`s in the
-`FieldVector` `x`.
+Creates an un-materialized `FieldMatrixBroadcasted` that extracts the main
+diagonal of the `FieldMatrix`/`FieldMatrixBroadcasted` `matrix`.
 """
-function field_vector_view(x)
-    top_level_keys = FieldVectorKeys(top_level_names(x), FieldNameTree(x))
-    entries = map(name -> get_field(x, name), top_level_keys)
-    return FieldVectorView(top_level_keys, entries)
+function lazy_main_diagonal(matrix)
+    diagonal_keys = matrix_diagonal_keys(keys(matrix))
+    entries = map(diagonal_keys) do key
+        entry = matrix[key]
+        entry isa UniformScaling || eltype(entry) <: DiagonalMatrixRow ?
+        entry :
+        Base.Broadcast.broadcasted(row -> DiagonalMatrixRow(row[0]), entry)
+    end
+    return FieldMatrixBroadcasted(diagonal_keys, entries)
+end
+
+"""
+    field_vector_view(x, [name_tree])
+
+Constructs a `FieldVectorView` that contains all of the `Field`s in the
+`FieldVector` `x`. The default `name_tree` is `FieldNameTree(x)`, but this can
+be modified if needed.
+"""
+function field_vector_view(x, name_tree = FieldNameTree(x))
+    keys_of_fields = FieldVectorKeys(names_of_fields(x, name_tree), name_tree)
+    entries = map(name -> get_field(x, name), keys_of_fields)
+    return FieldVectorView(keys_of_fields, entries)
+end
+names_of_fields(x, name_tree) =
+    unrolled_mapflatten(top_level_names(x)) do name
+        entry = get_field(x, name)
+        if entry isa Fields.Field
+            (name,)
+        elseif entry isa Fields.FieldVector
+            unrolled_map(names_of_fields(entry, name_tree)) do internal_name
+                append_internal_name(name, internal_name)
+            end
+        else
+            error("field_vector_view does not support entries of type \
+                   $(typeof(entry).name.name)")
+        end
+    end
+
+"""
+    concrete_field_vector(vector)
+
+Converts the `FieldVectorView` `vector` back into a `FieldVector`.
+"""
+concrete_field_vector(vector) =
+    concrete_field_vector_within_subtree(keys(vector).name_tree, vector)
+concrete_field_vector_within_subtree(tree, vector) =
+    if tree.name in keys(vector)
+        vector[tree.name]
+    else
+        subtrees = unrolled_filter(tree.subtrees) do subtree
+            unrolled_any(keys(vector).values) do key
+                is_child_name(key, subtree.name)
+            end
+        end
+        internal_names = unrolled_map(subtrees) do subtree
+            extract_first(extract_internal_name(subtree.name, tree.name))
+        end
+        internal_entries = unrolled_map(subtrees) do subtree
+            concrete_field_vector_within_subtree(subtree, vector)
+        end
+        entry_eltypes = unrolled_map(recursive_bottom_eltype, internal_entries)
+        T = promote_type(entry_eltypes...)
+        Fields.FieldVector{T}(NamedTuple{internal_names}(internal_entries))
+    end
+
+# This is required for type-stability as of Julia 1.9.
+if hasfield(Method, :recursion_relation)
+    dont_limit = (args...) -> true
+    for m in methods(names_of_fields)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(concrete_field_vector_within_subtree)
+        m.recursion_relation = dont_limit
+    end
 end
 
 ################################################################################
@@ -259,6 +342,19 @@ Base.Broadcast.broadcasted(
     ::typeof(identity),
     arg::FieldMatrixStyleType,
 ) = arg
+
+function Base.Broadcast.broadcasted(
+    ::FieldMatrixStyle,
+    ::typeof(zero),
+    vector_or_matrix::FieldMatrixStyleType,
+)
+    FieldNameDictType = dict_type(vector_or_matrix)
+    entries = unrolled_map(values(vector_or_matrix)) do entry
+        entry isa UniformScaling ? zero(entry) :
+        Base.Broadcast.broadcasted(value -> rzero(typeof(value)), entry)
+    end
+    return FieldNameDictType(keys(vector_or_matrix), entries)
+end
 
 function Base.Broadcast.broadcasted(
     ::FieldMatrixStyle,
