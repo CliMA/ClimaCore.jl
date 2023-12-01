@@ -617,7 +617,7 @@ const RectilinearSpectralElementGrid =
         poly_degree = 3,    
     )
 
-Constructor for a `SpectralElementGrid2D` on a `RectangleDomain`.
+Constructor for a `SpectralElementGrid2D` on a `RectangleDomain`, with `XYPoint` coordinates.
 """
 function RectilinearSpectralElementGrid(;
     x_min::Real, x_max::Real, x_elem, x_periodic::Bool=false, x_boundary_names = (:west, :east),

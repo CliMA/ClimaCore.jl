@@ -177,5 +177,8 @@ const ExtrudedSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid2D}
 const ExtrudedRectilinearSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid}
-const ExtrudedCubedSphereSpectralElementGrid3D =
+const ExtrudedCubedSphereSpectralElementGrid =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
+
+## to be deprecated
+const ExtrudedCubedSphereSpectralElementGrid3D = ExtrudedCubedSphereSpectralElementGrid

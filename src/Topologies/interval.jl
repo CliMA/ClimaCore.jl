@@ -165,3 +165,11 @@ function local_neighboring_elements(topology::AbstractIntervalTopology, elem)
     end
 end
 ghost_neighboring_elements(topology::AbstractIntervalTopology, elem) = ()
+
+
+## aliases
+const LineTopology1D =
+    IntervalTopology{<:ClimaComms.AbstractCommsContext, <:Meshes.XIntervalMesh}
+
+const ColumnTopology1D =
+    IntervalTopology{<:ClimaComms.AbstractCommsContext, <:Meshes.ZIntervalMesh}

@@ -163,15 +163,6 @@ FiniteDifferenceGrid(
     mesh::Meshes.IntervalMesh,
 ) = FiniteDifferenceGrid(Topologies.IntervalTopology(device, mesh))
 
-function FiniteDifferenceGrid(;
-    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
-    z_elem::Integer, z_stretch=Meshes.Uniform(),    
-)
-    mesh = Meshes.ZIntervalMesh(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch)
-    topology = Topologies.IntervalTopology(mesh)
-    FiniteDifferenceGrid(topology)
-end
-
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::FiniteDifferenceGrid) = grid.topology
@@ -215,3 +206,23 @@ local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellCenter) =
 local_geometry_data(grid::DeviceFiniteDifferenceGrid, ::CellFace) =
     grid.face_local_geometry
 global_geometry(grid::DeviceFiniteDifferenceGrid) = grid.global_geometry
+
+
+## aliases
+const ColumnGrid = FiniteDifferenceGrid{<:Topologies.ColumnTopology1D}
+
+"""
+    Grids.ColumnGrid(;
+        z_min, z_max,
+        context = ClimaComms.SingletonCommsContext()
+        )
+"""
+function ColumnGrid(;
+    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
+    z_elem::Integer, z_stretch=Meshes.Uniform(),
+    context = ClimaComms.SingletonCommsContext(),
+)
+    mesh = Meshes.ZIntervalMesh(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch)
+    topology = Topologies.IntervalTopology(mesh)
+    FiniteDifferenceGrid(topology)
+end
