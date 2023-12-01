@@ -35,6 +35,10 @@ struct IntervalDomain{CT, B} <: AbstractDomain where {
     boundary_names::B
 end
 
+const XIntervalDomain{FT, B} = IntervalDomain{Geometry.XPoint{FT}, B}
+const YIntervalDomain{FT, B} = IntervalDomain{Geometry.YPoint{FT}, B}
+const ZIntervalDomain{FT, B} = IntervalDomain{Geometry.ZPoint{FT}, B}
+
 isperiodic(domain::IntervalDomain) = isnothing(domain.boundary_names)
 boundary_names(domain::IntervalDomain) =
     isperiodic(domain) ? () : unique(domain.boundary_names)
@@ -79,6 +83,19 @@ The domain minimum along the z-direction.
 """
 z_min(domain::IntervalDomain) = domain.coord_min.z
 
+function XIntervalDomain(; x_min::Real, x_max::Real, x_periodic::Bool=false, x_boundary_names=(:west, :east))
+    x_min, x_max = promote(x_min, x_max)
+    IntervalDomain(Geometry.XPoint(x_min), Geometry.XPoint(x_max); periodic = x_periodic, boundary_names = x_boundary_names)
+end
+function YIntervalDomain(; y_min::Real, y_max::Real, y_periodic::Bool=false, y_boundary_names=(:south, :north))
+    y_min, y_max = promote(y_min, y_max)
+    IntervalDomain(Geometry.YPoint(y_min), Geometry.YPoint(y_max); periodic = y_periodic, boundary_names = y_boundary_names)
+end
+function ZIntervalDomain(; z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top))
+    z_min, z_max = promote(z_min, z_max)
+    IntervalDomain(Geometry.ZPoint(z_min), Geometry.ZPoint(z_max); periodic = z_periodic, boundary_names = z_boundary_names)
+end
+
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
 
@@ -108,6 +125,9 @@ struct RectangleDomain{I1 <: IntervalDomain, I2 <: IntervalDomain} <:
     interval1::I1
     interval2::I2
 end
+
+const XYRectangleDomain = RectangleDomain{<:XIntervalDomain, <:YIntervalDomain}
+
 Base.:*(interval1::IntervalDomain, interval2::IntervalDomain) =
     RectangleDomain(interval1, interval2)
 
@@ -144,6 +164,14 @@ function RectangleDomain(
     return interval1 * interval2
 end
 
+function XYRectangleDomain(;
+    x_min::Real, x_max::Real, x_periodic::Bool=false, x_boundary_names=(:west, :east),
+    y_min::Real, y_max::Real, y_periodic::Bool=false, y_boundary_names=(:south, :north),
+) 
+    x_domain = XIntervalDomain(; x_min, x_max, x_periodic, x_boundary_names)
+    y_domain = YIntervalDomain(; y_min, y_max, y_periodic, y_boundary_names)
+    RectangleDomain(x_domain, y_domain)
+end
 
 function Base.show(io::IO, domain::RectangleDomain)
     print(io, nameof(typeof(domain)), ": ")

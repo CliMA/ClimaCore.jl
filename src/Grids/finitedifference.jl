@@ -163,6 +163,15 @@ FiniteDifferenceGrid(
     mesh::Meshes.IntervalMesh,
 ) = FiniteDifferenceGrid(Topologies.IntervalTopology(device, mesh))
 
+function FiniteDifferenceGrid(;
+    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
+    z_elem::Integer, z_stretch=Meshes.Uniform(),    
+)
+    mesh = Meshes.ZIntervalMesh(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch)
+    topology = Topologies.IntervalTopology(mesh)
+    FiniteDifferenceGrid(topology)
+end
+
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::FiniteDifferenceGrid) = grid.topology

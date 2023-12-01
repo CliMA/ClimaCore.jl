@@ -176,6 +176,6 @@ const ExtrudedSpectralElementGrid2D =
 const ExtrudedSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid2D}
 const ExtrudedRectilinearSpectralElementGrid3D =
-    ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid2D}
+    ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid}
 const ExtrudedCubedSphereSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
