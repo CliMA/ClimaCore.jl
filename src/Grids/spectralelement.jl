@@ -605,7 +605,20 @@ Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
     )
 
 ## aliases
-#
+
+const LineSpectralElementGrid = SpectralElementGrid1D{<:Topologies.LineTopology1D}
+
+function LineSpectralElementGrid(;
+    x_min::Real, x_max::Real, x_periodic::Bool=false, x_boundary_names=(:west, :east),
+    x_elem::Integer, x_stretch=Uniform(),
+    poly_degree=3,
+    context=ClimaComms.SingletonCommsContext()
+)
+    mesh = XIntervalMesh(; x_min, x_max, x_periodic, x_boundary_names, x_elem, x_stretch)
+    topology = IntervalTopology(context, mesh)
+    quadrature_style = Quadratures.GLL{poly_degree+1}()
+    SpectralElementGrid1D(topology, quadrature_style)
+end
 const RectilinearSpectralElementGrid =
     SpectralElementGrid2D{<:Topologies.RectilinearTopology2D}
 
@@ -624,7 +637,6 @@ function RectilinearSpectralElementGrid(;
     y_min::Real, y_max::Real, y_elem, y_periodic::Bool=false, y_boundary_names = (:south, :north),
     context = ClimaComms.context(),
     poly_degree=3,
-    float_type = float(typeof(first(promote(x_min,x_max, y_min, y_max)))),
 )
     mesh = Meshes.RectilinearMesh(;
         x_min, x_max, y_min, y_max, x_periodic, x_boundary_names, x_elem, 
@@ -635,14 +647,13 @@ function RectilinearSpectralElementGrid(;
     SpectralElementGrid2D(topology, quadrature_style)
 end
 
-const CubedSphereSpectralElementGrid =
+const CubedSphereGrid =
     SpectralElementGrid2D{<:Topologies.CubedSphereTopology2D}
 
-function CubedSphereSpectralElementGrid(;
+function CubedSphereGrid(;
     radius::Real, panel_elem::Integer, cubed_sphere_type = Meshes.EquiangularCubedSphere,
     context = ClimaComms.context(),
     poly_degree = 3,
-    float_type = float(typeof(radius)),
     bubble = true,
 )
     domain = Domains.SphereDomain(radius)
@@ -655,4 +666,4 @@ end
 
 ## to be deprecated
 const RectilinearSpectralElementGrid2D = RectilinearSpectralElementGrid
-const CubedSphereSpectralElementGrid2D = CubedSphereSpectralElementGrid
+const CubedSphereSpectralElementGrid2D = CubedSphereGrid

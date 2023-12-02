@@ -175,10 +175,64 @@ const ExtrudedSpectralElementGrid2D =
     ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid1D}
 const ExtrudedSpectralElementGrid3D =
     ExtrudedFiniteDifferenceGrid{<:SpectralElementGrid2D}
-const ExtrudedRectilinearSpectralElementGrid3D =
+
+
+
+const PlaneGrid =
+    ExtrudedFiniteDifferenceGrid{<:LineSpectralElementGrid}
+function PlaneGrid(;
+    x_min::Real, x_max::Real, x_elem, x_periodic::Bool=false, x_boundary_names = (:west, :east),
+    poly_degree = 3,
+    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
+    z_elem::Integer, z_stretch=Meshes.Uniform(),
+    context = ClimaComms.context(),
+    )
+    h_grid = LineSpectralElementGrid(;
+        x_min, x_max, x_elem, x_periodic, x_boundary_names,
+        poly_degree,
+        context)
+    v_grid = ColumnGrid(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch, context=ClimaComms.SingletonCommsContext(ClimaComms.device(context)))
+    ExtrudedFiniteDifferenceGrid(h_grid, v_grid)
+end
+
+
+
+const BoxGrid =
     ExtrudedFiniteDifferenceGrid{<:RectilinearSpectralElementGrid}
-const ExtrudedCubedSphereSpectralElementGrid =
+
+function BoxGrid(;
+    x_min::Real, x_max::Real, x_elem, x_periodic::Bool=false, x_boundary_names = (:west, :east),
+    y_min::Real, y_max::Real, y_elem, y_periodic::Bool=false, y_boundary_names = (:south, :north),
+    poly_degree = 3,
+    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
+    z_elem::Integer, z_stretch=Meshes.Uniform(),
+    context = ClimaComms.context(),
+    )
+    h_grid = RectilinearSpectralElementGrid2D(;
+        x_min, x_max, x_elem, x_periodic, x_boundary_names,
+        y_min, y_max, y_elem, y_periodic, y_boundary_names,
+        poly_degree,
+        context)
+    v_grid = ColumnGrid(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch, context=ClimaComms.SingletonCommsContext(ClimaComms.device(context)))
+    ExtrudedFiniteDifferenceGrid(h_grid, v_grid)
+end
+
+
+const ExtrudedCubedSphereGrid =
     ExtrudedFiniteDifferenceGrid{<:CubedSphereSpectralElementGrid2D}
 
+function ExtrudedCubedSphereGrid(;
+    radius::Real, panel_elem::Integer, cubed_sphere_type = Meshes.EquiangularCubedSphere,
+    poly_degree = 3, bubble = true,
+    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
+    z_elem::Integer, z_stretch=Meshes.Uniform(),
+    context = ClimaComms.context(),
+)
+    h_grid = CubedSphereGrid(;radius, panel_elem, cubed_sphere_type, poly_degree, bubble, context)
+    v_grid = ColumnGrid(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch, context=ClimaComms.SingletonCommsContext(ClimaComms.device(context)))
+    ExtrudedFiniteDifferenceGrid(h_grid, v_grid)
+end
+
 ## to be deprecated
-const ExtrudedCubedSphereSpectralElementGrid3D = ExtrudedCubedSphereSpectralElementGrid
+const ExtrudedCubedSphereSpectralElementGrid3D = ExtrudedCubedSphereGrid
+const ExtrudedRectilinearSpectralElementGrid3D = BoxGrid

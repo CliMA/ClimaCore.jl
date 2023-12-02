@@ -455,9 +455,18 @@ function truncate_mesh(
     return IntervalMesh(new_domain, new_stretch; nelems = new_nelems)
 end
 
+## aliases
+
+const XIntervalMesh = IntervalMesh{<:Domains.XIntervalDomain}
+function XIntervalMesh(;
+    x_min::Real, x_max::Real, x_periodic::Bool=false, x_boundary_names=(:west, :east),
+    x_elem::Integer, x_stretch=Uniform(),
+)
+    domain = Domains.XIntervalDomain(; x_min, x_max, x_periodic, x_boundary_names)
+    mesh = IntervalMesh(domain, x_stretch; nelem=x_elem)
+end
 
 const ZIntervalMesh = IntervalMesh{<:Domains.ZIntervalDomain}
-
 function ZIntervalMesh(;
     z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
     z_elem::Integer, z_stretch=Uniform(),

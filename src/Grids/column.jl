@@ -21,14 +21,14 @@ end
 
 
 """
-    ColumnGrid(
+    ColumnViewGrid(
         full_grid :: ExtrudedFiniteDifferenceGrid, 
         colidx    :: ColumnIndex,
     )
 
 A view into a column of a `ExtrudedFiniteDifferenceGrid`. This can be used as an
 """
-struct ColumnGrid{
+struct ColumnViewGrid{
     G <: AbstractExtrudedFiniteDifferenceGrid,
     C <: ColumnIndex,
 } <: AbstractFiniteDifferenceGrid
@@ -40,14 +40,14 @@ local_geometry_type(::Type{ColumnGrid{G, C}}) where {G, C} =
     local_geometry_type(G)
 
 column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
-    ColumnGrid(grid, colidx)
+    ColumnViewGrid(grid, colidx)
 
-topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
-vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
+topology(colgrid::ColumnViewGrid) = vertical_topology(colgrid.full_grid)
+vertical_topology(colgrid::ColumnViewGrid) = vertical_topology(colgrid.full_grid)
 
-local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) = column(
+local_geometry_data(colgrid::ColumnViewGrid, staggering::Staggering) = column(
     local_geometry_data(colgrid.full_grid, staggering::Staggering),
     colgrid.colidx.ij...,
     colgrid.colidx.h,
 )
-global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
+global_geometry(colgrid::ColumnViewGrid) = global_geometry(colgrid.full_grid)
