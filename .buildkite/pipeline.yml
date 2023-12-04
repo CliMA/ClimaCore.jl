@@ -987,6 +987,15 @@ steps:
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
 
+      - label: ":computer: 3D Box limiters advection Gaussian bells GPU"
+        key: "gpu_box_advection_limiter_gaussian_bells"
+        command:
+          - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl gaussian_bells"
+        artifact_paths:
+          - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+        agents:
+          slurm_gpus: 1
+
       - label: ":computer: 3D Box limiters advection slotted spheres"
         key: "cpu_box_advection_limiter_slotted_spheres"
         command:

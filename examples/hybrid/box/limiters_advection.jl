@@ -45,7 +45,7 @@ convergence_rate(err, Δh) =
 # Function space setup
 function hvspace_3D(
     ::Type{FT};
-    device = ClimaComms.device(),
+    device,
     context = ClimaComms.SingletonCommsContext(device),
     xlim = (-2π, 2π),
     ylim = (-2π, 2π),
@@ -149,8 +149,11 @@ function init_state(cspace, fspace, test_case, params)
     # Initialize state
     ρ_init = ρ₀ .* ones(cspace)
     q_init = map(Fields.coordinate_field(cspace)) do coord
+        rd = (
+            Geometry.euclidean_distance(coord, bell_centers[1]),
+            Geometry.euclidean_distance(coord, bell_centers[2]),
+        )
         (; x, y, z) = coord
-        rd = Geometry.euclidean_distance.((coord,), bell_centers)
         if test_case isa SlottedSpheres
             if rd[1] <= r0 && abs(x - bell_centers[1].x) >= r0 / 6
                 return 1.0
@@ -187,7 +190,9 @@ end
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dirname = "box_advection_limiter_$(name(test_case))"
+device = ClimaComms.device()
+dev_suffix = device isa ClimaComms.CUDADevice ? "_gpu" : ""
+dirname = "box_advection_limiter_$(name(test_case))$dev_suffix"
 
 FT = Float64;
 params = LimAdvectionParams{FT}();
@@ -282,6 +287,7 @@ for (k, horz_ne) in enumerate(horz_ne_seq)
     # Set up 3D spatial domain - doubly periodic box
     cspace, fspace = hvspace_3D(
         FT;
+        device,
         Nij = Nij,
         xelems = horz_ne,
         yelems = horz_ne,
