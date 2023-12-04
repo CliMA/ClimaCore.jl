@@ -25,11 +25,21 @@ function Base.show(io::IO, space::AbstractSpectralElementSpace)
     if hasfield(typeof(grid(space)), :topology)
         # some reduced spaces (like slab space) do not have topology
         print(iio, " "^(indent + 2), "context: ")
-        Topologies.print_context(iio, grid(space).topology.context)
+        Topologies.print_context(iio, Spaces.topology(grid(space)).context)
         println(iio)
-        println(iio, " "^(indent + 2), "mesh: ", grid(space).topology.mesh)
+        println(
+            iio,
+            " "^(indent + 2),
+            "mesh: ",
+            Spaces.topology(grid(space)).mesh,
+        )
     end
-    print(iio, " "^(indent + 2), "quadrature: ", grid(space).quadrature_style)
+    print(
+        iio,
+        " "^(indent + 2),
+        "quadrature: ",
+        Spaces.quadrature_style(grid(space)),
+    )
 end
 
 
