@@ -419,7 +419,11 @@ function dss_local_ghost_kernel!(
     return nothing
 end
 
-function fill_send_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
+function fill_send_buffer!(
+    ::ClimaComms.CUDADevice,
+    dss_buffer::DSSBuffer;
+    synchronize = true,
+)
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     pperimeter_data = parent(perimeter_data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
@@ -432,7 +436,9 @@ function fill_send_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
             send_buf_idx,
             pperimeter_data,
         )
-        CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
+        if synchronize
+            CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
+        end
     end
     return nothing
 end

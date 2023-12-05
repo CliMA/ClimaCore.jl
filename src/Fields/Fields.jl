@@ -409,6 +409,51 @@ Spaces.weighted_dss_internal!(field::Field, dss_buffer) =
 Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
+"""
+    Spaces.weighted_dss!(field1 => ghost_buffer1, field2 => ghost_buffer2, ...)
+
+Call [`Spaces.weighted_dss!`](@ref) on multiple fields at once, overlapping
+communication as much as possible.
+"""
+function Spaces.weighted_dss!(
+    (field1, dss_buffer1)::Pair,
+    field_buffer_pairs::Pair...,
+)
+    device = ClimaComms.device(axes(field1))
+    Spaces.weighted_dss_prepare!(
+        field_values(field1),
+        axes(field1),
+        dss_buffer1,
+    )
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_prepare!(
+            field_values(field),
+            axes(field),
+            dss_buffer,
+        )
+    end
+
+    if device isa ClimaComms.CUDADevice
+        CUDA.synchronize(; blocking = true)
+    end
+
+    ClimaComms.start(dss_buffer1.graph_context)
+    for (field, dss_buffer) in field_buffer_pairs
+        ClimaComms.start(dss_buffer.graph_context)
+    end
+
+    Spaces.weighted_dss_internal!(field1, dss_buffer1)
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_internal!(field, dss_buffer)
+    end
+
+    Spaces.weighted_dss_ghost!(field1, dss_buffer1)
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_ghost!(field, dss_buffer)
+    end
+
+    return nothing
+end
 
 # Add definitions for backward compatibility
 Spaces.weighted_dss2!(

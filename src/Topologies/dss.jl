@@ -9,11 +9,14 @@ $(DocStringExtensions.FIELDS)
 struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
-    "Array for storing perimeter data"
+    """
+    Perimeter `DataLayout` object: typically a `VIFH{TT,Np}`, where `TT` is the
+    transformed type, and `Np` is the length of the perimeter
+    """
     perimeter_data::D
-    "send buffer"
+    "send buffer `AbstractVector{FT}`"
     send_data::A
-    "recv buffer"
+    "recv buffer `AbstractVector{FT}`"
     recv_data::A
     "indexing array for loading send buffer from `perimeter_data`"
     send_buf_idx::B
@@ -730,7 +733,7 @@ function dss_ghost!(
 end
 
 """
-    fill_send_buffer!(::ClimaComms.AbstractCPUDevice, dss_buffer::DSSBuffer)
+    fill_send_buffer!(::ClimaComms.AbstractCPUDevice, dss_buffer::DSSBuffer; synchronize=true)
 
 Loads the send buffer from `perimeter_data`. For unique ghost vertices, only data from the
 representative vertices which store result of "ghost local" DSS are loaded.
@@ -739,7 +742,8 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function fill_send_buffer!(
     ::ClimaComms.AbstractCPUDevice,
-    dss_buffer::DSSBuffer,
+    dss_buffer::DSSBuffer;
+    synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)

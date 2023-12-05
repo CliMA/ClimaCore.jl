@@ -123,8 +123,8 @@ end
     dss_buffer12 = Spaces.create_dss_buffer(y12)
     dss_buffer12_cpu = Spaces.create_dss_buffer(y12_cpu)
     # ensure physical velocity is continous across SE boundary for initial state
-    Spaces.weighted_dss!(y12, dss_buffer12)
-    Spaces.weighted_dss!(y12_cpu, dss_buffer12_cpu)
+    Spaces.weighted_dss!(y12 => dss_buffer12)
+    Spaces.weighted_dss!(y12_cpu => dss_buffer12_cpu)
 
     yinit12 = copy(y12)
     yinit12_cpu = copy(y12_cpu)

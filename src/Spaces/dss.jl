@@ -86,6 +86,37 @@ function weighted_dss!(
     weighted_dss_ghost!(data, space, dss_buffer)
 end
 
+function weighted_dss_prepare!(
+    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    space::Union{
+        Spaces.SpectralElementSpace2D,
+        Spaces.ExtrudedFiniteDifferenceSpace,
+    },
+    dss_buffer::DSSBuffer,
+)
+    assert_same_eltype(data, dss_buffer)
+    length(parent(data)) == 0 && return nothing
+    device = ClimaComms.device(topology(space))
+    hspace = horizontal_space(space)
+    dss_transform!(
+        device,
+        dss_buffer,
+        data,
+        local_geometry_data(space),
+        local_dss_weights(hspace),
+        Spaces.perimeter(hspace),
+        dss_buffer.perimeter_elems,
+    )
+    dss_local_ghost!(
+        device,
+        dss_buffer.perimeter_data,
+        Spaces.perimeter(hspace),
+        topology(hspace),
+    )
+    fill_send_buffer!(device, dss_buffer; synchronize = false)
+    return nothing
+end
+
 
 """
     weighted_dss_start!(
@@ -117,57 +148,29 @@ representative ghost vertices which store result of "ghost local" DSS are loaded
 
 4). Start DSS communication with neighboring processes
 """
-weighted_dss_start!(
-    data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
-    },
-    space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
-    dss_buffer::Union{DSSBuffer, Nothing},
-) = weighted_dss_start!(data, space, horizontal_space(space), dss_buffer)
-
-
-
 function weighted_dss_start!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     space::Union{
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
     },
-    hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,
 )
-    assert_same_eltype(data, dss_buffer)
-    length(parent(data)) == 0 && return nothing
-    device = ClimaComms.device(topology(hspace))
-    dss_transform!(
-        device,
-        dss_buffer,
-        data,
-        local_geometry_data(space),
-        local_dss_weights(hspace),
-        Spaces.perimeter(hspace),
-        dss_buffer.perimeter_elems,
-    )
-    dss_local_ghost!(
-        device,
-        dss_buffer.perimeter_data,
-        Spaces.perimeter(hspace),
-        topology(hspace),
-    )
-    fill_send_buffer!(device, dss_buffer)
+    device = ClimaComms.device(topology(space))
+    weighted_dss_prepare!(data, space, dss_buffer)
+    if device isa ClimaComms.CUDADevice
+        CUDA.synchronize(; blocking = true)
+    end
     ClimaComms.start(dss_buffer.graph_context)
     return nothing
 end
 
-weighted_dss_start!(
-    data,
-    space,
-    hspace::SpectralElementSpace1D,
-    dss_buffer::Nothing,
-) = nothing
+weighted_dss_start!(data, space, dss_buffer::Nothing) = nothing
+
+# TODO: deprecate
+weighted_dss_start!(data, space, hspace, dss_buffer) =
+    weighted_dss_start!(data, space, dss_buffer)
+
 
 """
     weighted_dss_internal!(
@@ -299,9 +302,9 @@ function weighted_dss_ghost!(
     dss_buffer::DSSBuffer,
 )
     assert_same_eltype(data, dss_buffer)
+    ClimaComms.finish(dss_buffer.graph_context)
     length(parent(data)) == 0 && return data
     device = ClimaComms.device(topology(hspace))
-    ClimaComms.finish(dss_buffer.graph_context)
     load_from_recv_buffer!(device, dss_buffer)
     dss_ghost!(
         device,
