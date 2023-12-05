@@ -89,6 +89,18 @@ function mapreduce_cuda(
     field::Field{V};
     weighting = false,
     opargs...,
+) where {S, V <: DataLayouts.DataF{S}}
+    data = Fields.field_values(field)
+    pdata = parent(data)
+    return DataLayouts.DataF{S}(Array(Array(f(pdata))[1, :]))
+end
+
+function mapreduce_cuda(
+    f,
+    op,
+    field::Field{V};
+    weighting = false,
+    opargs...,
 ) where {
     S,
     V <: Union{DataLayouts.VF{S}, DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
