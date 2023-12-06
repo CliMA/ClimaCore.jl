@@ -356,7 +356,15 @@ function Base.iterate(
 end
 
 ## aliases
-const RectilinearSpectralElementSpace2D =
-    SpectralElementSpace2D{<:Grids.RectilinearSpectralElementGrid2D}
-const CubedSphereSpectralElementSpace2D =
-    SpectralElementSpace2D{<:Grids.CubedSphereSpectralElementGrid2D}
+const RectilinearSpectralElementSpace2D = SpectralElementSpace2D{
+    <:Union{
+        Grids.RectilinearSpectralElementGrid2D,
+        Grids.LevelRectilinearSpectralElementGrid2D,
+    },
+}
+const CubedSphereSpectralElementSpace2D = SpectralElementSpace2D{
+    <:Union{
+        Grids.CubedSphereSpectralElementGrid2D,
+        Grids.LevelCubedSphereSpectralElementGrid2D,
+    },
+}

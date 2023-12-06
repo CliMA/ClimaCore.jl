@@ -32,3 +32,9 @@ global_geometry(levlgrid::LevelGrid) = global_geometry(levlgrid.full_grid)
 ## GPU compatibility
 Adapt.adapt_structure(to, grid::LevelGrid) =
     LevelGrid(Adapt.adapt(to, grid.full_grid), grid.level)
+
+## aliases
+const LevelCubedSphereSpectralElementGrid2D =
+    LevelGrid{<:ExtrudedCubedSphereSpectralElementGrid3D}
+const LevelRectilinearSpectralElementGrid2D =
+    LevelGrid{<:ExtrudedRectilinearSpectralElementGrid3D}
