@@ -86,6 +86,11 @@ function weighted_dss!(
     weighted_dss_ghost!(data, space, dss_buffer)
 end
 
+
+function weighted_dss_prepare!(data, space, dss_buffer::Nothing)
+    return nothing
+end
+
 function weighted_dss_prepare!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     space::Union{
