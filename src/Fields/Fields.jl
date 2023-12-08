@@ -436,10 +436,11 @@ function Spaces.weighted_dss!(
     if device isa ClimaComms.CUDADevice
         CUDA.synchronize(; blocking = true)
     end
-
-    ClimaComms.start(dss_buffer1.graph_context)
+    dss_buffer1 isa Topologies.DSSBuffer &&
+        ClimaComms.start(dss_buffer1.graph_context)
     for (field, dss_buffer) in field_buffer_pairs
-        ClimaComms.start(dss_buffer.graph_context)
+        dss_buffer isa Topologies.DSSBuffer &&
+            ClimaComms.start(dss_buffer.graph_context)
     end
 
     Spaces.weighted_dss_internal!(field1, dss_buffer1)
