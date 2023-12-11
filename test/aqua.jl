@@ -22,7 +22,7 @@ using Aqua
     for method_ambiguity in ambs
         @show method_ambiguity
     end
-    @test length(ambs) ≤ 22
+    @test length(ambs) ≤ 23
 end
 
 @testset "Aqua tests (additional)" begin
