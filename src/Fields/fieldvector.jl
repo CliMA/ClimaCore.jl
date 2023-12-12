@@ -260,7 +260,10 @@ LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(x))
 
 function LinearAlgebra.norm_sqr(x::FieldVector)
-    Base.sum(value -> LinearAlgebra.norm_sqr(backing_array(value)), _values(x))
+    value_norm_sqrs = UnrolledFunctions.unrolled_map(_values(x)) do value
+        LinearAlgebra.norm_sqr(backing_array(value))
+    end
+    return sum(value_norm_sqrs; init = zero(eltype(x)))
 end
 function LinearAlgebra.norm(x::FieldVector)
     sqrt(LinearAlgebra.norm_sqr(x))
@@ -268,19 +271,6 @@ end
 
 import ClimaComms
 
-ClimaComms.array_type(x::FieldVector) = _array_type(x)
-
-@inline _array_type(x::FieldVector) = _array_type(x, propertynames(x))
-@inline _array_type(x::FieldVector, pns::Tuple{}) = Any
-
-@inline _array_type(x::Field) = ClimaComms.array_type(x)
-@inline _array_type(x::FieldVector, sym::Symbol) =
-    _array_type(getproperty(x, sym))
-
-@inline _array_type(x::FieldVector, pns::Tuple{Symbol}) =
-    _array_type(getproperty(x, first(pns)))
-
-@inline _array_type(x::FieldVector, pns::Tuple) = promote_type(
-    _array_type(getproperty(x, first(pns))),
-    _array_type(x, Base.tail(pns)),
+ClimaComms.array_type(x::FieldVector) = promote_type(
+    UnrolledFunctions.unrolled_map(ClimaComms.array_type, _values(x))...,
 )

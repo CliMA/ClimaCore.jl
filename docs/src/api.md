@@ -4,6 +4,14 @@
 CurrentModule = ClimaCore
 ```
 
+## Utilities
+
+```@docs
+Utilities.PlusHalf
+Utilities.half
+Utilities.UnrolledFunctions
+```
+
 ## DataLayouts
 
 ```@docs

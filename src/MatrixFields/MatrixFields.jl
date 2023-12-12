@@ -62,13 +62,14 @@ import ..Spaces
 import ..Fields
 import ..Operators
 
+using ..Utilities.UnrolledFunctions
+
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
     TridiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
-export FieldVectorKeys, FieldVectorView, FieldVectorViewBroadcasted
-export FieldMatrixKeys, FieldMatrix, FieldMatrixBroadcasted
+export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
 export ⋅, FieldMatrixSolver, field_matrix_solve!
 
 # Types that are teated as single values when using matrix fields.
@@ -94,7 +95,6 @@ include("matrix_multiplication.jl")
 include("lazy_operators.jl")
 include("operator_matrices.jl")
 include("field2arrays.jl")
-include("unrolled_functions.jl")
 include("field_name.jl")
 include("field_name_set.jl")
 include("field_name_dict.jl")

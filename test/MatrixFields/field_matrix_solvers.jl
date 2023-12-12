@@ -9,15 +9,7 @@ include("matrix_field_test_utils.jl")
 # This broadcast must be wrapped in a function to be tested with @test_opt.
 field_matrix_mul!(b, A, x) = @. b = A * x
 
-function test_field_matrix_solver(;
-    test_name,
-    alg,
-    A,
-    b,
-    use_rel_error = false,
-    solve_inference_is_broken = false,
-    mul_is_allocating = false,
-)
+function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
     @testset "$test_name" begin
         x = similar(b)
         b_test = similar(b)
@@ -62,16 +54,11 @@ function test_field_matrix_solver(;
             AnyFrameModule(Base.CoreLogging),
         )
         @test_opt ignored_modules = ignored FieldMatrixSolver(alg, A, b)
-        @test_opt ignored_modules = ignored field_matrix_solve!(args...) skip =
-            solve_inference_is_broken
+        @test_opt ignored_modules = ignored field_matrix_solve!(args...)
         @test_opt ignored_modules = ignored field_matrix_mul!(b, A, x)
 
-        if !using_cuda
-            @test @allocated(field_matrix_solve!(args...)) == 0 broken =
-                solve_inference_is_broken
-            @test @allocated(field_matrix_mul!(b, A, x)) == 0 broken =
-                mul_is_allocating
-        end
+        using_cuda || @test @allocated(field_matrix_solve!(args...)) == 0
+        using_cuda || @test @allocated(field_matrix_mul!(b, A, x)) == 0
     end
 end
 
@@ -441,7 +428,6 @@ end
             (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
         ),
         b = b_dry_dycore,
-        solve_inference_is_broken = true, # TODO: Fix this.
     )
 
     test_field_matrix_solver(;
@@ -466,7 +452,6 @@ end
             (@name(f.u₃), @name(f.u₃)) => ᶠᶠmat3_u₃_u₃,
         ),
         b = b_moist_dycore_diagnostic_edmf,
-        solve_inference_is_broken = true, # TODO: Fix this.
     )
 
     test_field_matrix_solver(;
@@ -530,7 +515,5 @@ end
             (@name(f.sgsʲs.:(1).u₃), @name(f.sgsʲs.:(1).u₃)) => ᶠᶠmat3_u₃_u₃,
         ),
         b = b_moist_dycore_prognostic_edmf_prognostic_surface,
-        solve_inference_is_broken = true, # TODO: Fix this.
-        mul_is_allocating = true, # And also this.
     )
 end

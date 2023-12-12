@@ -73,9 +73,10 @@ is_child_name(
     ::FieldName{parent_name_chain},
 ) where {child_name_chain, parent_name_chain} =
     length(child_name_chain) >= length(parent_name_chain) &&
-    child_name_chain[1:length(parent_name_chain)] == parent_name_chain
+    unrolled_take(child_name_chain, Val(length(parent_name_chain))) ==
+    parent_name_chain
 
-names_are_overlapping(name1, name2) =
+is_overlapping_name(name1, name2) =
     is_child_name(name1, name2) || is_child_name(name2, name1)
 
 extract_internal_name(
@@ -83,8 +84,9 @@ extract_internal_name(
     parent_name::FieldName{parent_name_chain},
 ) where {child_name_chain, parent_name_chain} =
     is_child_name(child_name, parent_name) ?
-    FieldName(child_name_chain[(length(parent_name_chain) + 1):end]...) :
-    error("$child_name is not a child name of $parent_name")
+    FieldName(
+        unrolled_drop(child_name_chain, Val(length(parent_name_chain)))...,
+    ) : error("$child_name is not a child name of $parent_name")
 
 append_internal_name(
     ::FieldName{name_chain},
@@ -118,41 +120,38 @@ struct FieldNameTreeNode{V <: FieldName, S <: NTuple{<:Any, FieldNameTree}} <:
     subtrees::S
 end
 
-FieldNameTree(x) = make_subtree_at_name(x, @name())
-function make_subtree_at_name(x, name)
+FieldNameTree(x) = subtree_at_name(x, @name())
+function subtree_at_name(x, name)
     internal_names = top_level_names(get_field(x, name))
-    isempty(internal_names) && return FieldNameTreeLeaf(name)
-    subsubtrees = unrolled_map(internal_names) do internal_name
-        make_subtree_at_name(x, append_internal_name(name, internal_name))
+    return if isempty(internal_names)
+        FieldNameTreeLeaf(name)
+    else
+        subsubtrees_at_name = unrolled_map(internal_names) do internal_name
+            subtree_at_name(x, append_internal_name(name, internal_name))
+        end
+        FieldNameTreeNode(name, subsubtrees_at_name)
     end
-    return FieldNameTreeNode(name, subsubtrees)
 end
 
-is_valid_name(name, tree::FieldNameTreeLeaf) = name == tree.name
-is_valid_name(name, tree::FieldNameTreeNode) =
+is_valid_name(name, tree) =
     name == tree.name ||
-    is_child_name(name, tree.name) &&
+    tree isa FieldNameTreeNode &&
     unrolled_any(subtree -> is_valid_name(name, subtree), tree.subtrees)
 
 function child_names(name, tree)
+    is_valid_name(name, tree) || error("$name is not a valid name")
     subtree = get_subtree_at_name(name, tree)
-    subtree isa FieldNameTreeNode ||
-        error("FieldNameTree does not contain any child names for $name")
+    subtree isa FieldNameTreeNode || error("$name does not have child names")
     return unrolled_map(subsubtree -> subsubtree.name, subtree.subtrees)
 end
-get_subtree_at_name(name, tree::FieldNameTreeLeaf) =
-    name == tree.name ? tree :
-    error("FieldNameTree does not contain the name $name")
-get_subtree_at_name(name, tree::FieldNameTreeNode) =
+get_subtree_at_name(name, tree) =
     if name == tree.name
         tree
-    elseif is_valid_name(name, tree)
-        subtree_that_contains_name = unrolled_findonly(tree.subtrees) do subtree
-            is_child_name(name, subtree.name)
-        end
-        get_subtree_at_name(name, subtree_that_contains_name)
     else
-        error("FieldNameTree does not contain the name $name")
+        subtree = unrolled_findonly(tree.subtrees) do subtree
+            is_valid_name(name, subtree)
+        end
+        get_subtree_at_name(name, subtree)
     end
 
 ################################################################################
@@ -175,7 +174,7 @@ if hasfield(Method, :recursion_relation)
     for m in methods(wrapped_prop_names)
         m.recursion_relation = dont_limit
     end
-    for m in methods(make_subtree_at_name)
+    for m in methods(subtree_at_name)
         m.recursion_relation = dont_limit
     end
     for m in methods(is_valid_name)
