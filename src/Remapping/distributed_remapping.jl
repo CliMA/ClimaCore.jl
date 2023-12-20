@@ -151,7 +151,7 @@ function Remapper(target_hcoords, target_zcoords, space)
 
     interpolation_coeffs = map(local_target_hcoords) do hcoord
         quad = Spaces.quadrature_style(space)
-        quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
+        quad_points, _ = Quadratures.quadrature_points(FT, quad)
         return interpolation_weights(horz_mesh, hcoord, quad_points)
     end
 

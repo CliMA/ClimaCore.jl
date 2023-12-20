@@ -3,7 +3,7 @@ using ClimaComms
 using ClimaCoreVTK
 using IntervalSets
 import ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 mkpath(joinpath(OUTPUT_DIR, "series"))
@@ -15,7 +15,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
     mesh = Meshes.EquiangularCubedSphere(domain, 4)
     grid_topology =
         Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-    quad = Spaces.Quadratures.GLL{5}()
+    quad = Quadratures.GLL{5}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = Fields.coordinate_field(space)
 
@@ -140,7 +140,7 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology =
         Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     coords = Fields.coordinate_field(space)
@@ -164,7 +164,7 @@ end
     )
     hmesh = Meshes.IntervalMesh(hdomain, nelems = 10)
     htopology = Topologies.IntervalTopology(hmesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     hspace = Spaces.SpectralElementSpace1D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
@@ -202,7 +202,7 @@ end
 
     hmesh = Meshes.RectilinearMesh(hdomain, 4, 4)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
@@ -235,7 +235,7 @@ end
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, 4)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{5}()
+    quad = Quadratures.GLL{5}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
 

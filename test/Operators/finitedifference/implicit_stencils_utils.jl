@@ -3,7 +3,7 @@ using ClimaComms
 using Random: seed!
 seed!(1) # ensures reproducibility
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
+using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
 using ClimaCore: Operators
 import ClimaCore.Operators as OP
 
@@ -62,7 +62,7 @@ function get_space(::Type{FT}) where {FT}
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(

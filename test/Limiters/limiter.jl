@@ -6,7 +6,7 @@ import CUDA
 CUDA.allowscalar(false)
 using ClimaComms
 using ClimaCore:
-    DataLayouts, Fields, Domains, Geometry, Topologies, Meshes, Spaces, Limiters
+    DataLayouts, Fields, Domains, Geometry, Topologies, Meshes, Spaces, Limiters, Quadratures
 using ClimaCore.RecursiveApply
 using ClimaCore: slab
 using Test
@@ -44,7 +44,7 @@ function rectangular_mesh_space(
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     topology = Topologies.Topology2D(comms_ctx, mesh)
-    quad = Spaces.Quadratures.GLL{Nij}()
+    quad = Quadratures.GLL{Nij}()
     return Spaces.SpectralElementSpace2D(topology, quad)
 end
 
@@ -87,7 +87,7 @@ function hvspace_3D(
 
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
+    quad = Quadratures.GLL{Nij}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =

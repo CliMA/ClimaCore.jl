@@ -3,7 +3,7 @@ using StaticArrays
 using ClimaComms
 import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
+    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
 using LinearAlgebra, IntervalSets
 
 FT = Float64
@@ -13,7 +13,7 @@ hdomain = Domains.IntervalDomain(
 )
 
 Nq = 5
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 device = ClimaComms.CPUSingleThreaded()
 hmesh = Meshes.IntervalMesh(hdomain, nelems = 16)
 htopology =

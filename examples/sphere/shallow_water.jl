@@ -12,6 +12,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -539,7 +540,7 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
 
     domain = Domains.SphereDomain(test.params.R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     if usempi
         global_grid_topology =

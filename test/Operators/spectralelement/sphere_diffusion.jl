@@ -3,7 +3,7 @@ using StaticArrays, IntervalSets
 using ClimaComms
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry
+    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry, Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
 @testset "Scalar Poisson problem - ∇⋅∇ = f on the cubed-sphere" begin
@@ -27,7 +27,7 @@ using StaticArrays, IntervalSets, LinearAlgebra
         ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
         mesh,
     )
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     # Define eigensolution

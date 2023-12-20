@@ -10,6 +10,7 @@ import ClimaCore:
     Operators,
     Meshes,
     Spaces,
+    Quadratures,
     Topologies,
     Hypsography
 
@@ -58,7 +59,7 @@ function generate_base_spaces(
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
     # Generate Horizontal Space
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     if ndims == 2
         horzdomain = Domains.IntervalDomain(
             Geometry.XPoint{FT}(xlim[1]),
@@ -437,7 +438,7 @@ end
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
             horztopology = Topologies.IntervalTopology(horzmesh)
 
-            quad = Spaces.Quadratures.GLL{np + 1}()
+            quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile
@@ -491,7 +492,7 @@ end
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
             horztopology = Topologies.IntervalTopology(horzmesh)
 
-            quad = Spaces.Quadratures.GLL{np + 1}()
+            quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile

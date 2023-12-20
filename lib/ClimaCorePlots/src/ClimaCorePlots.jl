@@ -10,6 +10,7 @@ import ClimaCore:
     Geometry,
     Meshes,
     Operators,
+    Quadratures,
     Topologies,
     Spaces
 
@@ -26,11 +27,11 @@ RecipesBase.@recipe function f(
     nelems = Topologies.nlocalelems(space)
     QS = Spaces.quadrature_style(space)
     quad_name = Base.typename(typeof(QS)).name
-    Nq = Spaces.Quadratures.degrees_of_freedom(QS)
+    Nq = Quadratures.degrees_of_freedom(QS)
     Nu = max(interpolate, Nq)
     coord_field = Fields.coordinate_field(space)
 
-    lagrange_quad = Spaces.Quadratures.ClosedUniform{Nu}()
+    lagrange_quad = Quadratures.ClosedUniform{Nu}()
     dataspace =
         Spaces.SpectralElementSpace1D(Spaces.topology(space), lagrange_quad)
     interp = Operators.Interpolate(dataspace)
@@ -64,7 +65,7 @@ end
 RecipesBase.@recipe function f(space::Spaces.RectilinearSpectralElementSpace2D;)
     quad = Spaces.quadrature_style(space)
     quad_name = Base.typename(typeof(quad)).name
-    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+    dof = Quadratures.degrees_of_freedom(quad)
 
     topology = Spaces.topology(space)
     mesh = topology.mesh
@@ -103,7 +104,7 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
 
     quad = Spaces.quadrature_style(hspace)
     quad_name = Base.typename(typeof(quad)).name
-    dof = Spaces.Quadratures.degrees_of_freedom(quad)
+    dof = Quadratures.degrees_of_freedom(quad)
 
     coord_symbols = propertynames(coord_field)
     hcoord = vec(parent(coord_field)[:, :, 1, :])
@@ -207,7 +208,7 @@ function _slice_triplot(field, hinterpolate, ncolors)
 
     if hinterpolate ≥ 1
         Nu = hinterpolate
-        uquad = Spaces.Quadratures.ClosedUniform{Nu}()
+        uquad = Quadratures.ClosedUniform{Nu}()
         M_hcoord = Operators.matrix_interpolate(hcoord_field, uquad)
         M_vcoord = Operators.matrix_interpolate(vcoord_field, uquad)
         M_data = Operators.matrix_interpolate(field, uquad)
@@ -402,8 +403,8 @@ function _unfolded_pannel_matrix(field, interpolate)
     panel_size = mesh.ne
 
     quad_from = Spaces.quadrature_style(space)
-    quad_to = Spaces.Quadratures.Uniform{interpolate}()
-    Imat = Spaces.Quadratures.interpolation_matrix(FT, quad_to, quad_from)
+    quad_to = Quadratures.Uniform{interpolate}()
+    Imat = Quadratures.interpolation_matrix(FT, quad_to, quad_from)
 
     dof = interpolate
 
@@ -481,7 +482,7 @@ RecipesBase.@recipe function f(
     space = axes(field)
     nelem = Topologies.nlocalelems(Spaces.topology(space))
     quad_from = Spaces.quadrature_style(space)
-    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
+    dof_in = Quadratures.degrees_of_freedom(quad_from)
     quad_from_name = Base.typename(typeof(quad_from)).name
 
     # set the plot attributes
@@ -516,7 +517,7 @@ RecipesBase.@recipe function f(
     nlevel = Spaces.nlevels(space)
     nelem = Topologies.nlocalelems(Spaces.topology(space))
     quad_from = Spaces.quadrature_style(space)
-    dof_in = Spaces.Quadratures.degrees_of_freedom(quad_from)
+    dof_in = Quadratures.degrees_of_freedom(quad_from)
     quad_from_name = Base.typename(typeof(quad_from)).name
 
     # set the plot attributes

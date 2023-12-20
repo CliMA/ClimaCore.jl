@@ -13,6 +13,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -66,7 +67,7 @@ function shallow_water_dss_profiler(::Type{FT}, npoly) where {FT}
     R = FT(6.37122e6) # radius of earth
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     grid_topology =
         Topologies.Topology2D(context, mesh, Topologies.spacefillingcurve(mesh))
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)

@@ -4,7 +4,7 @@ using Test
 using Statistics: mean
 
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Limiters
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Limiters, Quadratures
 using ClimaTimeSteppers
 
 using Logging
@@ -200,7 +200,7 @@ function run_deformation_flow(use_limiter, fct_op)
     horz_domain = Domains.SphereDomain(R)
     horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)
     horz_topology = Topologies.Topology2D(context, horz_mesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horz_space = Spaces.SpectralElementSpace2D(horz_topology, quad)
 
     cent_space =

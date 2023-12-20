@@ -1,6 +1,6 @@
 using LinearAlgebra, IntervalSets
 using ClimaComms
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column
+import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Quadratures
 
 using Test
 
@@ -13,7 +13,7 @@ using Test
         domain = Domains.SphereDomain(radius)
         mesh = Meshes.EquiangularCubedSphere(domain, ne)
         topology = Topologies.Topology2D(context, mesh)
-        quad = Spaces.Quadratures.GLL{Nq}()
+        quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
 
         # surface area
@@ -66,7 +66,7 @@ end
             domain = Domains.SphereDomain(radius)
             mesh = Meshes.EquiangularCubedSphere(domain, ne)
             topology = Topologies.Topology2D(context, mesh)
-            quad = Spaces.Quadratures.GLL{Nq}()
+            quad = Quadratures.GLL{Nq}()
             no_bubble_space = Spaces.SpectralElementSpace2D(topology, quad)
             # check surface area
             @test sum(ones(no_bubble_space)) ≈ FT(4pi * radius^2) rtol =
@@ -103,7 +103,7 @@ end
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =

@@ -9,6 +9,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     Remapping,
     Hypsography
@@ -44,7 +45,7 @@ if !(device isa ClimaComms.CUDADevice)
             periodic = true,
         )
 
-        quad = Spaces.Quadratures.GLL{4}()
+        quad = Quadratures.GLL{4}()
         horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
         horztopology = Topologies.IntervalTopology(
             ClimaComms.SingletonCommsContext(device),
@@ -140,7 +141,7 @@ end
         x2periodic = true,
     )
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),
@@ -276,7 +277,7 @@ end
         x2periodic = true,
     )
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),
@@ -408,7 +409,7 @@ end
 
     horzdomain = Domains.SphereDomain(1e6)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 6)
     horztopology = Topologies.Topology2D(context, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

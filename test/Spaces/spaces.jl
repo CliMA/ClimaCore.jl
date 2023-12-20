@@ -9,6 +9,7 @@ import ClimaCore:
     Meshes,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     DataLayouts,
     Geometry,
@@ -28,8 +29,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
     topology = Topologies.IntervalTopology(mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace1D(topology, quad)
 
@@ -95,7 +96,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = 5)
     horztopology = Topologies.IntervalTopology(horzmesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
 
     hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
     # Extrusion
@@ -154,7 +155,7 @@ end
     domain = Domains.RectangleDomain(x_domain, y_domain)
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
-    quad = Spaces.Quadratures.GL{1}()
+    quad = Quadratures.GL{1}()
     htopology = Topologies.Topology2D(context, hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -188,8 +189,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, 1, 1)
     grid_topology = Topologies.Topology2D(context, mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     @test repr(space) == """
@@ -259,7 +260,7 @@ end
     )
     n1, n2 = 2, 2
     Nq = 5
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -304,8 +305,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
@@ -384,8 +385,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{Nij}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

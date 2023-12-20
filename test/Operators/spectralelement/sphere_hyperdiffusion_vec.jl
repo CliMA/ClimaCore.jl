@@ -3,7 +3,7 @@ using ClimaComms
 using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry
+    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry, Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
 include("sphere_sphericalharmonics.jl")
@@ -46,7 +46,7 @@ end
         mesh,
     )
 
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = Fields.coordinate_field(space)
 
@@ -94,7 +94,7 @@ convergence_rate(err, Δh) =
                 mesh,
             )
 
-            quad = Spaces.Quadratures.GLL{Nq}()
+            quad = Quadratures.GLL{Nq}()
             space = Spaces.SpectralElementSpace2D(grid_topology, quad)
             coords = Fields.coordinate_field(space)
 

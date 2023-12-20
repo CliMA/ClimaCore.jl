@@ -2,7 +2,7 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters, Quadratures
 
 using OrdinaryDiffEq, Test
 
@@ -102,7 +102,7 @@ for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     grid_topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space =
         Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble = true)
 

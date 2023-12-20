@@ -24,7 +24,7 @@ See also:
 """
 function add_numerical_flux_internal!(fn, dydt, args...)
     space = axes(dydt)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
@@ -100,7 +100,7 @@ end
 
 function add_numerical_flux_boundary!(fn, dydt, args...)
     space = axes(dydt)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
 
     for (iboundary, boundarytag) in

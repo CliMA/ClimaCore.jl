@@ -1,13 +1,13 @@
 
 using ClimaComms
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
 using CUDA, BenchmarkTools
 
 hdomain = Domains.SphereDomain(6.37122e6)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, 30)
 htopology = Topologies.Topology2D(hmesh)
-hspace = Spaces.SpectralElementSpace2D(htopology, Spaces.Quadratures.GLL{4}())
+hspace = Spaces.SpectralElementSpace2D(htopology, Quadratures.GLL{4}())
 
 vdomain = Domains.IntervalDomain(
     Geometry.ZPoint(0.0),

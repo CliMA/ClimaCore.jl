@@ -18,7 +18,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -56,8 +56,8 @@ end
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
-    #quad = ClimaCore.Spaces.Quadratures.GLL{Nq}()
-    quad = ClimaCore.Spaces.Quadratures.ClosedUniform{Nq + 1}()
+    #quad = ClimaCore.Quadratures.GLL{Nq}()
+    quad = ClimaCore.Quadratures.ClosedUniform{Nq + 1}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -82,7 +82,7 @@ end
     )
     mesh = ClimaCore.Meshes.IntervalMesh(domain, nelems = 32)
     topology = ClimaCore.Topologies.IntervalTopology(mesh)
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     horz_space = ClimaCore.Spaces.SpectralElementSpace1D(topology, quad)
     horz_coords = ClimaCore.Fields.coordinate_field(horz_space)
 

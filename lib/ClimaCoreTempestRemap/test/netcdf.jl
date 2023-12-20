@@ -1,7 +1,7 @@
 import ClimaCore
 using ClimaComms
 using ClimaCore:
-    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Hypsography
+    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Hypsography, Quadratures
 using NCDatasets
 using TempestRemap_jll
 using Test
@@ -17,7 +17,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
     coords = Fields.coordinate_field(space)
 
@@ -85,7 +85,7 @@ end
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
@@ -168,7 +168,7 @@ end
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
@@ -303,7 +303,7 @@ end
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
@@ -411,7 +411,7 @@ end
     domain = Domains.RectangleDomain(x_domain, y_domain)
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
-    quad = Spaces.Quadratures.GL{1}()
+    quad = Quadratures.GL{1}()
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 

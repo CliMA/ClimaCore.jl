@@ -1,11 +1,12 @@
 using Base.Threads
 import ClimaCore.Spaces
+import ClimaCore.Quadratures
 using CUDA
 
 function spaceconfig(::Val{Nq}, ::Type{DA} = Array) where {Nq, DA}
-    quad = Spaces.Quadratures.GLL{Nq}()
-    ξ, W = Spaces.Quadratures.quadrature_points(Float64, quad)
-    D = Spaces.Quadratures.differentiation_matrix(Float64, quad)
+    quad = Quadratures.GLL{Nq}()
+    ξ, W = Quadratures.quadrature_points(Float64, quad)
+    D = Quadratures.differentiation_matrix(Float64, quad)
     return (DA(ξ), DA(W), DA(D))
 end
 

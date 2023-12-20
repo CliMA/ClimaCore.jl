@@ -4,7 +4,7 @@ using ClimaComms
 using CUDA
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Quadratures
 
 @testset "Distributed extruded CUDA space" begin
     # initializing MPI
@@ -35,7 +35,7 @@ import ClimaCore:
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
     space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 

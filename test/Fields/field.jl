@@ -8,7 +8,7 @@ import ClimaCore
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
+    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry, Quadratures
 
 using LinearAlgebra: norm
 using Statistics: mean
@@ -35,7 +35,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     grid_topology =
         Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
+    quad = Quadratures.GLL{Nij}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     return space
 end
@@ -341,7 +341,7 @@ end
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
     topology_xy = Topologies.Topology2D(context, mesh_xy)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
@@ -680,7 +680,7 @@ end
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
     topology_xy = Topologies.Topology2D(context, mesh_xy)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
@@ -828,7 +828,7 @@ end
         TU.bycolumnable(space) || continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
-        Nq = Spaces.Quadratures.degrees_of_freedom(
+        Nq = Quadratures.degrees_of_freedom(
             Spaces.quadrature_style(hspace),
         )
         if nameof(typeof(space)) == :SpectralElementSpace1D

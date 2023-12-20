@@ -5,7 +5,7 @@ import Random: seed!
 
 import ClimaComms
 import ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Hypsography, Spaces, Fields
+    Geometry, Domains, Meshes, Topologies, Hypsography, Spaces, Fields, Quadratures
 using ClimaCore.MatrixFields
 
 # Test that an expression is true and that it is also type-stable.
@@ -195,7 +195,7 @@ function test_spaces(::Type{FT}) where {FT}
     hdomain = Domains.SphereDomain(FT(10))
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(comms_ctx, hmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(FT(0)),

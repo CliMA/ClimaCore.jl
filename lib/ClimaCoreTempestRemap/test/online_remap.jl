@@ -1,6 +1,6 @@
 import ClimaCore
 using ClimaComms
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
+using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
 using NCDatasets
 using Test
 using ClimaCoreTempestRemap
@@ -61,7 +61,7 @@ end
     )
     space_i = Spaces.SpectralElementSpace2D(
         topology_i,
-        Spaces.Quadratures.GLL{nq_i}(),
+        Quadratures.GLL{nq_i}(),
     )
     coords_i = Fields.coordinate_field(space_i)
 
@@ -73,7 +73,7 @@ end
     )
     space_o = Spaces.SpectralElementSpace2D(
         topology_o,
-        Spaces.Quadratures.GLL{nq_o}(),
+        Quadratures.GLL{nq_o}(),
     )
     coords_o = Fields.coordinate_field(space_o)
 

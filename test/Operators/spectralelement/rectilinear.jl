@@ -3,7 +3,7 @@ using StaticArrays
 using ClimaComms
 import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
+    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
 using LinearAlgebra, IntervalSets
 
 FT = Float64
@@ -15,7 +15,7 @@ domain = Domains.RectangleDomain(
 )
 
 Nq = 5
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 device = ClimaComms.CPUSingleThreaded()
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 grid_topology =
@@ -36,7 +36,7 @@ ts_test_setup = (ts_topology, ts_space, ts_coords)
 
     for (topology, space, coords) in (grid_test_setup, ts_test_setup)
         INq = 9
-        Iquad = Spaces.Quadratures.GLL{INq}()
+        Iquad = Quadratures.GLL{INq}()
         Ispace = Spaces.SpectralElementSpace2D(topology, Iquad)
 
         I = Operators.Interpolate(Ispace)

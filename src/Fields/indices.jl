@@ -67,7 +67,7 @@ function bycolumn(
     ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         for h in 1:Nh
             for i in 1:Nq
@@ -83,7 +83,7 @@ function bycolumn(
     ::ClimaComms.CPUMultiThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for i in 1:Nq
@@ -99,7 +99,7 @@ function bycolumn(
     ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         for h in 1:Nh
             for j in 1:Nq, i in 1:Nq
@@ -115,7 +115,7 @@ function bycolumn(
     ::ClimaComms.CPUMultiThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nq, i in 1:Nq
@@ -152,12 +152,12 @@ ncolumns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
 
 function ncolumns(space::Spaces.SpectralElementSpace1D)
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     return Nh * Nq
 end
 function ncolumns(space::Spaces.SpectralElementSpace2D)
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     return Nh * Nq * Nq
 end
 

@@ -2,7 +2,7 @@ using Test
 using StaticArrays
 using ClimaComms, ClimaCore
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
+    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
 using LinearAlgebra, IntervalSets
 using CUDA
 
@@ -15,7 +15,7 @@ domain = Domains.RectangleDomain(
 )
 
 Nq = 5
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 
 grid_mesh = Meshes.RectilinearMesh(domain, 17, 16)
 

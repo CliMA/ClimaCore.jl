@@ -5,12 +5,12 @@ using LinearAlgebra, StaticArrays
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 import ClimaCore.Geometry: ⊗
@@ -55,7 +55,7 @@ function hvspace_3D(
     vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelem)
     vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =

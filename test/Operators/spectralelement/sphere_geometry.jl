@@ -1,7 +1,7 @@
 using LinearAlgebra, IntervalSets
 using ClimaComms
 import ClimaCore:
-    Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields
+    Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields, Quadratures
 
 using Test
 
@@ -31,7 +31,7 @@ end
             ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
             mesh,
         )
-        quad = Spaces.Quadratures.GLL{Nq}()
+        quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
         @test sum(ones(space)) ≈ 4pi * radius^2 rtol = 1e-3

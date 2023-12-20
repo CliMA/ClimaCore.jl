@@ -11,6 +11,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts,
     RecursiveApply
@@ -73,7 +74,7 @@ function initialize_mwe(device, ::Type{FT}) where {FT}
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
 
     # vertical space

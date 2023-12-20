@@ -11,6 +11,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -32,7 +33,7 @@ include("reduction_cuda_utils.jl")
     R = FT(6.37122e6) # radius of earth
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     grid_topology_cpu = Topologies.Topology2D(context_cpu, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -112,7 +113,7 @@ end
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
     h_space_cpu = Spaces.SpectralElementSpace2D(horizontal_topology_cpu, quad)
 
@@ -276,7 +277,7 @@ end
     mesh = Meshes.RectilinearMesh(domain, 3, 3)
     topology = Topologies.Topology2D(comms_ctx, mesh)
     topology_cpu = Topologies.Topology2D(comms_ctx_cpu, mesh)
-    quad = Spaces.Quadratures.GLL{5}()
+    quad = Quadratures.GLL{5}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
     space_cpu = Spaces.SpectralElementSpace2D(topology_cpu, quad)
     coords = Fields.coordinate_field(space)
