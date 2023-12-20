@@ -5,7 +5,15 @@ import ClimaCore
 import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry, Quadratures
+    Fields,
+    slab,
+    Domains,
+    Topologies,
+    Meshes,
+    Operators,
+    Spaces,
+    Geometry,
+    Quadratures
 
 using FastBroadcast
 using LinearAlgebra: norm

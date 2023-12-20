@@ -6,7 +6,8 @@ using IntervalSets
 
 import ClimaCore
 
-import ClimaCore: Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
+import ClimaCore:
+    Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
 import ClimaCore.Domains: Geometry
 
 # We need to pull these broadcasted expressions out as

@@ -6,7 +6,14 @@ import ClimaCore
 ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Quadratures
 
 import ClimaCore.Utilities: half
 import LinearAlgebra: norm_sqr

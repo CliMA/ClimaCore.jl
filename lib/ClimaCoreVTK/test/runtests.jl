@@ -3,7 +3,14 @@ using ClimaComms
 using ClimaCoreVTK
 using IntervalSets
 import ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Quadratures
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 mkpath(joinpath(OUTPUT_DIR, "series"))

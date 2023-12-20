@@ -2,7 +2,14 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Quadratures
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 import ClimaCore.Geometry: ⊗
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33

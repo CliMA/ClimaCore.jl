@@ -1,6 +1,7 @@
 using LinearAlgebra, IntervalSets
 using ClimaComms
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Quadratures
+import ClimaCore:
+    Domains, Topologies, Meshes, Spaces, Geometry, column, Quadratures
 
 using Test
 

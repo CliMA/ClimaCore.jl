@@ -2,7 +2,15 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters, Quadratures
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Limiters,
+    Quadratures
 
 using OrdinaryDiffEq, Test
 

@@ -1,5 +1,6 @@
 import ClimaCore
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Operators, Quadratures
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Operators, Quadratures
 using NCDatasets
 using ClimaCoreTempestRemap
 

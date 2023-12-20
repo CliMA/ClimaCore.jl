@@ -2,7 +2,14 @@ using Test
 using StaticArrays
 using ClimaComms, ClimaCore
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
+    Geometry,
+    Fields,
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Operators,
+    Quadratures
 using LinearAlgebra, IntervalSets
 using CUDA
 using OrdinaryDiffEq

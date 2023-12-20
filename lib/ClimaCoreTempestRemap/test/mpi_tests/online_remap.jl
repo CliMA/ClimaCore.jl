@@ -1,7 +1,8 @@
 import ClimaCore
 import ClimaCoreTempestRemap as CCTR
 using ClimaComms
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
 using Test
 # use these packages for manual inspection of solutions
 # using Plots

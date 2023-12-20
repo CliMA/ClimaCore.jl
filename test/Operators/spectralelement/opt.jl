@@ -4,7 +4,14 @@ using ClimaComms
 using LinearAlgebra, IntervalSets
 
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
+    Geometry,
+    Fields,
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Operators,
+    Quadratures
 
 
 # We need to pull these broadcasted expressions out as

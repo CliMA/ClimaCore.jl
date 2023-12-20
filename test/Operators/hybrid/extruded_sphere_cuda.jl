@@ -6,7 +6,15 @@ using LinearAlgebra, IntervalSets
 using CUDA
 using ClimaComms, ClimaCore
 import ClimaCore:
-    Domains, Topologies, Meshes, Spaces, Geometry, column, Fields, Operators, Quadratures
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Geometry,
+    column,
+    Fields,
+    Operators,
+    Quadratures
 using Test
 
 function get_space(context)

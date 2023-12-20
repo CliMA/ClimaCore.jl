@@ -3,7 +3,14 @@ using StaticArrays, IntervalSets
 using ClimaComms
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry, Quadratures
+    Fields,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Operators,
+    Geometry,
+    Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
 @testset "Scalar Poisson problem - ∇⋅∇ = f on the cubed-sphere" begin

@@ -4,7 +4,14 @@ using ClimaComms
 using CUDA
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Quadratures
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 @testset "Distributed extruded CUDA space" begin
     # initializing MPI

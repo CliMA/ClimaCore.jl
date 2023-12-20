@@ -5,7 +5,8 @@ import ClimaCore
 # To avoid JET failures in the error message
 ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
 
 FT = Float32
 radius = FT(1e7)

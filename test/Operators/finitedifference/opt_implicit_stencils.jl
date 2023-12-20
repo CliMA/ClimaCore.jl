@@ -2,7 +2,8 @@ using Test
 using ClimaComms
 using Random: seed!
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
 using ClimaCore: Operators
 
 struct CurriedTwoArgOperator{O, A}

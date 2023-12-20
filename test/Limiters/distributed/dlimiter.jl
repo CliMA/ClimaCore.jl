@@ -1,5 +1,13 @@
 using ClimaCore:
-    DataLayouts, Fields, Domains, Geometry, Topologies, Meshes, Spaces, Limiters, Quadratures
+    DataLayouts,
+    Fields,
+    Domains,
+    Geometry,
+    Topologies,
+    Meshes,
+    Spaces,
+    Limiters,
+    Quadratures
 using ClimaCore.RecursiveApply
 using ClimaCore: slab
 using Test

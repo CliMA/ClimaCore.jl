@@ -3,7 +3,14 @@ using StaticArrays
 using ClimaComms
 import ClimaCore.DataLayouts: IJFH, VF
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators, Quadratures
+    Geometry,
+    Fields,
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Operators,
+    Quadratures
 using LinearAlgebra, IntervalSets
 
 FT = Float64

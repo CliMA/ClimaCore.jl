@@ -104,9 +104,7 @@ an unstuctured mesh of linear cells, suitable for passing to
 `vtk_grid`.
 """
 function vtk_cells_linear(gridspace::Spaces.SpectralElementSpace2D)
-    Nq = Quadratures.degrees_of_freedom(
-        Spaces.quadrature_style(gridspace),
-    )
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
     Nh = Topologies.nlocalelems(gridspace)
     ind = LinearIndices((1:Nq, 1:Nq, 1:Nh))
     cells = [
@@ -226,20 +224,14 @@ This generally does two things:
  - Modifies the vertical space to be on the centers.
 """
 function vtk_cell_space(gridspace::Spaces.SpectralElementSpace1D)
-    @assert Spaces.quadrature_style(gridspace) isa
-            Quadratures.ClosedUniform
-    Nq = Quadratures.degrees_of_freedom(
-        Spaces.quadrature_style(gridspace),
-    )
+    @assert Spaces.quadrature_style(gridspace) isa Quadratures.ClosedUniform
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
     quad = Quadratures.Uniform{Nq - 1}()
     return Spaces.SpectralElementSpace1D(Spaces.topology(gridspace), quad)
 end
 function vtk_cell_space(gridspace::Spaces.SpectralElementSpace2D)
-    @assert Spaces.quadrature_style(gridspace) isa
-            Quadratures.ClosedUniform
-    Nq = Quadratures.degrees_of_freedom(
-        Spaces.quadrature_style(gridspace),
-    )
+    @assert Spaces.quadrature_style(gridspace) isa Quadratures.ClosedUniform
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
     quad = Quadratures.Uniform{Nq - 1}()
     return Spaces.SpectralElementSpace2D(Spaces.topology(gridspace), quad)
 end

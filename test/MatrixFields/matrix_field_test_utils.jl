@@ -5,7 +5,14 @@ import Random: seed!
 
 import ClimaComms
 import ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Hypsography, Spaces, Fields, Quadratures
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Hypsography,
+    Spaces,
+    Fields,
+    Quadratures
 using ClimaCore.MatrixFields
 
 # Test that an expression is true and that it is also type-stable.

@@ -4,7 +4,15 @@ using Test
 using Statistics: mean
 
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Limiters, Quadratures
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Limiters,
+    Quadratures
 using ClimaTimeSteppers
 
 using Logging

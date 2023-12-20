@@ -3,7 +3,14 @@ using ClimaComms
 using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry, Quadratures
+    Fields,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Operators,
+    Geometry,
+    Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
 include("sphere_sphericalharmonics.jl")

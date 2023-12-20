@@ -1,7 +1,14 @@
 
 using ClimaComms
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Quadratures
 using CUDA, BenchmarkTools
 
 hdomain = Domains.SphereDomain(6.37122e6)

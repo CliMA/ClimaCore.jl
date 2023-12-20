@@ -3,7 +3,8 @@ using ClimaComms
 using Random: seed!
 seed!(1) # ensures reproducibility
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
 using ClimaCore: Operators
 import ClimaCore.Operators as OP
 

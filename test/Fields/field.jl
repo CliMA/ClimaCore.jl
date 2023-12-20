@@ -8,7 +8,15 @@ import ClimaCore
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry, Quadratures
+    Fields,
+    slab,
+    Domains,
+    Topologies,
+    Meshes,
+    Operators,
+    Spaces,
+    Geometry,
+    Quadratures
 
 using LinearAlgebra: norm
 using Statistics: mean
@@ -828,9 +836,7 @@ end
         TU.bycolumnable(space) || continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
-        Nq = Quadratures.degrees_of_freedom(
-            Spaces.quadrature_style(hspace),
-        )
+        Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
         if nameof(typeof(space)) == :SpectralElementSpace1D
             @test Fields.ncolumns(space) == Nh * Nq
         else

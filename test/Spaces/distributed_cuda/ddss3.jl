@@ -4,7 +4,14 @@ using Logging
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Quadratures
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 using ClimaComms
 using CUDA
