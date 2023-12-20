@@ -172,9 +172,9 @@ steps:
   - group: "Unit: Spaces"
     steps:
 
-      - label: "Unit: quadrature"
+      - label: "Unit: Quadratures"
         key: unit_quadrature
-        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/quadrature.jl"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Quadratures/Quadratures.jl"
 
       - label: "Unit: spaces"
         key: unit_spaces
