@@ -4,7 +4,14 @@ using Logging
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 using ClimaComms
 using CUDA
@@ -76,7 +83,7 @@ partition numbers
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     topology = Topologies.Topology2D(context, mesh, Meshes.elements(mesh))
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == (pid == 1 ? 6 : 5)

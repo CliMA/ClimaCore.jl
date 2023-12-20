@@ -18,6 +18,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts,
     InputOutput
@@ -523,7 +524,7 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
 
     domain = Domains.SphereDomain(test.params.R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     f = set_coriolis_parameter(space, test)

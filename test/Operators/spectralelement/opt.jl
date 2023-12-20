@@ -4,7 +4,14 @@ using ClimaComms
 using LinearAlgebra, IntervalSets
 
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
+    Geometry,
+    Fields,
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Operators,
+    Quadratures
 
 
 # We need to pull these broadcasted expressions out as
@@ -137,7 +144,7 @@ end
             )
 
             Nq = 3
-            quad = Spaces.Quadratures.GLL{Nq}()
+            quad = Quadratures.GLL{Nq}()
             mesh = Meshes.RectilinearMesh(domain, 3, 3)
 
             topology = Topologies.Topology2D(
@@ -158,7 +165,7 @@ end
                 )
 
             INq = 4
-            Iquad = Spaces.Quadratures.GLL{INq}()
+            Iquad = Quadratures.GLL{INq}()
             Ispace =
                 Spaces.SpectralElementSpace2D(Spaces.topology(space), Iquad)
 
@@ -206,7 +213,7 @@ end
                 horzmesh,
             )
 
-            quad = Spaces.Quadratures.GLL{npoly + 1}()
+            quad = Quadratures.GLL{npoly + 1}()
             horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
             hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(

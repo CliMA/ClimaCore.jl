@@ -84,7 +84,7 @@ column_face_space =
 # These nodes are chosen by a particular *quadrature rule*, which allows us to integrate functions over the domain. The only supported choice for now is a Gauss-Legendre-Lobatto rule.
 
 ## Gauss-Legendre-Lobatto quadrature with 4 nodes in each direction, so 16 in each element
-quad = ClimaCore.Spaces.Quadratures.GLL{4}()
+quad = ClimaCore.Quadratures.GLL{4}()
 rectangle_space =
     ClimaCore.Spaces.SpectralElementSpace2D(rectangle_topology, quad)
 #----------------------------------------------------------------------------

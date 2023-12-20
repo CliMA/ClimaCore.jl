@@ -10,7 +10,7 @@ Nq = 4
 
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
 X = coordinates(Val(Nq), n1, n2)

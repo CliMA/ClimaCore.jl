@@ -10,6 +10,7 @@ import ..DataLayouts,
     ..Topologies,
     ..Meshes,
     ..Operators,
+    ..Quadratures,
     ..Fields,
     ..Hypsography
 

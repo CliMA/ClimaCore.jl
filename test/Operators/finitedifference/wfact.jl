@@ -6,7 +6,14 @@ import ClimaCore
 ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Quadratures
 
 import ClimaCore.Utilities: half
 import LinearAlgebra: norm_sqr
@@ -20,7 +27,7 @@ velem = 4
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
 htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-quad = Spaces.Quadratures.GLL{npoly + 1}()
+quad = Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
 vdomain = Domains.IntervalDomain(

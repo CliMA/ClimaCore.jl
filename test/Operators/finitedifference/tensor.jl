@@ -2,15 +2,21 @@ using Test
 
 using ClimaComms
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Quadratures
 using LinearAlgebra
 
 for FT in (Float32, Float64)
     hdomain = Domains.SphereDomain{FT}(6.37122e6)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, 30)
     htopology = Topologies.Topology2D(hmesh)
-    hspace =
-        Spaces.SpectralElementSpace2D(htopology, Spaces.Quadratures.GLL{4}())
+    hspace = Spaces.SpectralElementSpace2D(htopology, Quadratures.GLL{4}())
 
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),

@@ -12,6 +12,7 @@ import ClimaCore.Meshes as Meshes
 import ClimaCore.Spaces as Spaces
 import ClimaCore.Topologies as Topologies
 import ClimaCore.Geometry as Geometry
+import ClimaCore.Quadratures as Quadratures
 import ClimaCore.Fields as Fields
 import ClimaCore as CC
 import ClimaComms
@@ -118,7 +119,7 @@ function create_space(
     hdomain = Domains.SphereDomain(earth_radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, panel_size)
     htopology = Topologies.Topology2D(context, hmesh)
-    quad = Spaces.Quadratures.GLL{poly_nodes}()
+    quad = Quadratures.GLL{poly_nodes}()
     space = if space_type == "SpectralElementSpace2D"
         Spaces.SpectralElementSpace2D(htopology, quad)
     elseif space_type == "ExtrudedFiniteDifferenceSpace"

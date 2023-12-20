@@ -5,12 +5,12 @@ using StaticArrays, IntervalSets, LinearAlgebra
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 import ClimaCore.Geometry: WVector
@@ -40,7 +40,7 @@ device = ClimaComms.device()
         ClimaComms.SingletonCommsContext(device),
         horzmesh,
     )
-    quad = Spaces.Quadratures.GLL{3 + 1}()
+    quad = Quadratures.GLL{3 + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -87,7 +87,7 @@ function hvspace_3D(
         horzmesh,
     )
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =

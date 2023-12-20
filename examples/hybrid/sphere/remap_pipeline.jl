@@ -1,5 +1,6 @@
 import ClimaCore
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Operators
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Operators, Quadratures
 using NCDatasets
 using ClimaCoreTempestRemap
 
@@ -53,7 +54,7 @@ function remap2latlon(filein, nc_dir, nlat, nlon)
     # reconstruct space, obtain Nq from space
     cspace = axes(Y.c)
     hspace = Spaces.horizontal_space(cspace)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
 
     # create a temporary dir for intermediate data
     remap_tmpdir = nc_dir * "remaptmp/"

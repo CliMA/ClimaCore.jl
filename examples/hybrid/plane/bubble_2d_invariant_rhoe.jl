@@ -12,6 +12,7 @@ import ClimaCore:
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 using ClimaCore.Geometry
@@ -44,7 +45,7 @@ function hvspace_2D(
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
     horztopology = Topologies.IntervalTopology(horzmesh)
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
     hv_center_space =

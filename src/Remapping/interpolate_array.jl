@@ -458,7 +458,7 @@ function interpolate_array(
         hcoord = xcoord
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
-        quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
+        quad_points, _ = Quadratures.quadrature_points(FT, quad)
         weights = interpolation_weights(horz_mesh, hcoord, quad_points)
         h = helem
 
@@ -497,7 +497,7 @@ function interpolate_array(
         hcoord = Geometry.product_coordinates(xcoord, ycoord)
         helem = Meshes.containing_element(horz_mesh, hcoord)
         quad = Spaces.quadrature_style(space)
-        quad_points, _ = Spaces.Quadratures.quadrature_points(FT, quad)
+        quad_points, _ = Quadratures.quadrature_points(FT, quad)
         weights = interpolation_weights(horz_mesh, hcoord, quad_points)
         gidx = horz_topology.orderindex[helem]
         h = gidx
@@ -528,8 +528,8 @@ function interpolation_weights(
 )
     helem = Meshes.containing_element(horz_mesh, hcoord)
     ξ1, ξ2 = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
-    WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
-    WI2 = Spaces.Quadratures.interpolation_matrix(SVector(ξ2), quad_points)
+    WI1 = Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
+    WI2 = Quadratures.interpolation_matrix(SVector(ξ2), quad_points)
     return (WI1, WI2)
 end
 
@@ -540,7 +540,7 @@ function interpolation_weights(
 )
     helem = Meshes.containing_element(horz_mesh, hcoord)
     ξ1, = Meshes.reference_coordinates(horz_mesh, helem, hcoord)
-    WI1 = Spaces.Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
+    WI1 = Quadratures.interpolation_matrix(SVector(ξ1), quad_points)
     return (WI1,)
 end
 
@@ -550,7 +550,7 @@ end
 Interpolate the given `field` on the given points assuming the given interpolation_matrix
 and global index in the topology.
 
-The coefficients `weights` are computed with `Spaces.Quadratures.interpolation_matrix`.
+The coefficients `weights` are computed with `Quadratures.interpolation_matrix`.
 See also `interpolate_array`.
 
 Keyword arguments

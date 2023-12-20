@@ -36,7 +36,7 @@ if !Sys.iswindows()
     # now part of buildkite
     # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
 =#
-    @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
+    @safetestset "Quadratures" begin @time include("Quadratures/Quadratures.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
     #=
     @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end

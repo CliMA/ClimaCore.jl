@@ -1,10 +1,17 @@
 using Test
 using ClimaComms
 using ClimaCore:
-    Domains, Meshes, Topologies, Geometry, Operators, Spaces, Fields
+    Domains,
+    Meshes,
+    Topologies,
+    Geometry,
+    Operators,
+    Spaces,
+    Fields,
+    Quadratures
 using ClimaCore.Operators: local_weights, LinearRemap, remap, remap!
 using ClimaCore.Topologies: Topology2D
-using ClimaCore.Spaces: AbstractSpace, Quadratures
+using ClimaCore.Spaces: AbstractSpace
 using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
 
@@ -408,10 +415,7 @@ end
             for nq in [2, 5, 10]
                 space2 = make_space(domain, nq)
 
-                _, w = Spaces.Quadratures.quadrature_points(
-                    FT,
-                    Quadratures.GLL{nq}(),
-                )
+                _, w = Quadratures.quadrature_points(FT, Quadratures.GLL{nq}())
                 @test local_weights(space2) ≈ w ./ 2
 
                 # FV -> SE
@@ -515,16 +519,13 @@ end
             for nq1 in [3, 5, 9]
                 space1 = make_space(domain, nq1)
 
-                _, w = Spaces.Quadratures.quadrature_points(
-                    FT,
-                    Quadratures.GLL{nq1}(),
-                )
+                _, w = Quadratures.quadrature_points(FT, Quadratures.GLL{nq1}())
                 @test local_weights(space1) ≈ w ./ 2
 
                 for nq2 in [2, 4, 10]
                     space2 = make_space(domain, nq2)
 
-                    _, w = Spaces.Quadratures.quadrature_points(
+                    _, w = Quadratures.quadrature_points(
                         FT,
                         Quadratures.GLL{nq2}(),
                     )

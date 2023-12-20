@@ -12,6 +12,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -69,7 +70,7 @@ function hybrid3dcubedsphere_dss_profiler(
     z_stretch_string = "uniform"
     horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = h_elem)
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_topology = Topologies.Topology2D(
         comms_ctx,
         horizontal_mesh,

@@ -2,7 +2,14 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 import ClimaCore.Geometry: ⊗
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
@@ -41,10 +48,10 @@ Nqh = 7
 
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(context, mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-Iquad = Spaces.Quadratures.GLL{Nqh}()
+Iquad = Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)

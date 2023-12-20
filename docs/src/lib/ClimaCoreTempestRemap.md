@@ -49,7 +49,7 @@ apply_remap
 The following example converts an OrdinaryDiffEq solution object `sol` to a netcdf file, and remaps it to an regular latitude-longitude (RLL) grid.
 
 ```julia
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces
+using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Quadratures
 using NCDatasets, ClimaCoreTempestRemap
 
 # sol is the integrator solution
@@ -58,7 +58,7 @@ using NCDatasets, ClimaCoreTempestRemap
 
 # the issue is that the Space types changed since this changed
 # we can reconstruct it by digging around a bit
-Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace))
+Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace))
 
 datafile_cc = "test.nc"
 NCDataset(datafile_cc, "c") do nc
@@ -115,7 +115,7 @@ remap_weights(
     meshfile_rll,
     meshfile_overlap;
     in_type = "cgll",
-    in_np = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace)),
+    in_np = Quadratures.degrees_of_freedom(Spaces.quadrature_style(cspace)),
 )
 
 # apply remap

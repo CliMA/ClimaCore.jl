@@ -16,6 +16,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     Limiters,
     slab
@@ -80,7 +81,7 @@ function hvspace_3D(
     z_topology = Topologies.IntervalTopology(context, z_mesh)
     z_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
+    quad = Quadratures.GLL{Nij}()
     hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
     cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, z_space)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)

@@ -5,12 +5,12 @@ using LinearAlgebra
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 import ClimaCore.Utilities: half
@@ -72,7 +72,7 @@ function sphere_3D(
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -270,7 +270,7 @@ remap_weights(
     meshfile_rll,
     meshfile_overlap;
     in_type = "cgll",
-    in_np = Spaces.Quadratures.degrees_of_freedom(
+    in_np = Quadratures.degrees_of_freedom(
         Spaces.quadrature_style(hv_center_space),
     ),
 )

@@ -24,6 +24,7 @@ import ClimaCore:
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 using ClimaCorePlots, Plots
@@ -149,7 +150,7 @@ function hvspace_3D(
     )
     Nv = Meshes.nelements(vertmesh)
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xyelem, xyelem)
     horztopology = Topologies.Topology2D(comms_ctx, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
@@ -191,7 +192,7 @@ end
 function compute_κ₄(sim_params::SimulationParameters{FT}) where {FT}
     (; lxy, xyelem, npoly) = sim_params
     quad_points, _ =
-        Spaces.Quadratures.quadrature_points(FT, Quadratures.GLL{npoly + 1}())
+        Quadratures.quadrature_points(FT, Quadratures.GLL{npoly + 1}())
     Δx = (lxy / xyelem) * diff(quad_points)[1] / 2
     κ₄ = 1.0e6 * (Δx / lxy)^3.2
     return κ₄

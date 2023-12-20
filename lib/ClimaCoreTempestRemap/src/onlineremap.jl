@@ -178,11 +178,11 @@ function generate_map(
             meshfile_target,
             meshfile_overlap;
             in_type = in_type,
-            in_np = Spaces.Quadratures.degrees_of_freedom(
+            in_np = Quadratures.degrees_of_freedom(
                 Spaces.quadrature_style(source_space),
             ),
             out_type = out_type,
-            out_np = Spaces.Quadratures.degrees_of_freedom(
+            out_np = Quadratures.degrees_of_freedom(
                 Spaces.quadrature_style(target_space),
             ),
         )

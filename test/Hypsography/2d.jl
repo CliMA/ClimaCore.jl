@@ -3,12 +3,12 @@ import ClimaCore
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators,
     InputOutput,
@@ -33,7 +33,7 @@ horzdomain = Domains.IntervalDomain(
 )
 horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 20)
 horztopology = Topologies.IntervalTopology(horzmesh)
-quad = Spaces.Quadratures.GLL{4 + 1}()
+quad = Quadratures.GLL{4 + 1}()
 horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
 z_surface = sin.(Fields.coordinate_field(horzspace).x) .+ 1

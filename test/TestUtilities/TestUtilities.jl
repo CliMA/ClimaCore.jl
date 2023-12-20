@@ -13,6 +13,7 @@ using IntervalSets
 import ClimaComms
 import ClimaCore.Fields as Fields
 import ClimaCore.Utilities as Utilities
+import ClimaCore.Quadratures
 import ClimaCore.Geometry as Geometry
 import ClimaCore.Meshes as Meshes
 import ClimaCore.Spaces as Spaces
@@ -39,7 +40,7 @@ function SpectralElementSpace1D(
     )
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
     topology = Topologies.IntervalTopology(context, mesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     return Spaces.SpectralElementSpace1D(topology, quad)
 end
 
@@ -57,7 +58,7 @@ function SpectralElementSpace2D(
     )
     mesh = Meshes.RectilinearMesh(domain, 1, 1)
     topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     return Spaces.SpectralElementSpace2D(topology, quad)
 end
 
@@ -98,7 +99,7 @@ function SphereSpectralElementSpace(
     domain = Domains.SphereDomain(radius)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     return Spaces.SpectralElementSpace2D(topology, quad)
 end
 
@@ -123,7 +124,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
     return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 end

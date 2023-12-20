@@ -8,6 +8,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -39,7 +40,7 @@ domain = Domains.RectangleDomain(
 )
 n1, n2 = 16, 16
 Nq = 4
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 
 grid_topology = Topologies.Topology2D(comms_ctx, mesh, Meshes.elements(mesh))

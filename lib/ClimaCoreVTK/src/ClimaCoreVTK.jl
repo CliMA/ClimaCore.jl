@@ -6,7 +6,7 @@ module ClimaCoreVTK
 export writevtk, writepvd
 
 using WriteVTK
-import ClimaCore: Fields, Geometry, Spaces, Topologies, Operators
+import ClimaCore: Fields, Geometry, Spaces, Topologies, Operators, Quadratures
 
 include("space.jl")
 include("addfield.jl")
