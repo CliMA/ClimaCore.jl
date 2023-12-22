@@ -13,6 +13,7 @@ import ..DataLayouts,
     ..Quadratures,
     ..Fields,
     ..Hypsography
+import ClimaCore.Utilities: half
 
 using ..RecursiveApply
 using CUDA
