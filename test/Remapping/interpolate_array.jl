@@ -59,6 +59,14 @@ device = ClimaComms.CPUSingleThreaded()
     @test interp_z[:, 1] ≈ [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
     @test interp_z[:, end] ≈ [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
 
+    # Face space
+    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    face_coords = Fields.coordinate_field(hv_face_space)
+
+    xpts = range(Geometry.XPoint(-500.0), Geometry.XPoint(500.0), length = 21)
+    interp_x = Remapping.interpolate_array(face_coords.x, xpts, zpts)
+    @test interp_x ≈ [x.x for x in xpts, z in zpts]
+
 end
 
 
