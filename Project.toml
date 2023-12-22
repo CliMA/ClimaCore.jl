@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.11.6"
+version = "0.11.7"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -38,7 +38,7 @@ Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 KrylovExt = "Krylov"
 
 [compat]
-Adapt = "3"
+Adapt = "3, 4"
 BandedMatrices = "0.17, 1"
 BlockArrays = "0.16"
 CUDA = "4.2, 5"
@@ -57,7 +57,7 @@ KrylovKit = "0.6"
 LinearAlgebra = "1"
 Memoize = "0.4"
 PkgVersion = "0.1, 0.2, 0.3"
-RecursiveArrayTools = "2"
+RecursiveArrayTools = "2, 3"
 RootSolvers = "0.3, 0.4"
 SparseArrays = "1"
 Static = "0.4, 0.5, 0.6, 0.7, 0.8"

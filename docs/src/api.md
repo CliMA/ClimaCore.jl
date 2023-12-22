@@ -329,15 +329,3 @@ InputOutput.defaultname
 Remapping.interpolate_array
 Remapping.interpolate
 ```
-
-## ClimaCoreMakie
-
-```@meta
-CurrentModule = ClimaCoreMakie
-```
-
-```@docs
-ClimaCoreMakie.fieldheatmap
-ClimaCoreMakie.fieldcontourf
-```
-
