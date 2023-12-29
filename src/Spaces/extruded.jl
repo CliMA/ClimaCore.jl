@@ -135,6 +135,12 @@ function issubspace(
 )
     return grid(level_space).full_grid === grid(extruded_space)
 end
+function issubspace(
+    level_space::SpectralElementSpace1D{<:Grids.LevelGrid},
+    extruded_space::ExtrudedFiniteDifferenceSpace,
+)
+    return grid(level_space).full_grid === grid(extruded_space)
+end
 
 
 Adapt.adapt_structure(to, space::ExtrudedFiniteDifferenceSpace) =
