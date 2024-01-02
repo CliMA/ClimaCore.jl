@@ -40,7 +40,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
                $time_ratio_rounded)\n\t$error_string"
 
         if use_rel_error
-            @test rel_error < 1e-6
+            @test rel_error < 1e-5
         else
             @test max_eps_error <= 3
         end

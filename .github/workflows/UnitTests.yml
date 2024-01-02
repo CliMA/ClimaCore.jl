@@ -11,11 +11,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            julia-version: '1.9'
+            julia-version: '1.10'
           - os: windows-latest
-            julia-version: '1.9'
+            julia-version: '1.10'
           - os: macos-latest
-            julia-version: '1.9'
+            julia-version: '1.10'
           - os: ubuntu-latest
             julia-version: '~1.10.0-rc1'
 

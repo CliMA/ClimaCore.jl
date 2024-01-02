@@ -1,7 +1,7 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.9.4 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 nsight-systems/2023.2.1
+  modules: julia/1.10.0 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 nsight-systems/2023.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
@@ -725,12 +725,13 @@ steps:
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
-  - group: "Perf: Geometry"
-    steps:
+  # https://github.com/triscale-innov/GFlops.jl/issues/49
+  # - group: "Perf: Geometry"
+  #   steps:
 
-      - label: "Perf: Axis tensor conversion benchmarks"
-        key: "cpu_axis_tensor_conversion_perf_bm"
-        command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
+  #     - label: "Perf: Axis tensor conversion benchmarks"
+  #       key: "cpu_axis_tensor_conversion_perf_bm"
+  #       command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
 
   - group: "Perf: Fields"
     steps:
