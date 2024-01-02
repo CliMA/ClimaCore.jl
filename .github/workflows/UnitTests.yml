@@ -28,7 +28,7 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Checkout
-      uses: actions/checkout@v2.2.0
+      uses: actions/checkout@v4
 
     - name: Set up Julia
       uses: julia-actions/setup-julia@v1
