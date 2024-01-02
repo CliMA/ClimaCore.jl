@@ -1,4 +1,4 @@
-
+import CommonDataModel
 import ClimaCore: slab, column
 
 """
@@ -305,16 +305,20 @@ for (i,t) in enumerate(times)
 end
 ```
 """
-Base.setindex!(::NCDatasets.CFVariable, ::Fields.Field, ::Colon)
+Base.setindex!(
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
+    ::Fields.Field,
+    ::Colon,
+)
 
 function Base.setindex!(
-    var::NCDatasets.CFVariable,
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
     field::Fields.SpectralElementField2D,
     ::Colon,
     extraidx::Int...,
 )
     space = axes(field)
-    nc = NCDataset(var)
+    nc = NCDatasets.dataset(var)
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(space)
     elseif nc.attrib["node_type"] == "dgll"
@@ -329,12 +333,12 @@ function Base.setindex!(
     return var
 end
 function Base.setindex!(
-    var::NCDatasets.CFVariable,
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
     field::Fields.ExtrudedFiniteDifferenceField,
     ::Colon,
     extraidx::Int...,
 )
-    nc = NCDataset(var)
+    nc = NCDatasets.dataset(var)
     space = axes(field)
     hspace = Spaces.horizontal_space(space)
     if nc.attrib["node_type"] == "cgll"
