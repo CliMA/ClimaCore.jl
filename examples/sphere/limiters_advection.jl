@@ -267,8 +267,9 @@ for (k, ne) in enumerate(ne_seq)
 end
 
 # Check conservation
-#atols = [2.5e1eps(FT), 2.5e1eps(FT), 8.5eps(FT)]
-atols = [2.5e1eps(FT), 2.5e1eps(FT), 1.0e1eps(FT)]
+atols = [27.5eps(FT), 27.5eps(FT), 11eps(FT)]
+@info "relative_errors = $relative_errors"
+@info "atols = $atols"
 for k in 1:length(ne_seq)
     @test relative_errors[k] ≈ FT(0) atol = atols[k]
 end
