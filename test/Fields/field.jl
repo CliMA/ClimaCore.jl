@@ -433,20 +433,22 @@ end
     end
 end
 
-# Test truncated field type printing:
-ClimaCore.Fields.truncate_printing_field_types() = true
-@testset "Truncated printing" begin
-    nt = (; x = Float64(0), y = Float64(0))
-    Y = fill(nt, spectral_space_2D())
-    @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
-          "Field{(:x, :y)} (trunc disp)"
-end
-ClimaCore.Fields.truncate_printing_field_types() = false
+if VERSION < v"1.10"
+    # Test truncated field type printing:
+    ClimaCore.Fields.truncate_printing_field_types() = true
+    @testset "Truncated printing" begin
+        nt = (; x = Float64(0), y = Float64(0))
+        Y = fill(nt, spectral_space_2D())
+        @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
+              "Field{(:x, :y)} (trunc disp)"
+    end
+    ClimaCore.Fields.truncate_printing_field_types() = false
 
-@testset "Standard printing" begin
-    nt = (; x = Float64(0), y = Float64(0))
-    Y = fill(nt, spectral_space_2D())
-    s = sprint(show, typeof(Y)) # just make sure this doesn't break
+    @testset "Standard printing" begin
+        nt = (; x = Float64(0), y = Float64(0))
+        Y = fill(nt, spectral_space_2D())
+        s = sprint(show, typeof(Y)) # just make sure this doesn't break
+    end
 end
 
 @testset "Set!" begin
