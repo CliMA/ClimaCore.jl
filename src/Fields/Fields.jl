@@ -528,63 +528,65 @@ function set!(f::Function, field::Field, args = ())
     return nothing
 end
 
-#=
-This function can be used to truncate the printing
-of ClimaCore `Field` types, which can get rather
-long.
+if VERSION < v"1.10"
+    #=
+    This function can be used to truncate the printing
+    of ClimaCore `Field` types, which can get rather
+    long.
 
-# Example
-```
-import ClimaCore
-ClimaCore.Fields.truncate_printing_field_types() = true
-```
-=#
-truncate_printing_field_types() = false
+    # Example
+    ```
+    import ClimaCore
+    ClimaCore.Fields.truncate_printing_field_types() = true
+    ```
+    =#
+    truncate_printing_field_types() = false
 
-function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
-    if truncate_printing_field_types()
-        print(io, truncated_field_type_string(T))
-    else
-        invoke(show, Tuple{IO, Type}, io, T)
-    end
-end
-
-# Defined for testing
-function truncated_field_type_string(::Type{T}) where {T <: Fields.Field}
-    values_type(::Type{T}) where {V, T <: Fields.Field{V}} = V
-
-    _apply!(f, ::T, match_list) where {T} = nothing # sometimes we need this...
-    function _apply!(f, ::Type{T}, match_list) where {T}
-        if f(T)
-            push!(match_list, T)
-        end
-        for p in T.parameters
-            _apply!(f, p, match_list)
+    function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
+        if truncate_printing_field_types()
+            print(io, truncated_field_type_string(T))
+        else
+            invoke(show, Tuple{IO, Type}, io, T)
         end
     end
-    #     apply(::T) where {T <: Any}
-    # Recursively traverse type `T` and apply
-    # `f` to the types (and type parameters).
-    # Returns a list of matches where `f(T)` is true.
-    apply(f, ::T) where {T} = apply(f, T)
-    function apply(f, ::Type{T}) where {T}
-        match_list = []
-        _apply!(f, T, match_list)
-        return match_list
-    end
 
-    # We can't gaurantee that printing for all
-    # field types will succeed, so fallback to
-    # printing `Field{...}` if this fails.
-    try
-        V = values_type(T)
-        nts = apply(x -> x <: NamedTuple, eltype(V))
-        syms = unique(map(nt -> fieldnames(nt), nts))
-        s = join(syms, ",")
-        return "Field{$s} (trunc disp)"
-    catch
-        @warn "Could not print field. Please open a an issue with the runscript."
-        return "Field{...} (trunc disp)"
+    # Defined for testing
+    function truncated_field_type_string(::Type{T}) where {T <: Fields.Field}
+        values_type(::Type{T}) where {V, T <: Fields.Field{V}} = V
+
+        _apply!(f, ::T, match_list) where {T} = nothing # sometimes we need this...
+        function _apply!(f, ::Type{T}, match_list) where {T}
+            if f(T)
+                push!(match_list, T)
+            end
+            for p in T.parameters
+                _apply!(f, p, match_list)
+            end
+        end
+        #     apply(::T) where {T <: Any}
+        # Recursively traverse type `T` and apply
+        # `f` to the types (and type parameters).
+        # Returns a list of matches where `f(T)` is true.
+        apply(f, ::T) where {T} = apply(f, T)
+        function apply(f, ::Type{T}) where {T}
+            match_list = []
+            _apply!(f, T, match_list)
+            return match_list
+        end
+
+        # We can't gaurantee that printing for all
+        # field types will succeed, so fallback to
+        # printing `Field{...}` if this fails.
+        try
+            V = values_type(T)
+            nts = apply(x -> x <: NamedTuple, eltype(V))
+            syms = unique(map(nt -> fieldnames(nt), nts))
+            s = join(syms, ",")
+            return "Field{$s} (trunc disp)"
+        catch
+            @warn "Could not print field. Please open a an issue with the runscript."
+            return "Field{...} (trunc disp)"
+        end
     end
 end
 
