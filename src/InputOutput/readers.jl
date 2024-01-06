@@ -64,15 +64,15 @@ close(reader)
 To explore the contents of the `reader`, use either
 ```julia
 julia> reader |> propertynames
-``` 
-e.g, to explore the components of the `space`, 
+```
+e.g, to explore the components of the `space`,
 ```julia
 julia> reader.space_cache
 Dict{Any, Any} with 3 entries:
   "center_extruded_finite_difference_space" => CenterExtrudedFiniteDifferenceSpace:…
   "horizontal_space"                        => SpectralElementSpace2D:…
   "face_extruded_finite_difference_space"   => FaceExtrudedFiniteDifferenceSpace:…
-``` 
+```
 
 Once "unpacked" as shown above, `ClimaCorePlots` or `ClimaCoreMakie` can be used to visualise
 fields. `ClimaCoreTempestRemap` supports interpolation onto user-specified grids if necessary.
@@ -269,9 +269,13 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     type = attrs(group)["type"]
     if type == "IntervalTopology"
         mesh = read_mesh(reader, attrs(group)["mesh"])
-        context =
-            ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
-        return Topologies.IntervalTopology(context, mesh)
+        # context =
+        #     ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
+        # return Topologies.IntervalTopology(context, mesh)
+        return Topologies.IntervalTopology(
+            ClimaComms.SingletonCommsContext(ClimaComms.device()),
+            mesh,
+        )
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
@@ -427,43 +431,55 @@ cached, so that reading the same field multiple times will create multiple
 distinct objects.
 """
 function read_field(reader::HDF5Reader, name::AbstractString)
+    @show "start read_field"
     obj = reader.file["fields/$name"]
     type = attrs(obj)["type"]
     if type == "Field"
+        @show "field type"
         if haskey(attrs(obj), "grid")
             grid = read_grid(reader, attrs(obj)["grid"])
             staggering = get(attrs(obj), "staggering", nothing)
+            @show "before staggering"
             if staggering == "CellCenter"
                 staggering = Grids.CellCenter()
             elseif staggering == "CellFace"
                 staggering = Grids.CellFace()
             end
+            @show "after staggering"
             space = Spaces.space(grid, staggering)
         else
+            @show "before read_space"
             space = read_space(reader, attrs(obj)["space"])
         end
+        @show "after grid if/else"
         topology = Spaces.topology(space)
         ArrayType = ClimaComms.array_type(topology)
         if topology isa Topologies.Topology2D
+            @show "topology isa Topology2D"
             nd = ndims(obj)
             localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
             data = ArrayType(obj[localidx...])
         else
+            @show "topology is not Topology2D"
             data = ArrayType(read(obj))
         end
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
+        @show "before _scan_data_layout"
         DataLayout = _scan_data_layout(data_layout)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
         values = DataLayout{ElType, Nij}(data)
+        @show "before field return"
         return Fields.Field(values, space)
     elseif type == "FieldVector"
+        @show "fieldvec type"
         Fields.FieldVector(;
             [
                 Symbol(sub) => read_field(reader, "$name/$sub") for
                 sub in keys(obj)
             ]...,
         )
+        @show "after fieldvec construction"
     else
         error("Unsupported type $type")
     end
