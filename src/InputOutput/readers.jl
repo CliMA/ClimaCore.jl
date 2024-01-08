@@ -2,6 +2,7 @@ abstract type AbstractReader end
 
 # these need to be here for to make the eval work
 # TODO: figure out a better way to represent types
+using MPI
 using StaticArrays
 using ..ClimaCore
 using ..Domains: IntervalDomain, SphereDomain
@@ -29,6 +30,15 @@ import ..Geometry:
     Covariant12Vector,
     Covariant3Vector
 using ..DataLayouts
+
+function mpiprint(str, comms_ctx)
+    if comms_ctx isa ClimaComms.SingletonCommsContext
+        print(str * "\n")
+    else
+        print(string(MPI.Comm_rank(comms_ctx.mpicomm)) * " " * str * "\n")
+    end
+    flush(stdout)
+end
 
 """
     HDF5Reader(filename::AbstractString[, context::ClimaComms.AbstractCommsContext])
@@ -265,7 +275,7 @@ end
 
 
 function read_topology_new(reader::HDF5Reader, name::AbstractString)
-    @show "debug branch read_topology_new"
+    mpiprint("debug branch read_topology_new", reader.context)
     group = reader.file["topologies/$name"]
     type = attrs(group)["type"]
     if type == "IntervalTopology"
@@ -273,10 +283,11 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
         # context =
         #     ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
         # return Topologies.IntervalTopology(context, mesh)
-        return Topologies.IntervalTopology(
-            ClimaComms.SingletonCommsContext(ClimaComms.device()),
-            mesh,
-        )
+        # return Topologies.IntervalTopology(
+        #     ClimaComms.SingletonCommsContext(ClimaComms.device()),
+        #     mesh,
+        # )
+        return Topologies.IntervalTopology(mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
@@ -432,55 +443,55 @@ cached, so that reading the same field multiple times will create multiple
 distinct objects.
 """
 function read_field(reader::HDF5Reader, name::AbstractString)
-    @show "start read_field"
+    mpiprint("start read_field", reader.context)
+
     obj = reader.file["fields/$name"]
     type = attrs(obj)["type"]
     if type == "Field"
-        @show "field type"
+        mpiprint("field type", reader.context)
         if haskey(attrs(obj), "grid")
             grid = read_grid(reader, attrs(obj)["grid"])
             staggering = get(attrs(obj), "staggering", nothing)
-            @show "before staggering"
+            mpiprint("before staggering", reader.context)
             if staggering == "CellCenter"
                 staggering = Grids.CellCenter()
             elseif staggering == "CellFace"
                 staggering = Grids.CellFace()
             end
-            @show "after staggering"
+            mpiprint("after staggering", reader.context)
             space = Spaces.space(grid, staggering)
         else
-            @show "before read_space"
+            mpiprint("before read_space", reader.context)
             space = read_space(reader, attrs(obj)["space"])
         end
-        @show "after grid if/else"
+        mpiprint("after grid if/else", reader.context)
         topology = Spaces.topology(space)
         ArrayType = ClimaComms.array_type(topology)
         if topology isa Topologies.Topology2D
-            @show "topology isa Topology2D"
+            mpiprint("topology isa Topology2D", reader.context)
             nd = ndims(obj)
             localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
             data = ArrayType(obj[localidx...])
         else
-            @show "topology is not Topology2D"
+            mpiprint("topology is not Topology2D", reader.context)
             data = ArrayType(read(obj))
         end
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
-        @show "before _scan_data_layout"
+        mpiprint("before _scan_data_layout", reader.context)
         DataLayout = _scan_data_layout(data_layout)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
         values = DataLayout{ElType, Nij}(data)
-        @show "before field return"
+        mpiprint("before field return", reader.context)
         return Fields.Field(values, space)
     elseif type == "FieldVector"
-        @show "fieldvec type"
+        mpiprint("fieldveg type", reader.context)
         Fields.FieldVector(;
             [
                 Symbol(sub) => read_field(reader, "$name/$sub") for
                 sub in keys(obj)
             ]...,
         )
-        @show "after fieldvec construction"
     else
         error("Unsupported type $type")
     end
