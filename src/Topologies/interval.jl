@@ -35,6 +35,7 @@ function IntervalTopology(
     mesh::Meshes.IntervalMesh,
 )
     # currently only support SingletonCommsContext
+    @show context
     @assert context isa ClimaComms.SingletonCommsContext
     if Domains.isperiodic(mesh.domain)
         boundaries = NamedTuple()
