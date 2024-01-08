@@ -265,6 +265,7 @@ end
 
 
 function read_topology_new(reader::HDF5Reader, name::AbstractString)
+    @show "debug branch read_topology_new"
     group = reader.file["topologies/$name"]
     type = attrs(group)["type"]
     if type == "IntervalTopology"
