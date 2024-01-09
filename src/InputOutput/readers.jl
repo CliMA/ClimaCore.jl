@@ -199,9 +199,12 @@ function read_domain_new(reader::HDF5Reader, name::AbstractString)
     group = reader.file["domains/$name"]
     type = attrs(group)["type"]
     if type == "IntervalDomain"
+        mpiprint("read_domain_new branch 1 IntervalDomain", reader.context)
         CT = _scan_coord_type(attrs(group)["coord_type"])
+        mpiprint("after _scan_coord_type", reader.context)
         coord_min = CT(attrs(group)["coord_min"])
         coord_max = CT(attrs(group)["coord_max"])
+        mpiprint("after coords", reader.context)
         if haskey(attributes(group), "boundary_names")
             boundary_names =
                 tuple(map(Symbol, attrs(group)["boundary_names"])...)
@@ -210,6 +213,7 @@ function read_domain_new(reader::HDF5Reader, name::AbstractString)
             return Domains.IntervalDomain(coord_min, coord_max; periodic = true)
         end
     elseif type == "SphereDomain"
+        mpiprint("read_domain_new branch 2 SphereDomain", reader.context)
         radius = attrs(group)["radius"]
         return Domains.SphereDomain(radius)
     else
