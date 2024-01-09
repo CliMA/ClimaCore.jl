@@ -195,6 +195,7 @@ function read_domain(reader, name)
 end
 
 function read_domain_new(reader::HDF5Reader, name::AbstractString)
+    mpiprint("start read_domain_new", reader.context)
     group = reader.file["domains/$name"]
     type = attrs(group)["type"]
     if type == "IntervalDomain"
@@ -230,28 +231,34 @@ function read_mesh(reader, name)
 end
 
 function read_mesh_new(reader::HDF5Reader, name::AbstractString)
+    mpiprint("start read_mesh_new", reader.context)
     group = reader.file["meshes/$name"]
     type = attrs(group)["type"]
     if type == "IntervalMesh"
+        mpiprint("read_mesh_new branch 1 IntervalMesh", reader.context)
         domain = read_domain(reader, attrs(group)["domain"])
         nelements = attrs(group)["nelements"]
         faces_type = attrs(group)["faces_type"]
         if faces_type == "Range"
+            mpiprint("read_mesh_new branch 1.1 Range", reader.context)
             return Meshes.IntervalMesh(
                 domain,
                 Meshes.Uniform(),
                 nelems = nelements,
             )
         else
+            mpiprint("read_mesh_new branch 1.2", reader.context)
             CT = Domains.coordinate_type(domain)
             faces = [CT(coords) for coords in attrs(group)["faces"]]
             return Meshes.IntervalMesh(domain, faces)
         end
     elseif type == "RectilinearMesh"
+        mpiprint("read_mesh_new branch 2 RectilinearMesh", reader.context)
         intervalmesh1 = read_mesh(reader, attrs(group)["intervalmesh1"])
         intervalmesh2 = read_mesh(reader, attrs(group)["intervalmesh2"])
         return Meshes.RectilinearMesh(intervalmesh1, intervalmesh2)
     elseif type == "EquiangularCubedSphere"
+        mpiprint("read_mesh_new branch 2 EquiangularCubedSphere", reader.context)
         domain = read_domain(reader, attrs(group)["domain"])
         localelementmap =
             attrs(group)["localelementmap"] == "NormalizedBilinearMap" ?
@@ -279,6 +286,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     group = reader.file["topologies/$name"]
     type = attrs(group)["type"]
     if type == "IntervalTopology"
+        mpiprint("IntervalTopology", reader.context)
         mesh = read_mesh(reader, attrs(group)["mesh"])
         # context =
         #     ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
@@ -287,6 +295,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
         #     ClimaComms.SingletonCommsContext(ClimaComms.device()),
         #     mesh,
         # )
+        mpiprint("before IntervalTopology call", reader.context)
         return Topologies.IntervalTopology(mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
@@ -334,12 +343,14 @@ function read_grid(reader, name)
 end
 
 function read_grid_new(reader, name)
+    mpiprint("start read_grid_new", reader.context)
     group = reader.file["grids/$name"]
     type = attrs(group)["type"]
     if type in ("SpectralElementGrid1D", "SpectralElementGrid2D")
         npts = attrs(group)["quadrature_num_points"]
         quadrature_style =
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
+        mpiprint("branch 1 before read_topology", reader.context)
         topology = read_topology(reader, attrs(group)["topology"])
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
@@ -347,9 +358,11 @@ function read_grid_new(reader, name)
             return Grids.SpectralElementGrid2D(topology, quadrature_style)
         end
     elseif type == "FiniteDifferenceGrid"
+        mpiprint("branch 2 before read_topology", reader.context)
         topology = read_topology(reader, attrs(group)["topology"])
         return Grids.FiniteDifferenceGrid(topology)
     elseif type == "ExtrudedFiniteDifferenceGrid"
+        mpiprint("branch 3 before read_grid", reader.context)
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
         horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
         hypsography_type = get(attrs(group), "hypsography_type", "Flat")
