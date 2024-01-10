@@ -661,13 +661,9 @@ function RectilinearSpectralElementGrid(;
     mesh = Meshes.RectilinearMesh(;
         x_min,
         x_max,
-        y_min,
-        y_max,
         x_periodic,
         x_boundary_names,
         x_elem,
-        y_min,
-        y_max,
         y_min,
         y_max,
         y_periodic,
