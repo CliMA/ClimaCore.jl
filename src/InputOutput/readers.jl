@@ -295,15 +295,14 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     if type == "IntervalTopology"
         mpiprint("branch 1 IntervalTopology", reader.context)
         mesh = read_mesh(reader, attrs(group)["mesh"])
-        # context =
-        #     ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
-        # return Topologies.IntervalTopology(context, mesh)
+        context =
+            ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
+        return Topologies.IntervalTopology(context, mesh)
         # return Topologies.IntervalTopology(
         #     ClimaComms.SingletonCommsContext(ClimaComms.device()),
         #     mesh,
         # )
-        mpiprint("before IntervalTopology call", reader.context)
-        return Topologies.IntervalTopology(mesh)
+        # return Topologies.IntervalTopology(mesh)
     elseif type == "Topology2D"
         mpiprint("branch 2 Topology2D", reader.context)
         mesh = read_mesh(reader, attrs(group)["mesh"])
