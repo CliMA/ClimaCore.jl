@@ -367,8 +367,10 @@ function read_grid_new(reader, name)
         topology = read_topology(reader, attrs(group)["topology"])
         mpiprint("after read_topology", reader.context)
         if type == "SpectralElementGrid1D"
+            mpiprint("read_grid_new SpectralElementGrid1D", reader.context)
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
+            mpiprint("read_grid_new SpectralElementGrid1D", reader.context)
             return Grids.SpectralElementGrid2D(topology, quadrature_style)
         end
     elseif type == "FiniteDifferenceGrid"

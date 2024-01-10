@@ -2,6 +2,12 @@
 
 abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
+using MPI
+function mpiprint(str)
+    print(" " * string(MPI.Comm_rank(MPI.COMM_SELF)) * " " * str * "\n")
+    flush(stdout)
+end
+
 """
     SpectralElementGrid1D(mesh::Meshes.IntervalMesh, quadrature_style::Quadratures.QuadratureStyle)
 
@@ -25,17 +31,20 @@ end
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
 )
+    mpiprint("SpectralElementGrid1D start")
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
+    mpiprint("SpectralElementGrid1D after initial setup")
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
     local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
+    mpiprint("SpectralElementGrid1D after more setup")
 
     for elem in 1:nelements
         local_geometry_slab = slab(local_geometry, elem)
@@ -65,11 +74,13 @@ end
             )
         end
     end
+    mpiprint("SpectralElementGrid1D after for loop")
     dss_weights = copy(local_geometry.J)
     dss_weights .= one(FT)
     Topologies.dss_1d!(topology, dss_weights)
     dss_weights = one(FT) ./ dss_weights
 
+    mpiprint("SpectralElementGrid1D before return")
     return SpectralElementGrid1D(
         topology,
         quadrature_style,
@@ -142,7 +153,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     quadrature_style;
     enable_bubble = false,
 )
-
+    mpiprint("SpectralElementGrid1D start")
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
@@ -160,23 +171,28 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     # 1. allocate buffers externally
     DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
+    mpiprint("SpectralElementGrid2D before if")
     if domain isa Domains.SphereDomain
+        mpiprint("SpectralElementGrid2D branch 1")
         CoordType3D = Topologies.coordinate_type(topology)
         FT = Geometry.float_type(CoordType3D)
         CoordType2D = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
         global_geometry =
             Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
     else
+        mpiprint("SpectralElementGrid2D branch 2")
         CoordType2D = Topologies.coordinate_type(topology)
         FT = Geometry.float_type(CoordType2D)
         global_geometry = Geometry.CartesianGlobalGeometry()
     end
+    mpiprint("SpectralElementGrid2D after if")
     AIdx = Geometry.coordinate_axis(CoordType2D)
     nlelems = Topologies.nlocalelems(topology)
     ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
     high_order_Nq = Quadratures.degrees_of_freedom(high_order_quadrature_style)
+    mpiprint("SpectralElementGrid2D after setup")
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
@@ -186,6 +202,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
         Quadratures.quadrature_points(FT, quadrature_style)
     high_order_quad_points, high_order_quad_weights =
         Quadratures.quadrature_points(FT, high_order_quadrature_style)
+    mpiprint("SpectralElementGrid2D before for")
     for (lidx, elem) in enumerate(Topologies.localelems(topology))
         elem_area = zero(FT)
         high_order_elem_area = zero(FT)
@@ -311,6 +328,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
             end
         end
     end
+    mpiprint("SpectralElementGrid2D after for")
 
     # dss_weights = J ./ dss(J)
     J = DataLayouts.rebuild(local_geometry.J, DA)
@@ -326,7 +344,9 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     }
     interior_faces = Array(Topologies.interior_faces(topology))
 
+    mpiprint("SpectralElementGrid2D before quad_style if")
     if quadrature_style isa Quadratures.GLL
+        mpiprint("SpectralElementGrid2D quad_style if branch 1")
         internal_surface_geometry =
             DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
         for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
@@ -359,6 +379,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
                 internal_surface_geometry_slab[q] = sgeom⁻
             end
         end
+        mpiprint("SpectralElementGrid2D quad_style if branch 1 after for")
         internal_surface_geometry =
             DataLayouts.rebuild(internal_surface_geometry, DA)
 
@@ -386,9 +407,11 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
                 DataLayouts.rebuild(boundary_surface_geometry, DA)
             end
     else
+        mpiprint("SpectralElementGrid2D quad_style if branch 2")
         internal_surface_geometry = nothing
         boundary_surface_geometries = nothing
     end
+    mpiprint("SpectralElementGrid2D before return")
     return SpectralElementGrid2D(
         topology,
         quadrature_style,
