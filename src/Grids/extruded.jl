@@ -37,7 +37,7 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::LG
 end
 
-@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+@memoize IdDict function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat = Flat(),

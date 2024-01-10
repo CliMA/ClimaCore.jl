@@ -57,7 +57,7 @@ LinearAdaption() = LinearAdaption(nothing)
 )
 
 # linear coordinates
-@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+@memoize IdDict function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Grids.AbstractGrid,
     vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,

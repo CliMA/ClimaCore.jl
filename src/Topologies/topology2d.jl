@@ -195,7 +195,7 @@ function simple_partition(nelems::Int, npart::Int)
     return partition, ranges
 end
 
-@memoize WeakValueDict function Topology2D(
+@memoize IdDict function Topology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
     elemorder = Meshes.elements(mesh),
@@ -436,7 +436,7 @@ end
             end
         end
     end
-    # 6). 
+    # 6).
     comm_vertex_lengths = zeros(Int, length(send_elem_pids))
     ghost_vertex_neighbor_loc = Int[]
     ghost_vertex_comm_idx_offset = ones(Int, length(ghost_vertex_offset))
@@ -474,7 +474,7 @@ end
     end
     unique!(perimeter_elems)
     internal_elems = setdiff(1:length(local_elem_gidx), perimeter_elems)
-    # 7). 
+    # 7).
     comm_face_lengths = zeros(Int, length(send_elem_pids))
     ghost_face_neighbor_loc = Vector{Int}(undef, length(ghost_faces))
     ghost_face_gcidx = zeros(Int, length(ghost_faces))

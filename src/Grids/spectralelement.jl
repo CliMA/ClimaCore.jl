@@ -27,7 +27,7 @@ mutable struct SpectralElementGrid1D{
     dss_weights::D
 end
 
-@memoize WeakValueDict function SpectralElementGrid1D(
+@memoize IdDict function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
 )
@@ -148,7 +148,7 @@ where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
 [`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
-@memoize WeakValueDict function SpectralElementGrid2D(
+@memoize IdDict function SpectralElementGrid2D(
     topology,
     quadrature_style;
     enable_bubble = false,

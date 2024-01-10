@@ -372,7 +372,8 @@ function read_grid_new(reader, name)
         else
             mpiprint("read_grid_new SpectralElementGrid2D", reader.context)
             mpiprint("read_grid_new $topology\nread_grid_new $quadrature_style", reader.context)
-            return Grids.SpectralElementGrid2D(topology, quadrature_style)
+            grid = Grids.SpectralElementGrid2D(topology, quadrature_style)
+            return grid
         end
     elseif type == "FiniteDifferenceGrid"
         mpiprint("branch 2 before read_topology", reader.context)
