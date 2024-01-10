@@ -168,11 +168,10 @@ end
 function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
-    enable_bubble::Bool,
-    bubble = enable_bubble,
+    bubble = nothing,
     enable_bubble = false, # deprecated
 )
-
+    bubble = something(bubble, enable_bubble)
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
