@@ -178,8 +178,8 @@ const ExtrudedSpectralElementGrid3D =
 
 
 
-const PlaneGrid = ExtrudedFiniteDifferenceGrid{<:LineSpectralElementGrid}
-function PlaneGrid(;
+const SliceGrid = ExtrudedFiniteDifferenceGrid{<:LineSpectralElementGrid}
+function SliceGrid(;
     x_min::Real,
     x_max::Real,
     x_elem,
