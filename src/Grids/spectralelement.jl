@@ -153,7 +153,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     quadrature_style;
     enable_bubble = false,
 )
-    mpiprint("SpectralElementGrid1D start")
+    mpiprint("SpectralElementGrid2D start")
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
@@ -334,10 +334,12 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
     J = DataLayouts.rebuild(local_geometry.J, DA)
     dss_local_weights = copy(J)
     if quadrature_style isa Quadratures.GLL
+        mpiprint("SpectralElementGrid2D before dss")
         Topologies.dss!(dss_local_weights, topology)
     end
     dss_local_weights .= J ./ dss_local_weights
 
+    mpiprint("SpectralElementGrid2D before surface geometry")
     SG = Geometry.SurfaceGeometry{
         FT,
         Geometry.AxisVector{FT, Geometry.LocalAxis{AIdx}, SVector{2, FT}},

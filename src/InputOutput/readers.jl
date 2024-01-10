@@ -370,7 +370,8 @@ function read_grid_new(reader, name)
             mpiprint("read_grid_new SpectralElementGrid1D", reader.context)
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
-            mpiprint("read_grid_new SpectralElementGrid1D", reader.context)
+            mpiprint("read_grid_new SpectralElementGrid2D", reader.context)
+            mpiprint("read_grid_new $topology\nread_grid_new $quadrature_style", reader.context)
             return Grids.SpectralElementGrid2D(topology, quadrature_style)
         end
     elseif type == "FiniteDifferenceGrid"
@@ -480,6 +481,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         mpiprint("field type", reader.context)
         if haskey(attrs(obj), "grid")
             grid = read_grid(reader, attrs(obj)["grid"])
+            mpiprint("after read_grid", reader.context)
             staggering = get(attrs(obj), "staggering", nothing)
             mpiprint("before staggering", reader.context)
             if staggering == "CellCenter"
