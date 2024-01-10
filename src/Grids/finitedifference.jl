@@ -218,11 +218,22 @@ const ColumnGrid = FiniteDifferenceGrid{<:Topologies.ColumnTopology1D}
         )
 """
 function ColumnGrid(;
-    z_min::Real, z_max::Real, z_periodic::Bool=false, z_boundary_names=(:bottom, :top),
-    z_elem::Integer, z_stretch=Meshes.Uniform(),
+    z_min::Real,
+    z_max::Real,
+    z_periodic::Bool = false,
+    z_boundary_names = (:bottom, :top),
+    z_elem::Integer,
+    z_stretch = Meshes.Uniform(),
     context = ClimaComms.SingletonCommsContext(),
 )
-    mesh = Meshes.ZIntervalMesh(; z_min, z_max, z_periodic, z_boundary_names, z_elem, z_stretch)
+    mesh = Meshes.ZIntervalMesh(;
+        z_min,
+        z_max,
+        z_periodic,
+        z_boundary_names,
+        z_elem,
+        z_stretch,
+    )
     topology = Topologies.IntervalTopology(mesh)
     FiniteDifferenceGrid(topology)
 end

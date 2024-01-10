@@ -606,17 +606,29 @@ Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
 
 ## aliases
 
-const LineSpectralElementGrid = SpectralElementGrid1D{<:Topologies.LineTopology1D}
+const LineSpectralElementGrid =
+    SpectralElementGrid1D{<:Topologies.LineTopology1D}
 
 function LineSpectralElementGrid(;
-    x_min::Real, x_max::Real, x_periodic::Bool=false, x_boundary_names=(:west, :east),
-    x_elem::Integer, x_stretch=Uniform(),
-    poly_degree=3,
-    context=ClimaComms.SingletonCommsContext()
+    x_min::Real,
+    x_max::Real,
+    x_periodic::Bool = false,
+    x_boundary_names = (:west, :east),
+    x_elem::Integer,
+    x_stretch = Uniform(),
+    poly_degree = 3,
+    context = ClimaComms.SingletonCommsContext(),
 )
-    mesh = XIntervalMesh(; x_min, x_max, x_periodic, x_boundary_names, x_elem, x_stretch)
+    mesh = XIntervalMesh(;
+        x_min,
+        x_max,
+        x_periodic,
+        x_boundary_names,
+        x_elem,
+        x_stretch,
+    )
     topology = IntervalTopology(context, mesh)
-    quadrature_style = Quadratures.GLL{poly_degree+1}()
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
     SpectralElementGrid1D(topology, quadrature_style)
 end
 const RectilinearSpectralElementGrid =
@@ -633,17 +645,37 @@ const RectilinearSpectralElementGrid =
 Constructor for a `SpectralElementGrid2D` on a `RectangleDomain`, with `XYPoint` coordinates.
 """
 function RectilinearSpectralElementGrid(;
-    x_min::Real, x_max::Real, x_elem, x_periodic::Bool=false, x_boundary_names = (:west, :east),
-    y_min::Real, y_max::Real, y_elem, y_periodic::Bool=false, y_boundary_names = (:south, :north),
+    x_min::Real,
+    x_max::Real,
+    x_elem,
+    x_periodic::Bool = false,
+    x_boundary_names = (:west, :east),
+    y_min::Real,
+    y_max::Real,
+    y_elem,
+    y_periodic::Bool = false,
+    y_boundary_names = (:south, :north),
     context = ClimaComms.context(),
-    poly_degree=3,
+    poly_degree = 3,
 )
     mesh = Meshes.RectilinearMesh(;
-        x_min, x_max, y_min, y_max, x_periodic, x_boundary_names, x_elem, 
-        y_min, y_max, y_min, y_max, y_periodic, y_boundary_names, y_elem, 
-        )
+        x_min,
+        x_max,
+        y_min,
+        y_max,
+        x_periodic,
+        x_boundary_names,
+        x_elem,
+        y_min,
+        y_max,
+        y_min,
+        y_max,
+        y_periodic,
+        y_boundary_names,
+        y_elem,
+    )
     topology = Topologies.Topology2D(context, mesh)
-    quadrature_style = Quadratures.GLL{poly_degree+1}()
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
     SpectralElementGrid2D(topology, quadrature_style)
 end
 
@@ -651,7 +683,9 @@ const CubedSphereGrid =
     SpectralElementGrid2D{<:Topologies.CubedSphereTopology2D}
 
 function CubedSphereGrid(;
-    radius::Real, panel_elem::Integer, cubed_sphere_type = Meshes.EquiangularCubedSphere,
+    radius::Real,
+    panel_elem::Integer,
+    cubed_sphere_type = Meshes.EquiangularCubedSphere,
     context = ClimaComms.context(),
     poly_degree = 3,
     bubble = true,
@@ -659,7 +693,7 @@ function CubedSphereGrid(;
     domain = Domains.SphereDomain(radius)
     mesh = cubed_sphere_type(domain, panel_elem)
     topology = Topologies.Topology2D(context, mesh)
-    quadrature_style = Quadratures.GLL{poly_degree+1}()
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
     SpectralElementGrid2D(topology, quadrature_style; bubble)
 end
 

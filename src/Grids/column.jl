@@ -43,7 +43,8 @@ column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
     ColumnViewGrid(grid, colidx)
 
 topology(colgrid::ColumnViewGrid) = vertical_topology(colgrid.full_grid)
-vertical_topology(colgrid::ColumnViewGrid) = vertical_topology(colgrid.full_grid)
+vertical_topology(colgrid::ColumnViewGrid) =
+    vertical_topology(colgrid.full_grid)
 
 local_geometry_data(colgrid::ColumnViewGrid, staggering::Staggering) = column(
     local_geometry_data(colgrid.full_grid, staggering::Staggering),

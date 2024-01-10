@@ -33,8 +33,16 @@ end
 
 
 function RectilinearMesh(;
-    x_min::Real, x_max::Real, x_elem::Integer, x_periodic::Bool=false, x_boundary_names=(:west, :east),
-    y_min::Real, y_max::Real, y_elem::Integer, y_periodic::Bool=false, y_boundary_names=(:south, :north),
+    x_min::Real,
+    x_max::Real,
+    x_elem::Integer,
+    x_periodic::Bool = false,
+    x_boundary_names = (:west, :east),
+    y_min::Real,
+    y_max::Real,
+    y_elem::Integer,
+    y_periodic::Bool = false,
+    y_boundary_names = (:south, :north),
 )
     x_domain = XIntervalDomain(; x_min, x_max, x_periodic, x_boundary_names)
     y_domain = YIntervalDomain(; y_min, y_max, y_periodic, y_boundary_names)
