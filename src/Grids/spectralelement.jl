@@ -38,7 +38,7 @@ end
 function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
-    float_type::AbstractFloat = eltype(Topologies.coordinate_type(topology)),
+    float_type = eltype(Topologies.coordinate_type(topology)),
 )
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
