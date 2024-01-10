@@ -35,7 +35,7 @@ function mpiprint(str, comms_ctx)
     if comms_ctx isa ClimaComms.SingletonCommsContext
         print(str * "\n")
     else
-        print(string(MPI.Comm_rank(comms_ctx.mpicomm)) * " " * str * "\n")
+        print(" " * string(MPI.Comm_rank(comms_ctx.mpicomm)) * " " * str * "\n")
     end
     flush(stdout)
 end
@@ -215,6 +215,7 @@ function read_domain_new(reader::HDF5Reader, name::AbstractString)
     elseif type == "SphereDomain"
         mpiprint("read_domain_new branch 2 SphereDomain", reader.context)
         radius = attrs(group)["radius"]
+        mpiprint("before read_domain_new return", reader.context)
         return Domains.SphereDomain(radius)
     else
         error("Unsupported domain type $type")
@@ -264,10 +265,12 @@ function read_mesh_new(reader::HDF5Reader, name::AbstractString)
     elseif type == "EquiangularCubedSphere"
         mpiprint("read_mesh_new branch 2 EquiangularCubedSphere", reader.context)
         domain = read_domain(reader, attrs(group)["domain"])
+        mpiprint("after read_domain", reader.context)
         localelementmap =
             attrs(group)["localelementmap"] == "NormalizedBilinearMap" ?
             Meshes.NormalizedBilinearMap() : Meshes.IntrinsicMap()
         ne = attrs(group)["ne"]
+        mpiprint("before read_mesh_new return", reader.context)
         return Meshes.EquiangularCubedSphere(domain, ne, localelementmap)
     end
 end
@@ -290,7 +293,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     group = reader.file["topologies/$name"]
     type = attrs(group)["type"]
     if type == "IntervalTopology"
-        mpiprint("IntervalTopology", reader.context)
+        mpiprint("branch 1 IntervalTopology", reader.context)
         mesh = read_mesh(reader, attrs(group)["mesh"])
         # context =
         #     ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
@@ -302,10 +305,14 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
         mpiprint("before IntervalTopology call", reader.context)
         return Topologies.IntervalTopology(mesh)
     elseif type == "Topology2D"
+        mpiprint("branch 2 Topology2D", reader.context)
         mesh = read_mesh(reader, attrs(group)["mesh"])
+        mpiprint("branch 2 after read_mesh", reader.context)
         if haskey(group, "elemorder")
+            mpiprint("branch 2 if", reader.context)
             elemorder_matrix = HDF5.read(group, "elemorder")
             if reader.file_version < v"0.10.9"
+                mpiprint("branch 2 OLDER file version", reader.context)
                 elemorder = collect(
                     reinterpret(
                         reshape,
@@ -314,6 +321,7 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
                     ),
                 )
             else
+                mpiprint("branch 2 NEWER file version", reader.context)
                 elemorder = collect(
                     reinterpret(
                         reshape,
@@ -323,9 +331,10 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
                 )
             end
         else
+            mpiprint("branch 3 else", reader.context)
             elemorder = Meshes.elements(mesh)
         end
-
+        mpiprint("read_topology_new before return", reader.context)
         return Topologies.Topology2D(reader.context, mesh, elemorder)
     else
         error("Unsupported type $type")
@@ -356,6 +365,7 @@ function read_grid_new(reader, name)
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         mpiprint("branch 1 before read_topology", reader.context)
         topology = read_topology(reader, attrs(group)["topology"])
+        mpiprint("after read_topology", reader.context)
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
