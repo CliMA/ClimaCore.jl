@@ -43,6 +43,7 @@ function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption = Flat();
+    deep = false,
 )
     get!(
         Cache.OBJECT_CACHE,
@@ -51,6 +52,7 @@ function ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
             hypsography,
+            deep,
         ),
     ) do
         _ExtrudedFiniteDifferenceGrid(
@@ -65,18 +67,31 @@ end
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
-    hypsography::Flat,
+    hypsography::Flat;
+    deep = false,
 )
-    global_geometry = horizontal_grid.global_geometry
+    if horizontal_grid.global_geometry isa Geometry.SphericalGlobalGeometry
+        radius = horizontal_grid.global_geometry.radius
+        if deep
+            global_geometry = Geometry.DeepSphericalGlobalGeometry(radius)
+        else
+            global_geometry = Geometry.ShallowSphericalGlobalGeometry(radius)
+        end
+    else
+        global_geometry = horizontal_grid.global_geometry
+    end
+
     center_local_geometry =
         Geometry.product_geometry.(
             horizontal_grid.local_geometry,
             vertical_grid.center_local_geometry,
+            Ref(global_geometry),
         )
     face_local_geometry =
         Geometry.product_geometry.(
             horizontal_grid.local_geometry,
             vertical_grid.face_local_geometry,
+            Ref(global_geometry),
         )
 
     return ExtrudedFiniteDifferenceGrid(

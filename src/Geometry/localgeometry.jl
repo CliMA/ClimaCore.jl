@@ -122,18 +122,3 @@ function blockmat(
         ),
     )
 end
-
-function product_geometry(
-    horizontal_local_geometry::Geometry.LocalGeometry,
-    vertical_local_geometry::Geometry.LocalGeometry,
-)
-    coordinates = Geometry.product_coordinates(
-        horizontal_local_geometry.coordinates,
-        vertical_local_geometry.coordinates,
-    )
-    J = horizontal_local_geometry.J * vertical_local_geometry.J
-    WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    ∂x∂ξ =
-        blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
-    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
-end
