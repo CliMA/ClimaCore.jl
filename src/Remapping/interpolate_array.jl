@@ -590,10 +590,6 @@ function interpolate_column(
     # we have to make sure that we are passing around views of the same array (as opposed to
     # copied of it).
     if physical_z
-        # We are hardcoding the transformation from Hypsography.LinearAdaption
-        space.hypsography isa Hypsography.LinearAdaption ||
-            error("Cannot interpolate $(space.hypsography) hypsography")
-
         FT = Spaces.undertype(axes(field))
 
         # interpolate_slab! takes a vector
@@ -601,19 +597,26 @@ function interpolate_column(
 
         interpolate_slab!(
             z_surface,
-            space.hypsography.surface,
+            space.hypsography.surface.z,
             [Fields.SlabIndex(nothing, gidx)],
             [Is],
         )
         z_surface = z_surface[]
         z_top = Spaces.vertical_topology(space).mesh.domain.coord_max.z
 
-        zpts_ref = [
-            Geometry.ZPoint((z.z - z_surface) / (1 - z_surface / z_top)) for
-            z in zpts if z.z > z_surface
+        all_zpts_ref = [
+            Hypsography.physical_z_to_ref_z(
+                Spaces.grid(space).hypsography,
+                z_ref,
+                Geometry.ZPoint(z_surface),
+                Geometry.ZPoint(z_top),
+            ) for z_ref in zpts
         ]
 
-        # When zpts = zpts_ref, all the points are above the surface
+        # Remove points below the surface
+        zpts_ref = [z_ref for z_ref in all_zpts_ref if z_ref.z > 0]
+
+        # Edge case check: when zpts = zpts_ref, all the points are above the surface
         num_points_below_surface = length(zpts) - length(zpts_ref)
 
         fill!(

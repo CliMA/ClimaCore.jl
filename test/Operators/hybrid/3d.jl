@@ -9,6 +9,7 @@ import ClimaCore:
     Meshes,
     Geometry,
     Topologies,
+    Grids,
     Spaces,
     Quadratures,
     Fields,
@@ -32,24 +33,53 @@ device = ClimaComms.device()
         ClimaComms.SingletonCommsContext(device),
         vertmesh,
     )
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopology)
+    vertgrid = Grids.FiniteDifferenceGrid(verttopology)
 
-    horzdomain = Domains.SphereDomain(30.0)
+    radius = 30.0
+    horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),
         horzmesh,
     )
     quad = Quadratures.GLL{3 + 1}()
-    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+    horzgrid = Grids.SpectralElementGrid2D(horztopology, quad)
 
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
+    # shallow
+    shallow_grid = Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid)
 
-    coords = Fields.coordinate_field(hv_center_space)
+    coords = Fields.coordinate_field(
+        Spaces.CenterExtrudedFiniteDifferenceSpace(shallow_grid),
+    )
     x = Geometry.UVWVector.(cosd.(coords.lat), 0.0, 0.0)
     div = Operators.Divergence()
-    @test norm(div.(x)) < 2e-2
+    @test div.(x) ≈ zero(coords.z) atol = 1e-4
+
+    fcoords = Fields.coordinate_field(
+        Spaces.FaceExtrudedFiniteDifferenceSpace(shallow_grid),
+    )
+    y = map(coord -> Geometry.WVector(0.7), fcoords)
+    divf2c = Operators.DivergenceF2C()
+    @test divf2c.(y) ≈ zero(coords.z) atol = 100 * eps(FT)
+
+    # deep
+    deep_grid =
+        Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid; deep = true)
+
+    coords = Fields.coordinate_field(
+        Spaces.CenterExtrudedFiniteDifferenceSpace(deep_grid),
+    )
+    x = Geometry.UVWVector.(cosd.(coords.lat), 0.0, 0.0)
+    div = Operators.Divergence()
+    @test div.(x) ≈ zero(coords.z) atol = 1e-4
+
+    # divergence of a constant outward vector field = 2 w / (r + z)
+    fcoords = Fields.coordinate_field(
+        Spaces.FaceExtrudedFiniteDifferenceSpace(deep_grid),
+    )
+    y = map(coord -> Geometry.WVector(0.7), fcoords)
+    divf2c = Operators.DivergenceF2C()
+    @test divf2c.(y) ≈ (2 * 0.7) ./ (radius .+ coords.z) atol = 100 * eps(FT)
 end
 
 function hvspace_3D(
