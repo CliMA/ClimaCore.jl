@@ -123,6 +123,9 @@ end
 
 
 function Base.close(hdfreader::HDF5Reader)
+    @debug "closing file" hdfreader.context pid =
+        ClimaComms.mypid(hdfreader.context)
+
     empty!(hdfreader.domain_cache)
     empty!(hdfreader.mesh_cache)
     empty!(hdfreader.topology_cache)

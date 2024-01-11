@@ -2,11 +2,9 @@ module Grids
 
 import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm
-import Memoize: @memoize
-import WeakValueDicts: WeakValueDict
 import ..DataLayouts,
     ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, remove_from_cache!
 import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 
@@ -28,7 +26,6 @@ Grids should define the following
 
 """
 abstract type AbstractGrid end
-
 
 """
     Grids.topology(grid::AbstractGrid)

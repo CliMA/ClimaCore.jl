@@ -6,6 +6,7 @@ import ClimaComms, Adapt
 using CUDA
 
 import ..ClimaCore
+import ..Utilities: remove_from_cache!
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
@@ -13,8 +14,6 @@ import ..DataLayouts
 import ..slab, ..column, ..level
 
 import ..DeviceSideDevice, ..DeviceSideContext
-
-using Memoize, WeakValueDicts
 
 """
    AbstractTopology

@@ -45,9 +45,22 @@ mutable struct FiniteDifferenceGrid{
 end
 
 
-@memoize WeakValueDict function FiniteDifferenceGrid(
-    topology::Topologies.IntervalTopology,
-)
+const FD_GRID_CACHE = Dict()
+
+function remove_from_cache!(grid::FiniteDifferenceGrid)
+    filter!(FD_GRID_CACHE) do (k, v)
+        v !== grid
+    end
+    return nothing
+end
+
+function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
+    get!(FD_GRID_CACHE, (topology,)) do
+        _FiniteDifferenceGrid(topology)
+    end
+end
+
+function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     global_geometry = Geometry.CartesianGlobalGeometry()
     mesh = topology.mesh
     CT = Meshes.coordinate_type(mesh)

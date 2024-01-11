@@ -10,6 +10,7 @@ CurrentModule = ClimaCore
 Utilities.PlusHalf
 Utilities.half
 Utilities.UnrolledFunctions
+Utilities.remove_from_cache!
 ```
 
 ## DataLayouts
