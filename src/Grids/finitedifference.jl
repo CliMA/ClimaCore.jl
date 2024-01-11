@@ -49,90 +49,115 @@ end
 
 function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     global_geometry = Geometry.CartesianGlobalGeometry()
-    mesh = topology.mesh
-    CT = Meshes.coordinate_type(mesh)
-    AIdx = Geometry.coordinate_axis(CT)
-    # TODO: FD operators  hardcoded to work over the 3-axis, need to generalize
-    # similar to spectral operators
-    @assert AIdx == (3,) "FiniteDifference operations only work over the 3-axis (ZPoint) domain"
-    FT = eltype(CT)
     ArrayType = ClimaComms.array_type(topology)
-    face_coordinates = collect(mesh.faces)
-    LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
-    nface = length(face_coordinates) - Topologies.isperiodic(topology)
-    ncent = length(face_coordinates) - 1
-    # contstruct on CPU, copy to device at end
-    center_local_geometry = DataLayouts.VF{LG}(Array{FT}, ncent)
-    face_local_geometry = DataLayouts.VF{LG}(Array{FT}, nface)
-    for i in 1:ncent
-        # centers
-        coord⁻ = Geometry.component(face_coordinates[i], 1)
-        coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
-        # at the moment we use a "discrete Jacobian"
-        # ideally we should use the continuous quantity via the derivative of the warp function
-        # could we just define this then as deriv on the mesh element coordinates?
-        coord = (coord⁺ + coord⁻) / 2
-        Δcoord = coord⁺ - coord⁻
-        J = Δcoord
-        WJ = Δcoord
-        ∂x∂ξ = SMatrix{1, 1}(J)
-        center_local_geometry[i] = Geometry.LocalGeometry(
-            CT(coord),
-            J,
-            WJ,
-            Geometry.AxisTensor(
-                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-                ∂x∂ξ,
-            ),
-        )
+
+    mesh = Topologies.mesh(topology)
+    CT = Topologies.coordinate_type(mesh)
+    FT = Geometry.float_type(CT)
+    Nv_face = length(mesh.faces)
+    # construct on CPU, adapt to GPU
+    face_coordinates = DataLayouts.VF{CT}(Array{FT}, Nv_face)
+    for v in 1:Nv_face
+        face_coordinates[v] = mesh.faces[v]
     end
-    for i in 1:nface
-        coord = Geometry.component(face_coordinates[i], 1)
-        if i == 1
-            # bottom face
-            if Topologies.isperiodic(topology)
-                Δcoord⁺ =
-                    Geometry.component(face_coordinates[2], 1) -
-                    Geometry.component(face_coordinates[1], 1)
-                Δcoord⁻ =
-                    Geometry.component(face_coordinates[end], 1) -
-                    Geometry.component(face_coordinates[end - 1], 1)
-                J = (Δcoord⁺ + Δcoord⁻) / 2
-                WJ = J
-            else
-                coord⁺ = Geometry.component(face_coordinates[2], 1)
-                J = coord⁺ - coord
-                WJ = J / 2
-            end
-        elseif !Topologies.isperiodic(topology) && i == nface
-            # top face
-            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
-            J = coord - coord⁻
-            WJ = J / 2
-        else
-            coord⁺ = Geometry.component(face_coordinates[i + 1], 1)
-            coord⁻ = Geometry.component(face_coordinates[i - 1], 1)
-            J = (coord⁺ - coord⁻) / 2
-            WJ = J
-        end
-        ∂x∂ξ = SMatrix{1, 1}(J)
-        ∂ξ∂x = SMatrix{1, 1}(inv(J))
-        face_local_geometry[i] = Geometry.LocalGeometry(
-            CT(coord),
-            J,
-            WJ,
-            Geometry.AxisTensor(
-                (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
-                ∂x∂ξ,
-            ),
-        )
-    end
+    center_local_geometry, face_local_geometry = fd_geometry_data(
+        face_coordinates;
+        periodic = Topologies.isperiodic(topology),
+    )
+
     return FiniteDifferenceGrid(
         topology,
         global_geometry,
         Adapt.adapt(ArrayType, center_local_geometry),
         Adapt.adapt(ArrayType, face_local_geometry),
     )
+end
+
+# called by the FiniteDifferenceGrid constructor, and the ExtrudedFiniteDifferenceGrid constructor with Hypsography
+function fd_geometry_data(
+    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}};
+    periodic,
+) where {FT}
+    CT = Geometry.ZPoint{FT}
+    AIdx = (3,)
+    LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
+    (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
+    Nv_face = Nv - periodic
+    Nv_cent = Nv - 1
+    center_local_geometry =
+        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_cent, Nh))
+    face_local_geometry =
+        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_face, Nh))
+    c1(args...) =
+        Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
+    for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
+        for v in 1:Nv_cent
+            # centers
+            coord⁻ = c1(i, j, k, v, h)
+            coord⁺ = c1(i, j, k, v + 1, h)
+            # use a "discrete Jacobian"
+            coord = (coord⁺ + coord⁻) / 2
+            Δcoord = coord⁺ - coord⁻
+            J = Δcoord
+            WJ = Δcoord
+            ∂x∂ξ = SMatrix{1, 1}(J)
+            center_local_geometry[CartesianIndex(i, j, k, v, h)] =
+                Geometry.LocalGeometry(
+                    CT(coord),
+                    J,
+                    WJ,
+                    Geometry.AxisTensor(
+                        (
+                            Geometry.LocalAxis{AIdx}(),
+                            Geometry.CovariantAxis{AIdx}(),
+                        ),
+                        ∂x∂ξ,
+                    ),
+                )
+        end
+        for v in 1:Nv_face
+            coord = c1(i, j, k, v, h)
+            if v == 1
+                # bottom face
+                if periodic
+                    Δcoord⁺ = c1(i, j, k, 2, h) - c1(i, j, k, 1, h)
+                    Δcoord⁻ = c1(i, j, k, Nv, h) - c1(i, j, k, Nv - 1, h)
+                    J = (Δcoord⁺ + Δcoord⁻) / 2
+                    WJ = J
+                else
+                    coord⁺ = c1(i, j, k, 2, h)
+                    J = coord⁺ - coord
+                    WJ = J / 2
+                end
+            elseif v == Nv_cent + 1
+                @assert !periodic
+                # top face
+                coord⁻ = c1(i, j, k, Nv - 1, h)
+                J = coord - coord⁻
+                WJ = J / 2
+            else
+                coord⁺ = c1(i, j, k, v + 1, h)
+                coord⁻ = c1(i, j, k, v - 1, h)
+                J = (coord⁺ - coord⁻) / 2
+                WJ = J
+            end
+            ∂x∂ξ = SMatrix{1, 1}(J)
+            face_local_geometry[CartesianIndex(i, j, k, v, h)] =
+                Geometry.LocalGeometry(
+                    CT(coord),
+                    J,
+                    WJ,
+                    Geometry.AxisTensor(
+                        (
+                            Geometry.LocalAxis{AIdx}(),
+                            Geometry.CovariantAxis{AIdx}(),
+                        ),
+                        ∂x∂ξ,
+                    ),
+                )
+        end
+    end
+    return (center_local_geometry, face_local_geometry)
 end
 
 
