@@ -9,7 +9,7 @@ _memoization_). This has two main advantages:
 1. topology and metric information can be reused, reducing memory usage.
 
 2. it is easy to check if two fields live on the same grid: we can just check if
-   the umderlying grid objects are the same (`===`), rather than checking all
+   the underlying grid objects are the same (`===`), rather than checking all
    the fields are equal (via `==`).
 
 However this means that objects in the cache will not be removed from the
