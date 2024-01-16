@@ -39,21 +39,20 @@ end
 
 # non-view grids are cached based on their input arguments
 # this means that if data is saved in two different files, reloading will give fields which live on the same grid
-const EXTRUDED_GRID_CACHE = Dict()
-
-function remove_from_cache!(grid::ExtrudedFiniteDifferenceGrid)
-    filter!(EXTRUDED_GRID_CACHE) do (k, v)
-        v !== grid
-    end
-    return nothing
-end
-
 function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption = Flat();
 )
-    get!(EXTRUDED_GRID_CACHE, (horizontal_grid, vertical_grid, hypsography)) do
+    get!(
+        Cache.OBJECT_CACHE,
+        (
+            ExtrudedFiniteDifferenceGrid,
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+        ),
+    ) do
         _ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
@@ -66,7 +65,7 @@ end
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
-    hypsography::Flat = Flat(),
+    hypsography::Flat,
 )
     global_geometry = horizontal_grid.global_geometry
     center_local_geometry =

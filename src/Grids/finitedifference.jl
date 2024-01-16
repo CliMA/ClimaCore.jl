@@ -16,10 +16,6 @@ Cell face location
 struct CellFace <: Staggering end
 
 
-
-
-
-
 abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
@@ -45,17 +41,8 @@ mutable struct FiniteDifferenceGrid{
 end
 
 
-const FD_GRID_CACHE = Dict()
-
-function remove_from_cache!(grid::FiniteDifferenceGrid)
-    filter!(FD_GRID_CACHE) do (k, v)
-        v !== grid
-    end
-    return nothing
-end
-
 function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
-    get!(FD_GRID_CACHE, (topology,)) do
+    get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do
         _FiniteDifferenceGrid(topology)
     end
 end

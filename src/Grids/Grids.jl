@@ -4,7 +4,7 @@ import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm
 import ..DataLayouts,
     ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
-import ..Utilities: PlusHalf, half, remove_from_cache!
+import ..Utilities: PlusHalf, half, Cache
 import ..slab, ..column, ..level
 import ..DeviceSideDevice, ..DeviceSideContext
 

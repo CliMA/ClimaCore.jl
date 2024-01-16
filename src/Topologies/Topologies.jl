@@ -6,7 +6,7 @@ import ClimaComms, Adapt
 using CUDA
 
 import ..ClimaCore
-import ..Utilities: remove_from_cache!
+import ..Utilities: Cache
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
