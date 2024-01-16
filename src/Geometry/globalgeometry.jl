@@ -274,7 +274,6 @@ function LocalVector(
     G' * u
 end
 
-
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
     vertical_local_geometry::Geometry.LocalGeometry,
@@ -286,18 +285,28 @@ function product_geometry(
     )
     J = horizontal_local_geometry.J * vertical_local_geometry.J
     WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    if global_geometry isa DeepSphericalGlobalGeometry
-        r = global_geometry.radius
-        z = vertical_local_geometry.coordinates.z
-        ∂x∂ξ = blockmat(
-            horizontal_local_geometry.∂x∂ξ .* ((r + z) / r),
-            vertical_local_geometry.∂x∂ξ,
-        )
-    else
-        ∂x∂ξ = blockmat(
-            horizontal_local_geometry.∂x∂ξ,
-            vertical_local_geometry.∂x∂ξ,
-        )
-    end
+    ∂x∂ξ =
+        blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
+    return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
+end
+function product_geometry(
+    horizontal_local_geometry::Geometry.LocalGeometry,
+    vertical_local_geometry::Geometry.LocalGeometry,
+    global_geometry::DeepSphericalGlobalGeometry,
+)
+    r = global_geometry.radius
+    z = vertical_local_geometry.coordinates.z
+    scale = ((r + z) / r)
+
+    coordinates = Geometry.product_coordinates(
+        horizontal_local_geometry.coordinates,
+        vertical_local_geometry.coordinates,
+    )
+    J = scale^2 * horizontal_local_geometry.J * vertical_local_geometry.J
+    WJ = scale^2 * horizontal_local_geometry.WJ * vertical_local_geometry.WJ
+    ∂x∂ξ = blockmat(
+        scale * horizontal_local_geometry.∂x∂ξ,
+        vertical_local_geometry.∂x∂ξ,
+    )
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end

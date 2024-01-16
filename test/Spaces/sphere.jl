@@ -1,7 +1,7 @@
 using LinearAlgebra, IntervalSets
 using ClimaComms
 import ClimaCore:
-    Domains, Topologies, Meshes, Spaces, Geometry, column, Quadratures
+    Domains, Topologies, Meshes, Grids, Spaces, Geometry, column, Quadratures
 
 using Test
 
@@ -87,7 +87,7 @@ end
 @testset "Volume of a spherical shell" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext()
-    radius = FT(128)
+    radius = FT(10)
     zlim = (0, 1)
     helem = 4
     zelem = 10
@@ -99,21 +99,31 @@ end
         boundary_tags = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    vertgrid = Grids.FiniteDifferenceGrid(vertmesh)
 
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
     quad = Quadratures.GLL{Nq}()
-    horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
-
+    horzgrid = Grids.SpectralElementGrid2D(horztopology, quad)
+    horzspace = Spaces.SpectralElementSpace2D(horzgrid)
     @test Spaces.node_horizontal_length_scale(horzspace) ≈
           sqrt((4 * pi * radius^2) / (helem^2 * 6 * (Nq - 1)^2))
 
-    hv_center_space =
-        Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
-
     # "shallow atmosphere" spherical shell: volume = surface area * height
-    @test sum(ones(hv_center_space)) ≈ 4pi * radius^2 * (zlim[2] - zlim[1]) rtol =
-        1e-3
+    shallow_grid = Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid)
+
+    @test sum(ones(Spaces.CenterExtrudedFiniteDifferenceSpace(shallow_grid))) ≈
+          4pi * radius^2 * (zlim[2] - zlim[1]) rtol = 1e-3
+    @test sum(ones(Spaces.FaceExtrudedFiniteDifferenceSpace(shallow_grid))) ≈
+          4pi * radius^2 * (zlim[2] - zlim[1]) rtol = 1e-3
+
+    deep_grid =
+        Grids.ExtrudedFiniteDifferenceGrid(horzgrid, vertgrid; deep = true)
+
+    @test sum(ones(Spaces.CenterExtrudedFiniteDifferenceSpace(deep_grid))) ≈
+          4pi / 3 * ((zlim[2] + radius)^3 - (zlim[1] + radius)^3) rtol = 1e-3
+    @test sum(ones(Spaces.FaceExtrudedFiniteDifferenceSpace(deep_grid))) ≈
+          4pi / 3 * ((zlim[2] + radius)^3 - (zlim[1] + radius)^3) rtol = 1e-3
+
 end
