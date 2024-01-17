@@ -58,7 +58,8 @@ function ExtrudedFiniteDifferenceGrid(
         _ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
-            hypsography,
+            hypsography;
+            deep,
         )
     end
 end
@@ -68,7 +69,7 @@ function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::Flat;
-    deep = false,
+    deep::Bool,
 )
     if horizontal_grid.global_geometry isa Geometry.SphericalGlobalGeometry
         radius = horizontal_grid.global_geometry.radius
