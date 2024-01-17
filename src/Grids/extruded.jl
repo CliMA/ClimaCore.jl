@@ -37,10 +37,35 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::LG
 end
 
-@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+# non-view grids are cached based on their input arguments
+# this means that if data is saved in two different files, reloading will give fields which live on the same grid
+function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
-    hypsography::Flat = Flat(),
+    hypsography::HypsographyAdaption = Flat();
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (
+            ExtrudedFiniteDifferenceGrid,
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+        ),
+    ) do
+        _ExtrudedFiniteDifferenceGrid(
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+        )
+    end
+end
+
+# Non-memoized constructor. Should not generally be called.
+function _ExtrudedFiniteDifferenceGrid(
+    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    vertical_grid::FiniteDifferenceGrid,
+    hypsography::Flat,
 )
     global_geometry = horizontal_grid.global_geometry
     center_local_geometry =

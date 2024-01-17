@@ -21,7 +21,21 @@ mutable struct SpectralElementGrid1D{
     dss_weights::D
 end
 
-@memoize WeakValueDict function SpectralElementGrid1D(
+# non-view grids are cached based on their input arguments
+# this means that if data is saved in two different files, reloading will give fields which live on the same grid
+function SpectralElementGrid1D(
+    topology::Topologies.IntervalTopology,
+    quadrature_style::Quadratures.QuadratureStyle,
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (SpectralElementGrid1D, topology, quadrature_style),
+    ) do
+        _SpectralElementGrid1D(topology, quadrature_style)
+    end
+end
+
+function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
 )
@@ -104,7 +118,6 @@ mutable struct SpectralElementGrid2D{
     boundary_surface_geometries::BS
 end
 
-
 """
     SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
 
@@ -137,10 +150,24 @@ where ``\\tilde{A}^e`` is the approximated area given by the sum of the interior
 Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSphere`](@ref) and
 [`Meshes.EquidistantCubedSphere`](@ref) type, not for [`Meshes.ConformalCubedSphere`](@ref).
 """
-@memoize WeakValueDict function SpectralElementGrid2D(
-    topology,
-    quadrature_style;
-    enable_bubble = false,
+function SpectralElementGrid2D(
+    topology::Topologies.Topology2D,
+    quadrature_style::Quadratures.QuadratureStyle;
+    enable_bubble::Bool = false,
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (SpectralElementGrid2D, topology, quadrature_style, enable_bubble),
+    ) do
+        _SpectralElementGrid2D(topology, quadrature_style; enable_bubble)
+    end
+end
+
+
+function _SpectralElementGrid2D(
+    topology::Topologies.Topology2D,
+    quadrature_style::Quadratures.QuadratureStyle;
+    enable_bubble::Bool,
 )
 
     # 1. compute localgeom for local elememts

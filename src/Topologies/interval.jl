@@ -30,7 +30,17 @@ ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =
     ClimaComms.array_type(topology.context.device)
 
+
 function IntervalTopology(
+    context::ClimaComms.AbstractCommsContext,
+    mesh::Meshes.IntervalMesh,
+)
+    get!(Cache.OBJECT_CACHE, (IntervalTopology, context, mesh)) do
+        _IntervalTopology(context, mesh)
+    end
+end
+
+function _IntervalTopology(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.IntervalMesh,
 )

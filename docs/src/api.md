@@ -12,6 +12,14 @@ Utilities.half
 Utilities.UnrolledFunctions
 ```
 
+### Utilities.Cache
+
+```@docs
+Utilities.Cache
+Utilities.Cache.cached_objects
+Utilities.Cache.clean_cache!
+```
+
 ## DataLayouts
 
 ```@docs

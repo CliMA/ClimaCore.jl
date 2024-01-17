@@ -5,9 +5,13 @@ import ..Geometry,
     ..Domains, ..Topologies, ..Grids, ..Spaces, ..Fields, ..Operators
 import ..Spaces: ExtrudedFiniteDifferenceSpace
 
-import ..Grids: ExtrudedFiniteDifferenceGrid, HypsographyAdaption, Flat
+import ..Grids:
+    _ExtrudedFiniteDifferenceGrid,
+    ExtrudedFiniteDifferenceGrid,
+    HypsographyAdaption,
+    Flat
 
-using StaticArrays, LinearAlgebra, Memoize, WeakValueDicts
+using StaticArrays, LinearAlgebra
 
 
 """
@@ -57,7 +61,7 @@ LinearAdaption() = LinearAdaption(nothing)
 )
 
 # linear coordinates
-@memoize WeakValueDict function ExtrudedFiniteDifferenceGrid(
+function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Grids.AbstractGrid,
     vertical_grid::Grids.FiniteDifferenceGrid,
     adaption::HypsographyAdaption,

@@ -195,12 +195,27 @@ function simple_partition(nelems::Int, npart::Int)
     return partition, ranges
 end
 
-@memoize WeakValueDict function Topology2D(
+function Topology2D(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.AbstractMesh{2},
     elemorder = Meshes.elements(mesh),
     elempid = nothing, # array of same size as elemorder, containing owning pid for each element (it should be sorted)
     orderindex = Meshes.linearindices(elemorder), # inverse mapping of elemorder (e.g. map CartesianIndex => Int)
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (Topology2D, context, mesh, elemorder, elempid, orderindex),
+    ) do
+        _Topology2D(context, mesh, elemorder, elempid, orderindex)
+    end
+end
+
+function _Topology2D(
+    context::ClimaComms.AbstractCommsContext,
+    mesh::Meshes.AbstractMesh{2},
+    elemorder,
+    elempid,
+    orderindex,
 )
     pid = ClimaComms.mypid(context)
     nprocs = ClimaComms.nprocs(context)

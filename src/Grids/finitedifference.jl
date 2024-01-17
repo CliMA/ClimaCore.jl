@@ -16,10 +16,6 @@ Cell face location
 struct CellFace <: Staggering end
 
 
-
-
-
-
 abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
@@ -45,9 +41,13 @@ mutable struct FiniteDifferenceGrid{
 end
 
 
-@memoize WeakValueDict function FiniteDifferenceGrid(
-    topology::Topologies.IntervalTopology,
-)
+function FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
+    get!(Cache.OBJECT_CACHE, (FiniteDifferenceGrid, topology)) do
+        _FiniteDifferenceGrid(topology)
+    end
+end
+
+function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     global_geometry = Geometry.CartesianGlobalGeometry()
     mesh = topology.mesh
     CT = Meshes.coordinate_type(mesh)
