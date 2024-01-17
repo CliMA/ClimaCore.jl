@@ -20,6 +20,18 @@ RectilinearMesh(domain::RectangleDomain, n1::Int, n2::Int) = RectilinearMesh(
     IntervalMesh(domain.interval2; nelems = n2),
 )
 
+# implies isequal
+Base.:(==)(mesh1::RectilinearMesh, mesh2::RectilinearMesh) =
+    mesh1.intervalmesh1 == mesh2.intervalmesh1 &&
+    mesh1.intervalmesh2 == mesh2.intervalmesh2
+function Base.hash(mesh::RectilinearMesh, h::UInt)
+    h = hash(Meshes.RectilinearMesh, h)
+    h = hash(mesh.intervalmesh1, h)
+    h = hash(mesh.intervalmesh2, h)
+    return h
+end
+
+
 function Base.summary(io::IO, mesh::RectilinearMesh)
     n1 = nelements(mesh.intervalmesh1)
     n2 = nelements(mesh.intervalmesh2)

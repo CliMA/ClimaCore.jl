@@ -145,6 +145,10 @@ steps:
   - group: "Unit: Topologies"
     steps:
 
+      - label: "Unit: topo interval"
+        key: unit_topo_interval
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/interval.jl"
+
       - label: "Unit: topo rectangle"
         key: unit_topo_rectangle
         command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle.jl"

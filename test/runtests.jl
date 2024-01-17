@@ -29,6 +29,7 @@ if !Sys.iswindows()
     # now part of buildkite
     # @safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
 
+    @safetestset "Interval topology" begin @time include("Topologies/interval.jl") end
     @safetestset "Rectangle topology" begin @time include("Topologies/rectangle.jl") end
     @safetestset "Rectangle surface topology" begin @time include("Topologies/rectangle_sfc.jl") end
     @safetestset "Cubedsphere topology" begin @time include("Topologies/cubedsphere.jl") end
