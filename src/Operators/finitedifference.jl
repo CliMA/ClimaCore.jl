@@ -2560,6 +2560,32 @@ Base.@propagate_inbounds function stencil_right_boundary(
     (Ju³₊ ⊟ Ju³₋) ⊠ local_geometry.invJ
 end
 
+boundary_width(::DivergenceF2C, ::SetDivergence) = 1
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::DivergenceF2C,
+    bc::SetDivergence,
+    loc,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == left_center_boundary_idx(space)
+    getidx(space, bc.val, loc, nothing, hidx)
+end
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::DivergenceF2C,
+    bc::SetDivergence,
+    loc,
+    space,
+    idx,
+    hidx,
+    arg,
+)
+    @assert idx == right_center_boundary_idx(space)
+    getidx(space, bc.val, loc, nothing, hidx)
+end
+
 boundary_width(::DivergenceF2C, ::Extrapolate) = 1
 Base.@propagate_inbounds function stencil_left_boundary(
     op::DivergenceF2C,
@@ -2592,6 +2618,10 @@ end
 
 function Adapt.adapt_structure(to, bc::SetValue)
     SetValue(Adapt.adapt_structure(to, bc.val))
+end
+
+function Adapt.adapt_structure(to, bc::SetDivergence)
+    SetDivergence(Adapt.adapt_structure(to, bc.val))
 end
 
 

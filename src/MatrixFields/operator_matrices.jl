@@ -855,6 +855,16 @@ Base.@propagate_inbounds function op_matrix_last_row(
     J⁻ = Geometry.LocalGeometry(space, idx - half, hidx).J
     return BidiagonalMatrixRow(-C3(J⁻)', C3(FT(0))') * invJ
 end
+op_matrix_first_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetDivergence,
+    ::Type{FT},
+) where {FT} = UpperDiagonalMatrixRow(C3(FT(0))')
+op_matrix_last_row(
+    ::Operators.DivergenceF2C,
+    ::Operators.SetDivergence,
+    ::Type{FT},
+) where {FT} = LowerDiagonalMatrixRow(C3(FT(0))')
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,

@@ -176,6 +176,7 @@ end
     test_op_matrix(DivergenceC2F, SetDivergence, (ᶜuvw,))
     test_op_matrix(DivergenceF2C, Nothing, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, SetValue, (ᶠuvw,))
+    test_op_matrix(DivergenceF2C, SetDivergence, (ᶠuvw,))
     test_op_matrix(DivergenceF2C, Extrapolate, (ᶠuvw,))
     test_op_matrix(CurlC2F, Nothing, (ᶜc12,), true)
     test_op_matrix(CurlC2F, SetValue, (ᶜc12,))
