@@ -74,7 +74,7 @@ function blockmat(
     Geometry.AxisTensor(
         (Geometry.UWAxis(), Geometry.Covariant13Axis()),
         @SMatrix [
-            A[1, 1] zero(FT);
+            A[1, 1] zero(FT)
             zero(FT) B[1, 1]
         ]
     )
@@ -102,7 +102,7 @@ function blockmat(
     Geometry.AxisTensor(
         (Geometry.UWAxis(), Geometry.Covariant13Axis()),
         @SMatrix [
-            A[1, 1] zero(FT);
+            A[1, 1] zero(FT)
             C[1, 1] B[1, 1]
         ]
     )
@@ -124,8 +124,8 @@ function blockmat(
     B = Geometry.components(b)
     Geometry.AxisTensor(
         (Geometry.VWAxis(), Geometry.Covariant23Axis()),
-        @SMatrix[
-            A[1, 1] zero(FT);
+        @SMatrix [
+            A[1, 1] zero(FT)
             zero(FT) B[1, 1]
         ]
     )
@@ -152,8 +152,8 @@ function blockmat(
     C = Geometry.components(c)
     Geometry.AxisTensor(
         (Geometry.VWAxis(), Geometry.Covariant23Axis()),
-        @SMatrix[
-            A[1, 1] zero(FT);
+        @SMatrix [
+            A[1, 1] zero(FT)
             C[1, 1] B[1, 1]
         ]
     )
@@ -175,8 +175,8 @@ function blockmat(
     Geometry.AxisTensor(
         (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
         @SMatrix [
-            A[1, 1] A[1, 2] zero(FT);
-            A[2, 1] A[2, 2] zero(FT);
+            A[1, 1] A[1, 2] zero(FT)
+            A[2, 1] A[2, 2] zero(FT)
             zero(FT) zero(FT) B[1, 1]
         ]
     )
@@ -204,8 +204,8 @@ function blockmat(
     Geometry.AxisTensor(
         (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
         @SMatrix [
-            A[1, 1] A[1, 2] zero(FT);
-            A[2, 1] A[2, 2] zero(FT);
+            A[1, 1] A[1, 2] zero(FT)
+            A[2, 1] A[2, 2] zero(FT)
             C[1, 1] C[1, 2] B[1, 1]
         ]
     )
