@@ -278,6 +278,7 @@ function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
     vertical_local_geometry::Geometry.LocalGeometry,
     global_geometry::AbstractGlobalGeometry,
+    ∇z = nothing,
 )
     coordinates = Geometry.product_coordinates(
         horizontal_local_geometry.coordinates,
@@ -285,14 +286,18 @@ function product_geometry(
     )
     J = horizontal_local_geometry.J * vertical_local_geometry.J
     WJ = horizontal_local_geometry.WJ * vertical_local_geometry.WJ
-    ∂x∂ξ =
-        blockmat(horizontal_local_geometry.∂x∂ξ, vertical_local_geometry.∂x∂ξ)
+    ∂x∂ξ = blockmat(
+        horizontal_local_geometry.∂x∂ξ,
+        vertical_local_geometry.∂x∂ξ,
+        ∇z,
+    )
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end
 function product_geometry(
     horizontal_local_geometry::Geometry.LocalGeometry,
     vertical_local_geometry::Geometry.LocalGeometry,
     global_geometry::DeepSphericalGlobalGeometry,
+    ∇z = nothing,
 )
     r = global_geometry.radius
     z = vertical_local_geometry.coordinates.z
@@ -307,6 +312,7 @@ function product_geometry(
     ∂x∂ξ = blockmat(
         scale * horizontal_local_geometry.∂x∂ξ,
         vertical_local_geometry.∂x∂ξ,
+        ∇z,
     )
     return Geometry.LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
 end

@@ -37,39 +37,11 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::LG
 end
 
-# non-view grids are cached based on their input arguments
-# this means that if data is saved in two different files, reloading will give fields which live on the same grid
 function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
     hypsography::HypsographyAdaption = Flat();
     deep = false,
-)
-    get!(
-        Cache.OBJECT_CACHE,
-        (
-            ExtrudedFiniteDifferenceGrid,
-            horizontal_grid,
-            vertical_grid,
-            hypsography,
-            deep,
-        ),
-    ) do
-        _ExtrudedFiniteDifferenceGrid(
-            horizontal_grid,
-            vertical_grid,
-            hypsography;
-            deep,
-        )
-    end
-end
-
-# Non-memoized constructor. Should not generally be called.
-function _ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
-    vertical_grid::FiniteDifferenceGrid,
-    hypsography::Flat;
-    deep::Bool,
 )
     if horizontal_grid.global_geometry isa Geometry.SphericalGlobalGeometry
         radius = horizontal_grid.global_geometry.radius
@@ -81,7 +53,47 @@ function _ExtrudedFiniteDifferenceGrid(
     else
         global_geometry = horizontal_grid.global_geometry
     end
+    ExtrudedFiniteDifferenceGrid(
+        horizontal_grid,
+        vertical_grid,
+        hypsography,
+        global_geometry,
+    )
+end
 
+# memoized constructor
+function ExtrudedFiniteDifferenceGrid(
+    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    vertical_grid::FiniteDifferenceGrid,
+    hypsography::HypsographyAdaption,
+    global_geometry::Geometry.AbstractGlobalGeometry,
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (
+            ExtrudedFiniteDifferenceGrid,
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+            global_geometry,
+        ),
+    ) do
+        _ExtrudedFiniteDifferenceGrid(
+            horizontal_grid,
+            vertical_grid,
+            hypsography,
+            global_geometry,
+        )
+    end
+end
+
+# Non-memoized constructor. Should not generally be called, but can be defined for other Hypsography types
+function _ExtrudedFiniteDifferenceGrid(
+    horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
+    vertical_grid::FiniteDifferenceGrid,
+    hypsography::Flat,
+    global_geometry::Geometry.AbstractGlobalGeometry,
+)
     center_local_geometry =
         Geometry.product_geometry.(
             horizontal_grid.local_geometry,

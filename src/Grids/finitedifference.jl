@@ -79,7 +79,7 @@ function fd_geometry_data(
     periodic,
 ) where {FT}
     CT = Geometry.ZPoint{FT}
-    AIdx == (3,)
+    AIdx = (3,)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic

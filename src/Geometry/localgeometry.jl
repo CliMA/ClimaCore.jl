@@ -68,6 +68,7 @@ function blockmat(
         Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
         SMatrix{1, 1, FT, 1},
     },
+    c::Nothing = nothing,
 ) where {FT}
     A = Geometry.components(a)
     B = Geometry.components(b)
@@ -119,6 +120,7 @@ function blockmat(
         Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
         SMatrix{1, 1, FT, 1},
     },
+    c::Nothing = nothing,
 ) where {FT}
     A = Geometry.components(a)
     B = Geometry.components(b)
@@ -169,6 +171,7 @@ function blockmat(
         Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
         SMatrix{1, 1, FT, 1},
     },
+    c::Nothing = nothing,
 ) where {FT}
     A = Geometry.components(a)
     B = Geometry.components(b)
