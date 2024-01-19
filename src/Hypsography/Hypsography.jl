@@ -1,5 +1,7 @@
 module Hypsography
 
+import ClimaComms, Adapt
+
 import ..slab, ..column
 import ..Geometry,
     ..DataLayouts,
