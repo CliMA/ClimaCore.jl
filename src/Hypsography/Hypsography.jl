@@ -15,6 +15,30 @@ using StaticArrays, LinearAlgebra
 
 
 """
+    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref, z_surface, z_top)
+
+Convert reference `z`s to physical `z`s as prescribed by the given adaption.
+"""
+function ref_z_to_physical_z(
+    adaption::HypsographyAdaption,
+    z_ref,
+    z_surface,
+    z_top,
+) end
+
+# For no adaption, z_physical is z_ref.
+function ref_z_to_physical_z(adaption::Nothing, z_ref, z_surface, z_top)
+    return z_ref
+end
+
+"""
+    _check_adaption_constraints(adaption, z_ref, z_surface, z_top)
+
+Ensures that the `adaption` is well defined for the given parameters.
+"""
+function _check_adaption_constraints(adaption, z_ref, z_surface, z_top) end
+
+"""
     LinearAdaption(surface::Field)
 
 Locate the levels by linear interpolation between the surface field and the top
@@ -23,6 +47,10 @@ of the domain, using the method of [GalChen1975](@cite).
 struct LinearAdaption{F <: Union{Fields.Field, Nothing}} <: HypsographyAdaption
     # Union can be removed once deprecation removed.
     surface::F
+end
+
+function ref_z_to_physical_z(adaption::LinearAdaption, z_ref, z_surface, z_top)
+    return z_ref + (1 - z_ref / z_top) * z_surface
 end
 
 """
@@ -40,6 +68,36 @@ struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
     surface::F
     ηₕ::FT
     s::FT
+end
+
+function _check_adaption_constraints(
+    adaption::SLEVEAdaption,
+    z_ref,
+    z_surface,
+    z_top,
+)
+    ηₕ = adaption.ηₕ
+    s = adaption.s
+    FT = eltype(s)
+    @assert FT(0) <= ηₕ <= FT(1)
+    @assert s >= FT(0)
+    if s * z_top <= maximum(z_surface)
+        @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
+    end
+end
+
+function ref_z_to_physical_z(adaption::SLEVEAdaption, z_ref, z_surface, z_top)
+    ηₕ = adaption.ηₕ
+    s = adaption.s
+    η = z_ref ./ z_top
+    FT = eltype(s)
+    # Fix scale height if needed
+    s = ifelse(s * z_top <= maximum(z_surface), FT(8 / 10), s)
+    return ifelse(
+        η <= ηₕ,
+        η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+        η * z_top,
+    )
 end
 
 # deprecated in 0.10.12
@@ -94,27 +152,9 @@ function _ExtrudedFiniteDifferenceGrid(
 
     FT = eltype(z_surface)
 
-    # TODO: Function dispatch
-    if adaption isa LinearAdaption
-        fZ_data = @. z_ref + (1 - z_ref / z_top) * z_surface
-        fZ = Fields.Field(fZ_data, face_ref_space)
-    elseif adaption isa SLEVEAdaption
-        ηₕ = adaption.ηₕ
-        s = adaption.s
-        @assert FT(0) <= ηₕ <= FT(1)
-        @assert s >= FT(0)
-        η = @. z_ref ./ z_top
-        if s * z_top <= maximum(z_surface)
-            @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
-            s = @. FT(8 / 10)
-        end
-        fZ_data = @. ifelse(
-            η <= ηₕ,
-            η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
-            η * z_top,
-        )
-        fZ = Fields.Field(fZ_data, face_ref_space)
-    end
+    _check_adaption_constraints(adaption, z_ref, z_surface, z_top)
+    fZ_data = ref_z_to_physical_z.(Ref(adaption), z_ref, z_surface, z_top)
+    fZ = Fields.Field(fZ_data, face_ref_space)
 
     # Take the horizontal gradient for the Z surface field
     # for computing updated ∂x∂ξ₃₁, ∂x∂ξ₃₂ terms
