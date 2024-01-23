@@ -116,8 +116,10 @@ function _ExtrudedFiniteDifferenceGrid(
     η = @. face_z_ref.z ./ z_top.z
     if s * z_top.z <= maximum(z_surface.z)
         @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
-        s = 0.8
+        s = oftype(s, 0.8)
+        adaption = SLEVEAdaption(adaption.surface, ηₕ, s)
     end
+
     face_z = @. ifelse(
         η <= ηₕ,
         η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
