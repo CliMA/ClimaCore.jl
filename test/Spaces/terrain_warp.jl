@@ -90,7 +90,7 @@ function generate_smoothed_orography(
     test_smoothing::Bool = false,
 )
     # Extrusion
-    z_surface = warp_fn.(Fields.coordinate_field(hspace))
+    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(hspace)))
     # An Euler step defines the diffusion coefficient 
     # (See e.g. cfl condition for diffusive terms).
     x_array = parent(Fields.coordinate_field(hspace).x)

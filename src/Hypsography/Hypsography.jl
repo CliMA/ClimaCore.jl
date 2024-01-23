@@ -122,8 +122,11 @@ function _ExtrudedFiniteDifferenceGrid(
 
     face_z = @. ifelse(
         η <= ηₕ,
-        η * z_top + z_surface * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
-        η * z_top,
+        Geometry.ZPoint(
+            η * z_top.z +
+            z_surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+        ),
+        Geometry.ZPoint(η * z_top.z),
     )
 
     return _ExtrudedFiniteDifferenceGrid(
@@ -233,57 +236,25 @@ function diffuse_surface_elevation!(
     maxiter::Int = 100,
     dt::T = 1e-1,
 ) where {T}
+    if eltype(f) <: Real
+        f_z = f
+    elseif eltype(f) <: Geometry.ZPoint
+        f_z = f.z
+    end
     # Define required ops
     wdiv = Operators.WeakDivergence()
     grad = Operators.Gradient()
-    FT = eltype(f)
     # Create dss buffer
-    ghost_buffer = (bf = Spaces.create_dss_buffer(f),)
+    ghost_buffer = (bf = Spaces.create_dss_buffer(f_z),)
     # Apply smoothing
     for iter in 1:maxiter
         # Euler steps
-        χf = @. wdiv(grad(f))
+        χf = @. wdiv(grad(f_z))
         Spaces.weighted_dss!(χf, ghost_buffer.bf)
-        @. f += κ * dt * χf
+        @. f_z += κ * dt * χf
     end
     # Return mutated surface elevation profile
     return f
-end
-
-function reconstruct_metric(
-    ∂x∂ξ::Geometry.Axis2Tensor{
-        T,
-        Tuple{Geometry.UWAxis, Geometry.Covariant13Axis},
-    },
-    ∇z::Geometry.Covariant1Vector,
-    Δz::Real,
-) where {T}
-    v∂x∂ξ = Geometry.components(∂x∂ξ)
-    v∇z = Geometry.components(∇z)
-    Geometry.AxisTensor(axes(∂x∂ξ), @SMatrix [
-        v∂x∂ξ[1, 1] 0
-        v∇z[1] Δz
-    ])
-end
-
-function reconstruct_metric(
-    ∂x∂ξ::Geometry.Axis2Tensor{
-        T,
-        Tuple{Geometry.UVWAxis, Geometry.Covariant123Axis},
-    },
-    ∇z::Geometry.Covariant12Vector,
-    Δz::Real,
-) where {T}
-    v∂x∂ξ = Geometry.components(∂x∂ξ)
-    v∇z = Geometry.components(∇z)
-    Geometry.AxisTensor(
-        axes(∂x∂ξ),
-        @SMatrix [
-            v∂x∂ξ[1, 1] v∂x∂ξ[1, 2] 0
-            v∂x∂ξ[2, 1] v∂x∂ξ[2, 2] 0
-            v∇z[1] v∇z[2] Δz
-        ]
-    )
 end
 
 end
