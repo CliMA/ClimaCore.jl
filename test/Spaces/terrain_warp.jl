@@ -111,11 +111,8 @@ function get_adaptation(adaption, z_surface::Fields.Field)
     if adaption <: Hypsography.LinearAdaption
         return adaption(z_surface)
     elseif adaption <: Hypsography.SLEVEAdaption
-        return adaption(
-            z_surface,
-            eltype(z_surface)(0.75),
-            eltype(z_surface)(0.60),
-        )
+        FT = eltype(eltype(z_surface))
+        return adaption(z_surface, FT(0.75), FT(0.60))
     end
 end
 
