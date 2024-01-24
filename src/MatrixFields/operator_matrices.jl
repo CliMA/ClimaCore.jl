@@ -73,7 +73,7 @@ has_affine_bc(op) = any(
     op.bcs,
 )
 
-uses_extrapolate(op) = any(bc -> bc isa Operators.Extrapolate, op.bcs)
+uses_extrapolate(op) = unrolled_any(bc -> bc isa Operators.Extrapolate, op.bcs)
 
 ################################################################################
 
@@ -859,12 +859,12 @@ op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.SetDivergence,
     ::Type{FT},
-) where {FT} = UpperDiagonalMatrixRow(C3(FT(0))')
+) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
 op_matrix_last_row(
     ::Operators.DivergenceF2C,
     ::Operators.SetDivergence,
     ::Type{FT},
-) where {FT} = LowerDiagonalMatrixRow(C3(FT(0))')
+) where {FT} = BidiagonalMatrixRow(C3(FT(0))', C3(FT(0))')
 Base.@propagate_inbounds function op_matrix_first_row(
     ::Operators.DivergenceF2C,
     ::Operators.Extrapolate,
