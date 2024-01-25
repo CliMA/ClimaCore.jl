@@ -23,6 +23,22 @@ using StaticArrays, LinearAlgebra
 
 
 """
+    ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_surface::ZPoint, z_top::ZPoint) :: ZPoint
+
+Convert reference `z`s to physical `z`s as prescribed by the given adaption.
+"""
+function ref_z_to_physical_z(
+    ::Flat,
+    z_ref::ZPoint,
+    z_surfac::ZPoint,
+    z_top::ZPoint,
+)
+    return z_ref
+end
+
+
+
+"""
     LinearAdaption(surface::Field)
 
 Locate the levels by linear interpolation between the surface field and the top
@@ -40,33 +56,15 @@ struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
 end
 
 # this method is invoked by the ExtrudedFiniteDifferenceGrid constructor
-function _ExtrudedFiniteDifferenceGrid(
-    horizontal_grid::Grids.AbstractGrid,
-    vertical_grid::Grids.FiniteDifferenceGrid,
-    adaption::LinearAdaption,
-    global_geometry::Geometry.AbstractGlobalGeometry,
+
+function ref_z_to_physical_z(
+    ::LinearAdaption,
+    z_ref::ZPoint,
+    z_surface::ZPoint,
+    z_top::ZPoint,
 )
-    @assert Spaces.grid(axes(adaption.surface)) == horizontal_grid
-    z_surface = Fields.field_values(adaption.surface)
-
-    face_z_ref =
-        Grids.local_geometry_data(vertical_grid, Grids.CellFace()).coordinates
-    vertical_domain = Topologies.domain(vertical_grid)
-    z_top = vertical_domain.coord_max
-
-    face_z = @. Geometry.ZPoint(
-        face_z_ref.z + (1 - face_z_ref.z / z_top.z) * z_surface.z,
-    )
-
-    return _ExtrudedFiniteDifferenceGrid(
-        horizontal_grid,
-        vertical_grid,
-        adaption,
-        global_geometry,
-        face_z,
-    )
+    Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * z_surface.z)
 end
-
 
 """
     SLEVEAdaption(surface::Field, ηₕ::FT, s::FT)
@@ -97,10 +95,29 @@ struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
     end
 end
 
+
+function ref_z_to_physical_z(adaption::SLEVEAdaption, z_ref, z_surface, z_top)
+    (; ηₕ, s) = adaption
+    if s * z_top.z <= z_surface.z
+        error("Decay scale (s*z_top) must be higher than max surface elevation")
+    end
+
+    η = z_ref.z ./ z_top.z
+    if η <= ηₕ
+        return Geometry.ZPoint(
+            η * z_top.z +
+            z_surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
+        )
+    else
+        return Geometry.ZPoint(η * z_top.z)
+    end
+end
+
+# can redefine this constructor for e.g. multi-arg SLEVE
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Grids.AbstractGrid,
     vertical_grid::Grids.FiniteDifferenceGrid,
-    adaption::SLEVEAdaption,
+    adaption::HypsographyAdaption,
     global_geometry::Geometry.AbstractGlobalGeometry,
 )
     @assert Spaces.grid(axes(adaption.surface)) == horizontal_grid
@@ -111,23 +128,7 @@ function _ExtrudedFiniteDifferenceGrid(
     vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max
 
-    (; ηₕ, s) = adaption
-
-    η = @. face_z_ref.z ./ z_top.z
-    if s * z_top.z <= maximum(z_surface.z)
-        @warn "Decay scale (s*z_top = $(s*z_top)) must be higher than max surface elevation (max(z_surface) = $(maximum(z_surface))). Returning s = FT(0.8). Scale height is therefore s=$(0.8 * z_top) m."
-        s = oftype(s, 0.8)
-        adaption = SLEVEAdaption(adaption.surface, ηₕ, s)
-    end
-
-    face_z = @. ifelse(
-        η <= ηₕ,
-        Geometry.ZPoint(
-            η * z_top.z +
-            z_surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
-        ),
-        Geometry.ZPoint(η * z_top.z),
-    )
+    face_z = ref_z_to_physical_z.(Ref(adaption), face_z_ref, z_surface, z_top)
 
     return _ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
@@ -138,7 +139,7 @@ function _ExtrudedFiniteDifferenceGrid(
     )
 end
 
-# generic hypsography constructor, uses computed face_z points
+# generic 5-arg hypsography constructor, uses computed face_z points
 function _ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Grids.AbstractGrid,
     vertical_grid::Grids.FiniteDifferenceGrid,
