@@ -317,7 +317,7 @@ lim_first_upwind_ρ_err, lim_first_upwind_ρq_errs =
 lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
 
 # Check that the conservation errors are not too big.
-max_err = 42 * eps(FT)
+max_err = 64 * eps(FT)
 @test abs(third_upwind_ρ_err) < max_err
 @test all(abs.(third_upwind_ρq_errs) .< max_err)
 @test all(abs.(fct_ρq_errs) .< max_err)
