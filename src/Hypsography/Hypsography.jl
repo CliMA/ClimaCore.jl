@@ -29,9 +29,9 @@ Convert reference `z`s to physical `z`s as prescribed by the given adaption.
 """
 function ref_z_to_physical_z(
     ::Flat,
-    z_ref::ZPoint,
-    z_surfac::ZPoint,
-    z_top::ZPoint,
+    z_ref::Geometry.ZPoint,
+    z_surfac::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
 )
     return z_ref
 end
@@ -59,9 +59,9 @@ end
 
 function ref_z_to_physical_z(
     ::LinearAdaption,
-    z_ref::ZPoint,
-    z_surface::ZPoint,
-    z_top::ZPoint,
+    z_ref::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
 )
     Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * z_surface.z)
 end
