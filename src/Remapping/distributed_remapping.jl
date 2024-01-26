@@ -189,6 +189,12 @@ function Remapper(target_hcoords, target_zcoords, space)
     )
 end
 
+### ASR FIXME
+#############
+
+import Base.+
+(+)(x::AbstractFloat, y::Geometry.ZPoint) = x + eltype(x)(y.z)
+(+)(x::Geometry.ZPoint, y::AbstractFloat) = eltype(y)(x.z) + y
 
 """
    interpolate(remapper, field; physical_z = false)
