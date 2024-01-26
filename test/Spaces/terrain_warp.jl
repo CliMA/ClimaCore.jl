@@ -496,16 +496,10 @@ end
             z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
             # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
             # Scale height is poorly specified, so code should throw warning.
-            @test_logs (
-                :warn,
-                "Decay scale (s*z_top = 0.1) must be higher than max surface elevation (max(z_surface) = 0.5). Returning s = FT(0.8). Scale height is therefore s=0.8 m.",
-            )
-            (
-                fspace = Spaces.ExtrudedFiniteDifferenceSpace(
-                    hspace,
-                    vert_face_space,
-                    Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
-                )
+            @test_throws ErrorException Spaces.ExtrudedFiniteDifferenceSpace(
+                hspace,
+                vert_face_space,
+                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
             )
         end
     end
