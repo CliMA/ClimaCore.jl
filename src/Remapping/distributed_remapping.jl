@@ -192,9 +192,10 @@ end
 ### ASR FIXME
 #############
 
-import Base.+
+import Base.+, Base.zero
 (+)(x::AbstractFloat, y::Geometry.ZPoint) = x + eltype(x)(y.z)
 (+)(x::Geometry.ZPoint, y::AbstractFloat) = eltype(y)(x.z) + y
+zero(x::Geometry.ZPoint) = zero(x.z)
 
 """
    interpolate(remapper, field; physical_z = false)
@@ -241,7 +242,7 @@ function interpolate(
     axes(field) == remapper.space ||
         error("Field is defined on a different space than remapper")
 
-    FT = eltype(field)
+    FT = Spaces.undertype(axes(field))
 
     if length(remapper.target_zcoords) == 0
         out_local_array = zeros(FT, size(remapper.local_target_hcoords_bitmask))
