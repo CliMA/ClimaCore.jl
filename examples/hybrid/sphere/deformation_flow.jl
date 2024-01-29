@@ -221,12 +221,15 @@ function run_deformation_flow(use_limiter, fct_op)
         zd = z - z_c
 
         centers = (
-            Geometry.LatLongZPoint(ϕ_c, λ_c1, FT(0)),
-            Geometry.LatLongZPoint(ϕ_c, λ_c2, FT(0)),
+            Geometry.LatLongZPoint(ϕ_c, λ_c1, z),
+            Geometry.LatLongZPoint(ϕ_c, λ_c2, z),
         )
-        horz_geometry = Spaces.global_geometry(horz_space)
         rds = map(centers) do center
-            Geometry.great_circle_distance(coord, center, horz_geometry)
+            Geometry.great_circle_distance(
+                coord,
+                center,
+                Spaces.global_geometry(cent_space),
+            )
         end
         ds = @. min(1, (rds / R_t)^2 + (zd / Z_t)^2) # scaled distance functions
 

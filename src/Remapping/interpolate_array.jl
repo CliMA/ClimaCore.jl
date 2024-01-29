@@ -601,7 +601,7 @@ function interpolate_column(
 
         interpolate_slab!(
             z_surface,
-            space.hypsography.surface,
+            space.hypsography.surface.z,
             [Fields.SlabIndex(nothing, gidx)],
             [Is],
         )
