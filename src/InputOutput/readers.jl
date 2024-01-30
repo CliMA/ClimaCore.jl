@@ -344,7 +344,14 @@ function read_grid_new(reader, name)
             hypsography = Grids.Flat()
         elseif hypsography_type == "LinearAdaption"
             hypsography = Hypsography.LinearAdaption(
-                read_field(reader, attrs(group)["hypsography_surface"]),
+                read_field(reader, attrs(group)["hypsography_surface"]).surface,
+            )
+        elseif hypsography_type == "SLEVEAdaption"
+            # Store hyps object for general use ?
+            hypsography = Hypsography.SLEVEAdaption(
+                read_field(reader, attrs(group)["hypsography_obj"]).surface,
+                read_field(reader, attrs(group)["hypsography_obj"]).ηₕ,
+                read_field(reader, attrs(group)["hypsography_obj"]).s,
             )
         else
             error("Unsupported hypsography type $hypsography_type")

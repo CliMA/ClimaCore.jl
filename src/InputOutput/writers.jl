@@ -381,12 +381,18 @@ function write_new!(
         write_attribute(
             group,
             "hypsography_surface",
-            write!(writer, space.hypsography.surface, "_z_surface/$name"),
+            write!(writer, space.hypsography.surface, "_z_surface/$name"), # Change to save "space.hyps"
+        )
+    elseif space.hypsography isa Hypsography.SLEVEAdaption
+        write_attribute(group, "hypsography_type", "SLEVEAdaption")
+        write_attribute(
+            group,
+            write!(writer, space.hypsography, "SLEVEAdaption"),
+            "hypsography_obj",
         )
     end
     return name
 end
-
 
 function write_new!(
     writer::HDF5Writer,
@@ -468,6 +474,7 @@ function write!(
     end
     return name
 end
+
 
 """
     write!(writer::HDF5Writer, name => value...)

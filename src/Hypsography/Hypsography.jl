@@ -12,6 +12,7 @@ import ..Geometry,
     ..Fields,
     ..Operators
 import ..Spaces: ExtrudedFiniteDifferenceSpace
+import ClimaCore.Utilities: half
 
 import ..Grids:
     _ExtrudedFiniteDifferenceGrid,
@@ -30,13 +31,11 @@ Convert reference `z`s to physical `z`s as prescribed by the given adaption.
 function ref_z_to_physical_z(
     ::Flat,
     z_ref::Geometry.ZPoint,
-    z_surfac::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
     return z_ref
 end
-
-
 
 """
     LinearAdaption(surface::Field)
