@@ -46,6 +46,18 @@ function Adapt.adapt_structure(
     )
 end
 
+using CUDA
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style <: AbstractFieldStyle}
+    Base.Broadcast.Broadcasted{Style}(
+        Adapt.adapt(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
+    )
+end
+
 Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
