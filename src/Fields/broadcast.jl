@@ -250,13 +250,6 @@ end
     return nothing
 end
 
-# types aren't isbits
-Base.Broadcast.broadcasted(
-    fs::AbstractFieldStyle,
-    ::Type{T},
-    args...,
-) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
-
 # GPU support for type wrappers, like `Geometry.AxisTensor`s
 Base.Broadcast.broadcasted(
     fs::Base.Broadcast.DefaultArrayStyle{0},
