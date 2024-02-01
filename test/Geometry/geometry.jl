@@ -26,6 +26,7 @@ using LinearAlgebra, StaticArrays
             @test pt < pt * FT(2)
             @test pt <= pt
             @test pt <= pt * FT(2)
+            @test Geometry.tofloat(pt) == one(FT)
         end
     end
 

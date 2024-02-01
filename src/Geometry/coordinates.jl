@@ -66,10 +66,16 @@ Define a subtype `name` of `AbstractPoint` with appropriate conversion functions
 macro pointtype(name, fields...)
     if length(fields) == 1
         supertype = :(Abstract1DPoint{FT})
+        coord = fields[1]
+        tofloat_expr = quote
+            tofloat(p::$name) = p.$coord
+        end
     elseif length(fields) == 2
         supertype = :(Abstract2DPoint{FT})
+        tofloat_expr = :()
     elseif length(fields) == 3
         supertype = :(Abstract3DPoint{FT})
+        tofloat_expr = :()
     end
     esc(
         quote
@@ -90,6 +96,7 @@ macro pointtype(name, fields...)
                 ::Type{$name{FT1}},
                 ::Type{$name{FT2}},
             ) where {FT1, FT2} = $name{promote_type(FT1, FT2)}
+            $tofloat_expr
         end,
     )
 end
