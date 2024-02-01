@@ -27,7 +27,32 @@ using StaticArrays, LinearAlgebra
     ref_z_to_physical_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_surface::ZPoint, z_top::ZPoint) :: ZPoint
 
 Convert reference `z`s to physical `z`s as prescribed by the given adaption.
+
+This function has to be the inverse of `physical_z_to_ref_z`.
 """
+function ref_z_to_physical_z(
+    adaption::HypsographyAdaption,
+    z_ref::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+) end
+
+"""
+    physical_z_to_ref_z(adaption::HypsographyAdaption, z_ref::ZPoint, z_surface::ZPoint, z_top::ZPoint) :: ZPoint
+
+Convert physical `z`s to reference `z`s as prescribed by the given adaption.
+
+This function has to be the inverse of `ref_z_to_physical_z`.
+"""
+function physical_z_to_ref_z(
+    adaption::HypsographyAdaption,
+    z_phys::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+) end
+
+# Flat, z_ref = z_physical
+
 function ref_z_to_physical_z(
     ::Flat,
     z_ref::Geometry.ZPoint,
@@ -35,6 +60,15 @@ function ref_z_to_physical_z(
     z_top::Geometry.ZPoint,
 )
     return z_ref
+end
+
+function physical_z_to_ref_z(
+    ::Flat,
+    z_physical::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+)
+    return z_physical
 end
 
 """
@@ -54,8 +88,7 @@ struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
     end
 end
 
-# this method is invoked by the ExtrudedFiniteDifferenceGrid constructor
-
+# This method is invoked by the ExtrudedFiniteDifferenceGrid constructor
 function ref_z_to_physical_z(
     ::LinearAdaption,
     z_ref::Geometry.ZPoint,
@@ -63,6 +96,16 @@ function ref_z_to_physical_z(
     z_top::Geometry.ZPoint,
 )
     Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * z_surface.z)
+end
+
+# This method is used for remapping
+function physical_z_to_ref_z(
+    ::LinearAdaption,
+    z_physical::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+)
+    Geometry.ZPoint((z_physical.z - z_surface.z) / (1 - z_surface.z / z_top.z))
 end
 
 """
@@ -95,13 +138,18 @@ struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
 end
 
 
-function ref_z_to_physical_z(adaption::SLEVEAdaption, z_ref, z_surface, z_top)
+function ref_z_to_physical_z(
+    adaption::SLEVEAdaption,
+    z_ref::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+)
     (; ηₕ, s) = adaption
     if s * z_top.z <= z_surface.z
         error("Decay scale (s*z_top) must be higher than max surface elevation")
     end
 
-    η = z_ref.z ./ z_top.z
+    η = z_ref.z / z_top.z
     if η <= ηₕ
         return Geometry.ZPoint(
             η * z_top.z +
@@ -110,6 +158,15 @@ function ref_z_to_physical_z(adaption::SLEVEAdaption, z_ref, z_surface, z_top)
     else
         return Geometry.ZPoint(η * z_top.z)
     end
+end
+
+function physical_z_to_ref_z(
+    adaption::SLEVEAdaption,
+    z_physical::Geometry.ZPoint,
+    z_surface::Geometry.ZPoint,
+    z_top::Geometry.ZPoint,
+)
+    error("This method is not implemented")
 end
 
 # can redefine this constructor for e.g. multi-arg SLEVE
