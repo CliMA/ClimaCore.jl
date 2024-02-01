@@ -606,7 +606,7 @@ function interpolate_column(
 
         zpts_ref = [
             Hypsography.physical_z_to_ref_z(
-                Spaces.hypsography(space),
+                Spaces.grid(space).hypsography,
                 z_ref,
                 z_surface,
                 z_top,
