@@ -1,6 +1,7 @@
 using Test
 using ClimaComms
 using IntervalSets
+using CUDA, Adapt
 
 import ClimaCore:
     ClimaCore,
@@ -78,6 +79,8 @@ function generate_base_spaces(
     h_space = Spaces.SpectralElementSpace2D(horz_topology, quad, enable_bubble=true); 
     horz_grid = Spaces.grid(h_space)
 
+    #TODO Upto Horzgrid is OK
+
     # Vert Mesh and Domain
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
@@ -93,6 +96,9 @@ function generate_base_spaces(
                                               vert_grid, 
                                               hypsography; 
                                               deep=false)
+
+    gpugrid = Adapt.adapt(CuArray, grid)
+
     vert_cent_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
     vert_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
     return vert_face_space, hspace
