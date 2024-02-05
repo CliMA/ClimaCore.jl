@@ -12,7 +12,8 @@ import ClimaCore:
     Spaces,
     Quadratures,
     Topologies,
-    Hypsography
+    Hypsography, 
+    Grids
 
 using ClimaCore.Utilities: half
 
@@ -49,15 +50,9 @@ function generate_base_spaces(
 )
     device = ClimaComms.CPUSingleThreaded()
     comms_context = ClimaComms.SingletonCommsContext(device)
+ 
     FT = eltype(xlim)
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
-
+ 
     # Generate Horizontal Space
     quad = Quadratures.GLL{npoly + 1}()
     if ndims == 2
@@ -67,8 +62,6 @@ function generate_base_spaces(
             periodic = true,
         )
         horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-        horztopology = Topologies.IntervalTopology(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
     elseif ndims == 3
         horzdomain = Domains.RectangleDomain(
             Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
@@ -78,9 +71,30 @@ function generate_base_spaces(
         )
         # Assume same number of elems (helem) in (x,y) directions
         horzmesh = Meshes.RectilinearMesh(horzdomain, helem, helem)
-        horztopology = Topologies.Topology2D(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
     end
+    horz_topology = Topologies.Topology2D(comms_context, 
+                                                     horzmesh, 
+                                                     Topologies.spacefillingcurve(horzmesh));
+    h_space = Spaces.SpectralElementSpace2D(horz_topology, quad, enable_bubble=true); 
+    horz_grid = Spaces.grid(h_space)
+
+    # Vert Mesh and Domain
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
+    vert_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), vertmesh)
+    vert_grid = Grids.FiniteDifferenceGrid(vert_topology)
+    hypsography = Hypsography.Flat()
+
+    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid, 
+                                              vert_grid, 
+                                              hypsography; 
+                                              deep=false)
+    vert_cent_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+    vert_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
     return vert_face_space, hspace
 end
 function generate_smoothed_orography(
