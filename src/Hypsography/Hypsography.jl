@@ -185,7 +185,7 @@ function _ExtrudedFiniteDifferenceGrid(
     z_top = vertical_domain.coord_max
 
     face_z =
-        ref_z_to_physical_z.(Ref(adaption), face_z_ref, z_surface, Ref(z_top))
+        ref_z_to_physical_z.(adaption, face_z_ref, z_surface, z_top)
 
     return _ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
