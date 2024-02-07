@@ -91,11 +91,11 @@ end
 # This method is invoked by the ExtrudedFiniteDifferenceGrid constructor
 function ref_z_to_physical_z(
     ::LinearAdaption,
-    z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
-    z_top::Geometry.ZPoint,
+    z_ref,
+    z_surface,
+    z_top,
 )
-    Geometry.ZPoint(z_ref.z + (1 - z_ref.z / z_top.z) * z_surface.z)
+    Geometry.ZPoint.(z_ref.z .+ (1 .- z_ref.z ./ z_top.z) .* z_surface.z)
 end
 
 # This method is used for remapping
@@ -105,7 +105,7 @@ function physical_z_to_ref_z(
     z_surface::Geometry.ZPoint,
     z_top::Geometry.ZPoint,
 )
-    Geometry.ZPoint((z_physical.z - z_surface.z) / (1 - z_surface.z / z_top.z))
+    Geometry.ZPoint.((z_physical.z .- z_surface.z) ./ (1 .- z_surface.z ./ z_top.z))
 end
 
 """
@@ -140,24 +140,22 @@ end
 
 function ref_z_to_physical_z(
     adaption::SLEVEAdaption,
-    z_ref::Geometry.ZPoint,
-    z_surface::Geometry.ZPoint,
-    z_top::Geometry.ZPoint,
+    z_ref,
+    z_surface,
+    z_top,
 )
     (; ηₕ, s) = adaption
-    if s * z_top.z <= z_surface.z
+    if s .* z_top.z <= maximum(z_surface.z)
         error("Decay scale (s*z_top) must be higher than max surface elevation")
     end
 
-    η = z_ref.z / z_top.z
-    if η <= ηₕ
-        return Geometry.ZPoint(
-            η * z_top.z +
-            z_surface.z * (sinh((ηₕ - η) / s / ηₕ)) / (sinh(1 / s)),
-        )
-    else
-        return Geometry.ZPoint(η * z_top.z)
-    end
+    η = z_ref.z ./ z_top.z
+    return ifelse.(η .<= ηₕ, 
+            Geometry.ZPoint.(
+            η .* z_top.z .+
+            z_surface.z .* (sinh.((ηₕ .- η) ./ s ./ ηₕ)) ./ (sinh.(1 ./ s))),
+            Geometry.ZPoint.(η .* z_top.z))
+
 end
 
 function physical_z_to_ref_z(
@@ -181,11 +179,12 @@ function _ExtrudedFiniteDifferenceGrid(
 
     face_z_ref =
         Grids.local_geometry_data(vertical_grid, Grids.CellFace()).coordinates
+    
     vertical_domain = Topologies.domain(vertical_grid)
     z_top = vertical_domain.coord_max
 
     face_z =
-        ref_z_to_physical_z.(adaption, face_z_ref, z_surface, z_top)
+        ref_z_to_physical_z(adaption, face_z_ref, z_surface, z_top)
 
     return _ExtrudedFiniteDifferenceGrid(
         horizontal_grid,

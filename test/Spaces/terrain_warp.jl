@@ -1,4 +1,5 @@
 using Test
+using Adapt
 using ClimaComms
 using IntervalSets
 
@@ -6,6 +7,7 @@ import ClimaCore:
     ClimaCore,
     Domains,
     Geometry,
+    Grids,
     Fields,
     Operators,
     Meshes,
@@ -47,28 +49,21 @@ function generate_base_spaces(
     stretch = Meshes.Uniform();
     ndims = 3,
 )
-    device = ClimaComms.CPUSingleThreaded()
+    device = ClimaComms.CUDADevice()
     comms_context = ClimaComms.SingletonCommsContext(device)
     FT = eltype(xlim)
-    vertdomain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(zlim[1]),
-        Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
-    )
-    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
-    # Generate Horizontal Space
+    # Horizontal Grid Construction
     quad = Quadratures.GLL{npoly + 1}()
     if ndims == 2
-        horzdomain = Domains.IntervalDomain(
+	horzdomain = Domains.IntervalDomain(
             Geometry.XPoint{FT}(xlim[1]),
             Geometry.XPoint{FT}(xlim[2]);
             periodic = true,
         )
         horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-        horztopology = Topologies.IntervalTopology(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+        horz_topology = Topologies.IntervalTopology(comms_context, horzmesh)
+    	h_space = Spaces.SpectralElementSpace1D(horz_topology, quad);
     elseif ndims == 3
         horzdomain = Domains.RectangleDomain(
             Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
@@ -78,22 +73,52 @@ function generate_base_spaces(
         )
         # Assume same number of elems (helem) in (x,y) directions
         horzmesh = Meshes.RectilinearMesh(horzdomain, helem, helem)
-        horztopology = Topologies.Topology2D(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
+	horz_topology = Topologies.Topology2D(comms_context,
+                                              horzmesh,
+                                              Topologies.spacefillingcurve(horzmesh));
+	h_space = Spaces.SpectralElementSpace2D(horz_topology, quad, enable_bubble=true);
     end
-    return vert_face_space, hspace
+    
+    horz_grid = Spaces.grid(h_space)
+
+    # Vertical Grid Construction
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_tags = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    vert_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), vertmesh)
+    vert_grid = Grids.FiniteDifferenceGrid(vert_topology)
+
+
+    ArrayType = ClimaComms.array_type(device)
+    horz_grid = Adapt.adapt(ArrayType, horz_grid)
+    vert_grid = Adapt.adapt(ArrayType, vert_grid)
+    adaption = Adapt.adapt(ArrayType, Hypsography.Flat())
+
+    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid,
+                                              vert_grid,
+                                              adaption;
+                                              )
+
+    cent_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+    face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
+
+    return h_space, face_space, horz_grid, vert_grid
 end
 function generate_smoothed_orography(
-    hspace,
+    h_space,
     warp_fn::Function,
     helem;
     test_smoothing::Bool = false,
 )
     # Extrusion
-    z_surface = warp_fn.(Fields.coordinate_field(hspace))
+    z_surface = warp_fn.(Fields.coordinate_field(h_space))
     # An Euler step defines the diffusion coefficient 
     # (See e.g. cfl condition for diffusive terms).
-    x_array = parent(Fields.coordinate_field(hspace).x)
+    x_array = parent(Fields.coordinate_field(h_space).x)
     dx = x_array[2] - x_array[1]
     FT = eltype(x_array)
     κ = FT(1 / helem)
@@ -113,8 +138,8 @@ function get_adaptation(adaption, z_surface::Fields.Field)
     elseif adaption <: Hypsography.SLEVEAdaption
         return adaption(
             z_surface,
-            eltype(z_surface)(0.75),
-            eltype(z_surface)(0.60),
+            eltype(z_surface.z)(0.75),
+            eltype(z_surface.z)(0.60),
         )
     end
 end
@@ -131,18 +156,14 @@ function warpedspace_2D(
     test_smoothing = false,
     adaption = Hypsography.LinearAdaption,
 )
-    vert_face_space, hspace =
+    h_space, vert_face_space, horz_grid, vert_grid = 
         generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
     z_surface =
-        generate_smoothed_orography(hspace, warp_fn, helem; test_smoothing)
-    mesh_adapt = get_adaptation(adaption, z_surface)
-    f_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        hspace,
-        vert_face_space,
-        mesh_adapt,
-    )
-    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
-
+        Geometry.ZPoint.(generate_smoothed_orography(h_space, warp_fn, helem; test_smoothing))
+    grid_adapt = get_adaptation(adaption, z_surface)
+    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid, vert_grid, grid_adapt)
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+    f_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
     return (c_space, f_space)
 end
 function hybridspace_2D(
@@ -154,12 +175,11 @@ function hybridspace_2D(
     npoly = 5;
     stretch = Meshes.Uniform(),
 )
-    vert_face_space, hspace =
+    h_space, vert_face_space, horz_grid, vert_grid = 
         generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
-    # Extrusion
-    f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
-    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
-
+    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid, vert_grid, Hypsography.Flat())
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+    f_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
     return (c_space, f_space)
 end
 function warpedspace_3D(
@@ -175,20 +195,14 @@ function warpedspace_3D(
     test_smoothing = false,
     adaption = Hypsography.LinearAdaption,
 )
-    vert_face_space, hspace =
-        generate_base_spaces(xlim, zlim, helem, velem, npoly)
-
-    # Extrusion
+    h_space, vert_face_space, horz_grid, vert_grid = 
+        generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 3)
     z_surface =
-        generate_smoothed_orography(hspace, warp_fn, helem; test_smoothing)
-    mesh_adapt = get_adaptation(adaption, z_surface)
-    f_space = Spaces.ExtrudedFiniteDifferenceSpace(
-        hspace,
-        vert_face_space,
-        mesh_adapt,
-    )
-    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
-
+        Geometry.ZPoint.(generate_smoothed_orography(h_space, warp_fn, helem; test_smoothing))
+    grid_adapt = get_adaptation(adaption, z_surface)
+    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid, vert_grid, grid_adapt)
+    c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+    f_space = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
     return (c_space, f_space)
 end
 
@@ -417,38 +431,48 @@ end
     # Test interior mesh in different adaptation types
     for meshadapt in (Hypsography.SLEVEAdaption,)
         for FT in (Float32, Float64)
+	    device = ClimaComms.CUDADevice()
+	    comms_context = ClimaComms.SingletonCommsContext(device)
+
             xlim = (FT(0), FT(π))
             zlim = (FT(0), FT(1))
             nl = 10
             np = 3
             nh = 4
-            vertdomain = Domains.IntervalDomain(
-                Geometry.ZPoint{FT}(zlim[1]),
-                Geometry.ZPoint{FT}(zlim[2]);
-                boundary_names = (:bottom, :top),
-            )
-            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
-            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
-            horzdomain = Domains.IntervalDomain(
-                Geometry.XPoint{FT}(xlim[1]),
-                Geometry.XPoint{FT}(xlim[2]);
-                periodic = true,
-            )
-            horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
-            horztopology = Topologies.IntervalTopology(horzmesh)
-
-            quad = Quadratures.GLL{np + 1}()
-            hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+	    quad = Quadratures.GLL{np + 1}()
+		horzdomain = Domains.IntervalDomain(
+		    Geometry.XPoint{FT}(xlim[1]),
+		    Geometry.XPoint{FT}(xlim[2]);
+		    periodic = true,
+		)
+		horzmesh = Meshes.IntervalMesh(horzdomain; nelems =  nh)
+		horz_topology = Topologies.IntervalTopology(comms_context, horzmesh)
+		h_space = Spaces.SpectralElementSpace1D(horz_topology, quad);
 
             # Generate surface elevation profile
-            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
-            # Generate space with known mesh-warp parameters ηₕ = 1; s = 1
-            fspace = Spaces.ExtrudedFiniteDifferenceSpace(
-                hspace,
-                vert_face_space,
-                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(1)),
-            )
+            z_surface = warp_sin_2d.(Fields.coordinate_field(h_space))
+	    horz_grid = Spaces.grid(h_space)
+
+	    # Vertical Grid Construction
+	    vertdomain = Domains.IntervalDomain(
+		Geometry.ZPoint{FT}(zlim[1]),
+		Geometry.ZPoint{FT}(zlim[2]);
+		boundary_tags = (:bottom, :top),
+	    )
+	    vertmesh = Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = nl)
+	    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+	    vert_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), vertmesh)
+	    vert_grid = Grids.FiniteDifferenceGrid(vert_topology)
+
+	    grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid,
+						      vert_grid,
+						      Hypsography.SLEVEAdaption(z_surface, FT(1), FT(1));
+						      )
+
+	    cspace = Spaces.CenterExtrudedFiniteDifferenceSpace(grid)
+	    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(grid)
+
             for i in 1:(nl + 1)
                 z_extracted = Fields.Field(
                     Fields.level(fspace.face_local_geometry.coordinates.z, i),
@@ -467,49 +491,47 @@ end
         end
     end
 end
-@testset "Interior Mesh `Adaption`: Test Warnings" begin
+@testset "Interior Mesh `Adaption`: Test Error" begin
     # Test interior mesh in different adaptation types
     for meshadapt in (Hypsography.SLEVEAdaption,)
         for FT in (Float32, Float64)
+	    device = ClimaComms.CUDADevice()
+	    comms_context = ClimaComms.SingletonCommsContext(device)
+
             xlim = (FT(0), FT(π))
             zlim = (FT(0), FT(1))
             nl = 10
             np = 3
             nh = 4
-            vertdomain = Domains.IntervalDomain(
-                Geometry.ZPoint{FT}(zlim[1]),
-                Geometry.ZPoint{FT}(zlim[2]);
-                boundary_names = (:bottom, :top),
-            )
-            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
-            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
-            horzdomain = Domains.IntervalDomain(
-                Geometry.XPoint{FT}(xlim[1]),
-                Geometry.XPoint{FT}(xlim[2]);
-                periodic = true,
-            )
-            horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
-            horztopology = Topologies.IntervalTopology(horzmesh)
-
-            quad = Quadratures.GLL{np + 1}()
-            hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+	    quad = Quadratures.GLL{np + 1}()
+		horzdomain = Domains.IntervalDomain(
+		    Geometry.XPoint{FT}(xlim[1]),
+		    Geometry.XPoint{FT}(xlim[2]);
+		    periodic = true,
+		)
+		horzmesh = Meshes.IntervalMesh(horzdomain; nelems =  nh)
+		horz_topology = Topologies.IntervalTopology(comms_context, horzmesh)
+		h_space = Spaces.SpectralElementSpace1D(horz_topology, quad);
 
             # Generate surface elevation profile
-            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
-            # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
-            # Scale height is poorly specified, so code should throw warning.
-            @test_logs (
-                :warn,
-                "Decay scale (s*z_top = 0.1) must be higher than max surface elevation (max(z_surface) = 0.5). Returning s = FT(0.8). Scale height is therefore s=0.8 m.",
-            )
-            (
-                fspace = Spaces.ExtrudedFiniteDifferenceSpace(
-                    hspace,
-                    vert_face_space,
-                    Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
-                )
-            )
+            z_surface = warp_sin_2d.(Fields.coordinate_field(h_space))
+	    horz_grid = Spaces.grid(h_space)
+
+	    # Vertical Grid Construction
+	    vertdomain = Domains.IntervalDomain(
+		Geometry.ZPoint{FT}(zlim[1]),
+		Geometry.ZPoint{FT}(zlim[2]);
+		boundary_tags = (:bottom, :top),
+	    )
+	    vertmesh = Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = nl)
+	    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+	    vert_topology = Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(device), vertmesh)
+	    vert_grid = Grids.FiniteDifferenceGrid(vert_topology)
+	    @test_throws ErrorException Grids.ExtrudedFiniteDifferenceGrid(horz_grid,
+						      vert_grid,
+						      Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1));
+						      )
         end
     end
 end
