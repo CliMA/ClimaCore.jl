@@ -49,7 +49,7 @@ function generate_base_spaces(
     stretch = Meshes.Uniform();
     ndims = 3,
 )
-    device = ClimaComms.CUDADevice()
+    device = ClimaComms.CPUSingleThreaded()
     comms_context = ClimaComms.SingletonCommsContext(device)
     FT = eltype(xlim)
 
@@ -94,9 +94,6 @@ function generate_base_spaces(
 
 
     ArrayType = ClimaComms.array_type(device)
-    horz_grid = Adapt.adapt(ArrayType, horz_grid)
-    vert_grid = Adapt.adapt(ArrayType, vert_grid)
-    adaption = Adapt.adapt(ArrayType, Hypsography.Flat())
 
     grid = Grids.ExtrudedFiniteDifferenceGrid(horz_grid,
                                               vert_grid,
