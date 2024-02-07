@@ -83,11 +83,15 @@ function thomas_algorithm!(
     _setindex!(b, nrows, numerator / denominator)
 
     # back substitution
-    for row in (nrows - 1):-1:1
+    # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+    # for row in (nrows - 1):-1:1; # results in StepRange
+    row = (nrows - 1)
+    while row ≥ 1
         value =
             _getindex(b, row) -
             _getindex(upper_diag, row) * _getindex(b, row + 1)
         _setindex!(b, row, value)
+        row -= 1
     end
 end
 
