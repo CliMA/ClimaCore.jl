@@ -138,8 +138,12 @@ function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
         end
 
         x[n] = Ux[n]
-        for i in (n - 1):-1:1
+        # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+        i = (n - 1)
+        # for i in (n - 1):-1:1
+        while i ≥ 1
             x[i] = Ux[i] ⊟ U₊₁[i] ⊠ x[i + 1]
+            i -= 1
         end
     end
 end
@@ -188,8 +192,12 @@ function band_matrix_solve!(::Type{<:PentadiagonalMatrixRow}, cache, x, Aⱼs, b
 
         x[n] = Ux[n]
         x[n - 1] = Ux[n - 1] ⊟ U₊₁[n - 1] ⊠ x[n]
-        for i in (n - 2):-1:1
+        # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+        # for i in (n - 2):-1:1
+        i = (n - 2)
+        while i ≥ 1
             x[i] = Ux[i] ⊟ U₊₁[i] ⊠ x[i + 1] ⊟ U₊₂[i] ⊠ x[i + 2]
+            i -= 1
         end
     end
 end
