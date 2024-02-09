@@ -589,14 +589,44 @@ end
         global_geom,
     ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
 
-    # test between two LatLongZPoints
-    @test Geometry.great_circle_distance(
-        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
-        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
-        global_geom,
-    ) == 0.0
 end
 
+
+@testset "shallow great circle distance" begin
+    global_geom = Geometry.ShallowSphericalGlobalGeometry(2.0)
+
+    # test between two LatLongZPoints
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 0.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 10.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 10.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+end
+
+@testset "deep great circle distance" begin
+    global_geom = Geometry.DeepSphericalGlobalGeometry(2.0)
+
+    # test between two LatLongZPoints
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 0.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 10.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 10.0),
+        global_geom,
+    ) ≈ (10 + 2) * deg2rad(10.0) rtol = 2eps()
+
+end
 @testset "1D XPoint Euclidean distance" begin
     for FT in (Float32, Float64, BigFloat)
         pt_1 = Geometry.XPoint(one(FT))

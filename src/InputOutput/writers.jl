@@ -363,6 +363,12 @@ function write_new!(
     return name
 end
 
+
+"""
+    write_new!(writer, domain, name)
+
+Writes an object of type 'Hypsography' and name 'name' to the HDF5 file.
+"""
 function write_new!(
     writer::HDF5Writer,
     space::Grids.ExtrudedFiniteDifferenceGrid,
@@ -378,6 +384,15 @@ function write_new!(
     write_attribute(group, "vertical_grid", write!(writer, space.vertical_grid))
     if space.hypsography isa Hypsography.LinearAdaption
         write_attribute(group, "hypsography_type", "LinearAdaption")
+        write_attribute(
+            group,
+            "hypsography_surface",
+            write!(writer, space.hypsography.surface, "_z_surface/$name"), # Change to save "space.hyps"
+        )
+    elseif space.hypsography isa Hypsography.SLEVEAdaption
+        write_attribute(group, "hypsography_type", "SLEVEAdaption")
+        write_attribute(group, "hypsography_ηₕ", space.hypsography.ηₕ)
+        write_attribute(group, "hypsography_s", space.hypsography.s)
         write_attribute(
             group,
             "hypsography_surface",
@@ -468,6 +483,7 @@ function write!(
     end
     return name
 end
+
 
 """
     write!(writer::HDF5Writer, name => value...)

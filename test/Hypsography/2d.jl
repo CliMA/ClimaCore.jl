@@ -9,6 +9,7 @@ import ClimaCore:
     Topologies,
     Spaces,
     Quadratures,
+    Grids,
     Fields,
     Operators,
     InputOutput,
@@ -65,3 +66,32 @@ face_x = Fields.coordinate_field(hv_face_space).x
 
 @test map(u -> u.u, ∇x) ≈ ones(hv_center_space)
 @test maximum(u -> abs(u.w), ∇x) < 1e-10
+
+# Check transformations back and forth
+z_ref1 = Geometry.ZPoint{FT}(40.0)
+z_top1 = Geometry.ZPoint{FT}(400.0)
+z_surface1 = Geometry.ZPoint{FT}(10.0)
+
+point_space = Spaces.PointSpace(z_surface1)
+z_surface_point = Fields.coordinate_field(point_space)
+
+@test Hypsography.physical_z_to_ref_z(
+    Grids.Flat(),
+    Hypsography.ref_z_to_physical_z(Grids.Flat(), z_ref1, z_surface1, z_top1),
+    z_surface1,
+    z_top1,
+).z ≈ z_ref1.z
+
+# Linear adaption
+linear_adaption = Hypsography.LinearAdaption(z_surface_point)
+@test Hypsography.physical_z_to_ref_z(
+    linear_adaption,
+    Hypsography.ref_z_to_physical_z(
+        linear_adaption,
+        z_ref1,
+        z_surface1,
+        z_top1,
+    ),
+    z_surface1,
+    z_top1,
+).z ≈ z_ref1.z
