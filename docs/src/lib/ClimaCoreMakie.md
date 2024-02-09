@@ -8,7 +8,5 @@ ClimaCoreMakie.jl provides functionality for plotting ClimaCore fields extending
 
 ```@docs
 fieldheatmap
-fieldheatmap!
 fieldcontourf
-fieldcontourf!
 ```

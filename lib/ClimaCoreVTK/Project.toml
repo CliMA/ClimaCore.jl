@@ -4,7 +4,7 @@ uuid = "c8b6d40d-e815-466f-95ae-c48aefa668fa"
 version = "0.7.3"
 
 [compat]
-ClimaCore = "0.11"
+ClimaCore = "0.11, 0.12"
 WriteVTK = "1.11"
 julia = "1.7"
 
