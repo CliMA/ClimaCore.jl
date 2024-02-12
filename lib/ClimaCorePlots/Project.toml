@@ -4,7 +4,7 @@ uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 version = "0.2.6"
 
 [compat]
-ClimaCore = "0.11"
+ClimaCore = "0.11, 0.12"
 RecipesBase = "1"
 StaticArrays = "1"
 TriplotBase = "0.1"
