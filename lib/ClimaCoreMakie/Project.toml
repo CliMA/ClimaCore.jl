@@ -1,7 +1,7 @@
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
 name = "ClimaCoreMakie"
 uuid = "908f55d8-4145-4867-9c14-5dad1a479e4d"
-version = "0.4.2"
+version = "0.4.3"
 
 [compat]
 ClimaCore = "0.11, 0.12"
