@@ -1,7 +1,7 @@
 name = "ClimaCoreSpectra"
 uuid = "c2caaa1d-32ae-4754-ba0d-80e7561362e9"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
