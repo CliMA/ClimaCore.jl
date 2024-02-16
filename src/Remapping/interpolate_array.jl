@@ -161,7 +161,7 @@ Return the vertical indices of the elements below and above `zcoord`.
 
 Return also the correct reference coordinate `zcoord` for vertical interpolation.
 """
-function vertical_indices end
+function vertical_indices_ref_coordinate end
 
 function vertical_indices_ref_coordinate(
     space::Spaces.FaceExtrudedFiniteDifferenceSpace,
