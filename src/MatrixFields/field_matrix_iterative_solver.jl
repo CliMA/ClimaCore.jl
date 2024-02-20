@@ -1,3 +1,5 @@
+import Base.CoreLogging
+
 """
     PreconditionerAlgorithm
 
@@ -362,9 +364,13 @@ There are 4 values that can be included in `kwargs...`:
 - `eigsolve_kwargs = (;)`: keyword arguments for the `eigsolve` function that
   can be used to tune its accuracy and speed (only applicable when debugging the
   spectral radius)
+- `debug = nothing`: keyword argument for printing debug information to `@debug`.
+  By default, `debug` is set to true if `"error_norm"` or `"spectral_radius"` is in
+  `ENV["JULIA_DEBUG"]`, which must be set by users.
 """
 struct StationaryIterativeSolve{
     correlated_solves,
+    debug,
     P <: Union{Nothing, PreconditionerAlgorithm},
     K <: NamedTuple,
 } <: LazyFieldMatrixSolverAlgorithm
@@ -375,9 +381,19 @@ end
 function StationaryIterativeSolve(;
     P_alg = nothing,
     n_iters = 1,
+    debug = nothing,
     correlated_solves = false,
     eigsolve_kwargs = (;),
 )
+    B =
+        CoreLogging.min_enabled_level(CoreLogging.current_logger()) <=
+        CoreLogging.Debug
+    _debug = if isnothing(debug)
+        B
+    else
+        B || @warn "`ENV[\"JULIA_DEBUG\"]` must be set to use `debug = true`."
+        debug
+    end
     # Since Field operations can be much slower than typical Array operations,
     # the default values of krylovdim and maxiter specified in KrylovKit.jl
     # should be replaced with smaller values, and the default value of tol
@@ -385,9 +401,11 @@ function StationaryIterativeSolve(;
     eigsolve_kwargs′ =
         (; krylovdim = 4, maxiter = 20, tol = 0.01, eigsolve_kwargs...)
     # Make correlated_solves into a type parameter to ensure type-stability.
-    params = (correlated_solves, typeof(P_alg), typeof(eigsolve_kwargs′))
+    params =
+        (correlated_solves, _debug, typeof(P_alg), typeof(eigsolve_kwargs′))
     return StationaryIterativeSolve{params...}(P_alg, n_iters, eigsolve_kwargs′)
 end
+get_debug(::StationaryIterativeSolve{CS, debug}) where {CS, debug} = debug
 
 # Extract correlated_solves as if it were a regular field, not a type parameter.
 Base.getproperty(
@@ -411,23 +429,29 @@ check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
 
 function run_field_matrix_solver!(alg::StationaryIterativeSolve, cache, x, A, b)
     P = lazy_or_concrete_preconditioner(alg.P_alg, cache.P_cache, A)
-    using_cuda = ClimaComms.array_type(concrete_field_vector(b)) <: CUDA.CuArray
-    !using_cuda && @debug begin
-        e₀ = concrete_field_vector(b) # Initialize e to any nonzero vector.
-        λs, _, info = KrylovKit.eigsolve(e₀, 1; alg.eigsolve_kwargs...) do e
-            e_view = field_vector_view(e, keys(b).name_tree)
-            lazy_Ae = lazy_mul(A, e_view)
-            lazy_Δe = apply_preconditioner(alg.P_alg, cache.P_cache, P, lazy_Ae)
-            concrete_field_vector(@. e_view - lazy_Δe) # (I - inv(P) * A) * e
-        end
-        if info.converged == 0
-            (; tol, maxiter) = alg.eigsolve_kwargs
-            "Unable to approximate ρ(I - inv(P) * A) to within a tolerance \
-            of $(100 * tol) % in $maxiter or fewer iterations"
-        else
-            "ρ(I - inv(P) * A) ≈ $(abs(λs[1]))"
-        end
-    end _group = :spectral_radius
+    if get_debug(alg)
+        @debug begin
+            e₀ = concrete_field_vector(b) # Initialize e to any nonzero vector.
+            λs, _, info = KrylovKit.eigsolve(e₀, 1; alg.eigsolve_kwargs...) do e
+                e_view = field_vector_view(e, keys(b).name_tree)
+                lazy_Ae = lazy_mul(A, e_view)
+                lazy_Δe = apply_preconditioner(
+                    alg.P_alg,
+                    cache.P_cache,
+                    P,
+                    lazy_Ae,
+                )
+                concrete_field_vector(@. e_view - lazy_Δe) # (I - inv(P) * A) * e
+            end
+            if info.converged == 0
+                (; tol, maxiter) = alg.eigsolve_kwargs
+                "Unable to approximate ρ(I - inv(P) * A) to within a tolerance \
+                of $(100 * tol) % in $maxiter or fewer iterations"
+            else
+                "ρ(I - inv(P) * A) ≈ $(abs(λs[1]))"
+            end
+        end _group = :spectral_radius
+    end
     if alg.correlated_solves
         @. x = cache.previous_x
     else
@@ -436,18 +460,22 @@ function run_field_matrix_solver!(alg::StationaryIterativeSolve, cache, x, A, b)
     for iter in 1:(alg.n_iters)
         lazy_Δb = lazy_sub(b, lazy_mul(A, x))
         lazy_Δx = apply_preconditioner(alg.P_alg, cache.P_cache, P, lazy_Δb)
-        @debug begin
-            norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
-            "||x[$(iter - 1)] - x'||₂ ≈ $norm_Δx"
-        end _group = :error_norm
+        if get_debug(alg)
+            @debug begin
+                norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
+                "||x[$(iter - 1)] - x'||₂ ≈ $norm_Δx"
+            end _group = :error_norm
+        end
         @. x += lazy_Δx
     end
-    @debug begin
-        lazy_Δb = lazy_sub(b, lazy_mul(A, x))
-        lazy_Δx = apply_preconditioner(alg.P_alg, cache.P_cache, P, lazy_Δb)
-        norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
-        "||x[$(alg.n_iters)] - x'||₂ ≈ $norm_Δx"
-    end _group = :error_norm
+    if get_debug(alg)
+        @debug begin
+            lazy_Δb = lazy_sub(b, lazy_mul(A, x))
+            lazy_Δx = apply_preconditioner(alg.P_alg, cache.P_cache, P, lazy_Δb)
+            norm_Δx = norm(concrete_field_vector(Base.materialize(lazy_Δx)))
+            "||x[$(alg.n_iters)] - x'||₂ ≈ $norm_Δx"
+        end _group = :error_norm
+    end
     if alg.correlated_solves
         @. cache.previous_x = x
     end

@@ -297,38 +297,42 @@ end
     end
 
     @testset "approximate iterative solve with debugging" begin
-        # Recreate the setup from the previous unit test.
-        alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
-            @name(c);
-            P_alg₁ = MatrixFields.WeightedPreconditioner(
-                scaled_identity_matrix(FT(1.09)),
-                MatrixFields.MainDiagonalPreconditioner(),
-            ),
-            n_iters = 2,
-        )
-        A = MatrixFields.FieldMatrix(
-            (@name(c), @name(c)) => ᶜᶜmat3,
-            (@name(c), @name(f)) => ᶜᶠmat4,
-            (@name(f), @name(c)) => ᶠᶜmat2,
-            (@name(f), @name(f)) => ᶠᶠmat5,
-        )
-        b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec)
+        Logging.with_logger(Logging.SimpleLogger(stderr, Logging.Debug)) do
+            # Recreate the setup from the previous unit test.
+            alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
+                @name(c);
+                P_alg₁ = MatrixFields.WeightedPreconditioner(
+                    scaled_identity_matrix(FT(1.09)),
+                    MatrixFields.MainDiagonalPreconditioner(),
+                ),
+                n_iters = 2,
+            )
+            A = MatrixFields.FieldMatrix(
+                (@name(c), @name(c)) => ᶜᶜmat3,
+                (@name(c), @name(f)) => ᶜᶠmat4,
+                (@name(f), @name(c)) => ᶠᶜmat2,
+                (@name(f), @name(f)) => ᶠᶠmat5,
+            )
+            b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec)
 
-        x = similar(b)
-        solver = FieldMatrixSolver(alg, A, b)
-        args = (solver, x, A, b)
+            x = similar(b)
+            solver = FieldMatrixSolver(alg, A, b)
+            args = (solver, x, A, b)
 
-        # Compare the debugging logs to RegEx strings. Note that debugging the
-        # spectral radius is currently not possible on GPUs.
-        spectral_radius_logs =
-            using_cuda ? () : ((:debug, r"ρ\(I \- inv\(P\) \* A\) ≈"),)
-        error_norm_logs = (
-            (:debug, r"||x[0] - x'||₂ ≈"),
-            (:debug, r"||x[1] - x'||₂ ≈"),
-            (:debug, r"||x[2] - x'||₂ ≈"),
-        )
-        logs = (spectral_radius_logs..., error_norm_logs...)
-        @test_logs logs... min_level = Debug field_matrix_solve!(args...)
+            # Compare the debugging logs to RegEx strings. Note that debugging the
+            # spectral radius is currently not possible on GPUs.
+            spectral_radius_logs =
+                using_cuda ? () : ((:debug, r"ρ\(I \- inv\(P\) \* A\) ≈"),)
+            error_norm_logs = (
+                (:debug, r"||x[0] - x'||₂ ≈"),
+                (:debug, r"||x[1] - x'||₂ ≈"),
+                (:debug, r"||x[2] - x'||₂ ≈"),
+            )
+            logs = (spectral_radius_logs..., error_norm_logs...)
+            @test_logs logs... min_level = Logging.Debug field_matrix_solve!(
+                args...,
+            )
+        end
     end
 end
 
