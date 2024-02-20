@@ -278,6 +278,48 @@ end
     @test Y.k.z === 3.0
 end
 
+# https://github.com/CliMA/ClimaCore.jl/issues/1465
+@testset "Diagonal FieldVector broadcast expressions" begin
+    FT = Float64
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.context(device)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    fspace = TU.FaceExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    cx = Fields.fill((; a = FT(1), b = FT(2)), cspace)
+    cy = Fields.fill((; a = FT(1), b = FT(2)), cspace)
+    fx = Fields.fill((; a = FT(1), b = FT(2)), fspace)
+    fy = Fields.fill((; a = FT(1), b = FT(2)), fspace)
+    Y1 = Fields.FieldVector(; x = cx, y = cy)
+    Y2 = Fields.FieldVector(; x = cx, y = cy)
+    Y3 = Fields.FieldVector(; x = cx, y = cy)
+    Y4 = Fields.FieldVector(; x = cx, y = cy)
+    Z = Fields.FieldVector(; x = fx, y = fy)
+    function test_fv_allocations!(X1, X2, X3, X4)
+        @. X1 += X2 * X3 + X4
+        return nothing
+    end
+    test_fv_allocations!(Y1, Y2, Y3, Y4)
+    p_allocated = @allocated test_fv_allocations!(Y1, Y2, Y3, Y4)
+    if device isa ClimaComms.AbstractCPUDevice
+        @test p_allocated == 0
+    elseif device isa ClimaComms.CUDADevice
+        @test_broken p_allocated == 0
+    end
+
+    bc1 = Base.broadcasted(
+        :-,
+        Base.broadcasted(:+, Y1, Base.broadcasted(:*, 2, Y2)),
+        Base.broadcasted(:*, 3, Y3),
+    )
+    bc2 = Base.broadcasted(
+        :-,
+        Base.broadcasted(:+, Y1, Base.broadcasted(:*, 2, Y1)),
+        Base.broadcasted(:*, 3, Z),
+    )
+    @test Fields.is_diagonal_bc(bc1)
+    @test !Fields.is_diagonal_bc(bc2)
+end
+
 function call_getcolumn(fv, colidx)
     @allowscalar fvcol = fv[colidx]
     nothing
