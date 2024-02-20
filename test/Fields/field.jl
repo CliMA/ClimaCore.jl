@@ -278,6 +278,24 @@ end
     @test Y.k.z === 3.0
 end
 
+# https://github.com/CliMA/ClimaCore.jl/issues/1465
+@testset "FieldVector allocations" begin
+    space = spectral_space_2D()
+    x = Fields.coordinate_field(space)
+    y = Fields.coordinate_field(space)
+    Y1 = Fields.FieldVector(; x = x, y = y)
+    Y2 = Fields.FieldVector(; x = x, y = y)
+    Y3 = Fields.FieldVector(; x = x, y = y)
+    Y4 = Fields.FieldVector(; x = x, y = y)
+    function test_fv_allocations!(X1, X2, X3, X4)
+        @. X1 += X2 * X3 + X4
+        return nothing
+    end
+    test_fv_allocations!(Y1, Y2, Y3, Y4)
+    p_allocated = @allocated test_fv_allocations!(Y1, Y2, Y3, Y4)
+    @test p_allocated == 0
+end
+
 function call_getcolumn(fv, colidx)
     @allowscalar fvcol = fv[colidx]
     nothing
