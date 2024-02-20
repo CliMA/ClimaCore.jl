@@ -128,6 +128,26 @@ end
     end
 end
 
+# TODO move to GPU tests
+@testset "Convert field GPU to CPU" begin
+    FT = Float32
+    cpu_device = ClimaComms.CPUSingleThreaded()
+    cpu_context = ClimaComms.SingletonCommsContext(cpu_device)
+    gpu_device = ClimaComms.CUDADevice()
+    gpu_context = ClimaComms.context(gpu_device)
+    ClimaComms.init(gpu_context)
+
+    for gpu_space in TU.all_spaces(FT; gpu_context)
+        gpu_field = Fields.ones(gpu_space)
+
+        # convert field to CPU
+        cpu_field = todevice(cpu_device, gpu_field)
+
+        @test parent(cpu_field) isa CUDA.CuArray
+        @test axes(cpu_field).grid.topology.context isa ClimaComms.AbstractCPUDevice # TODO look at how GPU field differs from CPU field
+    end
+end
+
 function ifelse_broadcast_allocating(a, b, c)
     FT = eltype(a)
     @. a = ifelse(true || c < b * FT(1), FT(0), c)
