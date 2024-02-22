@@ -890,3 +890,24 @@ end
     end
     nothing
 end
+
+@testset "todevice CPU/GPU conversions" begin
+    FT = Float64
+    gpu_device = ClimaComms.CUDADevice()
+    gpu_context = ClimaComms.context(gpu_device)
+    for gpu_space in TU.all_spaces(FT, context = gpu_context)
+        gpu_field = Fields.ones(gpu_space)
+        @test parent(gpu_field2) isa CUDA.CuArray
+
+        # Test conversion from GPU to CPU field
+        cpu_field = Fields.todevice(Array, gpu_field)
+        @test parent(cpu_field) isa Array
+        @allowscalar @test parent(cpu_field) == parent(gpu_field)
+
+        # Test conversion back from CPU to GPU field
+        gpu_field2 = Fields.todevice(CUDA.CuArray, cpu_field)
+        @test parent(gpu_field2) isa CUDA.CuArray
+        @allowscalar @test parent(cpu_field) == parent(gpu_field2)
+        @test gpu_field == gpu_field2
+    end
+end

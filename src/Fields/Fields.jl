@@ -49,6 +49,16 @@ Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, axes(field)),
 )
 
+"""
+    todevice(array_type, field::Field)
+
+Converts a `Field` object to a device-specific representation using the
+`adapt_structure` function from Adapt.jl.
+`array_type` here should be `CuArray` to convert to a field on the GPU,
+or `Array` to convert to a field on the CPU.
+"""
+to_device(array_type, field::Field) = adapt_structure(array_type, field)
+
 ## aliases
 # Point Field
 const PointField{V, S} =

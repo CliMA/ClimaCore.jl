@@ -121,4 +121,15 @@ area(space::Spaces.AbstractSpace) =
 ClimaComms.array_type(space::AbstractSpace) =
     ClimaComms.array_type(ClimaComms.device(space))
 
+"""
+    todevice(array_type, space::AbstractSpace)
+
+Converts a `Space` object to a device-specific representation using the
+`adapt_structure` function from Adapt.jl.
+`array_type` here should be `CuArray` to convert to a space on the GPU,
+or `Array` to convert to a space on the CPU.
+"""
+todevice(array_type, space::AbstractSpace) =
+    Adapt.adapt_structure(array_type, space)
+
 end # module

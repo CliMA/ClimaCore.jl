@@ -66,6 +66,15 @@ include("extruded.jl")
 include("column.jl")
 include("level.jl")
 
+"""
+    todevice(array_type, grid::AbstractGrid)
 
+Converts a `Grid` object to a device-specific representation using the
+`adapt_structure` function from Adapt.jl.
+`array_type` here should be `CuArray` to convert to a grid on the GPU,
+or `Array` to convert to a grid on the CPU.
+"""
+todevice(array_type, grid::AbstractGrid) =
+    Adapt.adapt_structure(array_type, grid)
 
 end # module
