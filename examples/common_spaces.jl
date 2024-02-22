@@ -1,5 +1,5 @@
 using ClimaComms
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces
+using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Quadratures
 
 function periodic_line_mesh(; x_max, x_elem)
     domain = Domains.IntervalDomain(
@@ -36,7 +36,7 @@ function make_horizontal_space(
     npoly,
     context::ClimaComms.SingletonCommsContext,
 )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
         topology = Topologies.IntervalTopology(mesh)
         space = Spaces.SpectralElementSpace1D(topology, quad)
@@ -52,7 +52,7 @@ function make_horizontal_space(
     npoly,
     comms_ctx::ClimaComms.MPICommsContext,
 )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
         error("Distributed mode does not work with 1D horizontal spaces.")
     elseif mesh isa Meshes.AbstractMesh2D

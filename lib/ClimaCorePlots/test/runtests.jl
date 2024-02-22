@@ -17,7 +17,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     )
     mesh = ClimaCore.Meshes.IntervalMesh(domain; nelems = 5)
     grid_topology = ClimaCore.Topologies.IntervalTopology(mesh)
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace1D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -40,7 +40,7 @@ end
         ClimaComms.SingletonCommsContext(),
         mesh,
     )
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -68,7 +68,7 @@ end
         mesh,
         ClimaCore.Topologies.spacefillingcurve(mesh),
     )
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -102,7 +102,7 @@ end
         ClimaComms.SingletonCommsContext(),
         horz_mesh,
     )
-    quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+    quad = ClimaCore.Quadratures.GLL{5}()
     horz_space =
         ClimaCore.Spaces.SpectralElementSpace2D(horz_grid_topology, quad)
 
@@ -166,7 +166,7 @@ end
         mesh,
     )
 
-    quad = ClimaCore.Spaces.Quadratures.ClosedUniform{Nq + 1}()
+    quad = ClimaCore.Quadratures.ClosedUniform{Nq + 1}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
 
@@ -210,7 +210,7 @@ end
     horzmesh = ClimaCore.Meshes.IntervalMesh(horzdomain; nelems = helem)
     horztopology = ClimaCore.Topologies.IntervalTopology(horzmesh)
 
-    quad = ClimaCore.Spaces.Quadratures.GLL{npoly + 1}()
+    quad = ClimaCore.Quadratures.GLL{npoly + 1}()
     horzspace = ClimaCore.Spaces.SpectralElementSpace1D(horztopology, quad)
 
     hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(
@@ -269,7 +269,7 @@ end
         horzmesh,
     )
 
-    quad = ClimaCore.Spaces.Quadratures.GLL{npoly + 1}()
+    quad = ClimaCore.Quadratures.GLL{npoly + 1}()
     horzspace = ClimaCore.Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(

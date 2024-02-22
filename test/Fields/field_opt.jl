@@ -5,7 +5,15 @@ import ClimaCore
 import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
+    Fields,
+    slab,
+    Domains,
+    Topologies,
+    Meshes,
+    Operators,
+    Spaces,
+    Geometry,
+    Quadratures
 
 using FastBroadcast
 using LinearAlgebra: norm
@@ -265,7 +273,7 @@ end
         hdomain = Domains.SphereDomain(FT(1e7))
         hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
         htopology = Topologies.Topology2D(hmesh)
-        quad = Spaces.Quadratures.GLL{npoly + 1}()
+        quad = Quadratures.GLL{npoly + 1}()
         hspace = Spaces.SpectralElementSpace2D(htopology, quad)
         vdomain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(zero(FT)),

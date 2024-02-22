@@ -1,20 +1,31 @@
 agents:
   queue: central
   slurm_mem: 8G
-  modules: julia/1.9.3 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 hdf5/1.12.2-ompi415 nsight-systems/2023.2.1
+  modules: julia/1.10.0 cuda/12.2 ucx/1.14.1_cuda-12.2 openmpi/4.1.5_cuda-12.2 nsight-systems/2023.2.1
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
-  OPENBLAS_NUM_THREADS: 1
-  JULIA_NVTX_CALLBACKS: gc
-  OMPI_MCA_opal_warn_on_missing_libcuda: 0
-  # JULIA_CPU_TARGET: broadwell # arch used by GPU nodes
+  # JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
+  JULIA_MAX_NUM_PRECOMPILE_FILES: 100
   JULIA_CPU_TARGET: 'broadwell;skylake'
+  JULIA_NVTX_CALLBACKS: gc
+  JULIA_CUDA_MEMORY_POOL: none
+  JULIA_MPI_HAS_CUDA: "true"
+  OPENBLAS_NUM_THREADS: 1
+  OMPI_MCA_opal_warn_on_missing_libcuda: 0
+  MPITRAMPOLINE_LIB: /groups/esm/software/MPIwrapper/ompi4.1.5_cuda-12.2/lib64/libmpiwrapper.so
+  MPITRAMPOLINE_MPIEXEC: /groups/esm/software/MPIwrapper/ompi4.1.5_cuda-12.2/bin/mpiwrapperexec
 
 steps:
   - label: "initialize"
     key: "init_cpu_env"
     command:
+      - |
+        if [ -n "$$CLEAR_DEPOT" ]; then
+          echo "--- Clearing depot"
+          rm -rf ${JULIA_DEPOT_PATH}
+        fi
+
       - echo "--- Instantiate project"
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       # force the initialization of the CUDA runtime as it is lazily loaded by default
@@ -43,9 +54,9 @@ steps:
     agents:
       slurm_mem: 80G
       slurm_gpus: 1
-      slurm_cpus_per_task: 8
+      slurm_cpus_per_task: 12
     env:
-      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_NUM_PRECOMPILE_TASKS: 12
 
   - wait
 
@@ -59,7 +70,7 @@ steps:
       - label: "Unit: cuda"
         key: unit_cuda_functional
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/gpu/cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -134,6 +145,10 @@ steps:
   - group: "Unit: Topologies"
     steps:
 
+      - label: "Unit: topo interval"
+        key: unit_topo_interval
+        command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/interval.jl"
+
       - label: "Unit: topo rectangle"
         key: unit_topo_rectangle
         command: "julia --color=yes --check-bounds=yes --project=test test/Topologies/rectangle.jl"
@@ -161,13 +176,21 @@ steps:
   - group: "Unit: Spaces"
     steps:
 
-      - label: "Unit: quadrature"
+      - label: "Unit: Quadratures"
         key: unit_quadrature
-        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/quadrature.jl"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Quadratures/Quadratures.jl"
 
       - label: "Unit: spaces"
         key: unit_spaces
         command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
+
+      - label: "Unit: cuda spaces"
+        key: "gpu_cuda_spaces"
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
+        agents:
+          slurm_gpus: 1
 
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
@@ -231,12 +254,25 @@ steps:
         command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CPU"
         agents:
           slurm_ntasks: 2
 
       - label: "Unit: distributed remapping (1 process)"
         key: distributed_remapping_1proc
         command: "julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CPU"
+
+      - label: "Unit: distributed remapping with CUDA"
+        key: distributed_remapping_gpu
+        command: "srun julia --color=yes --check-bounds=yes --project=test test/Remapping/distributed_remapping.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_ntasks: 2
+          slurm_gpus: 1
 
       - label: "Unit: distributed gather"
         key: unit_distributed_gather4
@@ -254,6 +290,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: cuda point spaces"
+        key: "point_space_cuda"
+        command: "julia --color=yes --check-bounds=yes --project=test test/Spaces/point_cuda.jl CUDA"
+        artifact_paths:
+          - output/point_cuda
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
         command:
@@ -262,7 +306,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -275,7 +318,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -288,7 +330,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -301,7 +342,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -314,7 +354,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -327,7 +366,6 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
-          JULIA_CUDA_MEMORY_POOL: "none"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -691,12 +729,13 @@ steps:
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
-  - group: "Perf: Geometry"
-    steps:
+  # https://github.com/triscale-innov/GFlops.jl/issues/49
+  # - group: "Perf: Geometry"
+  #   steps:
 
-      - label: "Perf: Axis tensor conversion benchmarks"
-        key: "cpu_axis_tensor_conversion_perf_bm"
-        command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
+  #     - label: "Perf: Axis tensor conversion benchmarks"
+  #       key: "cpu_axis_tensor_conversion_perf_bm"
+  #       command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
 
   - group: "Perf: Fields"
     steps:
@@ -780,13 +819,6 @@ steps:
         key: "cpu_integrals_perf"
         command:
           - "julia --color=yes --project=test test/Operators/integrals.jl"
-
-      - label: "Perf: Integrals (GPU)"
-        key: "gpu_integrals_perf"
-        command:
-          - "julia --color=yes --project=test test/Operators/integrals.jl"
-        agents:
-          slurm_gpus: 1
 
   - group: "Examples: Column"
     steps:
@@ -968,19 +1000,21 @@ steps:
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
 
+      - label: ":computer: 3D Box limiters advection Gaussian bells GPU"
+        key: "gpu_box_advection_limiter_gaussian_bells"
+        command:
+          - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl gaussian_bells"
+        artifact_paths:
+          - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+        agents:
+          slurm_gpus: 1
+
       - label: ":computer: 3D Box limiters advection slotted spheres"
         key: "cpu_box_advection_limiter_slotted_spheres"
         command:
           - "julia --color=yes --project=examples examples/hybrid/box/limiters_advection.jl slotted_spheres"
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_slotted_spheres_D0/*"
-
-      - label: ":computer: Rising Bubble 2D hybrid (ρθ)"
-        key: "cpu_rising_bubble_2d_hybrid_rhotheta"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/bubble_2d_rhotheta/*"
 
       - label: ":computer: Isothermal channel flow 2D hybrid (ρe)"
         key: "cpu_isothermal_channel_2d_hybrid_rhoe"
@@ -995,13 +1029,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/box/bubble_3d_rhotheta.jl"
         artifact_paths:
           - "examples/hybrid/box/output/bubble_3d_rhotheta/*"
-
-      - label: ":computer: Rising Bubble 2D hybrid invariant (ρθ)"
-        key: "cpu_rising_bubble_2d_hybrid_invariant_rhotheta"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/bubble_2d_invariant_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/bubble_2d_invariant_rhotheta/*"
 
       - label: ":computer: Rising Bubble 2D hybrid invariant (ρe)"
         key: "cpu_rising_bubble_2d_hybrid_invariant_rhoe"
@@ -1051,13 +1078,6 @@ steps:
         artifact_paths:
           - "examples/hybrid/plane/output/dc_invariant_etot/*"
 
-      - label: ":computer: Density current 2D hybrid invariant total energy (topography mesh interface)"
-        key: "cpu_density_current_2d_hybrid_invariant_total_energy_no-warp_topography"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/topo_dc_2dinvariant_rhoe.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/dc_invariant_etot_topo/*"
-
       - label: ":computer: Nonhydrostatic Agnesi Mountain total energy (topography mesh interface)"
         key: "cpu_agnesi_mtn_2d_hybrid_invariant_total_energy_topography"
         command:
@@ -1071,13 +1091,6 @@ steps:
           - "julia --color=yes --project=examples examples/hybrid/plane/topo_schar_nh.jl"
         artifact_paths:
           - "examples/hybrid/plane/output/schar_etot_nh/*"
-
-      - label: ":computer: Density current 2D hybrid invariant potential temperature"
-        key: "cpu_density_current_2d_hybrid_invariant_potential_temperature"
-        command:
-          - "julia --color=yes --project=examples examples/hybrid/plane/density_current_2dinvariant_rhotheta.jl"
-        artifact_paths:
-          - "examples/hybrid/plane/output/dc_rhotheta/*"
 
       - label: ":computer: Density current 2D hybrid conservative form potential temperature"
         key: "cpu_density_current_2d_hybrid_conservative_potential_temperature"

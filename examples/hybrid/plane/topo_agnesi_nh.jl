@@ -1,15 +1,15 @@
 using Test
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators,
     Hypsography
@@ -66,15 +66,14 @@ function hvspace_2D(
     )
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
     horztopology = Topologies.IntervalTopology(horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-    z_surface = warp_fn.(Fields.coordinate_field(horzspace))
+    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))
     hv_face_space = Spaces.ExtrudedFiniteDifferenceSpace(
         horzspace,
         vert_face_space,
-        Hypsography.LinearAdaption(),
-        z_surface,
+        Hypsography.LinearAdaption(z_surface),
     )
     hv_center_space = Spaces.CenterExtrudedFiniteDifferenceSpace(hv_face_space)
     return (hv_center_space, hv_face_space)

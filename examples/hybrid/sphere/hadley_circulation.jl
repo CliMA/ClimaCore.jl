@@ -5,12 +5,12 @@ using LinearAlgebra
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 import ClimaCore.Utilities: half
@@ -72,7 +72,7 @@ function sphere_3D(
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -250,7 +250,7 @@ end
 
 # write out our cubed sphere mesh
 meshfile_cc = remap_tmpdir * "mesh_cubedsphere.g"
-write_exodus(meshfile_cc, hv_center_space.horizontal_space.topology)
+write_exodus(meshfile_cc, Spaces.topology(hv_center_space))
 
 # write out RLL mesh
 nlat = 90
@@ -270,7 +270,7 @@ remap_weights(
     meshfile_rll,
     meshfile_overlap;
     in_type = "cgll",
-    in_np = Spaces.Quadratures.degrees_of_freedom(
+    in_np = Quadratures.degrees_of_freedom(
         Spaces.quadrature_style(hv_center_space),
     ),
 )
@@ -281,10 +281,10 @@ apply_remap(datafile_rll, datafile_cc, weightfile, ["q1"])
 
 # load remapped data and create statistics for plots
 nt = NCDataset(datafile_rll, "r") do nc
-    lat = nc["lat"][:]
-    z = nc["z"][:]
-    time = nc["time"][:]
-    q1 = nc["q1"][:]
+    lat = Array(nc["lat"])
+    z = Array(nc["z"])
+    time = Array(nc["time"])
+    q1 = Array(nc["q1"])
     (; lat, z, time, q1)
 end
 (; lat, z, time, q1) = nt

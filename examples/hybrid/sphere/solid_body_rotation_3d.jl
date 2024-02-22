@@ -5,16 +5,15 @@ using LinearAlgebra
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 import ClimaCore.Utilities: half
-import UnPack
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -63,7 +62,7 @@ function sphere_3D(
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
     hv_center_space =
@@ -95,7 +94,7 @@ function init_sbr_thermo(z)
 end
 
 function rhs!(dY, Y, parameters, t)
-    UnPack.@unpack c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE = parameters
+    (; c_coords, cuvw, cw, cω³, fω¹², fu¹², fu³, cp, cE) = parameters
     cρ = Y.Yc.ρ # density on centers
     fw = Y.w # Covariant3Vector on faces
     cuₕ = Y.uₕ # Covariant12Vector on centers

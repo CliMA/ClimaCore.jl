@@ -2,7 +2,14 @@ using Logging
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 using ClimaComms
 const context = ClimaComms.MPICommsContext()
@@ -40,7 +47,7 @@ function distributed_space(
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     topology = Topologies.Topology2D(context, mesh, Meshes.elements(mesh))
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     return (space, context)

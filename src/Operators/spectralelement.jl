@@ -56,7 +56,7 @@ operator_axes(space::Spaces.SpectralElementSpace2D) = (1, 2)
 operator_axes(space::Spaces.SpectralElementSpaceSlab1D) = (1,)
 operator_axes(space::Spaces.SpectralElementSpaceSlab2D) = (1, 2)
 operator_axes(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    operator_axes(space.horizontal_space)
+    operator_axes(Spaces.horizontal_space(space))
 
 
 function node_indices(space::Spaces.SpectralElementSpace1D)
@@ -70,7 +70,7 @@ function node_indices(space::Spaces.SpectralElementSpace2D)
     CartesianIndices((Nq, Nq))
 end
 node_indices(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    node_indices(space.horizontal_space)
+    node_indices(Spaces.horizontal_space(space))
 
 
 """

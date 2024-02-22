@@ -22,7 +22,7 @@ unit_eltype(::Type{T_A}) where {T_A} =
 ################################################################################
 
 check_single_field_solver(::UniformScaling, _) = nothing
-function check_single_field_solver(A::ColumnwiseBandMatrixField, b)
+function check_single_field_solver(A, b)
     matrix_shape(A) == Square() || error(
         "Cannot solve linear system because a diagonal entry in A is not a \
          square matrix",
@@ -33,13 +33,13 @@ function check_single_field_solver(A::ColumnwiseBandMatrixField, b)
     )
 end
 
-single_field_solver_cache(::UniformScaling, _) = nothing
+single_field_solver_cache(::UniformScaling, b) = similar(b, Tuple{})
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
     cache_eltype =
         ud == 0 ? Tuple{} :
         Tuple{x_eltype(A, b), ntuple(_ -> unit_eltype(A), Val(ud))...}
-    return similar(A, cache_eltype)
+    return similar(b, cache_eltype)
 end
 
 single_field_solve!(_, x, A::UniformScaling, b) = x .= inv(A.λ) .* b
@@ -50,7 +50,7 @@ single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(cache, x, A, b)
 function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     CUDA.@cuda threads = nthreads blocks = nblocks single_field_solve_kernel!(
         cache,
         x,
@@ -63,7 +63,7 @@ function single_field_solve_kernel!(cache, x, A, b)
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         _single_field_solve!(
             Spaces.column(cache, i, j, h),
             Spaces.column(x, i, j, h),
@@ -138,8 +138,12 @@ function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
         end
 
         x[n] = Ux[n]
-        for i in (n - 1):-1:1
+        # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+        i = (n - 1)
+        # for i in (n - 1):-1:1
+        while i ≥ 1
             x[i] = Ux[i] ⊟ U₊₁[i] ⊠ x[i + 1]
+            i -= 1
         end
     end
 end
@@ -188,8 +192,12 @@ function band_matrix_solve!(::Type{<:PentadiagonalMatrixRow}, cache, x, Aⱼs, b
 
         x[n] = Ux[n]
         x[n - 1] = Ux[n - 1] ⊟ U₊₁[n - 1] ⊠ x[n]
-        for i in (n - 2):-1:1
+        # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+        # for i in (n - 2):-1:1
+        i = (n - 2)
+        while i ≥ 1
             x[i] = Ux[i] ⊟ U₊₁[i] ⊠ x[i + 1] ⊟ U₊₂[i] ⊠ x[i + 2]
+            i -= 1
         end
     end
 end

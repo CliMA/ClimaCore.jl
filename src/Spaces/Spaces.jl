@@ -19,12 +19,61 @@ using Adapt
 using CUDA
 
 import ..slab, ..column, ..level
-import ..Utilities: PlusHalf
-import ..DataLayouts, ..Geometry, ..Domains, ..Meshes, ..Topologies
-import ClimaComms
-using StaticArrays, ForwardDiff, LinearAlgebra, UnPack, Adapt
+import ..Utilities: PlusHalf, half
+import ..DataLayouts,
+    ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 
+import ..DeviceSideDevice, ..DeviceSideContext
+
+import ..Grids:
+    Staggering,
+    CellFace,
+    CellCenter,
+    topology,
+    vertical_topology,
+    local_geometry_data,
+    global_geometry,
+    local_dss_weights,
+    quadrature_style
+
+import ClimaComms
+using StaticArrays, ForwardDiff, LinearAlgebra, Adapt
+
+"""
+    AbstractSpace
+
+Should define
+- `grid`
+- `staggering`
+
+
+- `space` constructor
+
+"""
 abstract type AbstractSpace end
+
+function grid end
+function staggering end
+
+
+ClimaComms.context(space::AbstractSpace) = ClimaComms.context(grid(space))
+ClimaComms.device(space::AbstractSpace) = ClimaComms.device(grid(space))
+
+topology(space::AbstractSpace) = topology(grid(space))
+vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
+
+
+local_geometry_data(space::AbstractSpace) =
+    local_geometry_data(grid(space), staggering(space))
+
+global_geometry(space::AbstractSpace) = global_geometry(grid(space))
+
+space(refspace::AbstractSpace, staggering::Staggering) =
+    space(grid(refspace), staggering)
+
+
+
+
 
 issubspace(::AbstractSpace, ::AbstractSpace) = false
 
@@ -32,20 +81,18 @@ undertype(space::AbstractSpace) =
     Geometry.undertype(eltype(local_geometry_data(space)))
 
 coordinates_data(space::AbstractSpace) = local_geometry_data(space).coordinates
-
-include("quadrature.jl")
-import .Quadratures
+coordinates_data(grid::Grids.AbstractGrid) =
+    local_geometry_data(grid).coordinates
+coordinates_data(staggering, grid::Grids.AbstractGrid) =
+    local_geometry_data(staggering, grid).coordinates
 
 include("pointspace.jl")
 include("spectralelement.jl")
 include("finitedifference.jl")
 include("extruded.jl")
 include("triangulation.jl")
-include("dss_transform.jl")
 include("dss.jl")
 
-horizontal_space(space::ExtrudedFiniteDifferenceSpace) = space.horizontal_space
-horizontal_space(space::AbstractSpace) = space
 
 weighted_jacobian(space::Spaces.AbstractSpace) = local_geometry_data(space).WJ
 

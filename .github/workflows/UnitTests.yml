@@ -1,0 +1,48 @@
+name: Unit Tests
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    timeout-minutes: 80
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            julia-version: '1.10'
+          - os: windows-latest
+            julia-version: '1.10'
+          - os: macos-latest
+            julia-version: '1.10'
+          - os: ubuntu-latest
+            julia-version: '~1.10.0-rc1'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Julia
+      uses: julia-actions/setup-julia@v1
+      if: steps.filter.outputs.run_test == 'true'
+      with:
+        version: ${{ matrix.julia-version }}
+
+    - name: Cache artifacts
+      uses: julia-actions/cache@v1
+
+    - name: Build package
+      uses: julia-actions/julia-buildpkg@v1
+
+    - name: Run Unit Tests
+      uses: julia-actions/julia-runtest@v1
+      with:
+        annotate: true

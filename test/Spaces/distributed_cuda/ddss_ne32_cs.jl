@@ -8,6 +8,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -30,7 +31,7 @@ import ClimaCore:
     mesh = Meshes.EquiangularCubedSphere(domain, 32)
     topology_cuda = Topologies.Topology2D(context_cuda, mesh)
     topology_cpu = Topologies.Topology2D(context_cpu, mesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     space_cuda = Spaces.SpectralElementSpace2D(topology_cuda, quad)
     space_cpu = Spaces.SpectralElementSpace2D(topology_cpu, quad)
     x_cuda = ones(space_cuda)

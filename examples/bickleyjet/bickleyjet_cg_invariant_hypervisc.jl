@@ -9,6 +9,7 @@ import ClimaCore:
     Operators,
     Spaces,
     Topologies,
+    Quadratures,
     DataLayouts
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -38,7 +39,6 @@ const parameters = (
     ρ₀ = 1.0, # reference density
     c = 2,
     g = 10,
-    D₄ = 1e-4, # hyperdiffusion coefficient
 )
 
 domain = Domains.RectangleDomain(
@@ -55,7 +55,7 @@ domain = Domains.RectangleDomain(
 )
 n1, n2 = 16, 16
 Nq = 4
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(context, mesh)
 if usempi
@@ -104,7 +104,10 @@ function energy(state, p, local_geometry)
 end
 
 function rhs!(dydt, y, _, t)
-    D₄ = parameters.D₄
+    space = axes(y)
+    c = sqrt(parameters.g * parameters.ρ₀)
+    D₄ = 0.0015 * c * Spaces.node_horizontal_length_scale(space)^3 # hyperdiffusion coefficient
+
     g = parameters.g
 
     sdiv = Operators.Divergence()

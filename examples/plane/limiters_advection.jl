@@ -2,7 +2,15 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Limiters,
+    Quadratures
 
 using OrdinaryDiffEq: ODEProblem, solve
 using ClimaTimeSteppers
@@ -140,7 +148,7 @@ Nq = 4
 for (k, ne) in enumerate(ne_seq)
     mesh = Meshes.RectilinearMesh(domain, ne, ne)
     grid_topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     # Initialize state

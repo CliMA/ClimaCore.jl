@@ -15,7 +15,6 @@ using ClimaComms,
     ClimaCorePlots,
     LinearAlgebra,
     IntervalSets,
-    UnPack,
     Plots,
     OrdinaryDiffEq
 #----------------------------------------------------------------------------
@@ -85,7 +84,7 @@ column_face_space =
 # These nodes are chosen by a particular *quadrature rule*, which allows us to integrate functions over the domain. The only supported choice for now is a Gauss-Legendre-Lobatto rule.
 
 ## Gauss-Legendre-Lobatto quadrature with 4 nodes in each direction, so 16 in each element
-quad = ClimaCore.Spaces.Quadratures.GLL{4}()
+quad = ClimaCore.Quadratures.GLL{4}()
 rectangle_space =
     ClimaCore.Spaces.SpectralElementSpace2D(rectangle_topology, quad)
 #----------------------------------------------------------------------------
@@ -464,7 +463,7 @@ parameters = (
 
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
-    @unpack x, y = coord
+    (; x, y) = coord
     ## set initial state
     ρ = p.ρ₀
 
@@ -501,7 +500,7 @@ Plots.plot(y0.ρθ)
 
 function shallow_water_tendency!(dydt, y, _, t)
 
-    @unpack D₄, g = parameters
+    (; D₄, g) = parameters
 
     sdiv = ClimaCore.Operators.Divergence()
     wdiv = ClimaCore.Operators.WeakDivergence()

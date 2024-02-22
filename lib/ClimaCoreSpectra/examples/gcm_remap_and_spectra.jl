@@ -1,12 +1,12 @@
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 
@@ -26,7 +26,7 @@ Nq = 5
 domain = Domains.SphereDomain(R)
 mesh = Meshes.EquiangularCubedSphere(domain, ne)
 topology = Topologies.Topology2D(mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(topology, quad)
 coords = Fields.coordinate_field(space)
 

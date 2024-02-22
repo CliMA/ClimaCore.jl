@@ -1,6 +1,13 @@
-using LinearAlgebra, IntervalSets, UnPack
+using LinearAlgebra, IntervalSets
 import ClimaCore:
-    Domains, Topologies, Meshes, Spaces, Geometry, Operators, Fields
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Geometry,
+    Operators,
+    Fields,
+    Quadratures
 
 using Test
 
@@ -46,7 +53,7 @@ end
             mesh,
             Topologies.spacefillingcurve(mesh),
         )
-        quad = Spaces.Quadratures.GLL{Nq}()
+        quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(grid_topology, quad)
         # for comparison with serial results
         grid_topology_serial =

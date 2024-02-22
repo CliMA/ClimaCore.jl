@@ -2,17 +2,8 @@ name: JuliaFormatter
 
 on:
   push:
-    branches:
-      - main
-      - trying
-      - staging
     tags: '*'
   pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
 
 jobs:
   format:
@@ -24,7 +15,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.2.0
+    - uses: actions/checkout@v4
 
     - uses: dorny/paths-filter@v2.9.1
       id: filter
@@ -36,7 +27,7 @@ jobs:
     - uses: julia-actions/setup-julia@latest
       if: steps.filter.outputs.julia_file_change == 'true'
       with:
-        version: 1.9
+        version: '1.10'
 
     - name: Apply JuliaFormatter
       if: steps.filter.outputs.julia_file_change == 'true'

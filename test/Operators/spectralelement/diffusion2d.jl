@@ -3,7 +3,14 @@ using ClimaComms
 using StaticArrays, IntervalSets
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, Domains, Meshes, Topologies, Spaces, Operators, Geometry
+    Fields,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Operators,
+    Geometry,
+    Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
 using OrdinaryDiffEq
@@ -31,8 +38,8 @@ using OrdinaryDiffEq
     )
 
     Nq = 6
-    quad = Spaces.Quadratures.GLL{Nq}()
-    points, weights = Spaces.Quadratures.quadrature_points(Float64, quad)
+    quad = Quadratures.GLL{Nq}()
+    points, weights = Quadratures.quadrature_points(Float64, quad)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     # Define eigensolution

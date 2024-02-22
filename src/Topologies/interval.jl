@@ -16,18 +16,31 @@ struct IntervalTopology{
     boundaries::B
 end
 
+## gpu
 struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
     boundaries::B
 end
 Adapt.adapt_structure(to, topology::IntervalTopology) =
     DeviceIntervalTopology(topology.boundaries)
 
+ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
+ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()
 
 ClimaComms.device(topology::IntervalTopology) = topology.context.device
 ClimaComms.array_type(topology::IntervalTopology) =
     ClimaComms.array_type(topology.context.device)
 
+
 function IntervalTopology(
+    context::ClimaComms.AbstractCommsContext,
+    mesh::Meshes.IntervalMesh,
+)
+    get!(Cache.OBJECT_CACHE, (IntervalTopology, context, mesh)) do
+        _IntervalTopology(context, mesh)
+    end
+end
+
+function _IntervalTopology(
     context::ClimaComms.AbstractCommsContext,
     mesh::Meshes.IntervalMesh,
 )
@@ -43,7 +56,7 @@ function IntervalTopology(
     IntervalTopology(context, mesh, boundaries)
 end
 IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
-    ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+    ClimaComms.SingletonCommsContext(ClimaComms.device()),
     mesh,
 )
 

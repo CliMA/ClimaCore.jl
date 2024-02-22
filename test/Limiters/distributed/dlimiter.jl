@@ -1,5 +1,13 @@
 using ClimaCore:
-    DataLayouts, Fields, Domains, Geometry, Topologies, Meshes, Spaces, Limiters
+    DataLayouts,
+    Fields,
+    Domains,
+    Geometry,
+    Topologies,
+    Meshes,
+    Spaces,
+    Limiters,
+    Quadratures
 using ClimaCore.RecursiveApply
 using ClimaCore: slab
 using Test
@@ -41,7 +49,7 @@ zdomain = Domains.IntervalDomain(
 vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelems)
 vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
-quad = Spaces.Quadratures.GLL{Nij}()
+quad = Quadratures.GLL{Nij}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
 hv_center_space =

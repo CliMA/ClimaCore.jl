@@ -83,13 +83,10 @@ Construct a vector of `MeshCell` objects representing the elements of `space` as
 an unstuctured mesh of Lagrange polynomial cells, suitable for passing to
 `vtk_grid`.
 """
-function vtk_cells_lagrange(
-    gspace::Spaces.SpectralElementSpace2D{
-        T,
-        Spaces.Quadratures.ClosedUniform{Nq},
-    },
-) where {T, Nq}
-    # TODO: this should depend on the backing DataLayouts (e.g. IJFH)
+function vtk_cells_lagrange(gspace::Spaces.SpectralElementSpace2D)
+    quad = Spaces.quadrature_style(gspace)
+    @assert quad isa Quadratures.ClosedUniform
+    Nq = Quadratures.degrees_of_freedom(quad)    # TODO: this should depend on the backing DataLayouts (e.g. IJFH)
     con_map = vtk_connectivity_map_lagrange(Nq, Nq)
     [
         MeshCell(
@@ -107,7 +104,7 @@ an unstuctured mesh of linear cells, suitable for passing to
 `vtk_grid`.
 """
 function vtk_cells_linear(gridspace::Spaces.SpectralElementSpace2D)
-    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
     Nh = Topologies.nlocalelems(gridspace)
     ind = LinearIndices((1:Nq, 1:Nq, 1:Nh))
     cells = [
@@ -126,7 +123,7 @@ end
 
 function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
     hspace = Spaces.horizontal_space(gridspace)
-    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
     ind = LinearIndices((1:Nv, 1:Nq, 1:Nh)) # assume VIFH
@@ -145,7 +142,7 @@ function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
 end
 function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace3D)
     hspace = Spaces.horizontal_space(gridspace)
-    Nq = Spaces.Quadratures.degrees_of_freedom(hspace.quadrature_style)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
     ind = LinearIndices((1:Nv, 1:Nq, 1:Nq, 1:Nh)) # assumes VIJFH
@@ -180,25 +177,26 @@ This generally does two things:
  - Modifies the vertical space to be on the faces.
 """
 function vtk_grid_space(space::Spaces.SpectralElementSpace1D)
-    if space.quadrature_style isa Spaces.Quadratures.ClosedUniform
+    if Spaces.quadrature_style(space) isa Quadratures.ClosedUniform
         return space
     end
-    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
-    lagrange_quad = Spaces.Quadratures.ClosedUniform{Nq}()
-    return Spaces.SpectralElementSpace1D(space.topology, lagrange_quad)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    lagrange_quad = Quadratures.ClosedUniform{Nq}()
+    return Spaces.SpectralElementSpace1D(Spaces.topology(space), lagrange_quad)
 end
 function vtk_grid_space(space::Spaces.SpectralElementSpace2D)
-    if space.quadrature_style isa Spaces.Quadratures.ClosedUniform
+    if Spaces.quadrature_style(space) isa Quadratures.ClosedUniform
         return space
     end
-    Nq = Spaces.Quadratures.degrees_of_freedom(space.quadrature_style)
-    lagrange_quad = Spaces.Quadratures.ClosedUniform{Nq}()
-    return Spaces.SpectralElementSpace2D(space.topology, lagrange_quad)
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    lagrange_quad = Quadratures.ClosedUniform{Nq}()
+    return Spaces.SpectralElementSpace2D(Spaces.topology(space), lagrange_quad)
 end
 function vtk_grid_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
     horizontal_space = vtk_grid_space(Spaces.horizontal_space(space))
-    vertical_space = Spaces.FaceFiniteDifferenceSpace(space.vertical_topology)
+    vertical_space =
+        Spaces.FaceFiniteDifferenceSpace(Spaces.vertical_topology(space))
     return Spaces.ExtrudedFiniteDifferenceSpace(
         horizontal_space,
         vertical_space,
@@ -226,22 +224,22 @@ This generally does two things:
  - Modifies the vertical space to be on the centers.
 """
 function vtk_cell_space(gridspace::Spaces.SpectralElementSpace1D)
-    @assert gridspace.quadrature_style isa Spaces.Quadratures.ClosedUniform
-    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
-    quad = Spaces.Quadratures.Uniform{Nq - 1}()
-    return Spaces.SpectralElementSpace1D(gridspace.topology, quad)
+    @assert Spaces.quadrature_style(gridspace) isa Quadratures.ClosedUniform
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
+    quad = Quadratures.Uniform{Nq - 1}()
+    return Spaces.SpectralElementSpace1D(Spaces.topology(gridspace), quad)
 end
 function vtk_cell_space(gridspace::Spaces.SpectralElementSpace2D)
-    @assert gridspace.quadrature_style isa Spaces.Quadratures.ClosedUniform
-    Nq = Spaces.Quadratures.degrees_of_freedom(gridspace.quadrature_style)
-    quad = Spaces.Quadratures.Uniform{Nq - 1}()
-    return Spaces.SpectralElementSpace2D(gridspace.topology, quad)
+    @assert Spaces.quadrature_style(gridspace) isa Quadratures.ClosedUniform
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(gridspace))
+    quad = Quadratures.Uniform{Nq - 1}()
+    return Spaces.SpectralElementSpace2D(Spaces.topology(gridspace), quad)
 end
 function vtk_cell_space(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace)
     # this will need to be updated for warped meshes
     horizontal_space = vtk_cell_space(Spaces.horizontal_space(gridspace))
     vertical_space =
-        Spaces.CenterFiniteDifferenceSpace(gridspace.vertical_topology)
+        Spaces.CenterFiniteDifferenceSpace(Spaces.vertical_topology(gridspace))
     return Spaces.ExtrudedFiniteDifferenceSpace(
         horizontal_space,
         vertical_space,

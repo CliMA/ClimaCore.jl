@@ -10,6 +10,7 @@ import ClimaCore:
     Operators,
     Meshes,
     Spaces,
+    Quadratures,
     Topologies,
     Hypsography
 
@@ -58,7 +59,7 @@ function generate_base_spaces(
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
     # Generate Horizontal Space
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     if ndims == 2
         horzdomain = Domains.IntervalDomain(
             Geometry.XPoint{FT}(xlim[1]),
@@ -89,7 +90,7 @@ function generate_smoothed_orography(
     test_smoothing::Bool = false,
 )
     # Extrusion
-    z_surface = warp_fn.(Fields.coordinate_field(hspace))
+    z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(hspace)))
     # An Euler step defines the diffusion coefficient 
     # (See e.g. cfl condition for diffusive terms).
     x_array = parent(Fields.coordinate_field(hspace).x)
@@ -110,11 +111,8 @@ function get_adaptation(adaption, z_surface::Fields.Field)
     if adaption <: Hypsography.LinearAdaption
         return adaption(z_surface)
     elseif adaption <: Hypsography.SLEVEAdaption
-        return adaption(
-            z_surface,
-            eltype(z_surface)(0.75),
-            eltype(z_surface)(0.60),
-        )
+        FT = eltype(eltype(z_surface))
+        return adaption(z_surface, FT(0.75), FT(0.60))
     end
 end
 
@@ -437,7 +435,7 @@ end
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
             horztopology = Topologies.IntervalTopology(horzmesh)
 
-            quad = Spaces.Quadratures.GLL{np + 1}()
+            quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile
@@ -491,23 +489,17 @@ end
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
             horztopology = Topologies.IntervalTopology(horzmesh)
 
-            quad = Spaces.Quadratures.GLL{np + 1}()
+            quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile
             z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
             # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
             # Scale height is poorly specified, so code should throw warning.
-            @test_logs (
-                :warn,
-                "Decay scale (s*z_top = 0.1) must be higher than max surface elevation (max(z_surface) = 0.5). Returning s = FT(0.8). Scale height is therefore s=0.8 m.",
-            )
-            (
-                fspace = Spaces.ExtrudedFiniteDifferenceSpace(
-                    hspace,
-                    vert_face_space,
-                    Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
-                )
+            @test_throws ErrorException Spaces.ExtrudedFiniteDifferenceSpace(
+                hspace,
+                vert_face_space,
+                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
             )
         end
     end

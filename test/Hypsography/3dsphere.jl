@@ -4,12 +4,12 @@ import ClimaCore
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators,
     InputOutput,
@@ -33,7 +33,7 @@ horztopology = Topologies.Topology2D(
     ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
     horzmesh,
 )
-quad = Spaces.Quadratures.GLL{4 + 1}()
+quad = Quadratures.GLL{4 + 1}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
 z_surface =

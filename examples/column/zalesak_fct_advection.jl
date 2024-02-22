@@ -38,6 +38,7 @@ end
 
 function tendency!(yₜ, y, parameters, t)
     (; w, Δt) = parameters
+    FT = Spaces.undertype(axes(y.q))
     divf2c = Operators.DivergenceF2C(
         bottom = Operators.SetValue(Geometry.WVector(FT(0))),
         top = Operators.SetValue(Geometry.WVector(FT(0))),
@@ -92,13 +93,14 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
     face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
     z = Fields.coordinate_field(cent_space).z
+    O = ones(FT, face_space)
 
     # Initial condition
     q_init = pulse.(z, 0.0, z₀, zₕ, z₁)
     y = Fields.FieldVector(q = q_init)
 
     # Unitary, constant advective velocity
-    w = Geometry.WVector.(speed .* ones(FT, face_space))
+    w = Geometry.WVector.(speed .* O)
 
     # Solve the ODE
     parameters = (; w, Δt)

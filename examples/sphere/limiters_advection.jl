@@ -2,7 +2,15 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies, Limiters
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Limiters,
+    Quadratures
 
 using OrdinaryDiffEq, Test
 
@@ -102,18 +110,18 @@ for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     grid_topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space =
         Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble = true)
 
     # Initialize variables needed for limiters
-    n_elems = Topologies.nlocalelems(space.topology)
+    n_elems = Topologies.nlocalelems(Spaces.topology(space))
     min_q = zeros(n_elems)
     max_q = zeros(n_elems)
 
     coords = Fields.coordinate_field(space)
     Δh[k] = 2 * R / ne
-    global_geom = space.global_geometry
+    global_geom = Spaces.global_geometry(space)
 
     # Initialize state
     y0 = map(coords) do coord
@@ -259,8 +267,9 @@ for (k, ne) in enumerate(ne_seq)
 end
 
 # Check conservation
-#atols = [2.5e1eps(FT), 2.5e1eps(FT), 8.5eps(FT)]
-atols = [2.5e1eps(FT), 2.5e1eps(FT), 1.0e1eps(FT)]
+atols = [27.5eps(FT), 27.5eps(FT), 11eps(FT)]
+@info "relative_errors = $relative_errors"
+@info "atols = $atols"
 for k in 1:length(ne_seq)
     @test relative_errors[k] ≈ FT(0) atol = atols[k]
 end

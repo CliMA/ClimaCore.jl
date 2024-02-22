@@ -7,6 +7,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -22,7 +23,7 @@ import ClimaCore:
     mesh = Meshes.EquiangularCubedSphere(domain, 3)
     topology = Topologies.Topology2D(context, mesh)
     topology_cpu = Topologies.Topology2D(context_cpu, mesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
     space_cpu = Spaces.SpectralElementSpace2D(topology_cpu, quad)
 
@@ -82,7 +83,7 @@ end
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
     h_space_cpu = Spaces.SpectralElementSpace2D(horizontal_topology_cpu, quad)
 
@@ -123,8 +124,8 @@ end
     dss_buffer12 = Spaces.create_dss_buffer(y12)
     dss_buffer12_cpu = Spaces.create_dss_buffer(y12_cpu)
     # ensure physical velocity is continous across SE boundary for initial state
-    Spaces.weighted_dss!(y12, dss_buffer12)
-    Spaces.weighted_dss!(y12_cpu, dss_buffer12_cpu)
+    Spaces.weighted_dss!(y12 => dss_buffer12)
+    Spaces.weighted_dss!(y12_cpu => dss_buffer12_cpu)
 
     yinit12 = copy(y12)
     yinit12_cpu = copy(y12_cpu)

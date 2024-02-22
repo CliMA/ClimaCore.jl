@@ -2,11 +2,19 @@
 julia --project
 using Revise; include(joinpath("test", "Spaces", "extruded_sphere_cuda.jl"))
 =#
-using LinearAlgebra, IntervalSets, UnPack
+using LinearAlgebra, IntervalSets
 using CUDA
 using ClimaComms, ClimaCore
 import ClimaCore:
-    Domains, Topologies, Meshes, Spaces, Geometry, column, Fields, Operators
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Geometry,
+    column,
+    Fields,
+    Operators,
+    Quadratures
 using Test
 
 function get_space(context)
@@ -28,7 +36,7 @@ function get_space(context)
     horzdomain = Domains.SphereDomain(FT(30.0))
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
 
-    quad = Spaces.Quadratures.GLL{3 + 1}()
+    quad = Quadratures.GLL{3 + 1}()
 
     # Define horz topology and space
     horztopology = Topologies.Topology2D(context, horzmesh)

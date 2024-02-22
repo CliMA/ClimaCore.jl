@@ -3,11 +3,17 @@ module Topologies
 using DocStringExtensions
 
 import ClimaComms, Adapt
+using CUDA
 
-import ClimaComms
+import ..ClimaCore
+import ..Utilities: Cache
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
+import ..DataLayouts
+import ..slab, ..column, ..level
+
+import ..DeviceSideDevice, ..DeviceSideContext
 
 """
    AbstractTopology
@@ -336,6 +342,9 @@ function boundary_faces end
 # Topologies API implementations
 include("interval.jl")
 include("topology2d.jl")
+
+include("dss_transform.jl")
+include("dss.jl")
 
 # deprecate
 @deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)

@@ -6,7 +6,8 @@ using IntervalSets
 
 import ClimaCore
 
-import ClimaCore: Domains, Meshes, Topologies, Spaces, Fields, Operators
+import ClimaCore:
+    Domains, Meshes, Topologies, Spaces, Fields, Operators, Quadratures
 import ClimaCore.Domains: Geometry
 
 # We need to pull these broadcasted expressions out as
@@ -212,7 +213,7 @@ function hspace1d(FT)
     hmesh = Meshes.IntervalMesh(hdomain, nelems = 3)
     htopology = Topologies.IntervalTopology(hmesh)
     Nq = 3
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     return Spaces.SpectralElementSpace1D(htopology, quad)
 end
 
@@ -224,7 +225,7 @@ function hspace2d(FT)
         x2periodic = true,
     )
     Nq = 3
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     hmesh = Meshes.RectilinearMesh(hdomain, 3, 3)
     htopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
@@ -256,9 +257,7 @@ end
             center_values = ones(FT, center_space)
             center_velocities = Geometry.WVector.(center_values)
 
-            filter18(@nospecialize(ft)) = ft !== typeof(Base.mapreduce_empty)
-            filter19(@nospecialize f) = f !== Base.mapreduce_empty
-            filter = VERSION ≤ v"1.9" ? filter18 : filter19
+            filter(@nospecialize f) = f !== Base.mapreduce_empty
 
             # face space operators
             @test_opt function_filter = filter sum(ones(FT, face_space))

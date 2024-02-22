@@ -51,3 +51,165 @@ end
 
 undertype(::Type{LocalGeometry{I, C, FT, S}}) where {I, C, FT, S} = FT
 undertype(::Type{SurfaceGeometry{FT, N}}) where {FT, N} = FT
+
+"""
+    blockmat(m11, m22[, m12])
+
+Construct an `Axis2Tensor` from sub-blocks
+"""
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UAxis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Nothing = nothing,
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.UWAxis(), Geometry.Covariant13Axis()),
+        @SMatrix [
+            A[1, 1] zero(FT)
+            zero(FT) B[1, 1]
+        ]
+    )
+end
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UAxis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant1Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    C = Geometry.components(c)
+    Geometry.AxisTensor(
+        (Geometry.UWAxis(), Geometry.Covariant13Axis()),
+        @SMatrix [
+            A[1, 1] zero(FT)
+            C[1, 1] B[1, 1]
+        ]
+    )
+end
+
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.VAxis, Geometry.Covariant2Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Nothing = nothing,
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.VWAxis(), Geometry.Covariant23Axis()),
+        @SMatrix [
+            A[1, 1] zero(FT)
+            zero(FT) B[1, 1]
+        ]
+    )
+end
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.VAxis, Geometry.Covariant2Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant2Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    C = Geometry.components(c)
+    Geometry.AxisTensor(
+        (Geometry.VWAxis(), Geometry.Covariant23Axis()),
+        @SMatrix [
+            A[1, 1] zero(FT)
+            C[1, 1] B[1, 1]
+        ]
+    )
+end
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Nothing = nothing,
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    Geometry.AxisTensor(
+        (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
+        @SMatrix [
+            A[1, 1] A[1, 2] zero(FT)
+            A[2, 1] A[2, 2] zero(FT)
+            zero(FT) zero(FT) B[1, 1]
+        ]
+    )
+end
+function blockmat(
+    a::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.UVAxis, Geometry.Covariant12Axis},
+        SMatrix{2, 2, FT, 4},
+    },
+    b::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant3Axis},
+        SMatrix{1, 1, FT, 1},
+    },
+    c::Geometry.Axis2Tensor{
+        FT,
+        Tuple{Geometry.WAxis, Geometry.Covariant12Axis},
+        SMatrix{1, 2, FT, 2},
+    },
+) where {FT}
+    A = Geometry.components(a)
+    B = Geometry.components(b)
+    C = Geometry.components(c)
+    Geometry.AxisTensor(
+        (Geometry.UVWAxis(), Geometry.Covariant123Axis()),
+        @SMatrix [
+            A[1, 1] A[1, 2] zero(FT)
+            A[2, 1] A[2, 2] zero(FT)
+            C[1, 1] C[1, 2] B[1, 1]
+        ]
+    )
+end

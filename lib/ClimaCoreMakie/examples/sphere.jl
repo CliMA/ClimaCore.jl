@@ -7,7 +7,7 @@ R = 6.37122e6
 domain = ClimaCore.Domains.SphereDomain(R)
 mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 32)
 grid_topology = ClimaCore.Topologies.Topology2D(mesh)
-quad = ClimaCore.Spaces.Quadratures.GLL{5}()
+quad = ClimaCore.Quadratures.GLL{5}()
 space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
 coords = ClimaCore.Fields.coordinate_field(space)
 

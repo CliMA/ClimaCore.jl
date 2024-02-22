@@ -7,12 +7,12 @@ import ClimaCore
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     Operators
 
@@ -35,7 +35,7 @@ horztopology = Topologies.Topology2D(
     ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
     horzmesh,
 )
-quad = Spaces.Quadratures.GLL{5}()
+quad = Quadratures.GLL{5}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 
 hv_center_space =

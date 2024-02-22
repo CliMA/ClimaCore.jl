@@ -1,6 +1,7 @@
 import ClimaCore
 using ClimaComms
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
 using NCDatasets
 using Test
 using ClimaCoreTempestRemap
@@ -33,8 +34,8 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
     # broadcast to the redundant nodes using unweighted dss
     topology = Spaces.topology(axes(field))
     hspace = Spaces.horizontal_space(axes(field))
-    quadrature_style = hspace.quadrature_style
-    Spaces.dss2!(Fields.field_values(field), topology, quadrature_style)
+    quadrature_style = Spaces.quadrature_style(hspace)
+    Topologies.dss!(Fields.field_values(field), topology)
     return field
 end
 
@@ -59,10 +60,7 @@ end
         ClimaComms.SingletonCommsContext(),
         mesh_i,
     )
-    space_i = Spaces.SpectralElementSpace2D(
-        topology_i,
-        Spaces.Quadratures.GLL{nq_i}(),
-    )
+    space_i = Spaces.SpectralElementSpace2D(topology_i, Quadratures.GLL{nq_i}())
     coords_i = Fields.coordinate_field(space_i)
 
     # construct target mesh
@@ -71,10 +69,7 @@ end
         ClimaComms.SingletonCommsContext(),
         mesh_o,
     )
-    space_o = Spaces.SpectralElementSpace2D(
-        topology_o,
-        Spaces.Quadratures.GLL{nq_o}(),
-    )
+    space_o = Spaces.SpectralElementSpace2D(topology_o, Quadratures.GLL{nq_o}())
     coords_o = Fields.coordinate_field(space_o)
 
     # generate test data in the Field format
@@ -93,7 +88,7 @@ end
     # apply the remap
     field_o = ClimaCoreTempestRemap.remap(R, field_i)
 
-    # TEST_1: error between our `apply!` in ClimaCoe and `apply_remap` in TempestRemap
+    # TEST_1: error between our `apply!` in ClimaCore and `apply_remap` in TempestRemap
 
     # write test data for offline map apply for comparison
     datafile_in = joinpath(OUTPUT_DIR, "data_in.nc")

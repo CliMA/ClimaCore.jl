@@ -9,6 +9,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts,
     InputOutput
@@ -66,7 +67,7 @@ end
     )
     n1, n2 = 16, 16
     Nq = 4
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     device = ClimaComms.device()
     @info "Using device" device

@@ -1,6 +1,6 @@
 import ClimaCore
 using ClimaComms
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces
+using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Quadratures
 using NCDatasets
 using TempestRemap_jll
 using Test

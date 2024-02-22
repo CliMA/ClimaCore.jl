@@ -11,6 +11,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -32,7 +33,7 @@ include("reduction_cuda_utils.jl")
     R = FT(6.37122e6) # radius of earth
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     grid_topology = Topologies.Topology2D(context, mesh)
     grid_topology_cpu = Topologies.Topology2D(context_cpu, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -112,7 +113,7 @@ end
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
     h_space_cpu = Spaces.SpectralElementSpace2D(horizontal_topology_cpu, quad)
 
@@ -251,4 +252,42 @@ end
     @test LinearAlgebra.norm(Yc, 3) ≈ LinearAlgebra.norm(Yc_cpu, 3)
 
     @test LinearAlgebra.norm(Yc, Inf) ≈ LinearAlgebra.norm(Yc_cpu, Inf)
+end
+
+@testset "test cuda reduction on a field with multiple variables" begin
+    comms_ctx = ClimaComms.SingletonCommsContext(ClimaComms.device())
+    comms_ctx_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
+    FT = Float64
+    println("running multi-variable reduction test on $(comms_ctx.device)")
+    domain = Domains.RectangleDomain(
+        Domains.IntervalDomain(
+            Geometry.XPoint{FT}(0.0),
+            Geometry.XPoint{FT}(1.0);
+            periodic = false,
+            boundary_names = (:west, :east),
+        ),
+        Domains.IntervalDomain(
+            Geometry.YPoint{FT}(0.0),
+            Geometry.YPoint{FT}(1.0);
+            periodic = false,
+            boundary_names = (:south, :north),
+        ),
+    )
+    mesh = Meshes.RectilinearMesh(domain, 3, 3)
+    topology = Topologies.Topology2D(comms_ctx, mesh)
+    topology_cpu = Topologies.Topology2D(comms_ctx_cpu, mesh)
+    quad = Quadratures.GLL{5}()
+    space = Spaces.SpectralElementSpace2D(topology, quad)
+    space_cpu = Spaces.SpectralElementSpace2D(topology_cpu, quad)
+    coords = Fields.coordinate_field(space)
+    coords_cpu = Fields.coordinate_field(space_cpu)
+
+    q₀(coords, x_scale, y_scale) =
+        (x = x_scale * coords.x, y = y_scale * coords.y)
+
+    q = @. q₀(coords, 1.2, 1.5)
+    q_cpu = @. q₀(coords_cpu, 1.2, 1.5)
+
+    @test [sum(q)...] ≈ [sum(q_cpu)...]
 end

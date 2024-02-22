@@ -22,6 +22,15 @@ struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <: AbstractMesh1D
     faces::V
 end
 
+# implies isequal
+Base.:(==)(mesh1::IntervalMesh, mesh2::IntervalMesh) =
+    mesh1.domain == mesh2.domain && mesh1.faces == mesh2.faces
+function Base.hash(mesh::IntervalMesh, h::UInt)
+    h = hash(Meshes.IntervalMesh, h)
+    h = hash(mesh.domain, h)
+    h = hash(mesh.faces, h)
+    return h
+end
 domain(mesh::IntervalMesh) = mesh.domain
 nelements(mesh::IntervalMesh) = length(mesh.faces) - 1
 elements(mesh::IntervalMesh) = Base.OneTo(nelements(mesh))
@@ -33,6 +42,11 @@ function Base.show(io::IO, mesh::IntervalMesh)
     summary(io, mesh)
     print(io, " of ")
     print(io, mesh.domain)
+end
+function element_horizontal_length_scale(mesh::IntervalMesh)
+    cmax = Geometry.component(mesh.domain.coord_max, 1)
+    cmin = Geometry.component(mesh.domain.coord_min, 1)
+    return (cmax - cmin) / nelements(mesh)
 end
 
 coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =

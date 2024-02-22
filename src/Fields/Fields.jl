@@ -5,9 +5,11 @@ import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
+import ..Quadratures
+import ..Grids: ColumnIndex
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, UnrolledFunctions
 
 using ..RecursiveApply
 using CUDA
@@ -38,13 +40,6 @@ Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 
-ClimaComms.context(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ClimaComms.context(Spaces.horizontal_space(space))
-ClimaComms.context(space::Spaces.SpectralElementSpace2D) =
-    ClimaComms.context(space.topology)
-ClimaComms.context(space::S) where {S <: Spaces.AbstractSpace} =
-    ClimaComms.context(space.topology)
-
 ClimaComms.context(topology::Topologies.Topology2D) = topology.context
 ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
     topology.context
@@ -54,7 +49,7 @@ Adapt.adapt_structure(to, field::Field) = Field(
     Adapt.adapt(to, axes(field)),
 )
 
-
+## aliases
 # Point Field
 const PointField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
@@ -83,6 +78,14 @@ const ExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace}
+const ExtrudedFiniteDifferenceField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace2D}
+const ExtrudedFiniteDifferenceField3D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedFiniteDifferenceSpace3D}
 const FaceExtrudedFiniteDifferenceField{V, S} = Field{
     V,
     S,
@@ -92,12 +95,40 @@ const CenterExtrudedFiniteDifferenceField{V, S} = Field{
     S,
 } where {V <: AbstractData, S <: Spaces.CenterExtrudedFiniteDifferenceSpace}
 
+#
+const SpectralElementField1D{V, S} =
+    Field{V, S} where {V <: AbstractData, S <: Spaces.SpectralElementSpace1D}
+const ExtrudedSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.ExtrudedSpectralElementSpace2D}
+
+const RectilinearSpectralElementField2D{V, S} = Field{
+    V,
+    S,
+} where {V <: AbstractData, S <: Spaces.RectilinearSpectralElementSpace2D}
+const ExtrudedRectilinearSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedRectilinearSpectralElementSpace3D,
+}
+
+
 # Cubed Sphere Fields
+
 const CubedSphereSpectralElementField2D{V, S} = Field{
     V,
     S,
 } where {V <: AbstractData, S <: Spaces.CubedSphereSpectralElementSpace2D}
-
+const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
+    V,
+    S,
+} where {
+    V <: AbstractData,
+    S <: Spaces.ExtrudedCubedSphereSpectralElementSpace3D,
+}
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
 @inline field_values(field::Field) = getfield(field, :values)
@@ -334,21 +365,11 @@ function interpcoord(elemrange, x::Real)
 end
 
 """
-    Spaces.variational_solve!(field)
-
-Divide `field` by the mass matrix.
-"""
-function Spaces.variational_solve!(field::Field)
-    Spaces.variational_solve!(field_values(field), axes(field))
-    return field
-end
-
-"""
     Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_dss_buffer(field)])
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 (i.e. it modifies the `f`). `ghost_buffer` contains the necessary information
-for communication in a distributed setting, see [`Spaces.create_ghost_buffer`](@ref).
+for communication in a distributed setting, see [`Spaces.create_dss_buffer`](@ref).
 
 This is a projection operation from the piecewise polynomial space
 ``\\mathcal{V}_0`` to the continuous space ``\\mathcal{V}_1 = \\mathcal{V}_0
@@ -390,22 +411,52 @@ Spaces.weighted_dss_ghost!(field::Field, dss_buffer) =
     Spaces.weighted_dss_ghost!(field_values(field), axes(field), dss_buffer)
 
 """
-    Spaces.create_ghost_buffer(field::Field)
+    Spaces.weighted_dss!(field1 => ghost_buffer1, field2 => ghost_buffer2, ...)
 
-Create a buffer for communicating neighbour information of `field`.
+Call [`Spaces.weighted_dss!`](@ref) on multiple fields at once, overlapping
+communication as much as possible.
 """
-Spaces.create_ghost_buffer(field::Field) = Spaces.create_dss_buffer(field)
+function Spaces.weighted_dss!(
+    (field1, dss_buffer1)::Pair,
+    field_buffer_pairs::Pair...,
+)
+    device = ClimaComms.device(axes(field1))
+    Spaces.weighted_dss_prepare!(
+        field_values(field1),
+        axes(field1),
+        dss_buffer1,
+    )
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_prepare!(
+            field_values(field),
+            axes(field),
+            dss_buffer,
+        )
+    end
 
-"""
-    Spaces.create_dss_buffer(field::Field)
+    if device isa ClimaComms.CUDADevice
+        CUDA.synchronize(; blocking = true)
+    end
+    dss_buffer1 isa Topologies.DSSBuffer &&
+        ClimaComms.start(dss_buffer1.graph_context)
+    for (field, dss_buffer) in field_buffer_pairs
+        dss_buffer isa Topologies.DSSBuffer &&
+            ClimaComms.start(dss_buffer.graph_context)
+    end
 
-Create a buffer for communicating neighbour information of `field`.
-"""
-function Spaces.create_dss_buffer(field::Field)
-    space = axes(field)
-    hspace = Spaces.horizontal_space(space)
-    Spaces.create_dss_buffer(field_values(field), hspace)
+    Spaces.weighted_dss_internal!(field1, dss_buffer1)
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_internal!(field, dss_buffer)
+    end
+
+    Spaces.weighted_dss_ghost!(field1, dss_buffer1)
+    for (field, dss_buffer) in field_buffer_pairs
+        Spaces.weighted_dss_ghost!(field, dss_buffer)
+    end
+
+    return nothing
 end
+
 # Add definitions for backward compatibility
 Spaces.weighted_dss2!(
     field::Field,
@@ -420,6 +471,18 @@ Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
 
 Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
     Spaces.weighted_dss_ghost!(field, ghost_buffer)
+
+
+"""
+    Spaces.create_dss_buffer(field::Field)
+
+Create a buffer for communicating neighbour information of `field`.
+"""
+function Spaces.create_dss_buffer(field::Field)
+    space = axes(field)
+    hspace = Spaces.horizontal_space(space)
+    Spaces.create_dss_buffer(field_values(field), hspace)
+end
 
 Base.@propagate_inbounds function level(
     field::Union{
@@ -465,63 +528,65 @@ function set!(f::Function, field::Field, args = ())
     return nothing
 end
 
-#=
-This function can be used to truncate the printing
-of ClimaCore `Field` types, which can get rather
-long.
+if VERSION < v"1.10"
+    #=
+    This function can be used to truncate the printing
+    of ClimaCore `Field` types, which can get rather
+    long.
 
-# Example
-```
-import ClimaCore
-ClimaCore.Fields.truncate_printing_field_types() = true
-```
-=#
-truncate_printing_field_types() = false
+    # Example
+    ```
+    import ClimaCore
+    ClimaCore.Fields.truncate_printing_field_types() = true
+    ```
+    =#
+    truncate_printing_field_types() = false
 
-function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
-    if truncate_printing_field_types()
-        print(io, truncated_field_type_string(T))
-    else
-        invoke(show, Tuple{IO, Type}, io, T)
-    end
-end
-
-# Defined for testing
-function truncated_field_type_string(::Type{T}) where {T <: Fields.Field}
-    values_type(::Type{T}) where {V, T <: Fields.Field{V}} = V
-
-    _apply!(f, ::T, match_list) where {T} = nothing # sometimes we need this...
-    function _apply!(f, ::Type{T}, match_list) where {T}
-        if f(T)
-            push!(match_list, T)
-        end
-        for p in T.parameters
-            _apply!(f, p, match_list)
+    function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
+        if truncate_printing_field_types()
+            print(io, truncated_field_type_string(T))
+        else
+            invoke(show, Tuple{IO, Type}, io, T)
         end
     end
-    #     apply(::T) where {T <: Any}
-    # Recursively traverse type `T` and apply
-    # `f` to the types (and type parameters).
-    # Returns a list of matches where `f(T)` is true.
-    apply(f, ::T) where {T} = apply(f, T)
-    function apply(f, ::Type{T}) where {T}
-        match_list = []
-        _apply!(f, T, match_list)
-        return match_list
-    end
 
-    # We can't gaurantee that printing for all
-    # field types will succeed, so fallback to
-    # printing `Field{...}` if this fails.
-    try
-        V = values_type(T)
-        nts = apply(x -> x <: NamedTuple, eltype(V))
-        syms = unique(map(nt -> fieldnames(nt), nts))
-        s = join(syms, ",")
-        return "Field{$s} (trunc disp)"
-    catch
-        @warn "Could not print field. Please open a an issue with the runscript."
-        return "Field{...} (trunc disp)"
+    # Defined for testing
+    function truncated_field_type_string(::Type{T}) where {T <: Fields.Field}
+        values_type(::Type{T}) where {V, T <: Fields.Field{V}} = V
+
+        _apply!(f, ::T, match_list) where {T} = nothing # sometimes we need this...
+        function _apply!(f, ::Type{T}, match_list) where {T}
+            if f(T)
+                push!(match_list, T)
+            end
+            for p in T.parameters
+                _apply!(f, p, match_list)
+            end
+        end
+        #     apply(::T) where {T <: Any}
+        # Recursively traverse type `T` and apply
+        # `f` to the types (and type parameters).
+        # Returns a list of matches where `f(T)` is true.
+        apply(f, ::T) where {T} = apply(f, T)
+        function apply(f, ::Type{T}) where {T}
+            match_list = []
+            _apply!(f, T, match_list)
+            return match_list
+        end
+
+        # We can't gaurantee that printing for all
+        # field types will succeed, so fallback to
+        # printing `Field{...}` if this fails.
+        try
+            V = values_type(T)
+            nts = apply(x -> x <: NamedTuple, eltype(V))
+            syms = unique(map(nt -> fieldnames(nt), nts))
+            s = join(syms, ",")
+            return "Field{$s} (trunc disp)"
+        catch
+            @warn "Could not print field. Please open a an issue with the runscript."
+            return "Field{...} (trunc disp)"
+        end
     end
 end
 

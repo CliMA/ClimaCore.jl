@@ -1,8 +1,17 @@
+import CUDA
+CUDA.allowscalar(false)
 using Logging
 using Test
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 using ClimaComms
 using CUDA
@@ -74,30 +83,41 @@ partition numbers
     )
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     topology = Topologies.Topology2D(context, mesh, Meshes.elements(mesh))
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == (pid == 1 ? 6 : 5)
-    if pid == 1
-        # gidx 1
-        @test Topologies.local_neighboring_elements(space.topology, 1) ==
-              [2, 5, 6]
-        @test Topologies.ghost_neighboring_elements(space.topology, 1) == []
-        # gidx 6
-        @test Topologies.local_neighboring_elements(space.topology, 6) ==
-              [1, 2, 3, 5]
-        @test space.topology.recv_elem_gidx[Topologies.ghost_neighboring_elements(
-            space.topology,
-            6,
-        )] == [7, 9, 10, 11]
-    elseif pid == 2
-        # gidx 7
-        @test Topologies.local_neighboring_elements(space.topology, 1) ==
-              [2, 4, 5]
-        @test space.topology.recv_elem_gidx[Topologies.ghost_neighboring_elements(
-            space.topology,
-            1,
-        )] == [2, 3, 4, 6, 12]
+    CUDA.@allowscalar begin
+        if pid == 1
+            # gidx 1
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == [2, 5, 6]
+            @test Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == []
+            # gidx 6
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                6,
+            ) == [1, 2, 3, 5]
+            @test Spaces.topology(space).recv_elem_gidx[Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
+                6,
+            )] == [7, 9, 10, 11]
+        elseif pid == 2
+            # gidx 7
+            @test Topologies.local_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            ) == [2, 4, 5]
+            @test Spaces.topology(space).recv_elem_gidx[Topologies.ghost_neighboring_elements(
+                Spaces.topology(space),
+                1,
+            )] == [2, 3, 4, 6, 12]
+        end
     end
 
     init_state(local_geometry, p) = (ρ = 1.0)

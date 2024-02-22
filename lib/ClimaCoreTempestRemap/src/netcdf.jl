@@ -1,4 +1,4 @@
-
+import CommonDataModel
 import ClimaCore: slab, column
 
 """
@@ -53,7 +53,7 @@ def_space_coord(
     nc::NCDataset,
     space::Spaces.SpectralElementSpace2D;
     type = "dgll",
-) = def_space_coord(nc, space, space.topology.mesh; type)
+) = def_space_coord(nc, space, Spaces.topology(space).mesh; type)
 
 function def_space_coord(
     nc::NCDataset,
@@ -224,13 +224,17 @@ end
 
 function def_space_coord(
     nc::NCDataset,
-    space::Spaces.ExtrudedFiniteDifferenceSpace{S};
+    space::Spaces.ExtrudedFiniteDifferenceSpace;
     type = "dgll",
-) where {S <: Spaces.Staggering}
-    hvar = def_space_coord(nc, space.horizontal_space; type = type)
+)
+    staggering = Spaces.staggering(space)
+    hvar = def_space_coord(nc, Spaces.horizontal_space(space); type = type)
     vvar = def_space_coord(
         nc,
-        Spaces.FiniteDifferenceSpace{S}(space.vertical_topology),
+        Spaces.FiniteDifferenceSpace(
+            Spaces.vertical_topology(space),
+            staggering,
+        ),
     )
     (hvar..., vvar...)
 end
@@ -301,16 +305,20 @@ for (i,t) in enumerate(times)
 end
 ```
 """
-Base.setindex!(::NCDatasets.CFVariable, ::Fields.Field, ::Colon)
+Base.setindex!(
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
+    ::Fields.Field,
+    ::Colon,
+)
 
 function Base.setindex!(
-    var::NCDatasets.CFVariable,
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
     field::Fields.SpectralElementField2D,
     ::Colon,
     extraidx::Int...,
 )
     space = axes(field)
-    nc = NCDataset(var)
+    nc = NCDatasets.dataset(var)
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(space)
     elseif nc.attrib["node_type"] == "dgll"
@@ -325,14 +333,14 @@ function Base.setindex!(
     return var
 end
 function Base.setindex!(
-    var::NCDatasets.CFVariable,
+    var::Union{NCDatasets.CFVariable, CommonDataModel.CFVariable},
     field::Fields.ExtrudedFiniteDifferenceField,
     ::Colon,
     extraidx::Int...,
 )
-    nc = NCDataset(var)
+    nc = NCDatasets.dataset(var)
     space = axes(field)
-    hspace = space.horizontal_space
+    hspace = Spaces.horizontal_space(space)
     if nc.attrib["node_type"] == "cgll"
         nodes = Spaces.unique_nodes(hspace)
     elseif nc.attrib["node_type"] == "dgll"

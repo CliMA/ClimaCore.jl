@@ -71,9 +71,7 @@ function remap!(
     # using out_type == "cgll"
     if R.out_type == "cgll"
         topology = Spaces.topology(R.target_space)
-        hspace = Spaces.horizontal_space(R.target_space)
-        quadrature_style = hspace.quadrature_style
-        Spaces.dss2!(target, topology, quadrature_style)
+        Topologies.dss!(target, topology)
     end
     return target
 end
@@ -131,13 +129,7 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         # using out_type == "cgll"
         if R.out_type == "cgll"
             topology = Spaces.topology(axes(target))
-            hspace = Spaces.horizontal_space(axes(target))
-            quadrature_style = hspace.quadrature_style
-            Spaces.dss2!(
-                Fields.field_values(target),
-                topology,
-                quadrature_style,
-            )
+            Topologies.dss!(Fields.field_values(target), topology)
         end
         return target
     end
@@ -170,15 +162,15 @@ function generate_map(
     out_type = "cgll",
 )
     if (target_space_distr != nothing)
-        comms_ctx = target_space_distr.topology.context
+        comms_ctx = ClimaComms.context(target_space_distr)
     else
-        comms_ctx = target_space.topology.context
+        comms_ctx = ClimaComms.context(target_space)
     end
 
     if ClimaComms.iamroot(comms_ctx)
         # write meshes and generate weights on root process (using global indices)
-        write_exodus(meshfile_source, source_space.topology)
-        write_exodus(meshfile_target, target_space.topology)
+        write_exodus(meshfile_source, Spaces.topology(source_space))
+        write_exodus(meshfile_target, Spaces.topology(target_space))
         overlap_mesh(meshfile_overlap, meshfile_source, meshfile_target)
         remap_weights(
             weightfile,
@@ -186,12 +178,12 @@ function generate_map(
             meshfile_target,
             meshfile_overlap;
             in_type = in_type,
-            in_np = Spaces.Quadratures.degrees_of_freedom(
-                source_space.quadrature_style,
+            in_np = Quadratures.degrees_of_freedom(
+                Spaces.quadrature_style(source_space),
             ),
             out_type = out_type,
-            out_np = Spaces.Quadratures.degrees_of_freedom(
-                target_space.quadrature_style,
+            out_np = Quadratures.degrees_of_freedom(
+                Spaces.quadrature_style(target_space),
             ),
         )
 

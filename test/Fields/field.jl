@@ -8,7 +8,15 @@ import ClimaCore
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
-    Fields, slab, Domains, Topologies, Meshes, Operators, Spaces, Geometry
+    Fields,
+    slab,
+    Domains,
+    Topologies,
+    Meshes,
+    Operators,
+    Spaces,
+    Geometry,
+    Quadratures
 
 using LinearAlgebra: norm
 using Statistics: mean
@@ -35,7 +43,7 @@ function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     grid_topology =
         Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
+    quad = Quadratures.GLL{Nij}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     return space
 end
@@ -280,7 +288,7 @@ function call_getproperty(fv)
 end
 @testset "FieldVector getindex" begin
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32)
-    fspace = Spaces.ExtrudedFiniteDifferenceSpace{Spaces.CellFace}(cspace)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     c = fill((a = Float32(1), b = Float32(2)), cspace)
     f = fill((x = Float32(1), y = Float32(2)), fspace)
     fv = Fields.FieldVector(; c, f)
@@ -341,7 +349,7 @@ end
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
     topology_xy = Topologies.Topology2D(context, mesh_xy)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
@@ -425,20 +433,22 @@ end
     end
 end
 
-# Test truncated field type printing:
-ClimaCore.Fields.truncate_printing_field_types() = true
-@testset "Truncated printing" begin
-    nt = (; x = Float64(0), y = Float64(0))
-    Y = fill(nt, spectral_space_2D())
-    @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
-          "Field{(:x, :y)} (trunc disp)"
-end
-ClimaCore.Fields.truncate_printing_field_types() = false
+if VERSION < v"1.10"
+    # Test truncated field type printing:
+    ClimaCore.Fields.truncate_printing_field_types() = true
+    @testset "Truncated printing" begin
+        nt = (; x = Float64(0), y = Float64(0))
+        Y = fill(nt, spectral_space_2D())
+        @test sprint(show, typeof(Y); context = IOContext(stdout)) ==
+              "Field{(:x, :y)} (trunc disp)"
+    end
+    ClimaCore.Fields.truncate_printing_field_types() = false
 
-@testset "Standard printing" begin
-    nt = (; x = Float64(0), y = Float64(0))
-    Y = fill(nt, spectral_space_2D())
-    s = sprint(show, typeof(Y)) # just make sure this doesn't break
+    @testset "Standard printing" begin
+        nt = (; x = Float64(0), y = Float64(0))
+        Y = fill(nt, spectral_space_2D())
+        s = sprint(show, typeof(Y)) # just make sure this doesn't break
+    end
 end
 
 @testset "Set!" begin
@@ -551,22 +561,10 @@ end
     nothing
 end
 
-@testset "Broadcasting same spaces different instances" begin
+@testset "Memoization of spaces" begin
     space1 = spectral_space_2D()
     space2 = spectral_space_2D()
-    field1 = ones(space1)
-    field2 = 2 .* ones(space2)
-    @test Fields.is_diagonalized_spaces(typeof(space1), typeof(space2))
-    @test_throws ErrorException(
-        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
-    ) field1 .= field2
-
-    # turn warning on
-    Fields.allow_mismatched_diagonalized_spaces() = true
-    @test_warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance" field1 .=
-        field2
-    @test parent(field1) == parent(field2)
-    Fields.allow_mismatched_diagonalized_spaces() = false
+    @test space1 === space2
 end
 
 struct InferenceFoo{FT}
@@ -692,7 +690,7 @@ end
     mesh_xy = Meshes.RectilinearMesh(domain_xy, 10, 10)
     topology_xy = Topologies.Topology2D(context, mesh_xy)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
@@ -840,9 +838,7 @@ end
         TU.bycolumnable(space) || continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
-        Nq = Spaces.Quadratures.degrees_of_freedom(
-            Spaces.quadrature_style(hspace),
-        )
+        Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
         if nameof(typeof(space)) == :SpectralElementSpace1D
             @test Fields.ncolumns(space) == Nh * Nq
         else

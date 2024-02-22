@@ -23,7 +23,7 @@ Internally, we can refer to elements in several different ways:
 - `ridx`: "receive index": an index into the receive buffer of a ghost element.
     - `recv_elem_gidx[ridx] == gidx`
 """
-struct Topology2D{
+mutable struct Topology2D{
     C <: ClimaComms.AbstractCommsContext,
     M <: Meshes.AbstractMesh{2},
     EO,
@@ -34,6 +34,7 @@ struct Topology2D{
     LVO,
     GV,
     GVO,
+    VI,
     BF,
     RGV,
 } <: AbstractDistributedTopology
@@ -81,9 +82,9 @@ struct Topology2D{
     ghost_vertex_offset::GVO
 
     "a vector of the lidx of neighboring local elements of each element"
-    local_neighbor_elem::Vector{Int}
+    local_neighbor_elem::VI
     "the index into `local_neighbor_elem` for the start of each element"
-    local_neighbor_elem_offset::Vector{Int}
+    local_neighbor_elem_offset::VI
     "a vector of the ridx of neighboring ghost elements of each element"
     ghost_neighbor_elem::Vector{Int}
     "the index into `ghost_neighbor_elem` for the start of each element"
@@ -112,9 +113,9 @@ struct Topology2D{
     "neighbor process locations in neighbor_pids for each of the ghost vertices"
     ghost_vertex_neighbor_loc::Vector{Int}
     "offset array for `ghost_vertex_neighbor_loc`
-    a ragged array representation: for i = 1:length(ghost_vertex_gcidx), we have that 
+    a ragged array representation: for i = 1:length(ghost_vertex_gcidx), we have that
     for j = ghost_vertex_comm_idx_offset[i]:ghost_vertex_comm_idx_offset[i+1]-1
-    the ghost vertex ghost_vertex_gcidx[i] should get sent to 
+    the ghost vertex ghost_vertex_gcidx[i] should get sent to
     neighbor_pids[ghost_vertex_neighbor_loc[j]]"
     ghost_vertex_comm_idx_offset::Vector{Int}
     "representative local ghost vertex (idx, vert) for each unique ghost vertex"
@@ -123,7 +124,7 @@ struct Topology2D{
     ghost_face_neighbor_loc::Vector{Int}
 end
 
-ClimaComms.device(topology::Topology2D) = topology.context.device
+ClimaComms.device(topology::Topology2D) = ClimaComms.device(topology.context)
 ClimaComms.array_type(topology::Topology2D) =
     ClimaComms.array_type(topology.context.device)
 
@@ -200,6 +201,21 @@ function Topology2D(
     elemorder = Meshes.elements(mesh),
     elempid = nothing, # array of same size as elemorder, containing owning pid for each element (it should be sorted)
     orderindex = Meshes.linearindices(elemorder), # inverse mapping of elemorder (e.g. map CartesianIndex => Int)
+)
+    get!(
+        Cache.OBJECT_CACHE,
+        (Topology2D, context, mesh, elemorder, elempid, orderindex),
+    ) do
+        _Topology2D(context, mesh, elemorder, elempid, orderindex)
+    end
+end
+
+function _Topology2D(
+    context::ClimaComms.AbstractCommsContext,
+    mesh::Meshes.AbstractMesh{2},
+    elemorder,
+    elempid,
+    orderindex,
 )
     pid = ClimaComms.mypid(context)
     nprocs = ClimaComms.nprocs(context)
@@ -503,8 +519,8 @@ function Topology2D(
         DA(local_vertex_offset),
         DA(ghost_vertices),
         DA(ghost_vertex_offset),
-        local_neighbor_elem,
-        local_neighbor_elem_offset,
+        DA(local_neighbor_elem),
+        DA(local_neighbor_elem_offset),
         ghost_neighbor_elem,
         ghost_neighbor_elem_offset,
         boundaries,
@@ -718,3 +734,57 @@ boundary_tag(topology::Topology2D, boundary_name::Symbol) =
     findfirst(==(boundary_name), boundary_names(topology))
 
 boundary_faces(topology::Topology2D, boundary) = topology.boundaries[boundary]
+
+
+
+
+abstract type AbstractPerimeter end
+
+struct Perimeter2D{Nq} <: AbstractPerimeter end
+
+"""
+    Perimeter2D(Nq)
+
+Construct a perimeter iterator for a 2D spectral element with `Nq` nodes per
+dimension (i.e. polynomial degree `Nq-1`).
+"""
+Perimeter2D(Nq) = Perimeter2D{Nq}()
+
+Adapt.adapt_structure(to, x::Perimeter2D) = x
+
+Base.IteratorEltype(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasEltype()
+Base.eltype(::Type{Perimeter2D{Nq}}) where {Nq} = Tuple{Int, Int}
+
+Base.IteratorSize(::Type{Perimeter2D{Nq}}) where {Nq} = Base.HasLength()
+Base.length(::Perimeter2D{Nq}) where {Nq} = 4 + (Nq - 2) * 4
+
+function Base.iterate(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc <= 4
+        return (vertex_node_index(loc, Nq), loc + 1)
+    elseif loc ≤ length(perimeter)
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return (face_node_index(f, Nq, 1 + n), loc + 1)
+    else
+        return nothing
+    end
+end
+
+function Base.getindex(perimeter::Perimeter2D{Nq}, loc = 1) where {Nq}
+    if loc < 1 || loc > length(perimeter)
+        return (-1, -1)
+    elseif loc <= 4
+        return vertex_node_index(loc, Nq)
+    else
+        f = cld(loc - 4, Nq - 2)
+        n = mod(loc - 4, Nq - 2) == 0 ? (Nq - 2) : mod(loc - 4, Nq - 2)
+        return face_node_index(f, Nq, 1 + n)
+    end
+end
+
+
+## aliases
+const RectilinearTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.RectilinearMesh}
+const CubedSphereTopology2D =
+    Topology2D{<:ClimaComms.AbstractCommsContext, <:Meshes.AbstractCubedSphere}

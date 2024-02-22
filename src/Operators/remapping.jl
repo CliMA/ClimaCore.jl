@@ -67,28 +67,16 @@ end
 
 Computes local weights of the overlap mesh for `source` to `target` spaces.
 """
-function overlap(
-    target::T,
-    source::S,
-) where {
-    T <: SpectralElementSpace1D{<:IntervalTopology},
-    S <: SpectralElementSpace1D{<:IntervalTopology},
-}
+function overlap(target::SpectralElementSpace1D, source::SpectralElementSpace1D)
     return x_overlap(target, source)
 end
 
-function overlap(
-    target::T,
-    source::S,
-) where {
-    T <:
-    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
-    S <:
-    SpectralElementSpace2D{<:Topology2D{<:ClimaComms.SingletonCommsContext}},
-}
+function overlap(target::SpectralElementSpace2D, source::SpectralElementSpace2D)
     @assert (
-        typeof(Spaces.topology(target).mesh) <: Meshes.RectilinearMesh &&
-        typeof(Spaces.topology(source).mesh) <: Meshes.RectilinearMesh
+        ClimaComms.context(target) isa ClimaComms.SingletonCommsContext &&
+        ClimaComms.context(source) isa ClimaComms.SingletonCommsContext &&
+        Spaces.topology(target).mesh isa Meshes.RectilinearMesh &&
+        Spaces.topology(source).mesh isa Meshes.RectilinearMesh
     )
     X_ov = x_overlap(target, source)
     Y_ov = y_overlap(target, source)
@@ -290,6 +278,6 @@ associated basis function.
 See [Ullrich2015] section 2.
 """
 function local_weights(space::AbstractSpace)
-    wj = space.local_geometry.WJ
+    wj = Spaces.local_geometry_data(space).WJ
     return vec(parent(wj))
 end

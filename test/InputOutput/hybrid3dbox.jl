@@ -1,17 +1,17 @@
 using Test
 using ClimaComms
-using StaticArrays, IntervalSets, LinearAlgebra, UnPack
+using StaticArrays, IntervalSets, LinearAlgebra
 import ClimaCore
 import ClimaCore:
     ClimaCore,
     slab,
-    Spaces,
     Domains,
     Meshes,
     Geometry,
     Topologies,
     DataLayouts,
     Spaces,
+    Quadratures,
     Fields,
     Operators,
     InputOutput
@@ -43,7 +43,7 @@ function hvspace_3D(
     )
     Nv = Meshes.nelements(vertmesh)
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
     context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     horztopology = Topologies.Topology2D(context, horzmesh)

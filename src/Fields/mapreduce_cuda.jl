@@ -89,6 +89,18 @@ function mapreduce_cuda(
     field::Field{V};
     weighting = false,
     opargs...,
+) where {S, V <: DataLayouts.DataF{S}}
+    data = Fields.field_values(field)
+    pdata = parent(data)
+    return DataLayouts.DataF{S}(Array(Array(f(pdata))[1, :]))
+end
+
+function mapreduce_cuda(
+    f,
+    op,
+    field::Field{V};
+    weighting = false,
+    opargs...,
 ) where {
     S,
     V <: Union{DataLayouts.VF{S}, DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
@@ -150,42 +162,33 @@ function mapreduce_cuda_kernel!(
     tidx = threadIdx().x
     bidx = blockIdx().x
     fidx = blockIdx().y
+    dataview = _dataview(pdata, fidx)
     effective_blksize = blksize * (n_ops_on_load + 1)
-    gidx = _get_gidx(tidx, bidx, fidx, effective_blksize, nblk)
+    gidx = _get_gidx(tidx, bidx, effective_blksize)
     reduction = CUDA.CuStaticSharedArray(T, shmemsize)
     reduction[tidx] = 0
-    (Nv, Nij, Nf, Nh) = _get_dims(pdata)
+    (Nv, Nij, Nf, Nh) = _get_dims(dataview)
     nitems = Nv * Nij * Nij * Nf * Nh
 
     # load shmem
     if gidx ≤ nitems
         if weighting
-            reduction[tidx] = f(pdata[gidx]) * pwt[gidx]
+            reduction[tidx] = f(dataview[gidx]) * pwt[gidx]
             for n_ops in 1:n_ops_on_load
-                gidx2 = _get_gidx(
-                    tidx + blksize * n_ops,
-                    bidx,
-                    fidx,
-                    effective_blksize,
-                    nblk,
-                )
+                gidx2 =
+                    _get_gidx(tidx + blksize * n_ops, bidx, effective_blksize)
                 if gidx2 ≤ nitems
                     reduction[tidx] =
-                        op(reduction[tidx], f(pdata[gidx2]) * pwt[gidx2])
+                        op(reduction[tidx], f(dataview[gidx2]) * pwt[gidx2])
                 end
             end
         else
-            reduction[tidx] = f(pdata[gidx])
+            reduction[tidx] = f(dataview[gidx])
             for n_ops in 1:n_ops_on_load
-                gidx2 = _get_gidx(
-                    tidx + blksize * n_ops,
-                    bidx,
-                    fidx,
-                    effective_blksize,
-                    nblk,
-                )
+                gidx2 =
+                    _get_gidx(tidx + blksize * n_ops, bidx, effective_blksize)
                 if gidx2 ≤ nitems
-                    reduction[tidx] = op(reduction[tidx], f(pdata[gidx2]))
+                    reduction[tidx] = op(reduction[tidx], f(dataview[gidx2]))
                 end
             end
         end
@@ -197,37 +200,32 @@ function mapreduce_cuda_kernel!(
     return nothing
 end
 
-@inline function _get_gidx(tidx, bidx, fidx, effective_blksize, nblk)
-    return tidx +
-           (bidx - 1) * effective_blksize +
-           (fidx - 1) * effective_blksize * nblk
+@inline function _get_gidx(tidx, bidx, effective_blksize)
+    return tidx + (bidx - 1) * effective_blksize
 end
 # for VF DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 2}) where {FT}
     (Nv, Nf) = size(pdata)
     return (Nv, 1, Nf, 1)
 end
+@inline _dataview(pdata::AbstractArray{FT, 2}, fidx) where {FT} =
+    view(pdata, :, fidx:fidx)
 
 # for IJFH DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 4}) where {FT}
     (Nij, _, Nf, Nh) = size(pdata)
     return (1, Nij, Nf, Nh)
 end
+@inline _dataview(pdata::AbstractArray{FT, 4}, fidx) where {FT} =
+    view(pdata, :, :, fidx:fidx, :)
 
 # for VIJFH DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 5}) where {FT}
     (Nv, Nij, _, Nf, Nh) = size(pdata)
     return (Nv, Nij, Nf, Nh)
 end
-
-@inline function _get_idxs(Nv, Nij, Nf, Nh, fidx, gidx)
-    hidx = cld(gidx, Nv * Nij * Nij * Nf)
-    offset = ((hidx - 1) * Nf + (fidx - 1)) * Nv * Nij * Nij
-    jidx = cld(gidx - offset, Nv * Nij)
-    offset += (jidx - 1) * Nv * Nij
-    iidx = cld(gidx - offset, Nv)
-    return (iidx, jidx, hidx)
-end
+@inline _dataview(pdata::AbstractArray{FT, 5}, fidx) where {FT} =
+    view(pdata, :, :, :, fidx:fidx, :)
 
 @inline function _cuda_reduce!(op, reduction, tidx, reduction_size, N)
     if reduction_size > N

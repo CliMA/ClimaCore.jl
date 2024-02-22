@@ -2,7 +2,14 @@ using Test
 using StaticArrays
 using ClimaComms, ClimaCore
 import ClimaCore:
-    Geometry, Fields, Domains, Topologies, Meshes, Spaces, Operators
+    Geometry,
+    Fields,
+    Domains,
+    Topologies,
+    Meshes,
+    Spaces,
+    Operators,
+    Quadratures
 using LinearAlgebra, IntervalSets
 using CUDA
 using OrdinaryDiffEq
@@ -39,7 +46,7 @@ function hvspace_3D_box(
     )
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
 
     # Define horz topology and space
     horztopology = Topologies.Topology2D(context, horzmesh)
@@ -70,7 +77,7 @@ function hvspace_3D_sphere(context)
     horzdomain = Domains.SphereDomain(FT(30.0))
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
 
-    quad = Spaces.Quadratures.GLL{3 + 1}()
+    quad = Quadratures.GLL{3 + 1}()
 
     # Define horz topology and space
     horztopology = Topologies.Topology2D(context, horzmesh)

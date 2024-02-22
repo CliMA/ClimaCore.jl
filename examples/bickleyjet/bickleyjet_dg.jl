@@ -9,6 +9,7 @@ import ClimaCore:
     Operators,
     RecursiveApply,
     Spaces,
+    Quadratures,
     Topologies
 import ClimaCore.Geometry: ⊗
 import ClimaCore.RecursiveApply: ⊞, rdiv, rmap
@@ -51,10 +52,10 @@ Nq = 4
 Nqh = 7
 mesh = Meshes.RectilinearMesh(domain, n1, n2)
 grid_topology = Topologies.Topology2D(context, mesh)
-quad = Spaces.Quadratures.GLL{Nq}()
+quad = Quadratures.GLL{Nq}()
 space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-Iquad = Spaces.Quadratures.GLL{Nqh}()
+Iquad = Quadratures.GLL{Nqh}()
 Ispace = Spaces.SpectralElementSpace2D(grid_topology, Iquad)
 
 function init_state(coord, p)
@@ -206,9 +207,9 @@ function rhs!(dydt, y, (parameters, numflux), t)
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
     dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
-    M = Spaces.Quadratures.cutoff_filter_matrix(
+    M = Quadratures.cutoff_filter_matrix(
         Float64,
-        space.quadrature_style,
+        Spaces.quadrature_style(space),
         3,
     )
     Operators.tensor_product!(dydt_data, M)

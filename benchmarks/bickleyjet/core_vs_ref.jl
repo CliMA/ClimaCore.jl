@@ -22,7 +22,7 @@ for Nq in Nqs
     # setup core
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     y0 = init_state.(Fields.coordinate_field(space), Ref(parameters))

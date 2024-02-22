@@ -12,6 +12,7 @@ import ClimaCore:
     Meshes,
     Operators,
     Spaces,
+    Quadratures,
     Topologies,
     DataLayouts
 
@@ -69,7 +70,7 @@ function hybrid3dcubedsphere_dss_profiler(
     z_stretch_string = "uniform"
     horizontal_mesh = cubed_sphere_mesh(; radius = R, h_elem = h_elem)
 
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_topology = Topologies.Topology2D(
         comms_ctx,
         horizontal_mesh,
@@ -85,10 +86,8 @@ function hybrid3dcubedsphere_dss_profiler(
         c = center_initial_condition(ᶜlocal_geometry),
         f = face_initial_condition(ᶠlocal_geometry),
     )
-    ghost_buffer = (
-        c = Spaces.create_ghost_buffer(Y.c),
-        f = Spaces.create_ghost_buffer(Y.f),
-    )
+    ghost_buffer =
+        (c = Spaces.create_dss_buffer(Y.c), f = Spaces.create_dss_buffer(Y.f))
     dss_buffer_f = Spaces.create_dss_buffer(Y.f)
     dss_buffer_c = Spaces.create_dss_buffer(Y.c)
     nsamples = 10000
@@ -96,7 +95,7 @@ function hybrid3dcubedsphere_dss_profiler(
 
     # precompile relevant functions
     space = axes(Y.c)
-    horizontal_topology = space.horizontal_space.topology
+    horizontal_topology = Spaces.topology(space)
     Spaces.weighted_dss_internal!(Y.c, ghost_buffer.c)
     weighted_dss_full!(Y.c, ghost_buffer.c)
     Spaces.fill_send_buffer!(

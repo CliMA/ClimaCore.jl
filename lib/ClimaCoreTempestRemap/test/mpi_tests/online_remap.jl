@@ -1,7 +1,8 @@
 import ClimaCore
 import ClimaCoreTempestRemap as CCTR
 using ClimaComms
-using ClimaCore: Geometry, Meshes, Domains, Topologies, Spaces, Fields
+using ClimaCore:
+    Geometry, Meshes, Domains, Topologies, Spaces, Fields, Quadratures
 using Test
 # use these packages for manual inspection of solutions
 # using Plots
@@ -28,7 +29,7 @@ using Test
     topology_i_distr = Topologies.Topology2D(comms_ctx, mesh_i)
 
     nq_i = 3 # polynomial order for SE discretization
-    quad_i = Spaces.Quadratures.GLL{nq_i}()
+    quad_i = Quadratures.GLL{nq_i}()
     space_i_distr = Spaces.SpectralElementSpace2D(topology_i_distr, quad_i)
 
     topology_i_singleton = Topologies.Topology2D(comms_ctx_singleton, mesh_i)
@@ -41,7 +42,7 @@ using Test
     topology_o_distr = Topologies.Topology2D(comms_ctx, mesh_o)
 
     nq_o = 4
-    quad_o = Spaces.Quadratures.GLL{nq_o}()
+    quad_o = Quadratures.GLL{nq_o}()
     space_o_distr = Spaces.SpectralElementSpace2D(topology_o_distr, quad_o)
 
     topology_o_singleton = Topologies.Topology2D(comms_ctx_singleton, mesh_o)

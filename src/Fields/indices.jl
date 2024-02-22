@@ -1,19 +1,3 @@
-"""
-    ColumnIndex(ij,h)
-
-An index into a column of a field. This can be used as an argument to `getindex`
-of a `Field`, to return a field on that column.
-
-# Example
-```julia
-colidx = ColumnIndex((1,1),1)
-field[colidx]
-```
-"""
-struct ColumnIndex{N}
-    ij::NTuple{N, Int}
-    h::Int
-end
 
 Base.@propagate_inbounds Base.getindex(field::Field, colidx::ColumnIndex) =
     column(field, colidx)
@@ -83,7 +67,7 @@ function bycolumn(
     ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         for h in 1:Nh
             for i in 1:Nq
@@ -99,7 +83,7 @@ function bycolumn(
     ::ClimaComms.CPUMultiThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for i in 1:Nq
@@ -115,7 +99,7 @@ function bycolumn(
     ::ClimaComms.CPUSingleThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         for h in 1:Nh
             for j in 1:Nq, i in 1:Nq
@@ -131,7 +115,7 @@ function bycolumn(
     ::ClimaComms.CPUMultiThreaded,
 )
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nq, i in 1:Nq
@@ -145,7 +129,7 @@ bycolumn(
     fn,
     space::Spaces.ExtrudedFiniteDifferenceSpace,
     device::ClimaComms.AbstractCPUDevice,
-) = bycolumn(fn, space.horizontal_space, device)
+) = bycolumn(fn, Spaces.horizontal_space(space), device)
 
 
 function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
@@ -164,16 +148,16 @@ Number of columns in a given space.
 ncolumns(field::Field) = ncolumns(axes(field))
 
 ncolumns(space::Spaces.ExtrudedFiniteDifferenceSpace) =
-    ncolumns(space.horizontal_space)
+    ncolumns(Spaces.horizontal_space(space))
 
 function ncolumns(space::Spaces.SpectralElementSpace1D)
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     return Nh * Nq
 end
 function ncolumns(space::Spaces.SpectralElementSpace2D)
     Nh = Topologies.nlocalelems(space)
-    Nq = Spaces.Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
+    Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     return Nh * Nq * Nq
 end
 
@@ -219,7 +203,7 @@ function byslab(
     ::ClimaComms.CPUSingleThreaded,
     space::Spaces.AbstractSpectralElementSpace,
 )
-    Nh = Topologies.nlocalelems(space.topology)::Int
+    Nh = Topologies.nlocalelems(Spaces.topology(space))::Int
     @inbounds for h in 1:Nh
         fn(SlabIndex(nothing, h))
     end
@@ -230,7 +214,7 @@ function byslab(
     ::ClimaComms.CPUMultiThreaded,
     space::Spaces.AbstractSpectralElementSpace,
 )
-    Nh = Topologies.nlocalelems(space.topology)::Int
+    Nh = Topologies.nlocalelems(Spaces.topology(space))::Int
     @inbounds begin
         Threads.@threads for h in 1:Nh
             fn(SlabIndex(nothing, h))

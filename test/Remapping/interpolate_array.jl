@@ -1,7 +1,14 @@
 
 using ClimaComms
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Remapping
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Remapping,
+    Quadratures
 using IntervalSets
 using Test
 
@@ -26,7 +33,7 @@ device = ClimaComms.CPUSingleThreaded()
         periodic = true,
     )
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 10)
     horztopology = Topologies.IntervalTopology(
         ClimaComms.SingletonCommsContext(device),
@@ -52,6 +59,14 @@ device = ClimaComms.CPUSingleThreaded()
     @test interp_z[:, 1] ≈ [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
     @test interp_z[:, end] ≈ [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
 
+    # Face space
+    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    face_coords = Fields.coordinate_field(hv_face_space)
+
+    xpts = range(Geometry.XPoint(-500.0), Geometry.XPoint(500.0), length = 21)
+    interp_x = Remapping.interpolate_array(face_coords.x, xpts, zpts)
+    @test interp_x ≈ [x.x for x in xpts, z in zpts]
+
 end
 
 
@@ -76,7 +91,7 @@ end
         x2periodic = true,
     )
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),
@@ -131,7 +146,7 @@ end
         x2periodic = true,
     )
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, 10, 10)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),
@@ -183,7 +198,7 @@ end
 
     horzdomain = Domains.SphereDomain(1e6)
 
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 6)
     horztopology = Topologies.Topology2D(
         ClimaComms.SingletonCommsContext(device),

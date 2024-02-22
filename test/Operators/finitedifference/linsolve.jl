@@ -5,7 +5,8 @@ import ClimaCore
 # To avoid JET failures in the error message
 ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
-using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Fields
+using ClimaCore:
+    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
 
 FT = Float32
 radius = FT(1e7)
@@ -16,7 +17,7 @@ velem = 4
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
 htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
-quad = Spaces.Quadratures.GLL{npoly + 1}()
+quad = Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
 vdomain = Domains.IntervalDomain(

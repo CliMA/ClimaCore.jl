@@ -2,7 +2,14 @@ using ClimaComms
 using LinearAlgebra
 
 import ClimaCore:
-    Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
+    Domains,
+    Fields,
+    Geometry,
+    Meshes,
+    Operators,
+    Spaces,
+    Topologies,
+    Quadratures
 
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
@@ -80,14 +87,14 @@ for (k, ne) in enumerate(ne_seq)
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
     grid_topology = Topologies.Topology2D(context, mesh)
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
     coords = Fields.coordinate_field(space)
 
     Δh[k] = 2 * R / ne
 
-    global_geom = space.global_geometry
+    global_geom = Spaces.global_geometry(space)
 
     h_init = map(coords) do coord
         rd = Geometry.great_circle_distance(coord, center, global_geom)

@@ -1,11 +1,24 @@
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
+using Adapt
 
-import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, DataLayouts
+import ClimaCore:
+    slab,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Quadratures,
+    Fields,
+    DataLayouts,
+    Geometry,
+    DeviceSideContext,
+    DeviceSideDevice
 
-import ClimaCore.Geometry: Geometry
 import ClimaCore.DataLayouts: IJFH, VF
+
+on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
 @testset "1d domain space" begin
     FT = Float64
@@ -16,16 +29,20 @@ import ClimaCore.DataLayouts: IJFH, VF
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
     topology = Topologies.IntervalTopology(mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace1D(topology, quad)
 
-    @test repr(space) === """
+    device = ClimaComms.device()
+
+    expected_repr = """
     SpectralElementSpace1D:
-      context: SingletonCommsContext using CPUSingleThreaded
+      context: SingletonCommsContext using $(nameof(typeof(device)))
       mesh: 1-element IntervalMesh of IntervalDomain: x ∈ [-3.0,5.0] (periodic)
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
+
+    @test repr(space) === expected_repr
 
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
@@ -36,8 +53,8 @@ import ClimaCore.DataLayouts: IJFH, VF
     @test coord_slab[1] == Geometry.XPoint{FT}(-3)
     @test coord_slab[4] == Geometry.XPoint{FT}(5)
 
-    local_geometry_slab = slab(space.local_geometry, 1)
-    dss_weights_slab = slab(space.dss_weights, 1)
+    local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
+    dss_weights_slab = slab(space.grid.dss_weights, 1)
 
     for i in 1:4
         @test Geometry.components(local_geometry_slab[i].∂x∂ξ) ≈
@@ -59,7 +76,7 @@ import ClimaCore.DataLayouts: IJFH, VF
           Spaces.column(coord_data, 1, 1)[]
 end
 
-@testset "extruded (2d 1×3) finite difference space" begin
+on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
 
     FT = Float32
 
@@ -68,7 +85,8 @@ end
         Geometry.ZPoint{FT}(10);
         boundary_tags = (:bottom, :top),
     )
-    vertmesh = Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
+    vertmesh =
+        Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
     # Generate Horizontal Space
     horzdomain = Domains.IntervalDomain(
@@ -78,14 +96,15 @@ end
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = 5)
     horztopology = Topologies.IntervalTopology(horzmesh)
-    quad = Spaces.Quadratures.GLL{4}()
+    quad = Quadratures.GLL{4}()
+
     hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
     # Extrusion
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
     array = parent(Spaces.coordinates_data(c_space))
     z = Fields.coordinate_field(c_space).z
-    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H 
+    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
 
     # Define test col index
     colidx = Fields.ColumnIndex{1}((4,), 5)
@@ -136,7 +155,7 @@ end
     domain = Domains.RectangleDomain(x_domain, y_domain)
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
-    quad = Spaces.Quadratures.GL{1}()
+    quad = Quadratures.GL{1}()
     htopology = Topologies.Topology2D(context, hmesh)
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -144,6 +163,17 @@ end
           [((1, 1), 1);;; ((1, 1), 2);;; ((1, 1), 3);;; ((1, 1), 4)]
     @test length(Spaces.unique_nodes(hspace)) == 4
     @test length(Spaces.all_nodes(hspace)) == 4
+
+    if on_gpu
+        adapted_space = adapt(space)(space)
+        @test ClimaComms.context(adapted_space) == DeviceSideContext()
+        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+
+        adapted_hspace = adapt(hspace)(hspace)
+        @test ClimaComms.context(adapted_hspace) == DeviceSideContext()
+        @test ClimaComms.device(adapted_hspace) == DeviceSideDevice()
+    end
+
 end
 
 @testset "1×1 domain space" begin
@@ -159,8 +189,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, 1, 1)
     grid_topology = Topologies.Topology2D(context, mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     @test repr(space) == """
@@ -178,9 +208,14 @@ end
     @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
     @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
-    local_geometry_slab = slab(space.local_geometry, 1)
-    dss_weights_slab = slab(space.local_dss_weights, 1)
+    local_geometry_slab = slab(space.grid.local_geometry, 1)
+    dss_weights_slab = slab(space.grid.local_dss_weights, 1)
 
+    if on_gpu
+        adapted_space = adapt(space)(space)
+        @test ClimaComms.context(adapted_space) == DeviceSideContext()
+        @test ClimaComms.device(adapted_space) == DeviceSideDevice()
+    end
 
     for i in 1:4, j in 1:4
         @test Geometry.components(local_geometry_slab[i, j].∂x∂ξ) ≈
@@ -197,10 +232,10 @@ end
         end
     end
 
-    @test length(space.boundary_surface_geometries) == 2
-    @test keys(space.boundary_surface_geometries) == (:south, :north)
-    @test sum(parent(space.boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(space.boundary_surface_geometries.north.normal)[1, :, 1] ≈
+    @test length(space.grid.boundary_surface_geometries) == 2
+    @test keys(space.grid.boundary_surface_geometries) == (:south, :north)
+    @test sum(parent(space.grid.boundary_surface_geometries.north.sWJ)) ≈ 8
+    @test parent(space.grid.boundary_surface_geometries.north.normal)[1, :, 1] ≈
           [0.0, 1.0]
 
     point_space = Spaces.column(space, 1, 1, 1)
@@ -225,7 +260,7 @@ end
     )
     n1, n2 = 2, 2
     Nq = 5
-    quad = Spaces.Quadratures.GLL{Nq}()
+    quad = Quadratures.GLL{Nq}()
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
@@ -254,6 +289,7 @@ end
     end
 end
 
+
 #=
 @testset "dss on 2×2 rectangular mesh (unstructured)" begin
     FT = Float64
@@ -269,8 +305,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
-    quad = Spaces.Quadratures.GLL{4}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{4}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
@@ -349,8 +385,8 @@ end
     mesh = Meshes.RectilinearMesh(domain, n1, n2)
     grid_topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
 
-    quad = Spaces.Quadratures.GLL{Nij}()
-    points, weights = Spaces.Quadratures.quadrature_points(FT, quad)
+    quad = Quadratures.GLL{Nij}()
+    points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 

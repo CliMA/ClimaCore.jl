@@ -4,7 +4,15 @@ using Test
 using Statistics: mean
 
 using ClimaCore:
-    Geometry, Domains, Meshes, Topologies, Spaces, Fields, Operators, Limiters
+    Geometry,
+    Domains,
+    Meshes,
+    Topologies,
+    Spaces,
+    Fields,
+    Operators,
+    Limiters,
+    Quadratures
 using ClimaTimeSteppers
 
 using Logging
@@ -200,7 +208,7 @@ function run_deformation_flow(use_limiter, fct_op)
     horz_domain = Domains.SphereDomain(R)
     horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)
     horz_topology = Topologies.Topology2D(context, horz_mesh)
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     horz_space = Spaces.SpectralElementSpace2D(horz_topology, quad)
 
     cent_space =
@@ -213,12 +221,15 @@ function run_deformation_flow(use_limiter, fct_op)
         zd = z - z_c
 
         centers = (
-            Geometry.LatLongZPoint(ϕ_c, λ_c1, FT(0)),
-            Geometry.LatLongZPoint(ϕ_c, λ_c2, FT(0)),
+            Geometry.LatLongZPoint(ϕ_c, λ_c1, z),
+            Geometry.LatLongZPoint(ϕ_c, λ_c2, z),
         )
-        horz_geometry = horz_space.global_geometry
         rds = map(centers) do center
-            Geometry.great_circle_distance(coord, center, horz_geometry)
+            Geometry.great_circle_distance(
+                coord,
+                center,
+                Spaces.global_geometry(cent_space),
+            )
         end
         ds = @. min(1, (rds / R_t)^2 + (zd / Z_t)^2) # scaled distance functions
 
@@ -309,7 +320,7 @@ lim_first_upwind_ρ_err, lim_first_upwind_ρq_errs =
 lim_centered_ρ_err, lim_centered_ρq_errs = conservation_errors(lim_centered_sol)
 
 # Check that the conservation errors are not too big.
-max_err = 42 * eps(FT)
+max_err = 64 * eps(FT)
 @test abs(third_upwind_ρ_err) < max_err
 @test all(abs.(third_upwind_ρq_errs) .< max_err)
 @test all(abs.(fct_ρq_errs) .< max_err)

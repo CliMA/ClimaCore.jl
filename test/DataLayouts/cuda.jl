@@ -72,4 +72,8 @@ end
     @test Array(parent(data)) == FT[
         f == 1 ? 1 : 2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:2, h in 1:3
     ]
+
+    data = DataF{S}(CuArray{FT})
+    data .= Complex(1.0, 2.0)
+    @test Array(parent(data)) == FT[f == 1 ? 1 : 2 for f in 1:2]
 end

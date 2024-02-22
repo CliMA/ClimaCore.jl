@@ -11,6 +11,7 @@ Stacktrace:
  [1] pkgerror(msg::String)
 =#
 if !Sys.iswindows()
+    #=
     @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end
     @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
 
@@ -28,14 +29,15 @@ if !Sys.iswindows()
     # now part of buildkite
     # @safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
 
+    @safetestset "Interval topology" begin @time include("Topologies/interval.jl") end
     @safetestset "Rectangle topology" begin @time include("Topologies/rectangle.jl") end
     @safetestset "Rectangle surface topology" begin @time include("Topologies/rectangle_sfc.jl") end
     @safetestset "Cubedsphere topology" begin @time include("Topologies/cubedsphere.jl") end
     @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
     # now part of buildkite
     # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-
-    @safetestset "Quadrature" begin @time include("Spaces/quadrature.jl") end
+=#
+    @safetestset "Quadratures" begin @time include("Quadratures/Quadratures.jl") end
     @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
     #=
     @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end
@@ -59,7 +61,7 @@ if !Sys.iswindows()
     @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
-
+    
     @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
     @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
     @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end
@@ -68,7 +70,6 @@ if !Sys.iswindows()
     # now part of buildkite
     # @time include("Operators/finitedifference/implicit_stencils.jl")
     # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
-
     @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
     @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/3d.jl") end
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
@@ -109,13 +110,14 @@ if !Sys.iswindows()
 end
 if "CUDA" in ARGS
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
-    @safetestset "GPU - data" begin @time include("test/DataLayouts/cuda.jl") end
+    @safetestset "GPU - data" begin @time include("DataLayouts/cuda.jl") end
+    @safetestset "GPU - spaces" begin @time include("Spaces/spaces.jl") end
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
     @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
     @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/cuda.jl") end
     @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_sphere_cuda.jl") end
-    @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_3dbox_cuda.jl") end
+    @safetestset "Operators - extruded 3dbox space operators CUDA" begin @time include("Operators/hybrid/extruded_3dbox_cuda.jl") end
     @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end
 end
 

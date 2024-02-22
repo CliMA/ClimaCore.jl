@@ -1,6 +1,6 @@
 using Test
 using ClimaCore.Geometry
-using LinearAlgebra, UnPack, StaticArrays
+using LinearAlgebra, StaticArrays
 
 @testset "1D X,Y,Z Points" begin
 
@@ -26,6 +26,7 @@ using LinearAlgebra, UnPack, StaticArrays
             @test pt < pt * FT(2)
             @test pt <= pt
             @test pt <= pt * FT(2)
+            @test Geometry.tofloat(pt) == one(FT)
         end
     end
 
@@ -113,7 +114,7 @@ end
     state = (ρ = 2.0, ρu = Geometry.UVVector(1.0, 2.0), ρθ = 0.5)
 
     function flux(state, g)
-        @unpack ρ, ρu, ρθ = state
+        (; ρ, ρu, ρθ) = state
         u = ρu / ρ
         return (ρ = ρu, ρu = (ρu ⊗ u) + (g * ρ^2 / 2) * I, ρθ = ρθ * u)
     end
@@ -588,14 +589,44 @@ end
         global_geom,
     ) ≈ 2 * deg2rad(180.0) rtol = 2eps()
 
-    # test between two LatLongZPoints
-    @test Geometry.great_circle_distance(
-        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
-        Geometry.LatLongZPoint(22.0, 32.0, 2.0),
-        global_geom,
-    ) == 0.0
 end
 
+
+@testset "shallow great circle distance" begin
+    global_geom = Geometry.ShallowSphericalGlobalGeometry(2.0)
+
+    # test between two LatLongZPoints
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 0.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 10.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 10.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+end
+
+@testset "deep great circle distance" begin
+    global_geom = Geometry.DeepSphericalGlobalGeometry(2.0)
+
+    # test between two LatLongZPoints
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 0.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 0.0),
+        global_geom,
+    ) ≈ 2 * deg2rad(10.0) rtol = 2eps()
+
+    @test Geometry.great_circle_distance(
+        Geometry.LatLongZPoint(0.0, 30.0, 10.0),
+        Geometry.LatLongZPoint(0.0, 40.0, 10.0),
+        global_geom,
+    ) ≈ (10 + 2) * deg2rad(10.0) rtol = 2eps()
+
+end
 @testset "1D XPoint Euclidean distance" begin
     for FT in (Float32, Float64, BigFloat)
         pt_1 = Geometry.XPoint(one(FT))

@@ -16,7 +16,7 @@ column_thomas_solve!(::ClimaComms.AbstractCPUDevice, A, b) =
 
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = Spaces._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     @cuda threads = nthreads blocks = nblocks thomas_algorithm_kernel!(A, b)
 end
 
@@ -27,7 +27,7 @@ function thomas_algorithm_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Spaces._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         thomas_algorithm!(Spaces.column(A, i, j, h), Spaces.column(b, i, j, h))
     end
     return nothing
@@ -38,10 +38,14 @@ thomas_algorithm_kernel!(
     b::Fields.FiniteDifferenceField,
 ) = thomas_algorithm!(A, b)
 
-thomas_algorithm!(
+function thomas_algorithm!(
     A::Fields.ExtrudedFiniteDifferenceField,
     b::Fields.ExtrudedFiniteDifferenceField,
-) = Fields.bycolumn(colidx -> thomas_algorithm!(A[colidx], b[colidx]), axes(A))
+)
+    Fields.bycolumn(axes(A)) do colidx
+        thomas_algorithm!(A[colidx], b[colidx])
+    end
+end
 
 function thomas_algorithm!(
     A::Fields.FiniteDifferenceField,
@@ -79,11 +83,15 @@ function thomas_algorithm!(
     _setindex!(b, nrows, numerator / denominator)
 
     # back substitution
-    for row in (nrows - 1):-1:1
+    # Avoid steprange on GPU: https://cuda.juliagpu.org/stable/tutorials/performance/#Avoiding-StepRange
+    # for row in (nrows - 1):-1:1; # results in StepRange
+    row = (nrows - 1)
+    while row ≥ 1
         value =
             _getindex(b, row) -
             _getindex(upper_diag, row) * _getindex(b, row + 1)
         _setindex!(b, row, value)
+        row -= 1
     end
 end
 

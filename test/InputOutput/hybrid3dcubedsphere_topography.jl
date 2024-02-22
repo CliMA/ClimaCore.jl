@@ -6,6 +6,7 @@ using ClimaCore:
     Meshes,
     Topologies,
     Spaces,
+    Quadratures,
     Fields,
     DataLayouts,
     Hypsography,
@@ -35,7 +36,7 @@ end
         horizontal_mesh,
         Topologies.spacefillingcurve(horizontal_mesh),
     )
-    quad = Spaces.Quadratures.GLL{npoly + 1}()
+    quad = Quadratures.GLL{npoly + 1}()
     h_space = Spaces.SpectralElementSpace2D(topology, quad)
     # vertical space
     z_domain = Domains.IntervalDomain(

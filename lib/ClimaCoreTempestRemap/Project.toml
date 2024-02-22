@@ -1,25 +1,32 @@
 name = "ClimaCoreTempestRemap"
 uuid = "d934ef94-cdd4-4710-83d6-720549644b70"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.3.9"
+version = "0.3.13"
 
 [deps]
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+CommonDataModel = "1fbeeb36-5f17-413c-809b-666fb144f157"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 PkgVersion = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 ClimaComms = "0.5"
-ClimaCore = "0.10.25"
-NCDatasets = "0.11, 0.12"
-PkgVersion = "0.1, 0.2"
+ClimaCore = "0.11, 0.12"
+CommonDataModel = "0.2, 0.3"
+Dates = "1"
+LinearAlgebra = "1"
+NCDatasets = "0.11, 0.12, 0.13, 0.14"
+PkgVersion = "0.1, 0.2, 0.3"
 TempestRemap_jll = "2.1.2"
+Test = "1"
 julia = "1.7"
 
 [extras]
-CPUSummary = "2a0fbf3d-bb9c-48f3-b0a9-814d99fd7ab9"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

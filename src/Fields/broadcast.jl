@@ -50,22 +50,30 @@ Base.eltype(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     Base.Broadcast.combine_eltypes(bc.f, bc.args)
 
 # _first: recursively get the first element
+function _first end
+
+# If we haven't caught the datatype, then this
+# may just result in a method error-- but all
+# we're trying to do is throw a more helpful
+# error message. So, let's throw it here instead.
+_first(bc, ::Any) = throw(BroadcastInferenceError(bc))
 _first_data_layout(data::DataLayouts.VF) = data[1]
 _first_data_layout(data::DataLayouts.DataF) = data[]
-_first(x::Real) = x
-_first(x::Geometry.LocalGeometry) = x
-_first(data::DataLayouts.VF) = data[]
-_first(field::Field) = _first_data_layout(field_values(column(field, 1, 1, 1)))
-_first(space::Spaces.AbstractSpace) =
+_first(bc, x::Real) = x
+_first(bc, x::Geometry.LocalGeometry) = x
+_first(bc, data::DataLayouts.VF) = data[]
+_first(bc, field::Field) =
+    _first_data_layout(field_values(column(field, 1, 1, 1)))
+_first(bc, space::Spaces.AbstractSpace) =
     _first_data_layout(field_values(column(space, 1, 1, 1)))
-_first(bc::Base.Broadcast.Broadcasted) = _first(copy(bc))
-_first(x::Ref{T}) where {T} = x.x
-_first(x::Tuple{T}) where {T} = x[1]
+_first(bc, x::Base.Broadcast.Broadcasted) = _first(bc, copy(x))
+_first(bc, x::Ref{T}) where {T} = x.x
+_first(bc, x::Tuple{T}) where {T} = x[1]
 
 function call_with_first(bc)
     # Try calling with first applied to all arguments:
     bc′ = Base.Broadcast.preprocess(nothing, bc)
-    first_args = map(arg -> _first(arg), bc′.args)
+    first_args = map(arg -> _first(bc, arg), bc′.args)
     bc.f(first_args...)
 end
 
@@ -153,31 +161,8 @@ end
     return dest
 end
 
-allow_mismatched_diagonalized_spaces() = false
-
-@noinline function warn_mismatched_spaces(
-    space1::Type{S},
-    space2::Type{S},
-) where {S <: AbstractSpace}
-    @warn "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance"
-    return nothing
-end
-
-is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
-
-is_diagonalized_spaces(::Type, ::Type) = false
-
-@noinline function error_mismatched_spaces(
-    space1::Type{S},
-    space2::Type{S},
-) where {S <: AbstractSpace}
-    error(
-        "Broacasted spaces are the same ClimaCore.Spaces type but not the same instance",
-    )
-end
-
 @noinline function error_mismatched_spaces(space1::Type, space2::Type)
-    error("Broacasted spaces are not the same ClimaCore.Spaces type")
+    error("Broacasted spaces are not the same.")
 end
 
 @inline function Base.Broadcast.broadcast_shape(
@@ -185,14 +170,7 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
-           allow_mismatched_diagonalized_spaces() &&
-           (
-               parent(Spaces.local_geometry_data(space1)) ==
-               parent(Spaces.local_geometry_data(space2))
-           )
-            warn_mismatched_spaces(typeof(space1), typeof(space2))
-        elseif Spaces.issubspace(space2, space1)
+        if Spaces.issubspace(space2, space1)
             return space1
         elseif Spaces.issubspace(space1, space2)
             return space2
@@ -226,15 +204,8 @@ end
     space2::AbstractSpace,
 )
     if space1 !== space2
-        if is_diagonalized_spaces(typeof(space1), typeof(space2)) &&
-           allow_mismatched_diagonalized_spaces() &&
-           (
-               parent(Spaces.local_geometry_data(space1)) ==
-               parent(Spaces.local_geometry_data(space2))
-           )
-            warn_mismatched_spaces(typeof(space1), typeof(space2))
-        elseif Spaces.issubspace(space2, space1) ||
-               Spaces.issubspace(space1, space2)
+        if Spaces.issubspace(space2, space1) ||
+           Spaces.issubspace(space1, space2)
             nothing
         else
             error_mismatched_spaces(typeof(space1), typeof(space2))
@@ -419,7 +390,7 @@ function Base.Broadcast.broadcasted(
         fs,
         V,
         arg,
-        tuple(space.global_geometry),
+        tuple(Spaces.global_geometry(space)),
         local_geometry_field(space),
     )
 end
@@ -449,3 +420,12 @@ function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
         ),
     )
 end
+
+
+# TODO: deprecate these
+
+allow_mismatched_diagonalized_spaces() = false
+
+is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
+
+is_diagonalized_spaces(::Type, ::Type) = false
