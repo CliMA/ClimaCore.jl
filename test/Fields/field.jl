@@ -891,13 +891,16 @@ end
     nothing
 end
 
-@testset "todevice CPU/GPU conversions" begin
+compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
+
+@testset "todevice GPU to CPU conversions" begin
     FT = Float64
     gpu_device = ClimaComms.CUDADevice()
     gpu_context = ClimaComms.context(gpu_device)
     for gpu_space in TU.all_spaces(FT, context = gpu_context)
         gpu_field = Fields.ones(gpu_space)
 
+        # Verify backing array of initial field
         # TODO this fails for SpectralElementSpace1D
         if !(gpu_space isa Spaces.SpectralElementSpace1D)
             @test parent(gpu_field) isa CuArray
@@ -906,20 +909,23 @@ end
         # Test conversion from GPU to CPU field
         cpu_field = Fields.todevice(Array, gpu_field)
         @test parent(cpu_field) isa Array
-        @allowscalar @test parent(cpu_field) == parent(gpu_field)
-        @show typeof(cpu_field)
+        @test compare(cpu_field, gpu_field)
+    end
+end
 
-        # Test conversion back from CPU to GPU field
-        # TODO this doesn't result in CuArrays
-        gpu_field2 = Fields.todevice(CuArray, cpu_field)
-        @test parent(gpu_field2) isa CuArray
-        # @show typeof(parent(gpu_field2))
-        # @show typeof(gpu_field2)
-        @show typeof(axes(gpu_field2).grid.local_geometry)
+@testset "todevice CPU to GPU conversions" begin
+    FT = Float64
+    cpu_device = ClimaComms.CPUSingleThreaded()
+    cpu_context = ClimaComms.context(cpu_device)
+    for cpu_space in TU.all_spaces(FT, context = cpu_context)
+        cpu_field = Fields.ones(cpu_space)
 
-        # @allowscalar @test parent(cpu_field) == parent(gpu_field2)
-        # # TODO this fails
-        # @allowscalar @test typeof(gpu_field) == typeof(gpu_field2)
+        # Verify backing array of initial field
+        @test parent(cpu_field) isa Array
 
+        # Test conversion from CPU to GPU field
+        gpu_field = Fields.todevice(CuArray, cpu_field)
+        @test parent(gpu_field) isa CuArray
+        @test compare(cpu_field, gpu_field)
     end
 end
