@@ -1,3 +1,4 @@
+import Logging
 import Logging: Debug
 import LinearAlgebra: I, norm
 import ClimaCore.Utilities: half
