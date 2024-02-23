@@ -298,10 +298,7 @@ end
     end
 
     @testset "approximate iterative solve with debugging" begin
-        logger =
-            using_cuda ? Logging.NullLogger() :
-            Logging.SimpleLogger(stderr, Logging.Debug)
-        Logging.with_logger(logger) do
+        Logging.with_logger(Logging.SimpleLogger(stderr, Logging.Debug)) do
             # Recreate the setup from the previous unit test.
             alg = MatrixFields.ApproximateBlockArrowheadIterativeSolve(
                 @name(c);
