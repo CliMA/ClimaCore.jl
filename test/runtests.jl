@@ -61,7 +61,7 @@ if !Sys.iswindows()
     @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
     @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
-    
+
     @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
     @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
     @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end
@@ -111,6 +111,7 @@ end
 if "CUDA" in ARGS
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
     @safetestset "GPU - data" begin @time include("DataLayouts/cuda.jl") end
+    @safetestset "GPU - grids" begin @time include("Grids/grids.jl") end
     @safetestset "GPU - spaces" begin @time include("Spaces/spaces.jl") end
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end

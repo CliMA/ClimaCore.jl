@@ -57,7 +57,7 @@ Converts a `Field` object to a device-specific representation using the
 `array_type` here should be `CuArray` to convert to a field on the GPU,
 or `Array` to convert to a field on the CPU.
 """
-to_device(array_type, field::Field) = adapt_structure(array_type, field)
+todevice(array_type, field::Field) = Adapt.adapt_structure(array_type, field)
 
 ## aliases
 # Point Field

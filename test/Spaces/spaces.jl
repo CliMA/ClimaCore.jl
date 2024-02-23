@@ -18,6 +18,8 @@ import ClimaCore:
 
 import ClimaCore.DataLayouts: IJFH, VF
 
+import .TestUtilities as TU
+
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
 @testset "1d domain space" begin
@@ -286,6 +288,26 @@ end
     ]
     for (p, (ip, jp)) in enumerate(perimeter)
         @test (ip, jp) == reference[p] # face_node_index also counts the bordering vertex dof
+    end
+end
+
+@testset "todevice CPU/GPU conversions" begin
+    FT = Float64
+    gpu_device = ClimaComms.CUDADevice()
+    gpu_context = ClimaComms.context(gpu_device)
+    for gpu_space in TU.all_spaces(FT, context = gpu_context)
+        cpu_space = Spaces.todevice(Array, gpu_space)
+
+        # Test conversion from GPU to CPU space
+        # TODO what can we test here?
+
+        # Test conversion back from CPU to GPU space
+        # TODO this doesn't result in CuArrays
+        gpu_space2 = Spaces.todevice(CuArray, cpu_space)
+        # TODO gpu_space2 doesn't have topology (`gpu_space2.grid.topology`)
+        #  is this bc of info lost when moving from CPU to GPU?
+        # @test gpu_space == gpu_space2
+
     end
 end
 
