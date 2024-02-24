@@ -138,7 +138,7 @@ end
     @test Spaces.coordinates_data(point_space)[] ==
           Spaces.level(coord_data, 1)[]
 
-    x_max = FT(0)
+    x_max = FT(1)
     y_max = FT(1)
     x_elem = 2
     y_elem = 2
