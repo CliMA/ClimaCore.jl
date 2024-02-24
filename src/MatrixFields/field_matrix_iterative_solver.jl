@@ -429,7 +429,8 @@ check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
 
 function run_field_matrix_solver!(alg::StationaryIterativeSolve, cache, x, A, b)
     P = lazy_or_concrete_preconditioner(alg.P_alg, cache.P_cache, A)
-    if get_debug(alg)
+    using_cuda = ClimaComms.array_type(concrete_field_vector(b)) <: CUDA.CuArray
+    if get_debug(alg) && !using_cuda
         @debug begin
             e₀ = concrete_field_vector(b) # Initialize e to any nonzero vector.
             λs, _, info = KrylovKit.eigsolve(e₀, 1; alg.eigsolve_kwargs...) do e
