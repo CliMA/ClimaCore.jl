@@ -36,13 +36,24 @@ Base.Broadcast.BroadcastStyle(
 Base.Broadcast.broadcastable(field::Field) = field
 
 function Adapt.adapt_structure(
-    to,
+    to::CUDA.KernelAdaptor,
     bc::Base.Broadcast.Broadcasted{Style},
 ) where {Style <: AbstractFieldStyle}
     Base.Broadcast.Broadcasted{Style}(
         Adapt.adapt(to, bc.f),
         Adapt.adapt(to, bc.args),
         Adapt.adapt(to, bc.axes),
+    )
+end
+
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::Base.Broadcast.Broadcasted{Style, <: Any, Type{T}},
+) where {Style <: AbstractFieldStyle, T}
+    Base.Broadcast.Broadcasted{Style}(
+        (x...) -> T(x...),
+        Adapt.adapt(to, bc.args),
+        bc.axes,
     )
 end
 
@@ -251,11 +262,11 @@ end
 end
 
 # types aren't isbits
-Base.Broadcast.broadcasted(
-    fs::AbstractFieldStyle,
-    ::Type{T},
-    args...,
-) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
+# Base.Broadcast.broadcasted(
+#     fs::AbstractFieldStyle,
+#     ::Type{T},
+#     args...,
+# ) where {T} = Base.Broadcast.broadcasted(fs, (x...) -> T(x...), args...)
 
 # GPU support for type wrappers, like `Geometry.AxisTensor`s
 Base.Broadcast.broadcasted(
