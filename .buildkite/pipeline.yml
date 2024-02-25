@@ -760,6 +760,14 @@ steps:
         key: perf_FD_ops_examples
         command: "julia --color=yes --project=test test/Operators/finitedifference/opt_examples.jl"
 
+      - label: "Perf: FD operators from the wild (gpu)"
+        key: perf_FD_ops_examples_gpu
+        command:
+          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=test test/Operators/finitedifference/opt_examples.jl"
+        agents:
+          slurm_gpus: 1
+
       - label: "Perf: dss"
         key: perf_dss
         command: "julia --color=yes --project=test test/Operators/hybrid/dss_opt.jl"
