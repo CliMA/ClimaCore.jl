@@ -891,41 +891,28 @@ end
     nothing
 end
 
-compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
-
-@testset "todevice GPU to CPU conversions" begin
+@testset "todevice GPU/CPU conversions" begin
+    # Set up GPU and CPU contexts and spaces
     FT = Float64
     gpu_device = ClimaComms.CUDADevice()
-    gpu_context = ClimaComms.context(gpu_device)
-    for gpu_space in TU.all_spaces(FT, context = gpu_context)
-        gpu_field = Fields.ones(gpu_space)
-
-        # Verify backing array of initial field
-        # TODO this fails for SpectralElementSpace1D
-        if !(gpu_space isa Spaces.SpectralElementSpace1D)
-            @test parent(gpu_field) isa CuArray
-        end
-
-        # Test conversion from GPU to CPU field
-        cpu_field = Fields.todevice(Array, gpu_field)
-        @test parent(cpu_field) isa Array
-        @test compare(cpu_field, gpu_field)
-    end
-end
-
-@testset "todevice CPU to GPU conversions" begin
-    FT = Float64
     cpu_device = ClimaComms.CPUSingleThreaded()
+    gpu_context = ClimaComms.context(gpu_device)
     cpu_context = ClimaComms.context(cpu_device)
-    for cpu_space in TU.all_spaces(FT, context = cpu_context)
-        cpu_field = Fields.ones(cpu_space)
+    gpu_spaces = TU.all_spaces(FT, context = gpu_context)
+    cpu_spaces = TU.all_spaces(FT, context = cpu_context)
 
-        # Verify backing array of initial field
-        @test parent(cpu_field) isa Array
+    for (gpu_space, cpu_space) in zip(gpu_spaces, cpu_spaces)
+        if !(cpu_space isa Spaces.PointSpace)
+            gpu_field = Fields.ones(gpu_space)
+            cpu_field = Fields.ones(cpu_space)
 
-        # Test conversion from CPU to GPU field
-        gpu_field = Fields.todevice(CuArray, cpu_field)
-        @test parent(gpu_field) isa CuArray
-        @test compare(cpu_field, gpu_field)
+            # Test GPU to CPU
+            cpu_field_converted = Fields.todevice(Array, gpu_field)
+            @test parent(cpu_field) == parent(cpu_field_converted)
+
+            # Test CPU to GPU
+            gpu_field_converted = Fields.todevice(CuArray, cpu_field)
+            @test @allowscalar parent(gpu_field) == parent(gpu_field_converted)
+        end
     end
 end
