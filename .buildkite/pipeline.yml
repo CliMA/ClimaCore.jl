@@ -723,13 +723,12 @@ steps:
 
   # TODO: improve performance label: [inference, allocs, flops, latency, benchmark, boundscheck]
   # TODO: use perf env for perf jobs, or merge test/perf envs
-  # https://github.com/triscale-innov/GFlops.jl/issues/49
-  # - group: "Perf: Geometry"
-  #   steps:
+  - group: "Perf: Geometry"
+    steps:
 
-  #     - label: "Perf: Axis tensor conversion benchmarks"
-  #       key: "cpu_axis_tensor_conversion_perf_bm"
-  #       command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
+      - label: "Perf: Axis tensor conversion benchmarks"
+        key: "cpu_axis_tensor_conversion_perf_bm"
+        command: "julia --color=yes --project=test test/Geometry/axistensor_conversion_benchmarks.jl"
 
   - group: "Perf: Fields"
     steps:
