@@ -20,8 +20,13 @@ end
 struct DeviceIntervalTopology{B} <: AbstractIntervalTopology
     boundaries::B
 end
-Adapt.adapt_structure(to, topology::IntervalTopology) =
+Adapt.adapt_structure(to::CuArray, topology::IntervalTopology) =
     DeviceIntervalTopology(topology.boundaries)
+Adapt.adapt_structure(to::Array, topology::DeviceIntervalTopology) =
+    IntervalTopology(
+        ClimaComms.SingletonCommsContext(topology.context.device),
+        topology.boundaries,
+    )
 
 ClimaComms.context(topology::DeviceIntervalTopology) = DeviceSideContext()
 ClimaComms.device(topology::DeviceIntervalTopology) = DeviceSideDevice()

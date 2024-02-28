@@ -147,8 +147,16 @@ struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG} <:
     face_local_geometry::LG
 end
 
-Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
+Adapt.adapt_structure(to::CuArray, grid::ExtrudedFiniteDifferenceGrid) =
     DeviceExtrudedFiniteDifferenceGrid(
+        Adapt.adapt(to, vertical_topology(grid)),
+        Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
+        Adapt.adapt(to, grid.global_geometry),
+        Adapt.adapt(to, grid.center_local_geometry),
+        Adapt.adapt(to, grid.face_local_geometry),
+    )
+Adapt.adapt_structure(to::Array, grid::DeviceExtrudedFiniteDifferenceGrid) =
+    ExtrudedFiniteDifferenceGrid(
         Adapt.adapt(to, vertical_topology(grid)),
         Adapt.adapt(to, grid.horizontal_grid.quadrature_style),
         Adapt.adapt(to, grid.global_geometry),

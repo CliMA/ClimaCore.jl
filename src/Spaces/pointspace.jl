@@ -37,8 +37,13 @@ function PointSpace(
 end
 
 
-Adapt.adapt_structure(to, space::PointSpace) =
+Adapt.adapt_structure(to::CuArray, space::PointSpace) =
     PointSpace(DeviceSideContext(), Adapt.adapt(to, space.local_geometry))
+
+Adapt.adapt_structure(to::Array, space::PointSpace) = PointSpace(
+    ClimaComms.context(ClimaComms.CPUSingleThreaded()),
+    Adapt.adapt(to, space.local_geometry),
+)
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,

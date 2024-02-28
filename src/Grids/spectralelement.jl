@@ -1,4 +1,4 @@
-
+using CUDA
 
 abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
@@ -517,8 +517,15 @@ end
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
 ClimaComms.device(grid::DeviceSpectralElementGrid2D) = DeviceSideDevice()
 
-Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
+Adapt.adapt_structure(to::CuArray, grid::SpectralElementGrid2D) =
     DeviceSpectralElementGrid2D(
+        Adapt.adapt(to, grid.quadrature_style),
+        Adapt.adapt(to, grid.global_geometry),
+        Adapt.adapt(to, grid.local_geometry),
+    )
+
+Adapt.adapt_structure(to::Array, grid::DeviceSpectralElementGrid2D) =
+    SpectralElementGrid2D(
         Adapt.adapt(to, grid.quadrature_style),
         Adapt.adapt(to, grid.global_geometry),
         Adapt.adapt(to, grid.local_geometry),

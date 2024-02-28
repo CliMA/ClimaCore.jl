@@ -2,7 +2,9 @@ using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 using Adapt
+using CUDA
 
+import ClimaCore
 import ClimaCore:
     slab,
     Domains,
@@ -294,34 +296,55 @@ end
     end
 end
 
-@testset "todevice GPU to CPU conversions" begin
+@testset "todevice GPU/CPU conversions" begin
+    # Set up GPU and CPU contexts and spaces
     FT = Float64
     gpu_device = ClimaComms.CUDADevice()
-    gpu_context = ClimaComms.context(gpu_device)
-    for gpu_space in TU.all_spaces(FT, context = gpu_context)
-        # Test backing array of initial space
-        @test parent(gpu_space.grid.local_geometry) isa CuArray
-
-        # Test conversion from GPU to CPU space
-        # TODO context doesn't actually get changed - implement that?
-        cpu_space = Spaces.todevice(Array, gpu_space)
-        @test parent(cpu_space.grid.local_geometry) isa Array
-    end
-end
-
-@testset "todevice CPU to GPU conversions" begin
-    FT = Float64
     cpu_device = ClimaComms.CPUSingleThreaded()
+    gpu_context = ClimaComms.context(gpu_device)
+    # cpu_context = ClimaComms.SingletonCommsContext(gpu_device)
     cpu_context = ClimaComms.context(cpu_device)
-    for cpu_space in TU.all_spaces(FT, context = cpu_context)
-        # Test backing array of initial space
-        @test parent(cpu_space.grid.local_geometry) isa Array
+    gpu_spaces = TU.all_spaces(FT, context = gpu_context)
+    cpu_spaces = TU.all_spaces(FT, context = cpu_context)
 
-        # Test conversion from GPU to CPU space
-        gpu_space = Spaces.todevice(CuArray, cpu_space)
-        @test parent(gpu_space.grid.local_geometry) isa CuArray
+    for (gpu_space, cpu_space) in zip(gpu_spaces, cpu_spaces)
+        # Test GPU to CPU
+        cpu_space_converted = Spaces.todevice(Array, gpu_space)
+        # if cpu_space_converted isa Spaces.ExtrudedFiniteDifferenceSpace
+        #     @show cpu_space_converted.grid.horizontal_grid.topology.context
+        # elseif !(cpu_space_converted isa Spaces.PointSpace)
+        #     @show cpu_space_converted.grid.topology.context
+        # end
+        @test cpu_space == cpu_space_converted
+
+        # Test CPU to GPU
+        gpu_space_converted = Spaces.todevice(CuArray, cpu_space)
+        @test gpu_space == gpu_space_converted
     end
+    # for gpu_space in TU.all_spaces(FT, context = gpu_context)
+    #     # Test backing array of initial space
+    #     @test parent(gpu_space.grid.local_geometry) isa CuArray
+
+    #     # Test conversion from GPU to CPU space
+    #     # TODO context doesn't actually get changed - implement that?
+    #     cpu_space = Spaces.todevice(Array, gpu_space)
+    #     @test parent(cpu_space.grid.local_geometry) isa Array
+    # end
 end
+
+# @testset "todevice CPU to GPU conversions" begin
+#     FT = Float64
+#     cpu_device = ClimaComms.CPUSingleThreaded()
+#     cpu_context = ClimaComms.context(cpu_device)
+#     for cpu_space in TU.all_spaces(FT, context = cpu_context)
+#         # Test backing array of initial space
+#         @test parent(cpu_space.grid.local_geometry) isa Array
+
+#         # Test conversion from GPU to CPU space
+#         gpu_space = Spaces.todevice(CuArray, cpu_space)
+#         @test parent(gpu_space.grid.local_geometry) isa CuArray
+#     end
+# end
 
 #=
 @testset "dss on 2×2 rectangular mesh (unstructured)" begin
