@@ -83,7 +83,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0),
         Geometry.ZPoint{FT}(10);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh =
         Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
@@ -208,8 +208,8 @@ end
     @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
     @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
-    local_geometry_slab = slab(space.grid.local_geometry, 1)
-    dss_weights_slab = slab(space.grid.local_dss_weights, 1)
+    local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
+    dss_weights_slab = slab(Spaces.local_dss_weights(space), 1)
 
     if on_gpu
         adapted_space = adapt(space)(space)
@@ -232,11 +232,11 @@ end
         end
     end
 
-    @test length(space.grid.boundary_surface_geometries) == 2
-    @test keys(space.grid.boundary_surface_geometries) == (:south, :north)
-    @test sum(parent(space.grid.boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(space.grid.boundary_surface_geometries.north.normal)[1, :, 1] ≈
-          [0.0, 1.0]
+    boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
+    @test length(boundary_surface_geometries) == 2
+    @test keys(boundary_surface_geometries) == (:south, :north)
+    @test sum(parent(boundary_surface_geometries.north.sWJ)) ≈ 8
+    @test parent(boundary_surface_geometries.north.normal)[1, :, 1] ≈ [0.0, 1.0]
 
     point_space = Spaces.column(space, 1, 1, 1)
     @test point_space isa Spaces.PointSpace

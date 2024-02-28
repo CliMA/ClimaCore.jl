@@ -26,12 +26,12 @@ function add_numerical_flux_internal!(fn, dydt, args...)
     space = axes(dydt)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
+    internal_surface_geometry = Spaces.grid(space).internal_surface_geometry
 
     for (iface, (elem⁻, face⁻, elem⁺, face⁺, reversed)) in
         enumerate(Topologies.interior_faces(topology))
 
-        internal_surface_geometry_slab =
-            slab(space.internal_surface_geometry, iface)
+        internal_surface_geometry_slab = slab(internal_surface_geometry, iface)
 
         arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
         arg_slabs⁺ = map(arg -> slab(Fields.todata(arg), elem⁺), args)
@@ -102,6 +102,7 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
     space = axes(dydt)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(space))
     topology = Spaces.topology(space)
+    boundary_surface_geometries = Spaces.grid(space).boundary_surface_geometries
 
     for (iboundary, boundarytag) in
         enumerate(Topologies.boundary_tags(topology))
@@ -109,7 +110,7 @@ function add_numerical_flux_boundary!(fn, dydt, args...)
             enumerate(Topologies.boundary_faces(topology, boundarytag))
             boundary_surface_geometry_slab =
                 surface_geometry_slab =
-                    slab(space.boundary_surface_geometries[iboundary], iface)
+                    slab(boundary_surface_geometries[iboundary], iface)
 
             arg_slabs⁻ = map(arg -> slab(Fields.todata(arg), elem⁻), args)
             dydt_slab⁻ = slab(Fields.field_values(dydt), elem⁻)

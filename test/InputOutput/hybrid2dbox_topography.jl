@@ -32,7 +32,8 @@ function hvspace_2D(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopo = Topologies.IntervalTopology(context, vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(xlim[1]),
@@ -46,10 +47,12 @@ function hvspace_2D(
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
     z_surface =
-        sinpi.(
-            2 .* (Fields.coordinate_field(horzspace).x .- xlim[1]) ./
-            (xlim[2] - xlim[1]),
-        ) .+ 1
+        Geometry.ZPoint.(
+            sinpi.(
+                2 .* (Fields.coordinate_field(horzspace).x .- xlim[1]) ./
+                (xlim[2] - xlim[1]),
+            ) .+ 1
+        )
 
     hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(
         horzspace,
@@ -121,7 +124,7 @@ end
     filename = tempname()
     writer = InputOutput.HDF5Writer(filename, context)
     InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
-    reader = InputOutput.HDF5Reader(filename)
+    reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
     @test restart_Y == Y # test if restart is exact

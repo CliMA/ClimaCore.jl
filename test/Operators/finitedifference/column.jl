@@ -14,7 +14,7 @@ device = ClimaComms.device()
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
             Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
         @test eltype(domain) === Geometry.ZPoint{FT}
 
@@ -125,11 +125,12 @@ end
 end
 
 @testset "Test composed stencils" begin
+    are_boundschecks_forced = Base.JLOptions().check_bounds == 1
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
             Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
         @test eltype(domain) === Geometry.ZPoint{FT}
 
@@ -158,7 +159,11 @@ end
             right = Operators.SetGradient(FT(-1)),
         )
 
-        @test_throws Exception ∂.(w .* I.(θ))
+        if are_boundschecks_forced
+            @test_throws Exception ∂.(w .* I.(θ))
+        else
+            @warn "Bounds check on BoundsError ∂.(w .* I.(θ)) not verified."
+        end
 
         # 2) we set boundaries on the 1st operator
         I = Operators.InterpolateC2F(
@@ -201,7 +206,6 @@ end
         ∂ = Operators.GradientF2C()
 
         # TODO: should we throw something else?
-        are_boundschecks_forced = Base.JLOptions().check_bounds == 1
         if are_boundschecks_forced
             @test_throws BoundsError ∂.(w .* I.(θ))
         else
@@ -215,7 +219,7 @@ end
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
             Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
 
         @test eltype(domain) === Geometry.ZPoint{FT}
@@ -269,7 +273,7 @@ convergence_rate(err, Δh) =
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
@@ -317,7 +321,7 @@ end
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
@@ -368,7 +372,7 @@ end
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
@@ -419,7 +423,7 @@ end
             interval = Geometry.ZPoint(a) .. Geometry.ZPoint(b)
             domain = Domains.IntervalDomain(
                 interval;
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
@@ -474,7 +478,7 @@ end
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
             Geometry.ZPoint{FT}(pi);
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
@@ -743,7 +747,7 @@ end
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(-pi),
                 Geometry.ZPoint{FT}(pi);
-                boundary_tags = (:bottom, :top),
+                boundary_names = (:bottom, :top),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
@@ -804,7 +808,7 @@ end
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(-pi),
                 Geometry.ZPoint{FT}(pi);
-                boundary_tags = (:bottom, :top),
+                boundary_names = (:bottom, :top),
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
@@ -915,7 +919,7 @@ end
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(-pi),
                 Geometry.ZPoint{FT}(pi);
-                boundary_tags = (:bottom, :top),
+                boundary_names = (:bottom, :top),
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
@@ -985,7 +989,7 @@ end
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(-pi),
                 Geometry.ZPoint{FT}(pi);
-                boundary_tags = (:bottom, :top),
+                boundary_names = (:bottom, :top),
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
@@ -1044,7 +1048,7 @@ end
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
         Geometry.ZPoint{FT}(pi);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
 
@@ -1112,7 +1116,7 @@ end
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
             Geometry.ZPoint{FT}(4π);
-            boundary_tags = (:bottom, :top),
+            boundary_names = (:bottom, :top),
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 

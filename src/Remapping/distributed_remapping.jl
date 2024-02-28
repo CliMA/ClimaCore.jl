@@ -323,21 +323,8 @@ function Remapper(
     )
 end
 
-function Remapper(
-    target_hcoords::AbstractArray,
-    target_zcoords::Union{AbstractArray, Nothing},
-    space::Spaces.AbstractSpace,
-)
-    Base.depwarn(
-        "The order of arguments in Remapper has changed. Please use Remapper(space, target_hcoords, target_zcoords) instead.",
-        :Remapper,
-    )
-    return Remapper(space, target_hcoords, target_zcoords)
-end
-
-function Remapper(space::Spaces.AbstractSpace, target_hcoords::AbstractArray)
-    return Remapper(space, target_hcoords, nothing)
-end
+Remapper(space::Spaces.AbstractSpace, target_hcoords::AbstractArray) =
+    Remapper(space, target_hcoords, nothing)
 
 """
     _set_interpolated_values!(remapper, field)

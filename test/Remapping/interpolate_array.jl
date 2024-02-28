@@ -18,7 +18,7 @@ device = ClimaComms.CPUSingleThreaded()
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(1000.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
@@ -74,7 +74,7 @@ end
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(1000.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
@@ -129,7 +129,7 @@ end
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(1000.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)
@@ -186,7 +186,7 @@ end
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(1000.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
 
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 30)

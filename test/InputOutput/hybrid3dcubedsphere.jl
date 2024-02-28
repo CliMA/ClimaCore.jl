@@ -41,7 +41,7 @@ end
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
     z_topology = Topologies.IntervalTopology(z_mesh)

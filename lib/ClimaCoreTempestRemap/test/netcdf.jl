@@ -98,7 +98,7 @@ end
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(50.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
     vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
@@ -181,7 +181,7 @@ end
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(50.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
     vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
@@ -316,11 +316,11 @@ end
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(50.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
     vfspace = Spaces.FaceFiniteDifferenceSpace(vmesh)
-    z_surface = test_warp.(Fields.coordinate_field(hspace))
+    z_surface = Geometry.ZPoint.(test_warp.(Fields.coordinate_field(hspace)))
     fhvspace = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vfspace,
@@ -425,7 +425,7 @@ end
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(0.0),
         Geometry.ZPoint(50.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
     vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)

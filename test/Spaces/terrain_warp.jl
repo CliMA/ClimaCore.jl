@@ -6,6 +6,7 @@ import ClimaCore:
     ClimaCore,
     Domains,
     Geometry,
+    Grids,
     Fields,
     Operators,
     Meshes,
@@ -53,7 +54,7 @@ function generate_base_spaces(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
     vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
@@ -439,21 +440,26 @@ end
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile
-            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
+            z_surface =
+                Geometry.ZPoint.(warp_sin_2d.(Fields.coordinate_field(hspace)))
             # Generate space with known mesh-warp parameters ηₕ = 1; s = 1
             fspace = Spaces.ExtrudedFiniteDifferenceSpace(
                 hspace,
                 vert_face_space,
                 Hypsography.SLEVEAdaption(z_surface, FT(1), FT(1)),
             )
+            face_local_geometry = Spaces.local_geometry_data(
+                Spaces.grid(fspace),
+                Grids.CellFace(),
+            )
             for i in 1:(nl + 1)
                 z_extracted = Fields.Field(
-                    Fields.level(fspace.face_local_geometry.coordinates.z, i),
+                    Fields.level(face_local_geometry.coordinates.z, i),
                     fspace,
                 )
                 η = FT((i - 1) / 10)
                 z_surface_known =
-                    @. FT(η) + z_surface * FT(sinh(1 - η) / sinh(1))
+                    @. FT(η) + z_surface.z * FT(sinh(1 - η) / sinh(1))
                 @test maximum(
                     abs.(
                         Fields.field_values(z_extracted) .-
@@ -493,7 +499,8 @@ end
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
             # Generate surface elevation profile
-            z_surface = warp_sin_2d.(Fields.coordinate_field(hspace))
+            z_surface =
+                Geometry.ZPoint.(warp_sin_2d.(Fields.coordinate_field(hspace)))
             # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
             # Scale height is poorly specified, so code should throw warning.
             @test_throws ErrorException Spaces.ExtrudedFiniteDifferenceSpace(

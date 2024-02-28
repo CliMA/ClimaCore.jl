@@ -30,7 +30,7 @@ function hvspace_3D_box(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
 
@@ -65,7 +65,7 @@ function hvspace_3D_sphere(context)
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
         Geometry.ZPoint{FT}(1.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
 

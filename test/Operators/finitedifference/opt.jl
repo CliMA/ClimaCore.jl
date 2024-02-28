@@ -210,7 +210,7 @@ end
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0.0),
                 Geometry.ZPoint{FT}(pi);
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             mesh = Meshes.IntervalMesh(domain; nelems = 16)
 

@@ -156,12 +156,4 @@ function writepvd(basename::String, times, fields::NamedTuple; vtkargs...)
     end
 end
 
-Base.@deprecate writevtk(basename::String, times, fields; vtkargs...) writepvd(
-    basename,
-    times,
-    fields;
-    vtkargs...,
-)
-
-
 end # module

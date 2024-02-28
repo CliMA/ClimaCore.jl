@@ -38,7 +38,7 @@ end
 
 
 Adapt.adapt_structure(to, space::PointSpace) =
-    PointSpace(DeviceSideContext(), Adapt.adapt(to, space.local_geometry))
+    PointSpace(DeviceSideContext(), Adapt.adapt(to, local_geometry_data(space)))
 
 function PointSpace(
     context::ClimaComms.AbstractCommsContext,

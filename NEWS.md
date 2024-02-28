@@ -3,6 +3,7 @@ ClimaCore.jl Release Notes
 
 Main
 -------
+- ![][badge-💥breaking] support for many deprecated methods have been dropped PR [#1632](https://github.com/CliMA/ClimaCore.jl/pull/1632).
 - ![][badge-🤖precisionΔ]![][badge-🚀performance] Slight performance improvement by replacing `rdiv` with `rmul`. PR ([#1496](https://github.com/CliMA/ClimaCore.jl/pull/1496)) Machine-precision differences are expected.
 
 v0.12.1

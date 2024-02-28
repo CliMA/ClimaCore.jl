@@ -8,7 +8,7 @@ import ClimaCore: Geometry, Domains, Meshes, Spaces, Fields, MatrixFields
     domain = Domains.IntervalDomain(
         Geometry.ZPoint(FT(1)),
         Geometry.ZPoint(FT(4));
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain, nelems = 3)
     center_space = Spaces.CenterFiniteDifferenceSpace(mesh)

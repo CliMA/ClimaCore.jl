@@ -66,35 +66,6 @@ FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
 CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellCenter())
 
-@inline function Base.getproperty(space::FiniteDifferenceSpace, name::Symbol)
-    if name == :topology
-        Base.depwarn(
-            "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
-            :getproperty,
-        )
-        return topology(space)
-    elseif name == :global_geometry
-        Base.depwarn(
-            "`space.global_geometry` is deprecated, use `Spaces.global_geometry(space)` instead",
-            :getproperty,
-        )
-        return global_geometry(space)
-    elseif name == :center_local_geometry
-        Base.depwarn(
-            "`space.center_local_geometry` is deprecated, use `local_geometry_data(grid(space), Grids.CellCenter())` instead",
-            :getproperty,
-        )
-        return local_geometry_data(space, Grids.CellCenter())
-    elseif name == :face_local_geometry
-        Base.depwarn(
-            "`space.face_local_geometry` is deprecated, use `local_geometry_data(grid(space), Grids.CellFace())` instead",
-            :getproperty,
-        )
-        return local_geometry_data(space, Grids.CellFace())
-    end
-    return getfield(space, name)
-end
-
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
     FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))
 
@@ -103,10 +74,6 @@ Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
 nlevels(space::FiniteDifferenceSpace) = length(space)
 # TODO: deprecate?
 Base.length(space::FiniteDifferenceSpace) = length(coordinates_data(space))
-
-
-
-Base.@deprecate z_component(::Type{T}) where {T} Δz_metric_component(T) false
 
 """
     Δz_metric_component(::Type{<:Goemetry.AbstractPoint})
@@ -121,8 +88,6 @@ in an `AxisTensor`.
 Δz_metric_component(::Type{<:Geometry.XYZPoint}) = 9
 Δz_metric_component(::Type{<:Geometry.ZPoint}) = 1
 Δz_metric_component(::Type{<:Geometry.XZPoint}) = 4
-
-Base.@deprecate dz_data(space::AbstractSpace) Δz_data(space) false
 
 """
     Δz_data(space::AbstractSpace)

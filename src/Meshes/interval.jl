@@ -55,7 +55,7 @@ coordinates(mesh::IntervalMesh, elem::Integer, vert::Integer) =
 function coordinates(
     mesh::IntervalMesh,
     elem::Integer,
-    (ξ1,)::StaticArrays.SVector{1},
+    (ξ1,)::Union{StaticArrays.SVector{1}, Tuple{<:Real}},
 )
     ca = mesh.faces[elem]
     cb = mesh.faces[elem + 1]
