@@ -157,7 +157,26 @@ end
     dest::Field,
     bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
 )
-    copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
+    et = eltype(dest)
+    space = axes(dest)
+    if is_diagonal_field_bc(bc) &&
+       et <: AbstractFloat &&
+       hasfield(typeof(space), :context)
+        device = ClimaComms.device(space)
+        if device isa ClimaComms.CUDADevice
+            DataLayouts.diagonal_copyto_cuda!(
+                field_values(dest),
+                Base.Broadcast.instantiate(todata(bc)),
+            )
+        else
+            DataLayouts.diagonal_copyto!(
+                field_values(dest),
+                Base.Broadcast.instantiate(todata(bc)),
+            )
+        end
+    else
+        copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
+    end
     return dest
 end
 
@@ -429,3 +448,69 @@ allow_mismatched_diagonalized_spaces() = false
 is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
 
 is_diagonalized_spaces(::Type, ::Type) = false
+
+
+@inline function first_field_in_bc(args::Tuple, rargs...)
+    x1 = first_field_in_bc(args[1], rargs...)
+    x1 isa Field && return x1
+    return first_field_in_bc(Base.tail(args), rargs...)
+end
+
+@inline first_field_in_bc(args::Tuple{Any}, rargs...) =
+    first_field_in_bc(args[1], rargs...)
+@inline first_field_in_bc(args::Tuple{}, rargs...) = nothing
+@inline first_field_in_bc(x) = nothing
+@inline first_field_in_bc(x::Field) = x
+
+@inline first_field_in_bc(bc::Base.Broadcast.Broadcasted{<:FieldStyle}) =
+    first_field_in_bc(bc.args)
+
+@inline _is_diagonal_field_bc_args(
+    truesofar,
+    ::Type{TStart},
+    args::Tuple,
+    rargs...,
+) where {TStart} =
+    truesofar &&
+    _is_diagonal_field_bc(truesofar, TStart, args[1], rargs...) &&
+    _is_diagonal_field_bc_args(truesofar, TStart, Base.tail(args), rargs...)
+
+@inline _is_diagonal_field_bc_args(
+    truesofar,
+    ::Type{TStart},
+    args::Tuple{Any},
+    rargs...,
+) where {TStart} =
+    truesofar && _is_diagonal_field_bc(truesofar, TStart, args[1], rargs...)
+@inline _is_diagonal_field_bc_args(
+    truesofar,
+    ::Type{TStart},
+    args::Tuple{},
+    rargs...,
+) where {TStart} = truesofar
+
+@inline function _is_diagonal_field_bc(
+    truesofar,
+    ::Type{TStart},
+    bc::Base.Broadcast.Broadcasted{<:FieldStyle},
+) where {TStart}
+    return truesofar && _is_diagonal_field_bc_args(truesofar, TStart, bc.args)
+end
+
+@inline _is_diagonal_field_bc(
+    truesofar,
+    ::Type{TStart},
+    ::TStart,
+) where {TStart <: Field} = true
+@inline _is_diagonal_field_bc(
+    truesofar,
+    ::Type{TStart},
+    x::Field,
+) where {TStart} = false
+@inline _is_diagonal_field_bc(truesofar, ::Type{TStart}, x) where {TStart} =
+    truesofar
+
+# Find the first Field in the broadcast expression (BCE),
+# and compare against every other Field in the BCE
+@inline is_diagonal_field_bc(bc::Base.Broadcast.Broadcasted{<:FieldStyle}) =
+    _is_diagonal_field_bc_args(true, typeof(first_field_in_bc(bc)), bc.args)

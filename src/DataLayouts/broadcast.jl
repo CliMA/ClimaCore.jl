@@ -593,3 +593,37 @@ function Base.copyto!(
     # end
     return _serial_copyto!(dest, bc)
 end
+
+# ------------------------------ diagonal kernels
+import CUDA
+function diagonal_copyto!(dest, bc)
+    pdest = parent(dest)
+    @inbounds begin
+        for i in eachindex(pdest)
+            pdest[i] = bc[i]
+        end
+    end
+    return dest
+end
+
+function diagonal_copyto_cuda!(dest, bc)
+    nitems = length(parent(dest))
+    max_threads = 256 # can be higher if conditions permit
+    nthreads = min(max_threads, nitems)
+    nblocks = cld(nitems, nthreads)
+    pdest, pbc = parent(dest), bc
+    CUDA.@cuda threads = (nthreads) blocks = (nblocks) knl_copyto!(pdest, pbc)
+    return dest
+end
+
+function diagonal_knl_copyto!(dest, src)
+    nitems = length(dest)
+    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    if gidx < nitems
+        idx = gidx
+        # idx = CartesianIndices(dest)[gidx] # or this
+        @inbounds dest[idx] = src[idx]
+    end
+    return nothing
+end

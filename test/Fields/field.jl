@@ -316,8 +316,8 @@ end
         Base.broadcasted(:+, Y1, Base.broadcasted(:*, 2, Y1)),
         Base.broadcasted(:*, 3, Z),
     )
-    @test Fields.is_diagonal_bc(bc1)
-    @test !Fields.is_diagonal_bc(bc2)
+    @test Fields.is_diagonal_fv_bc(bc1)
+    @test !Fields.is_diagonal_fv_bc(bc2)
 end
 
 function call_getcolumn(fv, colidx)
