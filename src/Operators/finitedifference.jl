@@ -3105,25 +3105,21 @@ Base.Broadcast.BroadcastStyle(
 
 Base.eltype(bc::StencilBroadcasted) = return_eltype(bc.op, bc.args...)
 
-function vidx(space::AllFaceFiniteDifferenceSpace, idx)
-    @assert idx isa PlusHalf
+@inline function vidx(space::AllFaceFiniteDifferenceSpace, idx::PlusHalf)
     v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         v = mod1(v, length(space))
     end
     return v
 end
-function vidx(space::AllCenterFiniteDifferenceSpace, idx)
-    @assert idx isa Integer
+@inline function vidx(space::AllCenterFiniteDifferenceSpace, idx::Int)
     v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         v = mod1(v, length(space))
     end
     return v
 end
-function vidx(space::AbstractSpace, idx)
-    return 1
-end
+@inline vidx(space::AbstractSpace, idx) = 1
 
 Base.@propagate_inbounds function getidx(
     parent_space,
