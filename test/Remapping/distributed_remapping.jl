@@ -227,7 +227,7 @@ end
 
     # Horizontal space
     horiz_space = Spaces.horizontal_space(hv_center_space)
-    horiz_remapper = Remapping.Remapper(horiz_space, hcoords, nothing)
+    horiz_remapper = Remapping.Remapper(horiz_space, hcoords)
 
     coords = Fields.coordinate_field(horiz_space)
 

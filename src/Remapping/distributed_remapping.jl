@@ -188,6 +188,7 @@ end
 
 """
    Remapper(space, target_hcoords, target_zcoords)
+   Remapper(space, target_hcoords)
 
 Return a `Remapper` responsible for interpolating any `Field` defined on the given `space`
 to the Cartesian product of `target_hcoords` with `target_zcoords`.
@@ -332,6 +333,10 @@ function Remapper(
         :Remapper,
     )
     return Remapper(space, target_hcoords, target_zcoords)
+end
+
+function Remapper(space::Spaces.AbstractSpace, target_hcoords::AbstractArray)
+    return Remapper(space, target_hcoords, nothing)
 end
 
 """
