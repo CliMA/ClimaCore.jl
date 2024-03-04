@@ -1,25 +1,6 @@
 # Toplevel interface functions for recurisve broadcast expressions
 
 """
-    enable_threading()
-
-By default returns `false` signifying threading is disabled.
-Enable the threading runtime by redefining the method at the toplevel your experiment file:
-
-    import ClimaCore: enable_threading
-    enable_threading() = true
-
-and running julia with `julia --nthreads=N ...`
-
-This function is deprecated in version `0.10.42`.
-Please use the ClimaComms context for threading.
-"""
-function enable_threading end
-
-Base.@deprecate enable_threading() deprecated_enable_threading() false
-deprecated_enable_threading() = false
-
-"""
     slab(data::AbstractData, h::Integer)
 
 A "pancake" view into an underlying

@@ -33,7 +33,8 @@ function hvspace_2D(
     )
     stretch = Meshes.ExponentialStretching{FT}(FT(100.0))
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopo = Topologies.IntervalTopology(context, vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(xlim[1]),
@@ -113,7 +114,7 @@ end
     writer = InputOutput.HDF5Writer(filename, context)
     InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
 
-    reader = InputOutput.HDF5Reader(filename)
+    reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
     @test restart_Y == Y # test if restart is exact

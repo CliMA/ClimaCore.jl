@@ -51,8 +51,7 @@ function IntervalDomain(
     coord_min::Geometry.Abstract1DPoint,
     coord_max::Geometry.Abstract1DPoint;
     periodic = false,
-    boundary_tags = nothing, # TODO: deprecate this
-    boundary_names::BCTagType = boundary_tags,
+    boundary_names::BCTagType = nothing,
 )
     if !periodic && isnothing(boundary_names)
         throw(

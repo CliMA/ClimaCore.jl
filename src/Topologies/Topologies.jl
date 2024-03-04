@@ -346,14 +346,6 @@ include("topology2d.jl")
 include("dss_transform.jl")
 include("dss.jl")
 
-# deprecate
-@deprecate boundaries(topology::AbstractTopology) boundary_tags(topology)
-
 const DistributedTopology2D = Topology2D
-@deprecate Topology2D(mesh::Meshes.AbstractMesh, args...) Topology2D(
-    ClimaComms.SingletonCommsContext(),
-    mesh,
-    args...,
-)
 
 end # module

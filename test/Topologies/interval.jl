@@ -7,7 +7,7 @@ using ClimaCore: Geometry, Domains, Meshes, Topologies
 domain = Domains.IntervalDomain(
     Geometry.ZPoint(0.0),
     Geometry.ZPoint(10.0);
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 mesh1 = Meshes.IntervalMesh(domain, [Geometry.ZPoint(Float64(i)) for i in 0:10])
 mesh2 = Meshes.IntervalMesh(domain, [Geometry.ZPoint(Float64(i)) for i in 0:10])

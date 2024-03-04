@@ -65,42 +65,6 @@ function SpectralElementSpace1D(
     SpectralElementSpace1D(grid)
 end
 
-
-@inline function Base.getproperty(space::SpectralElementSpace1D, name::Symbol)
-    if name == :topology
-        Base.depwarn(
-            "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
-            :getproperty,
-        )
-        return topology(space)
-    elseif name == :quadrature_style
-        Base.depwarn(
-            "`space.quadrature_style` is deprecated, use `Spaces.quadrature_style(space)` instead",
-            :getproperty,
-        )
-        return quadrature_style(space)
-    elseif name == :global_geometry
-        Base.depwarn(
-            "`space.global_geometry` is deprecated, use `Spaces.global_geometry(space)` instead",
-            :getproperty,
-        )
-        return global_geometry(space)
-    elseif name == :local_geometry
-        Base.depwarn(
-            "`space.local_geometry` is deprecated, use `Spaces.local_geometry_data(space)` instead",
-            :getproperty,
-        )
-        return local_geometry_data(space)
-    elseif name == :local_dss_weights
-        Base.depwarn(
-            "`space.local_dss_weights` is deprecated, use `Spaces.local_dss_weights(space)` instead",
-            :getproperty,
-        )
-        return local_dss_weights(space)
-    end
-    return getfield(space, name)
-end
-
 # 2D
 """
     SpectralElementSpace2D(grid::SpectralElementGrid1D)
@@ -123,66 +87,6 @@ function SpectralElementSpace2D(
     grid = Grids.SpectralElementGrid2D(topology, quadrature_style; kwargs...)
     SpectralElementSpace2D(grid)
 end
-
-@inline function Base.getproperty(space::SpectralElementSpace2D, name::Symbol)
-    if name == :topology
-        Base.depwarn(
-            "`space.topology` is deprecated, use `Spaces.topology(space)` instead",
-            :getproperty,
-        )
-        return topology(space)
-    elseif name == :quadrature_style
-        Base.depwarn(
-            "`space.quadrature_style` is deprecated, use `Spaces.quadrature_style(space)` instead",
-            :getproperty,
-        )
-        return quadrature_style(space)
-    elseif name == :global_geometry
-        Base.depwarn(
-            "`space.global_geometry` is deprecated, use `Spaces.global_geometry(space)` instead",
-            :getproperty,
-        )
-        return global_geometry(space)
-    elseif name == :local_geometry
-        Base.depwarn(
-            "`space.local_geometry` is deprecated, use `Spaces.local_geometry_data(space)` instead",
-            :getproperty,
-        )
-        return local_geometry_data(space)
-    elseif name == :ghost_geometry
-        Base.depwarn(
-            "`space.ghost_geometry` is deprecated, use `nothing` instead",
-            :getproperty,
-        )
-        return nothing
-    elseif name == :local_dss_weights
-        Base.depwarn(
-            "`space.local_dss_weights` is deprecated, use `Spaces.local_dss_weights(space)` instead",
-            :getproperty,
-        )
-        return local_dss_weights(space)
-    elseif name == :ghost_dss_weights
-        Base.depwarn(
-            "`space.ghost_dss_weights` is deprecated, use `nothing` instead",
-            :getproperty,
-        )
-        return nothing
-    elseif name == :internal_surface_geometry
-        Base.depwarn(
-            "`space.internal_surface_geometry` is deprecated, use `Spaces.grid(space).internal_surface_geometry` instead",
-            :getproperty,
-        )
-        return grid(space).internal_surface_geometry
-    elseif name == :boundary_surface_geometries
-        Base.depwarn(
-            "`space.boundary_surface_geometries` is deprecated, use `Spaces.grid(space).boundary_surface_geometries` instead",
-            :getproperty,
-        )
-        return grid(space).boundary_surface_geometries
-    end
-    return getfield(space, name)
-end
-
 
 Adapt.adapt_structure(to, space::SpectralElementSpace2D) =
     SpectralElementSpace2D(Adapt.adapt(to, grid(space)))
@@ -226,7 +130,8 @@ number of unique quadrature points along each dimension.
 function node_horizontal_length_scale(space::AbstractSpectralElementSpace)
     quad = quadrature_style(space)
     Nu = Quadratures.unique_degrees_of_freedom(quad)
-    return Meshes.element_horizontal_length_scale(space.topology.mesh) / Nu
+    return Meshes.element_horizontal_length_scale(Spaces.topology(space).mesh) /
+           Nu
 end
 
 
@@ -240,7 +145,7 @@ Base.@propagate_inbounds function slab(
 )
     SpectralElementSpaceSlab(
         quadrature_style(space),
-        slab(space.local_geometry, v, h),
+        slab(local_geometry_data(space), v, h),
     )
 end
 Base.@propagate_inbounds slab(space::AbstractSpectralElementSpace, h) =

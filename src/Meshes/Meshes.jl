@@ -119,26 +119,5 @@ include("interval.jl")
 include("rectangle.jl")
 include("cubedsphere.jl")
 
-# deprecations
-@deprecate EquispacedRectangleMesh(args...) RectilinearMesh(args...)
-@deprecate equispaced_rectangular_mesh(args...) RectilinearMesh(args...)
-@deprecate TensorProductMesh(args...) RectilinearMesh(args...)
-@deprecate EquiangularSphereWarp() EquiangularCubedSphere
-@deprecate EquidistantSphereWarp() EquidistantCubedSphere
-@deprecate ConformalSphereWarp() ConformalCubedSphere
-@deprecate Mesh2D(
-    domain::Domains.SphereDomain,
-    ::Type{T},
-    Ne,
-) where {T <: AbstractCubedSphere} T(domain, Ne)
-@deprecate Mesh2D(domain::RectangleDomain, x1c, x2c) RectilinearMesh(
-    IntervalMesh(domain.interval1, x1c),
-    IntervalMesh(domain.interval2, x2c),
-)
-@deprecate coordinates(mesh::AbstractMesh, elem, ξ::NTuple) coordinates(
-    mesh,
-    elem,
-    StaticArrays.SVector(ξ),
-)
 
 end # module

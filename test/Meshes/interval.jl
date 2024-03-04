@@ -300,13 +300,13 @@ end
     parent_domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(z_bottom),
         Geometry.ZPoint{FT}(z_top_parent),
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     parent_mesh = Meshes.IntervalMesh(parent_domain, stretch, nelems = nz)
     trunc_domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(z_bottom),
         Geometry.ZPoint{FT}(z_top),
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     trunc_mesh = Meshes.truncate_mesh(parent_mesh, trunc_domain)
 

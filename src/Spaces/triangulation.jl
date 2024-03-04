@@ -16,12 +16,12 @@ function triangles(Ni, Nj, Nh)
 end
 
 function triangulate(space::SpectralElementSpace2D)
-    Ni, Nj, _, _, Nh = size(space.local_geometry)
+    Ni, Nj, _, _, Nh = size(local_geometry_data(space))
     return triangles(Ni, Nj, Nh)
 end
 
 function triangulate(space::ExtrudedFiniteDifferenceSpace)
-    Ni, Nj, _, Nv, Nh = size(space.local_geometry)
+    Ni, Nj, _, Nv, Nh = size(local_geometry_data(space))
     @assert Nj == 1 "triangulation only defined for 1D extruded fields"
     return triangles(Ni, Nv, Nh)
 end

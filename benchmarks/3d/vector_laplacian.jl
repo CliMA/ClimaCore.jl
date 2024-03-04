@@ -11,21 +11,19 @@ using ClimaCore:
     Quadratures
 using CUDA, BenchmarkTools
 
+context = ClimaComms.context()
 hdomain = Domains.SphereDomain(6.37122e6)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, 30)
-htopology = Topologies.Topology2D(hmesh)
+htopology = Topologies.Topology2D(context, hmesh)
 hspace = Spaces.SpectralElementSpace2D(htopology, Quadratures.GLL{4}())
 
 vdomain = Domains.IntervalDomain(
     Geometry.ZPoint(0.0),
     Geometry.ZPoint(10e3);
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 vmesh = Meshes.IntervalMesh(vdomain; nelems = 45)
-vtopology = Topologies.IntervalTopology(
-    ClimaComms.SingletonCommsContext(ClimaComms.device()),
-    vmesh,
-)
+vtopology = Topologies.IntervalTopology(context, vmesh)
 vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
 
 cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)

@@ -2,6 +2,7 @@
 using Test
 using StaticArrays, IntervalSets
 import ClimaCore
+import ClimaComms
 import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
@@ -308,19 +309,21 @@ end
 # https://github.com/CliMA/ClimaCore.jl/issues/1062
 @testset "Allocations with copyto! on FieldVectors" begin
     function toy_sphere(::Type{FT}) where {FT}
+        context = ClimaComms.context()
         helem = npoly = 2
         hdomain = Domains.SphereDomain(FT(1e7))
         hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-        htopology = Topologies.Topology2D(hmesh)
+        htopology = Topologies.Topology2D(context, hmesh)
         quad = Quadratures.GLL{npoly + 1}()
         hspace = Spaces.SpectralElementSpace2D(htopology, quad)
         vdomain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(zero(FT)),
             Geometry.ZPoint{FT}(FT(1e4));
-            boundary_tags = (:bottom, :top),
+            boundary_names = (:bottom, :top),
         )
         vmesh = Meshes.IntervalMesh(vdomain, nelems = 4)
-        vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+        vtopology = Topologies.IntervalTopology(context, vmesh)
+        vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
         center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
         face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
         return (center_space, face_space)

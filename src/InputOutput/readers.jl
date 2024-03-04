@@ -88,11 +88,6 @@ struct HDF5Reader{C <: ClimaComms.AbstractCommsContext}
     grid_cache::Dict{Any, Any}
 end
 
-@deprecate HDF5Reader(filename::AbstractString) HDF5Reader(
-    filename,
-    ClimaComms.SingletonCommsContext(),
-)
-
 function HDF5Reader(
     filename::AbstractString,
     context::ClimaComms.AbstractCommsContext,

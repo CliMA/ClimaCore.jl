@@ -26,14 +26,16 @@ function hvspace_3D(
     zelem = 16,
     npoly = 3;
 )
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     FT = Float64
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    verttopo = Topologies.IntervalTopology(context, vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(verttopo)
 
     horzdomain = Domains.RectangleDomain(
         Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
@@ -45,7 +47,6 @@ function hvspace_3D(
     Nf_center, Nf_face = 2, 1 #1 + 3 + 1
     quad = Quadratures.GLL{npoly + 1}()
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     horztopology = Topologies.Topology2D(context, horzmesh)
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

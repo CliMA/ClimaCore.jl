@@ -420,12 +420,3 @@ function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
         ),
     )
 end
-
-
-# TODO: deprecate these
-
-allow_mismatched_diagonalized_spaces() = false
-
-is_diagonalized_spaces(::Type{S}, ::Type{S}) where {S <: AbstractSpace} = true
-
-is_diagonalized_spaces(::Type, ::Type) = false

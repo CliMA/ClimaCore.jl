@@ -119,7 +119,7 @@ end
 function coordinates(
     mesh::RectilinearMesh,
     elem::CartesianIndex{2},
-    (ξ1, ξ2)::StaticArrays.SVector{2},
+    (ξ1, ξ2)::Union{StaticArrays.SVector{2}, Tuple{<:Real, <:Real}},
 )
     x1, x2 = elem.I
     coord1 = coordinates(mesh.intervalmesh1, x1, StaticArrays.SVector(ξ1))

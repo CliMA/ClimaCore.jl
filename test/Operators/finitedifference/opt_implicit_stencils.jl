@@ -36,7 +36,7 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zero(FT)),
         Geometry.ZPoint{FT}(zmax);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
     vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)

@@ -27,7 +27,7 @@ using ClimaComms,
 
 column_domain = ClimaCore.Domains.IntervalDomain(
     ClimaCore.Geometry.ZPoint(0.0) .. ClimaCore.Geometry.ZPoint(10.0),
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 #----------------------------------------------------------------------------
 

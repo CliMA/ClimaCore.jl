@@ -538,8 +538,8 @@ end
         lg_space = Spaces.level(space, TU.fc_index(1, space))
         lg_field_space = axes(Fields.level(Y, TU.fc_index(1, space)))
         @test all(
-            lg_space.local_geometry.coordinates ===
-            lg_field_space.local_geometry.coordinates,
+            Spaces.local_geometry_data(lg_space).coordinates ===
+            Spaces.local_geometry_data(lg_field_space).coordinates,
         )
         @test all(Fields.zeros(lg_space) == Fields.zeros(lg_field_space))
     end

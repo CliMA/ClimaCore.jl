@@ -188,7 +188,7 @@ end
             vertdomain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0),
                 Geometry.ZPoint{FT}(1000);
-                boundary_tags = (:bottom, :top),
+                boundary_names = (:bottom, :top),
             )
             vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
             vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)

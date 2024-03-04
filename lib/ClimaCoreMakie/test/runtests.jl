@@ -11,13 +11,11 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
 @testset "spectral element 2D cubed-sphere" begin
     R = 6.37122e6
+    context = ClimaComms.SingletonCommsContext()
 
     domain = ClimaCore.Domains.SphereDomain(R)
     mesh = ClimaCore.Meshes.EquiangularCubedSphere(domain, 6)
-    grid_topology = ClimaCore.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh,
-    )
+    grid_topology = ClimaCore.Topologies.Topology2D(context, mesh)
     quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace2D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
@@ -75,6 +73,7 @@ end
 
 @testset "extruded" begin
 
+    context = ClimaComms.context()
     domain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.XPoint(-1000.0),
         ClimaCore.Geometry.XPoint(1000.0),
@@ -87,16 +86,17 @@ end
     horz_coords = ClimaCore.Fields.coordinate_field(horz_space)
 
     z_surface = map(horz_coords) do coord
-        100 * exp(-(coord.x / 100)^2)
+        Geometry.ZPoint(100 * exp(-(coord.x / 100)^2))
     end
 
     vert_domain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.ZPoint(0.0),
         ClimaCore.Geometry.ZPoint(1000.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vert_mesh = ClimaCore.Meshes.IntervalMesh(vert_domain, nelems = 36)
-    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vert_mesh)
+    vtopology = Topologies.IntervalTopology(context, vert_mesh)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vtopology)
     vert_face_space =
         ClimaCore.Spaces.FaceFiniteDifferenceSpace(vert_center_space)
 

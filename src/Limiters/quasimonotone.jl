@@ -68,11 +68,6 @@ function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq)))
     return QuasiMonotoneLimiter(q_bounds, similar(q_bounds), ghost_buffer, rtol)
 end
 
-Base.@deprecate(
-    QuasiMonotoneLimiter(ρq::Fields.Field, ρ::Fields.Field),
-    QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq)))),
-)
-
 function make_q_bounds(
     ρq::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
 ) where {S}

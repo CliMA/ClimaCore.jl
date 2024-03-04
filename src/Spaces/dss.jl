@@ -172,10 +172,6 @@ end
 
 weighted_dss_start!(data, space, dss_buffer::Nothing) = nothing
 
-# TODO: deprecate
-weighted_dss_start!(data, space, hspace, dss_buffer) =
-    weighted_dss_start!(data, space, dss_buffer)
-
 
 """
     weighted_dss_internal!(
@@ -329,17 +325,3 @@ function weighted_dss_ghost!(
 end
 
 weighted_dss_ghost!(data, space, hspace, dss_buffer) = data
-
-
-# TODO: deprecate
-
-
-# for backward compatibility
-function weighted_dss2! end
-function weighted_dss_start2! end
-function weighted_dss_internal2! end
-function weighted_dss_ghost2! end
-function dss2! end
-
-
-dss2!(data, topology, quadrature_style) = dss!(data, topology)
