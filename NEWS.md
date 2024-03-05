@@ -1,10 +1,12 @@
 ClimaCore.jl Release Notes
 ========================
 
-Main
+v0.13.0
 -------
 - ![][badge-💥breaking] support for many deprecated methods have been dropped PR [#1632](https://github.com/CliMA/ClimaCore.jl/pull/1632).
 - ![][badge-🤖precisionΔ]![][badge-🚀performance] Slight performance improvement by replacing `rdiv` with `rmul`. PR ([#1496](https://github.com/CliMA/ClimaCore.jl/pull/1496)) Machine-precision differences are expected.
+- ![][badge-💥breaking]![][badge-🚀performance] Rewritten `distributed_remapping`. New `distributed_remapping` is non-allocating and up to 1000x faster (on GPUs). New `distributed_remapping` no longer supports the `physical_z` argument (this option is still available in `Remapping.interpolate_column`). New `interpolate!` function is available for remapping in-place. The new preferred way to define a `Rampper` is `Remapper(space, target_hcoords, target_zcoords)` (instead of `Remapper(target_hcoords, target_zcoords, space)`).
+  PR ([#1630](https://github.com/CliMA/ClimaCore.jl/pull/1630))
 
 v0.12.1
 -------
