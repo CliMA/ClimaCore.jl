@@ -15,7 +15,7 @@ include("matrix_field_test_utils.jl")
     ᶠᶠmat = random_field(TridiagonalMatrixRow{FT}, face_space)
     ᶠᶜmat = random_field(QuaddiagonalMatrixRow{FT}, face_space)
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 1" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times vector",
         get_result = () -> (@. ᶜᶜmat ⋅ ᶜvec),
         set_result! = result -> (@. result = ᶜᶜmat ⋅ ᶜvec),
@@ -24,9 +24,9 @@ include("matrix_field_test_utils.jl")
             mul!(_result, _ᶜᶜmat, _ᶜvec),
     )
 
-    GC.gc()
+    @time "gc 1" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 2" test_field_broadcast_against_array_reference(;
         test_name = "tri-diagonal matrix times vector",
         get_result = () -> (@. ᶠᶠmat ⋅ ᶠvec),
         set_result! = result -> (@. result = ᶠᶠmat ⋅ ᶠvec),
@@ -34,10 +34,10 @@ include("matrix_field_test_utils.jl")
         ref_set_result! = (_result, _ᶠᶠmat, _ᶠvec) ->
             mul!(_result, _ᶠᶠmat, _ᶠvec),
     )
-    GC.gc()
+    @time "gc 2" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 3" test_field_broadcast_against_array_reference(;
         test_name = "quad-diagonal matrix times vector",
         get_result = () -> (@. ᶠᶜmat ⋅ ᶜvec),
         set_result! = result -> (@. result = ᶠᶜmat ⋅ ᶜvec),
@@ -45,10 +45,10 @@ include("matrix_field_test_utils.jl")
         ref_set_result! = (_result, _ᶠᶜmat, _ᶜvec) ->
             mul!(_result, _ᶠᶜmat, _ᶜvec),
     )
-    GC.gc()
+    @time "gc 3" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 4" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times bi-diagonal matrix",
         get_result = () -> (@. ᶜᶜmat ⋅ ᶜᶠmat),
         set_result! = result -> (@. result = ᶜᶜmat ⋅ ᶜᶠmat),
@@ -56,20 +56,20 @@ include("matrix_field_test_utils.jl")
         ref_set_result! = (_result, _ᶜᶜmat, _ᶜᶠmat) ->
             mul!(_result, _ᶜᶜmat, _ᶜᶠmat),
     )
-    GC.gc()
+    @time "gc 4" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 5" test_field_broadcast_against_array_reference(;
         test_name = "tri-diagonal matrix times tri-diagonal matrix",
         get_result = () -> (@. ᶠᶠmat ⋅ ᶠᶠmat),
         set_result! = result -> (@. result = ᶠᶠmat ⋅ ᶠᶠmat),
         input_fields = (ᶠᶠmat,),
         ref_set_result! = (_result, _ᶠᶠmat) -> mul!(_result, _ᶠᶠmat, _ᶠᶠmat),
     )
-    GC.gc()
+    @time "gc 5" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 6" test_field_broadcast_against_array_reference(;
         test_name = "quad-diagonal matrix times diagonal matrix",
         get_result = () -> (@. ᶠᶜmat ⋅ ᶜᶜmat),
         set_result! = result -> (@. result = ᶠᶜmat ⋅ ᶜᶜmat),
@@ -77,10 +77,10 @@ include("matrix_field_test_utils.jl")
         ref_set_result! = (_result, _ᶠᶜmat, _ᶜᶜmat) ->
             mul!(_result, _ᶠᶜmat, _ᶜᶜmat),
     )
-    GC.gc()
+    @time "gc 6" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 7" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times bi-diagonal matrix times \
                      tri-diagonal matrix times quad-diagonal matrix",
         get_result = () -> (@. ᶜᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶠmat ⋅ ᶠᶜmat),
@@ -102,10 +102,10 @@ include("matrix_field_test_utils.jl")
             mul!(_result, _temp2, _ᶠᶜmat)
         end,
     )
-    GC.gc()
+    @time "gc 7" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 8" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times bi-diagonal matrix times \
                      tri-diagonal matrix times quad-diagonal matrix, but with \
                      forced right-associativity",
@@ -129,10 +129,10 @@ include("matrix_field_test_utils.jl")
         end,
         test_broken_with_cuda = true, # TODO: Fix this.
     )
-    GC.gc()
+    @time "gc 8" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 9" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times bi-diagonal matrix times \
                      tri-diagonal matrix times quad-diagonal matrix times \
                      vector",
@@ -162,10 +162,10 @@ include("matrix_field_test_utils.jl")
             mul!(_result, _temp3, _ᶜvec)
         end,
     )
-    GC.gc()
+    @time "gc 9" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 10" test_field_broadcast_against_array_reference(;
         test_name = "diagonal matrix times bi-diagonal matrix times \
                      tri-diagonal matrix times quad-diagonal matrix times \
                      vector, but with forced right-associativity",
@@ -197,10 +197,10 @@ include("matrix_field_test_utils.jl")
         time_ratio_limit = 15, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
-    GC.gc()
+    @time "gc 10" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 11" test_field_broadcast_against_array_reference(;
         test_name = "linear combination of matrix products and LinearAlgebra.I",
         get_result = () ->
             (@. 2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)),
@@ -232,10 +232,10 @@ include("matrix_field_test_utils.jl")
             @. _result = _temp3 + _temp4 / 3 - _result
         end,
     )
-    GC.gc()
+    @time "gc 11" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 12" test_field_broadcast_against_array_reference(;
         test_name = "another linear combination of matrix products and \
                      LinearAlgebra.I",
         get_result = () ->
@@ -268,10 +268,10 @@ include("matrix_field_test_utils.jl")
             @. _result = _temp2 * 2 - _temp4 + _result
         end,
     )
-    GC.gc()
+    @time "gc 12" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 13" test_field_broadcast_against_array_reference(;
         test_name = "matrix times linear combination",
         get_result = () -> (@. ᶜᶠmat ⋅
             (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,))),
@@ -306,10 +306,10 @@ include("matrix_field_test_utils.jl")
             mul!(_result, _ᶜᶠmat, _temp5)
         end,
     )
-    GC.gc()
+    @time "gc 13" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 14" test_field_broadcast_against_array_reference(;
         test_name = "linear combination times another linear combination",
         get_result = () ->
             (@. (2 * ᶠᶜmat ⋅ ᶜᶜmat ⋅ ᶜᶠmat + ᶠᶠmat ⋅ ᶠᶠmat / 3 - (4I,)) ⋅
@@ -363,10 +363,10 @@ include("matrix_field_test_utils.jl")
         end,
         max_eps_error_limit = 30, # This case's roundoff error is large on GPUs.
     )
-    GC.gc()
+    @time "gc 14" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 15" test_field_broadcast_against_array_reference(;
         test_name = "matrix times matrix times linear combination times matrix \
                      times another linear combination times matrix",
         get_result = () -> (@. ᶠᶜmat ⋅ ᶜᶠmat ⋅
@@ -444,10 +444,10 @@ include("matrix_field_test_utils.jl")
         end,
         max_eps_error_limit = 70, # This case's roundoff error is large on GPUs.
     )
-    GC.gc()
+    @time "gc 15" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast_against_array_reference(;
+    @time "tfbaar 16" test_field_broadcast_against_array_reference(;
         test_name = "matrix constructions and multiplications",
         get_result = () ->
             (@. BidiagonalMatrixRow(ᶜᶠmat ⋅ ᶠvec, ᶜᶜmat ⋅ ᶜvec) ⋅
@@ -495,11 +495,11 @@ include("matrix_field_test_utils.jl")
             mul!(_result, _temp4, _temp6)
         end,
     )
-    GC.gc()
+    @time "gc 16" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 end
 
-GC.gc();
+@time "gc 17" GC.gc();
 @info "mem usage" rss = Sys.maxrss() / 2^30;
 
 @testset "Non-scalar Matrix Field Broadcasting" begin
@@ -531,10 +531,10 @@ GC.gc();
         ᶠᶜmat2,
         ᶠᶜmat3,
     )
-    GC.gc()
+    @time "gc 18" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast(;
+    @time "tfb 1" test_field_broadcast(;
         test_name = "matrix of covectors times matrix of vectors",
         get_result = () -> (@. ᶜᶠmat_AC1 ⋅ ᶠᶜmat_C12),
         set_result! = result -> (@. result = ᶜᶠmat_AC1 ⋅ ᶠᶜmat_C12),
@@ -544,10 +544,10 @@ GC.gc();
                 DiagonalMatrixRow(ᶠlg.gⁱʲ.components.data.:2) ⋅ ᶠᶜmat3
             )),
     )
-    GC.gc()
+    @time "gc 19" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
-    test_field_broadcast(;
+    @time "tfb 2" test_field_broadcast(;
         test_name = "matrix of covectors times matrix of vectors times matrix \
                      of numbers times matrix of covectors times matrix of \
                      vectors",
@@ -564,7 +564,7 @@ GC.gc();
                 DiagonalMatrixRow(ᶜlg.gⁱʲ.components.data.:2) ⋅ ᶜᶠmat3
             )),
     )
-    GC.gc()
+    @time "gc 20" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
     ᶜᶠmat_AC1_num =
@@ -574,9 +574,9 @@ GC.gc();
     ᶠᶜmat_C12_AC1 =
         map((row1, row2) -> map(tuple, row1, row2), ᶠᶜmat_C12, ᶠᶜmat_AC1)
 
-    GC.gc()
+    @time "gc 21" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
-    test_field_broadcast(;
+    @time "tfb 3" test_field_broadcast(;
         test_name = "matrix of covectors and numbers times matrix of vectors \
                      and covectors times matrix of numbers and vectors times \
                      vector of numbers",
@@ -595,7 +595,7 @@ GC.gc();
             ) ⋅ ᶠvec,
         )),
     )
-    GC.gc()
+    @time "gc 22" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 
     ᶜvec_NT = @. nested_type(ᶜvec, ᶜvec, ᶜvec)
@@ -604,9 +604,9 @@ GC.gc();
     ᶠᶜmat_NT =
         map((rows...) -> map(nested_type, rows...), ᶠᶜmat, ᶠᶜmat2, ᶠᶜmat3)
 
-    GC.gc()
+    @time "gc 23" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
-    test_field_broadcast(;
+    @time "tfb 4" test_field_broadcast(;
         test_name = "matrix of nested values times matrix of nested values \
                      times matrix of numbers times matrix of numbers times \
                      vector of nested values",
@@ -619,9 +619,9 @@ GC.gc();
             ᶜᶠmat3 ⋅ ᶠᶜmat ⋅ ᶜᶠmat ⋅ ᶠᶜmat3 ⋅ ᶜvec,
         )),
     )
-    GC.gc()
+    @time "gc 24" GC.gc()
     @info "mem usage" rss = Sys.maxrss() / 2^30
 end
 
-GC.gc();
+@time "gc 25" GC.gc();
 @info "mem usage" rss = Sys.maxrss() / 2^30;
