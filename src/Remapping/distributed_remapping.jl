@@ -362,20 +362,19 @@ function set_interpolated_values_cpu_kernel!(
 
     # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
     # this because multiple target points might be all contained in the same element.
-    prev_v_lo, prev_v_hi, prev_lidx = -1, -1, -1
+    prev_vindex, prev_lidx = -1, -1
     @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
         (v_lo, v_hi) = vert_bounding_indices[vindex]
-
         for (out_index, h) in enumerate(local_horiz_indices)
             # If we are no longer in the same element, read the field values again
-            if prev_lidx != h || v_lo != prev_v_lo || v_hi != prev_v_hi
+            if prev_lidx != h || prev_vindex != vindex
                 for j in 1:Nq, i in 1:Nq
                     scratch_field_values[i, j] = (
                         A * field_values[i, j, nothing, v_lo, h] +
                         B * field_values[i, j, nothing, v_hi, h]
                     )
                 end
-                prev_v_lo, prev_v_hi, prev_lidx = v_lo, v_hi, h
+                prev_vindex, prev_lidx = vindex, h
             end
 
             tmp = zero(FT)
@@ -475,20 +474,20 @@ function set_interpolated_values_cpu_kernel!(
 
     # Reading values from field_values is expensive, so we try to limit the number of reads. We can do
     # this because multiple target points might be all contained in the same element.
-    prev_v_lo, prev_v_hi, prev_lidx = -1, -1, -1
+    prev_vindex, prev_lidx = -1, -1
     @inbounds for (vindex, (A, B)) in enumerate(vert_interpolation_weights)
         (v_lo, v_hi) = vert_bounding_indices[vindex]
 
         for (out_index, h) in enumerate(local_horiz_indices)
             # If we are no longer in the same element, read the field values again
-            if prev_lidx != h || v_lo != prev_v_lo || v_hi != prev_v_hi
+            if prev_lidx != h || prev_vindex != vindex
                 for i in 1:Nq
                     scratch_field_values[i] = (
                         A * field_values[i, nothing, nothing, v_lo, h] +
                         B * field_values[i, nothing, nothing, v_hi, h]
                     )
                 end
-                prev_v_lo, prev_v_hi, prev_lidx = v_lo, v_hi, h
+                prev_vindex, prev_lidx = vindex, h
             end
 
             tmp = zero(FT)
