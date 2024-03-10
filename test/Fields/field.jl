@@ -1,4 +1,5 @@
 #=
+julia --check-bounds=yes --project=test
 julia --project=test
 using Revise; include(joinpath("test", "Fields", "field.jl"))
 =#
@@ -915,3 +916,7 @@ end
     end
     nothing
 end
+
+include("field_multi_broadcast_fusion.jl")
+
+nothing
