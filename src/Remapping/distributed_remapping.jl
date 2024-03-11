@@ -715,17 +715,19 @@ function _collect_interpolated_values!(dest, remapper::Remapper)
 end
 
 """
-   interpolate(remapper, field)
-   interpolate!(dest, remapper, field)
+   interpolate(remapper::Remapper, field)
+   interpolate!(dest, remapper::Remapper, field)
 
 Interpolate the given `field` as prescribed by `remapper`.
 
 This call mutates the internal (private) state of the `remapper`.
 
 Horizontally, interpolation is performed with the barycentric formula in
-[Berrut2004](@cite), equation 3.2. Vertical interpolation is linear.
+[Berrut2004](@cite), equation (3.2). Vertical interpolation is linear except
+in the boundary elements where it is 0th order.
 
-`interpolate!` writes the output to the given `dest`iniation.
+`interpolate!` writes the output to the given `dest`iniation. `dest` is expected
+to be defined on the root process and to be `nothing` for the other processes.
 
 Note: `interpolate` allocates new arrays and has some internal type-instability,
 `interpolate!` is non-allocating and type-stable.
@@ -770,7 +772,7 @@ function interpolate(remapper::Remapper, field::T) where {T <: Fields.Field}
 end
 
 function interpolate!(
-    dest::AbstractArray,
+    dest::Union{Nothing, <:AbstractArray},
     remapper::Remapper,
     field::T,
 ) where {T <: Fields.Field}
@@ -778,9 +780,13 @@ function interpolate!(
     axes(field) == remapper.space ||
         error("Field is defined on a different space than remapper")
 
-    size(dest) == size(remapper._interpolated_values) || error(
-        "Destination array is not compatible with remapper (size mismatch)",
-    )
+    if !isnothing(dest)
+        # !isnothing(dest) means that this is the root process, in this case, the size have
+        # to match
+        size(dest) == size(remapper._interpolated_values) || error(
+            "Destination array is not compatible with remapper (size mismatch)",
+        )
+    end
 
     # Reset interpolated_values. This is needed because we collect distributed results with
     # a + reduction.

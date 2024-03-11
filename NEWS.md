@@ -1,6 +1,16 @@
 ClimaCore.jl Release Notes
 ========================
 
+v0.13.1
+-------
+
+- ![][badge-🐛bugfix] fixed edge case in interpolation that led to incorrect
+  vertical interpolation.
+  PR [#1640](https://github.com/CliMA/ClimaCore.jl/pull/1640).
+- ![][badge-🐛bugfix] fixed `interpolate!` for MPI runs.
+  PR [#1642](https://github.com/CliMA/ClimaCore.jl/pull/1642).
+
+
 v0.13.0
 -------
 - ![][badge-💥breaking] support for many deprecated methods have been dropped PR [#1632](https://github.com/CliMA/ClimaCore.jl/pull/1632).
