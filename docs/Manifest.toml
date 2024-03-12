@@ -5,9 +5,9 @@ manifest_format = "2.0"
 project_hash = "a9e7da8d14118b90a27a77ee28e92d1859dce87f"
 
 [[deps.ADTypes]]
-git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
+git-tree-sha1 = "016833eb52ba2d6bea9fcb50ca295980e728ee24"
 uuid = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
-version = "0.2.6"
+version = "0.2.7"
 
 [[deps.ANSIColoredPrinters]]
 git-tree-sha1 = "574baf8110975760d391c710b6341da1afa48d8c"
@@ -288,7 +288,7 @@ version = "0.5.7"
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "CUDA", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "Static", "StaticArrays", "Statistics", "Unrolled"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.13.1"
+version = "0.13.2"
 weakdeps = ["Krylov"]
 
     [deps.ClimaCore.extensions]
@@ -420,9 +420,9 @@ version = "0.2.3"
 
 [[deps.ConcurrentUtilities]]
 deps = ["Serialization", "Sockets"]
-git-tree-sha1 = "9c4708e3ed2b799e6124b5673a712dda0b596a9b"
+git-tree-sha1 = "6cbbd4d241d7e6579ab354737f4dd95ca43946e1"
 uuid = "f0e56b4a-5159-44fe-b623-3e5288b988bb"
-version = "2.3.1"
+version = "2.4.1"
 
 [[deps.ConstructionBase]]
 deps = ["LinearAlgebra"]
