@@ -679,23 +679,6 @@ interpolated data.
 `_collect_and_return_interpolated_values!` is type-unstable and allocates new return arrays.
 """
 function _collect_and_return_interpolated_values!(remapper::Remapper)
-    return _collect_and_return_interpolated_values!(
-        remapper::Remapper,
-        ClimaComms.device(remapper.comms_ctx),
-    )
-end
-
-function _collect_and_return_interpolated_values!(
-    remapper::Remapper,
-    ::ClimaComms.AbstractCPUDevice,
-)
-    ClimaComms.reduce(remapper.comms_ctx, remapper._interpolated_values, +)
-end
-
-function _collect_and_return_interpolated_values!(
-    remapper::Remapper,
-    ::ClimaComms.CUDADevice,
-)
     ClimaComms.reduce!(remapper.comms_ctx, remapper._interpolated_values, +)
     return ClimaComms.iamroot(remapper.comms_ctx) ?
            Array(remapper._interpolated_values) : nothing
