@@ -1,6 +1,12 @@
 ClimaCore.jl Release Notes
 ========================
 
+v0.13.2
+-------
+
+- ![][badge-🐛bugfix] fixed array allocation for interpolation on CPU.
+  PR [#1643](https://github.com/CliMA/ClimaCore.jl/pull/1643).
+
 v0.13.1
 -------
 
