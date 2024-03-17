@@ -308,7 +308,7 @@ function copyto_spectral_kernel!(
         # v may potentially be out-of-range: any time memory is accessed, it
         # should be checked by a call to is_valid_index(space, ij, slabidx)
 
-        # resolve_shmem! needs to be called even when out of range, so that 
+        # resolve_shmem! needs to be called even when out of range, so that
         # sync_threads() is invoked collectively
         resolve_shmem!(sbc_shmem, ij, slabidx)
 
@@ -324,7 +324,7 @@ end
 """
     reconstruct_placeholder_broadcasted(space, obj)
 
-Recurively reconstructs objects that have been stripped via `strip_space`.
+Recursively reconstructs objects that have been stripped via `strip_space`.
 """
 @inline reconstruct_placeholder_broadcasted(parent_space, obj) = obj
 @inline function reconstruct_placeholder_broadcasted(

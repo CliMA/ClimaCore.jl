@@ -1,3 +1,4 @@
+import ..CUDAUtils: auto_launch!
 
 _max_threads_cuda() = 256
 
@@ -18,14 +19,8 @@ function dss_load_perimeter_data!(
 ) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nitems = nlevels * nperimeter * nfid * nelems
-    nthreads, nblocks = _configure_threadblock(nitems)
-    CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_load_perimeter_data_kernel!(
-        pperimeter_data,
-        pdata,
-        perimeter,
-    )
+    args = (pperimeter_data, pdata, perimeter)
+    auto_launch!(dss_load_perimeter_data_kernel!, args, length(pdata))
     return nothing
 end
 
@@ -55,14 +50,8 @@ function dss_unload_perimeter_data!(
 ) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nitems = nlevels * nperimeter * nfid * nelems
-    nthreads, nblocks = _configure_threadblock(nitems)
-    CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_unload_perimeter_data_kernel!(
-        pdata,
-        pperimeter_data,
-        perimeter,
-    )
+    args = (pdata, pperimeter_data, perimeter)
+    auto_launch!(dss_unload_perimeter_data_kernel!, args, length(pdata))
     return nothing
 end
 
@@ -94,17 +83,14 @@ function dss_local!(
     nlocalfaces = length(topology.interior_faces)
     if (nlocalvertices + nlocalfaces) > 0
         pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-
-        nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_local_kernel!(
+        args = (
             pperimeter_data,
             topology.local_vertices,
             topology.local_vertex_offset,
             topology.interior_faces,
             perimeter,
         )
+        auto_launch!(dss_local_kernel!, args, length(pperimeter_data))
     end
     return nothing
 end
@@ -181,10 +167,7 @@ function dss_transform!(
         p∂ξ∂x = parent(∂ξ∂x)
         pperimeter_data = parent(perimeter_data)
         nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
-        (nlevels, nperimeter, _, _) = size(pperimeter_data)
-        nitems = nlevels * nperimeter * nlocalelems
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_transform_kernel!(
+        args = (
             pperimeter_data,
             pdata,
             p∂ξ∂x,
@@ -197,6 +180,7 @@ function dss_transform!(
             contravariant12fidx,
             localelems,
         )
+        auto_launch!(dss_transform_kernel!, args, length(pdata))
     end
     return nothing
 end
@@ -287,10 +271,7 @@ function dss_untransform!(
         p∂ξ∂x = parent(∂ξ∂x)
         nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
         pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, _, _) = size(pperimeter_data)
-        nitems = nlevels * nperimeter * nlocalelems
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_untransform_kernel!(
+        args = (
             pperimeter_data,
             pdata,
             p∂ξ∂x,
@@ -302,6 +283,7 @@ function dss_untransform!(
             contravariant12fidx,
             localelems,
         )
+        auto_launch!(dss_untransform_kernel!, args, length(pdata))
     end
     return nothing
 end
@@ -372,16 +354,13 @@ function dss_local_ghost!(
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-        max_threads = 256
-        nitems = nlevels * nfid * nghostvertices
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_local_ghost_kernel!(
+        args = (
             pperimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
             perimeter,
         )
+        auto_launch!(dss_local_ghost_kernel!, args, length(pperimeter_data))
     end
     return nothing
 end
@@ -425,17 +404,11 @@ function fill_send_buffer!(
     synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
-    pperimeter_data = parent(perimeter_data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nsend = size(send_buf_idx, 1)
     if nsend > 0
-        nitems = nsend * nlevels * nfid
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) fill_send_buffer_kernel!(
-            send_data,
-            send_buf_idx,
-            pperimeter_data,
-        )
+        pperimeter_data = parent(perimeter_data)
+        args = (send_data, send_buf_idx, pperimeter_data)
+        auto_launch!(fill_send_buffer_kernel!, args, length(pperimeter_data))
         if synchronize
             CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
         end
@@ -467,16 +440,14 @@ end
 
 function load_from_recv_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
-    pperimeter_data = parent(perimeter_data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
     nrecv = size(recv_buf_idx, 1)
     if nrecv > 0
-        nitems = nrecv * nlevels * nfid
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) load_from_recv_buffer_kernel!(
-            pperimeter_data,
-            recv_data,
-            recv_buf_idx,
+        pperimeter_data = parent(perimeter_data)
+        args = (pperimeter_data, recv_data, recv_buf_idx)
+        auto_launch!(
+            load_from_recv_buffer_kernel!,
+            args,
+            length(pperimeter_data),
         )
     end
     return nothing
@@ -514,16 +485,14 @@ function dss_ghost!(
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
         pperimeter_data = parent(perimeter_data)
-        nlevels, _, nfidx, _ = size(pperimeter_data)
-        nitems = nlevels * nfidx * nghostvertices
-        nthreads, nblocks = _configure_threadblock(nitems)
-        CUDA.@cuda threads = (nthreads) blocks = (nblocks) dss_ghost_kernel!(
+        args = (
             pperimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
             topology.repr_ghost_vertex,
             perimeter,
         )
+        auto_launch!(dss_ghost_kernel!, args, length(pperimeter_data))
     end
     return nothing
 end

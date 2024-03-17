@@ -1,3 +1,4 @@
+import ..CUDAUtils: auto_launch!
 using CUDA
 import ClimaComms
 import CUDA
@@ -104,9 +105,8 @@ function compute_element_bounds!(
 )
     S = size(Fields.field_values(ρ))
     (Ni, Nj, _, Nv, Nh) = S
-    nthreads, nblocks = config_threadblock(Nv, Nh)
 
-    CUDA.@cuda threads = nthreads blocks = nblocks compute_element_bounds_kernel!(
+    args = (
         limiter,
         Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
         Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
@@ -115,14 +115,12 @@ function compute_element_bounds!(
         Val(Ni),
         Val(Nj),
     )
+    auto_launch!(
+        compute_element_bounds_kernel!,
+        args,
+        length(parent(Fields.field_values(ρ))),
+    )
     return nothing
-end
-
-function config_threadblock(Nv, Nh)
-    nitems = Nv * Nh
-    nthreads = min(256, nitems)
-    nblocks = cld(nitems, nthreads)
-    return (nthreads, nblocks)
 end
 
 function get_hv(Nv, Nh, blockIdx, threadIdx, blockDim, gridDim)
@@ -220,8 +218,7 @@ function compute_neighbor_bounds_local!(
 )
     topology = Spaces.topology(axes(ρ))
     Ni, Nj, _, Nv, Nh = size(Fields.field_values(ρ))
-    nthreads, nblocks = config_threadblock(Nv, Nh)
-    CUDA.@cuda threads = nthreads blocks = nblocks compute_neighbor_bounds_local_kernel!(
+    args = (
         limiter,
         topology.local_neighbor_elem,
         topology.local_neighbor_elem_offset,
@@ -229,6 +226,11 @@ function compute_neighbor_bounds_local!(
         Nh,
         Val(Ni),
         Val(Nj),
+    )
+    auto_launch!(
+        compute_neighbor_bounds_local_kernel!,
+        args,
+        length(parent(Fields.field_values(ρ))),
     )
 end
 
@@ -387,8 +389,7 @@ function apply_limiter!(
     Nf = DataLayouts.ncomponents(ρq_data)
     maxiter = Ni * Nj
     WJ = Spaces.local_geometry_data(axes(ρq)).WJ
-    nthreads, nblocks = config_threadblock(Nv, Nh)
-    CUDA.@cuda threads = nthreads blocks = nblocks apply_limiter_kernel!(
+    args = (
         limiter,
         Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
         Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
@@ -399,6 +400,11 @@ function apply_limiter!(
         Val(Ni),
         Val(Nj),
         Val(maxiter),
+    )
+    auto_launch!(
+        apply_limiter_kernel!,
+        args,
+        length(parent(Fields.field_values(ρ))),
     )
     return nothing
 end

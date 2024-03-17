@@ -27,3 +27,16 @@ struct DeviceSideContext <: ClimaComms.AbstractCommsContext end
 
 ClimaComms.context(::DeviceSideDevice) = DeviceSideContext()
 ClimaComms.device(::DeviceSideContext) = DeviceSideDevice()
+
+module CUDAUtils
+
+import CUDA
+function auto_launch!(f!::F!, args, N) where {F!}
+    kernel = CUDA.@cuda launch = false f!(args...)
+    config = CUDA.launch_configuration(kernel.fun)
+    threads = min(N, config.threads)
+    blocks = cld(N, threads)
+    @cuda always_inline = true threads = threads blocks = blocks f!(args...)
+end
+
+end # module

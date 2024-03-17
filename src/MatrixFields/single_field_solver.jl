@@ -1,3 +1,4 @@
+import ..CUDAUtils: auto_launch!
 dual_type(::Type{A}) where {A} = typeof(Geometry.dual(A.instance))
 
 inv_return_type(::Type{X}) where {X} = error(
@@ -49,13 +50,11 @@ single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
 single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(cache, x, A, b)
 function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    CUDA.@cuda threads = nthreads blocks = nblocks single_field_solve_kernel!(
-        cache,
-        x,
-        A,
-        b,
+    args = (cache, x, A, b)
+    auto_launch!(
+        single_field_solve_kernel!,
+        args,
+        length(parent(Fields.field_values(x))),
     )
 end
 

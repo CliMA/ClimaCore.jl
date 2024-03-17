@@ -1,4 +1,5 @@
 import ..Utilities: PlusHalf, half
+import ..CUDAUtils: auto_launch!
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
@@ -3360,10 +3361,7 @@ function Base.copyto!(
     end
     (li, lw, rw, ri) = bounds = window_bounds(space, bc)
     Nv = ri - li + 1
-    max_threads = 256
-    nitems = Nv * Nq * Nq * Nh # # of independent items
-    (nthreads, nblocks) = Topologies._configure_threadblock(max_threads, nitems)
-    @cuda always_inline = true threads = (nthreads,) blocks = (nblocks,) copyto_stencil_kernel!(
+    args = (
         strip_space(out, space),
         strip_space(bc, space),
         axes(out),
@@ -3371,6 +3369,11 @@ function Base.copyto!(
         Nq,
         Nh,
         Nv,
+    )
+    auto_launch!(
+        copyto_stencil_kernel!,
+        args,
+        length(parent(Fields.field_values(out))),
     )
     return out
 end

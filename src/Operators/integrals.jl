@@ -1,3 +1,4 @@
+import ..CUDAUtils: auto_launch!
 import ..RecursiveApply: rzero, ⊠, ⊞, radd, rmul
 import ..Utilities
 import ..DataLayouts
@@ -23,9 +24,11 @@ function column_integral_definite!(
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks column_integral_definite_kernel!(
-        strip_space(∫field, space),
-        strip_space(ᶜfield, space),
+    args = (strip_space(∫field, space), strip_space(ᶜfield, space))
+    auto_launch!(
+        column_integral_definite_kernel!,
+        args,
+        length(parent(Fields.field_values(∫field))),
     )
 end
 
@@ -112,11 +115,11 @@ function column_integral_indefinite!(
     ᶠ∫field::Fields.Field,
     ᶜfield::Fields.Field,
 )
-    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
-        ᶠ∫field,
-        ᶜfield,
+    args = (ᶠ∫field, ᶜfield)
+    auto_launch!(
+        column_integral_indefinite_kernel!,
+        args,
+        length(parent(Fields.field_values(ᶠ∫field))),
     )
 end
 
@@ -288,20 +291,23 @@ function column_mapreduce_device!(
     reduced_field::Fields.Field,
     fields::Fields.Field...,
 ) where {F, O}
-    Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
     kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
         column_mapreduce_kernel_extruded!
     else
         column_mapreduce_kernel!
     end
-    @cuda threads = nthreads blocks = nblocks kernel!(
+    args = (
         fn,
         op,
         # reduced_field,
         strip_space(reduced_field, axes(reduced_field)),
         # fields...,
         map(field -> strip_space(field, axes(field)), fields)...,
+    )
+    auto_launch!(
+        kernel!,
+        args,
+        length(parent(Fields.field_values(first(fields)))),
     )
 end
 

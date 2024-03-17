@@ -1,3 +1,4 @@
+import ..CUDAUtils: auto_launch!
 """
     column_thomas_solve!(A, b)
 
@@ -15,9 +16,12 @@ column_thomas_solve!(::ClimaComms.AbstractCPUDevice, A, b) =
     thomas_algorithm!(A, b)
 
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks thomas_algorithm_kernel!(A, b)
+    args = (A, b)
+    auto_launch!(
+        thomas_algorithm_kernel!,
+        args,
+        length(parent(Fields.field_values(b))),
+    )
 end
 
 function thomas_algorithm_kernel!(
