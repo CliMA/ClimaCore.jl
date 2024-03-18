@@ -23,7 +23,7 @@ function column_integral_definite!(
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks column_integral_definite_kernel!(
+    @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_definite_kernel!(
         strip_space(∫field, space),
         strip_space(ᶜfield, space),
     )
@@ -114,7 +114,7 @@ function column_integral_indefinite!(
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
+    @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
         ᶠ∫field,
         ᶜfield,
     )
@@ -295,7 +295,7 @@ function column_mapreduce_device!(
     else
         column_mapreduce_kernel!
     end
-    @cuda threads = nthreads blocks = nblocks kernel!(
+    @cuda always_inline = true threads = nthreads blocks = nblocks kernel!(
         fn,
         op,
         # reduced_field,

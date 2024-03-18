@@ -17,7 +17,10 @@ column_thomas_solve!(::ClimaComms.AbstractCPUDevice, A, b) =
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    @cuda threads = nthreads blocks = nblocks thomas_algorithm_kernel!(A, b)
+    @cuda always_inline = true threads = nthreads blocks = nblocks thomas_algorithm_kernel!(
+        A,
+        b,
+    )
 end
 
 function thomas_algorithm_kernel!(

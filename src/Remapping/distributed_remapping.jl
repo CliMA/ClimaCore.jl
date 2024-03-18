@@ -515,7 +515,7 @@ function _set_interpolated_values!(
     if ClimaComms.device(field) isa ClimaComms.CUDADevice
         nblocks, _ = size(interpolation_matrix[1])
         nthreads = length(vert_interpolation_weights)
-        @cuda threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
+        @cuda always_inline = true threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
             out,
             interpolation_matrix,
             local_horiz_indices,
@@ -559,7 +559,7 @@ function _set_interpolated_values!(
     if ClimaComms.device(space) isa ClimaComms.CUDADevice
         nitems = length(out)
         nthreads, nblocks = Topologies._configure_threadblock(nitems)
-        @cuda threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
+        @cuda always_inline = true threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
             out,
             local_horiz_interpolation_weights,
             local_horiz_indices,

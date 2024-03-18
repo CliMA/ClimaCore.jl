@@ -51,7 +51,7 @@ single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
 function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
-    CUDA.@cuda threads = nthreads blocks = nblocks single_field_solve_kernel!(
+    CUDA.@cuda always_inline = true threads = nthreads blocks = nblocks single_field_solve_kernel!(
         cache,
         x,
         A,
