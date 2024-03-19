@@ -2,7 +2,14 @@ module Fields
 
 import ClimaComms
 import ..slab, ..slab_args, ..column, ..column_args, ..level
-import ..DataLayouts: DataLayouts, AbstractData, DataStyle
+import ..DataLayouts:
+    DataLayouts,
+    AbstractData,
+    DataStyle,
+    FusedMultiBroadcast,
+    @fused,
+    isascalar,
+    check_fused_broadcast_axes
 import ..Domains
 import ..Topologies
 import ..Quadratures
