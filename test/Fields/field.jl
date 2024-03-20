@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Fields", "field.jl"))
+=#
 using Test
 using JET
 
@@ -105,6 +109,27 @@ end
 
     point_field = Fields.column(field, 1, 1, 1)
     @test axes(point_field) isa Spaces.PointSpace
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/1650
+@testset "mapreduce inside broadcast expression" begin
+    dev = ClimaComms.device()
+    context = ClimaComms.context(dev)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
+    c = fill(
+        (
+            ∑ab = Float32(0),
+            a = ntuple(i -> Float32(1), 3),
+            b = ntuple(i -> Float32(2), 3),
+        ),
+        cspace,
+    )
+
+    @test begin
+        @. c.∑ab = mapreduce(*, +, c.a, c.b)
+        true
+    end broken = dev isa ClimaComms.CUDADevice
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1126
