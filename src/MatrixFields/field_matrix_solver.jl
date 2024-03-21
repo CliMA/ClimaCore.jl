@@ -248,9 +248,13 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
 end
 
 run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
-    foreach(matrix_row_keys(keys(A))) do name
-        single_field_solve!(cache[name], x[name], A[name, name], b[name])
-    end
+    multiple_field_solve!(cache, x, A, b)
+
+# This may be helpful for debugging:
+# run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+#     foreach(matrix_row_keys(keys(A))) do name
+#         single_field_solve!(cache[name], x[name], A[name, name], b[name])
+#     end
 
 """
     BlockLowerTriangularSolve(names₁...; [alg₁], [alg₂])

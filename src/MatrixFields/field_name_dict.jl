@@ -88,6 +88,22 @@ function Base.show(io::IO, dict::FieldNameDict)
     end
 end
 
+function Operators.strip_space(dict::FieldNameDict)
+    vals = unrolled_map(values(dict)) do val
+        if val isa Fields.Field
+            Fields.Field(Fields.field_values(val), Operators.PlaceholderSpace())
+        else
+            val
+        end
+    end
+    FieldNameDict(keys(dict), vals)
+end
+
+function Adapt.adapt_structure(to, dict::FieldNameDict)
+    vals = unrolled_map(v -> Adapt.adapt_structure(to, v), values(dict))
+    FieldNameDict(keys(dict), vals)
+end
+
 Base.keys(dict::FieldNameDict) = dict.keys
 
 Base.values(dict::FieldNameDict) = dict.entries

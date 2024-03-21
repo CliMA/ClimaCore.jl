@@ -47,11 +47,17 @@ single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
     single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
 
 single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
-    _single_field_solve!(cache, x, A, b)
+    _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+
+# single_field_solve!(::ClimaComms.CUDADevice, ...) is no longer exercised,
+# but it may be helpful for debugging, due to its simplicity. So, let's leave
+# it here for now.
 function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
+    device = ClimaComms.device(A)
     CUDA.@cuda always_inline = true threads = nthreads blocks = nblocks single_field_solve_kernel!(
+        device,
         cache,
         x,
         A,
@@ -59,12 +65,13 @@ function single_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b)
     )
 end
 
-function single_field_solve_kernel!(cache, x, A, b)
+function single_field_solve_kernel!(device, cache, x, A, b)
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
         i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
         _single_field_solve!(
+            device,
             Spaces.column(cache, i, j, h),
             Spaces.column(x, i, j, h),
             Spaces.column(A, i, j, h),
@@ -80,22 +87,103 @@ single_field_solve_kernel!(
     b::Fields.ColumnField,
 ) = _single_field_solve!(cache, x, A, b)
 
-_single_field_solve!(cache, x, A, b) =
+# CPU (GPU has already called Spaces.column on arg)
+_single_field_solve!(device::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     Fields.bycolumn(axes(A)) do colidx
-        _single_field_solve!(cache[colidx], x[colidx], A[colidx], b[colidx])
+        _single_field_solve_col!(
+            ClimaComms.device(axes(A)),
+            cache[colidx],
+            x[colidx],
+            A[colidx],
+            b[colidx],
+        )
     end
+
+function _single_field_solve_col!(
+    ::ClimaComms.AbstractCPUDevice,
+    cache::Fields.ColumnField,
+    x::Fields.ColumnField,
+    A,
+    b::Fields.ColumnField,
+)
+    if A isa Fields.ColumnField
+        band_matrix_solve!(
+            eltype(A),
+            unzip_tuple_field_values(Fields.field_values(cache)),
+            Fields.field_values(x),
+            unzip_tuple_field_values(Fields.field_values(A.entries)),
+            Fields.field_values(b),
+        )
+    elseif A isa UniformScaling
+        x .= inv(A.λ) .* b
+    else
+        error("uncaught case")
+    end
+end
+
+# called by TuplesOfNTuples.jl's `inner_dispatch`:
+# which requires a particular argument order:
 _single_field_solve!(
+    cache::Fields.Field,
+    x::Fields.Field,
+    A::Union{Fields.Field, UniformScaling},
+    b::Fields.Field,
+    dev::ClimaComms.CUDADevice,
+) = _single_field_solve!(dev, cache, x, A, b)
+
+_single_field_solve!(
+    cache::Fields.Field,
+    x::Fields.Field,
+    A::Union{Fields.Field, UniformScaling},
+    b::Fields.Field,
+    dev::ClimaComms.AbstractCPUDevice,
+) = _single_field_solve_col!(dev, cache, x, A, b)
+
+function _single_field_solve!(
+    ::ClimaComms.CUDADevice,
     cache::Fields.ColumnField,
     x::Fields.ColumnField,
     A::Fields.ColumnField,
     b::Fields.ColumnField,
-) = band_matrix_solve!(
-    eltype(A),
-    unzip_tuple_field_values(Fields.field_values(cache)),
-    Fields.field_values(x),
-    unzip_tuple_field_values(Fields.field_values(A.entries)),
-    Fields.field_values(b),
 )
+    band_matrix_solve!(
+        eltype(A),
+        unzip_tuple_field_values(Fields.field_values(cache)),
+        Fields.field_values(x),
+        unzip_tuple_field_values(Fields.field_values(A.entries)),
+        Fields.field_values(b),
+    )
+end
+
+function _single_field_solve!(
+    ::ClimaComms.CUDADevice,
+    cache::Fields.ColumnField,
+    x::Fields.ColumnField,
+    A::UniformScaling,
+    b::Fields.ColumnField,
+)
+    x_data = Fields.field_values(x)
+    b_data = Fields.field_values(b)
+    n = length(x_data)
+    @inbounds for i in 1:n
+        x_data[i] = inv(A.λ) ⊠ b_data[i]
+    end
+end
+
+function _single_field_solve!(
+    ::ClimaComms.CUDADevice,
+    cache::Fields.PointDataField,
+    x::Fields.PointDataField,
+    A::UniformScaling,
+    b::Fields.PointDataField,
+)
+    x_data = Fields.field_values(x)
+    b_data = Fields.field_values(b)
+    n = length(x_data)
+    @inbounds begin
+        x_data[] = inv(A.λ) ⊠ b_data[]
+    end
+end
 
 unzip_tuple_field_values(data) =
     ntuple(i -> data.:($i), Val(length(propertynames(data))))
