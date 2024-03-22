@@ -1,6 +1,11 @@
 ClimaCore.jl Release Notes
 ========================
 
+v0.13.3
+-------
+
+- ![][badge-🚀performance] We now always inline for all ClimaCore kernels. PR [#1647](https://github.com/CliMA/ClimaCore.jl/pull/1647). This can result in more brittle inference (due to compiler heuristics). Technically, this is not a breaking change, but some code changes may be needed in practice.
+
 v0.13.2
 -------
 

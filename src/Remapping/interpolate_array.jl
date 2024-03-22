@@ -89,7 +89,7 @@ function interpolate_slab!(
     nitems = length(output_array)
     nthreads, nblocks = Topologies._configure_threadblock(nitems)
 
-    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
+    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
         output_cuarray,
         field,
         cuslab_indices,
@@ -332,7 +332,7 @@ function interpolate_slab_level!(
 
     nitems = length(vidx_ref_coordinates)
     nthreads, nblocks = Topologies._configure_threadblock(nitems)
-    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
+    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
         output_cuarray,
         field,
         cuvidx_ref_coordinates,
