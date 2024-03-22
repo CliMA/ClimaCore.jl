@@ -46,7 +46,8 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
 )
     v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
+        Spaces.nlevels(space) ≠ length(space) && error("debug")
     end
     i, j, h = hidx
     local_geom =
@@ -60,7 +61,8 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
 )
     v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
+        Spaces.nlevels(space) ≠ length(space) && error("debug")
     end
     i, j, h = hidx
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
@@ -3109,7 +3111,8 @@ function vidx(space::AllFaceFiniteDifferenceSpace, idx)
     @assert idx isa PlusHalf
     v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
+        Spaces.nlevels(space) ≠ length(space) && error("debug")
     end
     return v
 end
@@ -3117,7 +3120,8 @@ function vidx(space::AllCenterFiniteDifferenceSpace, idx)
     @assert idx isa Integer
     v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
+        Spaces.nlevels(space) ≠ length(space) && error("debug")
     end
     return v
 end
@@ -3416,7 +3420,8 @@ end
 function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         li = lw = left_idx(space)
-        ri = rw = left_idx(space) + length(space) - 1
+        ri = rw = right_idx(space)
+        ri ≠ left_idx(space) + length(space) - 1 && error("debug")
     else
         lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
         rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()
