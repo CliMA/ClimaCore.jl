@@ -174,7 +174,7 @@ end
 
 @testset "Broadcasting ifelse" begin
     FT = Float32
-    device = ClimaComms.CPUSingleThreaded() # broken on gpu
+    device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     for space in (
         TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
