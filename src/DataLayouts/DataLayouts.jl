@@ -189,6 +189,7 @@ function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 2) == Nij
     @assert size(array, 3) == Nk
     check_basetype(T, S)
+    @assert size(array, 4) == typesize(T, S)
     IJKFVH{S, Nij, Nk, typeof(array)}(array)
 end
 
@@ -255,6 +256,7 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     check_basetype(T, S)
+    @assert size(array, 3) == typesize(T, S)
     IJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -410,6 +412,7 @@ end
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     IFH{S, Ni, typeof(array)}(array)
 end
 
@@ -662,6 +665,7 @@ end
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
+    @assert size(array, 3) == typesize(T, S)
     check_basetype(T, S)
     IJF{S, Nij, typeof(array)}(array)
 end
@@ -801,6 +805,7 @@ end
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
@@ -898,16 +903,19 @@ end
 
 function VF{S}(array::AbstractArray{T, 2}) where {S, T}
     check_basetype(T, S)
+    @assert size(array, 2) == typesize(T, S)
     VF{S, typeof(array)}(array)
 end
 
 function VF{S}(array::AbstractVector{T}) where {S, T}
+    check_basetype(T, S)
     @assert typesize(T, S) == 1
     VF{S}(reshape(array, (:, 1)))
 end
 
 function VF{S}(ArrayType, nelements) where {S}
     T = eltype(ArrayType)
+    check_basetype(T, S)
     VF{S}(ArrayType(undef, nelements, typesize(T, S)))
 end
 
@@ -1012,6 +1020,8 @@ end
 
 function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
     @assert size(array, 2) == size(array, 3) == Nij
+    check_basetype(T, S)
+    @assert size(array, 4) == typesize(T, S)
     VIJFH{S, Nij, typeof(array)}(array)
 end
 
@@ -1180,6 +1190,7 @@ end
 function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     @assert size(array, 2) == Ni
     check_basetype(T, S)
+    @assert size(array, 3) == typesize(T, S)
     VIFH{S, Ni, typeof(array)}(array)
 end
 
