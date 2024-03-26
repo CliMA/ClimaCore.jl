@@ -21,6 +21,8 @@ if !Sys.iswindows()
     @safetestset "DataLayouts 1dx" begin @time include("DataLayouts/data1dx.jl") end
     @safetestset "DataLayouts 2dx" begin @time include("DataLayouts/data2dx.jl") end
 
+    @safetestset "Domains" begin @time include("Domains/domains.jl") end
+
     @safetestset "Geometry" begin @time include("Geometry/geometry.jl") end
     @safetestset "AxisTensors" begin @time include("Geometry/axistensors.jl") end
 
