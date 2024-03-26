@@ -99,6 +99,7 @@ include("field_name.jl")
 include("field_name_set.jl")
 include("field_name_dict.jl")
 include("single_field_solver.jl")
+include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 
