@@ -30,7 +30,7 @@ hspace = Spaces.SpectralElementSpace1D(htopology, quad)
 vdomain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(-pi),
     Geometry.ZPoint{FT}(pi);
-    boundary_tags = (:bottom, :top),
+    boundary_names = (:bottom, :top),
 )
 vmesh = Meshes.IntervalMesh(vdomain, nelems = 16)
 vtopology =

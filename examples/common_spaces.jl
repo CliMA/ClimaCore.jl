@@ -66,7 +66,7 @@ function make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     z_mesh = Meshes.IntervalMesh(z_domain, z_stretch; nelems = z_elem)
     z_topology = Topologies.IntervalTopology(z_mesh)

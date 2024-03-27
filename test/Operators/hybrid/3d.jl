@@ -26,7 +26,7 @@ device = ClimaComms.device()
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
         Geometry.ZPoint{FT}(1.0);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
     verttopology = Topologies.IntervalTopology(
@@ -96,7 +96,7 @@ function hvspace_3D(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     verttopology = Topologies.IntervalTopology(

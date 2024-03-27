@@ -133,7 +133,7 @@ end
 @testset "Identity Operator" begin
     domain1D = Domains.IntervalDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
-        boundary_tags = (:left, :right),
+        boundary_names = (:left, :right),
     )
     domain2D = Domains.RectangleDomain(
         Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
@@ -157,7 +157,7 @@ end
         @testset "Aligned Intervals Different Resolutions" begin
             domain = Domains.IntervalDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
 
             source = make_space(domain, 1, 4)
@@ -182,8 +182,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(Spaces.local_geometry_data(source))
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -200,13 +199,13 @@ end
         @testset "Unaligned Intervals Same Resolution" begin
             domain1 = Domains.IntervalDomain(
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             source = make_space(domain1, 1, 3)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(0.0) .. Geometry.XPoint(2.0),
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             target = make_space(domain2, 1, 3)
 
@@ -227,13 +226,13 @@ end
         @testset "Concentric Domains of Different Length" begin
             domain1 = Domains.IntervalDomain(
                 Geometry.XPoint(-1.0) .. Geometry.XPoint(1.0),
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             source = make_space(domain1, 1, 4)
 
             domain2 = Domains.IntervalDomain(
                 Geometry.XPoint(-0.5) .. Geometry.XPoint(0.5),
-                boundary_tags = (:left, :right),
+                boundary_names = (:left, :right),
             )
             target = make_space(domain2, 1, 4)
 
@@ -253,8 +252,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(Spaces.local_geometry_data(source))
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -307,8 +305,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(Spaces.local_geometry_data(source))
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -382,8 +379,7 @@ end
 
             @testset "Scalar Remap Operator Application" begin
                 n = length(Spaces.local_geometry_data(source))
-                source_field =
-                    Fields.Field(IJFH{FT, 1}(ones(1, 1, n, 1)), source)
+                source_field = Fields.ones(source)
 
                 # test consistent remap
                 target_field = remap(R, source_field)
@@ -404,7 +400,7 @@ end
     @testset "1D Domains" begin
         domain = Domains.IntervalDomain(
             Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
 
         @testset "Single aligned elements" begin
@@ -511,7 +507,7 @@ end
     @testset "1D Domains" begin
         domain = Domains.IntervalDomain(
             Geometry.XPoint(0.0) .. Geometry.XPoint(1.0),
-            boundary_tags = (:left, :right),
+            boundary_names = (:left, :right),
         )
 
         @testset "Single aligned elements" begin

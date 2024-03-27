@@ -124,7 +124,7 @@ function mapreduce_cuda(
     reduce_cuda = CuArray{T}(undef, nblocks, Nf)
     shmemsize = nthreads
     # place each field on a different block
-    @cuda threads = (nthreads) blocks = (nblocks, Nf) mapreduce_cuda_kernel!(
+    @cuda always_inline = true threads = (nthreads) blocks = (nblocks, Nf) mapreduce_cuda_kernel!(
         reduce_cuda,
         f,
         op,
@@ -138,7 +138,7 @@ function mapreduce_cuda(
     if nblocks > 1
         nthreads = min(32, nblocks)
         shmemsize = nthreads
-        @cuda threads = (nthreads) blocks = (Nf) reduce_cuda_blocks_kernel!(
+        @cuda always_inline = true threads = (nthreads) blocks = (Nf) reduce_cuda_blocks_kernel!(
             reduce_cuda,
             op,
             Val(shmemsize),

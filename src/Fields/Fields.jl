@@ -331,9 +331,6 @@ local_geometry_field(space::AbstractSpace) =
     Field(Spaces.local_geometry_data(space), space)
 local_geometry_field(field::Field) = local_geometry_field(axes(field))
 
-Base.@deprecate dz_field(space::AbstractSpace) Δz_field(space) false
-Base.@deprecate dz_field(field::Field) Δz_field(field) false
-
 """
     Δz_field(field::Field)
     Δz_field(space::AbstractSpace)
@@ -456,22 +453,6 @@ function Spaces.weighted_dss!(
 
     return nothing
 end
-
-# Add definitions for backward compatibility
-Spaces.weighted_dss2!(
-    field::Field,
-    dss_buffer = Spaces.create_dss_buffer(field),
-) = Spaces.weighted_dss!(field, dss_buffer)
-
-Spaces.weighted_dss_start2!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_start!(field, ghost_buffer)
-
-Spaces.weighted_dss_internal2!(field::Field, ghost_buffer) =
-    Spaces.weighted_dss_internal!(field, ghost_buffer)
-
-Spaces.weighted_dss_ghost2!(field, ghost_buffer) =
-    Spaces.weighted_dss_ghost!(field, ghost_buffer)
-
 
 """
     Spaces.create_dss_buffer(field::Field)

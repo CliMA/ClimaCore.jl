@@ -127,7 +127,7 @@ function create_space(
         vertdomain = Domains.IntervalDomain(
             Geometry.ZPoint{float_type}(zlim[1]),
             Geometry.ZPoint{float_type}(zlim[2]);
-            boundary_tags = (:bottom, :top),
+            boundary_names = (:bottom, :top),
         )
         vertmesh = Meshes.IntervalMesh(vertdomain, nelems = z_elem)
         vtopology = Topologies.IntervalTopology(context, vertmesh)

@@ -1,7 +1,7 @@
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
-    OrderedCollections, LinearAlgebra, Combinatorics, GFlops
+    OrderedCollections, LinearAlgebra, Combinatorics, CountFlops
 using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
@@ -16,8 +16,8 @@ include("ref_funcs.jl") # compact, generic but unoptimized reference
 include("method_info.jl")
 include("func_args.jl")
 
-count_flops(f::F, x, y) where {F} = GFlops.@count_ops f($x, $y)
-count_flops(f::F, x, y, z) where {F} = GFlops.@count_ops f($x, $y, $z)
+count_flops(f::F, x, y) where {F} = CountFlops.@count_ops f($x, $y)
+count_flops(f::F, x, y, z) where {F} = CountFlops.@count_ops f($x, $y, $z)
 
 # time_func(func::F, args...) where {F} = time_func_accurate(func, args...)
 time_func(f::F, args...) where {F} = time_func_fast(f, args...)

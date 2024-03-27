@@ -244,7 +244,8 @@ function generate_map(
 
     if target_space_distr != nothing
         # Create map from unique (TempestRemap convention) to local element indices
-        target_local_elem_gidx = target_space_distr.topology.local_elem_gidx # gidx = local_elem_gidx[lidx]
+        target_local_elem_gidx =
+            Spaces.topology(target_space_distr).local_elem_gidx # gidx = local_elem_gidx[lidx]
         target_global_elem_lidx = Dict{Int, Int}() # inverse of local_elem_gidx: lidx = global_elem_lidx[gidx]
         for (lidx, gidx) in enumerate(target_local_elem_gidx)
             target_global_elem_lidx[gidx] = lidx

@@ -13,7 +13,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 @testset "spectral element 1D" begin
     domain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.XPoint(0.0) .. ClimaCore.Geometry.XPoint(π),
-        boundary_tags = (:left, :right),
+        boundary_names = (:left, :right),
     )
     mesh = ClimaCore.Meshes.IntervalMesh(domain; nelems = 5)
     grid_topology = ClimaCore.Topologies.IntervalTopology(mesh)
@@ -109,7 +109,7 @@ end
     vertdomain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.ZPoint{FT}(0),
         ClimaCore.Geometry.ZPoint{FT}(1000);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
@@ -197,7 +197,7 @@ end
     vertdomain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.ZPoint{FT}(0),
         ClimaCore.Geometry.ZPoint{FT}(1000);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
@@ -246,7 +246,7 @@ end
     vertdomain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.ZPoint{FT}(0),
         ClimaCore.Geometry.ZPoint{FT}(1000);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
     vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)

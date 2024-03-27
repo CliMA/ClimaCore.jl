@@ -233,13 +233,13 @@ end
 coordinates(
     mesh::AbstractCubedSphere,
     elem::CartesianIndex{3},
-    ξ::StaticArrays.SVector{2},
+    ξ::Union{StaticArrays.SVector{2}, Tuple{<:Real, <:Real}},
 ) = coordinates(mesh, elem, ξ, mesh.localelementmap)
 
 function coordinates(
     mesh::AbstractCubedSphere,
     elem::CartesianIndex{3},
-    (ξ1, ξ2)::StaticArrays.SVector{2},
+    (ξ1, ξ2)::Union{StaticArrays.SVector{2}, Tuple{<:Real, <:Real}},
     ::IntrinsicMap,
 )
     FT = typeof(mesh.domain.radius)
@@ -257,7 +257,7 @@ end
 function coordinates(
     mesh::AbstractCubedSphere,
     elem::CartesianIndex{3},
-    (ξ1, ξ2)::StaticArrays.SVector{2},
+    (ξ1, ξ2)::Union{StaticArrays.SVector{2}, Tuple{<:Real, <:Real}},
     ::NormalizedBilinearMap,
 )
     radius = mesh.domain.radius

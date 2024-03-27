@@ -79,13 +79,6 @@ of the domain, using the method of [GalChen1975](@cite).
 """
 struct LinearAdaption{F <: Fields.Field} <: HypsographyAdaption
     surface::F
-    function LinearAdaption(surface::Fields.Field)
-        if eltype(surface) <: Real
-            @warn "`LinearAdaptation`: `surface` argument scalar field has been deprecated. Use a field `ZPoint`s."
-            surface = Geometry.ZPoint.(surface)
-        end
-        new{typeof(surface)}(surface)
-    end
 end
 
 Adapt.adapt_structure(to, adaption::LinearAdaption) =
@@ -132,10 +125,6 @@ struct SLEVEAdaption{F <: Fields.Field, FT <: Real} <: HypsographyAdaption
     ) where {FT <: Real}
         @assert 0 <= ηₕ <= 1
         @assert s >= 0
-        if eltype(surface) <: Real
-            @warn "`SLEVEAdaption`: `surface` argument scalar field has been deprecated. Use a field `ZPoint`s."
-            surface = Geometry.ZPoint.(surface)
-        end
         new{typeof(surface), FT}(surface, ηₕ, s)
     end
 end

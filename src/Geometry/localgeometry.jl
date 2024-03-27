@@ -21,21 +21,28 @@ struct LocalGeometry{I, C <: AbstractPoint, FT, S}
     gⁱʲ::Axis2Tensor{FT, Tuple{ContravariantAxis{I}, ContravariantAxis{I}}, S}
     "Covariant metric tensor (gᵢⱼ), transforms contravariant to covariant vector components"
     gᵢⱼ::Axis2Tensor{FT, Tuple{CovariantAxis{I}, CovariantAxis{I}}, S}
-end
-
-@inline function LocalGeometry(coordinates, J, WJ, ∂x∂ξ)
-    ∂ξ∂x = inv(∂x∂ξ)
-    return LocalGeometry(
+    @inline function LocalGeometry(
         coordinates,
         J,
         WJ,
-        inv(J),
-        ∂x∂ξ,
-        ∂ξ∂x,
-        ∂ξ∂x * ∂ξ∂x',
-        ∂x∂ξ' * ∂x∂ξ,
-    )
+        ∂x∂ξ::Axis2Tensor{FT, Tuple{LocalAxis{I}, CovariantAxis{I}}, S},
+    ) where {FT, I, S}
+        ∂ξ∂x = inv(∂x∂ξ)
+        C = typeof(coordinates)
+        Jinv = inv(J)
+        return new{I, C, FT, S}(
+            coordinates,
+            J,
+            WJ,
+            Jinv,
+            ∂x∂ξ,
+            ∂ξ∂x,
+            ∂ξ∂x * ∂ξ∂x',
+            ∂x∂ξ' * ∂x∂ξ,
+        )
+    end
 end
+
 
 """
     SurfaceGeometry

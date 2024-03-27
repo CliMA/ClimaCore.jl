@@ -59,7 +59,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
             (sind(coord.long) * sind(α) + cosd(coord.long) * cosd(α))
         end for α in times
     ]
-    writevtk(
+    writepvd(
         joinpath(OUTPUT_DIR, "series", "sphere_scalar_series"),
         times,
         (A = A, B = A),
@@ -87,7 +87,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         U[t] = u
     end
 
-    writevtk(
+    writepvd(
         joinpath(OUTPUT_DIR, "series", "sphere_vector_series"),
         times,
         (U = U,),
@@ -100,7 +100,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
     end
     @test isfile(joinpath(OUTPUT_DIR, "series", "sphere_vector_series.pvd"))
 
-    writevtk(
+    writepvd(
         joinpath(OUTPUT_DIR, "series", "sphere_latlong_scalar_series"),
         times,
         (A = A,);
@@ -111,7 +111,7 @@ mkpath(joinpath(OUTPUT_DIR, "series"))
         joinpath(OUTPUT_DIR, "series", "sphere_latlong_scalar_series.pvd"),
     )
 
-    writevtk(
+    writepvd(
         joinpath(OUTPUT_DIR, "series", "sphere_latlong_vector_series"),
         times,
         (U = U,);

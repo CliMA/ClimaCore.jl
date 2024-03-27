@@ -42,14 +42,16 @@ end
     z_domain = Domains.IntervalDomain(
         Geometry.ZPoint(zero(z_max)),
         Geometry.ZPoint(z_max);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
 
 
     z_surface =
-        z_max / 8 .* (
-            cosd.(Fields.coordinate_field(h_space).lat) .+
-            cosd.(Fields.coordinate_field(h_space).long) .+ 1
+        Geometry.ZPoint.(
+            z_max / 8 .* (
+                cosd.(Fields.coordinate_field(h_space).lat) .+
+                cosd.(Fields.coordinate_field(h_space).long) .+ 1
+            )
         )
 
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)

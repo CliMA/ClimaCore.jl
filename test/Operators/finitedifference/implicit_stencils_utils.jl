@@ -69,7 +69,7 @@ function get_space(::Type{FT}) where {FT}
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zero(FT)),
         Geometry.ZPoint{FT}(zmax);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
     vtopology =

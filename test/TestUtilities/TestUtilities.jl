@@ -72,7 +72,7 @@ function ColumnCenterFiniteDifferenceSpace(
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain, nelems = zelem)
     topology = Topologies.IntervalTopology(context, mesh)
@@ -115,7 +115,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(zlim[1]),
         Geometry.ZPoint{FT}(zlim[2]);
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
     vtopology = Topologies.IntervalTopology(context, vertmesh)

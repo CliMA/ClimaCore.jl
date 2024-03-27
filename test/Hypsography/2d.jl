@@ -1,5 +1,6 @@
 using Test
 import ClimaCore
+import ClimaComms
 import ClimaCore:
     ClimaCore,
     slab,
@@ -17,13 +18,15 @@ import ClimaCore:
 using ClimaCore.Geometry
 
 FT = Float64
+context = ClimaComms.context()
 vertdomain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0),
     Geometry.ZPoint{FT}(4);
     boundary_names = (:bottom, :top),
 )
 vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 40)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+z_topology = Topologies.IntervalTopology(context, vertmesh)
+vert_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
 
 
 
@@ -37,7 +40,7 @@ horztopology = Topologies.IntervalTopology(horzmesh)
 quad = Quadratures.GLL{4 + 1}()
 horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 
-z_surface = sin.(Fields.coordinate_field(horzspace).x) .+ 1
+z_surface = Geometry.ZPoint.(sin.(Fields.coordinate_field(horzspace).x) .+ 1)
 
 hv_center_space = Spaces.ExtrudedFiniteDifferenceSpace(
     horzspace,

@@ -207,7 +207,7 @@ function test_spaces(::Type{FT}) where {FT}
     vdomain = Domains.IntervalDomain(
         Geometry.ZPoint(FT(0)),
         Geometry.ZPoint(FT(10));
-        boundary_tags = (:bottom, :top),
+        boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
     vtopology = Topologies.IntervalTopology(comms_ctx, vmesh)
@@ -216,7 +216,7 @@ function test_spaces(::Type{FT}) where {FT}
     hypsography =
         using_cuda ? Hypsography.Flat() :
         Hypsography.LinearAdaption(
-            @. cosd(sfc_coord.lat) + cosd(sfc_coord.long) + 1
+            Geometry.ZPoint.(@. cosd(sfc_coord.lat) + cosd(sfc_coord.long) + 1),
         ) # TODO: FD operators don't currently work with hypsography on GPUs.
     center_space =
         Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace, hypsography)

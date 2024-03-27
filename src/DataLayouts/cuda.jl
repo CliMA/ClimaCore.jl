@@ -78,7 +78,10 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, 1) knl_copyto!(dest, bc)
+        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, 1) knl_copyto!(
+            dest,
+            bc,
+        )
     end
     return dest
 end
@@ -92,7 +95,10 @@ function Base.fill!(
 }
     _, _, _, _, Nh = size(dest)
     if Nh > 0
-        CUDA.@cuda threads = (Nij, Nij) blocks = (Nh, 1) knl_fill!(dest, val)
+        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, 1) knl_fill!(
+            dest,
+            val,
+        )
     end
     return dest
 end
@@ -133,14 +139,20 @@ function Base.copyto!(
 ) where {S, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(bc)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda threads = (1, 1) blocks = (Nh, Nv) knl_copyto!(dest, bc)
+        CUDA.@cuda always_inline = true threads = (1, 1) blocks = (Nh, Nv) knl_copyto!(
+            dest,
+            bc,
+        )
     end
     return dest
 end
 function Base.fill!(dest::VF{S, A}, val) where {S, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(dest)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda threads = (1, 1) blocks = (Nh, Nv) knl_fill!(dest, val)
+        CUDA.@cuda always_inline = true threads = (1, 1) blocks = (Nh, Nv) knl_fill!(
+            dest,
+            val,
+        )
     end
     return dest
 end
@@ -149,10 +161,16 @@ function Base.copyto!(
     dest::DataF{S},
     bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A <: CUDA.CuArray}
-    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_copyto!(dest, bc)
+    CUDA.@cuda always_inline = true threads = (1, 1) blocks = (1, 1) knl_copyto!(
+        dest,
+        bc,
+    )
     return dest
 end
 function Base.fill!(dest::DataF{S, A}, val) where {S, A <: CUDA.CuArray}
-    CUDA.@cuda threads = (1, 1) blocks = (1, 1) knl_fill!(dest, val)
+    CUDA.@cuda always_inline = true threads = (1, 1) blocks = (1, 1) knl_fill!(
+        dest,
+        val,
+    )
     return dest
 end

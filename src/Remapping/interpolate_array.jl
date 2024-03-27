@@ -89,7 +89,7 @@ function interpolate_slab!(
     nitems = length(output_array)
     nthreads, nblocks = Topologies._configure_threadblock(nitems)
 
-    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
+    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
         output_cuarray,
         field,
         cuslab_indices,
@@ -161,7 +161,7 @@ Return the vertical indices of the elements below and above `zcoord`.
 
 Return also the correct reference coordinate `zcoord` for vertical interpolation.
 """
-function vertical_indices end
+function vertical_indices_ref_coordinate end
 
 function vertical_indices_ref_coordinate(
     space::Spaces.FaceExtrudedFiniteDifferenceSpace,
@@ -332,7 +332,7 @@ function interpolate_slab_level!(
 
     nitems = length(vidx_ref_coordinates)
     nthreads, nblocks = Topologies._configure_threadblock(nitems)
-    @cuda threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
+    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
         output_cuarray,
         field,
         cuvidx_ref_coordinates,
@@ -575,7 +575,8 @@ function interpolate_column(
     # When we don't have hypsography, there is no notion of "interpolating hypsography". In
     # this case, the reference vertical points coincide with the physical ones. Setting
     # physical_z = false ensures that zpts_ref = zpts
-    if space.hypsography isa Grids.Flat
+    hypsography = Spaces.grid(space).hypsography
+    if hypsography isa Grids.Flat
         physical_z = false
     end
 
@@ -594,10 +595,9 @@ function interpolate_column(
 
         # interpolate_slab! takes a vector
         z_surface = [zero(FT)]
-
         interpolate_slab!(
             z_surface,
-            space.hypsography.surface.z,
+            hypsography.surface.z,
             [Fields.SlabIndex(nothing, gidx)],
             [Is],
         )
@@ -606,7 +606,7 @@ function interpolate_column(
 
         all_zpts_ref = [
             Hypsography.physical_z_to_ref_z(
-                Spaces.grid(space).hypsography,
+                hypsography,
                 z_ref,
                 Geometry.ZPoint(z_surface),
                 Geometry.ZPoint(z_top),

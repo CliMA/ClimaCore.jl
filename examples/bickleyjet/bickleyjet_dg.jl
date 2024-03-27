@@ -206,7 +206,8 @@ function rhs!(dydt, y, (parameters, numflux), t)
 
     # 6. Solve for final result
     dydt_data = Fields.field_values(dydt)
-    dydt_data .= RecursiveApply.rdiv.(dydt_data, space.local_geometry.WJ)
+    dydt_data .=
+        RecursiveApply.rdiv.(dydt_data, Spaces.local_geometry_data(space).WJ)
     M = Quadratures.cutoff_filter_matrix(
         Float64,
         Spaces.quadrature_style(space),

@@ -104,6 +104,7 @@ if !Sys.iswindows()
     @safetestset "InputOutput - hybrid3dcubedsphere_topography" begin @time include("InputOutput/hybrid3dcubedsphere_topography.jl") end
 
     @safetestset "Array interpolation" begin @time include("Remapping/interpolate_array.jl") end
+    @safetestset "Array interpolation" begin @time include("Remapping/distributed_remapping.jl") end
 
     # Code quality checks
     @safetestset "Aqua" begin @time include("aqua.jl") end

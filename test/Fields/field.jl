@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Fields", "field.jl"))
+=#
 using Test
 using JET
 
@@ -105,6 +109,27 @@ end
 
     point_field = Fields.column(field, 1, 1, 1)
     @test axes(point_field) isa Spaces.PointSpace
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/1650
+@testset "mapreduce inside broadcast expression" begin
+    dev = ClimaComms.device()
+    context = ClimaComms.context(dev)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context)
+    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
+    c = fill(
+        (
+            ∑ab = Float32(0),
+            a = ntuple(i -> Float32(1), 3),
+            b = ntuple(i -> Float32(2), 3),
+        ),
+        cspace,
+    )
+
+    @test begin
+        @. c.∑ab = mapreduce(*, +, c.a, c.b)
+        true
+    end broken = dev isa ClimaComms.CUDADevice
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1126
@@ -276,6 +301,48 @@ end
 
     Y.k.z = 3.0
     @test Y.k.z === 3.0
+end
+
+# https://github.com/CliMA/ClimaCore.jl/issues/1465
+@testset "Diagonal FieldVector broadcast expressions" begin
+    FT = Float64
+    device = ClimaComms.device()
+    comms_ctx = ClimaComms.context(device)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    fspace = TU.FaceExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    cx = Fields.fill((; a = FT(1), b = FT(2)), cspace)
+    cy = Fields.fill((; a = FT(1), b = FT(2)), cspace)
+    fx = Fields.fill((; a = FT(1), b = FT(2)), fspace)
+    fy = Fields.fill((; a = FT(1), b = FT(2)), fspace)
+    Y1 = Fields.FieldVector(; x = cx, y = cy)
+    Y2 = Fields.FieldVector(; x = cx, y = cy)
+    Y3 = Fields.FieldVector(; x = cx, y = cy)
+    Y4 = Fields.FieldVector(; x = cx, y = cy)
+    Z = Fields.FieldVector(; x = fx, y = fy)
+    function test_fv_allocations!(X1, X2, X3, X4)
+        @. X1 += X2 * X3 + X4
+        return nothing
+    end
+    test_fv_allocations!(Y1, Y2, Y3, Y4)
+    p_allocated = @allocated test_fv_allocations!(Y1, Y2, Y3, Y4)
+    if device isa ClimaComms.AbstractCPUDevice
+        @test p_allocated == 0
+    elseif device isa ClimaComms.CUDADevice
+        @test_broken p_allocated == 0
+    end
+
+    bc1 = Base.broadcasted(
+        :-,
+        Base.broadcasted(:+, Y1, Base.broadcasted(:*, 2, Y2)),
+        Base.broadcasted(:*, 3, Y3),
+    )
+    bc2 = Base.broadcasted(
+        :-,
+        Base.broadcasted(:+, Y1, Base.broadcasted(:*, 2, Y1)),
+        Base.broadcasted(:*, 3, Z),
+    )
+    @test Fields.is_diagonal_bc(bc1)
+    @test !Fields.is_diagonal_bc(bc2)
 end
 
 function call_getcolumn(fv, colidx)
@@ -496,8 +563,8 @@ end
         lg_space = Spaces.level(space, TU.fc_index(1, space))
         lg_field_space = axes(Fields.level(Y, TU.fc_index(1, space)))
         @test all(
-            lg_space.local_geometry.coordinates ===
-            lg_field_space.local_geometry.coordinates,
+            Spaces.local_geometry_data(lg_space).coordinates ===
+            Spaces.local_geometry_data(lg_field_space).coordinates,
         )
         @test all(Fields.zeros(lg_space) == Fields.zeros(lg_field_space))
     end

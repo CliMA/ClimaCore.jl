@@ -7,7 +7,8 @@ using ClimaComms
 using CUDA
 using ClimaComms: SingletonCommsContext
 import ClimaCore
-import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
+import ClimaCore:
+    Domains, Topologies, Meshes, Spaces, Geometry, column, Fields, Grids
 using Test
 
 include(
@@ -16,8 +17,7 @@ include(
 import .TestUtilities as TU
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
-compare(cpu, gpu, sym) =
-    all(parent(getproperty(cpu, sym)) .≈ Array(parent(getproperty(gpu, sym))))
+compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))
 
 @testset "CuArray-backed extruded spaces" begin
     context = SingletonCommsContext(
@@ -40,8 +40,16 @@ end
     gpuspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
-    @test compare(cpuspace, gpuspace, :center_local_geometry)
-    @test compare(cpuspace, gpuspace, :face_local_geometry)
+    @test compare(
+        cpuspace,
+        gpuspace,
+        x -> Spaces.local_geometry_data(Spaces.grid(x), Grids.CellCenter()),
+    )
+    @test compare(
+        cpuspace,
+        gpuspace,
+        x -> Spaces.local_geometry_data(Spaces.grid(x), Grids.CellFace()),
+    )
 
     space = gpuspace
     Y = Fields.Field(typeof((; v = FT(0))), space)
@@ -62,7 +70,7 @@ end
     gpuspace = TU.SpectralElementSpace2D(FT; context = gpu_context)
 
     # Test that all geometries match with CPU version:
-    @test compare(cpuspace, gpuspace, :local_geometry)
+    @test compare(cpuspace, gpuspace, x -> Spaces.local_geometry_data(x))
 
     space = gpuspace
     Y = Fields.Field(typeof((; v = FT(0))), space)

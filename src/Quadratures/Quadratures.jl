@@ -176,7 +176,7 @@ function interpolation_matrix(
             if x_to == points_from[j]
                 # assign to one to avoid singularity condition
                 M[i, j] = one(T)
-                # skip over the equal boundry condition
+                # skip over the equal boundary condition
                 skip_row = true
             end
             skip_row && break
@@ -186,6 +186,29 @@ function interpolation_matrix(
         M[i, :] .= w ./ sum(w)
     end
     return SMatrix(M)
+end
+
+function interpolation_matrix(points_to::Vector, points_from)
+    T = eltype(points_to)
+    bw = barycentric_weights(points_from)
+    M = zeros(T, length(points_to), length(points_from))
+    for i in 1:length(points_to)
+        x_to = points_to[i]
+        skip_row = false
+        for j in 1:length(points_from)
+            if x_to == points_from[j]
+                # assign to one to avoid singularity condition
+                M[i, j] = one(T)
+                # skip over the equal boundary condition
+                skip_row = true
+            end
+            skip_row && break
+        end
+        skip_row && continue
+        w = bw ./ (x_to .- points_from)
+        M[i, :] .= w ./ sum(w)
+    end
+    return M
 end
 
 @generated function interpolation_matrix(

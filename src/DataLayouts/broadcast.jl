@@ -538,9 +538,6 @@ function Base.copyto!(
     dest::VIFH{S, Ni},
     bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
 ) where {S, Ni, A}
-    # if enable_threading()
-    #     return _threaded_copyto!(dest, bc)
-    # end
     return _serial_copyto!(dest, bc)
 end
 
@@ -588,8 +585,5 @@ function Base.copyto!(
     dest::VIJFH{S, Nij},
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}
-    # if enable_threading()
-    #     return _threaded_copyto!(dest, bc)
-    # end
     return _serial_copyto!(dest, bc)
 end
