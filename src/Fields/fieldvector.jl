@@ -287,7 +287,7 @@ function Base.Broadcast.instantiate(
             Base.Broadcast.check_broadcast_axes(axes, bc.args...)
         end
     end
-    return Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, axes)
+    return Base.Broadcast.Broadcasted{FieldVectorStyle}(bc.f, bc.args, axes)
 end
 
 @inline function Base.copyto!(
