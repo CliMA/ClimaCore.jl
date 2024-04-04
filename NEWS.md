@@ -1,6 +1,11 @@
 ClimaCore.jl Release Notes
 ========================
 
+main
+-------
+
+- ![][badge-🐛bugfix] We fixed some fieldvector broadcasting on Julia 1.9. PR [#1658](https://github.com/CliMA/ClimaCore.jl/pull/1658).
+
 v0.13.3
 -------
 
