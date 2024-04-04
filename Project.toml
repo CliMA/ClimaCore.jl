@@ -27,6 +27,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TuplesOfNTuples = "48ce63ed-6f34-4d1b-af9f-4e5ab636a982"
 Unrolled = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
 
 [weakdeps]
@@ -61,4 +62,5 @@ Static = "0.4, 0.5, 0.6, 0.7, 0.8"
 StaticArrays = "1"
 Statistics = "1"
 Unrolled = "0.1"
+TuplesOfNTuples = "0.2"
 julia = "1.9"
