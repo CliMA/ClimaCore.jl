@@ -50,6 +50,7 @@ import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype
 import KrylovKit
 import ClimaComms
+import Adapt
 
 import ..Utilities: PlusHalf, half
 import ..RecursiveApply:
@@ -86,6 +87,7 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     S <: Union{
         Spaces.FiniteDifferenceSpace,
         Spaces.ExtrudedFiniteDifferenceSpace,
+        Operators.PlaceholderSpace, # so that this can exist inside cuda kernels
     },
 }
 
@@ -99,6 +101,7 @@ include("field_name.jl")
 include("field_name_set.jl")
 include("field_name_dict.jl")
 include("single_field_solver.jl")
+include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
 

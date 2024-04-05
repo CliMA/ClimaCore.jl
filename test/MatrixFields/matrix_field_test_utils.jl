@@ -41,9 +41,11 @@ macro benchmark(expression)
     end
 end
 
-const comms_device = ClimaComms.device()
-const using_cuda = comms_device isa ClimaComms.CUDADevice
-const ignore_cuda = using_cuda ? (AnyFrameModule(CUDA),) : ()
+comms_device = ClimaComms.device()
+# comms_device = ClimaComms.CPUSingleThreaded()
+@show comms_device
+using_cuda = comms_device isa ClimaComms.CUDADevice
+ignore_cuda = using_cuda ? (AnyFrameModule(CUDA),) : ()
 
 # Test the allocating and non-allocating versions of a field broadcast against
 # a reference non-allocating implementation. Ensure that they are performant,

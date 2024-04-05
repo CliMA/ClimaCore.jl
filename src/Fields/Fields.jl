@@ -55,6 +55,11 @@ Adapt.adapt_structure(to, field::Field) = Field(
 const PointField{V, S} =
     Field{V, S} where {V <: AbstractData, S <: Spaces.PointSpace}
 
+# TODO: do we need to make this distinction? what about inside cuda kernels
+#       when we replace with a PlaceHolerSpace?
+const PointDataField{V, S} =
+    Field{V, S} where {V <: DataLayouts.DataF, S <: Spaces.AbstractSpace}
+
 # Spectral Element Field
 const SpectralElementField{V, S} = Field{
     V,
