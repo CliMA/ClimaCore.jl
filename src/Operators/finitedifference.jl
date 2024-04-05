@@ -1667,6 +1667,10 @@ function fct_zalesak(
     stable_zero = zero(eltype(Aⱼ₊₁₂))
     stable_one = one(eltype(Aⱼ₊₁₂))
 
+    # 𝒮5.4.2 (1)  Durran (5.32)  Zalesak's cosmetic correction 
+    # which is usually omitted but used in Durran's textbook 
+    # implementation of the flux corrected transport method. 
+    # (Textbook suggests mixed results in 3 reported scenarios)
     if (
         Aⱼ₊₁₂ * (ϕⱼ₊₁ᵗᵈ - ϕⱼᵗᵈ) < stable_zero && (
             Aⱼ₊₁₂ * (ϕⱼ₊₂ᵗᵈ - ϕⱼ₊₁ᵗᵈ) < stable_zero ||
@@ -1675,15 +1679,19 @@ function fct_zalesak(
     )
         Aⱼ₊₁₂ = stable_zero
     end
+
+    # 𝒮5.4.2 (2)
+    # If flow is nondivergent, ϕᵗᵈ are not needed in the formulae below
     ϕⱼᵐᵃˣ = max(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     ϕⱼᵐⁱⁿ = min(ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₋₁ᵗᵈ, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ)
     Pⱼ⁺ = max(stable_zero, Aⱼ₋₁₂) - min(stable_zero, Aⱼ₊₁₂)
+    # Zalesak also requires, in equation (5.33) Δx/Δt, which for the 
+    # reference element we may assume Δζ = 1 between interfaces
     Qⱼ⁺ = (ϕⱼᵐᵃˣ - ϕⱼᵗᵈ)
     Rⱼ⁺ = (Pⱼ⁺ > stable_zero ? min(stable_one, Qⱼ⁺ / Pⱼ⁺) : stable_zero)
     Pⱼ⁻ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₋₁₂)
     Qⱼ⁻ = (ϕⱼᵗᵈ - ϕⱼᵐⁱⁿ)
     Rⱼ⁻ = (Pⱼ⁻ > stable_zero ? min(stable_one, Qⱼ⁻ / Pⱼ⁻) : stable_zero)
-
     ϕⱼ₊₁ᵐᵃˣ = max(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
     ϕⱼ₊₁ᵐⁱⁿ = min(ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, ϕⱼᵗᵈ, ϕⱼ₊₁ᵗᵈ, ϕⱼ₊₂ᵗᵈ)
     Pⱼ₊₁⁺ = max(stable_zero, Aⱼ₊₁₂) - min(stable_zero, Aⱼ₊₃₂)
@@ -1696,7 +1704,6 @@ function fct_zalesak(
     Cⱼ₊₁₂ = (Aⱼ₊₁₂ ≥ stable_zero ? min(Rⱼ₊₁⁺, Rⱼ⁻) : min(Rⱼ⁺, Rⱼ₊₁⁻))
 
     return Cⱼ₊₁₂ * Aⱼ₊₁₂
-
 end
 
 stencil_interior_width(::FCTZalesak, A_space, Φ_space, Φᵗᵈ_space) =
@@ -1787,7 +1794,185 @@ Base.@propagate_inbounds function stencil_right_boundary(
     return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
 end
 
+######Limited Flux Methods######
+"""
+    U = TVDSlopeLimitedFlux(;boundaries)
+    U.(𝒜, Φ)
+𝒜, following the notation of Durran (Numerical Methods for Fluid
+Dynamics, 2ⁿᵈ ed.) is the antidiffusive flux given by
+𝒜 = ℱʰ - ℱˡ
+where h and l superscripts represent the high and lower order (monotone) 
+fluxes respectively. The effect of the TVD limiters is then to 
+adjust the flux 
+F_{j+1/2} = F^{1}_{j+1/2} + C_{j+1/2}(F^{h}_{j+1/2} - F^{l}_{j+1/2})
+where C_{j+1/2} is the multiplicative limiter which is a function of 
+the ratio of the slope of the solution across a cell interface.
+C=1 recovers the high order flux.
+C=0 recovers the low order flux. 
 
+Supported limiter types are 
+(1) RZeroLimiter (returns low order flux)
+(2) RHalfLimiter (the flux multiplier == 1/2)
+(3) RMaxLimiter (returns high order flux)
+(4) MinModLimiter
+(5) KorenLimiter
+(6) SuperbeeLimiter
+(7) MonotonizedCentralLimiter
+(8) VanLeerLimiter
+
+"""
+### Here we define abstract types and specific implementations 
+### TVD limiters (see, for instance, Durran's notes)
+abstract type AbstractTVDSlopeLimiter end
+struct RZeroLimiter <: AbstractTVDSlopeLimiter end
+struct RHalfLimiter <: AbstractTVDSlopeLimiter end
+struct RMaxLimiter <: AbstractTVDSlopeLimiter end
+struct MinModLimiter <: AbstractTVDSlopeLimiter end
+struct KorenLimiter <: AbstractTVDSlopeLimiter end
+struct SuperbeeLimiter <: AbstractTVDSlopeLimiter end
+struct MonotonizedCentralLimiter <: AbstractTVDSlopeLimiter end
+struct VanLeerLimiter <: AbstractTVDSlopeLimiter end
+
+@inline function compute_limiter_coeff(r, ::RZeroLimiter)
+    # Returns the low order flux
+    # Typically first-order upwind in ClimaCore schemes.
+    return zero(eltype(r))
+end
+
+@inline function compute_limiter_coeff(r, ::RHalfLimiter)
+    return one(eltype(r)) * 1 / 2
+end
+
+@inline function compute_limiter_coeff(r, ::RMaxLimiter)
+    return one(eltype(r))
+end
+
+@inline function compute_limiter_coeff(r, ::MinModLimiter)
+    return max(zero(eltype(r)), min(one(eltype(r)), r))
+end
+
+@inline function compute_limiter_coeff(r, ::KorenLimiter)
+    return max(zero(eltype(r)), min(2r, min(1 / 3 + 2r / 3, 2)))
+end
+
+@inline function compute_limiter_coeff(r, ::SuperbeeLimiter)
+    return max(zero(eltype(r)), min(one(eltype(r)), r), min(2, r))
+end
+
+@inline function compute_limiter_coeff(r, ::MonotonizedCentralLimiter)
+    return max(zero(eltype(r)), min(2r, (1 + r) / 2, 2))
+end
+
+@inline function compute_limiter_coeff(r, ::VanLeerLimiter)
+    return (r + abs(r)) / (1 + abs(r) + eps(eltype(r)))
+end
+
+# ??? Do we want to allow flux method types to be determined here? 
+struct TVDSlopeLimitedFlux{BCS} <: AdvectionOperator
+    bcs::BCS
+end
+
+TVDSlopeLimitedFlux(; kwargs...) = TVDSlopeLimitedFlux(NamedTuple(kwargs))
+
+return_eltype(::TVDSlopeLimitedFlux, A, Φ) =
+    Geometry.Contravariant3Vector{eltype(eltype(A))}
+
+return_space(
+    ::TVDSlopeLimitedFlux,
+    A_space::AllFaceFiniteDifferenceSpace,
+    Φ_space::AllCenterFiniteDifferenceSpace,
+) = A_space
+
+function tvd_limited_flux(Aⱼ₋₁₂, Aⱼ₊₁₂, ϕⱼ₋₁, ϕⱼ, ϕⱼ₊₁, ϕⱼ₊₂, rⱼ₊₁₂, method)
+    stable_zero = zero(eltype(Aⱼ₊₁₂))
+    stable_one = one(eltype(Aⱼ₊₁₂))
+    # Test with various limiter methods
+    # Aⱼ₊₁₂ is the antidiffusive flux (see Durran textbook for notation)
+    Cⱼ₊₁₂ = compute_limiter_coeff(rⱼ₊₁₂, method)
+    # Assert condition for TVD limiter
+    @assert Cⱼ₊₁₂ <= eltype(Aⱼ₊₁₂)(2)
+    @assert Cⱼ₊₁₂ >= eltype(Aⱼ₊₁₂)(0)
+    return Cⱼ₊₁₂ * Aⱼ₊₁₂
+end
+
+stencil_interior_width(::TVDSlopeLimitedFlux, A_space, Φ_space) =
+    ((-1, 1), (-half - 1, half + 1))
+
+Base.@propagate_inbounds function stencil_interior(
+    ℱ::TVDSlopeLimitedFlux,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+)
+    # cell center variables
+    ϕⱼ₋₁ = getidx(space, Φ_field, loc, idx - half - 1, hidx)
+    ϕⱼ = getidx(space, Φ_field, loc, idx - half, hidx)
+    ϕⱼ₊₁ = getidx(space, Φ_field, loc, idx + half, hidx)
+    ϕⱼ₊₂ = getidx(space, Φ_field, loc, idx + half + 1, hidx)
+    # cell face variables
+    Aⱼ₊₁₂ = Geometry.contravariant3(
+        getidx(space, A_field, loc, idx, hidx),
+        Geometry.LocalGeometry(space, idx, hidx),
+    )
+    Aⱼ₋₁₂ = Geometry.contravariant3(
+        getidx(space, A_field, loc, idx - 1, hidx),
+        Geometry.LocalGeometry(space, idx - 1, hidx),
+    )
+    # See filter options below
+    rⱼ₊₁₂ = compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
+
+    return Geometry.Contravariant3Vector(
+        tvd_limited_flux(
+            Aⱼ₋₁₂,
+            Aⱼ₊₁₂,
+            ϕⱼ₋₁,
+            ϕⱼ,
+            ϕⱼ₊₁,
+            ϕⱼ₊₂,
+            rⱼ₊₁₂,
+            ℱ.bcs.method,
+        ),
+    )
+end
+
+@inline function compute_slope_ratio(ϕⱼ, ϕⱼ₋₁, ϕⱼ₊₁)
+    return (ϕⱼ - ϕⱼ₋₁) / (ϕⱼ₊₁ - ϕⱼ + eps(eltype(ϕⱼ)))
+end
+
+boundary_width(::TVDSlopeLimitedFlux, ::AbstractBoundaryCondition) = 2
+
+Base.@propagate_inbounds function stencil_left_boundary(
+    ::TVDSlopeLimitedFlux,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+)
+    @assert idx <= left_face_boundary_idx(space) + 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+end
+
+Base.@propagate_inbounds function stencil_right_boundary(
+    ::TVDSlopeLimitedFlux,
+    bc::FirstOrderOneSided,
+    loc,
+    space,
+    idx,
+    hidx,
+    A_field,
+    Φ_field,
+)
+    @assert idx <= right_face_boundary_idx(space) - 1
+
+    return Geometry.Contravariant3Vector(zero(eltype(eltype(A_field))))
+end
 
 """
     A = AdvectionF2F(;boundaries)
