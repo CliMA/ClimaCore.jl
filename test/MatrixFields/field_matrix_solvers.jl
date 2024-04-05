@@ -55,7 +55,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
             AnyFrameModule(Base.CoreLogging),
         )
         @test_opt ignored_modules = ignored FieldMatrixSolver(alg, A, b)
-        # @test_opt ignored_modules = ignored field_matrix_solve!(args...)
+        @test_opt ignored_modules = ignored field_matrix_solve!(args...)
         @test_opt ignored_modules = ignored field_matrix_mul!(b, A, x)
 
         using_cuda || @test @allocated(field_matrix_solve!(args...)) == 0
