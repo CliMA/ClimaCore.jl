@@ -50,7 +50,6 @@ import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype
 import KrylovKit
 import ClimaComms
-import TuplesOfNTuples as ToNTs
 
 import ..Utilities: PlusHalf, half
 import ..RecursiveApply:
