@@ -64,6 +64,7 @@ LeftBiasedC2F
 RightBiasedC2F
 LeftBiasedF2C
 RightBiasedF2C
+AbstractTVDSlopeLimiter
 ```
 
 ### Derivative operators

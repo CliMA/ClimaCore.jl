@@ -688,6 +688,173 @@ end
     @test conv_adv_wc[1] ≤ conv_adv_wc[2] ≤ conv_adv_wc[2]
 end
 
+@testset "Lin et al. (1994) van Leer class limiter (Mono5)" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+
+    err_adv_wc = zeros(FT, length(n_elems_seq))
+
+    Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            periodic = true,
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+
+        # Unitary, constant advective velocity
+        w = Geometry.WVector.(ones(fs))
+        # c = sin(z), scalar field defined at the centers
+        c = sin.(centers)
+
+        SLMethod = Operators.LinVanLeerC2F(
+            bottom = Operators.FirstOrderOneSided(),
+            top = Operators.FirstOrderOneSided(),
+            constraint = Operators.MonotoneLocalExtrema(),
+        )
+
+        divf2c = Operators.DivergenceF2C()
+        flux = SLMethod.(w, c, FT(0))
+        adv_wc = divf2c.(flux)
+
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+
+        # Error
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+    end
+
+    # Check convergence rate
+    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+
+    # LinVanLeer limited flux conv, with f(z) = sin(z)
+    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01
+
+end
+
+@testset "Lin et al. (1994) van Leer class limiter (Mono4)" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+
+    err_adv_wc = zeros(FT, length(n_elems_seq))
+
+    Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            periodic = true,
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+        C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
+
+        # Unitary, constant advective velocity
+        w = Geometry.WVector.(ones(fs))
+        # c = sin(z), scalar field defined at the centers
+        c = sin.(centers)
+
+        SLMethod = Operators.LinVanLeerC2F(;
+            bottom = Operators.FirstOrderOneSided(),
+            top = Operators.FirstOrderOneSided(),
+            constraint = Operators.MonotoneHarmonic(),
+        )
+
+        divf2c = Operators.DivergenceF2C()
+        flux = SLMethod.(w, c, FT(0))
+        adv_wc = divf2c.(flux)
+
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+
+        # Error
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+    end
+
+    # Check convergence rate
+    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+
+    # LinVanLeer limited flux conv, with f(z) = sin(z)
+    @test conv_adv_wc[1] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[2] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[3] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[4] ≈ 1.5 atol = 0.01
+    @test conv_adv_wc[5] ≈ 1.5 atol = 0.01
+
+end
+
+@testset "Lin et al. (1994) van Leer class limiter (PosDef)" begin
+    FT = Float64
+    n_elems_seq = 2 .^ (5, 6, 7, 8, 9, 10)
+
+    err_adv_wc = zeros(FT, length(n_elems_seq))
+
+    Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
+
+    for (k, n) in enumerate(n_elems_seq)
+        domain = Domains.IntervalDomain(
+            Geometry.ZPoint{FT}(-pi),
+            Geometry.ZPoint{FT}(pi);
+            periodic = true,
+        )
+        mesh = Meshes.IntervalMesh(domain; nelems = n)
+
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+        fs = Spaces.FaceFiniteDifferenceSpace(cs)
+
+        centers = getproperty(Fields.coordinate_field(cs), :z)
+        C = FT(1.0) # flux-correction coefficient (falling back to third-order upwinding)
+
+        # Unitary, constant advective velocity
+        w = Geometry.WVector.(ones(fs))
+        # c = sin(z), scalar field defined at the centers
+        c = sin.(centers)
+
+        SLMethod = Operators.LinVanLeerC2F(
+            bottom = Operators.FirstOrderOneSided(),
+            top = Operators.FirstOrderOneSided(),
+            constraint = Operators.PositiveDefinite(),
+        )
+
+        divf2c = Operators.DivergenceF2C()
+        flux = SLMethod.(w, c, FT(0))
+        adv_wc = divf2c.(flux)
+
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
+
+        # Error
+        err_adv_wc[k] = norm(adv_wc .- cos.(centers))
+    end
+
+    # Check convergence rate
+    conv_adv_wc = convergence_rate(err_adv_wc, Δh)
+
+    # LinVanLeer limited flux conv, with f(z) = sin(z)
+    @test conv_adv_wc[1] ≈ 1.0 atol = 0.01
+    @test conv_adv_wc[2] ≈ 1.0 atol = 0.01
+    @test conv_adv_wc[3] ≈ 1.0 atol = 0.01
+    @test conv_adv_wc[4] ≈ 1.0 atol = 0.01
+    @test conv_adv_wc[5] ≈ 1.0 atol = 0.01
+
+end
+
 @testset "Simple FCT: lin combination of UpwindBiasedProductC2F + Upwind3rdOrderBiasedProductC2F on (uniform and stretched) non-periodic mesh, with FirstOrderOneSided BCs" begin
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
