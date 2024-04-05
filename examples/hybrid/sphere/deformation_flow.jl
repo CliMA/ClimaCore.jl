@@ -83,6 +83,16 @@ const FCTZalesak = Operators.FCTZalesak(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
 )
+const SlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+    method = Operators.MinModLimiter(),
+)
+const LinVanLeerFlux = Operators.LinVanLeerC2F(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+    method = Operators.Mono5(),
+)
 const FCTBorisBook = Operators.FCTBorisBook(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
@@ -179,6 +189,19 @@ function vertical_tendency!(Yₜ, Y, cache, t)
                     )
                 ),
             )
+        elseif fct_op == SlopeLimitedFlux
+            @. ρqₜ_n -= vdivf2c(
+                ᶠwinterp(ᶜJ, Y.c.ρ) * (
+                    upwind1(face_uᵥ, q_n) + SlopeLimitedFlux(
+                        upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
+                        q_n / dt,
+                        face_uᵥ,
+                    )
+                ),
+            )
+        elseif fct_op == LinVanLeerFlux
+            @. ρqₜ_n -=
+                vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * LinVanLeerFlux(face_uᵥ, q_n, dt))
         else
             error("unrecognized FCT operator $fct_op")
         end
@@ -306,10 +329,19 @@ tracer_ranges(sol) =
         return maximum(q_n) - minimum(q_n)
     end
 
+@info "Slope Limited Solutions"
+tvd_sol = run_deformation_flow(false, SlopeLimitedFlux, _dt)
+lim_tvd_sol = run_deformation_flow(true, SlopeLimitedFlux, _dt)
+@info "vanLeer Flux Solutions"
+lvl_sol = run_deformation_flow(false, LinVanLeerFlux, _dt)
+lim_lvl_sol = run_deformation_flow(true, LinVanLeerFlux, _dt)
+@info "Third-Order Upwind Solutions"
 third_upwind_sol = run_deformation_flow(false, upwind3, _dt)
-fct_sol = run_deformation_flow(false, FCTZalesak, _dt)
 lim_third_upwind_sol = run_deformation_flow(true, upwind3, _dt)
+@info "Zalesak Flux-Corrected Transport Solutions"
+fct_sol = run_deformation_flow(false, FCTZalesak, _dt)
 lim_fct_sol = run_deformation_flow(true, FCTZalesak, _dt)
+@info "First-Order Upwind Solutions"
 lim_first_upwind_sol = run_deformation_flow(true, upwind1, _dt)
 lim_centered_sol = run_deformation_flow(true, nothing, _dt)
 
@@ -386,8 +418,12 @@ for (sol, suffix) in (
     (lim_first_upwind_sol, "_lim_first_upwind"),
     (third_upwind_sol, "_third_upwind"),
     (fct_sol, "_fct"),
+    (tvd_sol, "_tvd"),
+    (lvl_sol, "_lvl"),
     (lim_third_upwind_sol, "_lim_third_upwind"),
     (lim_fct_sol, "_lim_fct"),
+    (lim_tvd_sol, "_lim_tvd"),
+    (lim_lvl_sol, "_lim_lvl"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
         Plots.png(
@@ -397,6 +433,33 @@ for (sol, suffix) in (
                 clim = (-1, 1),
             ),
             joinpath(path, "q3_day$day$suffix.png"),
+        )
+    end
+end
+
+for (sol, suffix) in (
+    (lim_centered_sol, "_lim_centered"),
+    (lim_first_upwind_sol, "_lim_first_upwind"),
+    (third_upwind_sol, "_third_upwind"),
+    (fct_sol, "_fct"),
+    (tvd_sol, "_tvd"),
+    (lvl_sol, "_lvl"),
+    (lim_fct_sol, "_lim_fct"),
+    (lim_lvl_sol, "_lim_lvl"),
+)
+    for (sol_index, day) in ((1, 6), (2, 12))
+        Plots.png(
+            Plots.plot(
+                (
+                    ((sol.u[sol_index].c.ρq.:3) ./ sol.u[sol_index].c.ρ) .- (
+                        lim_third_upwind_sol[sol_index].c.ρq.:3 ./
+                        lim_third_upwind_sol[sol_index].c.ρ
+                    )
+                ),
+                level = 15,
+                clim = (-1, 1),
+            ),
+            joinpath(path, "q3_day_diff_$day$suffix.png"),
         )
     end
 end

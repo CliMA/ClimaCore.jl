@@ -1454,6 +1454,20 @@ steps:
           - "julia --color=yes --project=.buildkite examples/column/fct_advection.jl"
         artifact_paths:
           - "examples/column/output/fct_advection/*"
+      
+      - label: ":computer: Column TVD Slope-limited Advection Eq"
+        key: "cpu_tvd_column_advect"
+        command:
+          - "julia --color=yes --project=.buildkite examples/column/tvd_advection.jl"
+        artifact_paths:
+          - "examples/column/output/tvd_advection/*"
+      
+      - label: ":computer: Column Lin vanLeer Limiter Advection Eq"
+        key: "cpu_lvl_column_advect"
+        command:
+          - "julia --color=yes --project=.buildkite examples/column/vanleer_advection.jl"
+        artifact_paths:
+          - "examples/column/output/vanleer_advection/*"
 
       - label: ":computer: Column BB FCT Advection Eq"
         key: "cpu_bb_fct_column_advect"
