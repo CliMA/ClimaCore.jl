@@ -284,12 +284,15 @@ function Operators.return_eltype(
         ld1, ud1 = outer_diagonals(eltype(matrix1))
         ld2, ud2 = outer_diagonals(eltype(matrix2))
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type =
-            rmul_return_type(eltype(eltype(matrix1)), eltype(eltype(matrix2)))
+        prod_value_type = Base.promote_op(
+            rmul,
+            eltype(eltype(matrix1)),
+            eltype(eltype(matrix2)),
+        )
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
         vector = arg
-        return rmul_return_type(eltype(eltype(matrix1)), eltype(vector))
+        return Base.promote_op(rmul, eltype(eltype(matrix1)), eltype(vector))
     end
 end
 

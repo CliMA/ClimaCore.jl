@@ -5,6 +5,7 @@ main
 -------
 
 - ![][badge-🐛bugfix] We fixed some fieldvector broadcasting on Julia 1.9. PR [#1658](https://github.com/CliMA/ClimaCore.jl/pull/1658).
+- ![][badge-🚀performance] We fixed GPU inference for certain broadcast expressions. PR [#1665](https://github.com/CliMA/ClimaCore.jl/pull/1665).
 
 v0.13.3
 -------
