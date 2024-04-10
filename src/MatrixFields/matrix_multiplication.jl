@@ -270,6 +270,7 @@ function Operators.right_interior_idx(
     end
 end
 
+# import InteractiveUtils
 function Operators.return_eltype(
     ::MultiplyColumnwiseBandMatrixField,
     matrix1,
@@ -284,15 +285,40 @@ function Operators.return_eltype(
         ld1, ud1 = outer_diagonals(eltype(matrix1))
         ld2, ud2 = outer_diagonals(eltype(matrix2))
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type = Base.promote_op(
-            rmul,
-            eltype(eltype(matrix1)),
-            eltype(eltype(matrix2)),
-        )
+        prod_value_type =
+            rmul_return_type(eltype(eltype(matrix1)), eltype(eltype(matrix2)))
+        # prod_value_type_old =
+        #     rmul_return_type_old(eltype(eltype(matrix1)), eltype(eltype(matrix2)))
+        # if prod_value_type ≠ prod_value_type_old
+        #     s = InteractiveUtils.@which rmul_return_type(eltype(eltype(matrix1)), eltype(eltype(matrix2)))
+        #     @show s
+        #     @show eltype(eltype(matrix1))
+        #     @show eltype(eltype(matrix2))
+        #     @show eltype(eltype(matrix1)) <: Geometry.AdjointAxisTensor
+        #     @show eltype(eltype(matrix2)) <: Geometry.AdjointAxisTensor
+        #     @show prod_value_type
+        #     @show prod_value_type_old
+        #     error("Done")
+        # end
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
         vector = arg
-        return Base.promote_op(rmul, eltype(eltype(matrix1)), eltype(vector))
+        # prod_value_type = Base.promote_op(rmul, eltype(eltype(matrix1)), eltype(vector))
+        prod_value_type =
+            rmul_return_type(eltype(eltype(matrix1)), eltype(vector))
+        # prod_value_type_old = rmul_return_type_old(eltype(eltype(matrix1)), eltype(vector))
+        # if prod_value_type ≠ prod_value_type_old
+        #     s = InteractiveUtils.@which rmul_return_type(eltype(eltype(matrix1)), eltype(vector))
+        #     @show s
+        #     @show eltype(eltype(matrix1))
+        #     @show eltype(vector)
+        #     @show eltype(eltype(matrix1)) <: Geometry.AdjointAxisTensor
+        #     @show eltype(vector) <: Geometry.AdjointAxisTensor
+        #     @show prod_value_type
+        #     @show prod_value_type_old
+        #     error("Done")
+        # end
+        return prod_value_type
     end
 end
 

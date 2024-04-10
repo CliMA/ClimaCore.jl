@@ -141,16 +141,51 @@ Computes the return type of `rmul_with_projection(x, y, lg)`, where `x isa X`
 and `y isa Y`. This can also be used to obtain the return type of `rmul(x, y)`,
 although `rmul(x, y)` will throw an error when projection is necessary.
 
-Note that this is equivalent to calling the internal function `_return_type`:
-`Base._return_type(rmul_with_projection, Tuple{X, Y, LG})`, where `lg isa LG`.
+Note that this is similar to calling the internal function `Base.promote_op`:
+`Base.promote_op(rmul_with_projection, Tuple{X, Y, LG})`, where `lg isa LG`.
 """
 rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y} =
     rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
-    rmaptype(Y′ -> mul_return_type(X, Y′), Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
-    rmaptype(X′ -> mul_return_type(X′, Y), X)
+
+const SingleValueNonAdjoint = Union{Number, Geometry.AxisTensor}
+
+rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValueNonAdjoint, Y} =
+    Base.promote_op(rmul, X, Y)
+rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValueNonAdjoint} =
+    Base.promote_op(rmul, X, Y)
+
 rmul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)
+) where {X <: SingleValueNonAdjoint, Y <: Adjoint} =
+    rmaptype(Y′ -> mul_return_type(X, Y′), Y)
+rmul_return_type(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: Adjoint, Y <: SingleValueNonAdjoint} =
+    rmaptype(X′ -> mul_return_type(X′, Y), X)
+
+rmul_return_type(::Type{X}, ::Type{Y}) where {X <: Adjoint, Y <: Adjoint} =
+    mul_return_type(X, Y)
+
+rmul_return_type(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: SingleValueNonAdjoint, Y <: SingleValueNonAdjoint} =
+    Base.promote_op(rmul, X, Y)
+
+
+# #####
+# ##### Old
+# #####
+
+# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y} =
+#     rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
+# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
+#     rmaptype(Y′ -> mul_return_type(X, Y′), Y)
+# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
+#     rmaptype(X′ -> mul_return_type(X′, Y), X)
+# rmul_return_type_old(
+#     ::Type{X},
+#     ::Type{Y},
+# ) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)
