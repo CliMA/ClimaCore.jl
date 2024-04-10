@@ -548,7 +548,6 @@ steps:
       - label: "Unit: implicit stencil Float32"
         key: "gpu_implicit_stencil_float32"
         command: "julia -O0 --color=yes --check-bounds=yes --project=test test/Operators/finitedifference/implicit_stencils.jl --float_type Float32"
-        soft_fail: true
         agents:
           slurm_mem: 20GB
           slurm_gpus: 1
@@ -615,7 +614,6 @@ steps:
       - label: "Unit: operator matrices (GPU)"
         key: unit_operator_matrices_gpu
         command: "julia --color=yes --project=test test/MatrixFields/operator_matrices.jl"
-        soft_fail: true
         agents:
           slurm_gpus: 1
           slurm_mem: 40GB
@@ -1342,7 +1340,6 @@ steps:
           - "examples/hybrid/sphere/output/held_suarez_rhoe/Float32/*"
         env:
           TEST_NAME: "sphere/held_suarez_rhoe"
-        soft_fail: true
 
       - label: ":computer: Float64 3D sphere dry Held-Suarez (ρθ)"
         key: "cpu_held_suarez_rho_theta_float64"
