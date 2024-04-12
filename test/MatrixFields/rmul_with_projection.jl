@@ -1,15 +1,20 @@
 using StaticArrays: @SMatrix
 
-import ClimaCore.MatrixFields: rmul_with_projection, rmul_return_type
+import ClimaCore.MatrixFields: rmul_with_projection
 
 include("matrix_field_test_utils.jl")
 
-function test_rmul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
+function test_rmul_with_projection(
+    x::X,
+    y::Y,
+    lg::LG,
+    expected_result,
+) where {X, Y, LG}
     result = rmul_with_projection(x, y, lg)
-    result_type = rmul_return_type(X, Y)
+    result_type = Base.promote_op(rmul_with_projection, X, Y, LG)
 
     # Compute the maximum error as an integer multiple of machine epsilon.
-    FT = Geometry.undertype(typeof(lg))
+    FT = Geometry.undertype(LG)
     object2tuple(obj) =
         reinterpret(NTuple{sizeof(obj) ÷ sizeof(FT), FT}, [obj])[1]
     max_error = maximum(
@@ -18,13 +23,13 @@ function test_rmul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
         zip(object2tuple(result), object2tuple(expected_result)),
     )
 
-    @test max_error <= 1                                   # correctness
-    @test (@allocated rmul_with_projection(x, y, lg)) == 0 # allocations
-    @test_opt rmul_with_projection(x, y, lg)               # type instabilities
+    @test max_error <= 1                                                     # correctness
+    @test (@allocated rmul_with_projection(x, y, lg)) == 0                   # allocations
+    @test_opt rmul_with_projection(x, y, lg)                                 # type instabilities
 
-    @test result_type == typeof(result)                    # correctness
-    @test (@allocated rmul_return_type(X, Y)) == 0         # allocations
-    @test_opt rmul_return_type(X, Y)                       # type instabilities
+    @test result_type == typeof(result)                                      # correctness
+    @test (@allocated Base.promote_op(rmul_with_projection, X, Y, LG)) == 0  # allocations
+    @test_opt Base.promote_op(rmul_with_projection, X, Y, LG)                # type instabilities
 end
 
 @testset "rmul_with_projection Unit Tests" begin

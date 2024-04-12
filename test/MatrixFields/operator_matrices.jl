@@ -276,6 +276,7 @@ end
             ᶠuvw,
             ᶜadvect(ᶠuvw, ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))),
         )),
+        time_ratio_limit = 12,
     )
 
     test_field_broadcast(;
@@ -302,7 +303,7 @@ end
             ᶠuvw,
             ᶜadvect(ᶠuvw, ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))),
         )),
-        time_ratio_limit = 20, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 27, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
 

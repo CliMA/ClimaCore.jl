@@ -60,8 +60,6 @@ outer_diagonals
 band_matrix_row_type
 mul_with_projection
 rmul_with_projection
-mul_return_type
-rmul_return_type
 matrix_shape
 column_axes
 AbstractLazyOperator
