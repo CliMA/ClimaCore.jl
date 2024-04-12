@@ -607,6 +607,17 @@ steps:
           slurm_gpus: 1
           slurm_mem: 40GB
 
+      - label: "Unit: bidiag matrix row example (CPU)"
+        key: cpu_gpu_compat_bidiag_matrix_row
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
+
+      - label: "Unit: bidiag matrix row example (GPU)"
+        key: gpu_compat_bidiag_matrix_row
+        command: "julia --color=yes --project=test test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
+        soft_fail: true
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: operator matrices (CPU)"
         key: unit_operator_matrices_cpu
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/operator_matrices.jl"
