@@ -31,6 +31,7 @@ import ..Grids:
     CellCenter,
     topology,
     vertical_topology,
+    local_geometry_type,
     local_geometry_data,
     global_geometry,
     local_dss_weights,

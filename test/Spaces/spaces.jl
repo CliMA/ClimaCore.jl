@@ -70,10 +70,14 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
         end
     end
 
+    @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
+
     point_space = Spaces.column(space, 1, 1)
     @test point_space isa Spaces.PointSpace
     @test Spaces.coordinates_data(point_space)[] ==
           Spaces.column(coord_data, 1, 1)[]
+    @test Spaces.local_geometry_type(typeof(point_space)) <:
+          Geometry.LocalGeometry
 end
 
 on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
@@ -105,6 +109,8 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     array = parent(Spaces.coordinates_data(c_space))
     z = Fields.coordinate_field(c_space).z
     @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
+    @test Spaces.local_geometry_type(typeof(f_space)) <: Geometry.LocalGeometry
+    @test Spaces.local_geometry_type(typeof(c_space)) <: Geometry.LocalGeometry
 
     # Define test col index
     colidx = Fields.ColumnIndex{1}((4,), 5)
@@ -137,6 +143,8 @@ end
     @test point_space isa Spaces.PointSpace
     @test Spaces.coordinates_data(point_space)[] ==
           Spaces.level(coord_data, 1)[]
+
+    @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
 
     x_max = FT(1)
     y_max = FT(1)
@@ -208,6 +216,7 @@ end
     @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
     @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
+    @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
     dss_weights_slab = slab(Spaces.local_dss_weights(space), 1)
 
@@ -265,6 +274,8 @@ end
     grid_topology = Topologies.Topology2D(context, mesh)
     space = Spaces.SpectralElementSpace2D(grid_topology, quad)
     perimeter = Spaces.perimeter(space)
+    @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
+
 
     reference = [
         (1, 1),  # vertex 1

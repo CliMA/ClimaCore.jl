@@ -60,6 +60,7 @@ import ..DataLayouts: AbstractData
 import ..Geometry
 import ..Topologies
 import ..Spaces
+import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
 

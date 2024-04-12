@@ -7,7 +7,7 @@ import ..DataLayouts: DataLayouts, AbstractData, DataStyle
 import ..Domains
 import ..Topologies
 import ..Quadratures
-import ..Grids: ColumnIndex
+import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half, UnrolledFunctions
@@ -38,6 +38,8 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 
 ClimaComms.context(field::Field) = ClimaComms.context(axes(field))
 

@@ -57,6 +57,10 @@ space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid2D}, ::Nothing) =
     SpectralElementSpace1D(grid)
 grid(space::Spaces.SpectralElementSpace1D) = getfield(space, :grid)
 
+local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
+    local_geometry_type(G)
+
+
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
@@ -76,6 +80,9 @@ space(grid::Grids.SpectralElementGrid2D, ::Nothing) =
     SpectralElementSpace2D(grid)
 space(grid::Grids.LevelGrid{<:Grids.ExtrudedSpectralElementGrid3D}, ::Nothing) =
     SpectralElementSpace2D(grid)
+
+local_geometry_type(::Type{SpectralElementSpace2D{G}}) where {G} =
+    local_geometry_type(G)
 
 grid(space::Spaces.SpectralElementSpace2D) = getfield(space, :grid)
 
@@ -110,6 +117,8 @@ struct SpectralElementSpaceSlab{Q, G} <: AbstractSpectralElementSpace
     local_geometry::G
 end
 
+local_geometry_type(::Type{SpectralElementSpaceSlab{Q, G}}) where {Q, G} =
+    eltype(G) # calls eltype from DataLayouts
 const SpectralElementSpaceSlab1D =
     SpectralElementSpaceSlab{Q, DL} where {Q, DL <: DataLayouts.DataSlab1D}
 

@@ -8,6 +8,9 @@ struct ExtrudedFiniteDifferenceSpace{
     staggering::S
 end
 
+local_geometry_type(::Type{ExtrudedFiniteDifferenceSpace{G, S}}) where {G, S} =
+    local_geometry_type(G)
+
 space(grid::Grids.ExtrudedFiniteDifferenceGrid, staggering::Staggering) =
     ExtrudedFiniteDifferenceSpace(grid, staggering)
 

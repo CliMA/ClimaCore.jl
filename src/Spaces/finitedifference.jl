@@ -21,6 +21,8 @@ FiniteDifferenceSpace(
     staggering::Staggering,
 ) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), staggering)
 
+local_geometry_type(::Type{FiniteDifferenceSpace{G, S}}) where {G, S} =
+    local_geometry_type(G)
 
 const FaceFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellFace}
 const CenterFiniteDifferenceSpace{G} = FiniteDifferenceSpace{G, CellCenter}

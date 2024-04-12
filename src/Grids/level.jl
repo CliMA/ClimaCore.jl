@@ -18,6 +18,8 @@ topology(levelgrid::LevelGrid) = topology(levelgrid.full_grid)
 
 local_dss_weights(grid::LevelGrid) = local_dss_weights(grid.full_grid)
 
+local_geometry_type(::Type{LevelGrid{G, L}}) where {G, L} =
+    local_geometry_type(G)
 local_geometry_data(levelgrid::LevelGrid{<:Any, Int}, ::Nothing) = level(
     local_geometry_data(levelgrid.full_grid, CellCenter()),
     levelgrid.level,
