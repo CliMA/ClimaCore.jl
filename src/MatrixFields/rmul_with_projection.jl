@@ -146,46 +146,26 @@ Note that this is similar to calling the internal function `Base.promote_op`:
 """
 rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y} =
     rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
-
-const SingleValueNonAdjoint = Union{Number, Geometry.AxisTensor}
-
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValueNonAdjoint, Y} =
-    Base.promote_op(rmul, X, Y)
-rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValueNonAdjoint} =
-    Base.promote_op(rmul, X, Y)
-
-rmul_return_type(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: SingleValueNonAdjoint, Y <: Adjoint} =
+rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
     rmaptype(Y′ -> mul_return_type(X, Y′), Y)
-rmul_return_type(
-    ::Type{X},
-    ::Type{Y},
-) where {X <: Adjoint, Y <: SingleValueNonAdjoint} =
+rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
     rmaptype(X′ -> mul_return_type(X′, Y), X)
-
-rmul_return_type(::Type{X}, ::Type{Y}) where {X <: Adjoint, Y <: Adjoint} =
-    mul_return_type(X, Y)
-
 rmul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {X <: SingleValueNonAdjoint, Y <: SingleValueNonAdjoint} =
-    Base.promote_op(rmul, X, Y)
+) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)
 
+#####
+##### Old
+#####
 
-# #####
-# ##### Old
-# #####
-
-# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y} =
-#     rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
-# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
-#     rmaptype(Y′ -> mul_return_type(X, Y′), Y)
-# rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
-#     rmaptype(X′ -> mul_return_type(X′, Y), X)
-# rmul_return_type_old(
-#     ::Type{X},
-#     ::Type{Y},
-# ) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)
+rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y} =
+    rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
+rmul_return_type_old(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
+    rmaptype(Y′ -> mul_return_type(X, Y′), Y)
+rmul_return_type_old(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
+    rmaptype(X′ -> mul_return_type(X′, Y), X)
+rmul_return_type_old(
+    ::Type{X},
+    ::Type{Y},
+) where {X <: SingleValue, Y <: SingleValue} = mul_return_type(X, Y)

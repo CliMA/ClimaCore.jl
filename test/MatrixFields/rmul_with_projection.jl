@@ -40,7 +40,7 @@ end
 
     number = rand(FT)
     vector = Geometry.Covariant123Vector(rand(FT), rand(FT), rand(FT))
-    covector = Geometry.Covariant12Vector(rand(FT), rand(FT))';
+    covector = Geometry.Covariant12Vector(rand(FT), rand(FT))'
     tensor = vector * covector
     cotensor =
         (covector' * Geometry.Contravariant12Vector(rand(FT), rand(FT))')'
