@@ -25,4 +25,6 @@ include("Remapping/Remapping.jl")
 
 include("deprecated.jl")
 
+include("precompile.jl")
+
 end # module

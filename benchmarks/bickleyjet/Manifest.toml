@@ -194,7 +194,7 @@ uuid = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
 version = "0.5.8"
 
 [[deps.ClimaCore]]
-deps = ["Adapt", "BandedMatrices", "BlockArrays", "CUDA", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "Static", "StaticArrays", "Statistics", "Unrolled"]
+deps = ["Adapt", "BandedMatrices", "BlockArrays", "CUDA", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "PkgVersion", "PrecompileTools", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "Static", "StaticArrays", "Statistics", "Unrolled"]
 path = "../.."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 version = "0.13.3"
@@ -1321,9 +1321,9 @@ version = "7.2.1+1"
 
 [[deps.SymbolicIndexingInterface]]
 deps = ["Accessors", "ArrayInterface", "MacroTools", "RuntimeGeneratedFunctions", "StaticArraysCore"]
-git-tree-sha1 = "4b7f4c80449d8baae8857d55535033981862619c"
+git-tree-sha1 = "40ea524431a92328cd73582d1820a5b08247a40f"
 uuid = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
-version = "0.3.15"
+version = "0.3.16"
 
 [[deps.TOML]]
 deps = ["Dates"]
