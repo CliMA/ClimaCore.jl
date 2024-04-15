@@ -50,7 +50,7 @@ zelem = 36
 helem = 4
 npoly = 4
 t_end = FT(60 * 60 * 24 * 12) # 12 days of simulation time
-dt = FT(60 * 60) # 1 hour timestep
+_dt = FT(60 * 60) # 1 hour timestep
 ode_algorithm = ExplicitAlgorithm(SSP33ShuOsher())
 
 # Operators used in increment!
@@ -139,7 +139,7 @@ function horizontal_tendency!(Yₜ, Y, cache, t)
 end
 
 function vertical_tendency!(Yₜ, Y, cache, t)
-    (; q_n, face_u, face_uₕ, face_uᵥ, fct_op) = cache
+    (; q_n, face_u, face_uₕ, face_uᵥ, fct_op, dt) = cache
     face_coord = Fields.coordinate_field(face_u)
     @. face_u = local_velocity(face_coord, t)
     @. face_uₕ = Geometry.project(Geometry.Covariant12Axis(), face_u)
@@ -196,7 +196,7 @@ function dss!(Y, cache, t)
     Spaces.weighted_dss!(Y.c)
 end
 
-function run_deformation_flow(use_limiter, fct_op)
+function run_deformation_flow(use_limiter, fct_op, dt)
     vert_domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0),
         Geometry.ZPoint{FT}(z_top);
@@ -262,6 +262,7 @@ function run_deformation_flow(use_limiter, fct_op)
         face_uᵥ = Fields.Field(Geometry.Covariant3Vector{FT}, face_space),
         limiter = use_limiter ? Limiters.QuasiMonotoneLimiter(Y.c.ρq) : nothing,
         fct_op,
+        dt,
     )
 
     problem = ODEProblem(
@@ -303,12 +304,12 @@ tracer_ranges(sol) =
         return maximum(q_n) - minimum(q_n)
     end
 
-third_upwind_sol = run_deformation_flow(false, upwind3)
-fct_sol = run_deformation_flow(false, FCTZalesak)
-lim_third_upwind_sol = run_deformation_flow(true, upwind3)
-lim_fct_sol = run_deformation_flow(true, FCTZalesak)
-lim_first_upwind_sol = run_deformation_flow(true, upwind1)
-lim_centered_sol = run_deformation_flow(true, nothing)
+third_upwind_sol = run_deformation_flow(false, upwind3, _dt)
+fct_sol = run_deformation_flow(false, FCTZalesak, _dt)
+lim_third_upwind_sol = run_deformation_flow(true, upwind3, _dt)
+lim_fct_sol = run_deformation_flow(true, FCTZalesak, _dt)
+lim_first_upwind_sol = run_deformation_flow(true, upwind1, _dt)
+lim_centered_sol = run_deformation_flow(true, nothing, _dt)
 
 third_upwind_ρ_err, third_upwind_ρq_errs = conservation_errors(third_upwind_sol)
 fct_ρ_err, fct_ρq_errs = conservation_errors(fct_sol)
