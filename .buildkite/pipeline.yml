@@ -675,33 +675,33 @@ steps:
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_0
+        key: unit_matrix_field_broadcasting_cpu_scalar_10
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_1
+        key: unit_matrix_field_broadcasting_cpu_scalar_11
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_2
+        key: unit_matrix_field_broadcasting_cpu_scalar_12
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_3
+        key: unit_matrix_field_broadcasting_cpu_scalar_13
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_4
+        key: unit_matrix_field_broadcasting_cpu_scalar_14
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
         soft_fail: true
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_5
+        key: unit_matrix_field_broadcasting_cpu_scalar_15
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
         soft_fail: true
 
       - label: "Unit: matrix field broadcasting (CPU)"
-        key: unit_matrix_field_broadcasting_cpu_1scalar_6
+        key: unit_matrix_field_broadcasting_cpu_scalar_16
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
 
         # non-scalar
@@ -789,35 +789,35 @@ steps:
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_0
+        key: unit_matrix_field_broadcasting_gpu_scalar_10
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_1
+        key: unit_matrix_field_broadcasting_gpu_scalar_11
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_2
+        key: unit_matrix_field_broadcasting_gpu_scalar_12
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_3
+        key: unit_matrix_field_broadcasting_gpu_scalar_13
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_4
+        key: unit_matrix_field_broadcasting_gpu_scalar_14
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
         soft_fail: true
         agents:
@@ -825,7 +825,7 @@ steps:
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_5
+        key: unit_matrix_field_broadcasting_gpu_scalar_15
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
         soft_fail: true
         agents:
@@ -833,7 +833,7 @@ steps:
           slurm_mem: 10GB
 
       - label: "Unit: matrix field broadcasting (GPU)"
-        key: unit_matrix_field_broadcasting_gpu_1scalar_6
+        key: unit_matrix_field_broadcasting_gpu_scalar_16
         command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
         agents:
           slurm_gpus: 1
