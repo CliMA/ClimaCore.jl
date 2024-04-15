@@ -184,6 +184,11 @@ function vertical_tendency!(Yₜ, Y, cache, t)
     end
 end
 
+function T_exp_T_lim!(Yₜ, Yₜ_lim, Y, p, t)
+    horizontal_tendency!(Yₜ_lim, Y, p, t)
+    vertical_tendency!(Yₜ, Y, p, t)
+end
+
 function lim!(Y, cache, t, Y_ref)
     (; limiter) = cache
     if !isnothing(limiter)
@@ -265,12 +270,7 @@ function run_deformation_flow(use_limiter, fct_op)
     )
 
     problem = ODEProblem(
-        ClimaODEFunction(;
-            T_lim! = horizontal_tendency!,
-            T_exp! = vertical_tendency!,
-            lim!,
-            dss!,
-        ),
+        ClimaODEFunction(; T_exp_T_lim!, lim!, dss!),
         Y,
         (0, t_end),
         cache,
