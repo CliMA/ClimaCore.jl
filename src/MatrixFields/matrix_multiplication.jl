@@ -306,36 +306,6 @@ boundary_modified_ud(_, ud, column_space, i) = ud
 boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
     min(Operators.right_idx(column_space) - i, ud)
 
-# matrix_rows(ld1, ud1, (bc, boundary_modified_ld1, boundary_modified_ud1, space, matrix2, loc, idx, hidx))
-@inline matrix_rows(ld1, ud1, args) =
-    _matrix_rows(ntuple(i -> i + ld1 - 1, ud1 - ld1 + 1), args)
-Base.@propagate_inbounds function _matrix_rows(
-    d::Union{Int, PlusHalf{Int}},
-    args,
-)
-    (
-        bc,
-        boundary_modified_ld1,
-        boundary_modified_ud1,
-        space,
-        matrix2,
-        loc,
-        idx,
-        hidx,
-    ) = args
-    if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-        @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
-    else
-        zero(eltype(matrix2)) # This row is outside the matrix.
-    end
-end
-Base.@propagate_inbounds _matrix_rows(tup::Tuple, args) =
-    (_matrix_rows(first(tup), args), _matrix_rows(Base.tail(tup), args)...)
-Base.@propagate_inbounds _matrix_rows(tup::Tuple{<:Any}, args) =
-    (_matrix_rows(first(tup), args),)
-@inline _matrix_rows(tup::Tuple{}, args) = ()
-
-
 import UnrolledUtilities as UU
 # TODO: Use @propagate_inbounds here, and remove @inbounds from this function.
 # As of Julia 1.8, doing this increases compilation time by more than an order
@@ -372,15 +342,13 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
         # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
         # simplicity, use zero padding for rows that are outside the matrix.
         # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-        # matrix2_rows = matrix_rows(ld1, ud1, (bc, boundary_modified_ld1, boundary_modified_ud1, space, matrix2, loc, idx, hidx))
-        matrix2_rows = UU.unrolled_map((ld1:ud1...,)) do d
-            # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-            Base.@_inline_meta
-            if isnothing(bc) ||
-               boundary_modified_ld1 <= d <= boundary_modified_ud1
+        zero_mat2 = zero(eltype(matrix2))
+        nt_mat = ntuple(ξ -> ξ + ld1 - 1, ud1 - ld1 + 1)
+        matrix2_rows = UU.unrolled_map(nt_mat) do d
+            if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
                 @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
             else
-                zero(eltype(matrix2)) # This row is outside the matrix.
+                zero_mat2 # This row is outside the matrix.
             end
         end
         matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
@@ -395,22 +363,23 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
         # to boundary_modified_prod_ud. For simplicity, use zero padding for
         # entries that are outside the matrix. Wrap the entries in a
         # BandMatrixRow before returning them.
-        prod_entries = map((prod_ld:prod_ud...,)) do prod_d
-            # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-            Base.@_inline_meta
+        nt_pe = ntuple(ξ -> ξ + prod_ld - 1, prod_ud - prod_ld + 1)
+        prod_entries = UU.unrolled_map(nt_pe) do prod_d
             if isnothing(bc) ||
                boundary_modified_prod_ld <= prod_d <= boundary_modified_prod_ud
-                prod_entry = zero_value
                 min_d = max(boundary_modified_ld1, prod_d - ud2)
                 max_d = min(boundary_modified_ud1, prod_d - ld2)
-                @inbounds for d in min_d:max_d
-                    value1 = matrix1_row[d]
-                    value2 = matrix2_rows_wrapper[d][prod_d - d]
-                    value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-                    prod_entry = radd(
-                        prod_entry,
-                        rmul_with_projection(value1, value2, value2_lg),
-                    )
+                nt_pe_inner = ntuple(ξ -> ξ + min_d - 1, max_d - min_d + 1)
+                prod_entry = UU.unrolled_mapreduce(
+                    radd,
+                    nt_pe_inner;
+                    init = zero_value,
+                ) do d
+                    @inbounds value1 = matrix1_row[d]
+                    @inbounds value2 = matrix2_rows_wrapper[d][prod_d - d]
+                    @inbounds value2_lg =
+                        Geometry.LocalGeometry(space, idx + d, hidx)
+                    rmul_with_projection(value1, value2, value2_lg)
                 end # Using a for-loop is currently faster than using mapreduce.
                 prod_entry
             else
@@ -420,16 +389,20 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
         return BandMatrixRow{prod_ld}(prod_entries...)
     else # matrix-vector multiplication
         vector = arg
-        prod_value = rzero(prod_type)
-        @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
-            value1 = matrix1_row[d]
-            value2 = Operators.getidx(space, vector, loc, idx + d, hidx)
-            value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-            prod_value = radd(
-                prod_value,
-                rmul_with_projection(value1, value2, value2_lg),
-            )
-        end # Using a for-loop is currently faster than using mapreduce.
+        # @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
+        nt_pv = ntuple(
+            ξ -> ξ + boundary_modified_ld1 - 1,
+            boundary_modified_ud1 - boundary_modified_ld1 + 1,
+        )
+        prod_value =
+            UU.unrolled_mapreduce(radd, nt_pv; init = rzero(prod_type)) do d
+                @inbounds value1 = matrix1_row[d]
+                @inbounds value2 =
+                    Operators.getidx(space, vector, loc, idx + d, hidx)
+                @inbounds value2_lg =
+                    Geometry.LocalGeometry(space, idx + d, hidx)
+                rmul_with_projection(value1, value2, value2_lg)
+            end # Using a for-loop is currently faster than using mapreduce.
         return prod_value
     end
 end
@@ -473,9 +446,6 @@ Base.@propagate_inbounds Operators.stencil_right_boundary(
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true
     for m in methods(multiply_matrix_at_index)
-        m.recursion_relation = dont_limit
-    end
-    for m in methods(matrix_rows)
         m.recursion_relation = dont_limit
     end
 end
