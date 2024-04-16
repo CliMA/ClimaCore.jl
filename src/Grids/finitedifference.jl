@@ -168,6 +168,9 @@ FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
 topology(grid::FiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::FiniteDifferenceGrid) = grid.topology
 
+local_geometry_type(::Type{FiniteDifferenceGrid{T, GG, LG}}) where {T, GG, LG} =
+    eltype(LG) # calls eltype from DataLayouts
+
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellFace) =
@@ -181,6 +184,10 @@ struct DeviceFiniteDifferenceGrid{T, GG, LG} <: AbstractFiniteDifferenceGrid
     center_local_geometry::LG
     face_local_geometry::LG
 end
+
+local_geometry_type(
+    ::Type{DeviceFiniteDifferenceGrid{T, GG, LG}},
+) where {T, GG, LG} = eltype(LG) # calls eltype from DataLayouts
 
 Adapt.adapt_structure(to, grid::FiniteDifferenceGrid) =
     DeviceFiniteDifferenceGrid(

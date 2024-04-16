@@ -36,6 +36,8 @@ struct ColumnGrid{
     colidx::C
 end
 
+local_geometry_type(::Type{ColumnGrid{G, C}}) where {G, C} =
+    local_geometry_type(G)
 
 column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
     ColumnGrid(grid, colidx)

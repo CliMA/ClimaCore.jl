@@ -270,11 +270,29 @@ function Operators.right_interior_idx(
     end
 end
 
+pick_inferred_type(
+    ::Type{Union{}},
+    ::Type{Y},
+) where {Y <: Geometry.LocalGeometry} = Y
+pick_inferred_type(
+    ::Type{X},
+    ::Type{Union{}},
+) where {X <: Geometry.LocalGeometry} = X
+pick_inferred_type(::Type{T}, ::Type{T}) where {T <: Geometry.LocalGeometry} = T
+pick_inferred_type(::Type{Union{}}, ::Type{Union{}}) =
+    error("Both LGs are not inferred")
+pick_inferred_type(::Type{X}, ::Type{Y}) where {X, Y} =
+    error("LGs do not match: X=$X, Y=$Y")
+
 function Operators.return_eltype(
     ::MultiplyColumnwiseBandMatrixField,
     matrix1,
     arg,
 )
+    # LG1 = local_geometry_type(typeof(axes(matrix1)))
+    # LG2 = local_geometry_type(typeof(axes(arg)))
+    # LG = pick_inferred_type(LG1, LG2)
+    # return Operators.return_eltype(op, matrix1, arg, LG)
     eltype(matrix1) <: BandMatrixRow || error(
         "The first argument of ⋅ must have elements of type BandMatrixRow, but \
          the given argument has elements of type $(eltype(matrix1))",
@@ -290,6 +308,39 @@ function Operators.return_eltype(
     else # matrix-vector multiplication
         vector = arg
         return rmul_return_type(eltype(eltype(matrix1)), eltype(vector))
+    end
+end
+
+function Operators.return_eltype(
+    ::MultiplyColumnwiseBandMatrixField,
+    matrix1,
+    arg,
+    ::Type{LG},
+) where {LG}
+    eltype(matrix1) <: BandMatrixRow || error(
+        "The first argument of ⋅ must have elements of type BandMatrixRow, but \
+         the given argument has elements of type $(eltype(matrix1))",
+    )
+    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
+        matrix2 = arg
+        ld1, ud1 = outer_diagonals(eltype(matrix1))
+        ld2, ud2 = outer_diagonals(eltype(matrix2))
+        prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
+        prod_value_type = Base.promote_op(
+            rmul_with_projection,
+            eltype(eltype(matrix1)),
+            eltype(eltype(matrix2)),
+            LG,
+        )
+        return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
+    else # matrix-vector multiplication
+        vector = arg
+        prod_value_type = Base.promote_op(
+            rmul_with_projection,
+            eltype(eltype(matrix1)),
+            eltype(vector),
+            LG,
+        )
     end
 end
 
@@ -314,6 +365,8 @@ boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
 # matrix field broadcast expressions to take roughly 3 or 4 times longer to
 # evaluate, but this is less significant than the decrease in compilation time.
 function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
+    # lg = Geometry.LocalGeometry(space, idx, hidx)
+    # prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
     prod_type = Operators.return_eltype(⋅, matrix1, arg)
 
     column_space1 = column_axes(matrix1, space)

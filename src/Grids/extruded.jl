@@ -37,6 +37,10 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     face_local_geometry::LG
 end
 
+local_geometry_type(
+    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, LG}},
+) where {H, V, A, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+
 function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
     vertical_grid::FiniteDifferenceGrid,
@@ -125,7 +129,6 @@ vertical_topology(grid::ExtrudedFiniteDifferenceGrid) =
 local_dss_weights(grid::ExtrudedFiniteDifferenceGrid) =
     local_dss_weights(grid.horizontal_grid)
 
-
 local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry
 local_geometry_data(grid::AbstractExtrudedFiniteDifferenceGrid, ::CellFace) =
@@ -146,6 +149,10 @@ struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG} <:
     center_local_geometry::LG
     face_local_geometry::LG
 end
+
+local_geometry_type(
+    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG}},
+) where {VT, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
 
 Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
     DeviceExtrudedFiniteDifferenceGrid(

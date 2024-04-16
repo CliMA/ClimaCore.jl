@@ -21,6 +21,10 @@ mutable struct SpectralElementGrid1D{
     dss_weights::D
 end
 
+local_geometry_type(
+    ::Type{SpectralElementGrid1D{T, Q, GG, LG}},
+) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+
 # non-view grids are cached based on their input arguments
 # this means that if data is saved in two different files, reloading will give fields which live on the same grid
 function SpectralElementGrid1D(
@@ -117,6 +121,10 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
 end
+
+local_geometry_type(
+    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
+) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
     SpectralElementSpace2D(topology, quadrature_style; enable_bubble)

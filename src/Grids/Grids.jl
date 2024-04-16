@@ -49,6 +49,16 @@ If the grid is not staggered, `staggering` should be `nothing`.
 """
 function local_geometry_data end
 
+"""
+    Grids.local_geometry_type(::Type)
+
+Get the `LocalGeometry` type.
+"""
+function local_geometry_type end
+
+# Fallback, but this requires user error-handling
+local_geometry_type(::Type{T}) where {T} = Union{}
+
 function local_dss_weights end
 function quadrature_style end
 function vertical_topology end
