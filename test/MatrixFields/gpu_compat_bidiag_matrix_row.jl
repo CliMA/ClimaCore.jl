@@ -17,7 +17,10 @@ import .TestUtilities as TU
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 using ClimaCore.MatrixFields:
-    BidiagonalMatrixRow, TridiagonalMatrixRow, MultiplyColumnwiseBandMatrixField
+    BidiagonalMatrixRow,
+    TridiagonalMatrixRow,
+    MultiplyColumnwiseBandMatrixField,
+    ⋅
 const C3 = Geometry.Covariant3Vector
 FT = Float64
 const ᶠgradᵥ = Operators.GradientC2F(
@@ -25,7 +28,6 @@ const ᶠgradᵥ = Operators.GradientC2F(
     top = Operators.SetGradient(C3(0)),
 )
 const ᶠgradᵥ_matrix = MatrixFields.operator_matrix(ᶠgradᵥ)
-const ⋅ = MultiplyColumnwiseBandMatrixField()
 
 device = ClimaComms.device()
 context = ClimaComms.context(device)
