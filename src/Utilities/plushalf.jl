@@ -28,8 +28,23 @@ Base.:-(i::Integer, h::PlusHalf) = PlusHalf(i - h.i - one(h.i))
 Base.:-(h::PlusHalf, i::Integer) = PlusHalf(h.i - i)
 Base.:-(h1::PlusHalf, h2::PlusHalf) = h1.i - h2.i
 
+
+Base.:>=(h1::PlusHalf, h2::PlusHalf) = h1.i >= h2.i
+Base.:>=(h::PlusHalf, i::Int) = h.i ≥ i
+Base.:>=(i::Int, h::PlusHalf) = i > h.i
+
 Base.:<=(h1::PlusHalf, h2::PlusHalf) = h1.i <= h2.i
+Base.:<=(h::PlusHalf, i::Int) = h.i < i
+Base.:<=(i::Int, h::PlusHalf) = i ≤ h.i
+
+Base.:<(i::Int, h::PlusHalf) = i ≤ h.i
 Base.:<(h1::PlusHalf, h2::PlusHalf) = h1.i < h2.i
+Base.:<(h::PlusHalf, i::Int) = h.i < i
+
+Base.:>(h1::PlusHalf, h2::PlusHalf) = h1.i > h2.i
+Base.:>(h::PlusHalf, i::Int) = h.i ≥ i
+Base.:>(i::Int, h::PlusHalf) = i > h.i
+
 Base.max(h1::PlusHalf, h2::PlusHalf) = PlusHalf(max(h1.i, h2.i))
 Base.min(h1::PlusHalf, h2::PlusHalf) = PlusHalf(min(h1.i, h2.i))
 

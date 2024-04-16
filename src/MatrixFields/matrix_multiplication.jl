@@ -345,11 +345,100 @@ Base.@propagate_inbounds function multiply_matrix_at_index(
     end
 end
 
+# matrix_rows(ntuple(i -> i + ld1 - 1, ud1 - ld1 + 1), bc, boundary_modified_ld1, boundary_modified_ud1, space, matrix2, loc, idx, hidx)
+Base.@propagate_inbounds function _matrix_rows(
+    d::Union{Int, PlusHalf{Int}},
+    bc,
+    boundary_modified_ld1,
+    boundary_modified_ud1,
+    space,
+    matrix2,
+    loc,
+    idx,
+    hidx,
+)
+    # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
+    if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
+        @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
+    else
+        zero(eltype(matrix2)) # This row is outside the matrix.
+    end
+end
+Base.@propagate_inbounds matrix_rows(
+    tup::Tuple,
+    bc,
+    boundary_modified_ld1,
+    boundary_modified_ud1,
+    space,
+    matrix2,
+    loc,
+    idx,
+    hidx,
+) = (
+    _matrix_rows(
+        first(tup),
+        bc,
+        boundary_modified_ld1,
+        boundary_modified_ud1,
+        space,
+        matrix2,
+        loc,
+        idx,
+        hidx,
+    ),
+    matrix_rows(
+        Base.tail(tup),
+        bc,
+        boundary_modified_ld1,
+        boundary_modified_ud1,
+        space,
+        matrix2,
+        loc,
+        idx,
+        hidx,
+    )...,
+)
+Base.@propagate_inbounds matrix_rows(
+    tup::Tuple{<:Any},
+    bc,
+    boundary_modified_ld1,
+    boundary_modified_ud1,
+    space,
+    matrix2,
+    loc,
+    idx,
+    hidx,
+) = (
+    _matrix_rows(
+        first(tup),
+        bc,
+        boundary_modified_ld1,
+        boundary_modified_ud1,
+        space,
+        matrix2,
+        loc,
+        idx,
+        hidx,
+    ),
+)
+@inline matrix_rows(
+    tup::Tuple{},
+    bc,
+    boundary_modified_ld1,
+    boundary_modified_ud1,
+    space,
+    matrix2,
+    loc,
+    idx,
+    hidx,
+) = ()
+
+
 Base.@propagate_inbounds function multiply_matrix_at_index_mat_mat(
     loc,
     space,
     idx,
-    hidx,
+    hidx::Tuple{Int, Int, Int},
     matrix1,
     arg,
     bc,
@@ -380,15 +469,18 @@ Base.@propagate_inbounds function multiply_matrix_at_index_mat_mat(
     # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
     # simplicity, use zero padding for rows that are outside the matrix.
     # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-    matrix2_rows = map((ld1:ud1...,)) do d
-        # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-        Base.@_inline_meta
-        if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
-            @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
-        else
-            zero(eltype(matrix2)) # This row is outside the matrix.
-        end
-    end
+    nt = ntuple(i -> i + ld1 - 1, ud1 - ld1 + 1)
+    matrix2_rows = matrix_rows(
+        nt,
+        bc,
+        boundary_modified_ld1,
+        boundary_modified_ud1,
+        space,
+        matrix2,
+        loc,
+        idx,
+        hidx,
+    )
     matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
 
     # Precompute the zero value to avoid inference issues caused by passing
@@ -500,6 +592,9 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
     for m in methods(multiply_matrix_at_index_mat_mat)
+        m.recursion_relation = dont_limit
+    end
+    for m in methods(matrix_rows)
         m.recursion_relation = dont_limit
     end
     for m in methods(multiply_matrix_at_index_mat_vec)
