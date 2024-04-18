@@ -99,17 +99,17 @@ if !on_gpu
         # Remapping two fields
         interp_xx = Remapping.interpolate(remapper, [coords.x, coords.x])
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ interp_xx[1, :, :, :]
-            @test interp_x ≈ interp_xx[2, :, :, :]
+            @test interp_x ≈ interp_xx[:, :, 1]
+            @test interp_x ≈ interp_xx[:, :, 2]
         end
 
         # Remapping three fields (more than the buffer length)
         interp_xxx =
             Remapping.interpolate(remapper, [coords.x, coords.x, coords.x])
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ interp_xxx[1, :, :, :]
-            @test interp_x ≈ interp_xxx[2, :, :, :]
-            @test interp_x ≈ interp_xxx[3, :, :, :]
+            @test interp_x ≈ interp_xxx[:, :, 1]
+            @test interp_x ≈ interp_xxx[:, :, 2]
+            @test interp_x ≈ interp_xxx[:, :, 3]
         end
 
         # Remapping in-place one field
@@ -122,25 +122,25 @@ if !on_gpu
         end
 
         # Two fields
-        dest = zeros(2, 21, 21)
+        dest = zeros(21, 21, 2)
         Remapping.interpolate!(dest, remapper, [coords.x, coords.x])
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[1, :, :, :]
-            @test interp_x ≈ dest[2, :, :, :]
+            @test interp_x ≈ dest[:, :, 1]
+            @test interp_x ≈ dest[:, :, 2]
         end
 
         # Three fields (more than buffer length)
         if !broken
-            dest = zeros(3, 21, 21)
+            dest = zeros(21, 21, 3)
             Remapping.interpolate!(
                 dest,
                 remapper,
                 [coords.x, coords.x, coords.x],
             )
             if ClimaComms.iamroot(context)
-                @test interp_x ≈ dest[1, :, :, :]
-                @test interp_x ≈ dest[2, :, :, :]
-                @test interp_x ≈ dest[3, :, :, :]
+                @test interp_x ≈ dest[:, :, 1]
+                @test interp_x ≈ dest[:, :, 2]
+                @test interp_x ≈ dest[:, :, 3]
             end
         end
     end
@@ -212,15 +212,15 @@ end
     # Remapping two fields
     interp_xy = Remapping.interpolate(remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ interp_xy[1, :, :, :]
-        @test interp_y ≈ interp_xy[2, :, :, :]
+        @test interp_x ≈ interp_xy[:, :, :, 1]
+        @test interp_y ≈ interp_xy[:, :, :, 2]
     end
     # Remapping three fields (more than the buffer length)
     interp_xyx = Remapping.interpolate(remapper, [coords.x, coords.y, coords.x])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ interp_xyx[1, :, :, :]
-        @test interp_y ≈ interp_xyx[2, :, :, :]
-        @test interp_x ≈ interp_xyx[3, :, :, :]
+        @test interp_x ≈ interp_xyx[:, :, :, 1]
+        @test interp_y ≈ interp_xyx[:, :, :, 2]
+        @test interp_x ≈ interp_xyx[:, :, :, 3]
     end
 
     # Remapping in-place one field
@@ -237,21 +237,21 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21, 21)
+    dest = zeros(21, 21, 21, 2)
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ dest[1, :, :, :]
-        @test interp_y ≈ dest[2, :, :, :]
+        @test interp_x ≈ dest[:, :, :, 1]
+        @test interp_y ≈ dest[:, :, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21, 21)
+        dest = zeros(21, 21, 21, 3)
         Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[1, :, :, :]
-            @test interp_y ≈ dest[2, :, :, :]
-            @test interp_x ≈ dest[3, :, :, :]
+            @test interp_x ≈ dest[:, :, :, 1]
+            @test interp_y ≈ dest[:, :, :, 2]
+            @test interp_x ≈ dest[:, :, :, 3]
         end
     end
 
@@ -275,17 +275,17 @@ end
     # Two fields
     interp_xy = Remapping.interpolate(horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_xy[1, :, :] ≈ interp_x
-        @test interp_xy[2, :, :] ≈ interp_y
+        @test interp_xy[:, :, 1] ≈ interp_x
+        @test interp_xy[:, :, 2] ≈ interp_y
     end
 
     # Three fields
     interp_xyx =
         Remapping.interpolate(horiz_remapper, [coords.x, coords.y, coords.x])
     if ClimaComms.iamroot(context)
-        @test interp_xyx[1, :, :] ≈ interp_x
-        @test interp_xyx[2, :, :] ≈ interp_y
-        @test interp_xyx[3, :, :] ≈ interp_x
+        @test interp_xyx[:, :, 1] ≈ interp_x
+        @test interp_xyx[:, :, 2] ≈ interp_y
+        @test interp_xyx[:, :, 3] ≈ interp_x
     end
 
     # Remapping in-place one field
@@ -301,25 +301,25 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21)
+    dest = zeros(21, 21, 2)
     Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ dest[1, :, :]
-        @test interp_y ≈ dest[2, :, :]
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_y ≈ dest[:, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21)
+        dest = zeros(21, 21, 3)
         Remapping.interpolate!(
             dest,
             horiz_remapper,
             [coords.x, coords.y, coords.x],
         )
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[1, :, :]
-            @test interp_y ≈ dest[2, :, :]
-            @test interp_x ≈ dest[3, :, :]
+            @test interp_x ≈ dest[:, :, 1]
+            @test interp_y ≈ dest[:, :, 2]
+            @test interp_x ≈ dest[:, :, 3]
         end
     end
 end
@@ -392,15 +392,15 @@ end
     # Remapping two fields
     interp_xy = Remapping.interpolate(remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ interp_xy[1, :, :, :]
-        @test interp_y ≈ interp_xy[2, :, :, :]
+        @test interp_x ≈ interp_xy[:, :, :, 1]
+        @test interp_y ≈ interp_xy[:, :, :, 2]
     end
     # Remapping three fields (more than the buffer length)
     interp_xyx = Remapping.interpolate(remapper, [coords.x, coords.y, coords.x])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ interp_xyx[1, :, :, :]
-        @test interp_y ≈ interp_xyx[2, :, :, :]
-        @test interp_x ≈ interp_xyx[3, :, :, :]
+        @test interp_x ≈ interp_xyx[:, :, :, 1]
+        @test interp_y ≈ interp_xyx[:, :, :, 2]
+        @test interp_x ≈ interp_xyx[:, :, :, 3]
     end
 
     # Remapping in-place one field
@@ -417,21 +417,21 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21, 21)
+    dest = zeros(21, 21, 21, 2)
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ dest[1, :, :, :]
-        @test interp_y ≈ dest[2, :, :, :]
+        @test interp_x ≈ dest[:, :, :, 1]
+        @test interp_y ≈ dest[:, :, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21, 21)
+        dest = zeros(21, 21, 21, 3)
         Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[1, :, :, :]
-            @test interp_y ≈ dest[2, :, :, :]
-            @test interp_x ≈ dest[3, :, :, :]
+            @test interp_x ≈ dest[:, :, :, 1]
+            @test interp_y ≈ dest[:, :, :, 2]
+            @test interp_x ≈ dest[:, :, :, 3]
         end
     end
 
@@ -455,17 +455,17 @@ end
     # Two fields
     interp_xy = Remapping.interpolate(horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_xy[1, :, :] ≈ interp_x
-        @test interp_xy[2, :, :] ≈ interp_y
+        @test interp_xy[:, :, 1] ≈ interp_x
+        @test interp_xy[:, :, 2] ≈ interp_y
     end
 
     # Three fields
     interp_xyx =
         Remapping.interpolate(horiz_remapper, [coords.x, coords.y, coords.x])
     if ClimaComms.iamroot(context)
-        @test interp_xyx[1, :, :] ≈ interp_x
-        @test interp_xyx[2, :, :] ≈ interp_y
-        @test interp_xyx[3, :, :] ≈ interp_x
+        @test interp_xyx[:, :, 1] ≈ interp_x
+        @test interp_xyx[:, :, 2] ≈ interp_y
+        @test interp_xyx[:, :, 3] ≈ interp_x
     end
 
     # Remapping in-place one field
@@ -481,25 +481,25 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21)
+    dest = zeros(21, 21, 2)
     Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ dest[1, :, :]
-        @test interp_y ≈ dest[2, :, :]
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_y ≈ dest[:, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21)
+        dest = zeros(21, 21, 3)
         Remapping.interpolate!(
             dest,
             horiz_remapper,
             [coords.x, coords.y, coords.x],
         )
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[1, :, :]
-            @test interp_y ≈ dest[2, :, :]
-            @test interp_x ≈ dest[3, :, :]
+            @test interp_x ≈ dest[:, :, 1]
+            @test interp_y ≈ dest[:, :, 2]
+            @test interp_x ≈ dest[:, :, 3]
         end
     end
 end
@@ -567,8 +567,8 @@ end
     interp_long_lat =
         Remapping.interpolate(remapper, [sind.(coords.long), sind.(coords.lat)])
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈ interp_long_lat[1, :, :, :]
-        @test interp_sin_lat ≈ interp_long_lat[2, :, :, :]
+        @test interp_sin_long ≈ interp_long_lat[:, :, :, 1]
+        @test interp_sin_lat ≈ interp_long_lat[:, :, :, 2]
     end
     # Remapping three fields (more than the buffer length)
     interp_long_lat_long = Remapping.interpolate(
@@ -576,9 +576,9 @@ end
         [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
     )
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈ interp_long_lat_long[1, :, :, :]
-        @test interp_sin_lat ≈ interp_long_lat_long[2, :, :, :]
-        @test interp_sin_long ≈ interp_long_lat_long[3, :, :, :]
+        @test interp_sin_long ≈ interp_long_lat_long[:, :, :, 1]
+        @test interp_sin_lat ≈ interp_long_lat_long[:, :, :, 2]
+        @test interp_sin_long ≈ interp_long_lat_long[:, :, :, 3]
     end
 
     # Remapping in-place one field
@@ -595,29 +595,29 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21, 21)
+    dest = zeros(21, 21, 21, 2)
     Remapping.interpolate!(
         dest,
         remapper,
         [sind.(coords.long), sind.(coords.lat)],
     )
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈ dest[1, :, :, :]
-        @test interp_sin_lat ≈ dest[2, :, :, :]
+        @test interp_sin_long ≈ dest[:, :, :, 1]
+        @test interp_sin_lat ≈ dest[:, :, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21, 21)
+        dest = zeros(21, 21, 21, 3)
         Remapping.interpolate!(
             dest,
             remapper,
             [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
         )
         if ClimaComms.iamroot(context)
-            @test interp_sin_long ≈ dest[1, :, :, :]
-            @test interp_sin_lat ≈ dest[2, :, :, :]
-            @test interp_sin_long ≈ dest[3, :, :, :]
+            @test interp_sin_long ≈ dest[:, :, :, 1]
+            @test interp_sin_lat ≈ dest[:, :, :, 2]
+            @test interp_sin_long ≈ dest[:, :, :, 3]
         end
     end
 
@@ -644,8 +644,8 @@ end
         [sind.(coords.long), sind.(coords.lat)],
     )
     if ClimaComms.iamroot(context)
-        @test interp_sin_long_lat[1, :, :] ≈ interp_sin_long
-        @test interp_sin_long_lat[2, :, :] ≈ interp_sin_lat
+        @test interp_sin_long_lat[:, :, 1] ≈ interp_sin_long
+        @test interp_sin_long_lat[:, :, 2] ≈ interp_sin_lat
     end
 
     # Three fields
@@ -654,9 +654,9 @@ end
         [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
     )
     if ClimaComms.iamroot(context)
-        @test interp_sin_long_lat_long[1, :, :] ≈ interp_sin_long
-        @test interp_sin_long_lat_long[2, :, :] ≈ interp_sin_lat
-        @test interp_sin_long_lat_long[3, :, :] ≈ interp_sin_long
+        @test interp_sin_long_lat_long[:, :, 1] ≈ interp_sin_long
+        @test interp_sin_long_lat_long[:, :, 2] ≈ interp_sin_lat
+        @test interp_sin_long_lat_long[:, :, 3] ≈ interp_sin_long
     end
 
     # Remapping in-place one field
@@ -672,29 +672,29 @@ end
     end
 
     # Two fields
-    dest = zeros(2, 21, 21)
+    dest = zeros(21, 21, 2)
     Remapping.interpolate!(
         dest,
         horiz_remapper,
         [sind.(coords.long), sind.(coords.lat)],
     )
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈ dest[1, :, :]
-        @test interp_sin_lat ≈ dest[2, :, :]
+        @test interp_sin_long ≈ dest[:, :, 1]
+        @test interp_sin_lat ≈ dest[:, :, 2]
     end
 
     # Three fields (more than buffer length)
     if !broken
-        dest = zeros(3, 21, 21)
+        dest = zeros(21, 21, 3)
         Remapping.interpolate!(
             dest,
             horiz_remapper,
             [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
         )
         if ClimaComms.iamroot(context)
-            @test interp_sin_long ≈ dest[1, :, :]
-            @test interp_sin_lat ≈ dest[2, :, :]
-            @test interp_sin_long ≈ dest[3, :, :]
+            @test interp_sin_long ≈ dest[:, :, 1]
+            @test interp_sin_lat ≈ dest[:, :, 2]
+            @test interp_sin_long ≈ dest[:, :, 3]
         end
     end
 end
