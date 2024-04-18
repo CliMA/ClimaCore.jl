@@ -630,7 +630,6 @@ steps:
       - label: "Unit: bidiag matrix row example (GPU)"
         key: gpu_compat_bidiag_matrix_row
         command: "julia --color=yes --project=test test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
-        soft_fail: true
         agents:
           slurm_gpus: 1
 

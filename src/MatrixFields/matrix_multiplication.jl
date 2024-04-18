@@ -270,29 +270,11 @@ function Operators.right_interior_idx(
     end
 end
 
-pick_inferred_type(
-    ::Type{Union{}},
-    ::Type{Y},
-) where {Y <: Geometry.LocalGeometry} = Y
-pick_inferred_type(
-    ::Type{X},
-    ::Type{Union{}},
-) where {X <: Geometry.LocalGeometry} = X
-pick_inferred_type(::Type{T}, ::Type{T}) where {T <: Geometry.LocalGeometry} = T
-pick_inferred_type(::Type{Union{}}, ::Type{Union{}}) =
-    error("Both LGs are not inferred")
-pick_inferred_type(::Type{X}, ::Type{Y}) where {X, Y} =
-    error("LGs do not match: X=$X, Y=$Y")
-
 function Operators.return_eltype(
     ::MultiplyColumnwiseBandMatrixField,
     matrix1,
     arg,
 )
-    # LG1 = local_geometry_type(typeof(axes(matrix1)))
-    # LG2 = local_geometry_type(typeof(axes(arg)))
-    # LG = pick_inferred_type(LG1, LG2)
-    # return Operators.return_eltype(op, matrix1, arg, LG)
     eltype(matrix1) <: BandMatrixRow || error(
         "The first argument of ⋅ must have elements of type BandMatrixRow, but \
          the given argument has elements of type $(eltype(matrix1))",
@@ -365,9 +347,8 @@ boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
 # matrix field broadcast expressions to take roughly 3 or 4 times longer to
 # evaluate, but this is less significant than the decrease in compilation time.
 function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
-    # lg = Geometry.LocalGeometry(space, idx, hidx)
-    # prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
-    prod_type = Operators.return_eltype(⋅, matrix1, arg)
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
 
     column_space1 = column_axes(matrix1, space)
     ld1, ud1 = outer_diagonals(eltype(matrix1))
