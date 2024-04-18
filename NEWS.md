@@ -4,8 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- ![][badge-🤖precisionΔ] `Remapper`s can now process multiple `Field`s at the same time if created with some `buffer_lenght > 1`.
-  PR ([#1669](https://github.com/CliMA/ClimaCore.jl/pull/1669)) Machine-precision differences are expected.
+- ![][badge-🤖precisionΔ] ![][badge-💥breaking] `Remapper`s can now process
+  multiple `Field`s at the same time if created with some `buffer_lenght > 1`.
+  PR ([#1669](https://github.com/CliMA/ClimaCore.jl/pull/1669))
+  Machine-precision differences are expected. This change is breaking because
+  remappers now return the same array type as the input field.
 
 v0.13.4
 -------

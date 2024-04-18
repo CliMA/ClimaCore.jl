@@ -17,6 +17,7 @@ using ClimaComms
 const context = ClimaComms.context()
 const pid, nprocs = ClimaComms.init(context)
 const device = ClimaComms.device()
+ArrayType = ClimaComms.array_type(device)
 
 # log output only from root process
 logger_stream = ClimaComms.iamroot(context) ? stderr : devnull
@@ -34,7 +35,7 @@ end
 end
 
 on_gpu = device isa ClimaComms.CUDADevice
-broken = true
+broken = false
 
 if !on_gpu
     @testset "2D extruded" begin
@@ -83,16 +84,16 @@ if !on_gpu
 
         interp_x = Remapping.interpolate(remapper, coords.x)
         if ClimaComms.iamroot(context)
-            @test interp_x ≈ [x for x in xpts, z in zpts]
+            @test Array(interp_x) ≈ [x for x in xpts, z in zpts]
         end
 
         interp_z = Remapping.interpolate(remapper, coords.z)
         expected_z = [z for x in xpts, z in zpts]
         if ClimaComms.iamroot(context)
-            @test interp_z[:, 2:(end - 1)] ≈ expected_z[:, 2:(end - 1)]
-            @test interp_z[:, 1] ≈
+            @test Array(interp_z[:, 2:(end - 1)]) ≈ expected_z[:, 2:(end - 1)]
+            @test Array(interp_z[:, 1]) ≈
                   [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts]
-            @test interp_z[:, end] ≈
+            @test Array(interp_z[:, end]) ≈
                   [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts]
         end
 
@@ -113,16 +114,14 @@ if !on_gpu
         end
 
         # Remapping in-place one field
-        if !broken
-            dest = zeros(21, 21)
-            Remapping.interpolate!(dest, remapper, coords.x)
-            if ClimaComms.iamroot(context)
-                @test interp_x ≈ dest
-            end
+        dest = ArrayType(zeros(21, 21))
+        Remapping.interpolate!(dest, remapper, coords.x)
+        if ClimaComms.iamroot(context)
+            @test interp_x ≈ dest
         end
 
         # Two fields
-        dest = zeros(21, 21, 2)
+        dest = ArrayType(zeros(21, 21, 2))
         Remapping.interpolate!(dest, remapper, [coords.x, coords.x])
         if ClimaComms.iamroot(context)
             @test interp_x ≈ dest[:, :, 1]
@@ -130,18 +129,12 @@ if !on_gpu
         end
 
         # Three fields (more than buffer length)
-        if !broken
-            dest = zeros(21, 21, 3)
-            Remapping.interpolate!(
-                dest,
-                remapper,
-                [coords.x, coords.x, coords.x],
-            )
-            if ClimaComms.iamroot(context)
-                @test interp_x ≈ dest[:, :, 1]
-                @test interp_x ≈ dest[:, :, 2]
-                @test interp_x ≈ dest[:, :, 3]
-            end
+        dest = ArrayType(zeros(21, 21, 3))
+        Remapping.interpolate!(dest, remapper, [coords.x, coords.x, coords.x])
+        if ClimaComms.iamroot(context)
+            @test interp_x ≈ dest[:, :, 1]
+            @test interp_x ≈ dest[:, :, 2]
+            @test interp_x ≈ dest[:, :, 3]
         end
     end
 end
@@ -191,21 +184,21 @@ end
 
     interp_x = Remapping.interpolate(remapper, coords.x)
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ [x for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_x) ≈ [x for x in xpts, y in ypts, z in zpts]
     end
 
     interp_y = Remapping.interpolate(remapper, coords.y)
     if ClimaComms.iamroot(context)
-        @test interp_y ≈ [y for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_y) ≈ [y for x in xpts, y in ypts, z in zpts]
     end
 
     interp_z = Remapping.interpolate(remapper, coords.z)
     expected_z = [z for x in xpts, y in ypts, z in zpts]
     if ClimaComms.iamroot(context)
-        @test interp_z[:, :, 2:(end - 1)] ≈ expected_z[:, :, 2:(end - 1)]
-        @test interp_z[:, :, 1] ≈
+        @test Array(interp_z[:, :, 2:(end - 1)]) ≈ expected_z[:, :, 2:(end - 1)]
+        @test Array(interp_z[:, :, 1]) ≈
               [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts, y in ypts]
-        @test interp_z[:, :, end] ≈
+        @test Array(interp_z[:, :, end]) ≈
               [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts, y in ypts]
     end
 
@@ -224,20 +217,14 @@ end
     end
 
     # Remapping in-place one field
-    #
-    # We have to change remapper for GPU to make sure it works for when have have only one
-    # field
-    remapper_1field =
-        on_gpu ? Remapping.Remapper(hv_center_space, hcoords, zcoords) :
-        remapper
-    dest = zeros(21, 21, 21)
-    Remapping.interpolate!(dest, remapper_1field, coords.x)
+    dest = ArrayType(zeros(21, 21, 21))
+    Remapping.interpolate!(dest, remapper, coords.x)
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest
     end
 
     # Two fields
-    dest = zeros(21, 21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 21, 2))
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest[:, :, :, 1]
@@ -245,15 +232,14 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 21, 3)
-        Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, :, 1]
-            @test interp_y ≈ dest[:, :, :, 2]
-            @test interp_x ≈ dest[:, :, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 21, 3))
+    Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, :, 1]
+        @test interp_y ≈ dest[:, :, :, 2]
+        @test interp_x ≈ dest[:, :, :, 3]
     end
+
 
     # Horizontal space
     horiz_space = Spaces.horizontal_space(hv_center_space)
@@ -264,12 +250,12 @@ end
     interp_x = Remapping.interpolate(horiz_remapper, coords.x)
     # Only root has the final result
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ [x for x in xpts, y in ypts]
+        @test Array(interp_x) ≈ [x for x in xpts, y in ypts]
     end
 
     interp_y = Remapping.interpolate(horiz_remapper, coords.y)
     if ClimaComms.iamroot(context)
-        @test interp_y ≈ [y for x in xpts, y in ypts]
+        @test Array(interp_y) ≈ [y for x in xpts, y in ypts]
     end
 
     # Two fields
@@ -292,16 +278,15 @@ end
     #
     # We have to change remapper for GPU to make sure it works for when have have only one
     # field
-    if !broken
-        dest = zeros(21, 21)
-        Remapping.interpolate!(dest, remapper_1field, coords.x)
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest
-        end
+    dest = ArrayType(zeros(21, 21))
+    Remapping.interpolate!(dest, horiz_remapper, coords.x)
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest
     end
 
+
     # Two fields
-    dest = zeros(21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 2))
     Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest[:, :, 1]
@@ -309,19 +294,14 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 3)
-        Remapping.interpolate!(
-            dest,
-            horiz_remapper,
-            [coords.x, coords.y, coords.x],
-        )
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, 1]
-            @test interp_y ≈ dest[:, :, 2]
-            @test interp_x ≈ dest[:, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 3))
+    Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_y ≈ dest[:, :, 2]
+        @test interp_x ≈ dest[:, :, 3]
     end
+
 end
 
 
@@ -371,21 +351,21 @@ end
 
     interp_x = Remapping.interpolate(remapper, coords.x)
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ [x for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_x) ≈ [x for x in xpts, y in ypts, z in zpts]
     end
 
     interp_y = Remapping.interpolate(remapper, coords.y)
     if ClimaComms.iamroot(context)
-        @test interp_y ≈ [y for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_y) ≈ [y for x in xpts, y in ypts, z in zpts]
     end
 
     interp_z = Remapping.interpolate(remapper, coords.z)
     expected_z = [z for x in xpts, y in ypts, z in zpts]
     if ClimaComms.iamroot(context)
-        @test interp_z[:, :, 2:(end - 1)] ≈ expected_z[:, :, 2:(end - 1)]
-        @test interp_z[:, :, 1] ≈
+        @test Array(interp_z[:, :, 2:(end - 1)]) ≈ expected_z[:, :, 2:(end - 1)]
+        @test Array(interp_z[:, :, 1]) ≈
               [1000.0 * (0 / 30 + 1 / 30) / 2 for x in xpts, y in ypts]
-        @test interp_z[:, :, end] ≈
+        @test Array(interp_z[:, :, end]) ≈
               [1000.0 * (29 / 30 + 30 / 30) / 2 for x in xpts, y in ypts]
     end
 
@@ -404,20 +384,14 @@ end
     end
 
     # Remapping in-place one field
-    #
-    # We have to change remapper for GPU to make sure it works for when have have only one
-    # field
-    remapper_1field =
-        on_gpu ? Remapping.Remapper(hv_center_space, hcoords, zcoords) :
-        remapper
-    dest = zeros(21, 21, 21)
-    Remapping.interpolate!(dest, remapper_1field, coords.x)
+    dest = ArrayType(zeros(21, 21, 21))
+    Remapping.interpolate!(dest, remapper, coords.x)
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest
     end
 
     # Two fields
-    dest = zeros(21, 21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 21, 2))
     Remapping.interpolate!(dest, remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest[:, :, :, 1]
@@ -425,15 +399,14 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 21, 3)
-        Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, :, 1]
-            @test interp_y ≈ dest[:, :, :, 2]
-            @test interp_x ≈ dest[:, :, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 21, 3))
+    Remapping.interpolate!(dest, remapper, [coords.x, coords.y, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, :, 1]
+        @test interp_y ≈ dest[:, :, :, 2]
+        @test interp_x ≈ dest[:, :, :, 3]
     end
+
 
     # Horizontal space
     horiz_space = Spaces.horizontal_space(hv_center_space)
@@ -444,12 +417,12 @@ end
     interp_x = Remapping.interpolate(horiz_remapper, coords.x)
     # Only root has the final result
     if ClimaComms.iamroot(context)
-        @test interp_x ≈ [x for x in xpts, y in ypts]
+        @test Array(interp_x) ≈ [x for x in xpts, y in ypts]
     end
 
     interp_y = Remapping.interpolate(horiz_remapper, coords.y)
     if ClimaComms.iamroot(context)
-        @test interp_y ≈ [y for x in xpts, y in ypts]
+        @test Array(interp_y) ≈ [y for x in xpts, y in ypts]
     end
 
     # Two fields
@@ -469,19 +442,15 @@ end
     end
 
     # Remapping in-place one field
-    #
-    # We have to change remapper for GPU to make sure it works for when have have only one
-    # field
-    if !broken
-        dest = zeros(21, 21)
-        Remapping.interpolate!(dest, remapper_1field, coords.x)
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest
-        end
+    dest = ArrayType(zeros(21, 21))
+    Remapping.interpolate!(dest, horiz_remapper, coords.x)
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest
     end
 
+
     # Two fields
-    dest = zeros(21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 2))
     Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y])
     if ClimaComms.iamroot(context)
         @test interp_x ≈ dest[:, :, 1]
@@ -489,18 +458,12 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 3)
-        Remapping.interpolate!(
-            dest,
-            horiz_remapper,
-            [coords.x, coords.y, coords.x],
-        )
-        if ClimaComms.iamroot(context)
-            @test interp_x ≈ dest[:, :, 1]
-            @test interp_y ≈ dest[:, :, 2]
-            @test interp_x ≈ dest[:, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 3))
+    Remapping.interpolate!(dest, horiz_remapper, [coords.x, coords.y, coords.x])
+    if ClimaComms.iamroot(context)
+        @test interp_x ≈ dest[:, :, 1]
+        @test interp_y ≈ dest[:, :, 2]
+        @test interp_x ≈ dest[:, :, 3]
     end
 end
 
@@ -543,23 +506,23 @@ end
     interp_sin_long = Remapping.interpolate(remapper, sind.(coords.long))
     # Only root has the final result
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈
+        @test Array(interp_sin_long) ≈
               [sind(x) for x in longpts, y in latpts, z in zpts] rtol = 0.01
     end
 
     interp_sin_lat = Remapping.interpolate(remapper, sind.(coords.lat))
     if ClimaComms.iamroot(context)
-        @test interp_sin_lat ≈
+        @test Array(interp_sin_lat) ≈
               [sind(y) for x in longpts, y in latpts, z in zpts] rtol = 0.01
     end
 
     interp_z = Remapping.interpolate(remapper, coords.z)
     expected_z = [z for x in longpts, y in latpts, z in zpts]
     if ClimaComms.iamroot(context)
-        @test interp_z[:, :, 2:(end - 1)] ≈ expected_z[:, :, 2:(end - 1)]
-        @test interp_z[:, :, 1] ≈
+        @test Array(interp_z[:, :, 2:(end - 1)]) ≈ expected_z[:, :, 2:(end - 1)]
+        @test Array(interp_z[:, :, 1]) ≈
               [1000.0 * (0 / 30 + 1 / 30) / 2 for x in longpts, y in latpts]
-        @test interp_z[:, :, end] ≈
+        @test Array(interp_z[:, :, end]) ≈
               [1000.0 * (29 / 30 + 30 / 30) / 2 for x in longpts, y in latpts]
     end
 
@@ -582,20 +545,14 @@ end
     end
 
     # Remapping in-place one field
-    #
-    # We have to change remapper for GPU to make sure it works for when have have only one
-    # field
-    remapper_1field =
-        on_gpu ? Remapping.Remapper(hv_center_space, hcoords, zcoords) :
-        remapper
-    dest = zeros(21, 21, 21)
-    Remapping.interpolate!(dest, remapper_1field, sind.(coords.long))
+    dest = ArrayType(zeros(21, 21, 21))
+    Remapping.interpolate!(dest, remapper, sind.(coords.long))
     if ClimaComms.iamroot(context)
         @test interp_sin_long ≈ dest
     end
 
     # Two fields
-    dest = zeros(21, 21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 21, 2))
     Remapping.interpolate!(
         dest,
         remapper,
@@ -607,18 +564,16 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 21, 3)
-        Remapping.interpolate!(
-            dest,
-            remapper,
-            [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
-        )
-        if ClimaComms.iamroot(context)
-            @test interp_sin_long ≈ dest[:, :, :, 1]
-            @test interp_sin_lat ≈ dest[:, :, :, 2]
-            @test interp_sin_long ≈ dest[:, :, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 21, 3))
+    Remapping.interpolate!(
+        dest,
+        remapper,
+        [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
+    )
+    if ClimaComms.iamroot(context)
+        @test interp_sin_long ≈ dest[:, :, :, 1]
+        @test interp_sin_lat ≈ dest[:, :, :, 2]
+        @test interp_sin_long ≈ dest[:, :, :, 3]
     end
 
     # Horizontal space
@@ -630,12 +585,12 @@ end
     interp_sin_long = Remapping.interpolate(horiz_remapper, sind.(coords.long))
     # Only root has the final result
     if ClimaComms.iamroot(context)
-        @test interp_sin_long ≈ [sind(x) for x in longpts, y in latpts] rtol = 0.01
+        @test Array(interp_sin_long) ≈ [sind(x) for x in longpts, y in latpts] rtol = 0.01
     end
 
     interp_sin_lat = Remapping.interpolate(horiz_remapper, sind.(coords.lat))
     if ClimaComms.iamroot(context)
-        @test interp_sin_lat ≈ [sind(y) for x in longpts, y in latpts] rtol = 0.01
+        @test Array(interp_sin_lat) ≈ [sind(y) for x in longpts, y in latpts] rtol = 0.01
     end
 
     # Two fields
@@ -660,19 +615,14 @@ end
     end
 
     # Remapping in-place one field
-    #
-    # We have to change remapper for GPU to make sure it works for when have have only one
-    # field
-    if !broken
-        dest = zeros(21, 21)
-        Remapping.interpolate!(dest, remapper_1field, sind.(coords.long))
-        if ClimaComms.iamroot(context)
-            @test interp_sin_long ≈ dest
-        end
+    dest = ArrayType(zeros(21, 21))
+    Remapping.interpolate!(dest, horiz_remapper, sind.(coords.long))
+    if ClimaComms.iamroot(context)
+        @test interp_sin_long ≈ dest
     end
 
     # Two fields
-    dest = zeros(21, 21, 2)
+    dest = ArrayType(zeros(21, 21, 2))
     Remapping.interpolate!(
         dest,
         horiz_remapper,
@@ -684,17 +634,15 @@ end
     end
 
     # Three fields (more than buffer length)
-    if !broken
-        dest = zeros(21, 21, 3)
-        Remapping.interpolate!(
-            dest,
-            horiz_remapper,
-            [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
-        )
-        if ClimaComms.iamroot(context)
-            @test interp_sin_long ≈ dest[:, :, 1]
-            @test interp_sin_lat ≈ dest[:, :, 2]
-            @test interp_sin_long ≈ dest[:, :, 3]
-        end
+    dest = ArrayType(zeros(21, 21, 3))
+    Remapping.interpolate!(
+        dest,
+        horiz_remapper,
+        [sind.(coords.long), sind.(coords.lat), sind.(coords.long)],
+    )
+    if ClimaComms.iamroot(context)
+        @test interp_sin_long ≈ dest[:, :, 1]
+        @test interp_sin_lat ≈ dest[:, :, 2]
+        @test interp_sin_long ≈ dest[:, :, 3]
     end
 end

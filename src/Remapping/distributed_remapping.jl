@@ -795,29 +795,20 @@ function _collect_and_return_interpolated_values!(
     remapper::Remapper,
     num_fields::Int,
 )
-    output_array = ClimaComms.reduce(
+    return ClimaComms.reduce(
         remapper.comms_ctx,
         remapper._interpolated_values[remapper.colons..., 1:num_fields],
         +,
     )
-
-    maybe_copy_to_cpu =
-        ClimaComms.device(remapper.comms_ctx) isa ClimaComms.CUDADevice ?
-        Array : identity
-
-    return ClimaComms.iamroot(remapper.comms_ctx) ?
-           maybe_copy_to_cpu(output_array) : nothing
 end
 
 function _collect_interpolated_values!(
     dest,
     remapper::Remapper,
     index_field_begin::Int,
-    index_field_end::Int,
+    index_field_end::Int;
+    only_one_field,
 )
-
-    num_fields = 1 + index_field_end - index_field_begin
-    only_one_field = num_fields == 1
 
     if only_one_field
         ClimaComms.reduce!(
@@ -829,18 +820,12 @@ function _collect_interpolated_values!(
         return nothing
     end
 
-    # CUDA.jl does not support views very well at the moment. We can only work with
-    # num_fields = buffer_length
-    num_fields == remapper.buffer_length ||
-        error("Operation not currently supported")
+    num_fields = 1 + index_field_end - index_field_begin
 
-    # MPI.reduce! seems to behave nicely with respect to CPU/GPU. In particular,
-    # if the destination is on the CPU, but the source is on the GPU, the values
-    # are automatically moved.
     ClimaComms.reduce!(
         remapper.comms_ctx,
-        remapper._interpolated_values,
-        dest,
+        view(remapper._interpolated_values, remapper.colons..., 1:num_fields),
+        view(dest, remapper.colons..., index_field_begin:index_field_end),
         +,
     )
 
@@ -881,6 +866,9 @@ to be defined on the root process and to be `nothing` for the other processes.
 
 Note: `interpolate` allocates new arrays and has some internal type-instability,
 `interpolate!` is non-allocating and type-stable.
+
+When using `interpolate!`, the `dest`ination has to be the same array type as the
+device in use (e.g., `CuArray` for CUDA runs).
 
 Example
 ========
@@ -975,6 +963,14 @@ function interpolate!(
         dest_size == size(remapper._interpolated_values)[1:(end - 1)] || error(
             "Destination array is not compatible with remapper (size mismatch)",
         )
+
+        expected_array_type =
+            ClimaComms.array_type(ClimaComms.device(remapper.comms_ctx))
+
+        found_type = nameof(typeof(dest))
+
+        dest isa expected_array_type ||
+            error("dest is a $found_type, expected $expected_array_type")
     end
     index_field_begin, index_field_end =
         1, min(length(fields), remapper.buffer_length)
@@ -999,7 +995,8 @@ function interpolate!(
             dest,
             remapper,
             index_field_begin,
-            index_field_end,
+            index_field_end;
+            only_one_field,
         )
 
         index_field_end != length(fields) || break
