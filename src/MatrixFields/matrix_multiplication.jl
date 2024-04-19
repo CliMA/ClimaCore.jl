@@ -8,7 +8,7 @@ for `MultiplyColumnwiseBandMatrixField()`.
 What follows is a derivation of the algorithm used by this operator with
 single-column `Field`s. For `Field`s on multiple columns, the same computation
 is done for each column.
-    
+
 In this derivation, we will use ``M_1`` and ``M_2`` to denote two
 `ColumnwiseBandMatrixField`s, and we will use ``V`` to denote a regular
 (vector-like) `Field`. For both ``M_1`` and ``M_2``, we will use the array-like
@@ -169,7 +169,7 @@ The values of ``i`` in this range are considered to be in the "interior" of the
 operator, while those not in this range (for which we cannot make these
 simplifications) are considered to be on the "boundary".
 
-## 2.2 ``ld_{prod}`` and ``ud_{prod}`` 
+## 2.2 ``ld_{prod}`` and ``ud_{prod}``
 
 We only need to compute ``(M_1 ⋅ M_2)[i][d_{prod}]`` for values of ``d_{prod}``
 that correspond to a nonempty sum in the interior, i.e, those for which
@@ -375,7 +375,7 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
         # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
         # simplicity, use zero padding for rows that are outside the matrix.
         # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-        matrix2_rows = map((ld1:ud1...,)) do d
+        matrix2_rows = unrolled_map((ld1:ud1...,)) do d
             # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
             Base.@_inline_meta
             if isnothing(bc) ||
