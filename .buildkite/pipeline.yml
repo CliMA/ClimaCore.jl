@@ -20,14 +20,9 @@ steps:
           rm -rf ${JULIA_DEPOT_PATH}
         fi
 
-      - echo "--- Instantiate project"
-      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
-      # force the initialization of the CUDA runtime as it is lazily loaded by default
-      - "julia --project -e 'using CUDA; CUDA.precompile_runtime()'"
-
       - echo "--- Instantiate test"
-      - "julia --project=test -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
-      - "julia --project=test --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=test --check-bounds=yes -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=test -e 'using CUDA; CUDA.precompile_runtime()'"
 
       - echo "--- Instantiate lib/ClimaCoreTempestRemap"
       - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
@@ -43,7 +38,7 @@ steps:
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate status"
-      - "julia --project -e 'using Pkg; Pkg.status()'"
+      - "julia --project=test -e 'using Pkg; Pkg.status()'"
 
     agents:
       slurm_mem: 80G
@@ -109,7 +104,7 @@ steps:
       - label: "Unit: data cuda"
         key: unit_data_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/DataLayouts/cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -181,7 +176,7 @@ steps:
       - label: "Unit: cuda spaces"
         key: "gpu_cuda_spaces"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/spaces.jl"
         agents:
           slurm_gpus: 1
@@ -189,7 +184,7 @@ steps:
       - label: "Unit: distributed cuda spaces"
         key: "gpu_distributed_extruded_cuda_spaces"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/space_construction.jl CUDA"
         agents:
           slurm_gpus_per_task: 1
@@ -198,7 +193,7 @@ steps:
       - label: "Unit: ddss1"
         key: unit_ddss1
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Spaces/ddss1.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -206,7 +201,7 @@ steps:
       - label: "Unit: ddss1 cs"
         key: unit_ddss1_cs
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Spaces/ddss1_cs.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -303,7 +298,7 @@ steps:
       - label: "Unit: cuda dss 2-process test"
         key: "gpu_ddss2_test"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss2.jl"
         timeout_in_minutes: 15
         env:
@@ -315,7 +310,7 @@ steps:
       - label: "Unit: cuda dss 3-process test"
         key: "gpu_ddss3_test"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss3.jl"
         timeout_in_minutes: 15
         env:
@@ -327,7 +322,7 @@ steps:
       - label: "Unit: cuda dss 4-process test"
         key: "gpu_ddss4_test"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss4.jl"
         timeout_in_minutes: 15
         env:
@@ -339,7 +334,7 @@ steps:
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 2-process test"
         key: "gpu_ddss_ne32_cs_2processes"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
@@ -351,7 +346,7 @@ steps:
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 3-process test"
         key: "gpu_ddss_ne32_cs_3processes"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
@@ -363,7 +358,7 @@ steps:
       - label: "Unit: cuda Cubed Sphere dss; ne = 32; 4-process test"
         key: "gpu_ddss_ne32_cs_4processes"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Spaces/distributed_cuda/ddss_ne32_cs.jl"
         timeout_in_minutes: 15
         env:
@@ -382,7 +377,7 @@ steps:
       - label: "Unit: field cuda"
         key: unit_field_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Fields/field.jl"
         agents:
           slurm_gpus: 1
@@ -390,7 +385,7 @@ steps:
       - label: "Unit: reduction cuda"
         key: unit_reduction_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Fields/reduction_cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -398,7 +393,7 @@ steps:
       - label: "Unit: distributed reduction cuda"
         key: unit_distributed_reduction_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=test test/Fields/reduction_cuda_distributed.jl"
         agents:
           slurm_gpus_per_task: 1
@@ -516,7 +511,7 @@ steps:
         key: unit_rectilinear_cuda
         command: "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear_cuda.jl"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -524,7 +519,7 @@ steps:
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -532,7 +527,7 @@ steps:
       - label: "Unit: extruded sphere cuda"
         key: unit_extruded_sphere_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/extruded_sphere_cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -540,7 +535,7 @@ steps:
       - label: "Unit: extruded 3dbox cuda"
         key: unit_extruded_3dbox_cuda
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=test test/Operators/hybrid/extruded_3dbox_cuda.jl CUDA"
         agents:
           slurm_gpus: 1
@@ -947,7 +942,7 @@ steps:
       - label: "Unit: limiter cuda"
         key: unit_limiter_gpu
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Limiters/limiter.jl"
         agents:
           slurm_gpus: 1
@@ -995,7 +990,7 @@ steps:
       - label: "Perf: FD operators from the wild (gpu)"
         key: perf_FD_ops_examples_gpu
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/finitedifference/opt_examples.jl"
         agents:
           slurm_gpus: 1
@@ -1020,7 +1015,7 @@ steps:
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
         agents:
           slurm_gpus: 1
@@ -1032,7 +1027,7 @@ steps:
       - label: "Perf: SEM operator benchmarks (cuda Float64)"
         key: "perf_gpu_spectral_ops_cuda_float64"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
         agents:
           slurm_gpus: 1
@@ -1048,7 +1043,7 @@ steps:
       - label: "Perf: SEM operator benchmarks"
         key: "perf_gpu_spectral_ops"
         command:
-          - "julia --project -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=test test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
         agents:
           slurm_gpus: 1

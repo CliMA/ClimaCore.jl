@@ -3,8 +3,14 @@ using CUDA: @cuda
 import LinearAlgebra, Statistics
 import ClimaCore: DataLayouts, Spaces, Grids, Fields
 import ClimaCore.Fields: Field, FieldStyle
-import ClimaCore.Fields: AbstractFieldStyle
-import ClimaCore.Spaces: cuda_synchronize
+import ClimaCore.Fields: AbstractFieldStyle, bycolumn
+import ClimaCore.Spaces: AbstractSpace, cuda_synchronize
+
+function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
+    fn(:)
+    return nothing
+end
+
 function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CUDADevice,

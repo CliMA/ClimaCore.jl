@@ -149,7 +149,7 @@ function _set_interpolated_values_device!(
     # FIXME: Avoid allocation of tuple
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
     nitems = length(out)
-    nthreads, nblocks = Topologies._configure_threadblock(nitems)
+    nthreads, nblocks = _configure_threadblock(nitems)
     @cuda always_inline = true threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
         out,
         local_horiz_interpolation_weights,

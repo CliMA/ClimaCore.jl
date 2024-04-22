@@ -6,6 +6,7 @@ import ClimaCore.Fields: Field
 import ClimaCore.Fields
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
+import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 # called by TuplesOfNTuples.jl's `inner_dispatch`:
 # which requires a particular argument order:

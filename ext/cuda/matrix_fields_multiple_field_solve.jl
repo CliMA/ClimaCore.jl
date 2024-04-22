@@ -2,6 +2,7 @@ import CUDA
 import ClimaComms
 import LinearAlgebra: UniformScaling
 import ClimaCore.Operators
+import ClimaCore.MatrixFields
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
 import ClimaCore.MatrixFields: allow_scalar_func
@@ -13,9 +14,9 @@ is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
 function multiple_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b, x1)
     Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
-    names = matrix_row_keys(keys(A))
+    names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh * Nnames)
+    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh * Nnames)
     sscache = Operators.strip_space(cache)
     ssx = Operators.strip_space(x)
     ssA = Operators.strip_space(A)

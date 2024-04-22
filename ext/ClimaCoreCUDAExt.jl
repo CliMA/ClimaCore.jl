@@ -2,7 +2,14 @@ module ClimaCoreCUDAExt
 
 import ClimaComms
 import ClimaCore: DataLayouts, Grids, Spaces, Fields
+import ClimaCore: Geometry
+import ClimaCore.Geometry: AxisTensor
 import CUDA
+using CUDA
+using CUDA: threadIdx, blockIdx, blockDim
+import StaticArrays: SVector, SMatrix, SArray
+import ClimaCore.RecursiveApply:
+    ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
 
 include(joinpath("cuda", "data_layouts.jl"))
 include(joinpath("cuda", "fields.jl"))

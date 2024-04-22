@@ -1,4 +1,14 @@
-import ClimaCore: Fields, Spaces, Topologies
+import ClimaCore: Spaces, Fields, Spaces, Topologies
+import ClimaCore.Operators: strip_space
+import ClimaCore.Operators:
+    column_integral_definite!,
+    column_integral_definite_kernel!,
+    column_integral_indefinite_kernel!,
+    column_integral_indefinite!,
+    column_mapreduce_device!,
+    _column_integral_definite!,
+    _column_integral_indefinite!
+
 import ClimaComms
 using CUDA: @cuda
 
@@ -9,7 +19,7 @@ function column_integral_definite!(
 )
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
     @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_definite_kernel!(
         strip_space(∫field, space),
         strip_space(ᶜfield, space),
@@ -31,6 +41,20 @@ function column_integral_definite_kernel!(
     return nothing
 end
 
+function column_integral_indefinite_kernel!(
+    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
+    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
+)
+    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
+    if idx <= Ni * Nj * Nh
+        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
+        ᶠ∫field_column = Spaces.column(ᶠ∫field, i, j, h)
+        ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
+        _column_integral_indefinite!(ᶠ∫field_column, ᶜfield_column)
+    end
+    return nothing
+end
 
 function column_integral_indefinite!(
     ::ClimaComms.CUDADevice,
@@ -38,7 +62,7 @@ function column_integral_indefinite!(
     ᶜfield::Fields.Field,
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
     @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
         ᶠ∫field,
         ᶜfield,
@@ -53,7 +77,7 @@ function column_mapreduce_device!(
     fields::Fields.Field...,
 ) where {F, O}
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    nthreads, nblocks = Topologies._configure_threadblock(Ni * Nj * Nh)
+    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
     kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
         column_mapreduce_kernel_extruded!
     else

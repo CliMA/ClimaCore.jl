@@ -117,6 +117,7 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
         allow_scalar_func(
+            ClimaComms.device(field),
             Base.print_array,
             (io, column_field2array_view(column_field)),
         )

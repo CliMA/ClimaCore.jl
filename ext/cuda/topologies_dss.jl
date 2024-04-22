@@ -1,5 +1,8 @@
 import ClimaCore: DataLayouts, Topologies, Spaces, Fields
-import ClimaCore.Topologies: DSSBuffer, Perimeter2D
+using CUDA
+import ClimaCore.Topologies
+import ClimaCore.Topologies: perimeter_vertex_node_index
+
 _max_threads_cuda() = 256
 
 function _configure_threadblock(max_threads, nitems)
@@ -11,11 +14,11 @@ end
 _configure_threadblock(nitems) =
     _configure_threadblock(_max_threads_cuda(), nitems)
 
-function dss_load_perimeter_data!(
+function Topologies.dss_load_perimeter_data!(
     ::ClimaComms.CUDADevice,
-    dss_buffer::DSSBuffer,
+    dss_buffer::Topologies.DSSBuffer,
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    perimeter,
+    perimeter::Topologies.Perimeter2D,
 ) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
@@ -33,25 +36,25 @@ end
 function dss_load_perimeter_data_kernel!(
     pperimeter_data::AbstractArray{FT, 4},
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, _, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
 
     if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = _get_idx(sizep, gidx)
+        (level, p, fidx, elem) = Topologies._get_idx(sizep, gidx)
         (ip, jp) = perimeter[p]
-        data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
+        data_idx = Topologies._get_idx(sized, (level, ip, jp, fidx, elem))
         pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
     end
     return nothing
 end
 
-function dss_unload_perimeter_data!(
+function Topologies.dss_unload_perimeter_data!(
     ::ClimaComms.CUDADevice,
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
-    dss_buffer::DSSBuffer,
+    dss_buffer::Topologies.DSSBuffer,
     perimeter,
 ) where {S, Nij}
     pperimeter_data = parent(dss_buffer.perimeter_data)
@@ -70,25 +73,25 @@ end
 function dss_unload_perimeter_data_kernel!(
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     pperimeter_data::AbstractArray{FT, 4},
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
 
     if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = _get_idx(sizep, gidx)
+        (level, p, fidx, elem) = Topologies._get_idx(sizep, gidx)
         (ip, jp) = perimeter[p]
-        data_idx = _get_idx(sized, (level, ip, jp, fidx, elem))
+        data_idx = Topologies._get_idx(sized, (level, ip, jp, fidx, elem))
         pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
     end
     return nothing
 end
 
-function dss_local!(
+function Topologies.dss_local!(
     ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
-    perimeter::Perimeter2D,
+    perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
 )
     nlocalvertices = length(topology.local_vertex_offset) - 1
@@ -115,7 +118,7 @@ function dss_local_kernel!(
     local_vertices::AbstractVector{Tuple{Int, Int}},
     local_vertex_offset::AbstractVector{Int},
     interior_faces::AbstractVector{Tuple{Int, Int, Int, Int, Bool}},
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     nlocalvertices = length(local_vertex_offset) - 1
@@ -123,7 +126,7 @@ function dss_local_kernel!(
     (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
     if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
         sizev = (nlevels, nfidx, nlocalvertices)
-        (level, fidx, vertexid) = _get_idx(sizev, gidx)
+        (level, fidx, vertexid) = Topologies._get_idx(sizev, gidx)
         sum_data = FT(0)
         st, en =
             local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
@@ -141,7 +144,7 @@ function dss_local_kernel!(
         nfacedof = div(nperimeter - 4, 4)
         sizef = (nlevels, nfidx, nlocalfaces)
         (level, fidx, faceid) =
-            _get_idx(sizef, gidx - nlevels * nfidx * nlocalvertices)
+            Topologies._get_idx(sizef, gidx - nlevels * nfidx * nlocalvertices)
         (lidx1, face1, lidx2, face2, reversed) = interior_faces[faceid]
         (first1, inc1, last1) =
             Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
@@ -161,14 +164,14 @@ function dss_local_kernel!(
     return nothing
 end
 
-function dss_transform!(
+function Topologies.dss_transform!(
     device::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂x∂ξ::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     weight::DataLayouts.IJFH,
-    perimeter::Perimeter2D,
+    perimeter::Topologies.Perimeter2D,
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
@@ -209,7 +212,7 @@ function dss_transform_kernel!(
     p∂x∂ξ::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     nmetric::Int,
     pweight::AbstractArray{FT, 4},
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
@@ -224,20 +227,23 @@ function dss_transform_kernel!(
         sizet_wt = (Nq, Nq, 1, nelems)
         sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
-        (level, p, localelemno) = _get_idx(sizet, gidx)
+        (level, p, localelemno) = Topologies._get_idx(sizet, gidx)
         elem = localelems[localelemno]
         (ip, jp) = perimeter[p]
 
-        weight = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
+        weight = pweight[Topologies._get_idx(sizet_wt, (ip, jp, 1, elem))]
         for fidx in scalarfidx
-            data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
             pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
         end
         for fidx in covariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx1 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
             (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pperimeter_data[level, p, fidx, elem] =
                 (
                     p∂ξ∂x[idx11] * pdata[data_idx1] +
@@ -250,10 +256,12 @@ function dss_transform_kernel!(
                 ) * weight
         end
         for fidx in contravariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx1 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
             (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pperimeter_data[level, p, fidx, elem] =
                 (
                     p∂x∂ξ[idx11] * pdata[data_idx1] +
@@ -269,13 +277,13 @@ function dss_transform_kernel!(
     return nothing
 end
 
-function dss_untransform!(
+function Topologies.dss_untransform!(
     device::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
     data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂ξ∂x::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
     ∂x∂ξ::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
@@ -313,7 +321,7 @@ function dss_untransform_kernel!(
     p∂ξ∂x::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂x∂ξ::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     nmetric::Int,
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
@@ -328,18 +336,21 @@ function dss_untransform_kernel!(
         sizet_wt = (Nq, Nq, 1, nelems)
         sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
-        (level, p, localelemno) = _get_idx(sizet, gidx)
+        (level, p, localelemno) = Topologies._get_idx(sizet, gidx)
         elem = localelems[localelemno]
         ip, jp = perimeter[p]
         for fidx in scalarfidx
-            data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
             pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
         end
         for fidx in covariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx1 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
             (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pdata[data_idx1] =
                 p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
                 p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem]
@@ -348,10 +359,12 @@ function dss_untransform_kernel!(
                 p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem]
         end
         for fidx in contravariant12fidx
-            data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx1 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 =
+                Topologies._get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
             (idx11, idx12, idx21, idx22) =
-                _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pdata[data_idx1] =
                 p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
                 p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
@@ -364,10 +377,10 @@ function dss_untransform_kernel!(
 end
 
 # TODO: Function stubs, code to be implemented, needed only for distributed GPU runs
-function dss_local_ghost!(
+function Topologies.dss_local_ghost!(
     ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
-    perimeter::Perimeter2D,
+    perimeter::Topologies.Perimeter2D,
     topology::Topologies.AbstractTopology,
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
@@ -391,14 +404,14 @@ function dss_local_ghost_kernel!(
     pperimeter_data::AbstractArray{FT, 4},
     ghost_vertices,
     ghost_vertex_offset,
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
     if gidx ≤ nlevels * nfidx * nghostvertices
         sizev = (nlevels, nfidx, nghostvertices)
-        (level, fidx, vertexid) = _get_idx(sizev, gidx)
+        (level, fidx, vertexid) = Topologies._get_idx(sizev, gidx)
         sum_data = FT(0)
         st, en =
             ghost_vertex_offset[vertexid], ghost_vertex_offset[vertexid + 1]
@@ -420,9 +433,9 @@ function dss_local_ghost_kernel!(
     return nothing
 end
 
-function fill_send_buffer!(
+function Topologies.fill_send_buffer!(
     ::ClimaComms.CUDADevice,
-    dss_buffer::DSSBuffer;
+    dss_buffer::Topologies.DSSBuffer;
     synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
@@ -456,8 +469,8 @@ function fill_send_buffer_kernel!(
     sizet = (nlevels, nfid, nsend)
     #if gidx ≤ nsend * nlevels * nfid
     if gidx ≤ nlevels * nfid * nsend
-        #(isend, level, fidx) = _get_idx(sizet, gidx)
-        (level, fidx, isend) = _get_idx(sizet, gidx)
+        #(isend, level, fidx) = Topologies._get_idx(sizet, gidx)
+        (level, fidx, isend) = Topologies._get_idx(sizet, gidx)
         lidx = send_buf_idx[isend, 1]
         ip = send_buf_idx[isend, 2]
         idx = level + ((fidx - 1) + (isend - 1) * nfid) * nlevels
@@ -466,7 +479,10 @@ function fill_send_buffer_kernel!(
     return nothing
 end
 
-function load_from_recv_buffer!(::ClimaComms.CUDADevice, dss_buffer::DSSBuffer)
+function Topologies.load_from_recv_buffer!(
+    ::ClimaComms.CUDADevice,
+    dss_buffer::Topologies.DSSBuffer,
+)
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
     pperimeter_data = parent(perimeter_data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
@@ -495,8 +511,8 @@ function load_from_recv_buffer_kernel!(
     sizet = (nlevels, nfid, nrecv)
     #if gidx ≤ nrecv * nlevels * nfid
     if gidx ≤ nlevels * nfid * nrecv
-        #(irecv, level, fidx) = _get_idx(sizet, gidx)
-        (level, fidx, irecv) = _get_idx(sizet, gidx)
+        #(irecv, level, fidx) = Topologies._get_idx(sizet, gidx)
+        (level, fidx, irecv) = Topologies._get_idx(sizet, gidx)
         lidx = recv_buf_idx[irecv, 1]
         ip = recv_buf_idx[irecv, 2]
         idx = level + ((fidx - 1) + (irecv - 1) * nfid) * nlevels
@@ -506,10 +522,10 @@ function load_from_recv_buffer_kernel!(
 end
 
 
-function dss_ghost!(
+function Topologies.dss_ghost!(
     ::ClimaComms.CUDADevice,
     perimeter_data::DataLayouts.VIFH,
-    perimeter::Perimeter2D,
+    perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
@@ -534,7 +550,7 @@ function dss_ghost_kernel!(
     ghost_vertices,
     ghost_vertex_offset,
     repr_ghost_vertex,
-    perimeter::Perimeter2D{Nq},
+    perimeter::Topologies.Perimeter2D{Nq},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     nlevels, _, nfidx, _ = size(pperimeter_data)
@@ -542,7 +558,7 @@ function dss_ghost_kernel!(
 
     if gidx ≤ nlevels * nfidx * nghostvertices
         (level, fidx, ghostvertexidx) =
-            _get_idx((nlevels, nfidx, nghostvertices), gidx)
+            Topologies._get_idx((nlevels, nfidx, nghostvertices), gidx)
         idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
         ipresult = perimeter_vertex_node_index(lvertresult)
         result = pperimeter_data[level, ipresult, fidx, idxresult]

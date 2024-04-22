@@ -78,21 +78,6 @@ The indefinite integral `ᶠ∫field = ϕ(z) = ∫ f(ϕ,z) dz` given:
 column_integral_indefinite!(ᶠ∫field::Fields.Field, ᶜfield::Fields.Field) =
     column_integral_indefinite!(ClimaComms.device(ᶠ∫field), ᶠ∫field, ᶜfield)
 
-function column_integral_indefinite_kernel!(
-    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
-    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
-)
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
-    if idx <= Ni * Nj * Nh
-        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
-        ᶠ∫field_column = Spaces.column(ᶠ∫field, i, j, h)
-        ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
-        _column_integral_indefinite!(ᶠ∫field_column, ᶜfield_column)
-    end
-    return nothing
-end
-
 column_integral_indefinite_kernel!(
     ᶠ∫field::Fields.FaceFiniteDifferenceField,
     ᶜfield::Fields.CenterFiniteDifferenceField,
