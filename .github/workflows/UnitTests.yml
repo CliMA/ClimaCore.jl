@@ -1,7 +1,14 @@
 name: Unit Tests
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -17,16 +24,11 @@ jobs:
           - os: macos-latest
             julia-version: '1.10'
           - os: ubuntu-latest
-            julia-version: '~1.10.0-rc1'
+            julia-version: '~1.11.0-0'
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Checkout
       uses: actions/checkout@v4
 
