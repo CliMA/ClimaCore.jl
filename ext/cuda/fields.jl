@@ -1,4 +1,10 @@
-
+import ClimaComms
+using CUDA: @cuda
+import LinearAlgebra, Statistics
+import ClimaCore: DataLayouts, Spaces, Grids, Fields
+import ClimaCore.Fields: Field, FieldStyle
+import ClimaCore.Fields: AbstractFieldStyle
+import ClimaCore.Spaces: cuda_synchronize
 function Base.sum(
     field::Union{Field, Base.Broadcast.Broadcasted{<:FieldStyle}},
     ::ClimaComms.CUDADevice,
@@ -280,3 +286,29 @@ end
     newsize = _cuda_reduce!(op, reduction, tidx, newsize, 1)
     return nothing
 end
+
+
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {Style <: AbstractFieldStyle}
+    Base.Broadcast.Broadcasted{Style}(
+        Adapt.adapt(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
+    )
+end
+
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::Base.Broadcast.Broadcasted{Style, <:Any, Type{T}},
+) where {Style <: AbstractFieldStyle, T}
+    Base.Broadcast.Broadcasted{Style}(
+        (x...) -> T(x...),
+        Adapt.adapt(to, bc.args),
+        bc.axes,
+    )
+end
+
+cuda_synchronize(device::ClimaComms.CUDADevice; kwargs...) =
+    CUDA.synchronize(; kwargs...)

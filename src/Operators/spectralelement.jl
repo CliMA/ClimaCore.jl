@@ -15,18 +15,9 @@ temporaries for each operator. This is used for CPU kernels.
 """
 struct SlabBlockSpectralStyle <: AbstractSpectralStyle end
 
-"""
-    CUDASpectralStyle()
-
-Applies spectral-element operations by using threads for each node, and
-synchronizing when they occur. This is used for GPU kernels.
-"""
-struct CUDASpectralStyle <: AbstractSpectralStyle end
-
 
 import ClimaComms
 AbstractSpectralStyle(::ClimaComms.AbstractCPUDevice) = SlabBlockSpectralStyle
-AbstractSpectralStyle(::ClimaComms.CUDADevice) = CUDASpectralStyle
 
 
 """
@@ -247,80 +238,6 @@ function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     )
 end
 
-function Base.copyto!(
-    out::Field,
-    sbc::Union{
-        SpectralBroadcasted{CUDASpectralStyle},
-        Broadcasted{CUDASpectralStyle},
-    },
-)
-    space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    Nh = Topologies.nlocalelems(Spaces.topology(space))
-    Nv = Spaces.nlevels(space)
-    max_threads = 256
-    @assert Nq * Nq ≤ max_threads
-    Nvthreads = fld(max_threads, Nq * Nq)
-    Nvblocks = cld(Nv, Nvthreads)
-    # executed
-    @cuda always_inline = true threads = (Nq, Nq, Nvthreads) blocks =
-        (Nh, Nvblocks) copyto_spectral_kernel!(
-        strip_space(out, space),
-        strip_space(sbc, space),
-        space,
-        Val(Nvthreads),
-    )
-    return out
-end
-
-
-function copyto_spectral_kernel!(
-    out::Fields.Field,
-    sbc,
-    space,
-    ::Val{Nvt},
-) where {Nvt}
-    @inbounds begin
-        i = threadIdx().x
-        j = threadIdx().y
-        k = threadIdx().z
-        h = blockIdx().x
-        vid = k + (blockIdx().y - 1) * blockDim().z
-        # allocate required shmem
-
-        sbc_reconstructed = reconstruct_placeholder_broadcasted(space, sbc)
-        sbc_shmem = allocate_shmem(Val(Nvt), sbc_reconstructed)
-
-
-        # can loop over blocks instead?
-        if space isa Spaces.AbstractSpectralElementSpace
-            v = nothing
-        elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-            v = vid - half
-        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-            v = vid
-        else
-            error("Invalid space")
-        end
-        ij = CartesianIndex((i, j))
-        slabidx = Fields.SlabIndex(v, h)
-        # v may potentially be out-of-range: any time memory is accessed, it
-        # should be checked by a call to is_valid_index(space, ij, slabidx)
-
-        # resolve_shmem! needs to be called even when out of range, so that 
-        # sync_threads() is invoked collectively
-        resolve_shmem!(sbc_shmem, ij, slabidx)
-
-        isactive = is_valid_index(space, ij, slabidx)
-        if isactive
-            result = get_node(space, sbc_shmem, ij, slabidx)
-            set_node!(space, out, ij, slabidx, result)
-        end
-    end
-    return nothing
-end
-
 """
     reconstruct_placeholder_broadcasted(space, obj)
 
@@ -391,111 +308,6 @@ end
     Nv = Spaces.nlevels(space)
     return slabidx.v + half <= Nv
 end
-
-
-"""
-    allocate_shmem(Val(Nvt), b)
-
-Create a new broadcasted object with necessary share memory allocated,
-using `Nvt` slabs per block.
-"""
-@inline function allocate_shmem(::Val{Nvt}, obj) where {Nvt}
-    obj
-end
-@inline function allocate_shmem(
-    ::Val{Nvt},
-    bc::Broadcasted{Style},
-) where {Nvt, Style}
-    Broadcasted{Style}(bc.f, _allocate_shmem(Val(Nvt), bc.args...), bc.axes)
-end
-@inline function allocate_shmem(
-    ::Val{Nvt},
-    sbc::SpectralBroadcasted{Style},
-) where {Nvt, Style}
-    args = _allocate_shmem(Val(Nvt), sbc.args...)
-    work = operator_shmem(sbc.axes, Val(Nvt), sbc.op, args...)
-    SpectralBroadcasted{Style}(sbc.op, args, sbc.axes, work)
-end
-
-@inline _allocate_shmem(::Val{Nvt}) where {Nvt} = ()
-@inline _allocate_shmem(::Val{Nvt}, arg, xargs...) where {Nvt} =
-    (allocate_shmem(Val(Nvt), arg), _allocate_shmem(Val(Nvt), xargs...)...)
-
-
-
-
-
-"""
-    resolve_shmem!(obj, ij, slabidx)
-
-Recursively stores the arguments to all operators into shared memory, at the
-given indices (if they are valid).
-
-As this calls `sync_threads()`, it should be called collectively on all threads
-at the same time.
-"""
-Base.@propagate_inbounds function resolve_shmem!(
-    sbc::SpectralBroadcasted,
-    ij,
-    slabidx,
-)
-    space = axes(sbc)
-    isactive = is_valid_index(space, ij, slabidx)
-
-    _resolve_shmem!(ij, slabidx, sbc.args...)
-
-    # we could reuse shmem if we split this up
-    #==
-    if isactive
-        temp = compute thing to store in shmem
-    end
-    CUDA.sync_threads()
-    if isactive
-        shmem[i,j] = temp
-    end
-    CUDA.sync_threads()
-    ===#
-
-    if isactive
-        operator_fill_shmem!(
-            sbc.op,
-            sbc.work,
-            space,
-            ij,
-            slabidx,
-            _get_node(space, ij, slabidx, sbc.args...)...,
-        )
-    end
-    CUDA.sync_threads()
-    return nothing
-end
-
-@inline _resolve_shmem!(ij, slabidx) = nothing
-@inline function _resolve_shmem!(ij, slabidx, arg, xargs...)
-    resolve_shmem!(arg, ij, slabidx)
-    _resolve_shmem!(ij, slabidx, xargs...)
-end
-
-
-Base.@propagate_inbounds function resolve_shmem!(bc::Broadcasted, ij, slabidx)
-    _resolve_shmem!(ij, slabidx, bc.args...)
-    return nothing
-end
-Base.@propagate_inbounds function resolve_shmem!(obj, ij, slabidx)
-    nothing
-end
-
-
-
-Base.@propagate_inbounds function get_node(
-    space,
-    sbc::SpectralBroadcasted{CUDASpectralStyle},
-    ij,
-    slabidx,
-)
-    operator_evaluate(sbc.op, sbc.work, sbc.axes, ij, slabidx)
-end
-
 
 @inline _get_node(space, ij, slabidx) = ()
 Base.@propagate_inbounds _get_node(space, ij, slabidx, arg, xargs...) = (
@@ -782,46 +594,6 @@ Base.@propagate_inbounds function apply_operator(
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Divergence{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    Jv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    Jv² = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    return (Jv¹, Jv²)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Divergence{(1, 2)},
-    (Jv¹, Jv²),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-
-    Jv¹[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
-    Jv²[i, j, vt] =
-        local_geometry.J ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant2(v, local_geometry),
-            arg,
-        )
-end
-
 Base.@propagate_inbounds function operator_evaluate(
     op::Divergence{(1, 2)},
     (Jv¹, Jv²),
@@ -961,47 +733,6 @@ function apply_operator(op::WeakDivergence{(1, 2)}, space, slabidx, arg)
     return Field(SArray(out), space)
 end
 
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakDivergence{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    RT = operator_return_eltype(op, eltype(arg))
-    Nf = DataLayouts.typesize(FT, RT)
-    WJv¹ = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    WJv² = CUDA.CuStaticSharedArray(RT, (Nq, Nq, Nvt))
-    return (WJv¹, WJv²)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakDivergence{(1, 2)},
-    (WJv¹, WJv²),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    i, j = ij.I
-
-    WJv¹[i, j, vt] =
-        local_geometry.WJ ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant1(v, local_geometry),
-            arg,
-        )
-    WJv²[i, j, vt] =
-        local_geometry.WJ ⊠ RecursiveApply.rmap(
-            v -> Geometry.contravariant2(v, local_geometry),
-            arg,
-        )
-end
-
 Base.@propagate_inbounds function operator_evaluate(
     op::WeakDivergence{(1, 2)},
     (WJv¹, WJv²),
@@ -1105,34 +836,6 @@ Base.@propagate_inbounds function apply_operator(
         end
     end
     return Field(SArray(out), space)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Gradient{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    IT = eltype(arg)
-    input = CUDA.CuStaticSharedArray(IT, (Nq, Nq, Nvt))
-    return (input,)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Gradient{(1, 2)},
-    (input,),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-    input[i, j, vt] = arg
 end
 
 Base.@propagate_inbounds function operator_evaluate(
@@ -1260,36 +963,6 @@ function apply_operator(op::WeakGradient{(1, 2)}, space, slabidx, arg)
         out[i, j] = RecursiveApply.rdiv(out[i, j], W)
     end
     return Field(SArray(out), space)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakGradient{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
-    IT = eltype(arg)
-    Wf = CUDA.CuStaticSharedArray(IT, (Nq, Nq, Nvt))
-    return (Wf,)
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakGradient{(1, 2)},
-    (Wf,),
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-    i, j = ij.I
-    Wf[i, j, vt] = W ⊠ arg
 end
 
 Base.@propagate_inbounds function operator_evaluate(
@@ -1426,64 +1099,6 @@ function apply_operator(op::Curl{(1,)}, space, slabidx, arg)
         out[i] = RecursiveApply.rmul(out[i], local_geometry.invJ)
     end
     return Field(SArray(out), space)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::Curl{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
-    RT = operator_return_eltype(op, IT)
-    # allocate temp output
-    if RT <: Geometry.Contravariant3Vector
-        # input data is a Covariant12Vector field
-        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (v₁, v₂)
-    elseif RT <: Geometry.Contravariant12Vector
-        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (v₃,)
-    elseif RT <: Geometry.Contravariant123Vector
-        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (v₁, v₂, v₃)
-    else
-        error("invalid return type")
-    end
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::Curl{(1, 2)},
-    work,
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    RT = operator_return_eltype(op, typeof(arg))
-    if RT <: Geometry.Contravariant3Vector
-        v₁, v₂ = work
-        v₁[i, j, vt] = Geometry.covariant1(arg, local_geometry)
-        v₂[i, j, vt] = Geometry.covariant2(arg, local_geometry)
-    elseif RT <: Geometry.Contravariant12Vector
-        (v₃,) = work
-        v₃[i, j, vt] = Geometry.covariant3(arg, local_geometry)
-    else
-        v₁, v₂, v₃ = work
-        v₁[i, j, vt] = Geometry.covariant1(arg, local_geometry)
-        v₂[i, j, vt] = Geometry.covariant2(arg, local_geometry)
-        v₃[i, j, vt] = Geometry.covariant3(arg, local_geometry)
-    end
 end
 
 Base.@propagate_inbounds function operator_evaluate(
@@ -1818,65 +1433,6 @@ function apply_operator(op::WeakCurl{(1, 2)}, space, slabidx, arg)
         out[i, j] = RecursiveApply.rdiv(out[i, j], local_geometry.WJ)
     end
     return Field(SArray(out), space)
-end
-
-Base.@propagate_inbounds function operator_shmem(
-    space,
-    ::Val{Nvt},
-    op::WeakCurl{(1, 2)},
-    arg,
-) where {Nvt}
-    FT = Spaces.undertype(space)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    IT = eltype(arg)
-    ET = eltype(IT)
-    RT = operator_return_eltype(op, IT)
-    # allocate temp output
-    if RT <: Geometry.Contravariant3Vector
-        # input data is a Covariant12Vector field
-        Wv₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (Wv₁, Wv₂)
-    elseif RT <: Geometry.Contravariant12Vector
-        Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (Wv₃,)
-    elseif RT <: Geometry.Contravariant123Vector
-        Wv₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        Wv₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        Wv₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
-        return (Wv₁, Wv₂, Wv₃)
-    else
-        error("invalid return type")
-    end
-end
-
-Base.@propagate_inbounds function operator_fill_shmem!(
-    op::WeakCurl{(1, 2)},
-    work,
-    space,
-    ij,
-    slabidx,
-    arg,
-)
-    vt = threadIdx().z
-    i, j = ij.I
-    local_geometry = get_local_geometry(space, ij, slabidx)
-    W = local_geometry.WJ * local_geometry.invJ
-    RT = operator_return_eltype(op, typeof(arg))
-    if RT <: Geometry.Contravariant3Vector
-        Wv₁, Wv₂ = work
-        Wv₁[i, j, vt] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i, j, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
-    elseif RT <: Geometry.Contravariant12Vector
-        (Wv₃,) = work
-        Wv₃[i, j, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
-    else
-        Wv₁, Wv₂, Wv₃ = work
-        Wv₁[i, j, vt] = W ⊠ Geometry.covariant1(arg, local_geometry)
-        Wv₂[i, j, vt] = W ⊠ Geometry.covariant2(arg, local_geometry)
-        Wv₃[i, j, vt] = W ⊠ Geometry.covariant3(arg, local_geometry)
-    end
 end
 
 Base.@propagate_inbounds function operator_evaluate(

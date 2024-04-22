@@ -122,6 +122,7 @@ function weighted_dss_prepare!(
     return nothing
 end
 
+cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 
 """
     weighted_dss_start!(
@@ -163,9 +164,7 @@ function weighted_dss_start!(
 )
     device = ClimaComms.device(topology(space))
     weighted_dss_prepare!(data, space, dss_buffer)
-    if device isa ClimaComms.CUDADevice
-        CUDA.synchronize(; blocking = true)
-    end
+    cuda_synchronize(device; blocking = true)
     ClimaComms.start(dss_buffer.graph_context)
     return nothing
 end

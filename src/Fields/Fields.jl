@@ -8,12 +8,11 @@ import ..Domains
 import ..Topologies
 import ..Quadratures
 import ..Grids: ColumnIndex, local_geometry_type
-import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace
+import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Geometry: Geometry, Cartesian12Vector
 import ..Utilities: PlusHalf, half, UnrolledFunctions
 
 using ..RecursiveApply
-using CUDA
 using ClimaComms
 import Adapt
 
@@ -349,7 +348,6 @@ A `Field` containing the `Δz` values on the same space as the given field.
 Δz_field(space::AbstractSpace) = Field(Spaces.Δz_data(space), space)
 
 include("broadcast.jl")
-include("mapreduce_cuda.jl")
 include("mapreduce.jl")
 include("compat_diffeq.jl")
 include("fieldvector.jl")
@@ -439,9 +437,7 @@ function Spaces.weighted_dss!(
         )
     end
 
-    if device isa ClimaComms.CUDADevice
-        CUDA.synchronize(; blocking = true)
-    end
+    cuda_synchronize(device; blocking = true)
     dss_buffer1 isa Topologies.DSSBuffer &&
         ClimaComms.start(dss_buffer1.graph_context)
     for (field, dss_buffer) in field_buffer_pairs
