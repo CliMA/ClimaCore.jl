@@ -8,6 +8,8 @@ import CUDA
 using CUDA
 using CUDA: threadIdx, blockIdx, blockDim
 import StaticArrays: SVector, SMatrix, SArray
+import ClimaCore.DataLayouts: slab, column
+import ClimaCore.Utilities: half
 import ClimaCore.RecursiveApply:
     ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
 
