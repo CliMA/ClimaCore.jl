@@ -3,7 +3,6 @@ module Topologies
 using DocStringExtensions
 
 import ClimaComms, Adapt
-using CUDA
 
 import ..ClimaCore
 import ..Utilities: Cache

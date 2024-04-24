@@ -132,12 +132,6 @@ bycolumn(
 ) = bycolumn(fn, Spaces.horizontal_space(space), device)
 
 
-function bycolumn(fn, space::AbstractSpace, ::ClimaComms.CUDADevice)
-    fn(:)
-    return nothing
-end
-
-
 
 """
     ncolumns(::Field)

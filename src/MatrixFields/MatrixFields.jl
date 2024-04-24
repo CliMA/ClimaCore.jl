@@ -43,7 +43,6 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 """
 module MatrixFields
 
-import CUDA
 import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
@@ -117,9 +116,10 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
-        CUDA.@allowscalar Base.print_array(
-            io,
-            column_field2array_view(column_field),
+        allow_scalar_func(
+            ClimaComms.device(field),
+            Base.print_array,
+            (io, column_field2array_view(column_field)),
         )
     else
         # When a BandedMatrix with non-number entries is printed, it currently

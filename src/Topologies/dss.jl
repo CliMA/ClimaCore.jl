@@ -876,5 +876,3 @@ function dss_1d!(
     end
     return data
 end
-
-include("dss_cuda.jl")

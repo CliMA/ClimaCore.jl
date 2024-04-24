@@ -16,7 +16,6 @@ import ..DataLayouts,
 import ClimaCore.Utilities: half
 
 using ..RecursiveApply
-using CUDA
 
 include("remapping_utils.jl")
 include("interpolate_array.jl")

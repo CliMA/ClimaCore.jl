@@ -2,7 +2,7 @@ module Operators
 
 import LinearAlgebra, Adapt
 
-using StaticArrays, CUDA
+using StaticArrays
 
 import Base.Broadcast: Broadcasted
 

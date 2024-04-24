@@ -1,32 +1,10 @@
+
+import ClimaCore.DataLayouts: IJKFVH, IJFH, VIJFH, VIFH, IFH, IJF, IF, VF, DataF
+import ClimaCore.DataLayouts: IJFHStyle, VIJFHStyle, VFStyle, DataFStyle
+import ClimaCore.DataLayouts: promote_parent_array_type
+import ClimaCore.DataLayouts: parent_array_type
 import Adapt
 import CUDA
-
-Adapt.adapt_structure(to, data::IJKFVH{S, Nij, Nk}) where {S, Nij, Nk} =
-    IJKFVH{S, Nij, Nk}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::IJFH{S, Nij}) where {S, Nij} =
-    IJFH{S, Nij}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::VIJFH{S, Nij}) where {S, Nij} =
-    VIJFH{S, Nij}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::VIFH{S, Ni, A}) where {S, Ni, A} =
-    VIFH{S, Ni}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::IFH{S, Ni}) where {S, Ni} =
-    IFH{S, Ni}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::IJF{S, Nij}) where {S, Nij} =
-    IJF{S, Nij}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::IF{S, Ni}) where {S, Ni} =
-    IF{S, Ni}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::VF{S}) where {S} =
-    VF{S}(Adapt.adapt(to, parent(data)))
-
-Adapt.adapt_structure(to, data::DataF{S}) where {S} =
-    DataF{S}(Adapt.adapt(to, parent(data)))
 
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}

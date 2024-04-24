@@ -16,7 +16,6 @@ module Spaces
 
 using ClimaComms
 using Adapt
-using CUDA
 
 import ..slab, ..column, ..level
 import ..Utilities: PlusHalf, half
