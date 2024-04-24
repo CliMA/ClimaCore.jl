@@ -20,9 +20,13 @@ function column_integral_definite!(
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_definite_kernel!(
-        strip_space(∫field, space),
-        strip_space(ᶜfield, space),
+    args = (strip_space(∫field, space), strip_space(ᶜfield, space))
+    auto_launch!(
+        column_integral_definite_kernel!,
+        args,
+        size(Fields.field_values(∫field));
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
 end
 
@@ -63,9 +67,13 @@ function column_integral_indefinite!(
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    @cuda always_inline = true threads = nthreads blocks = nblocks column_integral_indefinite_kernel!(
-        ᶠ∫field,
-        ᶜfield,
+    args = (ᶠ∫field, ᶜfield)
+    auto_launch!(
+        column_integral_indefinite_kernel!,
+        args,
+        size(Fields.field_values(ᶠ∫field));
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
 end
 
@@ -83,13 +91,20 @@ function column_mapreduce_device!(
     else
         column_mapreduce_kernel!
     end
-    @cuda always_inline = true threads = nthreads blocks = nblocks kernel!(
+    args = (
         fn,
         op,
         # reduced_field,
         strip_space(reduced_field, axes(reduced_field)),
         # fields...,
         map(field -> strip_space(field, axes(field)), fields)...,
+    )
+    auto_launch!(
+        kernel!,
+        args,
+        size(Fields.field_values(reduced_field));
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
 end
 
