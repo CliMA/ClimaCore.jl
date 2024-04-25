@@ -56,9 +56,12 @@ function Base.copyto!(
 ) where {S, Nij, A <: CUDA.CuArray}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
-        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, 1) knl_copyto!(
-            dest,
-            bc,
+        auto_launch!(
+            knl_copyto!,
+            (dest, bc),
+            dest;
+            threads_s = (Nij, Nij),
+            blocks_s = (Nh, 1),
         )
     end
     return dest
@@ -73,9 +76,12 @@ function Base.fill!(
 }
     _, _, _, _, Nh = size(dest)
     if Nh > 0
-        CUDA.@cuda always_inline = true threads = (Nij, Nij) blocks = (Nh, 1) knl_fill!(
-            dest,
-            val,
+        auto_launch!(
+            knl_fill!,
+            (dest, val),
+            dest;
+            threads_s = (Nij, Nij),
+            blocks_s = (Nh, 1),
         )
     end
     return dest
@@ -91,8 +97,13 @@ function Base.copyto!(
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
-        CUDA.@cuda always_inline = true threads = (Nij, Nij, Nv_per_block) blocks =
-            (Nh, Nv_blocks) knl_copyto!(dest, bc)
+        auto_launch!(
+            knl_copyto!,
+            (dest, bc),
+            dest;
+            threads_s = (Nij, Nij, Nv_per_block),
+            blocks_s = (Nh, Nv_blocks),
+        )
     end
     return dest
 end
@@ -104,8 +115,13 @@ function Base.fill!(
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
-        CUDA.@cuda always_inline = true threads = (Nij, Nij, Nv_per_block) blocks =
-            (Nh, Nv_blocks) knl_fill!(dest, val)
+        auto_launch!(
+            knl_fill!,
+            (dest, val),
+            dest;
+            threads_s = (Nij, Nij, Nv_per_block),
+            blocks_s = (Nh, Nv_blocks),
+        )
     end
     return dest
 end
@@ -117,9 +133,12 @@ function Base.copyto!(
 ) where {S, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(bc)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda always_inline = true threads = (1, 1) blocks = (Nh, Nv) knl_copyto!(
-            dest,
-            bc,
+        auto_launch!(
+            knl_copyto!,
+            (dest, bc),
+            dest;
+            threads_s = (1, 1),
+            blocks_s = (Nh, Nv),
         )
     end
     return dest
@@ -127,9 +146,12 @@ end
 function Base.fill!(dest::VF{S, A}, val) where {S, A <: CUDA.CuArray}
     _, _, _, Nv, Nh = size(dest)
     if Nv > 0 && Nh > 0
-        CUDA.@cuda always_inline = true threads = (1, 1) blocks = (Nh, Nv) knl_fill!(
-            dest,
-            val,
+        auto_launch!(
+            knl_fill!,
+            (dest, val),
+            dest;
+            threads_s = (1, 1),
+            blocks_s = (Nh, Nv),
         )
     end
     return dest
@@ -139,16 +161,22 @@ function Base.copyto!(
     dest::DataF{S},
     bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A <: CUDA.CuArray}
-    CUDA.@cuda always_inline = true threads = (1, 1) blocks = (1, 1) knl_copyto!(
-        dest,
-        bc,
+    auto_launch!(
+        knl_copyto!,
+        (dest, bc),
+        dest;
+        threads_s = (1, 1),
+        blocks_s = (1, 1),
     )
     return dest
 end
 function Base.fill!(dest::DataF{S, A}, val) where {S, A <: CUDA.CuArray}
-    CUDA.@cuda always_inline = true threads = (1, 1) blocks = (1, 1) knl_fill!(
-        dest,
-        val,
+    auto_launch!(
+        knl_fill!,
+        (dest, val),
+        dest;
+        threads_s = (1, 1),
+        blocks_s = (1, 1),
     )
     return dest
 end

@@ -7,9 +7,13 @@ using CUDA: @cuda
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    @cuda always_inline = true threads = nthreads blocks = nblocks thomas_algorithm_kernel!(
-        A,
-        b,
+    args = (A, b)
+    auto_launch!(
+        thomas_algorithm_kernel!,
+        args,
+        size(Fields.field_values(A));
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
 end
 

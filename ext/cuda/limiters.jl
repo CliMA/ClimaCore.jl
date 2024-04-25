@@ -31,7 +31,7 @@ function compute_element_bounds!(
     (Ni, Nj, _, Nv, Nh) = S
     nthreads, nblocks = config_threadblock(Nv, Nh)
 
-    CUDA.@cuda always_inline = true threads = nthreads blocks = nblocks compute_element_bounds_kernel!(
+    args = (
         limiter,
         Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
         Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
@@ -39,6 +39,13 @@ function compute_element_bounds!(
         Nh,
         Val(Ni),
         Val(Nj),
+    )
+    auto_launch!(
+        compute_element_bounds_kernel!,
+        args,
+        ρ;
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
     return nothing
 end
@@ -87,7 +94,7 @@ function compute_neighbor_bounds_local!(
     topology = Spaces.topology(axes(ρ))
     Ni, Nj, _, Nv, Nh = size(Fields.field_values(ρ))
     nthreads, nblocks = config_threadblock(Nv, Nh)
-    CUDA.@cuda always_inline = true threads = nthreads blocks = nblocks compute_neighbor_bounds_local_kernel!(
+    args = (
         limiter,
         topology.local_neighbor_elem,
         topology.local_neighbor_elem_offset,
@@ -95,6 +102,13 @@ function compute_neighbor_bounds_local!(
         Nh,
         Val(Ni),
         Val(Nj),
+    )
+    auto_launch!(
+        compute_neighbor_bounds_local_kernel!,
+        args,
+        ρ;
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
 end
 
@@ -140,7 +154,7 @@ function apply_limiter!(
     maxiter = Ni * Nj
     WJ = Spaces.local_geometry_data(axes(ρq)).WJ
     nthreads, nblocks = config_threadblock(Nv, Nh)
-    CUDA.@cuda always_inline = true threads = nthreads blocks = nblocks apply_limiter_kernel!(
+    args = (
         limiter,
         Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
         Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
@@ -151,6 +165,13 @@ function apply_limiter!(
         Val(Ni),
         Val(Nj),
         Val(maxiter),
+    )
+    auto_launch!(
+        apply_limiter_kernel!,
+        args,
+        ρ;
+        threads_s = nthreads,
+        blocks_s = nblocks,
     )
     return nothing
 end

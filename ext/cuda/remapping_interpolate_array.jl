@@ -19,11 +19,13 @@ function interpolate_slab!(
     nitems = length(output_array)
     nthreads, nblocks = _configure_threadblock(nitems)
 
-    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_kernel!(
-        output_cuarray,
-        field,
-        cuslab_indices,
-        cuweights,
+    args = (output_cuarray, field, cuslab_indices, cuweights)
+    auto_launch!(
+        interpolate_slab_kernel!,
+        args,
+        output_cuarray;
+        threads_s = (nthreads),
+        blocks_s = (nblocks),
     )
 
     output_array .= Array(output_cuarray)
@@ -102,12 +104,13 @@ function interpolate_slab_level!(
 
     nitems = length(vidx_ref_coordinates)
     nthreads, nblocks = _configure_threadblock(nitems)
-    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) interpolate_slab_level_kernel!(
-        output_cuarray,
-        field,
-        cuvidx_ref_coordinates,
-        h,
-        Is,
+    args = (output_cuarray, field, cuvidx_ref_coordinates, h, Is)
+    auto_launch!(
+        interpolate_slab_level_kernel!,
+        args,
+        out;
+        threads_s = (nthreads),
+        blocks_s = (nblocks),
     )
     output_array .= Array(output_cuarray)
 end

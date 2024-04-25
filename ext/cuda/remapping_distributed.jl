@@ -19,13 +19,20 @@ function _set_interpolated_values_device!(
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
     nblocks, _ = size(interpolation_matrix[1])
     nthreads = length(vert_interpolation_weights)
-    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
+    args = (
         out,
         interpolation_matrix,
         local_horiz_indices,
         vert_interpolation_weights,
         vert_bounding_indices,
         field_values,
+    )
+    auto_launch!(
+        set_interpolated_values_kernel!,
+        args,
+        out;
+        threads_s = (nthreads),
+        blocks_s = (nblocks),
     )
 end
 
@@ -150,11 +157,18 @@ function _set_interpolated_values_device!(
     field_values = tuple(map(f -> Fields.field_values(f), fields)...)
     nitems = length(out)
     nthreads, nblocks = _configure_threadblock(nitems)
-    @cuda always_inline = true threads = (nthreads) blocks = (nblocks) set_interpolated_values_kernel!(
+    args = (
         out,
         local_horiz_interpolation_weights,
         local_horiz_indices,
         field_values,
+    )
+    auto_launch!(
+        set_interpolated_values_kernel!,
+        args,
+        out;
+        threads_s = (nthreads),
+        blocks_s = (nblocks),
     )
 end
 

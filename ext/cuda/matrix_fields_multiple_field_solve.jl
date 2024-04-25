@@ -3,6 +3,7 @@ import ClimaComms
 import LinearAlgebra: UniformScaling
 import ClimaCore.Operators
 import ClimaCore.MatrixFields
+import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
 import ClimaCore.MatrixFields: allow_scalar_func
@@ -30,11 +31,16 @@ function multiple_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b, x1)
     tups = (cache_tup, x_tup, A_tup, b_tup)
 
     device = ClimaComms.device(x[first(names)])
-    CUDA.@cuda threads = nthreads blocks = nblocks multiple_field_solve_kernel!(
-        device,
-        tups,
-        x1,
-        Val(Nnames),
+
+    args = (device, tups, x1, Val(Nnames))
+    # TODO: use always_inline=true
+    auto_launch!(
+        multiple_field_solve_kernel!,
+        args,
+        x1;
+        threads_s = nthreads,
+        blocks_s = nblocks,
+        always_inline = false,
     )
 end
 

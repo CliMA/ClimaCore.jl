@@ -1,3 +1,7 @@
+#=
+julia -g2 --check-bounds=yes --project=test
+using Revise; include(joinpath("test", "DataLayouts", "cuda.jl"))
+=#
 using Test
 using CUDA
 using ClimaCore.DataLayouts

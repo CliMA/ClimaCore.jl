@@ -44,12 +44,18 @@ function Base.copyto!(
     Nvthreads = fld(max_threads, Nq * Nq)
     Nvblocks = cld(Nv, Nvthreads)
     # executed
-    @cuda always_inline = true threads = (Nq, Nq, Nvthreads) blocks =
-        (Nh, Nvblocks) copyto_spectral_kernel!(
+    args = (
         strip_space(out, space),
         strip_space(sbc, space),
         space,
         Val(Nvthreads),
+    )
+    auto_launch!(
+        copyto_spectral_kernel!,
+        args,
+        out;
+        threads_s = (Nq, Nq, Nvthreads),
+        blocks_s = (Nh, Nvblocks),
     )
     return out
 end
