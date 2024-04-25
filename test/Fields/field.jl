@@ -6,6 +6,9 @@ using Test
 using JET
 
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore

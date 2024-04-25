@@ -3,6 +3,9 @@ using JET
 import CUDA
 CUDA.allowscalar(false)
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore
 import ClimaCore: Spaces, Fields, Operators
 import ClimaCore.RecursiveApply: rmax

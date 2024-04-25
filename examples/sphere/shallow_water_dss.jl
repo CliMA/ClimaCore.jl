@@ -19,6 +19,9 @@ import ClimaCore:
 
 using Logging
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 
 set_initial_condition(space) =
     map(Fields.local_geometry_field(space)) do local_geometry

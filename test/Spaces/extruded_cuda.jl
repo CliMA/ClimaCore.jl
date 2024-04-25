@@ -4,6 +4,9 @@ using Revise; include(joinpath("test", "Spaces", "extruded_cuda.jl"))
 =#
 using LinearAlgebra, IntervalSets
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using CUDA
 using ClimaComms: SingletonCommsContext
 import ClimaCore

@@ -14,6 +14,9 @@ import ClimaCore:
     Remapping,
     Hypsography
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 const context = ClimaComms.context()
 const pid, nprocs = ClimaComms.init(context)
 const device = ClimaComms.device()

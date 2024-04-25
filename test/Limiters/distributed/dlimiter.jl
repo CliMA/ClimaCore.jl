@@ -14,6 +14,9 @@ using Test
 
 
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 const context = ClimaComms.MPICommsContext()
 ClimaComms.init(context)
 

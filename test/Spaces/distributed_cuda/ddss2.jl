@@ -14,6 +14,9 @@ import ClimaCore:
     Quadratures
 
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using CUDA
 
 # initializing MPI

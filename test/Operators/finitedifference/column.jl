@@ -2,6 +2,9 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 import CUDA

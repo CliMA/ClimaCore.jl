@@ -13,6 +13,9 @@ using ClimaCore:
     InputOutput
 
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 const comms_ctx = ClimaComms.context(ClimaComms.CPUSingleThreaded())
 pid, nprocs = ClimaComms.init(comms_ctx)
 filename = ClimaComms.bcast(comms_ctx, tempname(pwd()))

@@ -4,6 +4,9 @@ import CUDA
 import Random: seed!
 
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore:
     Geometry,
     Domains,

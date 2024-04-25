@@ -26,6 +26,9 @@ postprocessing(sol, output_dir) = nothing
 
 import ClimaTimeSteppers as CTS
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext

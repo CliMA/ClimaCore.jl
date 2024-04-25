@@ -1,5 +1,8 @@
 using Test
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using StaticArrays, IntervalSets, LinearAlgebra
 using Adapt
 

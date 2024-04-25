@@ -3,6 +3,9 @@ using Revise; include(joinpath("test", "MatrixFields", "gpu_compat_bidiag_matrix
 =#
 import ClimaCore
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 if !(@isdefined(TU))
     include(
         joinpath(

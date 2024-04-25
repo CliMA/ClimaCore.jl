@@ -2,6 +2,9 @@ using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 import ClimaCore
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 
 import ClimaCore:
     ClimaCore,

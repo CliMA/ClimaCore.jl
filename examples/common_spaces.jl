@@ -1,4 +1,7 @@
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using ClimaCore: Geometry, Domains, Meshes, Topologies, Spaces, Quadratures
 
 function periodic_line_mesh(; x_max, x_elem)

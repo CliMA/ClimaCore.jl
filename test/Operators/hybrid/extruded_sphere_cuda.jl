@@ -4,7 +4,10 @@ using Revise; include(joinpath("test", "Spaces", "extruded_sphere_cuda.jl"))
 =#
 using LinearAlgebra, IntervalSets
 using CUDA
-using ClimaComms, ClimaCore
+using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end, ClimaCore
 import ClimaCore:
     Domains,
     Topologies,

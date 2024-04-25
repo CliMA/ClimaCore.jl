@@ -1,4 +1,7 @@
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using LinearAlgebra
 using Colors
 using DocStringExtensions
@@ -22,6 +25,9 @@ using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import TerminalLoggers
 using ClimaCorePlots
 import Plots

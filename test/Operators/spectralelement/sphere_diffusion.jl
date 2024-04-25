@@ -1,6 +1,9 @@
 using Test
 using StaticArrays, IntervalSets
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,

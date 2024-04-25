@@ -11,6 +11,9 @@
 using Test
 using Adapt
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
 using StaticArrays, IntervalSets, LinearAlgebra, OrdinaryDiffEq
 using DocStringExtensions

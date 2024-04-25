@@ -1,5 +1,8 @@
 using LinearAlgebra, IntervalSets
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore:
     Domains,
     Topologies,

@@ -5,6 +5,9 @@ using Revise; include(joinpath("test", "Limiters", "limiter.jl"))
 import CUDA
 CUDA.allowscalar(false)
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using ClimaCore:
     DataLayouts,
     Fields,

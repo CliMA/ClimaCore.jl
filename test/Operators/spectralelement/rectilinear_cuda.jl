@@ -1,6 +1,9 @@
 using Test
 using StaticArrays
-using ClimaComms, ClimaCore
+using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end, ClimaCore
 import ClimaCore:
     Geometry,
     Fields,

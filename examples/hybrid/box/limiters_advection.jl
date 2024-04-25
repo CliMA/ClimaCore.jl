@@ -6,6 +6,9 @@ ARGS = ["cosine_bells"];
 using Revise; include(joinpath("examples", "hybrid", "box", "limiters_advection.jl"))
 =#
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 using LinearAlgebra
 using SciMLBase
 

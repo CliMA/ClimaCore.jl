@@ -15,6 +15,9 @@ import ClimaCore:
     DataLayouts
 
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 const device = ClimaComms.device()
 const context = ClimaComms.SingletonCommsContext(device)
 

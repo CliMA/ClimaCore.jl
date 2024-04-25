@@ -3,6 +3,9 @@ using Test
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 import ClimaCore.Utilities: PlusHalf, half
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:

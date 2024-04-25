@@ -18,6 +18,9 @@ import ClimaCore:
 
 using Logging
 using ClimaComms
+if pkgversion(ClimaComms) >= v"0.6"
+    ClimaComms.@import_required_backends
+end
 resolution = get(ARGS, 1, "low")
 npoly = parse(Int, get(ARGS, 2, 4))
 FT = get(ARGS, 3, Float64) == "Float64" ? Float64 : Float32
