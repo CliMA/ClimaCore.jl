@@ -1,5 +1,5 @@
 #=
-julia --project=examples
+julia --project=.buildkite
 ARGS = ["cosine_bells"];
 # ARGS = ["gaussian_bells"];
 # ARGS = ["slotted_spheres"];
