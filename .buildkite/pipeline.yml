@@ -637,6 +637,17 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: matrix multiplication recursion example (CPU)"
+        key: cpu_matrix_multiplication_recursion
+        command: "julia --color=yes --check-bounds=yes --project=test test/MatrixFields/matrix_multiplication_recursion.jl"
+
+      - label: "Unit: matrix multiplication recursion example (GPU)"
+        key: gpu_matrix_multiplication_recursion
+        command: "julia --color=yes --project=test test/MatrixFields/matrix_multiplication_recursion.jl"
+        soft_fail: true
+        agents:
+          slurm_gpus: 1
+
   - group: "Unit: MatrixFields - broadcasting (CPU)"
     steps:
 
