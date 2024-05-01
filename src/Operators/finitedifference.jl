@@ -1,4 +1,4 @@
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, UnrolledFunctions
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
@@ -239,12 +239,6 @@ Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
         Adapt.adapt(to, sbc.args),
         Adapt.adapt(to, sbc.axes),
     )
-
-function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
-    op
-end
-
-
 
 function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
     op = sbc.op
@@ -2610,18 +2604,36 @@ Base.@propagate_inbounds function stencil_right_boundary(
     stencil_interior(op, loc, space, idx - 1, hidx, arg)
 end
 
-function Adapt.adapt_structure(to, op::DivergenceF2C)
-    DivergenceF2C(map(bc -> Adapt.adapt_structure(to, bc), op.bcs))
+"""
+    unionall_type(::Type{T})
+
+Extract the type of the input, and strip it of any type parameters.
+"""
+unionall_type(::Type{T}) where {T} = T.name.wrapper
+
+# Extend `adapt_structure` for all boundary conditions containing a `val` field.
+function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
+    if hasfield(typeof(bc), :val)
+        return unionall_type(typeof(bc))(Adapt.adapt_structure(to, bc.val))
+    else
+        return bc
+    end
 end
 
-function Adapt.adapt_structure(to, bc::SetValue)
-    SetValue(Adapt.adapt_structure(to, bc.val))
+# Extend `adapt_structure` for all operator types with boundary conditions.
+function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
+    if hasfield(typeof(op), :bcs)
+        bcs_adapted = NamedTuple{keys(op.bcs)}(
+            UnrolledFunctions.unrolled_map(
+                bc -> Adapt.adapt_structure(to, bc),
+                values(op.bcs),
+            ),
+        )
+        return unionall_type(typeof(op))(bcs_adapted)
+    else
+        return op
+    end
 end
-
-function Adapt.adapt_structure(to, bc::SetDivergence)
-    SetDivergence(Adapt.adapt_structure(to, bc.val))
-end
-
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)

@@ -94,6 +94,9 @@ struct LazyOneArgFDOperatorMatrix{O <: OneArgFDOperator} <: AbstractLazyOperator
     op::O
 end
 
+Adapt.adapt_structure(to, op::FDOperatorMatrix) =
+    FDOperatorMatrix(Adapt.adapt_structure(to, op.op))
+
 # Since the operator matrix of a one-argument operator does not have any
 # arguments, we need to use a lazy operator to add an argument.
 replace_lazy_operator(space, lazy_op::LazyOneArgFDOperatorMatrix) =
