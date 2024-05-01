@@ -1,6 +1,7 @@
 import ClimaCore
 import ClimaCore: Domains, Topologies, Meshes, Spaces, Geometry, column, Fields
 import ClimaComms
+ClimaComms.@import_required_backends
 using Test
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))

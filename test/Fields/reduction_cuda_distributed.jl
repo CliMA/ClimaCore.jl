@@ -1,6 +1,7 @@
 using Test
 using CUDA
 using ClimaComms
+ClimaComms.@import_required_backends
 using Statistics
 using LinearAlgebra
 using Logging

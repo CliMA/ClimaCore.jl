@@ -12,6 +12,8 @@ end
 import .TestUtilities as TU
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 import ClimaCore.MatrixFields: ⋅
+import ClimaComms
+ClimaComms.@import_required_backends
 
 # Set up operators
 const FT = Float64

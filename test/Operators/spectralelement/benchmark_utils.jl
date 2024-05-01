@@ -16,6 +16,7 @@ import ClimaCore.Quadratures as Quadratures
 import ClimaCore.Fields as Fields
 import ClimaCore as CC
 import ClimaComms
+ClimaComms.@import_required_backends
 
 using CUDA
 using ArgParse
