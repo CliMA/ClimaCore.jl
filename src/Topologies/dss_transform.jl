@@ -271,7 +271,6 @@ function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
         _get_idx(sizet, (level, i, j, i21, elem)),
         _get_idx(sizet, (level, i, j, i22, elem)),
     )
-    return nothing
 end
 
 function _representative_slab(
