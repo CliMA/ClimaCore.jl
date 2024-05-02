@@ -40,7 +40,7 @@ function multiple_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b, x1)
         x1;
         threads_s = nthreads,
         blocks_s = nblocks,
-        always_inline = false,
+        always_inline = true,
     )
 end
 
