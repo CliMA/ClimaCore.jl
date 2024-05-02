@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.0
+-------
+
 - ![][badge-🐛bugfix] Extend adapt_structure for all operator and boundary
   condition types. Also use `unrolled_map` in `multiply_matrix_at_index` to
   avoid the recursive inference limit when compiling nested matrix operations.
