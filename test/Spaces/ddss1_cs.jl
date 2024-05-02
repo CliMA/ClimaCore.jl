@@ -1,5 +1,7 @@
 using Test
 using ClimaComms
+ClimaComms.@import_required_backends
+
 import ClimaCore:
     Domains,
     Fields,

@@ -51,6 +51,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/gpu/cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -96,6 +98,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -168,6 +172,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/spaces.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -176,6 +182,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/distributed_cuda/space_construction.jl CUDA"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 3
@@ -185,6 +193,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -193,6 +203,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -248,6 +260,8 @@ steps:
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Remapping/distributed_remapping.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -274,6 +288,8 @@ steps:
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/extruded_cuda.jl CUDA"
         artifact_paths:
           - output/extruded_spaces_cuda
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -282,6 +298,8 @@ steps:
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/point_cuda.jl CUDA"
         artifact_paths:
           - output/point_cuda
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -293,6 +311,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -305,6 +324,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -317,6 +337,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -329,6 +350,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 2
           slurm_gpus: 2
@@ -341,6 +363,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 3
           slurm_gpus: 3
@@ -353,6 +376,7 @@ steps:
         timeout_in_minutes: 15
         env:
           CLIMACOMMS_CONTEXT: "MPI"
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_ntasks: 4
           slurm_gpus: 4
@@ -369,6 +393,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/field.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -377,6 +403,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -385,6 +413,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/reduction_cuda_distributed.jl"
+        env:
+          CLIMACOMMS_CONTEXT: "MPI"
         agents:
           slurm_gpus_per_task: 1
           slurm_ntasks: 2
@@ -463,6 +493,8 @@ steps:
       - label: "Unit: hyb ops 3d CUDA"
         key: unit_hyb_ops_3d_cuda
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/3d.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -503,6 +535,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -511,6 +545,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -519,6 +555,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_sphere_cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -527,6 +565,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/extruded_3dbox_cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -554,6 +594,8 @@ steps:
         key: "gpu_integrals"
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/integrals.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -566,6 +608,8 @@ steps:
         key: "gpu_thomas_algorithm"
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/thomas_algorithm.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -595,6 +639,8 @@ steps:
       - label: "Unit: operator matrices (GPU)"
         key: unit_operator_matrices_gpu
         command: "julia --color=yes --project=.buildkite test/MatrixFields/operator_matrices.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 40GB
@@ -612,6 +658,8 @@ steps:
       - label: "Unit: field matrix solvers (GPU)"
         key: unit_field_matrix_solvers_gpu
         command: "julia --color=yes --project=.buildkite test/MatrixFields/field_matrix_solvers.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 40GB
@@ -624,6 +672,8 @@ steps:
         key: gpu_compat_bidiag_matrix_row
         command: "julia --color=yes --project=.buildkite test/MatrixFields/gpu_compat_bidiag_matrix_row.jl"
         soft_fail: true
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -634,6 +684,8 @@ steps:
       - label: "Unit: matrix multiplication recursion example (GPU)"
         key: gpu_matrix_multiplication_recursion
         command: "julia --color=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -731,6 +783,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_1
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -738,6 +792,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_2
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -745,6 +801,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_3
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -752,6 +810,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -759,6 +819,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_5
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -766,6 +828,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_6
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -773,6 +837,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_7
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -780,6 +846,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_8
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -787,6 +855,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_9
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -794,6 +864,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_10
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -801,6 +873,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_11
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -808,6 +882,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_12
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -815,6 +891,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_13
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -823,6 +901,8 @@ steps:
         key: unit_matrix_field_broadcasting_gpu_scalar_14
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"
         soft_fail: true
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -831,6 +911,8 @@ steps:
         key: unit_matrix_field_broadcasting_gpu_scalar_15
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"
         soft_fail: true
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -838,6 +920,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_16
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -846,6 +930,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_1
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -854,6 +940,8 @@ steps:
         key: unit_matrix_field_broadcasting_gpu_non_scalar_2
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"
         soft_fail: true
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -861,6 +949,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_3
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         soft_fail: true
         agents:
           slurm_gpus: 1
@@ -869,6 +959,8 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
           slurm_mem: 10GB
@@ -946,6 +1038,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Limiters/limiter.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -994,6 +1088,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1019,6 +1115,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1031,6 +1129,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1047,6 +1147,8 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1241,6 +1343,8 @@ steps:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/limiters_advection.jl gaussian_bells"
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1293,6 +1397,8 @@ steps:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl"
         artifact_paths:
           - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_low_*"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1303,6 +1409,8 @@ steps:
           - "julia --color=yes --project=.buildkite examples/hybrid/box/bubble_3d_invariant_rhoe.jl Float64 custom 1000 1000 4 16 3 0.05 700.0"
         artifact_paths:
           - "examples/hybrid/box/output/gpu_bubble_3d_invariant_rhoe/*_custom_*"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
@@ -1475,6 +1583,8 @@ steps:
           - julia --color=yes --project=.buildkite examples/sphere/shallow_water_cuda.jl
         artifact_paths:
           - output/cuda_shallowwater_2d_cg_sphere
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 

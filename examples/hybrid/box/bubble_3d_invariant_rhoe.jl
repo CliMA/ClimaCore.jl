@@ -1,5 +1,5 @@
 # Usage:
-# julia --project hybrid/box/bubble_3d_invariant_rhoe.jl 
+# julia --project hybrid/box/bubble_3d_invariant_rhoe.jl
 # runs the low resolution simulation with Float64
 # julia --project hybrid/box/bubble_3d_invariant_rhoe.jl Float64 medium
 # rung the medium resolution simulation with Float64
@@ -11,6 +11,7 @@
 using Test
 using Adapt
 using ClimaComms
+ClimaComms.@import_required_backends
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
 using StaticArrays, IntervalSets, LinearAlgebra, OrdinaryDiffEq
 using DocStringExtensions

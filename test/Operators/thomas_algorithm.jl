@@ -3,6 +3,8 @@ import Random: seed!
 import LinearAlgebra: Tridiagonal, norm
 import ClimaCore
 import ClimaCore: Geometry, Spaces, Fields, Operators
+import ClimaComms
+ClimaComms.@import_required_backends
 
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),

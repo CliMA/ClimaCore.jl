@@ -14,7 +14,7 @@ PkgVersion = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 TempestRemap_jll = "8573a8c5-1df0-515e-a024-abad257ee284"
 
 [compat]
-ClimaComms = "0.5"
+ClimaComms = "0.5, 0.6"
 ClimaCore = "0.11, 0.12, 0.13"
 CommonDataModel = "0.2, 0.3"
 Dates = "1"

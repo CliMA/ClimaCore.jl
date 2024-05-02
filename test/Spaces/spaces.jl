@@ -2,6 +2,7 @@ using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
 using Adapt
+ClimaComms.@import_required_backends
 
 import ClimaCore:
     slab,
