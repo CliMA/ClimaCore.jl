@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.0
+-------
+
+- ![][badge-🐛bugfix] Extend adapt_structure for all operator and boundary
+  condition types. Also use `unrolled_map` in `multiply_matrix_at_index` to
+  avoid the recursive inference limit when compiling nested matrix operations.
+  PR [#1684](https://github.com/CliMA/ClimaCore.jl/pull/1684)
 - ![][badge-🤖precisionΔ] ![][badge-💥breaking] `Remapper`s can now process
   multiple `Field`s at the same time if created with some `buffer_lenght > 1`.
   PR ([#1669](https://github.com/CliMA/ClimaCore.jl/pull/1669))

@@ -1,5 +1,6 @@
 using Test
 using ClimaComms
+ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets, LinearAlgebra
 
 import ClimaCore:

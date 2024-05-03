@@ -14,6 +14,7 @@ import ClimaCore:
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
 
 using Logging
+ClimaComms.@import_required_backends
 const context = ClimaComms.context()
 usempi = context isa ClimaComms.MPICommsContext
 if usempi

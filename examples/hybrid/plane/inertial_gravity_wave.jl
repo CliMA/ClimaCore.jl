@@ -1,5 +1,5 @@
 #=
-julia --threads=8 --project=examples
+julia --threads=8 --project=.buildkite
 ENV["TEST_NAME"] = "plane/inertial_gravity_wave"
 include(joinpath("examples", "hybrid", "driver.jl"))
 =#

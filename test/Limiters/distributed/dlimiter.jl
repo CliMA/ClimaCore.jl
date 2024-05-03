@@ -12,8 +12,8 @@ using ClimaCore.RecursiveApply
 using ClimaCore: slab
 using Test
 
-
 using ClimaComms
+ClimaComms.@import_required_backends
 const context = ClimaComms.MPICommsContext()
 ClimaComms.init(context)
 
