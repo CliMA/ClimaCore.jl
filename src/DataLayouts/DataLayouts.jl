@@ -17,6 +17,7 @@ module DataLayouts
 import Base: Base, @propagate_inbounds
 import StaticArrays: SOneTo, MArray, SArray
 import ClimaComms
+import MultiBroadcastFusion as MBF
 import Adapt
 
 import ..slab, ..slab_args, ..column, ..column_args, ..level
@@ -1450,5 +1451,12 @@ Adapt.adapt_structure(to, data::VF{S}) where {S} =
 
 Adapt.adapt_structure(to, data::DataF{S}) where {S} =
     DataF{S}(Adapt.adapt(to, parent(data)))
+
+# TODO: Should the DataLayout be device-aware? So that we can
+# determine if we're multi-threaded or not?
+# This is only currently used in FusedMultiBroadcast kernels
+device_from_array_type(::Type{<:AbstractArray}) = ClimaComms.CPUSingleThreaded()
+ClimaComms.device(data::AbstractData) =
+    device_from_array_type(typeof(parent(data)))
 
 end # module

@@ -1,3 +1,11 @@
+import MultiBroadcastFusion as MBF
+import MultiBroadcastFusion: fused_direct
+
+# Make a MultiBroadcastFusion type, `FusedMultiBroadcast`, and macro, `@fused`:
+# via https://github.com/CliMA/MultiBroadcastFusion.jl
+MBF.@make_type FusedMultiBroadcast
+MBF.@make_fused fused_direct FusedMultiBroadcast fused_direct
+
 # Broadcasting of AbstractData objects
 # https://docs.julialang.org/en/v1/manual/interfaces/#Broadcast-Styles
 
@@ -586,4 +594,97 @@ function Base.copyto!(
     bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
 ) where {S, Nij, A}
     return _serial_copyto!(dest, bc)
+end
+
+# ============= FusedMultiBroadcast
+
+isascalar(
+    bc::Base.Broadcast.Broadcasted{Style},
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+} = true
+isascalar(bc) = false
+
+
+# Fused multi-broadcast entry point for DataLayouts
+function Base.copyto!(
+    fmbc::FusedMultiBroadcast{T},
+) where {N, T <: NTuple{N, Pair{<:AbstractData, <:Any}}}
+    dest1 = first(fmbc.pairs).first
+    # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
+    fused_copyto!(fmbc, dest1, ClimaComms.device(dest1))
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::VIJFH{S1, Nij},
+    ::ClimaComms.AbstractCPUDevice,
+) where {S1, Nij}
+    _, _, _, Nv, Nh = size(dest1)
+    for (dest, bc) in fmbc.pairs
+        # Base.copyto!(dest, bc) # we can just fall back like this
+        @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv
+            I = CartesianIndex(i, j, 1, v, h)
+            bcI = isascalar(bc) ? bc[] : bc[I]
+            dest[I] = convert(eltype(dest), bcI)
+        end
+    end
+    return nothing
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::VIFH{S, Ni, A},
+    ::ClimaComms.AbstractCPUDevice,
+) where {S, Ni, A}
+    # copy contiguous columns
+    _, _, _, Nv, Nh = size(dest1)
+    for (dest, bc) in fmbc.pairs
+        @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv
+            I = CartesianIndex(i, 1, 1, v, h)
+            bcI = isascalar(bc) ? bc[] : bc[I]
+            dest[I] = convert(eltype(dest), bcI)
+        end
+    end
+    return nothing
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::VF{S1, A},
+    ::ClimaComms.AbstractCPUDevice,
+) where {S1, A}
+    _, _, _, Nv, _ = size(dest1)
+    for (dest, bc) in fmbc.pairs
+        @inbounds for v in 1:Nv
+            I = CartesianIndex(1, 1, 1, v, 1)
+            dest[I] = convert(eltype(dest), bc[I])
+        end
+    end
+    return nothing
+end
+
+# we've already diagonalized dest, so we only need to make
+# sure that all the broadcast axes are compatible.
+# Logic here is similar to Base.Broadcast.instantiate
+@inline function _check_fused_broadcast_axes(bc1, bc2)
+    axes = Base.Broadcast.combine_axes(bc1.args..., bc2.args...)
+    if !(axes isa Nothing)
+        Base.Broadcast.check_broadcast_axes(axes, bc1.args...)
+        Base.Broadcast.check_broadcast_axes(axes, bc2.args...)
+    end
+end
+
+@inline check_fused_broadcast_axes(fmbc::FusedMultiBroadcast) =
+    check_fused_broadcast_axes(
+        map(x -> x.second, fmbc.pairs),
+        first(fmbc.pairs).second,
+    )
+@inline check_fused_broadcast_axes(bcs::Tuple{<:Any}, bc1) =
+    _check_fused_broadcast_axes(first(bcs), bc1)
+@inline check_fused_broadcast_axes(bcs::Tuple{}, bc1) = nothing
+@inline function check_fused_broadcast_axes(bcs::Tuple, bc1)
+    _check_fused_broadcast_axes(first(bcs), bc1)
+    check_fused_broadcast_axes(Base.tail(bcs), bc1)
 end

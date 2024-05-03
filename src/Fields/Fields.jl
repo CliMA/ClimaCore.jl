@@ -3,7 +3,14 @@ module Fields
 import ClimaComms
 import MultiBroadcastFusion as MBF
 import ..slab, ..slab_args, ..column, ..column_args, ..level
-import ..DataLayouts: DataLayouts, AbstractData, DataStyle
+import ..DataLayouts:
+    DataLayouts,
+    AbstractData,
+    DataStyle,
+    FusedMultiBroadcast,
+    @fused_direct,
+    isascalar,
+    check_fused_broadcast_axes
 import ..Domains
 import ..Topologies
 import ..Quadratures
