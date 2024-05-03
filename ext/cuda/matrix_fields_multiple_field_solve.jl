@@ -7,6 +7,7 @@ import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
 import ClimaCore.MatrixFields: allow_scalar_func
+import ClimaCore.Utilities.UnrolledFunctions: unrolled_map
 
 allow_scalar_func(::ClimaComms.CUDADevice, f, args) =
     CUDA.@allowscalar f(args...)
@@ -59,10 +60,16 @@ end
 
 @inline function _recurse(js::Tuple, tups::Tuple, transform, device, i::Int)
     if first(js) == i
-        tup_args = map(x -> transform(first(x)), tups)
+        tup_args = unrolled_map(x -> transform(first(x)), tups)
         _single_field_solve!(tup_args..., device)
     end
-    _recurse(Base.tail(js), map(x -> Base.tail(x), tups), transform, device, i)
+    _recurse(
+        Base.tail(js),
+        unrolled_map(x -> Base.tail(x), tups),
+        transform,
+        device,
+        i,
+    )
 end
 
 @inline _recurse(js::Tuple{}, tups::Tuple, transform, device, i::Int) = nothing
@@ -75,7 +82,7 @@ end
     i::Int,
 )
     if first(js) == i
-        tup_args = map(x -> transform(first(x)), tups)
+        tup_args = unrolled_map(x -> transform(first(x)), tups)
         _single_field_solve!(tup_args..., device)
     end
     return nothing
