@@ -7,6 +7,7 @@ import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
 import ClimaCore.MatrixFields: allow_scalar_func
+import ClimaCore.Utilities.UnrolledFunctions: unrolled_map
 
 allow_scalar_func(::ClimaComms.CUDADevice, f, args) =
     CUDA.@allowscalar f(args...)
@@ -22,25 +23,23 @@ function multiple_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b, x1)
     ssx = Operators.strip_space(x)
     ssA = Operators.strip_space(A)
     ssb = Operators.strip_space(b)
-    cache_tup = map(name -> sscache[name], names)
-    x_tup = map(name -> ssx[name], names)
-    A_tup = map(name -> ssA[name, name], names)
-    b_tup = map(name -> ssb[name], names)
-    x1 = first(x_tup)
-
-    tups = (cache_tup, x_tup, A_tup, b_tup)
+    caches = map(name -> sscache[name], names)
+    xs = map(name -> ssx[name], names)
+    As = map(name -> ssA[name, name], names)
+    bs = map(name -> ssb[name], names)
+    x1 = first(xs)
 
     device = ClimaComms.device(x[first(names)])
 
-    args = (device, tups, x1, Val(Nnames))
-    # TODO: use always_inline=true
+    args = (device, caches, xs, As, bs, x1, Val(Nnames))
+
     auto_launch!(
         multiple_field_solve_kernel!,
         args,
         x1;
         threads_s = nthreads,
         blocks_s = nblocks,
-        always_inline = false,
+        always_inline = true,
     )
 end
 
@@ -57,33 +56,37 @@ function get_ijhn(Ni, Nj, Nh, Nnames, blockIdx, threadIdx, blockDim, gridDim)
     return (i, j, h, n)
 end
 
-@inline function _recurse(js::Tuple, tups::Tuple, transform, device, i::Int)
-    if first(js) == i
-        tup_args = map(x -> transform(first(x)), tups)
-        _single_field_solve!(tup_args..., device)
-    end
-    _recurse(Base.tail(js), map(x -> Base.tail(x), tups), transform, device, i)
-end
-
-@inline _recurse(js::Tuple{}, tups::Tuple, transform, device, i::Int) = nothing
-
-@inline function _recurse(
-    js::Tuple{Int},
-    tups::Tuple,
-    transform,
+@generated function generated_single_field_solve!(
+    caches,
+    xs,
+    As,
+    bs,
     device,
-    i::Int,
-)
-    if first(js) == i
-        tup_args = map(x -> transform(first(x)), tups)
-        _single_field_solve!(tup_args..., device)
+    i,
+    j,
+    h,
+    iname,
+    ::Val{Nnames},
+) where {Nnames}
+    return quote
+        Base.Cartesian.@nif $Nnames ξ -> (iname == ξ) ξ -> begin
+            _single_field_solve!(
+                column_A(caches[ξ], i, j, h),
+                column_A(xs[ξ], i, j, h),
+                column_A(As[ξ], i, j, h),
+                column_A(bs[ξ], i, j, h),
+                device,
+            )
+        end
     end
-    return nothing
 end
 
 function multiple_field_solve_kernel!(
     device::ClimaComms.CUDADevice,
-    tups,
+    caches,
+    xs,
+    As,
+    bs,
     x1,
     ::Val{Nnames},
 ) where {Nnames}
@@ -100,17 +103,18 @@ function multiple_field_solve_kernel!(
             CUDA.gridDim(),
         )
         if 1 ≤ i <= Ni && 1 ≤ j ≤ Nj && 1 ≤ h ≤ Nh && 1 ≤ iname ≤ Nnames
-
-            nt = ntuple(ξ -> ξ, Val(Nnames))
-            _recurse(nt, tups, ξ -> column_A(ξ, i, j, h), device, iname)
-            # _recurse effectively calls
-            #    _single_field_solve!(
-            #        Spaces.column(caches[iname], i, j, h),
-            #        Spaces.column(xs[iname], i, j, h),
-            #        column_A(As[iname], i, j, h),
-            #        Spaces.column(bs[iname], i, j, h),
-            #        device,
-            #    )
+            generated_single_field_solve!(
+                caches,
+                xs,
+                As,
+                bs,
+                device,
+                i,
+                j,
+                h,
+                iname,
+                Val(Nnames),
+            )
         end
     end
     return nothing
