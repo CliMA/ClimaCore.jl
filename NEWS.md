@@ -16,6 +16,8 @@ v0.14.0
   PR ([#1669](https://github.com/CliMA/ClimaCore.jl/pull/1669))
   Machine-precision differences are expected. This change is breaking because
   remappers now return the same array type as the input field.
+- ![][badge-🚀performance] We inlined the `multiple_field_solve` kernels, which should improve performance. PR [#1715](https://github.com/CliMA/ClimaCore.jl/pull/1715).
+- ![][badge-🚀performance] We added support for MultiBroadcastFusion, which allows users to fuse similar space point-wise broadcast expressions via `Fields.@fused_direct`. PR [#1641](https://github.com/CliMA/ClimaCore.jl/pull/1641).
 
 v0.13.4
 -------
