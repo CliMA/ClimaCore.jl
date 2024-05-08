@@ -45,3 +45,70 @@ function set_elevation(space, h₀)
     end
     return Y
 end
+
+function extruded_sphere_spaces(::Type{FT}, device) where {FT}
+    context = ClimaComms.SingletonCommsContext(device)
+    R = FT(6.371229e6)
+    npoly = 4
+    z_max = FT(30e3)
+    z_elem = 10
+    h_elem = 4
+    @info(
+        "running reduction test on",
+        context.device,
+        h_elem,
+        npoly,
+        R,
+        z_max,
+        FT,
+    )
+    # horizontal space
+    domain = Domains.SphereDomain(R)
+    horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
+    horizontal_topology = Topologies.Topology2D(
+        context,
+        horizontal_mesh,
+        Topologies.spacefillingcurve(horizontal_mesh),
+    )
+    quad = Quadratures.GLL{npoly + 1}()
+    h_space = Spaces.SpectralElementSpace2D(horizontal_topology, quad)
+
+    # vertical space
+    z_domain = Domains.IntervalDomain(
+        Geometry.ZPoint(zero(z_max)),
+        Geometry.ZPoint(z_max);
+        boundary_names = (:bottom, :top),
+    )
+    z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
+    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    z_center_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
+    z_face_space = Spaces.FaceFiniteDifferenceSpace(z_topology)
+    hv_center_space =
+        Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_center_space)
+    hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
+    return (;cspace = hv_center_space, fspace = hv_face_space)
+end
+
+function sem_2d_sphere_spaces(::Type{FT}, device) where {FT}
+    context = ClimaComms.SingletonCommsContext(device)
+    # Set up discretization
+    ne = 72
+    Nq = 4
+    ndof = ne * ne * 6 * Nq * Nq
+    @info(
+        "Running reduction test on",
+        context.device,
+        ne,
+        Nq,
+        ndof,
+        FT,
+    )
+    R = FT(6.37122e6) # radius of earth
+    domain = Domains.SphereDomain(R)
+    mesh = Meshes.EquiangularCubedSphere(domain, ne)
+    quad = Quadratures.GLL{Nq}()
+    grid_topology = Topologies.Topology2D(context, mesh)
+    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
+    return (;space)
+end
+
