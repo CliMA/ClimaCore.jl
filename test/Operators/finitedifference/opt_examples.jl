@@ -578,7 +578,7 @@ end
     @show p_allocated
 
     trial = if device isa ClimaComms.CUDADevice
-        CUDA.@sync @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
+        @benchmark CUDA.@sync set_ᶠuₕ³!($ ᶜx, $ᶠx)
     else
         @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
     end

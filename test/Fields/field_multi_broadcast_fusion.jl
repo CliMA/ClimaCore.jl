@@ -76,7 +76,7 @@ function benchmark_kernel!(f!, X, Y)
     show(stdout, MIME("text/plain"), trial)
 end
 benchmark_kernel!(f!, X, Y, ::ClimaComms.CUDADevice) =
-    CUDA.@sync BenchmarkTools.@benchmark $f!($X, $Y);
+    BenchmarkTools.@benchmark CUDA.@sync $f!($X, $Y);
 benchmark_kernel!(f!, X, Y, ::ClimaComms.AbstractCPUDevice) =
     BenchmarkTools.@benchmark $f!($X, $Y);
 
@@ -143,9 +143,11 @@ end
 function fused_bycolumn!(X, Y)
     (; x1, x2, x3) = X
     (; y1, y2, y3) = Y
+    var = (2,)
     Fields.bycolumn(axes(x1)) do colidx
         @fused_direct begin
             @. y1[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
+            @. y2[colidx] = var # tests Base.Broadcast.AbstractArrayStyle{0}
             @. y2[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
         end
     end
@@ -154,8 +156,10 @@ end
 function unfused_bycolumn!(X, Y)
     (; x1, x2, x3) = X
     (; y1, y2, y3) = Y
+    var = (2,)
     Fields.bycolumn(axes(x1)) do colidx
         @. y1[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
+        @. y2[colidx] = var # tests Base.Broadcast.AbstractArrayStyle{0}
         @. y2[colidx] = x1[colidx] + x2[colidx] + x3[colidx]
     end
     return nothing
