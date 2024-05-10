@@ -195,9 +195,16 @@ Base.@propagate_inbounds function rcopyto_at!(
     v,
 )
     dest, bc = pair.first, pair.second
-    if v <= size(dest, 4)
+    if 1 ≤ v <= size(dest, 4)
+        dest[I] = isascalar(bc) ? bc[] : bc[I]
+    end
+    return nothing
+end
+Base.@propagate_inbounds function rcopyto_at!(pair::Pair{<:DataF, <:Any}, I, v)
+    dest, bc = pair.first, pair.second
+    if 1 ≤ v <= size(dest, 4)
         bcI = isascalar(bc) ? bc[] : bc[I]
-        dest[I] = bcI
+        dest[] = bcI
     end
     return nothing
 end
@@ -233,10 +240,9 @@ function fused_copyto!(
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
-        args = (fmbc,)
         auto_launch!(
             knl_fused_copyto!,
-            args,
+            (fmbc,),
             dest1;
             threads_s = (Nij, Nij, Nv_per_block),
             blocks_s = (Nh, Nv_blocks),
@@ -244,6 +250,57 @@ function fused_copyto!(
     end
     return nothing
 end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::IJFH{S, Nij},
+    ::ClimaComms.CUDADevice,
+) where {S, Nij}
+    _, _, _, _, Nh = size(dest1)
+    if Nh > 0
+        auto_launch!(
+            knl_fused_copyto!,
+            (fmbc,),
+            dest1;
+            threads_s = (Nij, Nij),
+            blocks_s = (Nh, 1),
+        )
+    end
+    return nothing
+end
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::VF{S},
+    ::ClimaComms.CUDADevice,
+) where {S}
+    _, _, _, Nv, Nh = size(dest1)
+    if Nv > 0 && Nh > 0
+        auto_launch!(
+            knl_fused_copyto!,
+            (fmbc,),
+            dest1;
+            threads_s = (1, 1),
+            blocks_s = (Nh, Nv),
+        )
+    end
+    return nothing
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::DataF{S},
+    ::ClimaComms.CUDADevice,
+) where {S}
+    auto_launch!(
+        knl_fused_copyto!,
+        (fmbc,),
+        dest1;
+        threads_s = (1, 1),
+        blocks_s = (1, 1),
+    )
+    return nothing
+end
+
 
 adapt_f(to, f::F) where {F} = Adapt.adapt(to, f)
 adapt_f(to, ::Type{F}) where {F} = (x...) -> F(x...)
