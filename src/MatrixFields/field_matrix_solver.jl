@@ -71,7 +71,7 @@ end
 
 Solves the equation `A * x = b` for `x` using the `FieldMatrixSolver` `solver`.
 """
-function field_matrix_solve!(
+NVTX.@annotate function field_matrix_solve!(
     solver::FieldMatrixSolver,
     x::Fields.FieldVector,
     A::FieldMatrix,
@@ -168,7 +168,7 @@ end
 LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂) =
     LazySchurComplement(A₁₁, A₁₂, A₂₁, A₂₂, nothing, nothing, nothing, nothing)
 
-function lazy_mul(A₂₂′::LazySchurComplement, x₂)
+NVTX.@annotate function lazy_mul(A₂₂′::LazySchurComplement, x₂)
     (; A₁₁, A₁₂, A₂₁, A₂₂, alg₁, cache₁, A₁₂_x₂, invA₁₁_A₁₂_x₂) = A₂₂′
     zero_rows = setdiff(keys(A₁₂_x₂), matrix_row_keys(keys(A₁₂)))
     @. A₁₂_x₂ = A₁₂ * x₂ + zero(A₁₂_x₂[zero_rows])
@@ -247,7 +247,7 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+NVTX.@annotate run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
     multiple_field_solve!(cache, x, A, b)
 
 # This may be helpful for debugging:
@@ -303,7 +303,7 @@ function check_field_matrix_solver(alg::BlockLowerTriangularSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂, cache.b₂′)
 end
 
-function run_field_matrix_solver!(
+NVTX.@annotate function run_field_matrix_solver!(
     alg::BlockLowerTriangularSolve,
     cache,
     x,
@@ -363,7 +363,13 @@ function check_field_matrix_solver(alg::BlockArrowheadSolve, cache, A, b)
     check_field_matrix_solver(alg.alg₂, cache.cache₂, cache.A₂₂′, cache.b₂′)
 end
 
-function run_field_matrix_solver!(alg::BlockArrowheadSolve, cache, x, A, b)
+NVTX.@annotate function run_field_matrix_solver!(
+    alg::BlockArrowheadSolve,
+    cache,
+    x,
+    A,
+    b,
+)
     A₁₁, A₁₂, A₂₁, A₂₂, b₁, b₂, x₁, x₂ = partition_blocks(alg.names₁, A, b, x)
     @. cache.A₂₂′ = A₂₂ - A₂₁ * inv(A₁₁) * A₁₂
     @. cache.b₂′ = b₂ - A₂₁ * inv(A₁₁) * b₁
@@ -434,7 +440,7 @@ function check_field_matrix_solver(
     check_field_matrix_solver(alg.alg₂, cache.cache₂, A₂₂′, cache.b₂′)
 end
 
-function run_field_matrix_solver!(
+NVTX.@annotate function run_field_matrix_solver!(
     alg::SchurComplementReductionSolve,
     cache,
     x,

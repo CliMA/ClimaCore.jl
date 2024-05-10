@@ -98,7 +98,7 @@ Constructs a lazy `FieldMatrix` (or a concrete one when possible) that
 represents the product `@. inv(P) * b`. Here, `lazy_b` is a (possibly lazy)
 `FieldVectorView` that represents `b`.
 """
-function apply_preconditioner(P_alg, P_cache, P, lazy_b)
+NVTX.@annotate function apply_preconditioner(P_alg, P_cache, P, lazy_b)
     isnothing(P_alg) && return lazy_b
     is_diagonal(P_alg) && return lazy_mul(lazy_inv(P), lazy_b)
     @. P_cache.b = lazy_b
@@ -428,7 +428,13 @@ check_field_matrix_solver(alg::StationaryIterativeSolve, cache, A, b) =
     check_preconditioner(alg.P_alg, cache.P_cache, A, b)
 
 is_CuArray_type(::Type{T}) where {T} = false
-function run_field_matrix_solver!(alg::StationaryIterativeSolve, cache, x, A, b)
+NVTX.@annotate function run_field_matrix_solver!(
+    alg::StationaryIterativeSolve,
+    cache,
+    x,
+    A,
+    b,
+)
     P = lazy_or_concrete_preconditioner(alg.P_alg, cache.P_cache, A)
     using_cuda =
         is_CuArray_type(ClimaComms.array_type(concrete_field_vector(b)))

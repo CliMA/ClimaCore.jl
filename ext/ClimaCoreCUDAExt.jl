@@ -1,5 +1,6 @@
 module ClimaCoreCUDAExt
 
+import NVTX
 import ClimaComms
 import ClimaCore: DataLayouts, Grids, Spaces, Fields
 import ClimaCore: Geometry

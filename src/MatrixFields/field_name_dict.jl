@@ -521,15 +521,11 @@ Base.Broadcast.materialize!(
     dest::Fields.FieldVector,
     vector_or_matrix::FieldNameDict,
 ) = Base.Broadcast.materialize!(field_vector_view(dest), vector_or_matrix)
-function Base.Broadcast.materialize!(
+
+NVTX.@annotate function copyto_foreach!(
     dest::FieldNameDict,
     vector_or_matrix::FieldNameDict,
 )
-    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
-    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) || error(
-        "Broadcast result and destination keys are incompatible: \
-         $(set_string(keys(vector_or_matrix))) vs. $(set_string(keys(dest)))",
-    ) # It is not always the case that keys(vector_or_matrix) == keys(dest).
     foreach(keys(vector_or_matrix)) do key
         entry = vector_or_matrix[key]
         if dest[key] isa UniformScaling
@@ -540,6 +536,18 @@ function Base.Broadcast.materialize!(
             dest[key] .= entry
         end
     end
+end
+
+NVTX.@annotate function Base.Broadcast.materialize!(
+    dest::FieldNameDict,
+    vector_or_matrix::FieldNameDict,
+)
+    !is_lazy(dest) || error("Cannot materialize into a lazy FieldNameDict")
+    is_subset_that_covers_set(keys(vector_or_matrix), keys(dest)) || error(
+        "Broadcast result and destination keys are incompatible: \
+         $(set_string(keys(vector_or_matrix))) vs. $(set_string(keys(dest)))",
+    ) # It is not always the case that keys(vector_or_matrix) == keys(dest).
+    copyto_foreach!(dest, vector_or_matrix)
 end
 
 #=
