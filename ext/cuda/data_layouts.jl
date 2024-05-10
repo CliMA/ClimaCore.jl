@@ -11,6 +11,8 @@ import Adapt
 import CUDA
 
 device_from_array_type(::Type{<:CUDA.CuArray}) = ClimaComms.CUDADevice()
+device_from_array_type(::Type{<:SubArray{<:Any, <:Any, <:CUDA.CuArray}}) =
+    ClimaComms.CUDADevice()
 
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}
