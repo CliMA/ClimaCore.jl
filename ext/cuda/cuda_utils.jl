@@ -17,43 +17,46 @@ get_n_items(tup::Tuple) = prod(tup)
             AbstractData,
             Field,
         };
+        auto = false,
         threads_s,
         blocks_s,
         always_inline = true
     )
 
-Launch a cuda kernel, using `CUDA.launch_configuration`
+Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
 to determine the number of threads/blocks.
 
 Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
-to benchmark compare against auto-determined threads/blocks.
+to benchmark compare against auto-determined threads/blocks (if `auto=false`).
 """
 function auto_launch!(
     f!::F!,
     args,
     data;
-    threads_s,
-    blocks_s,
+    auto = false,
+    threads_s = nothing,
+    blocks_s = nothing,
     always_inline = true,
 ) where {F!}
-    nitems = get_n_items(data)
     # For now, we'll simply use the
     # suggested threads and blocks:
-    CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
-        blocks_s f!(args...)
-
-    # Soon, we'll experiment with `CUDA.launch_configuration`
-    # kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-    # config = CUDA.launch_configuration(kernel.fun)
-    # threads = min(nitems, config.threads)
-    # blocks = cld(nitems, threads)
-    # s = ""
-    # s *= "Launching kernel $f! with following config:\n"
-    # s *= "     nitems: $nitems\n"
-    # s *= "     threads: $threads\n"
-    # s *= "     blocks: $blocks\n"
-    # @info s
-    # kernel(args...; threads, blocks) # This knows to use always_inline from above.
+    if auto
+        nitems = get_n_items(data)
+        kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+        config = CUDA.launch_configuration(kernel.fun)
+        threads = min(nitems, config.threads)
+        blocks = cld(nitems, threads)
+        # s = ""
+        # s *= "Launching kernel $f! with following config:\n"
+        # s *= "     nitems: $nitems\n"
+        # s *= "     threads: $threads\n"
+        # s *= "     blocks: $blocks\n"
+        # @info s
+        kernel(args...; threads, blocks) # This knows to use always_inline from above.
+    else
+        CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
+            blocks_s f!(args...)
+    end
 end
 
 """
