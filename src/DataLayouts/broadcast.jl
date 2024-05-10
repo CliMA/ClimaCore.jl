@@ -659,7 +659,8 @@ function fused_copyto!(
     for (dest, bc) in fmbc.pairs
         @inbounds for v in 1:Nv
             I = CartesianIndex(1, 1, 1, v, 1)
-            dest[I] = convert(eltype(dest), bc[I])
+            bcI = isascalar(bc) ? bc[] : bc[I]
+            dest[I] = convert(eltype(dest), bcI)
         end
     end
     return nothing
