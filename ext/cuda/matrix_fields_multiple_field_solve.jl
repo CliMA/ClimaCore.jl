@@ -14,7 +14,14 @@ allow_scalar_func(::ClimaComms.CUDADevice, f, args) =
 
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
-function multiple_field_solve!(::ClimaComms.CUDADevice, cache, x, A, b, x1)
+NVTX.@annotate function multiple_field_solve!(
+    ::ClimaComms.CUDADevice,
+    cache,
+    x,
+    A,
+    b,
+    x1,
+)
     Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)

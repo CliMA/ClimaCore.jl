@@ -49,6 +49,7 @@ import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype
 import KrylovKit
 import ClimaComms
+import NVTX
 import Adapt
 
 import ..Utilities: PlusHalf, half
