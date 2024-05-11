@@ -1,5 +1,6 @@
 #=
 julia --check-bounds=yes --project=test
+julia -g2 --check-bounds=yes --project=test
 julia --project=test
 using Revise; include(joinpath("test", "Fields", "field_multi_broadcast_fusion.jl"))
 =#
@@ -12,7 +13,7 @@ using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH
+import ClimaCore.DataLayouts: IJFH, VF, DataF
 import ClimaCore.DataLayouts
 import ClimaCore:
     Fields,
@@ -38,6 +39,8 @@ if !(@isdefined(TU))
     include(util_file)
     import .TestUtilities as TU
 end
+
+@show ClimaComms.device()
 
 function CenterExtrudedFiniteDifferenceSpaceLineHSpace(
     ::Type{FT};
@@ -174,6 +177,11 @@ function rand_field!(f)
     parent(f) .= map(x -> rand(), parent(f))
     return f
 end
+struct SomeData{FT}
+    a::FT
+    b::FT
+    c::FT
+end
 
 @testset "FusedMultiBroadcast - restrict to only similar fields" begin
     FT = Float64
@@ -197,11 +205,6 @@ end
     nothing
 end
 
-struct SomeData{FT}
-    a::FT
-    b::FT
-    c::FT
-end
 @testset "FusedMultiBroadcast - restrict to only similar broadcast types" begin
     FT = Float64
     dev = ClimaComms.device()
@@ -311,4 +314,67 @@ end
         benchmark_kernel!(fused_bycolumn!, X, Y)
         nothing
     end
+end
+
+@testset "FusedMultiBroadcast IJFH" begin
+    FT = Float64
+    device = ClimaComms.device()
+    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
+    sem_space =
+        TU.SphereSpectralElementSpace(FT; context = ClimaComms.context(device))
+    IJFH_data() = Fields.Field(FT, sem_space)
+    X = Fields.FieldVector(;
+        x1 = IJFH_data(),
+        x2 = IJFH_data(),
+        x3 = IJFH_data(),
+    )
+    Y = Fields.FieldVector(;
+        y1 = IJFH_data(),
+        y2 = IJFH_data(),
+        y3 = IJFH_data(),
+    )
+    test_kernel!(; fused!, unfused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y)
+    benchmark_kernel!(fused!, X, Y)
+    nothing
+end
+
+@testset "FusedMultiBroadcast VF" begin
+    FT = Float64
+    device = ClimaComms.device()
+    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
+    colspace = TU.ColumnCenterFiniteDifferenceSpace(
+        FT;
+        zelem = 3,
+        context = ClimaComms.context(device),
+    )
+    VF_data() = Fields.Field(FT, colspace)
+
+    X = Fields.FieldVector(; x1 = VF_data(), x2 = VF_data(), x3 = VF_data())
+    Y = Fields.FieldVector(; y1 = VF_data(), y2 = VF_data(), y3 = VF_data())
+    test_kernel!(; fused!, unfused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y)
+    benchmark_kernel!(fused!, X, Y)
+    nothing
+end
+
+@testset "FusedMultiBroadcast DataF" begin
+    FT = Float64
+    device = ClimaComms.device()
+    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
+    DataF_data() = DataF{FT}(ArrayType(ones(FT, 2)))
+    X = Fields.FieldVector(;
+        x1 = DataF_data(),
+        x2 = DataF_data(),
+        x3 = DataF_data(),
+    )
+    Y = Fields.FieldVector(;
+        y1 = DataF_data(),
+        y2 = DataF_data(),
+        y3 = DataF_data(),
+    )
+    test_kernel!(; fused!, unfused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y)
+    benchmark_kernel!(fused!, X, Y)
+    nothing
 end

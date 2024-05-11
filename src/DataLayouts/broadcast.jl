@@ -606,14 +606,26 @@ isascalar(
 } = true
 isascalar(bc) = false
 
-
 # Fused multi-broadcast entry point for DataLayouts
 function Base.copyto!(
     fmbc::FusedMultiBroadcast{T},
 ) where {N, T <: NTuple{N, Pair{<:AbstractData, <:Any}}}
     dest1 = first(fmbc.pairs).first
+    fmb_inst = FusedMultiBroadcast(
+        map(fmbc.pairs) do pair
+            bc = pair.second
+            bc′ = if isascalar(bc)
+                Base.Broadcast.instantiate(
+                    Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, ()),
+                )
+            else
+                bc
+            end
+            Pair(pair.first, bc′)
+        end,
+    )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
-    fused_copyto!(fmbc, dest1, ClimaComms.device(dest1))
+    fused_copyto!(fmb_inst, dest1, ClimaComms.device(dest1))
 end
 
 function fused_copyto!(
@@ -626,6 +638,23 @@ function fused_copyto!(
         # Base.copyto!(dest, bc) # we can just fall back like this
         @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv
             I = CartesianIndex(i, j, 1, v, h)
+            bcI = isascalar(bc) ? bc[] : bc[I]
+            dest[I] = convert(eltype(dest), bcI)
+        end
+    end
+    return nothing
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest1::IJFH{S, Nij, A},
+    ::ClimaComms.AbstractCPUDevice,
+) where {S, Nij, A}
+    # copy contiguous columns
+    _, _, _, Nv, Nh = size(dest1)
+    for (dest, bc) in fmbc.pairs
+        @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
+            I = CartesianIndex(i, j, 1, 1, h)
             bcI = isascalar(bc) ? bc[] : bc[I]
             dest[I] = convert(eltype(dest), bcI)
         end
@@ -664,6 +693,17 @@ function fused_copyto!(
         end
     end
     return nothing
+end
+
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest::DataF{S},
+    ::ClimaComms.AbstractCPUDevice,
+) where {S}
+    for (dest, bc) in fmbc.pairs
+        @inbounds dest[] = convert(S, bc[])
+    end
+    return dest
 end
 
 # we've already diagonalized dest, so we only need to make

@@ -157,14 +157,7 @@ function Base.copyto!(
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
             bc = Base.Broadcast.instantiate(todata(pair.second))
-            bc′ = if isascalar(bc)
-                Base.Broadcast.instantiate(
-                    Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, ()),
-                )
-            else
-                bc
-            end
-            Pair(field_values(pair.first), bc′)
+            Pair(field_values(pair.first), bc)
         end,
     )
     check_mismatched_spaces(fmbc)
