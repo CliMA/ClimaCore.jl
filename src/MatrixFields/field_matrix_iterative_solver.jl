@@ -83,7 +83,7 @@ A wrapper for [`lazy_preconditioner`](@ref) that turns the lazy `FieldMatrix`
 `P` into a concrete `FieldMatrix` when the `PreconditionerAlgorithm` `P_alg`
 requires a `FieldMatrixSolverAlgorithm` to invert it.
 """
-function lazy_or_concrete_preconditioner(P_alg, P_cache, A)
+NVTX.@annotate function lazy_or_concrete_preconditioner(P_alg, P_cache, A)
     isnothing(P_alg) && return nothing
     lazy_P = lazy_preconditioner(P_alg, A)
     (is_diagonal(P_alg) || !is_lazy(lazy_P)) && return lazy_P
