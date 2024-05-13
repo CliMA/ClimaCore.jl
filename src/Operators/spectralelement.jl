@@ -768,6 +768,7 @@ Base.@propagate_inbounds function apply_operator(
     # allocate temp output
     RT = operator_return_eltype(op, eltype(arg))
     out = DataLayouts.IJF{RT, Nq}(MArray, FT)
+    
     fill!(parent(out), zero(FT))
 
     @inbounds for j in 1:Nq, i in 1:Nq

@@ -1,7 +1,6 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import ClimaCore: Operators, Geometry, Quadratures, RecursiveApply
 import ClimaComms
-using CUDA: @cuda
 using CUDA
 import ClimaCore.Operators: AbstractSpectralStyle, strip_space
 import ClimaCore.Operators: SpectralBroadcasted, set_node!, get_node
@@ -256,7 +255,7 @@ end
 
 Base.@propagate_inbounds function operator_evaluate(
     op::Gradient{(1, 2)},
-    (input,),
+    input,
     space,
     ij,
     slabidx,
@@ -269,14 +268,31 @@ Base.@propagate_inbounds function operator_evaluate(
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
-    ∂f∂ξ₁ = D[i, 1] * input[1, j, vt]
-    ∂f∂ξ₂ = D[j, 1] * input[i, 1, vt]
-
-    for k in 2:Nq
-        ∂f∂ξ₁ += D[i, k] * input[k, j, vt]
-        ∂f∂ξ₂ += D[j, k] * input[i, k, vt]
+    if length(input) == 2
+        v₁, v₂ = input
+        ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+        ∂f₁∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+        ∂f₂∂ξ₁ = D[i, 1] ⊠ v₂[1, j, vt]
+        ∂f₂∂ξ₂ = D[j, 1] ⊠ v₂[i, 1, vt]
+        @simd for k in 2:Nq
+            ∂f₁∂ξ₁ = ∂f₁∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+            ∂f₁∂ξ₂ = ∂f₁∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+            ∂f₂∂ξ₁ = ∂f₂∂ξ₁ ⊞ D[i, k] ⊠ v₂[k, j, vt]
+            ∂f₂∂ξ₂ = ∂f₂∂ξ₂ ⊞ D[j, k] ⊠ v₂[i, k, vt]
+        end
+        return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.Covariant12Axis()),
+                                   ∂f₁∂ξ₁, ∂f₂∂ξ₁,
+                                   ∂f₁∂ξ₂, ∂f₂∂ξ₂)
+    else
+        (v₁,) = input
+        ∂f∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+        ∂f∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+        for k in 2:Nq
+            ∂f∂ξ₁ = ∂f∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+            ∂f∂ξ₂ = ∂f∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+        end
+        return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
     end
-    return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
 end
 
 Base.@propagate_inbounds function operator_evaluate(
