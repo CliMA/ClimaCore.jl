@@ -267,8 +267,17 @@ Base.@propagate_inbounds function operator_evaluate(
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
-
-    if length(input) == 2
+    
+    if length(input) == 1 # check types
+        (v₁,) = input
+        ∂f∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+        ∂f∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+        for k in 2:Nq
+            ∂f∂ξ₁ = ∂f∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+            ∂f∂ξ₂ = ∂f∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+        end
+        return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
+    elseif length(input) == 2
         v₁, v₂ = input
         ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
         ∂f₁∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
@@ -284,14 +293,24 @@ Base.@propagate_inbounds function operator_evaluate(
                                    ∂f₁∂ξ₁, ∂f₂∂ξ₁,
                                    ∂f₁∂ξ₂, ∂f₂∂ξ₂)
     else
-        (v₁,) = input
-        ∂f∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
-        ∂f∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
-        for k in 2:Nq
-            ∂f∂ξ₁ = ∂f∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
-            ∂f∂ξ₂ = ∂f∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+        v₁, v₂, v₃ = input
+        ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+        ∂f₁∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+        ∂f₂∂ξ₁ = D[i, 1] ⊠ v₂[1, j, vt]
+        ∂f₂∂ξ₂ = D[j, 1] ⊠ v₂[i, 1, vt]
+        ∂f₃∂ξ₁ = D[i, 1] ⊠ v₃[1, j, vt]
+        ∂f₃∂ξ₂ = D[j, 1] ⊠ v₃[i, 1, vt]
+        @simd for k in 2:Nq
+            ∂f₁∂ξ₁ = ∂f₁∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+            ∂f₁∂ξ₂ = ∂f₁∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+            ∂f₂∂ξ₁ = ∂f₂∂ξ₁ ⊞ D[i, k] ⊠ v₂[k, j, vt]
+            ∂f₂∂ξ₂ = ∂f₂∂ξ₂ ⊞ D[j, k] ⊠ v₂[i, k, vt]
+            ∂f₃∂ξ₁ = ∂f₃∂ξ₁ ⊞ D[i, k] ⊠ v₃[k, j, vt]
+            ∂f₃∂ξ₂ = ∂f₃∂ξ₂ ⊞ D[j, k] ⊠ v₃[i, k, vt]
         end
-        return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
+        return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.Covariant123Axis()),
+                                   ∂f₁∂ξ₁, ∂f₂∂ξ₁, ∂f₃∂ξ₁,
+                                   ∂f₁∂ξ₂, ∂f₂∂ξ₂, ∂f₃∂ξ₂)
     end
 end
 
