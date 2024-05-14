@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "MatrixFields", "field_matrix_solvers.jl"))
+=#
 import Logging
 import Logging: Debug
 import LinearAlgebra: I, norm
