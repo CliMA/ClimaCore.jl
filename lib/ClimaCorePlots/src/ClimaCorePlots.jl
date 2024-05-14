@@ -12,7 +12,8 @@ import ClimaCore:
     Operators,
     Quadratures,
     Topologies,
-    Spaces
+    Spaces,
+    Utilities
 
 using StaticArrays
 
