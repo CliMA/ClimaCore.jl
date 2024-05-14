@@ -247,14 +247,14 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-NVTX.@annotate run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
-    multiple_field_solve!(cache, x, A, b)
+# multiple_field_solve! seems to use too many registers, possibly from branch divergence.
+# NVTX.@annotate run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+#     multiple_field_solve!(cache, x, A, b)
 
-# This may be helpful for debugging:
-# run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
-#     foreach(matrix_row_keys(keys(A))) do name
-#         single_field_solve!(cache[name], x[name], A[name, name], b[name])
-#     end
+NVTX.@annotate run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
+    foreach(matrix_row_keys(keys(A))) do name
+        single_field_solve!(cache[name], x[name], A[name, name], b[name])
+    end
 
 """
     BlockLowerTriangularSolve(names₁...; [alg₁], [alg₂])
