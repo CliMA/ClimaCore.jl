@@ -125,13 +125,20 @@ function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
     n = length(x)
     @inbounds begin
         inv_D₀ = inv(A₀[1])
-        Ux[1] = inv_D₀ ⊠ b[1]
-        U₊₁[1] = inv_D₀ ⊠ A₊₁[1]
+        U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[1]
+        Uxᵢ₋₁ = inv_D₀ ⊠ b[1]
+        Ux[1] = Uxᵢ₋₁
+        U₊₁[1] = U₊₁ᵢ₋₁
 
         for i in 2:n
-            inv_D₀ = inv(A₀[i] ⊟ A₋₁[i] ⊠ U₊₁[i - 1])
-            Ux[i] = inv_D₀ ⊠ (b[i] ⊟ A₋₁[i] ⊠ Ux[i - 1])
-            i < n && (U₊₁[i] = inv_D₀ ⊠ A₊₁[i]) # U₊₁[n] is outside the matrix.
+            A₋₁ᵢ = A₋₁[i]
+            inv_D₀ = inv(A₀[i] ⊟ A₋₁ᵢ ⊠ U₊₁ᵢ₋₁)
+            Uxᵢ₋₁ = inv_D₀ ⊠ (b[i] ⊟ A₋₁ᵢ ⊠ Uxᵢ₋₁)
+            Ux[i] = Uxᵢ₋₁
+            if i < n
+                U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[i] # U₊₁[n] is outside the matrix.
+                U₊₁[i] = U₊₁ᵢ₋₁
+            end
         end
 
         x[n] = Ux[n]
