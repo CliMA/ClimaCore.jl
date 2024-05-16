@@ -1458,5 +1458,7 @@ Adapt.adapt_structure(to, data::DataF{S}) where {S} =
 device_from_array_type(::Type{<:AbstractArray}) = ClimaComms.CPUSingleThreaded()
 ClimaComms.device(data::AbstractData) =
     device_from_array_type(typeof(parent(data)))
+empty_kernel_stats(::ClimaComms.AbstractDevice) = nothing
+empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
 
 end # module
