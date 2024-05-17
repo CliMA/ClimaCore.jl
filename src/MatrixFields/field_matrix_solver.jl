@@ -247,14 +247,24 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-NVTX.@annotate run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
-    multiple_field_solve!(cache, x, A, b)
-
-# This may be helpful for debugging:
-# run_field_matrix_solver!(::BlockDiagonalSolve, cache, x, A, b) =
-#     foreach(matrix_row_keys(keys(A))) do name
-#         single_field_solve!(cache[name], x[name], A[name, name], b[name])
-#     end
+NVTX.@annotate function run_field_matrix_solver!(
+    ::BlockDiagonalSolve,
+    cache,
+    x,
+    A,
+    b,
+)
+    names = matrix_row_keys(keys(A))
+    if length(names) == 1 ||
+       all(name -> A[name, name] isa UniformScaling, names.values)
+        foreach(names) do name
+            single_field_solve!(cache[name], x[name], A[name, name], b[name])
+        end
+    else
+        multiple_field_solve!(cache, x, A, b)
+    end
+    return nothing
+end
 
 """
     BlockLowerTriangularSolve(names₁...; [alg₁], [alg₂])

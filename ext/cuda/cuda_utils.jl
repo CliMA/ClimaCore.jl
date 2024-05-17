@@ -10,6 +10,7 @@ get_n_items(arr::AbstractArray) = prod(size(parent(arr)))
 get_n_items(tup::Tuple) = prod(tup)
 
 const reported_stats = Dict()
+# Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
 collect_kernel_stats() = false
 
@@ -22,58 +23,75 @@ collect_kernel_stats() = false
             AbstractData,
             Field,
         };
+        auto = false,
         threads_s,
         blocks_s,
         always_inline = true
     )
 
-Launch a cuda kernel, using `CUDA.launch_configuration`
+Launch a cuda kernel, using `CUDA.launch_configuration` (if `auto=true`)
 to determine the number of threads/blocks.
 
 Suggested threads and blocks (`threads_s`, `blocks_s`) can be given
-to benchmark compare against auto-determined threads/blocks.
+to benchmark compare against auto-determined threads/blocks (if `auto=false`).
 """
 function auto_launch!(
     f!::F!,
     args,
     data;
-    threads_s,
-    blocks_s,
+    auto = false,
+    threads_s = nothing,
+    blocks_s = nothing,
     always_inline = true,
+    caller = :unknown,
 ) where {F!}
-    nitems = get_n_items(data)
-    # For now, we'll simply use the
-    # suggested threads and blocks:
-    kernel =
-        CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
-            blocks_s f!(args...)
+    if auto
+        nitems = get_n_items(data)
+        kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+        config = CUDA.launch_configuration(kernel.fun)
+        threads = min(nitems, config.threads)
+        blocks = cld(nitems, threads)
+        kernel(args...; threads, blocks) # This knows to use always_inline from above.
+    else
+        kernel =
+            CUDA.@cuda always_inline = always_inline threads = threads_s blocks =
+                blocks_s f!(args...)
+    end
 
     if collect_kernel_stats() # only for development use
-        key = (F!, typeof(args))
+        key = (F!, typeof(args), CUDA.registers(kernel))
+        # CUDA.registers(kernel) > 50 || return nothing # for debugging
+        # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
+            nitems = get_n_items(data)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)
             blocks = cld(nitems, threads)
+            # For now, let's just collect info, later we can benchmark
+#! format: off
             s = ""
             s *= "Launching kernel $f! with following config:\n"
             s *= "     nitems:         $(nitems)\n"
-            s *= "     threads_s:      $(threads_s)\n"
-            s *= "     blocks_s:       $(blocks_s)\n"
+            isnothing(threads_s) || (s *= "     threads_s:      $(threads_s)\n")
+            isnothing(blocks_s) || (s *= "     blocks_s:       $(blocks_s)\n")
             s *= "     threads:        $(threads)\n"
             s *= "     blocks:         $(blocks)\n"
-            s *= "     Δthreads:       $(threads - prod(threads_s))\n"
-            s *= "     Δblocks:        $(blocks - prod(blocks_s))\n"
+            isnothing(threads_s) || (s *= "     Δthreads:       $(threads - prod(threads_s))\n")
+            isnothing(blocks_s) || (s *= "     Δblocks:        $(blocks - prod(blocks_s))\n")
             s *= "     maxthreads:     $(CUDA.maxthreads(kernel))\n"
             s *= "     registers:      $(CUDA.registers(kernel))\n"
-            s *= "     threads_s_frac: $(prod(threads_s)/CUDA.maxthreads(kernel))\n"
+            isnothing(threads_s) || ( s *= "     threads_s_frac: $(prod(threads_s)/CUDA.maxthreads(kernel))\n")
             s *= "     memory:         $(CUDA.memory(kernel))\n"
             @info s
+#! format: on
             reported_stats[key] = true
+            # error("Oops") # for debugging
+            # Main.Infiltrator.@exfiltrate # for debugging/performance optimization
         end
-        # For now, let's just collect info, later we can benchmark
-        # kernel(args...; threads, blocks) # This knows to use always_inline from above.
+        # end
     end
+    return nothing
 end
 
 """

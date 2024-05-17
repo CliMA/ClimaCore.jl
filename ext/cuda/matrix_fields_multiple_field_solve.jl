@@ -50,25 +50,15 @@ NVTX.@annotate function multiple_field_solve!(
     )
 end
 
-column_A(A::UniformScaling, i, j, h) = A
-column_A(A, i, j, h) = Spaces.column(A, i, j, h)
-
-function get_ijhn(Ni, Nj, Nh, Nnames, blockIdx, threadIdx, blockDim, gridDim)
-    tidx = (blockIdx.x - 1) * blockDim.x + threadIdx.x
-    (i, j, h, n) = if 1 ≤ tidx ≤ prod((Ni, Nj, Nh, Nnames))
-        CartesianIndices((1:Ni, 1:Nj, 1:Nh, 1:Nnames))[tidx].I
-    else
-        (-1, -1, -1, -1)
-    end
-    return (i, j, h, n)
-end
+Base.@propagate_inbounds column_A(A::UniformScaling, i, j, h) = A
+Base.@propagate_inbounds column_A(A, i, j, h) = Spaces.column(A, i, j, h)
 
 @generated function generated_single_field_solve!(
+    device,
     caches,
     xs,
     As,
     bs,
-    device,
     i,
     j,
     h,
@@ -78,11 +68,11 @@ end
     return quote
         Base.Cartesian.@nif $Nnames ξ -> (iname == ξ) ξ -> begin
             _single_field_solve!(
+                device,
                 column_A(caches[ξ], i, j, h),
                 column_A(xs[ξ], i, j, h),
                 column_A(As[ξ], i, j, h),
                 column_A(bs[ξ], i, j, h),
-                device,
             )
         end
     end
@@ -99,23 +89,16 @@ function multiple_field_solve_kernel!(
 ) where {Nnames}
     @inbounds begin
         Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
-        (i, j, h, iname) = get_ijhn(
-            Ni,
-            Nj,
-            Nh,
-            Nnames,
-            CUDA.blockIdx(),
-            CUDA.threadIdx(),
-            CUDA.blockDim(),
-            CUDA.gridDim(),
-        )
-        if 1 ≤ i <= Ni && 1 ≤ j ≤ Nj && 1 ≤ h ≤ Nh && 1 ≤ iname ≤ Nnames
+        tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+        if 1 ≤ tidx ≤ prod((Ni, Nj, Nh, Nnames))
+            (i, j, h, iname) =
+                CartesianIndices((1:Ni, 1:Nj, 1:Nh, 1:Nnames))[tidx].I
             generated_single_field_solve!(
+                device,
                 caches,
                 xs,
                 As,
                 bs,
-                device,
                 i,
                 j,
                 h,
