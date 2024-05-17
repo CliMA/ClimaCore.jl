@@ -176,9 +176,9 @@ end
 
     # Test wdiv(grad()) composed Laplace operator
     grad = Operators.Gradient()
+    @test parent(grad.(g_cpu)) ≈ Array(parent(grad.(g_gpu)))
     @test parent(wdiv.(grad.(f_cpu))) ≈ Array(parent(wdiv.(grad.(f_gpu))))
-    @test_broken parent(wdiv.(grad.(x_cpu))) ≈
-                 Array(parent(wdiv.(grad.(x_gpu))))
+    @test parent(wdiv.(grad.(x_cpu))) ≈ Array(parent(wdiv.(grad.(x_gpu))))
 
     # Test DSS
     @test parent(Spaces.weighted_dss!(wdiv.(grad.(f_cpu)))) ≈

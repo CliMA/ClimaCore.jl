@@ -15,7 +15,7 @@ function one_to_n(a::Array)
 end
 one_to_n(s::Tuple, ::Type{FT}) where {FT} = one_to_n(zeros(FT, s...))
 ncomponents(::Type{FT}, ::Type{S}) where {FT, S} = div(sizeof(S), sizeof(FT))
-field_dim_to_one(s, dim) = Tuple(map(j-> j == dim ? 1 : s[j], 1:length(s)))
+field_dim_to_one(s, dim) = Tuple(map(j -> j == dim ? 1 : s[j], 1:length(s)))
 CI(s) = CartesianIndices(map(ξ -> Base.OneTo(ξ), s))
 
 struct Foo{T}

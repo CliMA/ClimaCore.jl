@@ -37,6 +37,7 @@ UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
 UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
 UnitTest("Spectral elem - rectilinear"             ,"Operators/spectralelement/rectilinear.jl"),
 UnitTest("Spectral elem - opt"                     ,"Operators/spectralelement/opt.jl"),
+UnitTest("Spectral elem - gradient tensor"         ,"Operators/spectralelement/covar_deriv_ops.jl"),
 UnitTest("Spectral elem - Diffusion 2d"            ,"Operators/spectralelement/unit_diffusion2d.jl"),
 UnitTest("Spectral elem - sphere geometry"         ,"Operators/spectralelement/sphere_geometry.jl"),
 UnitTest("Spectral elem - sphere gradient"         ,"Operators/spectralelement/sphere_gradient.jl"),
