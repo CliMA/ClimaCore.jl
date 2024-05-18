@@ -41,7 +41,7 @@ KrylovExt = "Krylov"
 [compat]
 Adapt = "3, 4"
 BandedMatrices = "0.17, 1"
-BlockArrays = "0.16"
+BlockArrays = "0.16, 1"
 CUDA = "5"
 ClimaComms = "0.5.7, 0.6"
 CubedSphere = "0.2"
