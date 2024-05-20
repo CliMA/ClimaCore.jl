@@ -6,18 +6,18 @@ import ClimaCore.Fields: Field
 import ClimaCore.Fields
 import ClimaCore.Spaces
 import ClimaCore.Topologies
+import ClimaCore.MatrixFields
 import ClimaCore.MatrixFields: single_field_solve!
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+    Ni, Nj, _, Nv, Nh = size(Fields.field_values(A))
     nitems = Ni * Nj * Nh
     nthreads = min(256, nitems)
     nblocks = cld(nitems, nthreads)
-    args = (device, cache, x, A, b)
+    args = (device, cache, x, A, b, Val(Nv))
     auto_launch!(
         single_field_solve_kernel!,
         args,
@@ -27,17 +27,26 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     )
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b)
+function single_field_solve_kernel!(
+    device,
+    cache,
+    x,
+    A,
+    b,
+    ::Val{Nv},
+) where {Nv}
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
-        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
+        (i, j, h) = CartesianIndices((1:Ni, 1:Nj, 1:Nh))[idx].I
+
         _single_field_solve!(
             device,
             Spaces.column(cache, i, j, h),
             Spaces.column(x, i, j, h),
             Spaces.column(A, i, j, h),
             Spaces.column(b, i, j, h),
+            Val(Nv),
         )
     end
     return nothing
@@ -49,13 +58,15 @@ function _single_field_solve!(
     x::Fields.ColumnField,
     A::Fields.ColumnField,
     b::Fields.ColumnField,
-)
-    band_matrix_solve!(
+    ::Val{Nv},
+) where {Nv}
+    band_matrix_solve_local_mem!(
         eltype(A),
         unzip_tuple_field_values(Fields.field_values(cache)),
         Fields.field_values(x),
         unzip_tuple_field_values(Fields.field_values(A.entries)),
         Fields.field_values(b),
+        Val(Nv),
     )
 end
 
@@ -65,12 +76,12 @@ function _single_field_solve!(
     x::Fields.ColumnField,
     A::UniformScaling,
     b::Fields.ColumnField,
-)
+    ::Val{Nv},
+) where {Nv}
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
-    n = length(x_data)
-    @inbounds for i in 1:n
-        x_data[i] = inv(A.λ) ⊠ b_data[i]
+    @inbounds for v in 1:Nv
+        x_data[v] = inv(A.λ) ⊠ b_data[v]
     end
 end
 
@@ -80,11 +91,95 @@ function _single_field_solve!(
     x::Fields.PointDataField,
     A::UniformScaling,
     b::Fields.PointDataField,
-)
+    ::Val{Nv},
+) where {Nv}
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
-    n = length(x_data)
-    @inbounds begin
-        x_data[] = inv(A.λ) ⊠ b_data[]
+    x_data[] = inv(A.λ) ⊠ b_data[]
+end
+
+using StaticArrays: MArray
+function band_matrix_solve_local_mem!(
+    t::Type{<:MatrixFields.TridiagonalMatrixRow},
+    cache,
+    x,
+    Aⱼs,
+    b,
+    ::Val{Nv},
+) where {Nv}
+    Ux, U₊₁ = cache
+    A₋₁, A₀, A₊₁ = Aⱼs
+
+    Ux_local = MArray{Tuple{Nv}, eltype(Ux)}(undef)
+    U₊₁_local = MArray{Tuple{Nv}, eltype(U₊₁)}(undef)
+    x_local = MArray{Tuple{Nv}, eltype(x)}(undef)
+    A₋₁_local = MArray{Tuple{Nv}, eltype(A₋₁)}(undef)
+    A₀_local = MArray{Tuple{Nv}, eltype(A₀)}(undef)
+    A₊₁_local = MArray{Tuple{Nv}, eltype(A₊₁)}(undef)
+    b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
+    @inbounds for v in 1:Nv
+        A₋₁_local[v] = A₋₁[v]
+        A₀_local[v] = A₀[v]
+        A₊₁_local[v] = A₊₁[v]
+        b_local[v] = b[v]
     end
+    cache_local = (Ux_local, U₊₁_local)
+    Aⱼs_local = (A₋₁, A₀, A₊₁)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
+    @inbounds for v in 1:Nv
+        x[v] = x_local[v]
+    end
+    return nothing
+end
+
+function band_matrix_solve_local_mem!(
+    t::Type{<:MatrixFields.PentadiagonalMatrixRow},
+    cache,
+    x,
+    Aⱼs,
+    b,
+    ::Val{Nv},
+) where {Nv}
+    Ux, U₊₁, U₊₂ = cache
+    A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
+    Ux_local = MArray{Tuple{Nv}, eltype(Ux)}(undef)
+    U₊₁_local = MArray{Tuple{Nv}, eltype(U₊₁)}(undef)
+    U₊₂_local = MArray{Tuple{Nv}, eltype(U₊₂)}(undef)
+    x_local = MArray{Tuple{Nv}, eltype(x)}(undef)
+    A₋₂_local = MArray{Tuple{Nv}, eltype(A₋₂)}(undef)
+    A₋₁_local = MArray{Tuple{Nv}, eltype(A₋₁)}(undef)
+    A₀_local = MArray{Tuple{Nv}, eltype(A₀)}(undef)
+    A₊₁_local = MArray{Tuple{Nv}, eltype(A₊₁)}(undef)
+    A₊₂_local = MArray{Tuple{Nv}, eltype(A₊₂)}(undef)
+    b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
+    @inbounds for v in 1:Nv
+        A₋₂_local[v] = A₋₂[v]
+        A₋₁_local[v] = A₋₁[v]
+        A₀_local[v] = A₀[v]
+        A₊₁_local[v] = A₊₁[v]
+        A₊₂_local[v] = A₊₂[v]
+        b_local[v] = b[v]
+    end
+    cache_local = (Ux_local, U₊₁_local, U₊₂_local)
+    Aⱼs_local = (A₋₂, A₋₁, A₀, A₊₁, A₊₂)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
+    @inbounds for v in 1:Nv
+        x[v] = x_local[v]
+    end
+    return nothing
+end
+
+function band_matrix_solve_local_mem!(
+    t::Type{<:MatrixFields.DiagonalMatrixRow},
+    cache,
+    x,
+    Aⱼs,
+    b,
+    ::Val{Nv},
+) where {Nv}
+    (A₀,) = Aⱼs
+    @inbounds for v in 1:Nv
+        x[v] = inv(A₀[v]) ⊠ b[v]
+    end
+    return nothing
 end
