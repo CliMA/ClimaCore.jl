@@ -45,9 +45,26 @@ function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     return similar(b, cache_eltype)
 end
 
+function single_field_solve_diag_matrix_row!(
+    cache,
+    x,
+    A::ColumnwiseBandMatrixField,
+    b,
+)
+    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
+    b_vals = Fields.field_values(b)
+    x_vals = Fields.field_values(x)
+    (A₀,) = Aⱼs
+    @. x_vals = inv(A₀) ⊠ b_vals
+end
 single_field_solve!(_, x, A::UniformScaling, b) = x .= inv(A.λ) .* b
-single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
-    single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+function single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b)
+    if eltype(A) <: MatrixFields.DiagonalMatrixRow
+        single_field_solve_diag_matrix_row!(cache, x, A, b)
+    else
+        single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+    end
+end
 
 single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
@@ -85,14 +102,6 @@ function _single_field_solve_col!(
         error("uncaught case")
     end
 end
-
-_single_field_solve!(
-    cache::Fields.Field,
-    x::Fields.Field,
-    A::Union{Fields.Field, UniformScaling},
-    b::Fields.Field,
-    dev::ClimaComms.AbstractCPUDevice,
-) = _single_field_solve_col!(dev, cache, x, A, b)
 
 unzip_tuple_field_values(data) =
     ntuple(i -> data.:($i), Val(length(propertynames(data))))
