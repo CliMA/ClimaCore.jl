@@ -4,6 +4,16 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.5
+-------
+
+- ![][badge-🐛bugfix] `run_field_matrix_solver!` was fixed for column spaces, and tests were added to ensure it doesn't break in the future.
+  PR [#1750](https://github.com/CliMA/ClimaCore.jl/pull/1750)
+- ![][badge-🚀performance] We're now using local memory (MArrays) in the `band_matrix_solve!`, which has improved performance. PR [#1735](https://github.com/CliMA/ClimaCore.jl/pull/1735).
+- ![][badge-🚀performance] We've specialized some cases in `run_field_matrix_solver!`, which results in more efficient kernels being launched. PR [#1732](https://github.com/CliMA/ClimaCore.jl/pull/1732).
+- ![][badge-🚀performance] We've reduced memory reads in the `band_matrix_solve!` for tridiagonal systems, improving its performance. PR [#1731](https://github.com/CliMA/ClimaCore.jl/pull/1731).
+- ![][badge-🚀performance] We've added NVTX annotations in ClimaCore functions, so that we have a more granular trace of performance. PRs [#1726](https://github.com/CliMA/ClimaCore.jl/pull/1726), [#1723](https://github.com/CliMA/ClimaCore.jl/pull/1723).
+
 v0.14.0
 -------
 
