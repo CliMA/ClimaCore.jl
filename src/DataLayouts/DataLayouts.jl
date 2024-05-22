@@ -156,6 +156,22 @@ end
     return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
 end
 
+field_byterange(data::AbstractData, i::Int) = field_byterange(data, Val(i))
+
+field_byterange(data::AbstractData, ::Val{Idx}) where {Idx} =
+    field_byterange(typeof(data), Val(Idx))
+
+@generated function field_byterange(
+    ::Type{AD},
+    ::Val{Idx},
+) where {S, Idx, AD <: AbstractData{S}}
+    SS = fieldtype(S, Idx)
+    T = eltype(parent_type(AD))
+    offset = fieldtypeoffset(T, S, Val(Idx))
+    nbytes = typesize(T, SS)
+    return :(($offset + 1):($offset + $nbytes))
+end
+
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
     _getproperty(data, Val{name}())
 end
@@ -186,6 +202,8 @@ struct IJKFVH{S, Nij, Nk, A} <: Data3D{S, Nij, Nk}
     array::A
 end
 
+parent_type(::Type{IJKFVH{S, Nij, Nk, A}}) where {S, Nij, Nk, A} = A
+
 function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
@@ -204,16 +222,13 @@ function replace_basetype(
 end
 
 @generated function _property_view(
-    data::IJKFVH{S, Nij, Nk, A},
+    data::IJKFVH{S, Nij, Nk},
     ::Val{Idx},
-) where {S, Nij, Nk, A, Idx}
+) where {S, Nij, Nk, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
+    fbr = field_byterange(data, Val(Idx))
     return :(IJKFVH{$SS, $Nij, $Nk}(
-        @inbounds view(parent(data), :, :, :, $field_byterange, :, :)
+        @inbounds view(parent(data), :, :, :, $fbr, :, :)
     ))
 end
 
@@ -222,12 +237,8 @@ end
     i::Integer,
 ) where {S, Nij, Nk}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview =
-        @inbounds view(array, :, :, :, (offset + 1):(offset + nbytes), :, :)
+    fbr = field_byterange(data, i)
+    dataview = @inbounds view(array, :, :, :, fbr, :, :)
     IJKFVH{SS, Nij, Nk}(dataview)
 end
 
@@ -252,6 +263,8 @@ for each 2D mesh element slab (H).
 struct IJFH{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
+
+parent_type(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} = A
 
 function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 1) == Nij
@@ -334,26 +347,18 @@ end
 Base.length(data::IJFH) = size(parent(data), 4)
 
 @generated function _property_view(
-    data::IJFH{S, Nij, A},
+    data::IJFH{S, Nij},
     ::Val{Idx},
-) where {S, Nij, A, Idx}
+) where {S, Nij, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IJFH{$SS, $Nij}(
-        @inbounds view(parent(data), :, :, $field_byterange, :)
-    ))
+    fbr = field_byterange(data, Val(Idx))
+    return :(IJFH{$SS, $Nij}(@inbounds view(parent(data), :, :, $fbr, :)))
 end
 
 @inline function Base.getproperty(data::IJFH{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes), :)
+    fbr = field_byterange(data, i)
+    dataview = @inbounds view(array, :, :, fbr, :)
     IJFH{SS, Nij}(dataview)
 end
 
@@ -408,6 +413,8 @@ for each 1D mesh element (H).
 struct IFH{S, Ni, A} <: Data1D{S, Ni}
     array::A
 end
+
+parent_type(::Type{IFH{S, Ni, A}}) where {S, Ni, A} = A
 
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
@@ -474,22 +481,14 @@ Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
     ::Val{Idx},
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IFH{$SS, $Ni}(
-        @inbounds view(parent(data), :, $field_byterange, :)
-    ))
+    fbr = field_byterange(data, Val(Idx))
+    return :(IFH{$SS, $Ni}(@inbounds view(parent(data), :, $fbr, :)))
 end
 
 @inline function Base.getproperty(data::IFH{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, f)
-    offset = fieldtypeoffset(T, S, f)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + nbytes), :)
+    fbr = field_byterange(data, f)
+    dataview = @inbounds view(array, :, fbr, :)
     IFH{SS, Ni}(dataview)
 end
 
@@ -538,6 +537,8 @@ struct DataF{S, A} <: Data0D{S}
     array::A
 end
 
+parent_type(::Type{DataF{S, A}}) where {S, A} = A
+
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
     DataF{S, typeof(array)}(array)
@@ -569,24 +570,15 @@ function Base.fill!(data::DataF, val)
 end
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, (offset + 1):(offset + nbytes))
+    fbr = field_byterange(data, i)
+    dataview = @inbounds view(array, fbr)
     DataF{SS}(dataview)
 end
 
-@generated function _property_view(
-    data::DataF{S, A},
-    ::Val{Idx},
-) where {S, A, Idx}
+@generated function _property_view(data::DataF{S}, ::Val{Idx}) where {S, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(DataF{$SS}(@inbounds view(parent(data), $field_byterange)))
+    fbr = field_byterange(data, Val(Idx))
+    return :(DataF{$SS}(@inbounds view(parent(data), $fbr)))
 end
 
 Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
@@ -661,6 +653,8 @@ struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
     array::A
 end
 
+parent_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
+
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
@@ -696,26 +690,18 @@ function Base.fill!(data::IJF{S, Nij}, val) where {S, Nij}
 end
 
 @generated function _property_view(
-    data::IJF{S, Nij, A},
+    data::IJF{S, Nij},
     ::Val{Idx},
-) where {S, Nij, A, Idx}
+) where {S, Nij, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IJF{$SS, $Nij}(
-        @inbounds view(parent(data), :, :, $field_byterange)
-    ))
+    fbr = field_byterange(data, Val(Idx))
+    return :(IJF{$SS, $Nij}(@inbounds view(parent(data), :, :, $fbr)))
 end
 
 @inline function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes))
+    fbr = field_byterange(data, i)
+    dataview = @inbounds view(array, :, :, fbr)
     IJF{SS, Nij}(dataview)
 end
 
@@ -800,6 +786,8 @@ struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
 end
 
+parent_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
@@ -829,24 +817,18 @@ end
 
 
 @generated function _property_view(
-    data::IF{S, Ni, A},
+    data::IF{S, Ni},
     ::Val{Idx},
-) where {S, Ni, A, Idx}
+) where {S, Ni, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IF{$SS, $Ni}(@inbounds view(parent(data), :, $field_byterange)))
+    fbr = field_byterange(data, Val(Idx))
+    return :(IF{$SS, $Ni}(@inbounds view(parent(data), :, $fbr)))
 end
 
 @inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, f)
-    offset = fieldtypeoffset(T, S, f)
-    len = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + len))
+    fbr = field_byterange(data, f)
+    dataview = @inbounds view(array, :, fbr)
     IF{SS, Ni}(dataview)
 end
 
@@ -898,6 +880,8 @@ struct VF{S, A} <: DataColumn{S}
     array::A
 end
 
+parent_type(::Type{VF{S, A}}) where {S, A} = A
+
 function VF{S}(array::AbstractArray{T, 2}) where {S, T}
     check_basetype(T, S)
     VF{S, typeof(array)}(array)
@@ -933,13 +917,10 @@ function Base.fill!(data::VF, val)
     return data
 end
 
-@generated function _property_view(data::VF{S, A}, ::Val{Idx}) where {S, A, Idx}
+@generated function _property_view(data::VF{S}, ::Val{Idx}) where {S, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VF{$SS}(@inbounds view(parent(data), :, $field_byterange)))
+    fbr = field_byterange(data, Val(Idx))
+    return :(VF{$SS}(@inbounds view(parent(data), :, $fbr)))
 end
 
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
@@ -1012,6 +993,8 @@ struct VIJFH{S, Nij, A} <: Data2DX{S, Nij}
     array::A
 end
 
+parent_type(::Type{VIJFH{S, Nij, A}}) where {S, Nij, A} = A
+
 function VIJFH{S, Nij}(array::AbstractArray{T, 5}) where {S, Nij, T}
     @assert size(array, 2) == size(array, 3) == Nij
     VIJFH{S, Nij, typeof(array)}(array)
@@ -1049,17 +1032,12 @@ function Base.fill!(data::VIJFH, val)
 end
 
 @generated function _property_view(
-    data::VIJFH{S, Nij, A},
+    data::VIJFH{S, Nij},
     ::Val{Idx},
-) where {S, Nij, A, Idx}
+) where {S, Nij, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIJFH{$SS, $Nij}(
-        @inbounds view(parent(data), :, :, :, $field_byterange, :)
-    ))
+    fbr = field_byterange(data, Val(Idx))
+    return :(VIJFH{$SS, $Nij}(@inbounds view(parent(data), :, :, :, $fbr, :)))
 end
 
 @propagate_inbounds function Base.getproperty(
@@ -1067,11 +1045,8 @@ end
     i::Integer,
 ) where {S, Nij}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, :, (offset + 1):(offset + nbytes), :)
+    fbr = field_byterange(data, Val(Idx))
+    dataview = @inbounds view(array, :, :, :, fbr, :)
     VIJFH{SS, Nij}(dataview)
 end
 
@@ -1179,6 +1154,8 @@ struct VIFH{S, Ni, A} <: Data1DX{S, Ni}
     array::A
 end
 
+parent_type(::Type{VIFH{S, Ni, A}}) where {S, Ni, A} = A
+
 function VIFH{S, Ni}(array::AbstractArray{T, 4}) where {S, Ni, T}
     @assert size(array, 2) == Ni
     check_basetype(T, S)
@@ -1223,26 +1200,18 @@ end
 
 
 @generated function _property_view(
-    data::VIFH{S, Ni, A},
+    data::VIFH{S, Ni},
     ::Val{Idx},
-) where {S, Ni, A, Idx}
+) where {S, Ni, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIFH{$SS, $Ni}(
-        @inbounds view(parent(data), :, :, $field_byterange, :)
-    ))
+    fbr = field_byterange(data, Val(Idx))
+    return :(VIFH{$SS, $Ni}(@inbounds view(parent(data), :, :, $fbr, :)))
 end
 
 @inline function Base.getproperty(data::VIFH{S, Ni}, i::Integer) where {S, Ni}
     array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes), :)
+    fbr = field_byterange(data, i)
+    dataview = @inbounds view(array, :, :, fbr, :)
     VIFH{SS, Ni}(dataview)
 end
 
@@ -1331,6 +1300,8 @@ struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
 
+parent_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+
 """
     IH1JH2{S, Nij}(data::AbstractMatrix{S})
 
@@ -1377,6 +1348,8 @@ end
 struct IV1JH2{S, Ni, A} <: Data1DX{S, Ni}
     array::A
 end
+
+parent_type(::Type{IV1JH2{S, Ni, A}}) where {S, Ni, A} = A
 
 """
     IV1JH2{S, Ni}(data::AbstractMatrix{S})
