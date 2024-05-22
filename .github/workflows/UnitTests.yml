@@ -19,7 +19,7 @@ jobs:
   test:
     timeout-minutes: 80
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
