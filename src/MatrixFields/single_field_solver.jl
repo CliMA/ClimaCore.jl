@@ -70,16 +70,28 @@ single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
 
 # CPU (GPU has already called Spaces.column on arg)
-_single_field_solve!(device::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
-    Fields.bycolumn(axes(A)) do colidx
-        _single_field_solve_col!(
-            ClimaComms.device(axes(A)),
-            cache[colidx],
-            x[colidx],
-            A[colidx],
-            b[colidx],
-        )
+function _single_field_solve!(
+    device::ClimaComms.AbstractCPUDevice,
+    cache,
+    x,
+    A,
+    b,
+)
+    space = axes(x)
+    if space isa Spaces.FiniteDifferenceSpace
+        _single_field_solve_col!(device, cache, x, A, b)
+    else
+        Fields.bycolumn(space) do colidx
+            _single_field_solve_col!(
+                device,
+                cache[colidx],
+                x[colidx],
+                A[colidx],
+                b[colidx],
+            )
+        end
     end
+end
 
 function _single_field_solve_col!(
     ::ClimaComms.AbstractCPUDevice,
