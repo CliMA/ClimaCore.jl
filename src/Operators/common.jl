@@ -139,3 +139,70 @@ end
 strip_space_args(::Tuple{}, space) = ()
 strip_space_args(args::Tuple, space) =
     (strip_space(args[1], space), strip_space_args(Base.tail(args), space)...)
+
+struct PlaceHolderLocalGeometry end
+isa_local_geometry(f::Fields.Field) = eltype(f) <: Geometry.LocalGeometry
+isa_local_geometry(x) = false
+strip_local_geometry(f::Fields.Field) = isa_local_geometry(f) ? PlaceHolderLocalGeometry() : f
+strip_local_geometry(x) = x
+
+@inline _replace_placeholder_local_geometry(arg, lg) = arg
+@inline _replace_placeholder_local_geometry(arg::PlaceHolderLocalGeometry, lg::Geometry.LocalGeometry) = lg
+@inline _replace_placeholder_local_geometry(args::Tuple, lg) =
+    (_replace_placeholder_local_geometry(first(args), lg),
+        _replace_placeholder_local_geometry(Base.tail(args), lg)...)
+@inline _replace_placeholder_local_geometry(args::Tuple{Any}, lg) =
+    (_replace_placeholder_local_geometry(first(args), lg),)
+@inline _replace_placeholder_local_geometry(args::Tuple{}, lg) = ()
+
+# import .Utilities.UnrolledFunctions: unrolled_map
+@inline function replace_placeholder_local_geometry(args::Tuple, lg)
+    map(args) do a
+        Base.@_inline_meta
+        if a isa PlaceHolderLocalGeometry
+            lg
+        else
+            a
+        end
+    end
+end
+@inline has_placeholder_local_geometry(args::Tuple) = has_placeholder_local_geometry(false, args)
+@inline has_placeholder_local_geometry(found, ::Tuple{}) = found
+@inline has_placeholder_local_geometry(found, arg) = found | (arg isa PlaceHolderLocalGeometry)
+@inline has_placeholder_local_geometry(found, args::Tuple) =
+    found | has_placeholder_local_geometry(found, Base.first(args)) | has_placeholder_local_geometry(found, Base.tail(args))
+
+@inline function maybe_call_modified_bc(f::F, args, lg) where {F}
+    if has_placeholder_local_geometry(args)
+        call_modified_bc(f, args, lg)
+    else
+        return f(args...)
+    end
+end
+
+@inline function call_modified_bc(f::F, args, lg) where {F}
+    args′ = replace_placeholder_local_geometry(args, lg)
+    return f(args′...)
+end
+
+function strip_local_geometry(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
+    return Base.Broadcast.Broadcasted{Style}(
+        bc.f,
+        strip_local_geometry_args(bc.args),
+        bc.axes,
+    )
+end
+strip_local_geometry_args(::Tuple{}) = ()
+strip_local_geometry_args(args::Tuple{Any}) =
+    (strip_local_geometry(args[1]), )
+strip_local_geometry_args(args::Tuple) =
+    (strip_local_geometry(args[1]), strip_local_geometry_args(Base.tail(args))...)
+
+append_local_geometry(::Type{<:Geometry.CartesianVector}) = true
+append_local_geometry(::Type{<:Geometry.AxisVector}) = true
+append_local_geometry(::typeof(Geometry.project)) = true
+append_local_geometry(::typeof(Geometry.transform)) = true
+append_local_geometry(::typeof(LinearAlgebra.norm)) = true
+append_local_geometry(::typeof(LinearAlgebra.norm_sqr)) = true
+append_local_geometry(::typeof(LinearAlgebra.cross)) = true
+append_local_geometry(x) = false

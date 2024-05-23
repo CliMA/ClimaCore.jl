@@ -238,6 +238,15 @@ function strip_space(bc::SpectralBroadcasted{Style}, parent_space) where {Style}
     )
 end
 
+function strip_local_geometry(bc::SpectralBroadcasted{Style}) where {Style}
+    return SpectralBroadcasted{Style}(
+        bc.op,
+        strip_local_geometry_args(bc.args),
+        bc.axes,
+        bc.work
+    )
+end
+
 """
     reconstruct_placeholder_broadcasted(space, obj)
 
@@ -376,7 +385,12 @@ Base.@propagate_inbounds function get_node(
     slabidx,
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
-    bc.f(_get_node(space, ij, slabidx, bc.args...)...)
+    if append_local_geometry(bc.f)
+        # bc.f(_get_node(space, ij, slabidx, bc.args...)..., Geometry.LocalGeometry(parent_space, idx, hidx))
+        bc.f(_get_node(space, ij, slabidx, bc.args...)...)
+    else
+        bc.f(_get_node(space, ij, slabidx, bc.args...)...)
+    end
 end
 Base.@propagate_inbounds function get_node(
     space,

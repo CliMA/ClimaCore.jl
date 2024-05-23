@@ -2,7 +2,7 @@ import ClimaCore: Spaces, Quadratures, Topologies
 import Base.Broadcast: Broadcasted
 import ClimaComms
 using CUDA: @cuda
-import ClimaCore.Operators: AbstractStencilStyle, strip_space
+import ClimaCore.Operators: AbstractStencilStyle, strip_space, strip_local_geometry
 import ClimaCore.Operators: setidx!, getidx
 import ClimaCore.Operators: StencilBroadcasted
 import ClimaCore.Operators: LeftBoundaryWindow, RightBoundaryWindow, Interior
@@ -33,7 +33,7 @@ function Base.copyto!(
     (nthreads, nblocks) = _configure_threadblock(max_threads, nitems)
     args = (
         strip_space(out, space),
-        strip_space(bc, space),
+        strip_local_geometry(strip_space(bc, space)),
         axes(out),
         bounds,
         Nq,

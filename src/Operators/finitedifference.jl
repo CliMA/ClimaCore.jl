@@ -3223,7 +3223,8 @@ Base.@propagate_inbounds function getidx(
 )
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     _args = getidx_args(space, bc.args, loc, idx, hidx)
-    bc.f(_args...)
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    maybe_call_modified_bc(bc.f, _args, lg)
 end
 
 if hasfield(Method, :recursion_relation)
@@ -3321,7 +3322,7 @@ end
 function _serial_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)
     bounds = window_bounds(space, bc)
-    bcs = bc # strip_space(bc, space)
+    bcs = strip_local_geometry(strip_space(bc, space))
     @inbounds for h in 1:Nh, j in 1:Nj, i in 1:Ni
         apply_stencil!(space, field_out, bcs, (i, j, h), bounds)
     end
@@ -3331,7 +3332,7 @@ end
 function _threaded_copyto!(field_out::Field, bc, Ni::Int, Nj::Int, Nh::Int)
     space = axes(field_out)
     bounds = window_bounds(space, bc)
-    bcs = bc # strip_space(bc, space)
+    bcs = strip_local_geometry(strip_space(bc, space))
     @inbounds begin
         Threads.@threads for h in 1:Nh
             for j in 1:Nj, i in 1:Ni
@@ -3351,6 +3352,14 @@ function strip_space(bc::StencilBroadcasted{Style}, parent_space) where {Style}
         new_space,
     )
 end
+function strip_local_geometry(bc::StencilBroadcasted{Style}) where {Style}
+    return StencilBroadcasted{Style}(
+        bc.op,
+        strip_local_geometry_args(bc.args),
+        bc.axes,
+    )
+end
+
 
 function Base.copyto!(
     field_out::Field,
