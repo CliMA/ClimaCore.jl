@@ -917,6 +917,18 @@ end
 rebuild(data::VF{S, Nv}, array::AbstractArray{T, 2}) where {S, Nv, T} =
     VF{S, Nv}(array)
 
+@inline function rebuild_with_MArray(data::VF)
+    Nv = nlevels(data)
+    Nf = ncomponents(data)
+    FT = eltype(parent(data))
+    localmem = MArray{Tuple{Nv, Nf}, FT, 2, Nv * Nf}(undef)
+    rdata = rebuild(data, localmem)
+    @inbounds for v in 1:Nv
+        rdata[v] = data[v]
+    end
+    rdata
+end
+
 function replace_basetype(data::VF{S, Nv}, ::Type{T}) where {S, Nv, T}
     array = parent(data)
     S′ = replace_basetype(eltype(array), T, S)

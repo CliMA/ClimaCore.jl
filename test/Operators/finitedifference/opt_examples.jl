@@ -565,7 +565,7 @@ function set_ᶠuₕ³!(ᶜx, ᶠx)
     @. ᶠx.ᶠuₕ³ = ᶠwinterp(ᶜx.ρ * ᶜJ, CT3(ᶜx.uₕ))
     return nothing
 end
-@testset "Inference/allocations when broadcasting types" begin
+# @testset "Inference/allocations when broadcasting types" begin
     FT = Float64
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 25, helem = 10)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
@@ -583,4 +583,4 @@ end
         @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
     end
     show(stdout, MIME("text/plain"), trial)
-end
+# end
