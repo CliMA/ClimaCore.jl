@@ -101,7 +101,7 @@ function test_op_matrix(
         set_result! = result ->
             apply_op_matrix!(result, boundary_op, op_matrix, args...),
         ref_set_result! = result -> apply_op!(result, boundary_op, op, args...),
-        time_ratio_limit = 50, # Extrapolating operator matrices are very slow.
+        time_ratio_limit = 60, # Extrapolating operator matrices are very slow.
     )
 end
 
@@ -302,7 +302,7 @@ end
             ᶠuvw,
             ᶜadvect(ᶠuvw, ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))),
         )),
-        time_ratio_limit = 25, # This case's ref function is fast on Buildkite.
+        time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
 

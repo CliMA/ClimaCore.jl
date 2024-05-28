@@ -17,9 +17,10 @@ DataStyle(::Type{DataF{S, A}}) where {S, A} = DataFStyle{parent_array_type(A)}()
 Data0DStyle(::Type{DataFStyle{A}}) where {A} = DataFStyle{A}
 
 abstract type DataColumnStyle <: DataStyle end
-struct VFStyle{A} <: DataColumnStyle end
-DataStyle(::Type{VF{S, A}}) where {S, A} = VFStyle{parent_array_type(A)}()
-DataColumnStyle(::Type{VFStyle{A}}) where {A} = VFStyle{A}
+struct VFStyle{Nv, A} <: DataColumnStyle end
+DataStyle(::Type{VF{S, Nv, A}}) where {S, Nv, A} =
+    VFStyle{Nv, parent_array_type(A)}()
+DataColumnStyle(::Type{VFStyle{Nv, A}}) where {Nv, A} = VFStyle{Nv, A}
 
 abstract type Data1DStyle{Ni} <: DataStyle end
 struct IFHStyle{Ni, A} <: Data1DStyle{Ni} end
@@ -44,21 +45,25 @@ DataStyle(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} =
     IJFHStyle{Nij, parent_array_type(A)}()
 DataSlab2DStyle(::Type{IJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
 
-abstract type Data1DXStyle{Ni} <: DataStyle end
-struct VIFHStyle{Ni, A} <: Data1DXStyle{Ni} end
-DataStyle(::Type{VIFH{S, Ni, A}}) where {S, Ni, A} =
-    VIFHStyle{Ni, parent_array_type(A)}()
-Data1DXStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = VIFHStyle{Ni, A}
-DataColumnStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = VFStyle{A}
-DataSlab1DStyle(::Type{VIFHStyle{Ni, A}}) where {Ni, A} = IFStyle{Ni, A}
+abstract type Data1DXStyle{Nv, Ni} <: DataStyle end
+struct VIFHStyle{Nv, Ni, A} <: Data1DXStyle{Nv, Ni} end
+DataStyle(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} =
+    VIFHStyle{Nv, Ni, parent_array_type(A)}()
+Data1DXStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} =
+    VIFHStyle{Nv, Ni, A}
+DataColumnStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = VFStyle{Nv, A}
+DataSlab1DStyle(::Type{VIFHStyle{Nv, Ni, A}}) where {Ni, Nv, A} = IFStyle{Ni, A}
 
-abstract type Data2DXStyle{Nij} <: DataStyle end
-struct VIJFHStyle{Nij, A} <: Data2DXStyle{Nij} end
-DataStyle(::Type{VIJFH{S, Nij, A}}) where {S, Nij, A} =
-    VIJFHStyle{Nij, parent_array_type(A)}()
-Data2DXStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = VIJFHStyle{Nij, A}
-DataColumnStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = VFStyle{A}
-DataSlab2DStyle(::Type{VIJFHStyle{Nij, A}}) where {Nij, A} = IJFStyle{Nij, A}
+abstract type Data2DXStyle{Nv, Nij} <: DataStyle end
+struct VIJFHStyle{Nv, Nij, A} <: Data2DXStyle{Nv, Nij} end
+DataStyle(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
+    VIJFHStyle{Nv, Nij, parent_array_type(A)}()
+Data2DXStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
+    VIJFHStyle{Nv, Nij, A}
+DataColumnStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
+    VFStyle{Nv, A}
+DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
+    IJFStyle{Nij, A}
 
 abstract type Data3DStyle <: DataStyle end
 
@@ -79,8 +84,10 @@ Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
     ::DataFStyle{A2},
 ) where {A1, A2} = DataFStyle{promote_parent_array_type(A1, A2)}()
-Base.Broadcast.BroadcastStyle(::VFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
-    VFStyle{promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::VFStyle{Nv, A1},
+    ::VFStyle{Nv, A2},
+) where {Nv, A1, A2} = VFStyle{Nv, promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
     ::IFStyle{Ni, A1},
     ::IFStyle{Ni, A2},
@@ -90,9 +97,10 @@ Base.Broadcast.BroadcastStyle(
     ::IFHStyle{Ni, A2},
 ) where {Ni, A1, A2} = IFHStyle{Ni, promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
-    ::VIFHStyle{Ni, A1},
-    ::VIFHStyle{Ni, A2},
-) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+    ::VIFHStyle{Nv, Ni, A1},
+    ::VIFHStyle{Nv, Ni, A2},
+) where {Nv, Ni, A1, A2} =
+    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
     ::IJFStyle{Nij, A1},
     ::IJFStyle{Nij, A2},
@@ -102,9 +110,10 @@ Base.Broadcast.BroadcastStyle(
     ::IJFHStyle{Nij, A2},
 ) where {Nij, A1, A2} = IJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
 Base.Broadcast.BroadcastStyle(
-    ::VIJFHStyle{Nij, A1},
-    ::VIJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+    ::VIJFHStyle{Nv, Nij, A1},
+    ::VIJFHStyle{Nv, Nij, A2},
+) where {Nv, Nij, A1, A2} =
+    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
@@ -116,8 +125,10 @@ Base.Broadcast.BroadcastStyle(
     ::IJFStyle{Nij, A2},
 ) where {Nij, A1, A2} = IJFStyle{Nij, promote_parent_array_type(A1, A2)}()
 
-Base.Broadcast.BroadcastStyle(::DataFStyle{A1}, ::VFStyle{A2}) where {A1, A2} =
-    VFStyle{promote_parent_array_type(A1, A2)}()
+Base.Broadcast.BroadcastStyle(
+    ::DataFStyle{A1},
+    ::VFStyle{Nv, A2},
+) where {A1, Nv, A2} = VFStyle{Nv, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
@@ -131,50 +142,58 @@ Base.Broadcast.BroadcastStyle(
 
 Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
-    ::VIFHStyle{Ni, A2},
-) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+    ::VIFHStyle{Nv, Ni, A2},
+) where {Nv, Ni, A1, A2} =
+    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
     ::DataFStyle{A1},
-    ::VIJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+    ::VIJFHStyle{Nv, Nij, A2},
+) where {Nv, Nij, A1, A2} =
+    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A1},
+    ::VFStyle{Nv, A1},
     ::IFHStyle{Ni, A2},
-) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+) where {Nv, Ni, A1, A2} =
+    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A1},
+    ::VFStyle{Nv, A1},
     ::IJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+) where {Nv, Nij, A1, A2} =
+    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A1},
-    ::VIFHStyle{Ni, A2},
-) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+    ::VFStyle{Nv, A1},
+    ::VIFHStyle{Nv, Ni, A2},
+) where {Nv, Ni, A1, A2} =
+    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
-    ::VFStyle{A1},
-    ::VIJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+    ::VFStyle{Nv, A1},
+    ::VIJFHStyle{Nv, Nij, A2},
+) where {Nv, Nij, A1, A2} =
+    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
     ::IFHStyle{Ni, A1},
-    ::VIFHStyle{Ni, A2},
-) where {Ni, A1, A2} = VIFHStyle{Ni, promote_parent_array_type(A1, A2)}()
+    ::VIFHStyle{Nv, Ni, A2},
+) where {Nv, Ni, A1, A2} =
+    VIFHStyle{Nv, Ni, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.BroadcastStyle(
     ::IJFHStyle{Nij, A1},
-    ::VIJFHStyle{Nij, A2},
-) where {Nij, A1, A2} = VIJFHStyle{Nij, promote_parent_array_type(A1, A2)}()
+    ::VIJFHStyle{Nv, Nij, A2},
+) where {Nv, Nij, A1, A2} =
+    VIJFHStyle{Nv, Nij, promote_parent_array_type(A1, A2)}()
 
 Base.Broadcast.broadcastable(data::AbstractData) = data
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {Ni, DS <: Union{Data1DStyle{Ni}, Data1DXStyle{Ni}}}
+) where {Ni, DS <: Data1DStyle{Ni}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Ni),)
     Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
@@ -183,7 +202,25 @@ end
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {Nij, DS <: Union{Data2DStyle{Nij}, Data2DXStyle{Nij}}}
+) where {Nv, Ni, DS <: Data1DXStyle{Nv, Ni}}
+    _args = slab_args(bc.args, inds...)
+    _axes = (SOneTo(Ni),)
+    Base.Broadcast.Broadcasted{DataSlab1DStyle(DS)}(bc.f, _args, _axes)
+end
+
+Base.@propagate_inbounds function slab(
+    bc::Base.Broadcast.Broadcasted{DS},
+    inds...,
+) where {Nij, DS <: Data2DStyle{Nij}}
+    _args = slab_args(bc.args, inds...)
+    _axes = (SOneTo(Nij), SOneTo(Nij))
+    Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
+end
+
+Base.@propagate_inbounds function slab(
+    bc::Base.Broadcast.Broadcasted{DS},
+    inds...,
+) where {Nv, Nij, DS <: Data2DXStyle{Nv, Nij}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Nij), SOneTo(Nij))
     Base.Broadcast.Broadcasted{DataSlab2DStyle(DS)}(bc.f, _args, _axes)
@@ -192,7 +229,7 @@ end
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{DS},
     inds...,
-) where {N, DS <: Union{Data1DXStyle{N}, Data2DXStyle{N}}}
+) where {Nv, N, DS <: Union{Data1DXStyle{Nv, N}, Data2DXStyle{Nv, N}}}
     _args = column_args(bc.args, inds...)
     _axes = nothing
     Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
@@ -278,33 +315,42 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{VF{<:Any, A}, Broadcast.Broadcasted{VFStyle{A}}},
+    bc::Union{VF{<:Any, Nv, A}, Broadcast.Broadcasted{VFStyle{Nv, A}}},
     ::Type{Eltype},
-    (_, _, _, Nv, _) = size(bc),
-) where {A, Eltype}
+    dims = nothing,
+) where {Nv, A, Eltype}
+    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
     PA = parent_array_type(A)
-    array = similar(PA, (Nv, typesize(eltype(A), Eltype)))
-    return VF{Eltype}(array)
+    array = similar(PA, (newNv, typesize(eltype(A), Eltype)))
+    return VF{Eltype, newNv}(array)
 end
 
 function Base.similar(
-    bc::Union{VIFH{<:Any, Ni, A}, Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
+    bc::Union{
+        VIFH{<:Any, Nv, Ni, A},
+        Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+    },
     ::Type{Eltype},
-    (_, _, _, Nv, Nh) = size(bc),
-) where {Ni, A, Eltype}
+    dims = nothing,
+) where {Nv, Ni, A, Eltype}
+    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
     PA = parent_array_type(A)
-    array = similar(PA, (Nv, Ni, typesize(eltype(A), Eltype), Nh))
-    return VIFH{Eltype, Ni}(array)
+    array = similar(PA, (newNv, Ni, typesize(eltype(A), Eltype), Nh))
+    return VIFH{Eltype, newNv, Ni}(array)
 end
 
 function Base.similar(
-    bc::Union{VIJFH{<:Any, Nij, A}, Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
+    bc::Union{
+        VIJFH{<:Any, Nv, Nij, A},
+        Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+    },
     ::Type{Eltype},
-    (_, _, _, Nv, Nh) = size(bc),
-) where {Nij, A, Eltype}
+    dims = nothing,
+) where {Nv, Nij, A, Eltype}
+    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
     PA = parent_array_type(A)
-    array = similar(PA, (Nv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return VIJFH{Eltype, Nij}(array)
+    array = similar(PA, (newNv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
+    return VIJFH{Eltype, newNv, Nij}(array)
 end
 
 function Base.mapreduce(
@@ -372,10 +418,9 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{VF{<:Any, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
-) where {F, Op, A}
+    bc::Union{VF{<:Any, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+) where {F, Op, Nv, A}
     # mapreduce across DataColumn levels
-    _, _, _, Nv, _ = size(bc)
     mapreduce(op, 1:Nv) do v
         Base.@_inline_meta
         idx = CartesianIndex(1, 1, 1, v, 1)
@@ -387,8 +432,11 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{VIFH{<:Any, Ni, A}, Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
-) where {F, Op, Ni, A}
+    bc::Union{
+        VIFH{<:Any, Nv, Ni, A},
+        Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+    },
+) where {F, Op, Nv, Ni, A}
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
@@ -402,10 +450,10 @@ function Base.mapreduce(
     fn::F,
     op::Op,
     bc::Union{
-        VIJFH{<:Any, Nij, A},
-        Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
+        VIJFH{<:Any, Nv, Nij, A},
+        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
     },
-) where {F, Op, Nij, A}
+) where {F, Op, Nv, Nij, A}
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
@@ -491,10 +539,9 @@ end
 
 # inline inner column(::DataColumn) copy
 function Base.copyto!(
-    dest::VF{S},
-    bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
-) where {S, A}
-    _, _, _, Nv, _ = size(dest)
+    dest::VF{S, Nv},
+    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+) where {S, Nv, A}
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
         dest[idx] = convert(S, bc[idx])
@@ -503,11 +550,14 @@ function Base.copyto!(
 end
 
 function _serial_copyto!(
-    dest::VIFH{S, Ni},
-    bc::Union{VIFH{S, Ni, A}, Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}}},
-) where {S, Ni, A}
+    dest::VIFH{S, Nv, Ni},
+    bc::Union{
+        VIFH{S, Nv, Ni, A},
+        Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+    },
+) where {S, Nv, Ni, A}
+    (_, _, _, _, Nh) = size(bc)
     # copy contiguous columns
-    _, _, _, _, Nh = size(dest)
     @inbounds for h in 1:Nh, i in 1:Ni
         col_dest = column(dest, i, h)
         col_bc = column(bc, i, h)
@@ -517,9 +567,9 @@ function _serial_copyto!(
 end
 
 function _threaded_copyto!(
-    dest::VIFH{S, Ni},
-    bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
-) where {S, Ni, A}
+    dest::VIFH{S, Nv, Ni},
+    bc::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+) where {S, Nv, Ni, A}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
     @inbounds begin
@@ -536,23 +586,26 @@ function _threaded_copyto!(
 end
 
 function Base.copyto!(
-    dest::VIFH{S, Ni},
-    source::VIFH{S, Ni, A},
-) where {S, Ni, A}
+    dest::VIFH{S, Nv, Ni},
+    source::VIFH{S, Nv, Ni, A},
+) where {S, Nv, Ni, A}
     return _serial_copyto!(dest, source)
 end
 
 function Base.copyto!(
-    dest::VIFH{S, Ni},
-    bc::Base.Broadcast.Broadcasted{VIFHStyle{Ni, A}},
-) where {S, Ni, A}
+    dest::VIFH{S, Nv, Ni},
+    bc::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+) where {S, Nv, Ni, A}
     return _serial_copyto!(dest, bc)
 end
 
 function _serial_copyto!(
-    dest::VIJFH{S, Nij},
-    bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
-) where {S, Nij, A}
+    dest::VIJFH{S, Nv, Nij},
+    bc::Union{
+        VIJFH{S, Nv, Nij, A},
+        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+    },
+) where {S, Nv, Nij, A}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest)
     @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
@@ -564,9 +617,9 @@ function _serial_copyto!(
 end
 
 function _threaded_copyto!(
-    dest::VIJFH{S, Nij},
-    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
-) where {S, Nij, A}
+    dest::VIJFH{S, Nv, Nij},
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+) where {S, Nv, Nij, A}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
     @inbounds begin
@@ -583,16 +636,16 @@ function _threaded_copyto!(
 end
 
 function Base.copyto!(
-    dest::VIJFH{S, Nij},
-    source::VIJFH{S, Nij, A},
-) where {S, Nij, A}
+    dest::VIJFH{S, Nv, Nij},
+    source::VIJFH{S, Nv, Nij, A},
+) where {S, Nv, Nij, A}
     return _serial_copyto!(dest, source)
 end
 
 function Base.copyto!(
-    dest::VIJFH{S, Nij},
-    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}},
-) where {S, Nij, A}
+    dest::VIJFH{S, Nv, Nij},
+    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+) where {S, Nv, Nij, A}
     return _serial_copyto!(dest, bc)
 end
 
@@ -630,13 +683,13 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S1, Nij},
+    dest1::VIJFH{S1, Nv1, Nij},
     ::ClimaComms.AbstractCPUDevice,
-) where {S1, Nij}
-    _, _, _, Nv, Nh = size(dest1)
+) where {S1, Nv1, Nij}
+    _, _, _, _, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
         # Base.copyto!(dest, bc) # we can just fall back like this
-        @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv
+        @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv1
             I = CartesianIndex(i, j, 1, v, h)
             bcI = isascalar(bc) ? bc[] : bc[I]
             dest[I] = convert(eltype(dest), bcI)
@@ -664,13 +717,13 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIFH{S, Ni, A},
+    dest1::VIFH{S, Nv1, Ni, A},
     ::ClimaComms.AbstractCPUDevice,
-) where {S, Ni, A}
+) where {S, Nv1, Ni, A}
     # copy contiguous columns
-    _, _, _, Nv, Nh = size(dest1)
+    _, _, _, _, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
-        @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv
+        @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv1
             I = CartesianIndex(i, 1, 1, v, h)
             bcI = isascalar(bc) ? bc[] : bc[I]
             dest[I] = convert(eltype(dest), bcI)
@@ -681,12 +734,11 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VF{S1, A},
+    dest1::VF{S1, Nv1, A},
     ::ClimaComms.AbstractCPUDevice,
-) where {S1, A}
-    _, _, _, Nv, _ = size(dest1)
+) where {S1, Nv1, A}
     for (dest, bc) in fmbc.pairs
-        @inbounds for v in 1:Nv
+        @inbounds for v in 1:Nv1
             I = CartesianIndex(1, 1, 1, v, 1)
             bcI = isascalar(bc) ? bc[] : bc[I]
             dest[I] = convert(eltype(dest), bcI)

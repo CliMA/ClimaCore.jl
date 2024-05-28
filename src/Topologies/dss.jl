@@ -10,8 +10,8 @@ struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
     """
-    Perimeter `DataLayout` object: typically a `VIFH{TT,Np}`, where `TT` is the
-    transformed type, and `Np` is the length of the perimeter
+    Perimeter `DataLayout` object: typically a `VIFH{TT,Nv,Np}`, where `TT` is the
+    transformed type, `Nv` is the number of vertical levels, and `Np` is the length of the perimeter
     """
     perimeter_data::D
     "send buffer `AbstractVector{FT}`"
@@ -36,28 +36,26 @@ end
 
 """
     create_dss_buffer(
-        data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+        data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
         topology::Topology2D,
         local_geometry = nothing,
         local_weights = nothing,
-    ) where {S, Nij}
+    ) where {S}
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
     topology::Topology2D,
-    local_geometry::Union{
-        DataLayouts.IJFH{<:Any, Nij},
-        DataLayouts.VIJFH{<:Any, Nij},
-        Nothing,
-    } = nothing,
-    local_weights::Union{
-        DataLayouts.IJFH{<:Any, Nij},
-        DataLayouts.VIJFH{<:Any, Nij},
-        Nothing,
-    } = nothing,
-) where {S, Nij}
+    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
+    local_weights::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
+) where {S}
+    Nij = DataLayouts.get_Nij(data)
+    Nij_lg =
+        isnothing(local_geometry) ? Nij : DataLayouts.get_Nij(local_geometry)
+    Nij_weights =
+        isnothing(local_weights) ? Nij : DataLayouts.get_Nij(local_weights)
+    @assert Nij == Nij_lg == Nij_weights
     perimeter::Perimeter2D = Perimeter2D(Nij)
     context = ClimaComms.context(topology)
     DA = ClimaComms.array_type(topology)
@@ -76,7 +74,7 @@ function create_dss_buffer(
     if eltype(data) <: Geometry.Covariant123Vector
         TS = Geometry.UVWVector{T}
     end
-    perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
+    perimeter_data = DataLayouts.VIFH{TS, Nv, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]

@@ -460,7 +460,12 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         Nij = size(data, findfirst("I", data_layout)[1])
         DataLayout = _scan_data_layout(data_layout)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
-        values = DataLayout{ElType, Nij}(data)
+        if data_layout in ("VIJFH", "VIFH")
+            Nv = size(data, 1)
+            values = DataLayout{ElType, Nv, Nij}(data)
+        else
+            values = DataLayout{ElType, Nij}(data)
+        end
         return Fields.Field(values, space)
     elseif type == "FieldVector"
         Fields.FieldVector(;

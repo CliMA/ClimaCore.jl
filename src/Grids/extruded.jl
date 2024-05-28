@@ -27,19 +27,20 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,
     GG <: Geometry.AbstractGlobalGeometry,
-    LG,
+    CLG,
+    FLG,
 } <: AbstractExtrudedFiniteDifferenceGrid
     horizontal_grid::H
     vertical_grid::V
     hypsography::A
     global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
+    center_local_geometry::CLG
+    face_local_geometry::FLG
 end
 
 local_geometry_type(
-    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, LG}},
-) where {H, V, A, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},
+) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
@@ -141,18 +142,18 @@ quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
 
 
 ## GPU compatibility
-struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG} <:
+struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
        AbstractExtrudedFiniteDifferenceGrid
     vertical_topology::VT
     quadrature_style::Q
     global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
+    center_local_geometry::CLG
+    face_local_geometry::FLG
 end
 
 local_geometry_type(
-    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, LG}},
-) where {VT, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
+) where {VT, Q, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
     DeviceExtrudedFiniteDifferenceGrid(

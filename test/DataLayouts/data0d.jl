@@ -103,10 +103,11 @@ end
 @testset "broadcasting DataF + VF data object => VF" begin
     FT = Float64
     S = Complex{FT}
+    Nv = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_vf = VF{S}(ones(FT, 3, 2))
+    data_vf = VF{S, Nv}(ones(FT, Nv, 2))
     data_vf2 = data_f .+ data_vf
-    @test data_vf2 isa VF{S}
+    @test data_vf2 isa VF{S, Nv}
     @test size(data_vf2) == (1, 1, 1, 3, 1)
 end
 
@@ -154,20 +155,22 @@ end
     FT = Float64
     S = Complex{FT}
     data_f = DataF{S}(ones(FT, 2))
-    data_vifh = VIFH{S, 4}(ones(FT, 10, 4, 3, 10))
+    Nv = 10
+    data_vifh = VIFH{S, Nv, 4}(ones(FT, Nv, 4, 3, 10))
     data_vifh2 = data_f .+ data_vifh
-    @test data_vifh2 isa VIFH{S}
-    @test size(data_vifh2) == (4, 1, 1, 10, 10)
+    @test data_vifh2 isa VIFH{S, Nv}
+    @test size(data_vifh2) == (4, 1, 1, Nv, 10)
 end
 
 @testset "broadcasting DataF + VIJFH data object => VIJFH" begin
     FT = Float64
     S = Complex{FT}
+    Nv = 2
     data_f = DataF{S}(ones(FT, 2))
-    data_vijfh = VIJFH{S, 2}(ones(FT, 2, 2, 2, 2, 2))
+    data_vijfh = VIJFH{S, Nv, 2}(ones(FT, Nv, 2, 2, 2, 2))
     data_vijfh2 = data_f .+ data_vijfh
-    @test data_vijfh2 isa VIJFH{S}
-    @test size(data_vijfh2) == (2, 2, 1, 2, 2)
+    @test data_vijfh2 isa VIJFH{S, Nv}
+    @test size(data_vijfh2) == (2, 2, 1, Nv, 2)
 end
 
 @testset "column IF => DataF" begin
@@ -225,7 +228,8 @@ end
     FT = Float64
     S = Complex{FT}
     array = FT[1 2; 3 4; 5 6]
-    data_vf = VF{S}(array)
+    Nv = size(array, 1)
+    data_vf = VF{S, Nv}(array)
     vf_level = level(data_vf, 2)
     @test vf_level isa DataF
     @test vf_level[] == 3.0 + 4.0im

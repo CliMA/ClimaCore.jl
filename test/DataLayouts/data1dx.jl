@@ -13,7 +13,7 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH
         # 10 elements in horizontal with 4 nodal points per element in horizontal
         array = rand(FT, Nv, Ni, 3, Nh)
 
-        data = VIFH{S, Ni}(array)
+        data = VIFH{S, Nv, Ni}(array)
         sum(x -> x[2], data)
 
         @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
@@ -46,7 +46,7 @@ end
 
     S = Tuple{Complex{Float64}, Float64}
     array = zeros(Float64, Nv, Ni, 3, Nh)
-    data = VIFH{S, Ni}(array)
+    data = VIFH{S, Nv, Ni}(array)
 
     @test_throws BoundsError slab(data, -1, -1)
     @test_throws BoundsError slab(data, 1, 3)
@@ -72,7 +72,7 @@ end
     SB = (c = 1.0, d = 2.0)
 
     array = zeros(Float64, Nv, Ni, 2, Nh)
-    data = VIFH{typeof(SA), Ni}(array)
+    data = VIFH{typeof(SA), Nv, Ni}(array)
 
     cdata = column(data, 1, 1)
     cdata[1] = SA
@@ -86,11 +86,12 @@ end
 
 @testset "broadcasting between VIFH data object + scalars" begin
     FT = Float64
-    data1 = ones(FT, 2, 2, 2, 2)
+    Nv = 2
+    data1 = ones(FT, Nv, 2, 2, 2)
     S = Complex{Float64}
-    data1 = VIFH{S, 2}(data1)
+    data1 = VIFH{S, Nv, 2}(data1)
     res = data1 .+ 1
-    @test res isa VIFH{S}
+    @test res isa VIFH{S, Nv}
     @test parent(res) ==
           FT[f == 1 ? 2 : 1 for i in 1:2, j in 1:2, f in 1:2, h in 1:2]
     @test sum(res) == Complex(16.0, 8.0)
@@ -100,10 +101,11 @@ end
 @testset "broadcasting between VF + IFH data object => VIFH" begin
     FT = Float64
     S = Complex{FT}
-    data_vf = VF{S}(ones(FT, 3, 2))
+    Nv = 3
+    data_vf = VF{S, Nv}(ones(FT, Nv, 2))
     data_ifh = IFH{FT, 2}(ones(FT, 2, 1, 2))
     data_vifh = data_vf .+ data_ifh
-    @test data_vifh isa VIFH{S}
+    @test data_vifh isa VIFH{S, Nv}
     @test size(data_vifh) == (2, 1, 1, 3, 2)
     @test parent(data_vifh) ==
           FT[f == 1 ? 2 : 1 for v in 1:3, i in 1:2, f in 1:2, h in 1:2]

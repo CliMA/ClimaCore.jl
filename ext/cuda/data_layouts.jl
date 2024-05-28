@@ -98,10 +98,13 @@ end
 
 
 function Base.copyto!(
-    dest::VIJFH{S, Nij},
-    bc::Union{VIJFH{S, Nij, A}, Base.Broadcast.Broadcasted{VIJFHStyle{Nij, A}}},
-) where {S, Nij, A <: CUDA.CuArray}
-    _, _, _, Nv, Nh = size(bc)
+    dest::VIJFH{S, Nv, Nij},
+    bc::Union{
+        VIJFH{S, Nv, Nij, A},
+        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+    },
+) where {S, Nv, Nij, A <: CUDA.CuArray}
+    _, _, _, _, Nh = size(bc)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
@@ -116,10 +119,10 @@ function Base.copyto!(
     return dest
 end
 function Base.fill!(
-    dest::VIJFH{S, Nij, A},
+    dest::VIJFH{S, Nv, Nij, A},
     val,
-) where {S, Nij, A <: CUDA.CuArray}
-    _, _, _, Nv, Nh = size(dest)
+) where {S, Nv, Nij, A <: CUDA.CuArray}
+    _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
@@ -136,10 +139,10 @@ end
 
 
 function Base.copyto!(
-    dest::VF{S},
-    bc::Union{VF{S, A}, Base.Broadcast.Broadcasted{VFStyle{A}}},
-) where {S, A <: CUDA.CuArray}
-    _, _, _, Nv, Nh = size(bc)
+    dest::VF{S, Nv},
+    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+) where {S, Nv, A <: CUDA.CuArray}
+    _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(
             knl_copyto!,
@@ -151,8 +154,8 @@ function Base.copyto!(
     end
     return dest
 end
-function Base.fill!(dest::VF{S, A}, val) where {S, A <: CUDA.CuArray}
-    _, _, _, Nv, Nh = size(dest)
+function Base.fill!(dest::VF{S, Nv, A}, val) where {S, Nv, A <: CUDA.CuArray}
+    _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(
             knl_fill!,
@@ -233,10 +236,10 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S, Nij},
+    dest1::VIJFH{S, Nv, Nij},
     ::ClimaComms.CUDADevice,
-) where {S, Nij}
-    _, _, _, Nv, Nh = size(dest1)
+) where {S, Nv, Nij}
+    _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
@@ -270,10 +273,10 @@ function fused_copyto!(
 end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VF{S},
+    dest1::VF{S, Nv},
     ::ClimaComms.CUDADevice,
-) where {S}
-    _, _, _, Nv, Nh = size(dest1)
+) where {S, Nv}
+    _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
         auto_launch!(
             knl_fused_copyto!,
