@@ -78,7 +78,7 @@ function make_q_bounds(
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
+    return DataLayouts.VIFH{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
 end
 
 

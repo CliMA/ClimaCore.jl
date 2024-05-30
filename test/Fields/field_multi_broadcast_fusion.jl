@@ -220,13 +220,13 @@ end
     x2 = rand_field(FT, cspace)
     y = rand_field(FT, fspace)
     # Error when the axes of the RHS are incompatible
-    @test_throws DimensionMismatch begin
+    @test_throws ErrorException("Broacasted spaces are not the same.") begin
         @fused_direct begin
             @. x += 1
             @. x += y
         end
     end
-    @test_throws DimensionMismatch begin
+    @test_throws ErrorException("Broacasted spaces are not the same.") begin
         @fused_direct begin
             @. x += y
             @. x += y
