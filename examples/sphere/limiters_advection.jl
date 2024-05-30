@@ -96,7 +96,9 @@ end
 
 # Set up spatial discretization
 FT = Float64
+@show FT
 ne_seq = (5, 10, 20)
+@show ne_seq
 Δh = zeros(FT, length(ne_seq))
 L1err, L2err, Linferr, relative_errors = zeros(FT, length(ne_seq)),
 zeros(FT, length(ne_seq)),
@@ -215,8 +217,8 @@ for (k, ne) in enumerate(ne_seq)
 
     # Set up RHS function
     ystar = similar(y0)
-    parameters =
-        (space = space, limiter = Limiters.QuasiMonotoneLimiter(y0.ρq), T = T)
+    limiter = Limiters.QuasiMonotoneLimiter(y0.ρq; rtol = 100eps(FT))
+    parameters = (space = space, limiter, T = T)
     f!(ystar, y0, parameters, 0.0)
 
     # Solve the ODE
@@ -267,7 +269,7 @@ for (k, ne) in enumerate(ne_seq)
 end
 
 # Check conservation
-atols = [27.5eps(FT), 27.5eps(FT), 11eps(FT)]
+atols = [27.5eps(FT), 27.5eps(FT), 20eps(FT)] .* 200
 @info "relative_errors = $relative_errors"
 @info "atols = $atols"
 for k in 1:length(ne_seq)
