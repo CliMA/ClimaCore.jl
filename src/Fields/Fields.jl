@@ -53,10 +53,8 @@ ClimaComms.context(topology::Topologies.Topology2D) = topology.context
 ClimaComms.context(topology::T) where {T <: Topologies.AbstractTopology} =
     topology.context
 
-Adapt.adapt_structure(to, field::Field) = Field(
-    Adapt.adapt(to, Fields.field_values(field)),
-    Adapt.adapt(to, axes(field)),
-)
+Adapt.adapt_structure(to, field::Field) =
+    Field(Adapt.adapt(to, field_values(field)), Adapt.adapt(to, axes(field)))
 
 ## aliases
 # Point Field
@@ -172,7 +170,7 @@ Base.parent(field::Field) = parent(field_values(field))
 # to play nice with DifferentialEquations; may want to revisit this
 # https://github.com/SciML/SciMLBase.jl/blob/697bd0c0c7365e77fa311f2d32eade70f43a8d50/src/solutions/ode_solutions.jl#L31
 Base.size(field::Field) = ()
-Base.length(field::Fields.Field) = 1
+Base.length(field::Field) = 1
 
 Topologies.nlocalelems(field::Field) = Topologies.nlocalelems(axes(field))
 
@@ -529,12 +527,12 @@ if VERSION < v"1.10"
     # Example
     ```
     import ClimaCore
-    ClimaCore.Fields.truncate_printing_field_types() = true
+    ClimaCore.truncate_printing_field_types() = true
     ```
     =#
     truncate_printing_field_types() = false
 
-    function Base.show(io::IO, ::Type{T}) where {T <: Fields.Field}
+    function Base.show(io::IO, ::Type{T}) where {T <: Field}
         if truncate_printing_field_types()
             print(io, truncated_field_type_string(T))
         else
@@ -543,8 +541,8 @@ if VERSION < v"1.10"
     end
 
     # Defined for testing
-    function truncated_field_type_string(::Type{T}) where {T <: Fields.Field}
-        values_type(::Type{T}) where {V, T <: Fields.Field{V}} = V
+    function truncated_field_type_string(::Type{T}) where {T <: Field}
+        values_type(::Type{T}) where {V, T <: Field{V}} = V
 
         _apply!(f, ::T, match_list) where {T} = nothing # sometimes we need this...
         function _apply!(f, ::Type{T}, match_list) where {T}
@@ -580,6 +578,54 @@ if VERSION < v"1.10"
             return "Field{...} (trunc disp)"
         end
     end
+end
+
+
+"""
+    field2array(field)
+
+Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
+simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+```
+    model.center_temperature .= field2array(center_temperature_field)
+    field2array(face_flux_field) .= model.face_flux
+```
+
+The dimensions of the resulting array are `([number of vertical nodes], number
+of horizontal nodes)`. Also, `field` must be a `Field` of scalars, so that the
+element type of the array is the same as the struct type of `field`.
+"""
+array2field(array, space) = Field(
+    DataLayouts.array2data(array, Spaces.local_geometry_data(space)),
+    space,
+)
+
+
+"""
+    array2field(array, space)
+
+Wraps `array` in a `ClimaCore` `Field` that is defined over `space`. Can be used
+to simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+```
+    array2field(model.center_temperature, center_space) .=
+        center_temperature_field
+    face_flux_field .= array2field(model.face_flux, face_space)
+```
+
+The dimensions of `array` are assumed to be `([number of vertical nodes], number
+of horizontal nodes)`. Also, `array` must represent a `Field` of scalars, so
+that the struct type of the resulting `Field` is the same as the element type of
+`array`. If this restriction were removed, one would also need to pass the
+desired `Field` struct type as an argument to `array2field`, which would then
+need to permute the dimensions of `array` to match the target `DataLayout`.
+"""
+function field2array(field::Field)
+    if sizeof(eltype(field)) != sizeof(eltype(parent(field)))
+        f_axis_size = sizeof(eltype(parent(field))) ÷ sizeof(eltype(field))
+        error("unable to use field2array because each Field element is \
+               represented by $f_axis_size array elements (must be 1)")
+    end
+    return DataLayouts.data2array(field_values(field))
 end
 
 end # module

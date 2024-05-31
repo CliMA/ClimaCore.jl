@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data1d.jl"))
+=#
 using Test
 using JET
 
@@ -27,7 +31,15 @@ TestFloatTypes = (Float32, Float64)
             10eps()
 
         @test sum(x -> x[2], data) ≈ sum(array[:, 3]) atol = 10eps()
+
     end
+    FT = Float64
+    Nv = 4
+    array = rand(FT, Nv, 1)
+    data = VF{FT, Nv}(array)
+    @test DataLayouts.data2array(data) ==
+          reshape(parent(data), DataLayouts.nlevels(data), :)
+    @test DataLayouts.array2data(DataLayouts.data2array(data), data) == data
 end
 
 @testset "VF boundscheck" begin

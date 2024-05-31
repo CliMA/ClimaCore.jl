@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data0d.jl"))
+=#
 using Test
 using JET
 

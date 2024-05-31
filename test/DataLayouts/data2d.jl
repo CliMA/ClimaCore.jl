@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data2d.jl"))
+=#
 using Test
 using ClimaCore.DataLayouts
 using StaticArrays
@@ -60,6 +64,15 @@ end
     @test sum(data.:1) ≈ Complex(sum(array[:, :, 1, :]), sum(array[:, :, 2, :])) atol =
         10eps()
     @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :]) atol = 10eps()
+
+    FT = Float64
+    Nij = 4  # number of nodal points
+    Nh = 10 # number of elements
+    array = rand(FT, Nij, Nij, 1, Nh)
+    data = IJFH{FT, Nij}(array)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "IJFH boundscheck" begin

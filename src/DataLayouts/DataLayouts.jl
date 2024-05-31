@@ -1026,6 +1026,8 @@ rebuild(
     array::AbstractArray{T, 5},
 ) where {S, Nv, Nij, T} = VIJFH{S, Nv, Nij}(array)
 
+nlevels(::VIJFH{S, Nv}) where {S, Nv} = Nv
+
 function replace_basetype(
     data::VIJFH{S, Nv, Nij},
     ::Type{T},
@@ -1192,6 +1194,8 @@ end
 
 rebuild(data::VIFH{S, Nv, Ni}, array::A) where {S, Nv, Ni, A <: AbstractArray} =
     VIFH{S, Nv, Ni}(array)
+
+nlevels(::VIFH{S, Nv}) where {S, Nv} = Nv
 
 function replace_basetype(data::VIFH{S, Nv, Ni}, ::Type{T}) where {S, Nv, Ni, T}
     array = parent(data)
@@ -1480,5 +1484,53 @@ get_Nij(::VIFH{S, Nv, Nij}) where {S, Nv, Nij} = Nij
 get_Nij(::IFH{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IJF{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IF{S, Nij}) where {S, Nij} = Nij
+
+
+"""
+    data2array(::AbstractData)
+
+Reshapes the DataLayout's parent array into a `Vector`, or (for DataLayouts with vertical levels)
+`Nv x N` matrix, where `Nv` is the number of vertical levels and `N` is the remaining dimensions.
+
+The dimensions of the resulting array are
+ - `([number of vertical nodes], number of horizontal nodes)`.
+
+Also, this assumes that `eltype(data) <: Real`.
+"""
+function data2array end
+
+data2array(data::Union{IF, IFH}) = reshape(parent(data), :)
+data2array(data::Union{IJF, IJFH}) = reshape(parent(data), :)
+data2array(data::Union{VF{S, Nv}, VIFH{S, Nv}, VIJFH{S, Nv}}) where {S, Nv} =
+    reshape(parent(data), Nv, :)
+
+"""
+    array2data(array, ::AbstractData)
+
+Reshapes `array` (of scalars) to fit into the given `DataLayout`.
+
+The dimensions of `array` are assumed to be
+ - `([number of vertical nodes], number of horizontal nodes)`.
+"""
+function array2data end
+
+array2data(array::AbstractArray{T, 1}, ::IF{<:Any, Ni}) where {T, Ni} =
+    IF{T, Ni}(reshape(array, Ni, 1))
+array2data(array::AbstractArray{T, 1}, ::IFH{<:Any, Ni}) where {T, Ni} =
+    IFH{T, Ni}(reshape(array, Ni, 1, :))
+array2data(array::AbstractArray{T, 1}, ::IJF{<:Any, Nij}) where {T, Nij} =
+    IJF{T, Nij}(reshape(array, Nij, Nij, 1))
+array2data(array::AbstractArray{T, 1}, ::IJFH{<:Any, Nij}) where {T, Nij} =
+    IJFH{T, Nij}(reshape(array, Nij, Nij, 1, :))
+array2data(array::AbstractArray{T, 2}, ::VF{<:Any, Nv}) where {T, Nv} =
+    VF{T, Nv}(reshape(array, Nv, 1))
+array2data(
+    array::AbstractArray{T, 2},
+    ::VIFH{<:Any, Nv, Ni},
+) where {T, Nv, Ni} = VIFH{T, Nv, Ni}(reshape(array, Nv, Ni, 1, :))
+array2data(
+    array::AbstractArray{T, 2},
+    ::VIJFH{<:Any, Nv, Nij},
+) where {T, Nv, Nij} = VIJFH{T, Nv, Nij}(reshape(array, Nv, Nij, Nij, 1, :))
 
 end # module
