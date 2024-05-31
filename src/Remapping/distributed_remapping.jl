@@ -793,6 +793,39 @@ function interpolate(remapper::Remapper, fields)
            interpolated_values
 end
 
+"""
+       interpolate(field::ClimaCore.Fields, target_hcoords, target_zcoords)
+
+Interpolate the given fields on the Cartesian product of `target_hcoords` with
+`target_zcoords` (if not empty).
+
+Coordinates have to be `ClimaCore.Geometry.Points`.
+
+Note: do not use this method when performance is important. Instead, define a `Remapper` and
+call `interpolate(remapper, fields)`. Different `Field`s defined on the same `Space` can
+share a `Remapper`, so that interpolation can be optimized.
+
+Example
+========
+
+Given `field`, a `Field` defined on a cubed sphere.
+
+```julia
+longpts = range(-180.0, 180.0, 21)
+latpts = range(-80.0, 80.0, 21)
+zpts = range(0.0, 1000.0, 21)
+
+hcoords = [Geometry.LatLongPoint(lat, long) for long in longpts, lat in latpts]
+zcoords = [Geometry.ZPoint(z) for z in zpts]
+
+interpolate(field, hcoords, zcoords)
+```
+"""
+function interpolate(field::Fields.Field, target_hcoords, target_zcoords)
+    remapper = Remapper(axes(field), target_hcoords, target_zcoords)
+    return interpolate(remapper, field)
+end
+
 # dest has to be allowed to be nothing because interpolation happens only on the root
 # process
 function interpolate!(

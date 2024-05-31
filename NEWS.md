@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- ![][badge-✨feature/enhancement] Added `interpolate(field, target_hcoords,
+  target_zcoord)` convenience function so that the `Remapper` does not have to
+  be explicitely constructed. PR
+  [#1764](https://github.com/CliMA/ClimaCore.jl/pull/1764)
+
 v0.14.5
 -------
 
