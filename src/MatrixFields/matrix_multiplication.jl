@@ -478,3 +478,17 @@ if hasfield(Method, :recursion_relation)
         m.recursion_relation = dont_limit
     end
 end
+
+# TODO: Explain this
+function Base.Broadcast.broadcasted(
+    ::typeof(dot),              # This is LinearAlgebra.dot
+    arg1,
+    arg2,
+)
+    args_bced = (Base.Broadcast.broadcastable(arg1), Base.Broadcast.broadcastable(arg2))
+    if eltype(args_bced[1]) <: BandMatrixRow
+        error("Detected usage of LinearAlgebra.dot in MatrixFields. Did you mean to `import ClimaCore.MatrixFields: ⋅`?")
+    else
+        Base.Broadcast.broadcasted(Base.Broadcast.combine_styles(args_bced...), dot, args_bced...)
+    end
+end

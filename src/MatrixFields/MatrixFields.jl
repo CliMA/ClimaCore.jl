@@ -43,7 +43,7 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 """
 module MatrixFields
 
-import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm
+import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm, dot
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype

@@ -3432,3 +3432,4 @@ Base.@propagate_inbounds function apply_stencil!(
     end
     return field_out
 end
+
