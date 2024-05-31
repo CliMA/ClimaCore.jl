@@ -1,4 +1,9 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data1dx.jl"))
+=#
 using Test
+using ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH
 
 @testset "VIFH" begin
@@ -37,6 +42,17 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH
               Complex{FT}(sum(array[:, :, 1, :]), sum(array[:, :, 2, :]))
         @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :])
     end
+
+    FT = Float64
+    Nv = 10 # number of vertical levels
+    Ni = 4  # number of nodal points
+    Nh = 10 # number of elements
+    array = rand(FT, Nv, Ni, 1, Nh)
+    data = VIFH{FT, Nv, Ni}(array)
+    @test DataLayouts.data2array(data) ==
+          reshape(parent(data), DataLayouts.nlevels(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "VIFH boundscheck" begin
