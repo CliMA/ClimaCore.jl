@@ -84,8 +84,10 @@ if !on_gpu
         )
 
         interp_x = Remapping.interpolate(remapper, coords.x)
+        interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
         if ClimaComms.iamroot(context)
             @test Array(interp_x) ≈ [x for x in xpts, z in zpts]
+            @test Array(interp_x2) ≈ [x for x in xpts, z in zpts]
         end
 
         interp_z = Remapping.interpolate(remapper, coords.z)
@@ -184,8 +186,10 @@ end
         Remapping.Remapper(hv_center_space, hcoords, zcoords, buffer_length = 2)
 
     interp_x = Remapping.interpolate(remapper, coords.x)
+    interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
     if ClimaComms.iamroot(context)
         @test Array(interp_x) ≈ [x for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_x2) ≈ [x for x in xpts, y in ypts, z in zpts]
     end
 
     interp_y = Remapping.interpolate(remapper, coords.y)
@@ -351,8 +355,10 @@ end
         Remapping.Remapper(hv_center_space, hcoords, zcoords, buffer_length = 2)
 
     interp_x = Remapping.interpolate(remapper, coords.x)
+    interp_x2 = Remapping.interpolate(coords.x, hcoords, zcoords)
     if ClimaComms.iamroot(context)
         @test Array(interp_x) ≈ [x for x in xpts, y in ypts, z in zpts]
+        @test Array(interp_x2) ≈ [x for x in xpts, y in ypts, z in zpts]
     end
 
     interp_y = Remapping.interpolate(remapper, coords.y)
@@ -505,9 +511,13 @@ end
     coords = Fields.coordinate_field(hv_center_space)
 
     interp_sin_long = Remapping.interpolate(remapper, sind.(coords.long))
+    interp_sin_long2 =
+        Remapping.interpolate(sind.(coords.long), hcoords, zcoords)
     # Only root has the final result
     if ClimaComms.iamroot(context)
         @test Array(interp_sin_long) ≈
+              [sind(x) for x in longpts, y in latpts, z in zpts] rtol = 0.01
+        @test Array(interp_sin_long2) ≈
               [sind(x) for x in longpts, y in latpts, z in zpts] rtol = 0.01
     end
 
