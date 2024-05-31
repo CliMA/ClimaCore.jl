@@ -582,33 +582,13 @@ end
 
 
 """
-    field2array(field)
-
-Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
-simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
-```
-    model.center_temperature .= field2array(center_temperature_field)
-    field2array(face_flux_field) .= model.face_flux
-```
-
-The dimensions of the resulting array are `([number of vertical nodes], number
-of horizontal nodes)`. Also, `field` must be a `Field` of scalars, so that the
-element type of the array is the same as the struct type of `field`.
-"""
-array2field(array, space) = Field(
-    DataLayouts.array2data(array, Spaces.local_geometry_data(space)),
-    space,
-)
-
-
-"""
     array2field(array, space)
 
 Wraps `array` in a `ClimaCore` `Field` that is defined over `space`. Can be used
 to simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+
 ```
-    array2field(model.center_temperature, center_space) .=
-        center_temperature_field
+    array2field(center_temperature, center_space) .= center_temperature_field
     face_flux_field .= array2field(model.face_flux, face_space)
 ```
 
@@ -618,6 +598,25 @@ that the struct type of the resulting `Field` is the same as the element type of
 `array`. If this restriction were removed, one would also need to pass the
 desired `Field` struct type as an argument to `array2field`, which would then
 need to permute the dimensions of `array` to match the target `DataLayout`.
+"""
+array2field(array, space) = Field(
+    DataLayouts.array2data(array, Spaces.local_geometry_data(space)),
+    space,
+)
+
+"""
+    field2array(field)
+
+Extracts a view of a `ClimaCore` `Field`'s underlying array. Can be used to
+simplify the process of getting and setting values in an `RRTMGPModel`; e.g.
+```
+    center_temperature .= field2array(center_temperature_field)
+    field2array(face_flux_field) .= face_flux
+```
+
+The dimensions of the resulting array are `([number of vertical nodes], number
+of horizontal nodes)`. Also, `field` must be a `Field` of scalars, so that the
+element type of the array is the same as the struct type of `field`.
 """
 function field2array(field::Field)
     if sizeof(eltype(field)) != sizeof(eltype(parent(field)))

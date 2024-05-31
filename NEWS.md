@@ -4,6 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.6
+-------
+
+- ![][badge-✨feature/enhancement] Added `array2field(::Field)` and `field2array(::Field)` convenience functions, to help facilitate use with RRTMGP. PR [#1768](https://github.com/CliMA/ClimaCore.jl/pull/1768)
+
+- ![][badge-🚀performance] `Nv` is now a type parameter in DataLayouts that have vertical levels. As a result, users can use `DataLayouts.nlevels(::AbstractData)` to obtain a compile-time constant for the number of vertical levels.
+
 - ![][badge-✨feature/enhancement] Added `interpolate(field, target_hcoords,
   target_zcoord)` convenience function so that the `Remapper` does not have to
   be explicitely constructed. PR
