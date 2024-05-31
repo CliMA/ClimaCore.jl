@@ -22,7 +22,7 @@ NVTX.@annotate function multiple_field_solve!(
     b,
     x1,
 )
-    Ni, Nj, _, Nv, Nh = size(Fields.field_values(x1))
+    Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh * Nnames)
@@ -38,7 +38,7 @@ NVTX.@annotate function multiple_field_solve!(
 
     device = ClimaComms.device(x[first(names)])
 
-    args = (device, caches, xs, As, bs, x1, Val(Nv), Val(Nnames))
+    args = (device, caches, xs, As, bs, x1, Val(Nnames))
 
     auto_launch!(
         multiple_field_solve_kernel!,
@@ -62,10 +62,9 @@ Base.@propagate_inbounds column_A(A, i, j, h) = Spaces.column(A, i, j, h)
     i,
     j,
     h,
-    ::Val{Nv},
     iname,
     ::Val{Nnames},
-) where {Nnames, Nv}
+) where {Nnames}
     return quote
         Base.Cartesian.@nif $Nnames ξ -> (iname == ξ) ξ -> begin
             _single_field_solve!(
@@ -74,7 +73,6 @@ Base.@propagate_inbounds column_A(A, i, j, h) = Spaces.column(A, i, j, h)
                 column_A(xs[ξ], i, j, h),
                 column_A(As[ξ], i, j, h),
                 column_A(bs[ξ], i, j, h),
-                Val(Nv),
             )
         end
     end
@@ -87,9 +85,8 @@ function multiple_field_solve_kernel!(
     As,
     bs,
     x1,
-    ::Val{Nv},
     ::Val{Nnames},
-) where {Nnames, Nv}
+) where {Nnames}
     @inbounds begin
         Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
         tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
@@ -105,7 +102,6 @@ function multiple_field_solve_kernel!(
                 i,
                 j,
                 h,
-                Val(Nv),
                 iname,
                 Val(Nnames),
             )

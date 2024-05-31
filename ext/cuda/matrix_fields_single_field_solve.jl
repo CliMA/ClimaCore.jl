@@ -13,11 +13,11 @@ import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
 import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
-    Ni, Nj, _, Nv, Nh = size(Fields.field_values(A))
+    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     nitems = Ni * Nj * Nh
     nthreads = min(256, nitems)
     nblocks = cld(nitems, nthreads)
-    args = (device, cache, x, A, b, Val(Nv))
+    args = (device, cache, x, A, b)
     auto_launch!(
         single_field_solve_kernel!,
         args,
@@ -27,14 +27,7 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     )
 end
 
-function single_field_solve_kernel!(
-    device,
-    cache,
-    x,
-    A,
-    b,
-    ::Val{Nv},
-) where {Nv}
+function single_field_solve_kernel!(device, cache, x, A, b)
     idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     if idx <= Ni * Nj * Nh
@@ -46,7 +39,6 @@ function single_field_solve_kernel!(
             Spaces.column(x, i, j, h),
             Spaces.column(A, i, j, h),
             Spaces.column(b, i, j, h),
-            Val(Nv),
         )
     end
     return nothing
@@ -58,15 +50,13 @@ function _single_field_solve!(
     x::Fields.ColumnField,
     A::Fields.ColumnField,
     b::Fields.ColumnField,
-    ::Val{Nv},
-) where {Nv}
+)
     band_matrix_solve_local_mem!(
         eltype(A),
         unzip_tuple_field_values(Fields.field_values(cache)),
         Fields.field_values(x),
         unzip_tuple_field_values(Fields.field_values(A.entries)),
         Fields.field_values(b),
-        Val(Nv),
     )
 end
 
@@ -76,10 +66,10 @@ function _single_field_solve!(
     x::Fields.ColumnField,
     A::UniformScaling,
     b::Fields.ColumnField,
-    ::Val{Nv},
-) where {Nv}
+)
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
+    Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
         x_data[v] = inv(A.λ) ⊠ b_data[v]
     end
@@ -91,8 +81,7 @@ function _single_field_solve!(
     x::Fields.PointDataField,
     A::UniformScaling,
     b::Fields.PointDataField,
-    ::Val{Nv},
-) where {Nv}
+)
     x_data = Fields.field_values(x)
     b_data = Fields.field_values(b)
     x_data[] = inv(A.λ) ⊠ b_data[]
@@ -105,8 +94,8 @@ function band_matrix_solve_local_mem!(
     x,
     Aⱼs,
     b,
-    ::Val{Nv},
-) where {Nv}
+)
+    Nv = DataLayouts.nlevels(x)
     Ux, U₊₁ = cache
     A₋₁, A₀, A₊₁ = Aⱼs
 
@@ -138,8 +127,8 @@ function band_matrix_solve_local_mem!(
     x,
     Aⱼs,
     b,
-    ::Val{Nv},
-) where {Nv}
+)
+    Nv = DataLayouts.nlevels(x)
     Ux, U₊₁, U₊₂ = cache
     A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
     Ux_local = MArray{Tuple{Nv}, eltype(Ux)}(undef)
@@ -175,8 +164,8 @@ function band_matrix_solve_local_mem!(
     x,
     Aⱼs,
     b,
-    ::Val{Nv},
-) where {Nv}
+)
+    Nv = DataLayouts.nlevels(x)
     (A₀,) = Aⱼs
     @inbounds for v in 1:Nv
         x[v] = inv(A₀[v]) ⊠ b[v]
