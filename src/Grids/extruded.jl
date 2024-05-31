@@ -22,7 +22,7 @@ abstract type AbstractExtrudedFiniteDifferenceGrid <: AbstractGrid end
 
 Construct an `ExtrudedFiniteDifferenceGrid` from the horizontal and vertical spaces.
 """
-mutable struct ExtrudedFiniteDifferenceGrid{
+struct ExtrudedFiniteDifferenceGrid{
     H <: AbstractGrid,
     V <: FiniteDifferenceGrid,
     A <: HypsographyAdaption,

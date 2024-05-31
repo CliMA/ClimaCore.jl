@@ -29,25 +29,28 @@ end
 A view into a column of a `ExtrudedFiniteDifferenceGrid`. This can be used as an
 """
 struct ColumnGrid{
-    G <: AbstractExtrudedFiniteDifferenceGrid,
+    VG <: FiniteDifferenceGrid,
+    GG <: Geometry.AbstractGlobalGeometry,
     C <: ColumnIndex,
 } <: AbstractFiniteDifferenceGrid
-    full_grid::G
+    vertical_grid::VG
+    global_geometry::GG
     colidx::C
 end
 
-local_geometry_type(::Type{ColumnGrid{G, C}}) where {G, C} =
-    local_geometry_type(G)
+local_geometry_type(::Type{ColumnGrid{VG, C}}) where {VG, C} =
+    local_geometry_type(VG)
 
-column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex) =
-    ColumnGrid(grid, colidx)
+function column(grid::AbstractExtrudedFiniteDifferenceGrid, colidx::ColumnIndex)
+    ColumnGrid(grid.vertical_grid, grid.global_geometry, colidx)
+end
 
-topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
-vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.full_grid)
+topology(colgrid::ColumnGrid) = vertical_topology(colgrid.vertical_grid)
+vertical_topology(colgrid::ColumnGrid) = vertical_topology(colgrid.vertical_grid)
 
 local_geometry_data(colgrid::ColumnGrid, staggering::Staggering) = column(
-    local_geometry_data(colgrid.full_grid, staggering::Staggering),
+    local_geometry_data(colgrid.vertical_grid, staggering::Staggering),
     colgrid.colidx.ij...,
     colgrid.colidx.h,
 )
-global_geometry(colgrid::ColumnGrid) = global_geometry(colgrid.full_grid)
+global_geometry(colgrid::ColumnGrid) = colgrid.global_geometry

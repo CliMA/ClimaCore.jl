@@ -10,6 +10,7 @@ import ..DataLayouts:
     FusedMultiBroadcast,
     @fused_direct,
     isascalar,
+    DataColumnStyle,
     check_fused_broadcast_axes
 import ..Domains
 import ..Topologies

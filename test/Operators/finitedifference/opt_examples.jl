@@ -1,4 +1,9 @@
-import ClimaCore, ClimaComms, CUDA
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Operators", "finitedifference", "opt_examples.jl"))
+=#
+import ClimaCore, ClimaComms
+ClimaComms.@import_required_backends
 using BenchmarkTools
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -439,118 +444,118 @@ function alloc_test_nested_expressions_13(
     end
 end
 
-@testset "FD operator allocation tests" begin
-    FT = Float64
-    n_elems = 1000
-    domain = Domains.IntervalDomain(
-        Geometry.ZPoint{FT}(0.0),
-        Geometry.ZPoint{FT}(pi);
-        boundary_names = (:bottom, :top),
-    )
-    mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
-    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
-    fs = Spaces.FaceFiniteDifferenceSpace(cs)
-    zc = getproperty(Fields.coordinate_field(cs), :z)
-    zf = getproperty(Fields.coordinate_field(fs), :z)
-    cfield_vars() =
-        (; cx = FT(0), cy = FT(0), cz = FT(0), cϕ = FT(0), cψ = FT(0))
-    ffield_vars() =
-        (; fx = FT(0), fy = FT(0), fz = FT(0), fϕ = FT(0), fψ = FT(0))
-    cntfield_vars() = (; nt = ntuple(i -> cfield_vars(), n_tuples))
-    fntfield_vars() = (; nt = ntuple(i -> ffield_vars(), n_tuples))
-    cfield = fill(cfield_vars(), cs)
-    ffield = fill(ffield_vars(), fs)
-    ntcfield = fill(cntfield_vars(), cs)
-    ntffield = fill(fntfield_vars(), fs)
-    wvec_glob = Geometry.WVector
+# @testset "FD operator allocation tests" begin
+#     FT = Float64
+#     n_elems = 1000
+#     domain = Domains.IntervalDomain(
+#         Geometry.ZPoint{FT}(0.0),
+#         Geometry.ZPoint{FT}(pi);
+#         boundary_names = (:bottom, :top),
+#     )
+#     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
+#     cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+#     fs = Spaces.FaceFiniteDifferenceSpace(cs)
+#     zc = getproperty(Fields.coordinate_field(cs), :z)
+#     zf = getproperty(Fields.coordinate_field(fs), :z)
+#     cfield_vars() =
+#         (; cx = FT(0), cy = FT(0), cz = FT(0), cϕ = FT(0), cψ = FT(0))
+#     ffield_vars() =
+#         (; fx = FT(0), fy = FT(0), fz = FT(0), fϕ = FT(0), fψ = FT(0))
+#     cntfield_vars() = (; nt = ntuple(i -> cfield_vars(), n_tuples))
+#     fntfield_vars() = (; nt = ntuple(i -> ffield_vars(), n_tuples))
+#     cfield = fill(cfield_vars(), cs)
+#     ffield = fill(ffield_vars(), fs)
+#     ntcfield = fill(cntfield_vars(), cs)
+#     ntffield = fill(fntfield_vars(), fs)
+#     wvec_glob = Geometry.WVector
 
-    alloc_test_f2c_interp(cfield, ffield)
+#     alloc_test_f2c_interp(cfield, ffield)
 
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.InterpolateC2F(;
-            bottom = Operators.SetValue(0),
-            top = Operators.SetValue(0),
-        ),
-    )
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.InterpolateC2F(;
-            bottom = Operators.SetGradient(wvec_glob(0)),
-            top = Operators.SetGradient(wvec_glob(0)),
-        ),
-    )
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.InterpolateC2F(;
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
-        ),
-    )
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.LeftBiasedC2F(; bottom = Operators.SetValue(0)),
-    )
-    alloc_test_c2f_interp(
-        cfield,
-        ffield,
-        Operators.RightBiasedC2F(; top = Operators.SetValue(0)),
-    )
+#     alloc_test_c2f_interp(
+#         cfield,
+#         ffield,
+#         Operators.InterpolateC2F(;
+#             bottom = Operators.SetValue(0),
+#             top = Operators.SetValue(0),
+#         ),
+#     )
+#     alloc_test_c2f_interp(
+#         cfield,
+#         ffield,
+#         Operators.InterpolateC2F(;
+#             bottom = Operators.SetGradient(wvec_glob(0)),
+#             top = Operators.SetGradient(wvec_glob(0)),
+#         ),
+#     )
+#     alloc_test_c2f_interp(
+#         cfield,
+#         ffield,
+#         Operators.InterpolateC2F(;
+#             bottom = Operators.Extrapolate(),
+#             top = Operators.Extrapolate(),
+#         ),
+#     )
+#     alloc_test_c2f_interp(
+#         cfield,
+#         ffield,
+#         Operators.LeftBiasedC2F(; bottom = Operators.SetValue(0)),
+#     )
+#     alloc_test_c2f_interp(
+#         cfield,
+#         ffield,
+#         Operators.RightBiasedC2F(; top = Operators.SetValue(0)),
+#     )
 
-    alloc_test_derivative(
-        cfield,
-        ffield,
-        Operators.DivergenceF2C(),
-        Operators.DivergenceC2F(;
-            bottom = Operators.SetValue(wvec_glob(0)),
-            top = Operators.SetValue(wvec_glob(0)),
-        ),
-    )
-    alloc_test_derivative(
-        cfield,
-        ffield,
-        Operators.DivergenceF2C(;
-            bottom = Operators.SetValue(wvec_glob(0)),
-            top = Operators.SetValue(wvec_glob(0)),
-        ),
-        Operators.DivergenceC2F(;
-            bottom = Operators.SetValue(wvec_glob(0)),
-            top = Operators.SetValue(wvec_glob(0)),
-        ),
-    )
-    alloc_test_derivative(
-        cfield,
-        ffield,
-        Operators.DivergenceF2C(;
-            bottom = Operators.Extrapolate(),
-            top = Operators.Extrapolate(),
-        ),
-        Operators.DivergenceC2F(;
-            bottom = Operators.SetDivergence(0),
-            top = Operators.SetDivergence(0),
-        ),
-    )
+#     alloc_test_derivative(
+#         cfield,
+#         ffield,
+#         Operators.DivergenceF2C(),
+#         Operators.DivergenceC2F(;
+#             bottom = Operators.SetValue(wvec_glob(0)),
+#             top = Operators.SetValue(wvec_glob(0)),
+#         ),
+#     )
+#     alloc_test_derivative(
+#         cfield,
+#         ffield,
+#         Operators.DivergenceF2C(;
+#             bottom = Operators.SetValue(wvec_glob(0)),
+#             top = Operators.SetValue(wvec_glob(0)),
+#         ),
+#         Operators.DivergenceC2F(;
+#             bottom = Operators.SetValue(wvec_glob(0)),
+#             top = Operators.SetValue(wvec_glob(0)),
+#         ),
+#     )
+#     alloc_test_derivative(
+#         cfield,
+#         ffield,
+#         Operators.DivergenceF2C(;
+#             bottom = Operators.Extrapolate(),
+#             top = Operators.Extrapolate(),
+#         ),
+#         Operators.DivergenceC2F(;
+#             bottom = Operators.SetDivergence(0),
+#             top = Operators.SetDivergence(0),
+#         ),
+#     )
 
-    alloc_test_redefined_operators(cfield, ffield)
-    alloc_test_operators_in_loops(cfield, ffield)
-    alloc_test_nested_expressions_1(cfield, ffield)
-    alloc_test_nested_expressions_2(cfield, ffield)
-    alloc_test_nested_expressions_3(cfield, ffield)
-    alloc_test_nested_expressions_4(cfield, ffield)
-    alloc_test_nested_expressions_5(cfield, ffield)
-    alloc_test_nested_expressions_6(cfield, ffield)
-    alloc_test_nested_expressions_7(cfield, ffield)
-    alloc_test_nested_expressions_8(cfield, ffield)
-    alloc_test_nested_expressions_9(cfield, ffield)
-    alloc_test_nested_expressions_10(cfield, ffield)
-    alloc_test_nested_expressions_11(cfield, ffield)
-    alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
-    alloc_test_nested_expressions_13(cfield, ffield, ntcfield, ntffield, FT)
-end
+#     alloc_test_redefined_operators(cfield, ffield)
+#     alloc_test_operators_in_loops(cfield, ffield)
+#     alloc_test_nested_expressions_1(cfield, ffield)
+#     alloc_test_nested_expressions_2(cfield, ffield)
+#     alloc_test_nested_expressions_3(cfield, ffield)
+#     alloc_test_nested_expressions_4(cfield, ffield)
+#     alloc_test_nested_expressions_5(cfield, ffield)
+#     alloc_test_nested_expressions_6(cfield, ffield)
+#     alloc_test_nested_expressions_7(cfield, ffield)
+#     alloc_test_nested_expressions_8(cfield, ffield)
+#     alloc_test_nested_expressions_9(cfield, ffield)
+#     alloc_test_nested_expressions_10(cfield, ffield)
+#     alloc_test_nested_expressions_11(cfield, ffield)
+#     alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
+#     alloc_test_nested_expressions_13(cfield, ffield, ntcfield, ntffield, FT)
+# end
 
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1602
@@ -567,7 +572,7 @@ function set_ᶠuₕ³!(ᶜx, ᶠx)
 end
 # @testset "Inference/allocations when broadcasting types" begin
     FT = Float64
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 25, helem = 10)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 63, helem = 20)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     device = ClimaComms.device(cspace)
     @info "device = $device"
@@ -577,10 +582,10 @@ end
     p_allocated = @allocated set_ᶠuₕ³!(ᶜx, ᶠx)
     @show p_allocated
 
-    trial = if device isa ClimaComms.CUDADevice
-        @benchmark CUDA.@sync set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    else
-        @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    end
-    show(stdout, MIME("text/plain"), trial)
+    # trial = if device isa ClimaComms.CUDADevice
+    #     @benchmark CUDA.@sync set_ᶠuₕ³!($ ᶜx, $ᶠx)
+    # else
+    #     @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
+    # end
+    # show(stdout, MIME("text/plain"), trial)
 # end

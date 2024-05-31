@@ -23,7 +23,7 @@ Internally, we can refer to elements in several different ways:
 - `ridx`: "receive index": an index into the receive buffer of a ghost element.
     - `recv_elem_gidx[ridx] == gidx`
 """
-mutable struct Topology2D{
+struct Topology2D{
     C <: ClimaComms.AbstractCommsContext,
     M <: Meshes.AbstractMesh{2},
     EO,

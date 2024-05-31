@@ -7,7 +7,7 @@ abstract type AbstractSpectralElementGrid <: AbstractGrid end
 
 A one-dimensional space: within each element the space is represented as a polynomial.
 """
-mutable struct SpectralElementGrid1D{
+struct SpectralElementGrid1D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,
@@ -104,7 +104,7 @@ end
 
 A two-dimensional space: within each element the space is represented as a polynomial.
 """
-mutable struct SpectralElementGrid2D{
+struct SpectralElementGrid2D{
     T,
     Q,
     GG <: Geometry.AbstractGlobalGeometry,

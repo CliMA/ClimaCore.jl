@@ -29,7 +29,7 @@ This is an object which contains all the necessary geometric information.
 
 To avoid unnecessary duplication, we memoize the construction of the grid.
 """
-mutable struct FiniteDifferenceGrid{
+struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
     GG,
     CLG,

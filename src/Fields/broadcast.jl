@@ -15,6 +15,8 @@ struct FieldStyle{DS <: DataStyle} <: AbstractFieldStyle end
 FieldStyle(::DS) where {DS <: DataStyle} = FieldStyle{DS}()
 FieldStyle(x::Base.Broadcast.Unknown) = x
 
+DataColumnStyle(::Type{FieldStyle{DS}}) where {DS} = FieldStyle{DataColumnStyle(DS)}
+
 Base.Broadcast.BroadcastStyle(::Type{Field{V, S}}) where {V, S} =
     FieldStyle(DataStyle(V))
 
@@ -113,7 +115,7 @@ Base.@propagate_inbounds function column(
 ) where {Style <: AbstractFieldStyle}
     _args = column_args(bc.args, i, j, h)
     _axes = column(axes(bc), i, j, h)
-    Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+    Base.Broadcast.Broadcasted{DataColumnStyle(Style)}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
