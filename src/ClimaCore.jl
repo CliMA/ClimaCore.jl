@@ -2,6 +2,7 @@ module ClimaCore
 
 using PkgVersion
 const VERSION = PkgVersion.@Version
+import ClimaComms
 
 include("interface.jl")
 include("devices.jl")
