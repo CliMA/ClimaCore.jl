@@ -3,8 +3,9 @@ julia --project
 using Revise; include(joinpath("test", "Spaces", "extruded_3dbox_cuda.jl"))
 =#
 using LinearAlgebra, IntervalSets
-using CUDA
-using ClimaComms, ClimaCore
+using ClimaComms
+ClimaComms.@import_required_backends
+using ClimaCore
 import ClimaCore:
     Domains,
     Topologies,
@@ -157,8 +158,6 @@ end
             2 .* cos.(coords_gpu.y .+ coords_gpu.x .+ coords_gpu.z),
             cos.(coords_gpu.z),
         )
-
-    CUDA.allowscalar(false)
 
     # Test weak grad operator
     wgrad = Operators.WeakGradient()

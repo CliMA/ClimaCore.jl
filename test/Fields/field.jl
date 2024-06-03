@@ -7,6 +7,7 @@ using Test
 using JET
 
 using ClimaComms
+ClimaComms.@import_required_backends
 using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
@@ -26,8 +27,6 @@ import ClimaCore:
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
-using CUDA
-using CUDA: @allowscalar
 
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -346,8 +345,10 @@ end
     @test !Fields.is_diagonal_bc(bc2)
 end
 
-function call_getcolumn(fv, colidx)
-    @allowscalar fvcol = fv[colidx]
+function call_getcolumn(fv, colidx, device)
+    ClimaCore.allow_scalar(device) do
+        fvcol = fv[colidx]
+    end
     nothing
 end
 function call_getproperty(fv)
@@ -361,20 +362,22 @@ end
     f = fill((x = Float32(1), y = Float32(2)), fspace)
     fv = Fields.FieldVector(; c, f)
     colidx = Fields.ColumnIndex((1, 1), 1) # arbitrary index
+    device = ClimaComms.device()
 
-    @allowscalar @test all(parent(fv.c.a[colidx]) .== Float32(1))
-    @allowscalar @test all(parent(fv.f.y[colidx]) .== Float32(2))
-    @allowscalar @test propertynames(fv) == propertynames(fv[colidx])
+    ClimaCore.allow_scalar(device) do
+        @test all(parent(fv.c.a[colidx]) .== Float32(1))
+        @test all(parent(fv.f.y[colidx]) .== Float32(2))
+        @test propertynames(fv) == propertynames(fv[colidx])
+    end
 
     # JET tests
     # prerequisite
     call_getproperty(fv) # compile first
     @test_opt call_getproperty(fv)
 
-    call_getcolumn(fv, colidx) # compile first
-    @test_opt call_getcolumn(fv, colidx)
-    p = @allocated call_getcolumn(fv, colidx)
-    device = ClimaComms.device()
+    call_getcolumn(fv, colidx, device) # compile first
+    @test_opt call_getcolumn(fv, colidx, device)
+    p = @allocated call_getcolumn(fv, colidx, device)
     if ClimaComms.SingletonCommsContext(device) isa ClimaComms.AbstractCPUDevice
         @test p ≤ 32
     end
@@ -822,7 +825,7 @@ convergence_rate(err, Δh) =
             zcf = Fields.coordinate_field(Y.y).z
             Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
-            Δz_1 = CUDA.allowscalar() do
+            Δz_1 = ClimaCore.allow_scalar(device) do
                 parent(Δz_col)[1]
             end
             key = zelem

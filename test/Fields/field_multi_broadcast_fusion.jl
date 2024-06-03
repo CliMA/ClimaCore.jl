@@ -9,6 +9,7 @@ using JET
 using BenchmarkTools
 
 using ClimaComms
+ClimaComms.@import_required_backends
 using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
@@ -30,8 +31,6 @@ import ClimaCore.Fields: @fused_direct
 using LinearAlgebra: norm
 using Statistics: mean
 using ForwardDiff
-using CUDA
-using CUDA: @allowscalar
 
 util_file =
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl")
@@ -319,7 +318,6 @@ end
 @testset "FusedMultiBroadcast IJFH" begin
     FT = Float64
     device = ClimaComms.device()
-    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
     sem_space =
         TU.SphereSpectralElementSpace(FT; context = ClimaComms.context(device))
     IJFH_data() = Fields.Field(FT, sem_space)
@@ -342,7 +340,6 @@ end
 @testset "FusedMultiBroadcast VF" begin
     FT = Float64
     device = ClimaComms.device()
-    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
     colspace = TU.ColumnCenterFiniteDifferenceSpace(
         FT;
         zelem = 3,
@@ -361,7 +358,7 @@ end
 @testset "FusedMultiBroadcast DataF" begin
     FT = Float64
     device = ClimaComms.device()
-    ArrayType = device isa ClimaComms.CUDADevice ? CuArray : Array
+    ArrayType = ClimaComms.array_type(device)
     DataF_data() = DataF{FT}(ArrayType(ones(FT, 2)))
     X = Fields.FieldVector(;
         x1 = DataF_data(),

@@ -1,11 +1,10 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimaComms
+using ClimaComms
+ClimaComms.@import_required_backends
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
-import CUDA
-CUDA.allowscalar(false)
 
 device = ClimaComms.device()
 

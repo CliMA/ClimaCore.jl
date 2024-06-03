@@ -1,4 +1,6 @@
-import ClimaCore, ClimaComms, CUDA
+import ClimaCore
+using ClimaComms
+ClimaComms.@import_required_backends
 using BenchmarkTools
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -577,10 +579,6 @@ end
     p_allocated = @allocated set_ᶠuₕ³!(ᶜx, ᶠx)
     @show p_allocated
 
-    trial = if device isa ClimaComms.CUDADevice
-        @benchmark CUDA.@sync set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    else
-        @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    end
+    trial = @benchmark ClimaComms.@cuda_sync $device set_ᶠuₕ³!($ ᶜx, $ᶠx)
     show(stdout, MIME("text/plain"), trial)
 end
