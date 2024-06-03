@@ -795,7 +795,7 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
     topology::Topology2D,
 ) where {S, Nij}
     length(parent(data)) == 0 && return nothing

@@ -316,7 +316,7 @@ recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
 
 function create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
     topology::Topologies.Topology2D,
 ) where {S, Nij}
     if data isa DataLayouts.IJFH
