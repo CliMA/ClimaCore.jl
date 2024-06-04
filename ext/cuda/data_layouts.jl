@@ -60,8 +60,9 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
+    bc′::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
 ) where {S, Nij, A <: CUDA.CuArray}
+    bc = broadcast_flatten(bc′)
     _, _, _, _, Nh = size(bc)
     if Nh > 0
         auto_launch!(
@@ -99,11 +100,12 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::Union{
+    bc′::Union{
         VIJFH{S, Nv, Nij, A},
         Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
     },
 ) where {S, Nv, Nij, A <: CUDA.CuArray}
+    bc = broadcast_flatten(bc′)
     _, _, _, _, Nh = size(bc)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
@@ -140,8 +142,9 @@ end
 
 function Base.copyto!(
     dest::VF{S, Nv},
-    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc′::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
 ) where {S, Nv, A <: CUDA.CuArray}
+    bc = broadcast_flatten(bc′)
     _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(
@@ -170,8 +173,9 @@ end
 
 function Base.copyto!(
     dest::DataF{S},
-    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+    bc′::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A <: CUDA.CuArray}
+    bc = broadcast_flatten(bc′)
     auto_launch!(
         knl_copyto!,
         (dest, bc),

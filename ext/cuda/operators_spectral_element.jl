@@ -29,11 +29,12 @@ end
 
 function Base.copyto!(
     out::Field,
-    sbc::Union{
+    sbc′::Union{
         SpectralBroadcasted{CUDASpectralStyle},
         Broadcasted{CUDASpectralStyle},
     },
 )
+    sbc = broadcast_flatten(sbc′)
     space = axes(out)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)

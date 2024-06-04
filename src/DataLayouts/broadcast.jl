@@ -467,11 +467,12 @@ end
 # Performance optimization for the common identity scalar case: dest .= val
 function Base.copyto!(
     dest::AbstractData,
-    bc::Base.Broadcast.Broadcasted{Style},
+    bc′::Base.Broadcast.Broadcasted{Style},
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
 }
+    bc = broadcast_flatten(bc′)
     bc = Base.Broadcast.instantiate(
         Base.Broadcast.Broadcasted{Style}(bc.f, bc.args, ()),
     )
@@ -481,16 +482,18 @@ end
 
 function Base.copyto!(
     dest::DataF{S},
-    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+    bc′::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
 ) where {S, A}
+    bc = broadcast_flatten(bc′)
     @inbounds dest[] = convert(S, bc[])
     return dest
 end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
+    bc′::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
 ) where {S, Nij}
+    bc = broadcast_flatten(bc′)
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
@@ -502,8 +505,9 @@ end
 
 function Base.copyto!(
     dest::IFH{S, Ni},
-    bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
+    bc′::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
 ) where {S, Ni}
+    bc = broadcast_flatten(bc′)
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
@@ -516,8 +520,9 @@ end
 # inline inner slab(::DataSlab2D) copy
 function Base.copyto!(
     dest::IJF{S, Nij},
-    bc::Union{IJF{S, Nij, A}, Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}},
+    bc′::Union{IJF{S, Nij, A}, Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}},
 ) where {S, Nij, A}
+    bc = broadcast_flatten(bc′)
     @inbounds for j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, 1)
         dest[idx] = convert(S, bc[idx])
@@ -528,8 +533,9 @@ end
 # inline inner slab(::DataSlab1D) copy
 function Base.copyto!(
     dest::IF{S, Ni},
-    bc::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
+    bc′::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
 ) where {S, Ni, A}
+    bc = broadcast_flatten(bc′)
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
         dest[idx] = convert(S, bc[idx])
@@ -540,8 +546,9 @@ end
 # inline inner column(::DataColumn) copy
 function Base.copyto!(
     dest::VF{S, Nv},
-    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc′::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
 ) where {S, Nv, A}
+    bc = broadcast_flatten(bc′)
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
         dest[idx] = convert(S, bc[idx])
@@ -594,8 +601,9 @@ end
 
 function Base.copyto!(
     dest::VIFH{S, Nv, Ni},
-    bc::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
+    bc′::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
 ) where {S, Nv, Ni, A}
+    bc = broadcast_flatten(bc′)
     return _serial_copyto!(dest, bc)
 end
 
@@ -644,8 +652,9 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
+    bc′::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
 ) where {S, Nv, Nij, A}
+    bc = broadcast_flatten(bc′)
     return _serial_copyto!(dest, bc)
 end
 
@@ -674,7 +683,7 @@ function Base.copyto!(
             else
                 bc
             end
-            Pair(pair.first, bc′)
+            Pair(pair.first, broadcast_flatten(bc′))
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes

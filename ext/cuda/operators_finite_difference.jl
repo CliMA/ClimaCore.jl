@@ -12,11 +12,12 @@ AbstractStencilStyle(::ClimaComms.CUDADevice) = CUDAColumnStencilStyle
 
 function Base.copyto!(
     out::Field,
-    bc::Union{
+    bc′::Union{
         StencilBroadcasted{CUDAColumnStencilStyle},
         Broadcasted{CUDAColumnStencilStyle},
     },
 )
+    bc = broadcast_flatten(bc′)
     space = axes(out)
     if space isa Spaces.ExtrudedFiniteDifferenceSpace
         QS = Spaces.quadrature_style(space)

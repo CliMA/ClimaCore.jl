@@ -2,6 +2,7 @@ module ClimaCoreCUDAExt
 
 import NVTX
 import ClimaComms
+import ClimaCore: broadcast_flatten
 import ClimaCore: DataLayouts, Grids, Spaces, Fields
 import ClimaCore: Geometry
 import ClimaCore.Geometry: AxisTensor

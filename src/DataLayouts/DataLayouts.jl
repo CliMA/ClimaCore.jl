@@ -20,6 +20,7 @@ import ClimaComms
 import MultiBroadcastFusion as MBF
 import Adapt
 
+import ..broadcast_flatten
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, level, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
 

@@ -2,6 +2,7 @@ module Fields
 
 import ClimaComms
 import MultiBroadcastFusion as MBF
+import ..broadcast_flatten
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 import ..DataLayouts:
     DataLayouts,

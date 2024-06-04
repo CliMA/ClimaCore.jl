@@ -144,8 +144,9 @@ end
 
 @inline function Base.copyto!(
     dest::Field,
-    bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
+    bc′::Base.Broadcast.Broadcasted{<:AbstractFieldStyle},
 )
+    bc = broadcast_flatten(bc′)
     copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
     return dest
 end
@@ -156,7 +157,8 @@ function Base.copyto!(
 ) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
     fmb_data = FusedMultiBroadcast(
         map(fmbc.pairs) do pair
-            bc = Base.Broadcast.instantiate(todata(pair.second))
+            bc′ = Base.Broadcast.instantiate(todata(pair.second))
+            bc = broadcast_flatten(bc′)
             Pair(field_values(pair.first), bc)
         end,
     )

@@ -3354,11 +3354,12 @@ end
 
 function Base.copyto!(
     field_out::Field,
-    bc::Union{
+    bc′::Union{
         StencilBroadcasted{ColumnStencilStyle},
         Broadcasted{ColumnStencilStyle},
     },
 )
+    bc = broadcast_flatten(bc′)
     space = axes(bc)
     local_geometry = Spaces.local_geometry_data(space)
     (Ni, Nj, _, _, Nh) = size(local_geometry)

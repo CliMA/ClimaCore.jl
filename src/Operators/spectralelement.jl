@@ -159,11 +159,12 @@ end
 # Functions for SlabBlockSpectralStyle
 function Base.copyto!(
     out::Field,
-    sbc::Union{
+    sbc′::Union{
         SpectralBroadcasted{SlabBlockSpectralStyle},
         Broadcasted{SlabBlockSpectralStyle},
     },
 )
+    sbc = broadcast_flatten(sbc′)
     Fields.byslab(axes(out)) do slabidx
         Base.@_inline_meta
         @inbounds copyto_slab!(out, sbc, slabidx)

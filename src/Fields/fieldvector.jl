@@ -292,8 +292,9 @@ end
 
 @inline function Base.copyto!(
     dest::FieldVector,
-    bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
+    bc′::Base.Broadcast.Broadcasted{FieldVectorStyle},
 )
+    bc = broadcast_flatten(bc′)
     map(propertynames(dest)) do symb
         Base.@_inline_meta
         p = parent(getfield(_values(dest), symb))
@@ -304,8 +305,9 @@ end
 
 @inline function Base.copyto!(
     dest::FieldVector,
-    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
+    bc′::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
 )
+    bc = broadcast_flatten(bc′)
     map(propertynames(dest)) do symb
         Base.@_inline_meta
         p = parent(getfield(_values(dest), symb))

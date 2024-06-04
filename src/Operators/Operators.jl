@@ -6,6 +6,7 @@ using StaticArrays
 
 import Base.Broadcast: Broadcasted
 
+import ..broadcast_flatten
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
