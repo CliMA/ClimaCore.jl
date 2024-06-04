@@ -119,7 +119,7 @@ end
         for FT in TestFloatTypes
             Nv = 2
             S1 = NamedTuple{(:a, :b), Tuple{Complex{FT}, FT}}
-            data1 = ones(FT, Nv, 2)
+            data1 = ones(FT, Nv, 3)
             S2 = NamedTuple{(:c,), Tuple{FT}}
             data2 = ones(FT, Nv, 1)
 

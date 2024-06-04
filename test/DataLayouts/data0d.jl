@@ -189,7 +189,7 @@ end
     S = Complex{FT}
     data_f = DataF{S}(ones(FT, 2))
     Nv = 10
-    data_vifh = VIFH{S, Nv, 4}(ones(FT, Nv, 4, 3, 10))
+    data_vifh = VIFH{S, Nv, 4}(ones(FT, Nv, 4, 2, 10))
     data_vifh2 = data_f .+ data_vifh
     @test data_vifh2 isa VIFH{S, Nv}
     @test size(data_vifh2) == (4, 1, 1, Nv, 10)

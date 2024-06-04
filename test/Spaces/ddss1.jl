@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Spaces", "ddss1.jl"))
+=#
 using Logging
 using Test
 import CUDA
@@ -114,11 +118,6 @@ end
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
     y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
-
-    dims = (Nq, Nq, 0, 4)
-    array = similar(parent(y0), dims)
-    data = DataLayouts.rebuild(Fields.field_values(y0), array)
-    space = axes(y0)
     empty_field = similar(y0, Tuple{})
     dss_buffer = Spaces.create_dss_buffer(empty_field)
     @test empty_field == Spaces.weighted_dss!(empty_field)
