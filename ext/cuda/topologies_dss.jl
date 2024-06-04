@@ -17,9 +17,9 @@ _configure_threadblock(nitems) =
 function Topologies.dss_load_perimeter_data!(
     ::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer,
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     perimeter::Topologies.Perimeter2D,
-) where {S, Nij}
+)
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
@@ -56,10 +56,10 @@ end
 
 function Topologies.dss_unload_perimeter_data!(
     ::ClimaComms.CUDADevice,
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     dss_buffer::Topologies.DSSBuffer,
     perimeter,
-) where {S, Nij}
+)
     pperimeter_data = parent(dss_buffer.perimeter_data)
     pdata = parent(data)
     (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
