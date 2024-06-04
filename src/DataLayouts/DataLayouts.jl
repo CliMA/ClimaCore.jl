@@ -94,7 +94,7 @@ Objects `data` should define `slab(data, h)` to return a `DataSlab2D{S,Nij}` obj
 abstract type Data2D{S, Nij} <: AbstractData{S} end
 
 """
-    Data1DX{S,Nv, Ni}
+    Data1DX{S, Nv, Ni}
 
 Abstract type for data storage for a 1D field with extruded columns.
 The horizontal is made up of `Ni` values of type `S`.
@@ -1175,7 +1175,7 @@ end
 # ======================
 
 """
-    VIFH{S, Ni, A} <: Data1DX{S, Ni}
+    VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
 
 Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 

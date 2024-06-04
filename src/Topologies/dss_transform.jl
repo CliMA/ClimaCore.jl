@@ -331,13 +331,13 @@ function create_ghost_buffer(
         k = stride(parent(send_data), 4)
     else
         Nv, _, _, Nf, _ = size(parent(data))
-        send_data = DataLayouts.VIJFH{S, Nij}(
+        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
             similar(
                 parent(data),
                 (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
             ),
         )
-        recv_data = DataLayouts.VIJFH{S, Nij}(
+        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
             similar(
                 parent(data),
                 (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
