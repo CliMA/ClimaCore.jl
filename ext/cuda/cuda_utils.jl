@@ -3,10 +3,10 @@ import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
-get_n_items(field::Fields.Field) =
-    prod(size(parent(Fields.field_values(field))))
-get_n_items(data::DataLayouts.AbstractData) = prod(size(parent(data)))
-get_n_items(arr::AbstractArray) = prod(size(parent(arr)))
+get_n_items(field::Fields.Field) = get_n_items(Fields.field_values(field))
+get_n_items(data::DataLayouts.AbstractData) =
+    get_n_items(DataLayouts.universal_size(data))
+get_n_items(arr::AbstractArray) = get_n_items(size(parent(arr)))
 get_n_items(tup::Tuple) = prod(tup)
 
 const reported_stats = Dict()
@@ -47,11 +47,13 @@ function auto_launch!(
 ) where {F!}
     if auto
         nitems = get_n_items(data)
-        kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
-        config = CUDA.launch_configuration(kernel.fun)
-        threads = min(nitems, config.threads)
-        blocks = cld(nitems, threads)
-        kernel(args...; threads, blocks) # This knows to use always_inline from above.
+        if nitems ≥ 0
+            kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+            config = CUDA.launch_configuration(kernel.fun)
+            threads = min(nitems, config.threads)
+            blocks = cld(nitems, threads)
+            kernel(args...; threads, blocks) # This knows to use always_inline from above.
+        end
     else
         kernel =
             CUDA.@cuda always_inline = always_inline threads = threads_s blocks =

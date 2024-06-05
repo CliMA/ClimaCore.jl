@@ -77,6 +77,10 @@ steps:
         key: unit_data0d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data0d.jl"
 
+      - label: "Unit: data_fill"
+        key: unit_data_fill
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
+
       - label: "Unit: data1d"
         key: unit_data1d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1d.jl"
@@ -98,6 +102,16 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/cuda.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: data fill"
+        key: gpu_unit_data_fill
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1059,6 +1073,23 @@ steps:
       - label: "Perf: Axis tensor conversion benchmarks"
         key: "cpu_axis_tensor_conversion_perf_bm"
         command: "julia --color=yes --project=.buildkite test/Geometry/axistensor_conversion_benchmarks.jl"
+
+  - group: "Perf: DataLayouts"
+    steps:
+
+      - label: "Perf: DataLayouts fill"
+        key: "cpu_datalayouts_fill"
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+
+      - label: "Perf: DataLayouts fill"
+        key: "gpu_datalayouts_fill"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
   - group: "Perf: Fields"
     steps:

@@ -72,9 +72,9 @@ function CenterExtrudedFiniteDifferenceSpaceLineHSpace(
     return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 end
 
-function benchmark_kernel!(f!, X, Y)
+function benchmark_kernel!(f!, X, Y, device)
     println("\n--------------------------- $(nameof(typeof(f!))) ")
-    trial = benchmark_kernel!(f!, X, Y, ClimaComms.device(X.x1))
+    trial = benchmark_kernel!(f!, X, Y, device)
     show(stdout, MIME("text/plain"), trial)
 end
 benchmark_kernel!(f!, X, Y, ::ClimaComms.CUDADevice) =
@@ -250,11 +250,12 @@ end
 
 @testset "FusedMultiBroadcast VIJFH and VF" begin
     FT = Float64
+    device = ClimaComms.device()
     space = TU.CenterExtrudedFiniteDifferenceSpace(
         FT;
         zelem = 3,
         helem = 4,
-        context = ClimaComms.context(),
+        context = ClimaComms.context(device),
     )
     X = Fields.FieldVector(
         x1 = rand_field(FT, space),
@@ -269,11 +270,11 @@ end
     test_kernel!(; fused!, unfused!, X, Y)
     test_kernel!(; fused! = fused_bycolumn!, unfused! = unfused_bycolumn!, X, Y)
 
-    benchmark_kernel!(unfused!, X, Y)
-    benchmark_kernel!(fused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y, device)
+    benchmark_kernel!(fused!, X, Y, device)
 
-    benchmark_kernel!(unfused_bycolumn!, X, Y)
-    benchmark_kernel!(fused_bycolumn!, X, Y)
+    benchmark_kernel!(unfused_bycolumn!, X, Y, device)
+    benchmark_kernel!(fused_bycolumn!, X, Y, device)
     nothing
 end
 
@@ -306,11 +307,11 @@ end
             Y,
         )
 
-        benchmark_kernel!(unfused!, X, Y)
-        benchmark_kernel!(fused!, X, Y)
+        benchmark_kernel!(unfused!, X, Y, device)
+        benchmark_kernel!(fused!, X, Y, device)
 
-        benchmark_kernel!(unfused_bycolumn!, X, Y)
-        benchmark_kernel!(fused_bycolumn!, X, Y)
+        benchmark_kernel!(unfused_bycolumn!, X, Y, device)
+        benchmark_kernel!(fused_bycolumn!, X, Y, device)
         nothing
     end
 end
@@ -332,8 +333,8 @@ end
         y3 = IJFH_data(),
     )
     test_kernel!(; fused!, unfused!, X, Y)
-    benchmark_kernel!(unfused!, X, Y)
-    benchmark_kernel!(fused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y, device)
+    benchmark_kernel!(fused!, X, Y, device)
     nothing
 end
 
@@ -350,8 +351,8 @@ end
     X = Fields.FieldVector(; x1 = VF_data(), x2 = VF_data(), x3 = VF_data())
     Y = Fields.FieldVector(; y1 = VF_data(), y2 = VF_data(), y3 = VF_data())
     test_kernel!(; fused!, unfused!, X, Y)
-    benchmark_kernel!(unfused!, X, Y)
-    benchmark_kernel!(fused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y, device)
+    benchmark_kernel!(fused!, X, Y, device)
     nothing
 end
 
@@ -359,7 +360,7 @@ end
     FT = Float64
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
-    DataF_data() = DataF{FT}(ArrayType(ones(FT, 2)))
+    DataF_data() = DataF{FT}(ArrayType(ones(FT, 1)))
     X = Fields.FieldVector(;
         x1 = DataF_data(),
         x2 = DataF_data(),
@@ -371,7 +372,7 @@ end
         y3 = DataF_data(),
     )
     test_kernel!(; fused!, unfused!, X, Y)
-    benchmark_kernel!(unfused!, X, Y)
-    benchmark_kernel!(fused!, X, Y)
+    benchmark_kernel!(unfused!, X, Y, device)
+    benchmark_kernel!(fused!, X, Y, device)
     nothing
 end
