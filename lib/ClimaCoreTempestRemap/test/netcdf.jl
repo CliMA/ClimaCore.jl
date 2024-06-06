@@ -16,14 +16,28 @@ using ClimaCoreTempestRemap
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
-@testset "write remap sphere data $node_type" for node_type in ["cgll", "dgll"]
+@testset "write remap sphere data $node_type; use spacefillingcurve $use_spacefillingcurve" for node_type in
+                                                                                                [
+        "cgll",
+        "dgll",
+    ],
+    use_spacefillingcurve in [true, false]
     # generate CC mesh
     ne = 4
     R = 5.0
     Nq = 5
     domain = Domains.SphereDomain(R)
     mesh = Meshes.EquiangularCubedSphere(domain, ne)
-    topology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+    if use_spacefillingcurve
+        topology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh,
+            Topologies.spacefillingcurve(mesh),
+        )
+    else
+        topology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), mesh)
+    end
     quad = Quadratures.GLL{Nq}()
     space = Spaces.SpectralElementSpace2D(topology, quad)
     coords = Fields.coordinate_field(space)
@@ -49,6 +63,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         nothing
     end
 
+    # construct regular latitude-longitude (RLL) mesh
     nlat = 90
     nlon = 180
     meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
@@ -67,6 +82,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         in_np = Nq,
     )
 
+    # remap to RLL (lat-lon)
     datafile_rll = joinpath(OUTPUT_DIR, "data_rll.nc")
     apply_remap(datafile_rll, datafile_cc, weightfile, ["xlat", "sinlong"])
 
@@ -82,8 +98,12 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
     end
 end
 
-@testset "write remap 3d sphere data $node_type" for node_type in
-                                                     ["cgll", "dgll"]
+@testset "write remap 3d sphere data $node_type; use spacefillingcurve $use_spacefillingcurve" for node_type in
+                                                                                                   [
+        "cgll",
+        "dgll",
+    ],
+    use_spacefillingcurve in [true, false]
     # generate CC mesh
     ne = 4
     R = 1000.0
@@ -91,7 +111,16 @@ end
     Nq = 5
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    if use_spacefillingcurve
+        htopology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            hmesh,
+            Topologies.spacefillingcurve(hmesh),
+        )
+    else
+        htopology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    end
     quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -126,6 +155,7 @@ end
         nothing
     end
 
+    # construct regular latitude-longitude (RLL) mesh
     nlat = 90
     nlon = 180
     meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
@@ -144,6 +174,7 @@ end
         in_np = Nq,
     )
 
+    # remap to RLL (lat-lon)
     datafile_rll = joinpath(OUTPUT_DIR, "data_rll_3d.nc")
     apply_remap(datafile_rll, datafile_cc, weightfile, ["xlat", "xz"])
 
@@ -162,19 +193,29 @@ end
     end
 end
 
-@testset "write remap 3d sphere data $node_type to rll and back with Nq = $Nq" for node_type in
-                                                                                   [
+@testset "write remap 3d sphere data $node_type to rll and back with Nq = $Nq; use spacefillingcurve $use_spacefillingcurve" for node_type in
+                                                                                                                                 [
         "cgll",
         "dgll",
     ],
-    Nq in [4, 5]
+    Nq in [4, 5],
+    use_spacefillingcurve in [true, false]
     # generate CC mesh
     ne = 4
     R = 1000.0
     nlevels = 10
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    if use_spacefillingcurve
+        htopology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            hmesh,
+            Topologies.spacefillingcurve(hmesh),
+        )
+    else
+        htopology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    end
     quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -209,6 +250,7 @@ end
         nothing
     end
 
+    # construct regular latitude-longitude (RLL) mesh
     nlat = 90
     nlon = 180
     meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
@@ -228,6 +270,7 @@ end
         mono = true,
     )
 
+    # remap to RLL (lat-lon)
     datafile_rll = joinpath(OUTPUT_DIR, "data_rll_3d.nc")
     apply_remap(datafile_rll, datafile_cc, weightfile, ["xlat", "xz"])
 
@@ -300,8 +343,12 @@ function test_warp(coords)
     return zₛ
 end
 
-@testset "write remap warped 3d sphere data $node_type" for node_type in
-                                                            ["cgll", "dgll"]
+@testset "write remap warped 3d sphere data $node_type; use spacefillingcurve $use_spacefillingcurve" for node_type in
+                                                                                                          [
+        "cgll",
+        "dgll",
+    ],
+    use_spacefillingcurve in [true, false]
     # generate CC mesh
     ne = 4
     R = 1000.0
@@ -309,7 +356,16 @@ end
     Nq = 5
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, ne)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    if use_spacefillingcurve
+        htopology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            hmesh,
+            Topologies.spacefillingcurve(hmesh),
+        )
+    else
+        htopology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    end
     quad = Quadratures.GLL{Nq}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -348,6 +404,7 @@ end
         nothing
     end
 
+    # construct regular latitude-longitude (RLL) mesh
     nlat = 90
     nlon = 180
     meshfile_rll = joinpath(OUTPUT_DIR, "mesh_rll.g")
@@ -366,6 +423,7 @@ end
         in_np = Nq,
     )
 
+    # remap to RLL (lat-lon)
     datafile_rll = joinpath(OUTPUT_DIR, "data_rll_3d.nc")
     apply_remap(
         datafile_rll,
@@ -394,8 +452,12 @@ end
     end
 end
 
-@testset "write nc data for column with $node_type" for node_type in
-                                                        ["cgll", "dgll"]
+@testset "write nc data for column with $node_type; use spacefillingcurve $use_spacefillingcurve" for node_type in
+                                                                                                      [
+        "cgll",
+        "dgll",
+    ],
+    use_spacefillingcurve in [true, false]
 
     node_type = "cgll"
     FT = Float64
@@ -419,7 +481,16 @@ end
     hmesh = Meshes.RectilinearMesh(domain, x_elem, y_elem)
 
     quad = Quadratures.GL{1}()
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    if use_spacefillingcurve
+        htopology = Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            hmesh,
+            Topologies.spacefillingcurve(hmesh),
+        )
+    else
+        htopology =
+            Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    end
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
     vdomain = Domains.IntervalDomain(
