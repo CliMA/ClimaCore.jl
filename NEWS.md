@@ -4,6 +4,12 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.8
+-------
+
+- ![][badge-✨feature/enhancement] Added `FieldMatrixWithSolver`, a wrapper that helps defining implicit Jacobians. PR [#1788](https://github.com/CliMA/ClimaCore.jl/pull/1788)
+
+
 v0.14.6
 -------
 

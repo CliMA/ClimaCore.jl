@@ -4,7 +4,7 @@ using Revise; include(joinpath("test", "MatrixFields", "field_matrix_solvers.jl"
 =#
 import Logging
 import Logging: Debug
-import LinearAlgebra: I, norm
+import LinearAlgebra: I, norm, ldiv!, mul!
 import ClimaComms
 import ClimaCore.Utilities: half
 import ClimaCore.RecursiveApply: ⊠
@@ -14,26 +14,16 @@ import ClimaCore:
 
 include("matrix_field_test_utils.jl")
 
-# This broadcast must be wrapped in a function to be tested with @test_opt.
-field_matrix_mul!(b, A, x) = @. b = A * x
-
 function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
     @testset "$test_name" begin
         x = similar(b)
-        b_test = similar(b)
-        solver = FieldMatrixSolver(alg, A, b)
-        args = (solver, x, A, b)
-
+        A′ = FieldMatrixWithSolver(A, b, alg)
         solve_time =
-            @benchmark ClimaComms.@cuda_sync comms_device field_matrix_solve!(
-                args...,
-            )
+            @benchmark ClimaComms.@cuda_sync comms_device ldiv!(x, A′, b)
+
+        b_test = similar(b)
         mul_time =
-            @benchmark ClimaComms.@cuda_sync comms_device field_matrix_mul!(
-                b_test,
-                A,
-                x,
-            )
+            @benchmark ClimaComms.@cuda_sync comms_device mul!(b_test, A′, x)
 
         solve_time_rounded = round(solve_time; sigdigits = 2)
         mul_time_rounded = round(mul_time; sigdigits = 2)
@@ -70,14 +60,13 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
             AnyFrameModule(Base.CoreLogging),
         )
         using_cuda ||
-            @test_opt ignored_modules = ignored FieldMatrixSolver(alg, A, b)
-        using_cuda ||
-            @test_opt ignored_modules = ignored field_matrix_solve!(args...)
-        @test_opt ignored_modules = ignored field_matrix_mul!(b, A, x)
+            @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
+        using_cuda || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
+        @test_opt ignored_modules = ignored mul!(b_test, A′, x)
 
         # TODO: fix broken test when Nv is added to the type space
-        using_cuda || @test @allocated(field_matrix_solve!(args...)) ≤ 1536
-        using_cuda || @test @allocated(field_matrix_mul!(b, A, x)) == 0
+        using_cuda || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
+        using_cuda || @test @allocated(mul!(b_test, A′, x)) == 0
     end
 end
 
@@ -335,8 +324,7 @@ end
             b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec)
 
             x = similar(b)
-            solver = FieldMatrixSolver(alg, A, b)
-            args = (solver, x, A, b)
+            A′ = FieldMatrixWithSolver(A, b, alg)
 
             # Compare the debugging logs to RegEx strings. Note that debugging the
             # spectral radius is currently not possible on GPUs.
@@ -348,9 +336,7 @@ end
                 (:debug, r"||x[2] - x'||₂ ≈"),
             )
             logs = (spectral_radius_logs..., error_norm_logs...)
-            @test_logs logs... min_level = Logging.Debug field_matrix_solve!(
-                args...,
-            )
+            @test_logs logs... min_level = Logging.Debug ldiv!(x, A′, b)
         end
     end
 end
@@ -567,9 +553,8 @@ end
     field = Fields.ones(space)
     b = Fields.FieldVector(; _ = field)
     x = similar(b)
-    solver =
-        MatrixFields.FieldMatrixSolver(MatrixFields.BlockDiagonalSolve(), A, b)
+    A′ = FieldMatrixWithSolver(A, b)
 
     # Run matrix solve
-    MatrixFields.field_matrix_solve!(solver, x, A, b)
+    ldiv!(x, A′, b)
 end

@@ -31,6 +31,7 @@ operator_matrix
 ```@docs
 FieldMatrixSolverAlgorithm
 FieldMatrixSolver
+FieldMatrixWithSolver
 field_matrix_solve!
 BlockDiagonalSolve
 BlockLowerTriangularSolve
