@@ -543,10 +543,11 @@ end
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
+    @assert size(array, 1) == typesize(T, S)
     DataF{S, typeof(array)}(array)
 end
 
-function DataF{S}(ArrayType) where {S}
+function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
     T = eltype(ArrayType)
     DataF{S}(ArrayType(undef, typesize(T, S)))
 end

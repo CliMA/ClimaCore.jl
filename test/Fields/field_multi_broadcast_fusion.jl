@@ -359,7 +359,7 @@ end
     FT = Float64
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
-    DataF_data() = DataF{FT}(ArrayType(ones(FT, 2)))
+    DataF_data() = DataF{FT}(ArrayType(ones(FT, 1)))
     X = Fields.FieldVector(;
         x1 = DataF_data(),
         x2 = DataF_data(),
