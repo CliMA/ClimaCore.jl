@@ -43,7 +43,8 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 """
 module MatrixFields
 
-import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm
+import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
+import LinearAlgebra: inv, norm, ldiv!, mul!
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype
@@ -73,7 +74,7 @@ export DiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
 export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
-export ⋅, FieldMatrixSolver, field_matrix_solve!
+export FieldMatrixWithSolver, ⋅
 
 # Types that are teated as single values when using matrix fields.
 const SingleValue =
@@ -106,6 +107,7 @@ include("single_field_solver.jl")
 include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
+include("field_matrix_with_solver.jl")
 
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
