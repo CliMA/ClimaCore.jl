@@ -560,7 +560,6 @@ steps:
 
       - label: "Unit: rectilinear cuda"
         key: unit_rectilinear_cuda
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/rectilinear_cuda.jl CUDA"
