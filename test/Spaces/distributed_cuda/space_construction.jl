@@ -16,6 +16,7 @@ import ClimaCore:
 @testset "Distributed extruded CUDA space" begin
     # initializing MPI
     device = ClimaComms.device()
+    @show device
     context = ClimaComms.MPICommsContext(device)
     vcontext = ClimaComms.SingletonCommsContext(device)
     pid, nprocs = ClimaComms.init(context)
