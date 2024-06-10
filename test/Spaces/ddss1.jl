@@ -4,8 +4,6 @@ using Revise; include(joinpath("test", "Spaces", "ddss1.jl"))
 =#
 using Logging
 using Test
-import CUDA
-CUDA.allowscalar(false)
 
 import ClimaCore:
     Domains,
@@ -19,6 +17,7 @@ import ClimaCore:
     DataLayouts
 
 using ClimaComms
+ClimaComms.@import_required_backends
 const device = ClimaComms.device()
 const context = ClimaComms.SingletonCommsContext(device)
 
@@ -70,11 +69,11 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
 @testset "4x1 element mesh with periodic boundaries on 1 process" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
-
+    device = ClimaComms.device(comms_ctx)
     @test Topologies.nlocalelems(Spaces.topology(space)) == 4
 
 
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         @test Topologies.local_neighboring_elements(
             Spaces.topology(space),
             1,

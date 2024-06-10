@@ -41,6 +41,3 @@ Base.@propagate_inbounds column_args(args::Tuple{Any}, inds...) =
 Base.@propagate_inbounds column_args(args::Tuple{}, inds...) = ()
 
 function level end
-
-# TODO: move to ClimaComms
-allow_scalar(f, ::ClimaComms.AbstractDevice, args...) = f(args...)

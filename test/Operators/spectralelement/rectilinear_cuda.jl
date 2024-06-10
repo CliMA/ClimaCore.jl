@@ -48,7 +48,6 @@ grid_topology = Topologies.Topology2D(
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 coords = Fields.coordinate_field(grid_space)
 
-CUDA.allowscalar(false)
 f = sin.(coords.x .+ 2 .* coords.y)
 g = Geometry.UVVector.(sin.(coords.x), 2 .* cos.(coords.y .+ coords.x))
 

@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 using Logging
 using Test
 
@@ -88,7 +86,7 @@ partition numbers
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == (pid == 1 ? 6 : 5)
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         if pid == 1
             # gidx 1
             @test Topologies.local_neighboring_elements(

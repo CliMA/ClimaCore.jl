@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 include("ddss_setup.jl")
 
 #=
