@@ -58,7 +58,7 @@ import ClimaCore:
     )
 end
 
-@testset "DSS of Covarinat12Vector & Covariant123Vector on extruded Cubed Sphere mesh (ne = 3, serial run)" begin
+@testset "DSS of Covariant12Vector & Covariant123Vector on extruded Cubed Sphere mesh (ne = 3, serial run)" begin
     FT = Float64
     context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
     context_cpu =

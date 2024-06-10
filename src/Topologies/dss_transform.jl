@@ -271,7 +271,22 @@ function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
         _get_idx(sizet, (level, i, j, i21, elem)),
         _get_idx(sizet, (level, i, j, i22, elem)),
     )
-    return nothing
+end
+
+function _get_idx_metric_3d(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
+    nmetric = sizet[4]
+    (level, i, j, elem) = loc
+    return (
+        _get_idx(sizet, (level, i, j, 1, elem)),
+        _get_idx(sizet, (level, i, j, 2, elem)),
+        _get_idx(sizet, (level, i, j, 3, elem)),
+        _get_idx(sizet, (level, i, j, 4, elem)),
+        _get_idx(sizet, (level, i, j, 5, elem)),
+        _get_idx(sizet, (level, i, j, 6, elem)),
+        _get_idx(sizet, (level, i, j, 7, elem)),
+        _get_idx(sizet, (level, i, j, 8, elem)),
+        _get_idx(sizet, (level, i, j, 9, elem)),
+    )
 end
 
 function _representative_slab(
