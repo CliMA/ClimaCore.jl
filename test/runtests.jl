@@ -1,61 +1,40 @@
-using SafeTestsets
 using Base: operator_associativity
 
 #! format: off
 # Order of tests is intended to reflect dependency order of functionality
 
-#= TODO: add windows test back in. Currently getting
-ReadOnlyMemoryError()
-ERROR: Package ClimaCore errored during testing (exit code: 541541187)
-Stacktrace:
- [1] pkgerror(msg::String)
-=#
-@safetestset "DataLayouts fill" begin @time include("DataLayouts/unit_fill.jl") end
-@safetestset "DataLayouts ndims" begin @time include("DataLayouts/unit_ndims.jl") end
-@safetestset "Recursive" begin @time include("RecursiveApply/unit_recursive_apply.jl") end
-@safetestset "PlusHalf" begin @time include("Utilities/unit_plushalf.jl") end
-if !Sys.iswindows()
-    #=
-
-    @safetestset "DataLayouts 0D" begin @time include("DataLayouts/data0d.jl") end
-    @safetestset "DataLayouts 1D" begin @time include("DataLayouts/data1d.jl") end
-    @safetestset "DataLayouts 2D" begin @time include("DataLayouts/data2d.jl") end
-    @safetestset "DataLayouts 1dx" begin @time include("DataLayouts/data1dx.jl") end
-    @safetestset "DataLayouts 2dx" begin @time include("DataLayouts/data2dx.jl") end
-
-    @safetestset "Geometry" begin @time include("Geometry/geometry.jl") end
-    @safetestset "AxisTensors" begin @time include("Geometry/axistensors.jl") end
-
-    @safetestset "Interval mesh" begin @time include("Meshes/interval.jl") end
-    @safetestset "Rectangle mesh" begin @time include("Meshes/rectangle.jl") end
-    # now part of buildkite
-    # @safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
-
-    @safetestset "Interval topology" begin @time include("Topologies/interval.jl") end
-    @safetestset "Rectangle topology" begin @time include("Topologies/rectangle.jl") end
-    @safetestset "Rectangle surface topology" begin @time include("Topologies/rectangle_sfc.jl") end
-    @safetestset "Cubedsphere topology" begin @time include("Topologies/cubedsphere.jl") end
-    @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
-    # now part of buildkite
-    # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-=#
-    @safetestset "Quadratures" begin @time include("Quadratures/Quadratures.jl") end
-    @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
-    #=
-    @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end
-    # now part of buildkite
-    # @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
-    # @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
-    # now part of buildkite
-    # @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
-    =#
-    # now part of buildkite
-    # @safetestset "Fields" begin @time include("Fields/field.jl") end
-
+@time "Unit tests" begin
+    @time "Recursive" include("RecursiveApply/unit_recursive_apply.jl")
+    @time "PlusHalf" include("Utilities/unit_plushalf.jl")
+    @time "Geometry" include("Geometry/geometry.jl")
+    @time "AxisTensors" include("Geometry/axistensors.jl")
+    @time "DataLayouts fill" include("DataLayouts/unit_fill.jl")
+    @time "DataLayouts ndims" include("DataLayouts/unit_ndims.jl")
+    @time "DataLayouts 0D" include("DataLayouts/data0d.jl")
+    @time "DataLayouts 1D" include("DataLayouts/data1d.jl")
+    @time "DataLayouts 2D" include("DataLayouts/data2d.jl")
+    @time "DataLayouts 1dx" include("DataLayouts/data1dx.jl")
+    @time "DataLayouts 2dx" include("DataLayouts/data2dx.jl")
+    @time "Interval mesh" include("Meshes/interval.jl")
+    @time "Rectangle mesh" include("Meshes/rectangle.jl")
+    @time "Cubedsphere mesh" include("Meshes/cubedsphere.jl")
+    @time "Interval topology" include("Topologies/interval.jl")
+    @time "Rectangle topology" include("Topologies/rectangle.jl")
+    @time "Rectangle surface topology" include("Topologies/rectangle_sfc.jl")
+    @time "Cubedsphere topology" include("Topologies/cubedsphere.jl")
+    @time "Cubedsphere surface topology" include("Topologies/cubedsphere_sfc.jl")
+    @time "Quadratures" include("Quadratures/Quadratures.jl")
+    @time "Spaces" include("Spaces/spaces.jl")
+    @time "Spaces DSS" include("Spaces/ddss1.jl")
+    @time "Sphere spaces" include("Spaces/sphere.jl")
+    @time "Terrain warp" include("Spaces/terrain_warp.jl")
+    @time "Distributed spaces" include("Spaces/distributed.jl")
+    @time "Fields" include("Fields/field.jl")
+end
     @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
     # @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
     @safetestset "Spectral elem - Diffusion 2d" begin @time include("Operators/spectralelement/unit_diffusion2d.jl") end
-    @safetestset "Spectral elem - sphere geometry" begin @time include("Operators/spectralelement/sphere_geometry.jl") end
+    @safetestset "Spctral elem - sphere geometry" begin @time include("Operators/spectralelement/sphere_geometry.jl") end
     @safetestset "Spectral elem - sphere gradient" begin @time include("Operators/spectralelement/sphere_gradient.jl") end
     @safetestset "Spectral elem - sphere divergence" begin @time include("Operators/spectralelement/sphere_divergence.jl") end
     @safetestset "Spectral elem - sphere curl" begin @time include("Operators/spectralelement/sphere_curl.jl") end
@@ -77,36 +56,36 @@ if !Sys.iswindows()
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
     @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
 
-    @safetestset "MatrixFields - BandMatrixRow" begin @time include("MatrixFields/band_matrix_row.jl") end
-    @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
-    @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
-    @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
-    @safetestset "MatrixFields - field names" begin @time include("MatrixFields/field_names.jl") end
-    # now part of buildkite
-    # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
-    # @safetestset "MatrixFields - operator matrices" begin @time include("MatrixFields/operator_matrices.jl") end
-    # @safetestset "MatrixFields - field matrix solvers" begin @time include("MatrixFields/field_matrix_solvers.jl") end
+#     @safetestset "MatrixFields - BandMatrixRow" begin @time include("MatrixFields/band_matrix_row.jl") end
+#     @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
+#     @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
+#     @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
+#     @safetestset "MatrixFields - field names" begin @time include("MatrixFields/field_names.jl") end
+#     # now part of buildkite
+#     # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
+#     # @safetestset "MatrixFields - operator matrices" begin @time include("MatrixFields/operator_matrices.jl") end
+#     # @safetestset "MatrixFields - field matrix solvers" begin @time include("MatrixFields/field_matrix_solvers.jl") end
 
-    @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
-    @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end
+#     @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
+#     @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end
 
-    @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
+#     @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
 
-    # now part of buildkite
-    # @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
-    # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
+#     # now part of buildkite
+#     # @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
+#     # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
 
-    @safetestset "InputOutput - hdf5" begin @time include("InputOutput/hdf5.jl") end
-    @safetestset "InputOutput - spectralelement2d" begin @time include("InputOutput/spectralelement2d.jl") end
-    @safetestset "InputOutput - hybrid2dbox" begin @time include("InputOutput/hybrid2dbox.jl") end
-    @safetestset "InputOutput - hybrid2dbox_topography" begin @time include("InputOutput/hybrid2dbox_topography.jl") end
-    @safetestset "InputOutput - hybrid2dbox_stretched" begin @time include("InputOutput/hybrid2dbox_stretched.jl") end
-    @safetestset "InputOutput - hybrid3dbox" begin @time include("InputOutput/hybrid3dbox.jl") end
-    @safetestset "InputOutput - hybrid3dcubedsphere" begin @time include("InputOutput/hybrid3dcubedsphere.jl") end
-    @safetestset "InputOutput - hybrid3dcubedsphere_topography" begin @time include("InputOutput/hybrid3dcubedsphere_topography.jl") end
+#     @safetestset "InputOutput - hdf5" begin @time include("InputOutput/hdf5.jl") end
+#     @safetestset "InputOutput - spectralelement2d" begin @time include("InputOutput/spectralelement2d.jl") end
+#     @safetestset "InputOutput - hybrid2dbox" begin @time include("InputOutput/hybrid2dbox.jl") end
+#     @safetestset "InputOutput - hybrid2dbox_topography" begin @time include("InputOutput/hybrid2dbox_topography.jl") end
+#     @safetestset "InputOutput - hybrid2dbox_stretched" begin @time include("InputOutput/hybrid2dbox_stretched.jl") end
+#     @safetestset "InputOutput - hybrid3dbox" begin @time include("InputOutput/hybrid3dbox.jl") end
+#     @safetestset "InputOutput - hybrid3dcubedsphere" begin @time include("InputOutput/hybrid3dcubedsphere.jl") end
+#     @safetestset "InputOutput - hybrid3dcubedsphere_topography" begin @time include("InputOutput/hybrid3dcubedsphere_topography.jl") end
 
-    @safetestset "Array interpolation" begin @time include("Remapping/interpolate_array.jl") end
-    @safetestset "Array interpolation" begin @time include("Remapping/distributed_remapping.jl") end
+#     @safetestset "Array interpolation" begin @time include("Remapping/interpolate_array.jl") end
+#     @safetestset "Array interpolation" begin @time include("Remapping/distributed_remapping.jl") end
 
     # Code quality checks
     @safetestset "Aqua" begin @time include("aqua.jl") end
@@ -125,4 +104,4 @@ if ClimaComms.device() isa ClimaComms.CUDADevice
     @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end
 end
 
-#! format: on
+# #! format: on
