@@ -172,6 +172,7 @@ function warpedspace_3D(
     warp_fn = warp_sincos_3d,
     test_smoothing = false,
     adaption = Hypsography.LinearAdaption,
+    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
 )
     vert_face_space, hspace =
         generate_base_spaces(xlim, zlim, helem, velem, npoly)
@@ -298,7 +299,6 @@ end
 
 # 3D Tests
 @testset "3D Extruded Terrain Warped Space" begin
-    # Generated "negative space" should be unity
     for FT in (Float32, Float64)
         # Extruded FD-Spectral Hybrid
         xmin, xmax = FT(0), FT(π)
@@ -324,6 +324,92 @@ end
             # Assumes uniform stretching
             @test sum(z₀ .- zmax / 2nl) - FT(π^2 / 8) <= FT(0.1 / np * nh * nl)
             @test abs(maximum(z₀) - FT(0.5)) <= FT(0.125)
+        end
+    end
+end
+
+@testset "3D Extruded Terrain Warped Space: DSS" begin
+    context_gen =
+        ClimaComms.SingletonCommsContext(ClimaComms.device())
+    context_cpu =
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()) # CPU context for comparison
+    for FT in (Float32, Float64)
+        # Extruded FD-Spectral Hybrid
+        xmin, xmax = FT(0), FT(π)
+        ymin, ymax = FT(0), FT(π)
+        zmin, zmax = FT(0), FT(1)
+        levels = (5, 10)
+        polynom = (2, 5, 10)
+        horzelem = (2, 5, 10)
+        for nl in levels, np in polynom, nh in horzelem
+            hv_center_space, hv_face_space = warpedspace_3D(
+                FT,
+                (xmin, xmax),
+                (ymin, ymax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                context = context_gen,
+            )
+            hv_center_space_cpu, hv_face_space_cpu = warpedspace_3D(
+                FT,
+                (xmin, xmax),
+                (ymin, ymax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                context = context_cpu,
+            )
+            ᶜcoords = Fields.coordinate_field(hv_center_space)
+            ᶠcoords = Fields.coordinate_field(hv_face_space)
+            ᶜcoords_cpu = Fields.coordinate_field(hv_center_space_cpu)
+            ᶠcoords_cpu = Fields.coordinate_field(hv_face_space_cpu)
+
+            y1 = one.(Fields.coordinate_field(hv_center_space).z)
+            y2 = -1 .* y1
+            y3 = y1
+            y12 = @. Geometry.Covariant12Vector(y1, y2)
+
+            y1_cpu = one.(Fields.coordinate_field(hv_center_space_cpu).z)
+            y2_cpu = -1 .* y1_cpu
+            y3_cpu = @. y1_cpu
+            y12_cpu = @. Geometry.Covariant12Vector(y1_cpu, y2_cpu)
+
+            dss_buffer12 = Spaces.create_dss_buffer(y12)
+            dss_buffer12_cpu = Spaces.create_dss_buffer(y12_cpu)
+
+            Spaces.weighted_dss!(y12 => dss_buffer12)
+            Spaces.weighted_dss!(y12_cpu => dss_buffer12_cpu)
+
+            yinit12 = copy(y12)
+            yinit12_cpu = copy(y12_cpu)
+
+            @test yinit12 ≈ y12
+            @test yinit12_cpu ≈ y12_cpu
+            @test parent(y12_cpu) ≈ Array(parent(y12))
+
+            # test DSS for a Covariant123Vector
+            y123 = @. Geometry.Covariant123Vector(y1, y2, y3)
+            y123_cpu = @. Geometry.Covariant123Vector(y1_cpu, y2_cpu, y3_cpu)
+
+            dss_buffer123 = Spaces.create_dss_buffer(y123)
+            dss_buffer123_cpu = Spaces.create_dss_buffer(y123_cpu)
+
+            # ensure physical velocity is continous across SE boundary for initial state
+            Spaces.weighted_dss!(y123 => dss_buffer123)
+            Spaces.weighted_dss!(y123_cpu => dss_buffer123_cpu)
+
+            yinit123 = copy(y123)
+            yinit123_cpu = copy(y123_cpu)
+
+            Spaces.weighted_dss!(y123, dss_buffer123)
+            Spaces.weighted_dss!(y123_cpu, dss_buffer123_cpu)
+
+            @test yinit123 ≈ y123
+            @test yinit123_cpu ≈ y123_cpu
+            @test parent(y123_cpu) ≈ Array(parent(y123))
         end
     end
 end
