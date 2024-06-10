@@ -74,13 +74,9 @@ end
 
 function benchmark_kernel!(f!, X, Y, device)
     println("\n--------------------------- $(nameof(typeof(f!))) ")
-    trial = benchmark_kernel!(f!, X, Y, device)
+    trial = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $f!($X, $Y)
     show(stdout, MIME("text/plain"), trial)
 end
-benchmark_kernel!(f!, X, Y, ::ClimaComms.CUDADevice) =
-    BenchmarkTools.@benchmark CUDA.@sync $f!($X, $Y);
-benchmark_kernel!(f!, X, Y, ::ClimaComms.AbstractCPUDevice) =
-    BenchmarkTools.@benchmark $f!($X, $Y);
 
 function show_diff(A, B)
     for pn in propertynames(A)

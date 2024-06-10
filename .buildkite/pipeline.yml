@@ -1145,7 +1145,7 @@ steps:
         key: "perf_gpu_spectral_ops_cuda_float32"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1153,13 +1153,13 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float32)"
         key: "perf_gpu_spectral_ops_cpu_float32"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
 
       - label: "Perf: SEM operator benchmarks (cuda Float64)"
         key: "perf_gpu_spectral_ops_cuda_float64"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1167,17 +1167,17 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float64)"
         key: "perf_gpu_spectral_ops_cpu_float64"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
 
       - label: "Perf: SEM operator benchmarks (extruded CPU Float64)"
         key: "perf_gpu_spectral_ops_extruded_cpu_float64"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
 
       - label: "Perf: SEM operator benchmarks"
         key: "perf_gpu_spectral_ops"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

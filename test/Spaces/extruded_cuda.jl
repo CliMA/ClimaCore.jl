@@ -31,6 +31,7 @@ end
 @testset "copyto! with CuArray-backed extruded spaces" begin
     cpu_context = SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     gpu_context = SingletonCommsContext(ClimaComms.CUDADevice())
+    device = ClimaComms.device(gpu_context)
 
     FT = Float64
     device = ClimaComms.device(gpu_context)
