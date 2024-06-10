@@ -321,7 +321,7 @@ end
         )),
     )
         get_result()
-        @test_opt ignored_modules = ignore_cuda get_result()
+        @test_opt ignored_modules = cuda_frames get_result()
     end
 
     test_field_broadcast(;

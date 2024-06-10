@@ -1,9 +1,9 @@
 using Test
 using JET
-import CUDA
 import Random: seed!
 
 import ClimaComms
+ClimaComms.@import_required_backends
 import ClimaCore:
     Geometry,
     Domains,
@@ -45,7 +45,11 @@ const comms_device = ClimaComms.device()
 # comms_device = ClimaComms.CPUSingleThreaded()
 @show comms_device
 const using_cuda = comms_device isa ClimaComms.CUDADevice
-const ignore_cuda = using_cuda ? (AnyFrameModule(CUDA),) : ()
+cuda_module(ext) = using_cuda ? ext.CUDA : ext
+const cuda_mod = cuda_module(Base.get_extension(ClimaComms, :ClimaCommsCUDAExt))
+const cuda_frames = using_cuda ? (AnyFrameModule(cuda_mod),) : ()
+const cublas_frames = using_cuda ? (AnyFrameModule(cuda_mod.CUBLAS),) : ()
+const invalid_ir_error = using_cuda ? cuda_mod.InvalidIRError : ErrorException
 
 # Test the allocating and non-allocating versions of a field broadcast against
 # a reference non-allocating implementation. Ensure that they are performant,
@@ -63,7 +67,7 @@ function test_field_broadcast(;
 ) where {F1, F2, F3}
     @testset "$test_name" begin
         if test_broken_with_cuda && using_cuda
-            @test_throws CUDA.InvalidIRError get_result()
+            @test_throws invalid_ir_error get_result()
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
         end
@@ -101,14 +105,14 @@ function test_field_broadcast(;
         # Test get_result and set_result! for type instabilities, and test
         # set_result! for allocations. Ignore the type instabilities in CUDA and
         # the allocations they incur.
-        @test_opt ignored_modules = ignore_cuda get_result()
-        @test_opt ignored_modules = ignore_cuda set_result!(result)
+        @test_opt ignored_modules = cuda_frames get_result()
+        @test_opt ignored_modules = cuda_frames set_result!(result)
         using_cuda || @test (@allocated set_result!(result)) == 0
 
         if !isnothing(ref_set_result!)
             # Test ref_set_result! for type instabilities and allocations to
             # ensure that the performance comparison is fair.
-            @test_opt ignored_modules = ignore_cuda ref_set_result!(ref_result)
+            @test_opt ignored_modules = cuda_frames ref_set_result!(ref_result)
             using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
         end
     end
@@ -133,7 +137,7 @@ function test_field_broadcast_against_array_reference(;
 ) where {F1, F2, F3}
     @testset "$test_name" begin
         if test_broken_with_cuda && using_cuda
-            @test_throws CUDA.InvalidIRError get_result()
+            @test_throws invalid_ir_error get_result()
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
         end
@@ -183,13 +187,13 @@ function test_field_broadcast_against_array_reference(;
         # Test get_result and set_result! for type instabilities, and test
         # set_result! for allocations. Ignore the type instabilities in CUDA and
         # the allocations they incur.
-        @test_opt ignored_modules = ignore_cuda get_result()
-        @test_opt ignored_modules = ignore_cuda set_result!(result)
+        @test_opt ignored_modules = cuda_frames get_result()
+        @test_opt ignored_modules = cuda_frames set_result!(result)
         using_cuda || @test (@allocated set_result!(result)) == 0
 
         # Test ref_set_result! for type instabilities and allocations to ensure
         # that the performance comparison is fair.
-        @test_opt ignored_modules = ignore_cuda call_ref_set_result!()
+        @test_opt ignored_modules = cuda_frames call_ref_set_result!()
         using_cuda || @test (@allocated call_ref_set_result!()) == 0
     end
 end

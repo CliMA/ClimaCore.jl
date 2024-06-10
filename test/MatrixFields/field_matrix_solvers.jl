@@ -54,8 +54,8 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         # In addition to ignoring the type instabilities from CUDA, ignore those
         # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
         ignored = (
-            ignore_cuda...,
-            using_cuda ? AnyFrameModule(CUDA.CUBLAS) :
+            cuda_frames...,
+            cublas_frames...,
             AnyFrameModule(MatrixFields.KrylovKit),
             AnyFrameModule(Base.CoreLogging),
         )
