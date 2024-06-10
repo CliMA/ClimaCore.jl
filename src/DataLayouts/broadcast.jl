@@ -678,13 +678,12 @@ function Base.copyto!(
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
-    fused_copyto!(fmb_inst, dest1, ClimaComms.device(dest1))
+    fused_copyto!(fmb_inst, dest1)
 end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
     dest1::VIJFH{S1, Nv1, Nij},
-    ::ClimaComms.AbstractCPUDevice,
 ) where {S1, Nv1, Nij}
     _, _, _, _, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
@@ -700,9 +699,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::IJFH{S, Nij, A},
-    ::ClimaComms.AbstractCPUDevice,
-) where {S, Nij, A}
+    dest1::IJFH{S, Nij},
+) where {S, Nij}
     # copy contiguous columns
     _, _, _, Nv, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
@@ -717,9 +715,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIFH{S, Nv1, Ni, A},
-    ::ClimaComms.AbstractCPUDevice,
-) where {S, Nv1, Ni, A}
+    dest1::VIFH{S, Nv1, Ni},
+) where {S, Nv1, Ni}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
@@ -734,9 +731,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VF{S1, Nv1, A},
-    ::ClimaComms.AbstractCPUDevice,
-) where {S1, Nv1, A}
+    dest1::VF{S1, Nv1},
+) where {S1, Nv1}
     for (dest, bc) in fmbc.pairs
         @inbounds for v in 1:Nv1
             I = CartesianIndex(1, 1, 1, v, 1)
@@ -747,11 +743,7 @@ function fused_copyto!(
     return nothing
 end
 
-function fused_copyto!(
-    fmbc::FusedMultiBroadcast,
-    dest::DataF{S},
-    ::ClimaComms.AbstractCPUDevice,
-) where {S}
+function fused_copyto!(fmbc::FusedMultiBroadcast, dest::DataF{S}) where {S}
     for (dest, bc) in fmbc.pairs
         @inbounds dest[] = convert(S, bc[])
     end

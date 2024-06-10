@@ -1,6 +1,23 @@
 """
     ClimaCore.DataLayouts
 
+Defines the following DataLayouts (see individual docs for more info):
+
+TODO: Add links to these datalayouts
+
+ - `IJKFVH`
+ - `IJFH`
+ - `IFH`
+ - `DataF`
+ - `IJF`
+ - `IF`
+ - `VF`
+ - `VIJFH`
+ - `VIFH`
+ - `IH1JH2`
+ - `IV1JH2`
+
+
 Notation:
 - `i,j` are horizontal node indices within an element
 - `k` is the vertical node index within an element
@@ -28,6 +45,11 @@ include("struct.jl")
 abstract type AbstractData{S} end
 
 Base.size(data::AbstractData, i::Integer) = size(data)[i]
+
+function universal_size(data::AbstractData)
+    s = size(data)
+    return (s[1], s[2], ncomponents(data), s[4], s[5])
+end
 
 function Base.show(io::IO, data::AbstractData)
     indent_width = 2
@@ -182,9 +204,16 @@ end
 # Data3D DataLayout
 # ==================
 
+"""
+    IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) <: Data3D{S, Nij, Nk}
+
+A 3D DataLayout. TODO: Add more docs
+"""
 struct IJKFVH{S, Nij, Nk, A} <: Data3D{S, Nij, Nk}
     array::A
 end
+
+parent_array_type(::Type{IJKFVH{S, Nij, Nk, A}}) where {S, Nij, Nk, A} = A
 
 function IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) where {S, Nij, Nk, T}
     @assert size(array, 1) == Nij
@@ -244,15 +273,23 @@ end
 
 """
     IJFH{S, Nij, A} <: Data2D{S, Nij}
+    IJFH{S,Nij}(ArrayType, nelements)
+
 
 Backing `DataLayout` for 2D spectral element slabs.
 
 Element nodal point (I,J) data is contiguous for each datatype `S` struct field (F),
 for each 2D mesh element slab (H).
+
+The `ArrayType`-constructor constructs a IJFH 2D Spectral
+DataLayout given the backing `ArrayType`, quadrature degrees
+of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
 """
 struct IJFH{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
+
+parent_array_type(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} = A
 
 function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 1) == Nij
@@ -282,13 +319,6 @@ function Base.fill!(data::IJFH, val)
 end
 
 
-"""
-    IJFH{S,Nij}(ArrayType, nelements)
-
-Construct a IJFH 2D Spectral DataLayout given the backing `ArrayType`,
-quadrature degrees of freedom `Nij × Nij`  ,
-and the number of mesh elements `nelements`.
-"""
 function IJFH{S, Nij}(ArrayType, nelements) where {S, Nij}
     T = eltype(ArrayType)
     IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(T, S), nelements))
@@ -401,15 +431,24 @@ Base.length(data::Data1D) = size(parent(data), 3)
 
 """
     IFH{S, Ni, A} <: Data1D{S, Ni}
+    IFH{S,Ni}(ArrayType, nelements)
 
 Backing `DataLayout` for 1D spectral element slabs.
 
-Element nodal point (I) data is contiguous for each datatype `S` struct field (F),
-for each 1D mesh element (H).
+Element nodal point (I) data is contiguous for each
+datatype `S` struct field (F), for each 1D mesh element (H).
+
+
+The `ArrayType`-constructor makes a IFH 1D Spectral
+DataLayout given the backing `ArrayType`, quadrature
+degrees of freedom `Ni`, and the number of mesh elements
+`nelements`.
 """
 struct IFH{S, Ni, A} <: Data1D{S, Ni}
     array::A
 end
+
+parent_array_type(::Type{IFH{S, Ni, A}}) where {S, Ni, A} = A
 
 function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
@@ -424,13 +463,6 @@ function replace_basetype(data::IFH{S, Ni}, ::Type{T}) where {S, Ni, T}
     return IFH{S′, Ni}(similar(array, T))
 end
 
-"""
-    IFH{S,Ni}(ArrayType, nelements)
-
-Construct a IFH 1D Spectral DataLayout given the backing `ArrayType`,
-quadrature degrees of freedom `Ni`  ,
-and the number of mesh elements `nelements`.
-"""
 function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
     T = eltype(ArrayType)
     IFH{S, Ni}(ArrayType(undef, Ni, typesize(T, S), nelements))
@@ -507,7 +539,7 @@ end
     @inbounds set_struct!(
         parent(data),
         convert(S, val),
-        Val(3),
+        Val(2),
         CartesianIndex(i, 1, h),
     )
 end
@@ -520,7 +552,7 @@ end
     @inbounds set_struct!(
         parent(data),
         convert(S, val),
-        Val(3),
+        Val(2),
         CartesianIndex(i, 1, h),
     )
 end
@@ -541,12 +573,15 @@ struct DataF{S, A} <: Data0D{S}
     array::A
 end
 
+parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
+
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
+    @assert size(array, 1) == typesize(T, S)
     DataF{S, typeof(array)}(array)
 end
 
-function DataF{S}(ArrayType) where {S}
+function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
     T = eltype(ArrayType)
     DataF{S}(ArrayType(undef, typesize(T, S)))
 end
@@ -663,6 +698,8 @@ A `DataSlab2D` view can be returned from other `Data2D` objects by calling `slab
 struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
     array::A
 end
+
+parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
 
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
@@ -804,6 +841,8 @@ struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
 end
 
+parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
@@ -902,6 +941,8 @@ A `DataColumn` view can be returned from other `Data1DX`, `Data2DX` objects by c
 struct VF{S, Nv, A} <: DataColumn{S, Nv}
     array::A
 end
+
+parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
 
 function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
@@ -1023,6 +1064,8 @@ for each `S` datatype struct field (F), for each 2D mesh element slab (H).
 struct VIJFH{S, Nv, Nij, A} <: Data2DX{S, Nv, Nij}
     array::A
 end
+
+parent_array_type(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = A
 
 function VIJFH{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     @assert size(array, 2) == size(array, 3) == Nij
@@ -1196,6 +1239,8 @@ struct VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
     array::A
 end
 
+parent_array_type(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = A
+
 function VIFH{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
@@ -1346,16 +1391,18 @@ end
 # Special DataLayouts for regular gridding
 # =========================================
 
-struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
-    array::A
-end
-
 """
     IH1JH2{S, Nij}(data::AbstractMatrix{S})
 
 Stores a 2D field in a matrix using a column-major format.
 The primary use is for interpolation to a regular grid for ex. plotting / field output.
 """
+struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
+    array::A
+end
+
+parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+
 function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
     @assert size(array, 1) % Nij == 0
     @assert size(array, 2) % Nij == 0
@@ -1393,16 +1440,18 @@ end
     return dataview
 end
 
-struct IV1JH2{S, n1, Ni, A} <: Data1DX{S, n1, Ni}
-    array::A
-end
-
 """
     IV1JH2{S, n1, Ni}(data::AbstractMatrix{S})
 
 Stores values from an extruded 1D spectral field in a matrix using a column-major format.
 The primary use is for interpolation to a regular grid for ex. plotting / field output.
 """
+struct IV1JH2{S, n1, Ni, A} <: Data1DX{S, n1, Ni}
+    array::A
+end
+
+parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
+
 function IV1JH2{S, n1, Ni}(array::AbstractMatrix{S}) where {S, n1, Ni}
     @assert size(array, 2) % Ni == 0
     IV1JH2{S, n1, Ni, typeof(array)}(array)
@@ -1475,12 +1524,6 @@ Adapt.adapt_structure(to, data::VF{S, Nv}) where {S, Nv} =
 Adapt.adapt_structure(to, data::DataF{S}) where {S} =
     DataF{S}(Adapt.adapt(to, parent(data)))
 
-# TODO: Should the DataLayout be device-aware? So that we can
-# determine if we're multi-threaded or not?
-# This is only currently used in FusedMultiBroadcast kernels
-device_from_array_type(::Type{<:AbstractArray}) = ClimaComms.CPUSingleThreaded()
-ClimaComms.device(data::AbstractData) =
-    device_from_array_type(typeof(parent(data)))
 empty_kernel_stats(::ClimaComms.AbstractDevice) = nothing
 empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
 
@@ -1496,6 +1539,9 @@ get_Nij(::IFH{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IJF{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IF{S, Nij}) where {S, Nij} = Nij
 
+Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
+Base.ndims(::Type{T}) where {T <: AbstractData} =
+    Base.ndims(parent_array_type(T))
 
 """
     data2array(::AbstractData)

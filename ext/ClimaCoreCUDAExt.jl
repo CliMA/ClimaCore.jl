@@ -14,6 +14,9 @@ import ClimaCore.Utilities: half
 import ClimaCore.RecursiveApply:
     ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
 
+const CuArrayBackedTypes =
+    Union{CUDA.CuArray, SubArray{<:Any, <:Any, CUDA.CuArray}}
+
 include(joinpath("cuda", "cuda_utils.jl"))
 include(joinpath("cuda", "data_layouts.jl"))
 include(joinpath("cuda", "fields.jl"))

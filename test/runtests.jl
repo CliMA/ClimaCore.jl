@@ -10,6 +10,8 @@ ERROR: Package ClimaCore errored during testing (exit code: 541541187)
 Stacktrace:
  [1] pkgerror(msg::String)
 =#
+@safetestset "DataLayouts fill" begin @time include("DataLayouts/unit_fill.jl") end
+@safetestset "DataLayouts ndims" begin @time include("DataLayouts/unit_ndims.jl") end
 if !Sys.iswindows()
     #=
     @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end

@@ -5,14 +5,10 @@ import ClimaCore.DataLayouts: IJKFVH, IJFH, VIJFH, VIFH, IFH, IJF, IF, VF, DataF
 import ClimaCore.DataLayouts: IJFHStyle, VIJFHStyle, VFStyle, DataFStyle
 import ClimaCore.DataLayouts: promote_parent_array_type
 import ClimaCore.DataLayouts: parent_array_type
-import ClimaCore.DataLayouts: device_from_array_type, isascalar
+import ClimaCore.DataLayouts: isascalar
 import ClimaCore.DataLayouts: fused_copyto!
 import Adapt
 import CUDA
-
-device_from_array_type(::Type{<:CUDA.CuArray}) = ClimaComms.CUDADevice()
-device_from_array_type(::Type{<:SubArray{<:Any, <:Any, <:CUDA.CuArray}}) =
-    ClimaComms.CUDADevice()
 
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}
@@ -44,24 +40,10 @@ function knl_copyto!(dest, src)
     return nothing
 end
 
-function knl_fill!(dest, val)
-    i = CUDA.threadIdx().x
-    j = CUDA.threadIdx().y
-
-    h = CUDA.blockIdx().x
-    v = CUDA.blockDim().z * (CUDA.blockIdx().y - 1) + CUDA.threadIdx().z
-
-    if v <= size(dest, 4)
-        I = CartesianIndex((i, j, 1, v, h))
-        @inbounds dest[I] = val
-    end
-    return nothing
-end
-
 function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
-) where {S, Nij, A <: CUDA.CuArray}
+) where {S, Nij, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
         auto_launch!(
@@ -74,28 +56,6 @@ function Base.copyto!(
     end
     return dest
 end
-function Base.fill!(
-    dest::IJFH{S, Nij, A},
-    val,
-) where {
-    S,
-    Nij,
-    A <: Union{CUDA.CuArray, SubArray{<:Any, <:Any, <:CUDA.CuArray}},
-}
-    _, _, _, _, Nh = size(dest)
-    if Nh > 0
-        auto_launch!(
-            knl_fill!,
-            (dest, val),
-            dest;
-            threads_s = (Nij, Nij),
-            blocks_s = (Nh, 1),
-        )
-    end
-    return dest
-end
-
-
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
@@ -103,7 +63,7 @@ function Base.copyto!(
         VIJFH{S, Nv, Nij, A},
         Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
     },
-) where {S, Nv, Nij, A <: CUDA.CuArray}
+) where {S, Nv, Nij, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(bc)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
@@ -118,48 +78,16 @@ function Base.copyto!(
     end
     return dest
 end
-function Base.fill!(
-    dest::VIJFH{S, Nv, Nij, A},
-    val,
-) where {S, Nv, Nij, A <: CUDA.CuArray}
-    _, _, _, _, Nh = size(dest)
-    if Nv > 0 && Nh > 0
-        Nv_per_block = min(Nv, fld(256, Nij * Nij))
-        Nv_blocks = cld(Nv, Nv_per_block)
-        auto_launch!(
-            knl_fill!,
-            (dest, val),
-            dest;
-            threads_s = (Nij, Nij, Nv_per_block),
-            blocks_s = (Nh, Nv_blocks),
-        )
-    end
-    return dest
-end
-
 
 function Base.copyto!(
     dest::VF{S, Nv},
     bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
-) where {S, Nv, A <: CUDA.CuArray}
+) where {S, Nv, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(
             knl_copyto!,
             (dest, bc),
-            dest;
-            threads_s = (1, 1),
-            blocks_s = (Nh, Nv),
-        )
-    end
-    return dest
-end
-function Base.fill!(dest::VF{S, Nv, A}, val) where {S, Nv, A <: CUDA.CuArray}
-    _, _, _, _, Nh = size(dest)
-    if Nv > 0 && Nh > 0
-        auto_launch!(
-            knl_fill!,
-            (dest, val),
             dest;
             threads_s = (1, 1),
             blocks_s = (Nh, Nv),
@@ -181,16 +109,8 @@ function Base.copyto!(
     )
     return dest
 end
-function Base.fill!(dest::DataF{S, A}, val) where {S, A <: CUDA.CuArray}
-    auto_launch!(
-        knl_fill!,
-        (dest, val),
-        dest;
-        threads_s = (1, 1),
-        blocks_s = (1, 1),
-    )
-    return dest
-end
+
+include("fill.jl")
 
 Base.@propagate_inbounds function rcopyto_at!(
     pair::Pair{<:AbstractData, <:Any},
@@ -236,8 +156,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S, Nv, Nij},
-    ::ClimaComms.CUDADevice,
+    dest1::VIJFH{S, Nv, Nij, <:CuArrayBackedTypes},
 ) where {S, Nv, Nij}
     _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
@@ -256,8 +175,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::IJFH{S, Nij},
-    ::ClimaComms.CUDADevice,
+    dest1::IJFH{S, Nij, <:CuArrayBackedTypes},
 ) where {S, Nij}
     _, _, _, _, Nh = size(dest1)
     if Nh > 0
@@ -273,8 +191,7 @@ function fused_copyto!(
 end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VF{S, Nv},
-    ::ClimaComms.CUDADevice,
+    dest1::VF{S, Nv, <:CuArrayBackedTypes},
 ) where {S, Nv}
     _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
@@ -291,8 +208,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::DataF{S},
-    ::ClimaComms.CUDADevice,
+    dest1::DataF{S, <:CuArrayBackedTypes},
 ) where {S}
     auto_launch!(
         knl_fused_copyto!,
