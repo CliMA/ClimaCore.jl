@@ -54,15 +54,15 @@ if !Sys.iswindows()
 
     @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
     # @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
-    @safetestset "Spectral elem - Diffusion 2d" begin @time include("Operators/spectralelement/diffusion2d.jl") end
+    @safetestset "Spectral elem - Diffusion 2d" begin @time include("Operators/spectralelement/unit_diffusion2d.jl") end
     @safetestset "Spectral elem - sphere geometry" begin @time include("Operators/spectralelement/sphere_geometry.jl") end
     @safetestset "Spectral elem - sphere gradient" begin @time include("Operators/spectralelement/sphere_gradient.jl") end
     @safetestset "Spectral elem - sphere divergence" begin @time include("Operators/spectralelement/sphere_divergence.jl") end
     @safetestset "Spectral elem - sphere curl" begin @time include("Operators/spectralelement/sphere_curl.jl") end
     @safetestset "Spectral elem - sphere diffusion" begin @time include("Operators/spectralelement/sphere_diffusion.jl") end
     @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
-    @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
-    @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
+    @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/unit_sphere_hyperdiffusion.jl") end
+    @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl") end
     
     @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
     @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
@@ -73,7 +73,7 @@ if !Sys.iswindows()
     # @time include("Operators/finitedifference/implicit_stencils.jl")
     # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
     @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
-    @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/3d.jl") end
+    @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/unit_3d.jl") end
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
     @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
 
@@ -119,7 +119,7 @@ if ClimaComms.device() isa ClimaComms.CUDADevice
     @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
     @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
     @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
-    @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/cuda.jl") end
+    @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/unit_cuda.jl") end
     @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_sphere_cuda.jl") end
     @safetestset "Operators - extruded 3dbox space operators CUDA" begin @time include("Operators/hybrid/extruded_3dbox_cuda.jl") end
     @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end

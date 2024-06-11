@@ -442,7 +442,7 @@ steps:
 
       - label: "Unit: diffusion2d"
         key: unit_diffusion2d
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/diffusion2d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_diffusion2d.jl"
 
       - label: "Unit: sphere geometry"
         key: unit_sphere_geometry
@@ -470,11 +470,13 @@ steps:
 
       - label: "Unit: sphere hyperdiffusion"
         key: unit_sphere_hyperdiffusion
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_hyperdiffusion.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion.jl"
 
       - label: "Unit: sphere hyperdiffusion vec"
         key: unit_sphere_hyperdiffusion_vec
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/convergence_sphere_hyperdiffusion_vec.jl"
 
       - label: "Unit: spec ops plane"
         key: unit_spec_ops_plane
@@ -496,17 +498,28 @@ steps:
         key: unit_fd_tensor
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
 
+      - label: "Unit: advection operator convergence"
+        key: unit_adv_conv
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_advection_diffusion1d.jl"
+        soft_fail: true
+
       - label: "Unit: hyb ops 2d"
         key: unit_hyb_ops_2d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/2d.jl"
 
       - label: "Unit: hyb ops 3d"
         key: unit_hyb_ops_3d
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/3d.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
 
       - label: "Unit: hyb ops 3d CUDA"
         key: unit_hyb_ops_3d_cuda
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/3d.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -557,8 +570,8 @@ steps:
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
         command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/cuda.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_cuda.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_cuda.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

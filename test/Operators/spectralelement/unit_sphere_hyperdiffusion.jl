@@ -13,8 +13,6 @@ import ClimaCore:
     Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
-using OrdinaryDiffEq
-
 include("sphere_sphericalharmonics.jl")
 
 @testset "Scalar biharmonic equation in 2D sphere" begin
