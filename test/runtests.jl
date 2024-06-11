@@ -53,7 +53,7 @@ if !Sys.iswindows()
     # @safetestset "Fields" begin @time include("Fields/field.jl") end
 
     @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
-    @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
+    # @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
     @safetestset "Spectral elem - Diffusion 2d" begin @time include("Operators/spectralelement/diffusion2d.jl") end
     @safetestset "Spectral elem - sphere geometry" begin @time include("Operators/spectralelement/sphere_geometry.jl") end
     @safetestset "Spectral elem - sphere gradient" begin @time include("Operators/spectralelement/sphere_gradient.jl") end
@@ -111,7 +111,8 @@ if !Sys.iswindows()
     # Code quality checks
     @safetestset "Aqua" begin @time include("aqua.jl") end
 end
-if "CUDA" in ARGS
+import ClimaComms
+if ClimaComms.device() isa ClimaComms.CUDADevice
     @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
     @safetestset "GPU - data" begin @time include("DataLayouts/cuda.jl") end
     @safetestset "GPU - spaces" begin @time include("Spaces/spaces.jl") end

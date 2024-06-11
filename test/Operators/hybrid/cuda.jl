@@ -1,6 +1,7 @@
 using Test
 using StaticArrays
 using ClimaComms, ClimaCore
+ClimaComms.@import_required_backends
 import ClimaCore:
     Geometry,
     Fields,
@@ -11,7 +12,6 @@ import ClimaCore:
     Operators,
     Quadratures
 using LinearAlgebra, IntervalSets
-using CUDA
 using OrdinaryDiffEq
 
 function hvspace_3D_box(
