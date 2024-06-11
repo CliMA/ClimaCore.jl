@@ -1,9 +1,11 @@
+#=
+julia --project=.buildkite
+using Revise; include(joinpath("test", "Operators", "finitedifference", "wfact.jl"))
+=#
 using Test
 using ClimaComms
-
+ClimaComms.@import_required_backends
 import ClimaCore
-# To avoid JET failures in the error message
-ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
 using ClimaCore:
     Geometry,
@@ -105,12 +107,9 @@ function wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ,
     return nothing
 end
 
-@time wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
-@time wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
-
 using JET
-@testset "JET test for `compose` in wfact! kernel" begin
+@testset "Opt test for `compose` in wfact! kernel" begin
+    wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw) # compile first
+    @test 0 == @allocated wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
     @test_opt wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
 end
-
-ClimaCore.Operators.allow_mismatched_fd_spaces() = false

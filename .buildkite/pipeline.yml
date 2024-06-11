@@ -61,14 +61,14 @@ steps:
 
       - label: "Unit: RecursiveApply"
         key: unit_recursive_apply
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/recursive_apply.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/unit_recursive_apply.jl"
 
   - group: "Unit: Utilities"
     steps:
 
       - label: "Unit: plushalf"
         key: unit_plushalf
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/plushalf.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_plushalf.jl"
 
   - group: "Unit: DataLayouts"
     steps:
@@ -505,7 +505,9 @@ steps:
 
       - label: "Unit: hyb ops 2d"
         key: unit_hyb_ops_2d
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/2d.jl"
+        command:
+           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
+           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
 
       - label: "Unit: hyb ops 3d"
         key: unit_hyb_ops_3d
@@ -1125,13 +1127,16 @@ steps:
         # TODO: combine this with FD operators above
       - label: "Perf: FD operators from the wild"
         key: perf_FD_ops_examples
-        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+        command:
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
 
       - label: "Perf: FD operators from the wild (gpu)"
         key: perf_FD_ops_examples_gpu
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

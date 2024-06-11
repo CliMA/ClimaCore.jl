@@ -12,10 +12,10 @@ Stacktrace:
 =#
 @safetestset "DataLayouts fill" begin @time include("DataLayouts/unit_fill.jl") end
 @safetestset "DataLayouts ndims" begin @time include("DataLayouts/unit_ndims.jl") end
+@safetestset "Recursive" begin @time include("RecursiveApply/unit_recursive_apply.jl") end
+@safetestset "PlusHalf" begin @time include("Utilities/unit_plushalf.jl") end
 if !Sys.iswindows()
     #=
-    @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end
-    @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
 
     @safetestset "DataLayouts 0D" begin @time include("DataLayouts/data0d.jl") end
     @safetestset "DataLayouts 1D" begin @time include("DataLayouts/data1d.jl") end
@@ -72,7 +72,7 @@ if !Sys.iswindows()
     # now part of buildkite
     # @time include("Operators/finitedifference/implicit_stencils.jl")
     # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
-    @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
+    @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/unit_2d.jl") end
     @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/unit_3d.jl") end
     @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
     @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
