@@ -13,8 +13,6 @@ import ClimaCore:
     Quadratures
 using StaticArrays, IntervalSets, LinearAlgebra
 
-using OrdinaryDiffEq
-
 @testset "Scalar Poisson problem - ∇⋅∇ = f in 2D" begin
     # Poisson equation
     # - ∇⋅(∇ u(x,y)) = f(x,y)

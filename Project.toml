@@ -69,7 +69,6 @@ MPI = "0.20"
 MultiBroadcastFusion = "0.3"
 NVTX = "0.3"
 OrderedCollections = "1"
-OrdinaryDiffEq = "6"
 PkgVersion = "0.1, 0.2, 0.3"
 PrettyTables = "2"
 Random = "1"
@@ -100,7 +99,6 @@ JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
-OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
@@ -109,5 +107,5 @@ TerminalLoggers = "5d786b92-1e48-4d6f-9151-6b4477ca9bed"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "Combinatorics", "CountFlops", "CUDA", "FastBroadcast", "Krylov", "JET", "Logging", "MPI", "OrderedCollections", "OrdinaryDiffEq", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
+test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "Combinatorics", "CountFlops", "CUDA", "FastBroadcast", "Krylov", "JET", "Logging", "MPI", "OrderedCollections", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
 

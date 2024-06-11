@@ -23,8 +23,8 @@ convergence_rate(err, Δh) =
     err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
 
     for (k, n) in enumerate(n_elems_seq)
-        z₀ = FT(0)
-        z₁ = FT(10)
+        z₀ = Geometry.ZPoint(FT(0))
+        z₁ = Geometry.ZPoint(FT(10))
         t₀ = FT(0)
         t₁ = FT(10)
         μ = FT(-1 / 2)
@@ -32,8 +32,9 @@ convergence_rate(err, Δh) =
         𝓌 = FT(1)
         δ = FT(1)
 
-        domain = Domains.IntervalDomain(z₀, z₁, x3boundary = (:bottom, :top))
-        zp = (z₀ + z₁ / n / 2):(z₁ / n):(z₁ - z₁ / n / 2)
+        domain =
+            Domains.IntervalDomain(z₀, z₁; boundary_names = (:bottom, :top))
+        zp = (z₀.z + z₁.z / n / 2):(z₁.z / n):(z₁.z - z₁.z / n / 2)
 
         function gaussian(z, t; μ = -1 // 2, ν = 1, 𝓌 = 1, δ = 1)
             return exp(-(z - μ - 𝓌 * t)^2 / (4 * ν * (t + δ))) / sqrt(1 + t / δ)
@@ -53,7 +54,7 @@ convergence_rate(err, Δh) =
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
         zc = Fields.coordinate_field(cs)
 
-        T = gaussian.(zc, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
+        T = gaussian.(zc.z, -0; μ = μ, δ = δ, ν = ν, 𝓌 = 𝓌)
         V = ones(FT, fs)
 
         function ∑tendencies!(dT, T, z, t)
@@ -67,7 +68,7 @@ convergence_rate(err, Δh) =
                 bottom = bc_vb,
                 top = Operators.Extrapolate(),
             )
-            gradc2f = Operators.GradientC2F(bottom = bc_vb, top = bc_gt)
+            gradc2f = Operators.GradientC2F(; bottom = bc_vb, top = bc_gt)
             gradf2c = Operators.GradientF2C()
             return @. dT = gradf2c(ν * gradc2f(T)) - A(V, T)
         end

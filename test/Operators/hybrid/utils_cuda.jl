@@ -12,7 +12,6 @@ import ClimaCore:
     Operators,
     Quadratures
 using LinearAlgebra, IntervalSets
-using OrdinaryDiffEq
 
 function hvspace_3D_box(
     context,
@@ -88,83 +87,4 @@ function hvspace_3D_sphere(context)
         Spaces.ExtrudedFiniteDifferenceSpace(horzspace, vert_center_space)
     hv_face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(hv_center_space)
     return hv_center_space, hv_face_space
-end
-
-@testset "Finite difference GradientF2C CUDA" begin
-    device = ClimaComms.device()
-    gpu_context = ClimaComms.SingletonCommsContext(device)
-    println("running test on $device device")
-
-    # Define hv GPU space
-    hv_center_space_gpu, hv_face_space_gpu = hvspace_3D_sphere(gpu_context)
-
-    coords = Fields.coordinate_field(hv_face_space_gpu)
-    z = coords.z
-
-    gradc = Operators.GradientF2C()
-
-    @test parent(Geometry.WVector.(gradc.(z))) ≈
-          parent(Geometry.WVector.(ones(hv_center_space_gpu)))
-
-
-    hdiv = Operators.Divergence()
-    hwdiv = Operators.WeakDivergence()
-    hgrad = Operators.Gradient()
-    hwgrad = Operators.WeakGradient()
-    hcurl = Operators.Curl()
-    hwcurl = Operators.WeakCurl()
-
-
-    ccoords = Fields.coordinate_field(hv_center_space_gpu)
-
-    cuₕ = Geometry.Covariant12Vector.(.-ccoords.lat, ccoords.long)
-    duₕ = @. hwgrad(hdiv(cuₕ)) - Geometry.Covariant12Vector(
-        hwcurl(Geometry.Covariant3Vector(hcurl(cuₕ))),
-    )
-
-    Ic2f = Operators.InterpolateC2F(
-        bottom = Operators.Extrapolate(),
-        top = Operators.Extrapolate(),
-    )
-
-    vdivf2c = Operators.DivergenceF2C(
-        top = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-        bottom = Operators.SetValue(Geometry.Contravariant3Vector(0.0)),
-    )
-
-    cρ = ones(hv_center_space_gpu)
-
-    vdivf2c.(Ic2f.(cρ .* cuₕ))
-end
-@testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal CUDA" begin
-
-    # Advection Equation
-    # ∂_t f + c ∂_x f  = 0
-    # the solution translates to the right at speed c,
-    # so if you you have a periodic domain of size [-π, π]
-    # at time t, the solution is f(x - c * t, y)
-    # here c == 1, integrate t == 2π or one full period
-
-    function rhs!(dudt, u, _, t)
-        # horizontal divergence operator applied to all levels
-        hdiv = Operators.Divergence()
-        @. dudt = -hdiv(u * Geometry.UVVector(1.0, 1.0))
-        Spaces.weighted_dss!(dudt)
-        return dudt
-    end
-
-    gpu_context = ClimaComms.SingletonCommsContext(ClimaComms.CUDADevice())
-    device = ClimaComms.device() #ClimaComms.CUDADevice()
-    println("running test on $device device")
-
-    hv_center_space_gpu, _ = hvspace_3D_box(gpu_context)
-    U = sin.(Fields.coordinate_field(hv_center_space_gpu).x)
-    dudt = zeros(eltype(U), hv_center_space_gpu)
-    rhs!(dudt, U, nothing, 0.0)
-
-    Δt = 0.01
-    prob = ODEProblem(rhs!, U, (0.0, 2π))
-    sol = solve(prob, SSPRK33(), dt = Δt)
-
-    @test Array(parent(U)) ≈ Array(parent(sol.u[end])) rtol = 1e-6
 end
