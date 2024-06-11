@@ -64,7 +64,6 @@ import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
-import ..allow_scalar
 
 using ..Utilities.UnrolledFunctions
 
@@ -120,7 +119,7 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
-        allow_scalar(ClimaComms.device(field)) do
+        ClimaComms.allowscalar(ClimaComms.device(field)) do
             Base.print_array(io, column_field2array_view(column_field))
         end
     else

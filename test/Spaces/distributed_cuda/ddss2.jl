@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 using Logging
 using Test
 
@@ -69,7 +67,7 @@ pid, nprocs = ClimaComms.init(context)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == 2
 
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         @test Topologies.local_neighboring_elements(
             Spaces.topology(space),
             1,

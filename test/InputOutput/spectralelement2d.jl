@@ -14,9 +14,6 @@ import ClimaCore:
     DataLayouts,
     InputOutput
 
-using CUDA
-CUDA.allowscalar(false)
-
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
     x, y = coord.x, coord.y
@@ -86,6 +83,7 @@ end
     reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
-    CUDA.allowscalar(true)
-    @test restart_Y == Y # test if restart is exact
+    ClimaComms.allowscalar(device) do
+        @test restart_Y == Y # test if restart is exact
+    end
 end

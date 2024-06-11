@@ -1,8 +1,8 @@
 using Test
 using JET
-import CUDA
-CUDA.allowscalar(false)
+import CUDA # explicitly required due to JET
 import ClimaComms
+ClimaComms.@import_required_backends
 import ClimaCore
 import ClimaCore: Spaces, Fields, Operators
 import ClimaCore.RecursiveApply: rmax
@@ -38,8 +38,10 @@ function test_column_integral_definite!(center_space, alloc_lim)
     ᶠz = Fields.coordinate_field(face_space).z
     z_top = Fields.level(ᶠz, Operators.right_idx(face_space))
     ᶜu = map(z -> (; one = one(z), powers = (z, z^2, z^3)), ᶜz)
-    CUDA.@allowscalar ∫u_ref =
+    device = ClimaComms.device(ᶜu)
+    ∫u_ref = ClimaComms.allowscalar(device) do
         map(z -> (; one = z, powers = (z^2 / 2, z^3 / 3, z^4 / 4)), z_top)
+    end
     ∫u_test = similar(∫u_ref)
 
     column_integral_definite!(∫u_test, ᶜu)
@@ -118,8 +120,10 @@ function test_column_mapreduce!(space, alloc_lim)
     z_top_field = Fields.level(z_field, Operators.right_idx(space))
     sin_field = @. sin(pi * z_field / z_top_field)
     square_and_sin(z, sin_value) = (; square = z^2, sin = sin_value)
-    CUDA.@allowscalar reduced_field_ref =
+    device = ClimaComms.device(z_field)
+    reduced_field_ref = ClimaComms.allowscalar(device) do
         map(z -> (; square = z^2, sin = one(z)), z_top_field)
+    end
     reduced_field_test = similar(reduced_field_ref)
     args = (square_and_sin, rmax, reduced_field_test, z_field, sin_field)
 

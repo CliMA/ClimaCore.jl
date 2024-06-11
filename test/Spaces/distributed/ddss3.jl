@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 include("ddss_setup.jl")
 
 #=
@@ -37,9 +35,10 @@ partition numbers
 @testset "4x4 element mesh with non-periodic boundaries on 3 processes" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 4), (false, false), (Nq, 1, 1))
+    device = ClimaComms.device(comms_ctx)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == (pid == 1 ? 6 : 5)
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         if pid == 1
             # gidx 1
             @test Topologies.local_neighboring_elements(

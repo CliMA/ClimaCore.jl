@@ -346,7 +346,7 @@ end
 end
 
 function call_getcolumn(fv, colidx, device)
-    ClimaCore.allow_scalar(device) do
+    ClimaComms.allowscalar(device) do
         fvcol = fv[colidx]
     end
     nothing
@@ -364,7 +364,7 @@ end
     colidx = Fields.ColumnIndex((1, 1), 1) # arbitrary index
     device = ClimaComms.device()
 
-    ClimaCore.allow_scalar(device) do
+    ClimaComms.allowscalar(device) do
         @test all(parent(fv.c.a[colidx]) .== Float32(1))
         @test all(parent(fv.f.y[colidx]) .== Float32(2))
         @test propertynames(fv) == propertynames(fv[colidx])
@@ -825,7 +825,7 @@ convergence_rate(err, Δh) =
             zcf = Fields.coordinate_field(Y.y).z
             Δz = Fields.Δz_field(axes(zcf))
             Δz_col = Δz[Fields.ColumnIndex((1, 1), 1)]
-            Δz_1 = ClimaCore.allow_scalar(device) do
+            Δz_1 = ClimaComms.allowscalar(device) do
                 parent(Δz_col)[1]
             end
             key = zelem

@@ -2,9 +2,8 @@
 julia --project=test
 using Revise; include(joinpath("test", "Limiters", "limiter.jl"))
 =#
-import CUDA
-CUDA.allowscalar(false)
 using ClimaComms
+ClimaComms.@import_required_backends
 using ClimaCore:
     DataLayouts,
     Fields,
@@ -139,7 +138,7 @@ end
         S = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds, h1 + n1 * (h2 - 1)))
         end
-        CUDA.@allowscalar begin
+        ClimaComms.allowscalar(device) do
             @test all(map(T -> T[3][1].x ≈ 2 * (T[1] - 1), S)) # q_min
             @test all(map(T -> T[3][1].y ≈ 3 * (T[2] - 1), S)) # q_min
             @test all(map(T -> T[3][2].x ≈ 2 * T[1], S)) # q_max
@@ -150,7 +149,7 @@ end
         SN = map(Iterators.product(1:n1, 1:n2)) do (h1, h2)
             (h1, h2, slab(limiter.q_bounds_nbr, h1 + n1 * (h2 - 1)))
         end
-        CUDA.@allowscalar begin
+        ClimaComms.allowscalar(device) do
             @test all(map(T -> T[3][1].x ≈ 2 * max(T[1] - 2, 0), SN))  # q_min
             @test all(map(T -> T[3][1].y ≈ 3 * max(T[2] - 2, 0), SN))  # q_min
             @test all(map(T -> T[3][2].x ≈ 2 * min(T[1] + 1, n1), SN))  # q_max
