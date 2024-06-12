@@ -841,6 +841,9 @@ struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
 end
 
+rebuild(data::IF{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
+    IF{S, Nij, A}(array)
+
 parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
 
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
