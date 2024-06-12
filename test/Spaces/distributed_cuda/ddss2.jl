@@ -40,6 +40,7 @@ pid, nprocs = ClimaComms.init(context)
     context = ClimaComms.MPICommsContext(device)
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
+    @show ClimaComms.nprocs(context), ClimaComms.mypid(context), iamroot
     if iamroot
         println("running test on $device device with $nprocs processes")
     end
@@ -107,7 +108,7 @@ pid, nprocs = ClimaComms.init(context)
     end
 #! format: on
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 7808
 
     #testing weighted dss on a vector field
     init_vectorstate(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
@@ -120,5 +121,5 @@ pid, nprocs = ClimaComms.init(context)
     @test parent(v0) ≈ parent(vx)
 
     p = @allocated Spaces.weighted_dss!(v0, dss_vbuffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 7808
 end

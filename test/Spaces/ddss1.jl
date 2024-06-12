@@ -107,10 +107,8 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
 #! format: on
 
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    @show p
-    #=
-    @test p == 0
-    =#
+    @test p ≤ 4064 # cuda allocation
+    @test p == 0 broken = device isa ClimaComms.CUDADevice
 end
 
 @testset "test if dss is no-op on an empty field" begin
@@ -135,6 +133,6 @@ end
     @test parent(yx) ≈ parent(y0)
 
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    @show p
-    #@test p == 0
+    @test p ≤ 4064 # cuda allocation
+    @test p == 0 broken = device isa ClimaComms.CUDADevice
 end
