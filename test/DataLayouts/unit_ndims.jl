@@ -1,6 +1,6 @@
 #=
 julia --project
-using Revise; include(joinpath("test", "DataLayouts", "ndims.jl"))
+using Revise; include(joinpath("test", "DataLayouts", "unit_ndims.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
