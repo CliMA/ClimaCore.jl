@@ -6,6 +6,7 @@ using Aqua
     # This tests that we don't accidentally run into
     # https://github.com/JuliaLang/julia/issues/29393
     ua = Aqua.detect_unbound_args_recursively(ClimaCore)
+    @show ua
     @test length(ua) == 0
 
     # See: https://github.com/SciML/OrdinaryDiffEq.jl/issues/1750

@@ -42,7 +42,7 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Union{IJFH{S, Nij, A}, Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
+    bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, A},
 ) where {S, Nij, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
@@ -59,10 +59,7 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::Union{
-        VIJFH{S, Nv, Nij, A},
-        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-    },
+    bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, A},
 ) where {S, Nv, Nij, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(bc)
     if Nv > 0 && Nh > 0
@@ -81,7 +78,7 @@ end
 
 function Base.copyto!(
     dest::VF{S, Nv},
-    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc::DataLayouts.BroadcastedUnionVF{S, Nv, A},
 ) where {S, Nv, A <: CuArrayBackedTypes}
     _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
@@ -98,7 +95,7 @@ end
 
 function Base.copyto!(
     dest::DataF{S},
-    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+    bc::DataLayouts.BroadcastedUnionDataF{S, A},
 ) where {S, A <: CUDA.CuArray}
     auto_launch!(
         knl_copyto!,

@@ -65,6 +65,21 @@ DataColumnStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
 DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, A}}) where {Nv, Nij, A} =
     IJFStyle{Nij, A}
 
+#####
+##### Union styles
+#####
+
+#! format: off
+const BroadcastedUnionIJFH{S, Nij, A}      = Union{Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}}, IJFH{S, Nij, A}}
+const BroadcastedUnionIFH{S, Ni, A}        = Union{Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}, IFH{S, Ni, A}}
+const BroadcastedUnionIJF{S, Nij, A}       = Union{Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}, IJF{S, Nij, A}}
+const BroadcastedUnionIF{S, Ni, A}         = Union{Base.Broadcast.Broadcasted{IFStyle{Ni, A}}, IF{S, Ni, A}}
+const BroadcastedUnionVIFH{S, Nv, Ni, A}   = Union{Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}}, VIFH{S, Nv, Ni, A}}
+const BroadcastedUnionVIJFH{S, Nv, Nij, A} = Union{Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}}, VIJFH{S, Nv, Nij, A}}
+const BroadcastedUnionVF{S, Nv, A}         = Union{Base.Broadcast.Broadcasted{VFStyle{Nv, A}}, VF{S, Nv, A}}
+const BroadcastedUnionDataF{S, A}          = Union{Base.Broadcast.Broadcasted{DataFStyle{A}}, DataF{S, A}}
+#! format: on
+
 abstract type Data3DStyle <: DataStyle end
 
 Base.Broadcast.BroadcastStyle(::Type{D}) where {D <: AbstractData} =
@@ -268,7 +283,7 @@ Base.@propagate_inbounds function column(
 end
 
 function Base.similar(
-    bc::Union{DataF{<:Any, A}, Broadcast.Broadcasted{DataFStyle{A}}},
+    bc::BroadcastedUnionDataF{<:Any, A},
     ::Type{Eltype},
 ) where {A, Eltype}
     PA = parent_array_type(A)
@@ -277,7 +292,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{IJFH{<:Any, Nij, A}, Broadcast.Broadcasted{IJFHStyle{Nij, A}}},
+    bc::BroadcastedUnionIJFH{<:Any, Nij, A},
     ::Type{Eltype},
     (_, _, _, _, Nh) = size(bc),
 ) where {Nij, A, Eltype}
@@ -287,7 +302,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{IFH{<:Any, Ni, A}, Broadcast.Broadcasted{IFHStyle{Ni, A}}},
+    bc::BroadcastedUnionIFH{<:Any, Ni, A},
     ::Type{Eltype},
     (_, _, _, _, Nh) = size(bc),
 ) where {Ni, A, Eltype}
@@ -297,7 +312,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    ::Union{IJF{<:Any, Nij, A}, Broadcast.Broadcasted{IJFStyle{Nij, A}}},
+    ::BroadcastedUnionIJF{<:Any, Nij, A},
     ::Type{Eltype},
 ) where {Nij, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
@@ -306,7 +321,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    ::Union{IF{<:Any, Ni, A}, Broadcast.Broadcasted{IFStyle{Ni, A}}},
+    ::BroadcastedUnionIF{<:Any, Ni, A},
     ::Type{Eltype},
 ) where {Ni, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
@@ -315,7 +330,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{VF{<:Any, Nv, A}, Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc::BroadcastedUnionVF{<:Any, Nv, A},
     ::Type{Eltype},
     dims = nothing,
 ) where {Nv, A, Eltype}
@@ -326,10 +341,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{
-        VIFH{<:Any, Nv, Ni, A},
-        Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
-    },
+    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
     ::Type{Eltype},
     dims = nothing,
 ) where {Nv, Ni, A, Eltype}
@@ -340,10 +352,7 @@ function Base.similar(
 end
 
 function Base.similar(
-    bc::Union{
-        VIJFH{<:Any, Nv, Nij, A},
-        Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-    },
+    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
     ::Type{Eltype},
     dims = nothing,
 ) where {Nv, Nij, A, Eltype}
@@ -356,7 +365,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{DataF{<:Any, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+    bc::BroadcastedUnionDataF{<:Any, A},
 ) where {F, Op, A}
     mapreduce(op, 1) do v
         Base.@_inline_meta
@@ -367,10 +376,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{
-        IJFH{<:Any, Nij, A},
-        Base.Broadcast.Broadcasted{IJFHStyle{Nij, A}},
-    },
+    bc::BroadcastedUnionIJFH{<:Any, Nij, A},
 ) where {F, Op, Nij, A}
     # mapreduce across DataSlab2D
     _, _, _, _, Nh = size(bc)
@@ -384,7 +390,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{IFH{<:Any, Ni, A}, Base.Broadcast.Broadcasted{IFHStyle{Ni, A}}},
+    bc::BroadcastedUnionIFH{<:Any, Ni, A},
 ) where {F, Op, Ni, A}
     # mapreduce across DataSlab1D
     _, _, _, _, Nh = size(bc)
@@ -418,7 +424,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{VF{<:Any, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc::BroadcastedUnionVF{<:Any, Nv, A},
 ) where {F, Op, Nv, A}
     # mapreduce across DataColumn levels
     mapreduce(op, 1:Nv) do v
@@ -432,10 +438,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{
-        VIFH{<:Any, Nv, Ni, A},
-        Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
-    },
+    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
 ) where {F, Op, Nv, Ni, A}
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
@@ -449,10 +452,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::Union{
-        VIJFH{<:Any, Nv, Nij, A},
-        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-    },
+    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
 ) where {F, Op, Nv, Nij, A}
     # mapreduce across columns
     _, _, _, _, Nh = size(bc)
@@ -481,7 +481,7 @@ end
 
 function Base.copyto!(
     dest::DataF{S},
-    bc::Union{DataF{S, A}, Base.Broadcast.Broadcasted{DataFStyle{A}}},
+    bc::BroadcastedUnionDataF{S, A},
 ) where {S, A}
     @inbounds dest[] = convert(S, bc[])
     return dest
@@ -489,7 +489,7 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::Union{IJFH{S, Nij}, Base.Broadcast.Broadcasted{<:IJFHStyle{Nij}}},
+    bc::BroadcastedUnionIJFH{S, Nij},
 ) where {S, Nij}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
@@ -502,7 +502,7 @@ end
 
 function Base.copyto!(
     dest::IFH{S, Ni},
-    bc::Union{IFH{S, Ni}, Base.Broadcast.Broadcasted{<:IFHStyle{Ni}}},
+    bc::BroadcastedUnionIFH{S, Ni},
 ) where {S, Ni}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
@@ -516,7 +516,7 @@ end
 # inline inner slab(::DataSlab2D) copy
 function Base.copyto!(
     dest::IJF{S, Nij},
-    bc::Union{IJF{S, Nij, A}, Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}},
+    bc::BroadcastedUnionIJF{S, Nij, A},
 ) where {S, Nij, A}
     @inbounds for j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, 1)
@@ -540,7 +540,7 @@ end
 # inline inner column(::DataColumn) copy
 function Base.copyto!(
     dest::VF{S, Nv},
-    bc::Union{VF{S, Nv, A}, Base.Broadcast.Broadcasted{VFStyle{Nv, A}}},
+    bc::BroadcastedUnionVF{S, Nv, A},
 ) where {S, Nv, A}
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
@@ -551,11 +551,8 @@ end
 
 function _serial_copyto!(
     dest::VIFH{S, Nv, Ni},
-    bc::Union{
-        VIFH{S, Nv, Ni, A},
-        Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
-    },
-) where {S, Nv, Ni, A}
+    bc::BroadcastedUnionVIFH{S, Nv, Ni},
+) where {S, Nv, Ni}
     (_, _, _, _, Nh) = size(bc)
     # copy contiguous columns
     @inbounds for h in 1:Nh, i in 1:Ni
@@ -568,8 +565,8 @@ end
 
 function _threaded_copyto!(
     dest::VIFH{S, Nv, Ni},
-    bc::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
-) where {S, Nv, Ni, A}
+    bc::BroadcastedUnionVIFH{S, Nv, Ni},
+) where {S, Nv, Ni}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
     @inbounds begin
@@ -587,25 +584,15 @@ end
 
 function Base.copyto!(
     dest::VIFH{S, Nv, Ni},
-    source::VIFH{S, Nv, Ni, A},
-) where {S, Nv, Ni, A}
-    return _serial_copyto!(dest, source)
-end
-
-function Base.copyto!(
-    dest::VIFH{S, Nv, Ni},
-    bc::Base.Broadcast.Broadcasted{VIFHStyle{Nv, Ni, A}},
-) where {S, Nv, Ni, A}
+    bc::BroadcastedUnionVIFH{S, Nv, Ni},
+) where {S, Nv, Ni}
     return _serial_copyto!(dest, bc)
 end
 
 function _serial_copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::Union{
-        VIJFH{S, Nv, Nij, A},
-        Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-    },
-) where {S, Nv, Nij, A}
+    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
+) where {S, Nv, Nij}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest)
     @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
@@ -618,8 +605,8 @@ end
 
 function _threaded_copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-) where {S, Nv, Nij, A}
+    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
+) where {S, Nv, Nij}
     _, _, _, _, Nh = size(dest)
     # parallelize over elements
     @inbounds begin
@@ -637,15 +624,8 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
-    source::VIJFH{S, Nv, Nij, A},
-) where {S, Nv, Nij, A}
-    return _serial_copyto!(dest, source)
-end
-
-function Base.copyto!(
-    dest::VIJFH{S, Nv, Nij},
-    bc::Base.Broadcast.Broadcasted{VIJFHStyle{Nv, Nij, A}},
-) where {S, Nv, Nij, A}
+    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
+) where {S, Nv, Nij}
     return _serial_copyto!(dest, bc)
 end
 
