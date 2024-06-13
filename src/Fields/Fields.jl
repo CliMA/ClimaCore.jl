@@ -17,7 +17,7 @@ import ..Quadratures
 import ..Grids: ColumnIndex, local_geometry_type
 import ..Spaces: Spaces, AbstractSpace, AbstractPointSpace, cuda_synchronize
 import ..Geometry: Geometry, Cartesian12Vector
-import ..Utilities: PlusHalf, half, UnrolledFunctions
+import ..Utilities: PlusHalf, half
 
 using ..RecursiveApply
 using ClimaComms

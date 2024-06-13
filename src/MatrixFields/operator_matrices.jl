@@ -1,3 +1,4 @@
+import UnrolledUtilities as UU
 # Note: This list must be kept up-to-date with finitedifference.jl.
 const OneArgFDOperatorWithCenterInput = Union{
     Operators.InterpolateC2F,
@@ -73,7 +74,8 @@ has_affine_bc(op) = any(
     op.bcs,
 )
 
-uses_extrapolate(op) = unrolled_any(bc -> bc isa Operators.Extrapolate, op.bcs)
+uses_extrapolate(op) =
+    UU.unrolled_any(bc -> bc isa Operators.Extrapolate, op.bcs)
 
 ################################################################################
 
