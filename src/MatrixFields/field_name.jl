@@ -1,3 +1,5 @@
+import UnrolledUtilities as UU
+
 """
     FieldName(name_chain...)
 
@@ -73,7 +75,7 @@ is_child_name(
     ::FieldName{parent_name_chain},
 ) where {child_name_chain, parent_name_chain} =
     length(child_name_chain) >= length(parent_name_chain) &&
-    unrolled_take(child_name_chain, Val(length(parent_name_chain))) ==
+    UU.unrolled_take(child_name_chain, Val(length(parent_name_chain))) ==
     parent_name_chain
 
 is_overlapping_name(name1, name2) =
@@ -85,7 +87,7 @@ extract_internal_name(
 ) where {child_name_chain, parent_name_chain} =
     is_child_name(child_name, parent_name) ?
     FieldName(
-        unrolled_drop(child_name_chain, Val(length(parent_name_chain)))...,
+        UU.unrolled_drop(child_name_chain, Val(length(parent_name_chain)))...,
     ) : error("$child_name is not a child name of $parent_name")
 
 append_internal_name(
@@ -126,7 +128,7 @@ function subtree_at_name(x, name)
     return if isempty(internal_names)
         FieldNameTreeLeaf(name)
     else
-        subsubtrees_at_name = unrolled_map(internal_names) do internal_name
+        subsubtrees_at_name = UU.unrolled_map(internal_names) do internal_name
             subtree_at_name(x, append_internal_name(name, internal_name))
         end
         FieldNameTreeNode(name, subsubtrees_at_name)
@@ -136,21 +138,23 @@ end
 is_valid_name(name, tree) =
     name == tree.name ||
     tree isa FieldNameTreeNode &&
-    unrolled_any(subtree -> is_valid_name(name, subtree), tree.subtrees)
+    UU.unrolled_any(subtree -> is_valid_name(name, subtree), tree.subtrees)
 
 function child_names(name, tree)
     is_valid_name(name, tree) || error("$name is not a valid name")
     subtree = get_subtree_at_name(name, tree)
     subtree isa FieldNameTreeNode || error("$name does not have child names")
-    return unrolled_map(subsubtree -> subsubtree.name, subtree.subtrees)
+    return UU.unrolled_map(subsubtree -> subsubtree.name, subtree.subtrees)
 end
 get_subtree_at_name(name, tree) =
     if name == tree.name
         tree
     else
-        subtree = unrolled_findonly(tree.subtrees) do subtree
+        filtered_values = UU.unrolled_filter(tree.subtrees) do subtree
             is_valid_name(name, subtree)
         end
+        @assert length(filtered_values) == 1
+        subtree = filtered_values[1]
         get_subtree_at_name(name, subtree)
     end
 

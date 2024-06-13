@@ -65,8 +65,6 @@ import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
 
-using ..Utilities.UnrolledFunctions
-
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
     TridiagonalMatrixRow,

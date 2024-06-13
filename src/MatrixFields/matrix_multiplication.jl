@@ -1,3 +1,5 @@
+import UnrolledUtilities as UU
+
 """
     MultiplyColumnwiseBandMatrixField()
 
@@ -375,7 +377,7 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
         # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
         # simplicity, use zero padding for rows that are outside the matrix.
         # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-        matrix2_rows = unrolled_map((ld1:ud1...,)) do d
+        matrix2_rows = UU.unrolled_map((ld1:ud1...,)) do d
             # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
             Base.@_inline_meta
             if isnothing(bc) ||

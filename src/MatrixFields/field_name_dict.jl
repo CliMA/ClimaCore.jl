@@ -1,3 +1,5 @@
+import UnrolledUtilities as UU
+
 """
     FieldNameDict(keys, entries)
     FieldNameDict{T}(key_entry_pairs...)
@@ -43,7 +45,7 @@ struct FieldNameDict{
         length(keys) == length(entries) || error(
             "FieldNameDict cannot have different numbers of keys and entries",
         )
-        unrolled_foreach(entries) do entry
+        UU.unrolled_foreach(entries) do entry
             check_entry(T, entry) ||
                 error("Invalid $(FieldNameDict{T}) entry: $entry")
         end
@@ -51,8 +53,8 @@ struct FieldNameDict{
     end
 end
 function FieldNameDict{T}(key_entry_pairs::Pair{<:T}...) where {T}
-    keys = unrolled_map(pair -> pair[1], key_entry_pairs)
-    entries = unrolled_map(pair -> pair[2], key_entry_pairs)
+    keys = UU.unrolled_map(pair -> pair[1], key_entry_pairs)
+    entries = UU.unrolled_map(pair -> pair[2], key_entry_pairs)
     return FieldNameDict(FieldNameSet{T}(keys), entries)
 end
 
@@ -89,7 +91,7 @@ function Base.show(io::IO, dict::FieldNameDict)
 end
 
 function Operators.strip_space(dict::FieldNameDict)
-    vals = unrolled_map(values(dict)) do val
+    vals = UU.unrolled_map(values(dict)) do val
         if val isa Fields.Field
             Fields.Field(Fields.field_values(val), Operators.PlaceholderSpace())
         else
@@ -100,7 +102,7 @@ function Operators.strip_space(dict::FieldNameDict)
 end
 
 function Adapt.adapt_structure(to, dict::FieldNameDict)
-    vals = unrolled_map(v -> Adapt.adapt_structure(to, v), values(dict))
+    vals = UU.unrolled_map(v -> Adapt.adapt_structure(to, v), values(dict))
     FieldNameDict(keys(dict), vals)
 end
 
@@ -108,8 +110,11 @@ Base.keys(dict::FieldNameDict) = dict.keys
 
 Base.values(dict::FieldNameDict) = dict.entries
 
-Base.pairs(dict::FieldNameDict) =
-    unrolled_map((key, value) -> key => value, keys(dict).values, values(dict))
+Base.pairs(dict::FieldNameDict) = UU.unrolled_map(
+    (key, value) -> key => value,
+    keys(dict).values,
+    values(dict),
+)
 
 Base.length(dict::FieldNameDict) = length(keys(dict))
 
@@ -120,8 +125,10 @@ Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
 
 function Base.getindex(dict::FieldNameDict, key)
     key in keys(dict) || throw(KeyError(key))
-    key′, entry′ =
-        unrolled_findonly(pair -> is_child_value(key, pair[1]), pairs(dict))
+    filtered_values =
+        UU.unrolled_filter(pair -> is_child_value(key, pair[1]), pairs(dict))
+    @assert length(filtered_values) == 1
+    key′, entry′ = filtered_values[1]
     return get_internal_entry(entry′, get_internal_key(key, key′))
 end
 
@@ -175,7 +182,7 @@ function Base.getindex(dict::FieldNameDict, new_keys::FieldNameSet)
 end
 
 function Base.similar(dict::FieldNameDict)
-    entries = unrolled_map(values(dict)) do entry
+    entries = UU.unrolled_map(values(dict)) do entry
         entry isa UniformScaling ? entry : similar(entry)
     end
     return FieldNameDict(keys(dict), entries)
@@ -201,11 +208,12 @@ end
 
 function check_diagonal_matrix(matrix, error_message_start = "The matrix")
     check_block_diagonal_matrix(matrix, error_message_start)
-    non_diagonal_entry_pairs = unrolled_filter(pairs(matrix)) do pair
+    non_diagonal_entry_pairs = UU.unrolled_filter(pairs(matrix)) do pair
         !(pair[2] isa UniformScaling || eltype(pair[2]) <: DiagonalMatrixRow)
     end
-    non_diagonal_entry_keys =
-        FieldMatrixKeys(unrolled_map(pair -> pair[1], non_diagonal_entry_pairs))
+    non_diagonal_entry_keys = FieldMatrixKeys(
+        UU.unrolled_map(pair -> pair[1], non_diagonal_entry_pairs),
+    )
     isempty(non_diagonal_entry_keys) || error(
         "$error_message_start has non-diagonal entries at the following keys: \
          $(set_string(non_diagonal_entry_keys))",
@@ -219,7 +227,7 @@ Checks whether the `FieldNameDict` `dict` contains any un-materialized
 `AbstractBroadcasted` entries.
 """
 is_lazy(dict) =
-    unrolled_any(entry -> entry isa Base.AbstractBroadcasted, values(dict))
+    UU.unrolled_any(entry -> entry isa Base.AbstractBroadcasted, values(dict))
 
 """
     lazy_main_diagonal(matrix)
@@ -250,12 +258,12 @@ function field_vector_view(x, name_tree = FieldNameTree(x))
     return FieldNameDict(keys_of_fields, entries)
 end
 names_of_fields(x, name_tree) =
-    unrolled_flatmap(top_level_names(x)) do name
+    UU.unrolled_flatmap(top_level_names(x)) do name
         entry = get_field(x, name)
         if entry isa Fields.Field
             (name,)
         elseif entry isa Fields.FieldVector
-            unrolled_map(names_of_fields(entry, name_tree)) do internal_name
+            UU.unrolled_map(names_of_fields(entry, name_tree)) do internal_name
                 append_internal_name(name, internal_name)
             end
         else
@@ -275,18 +283,19 @@ concrete_field_vector_within_subtree(tree, vector) =
     if tree.name in keys(vector)
         vector[tree.name]
     else
-        subtrees = unrolled_filter(tree.subtrees) do subtree
-            unrolled_any(keys(vector).values) do key
+        subtrees = UU.unrolled_filter(tree.subtrees) do subtree
+            UU.unrolled_any(keys(vector).values) do key
                 is_child_name(key, subtree.name)
             end
         end
-        internal_names = unrolled_map(subtrees) do subtree
+        internal_names = UU.unrolled_map(subtrees) do subtree
             extract_first(extract_internal_name(subtree.name, tree.name))
         end
-        internal_entries = unrolled_map(subtrees) do subtree
+        internal_entries = UU.unrolled_map(subtrees) do subtree
             concrete_field_vector_within_subtree(subtree, vector)
         end
-        entry_eltypes = unrolled_map(recursive_bottom_eltype, internal_entries)
+        entry_eltypes =
+            UU.unrolled_map(recursive_bottom_eltype, internal_entries)
         T = promote_type(entry_eltypes...)
         Fields.FieldVector{T}(NamedTuple{internal_names}(internal_entries))
     end
@@ -362,7 +371,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(zero),
     vector_or_matrix::FieldNameDict,
 )
-    entries = unrolled_map(values(vector_or_matrix)) do entry
+    entries = UU.unrolled_map(values(vector_or_matrix)) do entry
         entry isa UniformScaling ? zero(entry) :
         Base.Broadcast.broadcasted(value -> rzero(typeof(value)), entry)
     end
@@ -374,7 +383,7 @@ function Base.Broadcast.broadcasted(
     ::typeof(-),
     vector_or_matrix::FieldNameDict,
 )
-    entries = unrolled_map(values(vector_or_matrix)) do entry
+    entries = UU.unrolled_map(values(vector_or_matrix)) do entry
         entry isa UniformScaling ? -entry : Base.Broadcast.broadcasted(-, entry)
     end
     return FieldNameDict(keys(vector_or_matrix), entries)
@@ -462,7 +471,7 @@ function Base.Broadcast.broadcasted(
         matrix,
         "inv.(<matrix>) cannot be computed because the matrix",
     )
-    entries = unrolled_map(values(matrix)) do entry
+    entries = UU.unrolled_map(values(matrix)) do entry
         entry isa UniformScaling ? inv(entry) :
         Base.Broadcast.broadcasted(inv, entry)
     end
@@ -511,7 +520,7 @@ convert_to_field_name_dict(
 ################################################################################
 
 function Base.Broadcast.materialize(vector_or_matrix::FieldNameDict)
-    entries = unrolled_map(values(vector_or_matrix)) do entry
+    entries = UU.unrolled_map(values(vector_or_matrix)) do entry
         Base.Broadcast.materialize(entry)
     end
     return FieldNameDict(keys(vector_or_matrix), entries)
