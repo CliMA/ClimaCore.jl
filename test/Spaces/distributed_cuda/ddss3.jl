@@ -147,5 +147,5 @@ partition numbers
     end
 #! format: on
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 10816
 end
