@@ -4,8 +4,7 @@ import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
 get_n_items(field::Fields.Field) = get_n_items(Fields.field_values(field))
-get_n_items(data::DataLayouts.AbstractData) =
-    get_n_items(DataLayouts.universal_size(data))
+get_n_items(data::DataLayouts.AbstractData) = get_n_items(size(data))
 get_n_items(arr::AbstractArray) = get_n_items(size(parent(arr)))
 get_n_items(tup::Tuple) = prod(tup)
 
