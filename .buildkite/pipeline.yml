@@ -143,6 +143,10 @@ steps:
         key: unit_meshes_rectangle
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/rectangle.jl"
 
+      - label: "Unit: meshes opt"
+        key: unit_meshes_opt
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/opt_meshes.jl"
+
       - label: "Unit: meshes cubedsphere"
         key: unit_meshes_cubed_sphere
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/cubedsphere.jl"

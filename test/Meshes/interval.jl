@@ -314,3 +314,27 @@ end
     @test Meshes.coordinates(trunc_mesh, 1, length(trunc_mesh.faces)) ==
           Geometry.ZPoint(z_top)
 end
+
+@testset "monotonic_check - dispatch" begin
+    faces = range(Geometry.XPoint(0), Geometry.XPoint(10); length = 11)
+    @test Meshes.monotonic_check(faces) == :no_check
+    @test Meshes.monotonic_check(collect(faces)) == :no_check
+end
+
+@testset "monotonic_check" begin
+    faces = range(Geometry.ZPoint(0), Geometry.ZPoint(10); length = 11)
+    @test Meshes.monotonic_check(faces) == :pass # monotonic increasing
+    @test Meshes.monotonic_check(collect(faces)) == :pass # monotonic increasing
+    @test Meshes.monotonic_check(map(x -> x.z, faces)) == :pass # monotonic increasing
+
+    faces = range(Geometry.ZPoint(0), Geometry.ZPoint(-10); length = 11)
+    @test Meshes.monotonic_check(faces) == :pass # monotonic decreasing
+    @test Meshes.monotonic_check(collect(faces)) == :pass # monotonic decreasing
+    @test Meshes.monotonic_check(map(x -> x.z, faces)) == :pass # monotonic decreasing
+
+    faces = map(z -> Geometry.ZPoint(1), 1:10)
+    @test_throws ErrorException Meshes.monotonic_check(faces) # non-monotonic
+
+    faces = range(Geometry.ZPoint(0), Geometry.ZPoint(10); length = 11)
+    cfaces = collect(faces)
+end
