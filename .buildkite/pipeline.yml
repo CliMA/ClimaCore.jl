@@ -187,13 +187,16 @@ steps:
 
       - label: "Unit: spaces"
         key: unit_spaces
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/spaces.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
 
       - label: "Unit: cuda spaces"
         key: "gpu_cuda_spaces"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/spaces.jl"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
