@@ -146,7 +146,6 @@ steps:
       - label: "Unit: meshes cubedsphere"
         key: unit_meshes_cubed_sphere
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/cubedsphere.jl"
-        soft_fail: true
 
   - group: "Unit: Topologies"
     steps:

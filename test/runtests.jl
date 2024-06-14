@@ -20,7 +20,7 @@ UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
 UnitTest("AxisTensors"                             ,"Geometry/axistensors.jl"),
 UnitTest("Interval mesh"                           ,"Meshes/interval.jl"),
 UnitTest("Rectangle mesh"                          ,"Meshes/rectangle.jl"),
-# UnitTest("Cubedsphere mesh"                        ,"Meshes/cubedsphere.jl"), # broken on GHA
+UnitTest("Cubedsphere mesh"                        ,"Meshes/cubedsphere.jl"),
 UnitTest("Interval topology"                       ,"Topologies/interval.jl"),
 UnitTest("Rectangle topology"                      ,"Topologies/rectangle.jl"),
 UnitTest("Rectangle surface topology"              ,"Topologies/rectangle_sfc.jl"),
