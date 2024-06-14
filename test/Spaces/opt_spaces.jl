@@ -43,12 +43,12 @@ end
     else
         test_n_failures(0,    TU.PointSpace, context)
         test_n_failures(137,  TU.SpectralElementSpace1D, context)
-        test_n_failures(279,  TU.SpectralElementSpace2D, context)
+        test_n_failures(272,  TU.SpectralElementSpace2D, context)
         test_n_failures(4,    TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(5,    TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(280,  TU.SphereSpectralElementSpace, context)
-        test_n_failures(285,  TU.CenterExtrudedFiniteDifferenceSpace, context)
-        test_n_failures(285,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(278,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(283,  TU.CenterExtrudedFiniteDifferenceSpace, context)
+        test_n_failures(283,  TU.FaceExtrudedFiniteDifferenceSpace, context)
     end
 #! format: on
 end

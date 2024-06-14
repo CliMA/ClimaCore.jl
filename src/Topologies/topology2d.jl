@@ -431,8 +431,11 @@ function _Topology2D(
         elem = elemorder[gidx]
         for face in 1:4
             if Meshes.is_boundary_face(mesh, elem, face)
-                boundary_name = Meshes.boundary_face_name(mesh, elem, face)
-                push!(boundaries[boundary_name], (lidx, face))
+                boundary_name =
+                    Meshes.boundary_face_name(mesh, elem, face)::Symbol
+                face_boundary =
+                    boundaries[boundary_name]::Vector{Tuple{Int64, Int64}}
+                push!(face_boundary, (lidx, face))
             else
                 oelem, oface, reversed = Meshes.opposing_face(mesh, elem, face)
                 ogidx = orderindex[oelem]
@@ -482,7 +485,7 @@ function _Topology2D(
         ghost_vertex_comm_idx_offset[i + 1] =
             ghost_vertex_comm_idx_offset[i] + length(procs)
         for pr in procs
-            loc = findfirst(send_elem_pids .== pr)
+            loc = findfirst(send_elem_pids .== pr)::Int
             push!(ghost_vertex_neighbor_loc, loc)
             comm_vertex_lengths[loc] += 1
         end
@@ -495,7 +498,7 @@ function _Topology2D(
     ghost_face_gcidx = zeros(Int, length(ghost_faces))
     for (i, (e, face, o, oface, reversed)) in enumerate(ghost_faces)
         ghostelem = recv_elem_gidx[o]
-        loc = findfirst(send_elem_pids .== elempid[ghostelem])
+        loc = findfirst(send_elem_pids .== elempid[ghostelem])::Int
         comm_face_lengths[loc] += 1
         ghost_face_neighbor_loc[i] = loc
         ghost_face_gcidx[i] = global_face_gidx[face, local_elem_gidx[e]]
