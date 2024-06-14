@@ -496,7 +496,9 @@ steps:
 
       - label: "Unit: column"
         key: unit_column
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/column.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
 
       - label: "Unit: wfact"
         key: unit_wfact
@@ -1168,7 +1170,7 @@ steps:
 
       - label: "Perf: FD operator benchmarks"
         key: "perf_fd_ops"
-        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/column_benchmark.jl"
+        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_column.jl"
         soft_fail: true
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
