@@ -1,7 +1,7 @@
 #=
-julia --check-bounds=yes --project=test
-julia --project=test
-using Revise; include(joinpath("test", "Fields", "field.jl"))
+julia --check-bounds=yes --project
+julia --project
+using Revise; include(joinpath("test", "Fields", "unit_field.jl"))
 =#
 using Test
 using JET
@@ -920,6 +920,6 @@ end
     nothing
 end
 
-include("field_multi_broadcast_fusion.jl")
+include("unit_field_multi_broadcast_fusion.jl")
 
 nothing

@@ -31,7 +31,7 @@ UnitTest("Spaces"                                  ,"Spaces/spaces.jl"),
 UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
 UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
 # UnitTest("Terrain warp"                            ,"Spaces/terrain_warp.jl"), # appears to hang on GHA
-# UnitTest("Fields"                                  ,"Fields/field.jl"), # has benchmarks
+UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
 UnitTest("Spectral elem - rectilinear"             ,"Operators/spectralelement/rectilinear.jl"),
 UnitTest("Spectral elem - opt"                     ,"Operators/spectralelement/opt.jl"),
 UnitTest("Spectral elem - Diffusion 2d"            ,"Operators/spectralelement/unit_diffusion2d.jl"),
