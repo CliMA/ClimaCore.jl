@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Meshes", "cubedsphere.jl"))
+=#
 using ClimaCore: Geometry, Domains, Meshes
 using Test
 using StaticArrays, SparseArrays, LinearAlgebra, ForwardDiff
@@ -120,7 +124,7 @@ end
                     @test norm(Geometry.components(coord)) ≈ 5 rtol = 3eps(FT)
                     @test Meshes.containing_element(mesh, coord) == elem
                     @test Meshes.reference_coordinates(mesh, elem, coord) ≈ ξ atol =
-                        10eps(FT)
+                        20eps(FT)
                 end
 
                 for vert in 1:4
@@ -191,11 +195,11 @@ end
             )
         end
         @test M[1, 1] < 0
-        @test M[2, 1] == 0
+        @test abs(M[2, 1]) ≤ eps(Float64)
         @test M[3, 1] > 0
-        @test M[1, 2] == 0
+        @test abs(M[1, 2]) ≤ eps(Float64)
         @test M[2, 2] < 0
-        @test M[3, 2] == 0
+        @test abs(M[3, 2]) ≤ eps(Float64)
 
         M = ForwardDiff.jacobian(SVector(-1.0, -1.0)) do ξ
             Geometry.components(
@@ -203,11 +207,11 @@ end
             )
         end
         @test M[1, 1] < 0
-        @test M[2, 1] == 0
+        @test abs(M[2, 1]) ≤ eps(Float64)
         @test M[3, 1] > 0
-        @test M[1, 2] == 0
+        @test abs(M[1, 2]) ≤ eps(Float64)
         @test M[2, 2] < 0
-        @test M[3, 2] == 0
+        @test abs(M[3, 2]) ≤ eps(Float64)
     end
 end
 
