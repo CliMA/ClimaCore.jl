@@ -208,7 +208,7 @@ bc_name_base(bcs::NamedTuple) = (
 bc_name_base(bcs::Tuple) = (:none,)
 bc_name(bcs::Tuple) = (:none,)
 
-include("column_benchmark_kernels.jl")
+include("benchmark_column_kernels.jl")
 
 uses_bycolumn(::typeof(op_broadcast_example0!)) = true
 uses_bycolumn(::typeof(op_broadcast_example1!)) = true
