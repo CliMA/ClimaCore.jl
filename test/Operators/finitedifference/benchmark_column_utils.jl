@@ -11,7 +11,7 @@ import ClimaCore
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 import ClimaCore: Domains, Meshes, Spaces, Fields, Operators, Topologies
 import ClimaCore.Domains: Geometry
@@ -292,13 +292,13 @@ function benchmark_operators(z_elems, ::Type{FT}) where {FT}
     t_ave = OrderedCollections.OrderedDict()
     benchmark_arrays(z_elems, FT)
 
-    cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
+    cspace = ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
     benchmark_operators_base(trials, t_ave, cfield, ffield)
 
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems)
+    cspace = CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)

@@ -31,7 +31,7 @@ using ForwardDiff
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 function spectral_space_2D(; n1 = 1, n2 = 1, Nij = 4)
     domain = Domains.RectangleDomain(
@@ -115,7 +115,7 @@ end
 @testset "mapreduce inside broadcast expression" begin
     dev = ClimaComms.device()
     context = ClimaComms.context(dev)
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context)
+    cspace = CenterExtrudedFiniteDifferenceSpace(Float32; context)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     c = fill(
         (
@@ -141,7 +141,7 @@ end
     FT = Float32
     device = ClimaComms.CPUSingleThreaded() # fill is broken on gpu
     context = ClimaComms.SingletonCommsContext(device)
-    for space in TU.all_spaces(FT; context)
+    for space in all_spaces(FT; context)
         f = fill((; x = FT(1)), space)
         pow_n(f) # Compile first
         p_allocated = @allocated pow_n(f)
@@ -177,8 +177,8 @@ end
     device = ClimaComms.CPUSingleThreaded() # broken on gpu
     context = ClimaComms.SingletonCommsContext(device)
     for space in (
-        TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-        TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+        CenterExtrudedFiniteDifferenceSpace(FT; context),
+        ColumnCenterFiniteDifferenceSpace(FT; context),
     )
         a = Fields.level(fill(FT(0), space), 1)
         b = Fields.level(fill(FT(2), space), 1)
@@ -201,7 +201,7 @@ end
 # Requires `--check-bounds=yes`
 @testset "Constructing & broadcasting over empty fields" begin
     FT = Float32
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         f = fill((;), space)
         @. f += f
     end
@@ -219,14 +219,14 @@ end
     empty_field(space) = fill((;), space)
 
     # Broadcasting over the wrong size should error
-    test_broken_throws(empty_field(TU.PointSpace(FT)))
-    test_broken_throws(empty_field(TU.SpectralElementSpace1D(FT)))
-    test_broken_throws(empty_field(TU.SpectralElementSpace2D(FT)))
-    test_broken_throws(empty_field(TU.ColumnCenterFiniteDifferenceSpace(FT)))
-    test_broken_throws(empty_field(TU.ColumnFaceFiniteDifferenceSpace(FT)))
-    test_broken_throws(empty_field(TU.SphereSpectralElementSpace(FT)))
-    test_broken_throws(empty_field(TU.CenterExtrudedFiniteDifferenceSpace(FT)))
-    test_broken_throws(empty_field(TU.FaceExtrudedFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(PointSpace(FT)))
+    test_broken_throws(empty_field(SpectralElementSpace1D(FT)))
+    test_broken_throws(empty_field(SpectralElementSpace2D(FT)))
+    test_broken_throws(empty_field(ColumnCenterFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(ColumnFaceFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(SphereSpectralElementSpace(FT)))
+    test_broken_throws(empty_field(CenterExtrudedFiniteDifferenceSpace(FT)))
+    test_broken_throws(empty_field(FaceExtrudedFiniteDifferenceSpace(FT)))
 
     # TODO: performance optimization: shouldn't we do
     #       nothing when broadcasting over empty fields?
@@ -308,8 +308,8 @@ end
     FT = Float64
     device = ClimaComms.device()
     comms_ctx = ClimaComms.context(device)
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
-    fspace = TU.FaceExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    cspace = CenterExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
+    fspace = FaceExtrudedFiniteDifferenceSpace(FT; context = comms_ctx)
     cx = Fields.fill((; a = FT(1), b = FT(2)), cspace)
     cy = Fields.fill((; a = FT(1), b = FT(2)), cspace)
     fx = Fields.fill((; a = FT(1), b = FT(2)), fspace)
@@ -356,7 +356,7 @@ function call_getproperty(fv)
     nothing
 end
 @testset "FieldVector getindex" begin
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(Float32)
+    cspace = CenterExtrudedFiniteDifferenceSpace(Float32)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     c = fill((a = Float32(1), b = Float32(2)), cspace)
     f = fill((x = Float32(1), y = Float32(2)), fspace)
@@ -386,7 +386,7 @@ end
 @testset "FieldVector array_type" begin
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
-    space = TU.SpectralElementSpace1D(Float32; context)
+    space = SpectralElementSpace1D(Float32; context)
     xcenters = Fields.coordinate_field(space).x
     y = Fields.FieldVector(x = xcenters)
     @test ClimaComms.array_type(y) == ClimaComms.array_type(device)
@@ -561,11 +561,11 @@ end
 
 @testset "Level" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
-        TU.levelable(space) || continue
+    for space in all_spaces(FT)
+        levelable(space) || continue
         Y = fill((; x = FT(2)), space)
-        lg_space = Spaces.level(space, TU.fc_index(1, space))
-        lg_field_space = axes(Fields.level(Y, TU.fc_index(1, space)))
+        lg_space = Spaces.level(space, fc_index(1, space))
+        lg_field_space = axes(Fields.level(Y, fc_index(1, space)))
         @test all(
             Spaces.local_geometry_data(lg_space).coordinates ===
             Spaces.local_geometry_data(lg_field_space).coordinates,
@@ -576,7 +576,7 @@ end
 
 @testset "Points from Columns" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         if space isa Spaces.SpectralElementSpace1D
             Y = fill((; x = FT(1)), space)
             point_space_from_field = axes(Fields.column(Y.x, 1, 1))
@@ -611,19 +611,19 @@ end
         end
         nothing
     end
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         # Filter out spaces without z coordinates:
-        TU.has_z_coordinates(space) || continue
+        has_z_coordinates(space) || continue
         Y = fill((; x = FT(1)), space)
         ᶜz_surf =
-            Spaces.level(Fields.coordinate_field(Y).z, TU.fc_index(1, space))
-        ᶜx_surf = copy(Spaces.level(Y.x, TU.fc_index(1, space)))
+            Spaces.level(Fields.coordinate_field(Y).z, fc_index(1, space))
+        ᶜx_surf = copy(Spaces.level(Y.x, fc_index(1, space)))
 
         # Still need to define broadcast rules for surface planes with 3D domains
         domain_surface_bc!(Y.x, ᶜz_surf, ᶜx_surf)
 
         # Skip spaces incompatible with Fields.bycolumn:
-        TU.bycolumnable(space) || continue
+        bycolumnable(space) || continue
         Yc = fill((; x = FT(1)), space)
         column_surface_bc!(Yc.x, ᶜz_surf, ᶜx_surf)
         @test Y.x == Yc.x
@@ -669,7 +669,7 @@ Base.broadcastable(x::InferenceFoo) = Ref(x)
     foo = InferenceFoo(2.0)
     device = ClimaComms.CPUSingleThreaded() # cuda fill is broken
     context = ClimaComms.SingletonCommsContext(device)
-    for space in TU.all_spaces(FT; context)
+    for space in all_spaces(FT; context)
         Y = fill((; a = FT(0), b = FT(1)), space)
         @test_throws ErrorException("type InferenceFoo has no field bingo") FieldFromNamedTupleBroken(
             space,
@@ -808,18 +808,18 @@ convergence_rate(err, Δh) =
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
     for space_constructor in [
-        TU.ColumnCenterFiniteDifferenceSpace,
-        TU.ColumnFaceFiniteDifferenceSpace,
-        TU.CenterExtrudedFiniteDifferenceSpace,
-        TU.FaceExtrudedFiniteDifferenceSpace,
+        ColumnCenterFiniteDifferenceSpace,
+        ColumnFaceFiniteDifferenceSpace,
+        CenterExtrudedFiniteDifferenceSpace,
+        FaceExtrudedFiniteDifferenceSpace,
     ]
         device isa ClimaComms.CUDADevice && continue # broken on gpu
         for zelem in (2^2, 2^3, 2^4, 2^5)
             space = space_constructor(FT; zelem, context)
             # # Filter out spaces without z coordinates:
-            # TU.has_z_coordinates(space) || continue
+            # has_z_coordinates(space) || continue
             # # Skip spaces incompatible with Fields.bycolumn:
-            # TU.bycolumnable(space) || continue
+            # bycolumnable(space) || continue
 
             Y = fill((; y = FT(1)), space)
             zcf = Fields.coordinate_field(Y.y).z
@@ -833,7 +833,7 @@ convergence_rate(err, Δh) =
                 results[key] =
                     Dict(:maxerr => 0, :Δz_1 => FT(0), :∫y => [], :y => [])
             end
-            ∫y = Spaces.level(similar(Y.y), TU.fc_index(1, space))
+            ∫y = Spaces.level(similar(Y.y), fc_index(1, space))
             ∫y .= 0
             y = Y.y
             @. y .= 1 + sin(zcf)
@@ -879,12 +879,12 @@ end
     FT = Float64
     device = ClimaComms.CPUSingleThreaded()
     context = ClimaComms.SingletonCommsContext(device)
-    for space in TU.all_spaces(FT; context)
+    for space in all_spaces(FT; context)
         # Filter out spaces without z coordinates:
-        TU.has_z_coordinates(space) || continue
+        has_z_coordinates(space) || continue
         Y = fill((; y = FT(1)), space)
         zcf = Fields.coordinate_field(Y.y).z
-        ∫y = Spaces.level(similar(Y.y), TU.fc_index(1, space))
+        ∫y = Spaces.level(similar(Y.y), fc_index(1, space))
         ∫y .= 0
         y = Y.y
         @. y .= 1 + sin(zcf)
@@ -893,7 +893,7 @@ end
         p = @allocated Operators.column_integral_definite!(∫y, y)
         @test p == 0
         # Skip spaces incompatible with Fields.bycolumn:
-        TU.bycolumnable(space) || continue
+        bycolumnable(space) || continue
         # Explicit bycolumn
         integrate_bycolumn!(∫y, Y) # compile first
         p = @allocated integrate_bycolumn!(∫y, Y)
@@ -905,8 +905,8 @@ end
 
 @testset "ncolumns" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
-        TU.bycolumnable(space) || continue
+    for space in all_spaces(FT)
+        bycolumnable(space) || continue
         hspace = Spaces.horizontal_space(space)
         Nh = Topologies.nlocalelems(hspace)
         Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))

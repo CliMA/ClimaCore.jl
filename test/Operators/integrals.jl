@@ -12,7 +12,7 @@ import ClimaCore.Operators:
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 are_boundschecks_forced = Base.JLOptions().check_bounds == 1
 center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
@@ -198,44 +198,44 @@ end
 
     for FT in (Float32, Float64)
         test_column_integral_definite!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            ColumnCenterFiniteDifferenceSpace(FT; context),
             i_lim[(1, FT)],
         )
         test_column_integral_definite!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            CenterExtrudedFiniteDifferenceSpace(FT; context),
             i_lim[(2, FT)],
         )
         test_column_integral_indefinite!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            ColumnCenterFiniteDifferenceSpace(FT; context),
             i_lim[(3, FT)],
         )
         test_column_integral_indefinite!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            CenterExtrudedFiniteDifferenceSpace(FT; context),
             i_lim[(4, FT)],
         )
         broken || test_column_integral_indefinite_fn!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            ColumnCenterFiniteDifferenceSpace(FT; context),
             i_lim[(3, FT)],
         )
         broken || test_column_integral_indefinite_fn!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            CenterExtrudedFiniteDifferenceSpace(FT; context),
             i_lim[(4, FT)],
         )
 
         broken || test_column_mapreduce!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
+            ColumnCenterFiniteDifferenceSpace(FT; context),
             lim[(1, FT)],
         )
         broken || test_column_mapreduce!(
-            TU.ColumnFaceFiniteDifferenceSpace(FT; context),
+            ColumnFaceFiniteDifferenceSpace(FT; context),
             lim[(2, FT)],
         )
         broken || test_column_mapreduce!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
+            CenterExtrudedFiniteDifferenceSpace(FT; context),
             lim[(3, FT)],
         )
         broken || test_column_mapreduce!(
-            TU.FaceExtrudedFiniteDifferenceSpace(FT; context),
+            FaceExtrudedFiniteDifferenceSpace(FT; context),
             lim[(4, FT)],
         )
     end

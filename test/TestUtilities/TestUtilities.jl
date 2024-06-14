@@ -7,9 +7,15 @@ TestUtilities is designed to:
    instances of types to ease testing
    a diverse set of inputs to functions
 """
-module TestUtilities
+# module TestUtilities
 
 using IntervalSets
+import ClimaCore.Spaces: PointSpace
+import ClimaCore.Spaces: SpectralElementSpace1D
+import ClimaCore.Spaces: SpectralElementSpace2D
+import ClimaCore.Spaces: CenterExtrudedFiniteDifferenceSpace
+import ClimaCore.Spaces: FaceExtrudedFiniteDifferenceSpace
+
 import ClimaComms
 import ClimaCore.Fields as Fields
 import ClimaCore.Utilities as Utilities
@@ -195,4 +201,4 @@ fc_index(
 
 has_z_coordinates(space) = :z in propertynames(Spaces.coordinates_data(space))
 
-end
+# end

@@ -24,7 +24,7 @@ using ForwardDiff
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 # https://github.com/CliMA/ClimaCore.jl/issues/946
 @testset "Allocations with broadcasting Scalars" begin
@@ -40,8 +40,8 @@ import .TestUtilities as TU
         end
         return nothing
     end
-    for space in TU.all_spaces(FT)
-        TU.bycolumnable(space) || continue
+    for space in all_spaces(FT)
+        bycolumnable(space) || continue
         Y = fill((; x = FT(2)), space)
 
         # Plain broadcast
@@ -69,7 +69,7 @@ end
         fill!(Y, (; x = 2.0))
         nothing
     end
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         Y = fill((; x = FT(2)), space)
         allocs_test!(Y)
         p = @allocated allocs_test!(Y)
@@ -94,7 +94,7 @@ end
 # https://github.com/CliMA/ClimaCore.jl/issues/1356
 @testset "Allocations in @.. broadcasting" begin
     FT = Float32
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         Y1 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
         Y2 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
         Y3 = fill((; x = FT(2.0), y = FT(2.0), z = FT(2.0)), space)
@@ -163,7 +163,7 @@ end
 
 @testset "Allocations StencilCoefs broadcasting" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         Y = fill((; x = sc(FT)), space)
         allocs_test1!(Y)
         p = @allocated allocs_test1!(Y)
@@ -172,7 +172,7 @@ end
         p = @allocated allocs_test2!(Y)
         @test p == 0
 
-        TU.bycolumnable(space) || continue
+        bycolumnable(space) || continue
 
         allocs_test1_column!(Y)
         p = @allocated allocs_test1_column!(Y)
@@ -208,7 +208,7 @@ end
 # https://github.com/CliMA/ClimaCore.jl/issues/1015
 @testset "Allocations when assigning SArrays and Tuples" begin
     FT = Float32
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         f = fill(
             (;
                 uₕ = Geometry.Covariant12Vector(FT(0), FT(0)),
@@ -249,7 +249,7 @@ end
 
 @testset "Allocations StencilCoefs scalar with ComposeStencils broadcasting" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         space isa Spaces.CenterExtrudedFiniteDifferenceSpace || continue
         cspace = space
         fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
@@ -280,7 +280,7 @@ end
 # https://github.com/CliMA/ClimaCore.jl/issues/983
 @testset "Allocations with fill! and zero eltype broadcasting on FieldVectors" begin
     FT = Float64
-    for space in TU.all_spaces(FT)
+    for space in all_spaces(FT)
         Y = Fields.FieldVector(;
             c = fill((; x = FT(0)), space),
             f = fill((; x = FT(0)), space),

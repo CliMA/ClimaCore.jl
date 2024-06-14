@@ -9,7 +9,7 @@ using BenchmarkTools
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 );
-import .TestUtilities as TU;
+;
 
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
@@ -32,7 +32,7 @@ function set_ᶠuₕ³!(ᶜx, ᶠx)
 end
 @testset "Inference/allocations when broadcasting types" begin
     FT = Float64
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 25, helem = 10)
+    cspace = CenterExtrudedFiniteDifferenceSpace(FT; zelem = 25, helem = 10)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     device = ClimaComms.device(cspace)
     @info "device = $device"

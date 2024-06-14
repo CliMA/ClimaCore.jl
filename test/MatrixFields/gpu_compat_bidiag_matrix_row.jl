@@ -14,7 +14,7 @@ if !(@isdefined(TU))
         ),
     )
 end
-import .TestUtilities as TU
+
 
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 using LinearAlgebra: Adjoint
@@ -39,7 +39,7 @@ const ᶠgradᵥ_matrix = MatrixFields.operator_matrix(ᶠgradᵥ)
 device = ClimaComms.device()
 context = ClimaComms.context(device)
 cspace =
-    TU.CenterExtrudedFiniteDifferenceSpace(GFT; zelem = 25, helem = 10, context)
+    CenterExtrudedFiniteDifferenceSpace(GFT; zelem = 25, helem = 10, context)
 fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
 @info "device = $device"
 

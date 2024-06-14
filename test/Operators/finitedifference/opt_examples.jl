@@ -5,7 +5,7 @@ using BenchmarkTools
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 );
-import .TestUtilities as TU;
+;
 
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra

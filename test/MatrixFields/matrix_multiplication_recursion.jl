@@ -9,7 +9,7 @@ if !(@isdefined(TU))
         ),
     )
 end
-import .TestUtilities as TU
+
 import ClimaCore: Spaces, Geometry, Operators, Fields, MatrixFields
 import ClimaCore.MatrixFields: ⋅
 import ClimaComms

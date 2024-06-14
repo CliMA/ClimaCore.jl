@@ -9,7 +9,7 @@ include("utils_field_multi_broadcast_fusion.jl")
 @testset "FusedMultiBroadcast VIJFH and VF" begin
     FT = Float64
     device = ClimaComms.device()
-    space = TU.CenterExtrudedFiniteDifferenceSpace(
+    space = CenterExtrudedFiniteDifferenceSpace(
         FT;
         zelem = 3,
         helem = 4,
@@ -78,7 +78,7 @@ end
     FT = Float64
     device = ClimaComms.device()
     sem_space =
-        TU.SphereSpectralElementSpace(FT; context = ClimaComms.context(device))
+        SphereSpectralElementSpace(FT; context = ClimaComms.context(device))
     IJFH_data() = Fields.Field(FT, sem_space)
     X = Fields.FieldVector(;
         x1 = IJFH_data(),
@@ -99,7 +99,7 @@ end
 @testset "FusedMultiBroadcast VF" begin
     FT = Float64
     device = ClimaComms.device()
-    colspace = TU.ColumnCenterFiniteDifferenceSpace(
+    colspace = ColumnCenterFiniteDifferenceSpace(
         FT;
         zelem = 3,
         context = ClimaComms.context(device),

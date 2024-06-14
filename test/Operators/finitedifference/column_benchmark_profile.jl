@@ -18,7 +18,7 @@ function apply_kernel_loop!(cfield, ffield)
     end
 end
 
-cspace = TU.ColumnCenterFiniteDifferenceSpace(Float64; zelem = 1000)
+cspace = ColumnCenterFiniteDifferenceSpace(Float64; zelem = 1000)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 cfield = fill(field_vars(Float64), cspace)
 ffield = fill(field_vars(Float64), fspace)

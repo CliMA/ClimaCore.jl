@@ -15,7 +15,7 @@ using Test
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 compare(cpu, gpu) = all(parent(cpu) .≈ Array(parent(gpu)))
 compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))
@@ -23,8 +23,8 @@ compare(cpu, gpu, f) = all(parent(f(cpu)) .≈ Array(parent(f(gpu))))
 @testset "CuArray-backed extruded spaces" begin
     device = ClimaComms.device()
     context = SingletonCommsContext(device)
-    collect(TU.all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
-    as = collect(TU.all_spaces(Float64; zelem = 10, context))
+    collect(all_spaces(Float64; zelem = 10, context)) # make sure we can construct spaces
+    as = collect(all_spaces(Float64; zelem = 10, context))
     @test length(as) == 8
 end
 
@@ -39,9 +39,9 @@ end
     ClimaComms.allowscalar(device) do
         # TODO: add support and test for all spaces
         cpuspace =
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context = cpu_context)
+            CenterExtrudedFiniteDifferenceSpace(FT; context = cpu_context)
         gpuspace =
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context = gpu_context)
+            CenterExtrudedFiniteDifferenceSpace(FT; context = gpu_context)
 
         # Test that all geometries match with CPU version:
         @test compare(
@@ -68,8 +68,8 @@ end
     ClimaComms.allowscalar(device) do
         @test all(parent(Y.v) .== parent(X.v))
         # TODO: add support and test for all spaces
-        cpuspace = TU.SpectralElementSpace2D(FT; context = cpu_context)
-        gpuspace = TU.SpectralElementSpace2D(FT; context = gpu_context)
+        cpuspace = SpectralElementSpace2D(FT; context = cpu_context)
+        gpuspace = SpectralElementSpace2D(FT; context = gpu_context)
 
         # Test that all geometries match with CPU version:
         @test compare(cpuspace, gpuspace, x -> Spaces.local_geometry_data(x))

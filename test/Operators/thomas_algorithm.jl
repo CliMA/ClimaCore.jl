@@ -9,7 +9,7 @@ ClimaComms.@import_required_backends
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
 )
-import .TestUtilities as TU
+
 
 function test_thomas_algorithm(space)
     coords = Fields.coordinate_field(space)
@@ -52,10 +52,10 @@ end
 @testset "Thomas Algorithm unit tests" begin
     for FT in (Float32, Float64),
         space in (
-            TU.ColumnCenterFiniteDifferenceSpace(FT),
-            TU.ColumnFaceFiniteDifferenceSpace(FT),
-            TU.CenterExtrudedFiniteDifferenceSpace(FT),
-            TU.FaceExtrudedFiniteDifferenceSpace(FT),
+            ColumnCenterFiniteDifferenceSpace(FT),
+            ColumnFaceFiniteDifferenceSpace(FT),
+            CenterExtrudedFiniteDifferenceSpace(FT),
+            FaceExtrudedFiniteDifferenceSpace(FT),
         )
 
         test_thomas_algorithm(space)

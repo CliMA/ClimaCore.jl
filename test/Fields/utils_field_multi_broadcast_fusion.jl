@@ -41,7 +41,7 @@ if !(@isdefined(TU))
             "TestUtilities.jl",
         ),
     )
-    import .TestUtilities as TU
+    
 end
 
 @show ClimaComms.device()
