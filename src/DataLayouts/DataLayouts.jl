@@ -573,6 +573,8 @@ struct DataF{S, A} <: Data0D{S}
     array::A
 end
 
+rebuild(data::DataF{S}, array::AbstractArray) where {S} = DataF{S}(array)
+
 parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
