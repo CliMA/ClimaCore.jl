@@ -549,7 +549,7 @@ function Base.copyto!(
     return dest
 end
 
-function _serial_copyto!(
+function Base.copyto!(
     dest::VIFH{S, Nv, Ni},
     bc::BroadcastedUnionVIFH{S, Nv, Ni},
 ) where {S, Nv, Ni}
@@ -563,33 +563,7 @@ function _serial_copyto!(
     return dest
 end
 
-function _threaded_copyto!(
-    dest::VIFH{S, Nv, Ni},
-    bc::BroadcastedUnionVIFH{S, Nv, Ni},
-) where {S, Nv, Ni}
-    _, _, _, _, Nh = size(dest)
-    # parallelize over elements
-    @inbounds begin
-        Threads.@threads for h in 1:Nh
-            # copy contiguous columns
-            for i in 1:Ni
-                col_dest = column(dest, i, h)
-                col_bc = column(bc, i, h)
-                copyto!(col_dest, col_bc)
-            end
-        end
-    end
-    return dest
-end
-
 function Base.copyto!(
-    dest::VIFH{S, Nv, Ni},
-    bc::BroadcastedUnionVIFH{S, Nv, Ni},
-) where {S, Nv, Ni}
-    return _serial_copyto!(dest, bc)
-end
-
-function _serial_copyto!(
     dest::VIJFH{S, Nv, Nij},
     bc::BroadcastedUnionVIJFH{S, Nv, Nij},
 ) where {S, Nv, Nij}
@@ -601,32 +575,6 @@ function _serial_copyto!(
         copyto!(col_dest, col_bc)
     end
     return dest
-end
-
-function _threaded_copyto!(
-    dest::VIJFH{S, Nv, Nij},
-    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
-) where {S, Nv, Nij}
-    _, _, _, _, Nh = size(dest)
-    # parallelize over elements
-    @inbounds begin
-        Threads.@threads for h in 1:Nh
-            # copy contiguous columns
-            for j in 1:Nij, i in 1:Nij
-                col_dest = column(dest, i, j, h)
-                col_bc = column(bc, i, j, h)
-                copyto!(col_dest, col_bc)
-            end
-        end
-    end
-    return dest
-end
-
-function Base.copyto!(
-    dest::VIJFH{S, Nv, Nij},
-    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
-) where {S, Nv, Nij}
-    return _serial_copyto!(dest, bc)
 end
 
 # ============= FusedMultiBroadcast

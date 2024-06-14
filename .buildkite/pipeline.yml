@@ -409,13 +409,16 @@ steps:
 
       - label: "Unit: field"
         key: unit_field
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/field.jl"
+        command:
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
 
       - label: "Unit: field cuda"
         key: unit_field_cuda
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/field.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
