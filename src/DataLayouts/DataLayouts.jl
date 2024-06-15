@@ -319,7 +319,7 @@ function Base.fill!(data::IJFH, val)
 end
 
 
-function IJFH{S, Nij}(ArrayType, nelements) where {S, Nij}
+function IJFH{S, Nij}(::Type{ArrayType}, nelements) where {S, Nij, ArrayType}
     T = eltype(ArrayType)
     IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(T, S), nelements))
 end
@@ -463,7 +463,7 @@ function replace_basetype(data::IFH{S, Ni}, ::Type{T}) where {S, Ni, T}
     return IFH{S′, Ni}(similar(array, T))
 end
 
-function IFH{S, Ni}(ArrayType, nelements) where {S, Ni}
+function IFH{S, Ni}(::Type{ArrayType}, nelements) where {S, Ni, ArrayType}
     T = eltype(ArrayType)
     IFH{S, Ni}(ArrayType(undef, Ni, typesize(T, S), nelements))
 end
@@ -962,7 +962,7 @@ function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
     VF{S, Nv}(reshape(array, (:, 1)))
 end
 
-function VF{S, Nv}(ArrayType, nelements) where {S, Nv}
+function VF{S, Nv}(::Type{ArrayType}, nelements) where {S, Nv, ArrayType}
     T = eltype(ArrayType)
     check_basetype(T, S)
     VF{S, Nv}(ArrayType(undef, nelements, typesize(T, S)))
