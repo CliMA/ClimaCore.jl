@@ -90,7 +90,7 @@ function tabulate_tests(
         include_timings ? "Tests results" :
         "Running the following unit tests..."
     if include_timings
-        sort!(unit_tests; by = x -> x.elapsed)
+        sort!(unit_tests; by = x -> x.elapsed, rev = true)
         local time_header
         elapsed_times = if time_format == :compoundperiod
             time_header = "Time"
