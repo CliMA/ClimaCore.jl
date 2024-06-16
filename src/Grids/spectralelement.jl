@@ -171,6 +171,15 @@ function SpectralElementGrid2D(
     end
 end
 
+function get_CoordType2D(topology)
+    domain = Topologies.domain(topology)
+    return if domain isa Domains.SphereDomain
+        FT = Domains.float_type(domain)
+        Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
+    else
+        Topologies.coordinate_type(topology)
+    end
+end
 
 function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
@@ -195,17 +204,13 @@ function _SpectralElementGrid2D(
     # 1. allocate buffers externally
     DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
-    if domain isa Domains.SphereDomain
-        CoordType3D = Topologies.coordinate_type(topology)
-        FT = Geometry.float_type(CoordType3D)
-        CoordType2D = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
-        global_geometry =
-            Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
+    FT = Domains.float_type(domain)
+    global_geometry = if domain isa Domains.SphereDomain
+        Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
     else
-        CoordType2D = Topologies.coordinate_type(topology)
-        FT = Geometry.float_type(CoordType2D)
-        global_geometry = Geometry.CartesianGlobalGeometry()
+        Geometry.CartesianGlobalGeometry()
     end
+    CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
     nlelems = Topologies.nlocalelems(topology)
     ngelems = Topologies.nghostelems(topology)

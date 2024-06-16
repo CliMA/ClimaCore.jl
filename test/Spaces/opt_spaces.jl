@@ -57,7 +57,7 @@ end
         space = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context=ClimaComms.context())
         result = JET.@report_opt Grids._SpectralElementGrid2D(Spaces.topology(space), Spaces.quadrature_style(space); enable_bubble=false)
         n_found = length(JET.get_reports(result.analyzer, result.result))
-        n_allowed = 351
+        n_allowed = 189
         @test n_found ≤ n_allowed
         n_found < n_allowed && @info "Inference may have improved. (found, allowed) = ($n_found, $n_allowed)"
     end
