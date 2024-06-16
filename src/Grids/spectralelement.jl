@@ -236,8 +236,13 @@ function _SpectralElementGrid2D(
         # high-order quadrature loop for computing geometric element face area.
         for i in 1:high_order_Nq, j in 1:high_order_Nq
             ξ = SVector(high_order_quad_points[i], high_order_quad_points[j])
-            u, ∂u∂ξ =
-                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
+            u, ∂u∂ξ = compute_local_geometry(
+                global_geometry,
+                topology,
+                elem,
+                ξ,
+                Val(AIdx),
+            )
             J_high_order = det(Geometry.components(∂u∂ξ))
             WJ_high_order =
                 J_high_order *
@@ -248,8 +253,13 @@ function _SpectralElementGrid2D(
         # low-order quadrature loop for computing numerical element face area
         for i in 1:Nq, j in 1:Nq
             ξ = SVector(quad_points[i], quad_points[j])
-            u, ∂u∂ξ =
-                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
+            u, ∂u∂ξ = compute_local_geometry(
+                global_geometry,
+                topology,
+                elem,
+                ξ,
+                Val(AIdx),
+            )
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
@@ -269,7 +279,7 @@ function _SpectralElementGrid2D(
                         topology,
                         elem,
                         ξ,
-                        AIdx,
+                        Val(AIdx),
                     )
                     J = det(Geometry.components(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
@@ -298,7 +308,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            AIdx,
+                            Val(AIdx),
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         J += Δarea / Nq^2
@@ -314,7 +324,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            AIdx,
+                            Val(AIdx),
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         WJ = J * quad_weights[i] * quad_weights[j]
@@ -335,7 +345,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            AIdx,
+                            Val(AIdx),
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         # Modify J only for interior nodes
@@ -445,8 +455,8 @@ function compute_local_geometry(
     topology,
     elem,
     ξ,
-    AIdx,
-)
+    ::Val{AIdx},
+) where {AIdx}
     x = Meshes.coordinates(topology.mesh, elem, ξ)
     u = Geometry.LatLongPoint(x, global_geometry)
     ∂x∂ξ = Geometry.AxisTensor(
@@ -465,8 +475,8 @@ function compute_local_geometry(
     topology,
     elem,
     ξ,
-    AIdx,
-)
+    ::Val{AIdx},
+) where {AIdx}
     u = Meshes.coordinates(topology.mesh, elem, ξ)
     ∂u∂ξ = Geometry.AxisTensor(
         (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
@@ -501,6 +511,8 @@ function compute_surface_geometry(
         -J * ∂ξ∂x[2, :] * quad_weights[i]
     elseif face == 3
         J * ∂ξ∂x[2, :] * quad_weights[i]
+    else
+        error("Uncaught case")
     end
     sWJ = norm(n)
     n = n / sWJ
