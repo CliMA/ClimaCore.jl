@@ -3,6 +3,7 @@ julia --project=.buildkite
 using Revise; include(joinpath("test", "Spaces", "opt_spaces.jl"))
 =#
 import ClimaCore
+import ClimaCore: Spaces, Grids
 using Test
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -49,7 +50,18 @@ end
         test_n_failures(278,  TU.SphereSpectralElementSpace, context)
         test_n_failures(283,  TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(283,  TU.FaceExtrudedFiniteDifferenceSpace, context)
+
+        # The OBJECT_CACHE causes inference failures that inhibit understanding
+        # inference failures in _SpectralElementGrid2D, so let's `@test_opt`
+        # _SpectralElementGrid2D separately:
+        space = TU.CenterExtrudedFiniteDifferenceSpace(Float32; context=ClimaComms.context())
+        result = JET.@report_opt Grids._SpectralElementGrid2D(Spaces.topology(space), Spaces.quadrature_style(space); enable_bubble=false)
+        n_found = length(JET.get_reports(result.analyzer, result.result))
+        n_allowed = 351
+        @test n_found ≤ n_allowed
+        n_found < n_allowed && @info "Inference may have improved. (found, allowed) = ($n_found, $n_allowed)"
     end
+
 #! format: on
 end
 
