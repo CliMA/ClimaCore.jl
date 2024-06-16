@@ -329,34 +329,49 @@ function Base.similar(
     return IF{Eltype, Ni}(array)
 end
 
+Base.similar(
+    bc::BroadcastedUnionVF{<:Any, Nv},
+    ::Type{Eltype},
+) where {Nv, Eltype} = Base.similar(bc, Eltype, Val(Nv))
+
 function Base.similar(
     bc::BroadcastedUnionVF{<:Any, Nv, A},
     ::Type{Eltype},
-    dims = nothing,
-) where {Nv, A, Eltype}
-    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
+    ::Val{newNv},
+) where {Nv, A, Eltype, newNv}
+    (_, _, _, _, Nh) = size(bc)
     PA = parent_array_type(A)
     array = similar(PA, (newNv, typesize(eltype(A), Eltype)))
     return VF{Eltype, newNv}(array)
 end
 
+Base.similar(
+    bc::BroadcastedUnionVIFH{<:Any, Nv},
+    ::Type{Eltype},
+) where {Nv, Eltype} = Base.similar(bc, Eltype, Val(Nv))
+
 function Base.similar(
     bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
     ::Type{Eltype},
-    dims = nothing,
-) where {Nv, Ni, A, Eltype}
-    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
+    ::Val{newNv},
+) where {Nv, Ni, A, Eltype, newNv}
+    (_, _, _, _, Nh) = size(bc)
     PA = parent_array_type(A)
     array = similar(PA, (newNv, Ni, typesize(eltype(A), Eltype), Nh))
     return VIFH{Eltype, newNv, Ni}(array)
 end
 
+Base.similar(
+    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
+    ::Type{Eltype},
+) where {Nv, Nij, A, Eltype} = similar(bc, Eltype, Val(Nv))
+
 function Base.similar(
     bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
     ::Type{Eltype},
-    dims = nothing,
-) where {Nv, Nij, A, Eltype}
-    (_, _, _, newNv, Nh) = isnothing(dims) ? size(bc) : dims
+    ::Val{newNv},
+) where {Nv, Nij, A, Eltype, newNv}
+    (_, _, _, _, Nh) = size(bc)
     PA = parent_array_type(A)
     array = similar(PA, (newNv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
     return VIJFH{Eltype, newNv, Nij}(array)
