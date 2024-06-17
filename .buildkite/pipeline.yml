@@ -657,12 +657,12 @@ steps:
       - label: "Unit: Thomas Algorithm"
         key: "cpu_thomas_algorithm"
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/thomas_algorithm.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
 
       - label: "Unit: Thomas Algorithm"
         key: "gpu_thomas_algorithm"
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/thomas_algorithm.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

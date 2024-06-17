@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Operators", "unit_thomas_algorithm.jl"))
+=#
 using Test
 import Random: seed!
 import LinearAlgebra: Tridiagonal, norm

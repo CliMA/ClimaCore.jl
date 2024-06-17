@@ -53,6 +53,7 @@ UnitTest("Hybrid - 2D"                             ,"Operators/hybrid/unit_2d.jl
 UnitTest("Hybrid - 3D"                             ,"Operators/hybrid/unit_3d.jl"),
 UnitTest("Hybrid - dss opt"                        ,"Operators/hybrid/dss_opt.jl"),
 UnitTest("Hybrid - opt"                            ,"Operators/hybrid/opt.jl"),
+UnitTest("Thomas Algorithm"                        ,"Operators/unit_thomas_algorithm.jl"),
 UnitTest("MatrixFields - BandMatrixRow"            ,"MatrixFields/band_matrix_row.jl"),
 UnitTest("MatrixFields - rmul_with_projection"     ,"MatrixFields/rmul_with_projection.jl"),
 UnitTest("MatrixFields - field2arrays"             ,"MatrixFields/field2arrays.jl"),
