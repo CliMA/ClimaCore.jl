@@ -87,7 +87,7 @@ end
         periodic = true,
     )
     mesh = Meshes.IntervalMesh(domain, nelems = 32)
-    topology = Topologies.IntervalTopology(mesh)
+    topology = Topologies.IntervalTopology(ClimaComms.device(context), mesh)
     quad = Quadratures.GLL{5}()
     horz_space = Spaces.SpectralElementSpace1D(topology, quad)
     horz_coords = Fields.coordinate_field(horz_space)

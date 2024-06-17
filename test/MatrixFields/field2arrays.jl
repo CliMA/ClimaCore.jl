@@ -2,6 +2,8 @@ using Test
 using JET
 
 import ClimaCore: Geometry, Domains, Meshes, Spaces, Fields, MatrixFields
+import ClimaComms
+ClimaComms.@import_required_backends
 
 @testset "field2arrays Unit Tests" begin
     FT = Float64
@@ -11,7 +13,8 @@ import ClimaCore: Geometry, Domains, Meshes, Spaces, Fields, MatrixFields
         boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain, nelems = 3)
-    center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+    device = ClimaComms.device()
+    center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z

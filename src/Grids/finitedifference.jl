@@ -20,7 +20,7 @@ abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
-    FiniteDifferenceGrid(mesh::Meshes.IntervalMesh)
+    FiniteDifferenceGrid(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
 Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
 `IntervalMesh`). 
@@ -158,8 +158,10 @@ function fd_geometry_data(
 end
 
 
-FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
-    FiniteDifferenceGrid(Topologies.IntervalTopology(mesh))
+FiniteDifferenceGrid(
+    device::ClimaComms.AbstractDevice,
+    mesh::Meshes.IntervalMesh,
+) = FiniteDifferenceGrid(Topologies.IntervalTopology(device, mesh))
 
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology

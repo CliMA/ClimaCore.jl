@@ -62,7 +62,8 @@ function get_space(::Type{FT}) where {FT}
 
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    context = ClimaComms.SingletonCommsContext()
+    htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -72,8 +73,7 @@ function get_space(::Type{FT}) where {FT}
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-    vtopology =
-        Topologies.IntervalTopology(ClimaComms.SingletonCommsContext(), vmesh)
+    vtopology = Topologies.IntervalTopology(context, vmesh)
     vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
 
     # TODO: Replace this with a space that includes topography.

@@ -125,6 +125,7 @@ end
 
 @testset "Test composed stencils" begin
     are_boundschecks_forced = Base.JLOptions().check_bounds == 1
+    device = ClimaComms.device()
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
@@ -135,7 +136,7 @@ end
 
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
-        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
         centers = getproperty(Fields.coordinate_field(center_space), :z)
@@ -214,6 +215,7 @@ end
 end
 
 @testset "Composite Field FiniteDifferenceSpaces" begin
+    device = ClimaComms.device()
     for FT in (Float32, Float64)
         domain = Domains.IntervalDomain(
             Geometry.ZPoint{FT}(0.0),
@@ -224,7 +226,7 @@ end
         @test eltype(domain) === Geometry.ZPoint{FT}
         mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
-        center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+        center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
         FieldType = NamedTuple{(:a, :b), Tuple{FT, FT}}
@@ -244,6 +246,7 @@ end
 @testset "Biased interpolation" begin
     FT = Float64
     n_elems = 10
+    device = ClimaComms.device()
 
     domain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0.0),
@@ -252,7 +255,7 @@ end
     )
     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
 
-    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
     zc = getproperty(Fields.coordinate_field(cs), :z)

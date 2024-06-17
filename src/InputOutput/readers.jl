@@ -267,9 +267,9 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     type = attrs(group)["type"]
     if type == "IntervalTopology"
         mesh = read_mesh(reader, attrs(group)["mesh"])
-        context =
-            ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
-        return Topologies.IntervalTopology(context, mesh)
+        device = ClimaComms.device(reader.context)
+        context = ClimaComms.SingletonCommsContext(device)
+        return Topologies.IntervalTopology(device, mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")

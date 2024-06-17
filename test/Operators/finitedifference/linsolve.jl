@@ -18,7 +18,9 @@ velem = 4
 
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+context = ClimaComms.SingletonCommsContext()
+device = ClimaComms.device(context)
+htopology = Topologies.Topology2D(context, hmesh)
 quad = Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -28,7 +30,7 @@ vdomain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-center_space = Spaces.CenterFiniteDifferenceSpace(vmesh)
+center_space = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
 #=
 # TODO: Replace this with a space that includes topography.

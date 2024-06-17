@@ -98,8 +98,9 @@ end
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_names = (:bottom, :top),
     )
+    device = ClimaComms.device(context)
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vertgrid = Grids.FiniteDifferenceGrid(vertmesh)
+    vertgrid = Grids.FiniteDifferenceGrid(device, vertmesh)
 
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)

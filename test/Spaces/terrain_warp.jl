@@ -60,7 +60,7 @@ function generate_base_spaces_2d(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
 
     # Generate Horizontal Space
     quad = Quadratures.GLL{npoly + 1}()
@@ -91,7 +91,7 @@ function generate_base_spaces_3d(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
 
     # Generate Horizontal Space
     quad = Quadratures.GLL{npoly + 1}()
@@ -480,7 +480,7 @@ end
                 boundary_names = (:bottom, :top),
             )
             vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
-            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+            vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
 
             horzdomain = Domains.IntervalDomain(
                 Geometry.XPoint{FT}(xlim[1]),
@@ -488,7 +488,7 @@ end
                 periodic = true,
             )
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
-            horztopology = Topologies.IntervalTopology(horzmesh)
+            horztopology = Topologies.IntervalTopology(device, horzmesh)
 
             quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)

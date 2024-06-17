@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.15.0
+-------
+
+- ![][badge-💥breaking] support for `IntervalTopology(::Mesh)` has been dropped in favor of using `IntervalTopology(::ClimaComms.AbstractDevice, ::Mesh)`. PR [#1821](https://github.com/CliMA/ClimaCore.jl/pull/1821).
+
 v0.14.9
 -------
 

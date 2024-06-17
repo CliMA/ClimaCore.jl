@@ -21,6 +21,7 @@ convergence_rate(err, Δh) =
     FT = Float64
     n_elems_seq = 2 .^ (5, 6, 7)
     err, Δh = zeros(length(n_elems_seq)), zeros(length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         z₀ = Geometry.ZPoint(FT(0))
@@ -50,7 +51,7 @@ convergence_rate(err, Δh) =
 
         mesh = Meshes.IntervalMesh(domain, nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
         zc = Fields.coordinate_field(cs)
 

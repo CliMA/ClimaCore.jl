@@ -1,3 +1,5 @@
+import ClimaComms
+ClimaComms.@import_required_backends
 import ClimaCore:
     Fields,
     Domains,
@@ -28,8 +30,8 @@ domain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 mesh = Meshes.IntervalMesh(domain, nelems = n)
-
-cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+device = ClimaComms.device()
+cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
 T = Fields.zeros(FT, cs)
 
 # Solve Heat Equation: ∂_t T = α ∇²T

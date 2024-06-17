@@ -43,7 +43,8 @@ column = ClimaCore.Domains.IntervalDomain(
 
 nelements = 150
 mesh = ClimaCore.Meshes.IntervalMesh(column; nelems = nelements)
-subsurface_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(mesh)
+device = ClimaComms.device()
+subsurface_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, mesh)
 obtain_face_space(cs::ClimaCore.Spaces.CenterFiniteDifferenceSpace) =
     ClimaCore.Spaces.FaceFiniteDifferenceSpace(cs)
 function obtain_surface_space(cs::ClimaCore.Spaces.CenterFiniteDifferenceSpace)

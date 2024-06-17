@@ -4,6 +4,8 @@ using JET
 using IntervalSets
 
 import ClimaCore
+import ClimaComms
+ClimaComms.@import_required_backends
 import ClimaCore: Domains, Meshes, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
 
@@ -206,6 +208,7 @@ end
 # Test that Julia ia able to optimize Stencil operations v1.7+
 @static if @isdefined(var"@test_opt")
     @testset "Scalar Field FiniteDifferenceSpaces optimizations" begin
+        device = ClimaComms.device()
         for FT in (Float64,)
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0.0),
@@ -214,7 +217,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain; nelems = 16)
 
-            center_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+            center_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
             faces = getproperty(Fields.coordinate_field(face_space), :z)

@@ -1,3 +1,5 @@
+import ClimaComms
+ClimaComms.@import_required_backends
 using LinearAlgebra
 import ClimaCore:
     Fields,
@@ -28,8 +30,8 @@ end
 
 domain = Domains.IntervalDomain(a, b, boundary_names = (:left, :right))
 mesh = Meshes.IntervalMesh(domain, nelems = n)
-
-cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+device = ClimaComms.device()
+cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
 V = Geometry.WVector.(ones(FT, fs))
