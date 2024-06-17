@@ -27,14 +27,13 @@ vertdomain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 vertmesh = Meshes.IntervalMesh(vertdomain, nelems = 10)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+device = ClimaComms.CPUSingleThreaded()
+vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
 
 horzdomain = Domains.SphereDomain(30.0)
 horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 4)
-horztopology = Topologies.Topology2D(
-    ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
-    horzmesh,
-)
+horztopology =
+    Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), horzmesh)
 quad = Quadratures.GLL{5}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)
 

@@ -3,6 +3,7 @@ module ClimaCorePlots
 import RecipesBase
 import TriplotBase
 
+import ClimaComms
 import ClimaCore:
     ClimaCore,
     DataLayouts,
@@ -317,7 +318,11 @@ function _slice_along(field, coord)
     end
 
     # construct the slice field space
-    htopo_ortho = ClimaCore.Topologies.IntervalTopology(hmesh_ortho)
+    context = ClimaComms.context(field)
+    htopo_ortho = ClimaCore.Topologies.IntervalTopology(
+        ClimaComms.device(context),
+        hmesh_ortho,
+    )
     hspace_ortho = ClimaCore.Spaces.SpectralElementSpace1D(
         htopo_ortho,
         ClimaCore.Spaces.quadrature_style(hspace),

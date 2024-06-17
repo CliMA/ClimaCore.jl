@@ -29,7 +29,8 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
 
     hdomain = Domains.SphereDomain(radius)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    context = ClimaComms.SingletonCommsContext()
+    htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{npoly + 1}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -38,8 +39,9 @@ Operators.Operator2Stencil(op::CurriedTwoArgOperator) =
         Geometry.ZPoint{FT}(zmax);
         boundary_names = (:bottom, :top),
     )
+    device = ClimaComms.device(context)
     vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     # TODO: Replace this with a space that includes topography.
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)

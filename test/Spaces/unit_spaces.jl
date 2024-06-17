@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Spaces", "unit_spaces.jl"))
+=#
 using Test
 using ClimaComms
 using StaticArrays, IntervalSets, LinearAlgebra
@@ -27,15 +31,15 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
         Geometry.XPoint{FT}(-3) .. Geometry.XPoint{FT}(5),
         periodic = true,
     )
+    device = ClimaComms.device()
     mesh = Meshes.IntervalMesh(domain; nelems = 1)
-    topology = Topologies.IntervalTopology(mesh)
+    topology = Topologies.IntervalTopology(device, mesh)
 
     quad = Quadratures.GLL{4}()
     points, weights = Quadratures.quadrature_points(FT, quad)
 
     space = Spaces.SpectralElementSpace1D(topology, quad)
 
-    device = ClimaComms.device()
 
     expected_repr = """
     SpectralElementSpace1D:
@@ -85,6 +89,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
 
     FT = Float32
 
+    device = ClimaComms.device()
     vertdomain = Domains.IntervalDomain(
         Geometry.ZPoint{FT}(0),
         Geometry.ZPoint{FT}(10);
@@ -92,7 +97,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     )
     vertmesh =
         Meshes.IntervalMesh(vertdomain, Meshes.Uniform(), nelems = 10)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
     # Generate Horizontal Space
     horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(0),
@@ -100,7 +105,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain; nelems = 5)
-    horztopology = Topologies.IntervalTopology(horzmesh)
+    horztopology = Topologies.IntervalTopology(device, horzmesh)
     quad = Quadratures.GLL{4}()
 
     hspace = Spaces.SpectralElementSpace1D(horztopology, quad)

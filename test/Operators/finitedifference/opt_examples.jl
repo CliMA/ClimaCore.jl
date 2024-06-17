@@ -450,7 +450,8 @@ end
         boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
-    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    device = ClimaComms.device()
+    cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = getproperty(Fields.coordinate_field(cs), :z)
     zf = getproperty(Fields.coordinate_field(fs), :z)

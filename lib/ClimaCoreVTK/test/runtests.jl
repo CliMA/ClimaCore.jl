@@ -170,7 +170,8 @@ end
         periodic = true,
     )
     hmesh = Meshes.IntervalMesh(hdomain, nelems = 10)
-    htopology = Topologies.IntervalTopology(hmesh)
+    context = ClimaComms.context()
+    htopology = Topologies.IntervalTopology(context, hmesh)
     quad = Quadratures.GLL{4}()
     hspace = Spaces.SpectralElementSpace1D(htopology, quad)
 
@@ -179,7 +180,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = 20)
-    vtopology = Topologies.IntervalTopology(vmesh)
+    vtopology = Topologies.IntervalTopology(context, vmesh)
     vspace = Spaces.FaceFiniteDifferenceSpace(vtopology)
 
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
@@ -208,6 +209,7 @@ end
     )
 
     hmesh = Meshes.RectilinearMesh(hdomain, 4, 4)
+    context = ClimaComms.SingletonCommsContext()
     htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
     quad = Quadratures.GLL{4}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
@@ -217,7 +219,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = 20)
-    vtopology = Topologies.IntervalTopology(vmesh)
+    vtopology = Topologies.IntervalTopology(context, vmesh)
     vspace = Spaces.FaceFiniteDifferenceSpace(vtopology)
 
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
@@ -241,7 +243,8 @@ end
 
     hdomain = Domains.SphereDomain(R)
     hmesh = Meshes.EquiangularCubedSphere(hdomain, 4)
-    htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+    context = ClimaComms.SingletonCommsContext()
+    htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{5}()
     hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -252,7 +255,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = 20)
-    vtopology = Topologies.IntervalTopology(vmesh)
+    vtopology = Topologies.IntervalTopology(context, vmesh)
     vspace = Spaces.FaceFiniteDifferenceSpace(vtopology)
 
     fspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)

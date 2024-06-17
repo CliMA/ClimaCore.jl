@@ -1,5 +1,6 @@
 import ClimaCore
 using ClimaComms
+ClimaComms.@import_required_backends
 using ClimaCore:
     Geometry,
     Meshes,
@@ -13,6 +14,7 @@ using NCDatasets
 using TempestRemap_jll
 using Test
 using ClimaCoreTempestRemap
+device = ClimaComms.device()
 
 OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
 
@@ -130,7 +132,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
@@ -225,7 +227,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
@@ -375,7 +377,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
-    vfspace = Spaces.FaceFiniteDifferenceSpace(vmesh)
+    vfspace = Spaces.FaceFiniteDifferenceSpace(device, vmesh)
     z_surface = Geometry.ZPoint.(test_warp.(Fields.coordinate_field(hspace)))
     fhvspace = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
@@ -499,7 +501,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
-    vspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
     fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)

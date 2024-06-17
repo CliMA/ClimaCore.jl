@@ -5,6 +5,9 @@ using JLD2
 
 include("../nvtx.jl")
 
+import ClimaComms
+ClimaComms.@import_required_backends
+
 import ClimaCore:
     Domains,
     Fields,

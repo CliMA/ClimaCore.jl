@@ -57,7 +57,8 @@ function sphere_3D(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+    device = ClimaComms.device(context)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
 
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)

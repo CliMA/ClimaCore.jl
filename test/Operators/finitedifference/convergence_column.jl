@@ -29,6 +29,7 @@ convergence_rate(err, Δh) =
     FT = Float64
     a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err = zeros(FT, length(n_elems_seq))
@@ -43,7 +44,7 @@ convergence_rate(err, Δh) =
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             cent_field_exact = zeros(FT, cs)
@@ -78,6 +79,7 @@ end
     FT = Float64
     a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -90,7 +92,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             face_field_exact = zeros(FT, fs)
@@ -130,6 +132,7 @@ end
     FT = Float64
     a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -141,7 +144,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             face_field_exact = Geometry.Covariant3Vector.(zeros(FT, fs))
@@ -181,6 +184,7 @@ end
     FT = Float64
     a, b = FT(0.0), FT(1.0)
     n_elems_seq = 2 .^ (5, 6, 7, 8)
+    device = ClimaComms.device()
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(0.5))
     for (i, stretch_fn) in enumerate(stretch_fns)
         err, Δh = zeros(FT, length(n_elems_seq)), zeros(FT, length(n_elems_seq))
@@ -192,7 +196,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             cent_field_exact = Geometry.Covariant3Vector.(zeros(FT, cs))
@@ -238,6 +242,7 @@ end
     err_div_cos_f = zeros(FT, length(n_elems_seq))
     err_curl_sin_f = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -247,7 +252,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -407,6 +412,7 @@ end
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -416,7 +422,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -457,6 +463,7 @@ end
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -466,7 +473,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -505,6 +512,7 @@ end
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
+    device = ClimaComms.device()
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -517,7 +525,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -566,6 +574,7 @@ end
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
+    device = ClimaComms.device()
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -578,7 +587,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -625,6 +634,7 @@ end
     err_adv_wc = zeros(FT, length(n_elems_seq))
 
     Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -634,7 +644,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -677,6 +687,7 @@ end
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
+    device = ClimaComms.device()
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -689,7 +700,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -747,6 +758,7 @@ end
     FT = Float64
     n_elems_seq = 2 .^ (4, 6, 8, 10)
     stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(1.0))
+    device = ClimaComms.device()
 
     for (i, stretch_fn) in enumerate(stretch_fns)
         err_adv_wc = zeros(FT, length(n_elems_seq))
@@ -759,7 +771,7 @@ end
             )
             mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-            cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+            cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
             fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
             centers = getproperty(Fields.coordinate_field(cs), :z)
@@ -821,6 +833,7 @@ end
     n_elems_seq = 2 .^ (5, 6, 7, 8)
     err = zeros(FT, length(n_elems_seq))
     Δh = zeros(FT, length(n_elems_seq))
+    device = ClimaComms.device()
 
     for (k, n) in enumerate(n_elems_seq)
         domain = Domains.IntervalDomain(
@@ -830,7 +843,7 @@ end
         )
         mesh = Meshes.IntervalMesh(domain; nelems = n)
 
-        cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+        cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
         fs = Spaces.FaceFiniteDifferenceSpace(cs)
 
         # advective velocity
