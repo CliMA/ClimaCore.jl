@@ -14,8 +14,8 @@ using CUDA: @cuda
 
 function column_integral_definite!(
     ::ClimaComms.CUDADevice,
-    ∫field::Fields.Field,
-    ᶜfield::Fields.Field,
+    ∫field::Fields.SpectralElementField,
+    ᶜfield::Fields.ExtrudedFiniteDifferenceField,
 )
     space = axes(∫field)
     Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
@@ -62,8 +62,8 @@ end
 
 function column_integral_indefinite!(
     ::ClimaComms.CUDADevice,
-    ᶠ∫field::Fields.Field,
-    ᶜfield::Fields.Field,
+    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
+    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
 )
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
@@ -81,15 +81,15 @@ function column_mapreduce_device!(
     ::ClimaComms.CUDADevice,
     fn::F,
     op::O,
-    reduced_field::Fields.Field,
-    fields::Fields.Field...,
+    reduced_field::Fields.SpectralElementField2D,
+    fields...,
 ) where {F, O}
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
     nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
     kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
         column_mapreduce_kernel_extruded!
     else
-        column_mapreduce_kernel!
+#       column_mapreduce_kernel!
     end
     args = (
         fn,
@@ -111,7 +111,7 @@ end
 function column_mapreduce_kernel_extruded!(
     fn::F,
     op::O,
-    reduced_field,
+    reduced_field, 
     fields...,
 ) where {F, O}
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x

@@ -293,6 +293,9 @@ Base.@propagate_inbounds function operator_evaluate(
         return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.UVAxis()),
                                    (∂f₁∂ξ₁, ∂f₂∂ξ₁,
                                    ∂f₁∂ξ₂, ∂f₂∂ξ₂))
+        #return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.Contravariant12Axis()),
+        #                           (∂f₁∂ξ₁, ∂f₂∂ξ₁,
+        #                           ∂f₁∂ξ₂, ∂f₂∂ξ₂))
     else 
         v₁, v₂, v₃ =  input
         ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
@@ -312,6 +315,9 @@ Base.@propagate_inbounds function operator_evaluate(
         return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.UVWAxis()),
                                    (∂f₁∂ξ₁, ∂f₂∂ξ₁, ∂f₃∂ξ₁,
                                    ∂f₁∂ξ₂, ∂f₂∂ξ₂, ∂f₃∂ξ₂))
+        #return Geometry.AxisTensor((Geometry.Covariant12Axis(), Geometry.Contravariant123Axis()),
+        #                           (∂f₁∂ξ₁, ∂f₂∂ξ₁, ∂f₃∂ξ₁,
+        #                           ∂f₁∂ξ₂, ∂f₂∂ξ₂, ∂f₃∂ξ₂))
     end
 end
 

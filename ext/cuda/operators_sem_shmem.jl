@@ -130,15 +130,22 @@ Base.@propagate_inbounds function operator_fill_shmem!(
     if RT <: Geometry.Covariant12Vector
         (v,) = input
         v[i, j, vt] = arg
-    elseif typeof(arg) <: Geometry.UVVector
+    elseif typeof(arg) <: Geometry.UVVector 
+        # TODO classify based on returntype
         v₁, v₂ = input
         v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
         v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
+        #v₁[i, j, vt] = Geometry.contravariant1(arg, local_geometry)
+        #v₂[i, j, vt] = Geometry.contravariant2(arg, local_geometry)
     elseif typeof(arg) <: Geometry.UVWVector
+        # TODO classify based on returntype
         v₁, v₂, v₃ = input
         v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
         v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
         v₃[i, j, vt] = Geometry.LocalVector(arg, local_geometry).w
+        #v₁[i, j, vt] = Geometry.contravariant1(arg, local_geometry)
+        #v₂[i, j, vt] = Geometry.contravariant2(arg, local_geometry)
+        #v₃[i, j, vt] = Geometry.contravariant3(arg, local_geometry)
     end
 end
 
