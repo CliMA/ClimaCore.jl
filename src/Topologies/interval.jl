@@ -55,10 +55,7 @@ function _IntervalTopology(
     end
     IntervalTopology(context, mesh, boundaries)
 end
-# IntervalTopology(mesh::Meshes.IntervalMesh) = IntervalTopology(
-#     ClimaComms.SingletonCommsContext(ClimaComms.device()),
-#     mesh,
-# )
+
 IntervalTopology(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh) =
     IntervalTopology(ClimaComms.SingletonCommsContext(device), mesh)
 

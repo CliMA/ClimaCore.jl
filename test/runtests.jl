@@ -78,6 +78,7 @@ UnitTest("InputOutput - hybrid3dcubedsphere_topo"  ,"InputOutput/hybrid3dcubedsp
 UnitTest("Array interpolation"                     ,"Remapping/interpolate_array.jl"),
 UnitTest("Array interpolation"                     ,"Remapping/distributed_remapping.jl"),
 UnitTest("Aqua"                                    ,"aqua.jl"),
+UnitTest("Deprecations"                            ,"deprecations.jl"),
 UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
 UnitTest("GPU - data"                              ,"DataLayouts/cuda.jl";meta=:gpu_only),
 UnitTest("Spaces - serial CUDA DSS on CubedSphere" ,"Spaces/ddss1_cs.jl";meta=:gpu_only),
