@@ -1,6 +1,7 @@
 #! format: off
 using Test
 using ClimaComms
+ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets, LinearAlgebra
 import BenchmarkTools
 import StatsBase
@@ -207,6 +208,8 @@ bc_name_base(bcs::NamedTuple) = (
 )
 bc_name_base(bcs::Tuple) = (:none,)
 bc_name(bcs::Tuple) = (:none,)
+bc_name_base(bcs::@NamedTuple{}) = (:none,)
+bc_name(bcs::@NamedTuple{}) = (:none,)
 
 include("benchmark_column_kernels.jl")
 
@@ -215,20 +218,20 @@ uses_bycolumn(::typeof(op_broadcast_example1!)) = true
 uses_bycolumn(::typeof(op_broadcast_example2!)) = false
 uses_bycolumn(::Any) = false
 
-bcs_tested(c, ::typeof(op_broadcast_example0!)) = ((), )
-bcs_tested(c, ::typeof(op_broadcast_example1!)) = ((), )
-bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((), )
+bcs_tested(c, ::typeof(op_broadcast_example0!)) = ((;), )
+bcs_tested(c, ::typeof(op_broadcast_example1!)) = ((;), )
+bcs_tested(c, ::typeof(op_broadcast_example2!)) = ((;), )
 
-bcs_tested(c, ::typeof(op_GradientF2C!)) = ((), set_value_bcs(c))
+bcs_tested(c, ::typeof(op_GradientF2C!)) = ((;), set_value_bcs(c))
 bcs_tested(c, ::typeof(op_GradientC2F!)) = (set_gradient_value_bcs(c), set_value_bcs(c))
-bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((), extrapolate_bcs(c))
+bcs_tested(c, ::typeof(op_DivergenceF2C!)) = ((;), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_DivergenceC2F!)) = (set_divergence_bcs(c), )
-bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((), )
+bcs_tested(c, ::typeof(op_InterpolateF2C!)) = ((;), )
 bcs_tested(c, ::typeof(op_InterpolateC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_LeftBiasedC2F!)) = (set_bot_value_bc(c),)
-bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((), set_bot_value_bc(c))
+bcs_tested(c, ::typeof(op_LeftBiasedF2C!)) = ((;), set_bot_value_bc(c))
 bcs_tested(c, ::typeof(op_RightBiasedC2F!)) = (set_top_value_bc(c),)
-bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((), set_top_value_bc(c))
+bcs_tested(c, ::typeof(op_RightBiasedF2C!)) = ((;), set_top_value_bc(c))
 bcs_tested(c, ::typeof(op_CurlC2F!)) = (set_curl_bcs(c), set_curl_value_bcs(c))
 bcs_tested(c, ::typeof(op_UpwindBiasedProductC2F!)) = (set_value_bcs(c), extrapolate_bcs(c))
 bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased_3_bcs(c), extrapolate_bcs(c))
@@ -237,30 +240,31 @@ bcs_tested(c, ::typeof(op_Upwind3rdOrderBiasedProductC2F!)) = (set_upwind_biased
 bcs_tested(c, ::typeof(op_divUpwind3rdOrderBiasedProductC2F!)) =
     ((; inner = set_upwind_biased_3_bcs(c), outer = set_value_contra3_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_CC!)) =
-    ((; inner = set_value_bcs(c), outer = ()), )
+    ((; inner = set_value_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_divgrad_FF!)) =
-    ((; inner = (), outer = set_divergence_bcs(c)), )
+    ((; inner = (;), outer = set_divergence_bcs(c)), )
 bcs_tested(c, ::typeof(op_div_interp_CC!)) =
-    ((; inner = set_value_contra3_bcs(c), outer = ()), )
+    ((; inner = set_value_contra3_bcs(c), outer = (;)), )
 bcs_tested(c, ::typeof(op_div_interp_FF!)) =
-    ((; inner = (), outer = set_value_contra3_bcs(c)), )
+    ((; inner = (;), outer = set_value_contra3_bcs(c)), )
 bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
     (
-        (; inner = (), outer = set_value_divgrad_uₕ_bcs(c)),
-        (; inner = (), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
+        (; inner = (;), outer = set_value_divgrad_uₕ_bcs(c)),
+        (; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
     )
 
-function benchmark_func!(t_ave, trials, fun, c, f, verbose = false)
+function benchmark_func!(t_min, trials, fun, c, f, verbose = false)
+    device = ClimaComms.device(c)
     for bcs in bcs_tested(c, fun)
         h_space = nameof(typeof(axes(c)))
         key = (h_space, fun, bc_name(bcs)...)
         verbose && @info "\n@benchmarking $key"
-        trials[key] = BenchmarkTools.@benchmark $fun($c, $f, $bcs)
+        trials[key] = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $fun($c, $f, $bcs)
         verbose && show(stdout, MIME("text/plain"), trials[key])
 
-        t_ave[key] = StatsBase.mean(trials[key].times) # nano seconds
-        t_pretty = BenchmarkTools.prettytime(t_ave[key])
-        verbose || @info "$t_pretty <=> t_ave[$key]"
+        t_min[key] = minimum(trials[key].times) # nano seconds
+        t_pretty = BenchmarkTools.prettytime(t_min[key])
+        verbose || @info "$t_pretty <=> t_min[$key]"
     end
 end
 
@@ -287,30 +291,31 @@ function benchmark_arrays(z_elems, ::Type{FT}) where {FT}
     println()
 end
 
-function benchmark_operators(z_elems, ::Type{FT}) where {FT}
+function benchmark_operators(::Type{FT}; z_elems, helem, Nq) where {FT}
+    @show ClimaComms.device()
     trials = OrderedCollections.OrderedDict()
-    t_ave = OrderedCollections.OrderedDict()
+    t_min = OrderedCollections.OrderedDict()
     benchmark_arrays(z_elems, FT)
 
     cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_ave, cfield, ffield)
+    benchmark_operators_base(trials, t_min, cfield, ffield)
 
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_ave, cfield, ffield)
+    benchmark_operators_base(trials, t_min, cfield, ffield)
 
     # Tests are removed since they're flakey. And maintaining
     # them before they're converged is a bit of work..
-    test_results(t_ave)
-    return (; trials, t_ave)
+    test_results(t_min)
+    return (; trials, t_min)
 end
 
-function benchmark_operators_base(trials, t_ave, cfield, ffield)
+function benchmark_operators_base(trials, t_min, cfield, ffield)
     ops = [
         #### Core discrete operators
         op_GradientF2C!,
@@ -346,78 +351,85 @@ function benchmark_operators_base(trials, t_ave, cfield, ffield)
         if uses_bycolumn(op) && axes(cfield) isa Spaces.FiniteDifferenceSpace
             continue
         end
-        benchmark_func!(t_ave, trials, op, cfield, ffield, #= verbose = =# false)
+        benchmark_func!(t_min, trials, op, cfield, ffield, #= verbose = =# false)
     end
 
     return nothing
 end
 
-function test_results(t_ave)
+function test_results(t_min)
     # If these tests fail, just update the numbers (or the
     # buffer) so long its not an egregious regression.
     buffer = 2
     ns = 1
     μs = 10^3
     ms = 10^6
-    @test t_ave[(:FiniteDifferenceSpace, op_GradientF2C!, :none)] ≤ 253.100*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue)] ≤ 270.448*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient)] ≤ 242.053*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue)] ≤ 241.647*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_DivergenceF2C!, :none)] ≤ 1.005*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] ≤ 1.076*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] ≤ 878.028*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_InterpolateF2C!, :none)] ≤ 254.523*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue)] ≤ 254.241*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] ≤ 241.308*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_broadcast_example2!, :none)] ≤ 555.039*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue)] ≤ 207.264*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :none)] ≤ 137.031*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue)] ≤ 185.135*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue)] ≤ 129.971*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_RightBiasedF2C!, :none)] ≤ 142.120*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue)] ≤ 141.446*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl)] ≤ 1.692*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue)] ≤ 1.616*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] ≤ 754.856*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] ≤ 765.401*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] ≤ 2.540*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none)] ≤ 924.147*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] ≤ 876.510*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none)] ≤ 721.119*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue)] ≤ 686.581*ns*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] ≤ 4.960*μs*buffer
-    @test t_ave[(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] ≤ 5.047*μs*buffer
+    results = [
+    [(:FiniteDifferenceSpace, op_GradientF2C!, :none), 253.100*ns*buffer],
+    [(:FiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
+    [(:FiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
+    [(:FiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue), 241.647*ns*buffer],
+    [(:FiniteDifferenceSpace, op_DivergenceF2C!, :none), 1.005*μs*buffer],
+    [(:FiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
+    [(:FiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
+    [(:FiniteDifferenceSpace, op_InterpolateF2C!, :none), 254.523*ns*buffer],
+    [(:FiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
+    [(:FiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate), 241.308*ns*buffer],
+    [(:FiniteDifferenceSpace, op_broadcast_example2!, :none), 555.039*ns*buffer],
+    [(:FiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue), 207.264*ns*buffer],
+    [(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :none), 137.031*ns*buffer],
+    [(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue), 185.135*ns*buffer],
+    [(:FiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue), 129.971*ns*buffer],
+    [(:FiniteDifferenceSpace, op_RightBiasedF2C!, :none), 142.120*ns*buffer],
+    [(:FiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue), 141.446*ns*buffer],
+    [(:FiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
+    [(:FiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue), 1.616*μs*buffer],
+    [(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 754.856*ns*buffer],
+    [(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 765.401*ns*buffer],
+    [(:FiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 2.540*μs*buffer],
+    [(:FiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none), 924.147*ns*buffer],
+    [(:FiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
+    [(:FiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
+    [(:FiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
+    [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
+    [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
 
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :none)] ≤ 1.746*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue)] ≤ 1.754*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient)] ≤ 1.899*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue)] ≤ 1.782*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :none)] ≤ 6.792*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate)] ≤ 6.776*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence)] ≤ 6.720*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_InterpolateF2C!, :none)] ≤ 1.701*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue)] ≤ 1.713*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate)] ≤ 1.698*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_broadcast_example0!, :none)] ≤ 1.059*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_broadcast_example1!, :none)] ≤ 154.330*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_broadcast_example2!, :none)] ≤ 152.689*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue)] ≤ 1.758*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :none)] ≤ 1.711*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue)] ≤ 1.754*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue)] ≤ 1.847*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :none)] ≤ 1.582*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue)] ≤ 1.551*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl)] ≤ 4.669*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue)] ≤ 4.568*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue)] ≤ 3.444*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate)] ≤ 3.432*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue)] ≤ 5.650*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none)] ≤ 4.474*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence)] ≤ 4.470*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none)] ≤ 3.566*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue)] ≤ 3.663*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate)] ≤ 7.470*ms*buffer
-    @test t_ave[(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue)] ≤ 7.251*ms*buffer
+    [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :none), 1.746*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue), 1.782*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :none), 6.792*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateF2C!, :none), 1.701*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate), 1.698*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example0!, :none), 1.059*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example1!, :none), 154.330*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example2!, :none), 152.689*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue), 1.758*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :none), 1.711*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue), 1.754*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue), 1.847*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :none), 1.582*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue), 1.551*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue), 4.568*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 3.444*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 3.432*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 5.650*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none), 4.474*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue), 3.663*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 7.470*ms*buffer],
+    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
+    ]
+    for (params, ref_time) in results
+        if !(t_min[params] ≤ ref_time)
+            @warn "Possible regression: $params, time=$(t_min[params]), ref_time=$ref_time"
+        end
+    end
 end
 
 #! format: on

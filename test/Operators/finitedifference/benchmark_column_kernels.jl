@@ -1,5 +1,5 @@
 #### Gradients
-function op_GradientF2C!(c, f, bcs = ())
+function op_GradientF2C!(c, f, bcs = (;))
     ∇f = Operators.GradientF2C(bcs)
     @. c.∇x = ∇f(f.y)
     return nothing
@@ -10,7 +10,7 @@ function op_GradientC2F!(c, f, bcs)
     return nothing
 end
 #### Divergences
-function op_DivergenceF2C!(c, f, bcs = ())
+function op_DivergenceF2C!(c, f, bcs = (;))
     div = Operators.DivergenceF2C(bcs)
     @. c.x = div(Geometry.WVector(f.y))
     return nothing
@@ -21,7 +21,7 @@ function op_DivergenceC2F!(c, f, bcs)
     return nothing
 end
 #### Interpolations
-function op_InterpolateF2C!(c, f, bcs = ())
+function op_InterpolateF2C!(c, f, bcs = (;))
     interp = Operators.InterpolateF2C(bcs)
     @. c.x = interp(f.y)
     return nothing
@@ -36,7 +36,7 @@ function op_LeftBiasedC2F!(c, f, bcs)
     @. f.x = interp(c.y)
     return nothing
 end
-function op_LeftBiasedF2C!(c, f, bcs = ())
+function op_LeftBiasedF2C!(c, f, bcs = (;))
     interp = Operators.LeftBiasedF2C(bcs)
     @. c.x = interp(f.y)
     return nothing
@@ -46,24 +46,24 @@ function op_RightBiasedC2F!(c, f, bcs)
     @. f.x = interp(c.y)
     return nothing
 end
-function op_RightBiasedF2C!(c, f, bcs = ())
+function op_RightBiasedF2C!(c, f, bcs = (;))
     interp = Operators.RightBiasedF2C(bcs)
     @. c.x = interp(f.y)
     return nothing
 end
 #### Curl
-function op_CurlC2F!(c, f, bcs = ())
+function op_CurlC2F!(c, f, bcs = (;))
     curl = Operators.CurlC2F(bcs)
     @. f.curluₕ = curl(c.uₕ)
     return nothing
 end
 #### Mixed/adaptive
-function op_UpwindBiasedProductC2F!(c, f, bcs = ())
+function op_UpwindBiasedProductC2F!(c, f, bcs = (;))
     upwind = Operators.UpwindBiasedProductC2F(bcs)
     @. f.contra3 = upwind(f.w, c.x)
     return nothing
 end
-function op_Upwind3rdOrderBiasedProductC2F!(c, f, bcs = ())
+function op_Upwind3rdOrderBiasedProductC2F!(c, f, bcs = (;))
     upwind = Operators.Upwind3rdOrderBiasedProductC2F(bcs)
     @. f.contra3 = upwind(f.w, c.x)
     return nothing

@@ -1183,7 +1183,16 @@ steps:
       - label: "Perf: FD operator benchmarks"
         key: "perf_fd_ops"
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_column.jl"
-        soft_fail: true
+
+      - label: "Perf: GPU FD operator benchmarks"
+        key: "gpu_perf_fd_ops"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_column.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
