@@ -49,7 +49,6 @@ function hvspace_3D(
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
     horztopology = Topologies.Topology2D(context, horzmesh)
-    #horztopology = Topologies.Topology2D(horzmesh)
     device = ClimaComms.device(context)
 
     zdomain = Domains.IntervalDomain(
