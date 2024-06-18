@@ -708,16 +708,15 @@ end
         Geometry.Cartesian123Point(x1, x2, x3),
     ]
     all_components = [
-        SMatrix{1, 1, FT}(range(1, 1)...),
-        SMatrix{2, 2, FT}(range(1, 4)...),
-        SMatrix{3, 3, FT}(range(1, 9)...),
-        SMatrix{3, 3, FT}(range(1, 9)...),
-        SMatrix{1, 1, FT}(range(1, 1)...),
-        SMatrix{2, 2, FT}(range(1, 4)...),
-        SMatrix{3, 3, FT}(range(1, 9)...),
+        SMatrix{1, 1}(FT[1]),
+        SMatrix{2, 2}(FT[1 2; 3 4]),
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
+        SMatrix{2, 2}(FT[1 2; 3 4]),
+        SMatrix{3, 3}(FT[1 2 10; 4 5 6; 7 8 9]),
     ]
 
-    expected_dzs = [1.0, 4.0, 9.0, 9.0, 1.0, 4.0, 9.0]
+    expected_dzs = [1.0, 4.0, 9.0, 9.0, 1.0, 2.0, 9.0]
 
     for (components, coord, expected_dz) in
         zip(all_components, coords, expected_dzs)

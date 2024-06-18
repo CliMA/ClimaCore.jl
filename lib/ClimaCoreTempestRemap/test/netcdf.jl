@@ -463,8 +463,8 @@ end
 
     node_type = "cgll"
     FT = Float64
-    x_max = FT(0)
-    y_max = FT(0)
+    x_max = FT(1)
+    y_max = FT(1)
     x_elem = 1
     y_elem = 1
     # generate CC mesh

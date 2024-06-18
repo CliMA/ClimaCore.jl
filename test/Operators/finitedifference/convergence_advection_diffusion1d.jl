@@ -1,3 +1,5 @@
+import ClimaComms
+ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33, Tsit5
