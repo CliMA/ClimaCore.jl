@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Geometry", "axistensor_conversion_benchmarks.jl"))
+=#
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
@@ -109,6 +113,11 @@ function benchmark_func(args, key, f, flops, ::Type{FT}; print_method_info) wher
             print("Time (opt, ref): ($(opt.t_pretty), $(ref.t_pretty)). Key: $key_str\n")
         # end
     end
+    correctness = compare(components(opt.result), components(ref.result)) # test correctness
+    # @show correctness
+    @show components(opt.result)
+    @show components(ref.result)
+    @show correctness
     bm = (;
         opt,
         ref,
@@ -117,7 +126,7 @@ function benchmark_func(args, key, f, flops, ::Type{FT}; print_method_info) wher
         flops, # current flops
         computed_flops,
         reduced_flops,
-        correctness = compare(opt.result, ref.result), # test correctness
+        correctness, # test correctness
         perf_pass = (opt.time - ref.time)/ref.time*100 < -100, # test performance
     )
     return bm
@@ -145,6 +154,7 @@ components(x::T) where {T <: Real} = x
 components(x) = Geometry.components(x)
 compare(x::T, y::T) where {T<: Real} = x ≈ y || (x < eps(T)/100 && y < eps(T)/100)
 compare(x::T, y::T) where {T <: SMatrix} = all(compare.(x, y))
+compare(x::T, y::T) where {T <: Geometry.SimpleSymmetric} = all(compare.(x.lowertriangle, y.lowertriangle))
 compare(x::T, y::T) where {T <: SVector} = all(compare.(x, y))
 compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(y))
 
@@ -164,6 +174,9 @@ function test_optimized_functions(::Type{FT}; print_method_info=false) where {FT
     end
 
     for key in keys(benchmarks)
+        if !(benchmarks[key].correctness)
+            @show key
+        end
         @test benchmarks[key].correctness       # test correctness
         @test benchmarks[key].Δflops ≤ 0        # Don't regress
         # @test_broken benchmarks[key].Δflops < 0 # Error on improvements. TODO: fix, this is somehow flakey

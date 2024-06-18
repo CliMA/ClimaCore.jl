@@ -22,8 +22,7 @@ export Contravariant1Vector,
     Contravariant23Vector,
     Contravariant123Vector
 
-
-
+include("simple_symmetric.jl")
 include("coordinates.jl")
 include("axistensors.jl")
 include("localgeometry.jl")
