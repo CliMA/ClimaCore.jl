@@ -24,7 +24,7 @@ function column_integral_definite_kernel!(
 end
 
 column_integral_definite!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ∫field::Fields.SpectralElementField,
     ᶜfield::Fields.ExtrudedFiniteDifferenceField,
 ) =
@@ -33,7 +33,7 @@ column_integral_definite!(
     end
 
 column_integral_definite!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ∫field::Fields.PointField,
     ᶜfield::Fields.FiniteDifferenceField,
 ) = _column_integral_definite!(∫field, ᶜfield)
@@ -84,7 +84,7 @@ column_integral_indefinite_kernel!(
 ) = _column_integral_indefinite!(ᶠ∫field, ᶜfield)
 
 column_integral_indefinite!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
     ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
 ) =
@@ -93,7 +93,7 @@ column_integral_indefinite!(
     end
 
 column_integral_indefinite!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ᶠ∫field::Fields.FaceFiniteDifferenceField,
     ᶜfield::Fields.CenterFiniteDifferenceField,
 ) = _column_integral_indefinite!(ᶠ∫field, ᶜfield)
@@ -145,14 +145,14 @@ column_integral_indefinite!(
 
 column_integral_indefinite!(
     f::Function,
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ᶠ∫field,
     args...,
 ) = column_integral_indefinite_cpu!(f, ᶠ∫field, args...)
 
 column_integral_indefinite!(
     f::Function,
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
     args...,
 ) =
@@ -215,7 +215,7 @@ column_mapreduce!(
     fn::F,
     op::O,
     reduced_field::Fields.Field,
-    fields::Fields.Field...,
+    fields...,
 ) where {F, O} = column_mapreduce_device!(
     ClimaComms.device(reduced_field),
     fn,
@@ -228,11 +228,11 @@ column_mapreduce_kernel!(fn::F, op::O, reduced_field, fields...) where {F, O} =
     _column_mapreduce!(fn, op, reduced_field, fields...)
 
 column_mapreduce_device!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     fn::F,
     op::O,
     reduced_field::Fields.SpectralElementField,
-    fields::Fields.ExtrudedFiniteDifferenceField...,
+    fields...,
 ) where {F, O} =
     Fields.bycolumn(axes(reduced_field)) do colidx
         column_fields = map(field -> field[colidx], fields)
@@ -240,11 +240,11 @@ column_mapreduce_device!(
     end
 
 column_mapreduce_device!(
-    ::ClimaComms.AbstractCPUDevice,
+    ::ClimaComms.AbstractDevice,
     fn::F,
     op::O,
     reduced_field::Fields.PointField,
-    fields::Fields.FiniteDifferenceField...,
+    fields...,
 ) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
 
 function _column_mapreduce!(fn::F, op::O, reduced_field, fields...) where {F, O}

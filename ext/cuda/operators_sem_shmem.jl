@@ -94,15 +94,30 @@ Base.@propagate_inbounds function operator_shmem(
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
     IT = eltype(arg)
-    input = CUDA.CuStaticSharedArray(IT, (Nq, Nq, Nvt))
-    return (input,)
+    ET = eltype(IT)
+    RT = operator_return_eltype(op, IT)
+    if RT <: Geometry.Covariant12Vector
+        # allocate temp output
+        input = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (input,)
+    elseif IT <: Geometry.UVVector
+        # input data is a UVVector field
+        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (v₁, v₂)
+    elseif IT <: Geometry.UVWVector
+        # input data is a UVWVector field
+        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (v₁, v₂, v₃)
+    end
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Gradient{(1, 2)},
-    (input,),
+    input,
     space,
     ij,
     slabidx,
@@ -110,7 +125,28 @@ Base.@propagate_inbounds function operator_fill_shmem!(
 )
     vt = threadIdx().z
     i, j = ij.I
-    input[i, j, vt] = arg
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    RT = operator_return_eltype(op, typeof(arg))
+    if RT <: Geometry.Covariant12Vector
+        (v,) = input
+        v[i, j, vt] = arg
+    elseif typeof(arg) <: Geometry.UVVector 
+        # TODO classify based on returntype
+        v₁, v₂ = input
+        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
+        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
+        #v₁[i, j, vt] = Geometry.contravariant1(arg, local_geometry)
+        #v₂[i, j, vt] = Geometry.contravariant2(arg, local_geometry)
+    elseif typeof(arg) <: Geometry.UVWVector
+        # TODO classify based on returntype
+        v₁, v₂, v₃ = input
+        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
+        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
+        v₃[i, j, vt] = Geometry.LocalVector(arg, local_geometry).w
+        #v₁[i, j, vt] = Geometry.contravariant1(arg, local_geometry)
+        #v₂[i, j, vt] = Geometry.contravariant2(arg, local_geometry)
+        #v₃[i, j, vt] = Geometry.contravariant3(arg, local_geometry)
+    end
 end
 
 
