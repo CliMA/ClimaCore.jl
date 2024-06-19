@@ -239,8 +239,6 @@ function _ExtrudedFiniteDifferenceGrid(
         f = Spaces.create_dss_buffer(face_∇Z_field),
     )
 
-    Spaces.weighted_dss!(center_∇Z_field => buffer.c, face_∇Z_field => buffer.f)
-
     # construct full local geometry
     center_local_geometry =
         Geometry.product_geometry.(
