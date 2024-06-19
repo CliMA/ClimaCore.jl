@@ -136,6 +136,10 @@ steps:
         key: unit_axistensors
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/axistensors.jl"
 
+      - label: "Unit: rmul_with_projection"
+        key: unit_rmul_with_projection
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/rmul_with_projection.jl"
+
   - group: "Unit: Meshes"
     steps:
 
@@ -674,10 +678,6 @@ steps:
       - label: "Unit: BandMatrixRow"
         key: unit_band_matrix_row
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/band_matrix_row.jl"
-
-      - label: "Unit: rmul_with_projection"
-        key: unit_rmul_with_projection
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/rmul_with_projection.jl"
 
       - label: "Unit: field2arrays"
         key: unit_field2arrays
