@@ -83,6 +83,10 @@ const FCTZalesak = Operators.FCTZalesak(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
 )
+const TVDSlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
+    bottom = Operators.FirstOrderOneSided(),
+    top = Operators.FirstOrderOneSided(),
+)
 const FCTBorisBook = Operators.FCTBorisBook(
     bottom = Operators.FirstOrderOneSided(),
     top = Operators.FirstOrderOneSided(),
@@ -176,6 +180,15 @@ function vertical_tendency!(Yₜ, Y, cache, t)
                         q_n / dt,
                         q_n / dt -
                         vdivf2c(ᶠwinterp(ᶜJ, Y.c.ρ) * upwind1(face_uᵥ, q_n)) / Y.c.ρ,
+                    )
+                ),
+            )
+        elseif fct_op == TVDSlopeLimitedFlux
+            @. ρqₜ_n -= vdivf2c(
+                ᶠwinterp(ᶜJ, Y.c.ρ) * (
+                    upwind1(face_uᵥ, q_n) + TVDSlopeLimitedFlux(
+                    upwind3(face_uᵥ, q_n) - upwind1(face_uᵥ, q_n),
+                    Y.c.ρ * q_n, 
                     )
                 ),
             )
@@ -306,6 +319,8 @@ tracer_ranges(sol) =
         return maximum(q_n) - minimum(q_n)
     end
 
+tvd_sol = run_deformation_flow(false, TVDSlopeLimitedFlux, _dt)
+lim_tvd_sol = run_deformation_flow(true, TVDSlopeLimitedFlux, _dt)
 third_upwind_sol = run_deformation_flow(false, upwind3, _dt)
 fct_sol = run_deformation_flow(false, FCTZalesak, _dt)
 lim_third_upwind_sol = run_deformation_flow(true, upwind3, _dt)
@@ -386,8 +401,10 @@ for (sol, suffix) in (
     (lim_first_upwind_sol, "_lim_first_upwind"),
     (third_upwind_sol, "_third_upwind"),
     (fct_sol, "_fct"),
+    (tvd_sol, "_tvd"),
     (lim_third_upwind_sol, "_lim_third_upwind"),
     (lim_fct_sol, "_lim_fct"),
+    (lim_tvd_sol, "_lim_tvd"),
 )
     for (sol_index, day) in ((1, 6), (2, 12))
         Plots.png(
@@ -397,6 +414,27 @@ for (sol, suffix) in (
                 clim = (-1, 1),
             ),
             joinpath(path, "q3_day$day$suffix.png"),
+        )
+    end
+end
+
+for (sol, suffix) in (
+    (lim_centered_sol, "_lim_centered"),
+    (lim_first_upwind_sol, "_lim_first_upwind"),
+    (third_upwind_sol, "_third_upwind"),
+    (fct_sol, "_fct"),
+    (tvd_sol, "_tvd"),
+    (lim_fct_sol, "_lim_fct"),
+    (lim_tvd_sol, "_lim_tvd"),
+)
+    for (sol_index, day) in ((1, 6), (2, 12))
+        Plots.png(
+            Plots.plot(
+                (((sol.u[sol_index].c.ρq.:3) ./ sol.u[sol_index].c.ρ) .- (lim_third_upwind_sol[sol_index].c.ρq.:3 ./ lim_third_upwind_sol[sol_index].c.ρ)),
+                level = 15,
+                clim = (-1, 1),
+            ),
+            joinpath(path, "q3_day_diff_$day$suffix.png"),
         )
     end
 end
