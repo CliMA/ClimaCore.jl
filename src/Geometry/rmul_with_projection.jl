@@ -1,3 +1,9 @@
+import LinearAlgebra: Adjoint, AdjointAbsVec
+import .RecursiveApply: rmap, rmaptype
+# import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
+# Types that are treated as single values when using matrix fields.
+const SingleValue = Union{Number, AxisTensor, AdjointAxisTensor}
+
 """
     mul_with_projection(x, y, lg)
 
@@ -9,10 +15,10 @@ be projected onto the dual of the last axis of `x`.
 """
 mul_with_projection(x, y, _) = x * y
 mul_with_projection(
-    x::Union{Geometry.AdjointAxisVector, Geometry.Axis2TensorOrAdj},
-    y::Geometry.AxisTensor,
+    x::Union{AdjointAxisVector, Axis2TensorOrAdj},
+    y::AxisTensor,
     lg,
-) = x * Geometry.project(Geometry.dual(axes(x)[2]), y, lg)
+) = x * project(dual(axes(x)[2]), y, lg)
 
 """
     rmul_with_projection(x, y, lg)
@@ -30,23 +36,21 @@ rmul_with_projection(x::SingleValue, y::SingleValue, lg) =
     mul_with_projection(x, y, lg)
 
 axis_tensor_type(::Type{T}, ::Type{Tuple{A1}}) where {T, A1} =
-    Geometry.AxisVector{T, A1, SVector{Geometry._length(A1), T}}
+    AxisVector{T, A1, SVector{_length(A1), T}}
 function axis_tensor_type(::Type{T}, ::Type{Tuple{A1, A2}}) where {T, A1, A2}
-    N1 = Geometry._length(A1)
-    N2 = Geometry._length(A2)
-    return Geometry.Axis2Tensor{T, Tuple{A1, A2}, SMatrix{N1, N2, T, N1 * N2}}
+    N1 = _length(A1)
+    N2 = _length(A2)
+    return Axis2Tensor{T, Tuple{A1, A2}, SMatrix{N1, N2, T, N1 * N2}}
 end
 
 adjoint_type(::Type{A}) where {A} = Adjoint{eltype(A), A}
 adjoint_type(::Type{A}) where {T, S, A <: Adjoint{T, S}} = S
 
-axis1(::Type{<:Geometry.Axis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
-axis1(::Type{<:Geometry.AdjointAxis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} =
-    A
+axis1(::Type{<:Axis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
+axis1(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
 
-axis2(::Type{<:Geometry.Axis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
-axis2(::Type{<:Geometry.AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} =
-    A
+axis2(::Type{<:Axis2Tensor{<:Any, <:Tuple{Any, A}}}) where {A} = A
+axis2(::Type{<:AdjointAxis2Tensor{<:Any, <:Tuple{A, Any}}}) where {A} = A
 
 """
     mul_return_type(X, Y)
@@ -78,32 +82,28 @@ mul_return_type(
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {T, N, A, X <: Number, Y <: Geometry.AxisTensor{T, N, A}} =
+) where {T, N, A, X <: Number, Y <: AxisTensor{T, N, A}} =
     axis_tensor_type(promote_type(X, T), A)
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {T, N, A, X <: Geometry.AxisTensor{T, N, A}, Y <: Number} =
+) where {T, N, A, X <: AxisTensor{T, N, A}, Y <: Number} =
     axis_tensor_type(promote_type(T, Y), A)
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {T, N, A, X <: Number, Y <: Geometry.AdjointAxisTensor{T, N, A}} =
+) where {T, N, A, X <: Number, Y <: AdjointAxisTensor{T, N, A}} =
     adjoint_type(axis_tensor_type(promote_type(X, T), A))
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {T, N, A, X <: Geometry.AdjointAxisTensor{T, N, A}, Y <: Number} =
+) where {T, N, A, X <: AdjointAxisTensor{T, N, A}, Y <: Number} =
     adjoint_type(axis_tensor_type(promote_type(T, Y), A))
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {
-    T1,
-    T2,
-    X <: Geometry.AdjointAxisVector{T1},
-    Y <: Geometry.AxisVector{T2},
-} = promote_type(T1, T2) # This comes from the definition of dot.
+) where {T1, T2, X <: AdjointAxisVector{T1}, Y <: AxisVector{T2}} =
+    promote_type(T1, T2) # This comes from the definition of dot.
 mul_return_type(
     ::Type{X},
     ::Type{Y},
@@ -112,27 +112,19 @@ mul_return_type(
     T2,
     A1,
     A2,
-    X <: Geometry.AxisVector{T1, A1},
-    Y <: Geometry.AdjointAxisVector{T2, A2},
+    X <: AxisVector{T1, A1},
+    Y <: AdjointAxisVector{T2, A2},
 } = axis_tensor_type(promote_type(T1, T2), Tuple{A1, A2})
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {
-    T1,
-    T2,
-    X <: Geometry.Axis2TensorOrAdj{T1},
-    Y <: Geometry.AxisVector{T2},
-} = axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X)})
+) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: AxisVector{T2}} =
+    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X)})
 mul_return_type(
     ::Type{X},
     ::Type{Y},
-) where {
-    T1,
-    T2,
-    X <: Geometry.Axis2TensorOrAdj{T1},
-    Y <: Geometry.Axis2TensorOrAdj{T2},
-} = axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
+) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
+    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
 
 """
     rmul_return_type(X, Y)

@@ -6,7 +6,10 @@ inv_return_type(::Type{X}) where {X} = error(
 )
 inv_return_type(::Type{X}) where {X <: Union{Number, SMatrix}} = X
 inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
-    axis_tensor_type(T, Tuple{dual_type(axis2(X)), dual_type(axis1(X))})
+    axis_tensor_type(
+        T,
+        Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
+    )
 
 x_eltype(A::UniformScaling, b) = x_eltype(eltype(A), eltype(b))
 x_eltype(A::ColumnwiseBandMatrixField, b) =

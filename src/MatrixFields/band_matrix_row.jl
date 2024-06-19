@@ -128,9 +128,9 @@ Base.:-(row1::BandMatrixRow, row2::UniformScaling) =
 Base.:-(row1::UniformScaling, row2::BandMatrixRow) =
     map(rsub, promote(row1, row2)...)
 
-Base.:*(row::BandMatrixRow, value::SingleValue) =
+Base.:*(row::BandMatrixRow, value::Geometry.SingleValue) =
     map(entry -> rmul(entry, value), row)
-Base.:*(value::SingleValue, row::BandMatrixRow) =
+Base.:*(value::Geometry.SingleValue, row::BandMatrixRow) =
     map(entry -> rmul(value, entry), row)
 
 Base.:/(row::BandMatrixRow, value::Number) =

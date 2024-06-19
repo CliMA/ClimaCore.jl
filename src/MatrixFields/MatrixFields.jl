@@ -66,6 +66,11 @@ import ..Fields
 import ..Operators
 
 using ..Utilities.UnrolledFunctions
+using ..Geometry:
+    rmul_with_projection,
+    mul_with_projection,
+    axis_tensor_type,
+    rmul_return_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -74,10 +79,6 @@ export DiagonalMatrixRow,
     PentadiagonalMatrixRow
 export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
 export FieldMatrixWithSolver, ⋅
-
-# Types that are teated as single values when using matrix fields.
-const SingleValue =
-    Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
 
 include("band_matrix_row.jl")
 
@@ -93,7 +94,6 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     },
 }
 
-include("rmul_with_projection.jl")
 include("matrix_shape.jl")
 include("matrix_multiplication.jl")
 include("lazy_operators.jl")

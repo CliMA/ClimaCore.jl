@@ -1,8 +1,18 @@
+#=
+julia --project=.buildkite
+using Revise; include(joinpath("test", "Geometry", "rmul_with_projection.jl"))
+=#
+using Test
+using JET
+import Random
 using StaticArrays: @SMatrix
 
-import ClimaCore.MatrixFields: rmul_with_projection, rmul_return_type
+import ClimaCore.Geometry
+import ClimaCore.Geometry: rmul_with_projection, rmul_return_type
 
-include("matrix_field_test_utils.jl")
+nested_type(value) = nested_type(value, value, value)
+nested_type(value1, value2, value3) =
+    (; a = (), b = value1, c = (value2, (; d = (value3,)), (;)))
 
 function test_rmul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
     result = rmul_with_projection(x, y, lg)
@@ -28,7 +38,7 @@ function test_rmul_with_projection(x::X, y::Y, lg, expected_result) where {X, Y}
 end
 
 @testset "rmul_with_projection Unit Tests" begin
-    seed!(1) # ensures reproducibility
+    Random.seed!(1) # ensures reproducibility
 
     FT = Float64
     coord = Geometry.LatLongZPoint(rand(FT), rand(FT), rand(FT))

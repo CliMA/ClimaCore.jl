@@ -154,7 +154,8 @@ function get_internal_entry(
         entry
     elseif name_pair[1] == name_pair[2]
         # multiplication case 3 or 4, first argument
-        @assert T <: SingleValue && !broadcasted_has_field(T, name_pair[1])
+        @assert T <: Geometry.SingleValue &&
+                !broadcasted_has_field(T, name_pair[1])
         entry
     elseif name_pair[2] == @name() && broadcasted_has_field(T, name_pair[1])
         # multiplication case 2 or 4, second argument
