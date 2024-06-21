@@ -1,11 +1,11 @@
-cartesian_index(::AbstractData, inds) = CartesianIndex(inds)
-
 function knl_fill_flat!(dest::AbstractData, val)
-    n = DataLayouts.universal_size(dest)
-    inds = kernel_indexes(n)
-    if valid_range(inds, n)
-        I = cartesian_index(dest, inds)
-        @inbounds dest[I] = val
+    @inbounds begin
+        tidx = thread_index()
+        n = DataLayouts.universal_size(dest)
+        if valid_range(tidx, prod(n))
+            I = kernel_indexes(tidx, n)
+            @inbounds dest[I] = val
+        end
     end
     return nothing
 end
