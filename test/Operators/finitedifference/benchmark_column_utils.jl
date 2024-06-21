@@ -33,41 +33,6 @@ field_vars(::Type{FT}) where {FT} = (;
     ᶠw = Geometry.Covariant3Vector(FT(0)),
 )
 
-#####
-##### Second order interpolation / derivatives
-#####
-
-#= e.g., any 2nd order interpolation / derivative operator =#
-function op_2mul_1add!(x, y, D, U)
-    y1 = @view y[1:(end - 1)]
-    y2 = @view y[2:end]
-    @inbounds for i in eachindex(x)
-        x[i] = D[i] * y1[i] + U[i] * y2[i]
-    end
-    return nothing
-end
-
-#= e.g., div(grad(scalar)), div(interp(vec)) =#
-function op_3mul_2add!(x, y, L, D, U)
-    y1 = @view y[1:(end - 1)]
-    y2 = @view y[2:(end - 1)]
-    y3 = @view y[2:end]
-    @inbounds for i in eachindex(x)
-        i==1 && continue
-        i==length(x) && continue
-        x[i] = L[i] * y1[i] + D[i] * y2[i] + U[i] * y3[i]
-    end
-    return nothing
-end
-
-#= e.g., curlC2F =#
-function curl_like!(curluₕ, uₕ_x, uₕ_y, D, U)
-    @inbounds for i in eachindex(curluₕ)
-        curluₕ[i] = D[i] * uₕ_x[i] + U[i] * uₕ_y[i]
-    end
-    return nothing
-end
-
 function set_value_bcs(c)
     FT = Spaces.undertype(axes(c))
     return (;bottom = Operators.SetValue(FT(0)),
@@ -211,7 +176,9 @@ bc_name(bcs::Tuple) = (:none,)
 bc_name_base(bcs::@NamedTuple{}) = (:none,)
 bc_name(bcs::@NamedTuple{}) = (:none,)
 
-include("benchmark_column_kernels.jl")
+include("benchmark_column_array_kernels.jl")
+include("benchmark_sphere_array_kernels.jl")
+include("benchmark_climacore_kernels.jl")
 
 uses_bycolumn(::typeof(op_broadcast_example0!)) = true
 uses_bycolumn(::typeof(op_broadcast_example1!)) = true
@@ -268,40 +235,85 @@ function benchmark_func!(t_min, trials, fun, c, f, verbose = false)
     end
 end
 
-function benchmark_arrays(z_elems, ::Type{FT}) where {FT}
-    L = zeros(FT, z_elems)
-    D = zeros(FT, z_elems)
-    U = zeros(FT, z_elems)
-    xarr = rand(FT, z_elems)
-    uₕ_x = rand(FT, z_elems)
-    uₕ_y = rand(FT, z_elems)
-    yarr = rand(FT, z_elems + 1)
+function column_benchmark_arrays(device, z_elems, ::Type{FT}) where {FT}
+    ArrayType = ClimaComms.array_type(device)
+    L = ArrayType(zeros(FT, z_elems))
+    D = ArrayType(zeros(FT, z_elems))
+    U = ArrayType(zeros(FT, z_elems))
+    xarr = ArrayType(rand(FT, z_elems))
+    uₕ_x = ArrayType(rand(FT, z_elems))
+    uₕ_y = ArrayType(rand(FT, z_elems))
+    yarr = ArrayType(rand(FT, z_elems + 1))
 
-    println("\n############################ 2-point stencil")
-    trial = BenchmarkTools.@benchmark op_2mul_1add!($xarr, $yarr, $D, $U)
-    show(stdout, MIME("text/plain"), trial)
-    println()
-    println("\n############################ 3-point stencil")
-    trial = BenchmarkTools.@benchmark op_3mul_2add!($xarr, $yarr, $L, $D, $U)
-    show(stdout, MIME("text/plain"), trial)
-    println()
-    println("\n############################ curl-like stencil")
-    trial = BenchmarkTools.@benchmark curl_like!($xarr, $uₕ_x, $uₕ_y, $D, $U)
-    show(stdout, MIME("text/plain"), trial)
-    println()
+    if device isa ClimaComms.CUDADevice
+        println("\n############################ column 2-point stencil")
+        trial = BenchmarkTools.@benchmark CUDA.@sync column_op_2mul_1add_cuda!($xarr, $yarr, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+    else
+        println("\n############################ column 2-point stencil")
+        trial = BenchmarkTools.@benchmark column_op_2mul_1add!($xarr, $yarr, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+        println("\n############################ column 3-point stencil")
+        trial = BenchmarkTools.@benchmark column_op_3mul_2add!($xarr, $yarr, $L, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+        println("\n############################ column curl-like stencil")
+        trial = BenchmarkTools.@benchmark column_curl_like!($xarr, $uₕ_x, $uₕ_y, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+    end
+end
+
+function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}) where {FT}
+    ArrayType = ClimaComms.array_type(device)
+    # VIJFH
+    cdims = (z_elems  , Nq, Nq, 1, helem)
+    fdims = (z_elems+1, Nq, Nq, 1, helem)
+    L = ArrayType(zeros(FT, cdims...))
+    D = ArrayType(zeros(FT, cdims...))
+    U = ArrayType(zeros(FT, cdims...))
+    xarr = ArrayType(rand(FT, cdims...))
+    uₕ_x = ArrayType(rand(FT, cdims...))
+    uₕ_y = ArrayType(rand(FT, cdims...))
+    yarr = ArrayType(rand(FT, fdims...))
+
+    if device isa ClimaComms.CUDADevice
+        println("\n############################ sphere 2-point stencil")
+        trial = BenchmarkTools.@benchmark CUDA.@sync sphere_op_2mul_1add_cuda!($xarr, $yarr, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+    else
+        println("\n############################ sphere 2-point stencil")
+        trial = BenchmarkTools.@benchmark sphere_op_2mul_1add!($xarr, $yarr, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+        println("\n############################ sphere 3-point stencil")
+        trial = BenchmarkTools.@benchmark sphere_op_3mul_2add!($xarr, $yarr, $L, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+        println("\n############################ sphere curl-like stencil")
+        trial = BenchmarkTools.@benchmark sphere_curl_like!($xarr, $uₕ_x, $uₕ_y, $D, $U)
+        show(stdout, MIME("text/plain"), trial)
+        println()
+    end
 end
 
 function benchmark_operators(::Type{FT}; z_elems, helem, Nq) where {FT}
-    @show ClimaComms.device()
+    device = ClimaComms.device()
+    @show device
     trials = OrderedCollections.OrderedDict()
     t_min = OrderedCollections.OrderedDict()
-    benchmark_arrays(z_elems, FT)
+    # column_benchmark_arrays(device, z_elems, FT)
+    sphere_benchmark_arrays(device, z_elems, helem, Nq, FT)
+    # return nothing
 
-    cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
-    fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
-    cfield = fill(field_vars(FT), cspace)
-    ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_min, cfield, ffield)
+    # cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
+    # fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
+    # cfield = fill(field_vars(FT), cspace)
+    # ffield = fill(field_vars(FT), fspace)
+    # benchmark_operators_base(trials, t_min, cfield, ffield)
 
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
