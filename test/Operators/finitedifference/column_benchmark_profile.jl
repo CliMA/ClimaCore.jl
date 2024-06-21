@@ -1,5 +1,5 @@
 #= This script is helpful for targeting specific kernels =#
-include("benchmark_column_utils.jl")
+include("benchmark_stencils_utils.jl")
 
 function apply_kernel!(cfield, ffield)
     # op_DivergenceF2C!(cfield, ffield)
