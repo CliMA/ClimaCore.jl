@@ -51,26 +51,29 @@ function Base.copyto!(
 end
 
 function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
-    gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    if gid ≤ Nv * Nq * Nq * Nh
-        (li, lw, rw, ri) = bds
-        (v, i, j, h) = Topologies._get_idx((Nv, Nq, Nq, Nh), gid)
-        hidx = (i, j, h)
-        idx = v - 1 + li
-        window =
-            idx < lw ? LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
-            (
-                idx > rw ?
-                RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
-                Interior()
+    @inbounds begin
+        gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+        if gid ≤ Nv * Nq * Nq * Nh
+            (li, lw, rw, ri) = bds
+            (v, i, j, h) = Topologies._get_idx((Nv, Nq, Nq, Nh), gid)
+            hidx = (i, j, h)
+            idx = v - 1 + li
+            window =
+                idx < lw ?
+                LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
+                (
+                    idx > rw ?
+                    RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
+                    Interior()
+                )
+            setidx!(
+                space,
+                out,
+                idx,
+                hidx,
+                Operators.getidx(space, bc, window, idx, hidx),
             )
-        setidx!(
-            space,
-            out,
-            idx,
-            hidx,
-            Operators.getidx(space, bc, window, idx, hidx),
-        )
+        end
     end
     return nothing
 end
