@@ -54,9 +54,9 @@ function compute_element_bounds_kernel!(
     ::Val{Nj},
 ) where {Ni, Nj}
     n = (Nv, Nh)
-    if valid_range(n)
-        inds = kernel_indexes(n)
-        (v, h) = inds
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds) = limiter
         local q_min, q_max
         slab_ρq = slab(ρq, v, h)
@@ -118,9 +118,9 @@ function compute_neighbor_bounds_local_kernel!(
 ) where {Ni, Nj}
 
     n = (Nv, Nh)
-    if valid_range(n)
-        inds = kernel_indexes(n)
-        (v, h) = inds
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds, q_bounds_nbr, ghost_buffer, rtol) = limiter
         slab_q_bounds = slab(q_bounds, v, h)
         q_min = slab_q_bounds[1]
@@ -188,9 +188,9 @@ function apply_limiter_kernel!(
     (; q_bounds_nbr, rtol) = limiter
     converged = true
     n = (Nv, Nh)
-    if valid_range(n)
-        inds = kernel_indexes(n)
-        (v, h) = inds
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
 
         slab_ρ = slab(ρ_data, v, h)
         slab_ρq = slab(ρq_data, v, h)

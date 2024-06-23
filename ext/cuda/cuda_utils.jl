@@ -97,38 +97,44 @@ function auto_launch!(
 end
 
 """
-    kernel_indexes(n)
-Return a tuple of indexes from the kernel,
-where `n` is a tuple of max lengths along each
-dimension of the accessed data.
+    thread_index()
+
+Return the threadindex:
+```
+(CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+```
 """
-function kernel_indexes(n::Tuple)
-    tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
-    inds = if 1 ≤ tidx ≤ prod(n)
-        CartesianIndices(map(x -> Base.OneTo(x), n))[tidx].I
-    else
-        ntuple(x -> -1, length(n))
-    end
-    return inds
-end
+@inline thread_index() =
+    (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
 
 """
-    valid_range(inds, n)
+    kernel_indexes(tidx, n)
+Return a tuple of indexes from the kernel,
+where `tidx` is the cuda thread index and
+`n` is a tuple of max lengths along each
+dimension of the accessed data.
+"""
+Base.@propagate_inbounds kernel_indexes(tidx, n::Tuple) =
+    CartesianIndices(map(x -> Base.OneTo(x), n))[tidx]
+
+"""
+    valid_range(tidx, n::Int)
+
 Returns a `Bool` indicating if the thread index
-is in the valid range, based on `inds` (the result
-of `kernel_indexes`) and `n`, a tuple of max lengths
-along each dimension of the accessed data.
+(`tidx`) is in the valid range, based on `n`, a
+tuple of max lengths along each dimension of the
+
+accessed data.
 ```julia
 function kernel!(data, n)
-    inds = kernel_indexes(n)
-    if valid_range(inds, n)
-        do_work!(data[inds...])
+    @inbounds begin
+        tidx = thread_index()
+        if valid_range(tidx, n)
+            I = kernel_indexes(tidx, n)
+            do_work!(data[I])
+        end
     end
 end
 ```
 """
-valid_range(inds::NTuple, n::Tuple) = all(i -> 1 ≤ inds[i] ≤ n[i], 1:length(n))
-function valid_range(n::Tuple)
-    inds = kernel_indexes(n)
-    return all(i -> 1 ≤ inds[i] ≤ n[i], 1:length(n))
-end
+@inline valid_range(tidx, n) = 1 ≤ tidx ≤ n

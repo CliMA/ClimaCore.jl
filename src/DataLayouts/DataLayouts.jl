@@ -46,6 +46,21 @@ abstract type AbstractData{S} end
 
 Base.size(data::AbstractData, i::Integer) = size(data)[i]
 
+"""
+    (Ni, Nj, Nf, Nv, Nh) = universal_size(data::AbstractData)
+
+Returns dimensions in a universal
+format for all data layouts:
+ - `Ni` number of spectral element nodal degrees of freedom in first horizontal direction
+ - `Nj` number of spectral element nodal degrees of freedom in second horizontal direction
+ - `Nf` number of field components
+ - `Nv` number of vertical degrees of freedom
+ - `Nh` number of horizontal elements
+
+Note: this is similar to `Base.size`, except
+      that `universal_size` does not return 1
+      for the number of field components.
+"""
 function universal_size(data::AbstractData)
     s = size(data)
     return (s[1], s[2], ncomponents(data), s[4], s[5])

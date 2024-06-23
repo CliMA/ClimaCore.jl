@@ -85,10 +85,10 @@ function multiple_field_solve_kernel!(
 ) where {Nnames}
     @inbounds begin
         Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
-        tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
-        if 1 ≤ tidx ≤ prod((Ni, Nj, Nh, Nnames))
-            (i, j, h, iname) =
-                CartesianIndices((1:Ni, 1:Nj, 1:Nh, 1:Nnames))[tidx].I
+        tidx = thread_index()
+        n = (Ni, Nj, Nh, Nnames)
+        if valid_range(tidx, prod(n))
+            (i, j, h, iname) = kernel_indexes(tidx, n).I
             generated_single_field_solve!(
                 device,
                 caches,
