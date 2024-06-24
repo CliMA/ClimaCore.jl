@@ -186,7 +186,11 @@ end
 
         ifelse_broadcast_allocating(a, b, c)
         p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
-        @test_broken p_allocated == 0
+        if VERSION < v"1.11"
+            @test_broken p_allocated == 0
+        else
+            @test p_allocated == 0
+        end
 
         ifelse_broadcast_or(a, b, c)
         p_allocated = @allocated ifelse_broadcast_or(a, b, c)
