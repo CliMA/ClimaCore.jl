@@ -377,6 +377,9 @@ function Base.similar(
     return VIJFH{Eltype, newNv, Nij}(array)
 end
 
+# This is only defined for testing.
+function mapreduce_cuda end
+
 function Base.mapreduce(
     fn::F,
     op::Op,
