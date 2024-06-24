@@ -186,10 +186,10 @@ end
 
         ifelse_broadcast_allocating(a, b, c)
         p_allocated = @allocated ifelse_broadcast_allocating(a, b, c)
-        if VERSION < v"1.11"
-            @test_broken p_allocated == 0
-        else
+        if VERSION ≥ v"1.11.0-beta"
             @test p_allocated == 0
+        else
+            @test_broken p_allocated == 0
         end
 
         ifelse_broadcast_or(a, b, c)
