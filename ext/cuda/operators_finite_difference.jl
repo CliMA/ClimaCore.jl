@@ -63,7 +63,7 @@ function copyto_stencil_kernel!(
         gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
         if gid ≤ Nv * Nq * Nq * Nh
             (li, lw, rw, ri) = bds
-            (v, i, j, h) = Topologies._get_idx((Nv, Nq, Nq, Nh), gid)
+            (v, i, j, h) = cart_ind((Nv, Nq, Nq, Nh), gid).I
             hidx = (i, j, h)
             idx = v - 1 + li
             window =

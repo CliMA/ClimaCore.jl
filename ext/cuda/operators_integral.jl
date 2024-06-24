@@ -37,7 +37,7 @@ function column_integral_definite_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
     if idx <= Ni * Nj * Nh
-        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
         ∫field_column = Spaces.column(∫field, i, j, h)
         ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
         _column_integral_definite!(∫field_column, ᶜfield_column)
@@ -52,7 +52,7 @@ function column_integral_indefinite_kernel!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
     if idx <= Ni * Nj * Nh
-        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
         ᶠ∫field_column = Spaces.column(ᶠ∫field, i, j, h)
         ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
         _column_integral_indefinite!(ᶠ∫field_column, ᶜfield_column)
@@ -117,7 +117,7 @@ function column_mapreduce_kernel_extruded!(
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
     if idx <= Ni * Nj * Nh
-        i, j, h = Topologies._get_idx((Ni, Nj, Nh), idx)
+        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
         reduced_field_column = Spaces.column(reduced_field, i, j, h)
         field_columns = map(field -> Spaces.column(field, i, j, h), fields)
         _column_mapreduce!(fn, op, reduced_field_column, field_columns...)

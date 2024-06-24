@@ -231,47 +231,20 @@ end
 end
 
 # helper functions for DSS2
-function _get_idx(sizet::NTuple{5, Int}, loc::NTuple{5, Int})
-    (n1, n2, n3, n4, n5) = sizet
-    (i1, i2, i3, i4, i5) = loc
-    return i1 +
-           ((i2 - 1) + ((i3 - 1) + ((i4 - 1) + (i5 - 1) * n4) * n3) * n2) * n1
-end
-
-function _get_idx(sizet::NTuple{4, Int}, loc::NTuple{4, Int})
-    (n1, n2, n3, n4) = sizet
-    (i1, i2, i3, i4) = loc
-    return i1 + ((i2 - 1) + ((i3 - 1) + (i4 - 1) * n3) * n2) * n1
-end
-
-function _get_idx(sizet::NTuple{3, Int}, idx::Int)
-    (n1, n2, n3) = sizet
-    i3 = cld(idx, n1 * n2)
-    i2 = cld(idx - (i3 - 1) * n1 * n2, n1)
-    i1 = idx - (i3 - 1) * n1 * n2 - (i2 - 1) * n1
-    return (i1, i2, i3)
-end
-
-function _get_idx(sizet::NTuple{4, Int}, idx::Int)
-    (n1, n2, n3, n4) = sizet
-    i4 = cld(idx, n1 * n2 * n3)
-    i3 = cld(idx - (i4 - 1) * n1 * n2 * n3, n1 * n2)
-    i2 = cld(idx - (i4 - 1) * n1 * n2 * n3 - (i3 - 1) * n1 * n2, n1)
-    i1 = idx - (i4 - 1) * n1 * n2 * n3 - (i3 - 1) * n1 * n2 - (i2 - 1) * n1
-    return (i1, i2, i3, i4)
-end
 
 function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
-    nmetric = sizet[4]
-    (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
-    (level, i, j, elem) = loc
-    return (
-        _get_idx(sizet, (level, i, j, i11, elem)),
-        _get_idx(sizet, (level, i, j, i12, elem)),
-        _get_idx(sizet, (level, i, j, i21, elem)),
-        _get_idx(sizet, (level, i, j, i22, elem)),
-    )
-    return nothing
+    @inbounds begin
+        nmetric = sizet[4]
+        (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
+        (level, i, j, elem) = loc
+        inds = (
+            linear_ind(sizet, (level, i, j, i11, elem)),
+            linear_ind(sizet, (level, i, j, i12, elem)),
+            linear_ind(sizet, (level, i, j, i21, elem)),
+            linear_ind(sizet, (level, i, j, i22, elem)),
+        )
+        return inds
+    end
 end
 
 function _representative_slab(
