@@ -5,7 +5,7 @@ using DocStringExtensions
 import ClimaComms, Adapt
 
 import ..ClimaCore
-import ..Utilities: Cache
+import ..Utilities: Cache, cart_ind, linear_ind
 import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
