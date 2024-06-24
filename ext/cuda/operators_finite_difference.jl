@@ -36,9 +36,9 @@ function Base.copyto!(
         strip_space(bc, space),
         axes(out),
         bounds,
-        Nq,
+        Val(Nv),
+        Val(Nq),
         Nh,
-        Nv,
     )
     auto_launch!(
         copyto_stencil_kernel!,
@@ -50,7 +50,15 @@ function Base.copyto!(
     return out
 end
 
-function copyto_stencil_kernel!(out, bc, space, bds, Nq, Nh, Nv)
+function copyto_stencil_kernel!(
+    out,
+    bc,
+    space,
+    bds,
+    ::Val{Nv},
+    ::Val{Nq},
+    Nh,
+) where {Nv, Nq}
     @inbounds begin
         gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
         if gid ≤ Nv * Nq * Nq * Nh
