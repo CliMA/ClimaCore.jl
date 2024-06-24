@@ -85,6 +85,10 @@ steps:
         key: unit_data_copyto
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
 
+      - label: "Unit: mapreduce"
+        key: unit_data_mapreduce
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
+
       - label: "Unit: data_opt_similar"
         key: data_opt_similar
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
@@ -128,6 +132,28 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
+
+      - label: "Unit: data mapreduce"
+        key: gpu_unit_data_mapreduce
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: data mapreduce (2 gpus)"
+        key: gpu_2_unit_data_mapreduce
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
+        env:
+           CLIMACOMMS_DEVICE: "CUDA"
+           CLIMACOMMS_CONTEXT: "MPI"
+        agents:
+           slum_ntasks: 2
+           slurm_gpus: 2
 
       - label: "Unit: data copyto"
         key: gpu_unit_data_copyto
