@@ -81,6 +81,10 @@ steps:
         key: unit_data_fill
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
 
+      - label: "Unit: data_copyto"
+        key: unit_data_copyto
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
+
       - label: "Unit: data_opt_similar"
         key: data_opt_similar
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
@@ -120,6 +124,16 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: data copyto"
+        key: gpu_unit_data_copyto
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

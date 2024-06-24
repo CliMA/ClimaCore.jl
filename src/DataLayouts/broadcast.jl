@@ -540,6 +540,17 @@ function Base.copyto!(
     return dest
 end
 
+function Base.copyto!(
+    dest::IF{S, Ni},
+    bc::BroadcastedUnionIF{S, Ni, A},
+) where {S, Ni, A}
+    @inbounds for i in 1:Ni
+        idx = CartesianIndex(i, 1, 1, 1, 1)
+        dest[idx] = convert(S, bc[idx])
+    end
+    return dest
+end
+
 # inline inner slab(::DataSlab1D) copy
 function Base.copyto!(
     dest::IF{S, Ni},

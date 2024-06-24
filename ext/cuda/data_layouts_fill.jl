@@ -1,7 +1,7 @@
 function knl_fill_flat!(dest::AbstractData, val)
     @inbounds begin
         tidx = thread_index()
-        n = DataLayouts.universal_size(dest)
+        n = size(dest)
         if valid_range(tidx, prod(n))
             I = kernel_indexes(tidx, n)
             @inbounds dest[I] = val

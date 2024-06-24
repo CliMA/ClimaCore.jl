@@ -62,6 +62,7 @@ LocalVector(u::CartesianVector{T,I}, ::CartesianGlobalGeometry) where {T,I} =
 =#
 
 abstract type AbstractSphericalGlobalGeometry <: AbstractGlobalGeometry end
+Base.broadcastable(x::AbstractSphericalGlobalGeometry) = tuple(x)
 
 """
     SphericalGlobalGeometry(radius)

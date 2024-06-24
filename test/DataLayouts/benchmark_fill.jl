@@ -12,6 +12,10 @@ function benchmarkfill!(device, data, val)
     trial = @benchmark ClimaComms.@cuda_sync $device fill!($data, $val)
     show(stdout, MIME("text/plain"), trial)
     println()
+    trial =
+        @benchmark ClimaComms.@cuda_sync $device fill!($(parent(data)), $val)
+    show(stdout, MIME("text/plain"), trial)
+    println()
 end
 
 @testset "fill! with Nf = 1" begin
