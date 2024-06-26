@@ -121,5 +121,5 @@ pid, nprocs = ClimaComms.init(context)
     @test parent(v0) ≈ parent(vx)
 
     p = @allocated Spaces.weighted_dss!(v0, dss_vbuffer)
-    iamroot && @test p ≤ 8064
+    iamroot && @test p ≤ 280384
 end

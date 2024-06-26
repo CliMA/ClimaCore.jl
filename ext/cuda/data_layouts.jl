@@ -27,6 +27,7 @@ Base.similar(
 
 include("data_layouts_fill.jl")
 include("data_layouts_copyto.jl")
+include("data_layouts_mapreduce.jl")
 
 Base.@propagate_inbounds function rcopyto_at!(
     pair::Pair{<:AbstractData, <:Any},
