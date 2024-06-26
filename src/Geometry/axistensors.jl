@@ -136,7 +136,7 @@ struct AxisTensor{
     T,
     N,
     A <: NTuple{N, AbstractAxis},
-    S <: StaticArray{<:Tuple, T, N},
+    S <: Union{SimpleSymmetric{N, T}, StaticArray{<:Tuple, T, N}},
 } <: AbstractArray{T, N}
     axes::A
     components::S
@@ -147,7 +147,7 @@ AxisTensor(
     components::S,
 ) where {
     A <: Tuple{Vararg{AbstractAxis}},
-    S <: StaticArray{<:Tuple, T, N},
+    S <: Union{SimpleSymmetric{N, T}, StaticArray{<:Tuple, T, N}},
 } where {T, N} = AxisTensor{T, N, A, S}(axes, components)
 
 AxisTensor(axes::Tuple{Vararg{AbstractAxis}}, components) =
@@ -396,8 +396,16 @@ end
 function Base.:*(x::AxisVector, y::AdjointAxisVector)
     AxisTensor((axes(x, 1), axes(y, 2)), components(x) * components(y))
 end
+import InteractiveUtils
 function Base.:*(A::Axis2TensorOrAdj, x::AxisVector)
     check_dual(axes(A, 2), axes(x, 1))
+    c = components(A) * components(x)
+    # @show typeof(A)
+    # @show typeof(x)
+    # s = InteractiveUtils.@which components(A) * components(x)
+    # @show s
+    # # @show typeof(x)
+    # @show c
     return AxisVector(axes(A, 1), components(A) * components(x))
 end
 function Base.:*(A::Axis2TensorOrAdj, B::Axis2TensorOrAdj)
