@@ -41,12 +41,13 @@ end
 
 function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
-    quadrature_style::Quadratures.QuadratureStyle,
+    quadrature_style::Quadratures.QuadratureStyle;
+    float_type = eltype(Topologies.coordinate_type(topology)),
 )
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
-    FT = eltype(CoordType)
+    FT = float_type
     nelements = Topologies.nlocalelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
@@ -127,17 +128,17 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
+    SpectralElementSpace2D(topology, quadrature_style; bubble)
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
-flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
+flag `bubble` enables the "bubble correction" for more accurate element areas.
 
 # Input arguments:
 - topology: Topology2D
 - quadrature_style: QuadratureStyle
-- enable_bubble: Bool
+- bubble: Bool
 
-The idea behind the so-called `bubble_correction` is that the numerical area
+The idea behind the so-called "bubble correction" is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
 times their corresponding Jacobians. However, this discrete sum is not exactly
 equal to the exact geometric area  (4pi*radius^2 for the sphere). To make these equal,
@@ -184,9 +185,10 @@ end
 function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
-    enable_bubble::Bool,
+    bubble = nothing,
+    enable_bubble = false, # deprecated
 )
-
+    bubble = something(bubble, enable_bubble)
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
@@ -263,14 +265,14 @@ function _SpectralElementGrid2D(
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
-            if !enable_bubble
+            if !bubble
                 local_geometry_slab[i, j] =
                     Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
             end
         end
 
         # If enabled, apply bubble correction
-        if enable_bubble
+        if bubble
             if abs(elem_area - high_order_elem_area) ≤ eps(FT)
                 for i in 1:Nq, j in 1:Nq
                     ξ = SVector(quad_points[i], quad_points[j])
@@ -550,7 +552,95 @@ Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
     )
 
 ## aliases
-const RectilinearSpectralElementGrid2D =
+
+const LineSpectralElementGrid =
+    SpectralElementGrid1D{<:Topologies.LineTopology1D}
+
+function LineSpectralElementGrid(;
+    x_min::Real,
+    x_max::Real,
+    x_periodic::Bool = false,
+    x_boundary_names = (:west, :east),
+    x_elem::Integer,
+    x_stretch = Uniform(),
+    poly_degree = 3,
+    context = ClimaComms.SingletonCommsContext(),
+)
+    mesh = XIntervalMesh(;
+        x_min,
+        x_max,
+        x_periodic,
+        x_boundary_names,
+        x_elem,
+        x_stretch,
+    )
+    topology = IntervalTopology(context, mesh)
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
+    SpectralElementGrid1D(topology, quadrature_style)
+end
+const RectilinearSpectralElementGrid =
     SpectralElementGrid2D{<:Topologies.RectilinearTopology2D}
-const CubedSphereSpectralElementGrid2D =
+
+"""
+    Grids.RectilinearSpectralElementGrid(;
+        x_min, x_max, x_elem, x_periodic=false, x_boundary_names = (:west, :east), 
+        y_min, y_max, y_elem, y_periodic=false, y_boundary_names = (:south, :north),
+        context = ClimaComms.context(),
+        poly_degree = 3,    
+    )
+
+Constructor for a `SpectralElementGrid2D` on a `RectangleDomain`, with `XYPoint` coordinates.
+"""
+function RectilinearSpectralElementGrid(;
+    x_min::Real,
+    x_max::Real,
+    x_elem,
+    x_periodic::Bool = false,
+    x_boundary_names = (:west, :east),
+    y_min::Real,
+    y_max::Real,
+    y_elem,
+    y_periodic::Bool = false,
+    y_boundary_names = (:south, :north),
+    context = ClimaComms.context(),
+    poly_degree = 3,
+)
+    mesh = Meshes.RectilinearMesh(;
+        x_min,
+        x_max,
+        x_periodic,
+        x_boundary_names,
+        x_elem,
+        y_min,
+        y_max,
+        y_periodic,
+        y_boundary_names,
+        y_elem,
+    )
+    topology = Topologies.Topology2D(context, mesh)
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
+    SpectralElementGrid2D(topology, quadrature_style)
+end
+
+const CubedSphereGrid =
     SpectralElementGrid2D{<:Topologies.CubedSphereTopology2D}
+
+function CubedSphereGrid(;
+    radius::Real,
+    panel_elem::Integer,
+    cubed_sphere_type = Meshes.EquiangularCubedSphere,
+    context = ClimaComms.context(),
+    poly_degree = 3,
+    bubble = true,
+)
+    domain = Domains.SphereDomain(radius)
+    mesh = cubed_sphere_type(domain, panel_elem)
+    topology = Topologies.Topology2D(context, mesh)
+    quadrature_style = Quadratures.GLL{poly_degree + 1}()
+    SpectralElementGrid2D(topology, quadrature_style; bubble)
+end
+
+
+## to be deprecated
+const RectilinearSpectralElementGrid2D = RectilinearSpectralElementGrid
+const CubedSphereSpectralElementGrid2D = CubedSphereGrid
