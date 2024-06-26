@@ -23,6 +23,7 @@ include("Hypsography/Hypsography.jl")
 include("Limiters/Limiters.jl")
 include("InputOutput/InputOutput.jl")
 include("Remapping/Remapping.jl")
+include("CommonGrids/CommonGrids.jl")
 
 include("deprecated.jl")
 

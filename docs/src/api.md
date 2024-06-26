@@ -40,6 +40,12 @@ DataLayouts.VIJHF
 
 ## Geometry
 
+### Global Geometry
+```@docs
+Geometry.AbstractGlobalGeometry
+Geometry.CartesianGlobalGeometry
+```
+
 ### Coordinates
 ```@docs
 Geometry.AbstractPoint
@@ -169,6 +175,34 @@ Topologies.boundary_tag
 Topologies.boundary_faces
 Topologies.local_neighboring_elements
 Topologies.ghost_neighboring_elements
+```
+
+## Grids
+
+```@docs
+Grids.ColumnGrid
+Grids.FiniteDifferenceGrid
+Grids.ExtrudedFiniteDifferenceGrid
+Grids.SpectralElementGrid1D
+Grids.SpectralElementGrid2D
+```
+
+## Hypsography
+
+```@docs
+Grids.Flat
+```
+
+## CommonGrids
+
+```@docs
+CommonGrids
+CommonGrids.ExtrudedCubedSphereGrid
+CommonGrids.CubedSphereGrid
+CommonGrids.ColumnGrid
+CommonGrids.Box3DGrid
+CommonGrids.SliceXZGrid
+CommonGrids.RectangleXYGrid
 ```
 
 ## Spaces
