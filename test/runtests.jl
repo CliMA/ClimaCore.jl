@@ -107,7 +107,11 @@ filter!(
 # Note: for `fail_fast = false`, the tests are all wrapped in `@testset "Unit tests"`
 #       so output is suppressed until all tests are complete.
 fail_fast = true
-prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing)) # prevent leaky tests on CI)
+
+# Use prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing))
+# once https://github.com/CliMA/ClimaCore.jl/issues/1826 is fixed:
+# prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing)) # prevent leaky tests on CI)
+prevent_leaky_tests = true
 # tabulate_tests(unit_tests; include_timings = false) # uncomment for preview
 
 # If `fail_fast` is `true`, then let's error on invalid tests before starting them.
