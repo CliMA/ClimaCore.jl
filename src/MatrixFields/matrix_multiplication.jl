@@ -346,7 +346,18 @@ boundary_modified_ud(::BottomRightMatrixCorner, ud, column_space, i) =
 # of linear combinations of matrix fields). Not using @propagate_inbounds causes
 # matrix field broadcast expressions to take roughly 3 or 4 times longer to
 # evaluate, but this is less significant than the decrease in compilation time.
-function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
+# matrix-matrix multiplication
+function multiply_matrix_at_index(
+    loc,
+    space,
+    idx,
+    hidx,
+    matrix1,
+    arg,
+    bc,
+    ::Type{T},
+) where {T <: BandMatrixRow}
+    # T = eltype(arg)
     lg = Geometry.LocalGeometry(space, idx, hidx)
     prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
 
@@ -359,81 +370,100 @@ function multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
     # recomputed multiple times.
     matrix1_row = @inbounds Operators.getidx(space, matrix1, loc, idx, hidx)
 
-    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
-        matrix2 = arg
-        column_space2 = column_axes(matrix2, column_space1)
-        ld2, ud2 = outer_diagonals(eltype(matrix2))
-        prod_ld, prod_ud = outer_diagonals(prod_type)
-        boundary_modified_prod_ld =
-            boundary_modified_ld(bc, prod_ld, column_space2, idx)
-        boundary_modified_prod_ud =
-            boundary_modified_ud(bc, prod_ud, column_space2, idx)
+    matrix2 = arg
+    column_space2 = column_axes(matrix2, column_space1)
+    ld2, ud2 = outer_diagonals(eltype(matrix2))
+    prod_ld, prod_ud = outer_diagonals(prod_type)
+    boundary_modified_prod_ld =
+        boundary_modified_ld(bc, prod_ld, column_space2, idx)
+    boundary_modified_prod_ud =
+        boundary_modified_ud(bc, prod_ud, column_space2, idx)
 
-        # Precompute the rows that are needed from matrix2 so that they do not
-        # get recomputed multiple times. To avoid inference issues at boundary
-        # points, this is implemented as a padded map from ld1 to ud1, instead
-        # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
-        # simplicity, use zero padding for rows that are outside the matrix.
-        # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
-        matrix2_rows = unrolled_map((ld1:ud1...,)) do d
-            # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-            Base.@_inline_meta
-            if isnothing(bc) ||
-               boundary_modified_ld1 <= d <= boundary_modified_ud1
-                @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
-            else
-                zero(eltype(matrix2)) # This row is outside the matrix.
-            end
+    # Precompute the rows that are needed from matrix2 so that they do not
+    # get recomputed multiple times. To avoid inference issues at boundary
+    # points, this is implemented as a padded map from ld1 to ud1, instead
+    # of as a map from boundary_modified_ld1 to boundary_modified_ud1. For
+    # simplicity, use zero padding for rows that are outside the matrix.
+    # Wrap the rows in a BandMatrixRow so that they can be easily indexed.
+    matrix2_rows = unrolled_map((ld1:ud1...,)) do d
+        # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
+        Base.@_inline_meta
+        if isnothing(bc) || boundary_modified_ld1 <= d <= boundary_modified_ud1
+            @inbounds Operators.getidx(space, matrix2, loc, idx + d, hidx)
+        else
+            zero(eltype(matrix2)) # This row is outside the matrix.
         end
-        matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
-
-        # Precompute the zero value to avoid inference issues caused by passing
-        # prod_type into the function closure below.
-        zero_value = rzero(eltype(prod_type))
-
-        # Compute the entries of the product matrix row. To avoid inference
-        # issues at boundary points, this is implemented as a padded map from
-        # prod_ld to prod_ud, instead of as a map from boundary_modified_prod_ld
-        # to boundary_modified_prod_ud. For simplicity, use zero padding for
-        # entries that are outside the matrix. Wrap the entries in a
-        # BandMatrixRow before returning them.
-        prod_entries = map((prod_ld:prod_ud...,)) do prod_d
-            # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
-            Base.@_inline_meta
-            if isnothing(bc) ||
-               boundary_modified_prod_ld <= prod_d <= boundary_modified_prod_ud
-                prod_entry = zero_value
-                min_d = max(boundary_modified_ld1, prod_d - ud2)
-                max_d = min(boundary_modified_ud1, prod_d - ld2)
-                @inbounds for d in min_d:max_d
-                    value1 = matrix1_row[d]
-                    value2 = matrix2_rows_wrapper[d][prod_d - d]
-                    value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-                    prod_entry = radd(
-                        prod_entry,
-                        rmul_with_projection(value1, value2, value2_lg),
-                    )
-                end # Using a for-loop is currently faster than using mapreduce.
-                prod_entry
-            else
-                zero_value # This entry is outside the matrix.
-            end
-        end
-        return BandMatrixRow{prod_ld}(prod_entries...)
-    else # matrix-vector multiplication
-        vector = arg
-        prod_value = rzero(prod_type)
-        @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
-            value1 = matrix1_row[d]
-            value2 = Operators.getidx(space, vector, loc, idx + d, hidx)
-            value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
-            prod_value = radd(
-                prod_value,
-                rmul_with_projection(value1, value2, value2_lg),
-            )
-        end # Using a for-loop is currently faster than using mapreduce.
-        return prod_value
     end
+    matrix2_rows_wrapper = BandMatrixRow{ld1}(matrix2_rows...)
+
+    # Precompute the zero value to avoid inference issues caused by passing
+    # prod_type into the function closure below.
+    zero_value = rzero(eltype(prod_type))
+
+    # Compute the entries of the product matrix row. To avoid inference
+    # issues at boundary points, this is implemented as a padded map from
+    # prod_ld to prod_ud, instead of as a map from boundary_modified_prod_ld
+    # to boundary_modified_prod_ud. For simplicity, use zero padding for
+    # entries that are outside the matrix. Wrap the entries in a
+    # BandMatrixRow before returning them.
+    prod_entries = map((prod_ld:prod_ud...,)) do prod_d
+        # TODO: Use @propagate_inbounds_meta instead of @inline_meta.
+        Base.@_inline_meta
+        if isnothing(bc) ||
+           boundary_modified_prod_ld <= prod_d <= boundary_modified_prod_ud
+            prod_entry = zero_value
+            min_d = max(boundary_modified_ld1, prod_d - ud2)
+            max_d = min(boundary_modified_ud1, prod_d - ld2)
+            @inbounds for d in min_d:max_d
+                value1 = matrix1_row[d]
+                value2 = matrix2_rows_wrapper[d][prod_d - d]
+                value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
+                prod_entry = radd(
+                    prod_entry,
+                    rmul_with_projection(value1, value2, value2_lg),
+                )
+            end # Using a for-loop is currently faster than using mapreduce.
+            prod_entry
+        else
+            zero_value # This entry is outside the matrix.
+        end
+    end
+    return BandMatrixRow{prod_ld}(prod_entries...)
+end
+# matrix-vector multiplication
+function multiply_matrix_at_index(
+    loc,
+    space,
+    idx,
+    hidx,
+    matrix1,
+    arg,
+    bc,
+    ::Type{T},
+) where {T}
+    # T = eltype(arg)
+    lg = Geometry.LocalGeometry(space, idx, hidx)
+    prod_type = Operators.return_eltype(⋅, matrix1, arg, typeof(lg))
+
+    column_space1 = column_axes(matrix1, space)
+    ld1, ud1 = outer_diagonals(eltype(matrix1))
+    boundary_modified_ld1 = boundary_modified_ld(bc, ld1, column_space1, idx)
+    boundary_modified_ud1 = boundary_modified_ud(bc, ud1, column_space1, idx)
+
+    # Precompute the row that is needed from matrix1 so that it does not get
+    # recomputed multiple times.
+    matrix1_row = @inbounds Operators.getidx(space, matrix1, loc, idx, hidx)
+
+    vector = arg
+    prod_value = rzero(prod_type)
+    @inbounds for d in boundary_modified_ld1:boundary_modified_ud1
+        value1 = matrix1_row[d]
+        value2 = Operators.getidx(space, vector, loc, idx + d, hidx)
+        value2_lg = Geometry.LocalGeometry(space, idx + d, hidx)
+        prod_value =
+            radd(prod_value, rmul_with_projection(value1, value2, value2_lg))
+    end # Using a for-loop is currently faster than using mapreduce.
+    return prod_value
 end
 
 Base.@propagate_inbounds Operators.stencil_interior(
@@ -444,7 +474,16 @@ Base.@propagate_inbounds Operators.stencil_interior(
     hidx,
     matrix1,
     arg,
-) = multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, nothing)
+) = multiply_matrix_at_index(
+    loc,
+    space,
+    idx,
+    hidx,
+    matrix1,
+    arg,
+    nothing,
+    eltype(arg),
+)
 
 Base.@propagate_inbounds Operators.stencil_left_boundary(
     ::MultiplyColumnwiseBandMatrixField,
@@ -455,7 +494,16 @@ Base.@propagate_inbounds Operators.stencil_left_boundary(
     hidx,
     matrix1,
     arg,
-) = multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
+) = multiply_matrix_at_index(
+    loc,
+    space,
+    idx,
+    hidx,
+    matrix1,
+    arg,
+    bc,
+    eltype(arg),
+)
 
 Base.@propagate_inbounds Operators.stencil_right_boundary(
     ::MultiplyColumnwiseBandMatrixField,
@@ -466,7 +514,16 @@ Base.@propagate_inbounds Operators.stencil_right_boundary(
     hidx,
     matrix1,
     arg,
-) = multiply_matrix_at_index(loc, space, idx, hidx, matrix1, arg, bc)
+) = multiply_matrix_at_index(
+    loc,
+    space,
+    idx,
+    hidx,
+    matrix1,
+    arg,
+    bc,
+    eltype(arg),
+)
 
 # For matrix field broadcast expressions involving 4 or more matrices, we
 # sometimes hit a recursion limit and de-optimize.
