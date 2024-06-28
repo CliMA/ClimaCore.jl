@@ -435,11 +435,19 @@ return_eltype(::ApplyStencil, stencil, arg) = eltype(eltype(stencil))
 
 return_space(::ApplyStencil, stencil_space, arg_space) = stencil_space
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
+Base.@propagate_inbounds function apply_stencil_at_idx(
+    i_vals,
+    stencil,
+    arg,
+    loc,
+    space,
+    idx,
+    hidx,
+)
     coefs = getidx(space, stencil, loc, idx, hidx)
     lbw = bandwidths(eltype(stencil))[1]
-    val = zero(eltype(eltype(stencil)))
+    val_type = eltype(eltype(stencil))
+    val = zero(val_type)::val_type
     @inbounds for j in 1:length(i_vals)
         i = i_vals[j]
         val = val ⊞ coefs[i - lbw + 1] ⊠ getidx(space, arg, loc, idx + i, hidx)
@@ -447,15 +455,21 @@ function apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
     return val
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_interior(::ApplyStencil, loc, space, idx, hidx, stencil, arg)
+Base.@propagate_inbounds function stencil_interior(
+    ::ApplyStencil,
+    loc,
+    space,
+    idx,
+    hidx,
+    stencil,
+    arg,
+)
     lbw, ubw = bandwidths(eltype(stencil))
     i_vals = lbw:ubw
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_left_boundary(
+Base.@propagate_inbounds function stencil_left_boundary(
     ::ApplyStencil,
     ::LeftStencilBoundary,
     loc,
@@ -471,8 +485,7 @@ function stencil_left_boundary(
     return apply_stencil_at_idx(i_vals, stencil, arg, loc, space, idx, hidx)
 end
 
-# TODO: find out why using Base.@propagate_inbounds blows up compilation time
-function stencil_right_boundary(
+Base.@propagate_inbounds function stencil_right_boundary(
     ::ApplyStencil,
     ::RightStencilBoundary,
     loc,
@@ -537,7 +550,7 @@ function compose_stencils_at_idx(
     ntup = (
         ntuple(Val(n)) do j
             Base.@_inline_meta
-            val = zero(zeroT)
+            val = zero(zeroT)::zeroT
             for i in get_range(ir_type, space, stencil1, stencil2, idx, j)
                 val =
                     val ⊞
