@@ -16,8 +16,19 @@ import ClimaCore.Utilities: cart_ind, linear_ind
 import ClimaCore.RecursiveApply:
     ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
 
-const CuArrayBackedTypes =
-    Union{CUDA.CuArray, SubArray{<:Any, <:Any, <:CUDA.CuArray}}
+const cu_array = CUDA.CuArray
+const TSubArray{T} = SubArray{<:Any, <:Any, <:T}
+const TReshapedArray{T} = Base.ReshapedArray{<:Any, <:Any, <:T}
+
+const CuArrayBackedTypes = Union{
+    cu_array,
+    TSubArray{cu_array},
+    TSubArray{TSubArray{cu_array}},
+    TSubArray{TReshapedArray{cu_array}},
+    TSubArray{TReshapedArray{TSubArray{cu_array}}},
+    TReshapedArray{cu_array},
+    TReshapedArray{TSubArray{cu_array}},
+}
 
 include(joinpath("cuda", "cuda_utils.jl"))
 include(joinpath("cuda", "data_layouts.jl"))

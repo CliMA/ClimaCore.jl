@@ -50,26 +50,9 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::VF{S, Nv},
-    bc::DataLayouts.BroadcastedUnionVF{S, Nv, A},
-) where {S, Nv, A <: CuArrayBackedTypes}
-    _, _, _, _, Nh = size(dest)
-    if Nv > 0 && Nh > 0
-        auto_launch!(
-            knl_copyto!,
-            (dest, bc),
-            dest;
-            threads_s = (1, 1),
-            blocks_s = (Nh, Nv),
-        )
-    end
-    return dest
-end
-
-function Base.copyto!(
     dest::DataF{S},
     bc::DataLayouts.BroadcastedUnionDataF{S, A},
-) where {S, A <: CUDA.CuArray}
+) where {S, A <: CuArrayBackedTypes}
     auto_launch!(
         knl_copyto!,
         (dest, bc),
@@ -110,6 +93,6 @@ Base.copyto!(dest::IJF{S, Nij, <:CuArrayBackedTypes},       bc::DataLayouts.Broa
 Base.copyto!(dest::IF{S, Ni, <:CuArrayBackedTypes},         bc::DataLayouts.BroadcastedUnionIF{S, Ni, <:CuArrayBackedTypes}) where {S, Ni} = cuda_copyto!(dest, bc)
 # Base.copyto!(dest::VIFH{S, Nv, Ni, <:CuArrayBackedTypes},   bc::DataLayouts.BroadcastedUnionVIFH{S, Nv, Ni, <:CuArrayBackedTypes}) where {S, Nv, Ni} = cuda_copyto!(dest, bc)
 # Base.copyto!(dest::VIJFH{S, Nv, Nij, <:CuArrayBackedTypes}, bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, <:CuArrayBackedTypes}) where {S, Nv, Nij} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::VF{S, Nv, <:CuArrayBackedTypes},         bc::DataLayouts.BroadcastedUnionVF{S, Nv, <:CuArrayBackedTypes}) where {S, Nv} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::VF{S, Nv, <:CuArrayBackedTypes},         bc::DataLayouts.BroadcastedUnionVF{S, Nv, <:CuArrayBackedTypes}) where {S, Nv} = cuda_copyto!(dest, bc)
 # Base.copyto!(dest::DataF{S, <:CuArrayBackedTypes},          bc::DataLayouts.BroadcastedUnionDataF{S, <:CuArrayBackedTypes}) where {S} = cuda_copyto!(dest, bc)
 #! format: on
