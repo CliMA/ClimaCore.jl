@@ -1,3 +1,5 @@
+DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
+
 function knl_copyto!(dest, src)
 
     i = CUDA.threadIdx().x
@@ -15,8 +17,9 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, A},
-) where {S, Nij, A <: CuArrayBackedTypes}
+    bc::DataLayouts.BroadcastedUnionIJFH{S, Nij},
+    ::ToCUDA,
+) where {S, Nij}
     _, _, _, _, Nh = size(bc)
     if Nh > 0
         auto_launch!(
@@ -32,8 +35,9 @@ end
 
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
-    bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, A},
-) where {S, Nv, Nij, A <: CuArrayBackedTypes}
+    bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij},
+    ::ToCUDA,
+) where {S, Nv, Nij}
     _, _, _, _, Nh = size(bc)
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
@@ -51,8 +55,9 @@ end
 
 function Base.copyto!(
     dest::VF{S, Nv},
-    bc::DataLayouts.BroadcastedUnionVF{S, Nv, A},
-) where {S, Nv, A <: CuArrayBackedTypes}
+    bc::DataLayouts.BroadcastedUnionVF{S, Nv},
+    ::ToCUDA,
+) where {S, Nv}
     _, _, _, _, Nh = size(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(
@@ -68,8 +73,9 @@ end
 
 function Base.copyto!(
     dest::DataF{S},
-    bc::DataLayouts.BroadcastedUnionDataF{S, A},
-) where {S, A <: CUDA.CuArray}
+    bc::DataLayouts.BroadcastedUnionDataF{S},
+    ::ToCUDA,
+) where {S}
     auto_launch!(
         knl_copyto!,
         (dest, bc),
@@ -104,12 +110,12 @@ end
 # TODO: can we use CUDA's luanch configuration for all data layouts?
 # Currently, it seems to have a slight performance degredation.
 #! format: off
-# Base.copyto!(dest::IJFH{S, Nij, <:CuArrayBackedTypes},      bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, <:CuArrayBackedTypes}) where {S, Nij} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IFH{S, Ni, <:CuArrayBackedTypes},        bc::DataLayouts.BroadcastedUnionIFH{S, Ni, <:CuArrayBackedTypes}) where {S, Ni} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IJF{S, Nij, <:CuArrayBackedTypes},       bc::DataLayouts.BroadcastedUnionIJF{S, Nij, <:CuArrayBackedTypes}) where {S, Nij} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IF{S, Ni, <:CuArrayBackedTypes},         bc::DataLayouts.BroadcastedUnionIF{S, Ni, <:CuArrayBackedTypes}) where {S, Ni} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::VIFH{S, Nv, Ni, <:CuArrayBackedTypes},   bc::DataLayouts.BroadcastedUnionVIFH{S, Nv, Ni, <:CuArrayBackedTypes}) where {S, Nv, Ni} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::VIJFH{S, Nv, Nij, <:CuArrayBackedTypes}, bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, <:CuArrayBackedTypes}) where {S, Nv, Nij} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::VF{S, Nv, <:CuArrayBackedTypes},         bc::DataLayouts.BroadcastedUnionVF{S, Nv, <:CuArrayBackedTypes}) where {S, Nv} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::DataF{S, <:CuArrayBackedTypes},          bc::DataLayouts.BroadcastedUnionDataF{S, <:CuArrayBackedTypes}) where {S} = cuda_copyto!(dest, bc)
+# Base.copyto!(dest::IJFH{S, Nij},      bc::DataLayouts.BroadcastedUnionIJFH{S, Nij}, ::ToCUDA) where {S, Nij} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::IFH{S, Ni},        bc::DataLayouts.BroadcastedUnionIFH{S, Ni}, ::ToCUDA) where {S, Ni} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::IJF{S, Nij},       bc::DataLayouts.BroadcastedUnionIJF{S, Nij}, ::ToCUDA) where {S, Nij} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::IF{S, Ni},         bc::DataLayouts.BroadcastedUnionIF{S, Ni}, ::ToCUDA) where {S, Ni} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::VIFH{S, Nv, Ni},   bc::DataLayouts.BroadcastedUnionVIFH{S, Nv, Ni}, ::ToCUDA) where {S, Nv, Ni} = cuda_copyto!(dest, bc)
+# Base.copyto!(dest::VIJFH{S, Nv, Nij}, bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij}, ::ToCUDA) where {S, Nv, Nij} = cuda_copyto!(dest, bc)
+# Base.copyto!(dest::VF{S, Nv},         bc::DataLayouts.BroadcastedUnionVF{S, Nv}, ::ToCUDA) where {S, Nv} = cuda_copyto!(dest, bc)
+# Base.copyto!(dest::DataF{S},          bc::DataLayouts.BroadcastedUnionDataF{S}, ::ToCUDA) where {S} = cuda_copyto!(dest, bc)
 #! format: on

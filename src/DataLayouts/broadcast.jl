@@ -481,11 +481,19 @@ function Base.mapreduce(
     end
 end
 
+Base.copyto!(
+    dest::AbstractData,
+    bc::Union{AbstractData, Base.Broadcast.Broadcasted},
+) = Base.copyto!(dest, bc, device_dispatch(dest))
+
 # broadcasting scalar assignment
 # Performance optimization for the common identity scalar case: dest .= val
+# And this is valid for the CPU or GPU, since the broadcasted object
+# is a scalar type.
 function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
+    ::AbstractDispatchToDevice,
 ) where {
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
@@ -500,6 +508,7 @@ end
 function Base.copyto!(
     dest::DataF{S},
     bc::BroadcastedUnionDataF{S, A},
+    ::ToCPU,
 ) where {S, A}
     @inbounds dest[] = convert(S, bc[])
     return dest
@@ -508,6 +517,7 @@ end
 function Base.copyto!(
     dest::IJFH{S, Nij},
     bc::BroadcastedUnionIJFH{S, Nij},
+    ::ToCPU,
 ) where {S, Nij}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
@@ -521,6 +531,7 @@ end
 function Base.copyto!(
     dest::IFH{S, Ni},
     bc::BroadcastedUnionIFH{S, Ni},
+    ::ToCPU,
 ) where {S, Ni}
     _, _, _, _, Nh = size(bc)
     @inbounds for h in 1:Nh
@@ -535,6 +546,7 @@ end
 function Base.copyto!(
     dest::IJF{S, Nij},
     bc::BroadcastedUnionIJF{S, Nij, A},
+    ::ToCPU,
 ) where {S, Nij, A}
     @inbounds for j in 1:Nij, i in 1:Nij
         idx = CartesianIndex(i, j, 1, 1, 1)
@@ -546,6 +558,7 @@ end
 function Base.copyto!(
     dest::IF{S, Ni},
     bc::BroadcastedUnionIF{S, Ni, A},
+    ::ToCPU,
 ) where {S, Ni, A}
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
@@ -558,6 +571,7 @@ end
 function Base.copyto!(
     dest::IF{S, Ni},
     bc::Base.Broadcast.Broadcasted{IFStyle{Ni, A}},
+    ::ToCPU,
 ) where {S, Ni, A}
     @inbounds for i in 1:Ni
         idx = CartesianIndex(i, 1, 1, 1, 1)
@@ -570,6 +584,7 @@ end
 function Base.copyto!(
     dest::VF{S, Nv},
     bc::BroadcastedUnionVF{S, Nv, A},
+    ::ToCPU,
 ) where {S, Nv, A}
     @inbounds for v in 1:Nv
         idx = CartesianIndex(1, 1, 1, v, 1)
@@ -581,6 +596,7 @@ end
 function Base.copyto!(
     dest::VIFH{S, Nv, Ni},
     bc::BroadcastedUnionVIFH{S, Nv, Ni},
+    ::ToCPU,
 ) where {S, Nv, Ni}
     (_, _, _, _, Nh) = size(bc)
     # copy contiguous columns
@@ -595,6 +611,7 @@ end
 function Base.copyto!(
     dest::VIJFH{S, Nv, Nij},
     bc::BroadcastedUnionVIJFH{S, Nv, Nij},
+    ::ToCPU,
 ) where {S, Nv, Nij}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest)
@@ -635,12 +652,13 @@ function Base.copyto!(
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
-    fused_copyto!(fmb_inst, dest1)
+    fused_copyto!(fmb_inst, dest1, device_dispatch(dest1))
 end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
     dest1::VIJFH{S1, Nv1, Nij},
+    ::ToCPU,
 ) where {S1, Nv1, Nij}
     _, _, _, _, Nh = size(dest1)
     for (dest, bc) in fmbc.pairs
@@ -657,6 +675,7 @@ end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
     dest1::IJFH{S, Nij},
+    ::ToCPU,
 ) where {S, Nij}
     # copy contiguous columns
     _, _, _, Nv, Nh = size(dest1)
@@ -673,6 +692,7 @@ end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
     dest1::VIFH{S, Nv1, Ni},
+    ::ToCPU,
 ) where {S, Nv1, Ni}
     # copy contiguous columns
     _, _, _, _, Nh = size(dest1)
@@ -689,6 +709,7 @@ end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
     dest1::VF{S1, Nv1},
+    ::ToCPU,
 ) where {S1, Nv1}
     for (dest, bc) in fmbc.pairs
         @inbounds for v in 1:Nv1
@@ -700,7 +721,11 @@ function fused_copyto!(
     return nothing
 end
 
-function fused_copyto!(fmbc::FusedMultiBroadcast, dest::DataF{S}) where {S}
+function fused_copyto!(
+    fmbc::FusedMultiBroadcast,
+    dest::DataF{S},
+    ::ToCPU,
+) where {S}
     for (dest, bc) in fmbc.pairs
         @inbounds dest[] = convert(S, bc[])
     end
