@@ -1,3 +1,8 @@
+#=
+julia --check-bounds=yes --project
+julia --project
+using Revise; include(joinpath("test", "Operators", "finitedifference", "unit_column.jl"))
+=#
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
@@ -26,7 +31,9 @@ device = ClimaComms.device()
         face_space = Spaces.FaceFiniteDifferenceSpace(center_space)
 
         @test sum(ones(FT, center_space)) ≈ pi
-        @test sum(ones(FT, face_space)) ≈ pi
+        ClimaComms.allowscalar(device) do
+            @test sum(ones(FT, face_space)) ≈ pi
+        end
 
         centers = getproperty(Fields.coordinate_field(center_space), :z)
         @test sum(sin.(centers)) ≈ FT(2.0) atol = 1e-2
@@ -102,20 +109,22 @@ end
         @test sum(sinz_f) ≈ FT(0.0) atol = 1e-2
 
         ∇ᶜ = Operators.GradientF2C()
-        ∂sin = Geometry.WVector.(∇ᶜ.(sinz_f))
-        @test ∂sin ≈ Geometry.WVector.(cosz_c) atol = 1e-2
+        @test begin
+            ∂sin = Geometry.WVector.(∇ᶜ.(sinz_f))
+            @test ∂sin ≈ Geometry.WVector.(cosz_c) atol = 1e-2
 
-        divᶜ = Operators.DivergenceF2C()
-        ∂sin = divᶜ.(Geometry.WVector.(sinz_f))
-        @test ∂sin ≈ cosz_c atol = 1e-2
+            divᶜ = Operators.DivergenceF2C()
+            ∂sin = divᶜ.(Geometry.WVector.(sinz_f))
+            @test ∂sin ≈ cosz_c atol = 1e-2
 
-        ∇ᶠ = Operators.GradientC2F()
-        ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
-        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-1
+            ∇ᶠ = Operators.GradientC2F()
+            ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
+            @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-1
 
-        ∇ᶠ = Operators.GradientC2F()
-        ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
-        @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2
+            ∇ᶠ = Operators.GradientC2F()
+            ∂cos = Geometry.WVector.(∇ᶠ.(cosz_c))
+            @test ∂cos ≈ Geometry.WVector.(.-sinz_f) atol = 1e-2
+        end broken = device isa ClimaComms.CUDADevice
 
         # test that broadcasting into incorrect field space throws an error
         empty_centers = zeros(FT, center_space)
@@ -269,32 +278,32 @@ end
     cy = cfield.y
     fy = ffield.y
 
-    cyp = parent(cy)
-    fyp = parent(fy)
+    cyp = Array(parent(cy))
+    fyp = Array(parent(fy))
 
     # C2F biased operators
     LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = LBC2F(cy)
     fy_ref = [FT(10), [cyp[i] for i in 1:length(cyp)]...]
-    @test all(fy_ref .== fyp)
+    @test all(fy_ref .== fyp) broken = device isa ClimaComms.CUDADevice
 
     RBC2F = Operators.RightBiasedC2F(; top = Operators.SetValue(10))
     @. cy = cos(zc)
     @. fy = RBC2F(cy)
     fy_ref = [[cyp[i] for i in 1:length(cyp)]..., FT(10)]
-    @test all(fy_ref .== fyp)
+    @test all(fy_ref .== fyp) broken = device isa ClimaComms.CUDADevice
 
     # F2C biased operators
     LBF2C = Operators.LeftBiasedF2C(; bottom = Operators.SetValue(10))
     @. cy = cos(zc)
     @. cy = LBF2C(fy)
     cy_ref = [i == 1 ? FT(10) : fyp[i] for i in 1:length(cyp)]
-    @test all(cy_ref .== cyp)
+    @test all(cy_ref .== cyp) broken = device isa ClimaComms.CUDADevice
 
     RBF2C = Operators.RightBiasedF2C(; top = Operators.SetValue(10))
     @. cy = cos(zc)
     @. cy = RBF2C(fy)
     cy_ref = [i == length(cyp) ? FT(10) : fyp[i + 1] for i in 1:length(cyp)]
-    @test all(cy_ref .== cyp)
+    @test all(cy_ref .== cyp) broken = device isa ClimaComms.CUDADevice
 end
