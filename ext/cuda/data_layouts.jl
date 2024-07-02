@@ -73,7 +73,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S, Nv, Nij, <:CuArrayBackedTypes},
+    dest1::VIJFH{S, Nv, Nij},
+    ::ToCUDA,
 ) where {S, Nv, Nij}
     _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
@@ -92,7 +93,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::IJFH{S, Nij, <:CuArrayBackedTypes},
+    dest1::IJFH{S, Nij},
+    ::ToCUDA,
 ) where {S, Nij}
     _, _, _, _, Nh = size(dest1)
     if Nh > 0
@@ -108,7 +110,8 @@ function fused_copyto!(
 end
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VF{S, Nv, <:CuArrayBackedTypes},
+    dest1::VF{S, Nv},
+    ::ToCUDA,
 ) where {S, Nv}
     _, _, _, _, Nh = size(dest1)
     if Nv > 0 && Nh > 0
@@ -125,7 +128,8 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::DataF{S, <:CuArrayBackedTypes},
+    dest1::DataF{S},
+    ::ToCUDA,
 ) where {S}
     auto_launch!(
         knl_fused_copyto!,

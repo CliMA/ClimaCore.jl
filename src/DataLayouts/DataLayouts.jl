@@ -40,6 +40,11 @@ import Adapt
 import ..slab, ..slab_args, ..column, ..column_args, ..level
 export slab, column, level, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
 
+# Internal types for managing CPU/GPU dispatching
+abstract type AbstractDispatchToDevice end
+struct ToCPU <: AbstractDispatchToDevice end
+struct ToCUDA <: AbstractDispatchToDevice end
+
 include("struct.jl")
 
 abstract type AbstractData{S} end
@@ -325,7 +330,7 @@ function Base.size(data::IJFH{S, Nij}) where {S, Nij}
     (Nij, Nij, 1, Nv, Nh)
 end
 
-function Base.fill!(data::IJFH, val)
+function Base.fill!(data::IJFH, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
@@ -494,7 +499,7 @@ function Base.size(data::IFH{S, Ni}) where {S, Ni}
     (Ni, 1, 1, Nv, Nh)
 end
 
-function Base.fill!(data::IFH, val)
+function Base.fill!(data::IFH, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
@@ -618,7 +623,7 @@ function DataF(x::T) where {T}
 end
 
 
-function Base.fill!(data::DataF, val)
+function Base.fill!(data::DataF, val, ::ToCPU)
     @inbounds data[] = val
     return data
 end
@@ -746,7 +751,7 @@ end
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij, 1, 1, 1)
 end
-function Base.fill!(data::IJF{S, Nij}, val) where {S, Nij}
+function Base.fill!(data::IJF{S, Nij}, val, ::ToCPU) where {S, Nij}
     @inbounds for j in 1:Nij, i in 1:Nij
         data[i, j] = val
     end
@@ -884,7 +889,7 @@ function replace_basetype(data::IF{S, Ni}, ::Type{T}) where {S, Ni, T}
     return IF{S′, Ni}(similar(array, T))
 end
 
-function Base.fill!(data::IF{S, Ni}, val) where {S, Ni}
+function Base.fill!(data::IF{S, Ni}, val, ::ToCPU) where {S, Ni}
     @inbounds for i in 1:Ni
         data[i] = val
     end
@@ -998,7 +1003,7 @@ Base.size(data::VF{S, Nv}) where {S, Nv} = (1, 1, 1, Nv, 1)
 
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 
-function Base.fill!(data::VF, val)
+function Base.fill!(data::VF, val, ::ToCPU)
     Nv = nlevels(data)
     @inbounds for v in 1:Nv
         data[v] = val
@@ -1123,7 +1128,7 @@ function Base.length(data::VIJFH)
     size(parent(data), 1) * size(parent(data), 5)
 end
 
-function Base.fill!(data::VIJFH, val)
+function Base.fill!(data::VIJFH, val, ::ToCPU)
     (Ni, Nj, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
@@ -1290,7 +1295,7 @@ end
 function Base.length(data::VIFH)
     nlevels(data) * size(parent(data), 4)
 end
-function Base.fill!(data::VIFH, val)
+function Base.fill!(data::VIFH, val, ::ToCPU)
     (Ni, _, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
@@ -1609,5 +1614,23 @@ array2data(
     array::AbstractArray{T, 2},
     ::VIJFH{<:Any, Nv, Nij},
 ) where {T, Nv, Nij} = VIJFH{T, Nv, Nij}(reshape(array, Nv, Nij, Nij, 1, :))
+
+"""
+    device_dispatch(data::AbstractData)
+
+Returns an `ToCPU` or a `ToCUDA` for CPU
+and CUDA-backed arrays accordingly.
+"""
+device_dispatch(dest::AbstractData) = _device_dispatch(dest)
+
+_device_dispatch(x::Array) = ToCPU()
+_device_dispatch(x::SubArray) = _device_dispatch(parent(x))
+_device_dispatch(x::Base.ReshapedArray) = _device_dispatch(parent(x))
+_device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
+_device_dispatch(x::SArray) = ToCPU()
+_device_dispatch(x::MArray) = ToCPU()
+
+Base.fill!(dest::AbstractData, val) =
+    Base.fill!(dest, val, device_dispatch(dest))
 
 end # module

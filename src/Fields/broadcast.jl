@@ -129,7 +129,7 @@ function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     Base.Broadcast.Broadcasted{DS}(bc.f, _args)
 end
 
-# same logic as Base.Broadcasted (which only defines it for Tuples)
+# same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     _axes(bc, bc.axes)
 _axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)

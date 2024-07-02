@@ -19,12 +19,12 @@ function cuda_fill!(dest::AbstractData, val)
 end
 
 #! format: off
-Base.fill!(dest::IJFH{<:Any, <:Any, <:CuArrayBackedTypes},         val) = cuda_fill!(dest, val)
-Base.fill!(dest::IFH{<:Any, <:Any, <:CuArrayBackedTypes},          val) = cuda_fill!(dest, val)
-Base.fill!(dest::IJF{<:Any, <:Any, <:CuArrayBackedTypes},          val) = cuda_fill!(dest, val)
-Base.fill!(dest::IF{<:Any, <:Any, <:CuArrayBackedTypes},           val) = cuda_fill!(dest, val)
-Base.fill!(dest::VIFH{<:Any, <:Any, <:Any, <:CuArrayBackedTypes},  val) = cuda_fill!(dest, val)
-Base.fill!(dest::VIJFH{<:Any, <:Any, <:Any, <:CuArrayBackedTypes}, val) = cuda_fill!(dest, val)
-Base.fill!(dest::VF{<:Any, <:Any, <:CuArrayBackedTypes},           val) = cuda_fill!(dest, val)
-Base.fill!(dest::DataF{<:Any, <:CuArrayBackedTypes},               val) = cuda_fill!(dest, val)
+Base.fill!(dest::IJFH{<:Any, <:Any},         val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::IFH{<:Any, <:Any},          val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::IJF{<:Any, <:Any},          val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::IF{<:Any, <:Any},           val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::VIFH{<:Any, <:Any, <:Any},  val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::VIJFH{<:Any, <:Any, <:Any}, val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::VF{<:Any, <:Any},           val, ::ToCUDA) = cuda_fill!(dest, val)
+Base.fill!(dest::DataF{<:Any},               val, ::ToCUDA) = cuda_fill!(dest, val)
 #! format: on

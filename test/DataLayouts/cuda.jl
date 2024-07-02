@@ -49,8 +49,8 @@ end
     data1 = IJFH{S1, 2}(data_arr1)
     data2 = IJFH{S2, 2}(data_arr2)
 
-    f(a1, a2) = a1.a.re * a2 + a1.b
-    res = f.(data1, data2)
+    f1(a1, a2) = a1.a.re * a2 + a1.b
+    res = f1.(data1, data2)
     @test res isa IJFH{Float64}
     @test Array(parent(res)) == FT[2 for i in 1:2, j in 1:2, f in 1:1, h in 1:2]
 
@@ -60,8 +60,8 @@ end
     data1 = VIJFH{S1, Nv, 4}(data_arr1)
     data2 = VIJFH{S2, Nv, 4}(data_arr2)
 
-    f(a1, a2) = a1.a.re * a2 + a1.b
-    res = f.(data1, data2)
+    f2(a1, a2) = a1.a.re * a2 + a1.b
+    res = f2.(data1, data2)
     @test res isa VIJFH{Float64, Nv}
     @test Array(parent(res)) ==
           FT[2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:1, h in 1:2]
