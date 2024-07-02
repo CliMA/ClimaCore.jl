@@ -2,6 +2,15 @@ name: ClimaCoreVTK CI
 on:
   pull_request:
 
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lib-climacore-vtk:
     runs-on: ubuntu-20.04
@@ -9,19 +18,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@latest
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - uses: actions/cache@v3
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      - uses: julia-actions/cache@v2
       - name: Install Paraview
         run: |
           sudo apt-get update && sudo apt-get -y install paraview python3-paraview
@@ -42,7 +42,7 @@ jobs:
           done
         continue-on-error: true
       - name: Upload test Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: climacore-vtk-output
           path: |

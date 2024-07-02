@@ -6,6 +6,11 @@ on:
     tags: '*'
   pull_request:
 
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -25,7 +30,7 @@ jobs:
           - 'ClimaTimeSteppers.jl'
     steps:
       - uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
       - uses: julia-actions/cache@v2

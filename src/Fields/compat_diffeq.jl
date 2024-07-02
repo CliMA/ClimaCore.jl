@@ -1,4 +1,4 @@
-import RecursiveArrayTools, Static
+import RecursiveArrayTools
 
 # for compatibility with OrdinaryDiffEq
 # Based on ApproxFun definitions

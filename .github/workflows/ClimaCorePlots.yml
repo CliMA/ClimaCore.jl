@@ -2,6 +2,15 @@ name: ClimaCorePlots CI
 on:
   pull_request:
 
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lib-climacore-plots:
     runs-on: ubuntu-20.04
@@ -9,19 +18,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: julia-actions/setup-julia@latest
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1.10'
-      - uses: actions/cache@v3
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+      - uses: julia-actions/cache@v2
       - name: Install Julia dependencies
         run: >
           julia --project=monorepo -e 'using Pkg; Pkg.develop(path="$(pwd())"); Pkg.develop(path="$(pwd())/lib/ClimaCorePlots")'
@@ -34,7 +34,7 @@ jobs:
           julia --project=monorepo -e 'using Pkg; Pkg.test("ClimaCorePlots")'
           && echo "TESTS_SUCCESSFUL=true" >> $GITHUB_ENV
       - name: Upload test Artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: climacore-plots-output
           path: |
