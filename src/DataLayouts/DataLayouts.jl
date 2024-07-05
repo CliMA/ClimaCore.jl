@@ -176,11 +176,6 @@ Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
 
-function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
-    copyto!(parent(dest), parent(src))
-    return dest
-end
-
 @inline function ncomponents(data::AbstractData{S}) where {S}
     typesize(eltype(parent(data)), S)
 end
@@ -329,15 +324,6 @@ function Base.size(data::IJFH{S, Nij}) where {S, Nij}
     Nh = size(parent(data), 4)
     (Nij, Nij, 1, Nv, Nh)
 end
-
-function Base.fill!(data::IJFH, val, ::ToCPU)
-    (_, _, _, _, Nh) = size(data)
-    @inbounds for h in 1:Nh
-        fill!(slab(data, h), val)
-    end
-    return data
-end
-
 
 function IJFH{S, Nij}(::Type{ArrayType}, nelements) where {S, Nij, ArrayType}
     T = eltype(ArrayType)
@@ -499,14 +485,6 @@ function Base.size(data::IFH{S, Ni}) where {S, Ni}
     (Ni, 1, 1, Nv, Nh)
 end
 
-function Base.fill!(data::IFH, val, ::ToCPU)
-    (_, _, _, _, Nh) = size(data)
-    @inbounds for h in 1:Nh
-        fill!(slab(data, h), val)
-    end
-    return data
-end
-
 @inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
     @boundscheck (1 <= h <= size(parent(data), 3)) ||
                  throw(BoundsError(data, (h,)))
@@ -623,10 +601,6 @@ function DataF(x::T) where {T}
 end
 
 
-function Base.fill!(data::DataF, val, ::ToCPU)
-    @inbounds data[] = val
-    return data
-end
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
     array = parent(data)
     T = eltype(array)
@@ -750,12 +724,6 @@ end
 
 function Base.size(data::IJF{S, Nij}) where {S, Nij}
     return (Nij, Nij, 1, 1, 1)
-end
-function Base.fill!(data::IJF{S, Nij}, val, ::ToCPU) where {S, Nij}
-    @inbounds for j in 1:Nij, i in 1:Nij
-        data[i, j] = val
-    end
-    return data
 end
 
 @generated function _property_view(
@@ -889,14 +857,6 @@ function replace_basetype(data::IF{S, Ni}, ::Type{T}) where {S, Ni, T}
     return IF{S′, Ni}(similar(array, T))
 end
 
-function Base.fill!(data::IF{S, Ni}, val, ::ToCPU) where {S, Ni}
-    @inbounds for i in 1:Ni
-        data[i] = val
-    end
-    return data
-end
-
-
 @generated function _property_view(
     data::IF{S, Ni, A},
     ::Val{Idx},
@@ -1002,14 +962,6 @@ Base.lastindex(data::VF) = length(data)
 Base.size(data::VF{S, Nv}) where {S, Nv} = (1, 1, 1, Nv, 1)
 
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
-
-function Base.fill!(data::VF, val, ::ToCPU)
-    Nv = nlevels(data)
-    @inbounds for v in 1:Nv
-        data[v] = val
-    end
-    return data
-end
 
 @generated function _property_view(
     data::VF{S, Nv, A},
@@ -1126,14 +1078,6 @@ end
 
 function Base.length(data::VIJFH)
     size(parent(data), 1) * size(parent(data), 5)
-end
-
-function Base.fill!(data::VIJFH, val, ::ToCPU)
-    (Ni, Nj, _, Nv, Nh) = size(data)
-    @inbounds for h in 1:Nh, v in 1:Nv
-        fill!(slab(data, v, h), val)
-    end
-    return data
 end
 
 @generated function _property_view(
@@ -1294,13 +1238,6 @@ end
 
 function Base.length(data::VIFH)
     nlevels(data) * size(parent(data), 4)
-end
-function Base.fill!(data::VIFH, val, ::ToCPU)
-    (Ni, _, _, Nv, Nh) = size(data)
-    @inbounds for h in 1:Nh, v in 1:Nv
-        fill!(slab(data, v, h), val)
-    end
-    return data
 end
 
 @propagate_inbounds function Base.getindex(
@@ -1630,7 +1567,9 @@ _device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
 _device_dispatch(x::SArray) = ToCPU()
 _device_dispatch(x::MArray) = ToCPU()
 
-Base.fill!(dest::AbstractData, val) =
-    Base.fill!(dest, val, device_dispatch(dest))
+include("copyto.jl")
+include("fused_copyto.jl")
+include("fill.jl")
+include("mapreduce.jl")
 
 end # module
