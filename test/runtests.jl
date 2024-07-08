@@ -16,7 +16,7 @@ UnitTest("DataLayouts 1D"                          ,"DataLayouts/data1d.jl"),
 UnitTest("DataLayouts 2D"                          ,"DataLayouts/data2d.jl"),
 UnitTest("DataLayouts 1dx"                         ,"DataLayouts/data1dx.jl"),
 UnitTest("DataLayouts 2dx"                         ,"DataLayouts/data2dx.jl"),
-UnitTest("DataLayouts mapreduce"                         ,"DataLayouts/unit_mapreduce.jl"),
+UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
 UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
 UnitTest("rmul_with_projection"                    ,"Geometry/rmul_with_projection.jl"),
 UnitTest("AxisTensors"                             ,"Geometry/axistensors.jl"),
@@ -60,6 +60,7 @@ UnitTest("MatrixFields - BandMatrixRow"            ,"MatrixFields/band_matrix_ro
 UnitTest("MatrixFields - field2arrays"             ,"MatrixFields/field2arrays.jl"),
 UnitTest("MatrixFields - mat mul at boundaries"    ,"MatrixFields/matrix_multiplication_at_boundaries.jl"),
 UnitTest("MatrixFields - field names"              ,"MatrixFields/field_names.jl"),
+UnitTest("MatrixFields - broadcasting (1)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"),
 # UnitTest("MatrixFields - matrix field broadcast"   ,"MatrixFields/matrix_field_broadcasting.jl"), # too long
 # UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/operator_matrices.jl"), # too long
 # UnitTest("MatrixFields - field matrix solvers"     ,"MatrixFields/field_matrix_solvers.jl"), # too long

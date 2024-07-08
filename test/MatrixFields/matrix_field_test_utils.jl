@@ -3,6 +3,7 @@ using JET
 import Random: seed!
 
 import ClimaComms
+import BenchmarkTools as BT
 ClimaComms.@import_required_backends
 import ClimaCore:
     Geometry,
@@ -253,3 +254,96 @@ const NestedType{FT} = NamedTuple{
         Tuple{FT, NamedTuple{(:d,), Tuple{Tuple{FT}}}, NamedTuple{(), Tuple{}}},
     },
 }
+
+import Base.Broadcast: materialize, materialize!
+import LazyBroadcast: @lazy
+import BenchmarkTools as BT
+
+function call_ref_set_result!(
+    ref_result_arrays,
+    inputs_arrays,
+    temp_values_arrays,
+)
+    for arrays in
+        zip(ref_result_arrays, inputs_arrays..., temp_values_arrays...)
+        mul!(arrays...)
+    end
+end
+
+function print_time_comparison(; time, ref_time)
+    time_rounded = round(time; sigdigits = 2)
+    ref_time_rounded = round(ref_time; sigdigits = 2)
+    time_ratio = time / ref_time
+    time_ratio_rounded = round(time_ratio; sigdigits = 2)
+    @info "Times (ClimaCore,Array,ClimaCore/Array): = ($time_rounded, $ref_time_rounded, $time_ratio_rounded)."
+    return nothing
+end
+
+function compute_max_error(result_arrays, ref_result_arrays)
+    return maximum(zip(result_arrays, ref_result_arrays)) do (array, ref_array)
+        maximum(eachindex(array, ref_array)) do ξ
+            abs(array[ξ] - ref_array[ξ])
+        end
+    end
+end
+
+function unit_test_field_broadcast_vs_array_reference(
+    result,
+    bc,
+    inputs_arrays;
+    temp_values_arrays = (),
+    using_cuda,
+    allowed_max_eps_error = 0,
+)
+    result_arrays = MatrixFields.field2arrays(result)
+    ref_result_arrays = MatrixFields.field2arrays(similar(result))
+    result = materialize(bc)
+    result₀ = copy(result)
+    set_result!(result, bc)
+    @test result == result₀
+    call_ref_set_result!(ref_result_arrays, inputs_arrays, temp_values_arrays)
+    max_error = compute_max_error(result_arrays, ref_result_arrays)
+    max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
+    @test max_eps_error == allowed_max_eps_error
+    return nothing
+end
+
+function opt_test_field_broadcast_against_array_reference(
+    result,
+    bc,
+    inputs_arrays;
+    temp_values_arrays = (),
+    using_cuda,
+)
+    ref_result_arrays = MatrixFields.field2arrays(similar(result))
+    ref_time = BT.@belapsed call_ref_set_result!(
+        $ref_result_arrays,
+        $inputs_arrays,
+        $temp_values_arrays,
+    )
+    time = BT.@belapsed set_result!($result, $bc)
+    print_time_comparison(; time, ref_time)
+
+    # Test get_result and set_result! for type instabilities, and test
+    # set_result! for allocations. Ignore the type instabilities in CUDA and
+    # the allocations they incur.
+    @test_opt ignored_modules = cuda_frames materialize(bc)
+    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
+    using_cuda || @test (@allocated set_result!(result, bc)) == 0
+
+    # Test ref_set_result! for type instabilities and allocations to ensure
+    # that the performance comparison is fair.
+    @test_opt ignored_modules = cuda_frames call_ref_set_result!(
+        ref_result_arrays,
+        inputs_arrays,
+        temp_values_arrays,
+    )
+    using_cuda || @test (@allocated call_ref_set_result!(
+        ref_result_arrays,
+        inputs_arrays,
+        temp_values_arrays,
+    )) == 0
+    return nothing
+end
+
+set_result!(result, bc) = (materialize!(result, bc); nothing)
