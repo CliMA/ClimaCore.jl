@@ -76,7 +76,7 @@ UnitTest("MatrixFields - broadcasting (13)"        ,"MatrixFields/matrix_fields_
 UnitTest("MatrixFields - broadcasting (14)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"),
 UnitTest("MatrixFields - broadcasting (15)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"),
 UnitTest("MatrixFields - broadcasting (16)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"),
-# UnitTest("MatrixFields - non-scalar broadcasting (1)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"),
+UnitTest("MatrixFields - non-scalar broadcasting (1)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"),
 # UnitTest("MatrixFields - non-scalar broadcasting (2)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"),
 # UnitTest("MatrixFields - non-scalar broadcasting (3)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"),
 # UnitTest("MatrixFields - non-scalar broadcasting (4)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"),

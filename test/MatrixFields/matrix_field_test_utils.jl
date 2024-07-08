@@ -90,7 +90,12 @@ function test_field_broadcast(;
             ref_time_rounded = round(ref_time; sigdigits = 2)
             time_ratio = time / ref_time
             time_ratio_rounded = round(time_ratio; sigdigits = 2)
-            max_error = maximum(abs.(parent(result) .- parent(ref_result)))
+            max_error = mapreduce(
+                (a, b) -> (abs(a - b)),
+                max,
+                parent(result),
+                parent(ref_result),
+            )
             max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
 
             @info "$test_name:\n\tTime Ratio = $time_ratio_rounded \
@@ -170,10 +175,7 @@ function test_field_broadcast_against_array_reference(;
         ref_time_rounded = round(ref_time; sigdigits = 2)
         time_ratio = time / ref_time
         time_ratio_rounded = round(time_ratio; sigdigits = 2)
-        max_error =
-            maximum(zip(result_arrays, ref_result_arrays)) do (array, ref_array)
-                maximum(abs.(array .- ref_array))
-            end
+        max_error = compute_max_error(result_arrays, ref_result_arrays)
         max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
 
         @info "$test_name:\n\tTime Ratio = $time_ratio_rounded ($time_rounded \
@@ -282,12 +284,16 @@ function print_time_comparison(; time, ref_time)
 end
 
 function compute_max_error(result_arrays, ref_result_arrays)
-    return maximum(zip(result_arrays, ref_result_arrays)) do (array, ref_array)
-        maximum(eachindex(array, ref_array)) do ξ
-            abs(array[ξ] - ref_array[ξ])
-        end
+    return mapreduce(max, result_arrays, ref_result_arrays) do array, ref_array
+        mapreduce((a, b) -> (abs(a - b)), max, array, ref_array)
     end
 end
+
+set_result!(result, bc) = (materialize!(result, bc); nothing)
+
+#####
+##### Scalar test utils
+#####
 
 function unit_test_field_broadcast_vs_array_reference(
     result,
@@ -362,4 +368,53 @@ function opt_test_field_broadcast_against_array_reference(
     return nothing
 end
 
-set_result!(result, bc) = (materialize!(result, bc); nothing)
+#####
+##### Non-scalar test utils
+#####
+
+function unit_test_field_broadcast(
+    result,
+    bc;
+    ref_set_result!,
+    allowed_max_eps_error = 10,
+)
+    result_copy = copy(result)
+    set_result!(result, bc)
+    # Test that set_result! sets the same value as get_result.
+    @test result == result_copy
+
+    ref_result = similar(result)
+    ref_set_result!(ref_result)
+    max_error = mapreduce(
+        (a, b) -> (abs(a - b)),
+        max,
+        parent(result),
+        parent(ref_result),
+    )
+    max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
+
+    # Test that set_result! is performant and correct when compared
+    # against ref_set_result!.
+    @test max_eps_error <= allowed_max_eps_error
+    return nothing
+end
+
+function opt_test_field_broadcast(result, bc; ref_set_result!)
+    time = @benchmark set_result!(result, bc)
+    ref_result = similar(result)
+    ref_time = @benchmark ref_set_result!(ref_result)
+    print_time_comparison(; time, ref_time)
+
+    # Test get_result and set_result! for type instabilities, and test
+    # set_result! for allocations. Ignore the type instabilities in CUDA and
+    # the allocations they incur.
+    @test_opt ignored_modules = cuda_frames materialize(bc)
+    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
+    using_cuda || @test (@allocated set_result!(result, bc)) == 0
+
+    # Test ref_set_result! for type instabilities and allocations to
+    # ensure that the performance comparison is fair.
+    @test_opt ignored_modules = cuda_frames ref_set_result!(ref_result)
+    using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
+    return nothing
+end
