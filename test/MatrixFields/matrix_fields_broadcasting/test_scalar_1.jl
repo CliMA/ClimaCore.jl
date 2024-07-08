@@ -13,17 +13,17 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
     bc = @lazy @. ᶜᶜmat ⋅ ᶜvec
     result = materialize(bc)
 
-    inputs_arrays = map(MatrixFields.field2arrays, (ᶜᶜmat, ᶜvec))
+    input_fields = (ᶜᶜmat, ᶜvec)
     unit_test_field_broadcast_vs_array_reference(
         result,
-        bc,
-        inputs_arrays;
+        bc;
+        input_fields,
         using_cuda,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
         result,
-        bc,
-        inputs_arrays;
+        bc;
+        input_fields,
         using_cuda,
     )
 end
