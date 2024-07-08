@@ -38,7 +38,7 @@ end
         test_n_failures(1120, TU.SpectralElementSpace2D, context)
         test_n_failures(123,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(123,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(1125, TU.SphereSpectralElementSpace, context)
+        test_n_failures(1126, TU.SphereSpectralElementSpace, context)
         test_n_failures(1139, TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(1139, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
