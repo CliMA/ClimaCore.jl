@@ -275,21 +275,22 @@ function Operators.return_eltype(
     matrix1,
     arg,
 )
-    eltype(matrix1) <: BandMatrixRow || error(
+    et_mat1 = eltype(matrix1)
+    et_arg = eltype(arg)
+    et_mat1 <: BandMatrixRow || error(
         "The first argument of ⋅ must have elements of type BandMatrixRow, but \
-         the given argument has elements of type $(eltype(matrix1))",
+         the given argument has elements of type $et_mat1",
     )
-    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
+    if et_arg <: BandMatrixRow # matrix-matrix multiplication
         matrix2 = arg
-        ld1, ud1 = outer_diagonals(eltype(matrix1))
-        ld2, ud2 = outer_diagonals(eltype(matrix2))
+        ld1, ud1 = outer_diagonals(et_mat1)
+        ld2, ud2 = outer_diagonals(et_arg)
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
-        prod_value_type =
-            rmul_return_type(eltype(eltype(matrix1)), eltype(eltype(matrix2)))
+        prod_value_type = rmul_return_type(eltype(et_mat1), eltype(et_arg))
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
         vector = arg
-        return rmul_return_type(eltype(eltype(matrix1)), eltype(vector))
+        return rmul_return_type(eltype(et_mat1), et_arg)
     end
 end
 
@@ -299,30 +300,28 @@ function Operators.return_eltype(
     arg,
     ::Type{LG},
 ) where {LG}
-    eltype(matrix1) <: BandMatrixRow || error(
+    et_mat1 = eltype(matrix1)
+    et_arg = eltype(arg)
+    et_mat1 <: BandMatrixRow || error(
         "The first argument of ⋅ must have elements of type BandMatrixRow, but \
-         the given argument has elements of type $(eltype(matrix1))",
+         the given argument has elements of type $et_mat1",
     )
-    if eltype(arg) <: BandMatrixRow # matrix-matrix multiplication
+    if et_arg <: BandMatrixRow # matrix-matrix multiplication
         matrix2 = arg
-        ld1, ud1 = outer_diagonals(eltype(matrix1))
-        ld2, ud2 = outer_diagonals(eltype(matrix2))
+        ld1, ud1 = outer_diagonals(et_mat1)
+        ld2, ud2 = outer_diagonals(et_arg)
         prod_ld, prod_ud = ld1 + ld2, ud1 + ud2
         prod_value_type = Base.promote_op(
             rmul_with_projection,
-            eltype(eltype(matrix1)),
-            eltype(eltype(matrix2)),
+            eltype(et_mat1),
+            eltype(et_arg),
             LG,
         )
         return band_matrix_row_type(prod_ld, prod_ud, prod_value_type)
     else # matrix-vector multiplication
         vector = arg
-        prod_value_type = Base.promote_op(
-            rmul_with_projection,
-            eltype(eltype(matrix1)),
-            eltype(vector),
-            LG,
-        )
+        prod_value_type =
+            Base.promote_op(rmul_with_projection, eltype(et_mat1), et_arg, LG)
     end
 end
 
