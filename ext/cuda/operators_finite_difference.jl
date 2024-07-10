@@ -66,21 +66,34 @@ function copyto_stencil_kernel!(
             (v, i, j, h) = cart_ind((Nv, Nq, Nq, Nh), gid).I
             hidx = (i, j, h)
             idx = v - 1 + li
-            window =
-                idx < lw ?
-                LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
-                (
-                    idx > rw ?
-                    RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
-                    Interior()
+            if idx < lw
+                lwindow = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+                setidx!(
+                    space,
+                    out,
+                    idx,
+                    hidx,
+                    Operators.getidx(space, bc, lwindow, idx, hidx),
                 )
-            setidx!(
-                space,
-                out,
-                idx,
-                hidx,
-                Operators.getidx(space, bc, window, idx, hidx),
-            )
+            elseif idx > rw
+                rwindow =
+                    RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+                setidx!(
+                    space,
+                    out,
+                    idx,
+                    hidx,
+                    Operators.getidx(space, bc, rwindow, idx, hidx),
+                )
+            else
+                setidx!(
+                    space,
+                    out,
+                    idx,
+                    hidx,
+                    Operators.getidx(space, bc, Interior(), idx, hidx),
+                )
+            end
         end
     end
     return nothing
