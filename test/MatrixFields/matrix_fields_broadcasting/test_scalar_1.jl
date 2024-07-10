@@ -1,12 +1,11 @@
 #=
-julia --project
+julia --project=.buildkite
+ENV["CLIMACOMMS_DEVICE"] = "CPU"
 using Revise; include(joinpath("test", "MatrixFields", "matrix_fields_broadcasting", "test_scalar_1.jl"))
 =#
 import ClimaCore
 #! format: off
-if !(@isdefined(unit_test_field_broadcast_vs_array_reference))
-    include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_scalar_utils.jl"))
-end
+include(joinpath(pkgdir(ClimaCore),"test","MatrixFields","matrix_fields_broadcasting","test_scalar_utils.jl"))
 #! format: on
 test_opt = get(ENV, "BUILDKITE", "") == "true"
 @testset "diagonal matrix times vector" begin
@@ -26,4 +25,5 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         input_fields,
         using_cuda,
     )
+    test_opt && !using_cuda && benchmark_getidx(bc)
 end
