@@ -1,11 +1,16 @@
 using Test
 using JET
+import Dates
 import Random: seed!
+import Base.Broadcast: materialize, materialize!
+import LazyBroadcast: @lazy
+import BenchmarkTools as BT
 
 import ClimaComms
 import BenchmarkTools as BT
 ClimaComms.@import_required_backends
 import ClimaCore:
+    Utilities,
     Geometry,
     Domains,
     Meshes,
@@ -13,6 +18,7 @@ import ClimaCore:
     Hypsography,
     Spaces,
     Fields,
+    Operators,
     Quadratures
 using ClimaCore.MatrixFields
 
@@ -257,10 +263,6 @@ const NestedType{FT} = NamedTuple{
     },
 }
 
-import Base.Broadcast: materialize, materialize!
-import LazyBroadcast: @lazy
-import BenchmarkTools as BT
-
 function call_ref_set_result!(
     ref_set_result!::F,
     ref_result_arrays,
@@ -291,130 +293,58 @@ end
 
 set_result!(result, bc) = (materialize!(result, bc); nothing)
 
-#####
-##### Scalar test utils
-#####
-
-function unit_test_field_broadcast_vs_array_reference(
-    result,
-    bc;
-    input_fields,
-    temp_value_fields = (),
-    using_cuda,
-    ref_set_result! = mul!,
-    allowed_max_eps_error = 0,
-)
-    inputs_arrays = map(MatrixFields.field2arrays, input_fields)
-    temp_values_arrays = map(MatrixFields.field2arrays, temp_value_fields)
-    result_arrays = MatrixFields.field2arrays(result)
-    ref_result_arrays = MatrixFields.field2arrays(similar(result))
-    result = materialize(bc)
-    result₀ = copy(result)
-    set_result!(result, bc)
-    @test result == result₀
-    call_ref_set_result!(
-        ref_set_result!,
-        ref_result_arrays,
-        inputs_arrays,
-        temp_values_arrays,
-    )
-    max_error = compute_max_error(result_arrays, ref_result_arrays)
-    max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
-    @test max_eps_error ≤ allowed_max_eps_error
+function call_getidx(space, bc, loc, idx, hidx)
+    @inbounds Operators.getidx(space, bc, loc, idx, hidx)
     return nothing
 end
 
-function opt_test_field_broadcast_against_array_reference(
-    result,
-    bc;
-    input_fields,
-    temp_value_fields = (),
-    ref_set_result!::F = mul!,
-    using_cuda,
-) where {F}
-    temp_values_arrays = map(MatrixFields.field2arrays, temp_value_fields)
-    inputs_arrays = map(MatrixFields.field2arrays, input_fields)
-    ref_result_arrays = MatrixFields.field2arrays(similar(result))
-    ref_time = BT.@belapsed call_ref_set_result!(
-        $ref_set_result!,
-        $ref_result_arrays,
-        $inputs_arrays,
-        $temp_values_arrays,
-    )
-    time = BT.@belapsed set_result!($result, $bc)
-    print_time_comparison(; time, ref_time)
+time_and_units_str(x::Real) =
+    trunc_time(string(compound_period(x, Dates.Second)))
 
-    # Test get_result and set_result! for type instabilities, and test
-    # set_result! for allocations. Ignore the type instabilities in CUDA and
-    # the allocations they incur.
-    @test_opt ignored_modules = cuda_frames materialize(bc)
-    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
-    using_cuda || @test (@allocated set_result!(result, bc)) == 0
+"""
+    compound_period(x::Real, ::Type{T}) where {T <: Dates.Period}
 
-    # Test ref_set_result! for type instabilities and allocations to ensure
-    # that the performance comparison is fair.
-    @test_opt ignored_modules = cuda_frames call_ref_set_result!(
-        ref_set_result!,
-        ref_result_arrays,
-        inputs_arrays,
-        temp_values_arrays,
-    )
-    using_cuda || @test (@allocated call_ref_set_result!(
-        ref_set_result!,
-        ref_result_arrays,
-        inputs_arrays,
-        temp_values_arrays,
-    )) == 0
-    return nothing
+A canonicalized `Dates.CompoundPeriod` given a real value
+`x`, and its units via the period type `T`.
+"""
+function compound_period(x::Real, ::Type{T}) where {T <: Dates.Period}
+    nf = Dates.value(convert(Dates.Nanosecond, T(1)))
+    ns = Dates.Nanosecond(ceil(x * nf))
+    return Dates.canonicalize(Dates.CompoundPeriod(ns))
 end
 
-#####
-##### Non-scalar test utils
-#####
+trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 
-function unit_test_field_broadcast(
-    result,
-    bc;
-    ref_set_result!,
-    allowed_max_eps_error = 10,
-)
-    result_copy = copy(result)
-    set_result!(result, bc)
-    # Test that set_result! sets the same value as get_result.
-    @test result == result_copy
+function get_getidx_args(bc)
+    space = axes(materialize(bc))
+    idx = if space.staggering isa Spaces.CellCenter
+        10
+    else
+        Utilities.PlusHalf(10)
+    end
+    hidx = (1, 1, 1)
 
-    ref_result = similar(result)
-    ref_set_result!(ref_result)
-    max_error = mapreduce(
-        (a, b) -> (abs(a - b)),
-        max,
-        parent(result),
-        parent(ref_result),
-    )
-    max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
-
-    # Test that set_result! is performant and correct when compared
-    # against ref_set_result!.
-    @test max_eps_error <= allowed_max_eps_error
-    return nothing
+    loc_i = Operators.Interior()
+    loc_l = Operators.LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    loc_r = Operators.RightBoundaryWindow{Spaces.left_boundary_name(space)}()
+    return (; space, bc, loc_l, loc_i, loc_r, idx, hidx)
 end
 
-function opt_test_field_broadcast(result, bc; ref_set_result!)
-    time = @benchmark set_result!(result, bc)
-    ref_result = similar(result)
-    ref_time = @benchmark ref_set_result!(ref_result)
-    print_time_comparison(; time, ref_time)
+function benchmark_getidx(bc)
+    (; space, bc, loc_l, loc_i, loc_r, idx, hidx) = get_getidx_args(bc)
+    call_getidx(space, bc, loc_i, idx, hidx)
+    call_getidx(space, bc, loc_l, idx, hidx)
+    call_getidx(space, bc, loc_r, idx, hidx)
 
-    # Test get_result and set_result! for type instabilities, and test
-    # set_result! for allocations. Ignore the type instabilities in CUDA and
-    # the allocations they incur.
-    @test_opt ignored_modules = cuda_frames materialize(bc)
-    @test_opt ignored_modules = cuda_frames set_result!(result, bc)
-    using_cuda || @test (@allocated set_result!(result, bc)) == 0
-
-    # Test ref_set_result! for type instabilities and allocations to
-    # ensure that the performance comparison is fair.
-    @test_opt ignored_modules = cuda_frames ref_set_result!(ref_result)
-    using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
+    bei = time_and_units_str(
+        BT.@belapsed call_getidx($space, $bc, $loc_i, $idx, $hidx)
+    )
+    bel = time_and_units_str(
+        BT.@belapsed call_getidx($space, $bc, $loc_l, $idx, $hidx)
+    )
+    ber = time_and_units_str(
+        BT.@belapsed call_getidx($space, $bc, $loc_r, $idx, $hidx)
+    )
+    @info "getidx times max(interior,left,right) = ($bei,$bel,$ber)"
     return nothing
 end

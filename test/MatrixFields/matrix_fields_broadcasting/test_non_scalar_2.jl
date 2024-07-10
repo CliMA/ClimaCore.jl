@@ -34,4 +34,5 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
     )
 
     test_opt && opt_test_field_broadcast(result, bc; ref_set_result!)
+    test_opt && !using_cuda && benchmark_getidx(bc)
 end
