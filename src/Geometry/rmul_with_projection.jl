@@ -68,42 +68,42 @@ mul_return_type(::Type{X}, ::Type{Y}) where {X, Y} = error(
 )
 # Note: If the behavior of * changes for any relevant types, the corresponding
 # methods below should be updated.
-
+import Base: *
 # Methods from Base:
 mul_return_type(::Type{X}, ::Type{Y}) where {X <: Number, Y <: Number} =
-    promote_type(X, Y)
+    promote_op(*, X, Y)
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {X <: AdjointAbsVec, Y <: AbstractMatrix} =
     adjoint_type(mul_return_type(adjoint_type(Y), adjoint_type(X)))
 
-# Methods from ClimaCore: 
+# Methods from ClimaCore:
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T, N, A, X <: Number, Y <: AxisTensor{T, N, A}} =
-    axis_tensor_type(promote_type(X, T), A)
+    axis_tensor_type(promote_op(*, X, T), A)
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T, N, A, X <: AxisTensor{T, N, A}, Y <: Number} =
-    axis_tensor_type(promote_type(T, Y), A)
+    axis_tensor_type(promote_op(*, T, Y), A)
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T, N, A, X <: Number, Y <: AdjointAxisTensor{T, N, A}} =
-    adjoint_type(axis_tensor_type(promote_type(X, T), A))
+    adjoint_type(axis_tensor_type(promote_op(*, X, T), A))
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T, N, A, X <: AdjointAxisTensor{T, N, A}, Y <: Number} =
-    adjoint_type(axis_tensor_type(promote_type(T, Y), A))
+    adjoint_type(axis_tensor_type(promote_op(*, T, Y), A))
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T1, T2, X <: AdjointAxisVector{T1}, Y <: AxisVector{T2}} =
-    promote_type(T1, T2) # This comes from the definition of dot.
+    promote_op(*, T1, T2) # This comes from the definition of dot.
 mul_return_type(
     ::Type{X},
     ::Type{Y},
@@ -114,17 +114,17 @@ mul_return_type(
     A2,
     X <: AxisVector{T1, A1},
     Y <: AdjointAxisVector{T2, A2},
-} = axis_tensor_type(promote_type(T1, T2), Tuple{A1, A2})
+} = axis_tensor_type(promote_op(*, T1, T2), Tuple{A1, A2})
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: AxisVector{T2}} =
-    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X)})
+    axis_tensor_type(promote_op(*, T1, T2), Tuple{axis1(X)})
 mul_return_type(
     ::Type{X},
     ::Type{Y},
 ) where {T1, T2, X <: Axis2TensorOrAdj{T1}, Y <: Axis2TensorOrAdj{T2}} =
-    axis_tensor_type(promote_type(T1, T2), Tuple{axis1(X), axis2(Y)})
+    axis_tensor_type(promote_op(*, T1, T2), Tuple{axis1(X), axis2(Y)})
 
 """
     rmul_return_type(X, Y)
