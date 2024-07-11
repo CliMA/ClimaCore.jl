@@ -24,7 +24,7 @@ results = Profile.fetch()
 Profile.clear()
 ProfileCanvas.html_file("flame.html", results)
 
-benchmark_getidx(bc)
+perf_getidx(bc)
 ```
 =#
 using Test

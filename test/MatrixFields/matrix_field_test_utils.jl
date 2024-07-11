@@ -316,7 +316,7 @@ end
 trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 
 function get_getidx_args(bc)
-    space = axes(materialize(bc))
+    space = axes(bc)
     idx = if space.staggering isa Spaces.CellCenter
         10
     else
@@ -330,7 +330,8 @@ function get_getidx_args(bc)
     return (; space, bc, loc_l, loc_i, loc_r, idx, hidx)
 end
 
-function benchmark_getidx(bc)
+import JET
+function perf_getidx(bc; broken = false)
     (; space, bc, loc_l, loc_i, loc_r, idx, hidx) = get_getidx_args(bc)
     call_getidx(space, bc, loc_i, idx, hidx)
     call_getidx(space, bc, loc_l, idx, hidx)
@@ -345,6 +346,10 @@ function benchmark_getidx(bc)
     ber = time_and_units_str(
         BT.@belapsed call_getidx($space, $bc, $loc_r, $idx, $hidx)
     )
+
+    JET.@test_opt call_getidx(space, bc, loc_i, idx, hidx)
+    JET.@test_opt call_getidx(space, bc, loc_l, idx, hidx)
+    JET.@test_opt call_getidx(space, bc, loc_r, idx, hidx)
     @info "getidx times max(interior,left,right) = ($bei,$bel,$ber)"
     return nothing
 end
