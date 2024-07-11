@@ -316,7 +316,7 @@ end
 trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 
 function get_getidx_args(bc)
-    space = axes(materialize(bc))
+    space = axes(bc)
     idx = if space.staggering isa Spaces.CellCenter
         10
     else
