@@ -88,8 +88,7 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
 } where {
     V <: AbstractData{<:BandMatrixRow},
     S <: Union{
-        Spaces.FiniteDifferenceSpace,
-        Spaces.ExtrudedFiniteDifferenceSpace,
+        Spaces.AbstractSpace,
         Operators.PlaceholderSpace, # so that this can exist inside cuda kernels
     },
 }
