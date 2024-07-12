@@ -180,6 +180,10 @@ steps:
         key: unit_rmul_with_projection
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/rmul_with_projection.jl"
 
+      - label: "Unit: simple_symmetric"
+        key: unit_simple_symmetric
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/unit_simple_symmetric.jl"
+
   - group: "Unit: Meshes"
     steps:
 
