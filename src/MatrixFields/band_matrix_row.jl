@@ -40,6 +40,11 @@ subtype of `BandMatrixRow`.
 outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
     (ld, ld + bw - 1)
 
+@inline lower_diagonal(::Tuple{<:BandMatrixRow{ld}}) where {ld} = ld
+@inline lower_diagonal(t::Tuple) = lower_diagonal(t...)
+@inline lower_diagonal(::BandMatrixRow{ld}, ::BandMatrixRow{ld}...) where {ld} =
+    ld
+
 """
     band_matrix_row_type(ld, ud, T)
 
@@ -53,8 +58,10 @@ Base.eltype(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} = T
 Base.zero(::Type{BandMatrixRow{ld, bw, T}}) where {ld, bw, T} =
     BandMatrixRow{ld}(ntuple(_ -> rzero(T), Val(bw))...)
 
-Base.map(f::F, rows::BandMatrixRow{ld}...) where {F, ld} =
-    BandMatrixRow{ld}(map(f, map(row -> row.entries, rows)...)...)
+Base.map(f::F, rows::BandMatrixRow...) where {F} =
+    BandMatrixRow{lower_diagonal(rows)}(
+        map(f, map(row -> row.entries, rows)...)...,
+    )
 
 Base.@propagate_inbounds Base.getindex(row::BandMatrixRow{ld}, d) where {ld} =
     row.entries[d - ld + 1]
