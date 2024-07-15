@@ -65,34 +65,34 @@ const invalid_ir_error = using_cuda ? cuda_mod.InvalidIRError : ErrorException
 # skipped.
 function test_field_broadcast(;
     test_name,
-    get_result::F1,
-    set_result!::F2,
-    ref_set_result!::F3 = nothing,
+    get_result,
+    set_result,
+    ref_set_result = nothing,
     time_ratio_limit = 10,
     max_eps_error_limit = 10,
     test_broken_with_cuda = false,
-) where {F1, F2, F3}
+)
     @testset "$test_name" begin
         if test_broken_with_cuda && using_cuda
-            @test_throws invalid_ir_error get_result()
+            @test_throws invalid_ir_error materialize(get_result)
             @warn "$test_name:\n\tCUDA.InvalidIRError"
             return
         end
 
-        result = get_result()
+        result = materialize(get_result)
         result_copy = copy(result)
-        time = @benchmark set_result!(result)
+        time = @benchmark materialize!(result, set_result)
         time_rounded = round(time; sigdigits = 2)
 
         # Test that set_result! sets the same value as get_result.
         @test result == result_copy
 
-        if isnothing(ref_set_result!)
+        if isnothing(ref_set_result)
             @info "$test_name:\n\tTime = $time_rounded s (reference \
                    implementation unavailable)"
         else
             ref_result = similar(result)
-            ref_time = @benchmark ref_set_result!(ref_result)
+            ref_time = @benchmark materialize!(ref_result, ref_set_result)
             ref_time_rounded = round(ref_time; sigdigits = 2)
             time_ratio = time / ref_time
             time_ratio_rounded = round(time_ratio; sigdigits = 2)
@@ -109,7 +109,7 @@ function test_field_broadcast(;
                    \n\tMaximum Error = $max_eps_error eps"
 
             # Test that set_result! is performant and correct when compared
-            # against ref_set_result!.
+            # against ref_set_result.
             @test time / ref_time <= time_ratio_limit
             @test max_eps_error <= max_eps_error_limit
         end
@@ -117,93 +117,20 @@ function test_field_broadcast(;
         # Test get_result and set_result! for type instabilities, and test
         # set_result! for allocations. Ignore the type instabilities in CUDA and
         # the allocations they incur.
-        @test_opt ignored_modules = cuda_frames get_result()
-        @test_opt ignored_modules = cuda_frames set_result!(result)
-        using_cuda || @test (@allocated set_result!(result)) == 0
+        @test_opt ignored_modules = cuda_frames materialize(get_result)
+        @test_opt ignored_modules = cuda_frames materialize!(result, set_result)
+        using_cuda || @test (@allocated materialize!(result, set_result)) == 0
 
-        if !isnothing(ref_set_result!)
+        if !isnothing(ref_set_result)
             # Test ref_set_result! for type instabilities and allocations to
             # ensure that the performance comparison is fair.
-            @test_opt ignored_modules = cuda_frames ref_set_result!(ref_result)
-            using_cuda || @test (@allocated ref_set_result!(ref_result)) == 0
+            @test_opt ignored_modules = cuda_frames materialize!(
+                ref_result,
+                ref_set_result,
+            )
+            using_cuda ||
+                @test (@allocated materialize!(ref_result, ref_set_result)) == 0
         end
-    end
-end
-
-# Test the allocating and non-allocating versions of a field broadcast against
-# a reference array-based non-allocating implementation. Ensure that they are
-# performant, correct, and type-stable, and print some useful information. In
-# order for the input arrays and temporary scratch arrays used by the reference
-# implementation to be generated automatically, the corresponding fields must be
-# passed to this function.
-function test_field_broadcast_against_array_reference(;
-    test_name,
-    get_result::F1,
-    set_result!::F2,
-    input_fields,
-    get_temp_value_fields = () -> (),
-    ref_set_result!::F3,
-    time_ratio_limit = 10,
-    max_eps_error_limit = 10,
-    test_broken_with_cuda = false,
-) where {F1, F2, F3}
-    @testset "$test_name" begin
-        if test_broken_with_cuda && using_cuda
-            @test_throws invalid_ir_error get_result()
-            @warn "$test_name:\n\tCUDA.InvalidIRError"
-            return
-        end
-
-        result = get_result()
-        result_copy = copy(result)
-        time = @benchmark set_result!(result)
-        time_rounded = round(time; sigdigits = 2)
-
-        # Test that set_result! sets the same value as get_result.
-        @test result == result_copy
-
-        ref_result = similar(result)
-        temp_value_fields = map(similar, get_temp_value_fields())
-
-        result_arrays = MatrixFields.field2arrays(result)
-        ref_result_arrays = MatrixFields.field2arrays(ref_result)
-        inputs_arrays = map(MatrixFields.field2arrays, input_fields)
-        temp_values_arrays = map(MatrixFields.field2arrays, temp_value_fields)
-
-        function call_ref_set_result!()
-            for arrays in
-                zip(ref_result_arrays, inputs_arrays..., temp_values_arrays...)
-                ref_set_result!(arrays...)
-            end
-        end
-
-        ref_time = @benchmark call_ref_set_result!()
-        ref_time_rounded = round(ref_time; sigdigits = 2)
-        time_ratio = time / ref_time
-        time_ratio_rounded = round(time_ratio; sigdigits = 2)
-        max_error = compute_max_error(result_arrays, ref_result_arrays)
-        max_eps_error = ceil(Int, max_error / eps(typeof(max_error)))
-
-        @info "$test_name:\n\tTime Ratio = $time_ratio_rounded ($time_rounded \
-               s vs. $ref_time_rounded s for reference)\n\tMaximum Error = \
-               $max_eps_error eps"
-
-        # Test that set_result! is performant and correct when compared against
-        # ref_set_result!.
-        @test time / ref_time <= time_ratio_limit
-        @test max_eps_error <= max_eps_error_limit
-
-        # Test get_result and set_result! for type instabilities, and test
-        # set_result! for allocations. Ignore the type instabilities in CUDA and
-        # the allocations they incur.
-        @test_opt ignored_modules = cuda_frames get_result()
-        @test_opt ignored_modules = cuda_frames set_result!(result)
-        using_cuda || @test (@allocated set_result!(result)) == 0
-
-        # Test ref_set_result! for type instabilities and allocations to ensure
-        # that the performance comparison is fair.
-        @test_opt ignored_modules = cuda_frames call_ref_set_result!()
-        using_cuda || @test (@allocated call_ref_set_result!()) == 0
     end
 end
 
