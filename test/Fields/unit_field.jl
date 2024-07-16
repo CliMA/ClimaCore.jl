@@ -305,6 +305,21 @@ end
 
     Y.k.z = 3.0
     @test Y.k.z === 3.0
+
+    @test Fields.rcompare(Y, Y)
+    Ydc = deepcopy(Y)
+    Ydc.k.z += 1
+    @test !Fields.rcompare(Ydc, Y)
+    # Fields.@rprint_diff(Ydc, Y)
+    s = sprint(
+        Fields._rprint_diff,
+        Ydc,
+        Y,
+        "Ydc",
+        "Y";
+        context = IOContext(stdout),
+    )
+    @test occursin("==================== Difference found:", s)
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1465

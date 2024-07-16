@@ -83,27 +83,6 @@ function benchmark_kernel!(f!, X, Y, device)
     show(stdout, MIME("text/plain"), trial)
 end
 
-function show_diff(A, B)
-    for pn in propertynames(A)
-        Ai = getproperty(A, pn)
-        Bi = getproperty(B, pn)
-        println("==================== Comparing $pn")
-        @show Ai
-        @show Bi
-        @show abs.(Ai .- Bi)
-    end
-end
-
-function compare(A, B)
-    pass = true
-    for pn in propertynames(A)
-        pass =
-            pass &&
-            all(parent(getproperty(A, pn)) .== parent(getproperty(B, pn)))
-    end
-    pass || show_diff(A, B)
-    return pass
-end
 function test_kernel!(; fused!, unfused!, X, Y)
     for pn in propertynames(X)
         rand_field!(getproperty(X, pn))
@@ -122,8 +101,10 @@ function test_kernel!(; fused!, unfused!, X, Y)
     unfused!(X_unfused, Y_unfused)
     fused!(X_fused, Y_fused)
     @testset "Test correctness of $(nameof(typeof(fused!)))" begin
-        @test compare(X_fused, X_unfused)
-        @test compare(Y_fused, Y_unfused)
+        Fields.@rprint_diff(X_fused, X_unfused)
+        Fields.@rprint_diff(Y_fused, Y_unfused)
+        @test Fields.rcompare(X_fused, X_unfused)
+        @test Fields.rcompare(Y_fused, Y_unfused)
     end
 end
 
