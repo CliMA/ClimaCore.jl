@@ -29,6 +29,7 @@ UnitTest("Rectangle surface topology"              ,"Topologies/rectangle_sfc.jl
 UnitTest("Cubedsphere topology"                    ,"Topologies/cubedsphere.jl"),
 UnitTest("Cubedsphere surface topology"            ,"Topologies/cubedsphere_sfc.jl"),
 UnitTest("Quadratures"                             ,"Quadratures/Quadratures.jl"),
+UnitTest("Grids: Convenience constructors"         ,"Grids/convenience_constructors.jl"),
 UnitTest("Spaces"                                  ,"Spaces/unit_spaces.jl"),
 UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
 UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
