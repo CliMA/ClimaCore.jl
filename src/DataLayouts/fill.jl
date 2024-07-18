@@ -59,3 +59,12 @@ end
 
 Base.fill!(dest::AbstractData, val) =
     Base.fill!(dest, val, device_dispatch(dest))
+
+# Specialize on Real, since `fill!(::AbstractArray, val)`
+# may be able to leverage linear indexing.
+# https://github.com/CliMA/ClimaCore.jl/issues/1888
+Base.fill!(dest::AbstractData, val::Real) = Base.fill!(parent(dest), val)
+
+# Specialized behavior on DataF:
+Base.fill!(dest::DataF, val::Real) =
+    Base.fill!(dest, val, device_dispatch(dest))
