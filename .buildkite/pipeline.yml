@@ -289,6 +289,16 @@ steps:
         key: unit_sphere
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/sphere.jl"
 
+      - label: "Unit: sphere gpu"
+        key: unit_sphere_gpu
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/sphere.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: terrain warp"
         key: unit_terrain_warp
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/terrain_warp.jl"
@@ -555,6 +565,16 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+
+      - label: "Unit: column gpu"
+        key: unit_column_gpu
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Unit: wfact"
         key: unit_wfact
@@ -1189,6 +1209,16 @@ steps:
       - label: "Perf: FD operators"
         key: perf_FD
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt.jl"
+
+      - label: "Perf: FD operators gpu"
+        key: perf_FD_gpu
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/opt.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
         # TODO: combine this with FD operators above
       - label: "Perf: FD operators from the wild"
