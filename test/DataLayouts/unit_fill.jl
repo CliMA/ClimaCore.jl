@@ -29,13 +29,13 @@ end
     Nk = 6
 #! format: off
     data = DataF{S}(device_zeros(FT,Nf));                        test_fill!(data, 3)
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         test_fill!(data, 3)
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              test_fill!(data, 3)
+    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_fill!(data, 3)
+    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_fill!(data, 3)
     data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_fill!(data, 3)
     data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_fill!(data, 3)
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_fill!(data, 3)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); test_fill!(data, 3)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      test_fill!(data, 3)
+    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_fill!(data, 3)
+    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_fill!(data, 3)
 #! format: on
     # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, 3) # TODO: test
     # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_fill!(data, 3) # TODO: test
@@ -53,13 +53,13 @@ end
     Nk = 6
 #! format: off
     data = DataF{S}(device_zeros(FT,Nf));                        test_fill!(data, (2,3))
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         test_fill!(data, (2,3))
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              test_fill!(data, (2,3))
+    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_fill!(data, (2,3))
+    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_fill!(data, (2,3))
     data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_fill!(data, (2,3))
     data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_fill!(data, (2,3))
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_fill!(data, (2,3))
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); test_fill!(data, (2,3))
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      test_fill!(data, (2,3))
+    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_fill!(data, (2,3))
+    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_fill!(data, (2,3))
 #! format: on
     # TODO: test this
     # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, (2,3)) # TODO: test
@@ -86,13 +86,13 @@ end
     # Rather than using level/slab/column, let's just make views/SubArrays
     # directly so that we can easily test all cases:
 #! format: off
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         test_fill!(data_view(data), (2,3))
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              test_fill!(data_view(data), (2,3))
+    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_fill!(data_view(data), (2,3))
+    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_fill!(data_view(data), (2,3))
     data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_fill!(data_view(data), (2,3))
     data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_fill!(data_view(data), (2,3))
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_fill!(data_view(data), (2,3))
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); test_fill!(data_view(data), (2,3))
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      test_fill!(data_view(data), (2,3))
+    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_fill!(data_view(data), (2,3))
+    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_fill!(data_view(data), (2,3))
 #! format: on
     # TODO: test this
     # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, (2,3)) # TODO: test
@@ -138,13 +138,13 @@ end
     Nk = 6
     # directly so that we can easily test all cases:
 #! format: off
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         test_fill!(reshaped_array(data), 2)
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              test_fill!(reshaped_array(data), 2)
+    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_fill!(reshaped_array(data), 2)
+    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_fill!(reshaped_array(data), 2)
     # data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_fill!(reshaped_array(data), 2)
     # data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_fill!(reshaped_array(data), 2)
     # data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_fill!(reshaped_array(data), 2)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); test_fill!(reshaped_array(data), 2)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      test_fill!(reshaped_array(data), 2)
+    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_fill!(reshaped_array(data), 2)
+    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_fill!(reshaped_array(data), 2)
 #! format: on
     # TODO: test this
     # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(reshaped_array(data), 2) # TODO: test

@@ -55,10 +55,13 @@ end
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
+    Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
-    field =
-        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), space)
+    field = Fields.Field(
+        IJFH{ComplexF64, Nij, Nh}(ones(Nij, Nij, 2, n1 * n2)),
+        space,
+    )
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
@@ -245,11 +248,12 @@ end
 @testset "Broadcasting interception for tuple-valued fields" begin
     n1 = n2 = 1
     Nij = 4
+    Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
     nt_field = Fields.Field(
-        IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
-            ones(Nij, Nij, 2, n1 * n2),
+        IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij, Nh}(
+            ones(Nij, Nij, 2, Nh),
         ),
         space,
     )

@@ -11,8 +11,8 @@ function knl_fill_flat!(dest::AbstractData, val)
 end
 
 function cuda_fill!(dest::AbstractData, val)
-    (_, _, Nf, Nv, Nh) = DataLayouts.universal_size(dest)
-    if Nv > 0 && Nh > 0 && Nf > 0
+    (_, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    if Nv > 0 && Nh > 0
         auto_launch!(knl_fill_flat!, (dest, val), dest; auto = true)
     end
     return dest

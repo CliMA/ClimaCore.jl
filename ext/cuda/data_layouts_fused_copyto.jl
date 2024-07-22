@@ -42,10 +42,9 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S, Nv, Nij},
+    dest1::VIJFH{S, Nv, Nij, Nh},
     ::ToCUDA,
-) where {S, Nv, Nij}
-    _, _, _, _, Nh = size(dest1)
+) where {S, Nv, Nij, Nh}
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)

@@ -331,7 +331,7 @@ end
     @test size(array) == (4, 4, 2, 4)
 
     Nij = length(points)
-    field = Fields.Field(IJFH{FT, Nij}(ones(Nij, Nij, 1, n1 * n2)), space)
+    field = Fields.Field(IJFH{FT, Nij, n1 * n2}(ones(Nij, Nij, 1, n1 * n2)), space)
     field_values = Fields.field_values(field)
     Spaces.horizontal_dss!(field)
 
@@ -414,7 +414,7 @@ end
     data[:, :, 1, :] .= 1:Nij
     data[:, :, 2, :] .= (1:Nij)'
     data[:, :, 3, :] .= reshape(1:(n1 * n2), 1, 1, :)
-    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij}(data), space)
+    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij, n1 * n2}(data), space)
     field_dss = Spaces.horizontal_dss!(copy(field))
     data_dss = parent(field_dss)
 
