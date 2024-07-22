@@ -1,8 +1,12 @@
 #=
 julia --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "linear_vs_cartesian_indexing.jl"))
+using Revise; include(joinpath("benchmarks", "scripts", "indexing_and_static_ndranges.jl"))
 
 # Info:
+This script compares two things:
+ - linear vs cartesian indexing
+ - impact of static vs dynamic NDRanges (https://juliagpu.github.io/KernelAbstractions.jl/dev/examples/memcopy_static/)
+
 Linear indexing, when possible, has performance advantages
 over using Cartesian indexing. Julia Base's Broadcast only
 supports Cartesian indexing as it provides more general support
@@ -12,6 +16,18 @@ arrays can change.
 This script (re-)defines some broadcast machinery and tests
 the performance of vector vs array operations in a broadcast
 setting where linear indexing is allowed.
+
+# Summary:
+ - On the CPU:
+    static NDRanges do not play an important role,
+    but linear indexing is 2x faster than cartesian
+    indexing.
+ - On the GPU:
+    static NDRanges DO play an important role,
+    but we could (alternatively) see an improvement
+    by using linear indexing. Supporting StaticNDRanges
+    also impacts non-pointwise kernels, and yields
+    nearly the same benefit as linear indexing.
 
 # References:
  - https://github.com/CliMA/ClimaCore.jl/issues/1889
@@ -23,27 +39,43 @@ setting where linear indexing is allowed.
 Local Apple M1 Mac (CPU):
 ```
 at_dot_call!($X_array, $Y_array):
-     146 milliseconds, 558 microseconds
+     143 milliseconds, 774 microseconds
 at_dot_call!($X_vector, $Y_vector):
-     65 milliseconds, 531 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $(Val(length(X_vector.x1))); printtb = false):
-     66 milliseconds, 735 microseconds
-custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1))); printtb = false, use_pw = false):
-     145 milliseconds, 957 microseconds
-custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1))); printtb = false, use_pw = true):
-     66 milliseconds, 320 microseconds
+     65 milliseconds, 567 microseconds
+custom_kernel_bc!($X_vector, $Y_vector, $us; printtb = false):
+     66 milliseconds, 870 microseconds
+custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = false):
+     143 milliseconds, 643 microseconds
+custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = true):
+     65 milliseconds, 778 microseconds
+custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb = false):
+     65 milliseconds, 765 microseconds
+custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = false):
+     144 milliseconds, 271 microseconds
+custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = true):
+     66 milliseconds, 376 microseconds
 ```
 
 Clima A100
 ```
+at_dot_call!($X_array, $Y_array):
+     6 milliseconds, 775 microseconds
 at_dot_call!($X_vector, $Y_vector):
-     2 milliseconds, 848 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $(Val(length(X_vector.x1))); printtb = false):
-     2 milliseconds, 537 microseconds
-custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1))); printtb = false, use_pw = false):
-     8 milliseconds, 804 microseconds
-custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1))); printtb = false, use_pw = true):
-     2 milliseconds, 545 microseconds
+     2 milliseconds, 834 microseconds
+custom_sol_kernel!($X_vector, $Y_vector, $(Val(N))):
+     2 milliseconds, 547 microseconds
+custom_kernel_bc!($X_vector, $Y_vector, $us; printtb = false):
+     2 milliseconds, 561 microseconds
+custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = false):
+     4 milliseconds, 160 microseconds
+custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = true):
+     2 milliseconds, 584 microseconds
+custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb = false):
+     2 milliseconds, 540 microseconds
+custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = false):
+     2 milliseconds, 715 microseconds
+custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = true):
+     2 milliseconds, 547 microseconds
 ```
 =#
 
@@ -239,7 +271,7 @@ function at_dot_call!(X, Y)
     return nothing
 end;
 
-function custom_kernel!(X, Y, ::Val{N}) where {N}
+function custom_sol_kernel!(X, Y, ::Val{N}) where {N}
     (; x1, x2, x3) = X
     (; y1) = Y
     kernel = CUDA.@cuda always_inline = true launch = false custom_kernel_knl!(
@@ -267,7 +299,27 @@ function custom_kernel_knl!(y1, x1, x2, x3, ::Val{N}) where {N}
     return nothing
 end;
 
-function custom_kernel_bc!(X, Y, ::Val{N}; printtb=true, use_pw=true) where {N}
+abstract type AbstractUniversalSizes{Nv, Nij} end
+struct UniversalSizesCC{Nv, Nij} <: AbstractUniversalSizes{Nv, Nij}
+    Nh::Int
+end
+struct UniversalSizesStatic{Nv, Nij, Nh} <: AbstractUniversalSizes{Nv, Nij} end
+
+get_Nv(::AbstractUniversalSizes{Nv}) where {Nv} = Nv
+get_Nij(::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} = Nij
+get_Nh(us::UniversalSizesCC) = us.Nh
+get_Nh(::UniversalSizesStatic{Nv, Nij, Nh}) where {Nv, Nij, Nh} = Nh
+get_N(us::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} = prod((Nv,Nij,Nij,1,get_Nh(us)))
+UniversalSizesCC(Nv, Nij, Nh) = UniversalSizesCC{Nv, Nij}(Nh)
+UniversalSizesStatic(Nv, Nij, Nh) = UniversalSizesStatic{Nv, Nij, Nh}()
+using Test
+us_tup = (1, 2, 3)
+@test get_Nv(UniversalSizesCC(us_tup...))  == get_Nv(UniversalSizesStatic(us_tup...))
+@test get_Nij(UniversalSizesCC(us_tup...)) == get_Nij(UniversalSizesStatic(us_tup...))
+@test get_Nh(UniversalSizesCC(us_tup...))  == get_Nh(UniversalSizesStatic(us_tup...))
+@test get_N(UniversalSizesCC(us_tup...))   == get_N(UniversalSizesStatic(us_tup...))
+
+function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=true, use_pw=true)
     (; x1, x2, x3) = X
     (; y1) = Y
     bc_base = @lazy @. y1 = myadd(x1, x2, x3)
@@ -281,7 +333,7 @@ function custom_kernel_bc!(X, Y, ::Val{N}; printtb=true, use_pw=true) where {N}
             end
         else
             for i in 1:100 # reduce variance / impact of launch latency
-                @inbounds @simd for j in 1:N
+                @inbounds @simd for j in 1:get_N(us)
                     y1[j] = bc[j]
                 end
             end
@@ -291,14 +343,14 @@ function custom_kernel_bc!(X, Y, ::Val{N}; printtb=true, use_pw=true) where {N}
             CUDA.@cuda always_inline = true launch = false custom_kernel_knl_bc!(
                 y1,
                 bc,
-                Val(N),
+                us,
             )
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(N, config.threads)
         blocks = cld(N, threads)
         printtb && @show blocks, threads
         for i in 1:100 # reduce variance / impact of launch latency
-            kernel(y1, bc, Val(N); threads, blocks)
+            kernel(y1, bc,us; threads, blocks)
         end
     end
     return nothing
@@ -306,13 +358,13 @@ end;
 @inline get_cart_lin_index(bc, n, I) = I
 @inline get_cart_lin_index(bc::Base.Broadcast.Broadcasted, n, I) =
     CartesianIndices(map(x -> Base.OneTo(x), n))[I]
-function custom_kernel_knl_bc!(y1, bc, ::Val{N}) where {N}
+function custom_kernel_knl_bc!(y1, bc, us)
     @inbounds begin
         I = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
-        n = size(y1)
-        if 1 ≤ I ≤ N
-            ind = get_cart_lin_index(bc, n, I)
-            y1[ind] = bc[ind]
+        if 1 ≤ I ≤ get_N(us)
+            n = (get_Nv(us), get_Nij(us), get_Nij(us), 1, get_Nh(us))
+            ci = get_cart_lin_index(bc, n, I)
+            y1[ci] = bc[ci]
         end
     end
     return nothing
@@ -327,16 +379,31 @@ X_vector = to_vec(X_array);
 Y_vector = to_vec(Y_array);
 at_dot_call!(X_array, Y_array)
 at_dot_call!(X_vector, Y_vector)
-# custom_kernel!(X_vector, Y_vector, Val(length(X_vector.x1)))
-custom_kernel_bc!(X_vector, Y_vector, Val(length(X_vector.x1)))
-custom_kernel_bc!(X_array, Y_array, Val(length(X_vector.x1)); use_pw=false)
-custom_kernel_bc!(X_array, Y_array, Val(length(X_vector.x1)); use_pw=true)
+N = length(X_vector.x1)
+(Nv, Nij, _, Nf, Nh) = size(Y_array.y1);
+us = UniversalSizesCC(Nv, Nij, Nh);
+uss = UniversalSizesStatic(Nv, Nij, Nh);
+@test get_N(us) == N
+@test get_N(uss) == N
+iscpu = ArrayType === identity
+iscpu || custom_sol_kernel!(X_vector, Y_vector, Val(N))
+custom_kernel_bc!(X_vector, Y_vector, us)
+custom_kernel_bc!(X_array, Y_array, us; use_pw=false)
+custom_kernel_bc!(X_array, Y_array, us; use_pw=true)
+
+custom_kernel_bc!(X_vector, Y_vector, uss)
+custom_kernel_bc!(X_array, Y_array, uss; use_pw=false)
+custom_kernel_bc!(X_array, Y_array, uss; use_pw=true)
 
 @pretty_belapsed at_dot_call!($X_array, $Y_array) # slow
 @pretty_belapsed at_dot_call!($X_vector, $Y_vector) # fast
-# @pretty_belapsed custom_kernel!($X_vector, $Y_vector, $(Val(length(X_vector.x1))))
-@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $(Val(length(X_vector.x1)));printtb=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1)));printtb=false, use_pw=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $(Val(length(X_vector.x1)));printtb=false, use_pw=true)
+iscpu || @pretty_belapsed custom_sol_kernel!($X_vector, $Y_vector, $(Val(N)))
+@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $us; printtb=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; printtb=false, use_pw=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; printtb=false, use_pw=true)
+
+@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; printtb=false, use_pw=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; printtb=false, use_pw=true)
 
 #! format: on
