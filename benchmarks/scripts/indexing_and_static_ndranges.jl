@@ -18,7 +18,16 @@ the performance of vector vs array operations in a broadcast
 setting where linear indexing is allowed.
 
 # Summary:
- - Pointwise
+ - On the CPU:
+    static NDRanges do not play an important role,
+    but linear indexing is 2x faster than cartesian
+    indexing.
+ - On the GPU:
+    static NDRanges DO play an important role,
+    but we could (alternatively) see an improvement
+    by using linear indexing. Supporting StaticNDRanges
+    also impacts non-pointwise kernels, and yields
+    nearly the same benefit as linear indexing.
 
 # References:
  - https://github.com/CliMA/ClimaCore.jl/issues/1889
