@@ -1,5 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve
@@ -25,7 +23,7 @@ import ClimaCore:
 ENV["GKSwstype"] = "nul"
 using ClimaCorePlots, Plots
 Plots.GRBackend()
-dir = "zalesak_fct_advection"
+dir = "tvd_limiters"
 path = joinpath(@__DIR__, "output", dir)
 mkpath(path)
 
@@ -53,16 +51,15 @@ function tendency!(yₜ, y, parameters, t)
         bottom = Operators.ThirdOrderOneSided(),
         top = Operators.ThirdOrderOneSided(),
     )
-    FCTZalesak = Operators.FCTZalesak(
+    TVDSlopeLimitedFlux = Operators.TVDSlopeLimitedFlux(
         bottom = Operators.FirstOrderOneSided(),
         top = Operators.FirstOrderOneSided(),
     )
     @. yₜ.q =
         -divf2c(
-            upwind1(w, y.q) + FCTZalesak(
+            upwind1(w, y.q) + TVDSlopeLimitedFlux(
                 upwind3(w, y.q) - upwind1(w, y.q),
-                y.q / Δt,
-                y.q / Δt - divf2c(upwind1(w, y.q)),
+                y.q / Δt, 
             ),
         )
 end
@@ -72,7 +69,7 @@ pulse(z, t, z₀, zₕ, z₁) = abs(z - speed * t) ≤ zₕ ? z₁ : z₀
 
 FT = Float64
 t₀ = FT(0.0)
-Δt = 0.0001 * 50
+Δt = 0.0001 * 25
 t₁ = 200Δt
 z₀ = FT(0.0)
 zₕ = FT(1.0)
@@ -89,10 +86,10 @@ domain = Domains.IntervalDomain(
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
 plot_string = ["uniform", "stretched"]
-device = ClimaComms.device()
+
 for (i, stretch_fn) in enumerate(stretch_fns)
     mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-    cent_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+    cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
     face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
     z = Fields.coordinate_field(cent_space).z
     O = ones(FT, face_space)
@@ -119,17 +116,17 @@ for (i, stretch_fn) in enumerate(stretch_fns)
     err = norm(q_final .- q_analytic)
     rel_mass_err = norm((sum(q_final) - sum(q_init)) / sum(q_init))
 
-    #@test err ≤ 0.11
-    #@test rel_mass_err ≤ 10eps()
 
     plot(q_final)
     Plots.png(
-        Plots.plot!(q_analytic, title = "Zalesak FCT"),
+        Plots.plot!(q_analytic, title = "TVD Slope-Limited Flux"),
         joinpath(
             path,
-            "exact_and_computed_advected_square_wave_ZalesakFCT_" *
+            "exact_and_computed_advected_square_wave_TVDSlopeLimitedFlux_" *
             plot_string[i] *
             ".png",
         ),
     )
+    @test err ≤ 0.25
+    @test rel_mass_err ≤ 10eps()
 end
