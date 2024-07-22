@@ -1,6 +1,6 @@
 #=
 julia --project=.buildkite
-using Revise; include(joinpath("benchmarks", "scripts", "linear_vs_cartesian_indexing.jl"))
+using Revise; include(joinpath("benchmarks", "scripts", "indexing_and_static_ndranges.jl"))
 
 # Info:
 This script compares two things:
