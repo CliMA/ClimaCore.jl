@@ -42,17 +42,17 @@ at_dot_call!($X_array, $Y_array):
      143 milliseconds, 774 microseconds
 at_dot_call!($X_vector, $Y_vector):
      65 milliseconds, 567 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $us; printtb = false):
+custom_kernel_bc!($X_vector, $Y_vector, $us):
      66 milliseconds, 870 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = false):
+custom_kernel_bc!($X_array, $Y_array, $us; use_pw = false):
      143 milliseconds, 643 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = true):
+custom_kernel_bc!($X_array, $Y_array, $us; use_pw = true):
      65 milliseconds, 778 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb = false):
+custom_kernel_bc!($X_vector, $Y_vector, $uss):
      65 milliseconds, 765 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = false):
+custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = false):
      144 milliseconds, 271 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = true):
+custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = true):
      66 milliseconds, 376 microseconds
 ```
 
@@ -64,17 +64,17 @@ at_dot_call!($X_vector, $Y_vector):
      2 milliseconds, 834 microseconds
 custom_sol_kernel!($X_vector, $Y_vector, $(Val(N))):
      2 milliseconds, 547 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $us; printtb = false):
+custom_kernel_bc!($X_vector, $Y_vector, $us):
      2 milliseconds, 561 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = false):
+custom_kernel_bc!($X_array, $Y_array, $us; use_pw = false):
      4 milliseconds, 160 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; printtb = false, use_pw = true):
+custom_kernel_bc!($X_array, $Y_array, $us; use_pw = true):
      2 milliseconds, 584 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb = false):
+custom_kernel_bc!($X_vector, $Y_vector, $uss):
      2 milliseconds, 540 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = false):
+custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = false):
      2 milliseconds, 715 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; printtb = false, use_pw = true):
+custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = true):
      2 milliseconds, 547 microseconds
 ```
 =#
@@ -319,7 +319,7 @@ us_tup = (1, 2, 3)
 @test get_Nh(UniversalSizesCC(us_tup...))  == get_Nh(UniversalSizesStatic(us_tup...))
 @test get_N(UniversalSizesCC(us_tup...))   == get_N(UniversalSizesStatic(us_tup...))
 
-function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=true, use_pw=true)
+function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_pw=true)
     (; x1, x2, x3) = X
     (; y1) = Y
     bc_base = @lazy @. y1 = myadd(x1, x2, x3)
@@ -399,12 +399,12 @@ custom_kernel_bc!(X_array, Y_array, uss; use_pw=true)
 @pretty_belapsed at_dot_call!($X_array, $Y_array) # slow
 @pretty_belapsed at_dot_call!($X_vector, $Y_vector) # fast
 iscpu || @pretty_belapsed custom_sol_kernel!($X_vector, $Y_vector, $(Val(N)))
-@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $us; printtb=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; printtb=false, use_pw=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; printtb=false, use_pw=true)
+@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $us)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; use_pw=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; use_pw=true)
 
-@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $uss; printtb=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; printtb=false, use_pw=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; printtb=false, use_pw=true)
+@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $uss)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; use_pw=false)
+@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; use_pw=true)
 
 #! format: on
