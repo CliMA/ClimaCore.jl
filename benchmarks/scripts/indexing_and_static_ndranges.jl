@@ -345,6 +345,7 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=true, use_p
                 bc,
                 us,
             )
+        N = get_N(us)
         config = CUDA.launch_configuration(kernel.fun)
         threads = min(N, config.threads)
         blocks = cld(N, threads)
