@@ -15,10 +15,9 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionIJFH{<:Any, Nij, A},
-) where {F, Op, Nij, A}
+    bc::BroadcastedUnionIJFH{<:Any, Nij, Nh, A},
+) where {F, Op, Nij, Nh, A}
     # mapreduce across DataSlab2D
-    _, _, _, _, Nh = size(bc)
     mapreduce(op, 1:Nh) do h
         Base.@_inline_meta
         slabview = @inbounds slab(bc, h)
@@ -29,10 +28,9 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionIFH{<:Any, Ni, A},
-) where {F, Op, Ni, A}
+    bc::BroadcastedUnionIFH{<:Any, Ni, Nh, A},
+) where {F, Op, Ni, Nh, A}
     # mapreduce across DataSlab1D
-    _, _, _, _, Nh = size(bc)
     mapreduce(op, 1:Nh) do h
         Base.@_inline_meta
         slabview = @inbounds slab(bc, h)
@@ -77,10 +75,9 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
-) where {F, Op, Nv, Ni, A}
+    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, Nh, A},
+) where {F, Op, Nv, Ni, Nh, A}
     # mapreduce across columns
-    _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Ni, 1:Nh)) do (i, h)
         Base.@_inline_meta
         columnview = @inbounds column(bc, i, h)
@@ -91,10 +88,9 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
-) where {F, Op, Nv, Nij, A}
+    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, Nh, A},
+) where {F, Op, Nv, Nij, Nh, A}
     # mapreduce across columns
-    _, _, _, _, Nh = size(bc)
     mapreduce(op, Iterators.product(1:Nij, 1:Nij, 1:Nh)) do (i, j, h)
         Base.@_inline_meta
         columnview = @inbounds column(bc, i, j, h)

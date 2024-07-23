@@ -10,7 +10,7 @@ struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
     """
-    Perimeter `DataLayout` object: typically a `VIFH{TT,Nv,Np}`, where `TT` is the
+    Perimeter `DataLayout` object: typically a `VIFH{TT,Nv,Np,Nh}`, where `TT` is the
     transformed type, `Nv` is the number of vertical levels, and `Np` is the length of the perimeter
     """
     perimeter_data::D
@@ -74,7 +74,8 @@ function create_dss_buffer(
     if eltype(data) <: Geometry.Covariant123Vector
         TS = Geometry.UVWVector{T}
     end
-    perimeter_data = DataLayouts.VIFH{TS, Nv, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
+    perimeter_data =
+        DataLayouts.VIFH{TS, Nv, Np, Nh}(DA{T}(undef, Nv, Np, Nf, Nh))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]

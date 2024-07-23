@@ -48,10 +48,11 @@ function _SpectralElementGrid1D(
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
     nelements = Topologies.nlocalelems(topology)
+    Nh = nelements
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
-    local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
+    local_geometry = DataLayouts.IFH{LG, Nq, Nh}(Array{FT})
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
@@ -213,6 +214,7 @@ function _SpectralElementGrid2D(
     CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
     nlelems = Topologies.nlocalelems(topology)
+    Nh = nlelems
     ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
@@ -220,7 +222,7 @@ function _SpectralElementGrid2D(
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
-    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nlelems)
+    local_geometry = DataLayouts.IJFH{LG, Nq, Nh}(Array{FT})
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -378,7 +380,7 @@ function _SpectralElementGrid2D(
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
-            DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
+            DataLayouts.IFH{SG, Nq, length(interior_faces)}(Array{FT})
         for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
             enumerate(interior_faces)
             internal_surface_geometry_slab =
@@ -417,7 +419,7 @@ function _SpectralElementGrid2D(
                 boundary_faces =
                     Topologies.boundary_faces(topology, boundarytag)
                 boundary_surface_geometry =
-                    DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
+                    DataLayouts.IFH{SG, Nq, length(boundary_faces)}(Array{FT})
                 for (iface, (elem, face)) in enumerate(boundary_faces)
                     boundary_surface_geometry_slab =
                         slab(boundary_surface_geometry, iface)

@@ -30,13 +30,13 @@ end
     Nk = 6
 #! format: off
     data = DataF{S}(device_zeros(FT,Nf));                        benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
+    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
+    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
     data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
     data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
+    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
+    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
 #! format: on
 
     # data = IJKFVH{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkfill!(device, data, 3); @test all(parent(data) .== 3) # TODO: test

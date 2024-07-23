@@ -293,29 +293,29 @@ function create_ghost_buffer(
     topology::Topologies.Topology2D,
 ) where {S, Nij}
     if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(
+        send_data = DataLayouts.IJFH{S, Nij, Topologies.nsendelems(topology)}(
             typeof(parent(data)),
-            Topologies.nsendelems(topology),
         )
-        recv_data = DataLayouts.IJFH{S, Nij}(
+        recv_data = DataLayouts.IJFH{S, Nij, Topologies.nrecvelems(topology)}(
             typeof(parent(data)),
-            Topologies.nrecvelems(topology),
         )
         k = stride(parent(send_data), 4)
     else
         Nv, _, _, Nf, _ = size(parent(data))
-        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(
-                parent(data),
-                (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
-            ),
-        )
-        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(
-                parent(data),
-                (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
-            ),
-        )
+        send_data =
+            DataLayouts.VIJFH{S, Nv, Nij, Topologies.nsendelems(topology)}(
+                similar(
+                    parent(data),
+                    (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
+                ),
+            )
+        recv_data =
+            DataLayouts.VIJFH{S, Nv, Nij, Topologies.nrecvelems(topology)}(
+                similar(
+                    parent(data),
+                    (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
+                ),
+            )
         k = stride(parent(send_data), 5)
     end
 
