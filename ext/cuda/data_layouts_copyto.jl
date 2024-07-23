@@ -84,11 +84,11 @@ function Base.copyto!(
 end
 
 import ClimaCore.DataLayouts: isascalar
-function knl_copyto_flat!(dest::AbstractData, bc)
+function knl_copyto_flat!(dest::AbstractData, bc, us)
     @inbounds begin
-        n = size(dest)
         tidx = thread_index()
-        if valid_range(tidx, prod(n))
+        if tidx ≤ get_N(us)
+            n = size(dest)
             I = kernel_indexes(tidx, n)
             dest[I] = bc[I]
         end
@@ -98,14 +98,15 @@ end
 
 function cuda_copyto!(dest::AbstractData, bc)
     (_, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
-        auto_launch!(knl_copyto_flat!, (dest, bc), dest; auto = true)
+        auto_launch!(knl_copyto_flat!, (dest, bc, us), dest; auto = true)
     end
     return dest
 end
 
 # TODO: can we use CUDA's luanch configuration for all data layouts?
-# Currently, it seems to have a slight performance degredation.
+# Currently, it seems to have a slight performance degradation.
 #! format: off
 # Base.copyto!(dest::IJFH{S, Nij},          bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, Nh}, ::ToCUDA) where {S, Nij, Nh} = cuda_copyto!(dest, bc)
 Base.copyto!(dest::IFH{S, Ni, Nh},        bc::DataLayouts.BroadcastedUnionIFH{S, Ni, Nh}, ::ToCUDA) where {S, Ni, Nh} = cuda_copyto!(dest, bc)
