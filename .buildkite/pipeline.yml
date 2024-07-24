@@ -93,6 +93,10 @@ steps:
         key: data_opt_similar
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
 
+      - label: "Unit: opt_universal_size"
+        key: opt_universal_size
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_universal_size.jl"
+
       - label: "Unit: data_ndims"
         key: unit_data_ndims
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"

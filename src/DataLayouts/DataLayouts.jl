@@ -76,6 +76,41 @@ corresponding to `UniversalSize`.
 """
 @inline universal_size(::UniversalSize{Ni, Nj, Nv, Nh}) where {Ni, Nj, Nv, Nh} =
     (Ni, Nj, Nv, Nh)
+
+"""
+    get_N(::AbstractData)
+    get_N(::UniversalSize)
+
+Statically returns `prod((Ni, Nj, Nv, Nh))`
+"""
+@inline get_N(::UniversalSize{Ni, Nj, Nv, Nh}) where {Ni, Nj, Nv, Nh} =
+    prod((Ni, Nj, Nv, Nh))
+
+@inline get_N(data::AbstractData) = get_N(UniversalSize(data))
+
+"""
+    get_Nv(::UniversalSize)
+
+Statically returns `Nv`.
+"""
+get_Nv(::UniversalSize{Ni, Nj, Nv}) where {Ni, Nj, Nv} = Nv
+
+"""
+    get_Nij(::UniversalSize)
+
+Statically returns `Nij`.
+"""
+get_Nij(::UniversalSize{Nij}) where {Nij} = Nij
+
+"""
+    get_Nh(::UniversalSize)
+
+Statically returns `Nh`.
+"""
+get_Nh(::UniversalSize{Ni, Nj, Nv, Nh}) where {Ni, Nj, Nv, Nh} = Nh
+
+get_Nh(data::AbstractData) = Nh
+
 @inline universal_size(data::AbstractData) = universal_size(UniversalSize(data))
 
 function Base.show(io::IO, data::AbstractData)
