@@ -49,6 +49,20 @@ include("struct.jl")
 
 abstract type AbstractData{S} end
 
+abstract type AbstractDataSpecificCartesianIndex{N} <:
+              Base.AbstractCartesianIndex{N} end
+
+"""
+    DataSpecificCartesianIndex{N} <: AbstractDataSpecificCartesianIndex{N}
+
+A DataLayout-specific CartesianIndex, which is used to provide support for
+`getindex` for DataLayouts such that indices are not swapped. This is used
+to improve memory access patterns on GPUs.
+"""
+struct DataSpecificCartesianIndex{N} <: AbstractDataSpecificCartesianIndex{N}
+    I::CartesianIndex{N}
+end
+
 @inline Base.size(data::AbstractData, i::Integer) = size(data)[i]
 @inline Base.size(data::AbstractData) = universal_size(data)
 
@@ -1354,5 +1368,7 @@ include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
+include("cartesian_index.jl")
+include("has_uniform_datalayouts.jl")
 
 end # module
