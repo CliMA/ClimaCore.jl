@@ -1166,11 +1166,25 @@ steps:
         key: "cpu_datalayouts_fill"
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
 
+      - label: "Perf: DataLayouts copyto!"
+        key: "cpu_datalayouts_copyto"
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
+
       - label: "Perf: DataLayouts fill"
         key: "gpu_datalayouts_fill"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: DataLayouts copyto"
+        key: "gpu_datalayouts_copyto"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
