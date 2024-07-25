@@ -80,6 +80,21 @@ replace_basetypes(::Type{T}, ::Type{T′}, value, values...) where {T, T′} =
 # change that object's type parameters, but there is no general way to map field
 # types to type parameters.
 
+parent_array_type(
+    ::Type{IJKFVH{S, Nij, Nk, Nv, A}},
+) where {S, Nij, Nk, Nv, A} = A
+parent_array_type(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} = A
+parent_array_type(::Type{IFH{S, Ni, A}}) where {S, Ni, A} = A
+parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
+parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
+parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
+parent_array_type(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} =
+    A
+parent_array_type(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = A
+parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
+
 """
     parent_array_type(::Type{<:AbstractArray})
 
