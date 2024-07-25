@@ -39,5 +39,7 @@ Base.@propagate_inbounds column_args(args::Tuple, inds...) =
 Base.@propagate_inbounds column_args(args::Tuple{Any}, inds...) =
     (column(args[1], inds...),)
 Base.@propagate_inbounds column_args(args::Tuple{}, inds...) = ()
+Base.@propagate_inbounds column_args(args::NamedTuple, inds...) =
+    NamedTuple{keys(args)}(column_args(values(args), inds...))
 
 function level end

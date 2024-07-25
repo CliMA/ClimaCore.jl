@@ -3299,6 +3299,15 @@ function Base.Broadcast.materialize!(
     )
 end
 
+Base.@propagate_inbounds column(op::FiniteDifferenceOperator, inds...) =
+    unionall_type(typeof(op))(column_args(op.bcs, inds...))
+Base.@propagate_inbounds column(sbc::StencilBroadcasted{S}, inds...) where {S} =
+    StencilBroadcasted{S}(
+        column(sbc.op, inds...),
+        column_args(sbc.args, inds...),
+        column(sbc.axes, inds...),
+    )
+
 #TODO: the optimizer dies with column broadcast expressions over a certain complexity
 if hasfield(Method, :recursion_relation)
     dont_limit = (args...) -> true

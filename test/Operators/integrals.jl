@@ -5,9 +5,11 @@ import ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore
 import ClimaCore: Spaces, Fields, Operators
-import ClimaCore.RecursiveApply: rmax
 import ClimaCore.Operators:
-    column_integral_definite!, column_integral_indefinite!, column_mapreduce!
+    column_integral_definite!,
+    column_integral_indefinite!,
+    column_reduce!,
+    column_accumulate!
 
 include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -20,19 +22,14 @@ center_to_face_space(center_space::Spaces.CenterFiniteDifferenceSpace) =
 center_to_face_space(center_space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
     Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)
 
-test_allocs(lim::Nothing, allocs, caller) = nothing
-function test_allocs(lim::Int, allocs, caller)
-    @assert allocs ≥ 0
-    if lim == 0
+test_allocs(allocs) =
+    if ClimaComms.device() isa ClimaComms.AbstractCPUDevice
         @test allocs == 0
     else
-        @test allocs ≤ lim
-        allocs < lim && @show allocs, lim, caller
-        @test_broken allocs == 0 # notify when things improve
+        @test allocs ≤ 5000 # GPU always has ~2 kB of non-deterministic allocs.
     end
-end
 
-function test_column_integral_definite!(center_space, alloc_lim)
+function test_column_integral_definite!(center_space)
     face_space = center_to_face_space(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
@@ -53,11 +50,10 @@ function test_column_integral_definite!(center_space, alloc_lim)
     cuda = (AnyFrameModule(CUDA),)
     @test_opt ignored_modules = cuda column_integral_definite!(∫u_test, ᶜu)
 
-    allocs = @allocated column_integral_definite!(∫u_test, ᶜu)
-    test_allocs(alloc_lim, allocs, "test_column_integral_definite")
+    test_allocs(@allocated column_integral_definite!(∫u_test, ᶜu))
 end
 
-function test_column_integral_indefinite!(center_space, alloc_lim)
+function test_column_integral_indefinite!(center_space)
     face_space = center_to_face_space(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
@@ -74,27 +70,14 @@ function test_column_integral_indefinite!(center_space, alloc_lim)
     cuda = (AnyFrameModule(CUDA),)
     @test_opt ignored_modules = cuda column_integral_indefinite!(ᶠ∫u_test, ᶜu)
 
-    allocs = @allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu)
-    test_allocs(alloc_lim, allocs, "test_column_integral_indefinite!")
+    test_allocs(@allocated column_integral_indefinite!(ᶠ∫u_test, ᶜu))
 end
 
-function test_column_integral_indefinite_fn!(center_space, alloc_lim)
+function test_column_integral_indefinite_fn!(center_space)
     face_space = center_to_face_space(center_space)
     ᶜz = Fields.coordinate_field(center_space).z
     ᶠz = Fields.coordinate_field(face_space).z
-    FT = Spaces.undertype(center_space)
-
-    ᶜu = Dict()
-    ᶠ∫u_ref = Dict()
-    ᶠ∫u_test = Dict()
-
-
-    # ᶜu = map(z -> (; one = one(z), powers = (z, z^2, z^3)), ᶜz)
-    # ᶠ∫u_ref = map(z -> (; one = z, powers = (z^2 / 2, z^3 / 3, z^4 / 4)), ᶠz)
-    # ᶠ∫u_test = similar(ᶠ∫u_ref)
-
     for (i, fn) in enumerate(((ϕ, z) -> z, (ϕ, z) -> z^2, (ϕ, z) -> z^3))
-        ᶜu = ᶜz .^ i
         ᶠ∫u_ref = ᶠz .^ (i + 1) ./ (i + 1)
         ᶠ∫u_test = similar(ᶠ∫u_ref)
 
@@ -107,136 +90,79 @@ function test_column_integral_indefinite_fn!(center_space, alloc_lim)
             maximum(@. abs((ref_array - test_array) / ref_array))
         @test max_relative_error <= 0.006 # Less than 0.6% error at the top level.
 
-        # @test_opt column_integral_indefinite!(fn, ᶠ∫u_test)
+        cuda = (AnyFrameModule(CUDA),)
+        @test_opt ignored_modules = cuda column_integral_indefinite!(
+            fn,
+            ᶠ∫u_test,
+        )
 
-        allocs = @allocated column_integral_indefinite!(fn, ᶠ∫u_test)
-        test_allocs(alloc_lim, allocs, "test_column_integral_indefinite_fn!")
+        test_allocs(@allocated column_integral_indefinite!(fn, ᶠ∫u_test))
     end
-
 end
 
-function test_column_mapreduce!(space, alloc_lim)
-    z_field = Fields.coordinate_field(space).z
-    z_top_field = Fields.level(z_field, Operators.right_idx(space))
-    sin_field = @. sin(pi * z_field / z_top_field)
-    square_and_sin(z, sin_value) = (; square = z^2, sin = sin_value)
-    device = ClimaComms.device(z_field)
-    reduced_field_ref = ClimaComms.allowscalar(device) do
-        map(z -> (; square = z^2, sin = one(z)), z_top_field)
-    end
-    reduced_field_test = similar(reduced_field_ref)
-    args = (square_and_sin, rmax, reduced_field_test, z_field, sin_field)
+function test_column_reduce_and_accumulate!(center_space)
+    face_space = center_to_face_space(center_space)
+    ᶜwhole_number = ones(center_space)
+    column_accumulate!(+, ᶜwhole_number, ᶜwhole_number) # 1:Nv per column
+    ᶠwhole_number = ones(face_space)
+    column_accumulate!(+, ᶠwhole_number, ᶠwhole_number) # 1:(Nv + 1) per column
 
-    column_mapreduce!(args...)
-    ref_array = parent(reduced_field_ref)
-    test_array = parent(reduced_field_test)
-    max_relative_error = maximum(@. abs((ref_array - test_array) / ref_array))
-    @test max_relative_error <= 0.004 # Less than 0.4% error.
+    safe_binomial(n, k) = binomial(Int32(n), Int32(k)) # GPU-compatible binomial
 
-    cuda = (AnyFrameModule(CUDA),)
-    if alloc_lim == 0
-        @test_opt ignored_modules = cuda column_mapreduce!(args...)
+    # https://en.wikipedia.org/wiki/Motzkin_number#Properties
+    motzkin_number(n) =
+        sum(0:(n / 2); init = zero(n)) do k
+            safe_binomial(n, 2 * k) * safe_binomial(2 * k, k) / (k + 1)
+        end
+    recursive_motzkin_number((mₙ₋₁, mₙ₋₂), n) =
+        ((2 * n + 1) * mₙ₋₁ + (3 * n - 3) * mₙ₋₂) / (n + 2)
+
+    # On step n of the reduction/accumulation, update (mₙ₋₁, mₙ₋₂) to (mₙ, mₙ₋₁).
+    f((mₙ₋₁, mₙ₋₂), n) = (recursive_motzkin_number((mₙ₋₁, mₙ₋₂), n), mₙ₋₁)
+    init = (1, 0) # m₀ = 1, m₋₁ = 0 (m₋₁ can be set to any finite value)
+    transform = first # Get mₙ from each (mₙ, mₙ₋₁) pair before saving to output.
+
+    for input in (ᶜwhole_number, ᶠwhole_number)
+        last_input_level = Fields.level(input, Operators.right_idx(axes(input)))
+        output = similar(last_input_level)
+        reference_output = motzkin_number.(last_input_level)
+
+        set_output! = () -> column_reduce!(f, output, input; init, transform)
+        set_output!()
+        @test output == reference_output
+        @test_opt ignored_modules = (AnyFrameModule(CUDA),) set_output!()
+        test_allocs(@allocated set_output!())
     end
-    allocs = @allocated column_mapreduce!(args...)
-    test_allocs(alloc_lim, allocs, "test_column_mapreduce!")
+
+    ᶜoutput = similar(ᶜwhole_number)
+    ᶠoutput = similar(ᶠwhole_number)
+    for (input, output, reference_output) in (
+        (ᶜwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number)),
+        (ᶠwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number)),
+        (ᶠwhole_number, ᶜoutput, motzkin_number.(ᶜwhole_number .+ 1)),
+        (ᶜwhole_number, ᶠoutput, motzkin_number.(ᶠwhole_number .- 1)),
+    )
+        set_output! =
+            () -> column_accumulate!(f, output, input; init, transform)
+        set_output!()
+        @test output == reference_output
+        @test_opt ignored_modules = (AnyFrameModule(CUDA),) set_output!()
+        test_allocs(@allocated set_output!())
+    end
 end
 
 @testset "Integral operations unit tests" begin
-    # device = ClimaComms.CPUSingleThreaded();
     device = ClimaComms.device()
     context = ClimaComms.SingletonCommsContext(device)
-    broken = device isa ClimaComms.CUDADevice
-    if device isa ClimaComms.CPUSingleThreaded
-        i_lim = Dict()
-        i_lim[(1, Float32)] = 0
-        i_lim[(2, Float32)] = 0
-        i_lim[(3, Float32)] = 0
-        i_lim[(4, Float32)] = 0
-
-        i_lim[(1, Float64)] = 0
-        i_lim[(2, Float64)] = 0
-        i_lim[(3, Float64)] = 0
-        i_lim[(4, Float64)] = 0
-
-        lim = Dict()
-        lim[(1, Float32)] = 2768
-        lim[(2, Float32)] = 2960
-        lim[(3, Float32)] = 8183808
-        lim[(4, Float32)] = 8650752
-
-        lim[(1, Float64)] = 3648
-        lim[(2, Float64)] = 3920
-        lim[(3, Float64)] = 9510912
-        lim[(4, Float64)] = 10100736
-    else
-        i_lim = Dict()
-        i_lim[(1, Float32)] = 1728
-        i_lim[(2, Float32)] = 4720
-        i_lim[(3, Float32)] = 2304
-        i_lim[(4, Float32)] = 8176
-
-        i_lim[(1, Float64)] = 1936
-        i_lim[(2, Float64)] = 4720
-        i_lim[(3, Float64)] = 2544
-        i_lim[(4, Float64)] = 8176
-
-        lim = Dict()
-        lim[(1, Float32)] = 34144
-        lim[(2, Float32)] = 37600
-        lim[(3, Float32)] = 4399104
-        lim[(4, Float32)] = 4571136
-
-        lim[(1, Float64)] = 35024
-        lim[(2, Float64)] = 38560
-        lim[(3, Float64)] = 5455872
-        lim[(4, Float64)] = 5726208
-    end
-    if are_boundschecks_forced
-        lim = Dict(k => nothing for k in keys(lim))
-        i_lim = Dict(k => nothing for k in keys(lim))
-    end
-
     for FT in (Float32, Float64)
-        test_column_integral_definite!(
+        for space in (
             TU.ColumnCenterFiniteDifferenceSpace(FT; context),
-            i_lim[(1, FT)],
-        )
-        test_column_integral_definite!(
             TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-            i_lim[(2, FT)],
         )
-        test_column_integral_indefinite!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
-            i_lim[(3, FT)],
-        )
-        test_column_integral_indefinite!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-            i_lim[(4, FT)],
-        )
-        broken || test_column_integral_indefinite_fn!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
-            i_lim[(3, FT)],
-        )
-        broken || test_column_integral_indefinite_fn!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-            i_lim[(4, FT)],
-        )
-
-        broken || test_column_mapreduce!(
-            TU.ColumnCenterFiniteDifferenceSpace(FT; context),
-            lim[(1, FT)],
-        )
-        broken || test_column_mapreduce!(
-            TU.ColumnFaceFiniteDifferenceSpace(FT; context),
-            lim[(2, FT)],
-        )
-        broken || test_column_mapreduce!(
-            TU.CenterExtrudedFiniteDifferenceSpace(FT; context),
-            lim[(3, FT)],
-        )
-        broken || test_column_mapreduce!(
-            TU.FaceExtrudedFiniteDifferenceSpace(FT; context),
-            lim[(4, FT)],
-        )
+            test_column_integral_definite!(space)
+            test_column_integral_indefinite!(space)
+            test_column_integral_indefinite_fn!(space)
+            test_column_reduce_and_accumulate!(space)
+        end
     end
 end
