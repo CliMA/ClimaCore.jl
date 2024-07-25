@@ -143,6 +143,7 @@ const ExtrudedCubedSphereSpectralElementField3D{V, S} = Field{
 }
 
 Base.propertynames(field::Field) = propertynames(getfield(field, :values))
+Base.ndims(::Type{Field{V, S}}) where {V, S} = Base.ndims(V)
 @inline field_values(field::Field) = getfield(field, :values)
 
 # Define the axes field to be the todata(bc) of the return field

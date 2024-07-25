@@ -1533,4 +1533,8 @@ array2data(
     ::VIJFH{<:Any, Nv, Nij},
 ) where {T, Nv, Nij} = VIJFH{T, Nv, Nij}(reshape(array, Nv, Nij, Nij, 1, :))
 
+Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
+Base.ndims(::Type{T}) where {T <: AbstractData} =
+    Base.ndims(parent_array_type(T))
+
 end # module
