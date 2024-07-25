@@ -9,15 +9,18 @@ import ClimaComms
 @static pkgversion(ClimaComms) >= v"0.6" && ClimaComms.@import_required_backends
 
 function benchmarkcopyto!(device, data, val, name)
+    data_rhs = similar(data)
+    fill!(data_rhs, val)
     println("Benchmarking ClimaCore copyto! for $name DataLayout")
-    bc = Base.Broadcast.broadcasted(identity, val)
+    bc = Base.Broadcast.broadcasted(identity, data_rhs)
+    bcp = Base.Broadcast.broadcasted(identity, parent(data_rhs))
     trial = @benchmark ClimaComms.@cuda_sync $device Base.copyto!($data, $bc)
     show(stdout, MIME("text/plain"), trial)
     println()
     println("Benchmarking array copyto! for $name DataLayout")
     trial = @benchmark ClimaComms.@cuda_sync $device Base.copyto!(
         $(parent(data)),
-        $bc,
+        $bcp,
     )
     show(stdout, MIME("text/plain"), trial)
     println()
@@ -37,8 +40,9 @@ end
     data = DataF{S}(device_zeros(FT,Nf));                        benchmarkcopyto!(device, data, 3, "DataF" ); @test all(parent(data) .== 3)
     data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     benchmarkcopyto!(device, data, 3, "IJFH"  ); @test all(parent(data) .== 3)
     data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          benchmarkcopyto!(device, data, 3, "IFH"   ); @test all(parent(data) .== 3)
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkcopyto!(device, data, 3, "IJF"   ); @test all(parent(data) .== 3)
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkcopyto!(device, data, 3, "IF"    ); @test all(parent(data) .== 3)
+    # The parent array of IJF and IF datalayouts are MArrays, and can therefore not be passed into CUDA kernels on the RHS.
+    # data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkcopyto!(device, data, 3, "IJF"   ); @test all(parent(data) .== 3)
+    # data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkcopyto!(device, data, 3, "IF"    ); @test all(parent(data) .== 3)
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    benchmarkcopyto!(device, data, 3, "VF"    ); @test all(parent(data) .== 3)
     data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));benchmarkcopyto!(device, data, 3, "VIJFH" ); @test all(parent(data) .== 3)
     data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  benchmarkcopyto!(device, data, 3, "VIFH"  ); @test all(parent(data) .== 3)
