@@ -61,14 +61,14 @@ steps:
 
       - label: "Unit: RecursiveApply"
         key: unit_recursive_apply
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/unit_recursive_apply.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/RecursiveApply/recursive_apply.jl"
 
   - group: "Unit: Utilities"
     steps:
 
       - label: "Unit: plushalf"
         key: unit_plushalf
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/unit_plushalf.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Utilities/plushalf.jl"
 
   - group: "Unit: DataLayouts"
     steps:
@@ -76,30 +76,6 @@ steps:
       - label: "Unit: data0d"
         key: unit_data0d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data0d.jl"
-
-      - label: "Unit: data_fill"
-        key: unit_data_fill
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
-
-      - label: "Unit: data_copyto"
-        key: unit_data_copyto
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
-
-      - label: "Unit: mapreduce"
-        key: unit_data_mapreduce
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
-
-      - label: "Unit: data_opt_similar"
-        key: data_opt_similar
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
-
-      - label: "Unit: opt_universal_size"
-        key: opt_universal_size
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_universal_size.jl"
-
-      - label: "Unit: data_ndims"
-        key: unit_data_ndims
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"
 
       - label: "Unit: data1d"
         key: unit_data1d
@@ -127,48 +103,6 @@ steps:
         agents:
           slurm_gpus: 1
 
-      - label: "Unit: data fill"
-        key: gpu_unit_data_fill
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_fill.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: data mapreduce"
-        key: gpu_unit_data_mapreduce
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Unit: data mapreduce (2 gpus)"
-        key: gpu_2_unit_data_mapreduce
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
-        env:
-           CLIMACOMMS_DEVICE: "CUDA"
-           CLIMACOMMS_CONTEXT: "MPI"
-        agents:
-           slum_ntasks: 2
-           slurm_gpus: 2
-
-      - label: "Unit: data copyto"
-        key: gpu_unit_data_copyto
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
   - group: "Unit: Geometry"
     steps:
 
@@ -180,10 +114,6 @@ steps:
         key: unit_axistensors
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/axistensors.jl"
 
-      - label: "Unit: rmul_with_projection"
-        key: unit_rmul_with_projection
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Geometry/rmul_with_projection.jl"
-
   - group: "Unit: Meshes"
     steps:
 
@@ -194,14 +124,6 @@ steps:
       - label: "Unit: meshes rectangle"
         key: unit_meshes_rectangle
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/rectangle.jl"
-
-      - label: "Unit: meshes opt"
-        key: unit_meshes_opt
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/opt_meshes.jl"
-
-      - label: "Unit: meshes cubedsphere"
-        key: unit_meshes_cubed_sphere
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Meshes/cubedsphere.jl"
 
   - group: "Unit: Topologies"
     steps:
@@ -243,16 +165,13 @@ steps:
 
       - label: "Unit: spaces"
         key: unit_spaces
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/spaces.jl"
 
       - label: "Unit: cuda spaces"
         key: "gpu_cuda_spaces"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/unit_spaces.jl"
-          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/opt_spaces.jl"
+          - "srun julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/spaces.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -467,18 +386,13 @@ steps:
 
       - label: "Unit: field"
         key: unit_field
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/field.jl"
 
       - label: "Unit: field cuda"
         key: unit_field_cuda
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/field.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -514,7 +428,7 @@ steps:
 
       - label: "Unit: diffusion2d"
         key: unit_diffusion2d
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_diffusion2d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/diffusion2d.jl"
 
       - label: "Unit: sphere geometry"
         key: unit_sphere_geometry
@@ -542,13 +456,11 @@ steps:
 
       - label: "Unit: sphere hyperdiffusion"
         key: unit_sphere_hyperdiffusion
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_hyperdiffusion.jl"
 
       - label: "Unit: sphere hyperdiffusion vec"
         key: unit_sphere_hyperdiffusion_vec
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/convergence_sphere_hyperdiffusion_vec.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/sphere_hyperdiffusion_vec.jl"
 
       - label: "Unit: spec ops plane"
         key: unit_spec_ops_plane
@@ -556,9 +468,7 @@ steps:
 
       - label: "Unit: column"
         key: unit_column
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/unit_column.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_column.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/column.jl"
 
       - label: "Unit: wfact"
         key: unit_wfact
@@ -572,30 +482,17 @@ steps:
         key: unit_fd_tensor
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/tensor.jl"
 
-      - label: "Unit: advection operator convergence"
-        key: unit_adv_conv
-        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/convergence_advection_diffusion1d.jl"
-        soft_fail: true
-
       - label: "Unit: hyb ops 2d"
         key: unit_hyb_ops_2d
-        command:
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_2d.jl"
-           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_2d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/2d.jl"
 
       - label: "Unit: hyb ops 3d"
         key: unit_hyb_ops_3d
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/3d.jl"
 
       - label: "Unit: hyb ops 3d CUDA"
         key: unit_hyb_ops_3d_cuda
-        command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/convergence_3d.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_3d.jl"
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/3d.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -646,8 +543,8 @@ steps:
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/unit_cuda.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/simulation_cuda.jl"
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/hybrid/cuda.jl CUDA"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -705,12 +602,12 @@ steps:
       - label: "Unit: Thomas Algorithm"
         key: "cpu_thomas_algorithm"
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/thomas_algorithm.jl"
 
       - label: "Unit: Thomas Algorithm"
         key: "gpu_thomas_algorithm"
         command:
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/thomas_algorithm.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -722,6 +619,10 @@ steps:
       - label: "Unit: BandMatrixRow"
         key: unit_band_matrix_row
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/band_matrix_row.jl"
+
+      - label: "Unit: rmul_with_projection"
+        key: unit_rmul_with_projection
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/rmul_with_projection.jl"
 
       - label: "Unit: field2arrays"
         key: unit_field2arrays
@@ -1159,37 +1060,6 @@ steps:
         key: "cpu_axis_tensor_conversion_perf_bm"
         command: "julia --color=yes --project=.buildkite test/Geometry/axistensor_conversion_benchmarks.jl"
 
-  - group: "Perf: DataLayouts"
-    steps:
-
-      - label: "Perf: DataLayouts fill"
-        key: "cpu_datalayouts_fill"
-        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
-
-      - label: "Perf: DataLayouts copyto!"
-        key: "cpu_datalayouts_copyto"
-        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
-
-      - label: "Perf: DataLayouts fill"
-        key: "gpu_datalayouts_fill"
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
-      - label: "Perf: DataLayouts copyto"
-        key: "gpu_datalayouts_copyto"
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
-
   - group: "Perf: Fields"
     steps:
 
@@ -1211,16 +1081,13 @@ steps:
         # TODO: combine this with FD operators above
       - label: "Perf: FD operators from the wild"
         key: perf_FD_ops_examples
-        command:
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
+        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
 
       - label: "Perf: FD operators from the wild (gpu)"
         key: perf_FD_ops_examples_gpu
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/Operators/finitedifference/opt_examples.jl"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_examples.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1238,25 +1105,16 @@ steps:
         key: "perf_cpu_implicit_stencil"
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/finitedifference/opt_implicit_stencils.jl"
 
-      - label: "Perf: FD operator stencil benchmarks"
+      - label: "Perf: FD operator benchmarks"
         key: "perf_fd_ops"
-        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
-
-      - label: "Perf: GPU FD operator stencil benchmarks"
-        key: "gpu_perf_fd_ops"
-        command:
-          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
-        env:
-          CLIMACOMMS_DEVICE: "CUDA"
-        agents:
-          slurm_gpus: 1
+        command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/column_benchmark.jl"
+        soft_fail: true
 
       - label: "Perf: SEM operator benchmarks (cuda Float32)"
         key: "perf_gpu_spectral_ops_cuda_float32"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float32"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1264,13 +1122,13 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float32)"
         key: "perf_gpu_spectral_ops_cpu_float32"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float32"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float32"
 
       - label: "Perf: SEM operator benchmarks (cuda Float64)"
         key: "perf_gpu_spectral_ops_cuda_float64"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA --float-type Float64"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1278,17 +1136,17 @@ steps:
 
       - label: "Perf: SEM operator benchmarks (CPU Float64)"
         key: "perf_gpu_spectral_ops_cpu_float64"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64"
 
       - label: "Perf: SEM operator benchmarks (extruded CPU Float64)"
         key: "perf_gpu_spectral_ops_extruded_cpu_float64"
-        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
+        command: "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CPU --float-type Float64 --space-type ExtrudedFiniteDifferenceSpace"
 
       - label: "Perf: SEM operator benchmarks"
         key: "perf_gpu_spectral_ops"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl"
+          - "julia --color=yes --project=.buildkite test/Operators/spectralelement/benchmark_ops.jl --device CUDA"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

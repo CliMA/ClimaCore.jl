@@ -53,9 +53,9 @@ rectangle_mesh = ClimaCore.Meshes.RectilinearMesh(rectangle_domain, 16, 16)
 #
 # A _topology_ determines the ordering and connections between elements of a mesh
 # - At the moment, this is only required for 2D meshes
-device = ClimaComms.device()
+
 rectangle_topology = ClimaCore.Topologies.Topology2D(
-    ClimaComms.SingletonCommsContext(device),
+    ClimaComms.SingletonCommsContext(),
     rectangle_mesh,
 )
 #----------------------------------------------------------------------------
@@ -71,8 +71,7 @@ rectangle_topology = ClimaCore.Topologies.Topology2D(
 #
 # You can construct either the center or face space from the mesh, then construct the opposite space from the original one (this is to avoid allocating additional memory).
 
-column_center_space =
-    ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, column_mesh)
+column_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(column_mesh)
 ## construct the face space from the center one
 column_face_space =
     ClimaCore.Spaces.FaceFiniteDifferenceSpace(column_center_space)

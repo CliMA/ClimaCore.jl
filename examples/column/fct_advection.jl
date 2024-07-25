@@ -1,5 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
@@ -89,11 +87,11 @@ initial_mass = zeros(FT, length(stretch_fns))
 mass = zeros(FT, length(stretch_fns))
 rel_mass_err = zeros(FT, length(stretch_fns))
 plot_string = ["uniform", "stretched"]
-device = ClimaComms.device()
+
 for (i, stretch_fn) in enumerate(stretch_fns)
 
     mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-    cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = Fields.coordinate_field(cs)
     O = ones(FT, fs)

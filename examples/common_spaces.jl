@@ -38,7 +38,7 @@ function make_horizontal_space(
 )
     quad = Quadratures.GLL{npoly + 1}()
     if mesh isa Meshes.AbstractMesh1D
-        topology = Topologies.IntervalTopology(ClimaComms.device(context), mesh)
+        topology = Topologies.IntervalTopology(mesh)
         space = Spaces.SpectralElementSpace1D(topology, quad)
     elseif mesh isa Meshes.AbstractMesh2D
         topology = Topologies.Topology2D(context, mesh)
@@ -68,9 +68,8 @@ function make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
         Geometry.ZPoint(z_max);
         boundary_names = (:bottom, :top),
     )
-    context = ClimaComms.context(h_space)
     z_mesh = Meshes.IntervalMesh(z_domain, z_stretch; nelems = z_elem)
-    z_topology = Topologies.IntervalTopology(ClimaComms.device(context), z_mesh)
+    z_topology = Topologies.IntervalTopology(z_mesh)
     z_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(h_space, z_space)
     face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)

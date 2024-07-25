@@ -1,5 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
 import ClimaCore:
     Fields,
     Domains,
@@ -34,8 +32,8 @@ domain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 mesh = Meshes.IntervalMesh(domain, nelems = n)
-device = ClimaComms.device()
-cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+
+cs = Spaces.CenterFiniteDifferenceSpace(mesh)
 fs = Spaces.FaceFiniteDifferenceSpace(cs)
 zc = Fields.coordinate_field(cs)
 zp = (z₀ + z₁ / n / 2):(z₁ / n):(z₁ - z₁ / n / 2)

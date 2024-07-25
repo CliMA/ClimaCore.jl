@@ -1,7 +1,6 @@
 using Test
 using StaticArrays
 using ClimaComms, ClimaCore
-ClimaComms.@import_required_backends
 import ClimaCore:
     Geometry,
     Fields,
@@ -12,6 +11,7 @@ import ClimaCore:
     Operators,
     Quadratures
 using LinearAlgebra, IntervalSets
+using CUDA
 
 FT = Float64
 domain = Domains.RectangleDomain(
@@ -48,6 +48,7 @@ grid_topology = Topologies.Topology2D(
 grid_space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 coords = Fields.coordinate_field(grid_space)
 
+CUDA.allowscalar(false)
 f = sin.(coords.x .+ 2 .* coords.y)
 g = Geometry.UVVector.(sin.(coords.x), 2 .* cos.(coords.y .+ coords.x))
 

@@ -1,5 +1,4 @@
-import ClimaComms
-ClimaComms.@import_required_backends
+using ClimaComms
 using OrdinaryDiffEq
 using Test
 using Statistics: mean
@@ -204,8 +203,7 @@ function run_deformation_flow(use_limiter, fct_op, dt)
         boundary_names = (:bottom, :top),
     )
     vert_mesh = Meshes.IntervalMesh(vert_domain, nelems = zelem)
-    device = ClimaComms.device(context)
-    vert_cent_space = Spaces.CenterFiniteDifferenceSpace(device, vert_mesh)
+    vert_cent_space = Spaces.CenterFiniteDifferenceSpace(vert_mesh)
 
     horz_domain = Domains.SphereDomain(R)
     horz_mesh = Meshes.EquiangularCubedSphere(horz_domain, helem)

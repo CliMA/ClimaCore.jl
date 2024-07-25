@@ -125,7 +125,7 @@ end
             2 .* cos.(coords_cpu.long .+ coords_cpu.lat),
         )
     x_gpu = Geometry.UVWVector.(cosd.(coords_gpu.lat), 0.0, 0.0)
-
+    CUDA.allowscalar(false)
     f_gpu = sin.(coords_gpu.lat .+ 2 .* coords_gpu.long)
     g_gpu =
         Geometry.UVVector.(

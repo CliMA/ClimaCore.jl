@@ -1,9 +1,6 @@
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
-import ClimaComms
-ClimaComms.@import_required_backends
-
 import ClimaCore:
     ClimaCore,
     slab,
@@ -47,9 +44,7 @@ function hvspace_2D(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.IntervalDomain(
         Geometry.XPoint{FT}(xlim[1]),
@@ -57,7 +52,7 @@ function hvspace_2D(
         periodic = true,
     )
     horzmesh = Meshes.IntervalMesh(horzdomain, nelems = xelem)
-    horztopology = Topologies.IntervalTopology(device, horzmesh)
+    horztopology = Topologies.IntervalTopology(horzmesh)
     quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
     z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(horzspace)))

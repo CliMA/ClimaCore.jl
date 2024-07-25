@@ -1,5 +1,4 @@
-import ClimaComms
-ClimaComms.@import_required_backends
+using ClimaComms
 using Test
 using LinearAlgebra
 
@@ -68,8 +67,7 @@ function sphere_3D(
         Meshes.ExponentialStretching(FT(7e3));
         nelems = zelem,
     )
-    device = ClimaComms.device(context)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = Domains.SphereDomain(R)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)

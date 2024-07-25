@@ -28,7 +28,6 @@ end
     z_max = FT(30e3)
     z_elem = 10
     h_elem = 4
-    device = ClimaComms.device(comms_ctx)
     # horizontal space
     domain = Domains.SphereDomain(R)
     horizontal_mesh = Meshes.EquiangularCubedSphere(domain, h_elem)
@@ -56,7 +55,7 @@ end
         )
 
     z_mesh = Meshes.IntervalMesh(z_domain, nelems = z_elem)
-    z_topology = Topologies.IntervalTopology(device, z_mesh)
+    z_topology = Topologies.IntervalTopology(z_mesh)
     z_space = Spaces.CenterFiniteDifferenceSpace(z_topology)
     # Extruded 3D space
     center_space = Spaces.ExtrudedFiniteDifferenceSpace(

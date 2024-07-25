@@ -43,8 +43,7 @@ multiples of `LinearAlgebra.I`. This comes with the following functionality:
 """
 module MatrixFields
 
-import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec
-import LinearAlgebra: inv, norm, ldiv!, mul!
+import LinearAlgebra: I, UniformScaling, Adjoint, AdjointAbsVec, mul!, inv, norm
 import StaticArrays: SMatrix, SVector
 import BandedMatrices: BandedMatrix, band, _BandedMatrix
 import RecursiveArrayTools: recursive_bottom_eltype
@@ -64,13 +63,9 @@ import ..Spaces
 import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
+import ..allow_scalar
 
 using ..Utilities.UnrolledFunctions
-using ..Geometry:
-    rmul_with_projection,
-    mul_with_projection,
-    axis_tensor_type,
-    rmul_return_type
 
 export DiagonalMatrixRow,
     BidiagonalMatrixRow,
@@ -78,7 +73,11 @@ export DiagonalMatrixRow,
     QuaddiagonalMatrixRow,
     PentadiagonalMatrixRow
 export FieldVectorKeys, FieldMatrixKeys, FieldVectorView, FieldMatrix
-export FieldMatrixWithSolver, ⋅
+export ⋅, FieldMatrixSolver, field_matrix_solve!
+
+# Types that are teated as single values when using matrix fields.
+const SingleValue =
+    Union{Number, Geometry.AxisTensor, Geometry.AdjointAxisTensor}
 
 include("band_matrix_row.jl")
 
@@ -94,6 +93,7 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
     },
 }
 
+include("rmul_with_projection.jl")
 include("matrix_shape.jl")
 include("matrix_multiplication.jl")
 include("lazy_operators.jl")
@@ -106,7 +106,6 @@ include("single_field_solver.jl")
 include("multiple_field_solver.jl")
 include("field_matrix_solver.jl")
 include("field_matrix_iterative_solver.jl")
-include("field_matrix_with_solver.jl")
 
 function Base.show(io::IO, field::ColumnwiseBandMatrixField)
     print(io, eltype(field), "-valued Field")
@@ -119,7 +118,7 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         end
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
-        ClimaComms.allowscalar(ClimaComms.device(field)) do
+        allow_scalar(ClimaComms.device(field)) do
             Base.print_array(io, column_field2array_view(column_field))
         end
     else

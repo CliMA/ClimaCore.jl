@@ -6,7 +6,10 @@ import ClimaCore.MatrixFields
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
+import ClimaCore: allow_scalar
 import ClimaCore.Utilities.UnrolledFunctions: unrolled_map
+
+allow_scalar(f, ::ClimaComms.CUDADevice, args...) = CUDA.@allowscalar f(args...)
 
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
@@ -85,10 +88,10 @@ function multiple_field_solve_kernel!(
 ) where {Nnames}
     @inbounds begin
         Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
-        tidx = thread_index()
-        n = (Ni, Nj, Nh, Nnames)
-        if valid_range(tidx, prod(n))
-            (i, j, h, iname) = kernel_indexes(tidx, n).I
+        tidx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+        if 1 ≤ tidx ≤ prod((Ni, Nj, Nh, Nnames))
+            (i, j, h, iname) =
+                CartesianIndices((1:Ni, 1:Nj, 1:Nh, 1:Nnames))[tidx].I
             generated_single_field_solve!(
                 device,
                 caches,

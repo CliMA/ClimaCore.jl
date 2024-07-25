@@ -1,6 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
-
 # Constants required by "staggered_nonhydrostatic_model.jl"
 # const FT = ? # specified in each test file
 const p_0 = FT(1.0e5)

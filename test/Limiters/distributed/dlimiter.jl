@@ -47,8 +47,7 @@ zdomain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelems)
-device = ClimaComms.device(context)
-vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
 quad = Quadratures.GLL{Nij}()
 horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

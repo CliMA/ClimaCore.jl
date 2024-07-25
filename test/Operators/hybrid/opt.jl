@@ -211,8 +211,7 @@ function hspace1d(FT)
         periodic = true,
     )
     hmesh = Meshes.IntervalMesh(hdomain, nelems = 3)
-    device = ClimaComms.device()
-    htopology = Topologies.IntervalTopology(device, hmesh)
+    htopology = Topologies.IntervalTopology(hmesh)
     Nq = 3
     quad = Quadratures.GLL{Nq}()
     return Spaces.SpectralElementSpace1D(htopology, quad)
@@ -238,7 +237,6 @@ end
 
 @static if @isdefined(var"@test_opt")
     @testset "Scalar Field ExtrudedFiniteDifferenceSpace" begin
-        device = ClimaComms.device()
         for FT in (Float64,), hspace in (hspace1d(FT), hspace2d(FT))
             vdomain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0.0),
@@ -246,7 +244,7 @@ end
                 boundary_names = (:left, :right),
             )
             vmesh = Meshes.IntervalMesh(vdomain; nelems = 16)
-            cvspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
+            cvspace = Spaces.CenterFiniteDifferenceSpace(vmesh)
 
             center_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, cvspace)
             face_space = Spaces.FaceExtrudedFiniteDifferenceSpace(center_space)

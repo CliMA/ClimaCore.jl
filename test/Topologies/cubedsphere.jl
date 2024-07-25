@@ -2,9 +2,9 @@ using ClimaComms
 using ClimaCore: Geometry, Domains, Meshes, Topologies
 using Test
 
+const context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
 
 @testset "neighboring element tests" begin
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     @testset "1 element across each panel" begin
         topology = Topologies.Topology2D(
             context,
@@ -37,7 +37,6 @@ using Test
 end
 
 @testset "interior faces iterator" begin
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     @testset "1 element across each panel" begin
         topology = Topologies.Topology2D(
             context,
@@ -55,7 +54,6 @@ end
 end
 
 @testset "boundaries" begin
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     @testset "1 element across each panel" begin
         topology = Topologies.Topology2D(
             context,
@@ -73,7 +71,6 @@ end
 end
 
 @testset "boundaries" begin
-    context = ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded())
     @testset "1 element across each panel" begin
         topology = Topologies.Topology2D(
             context,

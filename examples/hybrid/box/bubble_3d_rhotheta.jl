@@ -2,9 +2,6 @@ using Test
 using ClimaComms
 using LinearAlgebra, StaticArrays
 
-import ClimaComms
-ClimaComms.@import_required_backends
-
 import ClimaCore:
     ClimaCore,
     slab,
@@ -45,7 +42,6 @@ function hvspace_3D(
         Geometry.YPoint{FT}(ylim[2]),
         periodic = true,
     )
-    device = ClimaComms.device(context)
 
     horzdomain = Domains.RectangleDomain(xdomain, ydomain)
     horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
@@ -57,7 +53,7 @@ function hvspace_3D(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(zdomain, nelems = zelem)
-    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     quad = Quadratures.GLL{npoly + 1}()
     horzspace = Spaces.SpectralElementSpace2D(horztopology, quad)

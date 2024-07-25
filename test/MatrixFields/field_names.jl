@@ -738,7 +738,7 @@ end
                 _value: \[.*\]
           \(@name\(a\), @name\(foo._value\)\) => .*QuaddiagonalMatrixRow{.*}-valued Field:
         """,
-    ) broken = Sys.iswindows()
+    )
 
     @test_all vector_view[@name(foo)] == vector.foo
     @test_throws KeyError vector_view[@name(invalid_name)]

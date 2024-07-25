@@ -16,9 +16,7 @@ OUTPUT_DIR = mkpath(get(ENV, "CI_OUTPUT_DIR", tempname()))
         boundary_names = (:left, :right),
     )
     mesh = ClimaCore.Meshes.IntervalMesh(domain; nelems = 5)
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
-    grid_topology = ClimaCore.Topologies.IntervalTopology(device, mesh)
+    grid_topology = ClimaCore.Topologies.IntervalTopology(mesh)
     quad = ClimaCore.Quadratures.GLL{5}()
     space = ClimaCore.Spaces.SpectralElementSpace1D(grid_topology, quad)
     coords = ClimaCore.Fields.coordinate_field(space)
@@ -114,9 +112,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
-    device = ClimaComms.device()
-    vert_center_space =
-        ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     hv_center_space = ClimaCore.Spaces.ExtrudedFiniteDifferenceSpace(
         horz_space,
@@ -203,11 +199,8 @@ end
         ClimaCore.Geometry.ZPoint{FT}(1000);
         boundary_names = (:bottom, :top),
     )
-    context = ClimaComms.context()
-    device = ClimaComms.device(context)
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
-    vert_center_space =
-        ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     horzdomain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.XPoint{FT}(-500) ..
@@ -215,7 +208,7 @@ end
         periodic = true,
     )
     horzmesh = ClimaCore.Meshes.IntervalMesh(horzdomain; nelems = helem)
-    horztopology = ClimaCore.Topologies.IntervalTopology(device, horzmesh)
+    horztopology = ClimaCore.Topologies.IntervalTopology(horzmesh)
 
     quad = ClimaCore.Quadratures.GLL{npoly + 1}()
     horzspace = ClimaCore.Spaces.SpectralElementSpace1D(horztopology, quad)
@@ -256,9 +249,7 @@ end
         boundary_names = (:bottom, :top),
     )
     vertmesh = ClimaCore.Meshes.IntervalMesh(vertdomain, nelems = velem)
-    device = ClimaComms.device()
-    vert_center_space =
-        ClimaCore.Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    vert_center_space = ClimaCore.Spaces.CenterFiniteDifferenceSpace(vertmesh)
 
     xdomain = ClimaCore.Domains.IntervalDomain(
         ClimaCore.Geometry.XPoint{FT}(-500) ..
