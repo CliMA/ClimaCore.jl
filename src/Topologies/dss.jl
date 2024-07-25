@@ -10,8 +10,8 @@ struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
     """
-    Perimeter `DataLayout` object: typically a `VIFH{TT,Np}`, where `TT` is the
-    transformed type, and `Np` is the length of the perimeter
+    Perimeter `DataLayout` object: typically a `VIFH{TT,Nv,Np,Nh}`, where `TT` is the
+    transformed type, `Nv` is the number of vertical levels, and `Np` is the length of the perimeter
     """
     perimeter_data::D
     "send buffer `AbstractVector{FT}`"
@@ -36,28 +36,26 @@ end
 
 """
     create_dss_buffer(
-        data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+        data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
         topology::Topology2D,
         local_geometry = nothing,
         local_weights = nothing,
-    ) where {S, Nij}
+    ) where {S}
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
     topology::Topology2D,
-    local_geometry::Union{
-        DataLayouts.IJFH{<:Any, Nij},
-        DataLayouts.VIJFH{<:Any, Nij},
-        Nothing,
-    } = nothing,
-    local_weights::Union{
-        DataLayouts.IJFH{<:Any, Nij},
-        DataLayouts.VIJFH{<:Any, Nij},
-        Nothing,
-    } = nothing,
-) where {S, Nij}
+    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
+    local_weights::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
+) where {S}
+    Nij = DataLayouts.get_Nij(data)
+    Nij_lg =
+        isnothing(local_geometry) ? Nij : DataLayouts.get_Nij(local_geometry)
+    Nij_weights =
+        isnothing(local_weights) ? Nij : DataLayouts.get_Nij(local_weights)
+    @assert Nij == Nij_lg == Nij_weights
     perimeter::Perimeter2D = Perimeter2D(Nij)
     context = ClimaComms.context(topology)
     DA = ClimaComms.array_type(topology)
@@ -76,7 +74,8 @@ function create_dss_buffer(
     if eltype(data) <: Geometry.Covariant123Vector
         TS = Geometry.UVWVector{T}
     end
-    perimeter_data = DataLayouts.VIFH{TS, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
+    perimeter_data =
+        DataLayouts.VIFH{TS, Nv, Np, Nh}(DA{T}(undef, Nv, Np, Nf, Nh))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]
@@ -369,17 +368,17 @@ function dss_transform!(
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
-            pw = pweight[_get_idx(sizet_wt, (ip, jp, 1, elem))]
+            pw = pweight[linear_ind(sizet_wt, (ip, jp, 1, elem))]
 
             for fidx in scalarfidx, level in 1:nlevels
-                data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                 pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * pw
             end
 
             for fidx in covariant12fidx, level in 1:nlevels
-                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                 data_idx2 =
-                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
                 (idx11, idx12, idx21, idx22) =
                     _get_idx_metric(sizet_metric, (level, ip, jp, elem))
                 pperimeter_data[level, p, fidx, elem] =
@@ -395,9 +394,9 @@ function dss_transform!(
             end
 
             for fidx in contravariant12fidx, level in 1:nlevels
-                data_idx1 = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                 data_idx2 =
-                    _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
                 (idx11, idx12, idx21, idx22) =
                     _get_idx_metric(sizet_metric, (level, ip, jp, elem))
                 pperimeter_data[level, p, fidx, elem] =
@@ -469,16 +468,17 @@ function dss_untransform!(
         for (p, (ip, jp)) in enumerate(perimeter)
             for fidx in scalarfidx
                 for level in 1:nlevels
-                    data_idx = _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                    data_idx =
+                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                     pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
                 end
             end
             for fidx in covariant12fidx
                 for level in 1:nlevels
                     data_idx1 =
-                        _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                     data_idx2 =
-                        _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
                     (idx11, idx12, idx21, idx22) =
                         _get_idx_metric(sizet_metric, (level, ip, jp, elem))
                     pdata[data_idx1] =
@@ -492,9 +492,9 @@ function dss_untransform!(
             for fidx in contravariant12fidx
                 for level in 1:nlevels
                     data_idx1 =
-                        _get_idx(sizet_data, (level, ip, jp, fidx, elem))
+                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
                     data_idx2 =
-                        _get_idx(sizet_data, (level, ip, jp, fidx + 1, elem))
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
                     (idx11, idx12, idx21, idx22) =
                         _get_idx_metric(sizet_metric, (level, ip, jp, elem))
                     pdata[data_idx1] =
@@ -522,7 +522,7 @@ function dss_load_perimeter_data!(
     sizet = (nlevels, Nq, Nq, nfid, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
-            idx = _get_idx(sizet, (level, ip, jp, fidx, elem))
+            idx = linear_ind(sizet, (level, ip, jp, fidx, elem))
             pperimeter_data[level, p, fidx, elem] = pdata[idx]
         end
     end
@@ -541,7 +541,7 @@ function dss_unload_perimeter_data!(
     sizet = (nlevels, Nq, Nq, nfid, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
-            idx = _get_idx(sizet, (level, ip, jp, fidx, elem))
+            idx = linear_ind(sizet, (level, ip, jp, fidx, elem))
             pdata[idx] = pperimeter_data[level, p, fidx, elem]
         end
     end
@@ -797,7 +797,7 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, Nij}},
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
     topology::Topology2D,
 ) where {S, Nij}
     length(parent(data)) == 0 && return nothing

@@ -20,7 +20,7 @@ abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
-    FiniteDifferenceGrid(mesh::Meshes.IntervalMesh)
+    FiniteDifferenceGrid(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
 Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
 `IntervalMesh`). 
@@ -32,12 +32,13 @@ To avoid unnecessary duplication, we memoize the construction of the grid.
 mutable struct FiniteDifferenceGrid{
     T <: Topologies.AbstractIntervalTopology,
     GG,
-    LG,
+    CLG,
+    FLG,
 } <: AbstractFiniteDifferenceGrid
     topology::T
     global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
+    center_local_geometry::CLG
+    face_local_geometry::FLG
 end
 
 
@@ -56,14 +57,12 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     FT = Geometry.float_type(CT)
     Nv_face = length(mesh.faces)
     # construct on CPU, adapt to GPU
-    face_coordinates = DataLayouts.VF{CT}(Array{FT}, Nv_face)
+    face_coordinates = DataLayouts.VF{CT, Nv_face}(Array{FT}, Nv_face)
     for v in 1:Nv_face
         face_coordinates[v] = mesh.faces[v]
     end
-    center_local_geometry, face_local_geometry = fd_geometry_data(
-        face_coordinates;
-        periodic = Topologies.isperiodic(topology),
-    )
+    center_local_geometry, face_local_geometry =
+        fd_geometry_data(face_coordinates, Val(Topologies.isperiodic(topology)))
 
     return FiniteDifferenceGrid(
         topology,
@@ -75,19 +74,17 @@ end
 
 # called by the FiniteDifferenceGrid constructor, and the ExtrudedFiniteDifferenceGrid constructor with Hypsography
 function fd_geometry_data(
-    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}};
-    periodic,
-) where {FT}
+    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
+    ::Val{periodic},
+) where {FT, periodic}
     CT = Geometry.ZPoint{FT}
     AIdx = (3,)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1
-    center_local_geometry =
-        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_cent, Nh))
-    face_local_geometry =
-        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_face, Nh))
+    center_local_geometry = similar(face_coordinates, LG, Val(Nv_cent))
+    face_local_geometry = similar(face_coordinates, LG, Val(Nv_face))
     c1(args...) =
         Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
     for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
@@ -161,15 +158,18 @@ function fd_geometry_data(
 end
 
 
-FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
-    FiniteDifferenceGrid(Topologies.IntervalTopology(mesh))
+FiniteDifferenceGrid(
+    device::ClimaComms.AbstractDevice,
+    mesh::Meshes.IntervalMesh,
+) = FiniteDifferenceGrid(Topologies.IntervalTopology(device, mesh))
 
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology
 vertical_topology(grid::FiniteDifferenceGrid) = grid.topology
 
-local_geometry_type(::Type{FiniteDifferenceGrid{T, GG, LG}}) where {T, GG, LG} =
-    eltype(LG) # calls eltype from DataLayouts
+local_geometry_type(
+    ::Type{FiniteDifferenceGrid{T, GG, CLG, FLG}},
+) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 local_geometry_data(grid::FiniteDifferenceGrid, ::CellCenter) =
     grid.center_local_geometry
@@ -178,16 +178,17 @@ local_geometry_data(grid::FiniteDifferenceGrid, ::CellFace) =
 global_geometry(grid::FiniteDifferenceGrid) = grid.global_geometry
 
 ## GPU compatibility
-struct DeviceFiniteDifferenceGrid{T, GG, LG} <: AbstractFiniteDifferenceGrid
+struct DeviceFiniteDifferenceGrid{T, GG, CLG, FLG} <:
+       AbstractFiniteDifferenceGrid
     topology::T
     global_geometry::GG
-    center_local_geometry::LG
-    face_local_geometry::LG
+    center_local_geometry::CLG
+    face_local_geometry::FLG
 end
 
 local_geometry_type(
-    ::Type{DeviceFiniteDifferenceGrid{T, GG, LG}},
-) where {T, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{DeviceFiniteDifferenceGrid{T, GG, CLG, FLG}},
+) where {T, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
 
 Adapt.adapt_structure(to, grid::FiniteDifferenceGrid) =
     DeviceFiniteDifferenceGrid(

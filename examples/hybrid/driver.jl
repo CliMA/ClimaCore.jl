@@ -26,6 +26,7 @@ postprocessing(sol, output_dir) = nothing
 
 import ClimaTimeSteppers as CTS
 using ClimaComms
+ClimaComms.@import_required_backends
 import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
@@ -185,6 +186,10 @@ walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
 any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
+    global_Y_c_1 =
+        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].c))
+    global_Y_f_1 =
+        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].f))
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(
             horizontal_mesh,
@@ -193,14 +198,10 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
-        global_Y_c_type = Fields.Field{
-            typeof(Fields.field_values(Y.c)),
-            typeof(global_center_space),
-        }
-        global_Y_f_type = Fields.Field{
-            typeof(Fields.field_values(Y.f)),
-            typeof(global_face_space),
-        }
+        global_Y_c_type =
+            Fields.Field{typeof(global_Y_c_1), typeof(global_center_space)}
+        global_Y_f_type =
+            Fields.Field{typeof(global_Y_f_1), typeof(global_face_space)}
         global_Y_type = Fields.FieldVector{
             FT,
             NamedTuple{(:c, :f), Tuple{global_Y_c_type, global_Y_f_type}},

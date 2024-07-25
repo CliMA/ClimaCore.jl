@@ -8,6 +8,7 @@ using Test
 @testset "Sphere" begin
     for FT in (Float64, Float32)
         context = ClimaComms.SingletonCommsContext()
+        device = ClimaComms.device(context)
         radius = FT(3)
         ne = 4
         Nq = 4
@@ -43,13 +44,17 @@ using Test
         # total nodes
         nn = 6 * ne^2 * Nq^2
         # unique nodes
-        @test length(collect(Spaces.unique_nodes(space))) ==
-              nn - nn2 - 2 * nn3 - 3 * nn4
+        if device isa ClimaComms.AbstractCPUDevice
+            @test length(collect(Spaces.unique_nodes(space))) ==
+                  nn - nn2 - 2 * nn3 - 3 * nn4
+        end
 
         point_space = column(space, 1, 1, 1)
         @test point_space isa Spaces.PointSpace
-        @test Spaces.coordinates_data(point_space)[] ==
-              column(Spaces.coordinates_data(space), 1, 1, 1)[]
+        ClimaComms.allowscalar(device) do
+            @test Spaces.coordinates_data(point_space)[] ==
+                  column(Spaces.coordinates_data(space), 1, 1, 1)[]
+        end
     end
 end
 
@@ -98,8 +103,9 @@ end
         Geometry.ZPoint{FT}(zlim[2]);
         boundary_names = (:bottom, :top),
     )
+    device = ClimaComms.device(context)
     vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
-    vertgrid = Grids.FiniteDifferenceGrid(vertmesh)
+    vertgrid = Grids.FiniteDifferenceGrid(device, vertmesh)
 
     horzdomain = Domains.SphereDomain(radius)
     horzmesh = Meshes.EquiangularCubedSphere(horzdomain, helem)

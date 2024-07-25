@@ -1,9 +1,11 @@
+#=
+julia --project=.buildkite
+using Revise; include(joinpath("test", "Operators", "finitedifference", "wfact.jl"))
+=#
 using Test
 using ClimaComms
-
+ClimaComms.@import_required_backends
 import ClimaCore
-# To avoid JET failures in the error message
-ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
 using ClimaCore:
     Geometry,
@@ -26,7 +28,8 @@ velem = 4
 
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
+context = ClimaComms.SingletonCommsContext()
+htopology = Topologies.Topology2D(context, hmesh)
 quad = Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -36,7 +39,8 @@ vdomain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-center_space = Spaces.CenterFiniteDifferenceSpace(vmesh)
+device = ClimaComms.device(context)
+center_space = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
 #=
 # TODO: Replace this with a space that includes topography.
@@ -105,12 +109,9 @@ function wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ,
     return nothing
 end
 
-@time wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
-@time wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
-
 using JET
-@testset "JET test for `compose` in wfact! kernel" begin
+@testset "Opt test for `compose` in wfact! kernel" begin
+    wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw) # compile first
+    @test 0 == @allocated wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
     @test_opt wfact_test(∂ᶜ𝔼ₜ∂ᶠ𝕄, ∂ᶜK∂ᶠw_data, ᶜρe, ᶜρ, ᶜp, ᶠw)
 end
-
-ClimaCore.Operators.allow_mismatched_fd_spaces() = false

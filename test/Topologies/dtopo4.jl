@@ -6,6 +6,8 @@ import ClimaCore:
     Domains, Fields, Geometry, Meshes, Operators, Spaces, Topologies
 
 using ClimaComms
+ClimaComms.@import_required_backends
+
 comms_ctx = ClimaComms.MPICommsContext()
 pid, nprocs = ClimaComms.init(comms_ctx)
 

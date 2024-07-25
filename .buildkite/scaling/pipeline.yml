@@ -13,8 +13,8 @@ steps:
       - julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary()'
 
       - echo "--- Instantiate scaling test"
-      - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=examples -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=.buildkite -e 'using Pkg; Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate status"
       - "julia --project -e 'using Pkg; Pkg.status()'"
@@ -31,7 +31,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (1) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_1p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_1_processes.jld2"
     env:
@@ -46,7 +46,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (2) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_2p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_2_processes.jld2"
     env:
@@ -61,7 +61,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (4) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_4p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_4_processes.jld2"
     env:
@@ -76,7 +76,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (8) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_8p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_8_processes.jld2"
     env:
@@ -91,7 +91,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (16) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_16p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_16_processes.jld2"
     env:
@@ -106,7 +106,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (32) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_32p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_32_processes.jld2"
     env:
@@ -121,7 +121,7 @@ steps:
   - label: ":computer: MPI Held-Suarez scaling test(ρθ) - (64) processes"
     key: "cpu_mpi_held_suarez_scaling_test_rhotheta_64p"
     command:
-      - "mpiexec julia --color=yes --project=examples examples/hybrid/driver.jl"
+      - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/scaling_data_64_processes.jld2"
     env:
@@ -138,7 +138,7 @@ steps:
   - label: ":computer: scaling plots"
     key: "cpu_scaling_plots"
     command:
-      - "julia --color=yes --project=examples examples/hybrid/plot_scaling_results.jl"
+      - "julia --color=yes --project=.buildkite examples/hybrid/plot_scaling_results.jl"
     artifact_paths:
       - "examples/hybrid/sphere/output/held_suarez_rhotheta_scaling/Float32/*.png"
     env:

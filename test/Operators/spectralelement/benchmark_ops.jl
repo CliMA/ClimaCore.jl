@@ -13,7 +13,7 @@ using Revise; using ClimaCore
 include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_utils.jl"))
 include(joinpath(pkgdir(ClimaCore), "test", "Operators", "spectralelement", "benchmark_kernels.jl"))
 kernel_args = setup_kernel_args(["--float-type", "Float64"]);
-device = kernel_args.device
+device = ClimaComms.device()
 trial = benchmark_kernel!(kernel_args, kernel_spectral_div_grad!, device; silent=true);
 trial = benchmark_kernel_array!(kernel_args.arr_args, kernel_spectral_wdiv_array!, device; silent=true);
 show(stdout, MIME("text/plain"), trial);
@@ -60,7 +60,7 @@ include(
 
 function benchmark_all(kernel_args = setup_kernel_args(ARGS))
 
-    device = kernel_args.device
+    (; device) = kernel_args
     #=
     # Run benchmarks for a single kernel with:
     trial = benchmark_kernel!(kernel_args, kernel_spectral_div_grad!, device)

@@ -29,5 +29,6 @@ include("axistensors.jl")
 include("localgeometry.jl")
 include("conversions.jl")
 include("globalgeometry.jl")
+include("rmul_with_projection.jl")
 
 end # module

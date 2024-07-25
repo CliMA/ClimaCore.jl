@@ -97,10 +97,12 @@ end
 Base.:*(interval1::IntervalDomain, interval2::IntervalDomain) =
     RectangleDomain(interval1, interval2)
 
-boundary_names(domain::RectangleDomain) = unique([
-    boundary_names(domain.interval1)...,
-    boundary_names(domain.interval2)...,
-])
+boundary_names(domain::RectangleDomain) = unique(
+    Symbol[
+        boundary_names(domain.interval1)...,
+        boundary_names(domain.interval2)...,
+    ],
+)::Vector{Symbol}
 
 """
     RectangleDomain(x1::ClosedInterval, x2::ClosedInterval;

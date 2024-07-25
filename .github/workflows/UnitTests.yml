@@ -2,12 +2,24 @@ name: Unit Tests
 
 on:
   pull_request:
+    branches:
+      - main
+    tags: '*'
+
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     timeout-minutes: 80
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -17,32 +29,23 @@ jobs:
           - os: macos-latest
             julia-version: '1.10'
           - os: ubuntu-latest
-            julia-version: '~1.10.0-rc1'
+            julia-version: '~1.11.0-0'
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.0
-      with:
-        access_token: ${{ github.token }}
-
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Set up Julia
-      uses: julia-actions/setup-julia@v1
-      if: steps.filter.outputs.run_test == 'true'
-      with:
-        version: ${{ matrix.julia-version }}
-
-    - name: Cache artifacts
-      uses: julia-actions/cache@v1
-
-    - name: Build package
-      uses: julia-actions/julia-buildpkg@v1
-
-    - name: Run Unit Tests
-      uses: julia-actions/julia-runtest@v1
-      with:
-        annotate: true
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.julia-version }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@latest
+      - uses: julia-actions/julia-runtest@latest
+      - uses: julia-actions/julia-processcoverage@latest
+      - uses: codecov/codecov-action@v4
+        if: ${{ matrix.version == '1.10' }} && ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          files: lcov.info
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

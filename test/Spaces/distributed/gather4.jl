@@ -15,6 +15,7 @@ import ClimaCore:
 using Logging
 
 using ClimaComms
+ClimaComms.@import_required_backends
 const comms_ctx = ClimaComms.MPICommsContext()
 const pid, nprocs = ClimaComms.init(comms_ctx)
 

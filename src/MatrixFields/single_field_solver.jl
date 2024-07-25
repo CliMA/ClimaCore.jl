@@ -6,7 +6,10 @@ inv_return_type(::Type{X}) where {X} = error(
 )
 inv_return_type(::Type{X}) where {X <: Union{Number, SMatrix}} = X
 inv_return_type(::Type{X}) where {T, X <: Geometry.Axis2TensorOrAdj{T}} =
-    axis_tensor_type(T, Tuple{dual_type(axis2(X)), dual_type(axis1(X))})
+    axis_tensor_type(
+        T,
+        Tuple{dual_type(Geometry.axis2(X)), dual_type(Geometry.axis1(X))},
+    )
 
 x_eltype(A::UniformScaling, b) = x_eltype(eltype(A), eltype(b))
 x_eltype(A::ColumnwiseBandMatrixField, b) =
@@ -45,24 +48,53 @@ function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     return similar(b, cache_eltype)
 end
 
+function single_field_solve_diag_matrix_row!(
+    cache,
+    x,
+    A::ColumnwiseBandMatrixField,
+    b,
+)
+    Aⱼs = unzip_tuple_field_values(Fields.field_values(A.entries))
+    b_vals = Fields.field_values(b)
+    x_vals = Fields.field_values(x)
+    (A₀,) = Aⱼs
+    @. x_vals = inv(A₀) ⊠ b_vals
+end
 single_field_solve!(_, x, A::UniformScaling, b) = x .= inv(A.λ) .* b
-single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b) =
-    single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+function single_field_solve!(cache, x, A::ColumnwiseBandMatrixField, b)
+    if eltype(A) <: MatrixFields.DiagonalMatrixRow
+        single_field_solve_diag_matrix_row!(cache, x, A, b)
+    else
+        single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
+    end
+end
 
 single_field_solve!(::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
     _single_field_solve!(ClimaComms.device(axes(A)), cache, x, A, b)
 
 # CPU (GPU has already called Spaces.column on arg)
-_single_field_solve!(device::ClimaComms.AbstractCPUDevice, cache, x, A, b) =
-    Fields.bycolumn(axes(A)) do colidx
-        _single_field_solve_col!(
-            ClimaComms.device(axes(A)),
-            cache[colidx],
-            x[colidx],
-            A[colidx],
-            b[colidx],
-        )
+function _single_field_solve!(
+    device::ClimaComms.AbstractCPUDevice,
+    cache,
+    x,
+    A,
+    b,
+)
+    space = axes(x)
+    if space isa Spaces.FiniteDifferenceSpace
+        _single_field_solve_col!(device, cache, x, A, b)
+    else
+        Fields.bycolumn(space) do colidx
+            _single_field_solve_col!(
+                device,
+                cache[colidx],
+                x[colidx],
+                A[colidx],
+                b[colidx],
+            )
+        end
     end
+end
 
 function _single_field_solve_col!(
     ::ClimaComms.AbstractCPUDevice,
@@ -85,14 +117,6 @@ function _single_field_solve_col!(
         error("uncaught case")
     end
 end
-
-_single_field_solve!(
-    cache::Fields.Field,
-    x::Fields.Field,
-    A::Union{Fields.Field, UniformScaling},
-    b::Fields.Field,
-    dev::ClimaComms.AbstractCPUDevice,
-) = _single_field_solve_col!(dev, cache, x, A, b)
 
 unzip_tuple_field_values(data) =
     ntuple(i -> data.:($i), Val(length(propertynames(data))))
@@ -125,13 +149,20 @@ function band_matrix_solve!(::Type{<:TridiagonalMatrixRow}, cache, x, Aⱼs, b)
     n = length(x)
     @inbounds begin
         inv_D₀ = inv(A₀[1])
-        Ux[1] = inv_D₀ ⊠ b[1]
-        U₊₁[1] = inv_D₀ ⊠ A₊₁[1]
+        U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[1]
+        Uxᵢ₋₁ = inv_D₀ ⊠ b[1]
+        Ux[1] = Uxᵢ₋₁
+        U₊₁[1] = U₊₁ᵢ₋₁
 
         for i in 2:n
-            inv_D₀ = inv(A₀[i] ⊟ A₋₁[i] ⊠ U₊₁[i - 1])
-            Ux[i] = inv_D₀ ⊠ (b[i] ⊟ A₋₁[i] ⊠ Ux[i - 1])
-            i < n && (U₊₁[i] = inv_D₀ ⊠ A₊₁[i]) # U₊₁[n] is outside the matrix.
+            A₋₁ᵢ = A₋₁[i]
+            inv_D₀ = inv(A₀[i] ⊟ A₋₁ᵢ ⊠ U₊₁ᵢ₋₁)
+            Uxᵢ₋₁ = inv_D₀ ⊠ (b[i] ⊟ A₋₁ᵢ ⊠ Uxᵢ₋₁)
+            Ux[i] = Uxᵢ₋₁
+            if i < n
+                U₊₁ᵢ₋₁ = inv_D₀ ⊠ A₊₁[i] # U₊₁[n] is outside the matrix.
+                U₊₁[i] = U₊₁ᵢ₋₁
+            end
         end
 
         x[n] = Ux[n]

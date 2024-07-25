@@ -1,125 +1,151 @@
-using SafeTestsets
-using Base: operator_associativity
+#=
+julia --project
+using Revise; include(joinpath("test", "runtests.jl"))
+=#
+using Test
+include("tabulated_tests.jl")
 
 #! format: off
-# Order of tests is intended to reflect dependency order of functionality
-
-#= TODO: add windows test back in. Currently getting
-ReadOnlyMemoryError()
-ERROR: Package ClimaCore errored during testing (exit code: 541541187)
-Stacktrace:
- [1] pkgerror(msg::String)
-=#
-if !Sys.iswindows()
-    #=
-    @safetestset "Recursive" begin @time include("RecursiveApply/recursive_apply.jl") end
-    @safetestset "PlusHalf" begin @time include("Utilities/plushalf.jl") end
-
-    @safetestset "DataLayouts 0D" begin @time include("DataLayouts/data0d.jl") end
-    @safetestset "DataLayouts 1D" begin @time include("DataLayouts/data1d.jl") end
-    @safetestset "DataLayouts 2D" begin @time include("DataLayouts/data2d.jl") end
-    @safetestset "DataLayouts 1dx" begin @time include("DataLayouts/data1dx.jl") end
-    @safetestset "DataLayouts 2dx" begin @time include("DataLayouts/data2dx.jl") end
-
-    @safetestset "Geometry" begin @time include("Geometry/geometry.jl") end
-    @safetestset "AxisTensors" begin @time include("Geometry/axistensors.jl") end
-
-    @safetestset "Interval mesh" begin @time include("Meshes/interval.jl") end
-    @safetestset "Rectangle mesh" begin @time include("Meshes/rectangle.jl") end
-    # now part of buildkite
-    # @safetestset "Cubedsphere mesh" begin @time include("Meshes/cubedsphere.jl") end
-
-    @safetestset "Interval topology" begin @time include("Topologies/interval.jl") end
-    @safetestset "Rectangle topology" begin @time include("Topologies/rectangle.jl") end
-    @safetestset "Rectangle surface topology" begin @time include("Topologies/rectangle_sfc.jl") end
-    @safetestset "Cubedsphere topology" begin @time include("Topologies/cubedsphere.jl") end
-    @safetestset "Cubedsphere surface topology" begin @time include("Topologies/cubedsphere_sfc.jl") end
-    # now part of buildkite
-    # @safetestset "Distributed topology" begin @time include("Topologies/distributed.jl") end
-=#
-    @safetestset "Quadratures" begin @time include("Quadratures/Quadratures.jl") end
-    @safetestset "Spaces" begin @time include("Spaces/spaces.jl") end
-    #=
-    @safetestset "Spaces - serial CPU DSS" begin @time include("Spaces/ddss1.jl") end
-    # now part of buildkite
-    # @safetestset "Sphere spaces" begin @time include("Spaces/sphere.jl") end
-    # @safetestset "Terrain warp" begin @time include("Spaces/terrain_warp.jl") end
-    # now part of buildkite
-    # @safetestset "Distributed spaces" begin @time include("Spaces/distributed.jl") end
-    =#
-    # now part of buildkite
-    # @safetestset "Fields" begin @time include("Fields/field.jl") end
-
-    @safetestset "Spectral elem - rectilinear" begin @time include("Operators/spectralelement/rectilinear.jl") end
-    @safetestset "Spectral elem - opt" begin @time include("Operators/spectralelement/opt.jl") end
-    @safetestset "Spectral elem - Diffusion 2d" begin @time include("Operators/spectralelement/diffusion2d.jl") end
-    @safetestset "Spectral elem - sphere geometry" begin @time include("Operators/spectralelement/sphere_geometry.jl") end
-    @safetestset "Spectral elem - sphere gradient" begin @time include("Operators/spectralelement/sphere_gradient.jl") end
-    @safetestset "Spectral elem - sphere divergence" begin @time include("Operators/spectralelement/sphere_divergence.jl") end
-    @safetestset "Spectral elem - sphere curl" begin @time include("Operators/spectralelement/sphere_curl.jl") end
-    @safetestset "Spectral elem - sphere diffusion" begin @time include("Operators/spectralelement/sphere_diffusion.jl") end
-    @safetestset "Spectral elem - sphere diffusion vec" begin @time include("Operators/spectralelement/sphere_diffusion_vec.jl") end
-    @safetestset "Spectral elem - sphere hyperdiffusion" begin @time include("Operators/spectralelement/sphere_hyperdiffusion.jl") end
-    @safetestset "Spectral elem - sphere hyperdiffusion vec" begin @time include("Operators/spectralelement/sphere_hyperdiffusion_vec.jl") end
-    
-    @safetestset "FD ops - column" begin @time include("Operators/finitedifference/column.jl") end
-    @safetestset "FD ops - opt" begin @time include("Operators/finitedifference/opt.jl") end
-    @safetestset "FD ops - wfact" begin @time include("Operators/finitedifference/wfact.jl") end
-    @safetestset "FD ops - linsolve" begin @time include("Operators/finitedifference/linsolve.jl") end
-    @safetestset "FD ops - examples" begin @time include("Operators/finitedifference/opt_examples.jl") end
-    # now part of buildkite
-    # @time include("Operators/finitedifference/implicit_stencils.jl")
-    # @time include("Operators/finitedifference/opt_implicit_stencils.jl")
-    @safetestset "Hybrid - 2D" begin @time include("Operators/hybrid/2d.jl") end
-    @safetestset "Hybrid - 3D" begin @time include("Operators/hybrid/3d.jl") end
-    @safetestset "Hybrid - dss opt" begin @time include("Operators/hybrid/dss_opt.jl") end
-    @safetestset "Hybrid - opt" begin @time include("Operators/hybrid/opt.jl") end
-
-    @safetestset "MatrixFields - BandMatrixRow" begin @time include("MatrixFields/band_matrix_row.jl") end
-    @safetestset "MatrixFields - rmul_with_projection" begin @time include("MatrixFields/rmul_with_projection.jl") end
-    @safetestset "MatrixFields - field2arrays" begin @time include("MatrixFields/field2arrays.jl") end
-    @safetestset "MatrixFields - matrix multiplication at boundaries" begin @time include("MatrixFields/matrix_multiplication_at_boundaries.jl") end
-    @safetestset "MatrixFields - field names" begin @time include("MatrixFields/field_names.jl") end
-    # now part of buildkite
-    # @safetestset "MatrixFields - matrix field broadcasting" begin @time include("MatrixFields/matrix_field_broadcasting.jl") end
-    # @safetestset "MatrixFields - operator matrices" begin @time include("MatrixFields/operator_matrices.jl") end
-    # @safetestset "MatrixFields - field matrix solvers" begin @time include("MatrixFields/field_matrix_solvers.jl") end
-
-    @safetestset "Hypsography - 2d" begin @time include("Hypsography/2d.jl") end
-    @safetestset "Hypsography - 3d sphere" begin @time include("Hypsography/3dsphere.jl") end
-
-    @safetestset "Remapping" begin @time include("Operators/remapping.jl") end
-
-    # now part of buildkite
-    # @safetestset "Limiter" begin @time include("Limiters/limiter.jl") end
-    # @safetestset "Distributed limiters" begin @time include("Limiters/distributed.jl") end
-
-    @safetestset "InputOutput - hdf5" begin @time include("InputOutput/hdf5.jl") end
-    @safetestset "InputOutput - spectralelement2d" begin @time include("InputOutput/spectralelement2d.jl") end
-    @safetestset "InputOutput - hybrid2dbox" begin @time include("InputOutput/hybrid2dbox.jl") end
-    @safetestset "InputOutput - hybrid2dbox_topography" begin @time include("InputOutput/hybrid2dbox_topography.jl") end
-    @safetestset "InputOutput - hybrid2dbox_stretched" begin @time include("InputOutput/hybrid2dbox_stretched.jl") end
-    @safetestset "InputOutput - hybrid3dbox" begin @time include("InputOutput/hybrid3dbox.jl") end
-    @safetestset "InputOutput - hybrid3dcubedsphere" begin @time include("InputOutput/hybrid3dcubedsphere.jl") end
-    @safetestset "InputOutput - hybrid3dcubedsphere_topography" begin @time include("InputOutput/hybrid3dcubedsphere_topography.jl") end
-
-    @safetestset "Array interpolation" begin @time include("Remapping/interpolate_array.jl") end
-    @safetestset "Array interpolation" begin @time include("Remapping/distributed_remapping.jl") end
-
-    # Code quality checks
-    @safetestset "Aqua" begin @time include("aqua.jl") end
-end
-if "CUDA" in ARGS
-    @safetestset "GPU - cuda" begin @time include("gpu/cuda.jl") end
-    @safetestset "GPU - data" begin @time include("DataLayouts/cuda.jl") end
-    @safetestset "GPU - spaces" begin @time include("Spaces/spaces.jl") end
-    @safetestset "Spaces - serial CUDA DSS" begin @time include("Spaces/ddss1.jl") end
-    @safetestset "Spaces - serial CUDA DSS on CubedSphere" begin @time include("Spaces/ddss1_cs.jl") end
-    @safetestset "Operators - spectral element CUDA" begin @time include("Operators/spectralelement/rectilinear_cuda.jl") end
-    @safetestset "Operators - finite difference CUDA" begin @time include("Operators/hybrid/cuda.jl") end
-    @safetestset "Operators - extruded sphere space operators CUDA" begin @time include("Operators/hybrid/extruded_sphere_cuda.jl") end
-    @safetestset "Operators - extruded 3dbox space operators CUDA" begin @time include("Operators/hybrid/extruded_3dbox_cuda.jl") end
-    @safetestset "Fields - CUDA mapreduce" begin @time include("Fields/reduction_cuda.jl") end
-end
-
+unit_tests = [
+UnitTest("DataLayouts fill"                        ,"DataLayouts/unit_fill.jl"),
+UnitTest("DataLayouts ndims"                       ,"DataLayouts/unit_ndims.jl"),
+UnitTest("DataLayouts get_struct"                  ,"DataLayouts/unit_struct.jl"),
+UnitTest("Recursive"                               ,"RecursiveApply/unit_recursive_apply.jl"),
+UnitTest("PlusHalf"                                ,"Utilities/unit_plushalf.jl"),
+UnitTest("DataLayouts 0D"                          ,"DataLayouts/data0d.jl"),
+UnitTest("DataLayouts 1D"                          ,"DataLayouts/data1d.jl"),
+UnitTest("DataLayouts 2D"                          ,"DataLayouts/data2d.jl"),
+UnitTest("DataLayouts 1dx"                         ,"DataLayouts/data1dx.jl"),
+UnitTest("DataLayouts 2dx"                         ,"DataLayouts/data2dx.jl"),
+UnitTest("DataLayouts mapreduce"                   ,"DataLayouts/unit_mapreduce.jl"),
+UnitTest("Geometry"                                ,"Geometry/geometry.jl"),
+UnitTest("rmul_with_projection"                    ,"Geometry/rmul_with_projection.jl"),
+UnitTest("AxisTensors"                             ,"Geometry/axistensors.jl"),
+UnitTest("Interval mesh"                           ,"Meshes/interval.jl"),
+UnitTest("Rectangle mesh"                          ,"Meshes/rectangle.jl"),
+UnitTest("Cubedsphere mesh"                        ,"Meshes/cubedsphere.jl"),
+UnitTest("Interval topology"                       ,"Topologies/interval.jl"),
+UnitTest("Rectangle topology"                      ,"Topologies/rectangle.jl"),
+UnitTest("Rectangle surface topology"              ,"Topologies/rectangle_sfc.jl"),
+UnitTest("Cubedsphere topology"                    ,"Topologies/cubedsphere.jl"),
+UnitTest("Cubedsphere surface topology"            ,"Topologies/cubedsphere_sfc.jl"),
+UnitTest("Quadratures"                             ,"Quadratures/Quadratures.jl"),
+UnitTest("Spaces"                                  ,"Spaces/unit_spaces.jl"),
+UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
+UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
+# UnitTest("Terrain warp"                            ,"Spaces/terrain_warp.jl"), # appears to hang on GHA
+UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
+UnitTest("Spectral elem - rectilinear"             ,"Operators/spectralelement/rectilinear.jl"),
+UnitTest("Spectral elem - opt"                     ,"Operators/spectralelement/opt.jl"),
+UnitTest("Spectral elem - Diffusion 2d"            ,"Operators/spectralelement/unit_diffusion2d.jl"),
+UnitTest("Spectral elem - sphere geometry"         ,"Operators/spectralelement/sphere_geometry.jl"),
+UnitTest("Spectral elem - sphere gradient"         ,"Operators/spectralelement/sphere_gradient.jl"),
+UnitTest("Spectral elem - sphere divergence"       ,"Operators/spectralelement/sphere_divergence.jl"),
+UnitTest("Spectral elem - sphere curl"             ,"Operators/spectralelement/sphere_curl.jl"),
+UnitTest("Spectral elem - sphere diffusion"        ,"Operators/spectralelement/sphere_diffusion.jl"),
+UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/sphere_diffusion_vec.jl"),
+UnitTest("Spectral elem - sphere hyperdiff"        ,"Operators/spectralelement/unit_sphere_hyperdiffusion.jl"),
+UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"),
+# UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/sphere_geometry_distributed.jl"), # MPI-only
+UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
+UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt.jl"),
+UnitTest("FD ops - wfact"                          ,"Operators/finitedifference/wfact.jl"),
+UnitTest("FD ops - linsolve"                       ,"Operators/finitedifference/linsolve.jl"),
+# UnitTest("FD ops - examples"                       ,"Operators/finitedifference/opt_examples.jl"), # only opt tests? (check coverage)
+UnitTest("Hybrid - 2D"                             ,"Operators/hybrid/unit_2d.jl"),
+UnitTest("Hybrid - 3D"                             ,"Operators/hybrid/unit_3d.jl"),
+UnitTest("Hybrid - dss opt"                        ,"Operators/hybrid/dss_opt.jl"),
+UnitTest("Hybrid - opt"                            ,"Operators/hybrid/opt.jl"),
+UnitTest("Thomas Algorithm"                        ,"Operators/unit_thomas_algorithm.jl"),
+UnitTest("MatrixFields - BandMatrixRow"            ,"MatrixFields/band_matrix_row.jl"),
+UnitTest("MatrixFields - field2arrays"             ,"MatrixFields/field2arrays.jl"),
+UnitTest("MatrixFields - mat mul at boundaries"    ,"MatrixFields/matrix_multiplication_at_boundaries.jl"),
+UnitTest("MatrixFields - field names"              ,"MatrixFields/field_names.jl"),
+UnitTest("MatrixFields - broadcasting (1)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"),
+UnitTest("MatrixFields - broadcasting (2)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"),
+UnitTest("MatrixFields - broadcasting (3)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_3.jl"),
+UnitTest("MatrixFields - broadcasting (4)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_4.jl"),
+UnitTest("MatrixFields - broadcasting (5)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_5.jl"),
+UnitTest("MatrixFields - broadcasting (6)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_6.jl"),
+UnitTest("MatrixFields - broadcasting (7)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_7.jl"),
+UnitTest("MatrixFields - broadcasting (8)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_8.jl"),
+UnitTest("MatrixFields - broadcasting (9)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_9.jl"),
+UnitTest("MatrixFields - broadcasting (10)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_10.jl"),
+UnitTest("MatrixFields - broadcasting (11)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_11.jl"),
+UnitTest("MatrixFields - broadcasting (12)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_12.jl"),
+UnitTest("MatrixFields - broadcasting (13)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"),
+UnitTest("MatrixFields - broadcasting (14)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_14.jl"),
+UnitTest("MatrixFields - broadcasting (15)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_15.jl"),
+UnitTest("MatrixFields - broadcasting (16)"        ,"MatrixFields/matrix_fields_broadcasting/test_scalar_16.jl"),
+UnitTest("MatrixFields - non-scalar broadcasting (1)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_1.jl"),
+UnitTest("MatrixFields - non-scalar broadcasting (2)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_2.jl"),
+UnitTest("MatrixFields - non-scalar broadcasting (3)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_3.jl"),
+UnitTest("MatrixFields - non-scalar broadcasting (4)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"),
+# UnitTest("MatrixFields - matrix field broadcast"   ,"MatrixFields/matrix_field_broadcasting.jl"), # too long
+# UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/operator_matrices.jl"), # too long
+# UnitTest("MatrixFields - field matrix solvers"     ,"MatrixFields/field_matrix_solvers.jl"), # too long
+UnitTest("Hypsography - 2d"                        ,"Hypsography/2d.jl"),
+UnitTest("Hypsography - 3d sphere"                 ,"Hypsography/3dsphere.jl"),
+UnitTest("Remapping"                               ,"Operators/remapping.jl"),
+UnitTest("Limiter"                                 ,"Limiters/limiter.jl"),
+# UnitTest("Limiter"                                 ,"Limiters/distributed/dlimiter.jl"), # requires MPI
+UnitTest("InputOutput - hdf5"                      ,"InputOutput/hdf5.jl"),
+UnitTest("InputOutput - spectralelement2d"         ,"InputOutput/spectralelement2d.jl"),
+UnitTest("InputOutput - hybrid2dbox"               ,"InputOutput/hybrid2dbox.jl"),
+UnitTest("InputOutput - hybrid2dbox_topography"    ,"InputOutput/hybrid2dbox_topography.jl"),
+UnitTest("InputOutput - hybrid2dbox_stretched"     ,"InputOutput/hybrid2dbox_stretched.jl"),
+UnitTest("InputOutput - hybrid3dbox"               ,"InputOutput/hybrid3dbox.jl"),
+UnitTest("InputOutput - hybrid3dcubedsphere"       ,"InputOutput/hybrid3dcubedsphere.jl"),
+UnitTest("InputOutput - hybrid3dcubedsphere_topo"  ,"InputOutput/hybrid3dcubedsphere_topography.jl"),
+UnitTest("Array interpolation"                     ,"Remapping/interpolate_array.jl"),
+UnitTest("Array interpolation"                     ,"Remapping/distributed_remapping.jl"),
+UnitTest("Aqua"                                    ,"aqua.jl"),
+UnitTest("Deprecations"                            ,"deprecations.jl"),
+UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
+UnitTest("GPU - data"                              ,"DataLayouts/cuda.jl";meta=:gpu_only),
+UnitTest("Spaces - serial CUDA DSS on CubedSphere" ,"Spaces/ddss1_cs.jl";meta=:gpu_only),
+UnitTest("Operators - spectral element CUDA"       ,"Operators/spectralelement/rectilinear_cuda.jl";meta=:gpu_only),
+UnitTest("Operators - finite difference CUDA"      ,"Operators/hybrid/unit_cuda.jl";meta=:gpu_only),
+UnitTest("Operators - extruded sphere space ops"   ,"Operators/hybrid/extruded_sphere_cuda.jl";meta=:gpu_only),
+UnitTest("Operators - extruded 3dbox space ops"    ,"Operators/hybrid/extruded_3dbox_cuda.jl";meta=:gpu_only),
+UnitTest("Fields - CUDA mapreduce"                 ,"Fields/reduction_cuda.jl";meta=:gpu_only),
+]
 #! format: on
+
+# `validate_tests` returns one of (`:duplicate_file`, `:non_existent_file`, `:pass`)
+err = validate_tests(unit_tests; test_path = @__DIR__)
+
+import ClimaComms
+ClimaComms.@import_required_backends
+
+filter!(
+    test -> !(
+        test.meta == :gpu_only &&
+        !(ClimaComms.device() isa ClimaComms.CUDADevice)
+    ),
+    unit_tests,
+)
+# Note: for `fail_fast = false`, the tests are all wrapped in `@testset "Unit tests"`
+#       so output is suppressed until all tests are complete.
+fail_fast = true
+
+# Use prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing))
+# once https://github.com/CliMA/ClimaCore.jl/issues/1826 is fixed:
+# prevent_leaky_tests = !isnothing(get(ENV, "CI", nothing)) # prevent leaky tests on CI)
+prevent_leaky_tests = true
+# tabulate_tests(unit_tests; include_timings = false) # uncomment for preview
+
+# If `fail_fast` is `true`, then let's error on invalid tests before starting them.
+if fail_fast
+    err == :duplicate_file && error("Please remove the duplicate file.")
+    err == :non_existent_file && error("Please remove the non-existent file.")
+end
+
+run_unit_tests!(unit_tests; fail_fast, prevent_leaky_tests)
+tabulate_tests(unit_tests)
+
+# Early warning of duplicate and missing files, but lazy error:
+err == :duplicate_file && error("Please remove the duplicate file.")
+err == :non_existent_file && error("Please remove the non-existent file.")
+
+nothing

@@ -1,4 +1,5 @@
 using ClimaComms
+ClimaComms.@import_required_backends
 using LinearAlgebra
 using Colors
 using DocStringExtensions
@@ -131,7 +132,7 @@ Base.@kwdef struct MountainTest{FT, P} <: AbstractTest
     h0::FT = 5960
     "radius of conical mountain"
     a::FT = 20.0
-    "center of mountain long coord, shifted by 180 compared to the paper, 
+    "center of mountain long coord, shifted by 180 compared to the paper,
     because our λ ∈ [-180, 180] (in the paper it was 270, with λ ∈ [0, 360])"
     λc::FT = 90.0
     "latitude coordinate for center of mountain"
@@ -200,7 +201,7 @@ Base.@kwdef struct BarotropicInstabilityTest{FT, P} <: AbstractTest
     αₚ::FT = 19.09859
     "mountain shape parameters"
     βₚ::FT = 3.81971
-    "peak of balanced height field from Tempest 
+    "peak of balanced height field from Tempest
     https://github.com/paullric/tempestmodel/blob/master/test/shallowwater_sphere/BarotropicInstabilityTest.cpp#L86"
     h0::FT = 10158.18617
     "local perturbation peak height"

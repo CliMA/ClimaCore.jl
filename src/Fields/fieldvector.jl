@@ -361,3 +361,80 @@ import ClimaComms
 ClimaComms.array_type(x::FieldVector) = promote_type(
     UnrolledFunctions.unrolled_map(ClimaComms.array_type, _values(x))...,
 )
+
+function __rprint_diff(
+    io::IO,
+    x::T,
+    y::T;
+    pc,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, Field, DataLayouts.AbstractData, NamedTuple}}
+    for pn in propertynames(x)
+        pc_full = (pc..., ".", pn)
+        xi = getproperty(x, pn)
+        yi = getproperty(y, pn)
+        __rprint_diff(io, xi, yi; pc = pc_full, xname, yname)
+    end
+end;
+
+function __rprint_diff(io::IO, xi, yi; pc, xname, yname) # assume we can compute difference here
+    if !(xi == yi)
+        xs = xname * string(join(pc))
+        ys = yname * string(join(pc))
+        println(io, "==================== Difference found:")
+        println(io, "$xs: ", xi)
+        println(io, "$ys: ", yi)
+        println(io, "($xs .- $ys): ", (xi .- yi))
+    end
+    return nothing
+end
+
+"""
+    rprint_diff(io::IO, ::T, ::T) where {T <: FieldVector}
+    rprint_diff(::T, ::T) where {T <: FieldVector}
+
+Recursively print differences in given `FieldVector`.
+"""
+_rprint_diff(io::IO, x::T, y::T, xname, yname) where {T <: FieldVector} =
+    __rprint_diff(io, x, y; pc = (), xname, yname)
+_rprint_diff(x::T, y::T, xname, yname) where {T <: FieldVector} =
+    _rprint_diff(stdout, x, y, xname, yname)
+
+"""
+    @rprint_diff(::T, ::T) where {T <: FieldVector}
+
+Recursively print differences in given `FieldVector`.
+"""
+macro rprint_diff(x, y)
+    return :(_rprint_diff(
+        stdout,
+        $(esc(x)),
+        $(esc(y)),
+        $(string(x)),
+        $(string(y)),
+    ))
+end
+
+
+# Recursively compare contents of similar fieldvectors
+_rcompare(pass, x::T, y::T) where {T <: Field} =
+    pass && _rcompare(pass, field_values(x), field_values(y))
+_rcompare(pass, x::T, y::T) where {T <: DataLayouts.AbstractData} =
+    pass && (parent(x) == parent(y))
+_rcompare(pass, x::T, y::T) where {T} = pass && (x == y)
+
+function _rcompare(pass, x::T, y::T) where {T <: FieldVector}
+    for pn in propertynames(x)
+        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn))
+    end
+    return pass
+end
+
+"""
+    rcompare(x::T, y::T) where {T <: FieldVector}
+
+Recursively compare given fieldvectors via `==`.
+Returns `true` if `x == y` recursively.
+"""
+rcompare(x::T, y::T) where {T <: FieldVector} = _rcompare(true, x, y)

@@ -14,13 +14,6 @@ function config_threadblock(Nv, Nh)
     return (nthreads, nblocks)
 end
 
-function get_hv(Nv, Nh, blockIdx, threadIdx, blockDim, gridDim)
-    tidx = (blockIdx.x - 1) * blockDim.x + threadIdx.x
-    (h, v) = CartesianIndices((1:Nh, 1:Nv))[tidx].I
-    # @cuprintln("Nv,Nh,v,h=($Nv, $Nh,$v,$h)")
-    return (h, v)
-end
-
 function compute_element_bounds!(
     limiter::QuasiMonotoneLimiter,
     ρq,
@@ -60,8 +53,10 @@ function compute_element_bounds_kernel!(
     ::Val{Ni},
     ::Val{Nj},
 ) where {Ni, Nj}
-    (h, v) = get_hv(Nv, Nh, blockIdx(), threadIdx(), blockDim(), gridDim())
-    if h ≤ Nh && v ≤ Nv
+    n = (Nv, Nh)
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds) = limiter
         local q_min, q_max
         slab_ρq = slab(ρq, v, h)
@@ -122,8 +117,10 @@ function compute_neighbor_bounds_local_kernel!(
     ::Val{Nj},
 ) where {Ni, Nj}
 
-    (h, v) = get_hv(Nv, Nh, blockIdx(), threadIdx(), blockDim(), gridDim())
-    if h ≤ Nh && v ≤ Nv
+    n = (Nv, Nh)
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds, q_bounds_nbr, ghost_buffer, rtol) = limiter
         slab_q_bounds = slab(q_bounds, v, h)
         q_min = slab_q_bounds[1]
@@ -190,8 +187,10 @@ function apply_limiter_kernel!(
 ) where {Nf, Ni, Nj, maxiter}
     (; q_bounds_nbr, rtol) = limiter
     converged = true
-    (h, v) = get_hv(Nv, Nh, blockIdx(), threadIdx(), blockDim(), gridDim())
-    if h ≤ Nh && v ≤ Nv
+    n = (Nv, Nh)
+    tidx = thread_index()
+    @inbounds if valid_range(tidx, prod(n))
+        (v, h) = kernel_indexes(tidx, n).I
 
         slab_ρ = slab(ρ_data, v, h)
         slab_ρq = slab(ρq_data, v, h)

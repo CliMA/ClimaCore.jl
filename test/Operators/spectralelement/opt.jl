@@ -179,6 +179,7 @@ end
     end
 
     @testset "Spectral Element 3D Hybrid Field optimizations" begin
+        device = ClimaComms.CPUSingleThreaded()
         for FT in (Float64, Float32)
             xelem = 3
             yelem = 3
@@ -191,7 +192,8 @@ end
                 boundary_names = (:bottom, :top),
             )
             vertmesh = Meshes.IntervalMesh(vertdomain, nelems = velem)
-            vert_center_space = Spaces.CenterFiniteDifferenceSpace(vertmesh)
+            vert_center_space =
+                Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
 
             xdomain = Domains.IntervalDomain(
                 Geometry.XPoint{FT}(-500) .. Geometry.XPoint{FT}(500),
@@ -205,9 +207,7 @@ end
             horzdomain = Domains.RectangleDomain(xdomain, ydomain)
             horzmesh = Meshes.RectilinearMesh(horzdomain, xelem, yelem)
             horztopology = Topologies.Topology2D(
-                ClimaComms.SingletonCommsContext(
-                    ClimaComms.CPUSingleThreaded(),
-                ),
+                ClimaComms.SingletonCommsContext(device),
                 horzmesh,
             )
 

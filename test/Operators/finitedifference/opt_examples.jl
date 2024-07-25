@@ -1,4 +1,6 @@
-import ClimaCore, ClimaComms, CUDA
+import ClimaCore
+using ClimaComms
+ClimaComms.@import_required_backends
 using BenchmarkTools
 @isdefined(TU) || include(
     joinpath(pkgdir(ClimaCore), "test", "TestUtilities", "TestUtilities.jl"),
@@ -448,7 +450,8 @@ end
         boundary_names = (:bottom, :top),
     )
     mesh = Meshes.IntervalMesh(domain; nelems = n_elems)
-    cs = Spaces.CenterFiniteDifferenceSpace(mesh)
+    device = ClimaComms.device()
+    cs = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     fs = Spaces.FaceFiniteDifferenceSpace(cs)
     zc = getproperty(Fields.coordinate_field(cs), :z)
     zf = getproperty(Fields.coordinate_field(fs), :z)
@@ -550,37 +553,4 @@ end
     alloc_test_nested_expressions_11(cfield, ffield)
     alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
     alloc_test_nested_expressions_13(cfield, ffield, ntcfield, ntffield, FT)
-end
-
-
-# https://github.com/CliMA/ClimaCore.jl/issues/1602
-const CT3 = Geometry.Contravariant3Vector
-const C12 = ClimaCore.Geometry.Covariant12Vector
-const ᶠwinterp = Operators.WeightedInterpolateC2F(
-    bottom = Operators.Extrapolate(),
-    top = Operators.Extrapolate(),
-)
-function set_ᶠuₕ³!(ᶜx, ᶠx)
-    ᶜJ = Fields.local_geometry_field(ᶜx).J
-    @. ᶠx.ᶠuₕ³ = ᶠwinterp(ᶜx.ρ * ᶜJ, CT3(ᶜx.uₕ))
-    return nothing
-end
-@testset "Inference/allocations when broadcasting types" begin
-    FT = Float64
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem = 25, helem = 10)
-    fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
-    device = ClimaComms.device(cspace)
-    @info "device = $device"
-    ᶜx = fill((; uₕ = zero(C12{FT}), ρ = FT(0)), cspace)
-    ᶠx = fill((; ᶠuₕ³ = zero(CT3{FT})), fspace)
-    set_ᶠuₕ³!(ᶜx, ᶠx) # compile
-    p_allocated = @allocated set_ᶠuₕ³!(ᶜx, ᶠx)
-    @show p_allocated
-
-    trial = if device isa ClimaComms.CUDADevice
-        CUDA.@sync @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    else
-        @benchmark set_ᶠuₕ³!($ ᶜx, $ᶠx)
-    end
-    show(stdout, MIME("text/plain"), trial)
 end

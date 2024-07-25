@@ -40,7 +40,12 @@ function reshape_sparse_to_field!(field::Fields.Field, in_array::Array, R)
 end
 
 
-@testset "online remap 2D sphere data" begin
+@testset "online remap 2D sphere data; source spacefillingcurve $spacefillingcurve_i; target spacefillingcurve $spacefillingcurve_o" for spacefillingcurve_i in
+                                                                                                                                         [
+        true,
+        false,
+    ],
+    spacefillingcurve_o in [true, false]
 
     # domain
     R = 1.0 # unit sphere
@@ -54,21 +59,37 @@ end
     ne_o = 5
     nq_o = 3
 
-    # construct source mesh
+    # construct source mesh and space, using `spacefillingcurve`` if requested
     mesh_i = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_i)
-    topology_i = ClimaCore.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh_i,
-    )
+    if spacefillingcurve_i
+        topology_i = ClimaCore.Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh_i,
+            ClimaCore.Topologies.spacefillingcurve(mesh_i),
+        )
+    else
+        topology_i = ClimaCore.Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh_i,
+        )
+    end
     space_i = Spaces.SpectralElementSpace2D(topology_i, Quadratures.GLL{nq_i}())
     coords_i = Fields.coordinate_field(space_i)
 
-    # construct target mesh
+    # construct target mesh and space, using `spacefillingcurve`` if requested
     mesh_o = ClimaCore.Meshes.EquiangularCubedSphere(domain, ne_o)
-    topology_o = ClimaCore.Topologies.Topology2D(
-        ClimaComms.SingletonCommsContext(),
-        mesh_o,
-    )
+    if spacefillingcurve_o
+        topology_o = ClimaCore.Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh_o,
+            ClimaCore.Topologies.spacefillingcurve(mesh_o),
+        )
+    else
+        topology_o = ClimaCore.Topologies.Topology2D(
+            ClimaComms.SingletonCommsContext(),
+            mesh_o,
+        )
+    end
     space_o = Spaces.SpectralElementSpace2D(topology_o, Quadratures.GLL{nq_o}())
     coords_o = Fields.coordinate_field(space_o)
 

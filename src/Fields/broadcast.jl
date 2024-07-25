@@ -129,7 +129,7 @@ function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     Base.Broadcast.Broadcasted{DS}(bc.f, _args)
 end
 
-# same logic as Base.Broadcasted (which only defines it for Tuples)
+# same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
 Base.axes(bc::Base.Broadcast.Broadcasted{<:AbstractFieldStyle}) =
     _axes(bc, bc.axes)
 _axes(bc, ::Nothing) = Base.Broadcast.combine_axes(bc.args...)
@@ -149,6 +149,38 @@ end
     copyto!(field_values(dest), Base.Broadcast.instantiate(todata(bc)))
     return dest
 end
+
+# Fused multi-broadcast entry point for Fields
+function Base.copyto!(
+    fmbc::FusedMultiBroadcast{T},
+) where {N, T <: NTuple{N, Pair{<:Field, <:Any}}}
+    fmb_data = FusedMultiBroadcast(
+        map(fmbc.pairs) do pair
+            bc = Base.Broadcast.instantiate(todata(pair.second))
+            Pair(field_values(pair.first), bc)
+        end,
+    )
+    check_mismatched_spaces(fmbc)
+    check_fused_broadcast_axes(fmbc)
+    Base.copyto!(fmb_data) # forward to DataLayouts
+end
+
+@inline check_mismatched_spaces(fmbc::FusedMultiBroadcast) =
+    check_mismatched_spaces(
+        map(x -> axes(x.first), fmbc.pairs),
+        axes(first(fmbc.pairs).first),
+    )
+@inline check_mismatched_spaces(axs::Tuple{<:Any}, ax1) =
+    _check_mismatched_spaces(first(axs), ax1)
+@inline check_mismatched_spaces(axs::Tuple{}, ax1) = nothing
+@inline function check_mismatched_spaces(axs::Tuple, ax1)
+    _check_mismatched_spaces(first(axs), ax1)
+    check_mismatched_spaces(Base.tail(axs), ax1)
+end
+
+_check_mismatched_spaces(::T, ::T) where {T <: AbstractSpace} = nothing
+_check_mismatched_spaces(space1, space2) =
+    error("FusedMultiBroadcast spaces are not the same.")
 
 @noinline function error_mismatched_spaces(space1::Type, space2::Type)
     error("Broacasted spaces are not the same.")

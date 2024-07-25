@@ -4,11 +4,65 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.10
+-------
+
+- Various performance tweaks (PRs [#1840](https://github.com/CliMA/ClimaCore.jl/pull/1840), [#1837](https://github.com/CliMA/ClimaCore.jl/pull/1837), [#1843](https://github.com/CliMA/ClimaCore.jl/pull/1843), [#1839](https://github.com/CliMA/ClimaCore.jl/pull/1839)).
+- CPU/GPU kernels are now determined by dispatching, instead of specializing, which should (hopefully) have generally fixed GPU dispatching issues (PR [#1863](https://github.com/CliMA/ClimaCore.jl/pull/1863)).
+- Matrix multiplication kernels have been improved (PR [#1880](https://github.com/CliMA/ClimaCore.jl/pull/1880)).
+- Support for the following methods have been deprecated (PR [#1821](https://github.com/CliMA/ClimaCore.jl/pull/1821), ):
+  - `IntervalTopology(::Mesh)` in favor of using `IntervalTopology(::ClimaComms.AbstractDevice, ::Mesh)`
+  - `FaceFiniteDifferenceSpace(::Mesh)` in favor of using `FaceFiniteDifferenceSpace(::ClimaComms.AbstractDevice, ::Mesh)`
+  - `CenterFiniteDifferenceSpace(::Mesh)` in favor of using `CenterFiniteDifferenceSpace(::ClimaComms.AbstractDevice, ::Mesh)`
+  - `FiniteDifferenceGrid(::Mesh)` in favor of using `FiniteDifferenceGrid(::ClimaComms.AbstractDevice, ::Mesh)`
+
+v0.14.9
+-------
+
+- ![][badge-🐛bugfix] GPU dispatching with `copyto!` and `fill!` have been fixed PR [#1802](https://github.com/CliMA/ClimaCore.jl/pull/1802).
+
+v0.14.8
+-------
+
+- ![][badge-✨feature/enhancement] Added `FieldMatrixWithSolver`, a wrapper that helps defining implicit Jacobians. PR [#1788](https://github.com/CliMA/ClimaCore.jl/pull/1788)
+
+
+v0.14.6
+-------
+
+- ![][badge-✨feature/enhancement] Added `array2field(::Field)` and `field2array(::Field)` convenience functions, to help facilitate use with RRTMGP. PR [#1768](https://github.com/CliMA/ClimaCore.jl/pull/1768)
+
+- ![][badge-🚀performance] `Nv` is now a type parameter in DataLayouts that have vertical levels. As a result, users can use `DataLayouts.nlevels(::AbstractData)` to obtain a compile-time constant for the number of vertical levels.
+
+- ![][badge-✨feature/enhancement] Added `interpolate(field, target_hcoords,
+  target_zcoord)` convenience function so that the `Remapper` does not have to
+  be explicitely constructed. PR
+  [#1764](https://github.com/CliMA/ClimaCore.jl/pull/1764)
+
+v0.14.5
+-------
+
+- ![][badge-🐛bugfix] `run_field_matrix_solver!` was fixed for column spaces, and tests were added to ensure it doesn't break in the future.
+  PR [#1750](https://github.com/CliMA/ClimaCore.jl/pull/1750)
+- ![][badge-🚀performance] We're now using local memory (MArrays) in the `band_matrix_solve!`, which has improved performance. PR [#1735](https://github.com/CliMA/ClimaCore.jl/pull/1735).
+- ![][badge-🚀performance] We've specialized some cases in `run_field_matrix_solver!`, which results in more efficient kernels being launched. PR [#1732](https://github.com/CliMA/ClimaCore.jl/pull/1732).
+- ![][badge-🚀performance] We've reduced memory reads in the `band_matrix_solve!` for tridiagonal systems, improving its performance. PR [#1731](https://github.com/CliMA/ClimaCore.jl/pull/1731).
+- ![][badge-🚀performance] We've added NVTX annotations in ClimaCore functions, so that we have a more granular trace of performance. PRs [#1726](https://github.com/CliMA/ClimaCore.jl/pull/1726), [#1723](https://github.com/CliMA/ClimaCore.jl/pull/1723).
+
+v0.14.0
+-------
+
+- ![][badge-🐛bugfix] Extend adapt_structure for all operator and boundary
+  condition types. Also use `unrolled_map` in `multiply_matrix_at_index` to
+  avoid the recursive inference limit when compiling nested matrix operations.
+  PR [#1684](https://github.com/CliMA/ClimaCore.jl/pull/1684)
 - ![][badge-🤖precisionΔ] ![][badge-💥breaking] `Remapper`s can now process
   multiple `Field`s at the same time if created with some `buffer_lenght > 1`.
   PR ([#1669](https://github.com/CliMA/ClimaCore.jl/pull/1669))
   Machine-precision differences are expected. This change is breaking because
   remappers now return the same array type as the input field.
+- ![][badge-🚀performance] We inlined the `multiple_field_solve` kernels, which should improve performance. PR [#1715](https://github.com/CliMA/ClimaCore.jl/pull/1715).
+- ![][badge-🚀performance] We added support for MultiBroadcastFusion, which allows users to fuse similar space point-wise broadcast expressions via `Fields.@fused_direct`. PR [#1641](https://github.com/CliMA/ClimaCore.jl/pull/1641).
 
 v0.13.4
 -------

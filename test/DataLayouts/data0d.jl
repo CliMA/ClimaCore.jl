@@ -1,3 +1,7 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data0d.jl"))
+=#
 using Test
 using JET
 
@@ -103,10 +107,11 @@ end
 @testset "broadcasting DataF + VF data object => VF" begin
     FT = Float64
     S = Complex{FT}
+    Nv = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_vf = VF{S}(ones(FT, 3, 2))
+    data_vf = VF{S, Nv}(ones(FT, Nv, 2))
     data_vf2 = data_f .+ data_vf
-    @test data_vf2 isa VF{S}
+    @test data_vf2 isa VF{S, Nv}
     @test size(data_vf2) == (1, 1, 1, 3, 1)
 end
 
@@ -118,16 +123,32 @@ end
     data_if2 = data_f .+ data_if
     @test data_if2 isa IF{S}
     @test size(data_if2) == (2, 1, 1, 1, 1)
+
+    FT = Float64
+    array = rand(FT, 2, 1)
+    data = IF{FT, 2}(array)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "broadcasting DataF + IFH data object => IFH" begin
     FT = Float64
     S = Complex{FT}
+    Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ifh = IFH{S, 2}(ones(FT, 2, 2, 3))
+    data_ifh = IFH{S, 2, Nh}(ones(FT, 2, 2, Nh))
     data_ifh2 = data_f .+ data_ifh
     @test data_ifh2 isa IFH{S}
     @test size(data_ifh2) == (2, 1, 1, 1, 3)
+
+
+    FT = Float64
+    array = rand(FT, 2, 1, Nh)
+    data = IFH{FT, 2, Nh}(array)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "broadcasting DataF + IJF data object => IJF" begin
@@ -138,36 +159,56 @@ end
     data_ijf2 = data_f .+ data_ijf
     @test data_ijf2 isa IJF{S}
     @test size(data_ijf2) == (2, 2, 1, 1, 1)
+
+    FT = Float64
+    array = rand(FT, 2, 2, 1)
+    data = IJF{FT, 2}(array)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "broadcasting DataF + IJFH data object => IJFH" begin
     FT = Float64
     S = Complex{FT}
+    Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ijfh = IJFH{S, 2}(ones(2, 2, 2, 3))
+    data_ijfh = IJFH{S, 2, Nh}(ones(2, 2, 2, Nh))
     data_ijfh2 = data_f .+ data_ijfh
     @test data_ijfh2 isa IJFH{S}
-    @test size(data_ijfh2) == (2, 2, 1, 1, 3)
+    @test size(data_ijfh2) == (2, 2, 1, 1, Nh)
+
+    FT = Float64
+    Nh = 3
+    array = rand(FT, 2, 2, 1, Nh)
+    data = IJFH{FT, 2, Nh}(array)
+    @test DataLayouts.data2array(data) == reshape(parent(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "broadcasting DataF + VIFH data object => VIFH" begin
     FT = Float64
     S = Complex{FT}
+    Nh = 10
     data_f = DataF{S}(ones(FT, 2))
-    data_vifh = VIFH{S, 4}(ones(FT, 10, 4, 3, 10))
+    Nv = 10
+    data_vifh = VIFH{S, Nv, 4, Nh}(ones(FT, Nv, 4, 2, Nh))
     data_vifh2 = data_f .+ data_vifh
-    @test data_vifh2 isa VIFH{S}
-    @test size(data_vifh2) == (4, 1, 1, 10, 10)
+    @test data_vifh2 isa VIFH{S, Nv}
+    @test size(data_vifh2) == (4, 1, 1, Nv, Nh)
 end
 
 @testset "broadcasting DataF + VIJFH data object => VIJFH" begin
     FT = Float64
     S = Complex{FT}
+    Nv = 2
+    Nh = 2
     data_f = DataF{S}(ones(FT, 2))
-    data_vijfh = VIJFH{S, 2}(ones(FT, 2, 2, 2, 2, 2))
+    data_vijfh = VIJFH{S, Nv, 2, Nh}(ones(FT, Nv, 2, 2, 2, Nh))
     data_vijfh2 = data_f .+ data_vijfh
-    @test data_vijfh2 isa VIJFH{S}
-    @test size(data_vijfh2) == (2, 2, 1, 2, 2)
+    @test data_vijfh2 isa VIJFH{S, Nv, Nh}
+    @test size(data_vijfh2) == (2, 2, 1, Nv, Nh)
 end
 
 @testset "column IF => DataF" begin
@@ -184,9 +225,10 @@ end
 @testset "column IFH => DataF" begin
     FT = Float64
     S = Complex{FT}
-    array = ones(FT, 2, 2, 3)
+    Nh = 3
+    array = ones(FT, 2, 2, Nh)
     array[1, :, 1] .= FT[3, 4]
-    data_ifh = IFH{S, 2}(array)
+    data_ifh = IFH{S, 2, Nh}(array)
     ifh_column = column(data_ifh, 1, 1)
     @test ifh_column isa DataF
     @test ifh_column[] == 3.0 + 4.0im
@@ -210,9 +252,10 @@ end
 @testset "column IJFH => DataF" begin
     FT = Float64
     S = Complex{FT}
+    Nh = 3
     array = ones(2, 2, 2, 3)
     array[1, 1, :, 2] .= FT[3, 4]
-    data_ijfh = IJFH{S, 2}(array)
+    data_ijfh = IJFH{S, 2, Nh}(array)
     ijfh_column = column(data_ijfh, 1, 1, 2)
     @test ijfh_column isa DataF
     @test ijfh_column[] == 3.0 + 4.0im
@@ -225,7 +268,8 @@ end
     FT = Float64
     S = Complex{FT}
     array = FT[1 2; 3 4; 5 6]
-    data_vf = VF{S}(array)
+    Nv = size(array, 1)
+    data_vf = VF{S, Nv}(array)
     vf_level = level(data_vf, 2)
     @test vf_level isa DataF
     @test vf_level[] == 3.0 + 4.0im

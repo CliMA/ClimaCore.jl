@@ -14,6 +14,7 @@ using Test
 using StaticArrays, LinearAlgebra
 using Logging
 using ClimaComms
+ClimaComms.@import_required_backends
 
 function rotational_field(space, α0 = 45.0)
     coords = Fields.coordinate_field(space)

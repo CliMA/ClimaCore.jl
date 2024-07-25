@@ -89,15 +89,29 @@ function boundary_face_name(mesh::IntervalMesh, elem::Integer, face)
     return nothing
 end
 
-function monotonic_check(faces)
-    if !(hasproperty(first(faces), :z) || eltype(faces) <: Real)
-        return nothing
-    end
-    z(face::AbstractFloat) = face
-    z(face::Geometry.AbstractPoint) = face.z
+monotonic_check(
+    faces::Union{
+        LinRange{<:Geometry.AbstractPoint},
+        Vector{<:Geometry.AbstractPoint},
+    },
+) = :no_check
+
+function monotonic_check(
+    faces::Union{
+        LinRange{<:Geometry.ZPoint},
+        LinRange{<:Real},
+        Vector{<:Geometry.ZPoint},
+        Vector{<:Real},
+    },
+)
     n = length(faces) - 1
-    monotonic_incr = all(map(i -> z(faces[i]) < z(faces[i + 1]), 1:n))
-    monotonic_decr = all(map(i -> z(faces[i]) > z(faces[i + 1]), 1:n))
+    if eltype(faces) <: Geometry.AbstractPoint
+        monotonic_incr = all(i -> faces[i].z < faces[i + 1].z, 1:n)
+        monotonic_decr = all(i -> faces[i].z > faces[i + 1].z, 1:n)
+    else
+        monotonic_incr = all(i -> faces[i] < faces[i + 1], 1:n)
+        monotonic_decr = all(i -> faces[i] > faces[i + 1], 1:n)
+    end
     if !(monotonic_incr || monotonic_decr)
         error(
             string(
@@ -106,7 +120,7 @@ function monotonic_check(faces)
             ),
         )
     end
-    return nothing
+    return :pass
 end
 
 abstract type StretchingRule end

@@ -1,4 +1,9 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "DataLayouts", "data2dx.jl"))
+=#
 using Test
+using ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
 
 @testset "VIJFH" begin
@@ -14,7 +19,7 @@ import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
         # 10 elements in horizontal with 4 × 4 nodal points per element in horizontal
         array = rand(FT, Nv, Nij, Nij, 3, Nh)
 
-        data = VIJFH{S, Nij}(array)
+        data = VIJFH{S, Nv, Nij, Nh}(array)
 
         @test getfield(data.:1, :array) == @view(array[:, :, :, 1:2, :])
         @test getfield(data.:2, :array) == @view(array[:, :, :, 3:3, :])
@@ -38,6 +43,17 @@ import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
               Complex{FT}(sum(array[:, :, :, 1, :]), sum(array[:, :, :, 2, :]))
         @test sum(x -> x[2], data) ≈ sum(array[:, :, :, 3, :])
     end
+
+    FT = Float64
+    Nv = 10 # number of vertical levels
+    Ni = 4  # number of nodal points
+    Nh = 10 # number of elements
+    array = rand(FT, Nv, Nij, Nij, 1, Nh)
+    data = VIJFH{FT, Nv, Nij, Nh}(array)
+    @test DataLayouts.data2array(data) ==
+          reshape(parent(data), DataLayouts.nlevels(data), :)
+    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
+          parent(data)
 end
 
 @testset "VIJFH boundscheck" begin
@@ -47,7 +63,7 @@ end
 
     S = Tuple{Complex{Float64}, Float64}
     array = zeros(Float64, Nv, Nij, Nij, 3, Nh)
-    data = VIJFH{S, Nij}(array)
+    data = VIJFH{S, Nv, Nij, Nh}(array)
 
     @test_throws BoundsError slab(data, -1, 1)
     @test_throws BoundsError slab(data, 1, -1)
@@ -72,7 +88,7 @@ end
     SB = (c = 1.0, d = 2.0)
 
     array = zeros(Float64, Nv, Nij, Nij, 2, Nh)
-    data = VIJFH{typeof(SA), Nij}(array)
+    data = VIJFH{typeof(SA), Nv, Nij, Nh}(array)
 
     cdata = column(data, 1, 2, 1)
     cdata[1] = SA
@@ -87,10 +103,12 @@ end
 @testset "broadcasting between VIJFH data object + scalars" begin
     FT = Float64
     array = ones(FT, 2, 2, 2, 2, 2)
+    Nv = size(array, 1)
+    Nh = size(array, 5)
     S = Complex{Float64}
-    data1 = VIJFH{S, 2}(array)
+    data1 = VIJFH{S, Nv, 2, Nh}(array)
     res = data1 .+ 1
-    @test res isa VIJFH{S}
+    @test res isa VIJFH{S, Nv}
     @test parent(res) == FT[
         f == 1 ? 2 : 1 for v in 1:2, i in 1:2, j in 1:2, f in 1:2, h in 1:2
     ]
@@ -102,10 +120,12 @@ end
 @testset "broadcasting between VF + IJFH data object => VIJFH" begin
     FT = Float64
     S = Complex{FT}
-    data_vf = VF{S}(ones(FT, 3, 2))
-    data_ijfh = IJFH{FT, 2}(ones(FT, 2, 2, 1, 2))
+    Nv = 3
+    Nh = 2
+    data_vf = VF{S, Nv}(ones(FT, Nv, 2))
+    data_ijfh = IJFH{FT, 2, Nh}(ones(FT, 2, 2, 1, Nh))
     data_vijfh = data_vf .+ data_ijfh
-    @test data_vijfh isa VIJFH{S}
+    @test data_vijfh isa VIJFH{S, Nv}
     @test size(data_vijfh) == (2, 2, 1, 3, 2)
 
     @test parent(data_vijfh) == FT[

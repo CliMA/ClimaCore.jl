@@ -3,8 +3,9 @@ julia --project
 using Revise; include(joinpath("test", "Spaces", "extruded_sphere_cuda.jl"))
 =#
 using LinearAlgebra, IntervalSets
-using CUDA
-using ClimaComms, ClimaCore
+using ClimaComms
+ClimaComms.@import_required_backends
+using ClimaCore
 import ClimaCore:
     Domains,
     Topologies,
@@ -74,7 +75,7 @@ end
             2 .* cos.(coords_cpu.long .+ coords_cpu.lat),
         )
     x_gpu = Geometry.UVWVector.(cosd.(coords_gpu.lat), 0.0, 0.0)
-    CUDA.allowscalar(false)
+
     f_gpu = sin.(coords_gpu.lat .+ 2 .* coords_gpu.long)
     g_gpu =
         Geometry.UVVector.(
@@ -124,7 +125,7 @@ end
             2 .* cos.(coords_cpu.long .+ coords_cpu.lat),
         )
     x_gpu = Geometry.UVWVector.(cosd.(coords_gpu.lat), 0.0, 0.0)
-    CUDA.allowscalar(false)
+
     f_gpu = sin.(coords_gpu.lat .+ 2 .* coords_gpu.long)
     g_gpu =
         Geometry.UVVector.(

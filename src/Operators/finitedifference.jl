@@ -1,4 +1,4 @@
-import ..Utilities: PlusHalf, half
+import ..Utilities: PlusHalf, half, UnrolledFunctions
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
@@ -46,7 +46,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
 )
     v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
     end
     i, j, h = hidx
     local_geom =
@@ -60,7 +60,7 @@ Base.@propagate_inbounds function Geometry.LocalGeometry(
 )
     v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
     end
     i, j, h = hidx
     local_geom = Grids.local_geometry_data(Spaces.grid(space), Grids.CellFace())
@@ -239,12 +239,6 @@ Adapt.adapt_structure(to, sbc::StencilBroadcasted{Style}) where {Style} =
         Adapt.adapt(to, sbc.args),
         Adapt.adapt(to, sbc.axes),
     )
-
-function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
-    op
-end
-
-
 
 function Base.Broadcast.instantiate(sbc::StencilBroadcasted)
     op = sbc.op
@@ -2610,18 +2604,36 @@ Base.@propagate_inbounds function stencil_right_boundary(
     stencil_interior(op, loc, space, idx - 1, hidx, arg)
 end
 
-function Adapt.adapt_structure(to, op::DivergenceF2C)
-    DivergenceF2C(map(bc -> Adapt.adapt_structure(to, bc), op.bcs))
+"""
+    unionall_type(::Type{T})
+
+Extract the type of the input, and strip it of any type parameters.
+"""
+unionall_type(::Type{T}) where {T} = T.name.wrapper
+
+# Extend `adapt_structure` for all boundary conditions containing a `val` field.
+function Adapt.adapt_structure(to, bc::AbstractBoundaryCondition)
+    if hasfield(typeof(bc), :val)
+        return unionall_type(typeof(bc))(Adapt.adapt_structure(to, bc.val))
+    else
+        return bc
+    end
 end
 
-function Adapt.adapt_structure(to, bc::SetValue)
-    SetValue(Adapt.adapt_structure(to, bc.val))
+# Extend `adapt_structure` for all operator types with boundary conditions.
+function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
+    if hasfield(typeof(op), :bcs)
+        bcs_adapted = NamedTuple{keys(op.bcs)}(
+            UnrolledFunctions.unrolled_map(
+                bc -> Adapt.adapt_structure(to, bc),
+                values(op.bcs),
+            ),
+        )
+        return unionall_type(typeof(op))(bcs_adapted)
+    else
+        return op
+    end
 end
-
-function Adapt.adapt_structure(to, bc::SetDivergence)
-    SetDivergence(Adapt.adapt_structure(to, bc.val))
-end
-
 
 """
     D = DivergenceC2F(;boundaryname=boundarycondition...)
@@ -3107,7 +3119,7 @@ function vidx(space::AllFaceFiniteDifferenceSpace, idx)
     @assert idx isa PlusHalf
     v = idx + half
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
     end
     return v
 end
@@ -3115,7 +3127,7 @@ function vidx(space::AllCenterFiniteDifferenceSpace, idx)
     @assert idx isa Integer
     v = idx
     if Topologies.isperiodic(Spaces.vertical_topology(space))
-        v = mod1(v, length(space))
+        v = mod1(v, Spaces.nlevels(space))
     end
     return v
 end
@@ -3361,7 +3373,7 @@ end
 function window_bounds(space, bc)
     if Topologies.isperiodic(Spaces.vertical_topology(space))
         li = lw = left_idx(space)
-        ri = rw = left_idx(space) + length(space) - 1
+        ri = rw = right_idx(space)
     else
         lbw = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
         rbw = RightBoundaryWindow{Spaces.right_boundary_name(space)}()

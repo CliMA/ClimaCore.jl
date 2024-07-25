@@ -12,7 +12,7 @@ import ClimaCore:
     Quadratures
 
 using ClimaComms
-using CUDA
+ClimaComms.@import_required_backends
 
 # initializing MPI
 const device = ClimaComms.device()
@@ -100,7 +100,7 @@ pid, nprocs = ClimaComms.init(context)
     end
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
     if pid == 1
-        @show p
+        @test p ≤ 7008
     end
 
 end

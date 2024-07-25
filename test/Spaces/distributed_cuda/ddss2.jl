@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 using Logging
 using Test
 
@@ -14,7 +12,7 @@ import ClimaCore:
     Quadratures
 
 using ClimaComms
-using CUDA
+ClimaComms.@import_required_backends
 
 # initializing MPI
 const device = ClimaComms.device()
@@ -42,6 +40,7 @@ pid, nprocs = ClimaComms.init(context)
     context = ClimaComms.MPICommsContext(device)
     pid, nprocs = ClimaComms.init(context)
     iamroot = ClimaComms.iamroot(context)
+    @show ClimaComms.nprocs(context), ClimaComms.mypid(context), iamroot
     if iamroot
         println("running test on $device device with $nprocs processes")
     end
@@ -68,7 +67,7 @@ pid, nprocs = ClimaComms.init(context)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == 2
 
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         @test Topologies.local_neighboring_elements(
             Spaces.topology(space),
             1,
@@ -109,7 +108,7 @@ pid, nprocs = ClimaComms.init(context)
     end
 #! format: on
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 8064
 
     #testing weighted dss on a vector field
     init_vectorstate(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
@@ -122,5 +121,5 @@ pid, nprocs = ClimaComms.init(context)
     @test parent(v0) ≈ parent(vx)
 
     p = @allocated Spaces.weighted_dss!(v0, dss_vbuffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 280384
 end

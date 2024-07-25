@@ -1,3 +1,5 @@
+import ClimaComms
+ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
 using OrdinaryDiffEq: ODEProblem, solve
@@ -87,10 +89,10 @@ domain = Domains.IntervalDomain(
 
 stretch_fns = (Meshes.Uniform(), Meshes.ExponentialStretching(FT(7.0)))
 plot_string = ["uniform", "stretched"]
-
+device = ClimaComms.device()
 for (i, stretch_fn) in enumerate(stretch_fns)
     mesh = Meshes.IntervalMesh(domain, stretch_fn; nelems = n)
-    cent_space = Spaces.CenterFiniteDifferenceSpace(mesh)
+    cent_space = Spaces.CenterFiniteDifferenceSpace(device, mesh)
     face_space = Spaces.FaceFiniteDifferenceSpace(cent_space)
     z = Fields.coordinate_field(cent_space).z
     O = ones(FT, face_space)

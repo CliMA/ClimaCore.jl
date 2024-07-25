@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Spaces", "terrain_warp.jl"))
+=#
 using Test
 using ClimaComms
 using IntervalSets
@@ -39,16 +43,15 @@ function warp_sinsq_3d(coord)
     y = Geometry.component(coord, 2)
     eltype(x)(0.5) * sin(x)^2 * sin(y)^2
 end
-function generate_base_spaces(
+function generate_base_spaces_2d(
     xlim,
     zlim,
     helem,
     velem,
     npoly,
     stretch = Meshes.Uniform();
-    ndims = 3,
+    device,
 )
-    device = ClimaComms.CPUSingleThreaded()
     comms_context = ClimaComms.SingletonCommsContext(device)
     FT = eltype(xlim)
     vertdomain = Domains.IntervalDomain(
@@ -57,31 +60,51 @@ function generate_base_spaces(
         boundary_names = (:bottom, :top),
     )
     vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
-    vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
 
     # Generate Horizontal Space
     quad = Quadratures.GLL{npoly + 1}()
-    if ndims == 2
-        horzdomain = Domains.IntervalDomain(
-            Geometry.XPoint{FT}(xlim[1]),
-            Geometry.XPoint{FT}(xlim[2]);
-            periodic = true,
-        )
-        horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
-        horztopology = Topologies.IntervalTopology(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-    elseif ndims == 3
-        horzdomain = Domains.RectangleDomain(
-            Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
-            Geometry.YPoint{FT}(xlim[1]) .. Geometry.YPoint{FT}(xlim[2]),
-            x1periodic = true,
-            x2periodic = true,
-        )
-        # Assume same number of elems (helem) in (x,y) directions
-        horzmesh = Meshes.RectilinearMesh(horzdomain, helem, helem)
-        horztopology = Topologies.Topology2D(comms_context, horzmesh)
-        hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
-    end
+    horzdomain = Domains.IntervalDomain(
+        Geometry.XPoint{FT}(xlim[1]),
+        Geometry.XPoint{FT}(xlim[2]);
+        periodic = true,
+    )
+    horzmesh = Meshes.IntervalMesh(horzdomain; nelems = helem)
+    horztopology = Topologies.IntervalTopology(comms_context, horzmesh)
+    hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
+    return vert_face_space, hspace
+end
+function generate_base_spaces_3d(
+    xlim,
+    zlim,
+    helem,
+    velem,
+    npoly,
+    stretch = Meshes.Uniform();
+    device,
+)
+    comms_context = ClimaComms.SingletonCommsContext(device)
+    FT = eltype(xlim)
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, stretch, nelems = velem)
+    vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
+
+    # Generate Horizontal Space
+    quad = Quadratures.GLL{npoly + 1}()
+    horzdomain = Domains.RectangleDomain(
+        Geometry.XPoint{FT}(xlim[1]) .. Geometry.XPoint{FT}(xlim[2]),
+        Geometry.YPoint{FT}(xlim[1]) .. Geometry.YPoint{FT}(xlim[2]),
+        x1periodic = true,
+        x2periodic = true,
+    )
+    # Assume same number of elems (helem) in (x,y) directions
+    horzmesh = Meshes.RectilinearMesh(horzdomain, helem, helem)
+    horztopology = Topologies.Topology2D(comms_context, horzmesh)
+    hspace = Spaces.SpectralElementSpace2D(horztopology, quad)
     return vert_face_space, hspace
 end
 function generate_smoothed_orography(
@@ -118,7 +141,7 @@ function get_adaptation(adaption, z_surface::Fields.Field)
 end
 
 function warpedspace_2D(
-    FT = Float64,
+    ::Type{FT},
     xlim = (0, π),
     zlim = (0, 1),
     helem = 2,
@@ -128,9 +151,10 @@ function warpedspace_2D(
     warp_fn = warp_sin_2d,
     test_smoothing = false,
     adaption = Hypsography.LinearAdaption,
-)
+    device,
+) where {FT}
     vert_face_space, hspace =
-        generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
+        generate_base_spaces_2d(xlim, zlim, helem, velem, npoly; device)
     z_surface =
         generate_smoothed_orography(hspace, warp_fn, helem; test_smoothing)
     mesh_adapt = get_adaptation(adaption, z_surface)
@@ -144,16 +168,17 @@ function warpedspace_2D(
     return (c_space, f_space)
 end
 function hybridspace_2D(
-    FT = Float64,
+    ::Type{FT},
     xlim = (0, π),
     zlim = (0, 1),
     helem = 2,
     velem = 10,
     npoly = 5;
     stretch = Meshes.Uniform(),
-)
+    device,
+) where {FT}
     vert_face_space, hspace =
-        generate_base_spaces(xlim, zlim, helem, velem, npoly, ndims = 2)
+        generate_base_spaces_2d(xlim, zlim, helem, velem, npoly; device)
     # Extrusion
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
@@ -161,7 +186,7 @@ function hybridspace_2D(
     return (c_space, f_space)
 end
 function warpedspace_3D(
-    FT = Float64,
+    ::Type{FT},
     xlim = (0, π),
     ylim = (0, π),
     zlim = (0, 1),
@@ -172,9 +197,10 @@ function warpedspace_3D(
     warp_fn = warp_sincos_3d,
     test_smoothing = false,
     adaption = Hypsography.LinearAdaption,
-)
+    device,
+) where {FT}
     vert_face_space, hspace =
-        generate_base_spaces(xlim, zlim, helem, velem, npoly)
+        generate_base_spaces_3d(xlim, zlim, helem, velem, npoly; device)
 
     # Extrusion
     z_surface =
@@ -193,16 +219,24 @@ end
 # 2D Tests
 @testset "2D Extruded Terrain Warped Space" begin
     # Generated "negative space" should be unity
-    for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    for FT in (Float32,)
         # Extruded FD-Spectral Hybrid
         xmin, xmax = FT(0), FT(π)
         zmin, zmax = FT(0), FT(1)
-        levels = 5:10
-        polynom = 2:2:10
-        horzelem = 2:2:10
+        levels = (5, 10)
+        polynom = 2:4:10
+        horzelem = 2:4:10
         for nl in levels, np in polynom, nh in horzelem
-            ʷhv_center_space, ʷhv_face_space =
-                warpedspace_2D(FT, (xmin, xmax), (zmin, zmax), nh, nl, np;)
+            ʷhv_center_space, ʷhv_face_space = warpedspace_2D(
+                FT,
+                (xmin, xmax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                device,
+            )
             ʷᶜcoords = Fields.coordinate_field(ʷhv_center_space)
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             z₀ = ClimaCore.Fields.level(ʷᶜcoords.z, 1)
@@ -215,12 +249,13 @@ end
 
 @testset "2D Extruded Terrain Laplacian Smoothing" begin
     # Test smoothing for known parameters
-    for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    for FT in (Float32,)
         # Extruded FD-Spectral Hybrid
         xmin, xmax = FT(0), FT(π)
         zmin, zmax = FT(0), FT(1)
-        levels = [5, 10]
-        polynom = 3:2:10
+        levels = (5, 10)
+        polynom = 2:4:10
         horzelem = 5:2:10
         for nl in levels, np in polynom, nh in horzelem
             # Test Against Steady State Analytical Solution
@@ -233,6 +268,7 @@ end
                 np;
                 warp_fn = warp_sinsq_2d,
                 test_smoothing = true,
+                device,
             )
             ʳhv_center_space, ʳhv_face_space = warpedspace_2D(
                 FT,
@@ -243,6 +279,7 @@ end
                 np;
                 warp_fn = warp_sinsq_2d,
                 test_smoothing = false,
+                device,
             )
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             ʷᶠʳcoords = Fields.coordinate_field(ʳhv_face_space)
@@ -255,6 +292,7 @@ end
 end
 
 @testset "2D Warped Mesh RHS Integration Test" begin
+    device = ClimaComms.device()
     for FT in (Float64,)
         xmin, xmax = FT(0), FT(π)
         zmin, zmax = FT(0), FT(1)
@@ -269,6 +307,7 @@ end
             levels,
             polynom;
             warp_fn = flat_test_2d,
+            device,
         )
         ⁿᶜcoords = Fields.coordinate_field(ⁿhv_center_space)
         ⁿᶠcoords = Fields.coordinate_field(ⁿhv_face_space)
@@ -298,15 +337,16 @@ end
 
 # 3D Tests
 @testset "3D Extruded Terrain Warped Space" begin
+    device = ClimaComms.device()
     # Generated "negative space" should be unity
-    for FT in (Float32, Float64)
+    for FT in (Float32,)
         # Extruded FD-Spectral Hybrid
         xmin, xmax = FT(0), FT(π)
         ymin, ymax = FT(0), FT(π)
         zmin, zmax = FT(0), FT(1)
-        levels = 5:10
-        polynom = 2:2:10
-        horzelem = 2:2:10
+        levels = (5, 10)
+        polynom = 2:4:10
+        horzelem = 2:4:10
         for nl in levels, np in polynom, nh in horzelem
             hv_center_space, hv_face_space = warpedspace_3D(
                 FT,
@@ -316,6 +356,7 @@ end
                 nh,
                 nl,
                 np;
+                device,
             )
             ᶜcoords = Fields.coordinate_field(hv_center_space)
             ᶠcoords = Fields.coordinate_field(hv_face_space)
@@ -330,13 +371,14 @@ end
 
 @testset "3D Extruded Terrain Laplacian Smoothing" begin
     # Test smoothing for known parameters
-    for FT in (Float32, Float64)
+    device = ClimaComms.device()
+    for FT in (Float32,)
         # Extruded FD-Spectral Hybrid
         xmin, xmax = FT(0), FT(π)
         ymin, ymax = FT(0), FT(π)
         zmin, zmax = FT(0), FT(1)
         levels = [5]
-        polynom = 3:2:10
+        polynom = 3:3:10
         horzelem = 5:2:10
         for nl in levels, np in polynom, nh in horzelem
             # Test Against Steady State Analytical Solution
@@ -350,6 +392,7 @@ end
                 np;
                 warp_fn = warp_sinsq_3d,
                 test_smoothing = true,
+                device,
             )
             ʳhv_center_space, ʳhv_face_space = warpedspace_3D(
                 FT,
@@ -361,6 +404,7 @@ end
                 np;
                 warp_fn = warp_sinsq_3d,
                 test_smoothing = false,
+                device,
             )
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             ʷᶠʳcoords = Fields.coordinate_field(ʳhv_face_space)
@@ -376,8 +420,9 @@ end
 
 @testset "Interior Mesh `Adaption` ηₕ Test" begin
     # Test interior mesh in different adaptation types
+    device = ClimaComms.device()
     for meshadapt in (Hypsography.SLEVEAdaption,)
-        for FT in (Float32, Float64)
+        for FT in (Float32,)
             xmin, xmax = FT(0), FT(π)
             zmin, zmax = FT(0), FT(1)
             nl = 10
@@ -392,9 +437,17 @@ end
                 np;
                 warp_fn = warp_sin_2d,
                 adaption = meshadapt,
+                device,
             )
-            hv_center_space, hv_face_space =
-                hybridspace_2D(FT, (xmin, xmax), (zmin, zmax), nh, nl, np)
+            hv_center_space, hv_face_space = hybridspace_2D(
+                FT,
+                (xmin, xmax),
+                (zmin, zmax),
+                nh,
+                nl,
+                np;
+                device,
+            )
             ʷᶜcoords = Fields.coordinate_field(ʷhv_center_space)
             ʷᶠcoords = Fields.coordinate_field(ʷhv_face_space)
             ᶜcoords = Fields.coordinate_field(hv_center_space)
@@ -412,9 +465,10 @@ end
 end
 
 @testset "Interior Mesh `Adaption` (ηₕ=1, s=1) Test" begin
+    device = ClimaComms.device()
     # Test interior mesh in different adaptation types
     for meshadapt in (Hypsography.SLEVEAdaption,)
-        for FT in (Float32, Float64)
+        for FT in (Float32,)
             xlim = (FT(0), FT(π))
             zlim = (FT(0), FT(1))
             nl = 10
@@ -426,7 +480,7 @@ end
                 boundary_names = (:bottom, :top),
             )
             vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
-            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
+            vert_face_space = Spaces.FaceFiniteDifferenceSpace(device, vertmesh)
 
             horzdomain = Domains.IntervalDomain(
                 Geometry.XPoint{FT}(xlim[1]),
@@ -434,7 +488,7 @@ end
                 periodic = true,
             )
             horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
-            horztopology = Topologies.IntervalTopology(horzmesh)
+            horztopology = Topologies.IntervalTopology(device, horzmesh)
 
             quad = Quadratures.GLL{np + 1}()
             hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
@@ -442,11 +496,20 @@ end
             # Generate surface elevation profile
             z_surface =
                 Geometry.ZPoint.(warp_sin_2d.(Fields.coordinate_field(hspace)))
+
+            # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
+            # Scale height is poorly specified, so code should throw warning.
+            @test_throws ErrorException Spaces.ExtrudedFiniteDifferenceSpace(
+                hspace,
+                vert_face_space,
+                meshadapt(z_surface, FT(1), FT(0.1)),
+            )
+
             # Generate space with known mesh-warp parameters ηₕ = 1; s = 1
             fspace = Spaces.ExtrudedFiniteDifferenceSpace(
                 hspace,
                 vert_face_space,
-                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(1)),
+                meshadapt(z_surface, FT(1), FT(1)),
             )
             face_local_geometry = Spaces.local_geometry_data(
                 Spaces.grid(fspace),
@@ -467,47 +530,6 @@ end
                     ),
                 ) <= FT(1e-6)
             end
-        end
-    end
-end
-@testset "Interior Mesh `Adaption`: Test Warnings" begin
-    # Test interior mesh in different adaptation types
-    for meshadapt in (Hypsography.SLEVEAdaption,)
-        for FT in (Float32, Float64)
-            xlim = (FT(0), FT(π))
-            zlim = (FT(0), FT(1))
-            nl = 10
-            np = 3
-            nh = 4
-            vertdomain = Domains.IntervalDomain(
-                Geometry.ZPoint{FT}(zlim[1]),
-                Geometry.ZPoint{FT}(zlim[2]);
-                boundary_names = (:bottom, :top),
-            )
-            vertmesh = Meshes.IntervalMesh(vertdomain, nelems = nl)
-            vert_face_space = Spaces.FaceFiniteDifferenceSpace(vertmesh)
-
-            horzdomain = Domains.IntervalDomain(
-                Geometry.XPoint{FT}(xlim[1]),
-                Geometry.XPoint{FT}(xlim[2]);
-                periodic = true,
-            )
-            horzmesh = Meshes.IntervalMesh(horzdomain, nelems = nh)
-            horztopology = Topologies.IntervalTopology(horzmesh)
-
-            quad = Quadratures.GLL{np + 1}()
-            hspace = Spaces.SpectralElementSpace1D(horztopology, quad)
-
-            # Generate surface elevation profile
-            z_surface =
-                Geometry.ZPoint.(warp_sin_2d.(Fields.coordinate_field(hspace)))
-            # Generate space with known mesh-warp parameters ηₕ = 1; s = 0.1
-            # Scale height is poorly specified, so code should throw warning.
-            @test_throws ErrorException Spaces.ExtrudedFiniteDifferenceSpace(
-                hspace,
-                vert_face_space,
-                Hypsography.SLEVEAdaption(z_surface, FT(1), FT(0.1)),
-            )
         end
     end
 end

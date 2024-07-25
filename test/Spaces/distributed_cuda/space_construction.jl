@@ -1,7 +1,7 @@
 using Logging
 using Test
 using ClimaComms
-using CUDA
+ClimaComms.@import_required_backends
 
 import ClimaCore:
     Domains,

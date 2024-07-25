@@ -1,11 +1,13 @@
 #=
-julia --threads=8 --project=examples
+julia --threads=8 --project=.buildkite
 ENV["TEST_NAME"] = "plane/inertial_gravity_wave"
 include(joinpath("examples", "hybrid", "driver.jl"))
 =#
 using Printf
 using ProgressLogging
 using ClimaCorePlots, Plots
+import ClimaComms
+ClimaComms.@import_required_backends
 
 # Reference paper: https://rmets.onlinelibrary.wiley.com/doi/pdf/10.1002/qj.2105
 

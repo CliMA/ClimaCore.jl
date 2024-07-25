@@ -1,7 +1,9 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "Spaces", "ddss1.jl"))
+=#
 using Logging
 using Test
-import CUDA
-CUDA.allowscalar(false)
 
 import ClimaCore:
     Domains,
@@ -15,8 +17,7 @@ import ClimaCore:
     DataLayouts
 
 using ClimaComms
-const device = ClimaComms.device()
-const context = ClimaComms.SingletonCommsContext(device)
+ClimaComms.@import_required_backends
 
 function distributed_space(
     (n1, n2),
@@ -27,6 +28,8 @@ function distributed_space(
     x2min = -2π,
     x2max = 2π,
 )
+    device = ClimaComms.device()
+    context = ClimaComms.SingletonCommsContext(device)
     domain = Domains.RectangleDomain(
         Domains.IntervalDomain(
             Geometry.XPoint(x1min),
@@ -66,11 +69,11 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
 @testset "4x1 element mesh with periodic boundaries on 1 process" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
-
+    device = ClimaComms.device(comms_ctx)
     @test Topologies.nlocalelems(Spaces.topology(space)) == 4
 
 
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         @test Topologies.local_neighboring_elements(
             Spaces.topology(space),
             1,
@@ -104,21 +107,14 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
 #! format: on
 
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    @show p
-    #=
-    @test p == 0
-    =#
+    @test p ≤ 39448 # cuda allocation
+    @test p == 0 broken = device isa ClimaComms.CUDADevice
 end
 
 @testset "test if dss is no-op on an empty field" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 1))
     y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
-
-    dims = (Nq, Nq, 0, 4)
-    array = similar(parent(y0), dims)
-    data = DataLayouts.rebuild(Fields.field_values(y0), array)
-    space = axes(y0)
     empty_field = similar(y0, Tuple{})
     dss_buffer = Spaces.create_dss_buffer(empty_field)
     @test empty_field == Spaces.weighted_dss!(empty_field)
@@ -128,6 +124,7 @@ end
 @testset "4x1 element mesh on 1 process - vector field" begin
     Nq = 3
     space, comms_ctx = distributed_space((4, 1), (true, true), (Nq, 1, 2))
+    device = ClimaComms.device(comms_ctx)
     y0 = init_state_vector.(Fields.local_geometry_field(space), Ref(nothing))
     yx = copy(y0)
 
@@ -137,6 +134,6 @@ end
     @test parent(yx) ≈ parent(y0)
 
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    @show p
-    #@test p == 0
+    @test p ≤ 39448 # cuda allocation
+    @test p == 0 broken = device isa ClimaComms.CUDADevice
 end

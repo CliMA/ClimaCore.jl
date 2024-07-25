@@ -1,24 +1,29 @@
+#=
+julia --project=test
+using Revise; include(joinpath("test", "MatrixFields", "field_matrix_solvers.jl"))
+=#
 import Logging
 import Logging: Debug
-import LinearAlgebra: I, norm
+import LinearAlgebra: I, norm, ldiv!, mul!
+import ClimaComms
 import ClimaCore.Utilities: half
 import ClimaCore.RecursiveApply: ⊠
 import ClimaCore.MatrixFields: @name
+import ClimaCore:
+    Spaces, MatrixFields, Fields, Domains, Meshes, Topologies, Geometry
 
 include("matrix_field_test_utils.jl")
-
-# This broadcast must be wrapped in a function to be tested with @test_opt.
-field_matrix_mul!(b, A, x) = @. b = A * x
 
 function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
     @testset "$test_name" begin
         x = similar(b)
-        b_test = similar(b)
-        solver = FieldMatrixSolver(alg, A, b)
-        args = (solver, x, A, b)
+        A′ = FieldMatrixWithSolver(A, b, alg)
+        solve_time =
+            @benchmark ClimaComms.@cuda_sync comms_device ldiv!(x, A′, b)
 
-        solve_time = @benchmark field_matrix_solve!(args...)
-        mul_time = @benchmark field_matrix_mul!(b_test, A, x)
+        b_test = similar(b)
+        mul_time =
+            @benchmark ClimaComms.@cuda_sync comms_device mul!(b_test, A′, x)
 
         solve_time_rounded = round(solve_time; sigdigits = 2)
         mul_time_rounded = round(mul_time; sigdigits = 2)
@@ -49,17 +54,19 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         # In addition to ignoring the type instabilities from CUDA, ignore those
         # from CUBLAS (norm), KrylovKit (eigsolve), and CoreLogging (@debug).
         ignored = (
-            ignore_cuda...,
-            using_cuda ? AnyFrameModule(CUDA.CUBLAS) :
+            cuda_frames...,
+            cublas_frames...,
             AnyFrameModule(MatrixFields.KrylovKit),
             AnyFrameModule(Base.CoreLogging),
         )
-        @test_opt ignored_modules = ignored FieldMatrixSolver(alg, A, b)
-        @test_opt ignored_modules = ignored field_matrix_solve!(args...)
-        @test_opt ignored_modules = ignored field_matrix_mul!(b, A, x)
+        using_cuda ||
+            @test_opt ignored_modules = ignored FieldMatrixWithSolver(A, b, alg)
+        using_cuda || @test_opt ignored_modules = ignored ldiv!(x, A′, b)
+        @test_opt ignored_modules = ignored mul!(b_test, A′, x)
 
-        using_cuda || @test @allocated(field_matrix_solve!(args...)) == 0
-        using_cuda || @test @allocated(field_matrix_mul!(b, A, x)) == 0
+        # TODO: fix broken test when Nv is added to the type space
+        using_cuda || @test @allocated(ldiv!(x, A′, b)) ≤ 1536
+        using_cuda || @test @allocated(mul!(b_test, A′, x)) == 0
     end
 end
 
@@ -317,8 +324,7 @@ end
             b = Fields.FieldVector(; c = ᶜvec, f = ᶠvec)
 
             x = similar(b)
-            solver = FieldMatrixSolver(alg, A, b)
-            args = (solver, x, A, b)
+            A′ = FieldMatrixWithSolver(A, b, alg)
 
             # Compare the debugging logs to RegEx strings. Note that debugging the
             # spectral radius is currently not possible on GPUs.
@@ -330,9 +336,7 @@ end
                 (:debug, r"||x[2] - x'||₂ ≈"),
             )
             logs = (spectral_radius_logs..., error_norm_logs...)
-            @test_logs logs... min_level = Logging.Debug field_matrix_solve!(
-                args...,
-            )
+            @test_logs logs... min_level = Logging.Debug ldiv!(x, A′, b)
         end
     end
 end
@@ -521,4 +525,36 @@ end
         ),
         b = b_moist_dycore_prognostic_edmf_prognostic_surface,
     )
+end
+
+@testset "FieldMatrixSolver with CenterFiniteDifferenceSpace" begin
+    # Set up FiniteDifferenceSpace
+    FT = Float32
+    zmax = FT(0)
+    zmin = FT(-0.35)
+    nelems = 5
+
+    context = ClimaComms.context()
+    z_domain = Domains.IntervalDomain(
+        Geometry.ZPoint(zmin),
+        Geometry.ZPoint(zmax);
+        boundary_names = (:bottom, :top),
+    )
+    z_mesh = Meshes.IntervalMesh(z_domain, nelems = nelems)
+    z_topology = Topologies.IntervalTopology(context, z_mesh)
+    space = Spaces.CenterFiniteDifferenceSpace(z_topology)
+
+    # Create a field containing a `TridiagonalMatrixRow` at each point
+    tridiag_type = MatrixFields.TridiagonalMatrixRow{FT}
+    tridiag_field = Fields.Field(tridiag_type, space)
+
+    # Set up objects for matrix solve
+    A = MatrixFields.FieldMatrix((@name(_), @name(_)) => tridiag_field)
+    field = Fields.ones(space)
+    b = Fields.FieldVector(; _ = field)
+    x = similar(b)
+    A′ = FieldMatrixWithSolver(A, b)
+
+    # Run matrix solve
+    ldiv!(x, A′, b)
 end

@@ -71,14 +71,14 @@ function make_q_bounds(
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IFH{S, 2}(similar(parent(ρq), (2, Nf, Nh)))
+    return DataLayouts.IFH{S, 2, Nh}(similar(parent(ρq), (2, Nf, Nh)))
 end
 function make_q_bounds(
     ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
+    return DataLayouts.VIFH{S, Nv, 2, Nh}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
 end
 
 
@@ -267,6 +267,7 @@ function apply_limiter!(
     WJ_data = Spaces.local_geometry_data(axes(ρq)).WJ
 
     converged = true
+    max_rel_err = zero(rtol)
     (_, _, _, Nv, Nh) = size(ρq_data)
     for h in 1:Nh
         for v in 1:Nv
@@ -274,11 +275,14 @@ function apply_limiter!(
             slab_ρq = slab(ρq_data, v, h)
             slab_WJ = slab(WJ_data, v, h)
             slab_q_bounds = slab(q_bounds_nbr, v, h)
-            converged &=
+            (_converged, rel_err) =
                 apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
+            converged &= _converged
+            max_rel_err = max(rel_err, max_rel_err)
         end
     end
-    converged || @warn "Limiter failed to converge with rtol = $rtol"
+    converged ||
+        @warn "Limiter failed to converge with rtol = $rtol, `max_rel_err`=$max_rel_err"
 
     return ρq
 end
@@ -310,6 +314,7 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     @assert total_mass > 0
 
     converged = true
+    max_rel_err = zero(rtol)
     for f in 1:Nf
         q_min = array_q_bounds[1, f]
         q_max = array_q_bounds[2, f]
@@ -346,7 +351,9 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
                 end
             end
 
-            if abs(Δtracer_mass) <= rtol * abs(tracer_mass)
+            rel_err = abs(Δtracer_mass) / abs(tracer_mass)
+            max_rel_err = max(max_rel_err, rel_err)
+            if rel_err <= rtol
                 break
             end
 
@@ -393,5 +400,5 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             end
         end
     end
-    return converged
+    return (converged, max_rel_err)
 end

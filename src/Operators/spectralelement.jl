@@ -1463,16 +1463,15 @@ Computes the tensor product `out = (M ⊗ M) * in` on each element.
 function tensor_product! end
 
 function tensor_product!(
-    out::DataLayouts.Data1DX{S, Ni_out},
-    indata::DataLayouts.Data1DX{S, Ni_in},
+    out::DataLayouts.Data1DX{S, Nv, Ni_out},
+    indata::DataLayouts.Data1DX{S, Nv, Ni_in},
     M::SMatrix{Ni_out, Ni_in},
-) where {S, Ni_out, Ni_in}
-    (_, _, _, Nv_in, Nh_in) = size(indata)
-    (_, _, _, Nv_out, Nh_out) = size(out)
+) where {S, Nv, Ni_out, Ni_in}
+    (_, _, _, _, Nh_in) = size(indata)
+    (_, _, _, _, Nh_out) = size(out)
     # TODO: assumes the same number of levels (horizontal only)
-    @assert Nv_in == Nv_out
     @assert Nh_in == Nh_out
-    @inbounds for h in 1:Nh_out, v in 1:Nv_out
+    @inbounds for h in 1:Nh_out, v in 1:Nv
         in_slab = slab(indata, v, h)
         out_slab = slab(out, v, h)
         for i in 1:Ni_out
@@ -1568,7 +1567,7 @@ function matrix_interpolate(
     quadrature_style = Spaces.quadrature_style(space)
     nl = Spaces.nlevels(space)
     n1 = Topologies.nlocalelems(Spaces.topology(space))
-    interp_data = DataLayouts.IV1JH2{S, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
+    interp_data = DataLayouts.IV1JH2{S, nl, Nu}(Matrix{S}(undef, (nl, Nu * n1)))
     M = Quadratures.interpolation_matrix(Float64, Q_interp, quadrature_style)
     Operators.tensor_product!(interp_data, Fields.field_values(field), M)
     return parent(interp_data)

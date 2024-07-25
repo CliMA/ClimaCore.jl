@@ -1,5 +1,3 @@
-import CUDA
-CUDA.allowscalar(false)
 using Logging
 using Test
 
@@ -14,7 +12,7 @@ import ClimaCore:
     Quadratures
 
 using ClimaComms
-using CUDA
+ClimaComms.@import_required_backends
 
 # initializing MPI
 const device = ClimaComms.device()
@@ -87,7 +85,7 @@ partition numbers
     space = Spaces.SpectralElementSpace2D(topology, quad)
 
     @test Topologies.nlocalelems(Spaces.topology(space)) == (pid == 1 ? 6 : 5)
-    CUDA.@allowscalar begin
+    ClimaComms.allowscalar(device) do
         if pid == 1
             # gidx 1
             @test Topologies.local_neighboring_elements(
@@ -149,5 +147,5 @@ partition numbers
     end
 #! format: on
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    iamroot && @show p
+    iamroot && @test p ≤ 46200
 end

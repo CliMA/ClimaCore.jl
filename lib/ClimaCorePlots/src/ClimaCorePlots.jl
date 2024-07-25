@@ -3,6 +3,7 @@ module ClimaCorePlots
 import RecipesBase
 import TriplotBase
 
+import ClimaComms
 import ClimaCore:
     ClimaCore,
     DataLayouts,
@@ -12,7 +13,8 @@ import ClimaCore:
     Operators,
     Quadratures,
     Topologies,
-    Spaces
+    Spaces,
+    Utilities
 
 using StaticArrays
 
@@ -316,7 +318,11 @@ function _slice_along(field, coord)
     end
 
     # construct the slice field space
-    htopo_ortho = ClimaCore.Topologies.IntervalTopology(hmesh_ortho)
+    context = ClimaComms.context(field)
+    htopo_ortho = ClimaCore.Topologies.IntervalTopology(
+        ClimaComms.device(context),
+        hmesh_ortho,
+    )
     hspace_ortho = ClimaCore.Spaces.SpectralElementSpace1D(
         htopo_ortho,
         ClimaCore.Spaces.quadrature_style(hspace),
@@ -419,7 +425,7 @@ function _unfolded_pannel_matrix(field, interpolate)
     # TODO: inefficient memory wise, but good enough for now
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
-    interpolated_data = DataLayouts.IJFH{FT, interpolate}(Array{FT}, nelem)
+    interpolated_data = DataLayouts.IJFH{FT, interpolate, nelem}(Array{FT})
     field_data = Fields.field_values(field)
 
     Operators.tensor_product!(interpolated_data, field_data, Imat)
