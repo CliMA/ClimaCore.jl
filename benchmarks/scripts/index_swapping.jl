@@ -28,10 +28,20 @@ Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=20
 ┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
 │ funcs                                                                │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
 ├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 36 microseconds, 195 nanoseconds │ 54.952  │ 1120.47     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 74 microseconds, 228 nanoseconds │ 26.7955 │ 546.359     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 82 microseconds, 501 nanoseconds │ 24.1085 │ 491.572     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 72 microseconds, 567 nanoseconds │ 27.4088 │ 558.865     │ 2              │ 1000   │
+│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 34 microseconds, 617 nanoseconds │ 57.4574 │ 1171.56     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 60 microseconds, 384 nanoseconds │ 32.939  │ 671.627     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 68 microseconds, 108 nanoseconds │ 29.2034 │ 595.458     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 60 microseconds, 395 nanoseconds │ 32.9329 │ 671.502     │ 2              │ 1000   │
+└──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+[ Info: ArrayType = CuArray
+Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=2039
+┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 59 microseconds, 558 nanoseconds │ 66.791  │ 1361.87     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 63 microseconds, 238 nanoseconds │ 62.905  │ 1282.63     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 80 microseconds, 502 nanoseconds │ 49.4142 │ 1007.56     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 63 microseconds, 228 nanoseconds │ 62.9142 │ 1282.82     │ 2              │ 1000   │
 └──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 ```
 =#
@@ -42,28 +52,24 @@ module IndexSwapBench
 include("benchmark_utils.jl")
 
 foo(x1, x2, x3) = x1
-function at_dot_call!(X, Y; nreps = 1, print_info = true, bm=nothing)
+function at_dot_call!(X, Y; nreps = 1, print_info = true, bm=nothing, n_trials = 30)
     (; x1, x2, x3) = X
     (; y1) = Y
-    e = CUDA.@elapsed begin for i in 1:nreps # reduce variance / impact of launch latency
-            @. y1 = foo(x1, x2, x3) # 3 reads, 1 write
+    e = Inf
+    @. y1 = foo(x1, x2, x3) # compile
+    for t in 1:n_trials
+        et = CUDA.@elapsed begin
+            for i in 1:nreps # reduce variance / impact of launch latency
+                @. y1 = foo(x1, x2, x3) # 1 write, 1 read
+            end
         end
+        e = min(e, et)
     end
-    if !isnothing(bm)
-        kernel_time_s=e/nreps
-        nt = (;
-            caller=@caller_name(@__FILE__),
-            kernel_time_s,
-            n_reads_writes=2,
-            nreps,
-            perf_stats(;bm,kernel_time_s,n_reads_writes=2)...
-        )
-        push!(bm.data, nt)
-    end
+    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=2)
     return nothing
 end;
 
-function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false, nreps = 1, print_info = true, bm=nothing)
+function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false, nreps = 1, print_info = true, bm=nothing, n_trials=30)
     (; x1, x2, x3) = X
     (; y1) = Y
     bc = @lazy @. y1 = foo(x1, x2, x3)
@@ -88,22 +94,17 @@ function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false
     threads = min(N, config.threads)
     blocks = cld(N, threads)
     printtb && @show blocks, threads
-    e = CUDA.@elapsed begin
-        for i in 1:nreps # reduce variance / impact of launch latency
-            kernel(y1, bc,us; threads, blocks)
+    kernel(y1, bc,us; threads, blocks) # compile
+    e = Inf
+    for t in 1:n_trials
+        et = CUDA.@elapsed begin
+            for i in 1:nreps # reduce variance / impact of launch latency
+                kernel(y1, bc,us; threads, blocks)
+            end
         end
+        e = min(e, et)
     end
-    if !isnothing(bm)
-        kernel_time_s=e/nreps
-        nt = (;
-            caller=@caller_name(@__FILE__),
-            kernel_time_s,
-            n_reads_writes=2,
-            nreps,
-            perf_stats(;bm,kernel_time_s,n_reads_writes=2)...
-        )
-        push!(bm.data, nt)
-    end
+    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=2)
     return nothing
 end;
 

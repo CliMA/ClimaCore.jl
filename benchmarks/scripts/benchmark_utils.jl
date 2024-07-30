@@ -79,11 +79,18 @@ function tabulate_benchmark(bm)
         nreps,
     )
     title = "Problem size: $(bm.problem_size), float_type = $(bm.float_type), device_bandwidth_GBs=$(bm.device_bandwidth_GBs)"
-    PrettyTables.pretty_table(
-        data;
-        title,
-        header,
-        alignment = :l,
-        crop = :none,
+    PrettyTables.pretty_table(data; title, header, alignment = :l, crop = :none)
+end
+
+push_info(bm::Nothing; e, nreps, caller, n_reads_writes) = nothing
+function push_info(bm; e, nreps, caller, n_reads_writes)
+    kernel_time_s = e / nreps
+    nt = (;
+        caller,
+        kernel_time_s,
+        n_reads_writes,
+        nreps,
+        perf_stats(; bm, kernel_time_s, n_reads_writes)...,
     )
+    push!(bm.data, nt)
 end
