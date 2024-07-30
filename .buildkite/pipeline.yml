@@ -1198,6 +1198,29 @@ steps:
         key: "cpu_field_perf"
         command: "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
 
+  - group: "Perf: Benchmark scripts"
+    steps:
+
+      - label: "Perf: benchmark scripts index_swapping"
+        key: perf_index_swapping
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/index_swapping.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: benchmark scripts indexing_and_static_ndranges"
+        key: indexing_and_static_ndranges
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/indexing_and_static_ndranges.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Perf: Operators"
     steps:
 

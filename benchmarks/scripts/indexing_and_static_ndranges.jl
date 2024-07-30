@@ -5,7 +5,7 @@ using Revise; include(joinpath("benchmarks", "scripts", "indexing_and_static_ndr
 # Info:
 This script compares two things:
  - linear vs cartesian indexing
- - impact of static vs dynamic NDRanges (https://juliagpu.github.io/KernelAbstractions.jl/dev/examples/memcopy_static/)
+ - impact of static vs dynamic NDRanges (https://juliagpu.githubSR.io/KernelAbstractions.jl/dev/examples/memcopy_static/)
 
 Linear indexing, when possible, has performance advantages
 over using Cartesian indexing. Julia Base's Broadcast only
@@ -30,61 +30,84 @@ setting where linear indexing is allowed.
     nearly the same benefit as linear indexing.
 
 # References:
- - https://github.com/CliMA/ClimaCore.jl/issues/1889
- - https://github.com/JuliaLang/julia/issues/28126
- - https://github.com/JuliaLang/julia/issues/32051
+ - https://githubSR.com/CliMA/ClimaCore.jl/issues/1889
+ - https://githubSR.com/JuliaLang/julia/issues/28126
+ - https://githubSR.com/JuliaLang/julia/issues/32051
 
 # Benchmark results:
 
-Local Apple M1 Mac (CPU):
+Clima A100:
 ```
-at_dot_call!($X_array, $Y_array):
-     143 milliseconds, 774 microseconds
-at_dot_call!($X_vector, $Y_vector):
-     65 milliseconds, 567 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $us):
-     66 milliseconds, 870 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; use_pw = false):
-     143 milliseconds, 643 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; use_pw = true):
-     65 milliseconds, 778 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $uss):
-     65 milliseconds, 765 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = false):
-     144 milliseconds, 271 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = true):
-     66 milliseconds, 376 microseconds
+[ Info: ArrayType = identity
+Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
+┌────────────────────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                      │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BSR.at_dot_call!(X_array, Y_array; nreps=1000, bm) # slow                  │ 422 microseconds, 223 nanoseconds │ 2.35535 │ 48.0256     │ 1              │ 1000   │
+│ BSR.at_dot_call!(X_vector, Y_vector; nreps=1000, bm) # fast                │ 242 microseconds, 740 nanoseconds │ 4.09692 │ 83.5362     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, us; nreps=1000, bm)              │ 242 microseconds, 30 nanoseconds  │ 4.10894 │ 83.7812     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, uss; nreps=1000, bm)             │ 244 microseconds, 279 nanoseconds │ 4.0711  │ 83.0097     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false, nreps=1000, bm)  │ 499 microseconds, 283 nanoseconds │ 1.99182 │ 40.6133     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false, nreps=1000, bm) │ 541 microseconds, 506 nanoseconds │ 1.83651 │ 37.4465     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true, nreps=1000, bm)   │ 247 microseconds, 108 nanoseconds │ 4.02449 │ 82.0593     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true, nreps=1000, bm)  │ 242 microseconds, 209 nanoseconds │ 4.10589 │ 83.7192     │ 1              │ 1000   │
+└────────────────────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+[ Info: ArrayType = identity
+Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=2039
+┌────────────────────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                      │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BSR.at_dot_call!(X_array, Y_array; nreps=1000, bm) # slow                  │ 1 millisecond, 446 microseconds   │ 1.37517 │ 28.0397     │ 1              │ 1000   │
+│ BSR.at_dot_call!(X_vector, Y_vector; nreps=1000, bm) # fast                │ 984 microseconds, 854 nanoseconds │ 2.01955 │ 41.1787     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, us; nreps=1000, bm)              │ 987 microseconds, 438 nanoseconds │ 2.01427 │ 41.0709     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, uss; nreps=1000, bm)             │ 985 microseconds, 779 nanoseconds │ 2.01766 │ 41.1401     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false, nreps=1000, bm)  │ 1 millisecond, 475 microseconds   │ 1.34834 │ 27.4927     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false, nreps=1000, bm) │ 1 millisecond, 473 microseconds   │ 1.34985 │ 27.5234     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true, nreps=1000, bm)   │ 983 microseconds, 811 nanoseconds │ 2.0217  │ 41.2224     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true, nreps=1000, bm)  │ 984 microseconds, 683 nanoseconds │ 2.0199  │ 41.1858     │ 1              │ 1000   │
+└────────────────────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 ```
 
 Clima A100
 ```
-at_dot_call!($X_array, $Y_array):
-     6 milliseconds, 775 microseconds
-at_dot_call!($X_vector, $Y_vector):
-     2 milliseconds, 834 microseconds
-custom_sol_kernel!($X_vector, $Y_vector, $(Val(N))):
-     2 milliseconds, 547 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $us):
-     2 milliseconds, 561 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; use_pw = false):
-     4 milliseconds, 160 microseconds
-custom_kernel_bc!($X_array, $Y_array, $us; use_pw = true):
-     2 milliseconds, 584 microseconds
-custom_kernel_bc!($X_vector, $Y_vector, $uss):
-     2 milliseconds, 540 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = false):
-     2 milliseconds, 715 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss; use_pw = true):
-     2 milliseconds, 547 microseconds
+[ Info: ArrayType = CuArray
+Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
+┌─────────────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                       │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├─────────────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BSR.at_dot_call!(X_array, Y_array; nreps=1000, bm) # slow                   │ 84 microseconds, 791 nanoseconds │ 11.7287 │ 239.149     │ 1              │ 1000   │
+│ BSR.at_dot_call!(X_vector, Y_vector; nreps=1000, bm) # fast                 │ 14 microseconds, 497 nanoseconds │ 68.6003 │ 1398.76     │ 1              │ 1000   │
+│ iscpu || BSR.custom_sol_kernel!(X_vector, Y_vector, Val(N); nreps=1000, bm) │ 13 microseconds, 125 nanoseconds │ 75.7724 │ 1545.0      │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, us; nreps=1000, bm)               │ 14 microseconds, 212 nanoseconds │ 69.9794 │ 1426.88     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, uss; nreps=1000, bm)              │ 13 microseconds, 55 nanoseconds  │ 76.1765 │ 1553.24     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false, nreps=1000, bm)   │ 47 microseconds, 258 nanoseconds │ 21.0439 │ 429.084     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false, nreps=1000, bm)  │ 30 microseconds, 637 nanoseconds │ 32.4612 │ 661.884     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true, nreps=1000, bm)    │ 14 microseconds, 386 nanoseconds │ 69.1326 │ 1409.61     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true, nreps=1000, bm)   │ 13 microseconds, 58 nanoseconds  │ 76.1646 │ 1553.0      │ 1              │ 1000   │
+└─────────────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+[ Info: ArrayType = CuArray
+Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=2039
+┌─────────────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                       │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├─────────────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BSR.at_dot_call!(X_array, Y_array; nreps=1000, bm) # slow                   │ 85 microseconds, 69 nanoseconds  │ 23.3807 │ 476.732     │ 1              │ 1000   │
+│ BSR.at_dot_call!(X_vector, Y_vector; nreps=1000, bm) # fast                 │ 28 microseconds, 809 nanoseconds │ 69.0417 │ 1407.76     │ 1              │ 1000   │
+│ iscpu || BSR.custom_sol_kernel!(X_vector, Y_vector, Val(N); nreps=1000, bm) │ 26 microseconds, 183 nanoseconds │ 75.965  │ 1548.93     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, us; nreps=1000, bm)               │ 26 microseconds, 426 nanoseconds │ 75.2673 │ 1534.7      │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_vector, Y_vector, uss; nreps=1000, bm)              │ 26 microseconds, 256 nanoseconds │ 75.7546 │ 1544.64     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false, nreps=1000, bm)   │ 47 microseconds, 819 nanoseconds │ 41.5938 │ 848.098     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false, nreps=1000, bm)  │ 31 microseconds, 442 nanoseconds │ 63.2584 │ 1289.84     │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true, nreps=1000, bm)    │ 26 microseconds, 729 nanoseconds │ 74.4138 │ 1517.3      │ 1              │ 1000   │
+│ BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true, nreps=1000, bm)   │ 26 microseconds, 642 nanoseconds │ 74.6569 │ 1522.25     │ 1              │ 1000   │
+└─────────────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 ```
 =#
 
 #! format: off
-import CUDA
-using BenchmarkTools, Dates
-using LazyBroadcast: @lazy
-ArrayType = CUDA.CuArray;
-# ArrayType = identity;
+
+module IndexStaticRangeBench
+
+include("benchmark_utils.jl")
 
 # ============================================================ Non-extruded broadcast (start)
 import Base.Broadcast: BroadcastStyle
@@ -216,62 +239,32 @@ _axes(bc::PointWiseBC{<:Base.Broadcast.AbstractArrayStyle{0}}, ::Nothing) = ()
 Base.IndexStyle(::Type{<:PointWiseBC{<:Any, <:Tuple{Any}}}) = IndexLinear()
 # ============================================================ Non-extruded broadcast (end)
 
-if ArrayType === identity
-    macro pretty_belapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(BenchmarkTools.@belapsed(esc($expr)))
-        end
-    end
-    macro pretty_elapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(BenchmarkTools.@elapsed(esc($expr)))
-        end
-    end
-else
-    macro pretty_belapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(
-                BenchmarkTools.@belapsed(CUDA.@sync((esc($expr))))
-            )
-        end
-    end
-    macro pretty_elapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(
-                BenchmarkTools.@elapsed(CUDA.@sync((esc($expr))))
-            )
-        end
-    end
-end
-print_time_and_units(x) = println(time_and_units_str(x))
-time_and_units_str(x::Real) =
-    trunc_time(string(compound_period(x, Dates.Second)))
-function compound_period(x::Real, ::Type{T}) where {T <: Dates.Period}
-    nf = Dates.value(convert(Dates.Nanosecond, T(1)))
-    ns = Dates.Nanosecond(ceil(x * nf))
-    return Dates.canonicalize(Dates.CompoundPeriod(ns))
-end
-trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
 myadd(x1, x2, x3) = zero(x1)
-function at_dot_call!(X, Y)
+function at_dot_call!(X, Y; nreps = 1, bm=nothing)
     (; x1, x2, x3) = X
     (; y1) = Y
-    for i in 1:100 # reduce variance / impact of launch latency
-        @. y1 = myadd(x1, x2, x3) # 3 reads, 1 write
-        # @. y1 = 0 # 3 reads, 1 write
+    @. y1 = myadd(x1, x2, x3) # compile
+    e = CUDA.@elapsed begin
+        for i in 1:nreps # reduce variance / impact of launch latency
+            @. y1 = myadd(x1, x2, x3) # 3 reads, 1 write
+        end
+    end
+    if !isnothing(bm)
+        kernel_time_s=e/nreps
+        n_reads_writes=1
+        nt = (;
+            caller=@caller_name(@__FILE__),
+            kernel_time_s,
+            n_reads_writes,
+            nreps,
+            perf_stats(;bm,kernel_time_s,n_reads_writes)...
+        )
+        push!(bm.data, nt)
     end
     return nothing
 end;
 
-function custom_sol_kernel!(X, Y, ::Val{N}) where {N}
+function custom_sol_kernel!(X, Y, ::Val{N}; nreps = 1, bm=nothing) where {N}
     (; x1, x2, x3) = X
     (; y1) = Y
     kernel = CUDA.@cuda always_inline = true launch = false custom_kernel_knl!(
@@ -284,9 +277,25 @@ function custom_sol_kernel!(X, Y, ::Val{N}) where {N}
     config = CUDA.launch_configuration(kernel.fun)
     threads = min(N, config.threads)
     blocks = cld(N, threads)
-    for i in 1:100 # reduce variance / impact of launch latency
-        kernel(y1, x1, x2, x3, Val(N); threads, blocks)
+    kernel(y1, x1, x2, x3, Val(N); threads, blocks) # compile
+    e = CUDA.@elapsed begin
+        for i in 1:nreps # reduce variance / impact of launch latency
+            kernel(y1, x1, x2, x3, Val(N); threads, blocks)
+        end
     end
+    if !isnothing(bm)
+        kernel_time_s=e/nreps
+        n_reads_writes=1
+        nt = (;
+            caller=@caller_name(@__FILE__),
+            kernel_time_s,
+            n_reads_writes,
+            nreps,
+            perf_stats(;bm,kernel_time_s,n_reads_writes)...
+        )
+        push!(bm.data, nt)
+    end
+
     return nothing
 end;
 function custom_kernel_knl!(y1, x1, x2, x3, ::Val{N}) where {N}
@@ -299,42 +308,26 @@ function custom_kernel_knl!(y1, x1, x2, x3, ::Val{N}) where {N}
     return nothing
 end;
 
-abstract type AbstractUniversalSizes{Nv, Nij} end
-struct UniversalSizesCC{Nv, Nij} <: AbstractUniversalSizes{Nv, Nij}
-    Nh::Int
-end
-struct UniversalSizesStatic{Nv, Nij, Nh} <: AbstractUniversalSizes{Nv, Nij} end
-
-get_Nv(::AbstractUniversalSizes{Nv}) where {Nv} = Nv
-get_Nij(::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} = Nij
-get_Nh(us::UniversalSizesCC) = us.Nh
-get_Nh(::UniversalSizesStatic{Nv, Nij, Nh}) where {Nv, Nij, Nh} = Nh
-get_N(us::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} = prod((Nv,Nij,Nij,1,get_Nh(us)))
-UniversalSizesCC(Nv, Nij, Nh) = UniversalSizesCC{Nv, Nij}(Nh)
-UniversalSizesStatic(Nv, Nij, Nh) = UniversalSizesStatic{Nv, Nij, Nh}()
-using Test
-us_tup = (1, 2, 3)
-@test get_Nv(UniversalSizesCC(us_tup...))  == get_Nv(UniversalSizesStatic(us_tup...))
-@test get_Nij(UniversalSizesCC(us_tup...)) == get_Nij(UniversalSizesStatic(us_tup...))
-@test get_Nh(UniversalSizesCC(us_tup...))  == get_Nh(UniversalSizesStatic(us_tup...))
-@test get_N(UniversalSizesCC(us_tup...))   == get_N(UniversalSizesStatic(us_tup...))
-
-function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_pw=true)
+function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_pw=true, nreps = 1, bm=nothing)
     (; x1, x2, x3) = X
     (; y1) = Y
     bc_base = @lazy @. y1 = myadd(x1, x2, x3)
     bc = use_pw ? to_pointwise_bc(bc_base) : bc_base
     if y1 isa Array
         if bc isa Base.Broadcast.Broadcasted
-            for i in 1:100 # reduce variance / impact of launch latency
-                @inbounds @simd for j in eachindex(bc)
-                    y1[j] = bc[j]
+            e = Base.@elapsed begin
+                for i in 1:nreps # reduce variance / impact of launch latency
+                    @inbounds @simd for j in eachindex(bc)
+                        y1[j] = bc[j]
+                    end
                 end
             end
         else
-            for i in 1:100 # reduce variance / impact of launch latency
-                @inbounds @simd for j in 1:get_N(us)
-                    y1[j] = bc[j]
+            e = Base.@elapsed begin
+                for i in 1:nreps # reduce variance / impact of launch latency
+                    @inbounds @simd for j in 1:get_N(us)
+                        y1[j] = bc[j]
+                    end
                 end
             end
         end
@@ -350,9 +343,24 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_
         threads = min(N, config.threads)
         blocks = cld(N, threads)
         printtb && @show blocks, threads
-        for i in 1:100 # reduce variance / impact of launch latency
-            kernel(y1, bc,us; threads, blocks)
+        kernel(y1, bc,us; threads, blocks) # compile
+        e = CUDA.@elapsed begin
+            for i in 1:nreps # reduce variance / impact of launch latency
+                kernel(y1, bc,us; threads, blocks)
+            end
         end
+    end
+    if !isnothing(bm)
+        kernel_time_s=e/nreps
+        n_reads_writes=1
+        nt = (;
+            caller=@caller_name(@__FILE__),
+            kernel_time_s,
+            n_reads_writes,
+            nreps,
+            perf_stats(;bm,kernel_time_s,n_reads_writes)...
+        )
+        push!(bm.data, nt)
     end
     return nothing
 end;
@@ -371,40 +379,61 @@ function custom_kernel_knl_bc!(y1, bc, us)
     return nothing
 end;
 
-FT = Float32;
-arr(T) = T(zeros(63,4,4,1,5400))
-X_array = (;x1 = arr(ArrayType),x2 = arr(ArrayType),x3 = arr(ArrayType));
-Y_array = (;y1 = arr(ArrayType),);
+end # module
+import .IndexStaticRangeBench as BSR
+
+using CUDA
+using Test
+bm = BSR.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float32)
+# bm = BSR.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float64)
+ArrayType = CUDA.CuArray;
+# ArrayType = Base.identity;
+
+us_tup = (1, 2, 3)
+@test BSR.get_Nv(BSR.UniversalSizesCC(us_tup...))  == BSR.get_Nv(BSR.UniversalSizesStatic(us_tup...))
+@test BSR.get_Nij(BSR.UniversalSizesCC(us_tup...)) == BSR.get_Nij(BSR.UniversalSizesStatic(us_tup...))
+@test BSR.get_Nh(BSR.UniversalSizesCC(us_tup...))  == BSR.get_Nh(BSR.UniversalSizesStatic(us_tup...))
+@test BSR.get_N(BSR.UniversalSizesCC(us_tup...))   == BSR.get_N(BSR.UniversalSizesStatic(us_tup...))
+
+arr(bm, T) = T(zeros(bm.float_type, bm.problem_size...))
+X_array = (;x1 = arr(bm, ArrayType),x2 = arr(bm, ArrayType),x3 = arr(bm, ArrayType));
+Y_array = (;y1 = arr(bm, ArrayType),);
 to_vec(ξ) = (;zip(propertynames(ξ), map(θ -> vec(θ), values(ξ)))...);
 X_vector = to_vec(X_array);
 Y_vector = to_vec(Y_array);
-at_dot_call!(X_array, Y_array)
-at_dot_call!(X_vector, Y_vector)
+BSR.at_dot_call!(X_array, Y_array)
+BSR.at_dot_call!(X_vector, Y_vector)
 N = length(X_vector.x1)
 (Nv, Nij, _, Nf, Nh) = size(Y_array.y1);
-us = UniversalSizesCC(Nv, Nij, Nh);
-uss = UniversalSizesStatic(Nv, Nij, Nh);
-@test get_N(us) == N
-@test get_N(uss) == N
+us = BSR.UniversalSizesCC(Nv, Nij, Nh);
+uss = BSR.UniversalSizesStatic(Nv, Nij, Nh);
+@test BSR.get_N(us) == N
+@test BSR.get_N(uss) == N
 iscpu = ArrayType === identity
-iscpu || custom_sol_kernel!(X_vector, Y_vector, Val(N))
-custom_kernel_bc!(X_vector, Y_vector, us)
-custom_kernel_bc!(X_array, Y_array, us; use_pw=false)
-custom_kernel_bc!(X_array, Y_array, us; use_pw=true)
+BSR.custom_kernel_bc!(X_vector, Y_vector, us)
+BSR.custom_kernel_bc!(X_vector, Y_vector, uss)
+iscpu || BSR.custom_sol_kernel!(X_vector, Y_vector, Val(N))
 
-custom_kernel_bc!(X_vector, Y_vector, uss)
-custom_kernel_bc!(X_array, Y_array, uss; use_pw=false)
-custom_kernel_bc!(X_array, Y_array, uss; use_pw=true)
+BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false)
+BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false)
 
-@pretty_belapsed at_dot_call!($X_array, $Y_array) # slow
-@pretty_belapsed at_dot_call!($X_vector, $Y_vector) # fast
-iscpu || @pretty_belapsed custom_sol_kernel!($X_vector, $Y_vector, $(Val(N)))
-@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $us)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; use_pw=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $us; use_pw=true)
+BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true)
+BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true)
 
-@pretty_belapsed custom_kernel_bc!($X_vector, $Y_vector, $uss)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; use_pw=false)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss; use_pw=true)
+BSR.at_dot_call!(X_array, Y_array; nreps=1000, bm) # slow
+BSR.at_dot_call!(X_vector, Y_vector; nreps=1000, bm) # fast
+iscpu || BSR.custom_sol_kernel!(X_vector, Y_vector, Val(N); nreps=1000, bm)
+
+BSR.custom_kernel_bc!(X_vector, Y_vector, us; nreps=1000, bm)
+BSR.custom_kernel_bc!(X_vector, Y_vector, uss; nreps=1000, bm)
+
+BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=false, nreps=1000, bm)
+BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=false, nreps=1000, bm)
+
+BSR.custom_kernel_bc!(X_array, Y_array, us; use_pw=true, nreps=1000, bm)
+BSR.custom_kernel_bc!(X_array, Y_array, uss; use_pw=true, nreps=1000, bm)
+
+@info "ArrayType = $ArrayType"
+BSR.tabulate_benchmark(bm)
 
 #! format: on

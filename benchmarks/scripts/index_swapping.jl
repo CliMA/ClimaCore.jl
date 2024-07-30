@@ -23,89 +23,55 @@ In particular,
 
 Clima A100
 ```
-at_dot_call!($X_vector, $Y_vector):
-     6 milliseconds, 19 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss, swap = 0):
-     6 milliseconds, 329 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss, swap = 1):
-     14 milliseconds, 232 microseconds
-custom_kernel_bc!($X_array, $Y_array, $uss, swap = 2):
-     15 milliseconds, 960 microseconds
+[ Info: ArrayType = CuArray
+Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
+┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                                │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 36 microseconds, 195 nanoseconds │ 54.952  │ 1120.47     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 74 microseconds, 228 nanoseconds │ 26.7955 │ 546.359     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 82 microseconds, 501 nanoseconds │ 24.1085 │ 491.572     │ 2              │ 1000   │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 72 microseconds, 567 nanoseconds │ 27.4088 │ 558.865     │ 2              │ 1000   │
+└──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 ```
 =#
 
 #! format: off
-import CUDA
-using BenchmarkTools, Dates
-using LazyBroadcast: @lazy
-ArrayType = CUDA.CuArray;
-# ArrayType = identity;
+module IndexSwapBench
 
-if ArrayType === identity
-    macro pretty_belapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(BenchmarkTools.@belapsed(esc($expr)))
-        end
-    end
-else
-    macro pretty_belapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(
-                BenchmarkTools.@belapsed(CUDA.@sync((esc($expr))))
-            )
-        end
-    end
-    macro pretty_elapsed(expr)
-        return quote
-            println($(string(expr)), ":")
-            print("     ")
-            print_time_and_units(
-                BenchmarkTools.@elapsed(CUDA.@sync((esc($expr))))
-            )
-        end
-    end
-end
-print_time_and_units(x) = println(time_and_units_str(x))
-time_and_units_str(x::Real) =
-    trunc_time(string(compound_period(x, Dates.Second)))
-function compound_period(x::Real, ::Type{T}) where {T <: Dates.Period}
-    nf = Dates.value(convert(Dates.Nanosecond, T(1)))
-    ns = Dates.Nanosecond(ceil(x * nf))
-    return Dates.canonicalize(Dates.CompoundPeriod(ns))
-end
-trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
+include("benchmark_utils.jl")
+
 foo(x1, x2, x3) = x1
-function at_dot_call!(X, Y)
+function at_dot_call!(X, Y; nreps = 1, print_info = true, bm=nothing)
     (; x1, x2, x3) = X
     (; y1) = Y
-    for i in 1:100 # reduce variance / impact of launch latency
-        @. y1 = foo(x1, x2, x3) # 3 reads, 1 write
+    e = CUDA.@elapsed begin for i in 1:nreps # reduce variance / impact of launch latency
+            @. y1 = foo(x1, x2, x3) # 3 reads, 1 write
+        end
+    end
+    if !isnothing(bm)
+        kernel_time_s=e/nreps
+        nt = (;
+            caller=@caller_name(@__FILE__),
+            kernel_time_s,
+            n_reads_writes=2,
+            nreps,
+            perf_stats(;bm,kernel_time_s,n_reads_writes=2)...
+        )
+        push!(bm.data, nt)
     end
     return nothing
 end;
 
-struct UniversalSizesStatic{Nv, Nij, Nh} end
-
-get_Nv(::UniversalSizesStatic{Nv}) where {Nv} = Nv
-get_Nij(::UniversalSizesStatic{Nv, Nij}) where {Nv, Nij} = Nij
-get_Nh(::UniversalSizesStatic{Nv, Nij, Nh}) where {Nv, Nij, Nh} = Nh
-get_N(us::UniversalSizesStatic{Nv, Nij}) where {Nv, Nij} = prod((Nv,Nij,Nij,1,get_Nh(us)))
-UniversalSizesStatic(Nv, Nij, Nh) = UniversalSizesStatic{Nv, Nij, Nh}()
-using Test
-
-function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false)
+function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false, nreps = 1, print_info = true, bm=nothing)
     (; x1, x2, x3) = X
     (; y1) = Y
     bc = @lazy @. y1 = foo(x1, x2, x3)
     @assert !(y1 isa Array)
     f = if swap==0
-        custom_kernel_knl_bc_no_swap!
+        custom_kernel_knl_bc_0swap!
     elseif swap == 1
-        custom_kernel_knl_bc_swap!
+        custom_kernel_knl_bc_1swap!
     elseif swap == 2
         custom_kernel_knl_bc_2swap!
     else
@@ -122,14 +88,27 @@ function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false
     threads = min(N, config.threads)
     blocks = cld(N, threads)
     printtb && @show blocks, threads
-    for i in 1:100 # reduce variance / impact of launch latency
-        kernel(y1, bc,us; threads, blocks)
+    e = CUDA.@elapsed begin
+        for i in 1:nreps # reduce variance / impact of launch latency
+            kernel(y1, bc,us; threads, blocks)
+        end
+    end
+    if !isnothing(bm)
+        kernel_time_s=e/nreps
+        nt = (;
+            caller=@caller_name(@__FILE__),
+            kernel_time_s,
+            n_reads_writes=2,
+            nreps,
+            perf_stats(;bm,kernel_time_s,n_reads_writes=2)...
+        )
+        push!(bm.data, nt)
     end
     return nothing
 end;
 
 # Mimics how indexing works in generalized pointwise kernels
-function custom_kernel_knl_bc_swap!(y1, bc, us)
+function custom_kernel_knl_bc_1swap!(y1, bc, us)
     @inbounds begin
         tidx = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
         if tidx ≤ get_N(us)
@@ -145,7 +124,7 @@ function custom_kernel_knl_bc_swap!(y1, bc, us)
 end
 
 # Mimics how indexing works in specialized kernels
-function custom_kernel_knl_bc_no_swap!(y1, bc, us)
+function custom_kernel_knl_bc_0swap!(y1, bc, us)
     @inbounds begin
         tidx = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
         if tidx ≤ get_N(us)
@@ -179,35 +158,47 @@ function custom_kernel_knl_bc_2swap!(y1, bc, us)
 end
 
 import Random
+using Test
 function test_custom_kernel_bc!(X_array, Y_array, uss; swap)
     Random.seed!(1234)
     X_array.x1 .= typeof(X_array.x1)(rand(eltype(X_array.x1), size(X_array.x1)))
     Y_array_cp = deepcopy(Y_array)
-    custom_kernel_bc!(X_array, Y_array_cp, uss; swap=0)
-    custom_kernel_bc!(X_array, Y_array, uss; swap)
+    custom_kernel_bc!(X_array, Y_array_cp, uss; swap=0, print_info = false)
+    custom_kernel_bc!(X_array, Y_array, uss; swap, print_info = false)
     @test all(Y_array_cp.y1 .== Y_array.y1)
 end
 
-FT = Float32;
-arr(T) = T(zeros(63,4,4,1,5400))
-X_array = (;x1 = arr(ArrayType),x2 = arr(ArrayType),x3 = arr(ArrayType));
-Y_array = (;y1 = arr(ArrayType),);
+end # module
+
+import .IndexSwapBench as BIS
+
+using CUDA
+bm = BIS.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float32)
+# bm = BIS.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float64)
+ArrayType = CUDA.CuArray;
+# ArrayType = identity;
+arr(bm, T) = T(zeros(bm.float_type, bm.problem_size...))
+X_array = (;x1 = arr(bm, ArrayType),x2 = arr(bm, ArrayType),x3 = arr(bm, ArrayType));
+Y_array = (;y1 = arr(bm, ArrayType),);
 to_vec(ξ) = (;zip(propertynames(ξ), map(θ -> vec(θ), values(ξ)))...);
 X_vector = to_vec(X_array);
 Y_vector = to_vec(Y_array);
 N = length(X_vector.x1)
 (Nv, Nij, _, _, Nh) = size(Y_array.y1);
-uss = UniversalSizesStatic(Nv, Nij, Nh);
-at_dot_call!(X_vector, Y_vector)
-custom_kernel_bc!(X_array, Y_array, uss; swap=0)
-custom_kernel_bc!(X_array, Y_array, uss; swap=1)
-custom_kernel_bc!(X_array, Y_array, uss; swap=2)
-test_custom_kernel_bc!(X_array, Y_array, uss; swap=1)
-test_custom_kernel_bc!(X_array, Y_array, uss; swap=2)
+uss = BIS.UniversalSizesStatic(Nv, Nij, Nh);
+BIS.at_dot_call!(X_vector, Y_vector; nreps=1)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1)
+BIS.test_custom_kernel_bc!(X_array, Y_array, uss; swap=1)
+BIS.test_custom_kernel_bc!(X_array, Y_array, uss; swap=2)
 
-@pretty_belapsed at_dot_call!($X_vector, $Y_vector)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss, swap=0)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss, swap=1)
-@pretty_belapsed custom_kernel_bc!($X_array, $Y_array, $uss, swap=2)
+BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm)
+BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm)
+
+@info "ArrayType = $ArrayType"
+BIS.tabulate_benchmark(bm)
 
 #! format: on
