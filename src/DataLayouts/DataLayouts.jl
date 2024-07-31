@@ -965,6 +965,27 @@ empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
 @inline get_Nij(::IJF{S, Nij}) where {S, Nij} = Nij
 @inline get_Nij(::IF{S, Nij}) where {S, Nij} = Nij
 
+# Returns the size of the backing array.
+@inline array_size(::IJKFVH{S, Nij, Nk, Nv, Nh}) where {S, Nij, Nk, Nv, Nh} = (Nij, Nij, Nk, 1, Nv, Nh)
+@inline array_size(::IJFH{S, Nij, Nh}) where {S, Nij, Nh} = (Nij, Nij, 1, Nh)
+@inline array_size(::IFH{S, Ni, Nh}) where {S, Ni, Nh} = (Ni, 1, Nh)
+@inline array_size(::DataF{S}) where {S} = (1,)
+@inline array_size(::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1)
+@inline array_size(::IF{S, Ni}) where {S, Ni} = (Ni, 1)
+@inline array_size(::VF{S, Nv}) where {S, Nv} = (Nv, 1)
+@inline array_size(::VIJFH{S, Nv, Nij, Nh}) where {S, Nv, Nij, Nh} = (Nv, Nij, Nij, 1, Nh)
+@inline array_size(::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, 1, Nh)
+
+@inline farray_size(data::IJKFVH{S, Nij, Nk, Nv, Nh}) where {S, Nij, Nk, Nv, Nh} = (Nij, Nij, Nk, ncomponents(data), Nv, Nh)
+@inline farray_size(data::IJFH{S, Nij, Nh}) where {S, Nij, Nh} = (Nij, Nij, ncomponents(data), Nh)
+@inline farray_size(data::IFH{S, Ni, Nh}) where {S, Ni, Nh} = (Ni, ncomponents(data), Nh)
+@inline farray_size(data::DataF{S}) where {S} = (ncomponents(data),)
+@inline farray_size(data::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, ncomponents(data))
+@inline farray_size(data::IF{S, Ni}) where {S, Ni} = (Ni, ncomponents(data))
+@inline farray_size(data::VF{S, Nv}) where {S, Nv} = (Nv, ncomponents(data))
+@inline farray_size(data::VIJFH{S, Nv, Nij, Nh}) where {S, Nv, Nij, Nh} = (Nv, Nij, Nij, ncomponents(data), Nh)
+@inline farray_size(data::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, ncomponents(data), Nh)
+
 """
     field_dim(data::AbstractData)
     field_dim(::Type{<:AbstractData})
@@ -1216,9 +1237,11 @@ _device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
 _device_dispatch(x::SArray) = ToCPU()
 _device_dispatch(x::MArray) = ToCPU()
 
+include("non_extruded_broadcasted.jl")
 include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
+include("has_uniform_datalayouts.jl")
 
 end # module

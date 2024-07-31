@@ -73,6 +73,7 @@ DataSlab2DStyle(::Type{VIJFHStyle{Nv, Nij, Nh, A}}) where {Nv, Nij, Nh, A} =
 #####
 
 #! format: off
+const BroadcastedUnionData                     = Union{Base.Broadcast.Broadcasted{<:DataStyle}, AbstractData}
 const BroadcastedUnionIJFH{S, Nij, Nh, A}      = Union{Base.Broadcast.Broadcasted{IJFHStyle{Nij, Nh, A}}, IJFH{S, Nij, Nh, A}}
 const BroadcastedUnionIFH{S, Ni, Nh, A}        = Union{Base.Broadcast.Broadcasted{IFHStyle{Ni, Nh, A}}, IFH{S, Ni, Nh, A}}
 const BroadcastedUnionIJF{S, Nij, A}           = Union{Base.Broadcast.Broadcasted{IJFStyle{Nij, A}}, IJF{S, Nij, A}}
