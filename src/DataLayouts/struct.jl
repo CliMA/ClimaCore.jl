@@ -174,10 +174,10 @@ Construct an object of type `S` packed along the `D` dimension, from the values 
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function get_struct(
-    toa::TupleOfArrays{Nf, T},
+    toa::TupleOfArrays{Nf, <:AbstractArray{T}},
     ::Type{S},
     ::Val{D},
-    start_index::CartesianIndex,
+    start_index::Union{CartesianIndex, Integer},
     field_index::Integer = 1
 ) where {Nf, T, S, D}
     tup = :(())
@@ -201,10 +201,10 @@ end
 
 # recursion base case: hit array type is the same as the struct leaf type
 Base.@propagate_inbounds function get_struct(
-    toa::TupleOfArrays{Nf, S},
+    toa::TupleOfArrays{Nf, <:AbstractArray{S}},
     ::Type{S},
     ::Val{D},
-    start_index::CartesianIndex,
+    start_index::Union{CartesianIndex, Integer},
     field_index::Integer = 1
 ) where {Nf, S, D}
     @inbounds return toa.arrays[field_index][start_index]
@@ -217,10 +217,10 @@ Store an object `val` of type `S` packed along the `D` dimension, into `array`,
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function set_struct!(
-    toa::TupleOfArrays{Nf, T},
+    toa::TupleOfArrays{Nf, <:AbstractArray{T}},
     val::S,
     ::Val{D},
-    start_index::CartesianIndex,
+    start_index::Union{CartesianIndex, Integer},
     field_index::Integer = 1
 ) where {Nf, T, S, D}
     ex = quote
@@ -243,10 +243,10 @@ Base.@propagate_inbounds @generated function set_struct!(
 end
 
 Base.@propagate_inbounds function set_struct!(
-    toa::TupleOfArrays{Nf, S},
+    toa::TupleOfArrays{Nf, <:AbstractArray{S}},
     val::S,
     ::Val{D},
-    index::CartesianIndex,
+    index::Union{CartesianIndex, Integer},
     field_index::Integer = 1
 ) where {Nf, S, D}
     @inbounds toa.arrays[field_index][index] = val

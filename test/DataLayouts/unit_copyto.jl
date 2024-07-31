@@ -4,6 +4,7 @@ using Revise; include(joinpath("test", "DataLayouts", "unit_copyto.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
+using ClimaCore.DataLayouts: elsize
 import ClimaCore.Geometry
 import ClimaComms
 using StaticArrays
@@ -12,16 +13,16 @@ import Random
 Random.seed!(1234)
 
 function test_copyto_float!(data)
+    pdata = parent(data)
     Random.seed!(1234)
     # Normally we'd use `similar` here, but https://github.com/CliMA/ClimaCore.jl/issues/1803
-    rand_data = DataLayouts.rebuild(data, similar(parent(data)))
+    rand_data = DataLayouts.rebuild(data, similar(pdata))
     ArrayType = ClimaComms.array_type(ClimaComms.device())
-    parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), size(parent(data))))
+    parent(rand_data).arrays[1] .= ArrayType(rand(eltype(pdata), elsize(pdata)))
     Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
-    @test all(parent(data) .== parent(rand_data))
+    @test all(pdata.arrays[1] .== parent(rand_data).arrays[1])
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 1)) # test copyto!(::AbstractData, ::Broadcasted)
-    @test all(parent(data) .== parent(rand_data) .+ 1)
+    @test all(pdata .== parent(rand_data) .+ 1)
 end
 
 function test_copyto!(data)

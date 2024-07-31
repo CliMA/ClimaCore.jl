@@ -1,5 +1,6 @@
 #=
 julia --project
+ENV["CLIMACOMMS_DEVICE"] = "CPU";
 using Revise; include(joinpath("test", "DataLayouts", "unit_fill.jl"))
 =#
 using Test
@@ -9,12 +10,12 @@ ClimaComms.@import_required_backends
 
 function test_fill!(data, vals::Tuple{<:Any, <:Any})
     fill!(data, vals)
-    @test all(parent(data.:1) .== vals[1])
-    @test all(parent(data.:2) .== vals[2])
+    @test all(parent(data.:1).arrays[1] .== vals[1])
+    @test all(parent(data.:2).arrays[1] .== vals[2])
 end
 function test_fill!(data, val::Real)
     fill!(data, val)
-    @test all(parent(data) .== val)
+    @test all(parent(data).arrays[1] .== val)
 end
 
 @testset "fill! with Nf = 1" begin

@@ -4,18 +4,6 @@ for DL in (:IJKFVH,:IJFH,:IFH,:DataF,:IJF,:IF,:VF,:VIJFH,:VIFH,:IH1JH2,:IV1JH2)
     @eval struct $(Symbol(DL, :Singleton)) <: AbstractDataLayoutSingleton end
 end
 
-# struct IJKFVHSingleton <: AbstractDataLayoutSingleton end
-# struct IJFHSingleton <: AbstractDataLayoutSingleton end
-# struct IFHSingleton <: AbstractDataLayoutSingleton end
-# struct DataFSingleton <: AbstractDataLayoutSingleton end
-# struct IJFSingleton <: AbstractDataLayoutSingleton end
-# struct IFSingleton <: AbstractDataLayoutSingleton end
-# struct VFSingleton <: AbstractDataLayoutSingleton end
-# struct VIJFHSingleton <: AbstractDataLayoutSingleton end
-# struct VIFHSingleton <: AbstractDataLayoutSingleton end
-# struct IH1JH2Singleton <: AbstractDataLayoutSingleton end
-# struct IV1JH2Singleton <: AbstractDataLayoutSingleton end
-
 @inline field_dim(::IJKFVHSingleton) = 4
 @inline field_dim(::IJFHSingleton) = 3
 @inline field_dim(::IFHSingleton) = 2
@@ -29,9 +17,24 @@ end
 struct TupleOfArrays{N,T}
     arrays::NTuple{N,T}
 end
+float_type(::Type{TupleOfArrays{N,T}}) where {N,T} = eltype(T)
+parent_array_type(::Type{TupleOfArrays{N,T}}) where {N,T} = T
 Base.ndims(::Type{TupleOfArrays{N,T}}) where {N,T} = Base.ndims(T)+1
 Base.eltype(::Type{TupleOfArrays{N,T}}) where {N,T} = eltype(T)
+ncomponents(::Type{TupleOfArrays{N,T}}) where {N,T} = N
+ncomponents(::TupleOfArrays{N,T}) where {N,T} = N
 # Base.size(toa::TupleOfArrays{N,T}) where {N,T} = size(toa.arrays[1])
+
+elsize(toa::TupleOfArrays{N, T}) where {N, T} = size(toa.arrays[1])
+
+function Base.copyto!(x::TOA, y::TOA) where {N, T, TOA<:TupleOfArrays{N, T}}
+    @inbounds for i in 1:N
+        Base.copyto!(x.arrays[i], y.arrays[i])
+    end
+end
+
+Base.similar(toa::TupleOfArrays{N, T}) where {N, T} =
+    TupleOfArrays{N, T}(map(x->similar(x), toa.arrays))
 
 pre_post_colons(f, dim) = (;
     Ipre = ntuple(i->Colon(), Val(length(size(f)[1:dim-1]))),

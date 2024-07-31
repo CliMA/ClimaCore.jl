@@ -127,7 +127,7 @@ function Base.show(io::IO, data::AbstractData)
             :limit => true,
             :displaysize => (rows, cols - indent_width),
         ),
-        vec(parent(data)),
+        map(x->vec(x), parent(data).arrays),
     )
     return io
 end
@@ -274,7 +274,7 @@ end
 
 parent_array_type(
     ::Type{IJKFVH{S, Nij, Nk, Nv, Nh, A}},
-) where {S, Nij, Nk, Nv, Nh, A} = A
+) where {S, Nij, Nk, Nv, Nh, A} = parent_array_type(A)
 
 function IJKFVH{S, Nij, Nk, Nv, Nh}(
     array::AbstractArray{T, 6},
@@ -304,27 +304,17 @@ end
     ::Val{Idx},
 ) where {S, Nij, Nk, Nv, Nh, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IJKFVH{$SS, $Nij, $Nk, $Nv, $Nh}(
-        @inbounds view(parent(data), :, :, :, $field_byterange, :, :)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(IJKFVH{$SS, $Nij, $Nk, $Nv, $Nh, typeof($dataview)}($dataview))
 end
 
 @inline function Base.getproperty(
     data::IJKFVH{S, Nij, Nk, Nv, Nh},
     i::Integer,
 ) where {S, Nij, Nk, Nv, Nh}
-    array = parent(data)
-    T = eltype(array)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview =
-        @inbounds view(array, :, :, :, (offset + 1):(offset + nbytes), :, :)
-    IJKFVH{SS, Nij, Nk, Nv, Nh}(dataview)
+    dataview = generic_property_view(data, i)
+    IJKFVH{SS, Nij, Nk, Nv, Nh, typeof(dataview)}(dataview)
 end
 
 Base.size(data::IJKFVH{S, Nij, Nk, Nv, Nh}) where {S, Nij, Nk, Nv, Nh} =
@@ -352,7 +342,7 @@ struct IJFH{S, Nij, Nh, TOA <: TupleOfArrays} <: Data2D{S, Nij}
     array::TOA
 end
 
-parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
+parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = parent_array_type(A)
 
 function IJFH{S, Nij, Nh}(array::AbstractArray{T, 4}) where {S, Nij, Nh, T}
     check_basetype(T, S)
@@ -368,6 +358,11 @@ rebuild(
     data::IJFH{S, Nij, Nh},
     array::A,
 ) where {S, Nij, Nh, A <: AbstractArray} = IJFH{S, Nij, Nh}(array)
+
+rebuild(
+    data::AbstractData{S},
+    toa::TupleOfArrays,
+) where {S} = typeof(data)(toa)
 
 Base.copy(data::IJFH{S, Nij, Nh}) where {S, Nij, Nh} =
     IJFH{S, Nij, Nh}(copy(parent(data)))
@@ -419,50 +414,43 @@ Base.length(data::IJFH) = size(parent(data), 4)
     ::Val{Idx},
 ) where {S, Nij, Nh, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IJFH{$SS, $Nij, $Nh}(
-        @inbounds view(parent(data), :, :, $field_byterange, :)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(IJFH{$SS, $Nij, $Nh, typeof($dataview)}($dataview))
 end
 
 @inline function Base.getproperty(
     data::IJFH{S, Nij, Nh},
     i::Integer,
 ) where {S, Nij, Nh}
-    toa = parent(data)
-    T = eltype(toa)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    R = (offset + 1):(offset + nbytes)
-    # dataview = @inbounds view(toa, :, :, (offset + 1):(offset + nbytes), :)
-    dataview = TupleOfArrays(ntuple(jf-> toa.arrays[jf], nbytes))
+    dataview = generic_property_view(data, i)
     IJFH{SS, Nij, Nh, typeof(dataview)}(dataview)
 end
 
 @inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
     @boundscheck (1 <= h <= size(parent(data), 4)) ||
                  throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
+    dataview = @inbounds TupleOfArrays(ntuple(ncomponents(parent(data))) do jf
+        view(
+            parent(parent(data).arrays[jf]),
+            (:, :, h),
+        )
+    end)
+    IJF{S, Nij, typeof(dataview)}(dataview)
 end
 
 @inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
     @boundscheck (v >= 1 && 1 <= h <= size(parent(data), 4)) ||
                  throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
+    slab(data, h)
 end
 
 @inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
     @boundscheck (
         1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= size(parent(data), 4)
     ) || throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), i, j, :, h)
-    DataF{S}(dataview)
+    dataview = @inbounds TupleOfArrays(ntuple(jf-> view(parent(toa.arrays[jf]), i, j, h), ncomponents(toa)))
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 function gather(
@@ -503,7 +491,7 @@ struct IFH{S, Ni, Nh, TOA <: TupleOfArrays} <: Data1D{S, Ni}
     array::TOA
 end
 
-parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
+parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = parent_array_type(A)
 
 function IFH{S, Ni, Nh}(array::AbstractArray{T, 3}) where {S, Ni, Nh, T}
     check_basetype(T, S)
@@ -544,8 +532,8 @@ Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= size(parent(data), 3) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), i, :, h)
-    DataF{S}(dataview)
+    dataview = @inbounds TupleOfArrays(ntuple(jf-> view(parent(toa.arrays[jf]), i, h), ncomponents(toa)))
+    DataF{S, typeof(dataview)}(dataview)
 end
 Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
     column(data, i, h)
@@ -555,26 +543,17 @@ Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
     ::Val{Idx},
 ) where {S, Ni, Nh, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IFH{$SS, $Ni, $Nh}(
-        @inbounds view(parent(data), :, $field_byterange, :)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(IFH{$SS, $Ni, $Nh, typeof($dataview)}(dataview))
 end
 
 @inline function Base.getproperty(
     data::IFH{S, Ni, Nh},
-    f::Integer,
+    i::Integer,
 ) where {S, Ni, Nh}
-    array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, f)
-    offset = fieldtypeoffset(T, S, f)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + nbytes), :)
-    IFH{SS, Ni, Nh}(dataview)
+    SS = fieldtype(S, i)
+    dataview = generic_property_view(data, i)
+    IFH{SS, Ni, Nh, typeof(dataview)}(dataview)
 end
 
 @inline function Base.getindex(data::IFH{S}, I::CartesianIndex{5}) where {S}
@@ -616,7 +595,7 @@ end
 
 rebuild(data::DataF{S}, array::AbstractArray) where {S} = DataF{S}(array)
 
-parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
+parent_array_type(::Type{DataF{S, A}}) where {S, A} = parent_array_type(A)
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
@@ -646,13 +625,9 @@ end
 
 
 @inline function Base.getproperty(data::DataF{S}, i::Integer) where {S}
-    array = parent(data)
-    T = eltype(array)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, (offset + 1):(offset + nbytes))
-    DataF{SS}(dataview)
+    dataview = generic_property_view(data, i)
+    DataF{SS, typeof(dataview)}(dataview)
 end
 
 @generated function _property_view(
@@ -660,11 +635,8 @@ end
     ::Val{Idx},
 ) where {S, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(DataF{$SS}(@inbounds view(parent(data), $field_byterange)))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(DataF{$SS, typeof(dataview)}(dataview))
 end
 
 Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
@@ -729,7 +701,7 @@ struct IJF{S, Nij, TOA <: TupleOfArrays} <: DataSlab2D{S, Nij}
     array::TOA
 end
 
-parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
+parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = parent_array_type(A)
 
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
@@ -766,23 +738,14 @@ end
     ::Val{Idx},
 ) where {S, Nij, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IJF{$SS, $Nij}(
-        @inbounds view(parent(data), :, :, $field_byterange)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(IJF{$SS, $Nij, typeof($dataview)}(dataview))
 end
 
 @inline function Base.getproperty(data::IJF{S, Nij}, i::Integer) where {S, Nij}
-    array = parent(data)
-    T = eltype(array)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes))
-    IJF{SS, Nij}(dataview)
+    dataview = generic_property_view(data, i)
+    IJF{SS, Nij, typeof(dataview)}(dataview)
 end
 
 @inline function Base.getindex(
@@ -821,8 +784,8 @@ end
 @inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
-    dataview = @inbounds view(parent(data), i, j, :)
-    DataF{S}(dataview)
+    dataview = @inbounds TupleOfArrays(ntuple(jf-> view(parent(toa.arrays[jf]), i, j), ncomponents(toa)))
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 # ======================
@@ -861,7 +824,7 @@ end
 rebuild(data::IF{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
     IF{S, Nij, A}(array)
 
-parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = parent_array_type(A)
 
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
@@ -890,21 +853,14 @@ end
     ::Val{Idx},
 ) where {S, Ni, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(IF{$SS, $Ni}(@inbounds view(parent(data), :, $field_byterange)))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(IF{$SS, $Ni, typeof($dataview)}(dataview))
 end
 
-@inline function Base.getproperty(data::IF{S, Ni}, f::Integer) where {S, Ni}
-    array = parent(data)
-    T = eltype(array)
-    SS = fieldtype(S, f)
-    offset = fieldtypeoffset(T, S, f)
-    len = typesize(T, SS)
-    dataview = @inbounds view(array, :, (offset + 1):(offset + len))
-    IF{SS, Ni}(dataview)
+@inline function Base.getproperty(data::IF{S, Ni}, i::Integer) where {S, Ni}
+    SS = fieldtype(S, i)
+    dataview = generic_property_view(data, i)
+    IF{SS, Ni, typeof(dataview)}(dataview)
 end
 
 @inline function Base.getindex(data::IF{S, Ni}, I::CartesianIndex) where {S, Ni}
@@ -935,8 +891,9 @@ end
 
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    dataview = @inbounds view(parent(data), i, :)
-    DataF{S}(dataview)
+    toa = parent(data)
+    dataview = @inbounds TupleOfArrays(ntuple(jf-> view(parent(toa.arrays[jf]), i), ncomponents(toa)))
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 # ======================
@@ -959,7 +916,7 @@ struct VF{S, Nv, TOA <: TupleOfArrays} <: DataColumn{S, Nv}
     array::TOA
 end
 
-parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
+parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = parent_array_type(A)
 
 function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
@@ -996,16 +953,17 @@ Base.size(data::VF{S, Nv}) where {S, Nv} = (1, 1, 1, Nv, 1)
 
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 
-@generated function _property_view(
+function _property_view(
     data::VF{S, Nv, A},
     ::Val{Idx},
 ) where {S, Nv, A, Idx}
+    toa = parent(data)
+    T = eltype(toa)
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
+    offset = fieldtypeoffset(T, S, Idx)
     nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VF{$SS, $Nv}(@inbounds view(parent(data), :, $field_byterange)))
+    toa_view = TupleOfArrays(ntuple(jf -> toa.arrays[offset + jf], nbytes))
+    return VF{SS, Nv, typeof(toa_view)}(toa_view)
 end
 
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
@@ -1068,7 +1026,7 @@ struct VIJFH{S, Nv, Nij, Nh, TOA <: TupleOfArrays} <: Data2DX{S, Nv, Nij}
 end
 
 parent_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} =
-    A
+    parent_array_type(A)
 
 function VIJFH{S, Nv, Nij, Nh}(
     array::AbstractArray{T, 5},
@@ -1111,26 +1069,17 @@ Base.length(data::VIJFH) = size(parent(data), 1) * size(parent(data), 5)
     ::Val{Idx},
 ) where {S, Nv, Nij, Nh, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIJFH{$SS, $Nv, $Nij, $Nh}(
-        @inbounds view(parent(data), :, :, :, $field_byterange, :)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(VIJFH{$SS, $Nv, $Nij, $Nh, typeof($dataview)}(dataview))
 end
 
 @propagate_inbounds function Base.getproperty(
     data::VIJFH{S, Nv, Nij, Nh},
     i::Integer,
 ) where {S, Nv, Nij, Nh}
-    array = parent(data)
-    T = eltype(array)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, :, (offset + 1):(offset + nbytes), :)
-    VIJFH{SS, Nv, Nij, Nh}(dataview)
+    dataview = generic_property_view(data, i)
+    VIJFH{SS, Nv, Nij, Nh, typeof(dataview)}(dataview)
 end
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
@@ -1161,11 +1110,13 @@ end
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, j, h)))
     Nf = size(array, 4)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, j, Base.Slice(Base.OneTo(Nf)), h),
-    )
-    VF{S, Nv}(dataview)
+    dataview = @inbounds TupleOfArrays(ntuple(ncomponents(toa)) do jf
+        SubArray(
+            parent(toa.arrays[jf]),
+            (Base.Slice(Base.OneTo(Nv)), i, j, h),
+        )
+    end)
+    VF{S, Nv, typeof(dataview)}(dataview)
 end
 
 @inline function level(data::VIJFH{S, Nv, Nij, Nh}, v) where {S, Nv, Nij, Nh}
@@ -1229,7 +1180,7 @@ struct VIFH{S, Nv, Ni, Nh, TOA <: TupleOfArrays} <: Data1DX{S, Nv, Ni}
     array::TOA
 end
 
-parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
+parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = parent_array_type(A)
 
 function VIFH{S, Nv, Ni, Nh}(
     array::AbstractArray{T, 4},
@@ -1270,26 +1221,17 @@ Base.length(data::VIFH) = nlevels(data) * size(parent(data), 4)
     ::Val{Idx},
 ) where {S, Nv, Ni, Nh, A, Idx}
     SS = fieldtype(S, Idx)
-    T = eltype(A)
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :(VIFH{$SS, $Nv, $Ni, $Nh}(
-        @inbounds view(parent(data), :, :, $field_byterange, :)
-    ))
+    dataview = generic_property_view(data, Val(Idx))
+    return :(VIFH{$SS, $Nv, $Ni, $Nh, typeof($dataview)}(dataview))
 end
 
 @inline function Base.getproperty(
     data::VIFH{S, Nv, Ni, Nh},
     i::Integer,
 ) where {S, Nv, Ni, Nh}
-    array = parent(data)
-    T = eltype(array)
     SS = fieldtype(S, i)
-    offset = fieldtypeoffset(T, S, i)
-    nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes), :)
-    VIFH{SS, Nv, Ni, Nh}(dataview)
+    dataview = generic_property_view(data, i)
+    VIFH{SS, Nv, Ni, Nh, typeof(dataview)}(dataview)
 end
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
@@ -1383,7 +1325,7 @@ struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
 
-parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = parent_array_type(A)
 
 function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
     @assert size(array, 1) % Nij == 0
@@ -1432,7 +1374,7 @@ struct IV1JH2{S, n1, Ni, A} <: Data1DX{S, n1, Ni}
     array::A
 end
 
-parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
+parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = parent_array_type(A)
 
 function IV1JH2{S, n1, Ni}(array::AbstractMatrix{S}) where {S, n1, Ni}
     @assert size(array, 2) % Ni == 0
@@ -1614,16 +1556,6 @@ _device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
 _device_dispatch(x::SArray) = ToCPU()
 _device_dispatch(x::MArray) = ToCPU()
 
-@inline field_dim(::IJKFVH) = 4
-@inline field_dim(::IJFH) = 3
-@inline field_dim(::IFH) = 2
-@inline field_dim(::DataF) = 1
-@inline field_dim(::IJF) = 3
-@inline field_dim(::IF) = 2
-@inline field_dim(::VF) = 2
-@inline field_dim(::VIJFH) = 4
-@inline field_dim(::VIFH) = 3
-
 for DL in (:IJKFVH,:IJFH,:IFH,:DataF,:IJF,:IF,:VF,:VIJFH,:VIFH,:IH1JH2,:IV1JH2)
     @eval singleton(::$DL) = $(Symbol(DL, :Singleton))()
 end
@@ -1632,6 +1564,67 @@ include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
+
+@inline function generic_property_view(data::AbstractData{S}, i::Integer) where {S}
+    toa = parent(data)
+    T = eltype(toa)
+    SS = fieldtype(S, i)
+    offset = fieldtypeoffset(T, S, i)
+    nbytes = typesize(T, SS)
+    return TupleOfArrays(ntuple(jf -> parent(data).arrays[offset + jf], nbytes))
+end
+
+@inline @generated function generic_property_view(data::AbstractData{S}, ::Val{Idx}) where {S, Idx}
+    :(TupleOfArrays(ntuple(jf -> parent(data).arrays[fieldtypeoffset(eltype(parent(data)), S, i) + jf], typesize(eltype(parent(data)), fieldtype(S, i)))))
+end
+
+@propagate_inbounds function Base.getindex(
+    data::AbstractData{S},
+    I::Integer,
+) where {S}
+    @inbounds get_struct(parent(data), S, Val(field_dim(data)), I)
+end
+@propagate_inbounds function Base.setindex!(
+    data::AbstractData{S},
+    val,
+    I::Integer,
+) where {S}
+    @inbounds set_struct!(
+        parent(data),
+        convert(S, val),
+        Val(field_dim(data)),
+        I,
+    )
+end
+
+# @inline @generated function generic_property_view(data::AbstractData{S}, ::Val{Idx}) where {S, Idx}
+#     :(restruct(data)(TupleOfArrays(ntuple(jf -> parent(data).arrays[fieldtypeoffset(eltype(parent(data)), S, i) + jf], typesize(eltype(parent(data)), fieldtype(S, i))))))
+# end
+# TupleOfArrays(ntuple(jf -> parent(data).arrays[fieldtypeoffset(eltype(parent(data)), S, i) + jf], typesize(eltype(parent(data)), fieldtype(S, i))))
+# @generated function _property_view(
+#     data::AD,
+#     ::Val{Idx},
+# ) where {S, Idx, AD <: AbstractData{S}}
+#     SS = fieldtype(S, Idx)
+#     toa = parent(data)
+#     T = eltype(parent(data))
+#     SS = fieldtype(S, i)
+#     offset = fieldtypeoffset(eltype(parent(data)), S, i)
+#     nbytes = typesize(T, SS)
+#     return :(nameof(AD){$(rprop_params(AD)...), typeof($(TupleOfArrays(ntuple(jf -> parent(data).arrays[fieldtypeoffset(eltype(parent(data)), S, i) + jf], typesize(eltype(parent(data)), fieldtype(S, i))))))}($(TupleOfArrays(ntuple(jf -> parent(data).arrays[fieldtypeoffset(eltype(parent(data)), S, i) + jf], typesize(eltype(parent(data)), fieldtype(S, i)))))))
+# end
+
+float_type(::Type{IJKFVH{S, Nij, Nk, Nv, Nh, TOA}}) where {S, Nij, Nk, Nv, Nh, TOA} = eltype(TOA)
+float_type(::Type{IJFH{S, Nij, Nh, TOA}}) where {S, Nij, Nh, TOA} = eltype(TOA)
+float_type(::Type{IFH{S, Ni, Nh, TOA}}) where {S, Ni, Nh, TOA} = eltype(TOA)
+float_type(::Type{DataF{S, TOA}}) where {S, TOA} = eltype(TOA)
+float_type(::Type{IJF{S, Nij, TOA}}) where {S, Nij, TOA} = eltype(TOA)
+float_type(::Type{IF{S, Ni, TOA}}) where {S, Ni, TOA} = eltype(TOA)
+float_type(::Type{VF{S, Nv, TOA}}) where {S, Nv, TOA} = eltype(TOA)
+float_type(::Type{VIJFH{S, Nv, Nij, Nh, TOA}}) where {S, Nv, Nij, Nh, TOA} = eltype(TOA)
+float_type(::Type{VIFH{S, Nv, Ni, Nh, TOA}}) where {S, Nv, Ni, Nh, TOA} = eltype(TOA)
+float_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = eltype(A)
+float_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = eltype(A)
 
 slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
 slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
