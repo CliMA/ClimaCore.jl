@@ -168,30 +168,28 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 )
 
 """
-    get_struct(array, S, Val(D), start_index)
+    get_struct(toa, S, Val(D), start_index)
 
-Construct an object of type `S` packed along the `D` dimension, from the values of `array`,
+Construct an object of type `S` packed along the `D` dimension, from the values of `toa`,
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function get_struct(
-    array::AbstractArray{T},
+    toa::TupleOfArrays{Nf, T},
     ::Type{S},
     ::Val{D},
     start_index::CartesianIndex,
-) where {T, S, D}
+    field_index::Integer = 1
+) where {Nf, T, S, D}
     tup = :(())
     for i in 1:fieldcount(S)
         push!(
             tup.args,
             :(get_struct(
-                array,
+                toa,
                 fieldtype(S, $i),
                 Val($D),
-                offset_index(
-                    start_index,
-                    Val($D),
-                    $(fieldtypeoffset(T, S, Val(i))),
-                ),
+                start_index,
+                field_index+$(fieldtypeoffset(T, S, Val(i)))
             )),
         )
     end
@@ -199,23 +197,17 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
-    # else
-    #     Base.@_propagate_inbounds_meta
-    #     args = ntuple(fieldcount(S)) do i
-    #         get_struct(array, fieldtype(S, i), Val(D), offset_index(start_index, Val(D), fieldtypeoffset(T, S, i)))
-    #     end
-    #     return bypass_constructor(S, args)
-    # end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
 Base.@propagate_inbounds function get_struct(
-    array::AbstractArray{S},
+    toa::TupleOfArrays{Nf, S},
     ::Type{S},
     ::Val{D},
     start_index::CartesianIndex,
-) where {S, D}
-    @inbounds return array[start_index]
+    field_index::Integer = 1
+) where {Nf, S, D}
+    @inbounds return toa.arrays[field_index][start_index]
 end
 
 """
@@ -225,11 +217,12 @@ Store an object `val` of type `S` packed along the `D` dimension, into `array`,
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function set_struct!(
-    array::AbstractArray{T},
+    toa::TupleOfArrays{Nf, T},
     val::S,
     ::Val{D},
     start_index::CartesianIndex,
-) where {T, S, D}
+    field_index::Integer = 1
+) where {Nf, T, S, D}
     ex = quote
         Base.@_propagate_inbounds_meta
     end
@@ -237,10 +230,11 @@ Base.@propagate_inbounds @generated function set_struct!(
         push!(
             ex.args,
             :(set_struct!(
-                array,
+                toa,
                 getfield(val, $i),
                 Val($D),
-                offset_index(start_index, Val($D), $(fieldtypeoffset(T, S, i))),
+                start_index,
+                field_index+$(fieldtypeoffset(T, S, Val(i)))
             )),
         )
     end
@@ -249,12 +243,13 @@ Base.@propagate_inbounds @generated function set_struct!(
 end
 
 Base.@propagate_inbounds function set_struct!(
-    array::AbstractArray{S},
+    toa::TupleOfArrays{Nf, S},
     val::S,
     ::Val{D},
     index::CartesianIndex,
-) where {S, D}
-    @inbounds array[index] = val
+    field_index::Integer = 1
+) where {Nf, S, D}
+    @inbounds toa.arrays[field_index][index] = val
     val
 end
 

@@ -45,11 +45,13 @@ abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
 
-include("struct.jl")
 
 abstract type AbstractData{S} end
 
 Base.size(data::AbstractData, i::Integer) = size(data)[i]
+
+include("tuple_of_arrays.jl")
+include("struct.jl")
 
 """
     struct UniversalSize{Nv, Nij, Nh} end
@@ -266,8 +268,8 @@ end
 
 A 3D DataLayout. TODO: Add more docs
 """
-struct IJKFVH{S, Nij, Nk, Nv, Nh, A} <: Data3D{S, Nij, Nk}
-    array::A
+struct IJKFVH{S, Nij, Nk, Nv, Nh, TOA<:TupleOfArrays} <: Data3D{S, Nij, Nk}
+    toa::TOA
 end
 
 parent_array_type(
@@ -284,7 +286,8 @@ function IJKFVH{S, Nij, Nk, Nv, Nh}(
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nv
     @assert size(array, 6) == Nh
-    IJKFVH{S, Nij, Nk, Nv, Nh, typeof(array)}(array)
+    toa = tuple_of_arrays(array, IJKFVHSingleton())
+    IJKFVH{S, Nij, Nk, Nv, Nh, typeof(toa)}(toa)
 end
 
 function replace_basetype(
@@ -345,8 +348,8 @@ The `ArrayType`-constructor constructs a IJFH 2D Spectral
 DataLayout given the backing `ArrayType`, quadrature degrees
 of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
 """
-struct IJFH{S, Nij, Nh, A} <: Data2D{S, Nij}
-    array::A
+struct IJFH{S, Nij, Nh, TOA <: TupleOfArrays} <: Data2D{S, Nij}
+    array::TOA
 end
 
 parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
@@ -357,7 +360,8 @@ function IJFH{S, Nij, Nh}(array::AbstractArray{T, 4}) where {S, Nij, Nh, T}
     @assert size(array, 2) == Nij
     @assert size(array, 3) == typesize(T, S)
     @assert size(array, 4) == Nh
-    IJFH{S, Nij, Nh, typeof(array)}(array)
+    toa = tuple_of_arrays(array, IJFHSingleton())
+    IJFH{S, Nij, Nh, typeof(toa)}(toa)
 end
 
 rebuild(
@@ -428,13 +432,15 @@ end
     data::IJFH{S, Nij, Nh},
     i::Integer,
 ) where {S, Nij, Nh}
-    array = parent(data)
-    T = eltype(array)
+    toa = parent(data)
+    T = eltype(toa)
     SS = fieldtype(S, i)
     offset = fieldtypeoffset(T, S, i)
     nbytes = typesize(T, SS)
-    dataview = @inbounds view(array, :, :, (offset + 1):(offset + nbytes), :)
-    IJFH{SS, Nij, Nh}(dataview)
+    R = (offset + 1):(offset + nbytes)
+    # dataview = @inbounds view(toa, :, :, (offset + 1):(offset + nbytes), :)
+    dataview = TupleOfArrays(ntuple(jf-> toa.arrays[jf], nbytes))
+    IJFH{SS, Nij, Nh, typeof(dataview)}(dataview)
 end
 
 @inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
@@ -493,8 +499,8 @@ DataLayout given the backing `ArrayType`, quadrature
 degrees of freedom `Ni`, and the number of mesh elements
 `Nh`.
 """
-struct IFH{S, Ni, Nh, A} <: Data1D{S, Ni}
-    array::A
+struct IFH{S, Ni, Nh, TOA <: TupleOfArrays} <: Data1D{S, Ni}
+    array::TOA
 end
 
 parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
@@ -504,7 +510,8 @@ function IFH{S, Ni, Nh}(array::AbstractArray{T, 3}) where {S, Ni, Nh, T}
     @assert size(array, 1) == Ni
     @assert size(array, 2) == typesize(T, S)
     @assert size(array, 3) == Nh
-    IFH{S, Ni, Nh, typeof(array)}(array)
+    toa = tuple_of_arrays(array, IFHSingleton())
+    IFH{S, Ni, Nh, typeof(toa)}(toa)
 end
 
 function replace_basetype(data::IFH{S, Ni, Nh}, ::Type{T}) where {S, Ni, Nh, T}
@@ -603,8 +610,8 @@ Base.size(data::Data0D) = (1, 1, 1, 1, 1)
 
 Backing `DataLayout` for 0D point data.
 """
-struct DataF{S, A} <: Data0D{S}
-    array::A
+struct DataF{S, TOA<:TupleOfArrays} <: Data0D{S}
+    array::TOA
 end
 
 rebuild(data::DataF{S}, array::AbstractArray) where {S} = DataF{S}(array)
@@ -614,7 +621,8 @@ parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
     @assert size(array, 1) == typesize(T, S)
-    DataF{S, typeof(array)}(array)
+    toa = tuple_of_arrays(array, DataFSingleton())
+    DataF{S, typeof(toa)}(toa)
 end
 
 function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
@@ -717,8 +725,8 @@ Nodal element data (I,J) are contiguous for each `S` datatype struct field (F) f
 
 A `DataSlab2D` view can be returned from other `Data2D` objects by calling `slab(data, idx...)`.
 """
-struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
-    array::A
+struct IJF{S, Nij, TOA <: TupleOfArrays} <: DataSlab2D{S, Nij}
+    array::TOA
 end
 
 parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
@@ -728,7 +736,8 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     check_basetype(T, S)
     @assert size(array, 3) == typesize(T, S)
-    IJF{S, Nij, typeof(array)}(array)
+    toa = tuple_of_arrays(array, IJFSingleton())
+    IJF{S, Nij, typeof(toa)}(toa)
 end
 
 rebuild(data::IJF{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
@@ -845,8 +854,8 @@ Nodal element data (I) are contiguous for each `S` datatype struct field (F) for
 
 A `DataSlab1D` view can be returned from other `Data1D` objects by calling `slab(data, idx...)`.
 """
-struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
-    array::A
+struct IF{S, Ni, TOA <: TupleOfArrays} <: DataSlab1D{S, Ni}
+    array::TOA
 end
 
 rebuild(data::IF{S, Nij}, array::A) where {S, Nij, A <: AbstractArray} =
@@ -858,7 +867,8 @@ function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
     @assert size(array, 2) == typesize(T, S)
-    IF{S, Ni, typeof(array)}(array)
+    toa = tuple_of_arrays(array, IFSingleton())
+    IF{S, Ni, typeof(toa)}(toa)
 end
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
     Nf = typesize(T, S)
@@ -945,8 +955,8 @@ Column level data (V) are contiguous for each `S` datatype struct field (F).
 
 A `DataColumn` view can be returned from other `Data1DX`, `Data2DX` objects by calling `column(data, idx...)`.
 """
-struct VF{S, Nv, A} <: DataColumn{S, Nv}
-    array::A
+struct VF{S, Nv, TOA <: TupleOfArrays} <: DataColumn{S, Nv}
+    array::TOA
 end
 
 parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
@@ -955,7 +965,8 @@ function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == typesize(T, S)
-    VF{S, Nv, typeof(array)}(array)
+    toa = tuple_of_arrays(array, VFSingleton())
+    VF{S, Nv, typeof(toa)}(toa)
 end
 
 function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
@@ -1052,8 +1063,8 @@ Backing `DataLayout` for 2D spectral element slab + extruded 1D FV column data.
 Column levels (V) are contiguous for every element nodal point (I, J)
 for each `S` datatype struct field (F), for each 2D mesh element slab (H).
 """
-struct VIJFH{S, Nv, Nij, Nh, A} <: Data2DX{S, Nv, Nij}
-    array::A
+struct VIJFH{S, Nv, Nij, Nh, TOA <: TupleOfArrays} <: Data2DX{S, Nv, Nij}
+    array::TOA
 end
 
 parent_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} =
@@ -1066,7 +1077,8 @@ function VIJFH{S, Nv, Nij, Nh}(
     @assert size(array, 2) == size(array, 3) == Nij
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nh
-    VIJFH{S, Nv, Nij, Nh, typeof(array)}(array)
+    toa = tuple_of_arrays(array, VIJFHSingleton())
+    VIJFH{S, Nv, Nij, Nh, typeof(toa)}(toa)
 end
 
 rebuild(
@@ -1213,8 +1225,8 @@ Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 Column levels (V) are contiguous for every element nodal point (I)
 for each datatype `S` struct field (F), for each 1D mesh element slab (H).
 """
-struct VIFH{S, Nv, Ni, Nh, A} <: Data1DX{S, Nv, Ni}
-    array::A
+struct VIFH{S, Nv, Ni, Nh, TOA <: TupleOfArrays} <: Data1DX{S, Nv, Ni}
+    array::TOA
 end
 
 parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
@@ -1226,7 +1238,8 @@ function VIFH{S, Nv, Ni, Nh}(
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
     @assert size(array, 4) == Nh
-    VIFH{S, Nv, Ni, Nh, typeof(array)}(array)
+    toa = tuple_of_arrays(array, VIFHSingleton())
+    VIFH{S, Nv, Ni, Nh, typeof(toa)}(toa)
 end
 
 rebuild(
@@ -1548,10 +1561,10 @@ Also, this assumes that `eltype(data) <: Real`.
 """
 function data2array end
 
-data2array(data::Union{IF, IFH}) = reshape(parent(data), :)
-data2array(data::Union{IJF, IJFH}) = reshape(parent(data), :)
+data2array(data::Union{IF, IFH}) = reshape(parent(data).arrays[1], :)
+data2array(data::Union{IJF, IJFH}) = reshape(parent(data).arrays[1], :)
 data2array(data::Union{VF{S, Nv}, VIFH{S, Nv}, VIJFH{S, Nv}}) where {S, Nv} =
-    reshape(parent(data), Nv, :)
+    reshape(parent(data).arrays[1], Nv, :)
 
 """
     array2data(array, ::AbstractData)
@@ -1595,10 +1608,25 @@ device_dispatch(dest::AbstractData) = _device_dispatch(dest)
 
 _device_dispatch(x::Array) = ToCPU()
 _device_dispatch(x::SubArray) = _device_dispatch(parent(x))
+_device_dispatch(x::TupleOfArrays) = _device_dispatch(x.arrays[1])
 _device_dispatch(x::Base.ReshapedArray) = _device_dispatch(parent(x))
 _device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
 _device_dispatch(x::SArray) = ToCPU()
 _device_dispatch(x::MArray) = ToCPU()
+
+@inline field_dim(::IJKFVH) = 4
+@inline field_dim(::IJFH) = 3
+@inline field_dim(::IFH) = 2
+@inline field_dim(::DataF) = 1
+@inline field_dim(::IJF) = 3
+@inline field_dim(::IF) = 2
+@inline field_dim(::VF) = 2
+@inline field_dim(::VIJFH) = 4
+@inline field_dim(::VIFH) = 3
+
+for DL in (:IJKFVH,:IJFH,:IFH,:DataF,:IJF,:IF,:VF,:VIJFH,:VIFH,:IH1JH2,:IV1JH2)
+    @eval singleton(::$DL) = $(Symbol(DL, :Singleton))()
+end
 
 include("copyto.jl")
 include("fused_copyto.jl")

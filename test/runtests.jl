@@ -2,6 +2,7 @@
 julia --project
 using Revise; include(joinpath("test", "runtests.jl"))
 =#
+ENV["CLIMACOMMS_DEVICE"] = "CPU";
 using Test
 include("tabulated_tests.jl")
 
