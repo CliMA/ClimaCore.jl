@@ -24,7 +24,7 @@ jobs:
           julia_file_change:
             - added|modified: '**.jl'
 
-    - uses: julia-actions/setup-julia@v2
+    - uses: julia-actions/setup-julia@latest
       if: steps.filter.outputs.julia_file_change == 'true'
       with:
         version: '1.10'

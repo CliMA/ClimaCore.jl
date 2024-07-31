@@ -1,5 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
 import ClimaCore:
     Fields,
     Domains,
@@ -34,8 +32,8 @@ domain = Domains.IntervalDomain(
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = 30)
-device = ClimaComms.device()
-cspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+
+cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 # https://github.com/CliMA/Thermodynamics.jl/blob/main/src/TemperatureProfiles.jl#L115-L155

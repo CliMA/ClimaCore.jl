@@ -183,10 +183,6 @@ function Base.show(io::IO, a::AxisTensor{T, N, A, S}) where {T, N, A, S}
     )
 end
 
-function Base.isapprox(x::T, y::T; kwargs...) where {T <: AxisTensor}
-    Base.isapprox(components(x), components(y); kwargs...)
-end
-
 # Allow one() to be called on vectors.
 Base.one(::T) where {T <: Geometry.AxisTensor} = one(T)
 Base.one(::Type{T}) where {T′, A, S, T <: Geometry.AxisTensor{T′, 1, A, S}} =

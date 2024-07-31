@@ -1,6 +1,5 @@
 using Test
 using ClimaComms
-ClimaComms.@import_required_backends
 using LinearAlgebra
 import ClimaCore
 import ClimaCore:
@@ -14,6 +13,9 @@ import ClimaCore:
     Topologies,
     DataLayouts,
     InputOutput
+
+using CUDA
+CUDA.allowscalar(false)
 
 function init_state(local_geometry, p)
     coord = local_geometry.coordinates
@@ -84,7 +86,6 @@ end
     reader = InputOutput.HDF5Reader(filename, context)
     restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
     close(reader)
-    ClimaComms.allowscalar(device) do
-        @test restart_Y == Y # test if restart is exact
-    end
+    CUDA.allowscalar(true)
+    @test restart_Y == Y # test if restart is exact
 end

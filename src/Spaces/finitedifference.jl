@@ -63,17 +63,10 @@ FaceFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
 CenterFiniteDifferenceSpace(topology::Topologies.IntervalTopology) =
     FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(topology), CellCenter())
 
-FaceFiniteDifferenceSpace(
-    device::ClimaComms.AbstractDevice,
-    mesh::Meshes.IntervalMesh,
-) = FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(device, mesh), CellFace())
-CenterFiniteDifferenceSpace(
-    device::ClimaComms.AbstractDevice,
-    mesh::Meshes.IntervalMesh,
-) = FiniteDifferenceSpace(
-    Grids.FiniteDifferenceGrid(device, mesh),
-    CellCenter(),
-)
+FaceFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellFace())
+CenterFiniteDifferenceSpace(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceSpace(Grids.FiniteDifferenceGrid(mesh), CellCenter())
 
 Adapt.adapt_structure(to, space::FiniteDifferenceSpace) =
     FiniteDifferenceSpace(Adapt.adapt(to, grid(space)), staggering(space))

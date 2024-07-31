@@ -59,7 +59,7 @@ function benchmark_kernel_array!(
     @test all(Array(ϕ_arr) .== Array(ψ_arr)) # compile and confirm correctness
 
     # Perform benchmark
-    trial = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $kernel(
+    trial = BenchmarkTools.@benchmark CUDA.@sync $kernel(
         $args,
         threads = $threads,
         blocks = $blocks,
@@ -74,14 +74,21 @@ end
 function benchmark_kernel!(
     args,
     kernel_fun!,
-    device::ClimaComms.AbstractDevice;
+    ::ClimaComms.AbstractCPUDevice;
     silent,
 )
     kernel_fun!(args) # compile first
-    trial =
-        BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $kernel_fun!(
-            $args,
-        )
+    trial = BenchmarkTools.@benchmark $kernel_fun!($args)
+    if !silent
+        show(stdout, MIME("text/plain"), trial)
+        println()
+    end
+    return trial
+end
+
+function benchmark_kernel!(args, kernel_fun!, ::ClimaComms.CUDADevice; silent)
+    kernel_fun!(args) # compile first
+    trial = BenchmarkTools.@benchmark CUDA.@sync $kernel_fun!($args)
     if !silent
         show(stdout, MIME("text/plain"), trial)
         println()
@@ -92,6 +99,13 @@ end
 function initial_velocity(space)
     uλ, uϕ = zeros(space), zeros(space)
     return @. Geometry.Covariant12Vector(Geometry.UVVector(uλ, uϕ))
+end
+
+function ismpi()
+    # detect common environment variables used by MPI launchers
+    #   PMI_RANK appears to be used by MPICH and srun
+    #   OMPI_COMM_WORLD_RANK appears to be used by OpenMPI
+    return haskey(ENV, "PMI_RANK") || haskey(ENV, "OMPI_COMM_WORLD_RANK")
 end
 
 function create_space(
@@ -128,6 +142,14 @@ end
 function setup_kernel_args(ARGS::Vector{String} = ARGS)
     s = ArgParseSettings(prog = "spectralelement operator benchmarks")
     @add_arg_table! s begin
+        "--device"
+        help = "Computation device (CPU, CUDA)"
+        arg_type = String
+        default = CUDA.functional() ? "CUDA" : "CPU"
+        "--comms"
+        help = "Communication type (Singleton, MPI)"
+        arg_type = String
+        default = ismpi() ? "MPI" : "Singleton"
         "--float-type"
         help = "Floating point type (Float32, Float64)"
         eval_arg = true
@@ -151,8 +173,16 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     end
     args = parse_args(ARGS, s)
 
-    device = ClimaComms.device()
-    context = ClimaComms.context(device)
+    device =
+        args["device"] == "CUDA" ? ClimaComms.CUDADevice() :
+        args["device"] == "CPU" ? ClimaComms.CPUSingleThreaded() :
+        error("Unknown device: $(args["device"])")
+
+    context =
+        args["comms"] == "MPI" ? ClimaComms.MPICommsContext(device) :
+        args["comms"] == "Singleton" ?
+        ClimaComms.SingletonCommsContext(device) :
+        error("Unknown comms: $(args["comms"])")
 
     ClimaComms.init(context)
 
@@ -230,10 +260,12 @@ function setup_kernel_args(ARGS::Vector{String} = ARGS)
     f = @. Geometry.Contravariant3Vector(Geometry.WVector(ϕ))
 
     s = size(parent(ϕ))
-    ArrayType = ClimaComms.array_type(device)
-    ϕ_arr = ArrayType(fill(FT(1), s))
-    ψ_arr = ArrayType(fill(FT(2), s))
-    array_kernel_args = (; ϕ_arr, ψ_arr)
+    array_kernel_args = if device isa ClimaComms.AbstractCPUDevice
+        (; ϕ_arr = fill(FT(1), s), ψ_arr = fill(FT(2), s))
+    else
+        device isa ClimaComms.CUDADevice
+        (; ϕ_arr = CUDA.fill(FT(1), s), ψ_arr = CUDA.fill(FT(2), s))
+    end
 
     kernel_args = (; ϕ, ψ, u, du, f, ϕψ, nt_ϕψ, nt_ϕψ_ft, f_comp, f_comp2)
     # buffers cannot reside in CuArray kernels

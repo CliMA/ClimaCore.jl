@@ -18,10 +18,9 @@ using IntervalSets, LinearAlgebra, SparseArrays
 FT = Float64
 
 function make_space(domain::Domains.IntervalDomain, nq, nelems = 1)
-    device = ClimaComms.CPUSingleThreaded()
     nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.IntervalMesh(domain; nelems = nelems)
-    topo = Topologies.IntervalTopology(device, mesh)
+    topo = Topologies.IntervalTopology(mesh)
     space = Spaces.SpectralElementSpace1D(topo, quad)
     return space
 end
@@ -34,9 +33,10 @@ function make_space(
 )
     nq == 1 ? (quad = Quadratures.GL{1}()) : (quad = Quadratures.GLL{nq}())
     mesh = Meshes.RectilinearMesh(domain, nxelems, nyelems)
-    device = ClimaComms.CPUSingleThreaded()
-    topology =
-        Topologies.Topology2D(ClimaComms.SingletonCommsContext(device), mesh)
+    topology = Topologies.Topology2D(
+        ClimaComms.SingletonCommsContext(ClimaComms.CPUSingleThreaded()),
+        mesh,
+    )
     space = Spaces.SpectralElementSpace2D(topology, quad)
     return space
 end

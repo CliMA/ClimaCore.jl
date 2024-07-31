@@ -19,7 +19,6 @@ using ClimaCore.Geometry
 
 FT = Float64
 context = ClimaComms.context()
-device = ClimaComms.device(context)
 vertdomain = Domains.IntervalDomain(
     Geometry.ZPoint{FT}(0),
     Geometry.ZPoint{FT}(4);
@@ -37,7 +36,7 @@ horzdomain = Domains.IntervalDomain(
     periodic = true,
 )
 horzmesh = Meshes.IntervalMesh(horzdomain, nelems = 20)
-horztopology = Topologies.IntervalTopology(device, horzmesh)
+horztopology = Topologies.IntervalTopology(horzmesh)
 quad = Quadratures.GLL{4 + 1}()
 horzspace = Spaces.SpectralElementSpace1D(horztopology, quad)
 

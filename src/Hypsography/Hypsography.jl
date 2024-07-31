@@ -213,8 +213,8 @@ function _ExtrudedFiniteDifferenceGrid(
     ArrayType = ClimaComms.array_type(horizontal_grid.topology)
     # currently only works on Arrays
     (center_z_local_geometry, face_z_local_geometry) = Grids.fd_geometry_data(
-        Adapt.adapt(Array, face_z),
-        Val(Topologies.isperiodic(vertical_grid.topology)),
+        Adapt.adapt(Array, face_z);
+        periodic = Topologies.isperiodic(vertical_grid.topology),
     )
 
     center_z_local_geometry = Adapt.adapt(ArrayType, center_z_local_geometry)

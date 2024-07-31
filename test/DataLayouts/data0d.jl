@@ -135,17 +135,16 @@ end
 @testset "broadcasting DataF + IFH data object => IFH" begin
     FT = Float64
     S = Complex{FT}
-    Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ifh = IFH{S, 2, Nh}(ones(FT, 2, 2, Nh))
+    data_ifh = IFH{S, 2}(ones(FT, 2, 2, 3))
     data_ifh2 = data_f .+ data_ifh
     @test data_ifh2 isa IFH{S}
     @test size(data_ifh2) == (2, 1, 1, 1, 3)
 
 
     FT = Float64
-    array = rand(FT, 2, 1, Nh)
-    data = IFH{FT, 2, Nh}(array)
+    array = rand(FT, 2, 1, 3)
+    data = IFH{FT, 2}(array)
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
           parent(data)
@@ -171,17 +170,15 @@ end
 @testset "broadcasting DataF + IJFH data object => IJFH" begin
     FT = Float64
     S = Complex{FT}
-    Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ijfh = IJFH{S, 2, Nh}(ones(2, 2, 2, Nh))
+    data_ijfh = IJFH{S, 2}(ones(2, 2, 2, 3))
     data_ijfh2 = data_f .+ data_ijfh
     @test data_ijfh2 isa IJFH{S}
-    @test size(data_ijfh2) == (2, 2, 1, 1, Nh)
+    @test size(data_ijfh2) == (2, 2, 1, 1, 3)
 
     FT = Float64
-    Nh = 3
-    array = rand(FT, 2, 2, 1, Nh)
-    data = IJFH{FT, 2, Nh}(array)
+    array = rand(FT, 2, 2, 1, 5)
+    data = IJFH{FT, 2}(array)
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
           parent(data)
@@ -190,25 +187,23 @@ end
 @testset "broadcasting DataF + VIFH data object => VIFH" begin
     FT = Float64
     S = Complex{FT}
-    Nh = 10
     data_f = DataF{S}(ones(FT, 2))
     Nv = 10
-    data_vifh = VIFH{S, Nv, 4, Nh}(ones(FT, Nv, 4, 2, Nh))
+    data_vifh = VIFH{S, Nv, 4}(ones(FT, Nv, 4, 3, 10))
     data_vifh2 = data_f .+ data_vifh
     @test data_vifh2 isa VIFH{S, Nv}
-    @test size(data_vifh2) == (4, 1, 1, Nv, Nh)
+    @test size(data_vifh2) == (4, 1, 1, Nv, 10)
 end
 
 @testset "broadcasting DataF + VIJFH data object => VIJFH" begin
     FT = Float64
     S = Complex{FT}
     Nv = 2
-    Nh = 2
     data_f = DataF{S}(ones(FT, 2))
-    data_vijfh = VIJFH{S, Nv, 2, Nh}(ones(FT, Nv, 2, 2, 2, Nh))
+    data_vijfh = VIJFH{S, Nv, 2}(ones(FT, Nv, 2, 2, 2, 2))
     data_vijfh2 = data_f .+ data_vijfh
-    @test data_vijfh2 isa VIJFH{S, Nv, Nh}
-    @test size(data_vijfh2) == (2, 2, 1, Nv, Nh)
+    @test data_vijfh2 isa VIJFH{S, Nv}
+    @test size(data_vijfh2) == (2, 2, 1, Nv, 2)
 end
 
 @testset "column IF => DataF" begin
@@ -225,10 +220,9 @@ end
 @testset "column IFH => DataF" begin
     FT = Float64
     S = Complex{FT}
-    Nh = 3
-    array = ones(FT, 2, 2, Nh)
+    array = ones(FT, 2, 2, 3)
     array[1, :, 1] .= FT[3, 4]
-    data_ifh = IFH{S, 2, Nh}(array)
+    data_ifh = IFH{S, 2}(array)
     ifh_column = column(data_ifh, 1, 1)
     @test ifh_column isa DataF
     @test ifh_column[] == 3.0 + 4.0im
@@ -252,10 +246,9 @@ end
 @testset "column IJFH => DataF" begin
     FT = Float64
     S = Complex{FT}
-    Nh = 3
     array = ones(2, 2, 2, 3)
     array[1, 1, :, 2] .= FT[3, 4]
-    data_ijfh = IJFH{S, 2, Nh}(array)
+    data_ijfh = IJFH{S, 2}(array)
     ijfh_column = column(data_ijfh, 1, 1, 2)
     @test ijfh_column isa DataF
     @test ijfh_column[] == 3.0 + 4.0im

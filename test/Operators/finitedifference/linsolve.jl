@@ -1,11 +1,9 @@
-#=
-julia --project=.buildkite
-using Revise; include(joinpath("test", "Operators", "finitedifference", "linsolve.jl"))
-=#
 using Test
 using ClimaComms
-ClimaComms.@import_required_backends
+
 import ClimaCore
+# To avoid JET failures in the error message
+ClimaCore.Operators.allow_mismatched_fd_spaces() = true
 
 using ClimaCore:
     Geometry, Domains, Meshes, Topologies, Spaces, Fields, Quadratures
@@ -18,9 +16,7 @@ velem = 4
 
 hdomain = Domains.SphereDomain(radius)
 hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
-context = ClimaComms.SingletonCommsContext()
-device = ClimaComms.device(context)
-htopology = Topologies.Topology2D(context, hmesh)
+htopology = Topologies.Topology2D(ClimaComms.SingletonCommsContext(), hmesh)
 quad = Quadratures.GLL{npoly + 1}()
 hspace = Spaces.SpectralElementSpace2D(htopology, quad)
 
@@ -30,7 +26,7 @@ vdomain = Domains.IntervalDomain(
     boundary_names = (:bottom, :top),
 )
 vmesh = Meshes.IntervalMesh(vdomain, nelems = velem)
-center_space = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
+center_space = Spaces.CenterFiniteDifferenceSpace(vmesh)
 
 #=
 # TODO: Replace this with a space that includes topography.
@@ -93,9 +89,11 @@ W = SchurComplementW(Y, use_transform, jacobi_flags)
 
 using JET
 using Test
+@time test_linsolve!(Y, W, b)
+@time test_linsolve!(Y, W, b)
 
 @testset "JET test for `apply` in linsolve! kernel" begin
-    test_linsolve!(Y, W, b) # compile first
-    @test 0 == @allocated test_linsolve!(Y, W, b)
     @test_opt test_linsolve!(Y, W, b)
 end
+
+ClimaCore.Operators.allow_mismatched_fd_spaces() = false

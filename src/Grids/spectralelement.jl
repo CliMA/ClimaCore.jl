@@ -48,11 +48,10 @@ function _SpectralElementGrid1D(
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
     nelements = Topologies.nlocalelems(topology)
-    Nh = nelements
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
-    local_geometry = DataLayouts.IFH{LG, Nq, Nh}(Array{FT})
+    local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, nelements)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
@@ -172,15 +171,6 @@ function SpectralElementGrid2D(
     end
 end
 
-function get_CoordType2D(topology)
-    domain = Topologies.domain(topology)
-    return if domain isa Domains.SphereDomain
-        FT = Domains.float_type(domain)
-        Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
-    else
-        Topologies.coordinate_type(topology)
-    end
-end
 
 function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
@@ -205,16 +195,19 @@ function _SpectralElementGrid2D(
     # 1. allocate buffers externally
     DA = ClimaComms.array_type(topology)
     domain = Topologies.domain(topology)
-    FT = Domains.float_type(domain)
-    global_geometry = if domain isa Domains.SphereDomain
-        Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
+    if domain isa Domains.SphereDomain
+        CoordType3D = Topologies.coordinate_type(topology)
+        FT = Geometry.float_type(CoordType3D)
+        CoordType2D = Geometry.LatLongPoint{FT} # Domains.coordinate_type(topology)
+        global_geometry =
+            Geometry.SphericalGlobalGeometry(topology.mesh.domain.radius)
     else
-        Geometry.CartesianGlobalGeometry()
+        CoordType2D = Topologies.coordinate_type(topology)
+        FT = Geometry.float_type(CoordType2D)
+        global_geometry = Geometry.CartesianGlobalGeometry()
     end
-    CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
     nlelems = Topologies.nlocalelems(topology)
-    Nh = nlelems
     ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
@@ -222,7 +215,7 @@ function _SpectralElementGrid2D(
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
-    local_geometry = DataLayouts.IJFH{LG, Nq, Nh}(Array{FT})
+    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, nlelems)
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -238,13 +231,8 @@ function _SpectralElementGrid2D(
         # high-order quadrature loop for computing geometric element face area.
         for i in 1:high_order_Nq, j in 1:high_order_Nq
             ξ = SVector(high_order_quad_points[i], high_order_quad_points[j])
-            u, ∂u∂ξ = compute_local_geometry(
-                global_geometry,
-                topology,
-                elem,
-                ξ,
-                Val(AIdx),
-            )
+            u, ∂u∂ξ =
+                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
             J_high_order = det(Geometry.components(∂u∂ξ))
             WJ_high_order =
                 J_high_order *
@@ -255,13 +243,8 @@ function _SpectralElementGrid2D(
         # low-order quadrature loop for computing numerical element face area
         for i in 1:Nq, j in 1:Nq
             ξ = SVector(quad_points[i], quad_points[j])
-            u, ∂u∂ξ = compute_local_geometry(
-                global_geometry,
-                topology,
-                elem,
-                ξ,
-                Val(AIdx),
-            )
+            u, ∂u∂ξ =
+                compute_local_geometry(global_geometry, topology, elem, ξ, AIdx)
             J = det(Geometry.components(∂u∂ξ))
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
@@ -281,7 +264,7 @@ function _SpectralElementGrid2D(
                         topology,
                         elem,
                         ξ,
-                        Val(AIdx),
+                        AIdx,
                     )
                     J = det(Geometry.components(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
@@ -310,7 +293,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            Val(AIdx),
+                            AIdx,
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         J += Δarea / Nq^2
@@ -326,7 +309,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            Val(AIdx),
+                            AIdx,
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         WJ = J * quad_weights[i] * quad_weights[j]
@@ -347,7 +330,7 @@ function _SpectralElementGrid2D(
                             topology,
                             elem,
                             ξ,
-                            Val(AIdx),
+                            AIdx,
                         )
                         J = det(Geometry.components(∂u∂ξ))
                         # Modify J only for interior nodes
@@ -380,7 +363,7 @@ function _SpectralElementGrid2D(
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
-            DataLayouts.IFH{SG, Nq, length(interior_faces)}(Array{FT})
+            DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
         for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
             enumerate(interior_faces)
             internal_surface_geometry_slab =
@@ -419,7 +402,7 @@ function _SpectralElementGrid2D(
                 boundary_faces =
                     Topologies.boundary_faces(topology, boundarytag)
                 boundary_surface_geometry =
-                    DataLayouts.IFH{SG, Nq, length(boundary_faces)}(Array{FT})
+                    DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
                 for (iface, (elem, face)) in enumerate(boundary_faces)
                     boundary_surface_geometry_slab =
                         slab(boundary_surface_geometry, iface)
@@ -457,8 +440,8 @@ function compute_local_geometry(
     topology,
     elem,
     ξ,
-    ::Val{AIdx},
-) where {AIdx}
+    AIdx,
+)
     x = Meshes.coordinates(topology.mesh, elem, ξ)
     u = Geometry.LatLongPoint(x, global_geometry)
     ∂x∂ξ = Geometry.AxisTensor(
@@ -477,8 +460,8 @@ function compute_local_geometry(
     topology,
     elem,
     ξ,
-    ::Val{AIdx},
-) where {AIdx}
+    AIdx,
+)
     u = Meshes.coordinates(topology.mesh, elem, ξ)
     ∂u∂ξ = Geometry.AxisTensor(
         (Geometry.LocalAxis{AIdx}(), Geometry.CovariantAxis{AIdx}()),
@@ -513,8 +496,6 @@ function compute_surface_geometry(
         -J * ∂ξ∂x[2, :] * quad_weights[i]
     elseif face == 3
         J * ∂ξ∂x[2, :] * quad_weights[i]
-    else
-        error("Uncaught case")
     end
     sWJ = norm(n)
     n = n / sWJ

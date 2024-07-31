@@ -1,5 +1,3 @@
-import ClimaComms
-ClimaComms.@import_required_backends
 using LinearAlgebra
 
 import ClimaCore:
@@ -47,8 +45,8 @@ domain = Domains.IntervalDomain(
 )
 #mesh = Meshes.IntervalMesh(domain, Meshes.ExponentialStretching(7.5e3); nelems = 30)
 mesh = Meshes.IntervalMesh(domain; nelems = nelems)
-device = ClimaComms.device()
-cspace = Spaces.CenterFiniteDifferenceSpace(device, mesh)
+
+cspace = Spaces.CenterFiniteDifferenceSpace(mesh)
 fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
 
 

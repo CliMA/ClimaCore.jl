@@ -4,29 +4,6 @@ ClimaCore.jl Release Notes
 main
 -------
 
-v0.14.10
--------
-
-- Various performance tweaks (PRs [#1840](https://github.com/CliMA/ClimaCore.jl/pull/1840), [#1837](https://github.com/CliMA/ClimaCore.jl/pull/1837), [#1843](https://github.com/CliMA/ClimaCore.jl/pull/1843), [#1839](https://github.com/CliMA/ClimaCore.jl/pull/1839)).
-- CPU/GPU kernels are now determined by dispatching, instead of specializing, which should (hopefully) have generally fixed GPU dispatching issues (PR [#1863](https://github.com/CliMA/ClimaCore.jl/pull/1863)).
-- Matrix multiplication kernels have been improved (PR [#1880](https://github.com/CliMA/ClimaCore.jl/pull/1880)).
-- Support for the following methods have been deprecated (PR [#1821](https://github.com/CliMA/ClimaCore.jl/pull/1821), ):
-  - `IntervalTopology(::Mesh)` in favor of using `IntervalTopology(::ClimaComms.AbstractDevice, ::Mesh)`
-  - `FaceFiniteDifferenceSpace(::Mesh)` in favor of using `FaceFiniteDifferenceSpace(::ClimaComms.AbstractDevice, ::Mesh)`
-  - `CenterFiniteDifferenceSpace(::Mesh)` in favor of using `CenterFiniteDifferenceSpace(::ClimaComms.AbstractDevice, ::Mesh)`
-  - `FiniteDifferenceGrid(::Mesh)` in favor of using `FiniteDifferenceGrid(::ClimaComms.AbstractDevice, ::Mesh)`
-
-v0.14.9
--------
-
-- ![][badge-🐛bugfix] GPU dispatching with `copyto!` and `fill!` have been fixed PR [#1802](https://github.com/CliMA/ClimaCore.jl/pull/1802).
-
-v0.14.8
--------
-
-- ![][badge-✨feature/enhancement] Added `FieldMatrixWithSolver`, a wrapper that helps defining implicit Jacobians. PR [#1788](https://github.com/CliMA/ClimaCore.jl/pull/1788)
-
-
 v0.14.6
 -------
 

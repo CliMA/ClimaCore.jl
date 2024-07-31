@@ -20,7 +20,7 @@ abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
 
 """
     FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
-    FiniteDifferenceGrid(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
+    FiniteDifferenceGrid(mesh::Meshes.IntervalMesh)
 
 Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
 `IntervalMesh`). 
@@ -61,8 +61,10 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     for v in 1:Nv_face
         face_coordinates[v] = mesh.faces[v]
     end
-    center_local_geometry, face_local_geometry =
-        fd_geometry_data(face_coordinates, Val(Topologies.isperiodic(topology)))
+    center_local_geometry, face_local_geometry = fd_geometry_data(
+        face_coordinates;
+        periodic = Topologies.isperiodic(topology),
+    )
 
     return FiniteDifferenceGrid(
         topology,
@@ -74,17 +76,19 @@ end
 
 # called by the FiniteDifferenceGrid constructor, and the ExtrudedFiniteDifferenceGrid constructor with Hypsography
 function fd_geometry_data(
-    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}},
-    ::Val{periodic},
-) where {FT, periodic}
+    face_coordinates::DataLayouts.AbstractData{Geometry.ZPoint{FT}};
+    periodic,
+) where {FT}
     CT = Geometry.ZPoint{FT}
     AIdx = (3,)
     LG = Geometry.LocalGeometry{AIdx, CT, FT, SMatrix{1, 1, FT, 1}}
     (Ni, Nj, Nk, Nv, Nh) = size(face_coordinates)
     Nv_face = Nv - periodic
     Nv_cent = Nv - 1
-    center_local_geometry = similar(face_coordinates, LG, Val(Nv_cent))
-    face_local_geometry = similar(face_coordinates, LG, Val(Nv_face))
+    center_local_geometry =
+        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_cent, Nh))
+    face_local_geometry =
+        similar(face_coordinates, LG, (Ni, Nj, Nk, Nv_face, Nh))
     c1(args...) =
         Geometry.component(face_coordinates[CartesianIndex(args...)], 1)
     for h in 1:Nh, k in 1:Nk, j in 1:Nj, i in 1:Ni
@@ -158,10 +162,8 @@ function fd_geometry_data(
 end
 
 
-FiniteDifferenceGrid(
-    device::ClimaComms.AbstractDevice,
-    mesh::Meshes.IntervalMesh,
-) = FiniteDifferenceGrid(Topologies.IntervalTopology(device, mesh))
+FiniteDifferenceGrid(mesh::Meshes.IntervalMesh) =
+    FiniteDifferenceGrid(Topologies.IntervalTopology(mesh))
 
 # accessors
 topology(grid::FiniteDifferenceGrid) = grid.topology

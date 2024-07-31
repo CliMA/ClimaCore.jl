@@ -154,16 +154,6 @@ function _scan_data_layout(layoutstring::AbstractString)
     return DataLayouts.VIFH
 end
 
-function Nh_dim(layoutstring::AbstractString)
-    @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-    layoutstring == "IJFH" && return 4
-    layoutstring == "IJF" && return -1
-    layoutstring == "IFH" && return 3
-    layoutstring == "IF" && return -1
-    layoutstring == "VIJFH" && return 5
-    return 4
-end
-
 """
     matrix_to_cartesianindices(elemorder_matrix)
 
@@ -277,9 +267,9 @@ function read_topology_new(reader::HDF5Reader, name::AbstractString)
     type = attrs(group)["type"]
     if type == "IntervalTopology"
         mesh = read_mesh(reader, attrs(group)["mesh"])
-        device = ClimaComms.device(reader.context)
-        context = ClimaComms.SingletonCommsContext(device)
-        return Topologies.IntervalTopology(device, mesh)
+        context =
+            ClimaComms.SingletonCommsContext(ClimaComms.device(reader.context))
+        return Topologies.IntervalTopology(context, mesh)
     elseif type == "Topology2D"
         mesh = read_mesh(reader, attrs(group)["mesh"])
         if haskey(group, "elemorder")
@@ -469,14 +459,12 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
         DataLayout = _scan_data_layout(data_layout)
-        Nhd = Nh_dim(data_layout)
-        Nht = Nhd == -1 ? () : (size(data, Nhd),)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
         if data_layout in ("VIJFH", "VIFH")
             Nv = size(data, 1)
-            values = DataLayout{ElType, Nv, Nij, Nht...}(data)
+            values = DataLayout{ElType, Nv, Nij}(data)
         else
-            values = DataLayout{ElType, Nij, Nht...}(data)
+            values = DataLayout{ElType, Nij}(data)
         end
         return Fields.Field(values, space)
     elseif type == "FieldVector"
