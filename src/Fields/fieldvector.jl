@@ -136,6 +136,11 @@ Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
 
+Base.@propagate_inbounds slab(fv::FieldVector{T}, inds...) where {T} =
+    FieldVector{T}(slab_args(_values(fv), inds...))
+Base.@propagate_inbounds column(fv::FieldVector{T}, inds...) where {T} =
+    FieldVector{T}(column_args(_values(fv), inds...))
+
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
 Base.Broadcast.BroadcastStyle(::Type{<:FieldVector}) = FieldVectorStyle()

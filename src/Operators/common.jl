@@ -139,3 +139,8 @@ end
 strip_space_args(::Tuple{}, space) = ()
 strip_space_args(args::Tuple, space) =
     (strip_space(args[1], space), strip_space_args(Base.tail(args), space)...)
+
+function unstrip_space(field::Field, parent_space)
+    new_space = reconstruct_placeholder_space(axes(field), parent_space)
+    return Field(Fields.field_values(field), new_space)
+end
