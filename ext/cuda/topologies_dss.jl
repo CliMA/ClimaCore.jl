@@ -188,6 +188,8 @@ function Topologies.dss_transform!(
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
+    covariant123fidx::AbstractVector{Int},
+    contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
 )
     nlocalelems = length(localelems)
@@ -212,6 +214,8 @@ function Topologies.dss_transform!(
             scalarfidx,
             covariant12fidx,
             contravariant12fidx,
+            covariant123fidx,
+            contravariant123fidx,
             localelems,
         )
         auto_launch!(
@@ -236,6 +240,8 @@ function dss_transform_kernel!(
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
+    covariant123fidx::AbstractVector{Int},
+    contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
@@ -288,6 +294,81 @@ function dss_transform_kernel!(
                     p∂x∂ξ[idx22] * pdata[data_idx2]
                 ) * weight
         end
+        for fidx in covariant123fidx
+            data_idx1 =
+                Topologies.linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 = Topologies.linear_ind(
+                sizet_data,
+                (level, ip, jp, fidx + 1, elem),
+            )
+            data_idx3 = Topologies.linear_ind(
+                sizet_data,
+                (level, ip, jp, fidx + 2, elem),
+            )
+
+            (idx11, idx12, idx13, idx21, idx22, idx23, idx31, idx32, idx33) =
+                Topologies._get_idx_metric_3d(
+                    sizet_metric,
+                    (level, ip, jp, elem),
+                )
+
+            # Covariant to physical transformation
+            pperimeter_data[level, p, fidx, elem] =
+                (
+                    p∂ξ∂x[idx11] * pdata[data_idx1] +
+                    p∂ξ∂x[idx12] * pdata[data_idx2] +
+                    p∂ξ∂x[idx13] * pdata[data_idx3]
+                ) * weight
+            pperimeter_data[level, p, fidx + 1, elem] =
+                (
+                    p∂ξ∂x[idx21] * pdata[data_idx1] +
+                    p∂ξ∂x[idx22] * pdata[data_idx2] +
+                    p∂ξ∂x[idx23] * pdata[data_idx3]
+                ) * weight
+            pperimeter_data[level, p, fidx + 2, elem] =
+                (
+                    p∂ξ∂x[idx31] * pdata[data_idx1] +
+                    p∂ξ∂x[idx32] * pdata[data_idx2] +
+                    p∂ξ∂x[idx33] * pdata[data_idx3]
+                ) * weight
+        end
+
+        for fidx in contravariant123fidx
+            data_idx1 =
+                Topologies.linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 = Topologies.linear_ind(
+                sizet_data,
+                (level, ip, jp, fidx + 1, elem),
+            )
+            data_idx3 = Topologies.linear_ind(
+                sizet_data,
+                (level, ip, jp, fidx + 2, elem),
+            )
+            (idx11, idx12, idx13, idx21, idx22, idx23, idx31, idx32, idx33) =
+                Topologies._get_idx_metric_3d(
+                    sizet_metric,
+                    (level, ip, jp, elem),
+                )
+            # Contravariant to physical transformation
+            pperimeter_data[level, p, fidx, elem] =
+                (
+                    p∂x∂ξ[idx11] * pdata[data_idx1] +
+                    p∂x∂ξ[idx21] * pdata[data_idx2] +
+                    p∂x∂ξ[idx31] * pdata[data_idx3]
+                ) * weight
+            pperimeter_data[level, p, fidx + 1, elem] =
+                (
+                    p∂x∂ξ[idx12] * pdata[data_idx1] +
+                    p∂x∂ξ[idx22] * pdata[data_idx2] +
+                    p∂x∂ξ[idx32] * pdata[data_idx3]
+                ) * weight
+            pperimeter_data[level, p, fidx + 2, elem] =
+                (
+                    p∂x∂ξ[idx13] * pdata[data_idx1] +
+                    p∂x∂ξ[idx23] * pdata[data_idx2] +
+                    p∂x∂ξ[idx33] * pdata[data_idx3]
+                ) * weight
+        end
     end
     return nothing
 end
@@ -302,6 +383,8 @@ function Topologies.dss_untransform!(
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
+    covariant123fidx::AbstractVector{Int},
+    contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
 ) where {Nq}
     nlocalelems = length(localelems)
@@ -324,6 +407,8 @@ function Topologies.dss_untransform!(
             scalarfidx,
             covariant12fidx,
             contravariant12fidx,
+            covariant123fidx,
+            contravariant123fidx,
             localelems,
         )
         auto_launch!(
@@ -347,6 +432,8 @@ function dss_untransform_kernel!(
     scalarfidx::AbstractVector{Int},
     covariant12fidx::AbstractVector{Int},
     contravariant12fidx::AbstractVector{Int},
+    covariant123fidx::AbstractVector{Int},
+    contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
 ) where {FT <: AbstractFloat, Nq}
     gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
@@ -388,6 +475,50 @@ function dss_untransform_kernel!(
             pdata[data_idx2] =
                 p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
                 p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+        end
+        for fidx in covariant123fidx
+            data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 = linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx3 = linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+            (idx11, idx12, idx13, idx21, idx22, idx23, idx31, idx32, idx33) =
+                Topologies._get_idx_metric_3d(
+                    sizet_metric,
+                    (level, ip, jp, elem),
+                )
+            pdata[data_idx1] =
+                p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
+                p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem] +
+                p∂x∂ξ[idx13] * pperimeter_data[level, p, fidx + 2, elem]
+            pdata[data_idx2] =
+                p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
+                p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem] +
+                p∂x∂ξ[idx23] * pperimeter_data[level, p, fidx + 2, elem]
+            pdata[data_idx3] =
+                p∂x∂ξ[idx31] * pperimeter_data[level, p, fidx, elem] +
+                p∂x∂ξ[idx32] * pperimeter_data[level, p, fidx + 1, elem] +
+                p∂x∂ξ[idx33] * pperimeter_data[level, p, fidx + 2, elem]
+        end
+        for fidx in contravariant123fidx
+            data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+            data_idx2 = linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+            data_idx3 = linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+            (idx11, idx12, idx13, idx21, idx22, idx23, idx31, idx32, idx33) =
+                Topologies._get_idx_metric_3d(
+                    sizet_metric,
+                    (level, ip, jp, elem),
+                )
+            pdata[data_idx1] =
+                p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
+                p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem] +
+                p∂ξ∂x[idx31] * pperimeter_data[level, p, fidx + 2, elem]
+            pdata[data_idx2] =
+                p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
+                p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+            p∂ξ∂x[idx32] * pperimeter_data[level, p, fidx + 2, elem]
+            pdata[data_idx3] =
+                p∂ξ∂x[idx13] * pperimeter_data[level, p, fidx, elem] +
+                p∂ξ∂x[idx23] * pperimeter_data[level, p, fidx + 1, elem] +
+                p∂ξ∂x[idx33] * pperimeter_data[level, p, fidx + 2, elem]
         end
     end
     return nothing

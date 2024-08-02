@@ -29,6 +29,10 @@ struct DSSBuffer{S, G, D, A, B, VI}
     "field id for all contravariant12vector fields stored in the `data` array"
     contravariant12fidx::VI
     "internal local elements (lidx)"
+    covariant123fidx::VI
+    "field id for all contravariant123vector fields stored in the `data` array"
+    contravariant123fidx::VI
+    "internal local elements (lidx)"
     internal_elems::VI
     "local elements (lidx) located on process boundary"
     perimeter_elems::VI
@@ -73,6 +77,8 @@ function create_dss_buffer(
     # and is not transformed
     if eltype(data) <: Geometry.Covariant123Vector
         TS = Geometry.UVWVector{T}
+    elseif eltype(data) <: Geometry.Contravariant123Vector
+        TS = Geometry.UVWVector{T}
     end
     perimeter_data =
         DataLayouts.VIFH{TS, Nv, Np, Nh}(DA{T}(undef, Nv, Np, Nf, Nh))
@@ -107,7 +113,11 @@ function create_dss_buffer(
         internal_elems = DA(topology.internal_elems)
         perimeter_elems = DA(topology.perimeter_elems)
     end
-    scalarfidx, covariant12fidx, contravariant12fidx = Int[], Int[], Int[]
+    scalarfidx,
+    covariant12fidx,
+    contravariant12fidx,
+    covariant123fidx,
+    contravariant123fidx = Int[], Int[], Int[], Int[], Int[]
     supportedvectortypes = Union{
         Geometry.UVector,
         Geometry.VVector,
@@ -119,6 +129,7 @@ function create_dss_buffer(
         Geometry.Covariant12Vector,
         Geometry.Covariant3Vector,
         Geometry.Covariant123Vector,
+        Geometry.Contravariant123Vector,
         Geometry.Contravariant12Vector,
         Geometry.Contravariant3Vector,
     }
@@ -136,10 +147,11 @@ function create_dss_buffer(
                 if fieldtype <: Geometry.Covariant12Vector
                     push!(covariant12fidx, offset + 1)
                 elseif fieldtype <: Geometry.Covariant123Vector
-                    push!(covariant12fidx, offset + 1)
-                    push!(scalarfidx, offset + 3)
+                    push!(covariant123fidx, offset + 1)
                 elseif fieldtype <: Geometry.Contravariant12Vector
                     push!(contravariant12fidx, offset + 1)
+                elseif fieldtype <: Geometry.Contravariant123Vector
+                    push!(contravariant123fidx, offset + 1)
                 else
                     append!(
                         scalarfidx,
@@ -163,10 +175,11 @@ function create_dss_buffer(
             if S <: Geometry.Covariant12Vector
                 push!(covariant12fidx, 1)
             elseif S <: Geometry.Covariant123Vector
-                push!(covariant12fidx, 1)
-                push!(scalarfidx, 3)
+                push!(covariant123fidx, 1)
             elseif S <: Geometry.Contravariant12Vector
                 push!(contravariant12fidx, 1)
+            elseif S <: Geometry.Contravariant123Vector
+                push!(contravariant123fidx, 1)
             else
                 append!(scalarfidx, Vector(1:ncomponents))
             end
@@ -178,7 +191,9 @@ function create_dss_buffer(
     end
     scalarfidx = DA(scalarfidx)
     covariant12fidx = DA(covariant12fidx)
+    covariant123fidx = DA(covariant123fidx)
     contravariant12fidx = DA(contravariant12fidx)
+    contravariant123fidx = DA(contravariant123fidx)
     G = typeof(graph_context)
     D = typeof(perimeter_data)
     A = typeof(send_data)
@@ -194,6 +209,8 @@ function create_dss_buffer(
         scalarfidx,
         covariant12fidx,
         contravariant12fidx,
+        covariant123fidx,
+        contravariant123fidx,
         internal_elems,
         perimeter_elems,
     )
@@ -243,8 +260,14 @@ function dss_transform!(
     localelems::AbstractVector{Int},
 )
     if !isempty(localelems)
-        (; scalarfidx, covariant12fidx, contravariant12fidx, perimeter_data) =
-            dss_buffer
+        (;
+            scalarfidx,
+            covariant12fidx,
+            contravariant12fidx,
+            covariant123fidx,
+            contravariant123fidx,
+            perimeter_data,
+        ) = dss_buffer
         (; ∂ξ∂x, ∂x∂ξ) = local_geometry
         dss_transform!(
             device,
@@ -257,6 +280,8 @@ function dss_transform!(
             scalarfidx,
             covariant12fidx,
             contravariant12fidx,
+            covariant123fidx,
+            contravariant123fidx,
             localelems,
         )
     end
@@ -293,8 +318,14 @@ function dss_untransform!(
     perimeter::Perimeter2D,
     localelems::AbstractVector{Int},
 )
-    (; scalarfidx, covariant12fidx, contravariant12fidx, perimeter_data) =
-        dss_buffer
+    (;
+        scalarfidx,
+        covariant12fidx,
+        contravariant12fidx,
+        covariant123fidx,
+        contravariant123fidx,
+        perimeter_data,
+    ) = dss_buffer
     (; ∂ξ∂x, ∂x∂ξ) = local_geometry
     dss_untransform!(
         device,
@@ -306,6 +337,8 @@ function dss_untransform!(
         scalarfidx,
         covariant12fidx,
         contravariant12fidx,
+        covariant123fidx,
+        contravariant123fidx,
         localelems,
     )
     return nothing
@@ -323,6 +356,8 @@ end
         scalarfidx::Vector{Int},
         covariant12fidx::Vector{Int},
         contravariant12fidx::Vector{Int},
+        covariant123fidx::Vector{Int},
+        contravariant123fidx::Vector{Int},
         localelems::Vector{Int},
     )
 
@@ -338,6 +373,7 @@ Arguments:
 - `perimeter`: perimeter iterator
 - `scalarfidx`: field index for scalar fields in the data layout
 - `covariant12fidx`: field index for Covariant12 vector fields in the data layout
+- `covariant123fidx`: field index for Covariant123 vector fields in the data layout
 - `localelems`: list of local elements to perform transformation operations on
 
 Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
@@ -353,6 +389,8 @@ function dss_transform!(
     scalarfidx::Vector{Int},
     covariant12fidx::Vector{Int},
     contravariant12fidx::Vector{Int},
+    covariant123fidx::Vector{Int},
+    contravariant123fidx::Vector{Int},
     localelems::Vector{Int},
 ) where {Nq}
     pdata = parent(data)
@@ -410,6 +448,84 @@ function dss_transform!(
                         p∂x∂ξ[idx22] * pdata[data_idx2]
                     ) * pw
             end
+
+            for fidx in covariant123fidx, level in 1:nlevels
+                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                data_idx3 =
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+
+                (
+                    idx11,
+                    idx12,
+                    idx13,
+                    idx21,
+                    idx22,
+                    idx23,
+                    idx31,
+                    idx32,
+                    idx33,
+                ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+
+                # Covariant to physical transformation
+                pperimeter_data[level, p, fidx, elem] =
+                    (
+                        p∂ξ∂x[idx11] * pdata[data_idx1] +
+                        p∂ξ∂x[idx12] * pdata[data_idx2] +
+                        p∂ξ∂x[idx13] * pdata[data_idx3]
+                    ) * pw
+                pperimeter_data[level, p, fidx + 1, elem] =
+                    (
+                        p∂ξ∂x[idx21] * pdata[data_idx1] +
+                        p∂ξ∂x[idx22] * pdata[data_idx2] +
+                        p∂ξ∂x[idx23] * pdata[data_idx3]
+                    ) * pw
+                pperimeter_data[level, p, fidx + 2, elem] =
+                    (
+                        p∂ξ∂x[idx31] * pdata[data_idx1] +
+                        p∂ξ∂x[idx32] * pdata[data_idx2] +
+                        p∂ξ∂x[idx33] * pdata[data_idx3]
+                    ) * pw
+            end
+
+            for fidx in contravariant123fidx, level in 1:nlevels
+                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+                data_idx2 =
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                data_idx3 =
+                    linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                (
+                    idx11,
+                    idx12,
+                    idx13,
+                    idx21,
+                    idx22,
+                    idx23,
+                    idx31,
+                    idx32,
+                    idx33,
+                ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                # Contravariant to physical transformation
+                pperimeter_data[level, p, fidx, elem] =
+                    (
+                        p∂x∂ξ[idx11] * pdata[data_idx1] +
+                        p∂x∂ξ[idx21] * pdata[data_idx2] +
+                        p∂x∂ξ[idx31] * pdata[data_idx3]
+                    ) * pw
+                pperimeter_data[level, p, fidx + 1, elem] =
+                    (
+                        p∂x∂ξ[idx12] * pdata[data_idx1] +
+                        p∂x∂ξ[idx22] * pdata[data_idx2] +
+                        p∂x∂ξ[idx32] * pdata[data_idx3]
+                    ) * pw
+                pperimeter_data[level, p, fidx + 2, elem] =
+                    (
+                        p∂x∂ξ[idx13] * pdata[data_idx1] +
+                        p∂x∂ξ[idx23] * pdata[data_idx2] +
+                        p∂x∂ξ[idx33] * pdata[data_idx3]
+                    ) * pw
+            end
         end
     end
     return nothing
@@ -453,6 +569,8 @@ function dss_untransform!(
     scalarfidx::Vector{Int},
     covariant12fidx::Vector{Int},
     contravariant12fidx::Vector{Int},
+    covariant123fidx::Vector{Int},
+    contravariant123fidx::Vector{Int},
     localelems::Vector{Int},
 ) where {Nq}
     pdata = parent(data)
@@ -503,6 +621,77 @@ function dss_untransform!(
                     pdata[data_idx2] =
                         p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
                         p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+                end
+            end
+            for fidx in covariant123fidx
+                for level in 1:nlevels
+                    data_idx1 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+                    data_idx2 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    data_idx3 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                    (
+                        idx11,
+                        idx12,
+                        idx13,
+                        idx21,
+                        idx22,
+                        idx23,
+                        idx31,
+                        idx32,
+                        idx33,
+                    ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                    pdata[data_idx1] =
+                        p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ[idx12] *
+                        pperimeter_data[level, p, fidx + 1, elem] +
+                        p∂x∂ξ[idx13] * pperimeter_data[level, p, fidx + 2, elem]
+                    pdata[data_idx2] =
+                        p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ[idx22] *
+                        pperimeter_data[level, p, fidx + 1, elem] +
+                        p∂x∂ξ[idx23] * pperimeter_data[level, p, fidx + 2, elem]
+                    pdata[data_idx3] =
+                        p∂x∂ξ[idx31] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ[idx32] *
+                        pperimeter_data[level, p, fidx + 1, elem] +
+                        p∂x∂ξ[idx33] * pperimeter_data[level, p, fidx + 2, elem]
+                end
+            end
+            for fidx in contravariant123fidx
+                for level in 1:nlevels
+                    data_idx1 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
+                    data_idx2 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    data_idx3 =
+                        linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+
+                    (
+                        idx11,
+                        idx12,
+                        idx13,
+                        idx21,
+                        idx22,
+                        idx23,
+                        idx31,
+                        idx32,
+                        idx33,
+                    ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                    pdata[data_idx1] =
+                        p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
+                    p∂ξ∂x[idx31] * pperimeter_data[level, p, fidx + 2, elem]
+                    pdata[data_idx2] =
+                        p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+                    p∂ξ∂x[idx32] * pperimeter_data[level, p, fidx + 2, elem]
+                    pdata[data_idx3] =
+                        p∂ξ∂x[idx13] * pperimeter_data[level, p, fidx, elem] +
+                        p∂ξ∂x[idx23] *
+                        pperimeter_data[level, p, fidx + 1, elem] +
+                        p∂ξ∂x[idx33] * pperimeter_data[level, p, fidx + 2, elem]
                 end
             end
         end
