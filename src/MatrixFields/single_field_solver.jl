@@ -98,10 +98,10 @@ end
 
 function _single_field_solve_col!(
     ::ClimaComms.AbstractCPUDevice,
-    cache::Fields.ColumnField,
-    x::Fields.ColumnField,
+    cache,
+    x,
     A,
-    b::Fields.ColumnField,
+    b,
 )
     if A isa Fields.ColumnField
         band_matrix_solve!(
