@@ -643,6 +643,17 @@ steps:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
+      
+      - label: "Unit: velocity grad tensor ops"
+        key: unit_spectral_tensor_op_cuda
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
