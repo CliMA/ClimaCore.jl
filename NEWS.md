@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Support for matrix fields on spectral and point spaces was added, PR [#1884](https://github.com/CliMA/ClimaCore.jl/pull/1884).
+- Support for 3-component DSS transform was added, PR [#1693](https://github.com/CliMA/ClimaCore.jl/pull/1693).
+- Support for column-wise "accumulate"/"reduce" operations were added, PR [#1903](https://github.com/CliMA/ClimaCore.jl/pull/1903). These abstractions will allow us to group, paralellize and optimize more column-wise work on the GPU.
+- A new macro, `Fields.@rprint_diff` was added, which recursively print differences between two `FieldVector`s (of the same type) (PR [#1886](https://github.com/CliMA/ClimaCore.jl/pull/1886)).
+- Julia 1.11 fixes (PR [#1883](https://github.com/CliMA/ClimaCore.jl/pull/1883))
+- `Nh` has been added to the type parameter space, which allows us to more flexibly write performant backend kernels (PR [#1894](https://github.com/CliMA/ClimaCore.jl/pull/1894)). This was leveraged in PR [#1898](https://github.com/CliMA/ClimaCore.jl/pull/1898), and may result in slightly more performant kernels.
+
+
 v0.14.10
 -------
 
