@@ -404,19 +404,6 @@ end
     )
 end
 
-@inline function Base.getindex(data::IJFH{S}, i, j, _, _, h) where {S}
-    @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(i, j, 1, h))
-end
-@inline function Base.setindex!(data::IJFH{S}, val, i, j, _, _, h) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(3),
-        CartesianIndex(i, j, 1, h),
-    )
-end
-
-
 Base.length(data::IJFH) = size(parent(data), 4)
 
 @generated function _property_view(
@@ -579,20 +566,9 @@ end
     IFH{SS, Ni, Nh}(dataview)
 end
 
-@inline function Base.getindex(data::IFH{S}, i, _, _, _, h) where {S}
-    @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(i, 1, h))
-end
 @inline function Base.getindex(data::IFH{S}, I::CartesianIndex{5}) where {S}
     i, _, _, _, h = I.I
     @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(i, 1, h))
-end
-@inline function Base.setindex!(data::IFH{S}, val, i, _, _, _, h) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(2),
-        CartesianIndex(i, 1, h),
-    )
 end
 @inline function Base.setindex!(
     data::IFH{S},
@@ -803,35 +779,6 @@ end
     IJF{SS, Nij}(dataview)
 end
 
-@inline function Base.getindex(
-    data::IJF{S, Nij},
-    i::Integer,
-    j::Integer,
-    k = nothing,
-    v = nothing,
-    h = nothing,
-) where {S, Nij}
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
-    @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(i, j, 1))
-end
-
-@inline function Base.setindex!(
-    data::IJF{S, Nij},
-    val,
-    i::Integer,
-    j::Integer,
-) where {S, Nij}
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(3),
-        CartesianIndex(i, j, 1),
-    )
-end
-
 @inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
@@ -932,28 +879,6 @@ end
     IF{SS, Ni}(dataview)
 end
 
-@inline function Base.getindex(
-    data::IF{S, Ni},
-    i::Integer,
-    j = nothing,
-    k = nothing,
-    v = nothing,
-    h = nothing,
-) where {S, Ni}
-    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(i, 1))
-end
-
-@inline function Base.setindex!(data::IF{S, Ni}, val, i::Integer) where {S, Ni}
-    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(2),
-        CartesianIndex(i, 1),
-    )
-end
-
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     dataview = @inbounds view(parent(data), i, :)
@@ -1031,11 +956,6 @@ end
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
     _property_view(data, Val(i))
 
-@inline function Base.getindex(data::VF{S, Nv}, v::Integer) where {S, Nv}
-    @boundscheck 1 <= v <= nlevels(data) || throw(BoundsError(data, (v,)))
-    @inbounds get_struct(parent(data), S, Val(2), CartesianIndex(v, 1))
-end
-
 @propagate_inbounds function Base.getindex(
     col::DataColumn,
     I::CartesianIndex{5},
@@ -1049,16 +969,6 @@ end
     I::CartesianIndex{5},
 )
     @inbounds col[I[4]] = val
-end
-
-@inline function Base.setindex!(data::VF{S}, val, v::Integer) where {S}
-    @boundscheck (1 <= v <= nlevels(data)) || throw(BoundsError(data, (v,)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(2),
-        CartesianIndex(v, 1),
-    )
 end
 
 @inline function column(data::VF, i, h)
@@ -1237,18 +1147,6 @@ function gather(
     end
 end
 
-@inline function Base.getindex(data::VIJFH{S}, i, j, _, v, h) where {S}
-    @inbounds get_struct(parent(data), S, Val(4), CartesianIndex(v, i, j, 1, h))
-end
-@inline function Base.setindex!(data::VIJFH{S}, val, i, j, _, v, h) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(4),
-        CartesianIndex(v, i, j, 1, h),
-    )
-end
-
 # ======================
 # Data1DX DataLayout
 # ======================
@@ -1386,17 +1284,6 @@ end
     IFH{S, Nij, Nh}(dataview)
 end
 
-@inline function Base.getindex(data::VIFH{S}, i, _, _, v, h) where {S}
-    @inbounds get_struct(parent(data), S, Val(3), CartesianIndex(v, i, 1, h))
-end
-@inline function Base.setindex!(data::VIFH{S}, val, i, _, _, v, h) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(3),
-        CartesianIndex(v, i, 1, h),
-    )
-end
 @inline function Base.setindex!(
     data::VIFH{S},
     val,
