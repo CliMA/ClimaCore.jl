@@ -396,20 +396,31 @@ function __rprint_diff(io::IO, xi, yi; pc, xname, yname) # assume we can compute
 end
 
 """
-    rprint_diff(io::IO, ::T, ::T) where {T <: FieldVector}
-    rprint_diff(::T, ::T) where {T <: FieldVector}
+    rprint_diff(io::IO, ::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+    rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
 
-Recursively print differences in given `FieldVector`.
+Recursively print differences in given `Union{FieldVector, NamedTuple}`.
 """
-_rprint_diff(io::IO, x::T, y::T, xname, yname) where {T <: FieldVector} =
+_rprint_diff(
+    io::IO,
+    x::T,
+    y::T,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, NamedTuple}} =
     __rprint_diff(io, x, y; pc = (), xname, yname)
-_rprint_diff(x::T, y::T, xname, yname) where {T <: FieldVector} =
+_rprint_diff(
+    x::T,
+    y::T,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, NamedTuple}} =
     _rprint_diff(stdout, x, y, xname, yname)
 
 """
-    @rprint_diff(::T, ::T) where {T <: FieldVector}
+    @rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
 
-Recursively print differences in given `FieldVector`.
+Recursively print differences in given `Union{FieldVector, NamedTuple}`.
 """
 macro rprint_diff(x, y)
     return :(_rprint_diff(
@@ -429,7 +440,7 @@ _rcompare(pass, x::T, y::T) where {T <: DataLayouts.AbstractData} =
     pass && (parent(x) == parent(y))
 _rcompare(pass, x::T, y::T) where {T} = pass && (x == y)
 
-function _rcompare(pass, x::T, y::T) where {T <: FieldVector}
+function _rcompare(pass, x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
     for pn in propertynames(x)
         pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn))
     end
@@ -437,9 +448,10 @@ function _rcompare(pass, x::T, y::T) where {T <: FieldVector}
 end
 
 """
-    rcompare(x::T, y::T) where {T <: FieldVector}
+    rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
 
 Recursively compare given fieldvectors via `==`.
 Returns `true` if `x == y` recursively.
 """
-rcompare(x::T, y::T) where {T <: FieldVector} = _rcompare(true, x, y)
+rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
+    _rcompare(true, x, y)

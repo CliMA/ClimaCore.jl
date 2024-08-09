@@ -17,7 +17,7 @@ end
 Base.@kwdef mutable struct Benchmark
     problem_size::Tuple
     float_type::Type
-    device_bandwidth_GBs::Int = 2_039
+    device_bandwidth_GBs::Int = 2_039 # (A100 SXM4 80GB)
     data::Vector = []
 end
 
