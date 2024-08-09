@@ -4,13 +4,111 @@ using Revise; include(joinpath("benchmarks", "scripts", "thermo_bench.jl"))
 
 This benchmark requires Thermodynamics and ClimaParams
 to be in your local environment to run.
+
+# Benchmark results:
+
+Clima A100:
+```
+[ Info: device = ClimaComms.CUDADevice()
+Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
+┌──────────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
+│ funcs                                                            │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
+├──────────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
+│     TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 517 nanoseconds │ 15.2602 │ 311.155     │ 9              │ 100    │
+│     TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 292 microseconds, 178 nanoseconds │ 30.6332 │ 624.611     │ 9              │ 100    │
+│     TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 988 nanoseconds │ 15.2479 │ 310.905     │ 9              │ 100    │
+│     TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 292 microseconds, 178 nanoseconds │ 30.6332 │ 624.611     │ 9              │ 100    │
+└──────────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+```
 =#
 
 #! format: off
+module ThermoBench
+
+include("benchmark_utils.jl")
+
 import ClimaCore
+import CUDA
+using ClimaComms
+using Test
+using StaticArrays, IntervalSets, LinearAlgebra
+using JET
+
+import ClimaCore: Spaces, Fields
+import ClimaCore.Domains: Geometry
+
+@inline ts_gs(thermo_params, e_tot, q_tot, K, Φ, ρ) =
+    thermo_state(thermo_params, e_tot - K - Φ, q_tot, ρ)
+@inline thermo_state(thermo_params, ρ, e_int, q_tot) =
+    TD.PhaseEquil_ρeq(thermo_params,ρ,e_int,q_tot, 3, eltype(thermo_params)(0.003))
+
+import Thermodynamics as TD
+
+function thermo_func_bc!(x, thermo_params, us; nreps = 1, bm=nothing, n_trials = 30)
+    e = Inf
+    for t in 1:n_trials
+        et = CUDA.@elapsed begin
+            for _ in 1:nreps
+                (; ts, e_tot, q_tot, K, Φ, ρ) = x
+                @. ts = ts_gs(thermo_params, e_tot, q_tot, K, Φ, ρ) # 5 reads, 5 writes, many flops
+            end
+        end
+        e = min(e, et)
+    end
+    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=5+4) # TODO: verify this
+    return nothing
+end
+
+function thermo_func_sol!(x, thermo_params, us::UniversalSizesStatic; nreps = 1, bm=nothing, n_trials = 30)
+    e = Inf
+    for t in 1:n_trials
+        et = CUDA.@elapsed begin
+            (; ts, e_tot, q_tot, K, Φ, ρ) = x
+            kernel = CUDA.@cuda always_inline = true launch = false thermo_func_sol_kernel!(ts,e_tot,q_tot,K,Φ,ρ,thermo_params,us)
+            N = get_N(us)
+            config = CUDA.launch_configuration(kernel.fun)
+            threads = min(N, config.threads)
+            blocks = cld(N, threads)
+            for _ in 1:nreps
+                kernel(ts,e_tot,q_tot,K,Φ,ρ,thermo_params,us; threads, blocks)
+            end
+        end
+        e = min(e, et)
+    end
+    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=5+4) # TODO: verify this
+    return nothing
+end
+
+# Mimics how indexing works in generalized pointwise kernels
+function thermo_func_sol_kernel!(ts, e_tot, q_tot, K, Φ, ρ, thermo_params, us)
+    @inbounds begin
+        FT = eltype(e_tot)
+        I = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+        if I ≤ get_N(us)
+            # Data is not read into the correct fields because this is only used
+            # to compare with the case when the number of flops goes to zero.
+
+            # 5 reads, 5 writes, potentially many flops (see thermodynamics for estimate)
+            ts_i = ts_gs(thermo_params, e_tot[I], q_tot[I], K[I], Φ[I], ρ[I])
+            ts.ρ[I] = ts_i.ρ
+            ts.p[I] = ts_i.p
+            ts.T[I] = ts_i.T
+            ts.e_int[I] = ts_i.e_int
+            ts.q_tot[I] = ts_i.q_tot
+        end
+    end
+    return nothing
+end
+
+end
+
+import ClimaParams # trigger Thermo extension
+import .ThermoBench as TB
+
 import Thermodynamics as TD
 import CUDA
 using ClimaComms
+using ClimaCore
 import ClimaCore: Spaces, Fields
 import ClimaCore.Domains: Geometry
 
@@ -22,97 +120,10 @@ using BenchmarkTools
 );
 import .TestUtilities as TU;
 
-module ThermoBench
-import ClimaCore
-import CUDA
-using ClimaComms
-using Test
-using StaticArrays, IntervalSets, LinearAlgebra
-using JET
-
-import ClimaCore: Spaces, Fields
-import ClimaCore.Domains: Geometry
-import Dates
-print_time_and_units(x) = println(time_and_units_str(x))
-time_and_units_str(x::Real) =
-    trunc_time(string(compound_period(x, Dates.Second)))
-function compound_period(x::Real, ::Type{T}) where {T <: Dates.Period}
-    nf = Dates.value(convert(Dates.Nanosecond, T(1)))
-    ns = Dates.Nanosecond(ceil(x * nf))
-    return Dates.canonicalize(Dates.CompoundPeriod(ns))
-end
-trunc_time(s::String) = count(',', s) > 1 ? join(split(s, ",")[1:2], ",") : s
-
-@inline ts_gs(thermo_params, e_tot, q_tot, K, Φ, ρ) =
-    thermo_state(thermo_params, e_tot - K - Φ, q_tot, ρ)
-@inline thermo_state(thermo_params, ρ, e_int, q_tot) =
-    TD.PhaseEquil_ρeq(thermo_params,ρ,e_int,q_tot, 3, eltype(thermo_params)(0.003))
-
-struct UniversalSizesStatic{Nv, Nij, Nh} end
-get_Nv(::UniversalSizesStatic{Nv}) where {Nv} = Nv
-get_Nij(::UniversalSizesStatic{Nv, Nij}) where {Nv, Nij} = Nij
-get_Nh(::UniversalSizesStatic{Nv, Nij, Nh}) where {Nv, Nij, Nh} = Nh
-get_N(us::UniversalSizesStatic{Nv, Nij}) where {Nv, Nij} =
-    prod((Nv, Nij, Nij, 1, get_Nh(us)))
-UniversalSizesStatic(Nv, Nij, Nh) = UniversalSizesStatic{Nv, Nij, Nh}()
-import Thermodynamics as TD
-
-function thermo_func_bc!(x, thermo_params, us, niter = 1)
-    e = CUDA.@elapsed begin
-        for i in 1:niter # reduce variance / impact of launch latency
-            (; ts, e_tot, q_tot, K, Φ, ρ) = x
-            @. ts = ts_gs(thermo_params, e_tot, q_tot, K, Φ, ρ)
-        end
-    end
-    print_time_and_units(e / niter)
-    return nothing
-end
-
-function thermo_func_sol!(x, thermo_params, us::UniversalSizesStatic, niter = 1)
-    e = CUDA.@elapsed begin
-        for i in 1:niter # reduce variance / impact of launch latency
-            (; ts, e_tot, q_tot, K, Φ, ρ) = x
-            kernel = CUDA.@cuda always_inline = true launch = false thermo_func_sol_kernel!(ts,e_tot,q_tot,K,Φ,ρ,thermo_params,us)
-            N = get_N(us)
-            config = CUDA.launch_configuration(kernel.fun)
-            threads = min(N, config.threads)
-            blocks = cld(N, threads)
-            kernel(ts,e_tot,q_tot,K,Φ,ρ,thermo_params,us; threads, blocks)
-        end
-    end
-    print_time_and_units(e / niter)
-    return nothing
-end
-
-# Mimics how indexing works in generalized pointwise kernels
-function thermo_func_sol_kernel!(ts, e_tot, q_tot, K, Φ, ρ, thermo_params, us)
-    @inbounds begin
-        (; ts_ρ, ts_p, ts_e_int, ts_q_tot, ts_T) = ts
-        FT = eltype(e_tot)
-        I = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
-        if I ≤ get_N(us)
-            ts_i = ts_gs(thermo_params, e_tot[I], q_tot[I], K[I], Φ[I], ρ[I]) # 5 reads, potentially many flops (see thermodynamics for estimate)
-
-            # Data is not read into the correct fields because this is only used
-            # to compare with the case when the number of flops goes to zero.
-            # ts_i = TD.PhaseEquil{FT}(ρ[I], K[I], e_tot[I], q_tot[I], Φ[I]) # 5 reads, 0 flops
-            ts_ρ[I] = ts_i.ρ
-            ts_p[I] = ts_i.p
-            ts_T[I] = ts_i.T
-            ts_e_int[I] = ts_i.e_int
-            ts_q_tot[I] = ts_i.q_tot
-        end
-    end
-    return nothing
-end
-
-end
-
-import ClimaParams # trigger Thermo extension
-import .ThermoBench
 using Test
 @testset "Thermo state" begin
     FT = Float32
+    bm = TB.Benchmark(;problem_size=(63,4,4,1,5400), float_type=FT)
     device = ClimaComms.device()
     context = ClimaComms.context(device)
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(
@@ -125,18 +136,19 @@ using Test
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     @info "device = $device"
     thermo_params = TD.Parameters.ThermodynamicsParameters(FT)
+    # TODO: fill with non-trivial values (e.g., use Thermodynamics TestedProfiles) to verify correctness.
     nt_core = (; K = FT(0), Φ = FT(1), ρ = FT(0), e_tot = FT(1), q_tot = FT(0.001))
     nt_ts = (;
-        ts_ρ = FT(0),
-        ts_p = FT(0),
-        ts_e_int = FT(0),
-        ts_q_tot = FT(0),
-        ts_T = FT(0),
+        ρ = FT(0),
+        p = FT(0),
+        e_int = FT(0),
+        q_tot = FT(0),
+        T = FT(0),
     )
     x = fill((; ts = zero(TD.PhaseEquil{FT}), nt_core...), cspace)
     xv = fill((; ts = nt_ts, nt_core...), cspace)
     (_, Nij, _, Nv, Nh) = size(Fields.field_values(x.ts))
-    us = ThermoBench.UniversalSizesStatic(Nv, Nij, Nh)
+    us = TB.UniversalSizesStatic(Nv, Nij, Nh)
     function to_vec(ξ)
         pns = propertynames(ξ)
         dl_vals = map(pns) do pn
@@ -148,10 +160,20 @@ using Test
     end
     x_vec = to_vec(xv)
 
-    ThermoBench.thermo_func_bc!(x, thermo_params, us)
-    ThermoBench.thermo_func_sol!(x_vec, thermo_params, us)
+    TB.thermo_func_bc!(x, thermo_params, us; nreps=1, n_trials = 1)
+    TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=1, n_trials = 1)
 
-    ThermoBench.thermo_func_bc!(x, thermo_params, us, 100)
-    ThermoBench.thermo_func_sol!(x_vec, thermo_params, us, 100)
+    rc = Fields.rcompare(x_vec, to_vec(x))
+    rc || Fields.rprint_diff(x_vec, to_vec(x)) # test correctness (should print nothing)
+    @test rc # test correctness
+
+    TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)
+    TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm)
+
+    TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)
+    TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm)
+
+    TB.tabulate_benchmark(bm)
+
 end
 #! format: on
