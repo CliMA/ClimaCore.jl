@@ -2,8 +2,9 @@ function knl_fill_flat!(dest::AbstractData, val, us)
     @inbounds begin
         tidx = thread_index()
         if tidx ≤ get_N(us)
-            n = size(dest)
-            I = kernel_indexes(tidx, n)
+            n = array_size(dest)
+            CIS = CartesianIndices(map(x -> Base.OneTo(x), n))
+            I = DataSpecificCartesianIndex(CIS[tidx])
             @inbounds dest[I] = val
         end
     end

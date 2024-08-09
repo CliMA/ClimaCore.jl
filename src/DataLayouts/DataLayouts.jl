@@ -49,6 +49,20 @@ include("struct.jl")
 
 abstract type AbstractData{S} end
 
+abstract type AbstractDataSpecificCartesianIndex{N} <:
+              Base.AbstractCartesianIndex{N} end
+
+"""
+    DataSpecificCartesianIndex{N} <: AbstractDataSpecificCartesianIndex{N}
+
+A DataLayout-specific CartesianIndex, which is used to provide support for
+`getindex` for DataLayouts such that indices are not swapped. This is used
+to improve memory access patterns on GPUs.
+"""
+struct DataSpecificCartesianIndex{N} <: AbstractDataSpecificCartesianIndex{N}
+    I::CartesianIndex{N}
+end
+
 Base.size(data::AbstractData, i::Integer) = size(data)[i]
 
 """
@@ -1102,6 +1116,7 @@ function VIJFH{S, Nv, Nij, Nh}(
     array::AbstractArray{T, 5},
 ) where {S, Nv, Nij, Nh, T}
     check_basetype(T, S)
+    @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nh
@@ -1271,6 +1286,7 @@ function VIFH{S, Nv, Ni, Nh}(
     array::AbstractArray{T, 4},
 ) where {S, Nv, Ni, Nh, T}
     check_basetype(T, S)
+    @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
     @assert size(array, 4) == Nh
@@ -1568,6 +1584,16 @@ get_Nij(::IFH{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IJF{S, Nij}) where {S, Nij} = Nij
 get_Nij(::IF{S, Nij}) where {S, Nij} = Nij
 
+@inline field_dim(::IJKFVH) = 4
+@inline field_dim(::IJFH) = 3
+@inline field_dim(::IFH) = 2
+@inline field_dim(::DataF) = 1
+@inline field_dim(::IJF) = 3
+@inline field_dim(::IF) = 2
+@inline field_dim(::VF) = 2
+@inline field_dim(::VIJFH) = 4
+@inline field_dim(::VIFH) = 3
+
 Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
 Base.ndims(::Type{T}) where {T <: AbstractData} =
     Base.ndims(parent_array_type(T))
@@ -1641,5 +1667,7 @@ include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
+include("cartesian_index.jl")
+include("has_uniform_datalayouts.jl")
 
 end # module
