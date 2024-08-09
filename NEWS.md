@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.11
+-------
+
 - Support for matrix fields on spectral and point spaces was added, PR [#1884](https://github.com/CliMA/ClimaCore.jl/pull/1884).
 - Support for 3-component DSS transform was added, PR [#1693](https://github.com/CliMA/ClimaCore.jl/pull/1693).
 - Support for column-wise "accumulate"/"reduce" operations were added, PR [#1903](https://github.com/CliMA/ClimaCore.jl/pull/1903). These abstractions will allow us to group, paralellize and optimize more column-wise work on the GPU.
