@@ -115,8 +115,8 @@ function band_matrix_solve_local_mem!(
         b_local[v] = b[vi(v)]
     end
     cache_local = (Ux_local, U₊₁_local)
-    Aⱼs_local = (A₋₁, A₀, A₊₁)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, vi)
+    Aⱼs_local = (A₋₁_local, A₀_local, A₊₁_local)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
     @inbounds for v in 1:Nv
         x[vi(v)] = x_local[v]
     end
@@ -153,8 +153,8 @@ function band_matrix_solve_local_mem!(
         b_local[v] = b[vi(v)]
     end
     cache_local = (Ux_local, U₊₁_local, U₊₂_local)
-    Aⱼs_local = (A₋₂, A₋₁, A₀, A₊₁, A₊₂)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, vi)
+    Aⱼs_local = (A₋₂_local, A₋₁_local, A₀_local, A₊₁_local, A₊₂_local)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, identity)
     @inbounds for v in 1:Nv
         x[vi(v)] = x_local[v]
     end
