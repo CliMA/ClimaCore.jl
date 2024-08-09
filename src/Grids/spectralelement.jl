@@ -70,7 +70,7 @@ function _SpectralElementGrid1D(
                 ) / 2
             J = abs(∂x∂ξ)
             WJ = J * quad_weights[i]
-            local_geometry_slab[i] = Geometry.LocalGeometry(
+            local_geometry_slab[slab_index(i)] = Geometry.LocalGeometry(
                 x,
                 J,
                 WJ,
@@ -266,7 +266,7 @@ function _SpectralElementGrid2D(
             WJ = J * quad_weights[i] * quad_weights[j]
             elem_area += WJ
             if !enable_bubble
-                local_geometry_slab[i, j] =
+                local_geometry_slab[slab_index(i, j)] =
                     Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
             end
         end
@@ -285,7 +285,7 @@ function _SpectralElementGrid2D(
                     )
                     J = det(Geometry.components(∂u∂ξ))
                     WJ = J * quad_weights[i] * quad_weights[j]
-                    local_geometry_slab[i, j] =
+                    local_geometry_slab[slab_index(i, j)] =
                         Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                 end
             else
@@ -315,7 +315,7 @@ function _SpectralElementGrid2D(
                         J = det(Geometry.components(∂u∂ξ))
                         J += Δarea / Nq^2
                         WJ = J * quad_weights[i] * quad_weights[j]
-                        local_geometry_slab[i, j] =
+                        local_geometry_slab[slab_index(i, j)] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
                 else # Higher-order elements: Use HOMME bubble correction for the interior nodes
@@ -356,7 +356,7 @@ function _SpectralElementGrid2D(
                         end
                         WJ = J * quad_weights[i] * quad_weights[j]
                         # Finally allocate local geometry
-                        local_geometry_slab[i, j] =
+                        local_geometry_slab[slab_index(i, j)] =
                             Geometry.LocalGeometry(u, J, WJ, ∂u∂ξ)
                     end
                 end
@@ -408,7 +408,7 @@ function _SpectralElementGrid2D(
                 @assert sgeom⁻.sWJ ≈ sgeom⁺.sWJ
                 @assert sgeom⁻.normal ≈ -sgeom⁺.normal
 
-                internal_surface_geometry_slab[q] = sgeom⁻
+                internal_surface_geometry_slab[slab_index(q)] = sgeom⁻
             end
         end
         internal_surface_geometry =
@@ -425,7 +425,7 @@ function _SpectralElementGrid2D(
                         slab(boundary_surface_geometry, iface)
                     local_geometry_slab = slab(local_geometry, elem)
                     for q in 1:Nq
-                        boundary_surface_geometry_slab[q] =
+                        boundary_surface_geometry_slab[slab_index(q)] =
                             compute_surface_geometry(
                                 local_geometry_slab,
                                 quad_weights,
@@ -501,7 +501,7 @@ function compute_surface_geometry(
     @assert size(local_geometry_slab) == (Nq, Nq, 1, 1, 1)
     i, j = Topologies.face_node_index(face, Nq, q, reversed)
 
-    local_geometry = local_geometry_slab[i, j]
+    local_geometry = local_geometry_slab[slab_index(i, j)]
     (; J, ∂ξ∂x) = local_geometry
 
     # surface mass matrix

@@ -7,6 +7,7 @@ import ClimaCore.Fields
 import ClimaCore.Spaces
 import ClimaCore.Topologies
 import ClimaCore.MatrixFields
+import ClimaCore.DataLayouts: vindex
 import ClimaCore.MatrixFields: single_field_solve!
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: band_matrix_solve!, unzip_tuple_field_values
@@ -71,7 +72,7 @@ function _single_field_solve!(
     b_data = Fields.field_values(b)
     Nv = DataLayouts.nlevels(x_data)
     @inbounds for v in 1:Nv
-        x_data[v] = inv(A.λ) ⊠ b_data[v]
+        x_data[vindex(v)] = inv(A.λ) ⊠ b_data[vindex(v)]
     end
 end
 
@@ -98,6 +99,7 @@ function band_matrix_solve_local_mem!(
     Nv = DataLayouts.nlevels(x)
     Ux, U₊₁ = cache
     A₋₁, A₀, A₊₁ = Aⱼs
+    vi = vindex
 
     Ux_local = MArray{Tuple{Nv}, eltype(Ux)}(undef)
     U₊₁_local = MArray{Tuple{Nv}, eltype(U₊₁)}(undef)
@@ -107,16 +109,16 @@ function band_matrix_solve_local_mem!(
     A₊₁_local = MArray{Tuple{Nv}, eltype(A₊₁)}(undef)
     b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
     @inbounds for v in 1:Nv
-        A₋₁_local[v] = A₋₁[v]
-        A₀_local[v] = A₀[v]
-        A₊₁_local[v] = A₊₁[v]
-        b_local[v] = b[v]
+        A₋₁_local[v] = A₋₁[vi(v)]
+        A₀_local[v] = A₀[vi(v)]
+        A₊₁_local[v] = A₊₁[vi(v)]
+        b_local[v] = b[vi(v)]
     end
     cache_local = (Ux_local, U₊₁_local)
     Aⱼs_local = (A₋₁, A₀, A₊₁)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, vi)
     @inbounds for v in 1:Nv
-        x[v] = x_local[v]
+        x[vi(v)] = x_local[v]
     end
     return nothing
 end
@@ -128,6 +130,7 @@ function band_matrix_solve_local_mem!(
     Aⱼs,
     b,
 )
+    vi = vindex
     Nv = DataLayouts.nlevels(x)
     Ux, U₊₁, U₊₂ = cache
     A₋₂, A₋₁, A₀, A₊₁, A₊₂ = Aⱼs
@@ -142,18 +145,18 @@ function band_matrix_solve_local_mem!(
     A₊₂_local = MArray{Tuple{Nv}, eltype(A₊₂)}(undef)
     b_local = MArray{Tuple{Nv}, eltype(b)}(undef)
     @inbounds for v in 1:Nv
-        A₋₂_local[v] = A₋₂[v]
-        A₋₁_local[v] = A₋₁[v]
-        A₀_local[v] = A₀[v]
-        A₊₁_local[v] = A₊₁[v]
-        A₊₂_local[v] = A₊₂[v]
-        b_local[v] = b[v]
+        A₋₂_local[v] = A₋₂[vi(v)]
+        A₋₁_local[v] = A₋₁[vi(v)]
+        A₀_local[v] = A₀[vi(v)]
+        A₊₁_local[v] = A₊₁[vi(v)]
+        A₊₂_local[v] = A₊₂[vi(v)]
+        b_local[v] = b[vi(v)]
     end
     cache_local = (Ux_local, U₊₁_local, U₊₂_local)
     Aⱼs_local = (A₋₂, A₋₁, A₀, A₊₁, A₊₂)
-    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local)
+    band_matrix_solve!(t, cache_local, x_local, Aⱼs_local, b_local, vi)
     @inbounds for v in 1:Nv
-        x[v] = x_local[v]
+        x[vi(v)] = x_local[v]
     end
     return nothing
 end
@@ -168,7 +171,7 @@ function band_matrix_solve_local_mem!(
     Nv = DataLayouts.nlevels(x)
     (A₀,) = Aⱼs
     @inbounds for v in 1:Nv
-        x[v] = inv(A₀[v]) ⊠ b[v]
+        x[vindex(v)] = inv(A₀[vindex(v)]) ⊠ b[vindex(v)]
     end
     return nothing
 end

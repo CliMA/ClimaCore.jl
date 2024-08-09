@@ -4,7 +4,7 @@ using Revise; include(joinpath("test", "DataLayouts", "data2dx.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
-import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
+import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column, slab_index, vindex
 
 @testset "VIJFH" begin
     Nv = 10 # number of vertical levels
@@ -29,14 +29,14 @@ import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column
         # test tuple assignment on columns
         val = (Complex{FT}(-1.0, -2.0), FT(-3.0))
 
-        column(data, 1, 2, 1)[1] = val
+        column(data, 1, 2, 1)[vindex(1)] = val
         @test array[1, 1, 2, 1, 1] == -1.0
         @test array[1, 1, 2, 2, 1] == -2.0
         @test array[1, 1, 2, 3, 1] == -3.0
 
         # test value of assing tuple on slab
         sdata = slab(data, 1, 1)
-        @test sdata[1, 2] == val
+        @test sdata[slab_index(1, 2)] == val
 
         # sum of all the first field elements
         @test sum(data.:1) ≈
@@ -91,13 +91,13 @@ end
     data = VIJFH{typeof(SA), Nv, Nij, Nh}(array)
 
     cdata = column(data, 1, 2, 1)
-    cdata[1] = SA
-    @test cdata[1] isa typeof(SA)
-    @test_throws MethodError cdata[1] = SB
+    cdata[vindex(1)] = SA
+    @test cdata[vindex(1)] isa typeof(SA)
+    @test_throws MethodError cdata[vindex(1)] = SB
 
     sdata = slab(data, 1, 1)
-    @test sdata[1, 2] isa typeof(SA)
-    @test_throws MethodError sdata[1] = SB
+    @test sdata[slab_index(1, 2)] isa typeof(SA)
+    @test_throws MethodError sdata[slab_index(1)] = SB
 end
 
 @testset "broadcasting between VIJFH data object + scalars" begin

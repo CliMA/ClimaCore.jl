@@ -5,6 +5,7 @@ using ClimaComms
 ClimaComms.@import_required_backends
 import ClimaCore: slab, Domains, Meshes, Topologies, Spaces, Fields, Operators
 import ClimaCore.Domains: Geometry
+import ClimaCore.DataLayouts: vindex
 
 device = ClimaComms.device()
 
@@ -62,7 +63,7 @@ convergence_rate(err, Δh) =
             cent_field = operator.(face_field)
             wcent_field = woperator.(face_J, face_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             err[k] = norm(cent_field .- cent_field_exact)
             werr[k] = norm(wcent_field .- cent_field_exact)
         end
@@ -116,7 +117,7 @@ end
             face_field = operator.(cent_field)
             wface_field = woperator.(cent_J, cent_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             err[k] = norm(face_field .- face_field_exact)
             werr[k] = norm(wface_field .- face_field_exact)
         end
@@ -167,7 +168,7 @@ end
 
             face_field .= operator.(cent_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             err[k] = norm(face_field .- face_field_exact)
         end
         conv = convergence_rate(err, Δh)
@@ -216,7 +217,7 @@ end
 
             cent_field .= operator.(face_field)
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             err[k] = norm(cent_field .- cent_field_exact)
         end
         conv = convergence_rate(err, Δh)
@@ -317,7 +318,7 @@ end
         curlsinᶠ = curlᶠ.(Geometry.Covariant1Vector.(sin.(centers)))
 
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[1]
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
         # Errors
         err_grad_sin_c[k] = norm(gradsinᶜ .- Geometry.WVector.(cos.(centers)))
         err_div_sin_c[k] = norm(divsinᶜ .- cos.(centers))
@@ -439,7 +440,7 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[1]
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -491,7 +492,7 @@ end
         divf2c = Operators.DivergenceF2C()
         adv_wc = divf2c.(third_order_fluxsinᶠ)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[1]
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
 
         # Error
         err_adv_wc[k] =
@@ -554,7 +555,7 @@ end
 
             adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
 
             # Error
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -610,7 +611,7 @@ end
             )
             adv_wc = divf2c.(third_order_fluxᶠ.(w, c))
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             # Errors
             err_adv_wc[k] =
                 norm(adv_wc .- ((cos.(centers)) .^ 2 .- (sin.(centers)) .^ 2))
@@ -666,7 +667,7 @@ end
             @. divf2c(C * (third_order_fluxsinᶠ - first_order_fluxsinᶠ))
         adv_wc = @. divf2c.(first_order_fluxsinᶠ) + corrected_antidiff_flux
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[1]
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
 
         # Error
         err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -738,7 +739,7 @@ end
             adv_wc =
                 @. divf2c.(first_order_fluxᶠ(w, c)) + corrected_antidiff_flux
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
 
             # Error
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
@@ -802,7 +803,7 @@ end
             adv_wc =
                 @. divf2c.(first_order_fluxᶠ(w, c)) + corrected_antidiff_flux
 
-            Δh[k] = Spaces.local_geometry_data(fs).J[1]
+            Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
             # Errors
             err_adv_wc[k] = norm(adv_wc .- cos.(centers))
 
@@ -854,7 +855,7 @@ end
         # Call the advection operator
         adv = advection(c, f, cs)
 
-        Δh[k] = Spaces.local_geometry_data(fs).J[1]
+        Δh[k] = Spaces.local_geometry_data(fs).J[vindex(1)]
         err[k] = norm(adv .- cos.(Fields.coordinate_field(cs).z))
     end
     # AdvectionC2C convergence rate

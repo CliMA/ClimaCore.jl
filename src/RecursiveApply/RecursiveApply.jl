@@ -212,38 +212,4 @@ rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
 rmuladd(X::Number, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
 rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
 
-"""
-    rmatmul1(W, S, i, j)
-
-Recursive matrix product along the 1st dimension of `S`. Equivalent to:
-
-    mapreduce(⊠, ⊞, W[i,:], S[:,j])
-
-"""
-function rmatmul1(W, S, i, j)
-    Nq = size(W, 2)
-    @inbounds r = W[i, 1] ⊠ S[1, j]
-    @inbounds for ii in 2:Nq
-        r = rmuladd(W[i, ii], S[ii, j], r)
-    end
-    return r
-end
-
-"""
-    rmatmul2(W, S, i, j)
-
-Recursive matrix product along the 2nd dimension `S`. Equivalent to:
-
-    mapreduce(⊠, ⊞, W[j,:], S[i, :])
-
-"""
-function rmatmul2(W, S, i, j)
-    Nq = size(W, 2)
-    @inbounds r = W[j, 1] ⊠ S[i, 1]
-    @inbounds for jj in 2:Nq
-        r = rmuladd(W[j, jj], S[i, jj], r)
-    end
-    return r
-end
-
 end # module

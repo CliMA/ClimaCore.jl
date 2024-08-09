@@ -5,6 +5,7 @@ import ClimaCore.Limiters:
     apply_limiter!
 import ClimaCore.Fields
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
+import ClimaCore.DataLayouts: slab_index
 using CUDA
 
 function config_threadblock(Nv, Nh)
@@ -63,7 +64,7 @@ function compute_element_bounds_kernel!(
         slab_ρ = slab(ρ, v, h)
         for j in 1:Nj
             for i in 1:Ni
-                q = rdiv(slab_ρq[i, j], slab_ρ[i, j])
+                q = rdiv(slab_ρq[slab_index(i, j)], slab_ρ[slab_index(i, j)])
                 if i == 1 && j == 1
                     q_min = q
                     q_max = q
@@ -74,8 +75,8 @@ function compute_element_bounds_kernel!(
             end
         end
         slab_q_bounds = slab(q_bounds, v, h)
-        slab_q_bounds[1] = q_min
-        slab_q_bounds[2] = q_max
+        slab_q_bounds[slab_index(1)] = q_min
+        slab_q_bounds[slab_index(2)] = q_max
     end
     return nothing
 end
@@ -123,18 +124,18 @@ function compute_neighbor_bounds_local_kernel!(
         (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds, q_bounds_nbr, ghost_buffer, rtol) = limiter
         slab_q_bounds = slab(q_bounds, v, h)
-        q_min = slab_q_bounds[1]
-        q_max = slab_q_bounds[2]
+        q_min = slab_q_bounds[slab_index(1)]
+        q_max = slab_q_bounds[slab_index(2)]
         for lne in
             local_neighbor_elem_offset[h]:(local_neighbor_elem_offset[h + 1] - 1)
             h_nbr = local_neighbor_elem[lne]
             slab_q_bounds = slab(q_bounds, v, h_nbr)
-            q_min = rmin(q_min, slab_q_bounds[1])
-            q_max = rmax(q_max, slab_q_bounds[2])
+            q_min = rmin(q_min, slab_q_bounds[slab_index(1)])
+            q_max = rmax(q_max, slab_q_bounds[slab_index(2)])
         end
         slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-        slab_q_bounds_nbr[1] = q_min
-        slab_q_bounds_nbr[2] = q_max
+        slab_q_bounds_nbr[slab_index(1)] = q_min
+        slab_q_bounds_nbr[slab_index(2)] = q_max
     end
     return nothing
 end

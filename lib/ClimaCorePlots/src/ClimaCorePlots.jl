@@ -4,6 +4,7 @@ import RecipesBase
 import TriplotBase
 
 import ClimaComms
+import ClimaCore.DataLayouts: slab_index
 import ClimaCore:
     ClimaCore,
     DataLayouts,
@@ -308,7 +309,7 @@ function _slice_along(field, coord)
     hdata = ClimaCore.slab(hcoord_data, hidx)
     hnode_idx = 1
     for i in axes(hdata)[axis]
-        pt = axis == 1 ? hdata[i, 1] : hdata[1, i]
+        pt = axis == 1 ? hdata[slab_index(i, 1)] : hdata[slab_index(1, i)]
         axis_value = Geometry.component(pt, axis)
         coord_value = Geometry.component(coord, 1)
         if axis_value > coord_value
@@ -353,8 +354,9 @@ function _slice_along(field, coord)
             islab = ClimaCore.slab(ortho_data, v, i)
             # copy the nodal data
             for ni in 1:size(islab)[1]
-                islab[ni] =
-                    axis == 1 ? ijslab[hnode_idx, ni] : ijslab[ni, hnode_idx]
+                islab[slab_index(ni)] =
+                    axis == 1 ? ijslab[slab_index(hnode_idx, ni)] :
+                    ijslab[slab_index(ni, hnode_idx)]
             end
         end
     end

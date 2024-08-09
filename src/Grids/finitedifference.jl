@@ -59,7 +59,7 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     # construct on CPU, adapt to GPU
     face_coordinates = DataLayouts.VF{CT, Nv_face}(Array{FT}, Nv_face)
     for v in 1:Nv_face
-        face_coordinates[v] = mesh.faces[v]
+        face_coordinates[vindex(v)] = mesh.faces[v]
     end
     center_local_geometry, face_local_geometry =
         fd_geometry_data(face_coordinates, Val(Topologies.isperiodic(topology)))

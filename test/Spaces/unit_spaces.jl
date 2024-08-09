@@ -21,7 +21,7 @@ import ClimaCore:
     DeviceSideContext,
     DeviceSideDevice
 
-import ClimaCore.DataLayouts: IJFH, VF
+import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
@@ -55,23 +55,23 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     array = parent(Spaces.coordinates_data(space))
     @test size(array) == (4, 1, 1)
     coord_slab = slab(Spaces.coordinates_data(space), 1)
-    @test coord_slab[1] == Geometry.XPoint{FT}(-3)
-    @test coord_slab[4] == Geometry.XPoint{FT}(5)
+    @test coord_slab[slab_index(1)] == Geometry.XPoint{FT}(-3)
+    @test coord_slab[slab_index(4)] == Geometry.XPoint{FT}(5)
 
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
     dss_weights_slab = slab(space.grid.dss_weights, 1)
 
     for i in 1:4
-        @test Geometry.components(local_geometry_slab[i].∂x∂ξ) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
               @SMatrix [8 / 2]
-        @test Geometry.components(local_geometry_slab[i].∂ξ∂x) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
               @SMatrix [2 / 8]
-        @test local_geometry_slab[i].J ≈ (8 / 2)
-        @test local_geometry_slab[i].WJ ≈ (8 / 2) * weights[i]
+        @test local_geometry_slab[slab_index(i)].J ≈ (8 / 2)
+        @test local_geometry_slab[slab_index(i)].WJ ≈ (8 / 2) * weights[i]
         if i in (1, 4)
-            @test dss_weights_slab[i] ≈ 1 / 2
+            @test dss_weights_slab[slab_index(i)] ≈ 1 / 2
         else
-            @test dss_weights_slab[i] ≈ 1
+            @test dss_weights_slab[slab_index(i)] ≈ 1
         end
     end
 
@@ -217,10 +217,10 @@ end
     array = parent(coord_data)
     @test size(array) == (4, 4, 2, 1)
     coord_slab = slab(coord_data, 1)
-    @test coord_slab[1, 1] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
-    @test coord_slab[4, 1] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
-    @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
-    @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
+    @test coord_slab[slab_index(1, 1)] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
+    @test coord_slab[slab_index(4, 1)] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
+    @test coord_slab[slab_index(1, 4)] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
+    @test coord_slab[slab_index(4, 4)] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
@@ -233,17 +233,17 @@ end
     end
 
     for i in 1:4, j in 1:4
-        @test Geometry.components(local_geometry_slab[i, j].∂x∂ξ) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
               @SMatrix [8/2 0; 0 10/2]
-        @test Geometry.components(local_geometry_slab[i, j].∂ξ∂x) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
               @SMatrix [2/8 0; 0 2/10]
-        @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
-        @test local_geometry_slab[i, j].WJ ≈
+        @test local_geometry_slab[slab_index(i, j)].J ≈ (10 / 2) * (8 / 2)
+        @test local_geometry_slab[slab_index(i, j)].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]
         if i in (1, 4)
-            @test dss_weights_slab[i, j] ≈ 1 / 2
+            @test dss_weights_slab[slab_index(i, j)] ≈ 1 / 2
         else
-            @test dss_weights_slab[i, j] ≈ 1
+            @test dss_weights_slab[slab_index(i, j)] ≈ 1
         end
     end
 

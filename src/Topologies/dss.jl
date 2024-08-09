@@ -786,13 +786,13 @@ function dss_local_vertices!(
             ) do (lidx, vert)
                 ip = perimeter_vertex_node_index(vert)
                 perimeter_slab = slab(perimeter_data, level, lidx)
-                perimeter_slab[ip]
+                perimeter_slab[slab_index(ip)]
             end
             # scatter: assign sum to shared vertices
             for (lidx, vert) in vertex
                 perimeter_slab = slab(perimeter_data, level, lidx)
                 ip = perimeter_vertex_node_index(vert)
-                perimeter_slab[ip] = sum_data
+                perimeter_slab[slab_index(ip)] = sum_data
             end
         end
     end
@@ -815,9 +815,11 @@ function dss_local_faces!(
             perimeter_slab1 = slab(perimeter_data, level, lidx1)
             perimeter_slab2 = slab(perimeter_data, level, lidx2)
             for (ip1, ip2) in zip(pr1, pr2)
-                val = perimeter_slab1[ip1] ⊞ perimeter_slab2[ip2]
-                perimeter_slab1[ip1] = val
-                perimeter_slab2[ip2] = val
+                val =
+                    perimeter_slab1[slab_index(ip1)] ⊞
+                    perimeter_slab2[slab_index(ip2)]
+                perimeter_slab1[slab_index(ip1)] = val
+                perimeter_slab2[slab_index(ip2)] = val
             end
         end
     end
@@ -860,9 +862,12 @@ function dss_local_ghost!(
                     if !isghost
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
-                        perimeter_slab[ip]
+                        perimeter_slab[slab_index(ip)]
                     else
-                        RecursiveApply.rmap(zero, slab(perimeter_data, 1, 1)[1])
+                        RecursiveApply.rmap(
+                            zero,
+                            slab(perimeter_data, 1, 1)[slab_index(1)],
+                        )
                     end
                 end
                 for (isghost, idx, vert) in vertex
@@ -870,7 +875,7 @@ function dss_local_ghost!(
                         ip = perimeter_vertex_node_index(vert)
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
-                        perimeter_slab[ip] = sum_data
+                        perimeter_slab[slab_index(ip)] = sum_data
                     end
                 end
             end
@@ -906,13 +911,13 @@ function dss_ghost!(
             ipresult = perimeter_vertex_node_index(lvertresult)
             for level in 1:nlevels
                 result_slab = slab(perimeter_data, level, idxresult)
-                result = result_slab[ipresult]
+                result = result_slab[slab_index(ipresult)]
                 for (isghost, idx, vert) in vertex
                     if !isghost
                         ip = perimeter_vertex_node_index(vert)
                         lidx = idx
                         perimeter_slab = slab(perimeter_data, level, lidx)
-                        perimeter_slab[ip] = result
+                        perimeter_slab[slab_index(ip)] = result
                     end
                 end
             end
