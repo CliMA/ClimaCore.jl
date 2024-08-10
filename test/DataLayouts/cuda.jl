@@ -7,6 +7,7 @@ using ClimaComms
 using CUDA
 ClimaComms.@import_required_backends
 using ClimaCore.DataLayouts
+using ClimaCore.DataLayouts: slab_index
 
 function knl_copy!(dst, src)
     i = threadIdx().x
@@ -17,7 +18,7 @@ function knl_copy!(dst, src)
     p_dst = slab(dst, h)
     p_src = slab(src, h)
 
-    @inbounds p_dst[i, j] = p_src[i, j]
+    @inbounds p_dst[slab_index(i, j)] = p_src[slab_index(i, j)]
     return nothing
 end
 

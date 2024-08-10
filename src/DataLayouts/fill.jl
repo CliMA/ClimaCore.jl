@@ -21,14 +21,14 @@ end
 
 function Base.fill!(data::IJF{S, Nij}, val, ::ToCPU) where {S, Nij}
     @inbounds for j in 1:Nij, i in 1:Nij
-        data[i, j] = val
+        data[CartesianIndex(i, j, 1, 1, 1)] = val
     end
     return data
 end
 
 function Base.fill!(data::IF{S, Ni}, val, ::ToCPU) where {S, Ni}
     @inbounds for i in 1:Ni
-        data[i] = val
+        data[CartesianIndex(i, 1, 1, 1, 1)] = val
     end
     return data
 end
@@ -36,7 +36,7 @@ end
 function Base.fill!(data::VF, val, ::ToCPU)
     Nv = nlevels(data)
     @inbounds for v in 1:Nv
-        data[v] = val
+        data[CartesianIndex(1, 1, 1, v, 1)] = val
     end
     return data
 end

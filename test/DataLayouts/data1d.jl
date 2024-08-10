@@ -7,7 +7,7 @@ using JET
 
 using ClimaCore.DataLayouts
 using StaticArrays
-using ClimaCore.DataLayouts: get_struct, set_struct!
+using ClimaCore.DataLayouts: get_struct, set_struct!, vindex
 
 TestFloatTypes = (Float32, Float64)
 
@@ -21,7 +21,7 @@ TestFloatTypes = (Float32, Float64)
         @test getfield(data.:1, :array) == @view(array[:, 1:2])
 
         # test tuple assignment
-        data[1] = (Complex{FT}(-1.0, -2.0), FT(-3.0))
+        data[vindex(1)] = (Complex{FT}(-1.0, -2.0), FT(-3.0))
         @test array[1, 1] == -1.0
         @test array[1, 2] == -2.0
         @test array[1, 3] == -3.0
@@ -47,9 +47,9 @@ end
     Nv = 4
     array = zeros(Float64, Nv, 3)
     data = VF{S, Nv}(array)
-    @test data[1][2] == zero(Float64)
-    @test_throws BoundsError data[-1]
-    @test_throws BoundsError data[5]
+    @test data[vindex(1)][2] == zero(Float64)
+    @test_throws BoundsError data[vindex(-1)]
+    @test_throws BoundsError data[vindex(5)]
 end
 
 @testset "VF type safety" begin
@@ -63,11 +63,11 @@ end
     data = VF{typeof(SA), Nv}(array)
 
     ret = begin
-        data[1] = SA
+        data[vindex(1)] = SA
     end
     @test ret === SA
-    @test data[1] isa typeof(SA)
-    @test_throws MethodError data[1] = SB
+    @test data[vindex(1)] isa typeof(SA)
+    @test_throws MethodError data[vindex(1)] = SB
 end
 
 @testset "VF broadcasting between 1D data objects and scalars" begin

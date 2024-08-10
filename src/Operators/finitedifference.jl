@@ -3144,7 +3144,7 @@ Base.@propagate_inbounds function getidx(
     field_data = Fields.field_values(bc)
     space = reconstruct_placeholder_space(axes(bc), parent_space)
     v = vidx(space, idx)
-    return @inbounds field_data[v]
+    return @inbounds field_data[vindex(v)]
 end
 Base.@propagate_inbounds function getidx(
     parent_space,

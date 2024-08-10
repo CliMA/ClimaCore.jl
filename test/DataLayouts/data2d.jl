@@ -5,7 +5,7 @@ using Revise; include(joinpath("test", "DataLayouts", "data2d.jl"))
 using Test
 using ClimaCore.DataLayouts
 using StaticArrays
-using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!
+using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!, slab_index
 
 @testset "check_basetype" begin
     @test_throws Exception check_basetype(Real, Float64)
@@ -49,16 +49,16 @@ end
     data = IJFH{S, 2, Nh}(array)
     @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
     data_slab = slab(data, 1)
-    @test data_slab[2, 1] ==
+    @test data_slab[slab_index(2, 1)] ==
           (Complex(array[2, 1, 1, 1], array[2, 1, 2, 1]), array[2, 1, 3, 1])
-    data_slab[2, 1] = (Complex(-1.0, -2.0), -3.0)
+    data_slab[slab_index(2, 1)] = (Complex(-1.0, -2.0), -3.0)
     @test array[2, 1, 1, 1] == -1.0
     @test array[2, 1, 2, 1] == -2.0
     @test array[2, 1, 3, 1] == -3.0
 
     subdata_slab = data_slab.:2
-    @test subdata_slab[2, 1] == -3.0
-    subdata_slab[2, 1] = -5.0
+    @test subdata_slab[slab_index(2, 1)] == -3.0
+    subdata_slab[slab_index(2, 1)] = -5.0
     @test array[2, 1, 3, 1] == -5.0
 
     @test sum(data.:1) ≈ Complex(sum(array[:, :, 1, :]), sum(array[:, :, 2, :])) atol =
@@ -89,10 +89,10 @@ end
 
     # 2D Slab boundscheck
     sdata = slab(data, 1)
-    @test_throws BoundsError sdata[-1, 1]
-    @test_throws BoundsError sdata[1, -1]
-    @test_throws BoundsError sdata[2, 1]
-    @test_throws BoundsError sdata[1, 2]
+    @test_throws BoundsError sdata[slab_index(-1, 1)]
+    @test_throws BoundsError sdata[slab_index(1, -1)]
+    @test_throws BoundsError sdata[slab_index(2, 1)]
+    @test_throws BoundsError sdata[slab_index(1, 2)]
 end
 
 @testset "IJFH type safety" begin
@@ -107,11 +107,11 @@ end
     data = IJFH{typeof(SA), Nij, Nh}(array)
     data_slab = slab(data, 1)
     ret = begin
-        data_slab[1, 1] = SA
+        data_slab[slab_index(1, 1)] = SA
     end
     @test ret === SA
-    @test data_slab[1, 1] isa typeof(SA)
-    @test_throws MethodError data_slab[1, 1] = SB
+    @test data_slab[slab_index(1, 1)] isa typeof(SA)
+    @test_throws MethodError data_slab[slab_index(1, 1)] = SB
 end
 
 @testset "2D slab broadcasting" begin

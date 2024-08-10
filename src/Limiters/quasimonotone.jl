@@ -1,6 +1,7 @@
 import ClimaComms
 import ..Operators
 import ..RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
+import ..DataLayouts: slab_index
 import Adapt
 
 """
@@ -111,7 +112,10 @@ function compute_element_bounds!(
             local q_min, q_max
             for j in 1:Nj
                 for i in 1:Ni
-                    q = rdiv(slab_ρq[i, j], slab_ρ[i, j])
+                    q = rdiv(
+                        slab_ρq[slab_index(i, j)],
+                        slab_ρ[slab_index(i, j)],
+                    )
                     if i == 1 && j == 1
                         q_min = q
                         q_max = q
@@ -122,8 +126,8 @@ function compute_element_bounds!(
                 end
             end
             slab_q_bounds = slab(q_bounds, v, h)
-            slab_q_bounds[1] = q_min
-            slab_q_bounds[2] = q_max
+            slab_q_bounds[slab_index(1)] = q_min
+            slab_q_bounds[slab_index(2)] = q_max
         end
     end
     return nothing
@@ -152,16 +156,16 @@ function compute_neighbor_bounds_local!(
     for h in 1:Nh
         for v in 1:Nv
             slab_q_bounds = slab(q_bounds, v, h)
-            q_min = slab_q_bounds[1]
-            q_max = slab_q_bounds[2]
+            q_min = slab_q_bounds[slab_index(1)]
+            q_max = slab_q_bounds[slab_index(2)]
             for h_nbr in Topologies.local_neighboring_elements(topology, h)
                 slab_q_bounds = slab(q_bounds, v, h_nbr)
-                q_min = rmin(q_min, slab_q_bounds[1])
-                q_max = rmax(q_max, slab_q_bounds[2])
+                q_min = rmin(q_min, slab_q_bounds[slab_index(1)])
+                q_max = rmax(q_max, slab_q_bounds[slab_index(2)])
             end
             slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-            slab_q_bounds_nbr[1] = q_min
-            slab_q_bounds_nbr[2] = q_max
+            slab_q_bounds_nbr[slab_index(1)] = q_min
+            slab_q_bounds_nbr[slab_index(2)] = q_max
         end
     end
     return nothing
@@ -187,16 +191,16 @@ function compute_neighbor_bounds_ghost!(
         for h in 1:Nh
             for v in 1:Nv
                 slab_q_bounds = slab(q_bounds_nbr, v, h)
-                q_min = slab_q_bounds[1]
-                q_max = slab_q_bounds[2]
+                q_min = slab_q_bounds[slab_index(1)]
+                q_max = slab_q_bounds[slab_index(2)]
                 for gidx in Topologies.ghost_neighboring_elements(topology, h)
                     ghost_slab_q_bounds = slab(q_bounds_ghost, v, gidx)
-                    q_min = rmin(q_min, ghost_slab_q_bounds[1])
-                    q_max = rmax(q_max, ghost_slab_q_bounds[2])
+                    q_min = rmin(q_min, ghost_slab_q_bounds[slab_index(1)])
+                    q_max = rmax(q_max, ghost_slab_q_bounds[slab_index(2)])
                 end
                 slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-                slab_q_bounds_nbr[1] = q_min
-                slab_q_bounds_nbr[2] = q_max
+                slab_q_bounds_nbr[slab_index(1)] = q_min
+                slab_q_bounds_nbr[slab_index(2)] = q_max
             end
         end
     end

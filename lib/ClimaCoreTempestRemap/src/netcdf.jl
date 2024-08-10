@@ -1,5 +1,6 @@
 import CommonDataModel
 import ClimaCore: slab, column
+import ClimaCore.DataLayouts: slab_index
 
 """
     def_time_coord(nc::NCDataset, length=Inf, eltype=Float64;
@@ -97,7 +98,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[i, j]
+        coord = slab(coords, e)[slab_index(i, j)]
         X[col] = coord.x
         Y[col] = coord.y
     end
@@ -149,7 +150,7 @@ function def_space_coord(
     coords = Spaces.coordinates_data(space)
 
     for (col, ((i, j), e)) in enumerate(nodes)
-        coord = slab(coords, e)[i, j]
+        coord = slab(coords, e)[slab_index(i, j)]
         lon[col] = coord.long
         lat[col] = coord.lat
     end
@@ -328,7 +329,7 @@ function Base.setindex!(
     end
     data = Fields.field_values(field)
     for (col, ((i, j), e)) in enumerate(nodes)
-        var[col, extraidx...] = slab(data, e)[i, j]
+        var[col, extraidx...] = slab(data, e)[slab_index(i, j)]
     end
     return var
 end

@@ -2,47 +2,30 @@ import ..Topologies: Topology2D
 using ..RecursiveApply
 
 """
-    dss_transform(arg, local_geometry, weight, I...)
+    dss_transform(arg, local_geometry, weight, I)
 
-Transfrom `arg[I...]` to a basis for direct stiffness summation (DSS).
+Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
-- `local_geometry[I...]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-- `weight[I...]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+- `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+- `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
-Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i, j) =
-    dss_transform(arg[i, j], local_geometry[i, j], weight[i, j])
+Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, I) =
+    dss_transform(arg[I], local_geometry[I], weight[I])
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry,
     weight::Nothing,
-    i,
-    j,
-) = dss_transform(arg[i, j], local_geometry[i, j], 1)
+    I,
+) = dss_transform(arg[I], local_geometry[I], 1)
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry::Nothing,
     weight::Nothing,
-    i,
-    j,
-) = arg[i, j]
-
-Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i) =
-    dss_transform(arg[i], local_geometry[i], weight[i])
-Base.@propagate_inbounds dss_transform(
-    arg,
-    local_geometry,
-    weight::Nothing,
-    i,
-) = dss_transform(arg[i], local_geometry[i], 1)
-Base.@propagate_inbounds dss_transform(
-    arg,
-    local_geometry::Nothing,
-    weight::Nothing,
-    i,
-) = arg[i]
+    I,
+) = arg[I]
 
 @inline function dss_transform(
     arg::Tuple{},
@@ -152,23 +135,9 @@ Base.@propagate_inbounds dss_untransform(
     ::Type{T},
     targ,
     local_geometry,
-    i,
-    j,
-) where {T} = dss_untransform(T, targ, local_geometry[i, j])
-Base.@propagate_inbounds dss_untransform(
-    ::Type{T},
-    targ,
-    local_geometry::Nothing,
-    i,
-    j,
-) where {T} = dss_untransform(T, targ, local_geometry)
-Base.@propagate_inbounds dss_untransform(
-    ::Type{T},
-    targ,
-    local_geometry,
-    i,
-) where {T} = dss_untransform(T, targ, local_geometry[i])
-@inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
+    I,
+) where {T} = dss_untransform(T, targ, local_geometry[I])
+@inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, I) where {T} =
     dss_untransform(T, targ, local_geometry)
 @inline function dss_untransform(
     ::Type{NamedTuple{names, T}},
@@ -268,9 +237,12 @@ function _representative_slab(
     if isnothing(data)
         return nothing
     elseif rebuild_flag
-        return DataLayouts.rebuild(slab(data, 1, 1), Array)
+        return DataLayouts.rebuild(
+            slab(data, CartesianIndex(1, 1, 1, 1, 1)),
+            Array,
+        )
     else
-        return slab(data, 1, 1)
+        return slab(data, CartesianIndex(1, 1, 1, 1, 1))
     end
 end
 
@@ -284,8 +256,7 @@ _transformed_type(
         _representative_slab(data, DA),
         _representative_slab(local_geometry, DA),
         _representative_slab(local_weights, DA),
-        1,
-        1,
+        CartesianIndex(1, 1, 1, 1, 1),
     ),
 )
 
