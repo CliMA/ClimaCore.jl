@@ -18,10 +18,10 @@ Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=20
 ┌────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
 │ funcs                                              │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
 ├────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 797 microseconds, 92 nanoseconds  │ 12.4764 │ 254.394     │ 10             │ 100    │
-│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 131 microseconds, 851 nanoseconds │ 75.4252 │ 1537.92     │ 10             │ 100    │
-│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 797 microseconds, 164 nanoseconds │ 12.4753 │ 254.371     │ 10             │ 100    │
-│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 131 microseconds, 943 nanoseconds │ 75.3725 │ 1536.84     │ 10             │ 100    │
+│     TBB.singlefield_bc!(x_soa, us; nreps=100, bm)  │ 67 microseconds, 554 nanoseconds  │ 29.4429 │ 600.341     │ 2              │ 100    │
+│     TBB.singlefield_bc!(x_aos, us; nreps=100, bm)  │ 69 microseconds, 653 nanoseconds  │ 28.5556 │ 582.248     │ 2              │ 100    │
+│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 796 microseconds, 877 nanoseconds │ 12.4798 │ 254.462     │ 10             │ 100    │
+│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 131 microseconds, 72 nanoseconds  │ 75.873  │ 1547.05     │ 10             │ 100    │
 └────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 
 [ Info: device = ClimaComms.CUDADevice()
@@ -29,10 +29,10 @@ Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=20
 ┌────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
 │ funcs                                              │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
 ├────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 1 millisecond, 45 microseconds    │ 19.0163 │ 387.743     │ 10             │ 100    │
-│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 258 microseconds, 120 nanoseconds │ 77.0559 │ 1571.17     │ 10             │ 100    │
-│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 1 millisecond, 46 microseconds    │ 19.0147 │ 387.709     │ 10             │ 100    │
-│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 257 microseconds, 915 nanoseconds │ 77.1171 │ 1572.42     │ 10             │ 100    │
+│     TBB.singlefield_bc!(x_soa, us; nreps=100, bm)  │ 108 microseconds, 790 nanoseconds │ 36.5653 │ 745.567     │ 2              │ 100    │
+│     TBB.singlefield_bc!(x_aos, us; nreps=100, bm)  │ 123 microseconds, 730 nanoseconds │ 32.1501 │ 655.541     │ 2              │ 100    │
+│     TBB.thermo_func_bc!(x, us; nreps=100, bm)      │ 1 millisecond, 43 microseconds    │ 19.0568 │ 388.569     │ 10             │ 100    │
+│     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm) │ 256 microseconds, 717 nanoseconds │ 77.477  │ 1579.76     │ 10             │ 100    │
 └────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
 ```
 =#
@@ -62,6 +62,21 @@ end
 
 @inline Base.zero(::Type{PhaseEquil{FT}}) where {FT} =
     PhaseEquil{FT}(0, 0, 0, 0, 0)
+
+function singlefield_bc!(x, us; nreps = 1, bm=nothing, n_trials = 30)
+    e = Inf
+    for t in 1:n_trials
+        et = CUDA.@elapsed begin
+            for _ in 1:nreps
+                (; ρ_read, ρ_write) = x
+                @. ρ_write = ρ_read
+            end
+        end
+        e = min(e, et)
+    end
+    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=2)
+    return nothing
+end
 
 function thermo_func_bc!(x, us; nreps = 1, bm=nothing, n_trials = 30)
     e = Inf
@@ -173,16 +188,27 @@ using Test
     end
     x_vec = to_vec(xv)
 
+    x_aos = fill((; ρ_read = FT(0), ρ_write = FT(0)), cspace)
+    x_soa = (;
+        ρ_read = Fields.Field(FT, cspace),
+        ρ_write = Fields.Field(FT, cspace),
+    )
+    @. x_soa.ρ_read = 6
+    @. x_soa.ρ_write = 7
+    @. x_aos.ρ_read = 6
+    @. x_aos.ρ_write = 7
+    TBB.singlefield_bc!(x_soa, us; nreps=1, n_trials = 1)
+    TBB.singlefield_bc!(x_aos, us; nreps=1, n_trials = 1)
+
     TBB.thermo_func_bc!(x, us; nreps=1, n_trials = 1)
     TBB.thermo_func_sol!(x_vec, us; nreps=1, n_trials = 1)
 
     rc = Fields.rcompare(x_vec, to_vec(x))
-    rc || Fields.rprint_diff(x_vec, to_vec(x)) # test correctness (should print nothing)
+    rc || Fields.@rprint_diff(x_vec, to_vec(x)) # test correctness (should print nothing)
     @test rc # test correctness
 
-    TBB.thermo_func_bc!(x, us; nreps=100, bm)
-    TBB.thermo_func_sol!(x_vec, us; nreps=100, bm)
-
+    TBB.singlefield_bc!(x_soa, us; nreps=100, bm)
+    TBB.singlefield_bc!(x_aos, us; nreps=100, bm)
     TBB.thermo_func_bc!(x, us; nreps=100, bm)
     TBB.thermo_func_sol!(x_vec, us; nreps=100, bm)
 
