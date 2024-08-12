@@ -1242,6 +1242,16 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Perf: benchmark scripts benchmark_offset"
+        key: benchmark_offset
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/benchmark_offset.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Perf: Operators"
     steps:
 
