@@ -214,7 +214,7 @@ end
 end
 
 @testset "IntervalMesh GeneralizedExponentialStretching" begin
-    # use normalized GCM profile heights (7.5km)
+    # use normalized GCM profile heights (45km)
     @test_throws ArgumentError unit_intervalmesh(
         stretching = Meshes.GeneralizedExponentialStretching(
             0.02 / 45.0,
@@ -250,7 +250,7 @@ end
 
 
 @testset "IntervalMesh GeneralizedExponentialStretching reverse" begin
-    # use normalized GCM profile heights (7.5km)
+    # use normalized GCM profile heights (45km)
     @test_throws ArgumentError unit_intervalmesh(
         stretching = Meshes.GeneralizedExponentialStretching(
             7.0 / 45.0,
@@ -286,6 +286,55 @@ end
     fₑ = Geometry.component(Meshes.coordinates(mesh, nelems, 2), 1)
     # a residual tol of ~1e-1 or 1e-2 is fine for typical use cases
     @test fₑ - fₑ₋₁ ≈ 0.02 / 45.0 rtol = 1e-2
+end
+
+@testset "IntervalMesh HyperbolicTangentStretching" begin
+    # use normalized GCM profile heights (75km)
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = 0,
+    )
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = 1,
+    )
+    # test a gcm like configuration
+    nelems = 75
+    dom, mesh = unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = nelems, # 76 face levels
+    )
+    # test the bottom and top of the mesh coordinates are correct
+    @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(0.0)
+    @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(1.0)
+    # test the interval of the mesh coordinates at the surface is the same as dz_surface
+    @test Meshes.coordinates(mesh, 1, 2) ≈ Geometry.ZPoint(0.03 / 75.0)
+end
+
+@testset "IntervalMesh HyperbolicTangentStretching reverse" begin
+    # use normalized GCM profile heights (75km)
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = 0,
+        reverse_mode = true,
+    )
+    @test_throws ArgumentError unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = 1,
+        reverse_mode = true,
+    )
+    # test a gcm like configuration, for land
+    nelems = 75
+    dom, mesh = unit_intervalmesh(
+        stretching = Meshes.HyperbolicTangentStretching(0.03 / 75.0),
+        nelems = nelems, # 76 face levels
+        reverse_mode = true,
+    )
+    # test the bottom and top of the mesh coordinates are correct
+    @test Meshes.coordinates(mesh, 1, 1) == Geometry.ZPoint(-1.0)
+    @test Meshes.coordinates(mesh, 1, nelems + 1) ≈ Geometry.ZPoint(0.0)
+    # test the interval of the mesh coordinates at the surface is the same as dz_surface
+    @test Meshes.coordinates(mesh, 1, nelems) ≈ Geometry.ZPoint(-0.03 / 75.0)
 end
 
 @testset "Truncated IntervalMesh" begin
