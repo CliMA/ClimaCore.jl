@@ -1,12 +1,12 @@
 function knl_fill_flat!(dest::AbstractData, val, us)
-    @inbounds begin
-        tidx = thread_index()
-        if tidx ≤ get_N(us)
-            n = size(dest)
-            I = kernel_indexes(tidx, n)
-            @inbounds dest[I] = val
-        end
-    end
+    # @inbounds begin
+    #     tidx = thread_index()
+    #     if tidx ≤ get_N(us)
+    #         n = size(dest)
+    #         I = kernel_indexes(tidx, n)
+    #         @inbounds dest[I] = val
+    #     end
+    # end
     return nothing
 end
 

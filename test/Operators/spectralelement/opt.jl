@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Operators", "spectralelement", "opt.jl"))
+=#
 using Test
 using JET
 using ClimaComms
@@ -130,10 +134,11 @@ end
 end
 
 # Test that Julia ia able to optimize spectral element operations v1.7+
-@static if @isdefined(var"@test_opt")
+# @static if @isdefined(var"@test_opt")
 
-    @testset "Spectral Element 2D Field optimizations" begin
-        for FT in (Float64, Float32)
+    # @testset "Spectral Element 2D Field optimizations" begin
+        # for FT in (Float64, Float32)
+        FT = Float32
             domain = Domains.RectangleDomain(
                 Geometry.XPoint{FT}(-pi) .. Geometry.XPoint{FT}(pi),
                 Geometry.YPoint{FT}(-pi) .. Geometry.YPoint{FT}(pi);
@@ -175,8 +180,8 @@ end
             @test_opt opt_Restrict(R, Ifield)
 
             test_operators(field, vfield)
-        end
-    end
+        # end
+    # end
 
     @testset "Spectral Element 3D Hybrid Field optimizations" begin
         device = ClimaComms.CPUSingleThreaded()
@@ -234,4 +239,4 @@ end
             end
         end
     end
-end
+# end

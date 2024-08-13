@@ -16,6 +16,8 @@ end
 one_to_n(s::Tuple, ::Type{FT}) where {FT} = one_to_n(zeros(FT, s...))
 ncomponents(::Type{FT}, ::Type{S}) where {FT, S} = div(sizeof(S), sizeof(FT))
 field_dim_to_one(s, dim) = Tuple(map(j -> j == dim ? 1 : s[j], 1:length(s)))
+# drop_field_dim(s, dim) = Tuple(filter(j -> j !== dim, 1:length(s)))
+drop_field_dim(s, dim) = Tuple(deleteat!(collect(s), dim))
 CI(s) = CartesianIndices(map(ξ -> Base.OneTo(ξ), s))
 
 struct Foo{T}
@@ -30,8 +32,8 @@ Base.zero(::Type{Foo{T}}) where {T} = Foo{T}(0, 0)
     S = Foo{FT}
     s_array = (3, 2, 4)
     @test ncomponents(FT, S) == 2
-    s = field_dim_to_one(s_array, 2)
-    a = one_to_n(s_array, FT)
+    s = drop_field_dim(s_array, 2)
+    a = DataLayouts.field_array(one_to_n(s_array, FT), 2)
     @test get_struct(a, S, Val(2), CI(s)[1]) == Foo{FT}(1.0, 4.0)
     @test get_struct(a, S, Val(2), CI(s)[2]) == Foo{FT}(2.0, 5.0)
     @test get_struct(a, S, Val(2), CI(s)[3]) == Foo{FT}(3.0, 6.0)
@@ -52,8 +54,8 @@ end
     S = Foo{FT}
     s_array = (3, 4, 2)
     @test ncomponents(FT, S) == 2
-    s = field_dim_to_one(s_array, 3)
-    a = one_to_n(s_array, FT)
+    s = drop_field_dim(s_array, 3)
+    a = DataLayouts.field_array(one_to_n(s_array, FT), 3)
     @test get_struct(a, S, Val(3), CI(s)[1]) == Foo{FT}(1.0, 13.0)
     @test get_struct(a, S, Val(3), CI(s)[2]) == Foo{FT}(2.0, 14.0)
     @test get_struct(a, S, Val(3), CI(s)[3]) == Foo{FT}(3.0, 15.0)
@@ -73,8 +75,8 @@ end
     FT = Float64
     S = Foo{FT}
     s_array = (2, 2, 2, 2, 2)
-    s = field_dim_to_one(s_array, 4)
-    a = one_to_n(s_array, FT)
+    s = drop_field_dim(s_array, 4)
+    a = DataLayouts.field_array(one_to_n(s_array, FT), 4)
     @test ncomponents(FT, S) == 2
 
     @test get_struct(a, S, Val(4), CI(s)[1]) == Foo{FT}(1.0, 9.0)

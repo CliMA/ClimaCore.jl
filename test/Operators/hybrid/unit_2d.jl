@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Operators", "hybrid", "unit_2d.jl"))
+=#
 include("utils_2d.jl")
 
 @testset "1D SE, 1D FD Extruded Domain level extraction" begin
@@ -6,22 +10,22 @@ include("utils_2d.jl")
 
     fcoord = Fields.coordinate_field(hv_face_space)
     ccoord = Fields.coordinate_field(hv_center_space)
-    @test parent(Fields.field_values(level(fcoord.x, half))) == parent(
+    @test all(parent(Fields.field_values(level(fcoord.x, half))) .== parent(
         Fields.field_values(
             Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
-    )
-    @test parent(Fields.field_values(level(ccoord.x, 1))) == parent(
+    ))
+    @test all(parent(Fields.field_values(level(ccoord.x, 1))) .== parent(
         Fields.field_values(
             Fields.coordinate_field(Spaces.horizontal_space(hv_center_space)).x,
         ),
-    )
-    @test parent(Fields.field_values(level(fcoord.z, half))) ==
+    ))
+    @test all(parent(Fields.field_values(level(fcoord.z, half))) .==
           parent(
         Fields.field_values(
             Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
-    ) .* 0
+    ) .* 0)
 end
 
 

@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Operators", "finitedifference", "unit_column.jl"))
+=#
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 
@@ -269,8 +273,8 @@ end
     cy = cfield.y
     fy = ffield.y
 
-    cyp = parent(cy)
-    fyp = parent(fy)
+    cyp = parent(cy).arrays[1]
+    fyp = parent(fy).arrays[1]
 
     # C2F biased operators
     LBC2F = Operators.LeftBiasedC2F(; bottom = Operators.SetValue(10))

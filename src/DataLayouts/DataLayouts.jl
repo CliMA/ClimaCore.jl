@@ -45,12 +45,20 @@ abstract type AbstractDispatchToDevice end
 struct ToCPU <: AbstractDispatchToDevice end
 struct ToCUDA <: AbstractDispatchToDevice end
 
-include("struct.jl")
 
 abstract type AbstractData{S} end
 
 @inline Base.size(data::AbstractData, i::Integer) = size(data)[i]
 @inline Base.size(data::AbstractData) = universal_size(data)
+
+struct ArraySize{FD, Nf, S} end
+@inline ArraySize(data::AbstractData, i::Integer) = ArraySize(data)[i]
+@inline ArraySize(data::AbstractData) = ArraySize{field_dim(data), ncomponents(data), farray_size(data)}()
+@inline Base.ndims(::ArraySize{FD, Nf, S}) where {FD, Nf, S} = length(S)
+@inline Base.ndims(::Type{ArraySize{FD, Nf, S}}) where {FD, Nf, S} = length(S)
+
+include("field_array.jl")
+include("struct.jl")
 
 """
     struct UniversalSize{Ni, Nj, Nv, Nh} end
@@ -69,7 +77,7 @@ struct UniversalSize{Ni, Nj, Nv, Nh} end
     UniversalSize{us[1], us[2], us[4], us[5]}()
 end
 
-@inline array_length(data::AbstractData) = prod(size(parent(data)))
+@inline array_length(data::AbstractData) = prod(size(field_array(data)))
 
 """
     (Ni, Nj, _, Nv, Nh) = universal_size(data::AbstractData)
@@ -128,7 +136,7 @@ function Base.show(io::IO, data::AbstractData)
             :limit => true,
             :displaysize => (rows, cols - indent_width),
         ),
-        vec(parent(data)),
+        map(x -> vec(x), field_arrays(data)),
     )
     return io
 end
@@ -221,21 +229,28 @@ Base.parent(data::AbstractData) = getfield(data, :array)
 
 Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
 
-@inline function ncomponents(data::AbstractData{S}) where {S}
-    typesize(eltype(parent(data)), S)
-end
+@inline ncomponents(data::AbstractData) = ncomponents(parent(data))
+# @inline function ncomponents(data::AbstractData{S}) where {S}
+#     typesize(eltype(field_array(data)), S)
+# end
 
 @generated function _getproperty(
-    data::AbstractData{S},
+    data::T,
     ::Val{Name},
-) where {S, Name}
+) where {S, Name, T <: AbstractData{S}}
     errorstring = "Invalid field name $(Name) for type $(S)"
     i = findfirst(isequal(Name), fieldnames(S))
     if i === nothing
         return :(error($errorstring))
     end
-    static_idx = Val{i}()
-    return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
+    # static_idx = Val{i}()
+    # return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
+    # return :(Base.@_inline_meta; DataLayouts._property_view(data, $i))
+    n = union_all(T)
+    P = Base.tail(type_params(T))
+    SS = fieldtype(S, i)
+    return :(Base.@_inline_meta;
+    $n{$SS, $P...}(DataLayouts.generic_property_view(data, $i)))
 end
 
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
@@ -252,40 +267,44 @@ Base.@propagate_inbounds function Base.getproperty(
     data::AbstractData{S},
     i::Integer,
 ) where {S}
-    array = parent(data)
-    T = eltype(array)
+    P = Base.tail(type_params(data))
+    SS = fieldtype(S, i)
+    return union_all(data){SS, P...}(generic_property_view(data, i))
+end
+
+@inline function generic_property_view(
+    data::AbstractData{S},
+    i::Integer,
+) where {S}
+    fa = field_array(data)
+    T = eltype(fa)
     SS = fieldtype(S, i)
     offset = fieldtypeoffset(T, S, i)
     nbytes = typesize(T, SS)
-    fdim = field_dim(data)
-    Ipre = ntuple(i -> Colon(), Val(fdim - 1))
-    Ipost = ntuple(i -> Colon(), Val(ndims(data) - fdim))
-    dataview =
-        @inbounds view(array, Ipre..., (offset + 1):(offset + nbytes), Ipost...)
-    union_all(data){SS, Base.tail(type_params(data))...}(dataview)
+    field_byterange = (offset + 1):(offset + nbytes)
+    return FieldArray{field_dim(data)}(
+        ntuple(jf -> field_arrays(data)[offset + jf], nbytes),
+    )
 end
 
-# In the past, we've sometimes needed a generated function
-# for inference and constant propagation:
-Base.@propagate_inbounds @generated function _property_view(
-    data::AD,
+@inline @generated function generic_property_view(
+    data::AbstractData{S},
     ::Val{Idx},
-) where {S, Idx, AD <: AbstractData{S}}
-    SS = fieldtype(S, Idx)
-    T = eltype(parent_array_type(AD))
-    offset = fieldtypeoffset(T, S, Val(Idx))
-    nbytes = typesize(T, SS)
-    fdim = field_dim(AD)
-    Ipre = ntuple(i -> Colon(), Val(fdim - 1))
-    Ipost = ntuple(i -> Colon(), Val(ndims(data) - fdim))
-    field_byterange = (offset + 1):(offset + nbytes)
-    return :($(union_all(AD)){$SS, $(Base.tail(type_params(AD)))...}(
-        @inbounds view(parent(data), $Ipre..., $field_byterange, $Ipost...)
+) where {S, Idx}
+    :(FieldArray{field_dim(data)}(
+        ntuple(
+            jf -> field_arrays(data)[fieldtypeoffset(
+                eltype(field_array(data)),
+                S,
+                i,
+            ) + jf],
+            typesize(eltype(field_array(data)), fieldtype(S, i)),
+        ),
     ))
 end
 
 function replace_basetype(data::AbstractData{S}, ::Type{T}) where {S, T}
-    array = parent(data)
+    array = field_array(data)
     S′ = replace_basetype(eltype(array), T, S)
     return union_all(data){S′, Base.tail(type_params(data))...}(
         similar(array, T),
@@ -301,9 +320,11 @@ end
 
 A 3D DataLayout. TODO: Add more docs
 """
-struct IJKFVH{S, Nij, Nk, Nv, Nh, A} <: Data3D{S, Nij, Nk}
-    array::A
+struct IJKFVH{S, Nij, Nk, Nv, Nh, FA <: FieldArray} <: Data3D{S, Nij, Nk}
+    fa::FA
 end
+IJKFVH{S, Nij, Nk, Nv, Nh}(fa::FieldArray) where {S, Nij, Nk, Nv, Nh} =
+    IJKFVH{S, Nij, Nk, Nv, Nh, typeof(fa)}(fa)
 
 function IJKFVH{S, Nij, Nk, Nv, Nh}(
     array::AbstractArray{T, 6},
@@ -315,7 +336,8 @@ function IJKFVH{S, Nij, Nk, Nv, Nh}(
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nv
     @assert size(array, 6) == Nh
-    IJKFVH{S, Nij, Nk, Nv, Nh, typeof(array)}(array)
+    fa = field_array(array, IJKFVHSingleton())
+    IJKFVH{S, Nij, Nk, Nv, Nh, typeof(fa)}(fa)
 end
 
 @inline universal_size(
@@ -340,17 +362,25 @@ The `ArrayType`-constructor constructs a IJFH 2D Spectral
 DataLayout given the backing `ArrayType`, quadrature degrees
 of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
 """
-struct IJFH{S, Nij, Nh, A} <: Data2D{S, Nij}
-    array::A
+struct IJFH{S, Nij, Nh, FA <: FieldArray} <: Data2D{S, Nij}
+    array::FA
+end
+
+function IJFH{S, Nij, Nh}(fa::FieldArray) where {S, Nij, Nh}
+    IJFH{S, Nij, Nh, typeof(fa)}(fa)
 end
 
 function IJFH{S, Nij, Nh}(array::AbstractArray{T, 4}) where {S, Nij, Nh, T}
     check_basetype(T, S)
+    Nf = typesize(T, S)
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
     @assert size(array, 3) == typesize(T, S)
     @assert size(array, 4) == Nh
-    IJFH{S, Nij, Nh, typeof(array)}(array)
+    # fa = field_array(array, IJFHSingleton())
+    fa = field_array(array, ArraySize{3,Nf,(Nij,Nij,Nf,Nh)}())
+    @assert ncomponents(fa) == typesize(T, S)
+    IJFH{S, Nij, Nh, typeof(fa)}(fa)
 end
 
 @inline universal_size(::IJFH{S, Nij, Nh}) where {S, Nij, Nh} =
@@ -366,10 +396,10 @@ end
     I::CartesianIndex{5},
 ) where {S}
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 @propagate_inbounds function Base.setindex!(
@@ -378,10 +408,10 @@ end
     I::CartesianIndex{5},
 ) where {S}
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -390,29 +420,34 @@ Base.length(data::IJFH) = get_Nh(data)
 
 @inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
     @boundscheck (1 <= h <= get_Nh(data)) || throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
+    fa = field_array(data)
+    sub_arrays = ntuple(ncomponents(fa)) do jf
+        view(fa.arrays[jf], :, :, h)
+    end
+    dataview = FieldArray{field_dim(IJF)}(sub_arrays)
+    IJF{S, Nij, typeof(dataview)}(dataview)
 end
 
 @inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
     @boundscheck (v >= 1 && 1 <= h <= get_Nh(data)) ||
                  throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
+    slab(data, h)
 end
 
 @inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= get_Nh(data)) ||
                  throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), i, j, :, h)
-    DataF{S}(dataview)
+    fa = field_array(data)
+    sub_arrays = @inbounds ntuple(f -> view(fa.arrays[f], i, j, h), ncomponents(fa))
+    dataview = FieldArray{field_dim(DataF)}(sub_arrays)
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
     data::IJFH{S, Nij},
 ) where {S, Nij}
-    gatherdata = ClimaComms.gather(ctx, parent(data))
+    gatherdata = ClimaComms.gather(ctx, field_array(data))
     if ClimaComms.iamroot(ctx)
         Nh = size(gatherdata, 4)
         IJFH{S, Nij, Nh}(gatherdata)
@@ -442,16 +477,20 @@ DataLayout given the backing `ArrayType`, quadrature
 degrees of freedom `Ni`, and the number of mesh elements
 `Nh`.
 """
-struct IFH{S, Ni, Nh, A} <: Data1D{S, Ni}
-    array::A
+struct IFH{S, Ni, Nh, FA <: FieldArray} <: Data1D{S, Ni}
+    array::FA
 end
+
+IFH{S, Ni, Nh}(fa::FieldArray) where {S, Ni, Nh} =
+    IFH{S, Ni, Nh, typeof(fa)}(fa)
 
 function IFH{S, Ni, Nh}(array::AbstractArray{T, 3}) where {S, Ni, Nh, T}
     check_basetype(T, S)
     @assert size(array, 1) == Ni
     @assert size(array, 2) == typesize(T, S)
     @assert size(array, 3) == Nh
-    IFH{S, Ni, Nh, typeof(array)}(array)
+    fa = field_array(array, IFHSingleton())
+    IFH{S, Ni, Nh, typeof(fa)}(fa)
 end
 
 function IFH{S, Ni, Nh}(::Type{ArrayType}) where {S, Ni, Nh, ArrayType}
@@ -463,7 +502,11 @@ end
 
 @inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
     @boundscheck (1 <= h <= get_Nh(data)) || throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, h)
+    toa_view = @inbounds ntuple(
+        i -> view(field_arrays(data)[i], :, h),
+        ncomponents(data),
+    )
+    dataview = FieldArray{field_dim(IF)}(toa_view)
     IF{S, Ni}(dataview)
 end
 Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
@@ -471,18 +514,21 @@ Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 @inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= get_Nh(data) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), i, :, h)
-    DataF{S}(dataview)
+    fa = field_array(data)
+    dataview = @inbounds FieldArray{field_dim(DataF)}(
+        ntuple(jf -> view(parent(fa.arrays[jf]), i, h), ncomponents(fa)),
+    )
+    DataF{S, typeof(dataview)}(dataview)
 end
 Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
     column(data, i, h)
 
 @inline function Base.getindex(data::IFH{S}, I::CartesianIndex{5}) where {S}
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 @inline function Base.setindex!(
@@ -491,10 +537,10 @@ end
     I::CartesianIndex{5},
 ) where {S}
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -510,20 +556,22 @@ Base.length(data::Data0D) = 1
 
 Backing `DataLayout` for 0D point data.
 """
-struct DataF{S, A} <: Data0D{S}
-    array::A
+struct DataF{S, FA <: FieldArray} <: Data0D{S}
+    array::FA
 end
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
     @assert size(array, 1) == typesize(T, S)
-    DataF{S, typeof(array)}(array)
+    fa = field_array(array, DataFSingleton())
+    DataF{S, typeof(fa)}(fa)
 end
 
 function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
     T = eltype(ArrayType)
     DataF{S}(ArrayType(undef, typesize(T, S)))
 end
+DataF{S}(fa::FieldArray) where {S} = DataF{S, typeof(fa)}(fa)
 
 function DataF(x::T) where {T}
     if is_valid_basetype(Float64, T)
@@ -541,7 +589,7 @@ end
 
 Base.@propagate_inbounds function Base.getindex(data::DataF{S}) where {S}
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
         CartesianIndex(1),
@@ -554,7 +602,7 @@ end
 
 Base.@propagate_inbounds function Base.setindex!(data::DataF{S}, val) where {S}
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
         CartesianIndex(1),
@@ -596,8 +644,8 @@ Nodal element data (I,J) are contiguous for each `S` datatype struct field (F) f
 
 A `DataSlab2D` view can be returned from other `Data2D` objects by calling `slab(data, idx...)`.
 """
-struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
-    array::A
+struct IJF{S, Nij, FA <: FieldArray} <: DataSlab2D{S, Nij}
+    array::FA
 end
 
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
@@ -605,16 +653,23 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     check_basetype(T, S)
     @assert size(array, 3) == typesize(T, S)
-    IJF{S, Nij, typeof(array)}(array)
+    fa = field_array(array, IJFSingleton())
+    IJF{S, Nij, typeof(fa)}(fa)
 end
+
+IJF{S, Nij}(fa::FieldArray) where {S, Nij} = IJF{S, Nij, typeof(fa)}(fa)
 
 function IJF{S, Nij}(::Type{MArray}, ::Type{T}) where {S, Nij, T}
     Nf = typesize(T, S)
-    array = MArray{Tuple{Nij, Nij, Nf}, T, 3, Nij * Nij * Nf}(undef)
+    # array = MArray{Tuple{Nij, Nij, Nf}, T, 3, Nij * Nij * Nf}(undef)
+    array = FieldArray{field_dim(IJF)}(ntuple(f->MArray{Tuple{Nij, Nij}, T, 2, Nij * Nij}(undef), Nf))
     IJF{S, Nij}(array)
 end
+function SArray(ijf::IJF{S, Nij, FieldArray{FD, N, T}}) where {S, Nij, FD, N, T <: MArray}
+    IJF{S, Nij}(SArray(field_array(ijf)))
+end
 function SArray(ijf::IJF{S, Nij, <:MArray}) where {S, Nij}
-    IJF{S, Nij}(SArray(parent(ijf)))
+    IJF{S, Nij}(SArray(field_array(ijf)))
 end
 
 @inline universal_size(::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
@@ -628,7 +683,7 @@ end
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
                  throw(BoundsError(data, (i, j)))
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
         CartesianIndex(i, j, 1),
@@ -645,7 +700,7 @@ end
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
                  throw(BoundsError(data, (i, j)))
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
         CartesianIndex(i, j, 1),
@@ -655,8 +710,11 @@ end
 @inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
-    dataview = @inbounds view(parent(data), i, j, :)
-    DataF{S}(dataview)
+    fa = field_array(data)
+    dataview = @inbounds FieldArray{field_dim(DataF)}(
+        ntuple(jf -> view(parent(fa.arrays[jf]), i, j), ncomponents(fa)),
+    )
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 # ======================
@@ -686,30 +744,37 @@ Nodal element data (I) are contiguous for each `S` datatype struct field (F) for
 
 A `DataSlab1D` view can be returned from other `Data1D` objects by calling `slab(data, idx...)`.
 """
-struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
-    array::A
+struct IF{S, Ni, FA <: FieldArray} <: DataSlab1D{S, Ni}
+    array::FA
 end
+
+IF{S, Ni}(fa::FieldArray) where {S, Ni} = IF{S, Ni, typeof(fa)}(fa)
 
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
     @assert size(array, 2) == typesize(T, S)
-    IF{S, Ni, typeof(array)}(array)
+    fa = field_array(array, IFSingleton())
+    IF{S, Ni, typeof(fa)}(fa)
 end
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
     Nf = typesize(T, S)
-    array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
+    # array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
+    array = FieldArray{field_dim(IF)}(ntuple(f->MArray{Tuple{Ni}, T, 1, Ni}(undef), Nf))
     IF{S, Ni}(array)
 end
+function SArray(data::IF{S, Ni, <:FieldArray{<:Any, <:Any, T}}) where {S, Ni, T <: MArray}
+    IF{S, Ni}(SArray(field_array(data)))
+end
 function SArray(data::IF{S, Ni, <:MArray}) where {S, Ni}
-    IF{S, Ni}(SArray(parent(data)))
+    IF{S, Ni}(SArray(field_array(data)))
 end
 
 @inline function Base.getindex(data::IF{S, Ni}, I::CartesianIndex) where {S, Ni}
     i = I.I[1]
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
         CartesianIndex(i, 1),
@@ -724,7 +789,7 @@ end
     i = I.I[1]
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
         CartesianIndex(i, 1),
@@ -733,8 +798,11 @@ end
 
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    dataview = @inbounds view(parent(data), i, :)
-    DataF{S}(dataview)
+    fa = field_array(data)
+    dataview = @inbounds FieldArray{field_dim(DataF)}(
+        ntuple(jf -> view(parent(fa.arrays[jf]), i), ncomponents(fa)),
+    )
+    DataF{S, typeof(dataview)}(dataview)
 end
 
 # ======================
@@ -753,15 +821,18 @@ Column level data (V) are contiguous for each `S` datatype struct field (F).
 
 A `DataColumn` view can be returned from other `Data1DX`, `Data2DX` objects by calling `column(data, idx...)`.
 """
-struct VF{S, Nv, A} <: DataColumn{S, Nv}
-    array::A
+struct VF{S, Nv, FA <: FieldArray} <: DataColumn{S, Nv}
+    array::FA
 end
+
+VF{S, Nv}(fa::FieldArray) where {S, Nv} = VF{S, Nv, typeof(fa)}(fa)
 
 function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == typesize(T, S)
-    VF{S, Nv, typeof(array)}(array)
+    fa = field_array(array, VFSingleton())
+    VF{S, Nv, typeof(fa)}(fa)
 end
 
 function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
@@ -780,14 +851,14 @@ Base.lastindex(data::VF) = length(data)
 
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 
-Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
-    _property_view(data, Val(i))
+# Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
+#     generic_property_view(data, i)
 
 @inline function Base.getindex(data::VF{S, Nv}, I::CartesianIndex) where {S, Nv}
     v = I.I[4]
     @boundscheck 1 <= v <= nlevels(data) || throw(BoundsError(data, (v,)))
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
         CartesianIndex(v, 1),
@@ -798,7 +869,7 @@ end
     v = I.I[4]
     @boundscheck (1 <= v <= nlevels(data)) || throw(BoundsError(data, (v,)))
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
         CartesianIndex(v, 1),
@@ -818,8 +889,13 @@ end
 
 @inline function level(data::VF{S}, v) where {S}
     @boundscheck (1 <= v <= nlevels(data)) || throw(BoundsError(data, (v)))
-    array = parent(data)
-    dataview = @inbounds view(array, v, :)
+    fa = field_array(data)
+    dataview = @inbounds FieldArray{field_dim(DataF)}(
+        ntuple(ncomponents(fa)) do jf
+            view(parent(fa.arrays[jf]), v)
+        end,
+    )
+
     DataF{S}(dataview)
 end
 
@@ -835,9 +911,12 @@ Backing `DataLayout` for 2D spectral element slab + extruded 1D FV column data.
 Column levels (V) are contiguous for every element nodal point (I, J)
 for each `S` datatype struct field (F), for each 2D mesh element slab (H).
 """
-struct VIJFH{S, Nv, Nij, Nh, A} <: Data2DX{S, Nv, Nij}
-    array::A
+struct VIJFH{S, Nv, Nij, Nh, FA <: FieldArray} <: Data2DX{S, Nv, Nij}
+    array::FA
 end
+
+VIJFH{S, Nv, Nij, Nh}(fa::FieldArray) where {S, Nv, Nij, Nh} =
+    VIJFH{S, Nv, Nij, Nh, typeof(fa)}(fa)
 
 function VIJFH{S, Nv, Nij, Nh}(
     array::AbstractArray{T, 5},
@@ -847,7 +926,8 @@ function VIJFH{S, Nv, Nij, Nh}(
     @assert size(array, 2) == size(array, 3) == Nij
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nh
-    VIJFH{S, Nv, Nij, Nh, typeof(array)}(array)
+    fa = field_array(array, VIJFHSingleton())
+    VIJFH{S, Nv, Nij, Nh, typeof(fa)}(fa)
 end
 
 nlevels(::VIJFH{S, Nv}) where {S, Nv} = Nv
@@ -859,7 +939,7 @@ Base.length(data::VIJFH) = get_Nv(data) * get_Nh(data)
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function slab(data::VIJFH{S, Nv, Nij, Nh}, v, h) where {S, Nv, Nij, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (v, h)))
     Nf = ncomponents(data)
@@ -881,21 +961,25 @@ end
     j,
     h,
 ) where {S, Nv, Nij, Nh}
-    array = parent(data)
+    fa = field_array(data)
     @boundscheck (1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, j, h)))
     Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, j, Base.Slice(Base.OneTo(Nf)), h),
+    dataview = @inbounds FieldArray{field_dim(VF)}(
+        ntuple(ncomponents(fa)) do jf
+            SubArray(parent(fa.arrays[jf]), (Base.Slice(Base.OneTo(Nv)), i, j, h))
+        end,
     )
-    VF{S, Nv}(dataview)
+    VF{S, Nv, typeof(dataview)}(dataview)
 end
 
 @inline function level(data::VIJFH{S, Nv, Nij, Nh}, v) where {S, Nv, Nij, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
-    dataview = @inbounds view(array, v, :, :, :, :)
+    sub_arrays = @inbounds ntuple(ncomponents(data)) do f
+        view(array.arrays[f], v, :, :, :)
+    end
+    dataview = FieldArray{field_dim(IJFH)}(sub_arrays)
     IJFH{S, Nij, Nh}(dataview)
 end
 
@@ -904,10 +988,10 @@ end
     I::CartesianIndex{5},
 ) where {S}
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -917,10 +1001,10 @@ end
     I::CartesianIndex{5},
 ) where {S}
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
-        to_data_specific(data, I),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -928,7 +1012,7 @@ function gather(
     ctx::ClimaComms.AbstractCommsContext,
     data::VIJFH{S, Nv, Nij},
 ) where {S, Nv, Nij}
-    gatherdata = ClimaComms.gather(ctx, parent(data))
+    gatherdata = ClimaComms.gather(ctx, field_array(data))
     if ClimaComms.iamroot(ctx)
         Nh = size(gatherdata, 5)
         VIJFH{S, Nv, Nij, Nh}(gatherdata)
@@ -949,9 +1033,12 @@ Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 Column levels (V) are contiguous for every element nodal point (I)
 for each datatype `S` struct field (F), for each 1D mesh element slab (H).
 """
-struct VIFH{S, Nv, Ni, Nh, A} <: Data1DX{S, Nv, Ni}
-    array::A
+struct VIFH{S, Nv, Ni, Nh, FA <: FieldArray} <: Data1DX{S, Nv, Ni}
+    array::FA
 end
+
+VIFH{S, Nv, Ni, Nh}(fa::FieldArray) where {S, Nv, Ni, Nh} =
+    VIFH{S, Nv, Ni, Nh, typeof(fa)}(fa)
 
 function VIFH{S, Nv, Ni, Nh}(
     array::AbstractArray{T, 4},
@@ -961,7 +1048,8 @@ function VIFH{S, Nv, Ni, Nh}(
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
     @assert size(array, 4) == Nh
-    VIFH{S, Nv, Ni, Nh, typeof(array)}(array)
+    fa = field_array(array, VIFHSingleton())
+    VIFH{S, Nv, Ni, Nh, typeof(fa)}(fa)
 end
 
 nlevels(::VIFH{S, Nv}) where {S, Nv} = Nv
@@ -973,27 +1061,30 @@ Base.length(data::VIFH) = nlevels(data) * get_Nh(data)
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function slab(data::VIFH{S, Nv, Ni, Nh}, v, h) where {S, Nv, Ni, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (v, h)))
     Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (v, Base.Slice(Base.OneTo(Ni)), Base.Slice(Base.OneTo(Nf)), h),
-    )
+    sub_arrays = @inbounds ntuple(ncomponents(data)) do f
+        SubArray(
+            array.arrays[f],
+            (v, Base.Slice(Base.OneTo(Ni)), h),
+        )
+    end
+    dataview = FieldArray{field_dim(IF)}(sub_arrays)
     IF{S, Ni}(dataview)
 end
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function column(data::VIFH{S, Nv, Ni, Nh}, i, h) where {S, Nv, Ni, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= i <= Ni && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, h)))
     Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
-    )
+    sub_arrays = @inbounds ntuple(Nf) do f
+        SubArray(array.arrays[f], (Base.Slice(Base.OneTo(Nv)), i, h))
+    end
+    dataview = FieldArray{field_dim(VF)}(sub_arrays)
     VF{S, Nv}(dataview)
 end
 
@@ -1003,21 +1094,28 @@ end
     j,
     h,
 ) where {S, Nv, Ni, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= Nh) ||
                  throw(BoundsError(data, (i, j, h)))
     Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
-    )
+    sub_arrays = @inbounds ntuple(Nf) do f
+            SubArray(
+            parent(array.arrays[f]),
+            (Base.Slice(Base.OneTo(Nv)), i, h),
+        )
+    end
+    dataview = FieldArray{field_dim(VF)}(sub_arrays)
     VF{S, Nv}(dataview)
 end
 
 @inline function level(data::VIFH{S, Nv, Nij, Nh}, v) where {S, Nv, Nij, Nh}
-    array = parent(data)
+    array = field_array(data)
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
-    dataview = @inbounds view(array, v, :, :, :)
+    Nf = ncomponents(data)
+    sub_arrays = @inbounds ntuple(Nf) do f
+        view(array.arrays[f], v, :, :)
+    end
+    dataview = FieldArray{field_dim(IFH)}(sub_arrays)
     IFH{S, Nij, Nh}(dataview)
 end
 
@@ -1027,10 +1125,11 @@ end
 ) where {S}
     i, _, _, v, h = I.I
     @inbounds get_struct(
-        parent(data),
+        field_array(data),
         S,
         Val(field_dim(data)),
-        CartesianIndex(v, i, 1, h),
+        # CartesianIndex(v, i, 1, h),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -1041,10 +1140,11 @@ end
 ) where {S}
     i, _, _, v, h = I.I
     @inbounds set_struct!(
-        parent(data),
+        field_array(data),
         convert(S, val),
         Val(field_dim(data)),
-        CartesianIndex(v, i, 1, h),
+        # CartesianIndex(v, i, 1, h),
+        to_data_specific_field_array(data, I),
     )
 end
 
@@ -1083,13 +1183,13 @@ function Base.similar(
 end
 
 @inline function slab(data::IH1JH2{S, Nij}, h::Integer) where {S, Nij}
-    N1, N2 = size(parent(data))
+    N1, N2 = size(field_array(data))
     n1 = div(N1, Nij)
     n2 = div(N2, Nij)
     z2, z1 = fldmod(h - 1, n1)
     @boundscheck (1 <= h <= n1 * n2) || throw(BoundsError(data, (h,)))
     dataview =
-        @inbounds view(parent(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
+        @inbounds view(field_array(data), Nij * z1 .+ (1:Nij), Nij * z2 .+ (1:Nij))
     return dataview
 end
 
@@ -1137,19 +1237,23 @@ end
 end
 
 rebuild(data::AbstractData, ::Type{DA}) where {DA} =
-    rebuild(data, DA(getfield(data, :array)))
+    rebuild(data, rebuild(getfield(data, :array), DA))
+# rebuild(data, Adapt.adapt_structure(DA, getfield(data, :array)))
 
 Base.copy(data::AbstractData) =
-    union_all(data){type_params(data)...}(copy(parent(data)))
+    union_all(data){type_params(data)...}(copy(field_array(data)))
 
 # broadcast machinery
 include("broadcast.jl")
 
 Adapt.adapt_structure(to, data::AbstractData{S}) where {S} =
-    union_all(data){type_params(data)...}(Adapt.adapt(to, parent(data)))
+    union_all(data){type_params(data)...}(Adapt.adapt(to, field_array(data)))
 
 rebuild(data::AbstractData, array::AbstractArray) =
     union_all(data){type_params(data)...}(array)
+
+rebuild(data::AbstractData, fa::FieldArray) =
+    union_all(data){type_params(data)...}(fa)
 
 empty_kernel_stats(::ClimaComms.AbstractDevice) = nothing
 empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
@@ -1189,6 +1293,12 @@ type parameters.
 @inline field_dim(::Type{<:VF}) = 2
 @inline field_dim(::Type{<:VIJFH}) = 4
 @inline field_dim(::Type{<:VIFH}) = 3
+
+@inline to_data_specific_field_array(::IJFH, I::CartesianIndex{5}) = CartesianIndex(I.I[1], I.I[2], I.I[5])
+@inline to_data_specific_field_array(::IFH, I::CartesianIndex{5}) = CartesianIndex(I.I[1], I.I[5])
+@inline to_data_specific_field_array(::VIJFH, I::CartesianIndex{5}) = CartesianIndex(I.I[4], I.I[1], I.I[2], I.I[5])
+@inline to_data_specific_field_array(::VIFH, I::CartesianIndex{5}) = CartesianIndex(I.I[4], I.I[1], I.I[5])
+@inline to_data_specific_field_array(::DataSlab1D, I::CartesianIndex{5}) = CartesianIndex(I.I[1], I.I[1], I.I[5])
 
 @inline to_data_specific(::IJF, I::CartesianIndex) = CartesianIndex(I.I[1], I.I[2], 1, 1)
 @inline to_data_specific(::IJFH, I::CartesianIndex) = CartesianIndex(I.I[1], I.I[2], 1, I.I[5])
@@ -1294,10 +1404,24 @@ type parameters.
 @inline farray_size(data::VIJFH{S, Nv, Nij, Nh}) where {S, Nv, Nij, Nh} = (Nv, Nij, Nij, ncomponents(data), Nh)
 @inline farray_size(data::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, ncomponents(data), Nh)
 
-# Keep in sync with definition(s) in libs.
-@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
-@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
-@inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
+"""
+    float_type(data::AbstractData)
+
+This is an internal function, please do not use outside of ClimaCore.
+
+Returns the underlying float type of the backing array.
+"""
+@inline float_type(::Type{IJKFVH{S, Nij, Nk, Nv, Nh, FA}}) where {S, Nij, Nk, Nv, Nh, FA} = eltype(FA)
+@inline float_type(::Type{IJFH{S, Nij, Nh, FA}}) where {S, Nij, Nh, FA} = eltype(FA)
+@inline float_type(::Type{IFH{S, Ni, Nh, FA}}) where {S, Ni, Nh, FA} = eltype(FA)
+@inline float_type(::Type{DataF{S, FA}}) where {S, FA} = eltype(FA)
+@inline float_type(::Type{IJF{S, Nij, FA}}) where {S, Nij, FA} = eltype(FA)
+@inline float_type(::Type{IF{S, Ni, FA}}) where {S, Ni, FA} = eltype(FA)
+@inline float_type(::Type{VF{S, Nv, FA}}) where {S, Nv, FA} = eltype(FA)
+@inline float_type(::Type{VIJFH{S, Nv, Nij, Nh, FA}}) where {S, Nv, Nij, Nh, FA} = eltype(FA)
+@inline float_type(::Type{VIFH{S, Nv, Ni, Nh, FA}}) where {S, Nv, Ni, Nh, FA} = eltype(FA)
+@inline float_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = eltype(A)
+@inline float_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = eltype(A)
 
 """
     parent_array_type(data::AbstractData)
@@ -1310,26 +1434,78 @@ This function is helpful for writing generic
 code, when reconstructing new datalayouts with new
 type parameters.
 """
-@inline parent_array_type(data::AbstractData) = parent_array_type(typeof(data))
-# Equivalent to:
-# @generated parent_array_type(::Type{A}) where {A <: AbstractData} = Tuple(A.parameters)[end]
-@inline parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
-@inline parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
-@inline parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
-@inline parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
-@inline parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
-@inline parent_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} = A
-@inline parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
-@inline parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
-@inline parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
-@inline parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
-@inline parent_array_type(::Type{IJKFVH{S, Nij, Nk, Nv, Nh, A}}) where {S, Nij, Nk, Nv, Nh, A} = A
+@inline parent_array_type(data::AbstractData) = parent_array_type(field_array_type(typeof(data)))
+
+"""
+    field_array_type(data::AbstractData)
+
+This is an internal function, please do not use outside of ClimaCore.
+
+Returns the the field array type.
+
+This function is helpful for writing generic
+code, when reconstructing new datalayouts with new
+type parameters.
+"""
+@inline field_array_type(data::AbstractData) = field_array_type(typeof(data))
+@inline field_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
+@inline field_array_type(::Type{DataF{S, A}}) where {S, A} = A
+@inline field_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
+@inline field_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+@inline field_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
+@inline field_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} = A
+@inline field_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
+@inline field_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
+@inline field_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+@inline field_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
+@inline field_array_type(::Type{IJKFVH{S, Nij, Nk, Nv, Nh, A}}) where {S, Nij, Nk, Nv, Nh, A} = A
+
+# Keep in sync with definition(s) in libs.
+@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
+@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
+@inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
 
 #! format: on
 
+# Skip DataF here, since we want that to MethodError.
+for DL in (:IJKFVH, :IJFH, :IFH, :IJF, :IF, :VF, :VIJFH, :VIFH)
+    @eval @propagate_inbounds Base.getindex(data::$(DL), I::Integer) =
+        linear_getindex(data, I)
+    @eval @propagate_inbounds Base.setindex!(data::$(DL), val, I::Integer) =
+        linear_setindex!(data, val, I)
+end
+
+# Datalayouts
+@propagate_inbounds function linear_getindex(
+    data::AbstractData{S},
+    I::Integer,
+) where {S}
+    s_array = farray_size(data)
+    ss = StaticSize(s_array, field_dim(data))
+    @inbounds get_struct_linear(field_array(data), S, Val(field_dim(data)), ss, I)
+end
+@propagate_inbounds function linear_setindex!(
+    data::AbstractData{S},
+    val,
+    I::Integer,
+) where {S}
+    s_array = farray_size(data)
+    ss = StaticSize(s_array, field_dim(data))
+    @inbounds set_struct_linear!(
+        field_array(data),
+        convert(S, val),
+        Val(field_dim(data)),
+        ss,
+        I,
+    )
+end
+
+
 Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
 Base.ndims(::Type{T}) where {T <: AbstractData} =
-    Base.ndims(parent_array_type(T))
+    Base.ndims(field_array_type(T))
+
+field_array(data::AbstractData{S}) where {S} = parent(data)
 
 """
     data2array(::AbstractData)
@@ -1344,10 +1520,10 @@ Also, this assumes that `eltype(data) <: Real`.
 """
 function data2array end
 
-data2array(data::Union{IF, IFH}) = reshape(parent(data), :)
-data2array(data::Union{IJF, IJFH}) = reshape(parent(data), :)
+data2array(data::Union{IF, IFH}) = reshape(field_arrays(data)[1], :)
+data2array(data::Union{IJF, IJFH}) = reshape(field_arrays(data)[1], :)
 data2array(data::Union{VF{S, Nv}, VIFH{S, Nv}, VIJFH{S, Nv}}) where {S, Nv} =
-    reshape(parent(data), Nv, :)
+    reshape(field_arrays(data)[1], Nv, :)
 
 """
     array2data(array, ::AbstractData)
@@ -1372,14 +1548,34 @@ device_dispatch(dest::AbstractData) = _device_dispatch(dest)
 
 _device_dispatch(x::Array) = ToCPU()
 _device_dispatch(x::SubArray) = _device_dispatch(parent(x))
+_device_dispatch(x::FieldArray) = _device_dispatch(x.arrays[1])
 _device_dispatch(x::Base.ReshapedArray) = _device_dispatch(parent(x))
-_device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
+_device_dispatch(x::AbstractData) = _device_dispatch(field_array(x))
 _device_dispatch(x::SArray) = ToCPU()
 _device_dispatch(x::MArray) = ToCPU()
+
+for DL in (
+    :IJKFVH,
+    :IJFH,
+    :IFH,
+    :DataF,
+    :IJF,
+    :IF,
+    :VF,
+    :VIJFH,
+    :VIFH,
+    :IH1JH2,
+    :IV1JH2,
+)
+    @eval singleton(::$DL) = $(Symbol(DL, :Singleton))()
+    @eval singleton(::Type{<:$DL}) = $(Symbol(DL, :Singleton))()
+end
 
 include("copyto.jl")
 include("fused_copyto.jl")
 include("fill.jl")
 include("mapreduce.jl")
+include("non_extruded_broadcasted.jl")
+include("has_uniform_datalayouts.jl")
 
 end # module

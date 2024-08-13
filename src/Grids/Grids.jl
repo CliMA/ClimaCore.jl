@@ -2,7 +2,7 @@ module Grids
 
 import ClimaComms, Adapt, ForwardDiff, LinearAlgebra
 import LinearAlgebra: det, norm
-import ..DataLayouts: slab_index, vindex
+import ..DataLayouts: slab_index, vindex, field_array
 import ..DataLayouts,
     ..Domains, ..Meshes, ..Topologies, ..Geometry, ..Quadratures
 import ..Utilities: PlusHalf, half, Cache
