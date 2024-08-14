@@ -28,6 +28,7 @@ jobs:
           - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
           - 'ClimaTimeSteppers.jl'
+          - 'KinematicDriver.jl'
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
