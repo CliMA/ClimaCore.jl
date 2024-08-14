@@ -97,7 +97,7 @@ function knl_copyto_flat!(dest::AbstractData, bc, us)
 end
 
 function cuda_copyto!(dest::AbstractData, bc)
-    (_, _, Nv, Nh) = DataLayouts.universal_size(dest)
+    (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
         auto_launch!(knl_copyto_flat!, (dest, bc, us), dest; auto = true)

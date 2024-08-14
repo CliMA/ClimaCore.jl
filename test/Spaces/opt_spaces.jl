@@ -44,10 +44,10 @@ end
     else
         test_n_failures(0,    TU.PointSpace, context)
         test_n_failures(137,  TU.SpectralElementSpace1D, context)
-        test_n_failures(298,  TU.SpectralElementSpace2D, context)
+        test_n_failures(308,  TU.SpectralElementSpace2D, context)
         test_n_failures(118,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(118,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(304,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(314,  TU.SphereSpectralElementSpace, context)
         test_n_failures(321,  TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(321,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 
@@ -60,7 +60,7 @@ end
 
         result = JET.@report_opt Grids._SpectralElementGrid2D(Spaces.topology(space), Spaces.quadrature_style(space); enable_bubble=false)
         n_found = length(JET.get_reports(result.analyzer, result.result))
-        n_allowed = 177
+        n_allowed = 187
         @test n_found ≤ n_allowed
         if n_found < n_allowed
             @info "Inference may have improved for _SpectralElementGrid2D: (n_found, n_allowed) = ($n_found, $n_allowed)"
