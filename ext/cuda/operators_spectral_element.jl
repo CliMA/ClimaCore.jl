@@ -51,8 +51,7 @@ function Base.copyto!(
     )
     auto_launch!(
         copyto_spectral_kernel!,
-        args,
-        out;
+        args;
         threads_s = (Nq, Nq, Nvthreads),
         blocks_s = (Nh, Nvblocks),
     )

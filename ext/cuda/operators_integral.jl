@@ -29,7 +29,7 @@ function column_reduce_device!(
         init,
         space,
     )
-    auto_launch!(bycolumn_kernel!, args, (); threads_s, blocks_s)
+    auto_launch!(bycolumn_kernel!, args; threads_s, blocks_s)
 end
 
 function column_accumulate_device!(
@@ -52,7 +52,7 @@ function column_accumulate_device!(
         init,
         space,
     )
-    auto_launch!(bycolumn_kernel!, args, (); threads_s, blocks_s)
+    auto_launch!(bycolumn_kernel!, args; threads_s, blocks_s)
 end
 
 bycolumn_kernel!(

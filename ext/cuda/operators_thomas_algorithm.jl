@@ -10,8 +10,7 @@ function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     args = (A, b)
     auto_launch!(
         thomas_algorithm_kernel!,
-        args,
-        size(Fields.field_values(A));
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
     )

@@ -22,8 +22,7 @@ function interpolate_slab!(
     args = (output_cuarray, field, cuslab_indices, cuweights)
     auto_launch!(
         interpolate_slab_kernel!,
-        args,
-        output_cuarray;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
@@ -107,8 +106,7 @@ function interpolate_slab_level!(
     args = (output_cuarray, field, cuvidx_ref_coordinates, h, Is)
     auto_launch!(
         interpolate_slab_level_kernel!,
-        args,
-        out;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )

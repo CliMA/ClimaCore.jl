@@ -35,19 +35,19 @@ end
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
         test_n_failures(86,   TU.PointSpace, context)
         test_n_failures(144,  TU.SpectralElementSpace1D, context)
-        test_n_failures(1120, TU.SpectralElementSpace2D, context)
+        test_n_failures(1141, TU.SpectralElementSpace2D, context)
         test_n_failures(123,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(123,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(1126, TU.SphereSpectralElementSpace, context)
+        test_n_failures(1131, TU.SphereSpectralElementSpace, context)
         test_n_failures(1139, TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(1139, TU.FaceExtrudedFiniteDifferenceSpace, context)
     else
         test_n_failures(0,    TU.PointSpace, context)
         test_n_failures(137,  TU.SpectralElementSpace1D, context)
-        test_n_failures(308,  TU.SpectralElementSpace2D, context)
+        test_n_failures(310,  TU.SpectralElementSpace2D, context)
         test_n_failures(118,  TU.ColumnCenterFiniteDifferenceSpace, context)
         test_n_failures(118,  TU.ColumnFaceFiniteDifferenceSpace, context)
-        test_n_failures(314,  TU.SphereSpectralElementSpace, context)
+        test_n_failures(316,  TU.SphereSpectralElementSpace, context)
         test_n_failures(321,  TU.CenterExtrudedFiniteDifferenceSpace, context)
         test_n_failures(321,  TU.FaceExtrudedFiniteDifferenceSpace, context)
 

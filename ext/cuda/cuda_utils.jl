@@ -3,11 +3,6 @@ import ClimaCore.Fields
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: empty_kernel_stats
 
-get_n_items(field::Fields.Field) = get_n_items(Fields.field_values(field))
-get_n_items(data::DataLayouts.AbstractData) = get_n_items(size(data))
-get_n_items(arr::AbstractArray) = get_n_items(size(parent(arr)))
-get_n_items(tup::Tuple) = prod(tup)
-
 const reported_stats = Dict()
 # Call via ClimaCore.DataLayouts.empty_kernel_stats()
 empty_kernel_stats(::ClimaComms.CUDADevice) = empty!(reported_stats)
@@ -37,7 +32,7 @@ to benchmark compare against auto-determined threads/blocks (if `auto=false`).
 function auto_launch!(
     f!::F!,
     args,
-    data;
+    nitems::Union{Integer, Nothing} = nothing;
     auto = false,
     threads_s = nothing,
     blocks_s = nothing,
@@ -45,7 +40,7 @@ function auto_launch!(
     caller = :unknown,
 ) where {F!}
     if auto
-        nitems = get_n_items(data)
+        @assert !isnothing(nitems)
         if nitems ≥ 0
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
@@ -64,7 +59,7 @@ function auto_launch!(
         # CUDA.registers(kernel) > 50 || return nothing # for debugging
         # occursin("single_field_solve_kernel", string(nameof(F!))) || return nothing
         if !haskey(reported_stats, key)
-            nitems = get_n_items(data)
+            @assert !isnothing(nitems)
             kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
             config = CUDA.launch_configuration(kernel.fun)
             threads = min(nitems, config.threads)

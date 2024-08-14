@@ -21,8 +21,7 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     args = (device, cache, x, A, b)
     auto_launch!(
         single_field_solve_kernel!,
-        args,
-        x;
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
     )

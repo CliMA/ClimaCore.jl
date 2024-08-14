@@ -38,8 +38,7 @@ NVTX.@annotate function multiple_field_solve!(
 
     auto_launch!(
         multiple_field_solve_kernel!,
-        args,
-        x1;
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
         always_inline = true,

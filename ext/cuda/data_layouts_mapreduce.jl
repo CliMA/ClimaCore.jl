@@ -28,7 +28,7 @@ function mapreduce_cuda(
     pdata = parent(data)
     T = eltype(pdata)
     (Ni, Nj, Nk, Nv, Nh) = size(data)
-    Nf = div(length(pdata), prod(size(data))) # length of field dimension
+    Nf = DataLayouts.ncomponents(data) # length of field dimension
     pwt = parent(weighted_jacobian)
 
     nitems = Nv * Ni * Nj * Nk * Nh

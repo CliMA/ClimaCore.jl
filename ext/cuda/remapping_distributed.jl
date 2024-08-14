@@ -29,8 +29,7 @@ function _set_interpolated_values_device!(
     )
     auto_launch!(
         set_interpolated_values_kernel!,
-        args,
-        out;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
@@ -163,8 +162,7 @@ function _set_interpolated_values_device!(
     )
     auto_launch!(
         set_interpolated_values_kernel!,
-        args,
-        out;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
