@@ -1276,6 +1276,7 @@ type parameters.
 @inline union_all(::Type{<:IH1JH2}) = IH1JH2
 @inline union_all(::Type{<:IV1JH2}) = IV1JH2
 
+# Keep in sync with definition(s) in libs.
 @inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
 @inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
 @inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
