@@ -1,6 +1,9 @@
 import CommonDataModel
 import ClimaCore: slab, column
-import ClimaCore.DataLayouts: slab_index
+# Keep in sync with definition(s) in ClimaCore.DataLayouts.
+@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
+@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
+
 
 """
     def_time_coord(nc::NCDataset, length=Inf, eltype=Float64;

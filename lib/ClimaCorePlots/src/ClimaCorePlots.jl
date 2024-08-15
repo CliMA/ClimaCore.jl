@@ -4,7 +4,9 @@ import RecipesBase
 import TriplotBase
 
 import ClimaComms
-import ClimaCore.DataLayouts: slab_index
+# Keep in sync with definition(s) in ClimaCore.DataLayouts.
+@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
+@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
 import ClimaCore:
     ClimaCore,
     DataLayouts,
