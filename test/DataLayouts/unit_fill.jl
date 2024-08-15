@@ -73,7 +73,10 @@ end
         data,
         SubArray(
             parent(data),
-            ntuple(i -> Base.OneTo(size(parent(data), i)), ndims(data)),
+            ntuple(
+                i -> Base.OneTo(DataLayouts.farray_size(data, i)),
+                ndims(data),
+            ),
         ),
     )
     FT = Float64
@@ -119,7 +122,10 @@ end
             data,
             SubArray(
                 parent(rdata),
-                ntuple(i -> Base.OneTo(size(parent(rdata), i)), ndims(rdata)),
+                ntuple(
+                    i -> Base.OneTo(DataLayouts.farray_size(rdata, i)),
+                    ndims(rdata),
+                ),
             ),
         )
         rarray = parent(parent(newdata))

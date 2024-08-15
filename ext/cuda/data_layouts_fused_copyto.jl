@@ -50,8 +50,7 @@ function fused_copyto!(
         Nv_blocks = cld(Nv, Nv_per_block)
         auto_launch!(
             knl_fused_copyto!,
-            (fmbc,),
-            dest1;
+            (fmbc,);
             threads_s = (Nij, Nij, Nv_per_block),
             blocks_s = (Nh, Nv_blocks),
         )
@@ -68,8 +67,7 @@ function fused_copyto!(
     if Nh > 0
         auto_launch!(
             knl_fused_copyto!,
-            (fmbc,),
-            dest1;
+            (fmbc,);
             threads_s = (Nij, Nij),
             blocks_s = (Nh, 1),
         )
@@ -85,8 +83,7 @@ function fused_copyto!(
     if Nv > 0 && Nh > 0
         auto_launch!(
             knl_fused_copyto!,
-            (fmbc,),
-            dest1;
+            (fmbc,);
             threads_s = (1, 1),
             blocks_s = (Nh, Nv),
         )
@@ -101,8 +98,7 @@ function fused_copyto!(
 ) where {S}
     auto_launch!(
         knl_fused_copyto!,
-        (fmbc,),
-        dest1;
+        (fmbc,);
         threads_s = (1, 1),
         blocks_s = (1, 1),
     )

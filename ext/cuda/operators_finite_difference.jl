@@ -36,8 +36,7 @@ function Base.copyto!(
         (strip_space(out, space), strip_space(bc, space), axes(out), bounds, us)
     auto_launch!(
         copyto_stencil_kernel!,
-        args,
-        out;
+        args;
         threads_s = (nthreads,),
         blocks_s = (nblocks,),
     )

@@ -72,14 +72,14 @@ end
 @inline array_length(data::AbstractData) = prod(size(parent(data)))
 
 """
-    (Ni, Nj, Nv, _, Nh) = universal_size(data::AbstractData)
+    (Ni, Nj, _, Nv, Nh) = universal_size(data::AbstractData)
 
 A tuple of compile-time known type parameters,
 corresponding to `UniversalSize`. The field dimension
 is excluded and is returned as 1.
 """
 @inline universal_size(::UniversalSize{Ni, Nj, Nv, Nh}) where {Ni, Nj, Nv, Nh} =
-    (Ni, Nj, Nv, 1, Nh)
+    (Ni, Nj, 1, Nv, Nh)
 
 """
     get_N(::AbstractData)
@@ -115,8 +115,6 @@ Statically returns `Nh`.
 @inline get_Nij(data::AbstractData) = get_Nij(UniversalSize(data))
 @inline get_Nv(data::AbstractData) = get_Nv(UniversalSize(data))
 @inline get_N(data::AbstractData) = get_N(UniversalSize(data))
-
-@inline universal_size(data::AbstractData) = universal_size(UniversalSize(data))
 
 function Base.show(io::IO, data::AbstractData)
     indent_width = 2
@@ -1275,6 +1273,51 @@ type parameters.
 @inline union_all(::Type{<:VIFH}) = VIFH
 @inline union_all(::Type{<:IH1JH2}) = IH1JH2
 @inline union_all(::Type{<:IV1JH2}) = IV1JH2
+
+"""
+    array_size(data::AbstractData, [dim])
+    array_size(::Type{<:AbstractData}, [dim])
+
+This is an internal function, please do not use outside of ClimaCore.
+
+Returns the size of the backing array, with the field dimension set to 1
+
+This function is helpful for writing generic
+code, when reconstructing new datalayouts with new
+type parameters.
+"""
+@inline array_size(data::AbstractData, i::Integer) = array_size(data)[i]
+@inline array_size(::IJKFVH{S, Nij, Nk, Nv, Nh}) where {S, Nij, Nk, Nv, Nh} = (Nij, Nij, Nk, 1, Nv, Nh)
+@inline array_size(::IJFH{S, Nij, Nh}) where {S, Nij, Nh} = (Nij, Nij, 1, Nh)
+@inline array_size(::IFH{S, Ni, Nh}) where {S, Ni, Nh} = (Ni, 1, Nh)
+@inline array_size(::DataF{S}) where {S} = (1,)
+@inline array_size(::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1)
+@inline array_size(::IF{S, Ni}) where {S, Ni} = (Ni, 1)
+@inline array_size(::VF{S, Nv}) where {S, Nv} = (Nv, 1)
+@inline array_size(::VIJFH{S, Nv, Nij, Nh}) where {S, Nv, Nij, Nh} = (Nv, Nij, Nij, 1, Nh)
+@inline array_size(::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, 1, Nh)
+
+"""
+    farray_size(data::AbstractData)
+
+This is an internal function, please do not use outside of ClimaCore.
+
+Returns the size of the backing array, including the field dimension
+
+This function is helpful for writing generic
+code, when reconstructing new datalayouts with new
+type parameters.
+"""
+@inline farray_size(data::AbstractData, i::Integer) = farray_size(data)[i]
+@inline farray_size(data::IJKFVH{S, Nij, Nk, Nv, Nh}) where {S, Nij, Nk, Nv, Nh} = (Nij, Nij, Nk, ncomponents(data), Nv, Nh)
+@inline farray_size(data::IJFH{S, Nij, Nh}) where {S, Nij, Nh} = (Nij, Nij, ncomponents(data), Nh)
+@inline farray_size(data::IFH{S, Ni, Nh}) where {S, Ni, Nh} = (Ni, ncomponents(data), Nh)
+@inline farray_size(data::DataF{S}) where {S} = (ncomponents(data),)
+@inline farray_size(data::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, ncomponents(data))
+@inline farray_size(data::IF{S, Ni}) where {S, Ni} = (Ni, ncomponents(data))
+@inline farray_size(data::VF{S, Nv}) where {S, Nv} = (Nv, ncomponents(data))
+@inline farray_size(data::VIJFH{S, Nv, Nij, Nh}) where {S, Nv, Nij, Nh} = (Nv, Nij, Nij, ncomponents(data), Nh)
+@inline farray_size(data::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, ncomponents(data), Nh)
 
 # Keep in sync with definition(s) in libs.
 @inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)

@@ -20,16 +20,13 @@ function Topologies.dss_load_perimeter_data!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     perimeter::Topologies.Perimeter2D,
 )
-    pperimeter_data = parent(dss_buffer.perimeter_data)
-    pdata = parent(data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nitems = nlevels * nperimeter * nfid * nelems
+    (; perimeter_data) = dss_buffer
+    nitems = prod(DataLayouts.farray_size(perimeter_data))
     nthreads, nblocks = _configure_threadblock(nitems)
-    args = (pperimeter_data, pdata, perimeter)
+    args = (perimeter_data, data, perimeter)
     auto_launch!(
         dss_load_perimeter_data_kernel!,
-        args,
-        pperimeter_data;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
@@ -37,13 +34,16 @@ function Topologies.dss_load_perimeter_data!(
 end
 
 function dss_load_perimeter_data_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
-    pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
+    perimeter_data::DataLayouts.AbstractData,
+    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     perimeter::Topologies.Perimeter2D{Nq},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, _, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
+) where {Nq}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, _, nfidx, nelems) =
+        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
+    pperimeter_data = parent(perimeter_data)
+    pdata = parent(data)
 
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
@@ -60,16 +60,13 @@ function Topologies.dss_unload_perimeter_data!(
     dss_buffer::Topologies.DSSBuffer,
     perimeter,
 )
-    pperimeter_data = parent(dss_buffer.perimeter_data)
-    pdata = parent(data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nitems = nlevels * nperimeter * nfid * nelems
+    (; perimeter_data) = dss_buffer
+    nitems = prod(DataLayouts.farray_size(perimeter_data))
     nthreads, nblocks = _configure_threadblock(nitems)
-    args = (pdata, pperimeter_data, perimeter)
+    args = (data, perimeter_data, perimeter)
     auto_launch!(
         dss_unload_perimeter_data_kernel!,
-        args,
-        pdata;
+        args;
         threads_s = (nthreads),
         blocks_s = (nblocks),
     )
@@ -77,13 +74,16 @@ function Topologies.dss_unload_perimeter_data!(
 end
 
 function dss_unload_perimeter_data_kernel!(
-    pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
-    pperimeter_data::AbstractArray{FT, 4},
+    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    perimeter_data::AbstractData,
     perimeter::Topologies.Perimeter2D{Nq},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, nperimeter, nfidx, nelems) = sizep = size(pperimeter_data) # size of perimeter data array
+) where {Nq}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, nperimeter, nfidx, nelems) =
+        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
+    pperimeter_data = parent(perimeter_data)
+    pdata = parent(data)
 
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
@@ -103,13 +103,13 @@ function Topologies.dss_local!(
     nlocalvertices = length(topology.local_vertex_offset) - 1
     nlocalfaces = length(topology.interior_faces)
     if (nlocalvertices + nlocalfaces) > 0
-        pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
+        (nlevels, nperimeter, nfid, nelems) =
+            DataLayouts.farray_size(perimeter_data)
 
         nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
-            pperimeter_data,
+            perimeter_data,
             topology.local_vertices,
             topology.local_vertex_offset,
             topology.interior_faces,
@@ -117,8 +117,7 @@ function Topologies.dss_local!(
         )
         auto_launch!(
             dss_local_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -127,16 +126,19 @@ function Topologies.dss_local!(
 end
 
 function dss_local_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::DataLayouts.VIFH,
     local_vertices::AbstractVector{Tuple{Int, Int}},
     local_vertex_offset::AbstractVector{Int},
     interior_faces::AbstractVector{Tuple{Int, Int, Int, Int, Bool}},
     perimeter::Topologies.Perimeter2D{Nq},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+) where {Nq}
+    FT = eltype(parent(perimeter_data))
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     nlocalvertices = length(local_vertex_offset) - 1
     nlocalfaces = length(interior_faces)
-    (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
+    pperimeter_data = parent(perimeter_data)
+    FT = eltype(pperimeter_data)
+    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
     if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
         sizev = (nlevels, nfidx, nlocalvertices)
         (level, fidx, vertexid) = cart_ind(sizev, gidx).I
@@ -200,15 +202,15 @@ function Topologies.dss_transform!(
         p∂ξ∂x = parent(∂ξ∂x)
         pperimeter_data = parent(perimeter_data)
         nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
-        (nlevels, nperimeter, _, _) = size(pperimeter_data)
+        (nlevels, nperimeter, _, _) = DataLayouts.array_size(perimeter_data)
         nitems = nlevels * nperimeter * nlocalelems
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
-            pperimeter_data,
+            perimeter_data,
             pdata,
             p∂ξ∂x,
             p∂x∂ξ,
-            nmetric,
+            Val(nmetric),
             pweight,
             perimeter,
             scalarfidx,
@@ -217,11 +219,11 @@ function Topologies.dss_transform!(
             covariant123fidx,
             contravariant123fidx,
             localelems,
+            Val(nlocalelems),
         )
         auto_launch!(
             dss_transform_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -230,11 +232,11 @@ function Topologies.dss_transform!(
 end
 
 function dss_transform_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::DataLayouts.VIFH,
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂ξ∂x::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂x∂ξ::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
-    nmetric::Int,
+    ::Val{nmetric},
     pweight::AbstractArray{FT, 4},
     perimeter::Topologies.Perimeter2D{Nq},
     scalarfidx::AbstractVector{Int},
@@ -243,10 +245,12 @@ function dss_transform_kernel!(
     covariant123fidx::AbstractVector{Int},
     contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nlocalelems = length(localelems)
+    ::Val{nlocalelems},
+) where {FT <: AbstractFloat, Nq, nmetric, nlocalelems}
+    pperimeter_data = parent(perimeter_data)
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, nperimeter, nfid, nelems) =
+        DataLayouts.farray_size(perimeter_data)
     if gidx ≤ nlevels * nperimeter * nlocalelems
         sizet = (nlevels, nperimeter, nlocalelems)
         sizet_data = (nlevels, Nq, Nq, nfid, nelems)
@@ -393,12 +397,11 @@ function Topologies.dss_untransform!(
         p∂x∂ξ = parent(∂x∂ξ)
         p∂ξ∂x = parent(∂ξ∂x)
         nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
-        pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, _, _) = size(pperimeter_data)
+        (nlevels, nperimeter, _, _) = DataLayouts.array_size(perimeter_data)
         nitems = nlevels * nperimeter * nlocalelems
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
-            pperimeter_data,
+            perimeter_data,
             pdata,
             p∂ξ∂x,
             p∂x∂ξ,
@@ -410,11 +413,11 @@ function Topologies.dss_untransform!(
             covariant123fidx,
             contravariant123fidx,
             localelems,
+            Val(nlocalelems),
         )
         auto_launch!(
             dss_untransform_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -423,7 +426,7 @@ function Topologies.dss_untransform!(
 end
 
 function dss_untransform_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::DataLayouts.VIFH,
     pdata::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂ξ∂x::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
     p∂x∂ξ::Union{AbstractArray{FT, 4}, AbstractArray{FT, 5}},
@@ -435,10 +438,12 @@ function dss_untransform_kernel!(
     covariant123fidx::AbstractVector{Int},
     contravariant123fidx::AbstractVector{Int},
     localelems::AbstractVector{Int},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
-    nlocalelems = length(localelems)
+    ::Val{nlocalelems},
+) where {FT <: AbstractFloat, Nq, nlocalelems}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, nperimeter, nfid, nelems) =
+        DataLayouts.farray_size(perimeter_data)
+    pperimeter_data = parent(perimeter_data)
     if gidx ≤ nlevels * nperimeter * nlocalelems
         sizet = (nlevels, nperimeter, nlocalelems)
         sizet_data = (nlevels, Nq, Nq, nfid, nelems)
@@ -533,21 +538,20 @@ function Topologies.dss_local_ghost!(
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
-        pperimeter_data = parent(perimeter_data)
-        (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
+        (nlevels, nperimeter, nfid, nelems) =
+            DataLayouts.farray_size(perimeter_data)
         max_threads = 256
         nitems = nlevels * nfid * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
-            pperimeter_data,
+            perimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
             perimeter,
         )
         auto_launch!(
             dss_local_ghost_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -556,13 +560,15 @@ function Topologies.dss_local_ghost!(
 end
 
 function dss_local_ghost_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::DataLayouts.VIFH,
     ghost_vertices,
     ghost_vertex_offset,
     perimeter::Topologies.Perimeter2D{Nq},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, nperimeter, nfidx, _) = size(pperimeter_data)
+) where {Nq}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    pperimeter_data = parent(perimeter_data)
+    FT = eltype(pperimeter_data)
+    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
     if gidx ≤ nlevels * nfidx * nghostvertices
         sizev = (nlevels, nfidx, nghostvertices)
@@ -594,17 +600,16 @@ function Topologies.fill_send_buffer!(
     synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
-    pperimeter_data = parent(perimeter_data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
+    (nlevels, nperimeter, nfid, nelems) =
+        DataLayouts.farray_size(perimeter_data)
     nsend = size(send_buf_idx, 1)
     if nsend > 0
         nitems = nsend * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        args = (send_data, send_buf_idx, pperimeter_data)
+        args = (send_data, send_buf_idx, perimeter_data, Val(nsend))
         auto_launch!(
             fill_send_buffer_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -618,11 +623,12 @@ end
 function fill_send_buffer_kernel!(
     send_data::AbstractArray{FT, 1},
     send_buf_idx::AbstractArray{I, 2},
-    pperimeter_data::AbstractArray{FT, 4},
-) where {FT <: AbstractFloat, I <: Int}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    (nlevels, _, nfid, nelems) = size(pperimeter_data)
-    nsend = size(send_buf_idx, 1)
+    perimeter_data::AbstractData,
+    ::Val{nsend},
+) where {FT <: AbstractFloat, I <: Int, nsend}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
+    pperimeter_data = parent(perimeter_data)
     #sizet = (nsend, nlevels, nfid)
     sizet = (nlevels, nfid, nsend)
     #if gidx ≤ nsend * nlevels * nfid
@@ -642,17 +648,16 @@ function Topologies.load_from_recv_buffer!(
     dss_buffer::Topologies.DSSBuffer,
 )
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
-    pperimeter_data = parent(perimeter_data)
-    (nlevels, nperimeter, nfid, nelems) = size(pperimeter_data)
+    (nlevels, nperimeter, nfid, nelems) =
+        DataLayouts.farray_size(perimeter_data)
     nrecv = size(recv_buf_idx, 1)
     if nrecv > 0
         nitems = nrecv * nlevels * nfid
         nthreads, nblocks = _configure_threadblock(nitems)
-        args = (pperimeter_data, recv_data, recv_buf_idx)
+        args = (perimeter_data, recv_data, recv_buf_idx, Val(nrecv))
         auto_launch!(
             load_from_recv_buffer_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -661,13 +666,14 @@ function Topologies.load_from_recv_buffer!(
 end
 
 function load_from_recv_buffer_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::AbstractData,
     recv_data::AbstractArray{FT, 1},
     recv_buf_idx::AbstractArray{I, 2},
-) where {FT <: AbstractFloat, I <: Int}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    nlevels, _, nfid, nelems = size(pperimeter_data)
-    nrecv = size(recv_buf_idx, 1)
+    ::Val{nrecv},
+) where {FT <: AbstractFloat, I <: Int, nrecv}
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    pperimeter_data = parent(perimeter_data)
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
     #sizet = (nrecv, nlevels, nfid)
     sizet = (nlevels, nfid, nrecv)
     #if gidx ≤ nrecv * nlevels * nfid
@@ -691,12 +697,11 @@ function Topologies.dss_ghost!(
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
-        pperimeter_data = parent(perimeter_data)
-        nlevels, _, nfidx, _ = size(pperimeter_data)
+        (nlevels, _, nfidx, _) = DataLayouts.farray_size(perimeter_data)
         nitems = nlevels * nfidx * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
-            pperimeter_data,
+            perimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
             topology.repr_ghost_vertex,
@@ -704,8 +709,7 @@ function Topologies.dss_ghost!(
         )
         auto_launch!(
             dss_ghost_kernel!,
-            args,
-            pperimeter_data;
+            args;
             threads_s = (nthreads),
             blocks_s = (nblocks),
         )
@@ -714,14 +718,16 @@ function Topologies.dss_ghost!(
 end
 
 function dss_ghost_kernel!(
-    pperimeter_data::AbstractArray{FT, 4},
+    perimeter_data::AbstractData,
     ghost_vertices,
     ghost_vertex_offset,
     repr_ghost_vertex,
     perimeter::Topologies.Perimeter2D{Nq},
-) where {FT <: AbstractFloat, Nq}
-    gidx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    nlevels, _, nfidx, _ = size(pperimeter_data)
+) where {Nq}
+    pperimeter_data = parent(perimeter_data)
+    FT = eltype(pperimeter_data)
+    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    (nlevels, _, nfidx, _) = DataLayouts.farray_size(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
 
     if gidx ≤ nlevels * nfidx * nghostvertices

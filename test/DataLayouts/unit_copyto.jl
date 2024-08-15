@@ -17,7 +17,7 @@ function test_copyto_float!(data)
     rand_data = DataLayouts.rebuild(data, similar(parent(data)))
     ArrayType = ClimaComms.array_type(ClimaComms.device())
     parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), size(parent(data))))
+        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
     Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
     @test all(parent(data) .== parent(rand_data))
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 1)) # test copyto!(::AbstractData, ::Broadcasted)
@@ -30,7 +30,7 @@ function test_copyto!(data)
     rand_data = DataLayouts.rebuild(data, similar(parent(data)))
     ArrayType = ClimaComms.array_type(ClimaComms.device())
     parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), size(parent(data))))
+        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
     Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
     @test all(parent(data.:1) .== parent(rand_data.:1))
     @test all(parent(data.:2) .== parent(rand_data.:2))
@@ -98,7 +98,7 @@ end
         SubArray(
             parent(data),
             ntuple(
-                i -> Base.Slice(Base.OneTo(size(parent(data), i))),
+                i -> Base.Slice(Base.OneTo(DataLayouts.farray_size(data, i))),
                 ndims(data),
             ),
         ),

@@ -24,7 +24,8 @@ function test_mapreduce_1!(context, data)
     Random.seed!(1234)
     device = ClimaComms.device(context)
     ArrayType = ClimaComms.array_type(device)
-    rand_data = ArrayType(rand(eltype(parent(data)), size(parent(data))))
+    rand_data =
+        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
     parent(data) .= rand_data
     if device isa ClimaComms.CUDADevice
         @test wrapper(context, identity, min, data) == minimum(parent(data))
@@ -40,7 +41,8 @@ function test_mapreduce_2!(context, data)
     Random.seed!(1234)
     device = ClimaComms.device(context)
     ArrayType = ClimaComms.array_type(device)
-    rand_data = ArrayType(rand(eltype(parent(data)), size(parent(data))))
+    rand_data =
+        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
     parent(data) .= rand_data
     # mapreduce orders tuples lexicographically:
     #    minimum(((2,3), (1,4))) # (1, 4)
@@ -116,7 +118,10 @@ end
         data,
         SubArray(
             parent(data),
-            ntuple(i -> Base.OneTo(size(parent(data), i)), ndims(data)),
+            ntuple(
+                i -> Base.OneTo(DataLayouts.farray_size(data, i)),
+                ndims(data),
+            ),
         ),
     )
     FT = Float64

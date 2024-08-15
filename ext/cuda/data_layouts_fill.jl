@@ -14,7 +14,8 @@ function cuda_fill!(dest::AbstractData, val)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
-        auto_launch!(knl_fill_flat!, (dest, val, us), dest; auto = true)
+        nitems = prod(DataLayouts.universal_size(dest))
+        auto_launch!(knl_fill_flat!, (dest, val, us), nitems; auto = true)
     end
     return dest
 end

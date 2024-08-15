@@ -23,8 +23,7 @@ function Base.copyto!(
     if Nh > 0
         auto_launch!(
             knl_copyto!,
-            (dest, bc),
-            dest;
+            (dest, bc);
             threads_s = (Nij, Nij),
             blocks_s = (Nh, 1),
         )
@@ -42,8 +41,7 @@ function Base.copyto!(
         Nv_blocks = cld(Nv, Nv_per_block)
         auto_launch!(
             knl_copyto!,
-            (dest, bc),
-            dest;
+            (dest, bc);
             threads_s = (Nij, Nij, Nv_per_block),
             blocks_s = (Nh, Nv_blocks),
         )
@@ -59,8 +57,7 @@ function Base.copyto!(
     if Nv > 0
         auto_launch!(
             knl_copyto!,
-            (dest, bc),
-            dest;
+            (dest, bc);
             threads_s = (1, 1),
             blocks_s = (1, Nv),
         )
@@ -73,13 +70,7 @@ function Base.copyto!(
     bc::DataLayouts.BroadcastedUnionDataF{S},
     ::ToCUDA,
 ) where {S}
-    auto_launch!(
-        knl_copyto!,
-        (dest, bc),
-        dest;
-        threads_s = (1, 1),
-        blocks_s = (1, 1),
-    )
+    auto_launch!(knl_copyto!, (dest, bc); threads_s = (1, 1), blocks_s = (1, 1))
     return dest
 end
 
@@ -100,7 +91,8 @@ function cuda_copyto!(dest::AbstractData, bc)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
-        auto_launch!(knl_copyto_flat!, (dest, bc, us), dest; auto = true)
+        nitems = prod(DataLayouts.universal_size(dest))
+        auto_launch!(knl_copyto_flat!, (dest, bc, us), nitems; auto = true)
     end
     return dest
 end

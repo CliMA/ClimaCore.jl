@@ -66,9 +66,7 @@ function create_dss_buffer(
     convert_to_array = DA isa Array ? false : true
     (_, _, _, Nv, Nh) = Base.size(data)
     Np = length(perimeter)
-    Nf =
-        length(parent(data)) == 0 ? 0 :
-        cld(length(parent(data)), (Nij * Nij * Nv * Nh))
+    Nf = DataLayouts.ncomponents(data)
     nfacedof = Nij - 2
     T = eltype(parent(data))
     TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
@@ -941,7 +939,7 @@ function fill_send_buffer!(
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
-    Nf = cld(length(parent(perimeter_data)), (Nv * Np * nelems))
+    Nf = DataLayouts.ncomponents(perimeter_data)
     pdata = parent(perimeter_data)
     nsend = size(send_buf_idx, 1)
     ctr = 1
@@ -970,7 +968,7 @@ function load_from_recv_buffer!(
 )
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
-    Nf = cld(length(parent(perimeter_data)), (Nv * Np * nelems))
+    Nf = DataLayouts.ncomponents(perimeter_data)
     pdata = parent(perimeter_data)
     nrecv = size(recv_buf_idx, 1)
     ctr = 1

@@ -285,7 +285,7 @@ function create_ghost_buffer(
         )
         k = stride(parent(send_data), 4)
     else
-        Nv, _, _, Nf, _ = size(parent(data))
+        Nv, _, _, Nf, _ = DataLayouts.farray_size(data)
         send_data =
             DataLayouts.VIJFH{S, Nv, Nij, Topologies.nsendelems(topology)}(
                 similar(
