@@ -46,16 +46,30 @@ end
     Nh = 30 * 30 * 6
     Nk = 6
     bm = Benchmark(; float_type = FT, device_name)
-#! format: off
-    data = DataF{S}(device_zeros(FT,Nf));                        benchmarkfill!(bm, device, data, 3, "DataF" ); @test all(parent(data) .== 3)
-    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     benchmarkfill!(bm, device, data, 3, "IJFH"  ); @test all(parent(data) .== 3)
-    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          benchmarkfill!(bm, device, data, 3, "IFH"   ); @test all(parent(data) .== 3)
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkfill!(bm, device, data, 3, "IJF"   ); @test all(parent(data) .== 3)
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkfill!(bm, device, data, 3, "IF"    ); @test all(parent(data) .== 3)
-    data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    benchmarkfill!(bm, device, data, 3, "VF"    ); @test all(parent(data) .== 3)
-    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));benchmarkfill!(bm, device, data, 3, "VIJFH" ); @test all(parent(data) .== 3)
-    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  benchmarkfill!(bm, device, data, 3, "VIFH"  ); @test all(parent(data) .== 3)
-#! format: on
+    data = DataF{S}(device_zeros(FT, Nf))
+    benchmarkfill!(bm, device, data, 3, "DataF")
+    @test all(parent(data) .== 3)
+    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    benchmarkfill!(bm, device, data, 3, "IJFH")
+    @test all(parent(data) .== 3)
+    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    benchmarkfill!(bm, device, data, 3, "IFH")
+    @test all(parent(data) .== 3)
+    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    benchmarkfill!(bm, device, data, 3, "IJF")
+    @test all(parent(data) .== 3)
+    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    benchmarkfill!(bm, device, data, 3, "IF")
+    @test all(parent(data) .== 3)
+    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    benchmarkfill!(bm, device, data, 3, "VF")
+    @test all(parent(data) .== 3)
+    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    benchmarkfill!(bm, device, data, 3, "VIJFH")
+    @test all(parent(data) .== 3)
+    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    benchmarkfill!(bm, device, data, 3, "VIFH")
+    @test all(parent(data) .== 3)
 
     # data = IJKFVH{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
     # data = IH1JH2{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test

@@ -19,7 +19,7 @@ import ClimaCore.DataLayouts: VF, IJFH, VIJFH, slab, column, slab_index, vindex
         # 10 elements in horizontal with 4 × 4 nodal points per element in horizontal
         array = rand(FT, Nv, Nij, Nij, 3, Nh)
 
-        data = VIJFH{S, Nv, Nij, Nh}(array)
+        data = VIJFH{S, Nv, Nij}(array)
 
         @test getfield(data.:1, :array) == @view(array[:, :, :, 1:2, :])
         @test getfield(data.:2, :array) == @view(array[:, :, :, 3:3, :])
@@ -52,7 +52,7 @@ end
 
     S = Tuple{Complex{Float64}, Float64}
     array = zeros(Float64, Nv, Nij, Nij, 3, Nh)
-    data = VIJFH{S, Nv, Nij, Nh}(array)
+    data = VIJFH{S, Nv, Nij}(array)
 
     @test_throws BoundsError slab(data, -1, 1)
     @test_throws BoundsError slab(data, 1, -1)
@@ -77,7 +77,7 @@ end
     SB = (c = 1.0, d = 2.0)
 
     array = zeros(Float64, Nv, Nij, Nij, 2, Nh)
-    data = VIJFH{typeof(SA), Nv, Nij, Nh}(array)
+    data = VIJFH{typeof(SA), Nv, Nij}(array)
 
     cdata = column(data, 1, 2, 1)
     cdata[vindex(1)] = SA
@@ -95,7 +95,7 @@ end
     Nv = size(array, 1)
     Nh = size(array, 5)
     S = Complex{Float64}
-    data1 = VIJFH{S, Nv, 2, Nh}(array)
+    data1 = VIJFH{S, Nv, 2}(array)
     res = data1 .+ 1
     @test res isa VIJFH{S, Nv}
     @test parent(res) == FT[
@@ -112,7 +112,7 @@ end
     Nv = 3
     Nh = 2
     data_vf = VF{S, Nv}(ones(FT, Nv, 2))
-    data_ijfh = IJFH{FT, 2, Nh}(ones(FT, 2, 2, 1, Nh))
+    data_ijfh = IJFH{FT, 2}(ones(FT, 2, 2, 1, Nh))
     data_vijfh = data_vf .+ data_ijfh
     @test data_vijfh isa VIJFH{S, Nv}
     @test size(data_vijfh) == (2, 2, 1, 3, 2)

@@ -46,12 +46,13 @@ ClimaComms.@import_required_backends
     @test_deprecated CenterFiniteDifferenceSpace(z_mesh)
     @test_deprecated FiniteDifferenceGrid(z_mesh)
 
-    S = Float64
-    @test_deprecated DataLayouts.IJFH{S, 3}(zeros(3, 3, 1, 10))
-    @test_deprecated DataLayouts.IJFH{S, 3}(typeof(zeros(3, 3, 1, 10)), 10)
-    @test_deprecated DataLayouts.IFH{S, 3}(zeros(3, 1, 10))
-    @test_deprecated DataLayouts.VIJFH{S, 10, 4}(zeros(10, 4, 4, 1, 20))
-    @test_deprecated DataLayouts.VIFH{S, 10, 4}(zeros(10, 4, 1, 20))
+    # For when Nh is in the type-domain
+    # S = Float64
+    # @test_deprecated DataLayouts.IJFH{S, 3}(zeros(3, 3, 1, 10))
+    # @test_deprecated DataLayouts.IJFH{S, 3}(typeof(zeros(3, 3, 1, 10)), 10)
+    # @test_deprecated DataLayouts.IFH{S, 3}(zeros(3, 1, 10))
+    # @test_deprecated DataLayouts.VIJFH{S, 10, 4}(zeros(10, 4, 4, 1, 20))
+    # @test_deprecated DataLayouts.VIFH{S, 10, 4}(zeros(10, 4, 1, 20))
 end
 
 nothing

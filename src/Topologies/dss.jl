@@ -69,8 +69,7 @@ function create_dss_buffer(
     else
         _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
     end
-    perimeter_data =
-        DataLayouts.VIFH{TS, Nv, Np, Nh}(DA{T}(undef, Nv, Np, Nf, Nh))
+    perimeter_data = DataLayouts.VIFH{TS, Nv, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]

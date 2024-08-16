@@ -47,9 +47,10 @@ end
 
 function Base.copyto!(
     dest::IJFH{S, Nij},
-    bc::BroadcastedUnionIJFH{S, Nij, Nh},
+    bc::BroadcastedUnionIJFH{S, Nij},
     ::ToCPU,
-) where {S, Nij, Nh}
+) where {S, Nij}
+    (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
@@ -60,9 +61,10 @@ end
 
 function Base.copyto!(
     dest::IFH{S, Ni},
-    bc::BroadcastedUnionIFH{S, Ni, Nh},
+    bc::BroadcastedUnionIFH{S, Ni},
     ::ToCPU,
-) where {S, Ni, Nh}
+) where {S, Ni}
+    (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh
         slab_dest = slab(dest, h)
         slab_bc = slab(bc, h)
@@ -123,11 +125,12 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::VIFH{S, Nv, Ni, Nh},
-    bc::BroadcastedUnionVIFH{S, Nv, Ni, Nh},
+    dest::VIFH{S, Nv, Ni},
+    bc::BroadcastedUnionVIFH{S, Nv, Ni},
     ::ToCPU,
-) where {S, Nv, Ni, Nh}
+) where {S, Nv, Ni}
     # copy contiguous columns
+    (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, i in 1:Ni
         col_dest = column(dest, i, h)
         col_bc = column(bc, i, h)
@@ -137,11 +140,12 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::VIJFH{S, Nv, Nij, Nh},
-    bc::BroadcastedUnionVIJFH{S, Nv, Nij, Nh},
+    dest::VIJFH{S, Nv, Nij},
+    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
     ::ToCPU,
-) where {S, Nv, Nij, Nh}
+) where {S, Nv, Nij}
     # copy contiguous columns
+    (_, _, _, _, Nh) = size(dest)
     @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
         col_dest = column(dest, i, j, h)
         col_bc = column(bc, i, j, h)

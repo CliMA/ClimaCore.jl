@@ -36,16 +36,22 @@ end
     Nij = 3
     Nh = 5
     Nk = 6
-#! format: off
-    data = DataF{S}(device_zeros(FT,Nf));                        test_similar!(data)
-    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_similar!(data)
-    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_similar!(data)
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_similar!(data)
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_similar!(data)
-    data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_similar!(data)
-    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_similar!(data)
-    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_similar!(data)
-#! format: on
-    # data = DataLayouts.IJKFVH{S, Nij, Nk, Nv, Nh}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_similar!(data) # TODO: test
+    data = DataF{S}(device_zeros(FT, Nf))
+    test_similar!(data)
+    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    test_similar!(data)
+    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    test_similar!(data)
+    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    test_similar!(data)
+    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    test_similar!(data)
+    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    test_similar!(data)
+    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    test_similar!(data)
+    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    test_similar!(data)
+    # data = DataLayouts.IJKFVH{S, Nij, Nk, Nv}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_similar!(data) # TODO: test
     # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));                     test_similar!(data) # TODO: test
 end
