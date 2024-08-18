@@ -39,16 +39,24 @@ function SpectralElementGrid1D(
     end
 end
 
+_SpectralElementGrid1D(
+    topology::Topologies.IntervalTopology,
+    quadrature_style::Quadratures.QuadratureStyle,
+) = _SpectralElementGrid1D(
+    topology,
+    quadrature_style,
+    Val(Topologies.nlocalelems(topology)),
+)
+
 function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
-)
+    ::Val{Nh},
+) where {Nh}
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
     FT = eltype(CoordType)
-    nelements = Topologies.nlocalelems(topology)
-    Nh = nelements
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
@@ -56,7 +64,7 @@ function _SpectralElementGrid1D(
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
-    for elem in 1:nelements
+    for elem in 1:Nh
         local_geometry_slab = slab(local_geometry, elem)
         for i in 1:Nq
             ξ = quad_points[i]
@@ -182,11 +190,23 @@ function get_CoordType2D(topology)
     end
 end
 
-function _SpectralElementGrid2D(
+_SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
     enable_bubble::Bool,
+) = _SpectralElementGrid2D(
+    topology,
+    quadrature_style,
+    Val(Topologies.nlocalelems(topology));
+    enable_bubble,
 )
+
+function _SpectralElementGrid2D(
+    topology::Topologies.Topology2D,
+    quadrature_style::Quadratures.QuadratureStyle,
+    ::Val{Nh};
+    enable_bubble::Bool,
+) where {Nh}
 
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
@@ -213,8 +233,6 @@ function _SpectralElementGrid2D(
     end
     CoordType2D = get_CoordType2D(topology)
     AIdx = Geometry.coordinate_axis(CoordType2D)
-    nlelems = Topologies.nlocalelems(topology)
-    Nh = nlelems
     ngelems = Topologies.nghostelems(topology)
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
     high_order_quadrature_style = Quadratures.GLL{Nq * 2}()
