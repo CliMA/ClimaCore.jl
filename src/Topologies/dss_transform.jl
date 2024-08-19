@@ -272,34 +272,35 @@ recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 
 create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
 
+create_ghost_buffer(
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
+    topology::Topologies.Topology2D,
+) where {S, Nij} = create_ghost_buffer(
+    data,
+    topology,
+    Val(Topologies.nsendelems(topology)),
+    Val(Topologies.nrecvelems(topology)),
+)
+
+
 function create_ghost_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
     topology::Topologies.Topology2D,
-) where {S, Nij}
+    ::Val{Nhsend},
+    ::Val{Nhrec},
+) where {S, Nij, Nhsend, Nhrec}
     if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij, Topologies.nsendelems(topology)}(
-            typeof(parent(data)),
-        )
-        recv_data = DataLayouts.IJFH{S, Nij, Topologies.nrecvelems(topology)}(
-            typeof(parent(data)),
-        )
+        send_data = DataLayouts.IJFH{S, Nij, Nhsend}(typeof(parent(data)))
+        recv_data = DataLayouts.IJFH{S, Nij, Nhrec}(typeof(parent(data)))
         k = stride(parent(send_data), 4)
     else
         Nv, _, _, Nf, _ = DataLayouts.farray_size(data)
-        send_data =
-            DataLayouts.VIJFH{S, Nv, Nij, Topologies.nsendelems(topology)}(
-                similar(
-                    parent(data),
-                    (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
-                ),
-            )
-        recv_data =
-            DataLayouts.VIJFH{S, Nv, Nij, Topologies.nrecvelems(topology)}(
-                similar(
-                    parent(data),
-                    (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
-                ),
-            )
+        send_data = DataLayouts.VIJFH{S, Nv, Nij, Nhsend}(
+            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
+        )
+        recv_data = DataLayouts.VIJFH{S, Nv, Nij, Nhrec}(
+            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
+        )
         k = stride(parent(send_data), 5)
     end
 
