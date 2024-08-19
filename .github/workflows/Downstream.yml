@@ -27,7 +27,7 @@ jobs:
           - 'ClimaCoupler.jl'
           - 'ClimaDiagnostics.jl'
           - 'ClimaLand.jl'
-          - 'ClimaTimeSteppers.jl'
+          - 'ClimaTimesteppers.jl'
           - 'KinematicDriver.jl'
           - 'ClimaDiagnostics.jl'
           - 'ClimaUtilities.jl'
@@ -42,7 +42,18 @@ jobs:
         with:
           repository: 'CliMA/${{ matrix.package }}'
           path: ${{ matrix.package }}
-      - run: |
+
+      # The test suite for ClimaTimesteppers depends on ClimaCore, not
+      # ClimaTimesteppers itself. If we dev-ed ClimaCore in ClimaTimesteppers,
+      # the aqua test would fail because we never use ClimaCore.
+      - if: matrix.package != 'ClimaTimesteppers.jl'
+        run: |
           julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.instantiate()'
           julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.develop(; path = ".")'
           julia --color=yes --project=${{ matrix.package }} -e 'using Pkg; Pkg.test()'
+
+      - if: matrix.package == 'ClimaTimesteppers.jl'
+        run: |
+          julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.develop(; path = ".")'
+          julia --color=yes --project=ClimaTimesteppers.jl/test ClimaTimesteppers.jl/test/runtests.jl
