@@ -363,9 +363,9 @@ function Base.similar(
 end
 
 Base.similar(
-    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
+    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, Nh, A},
     ::Type{Eltype},
-) where {Nv, Nij, A, Eltype} = similar(bc, Eltype, Val(Nv))
+) where {Nv, Nij, Nh, A, Eltype} = similar(bc, Eltype, Val(Nv))
 
 function Base.similar(
     bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, Nh, A},
