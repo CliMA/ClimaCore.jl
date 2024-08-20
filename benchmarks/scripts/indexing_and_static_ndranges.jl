@@ -30,9 +30,9 @@ setting where linear indexing is allowed.
     nearly the same benefit as linear indexing.
 
 # References:
- - https://githubSR.com/CliMA/ClimaCore.jl/issues/1889
- - https://githubSR.com/JuliaLang/julia/issues/28126
- - https://githubSR.com/JuliaLang/julia/issues/32051
+ - https://github.com/CliMA/ClimaCore.jl/issues/1889
+ - https://github.com/JuliaLang/julia/issues/28126
+ - https://github.com/JuliaLang/julia/issues/32051
 
 # Benchmark results:
 

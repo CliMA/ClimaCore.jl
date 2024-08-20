@@ -305,10 +305,6 @@ struct IJKFVH{S, Nij, Nk, Nv, Nh, A} <: Data3D{S, Nij, Nk}
     array::A
 end
 
-parent_array_type(
-    ::Type{IJKFVH{S, Nij, Nk, Nv, Nh, A}},
-) where {S, Nij, Nk, Nv, Nh, A} = A
-
 function IJKFVH{S, Nij, Nk, Nv, Nh}(
     array::AbstractArray{T, 6},
 ) where {S, Nij, Nk, Nv, Nh, T}
@@ -347,8 +343,6 @@ of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
 struct IJFH{S, Nij, Nh, A} <: Data2D{S, Nij}
     array::A
 end
-
-parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
 
 function IJFH{S, Nij, Nh}(array::AbstractArray{T, 4}) where {S, Nij, Nh, T}
     check_basetype(T, S)
@@ -452,8 +446,6 @@ struct IFH{S, Ni, Nh, A} <: Data1D{S, Ni}
     array::A
 end
 
-parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
-
 function IFH{S, Ni, Nh}(array::AbstractArray{T, 3}) where {S, Ni, Nh, T}
     check_basetype(T, S)
     @assert size(array, 1) == Ni
@@ -521,8 +513,6 @@ Backing `DataLayout` for 0D point data.
 struct DataF{S, A} <: Data0D{S}
     array::A
 end
-
-parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
 
 function DataF{S}(array::AbstractVector{T}) where {S, T}
     check_basetype(T, S)
@@ -609,8 +599,6 @@ A `DataSlab2D` view can be returned from other `Data2D` objects by calling `slab
 struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
     array::A
 end
-
-parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
 
 function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     @assert size(array, 1) == Nij
@@ -702,8 +690,6 @@ struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
 end
 
-parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
-
 function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     check_basetype(T, S)
@@ -770,8 +756,6 @@ A `DataColumn` view can be returned from other `Data1DX`, `Data2DX` objects by c
 struct VF{S, Nv, A} <: DataColumn{S, Nv}
     array::A
 end
-
-parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
 
 function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     check_basetype(T, S)
@@ -854,9 +838,6 @@ for each `S` datatype struct field (F), for each 2D mesh element slab (H).
 struct VIJFH{S, Nv, Nij, Nh, A} <: Data2DX{S, Nv, Nij}
     array::A
 end
-
-parent_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} =
-    A
 
 function VIJFH{S, Nv, Nij, Nh}(
     array::AbstractArray{T, 5},
@@ -972,8 +953,6 @@ struct VIFH{S, Nv, Ni, Nh, A} <: Data1DX{S, Nv, Ni}
     array::A
 end
 
-parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
-
 function VIFH{S, Nv, Ni, Nh}(
     array::AbstractArray{T, 4},
 ) where {S, Nv, Ni, Nh, T}
@@ -1083,8 +1062,6 @@ struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
 
-parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
-
 function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
     @assert size(array, 1) % Nij == 0
     @assert size(array, 2) % Nij == 0
@@ -1125,8 +1102,6 @@ The primary use is for interpolation to a regular grid for ex. plotting / field 
 struct IV1JH2{S, n1, Ni, A} <: Data1DX{S, n1, Ni}
     array::A
 end
-
-parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
 
 function IV1JH2{S, n1, Ni}(array::AbstractMatrix{S}) where {S, n1, Ni}
     @assert size(array, 2) % Ni == 0
@@ -1323,6 +1298,33 @@ type parameters.
 @inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
 @inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
 @inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
+
+"""
+    parent_array_type(data::AbstractData)
+
+This is an internal function, please do not use outside of ClimaCore.
+
+Returns the the backing array type.
+
+This function is helpful for writing generic
+code, when reconstructing new datalayouts with new
+type parameters.
+"""
+@inline parent_array_type(data::AbstractData) = parent_array_type(typeof(data))
+# Equivalent to:
+# @generated parent_array_type(::Type{A}) where {A <: AbstractData} = Tuple(A.parameters)[end]
+@inline parent_array_type(::Type{IFH{S, Ni, Nh, A}}) where {S, Ni, Nh, A} = A
+@inline parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
+@inline parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
+@inline parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
+@inline parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
+@inline parent_array_type(::Type{VIJFH{S, Nv, Nij, Nh, A}}) where {S, Nv, Nij, Nh, A} = A
+@inline parent_array_type(::Type{VIFH{S, Nv, Ni, Nh, A}}) where {S, Nv, Ni, Nh, A} = A
+@inline parent_array_type(::Type{IJFH{S, Nij, Nh, A}}) where {S, Nij, Nh, A} = A
+@inline parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
+@inline parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
+@inline parent_array_type(::Type{IJKFVH{S, Nij, Nk, Nv, Nh, A}}) where {S, Nij, Nk, Nv, Nh, A} = A
+
 #! format: on
 
 Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
@@ -1355,29 +1357,10 @@ Reshapes `array` (of scalars) to fit into the given `DataLayout`.
 The dimensions of `array` are assumed to be
  - `([number of vertical nodes], number of horizontal nodes)`.
 """
-function array2data end
-
-array2data(array::AbstractArray{T, 1}, ::IF{<:Any, Ni}) where {T, Ni} =
-    IF{T, Ni}(reshape(array, Ni, 1))
-array2data(array::AbstractArray{T, 1}, ::IFH{<:Any, Ni, Nh}) where {T, Ni, Nh} =
-    IFH{T, Ni, Nh}(reshape(array, Ni, 1, Nh))
-array2data(array::AbstractArray{T, 1}, ::IJF{<:Any, Nij}) where {T, Nij} =
-    IJF{T, Nij}(reshape(array, Nij, Nij, 1))
-array2data(
-    array::AbstractArray{T, 1},
-    ::IJFH{<:Any, Nij, Nh},
-) where {T, Nij, Nh} = IJFH{T, Nij, Nh}(reshape(array, Nij, Nij, 1, Nh))
-array2data(array::AbstractArray{T, 2}, ::VF{<:Any, Nv}) where {T, Nv} =
-    VF{T, Nv}(reshape(array, Nv, 1))
-array2data(
-    array::AbstractArray{T, 2},
-    ::VIFH{<:Any, Nv, Ni, Nh},
-) where {T, Nv, Ni, Nh} = VIFH{T, Nv, Ni, Nh}(reshape(array, Nv, Ni, 1, Nh))
-array2data(
-    array::AbstractArray{T, 2},
-    ::VIJFH{<:Any, Nv, Nij, Nh},
-) where {T, Nv, Nij, Nh} =
-    VIJFH{T, Nv, Nij, Nh}(reshape(array, Nv, Nij, Nij, 1, Nh))
+array2data(array::AbstractArray{T}, data::AbstractData) where {T} =
+    union_all(data){T, Base.tail(type_params(data))...}(
+        reshape(array, array_size(data)...),
+    )
 
 """
     device_dispatch(data::AbstractData)
