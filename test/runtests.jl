@@ -9,6 +9,7 @@ include("tabulated_tests.jl")
 unit_tests = [
 UnitTest("DataLayouts fill"                        ,"DataLayouts/unit_fill.jl"),
 UnitTest("DataLayouts ndims"                       ,"DataLayouts/unit_ndims.jl"),
+UnitTest("DataLayouts array<->data"                ,"DataLayouts/unit_data2array.jl"),
 UnitTest("DataLayouts get_struct"                  ,"DataLayouts/unit_struct.jl"),
 UnitTest("Recursive"                               ,"RecursiveApply/unit_recursive_apply.jl"),
 UnitTest("PlusHalf"                                ,"Utilities/unit_plushalf.jl"),

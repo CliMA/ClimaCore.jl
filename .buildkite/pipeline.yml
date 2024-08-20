@@ -102,6 +102,10 @@ steps:
         key: unit_data_ndims
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"
 
+      - label: "Unit: unit_data2array"
+        key: unit_data2array
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_data2array.jl"
+
       - label: "Unit: data1d"
         key: unit_data1d
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/data1d.jl"
