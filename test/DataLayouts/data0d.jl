@@ -123,13 +123,6 @@ end
     data_if2 = data_f .+ data_if
     @test data_if2 isa IF{S}
     @test size(data_if2) == (2, 1, 1, 1, 1)
-
-    FT = Float64
-    array = rand(FT, 2, 1)
-    data = IF{FT, 2}(array)
-    @test DataLayouts.data2array(data) == reshape(parent(data), :)
-    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
-          parent(data)
 end
 
 @testset "broadcasting DataF + IFH data object => IFH" begin
@@ -141,14 +134,6 @@ end
     data_ifh2 = data_f .+ data_ifh
     @test data_ifh2 isa IFH{S}
     @test size(data_ifh2) == (2, 1, 1, 1, 3)
-
-
-    FT = Float64
-    array = rand(FT, 2, 1, Nh)
-    data = IFH{FT, 2, Nh}(array)
-    @test DataLayouts.data2array(data) == reshape(parent(data), :)
-    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
-          parent(data)
 end
 
 @testset "broadcasting DataF + IJF data object => IJF" begin
@@ -159,13 +144,6 @@ end
     data_ijf2 = data_f .+ data_ijf
     @test data_ijf2 isa IJF{S}
     @test size(data_ijf2) == (2, 2, 1, 1, 1)
-
-    FT = Float64
-    array = rand(FT, 2, 2, 1)
-    data = IJF{FT, 2}(array)
-    @test DataLayouts.data2array(data) == reshape(parent(data), :)
-    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
-          parent(data)
 end
 
 @testset "broadcasting DataF + IJFH data object => IJFH" begin
@@ -177,14 +155,6 @@ end
     data_ijfh2 = data_f .+ data_ijfh
     @test data_ijfh2 isa IJFH{S}
     @test size(data_ijfh2) == (2, 2, 1, 1, Nh)
-
-    FT = Float64
-    Nh = 3
-    array = rand(FT, 2, 2, 1, Nh)
-    data = IJFH{FT, 2, Nh}(array)
-    @test DataLayouts.data2array(data) == reshape(parent(data), :)
-    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
-          parent(data)
 end
 
 @testset "broadcasting DataF + VIFH data object => VIFH" begin

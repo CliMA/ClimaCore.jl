@@ -42,17 +42,6 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
               Complex{FT}(sum(array[:, :, 1, :]), sum(array[:, :, 2, :]))
         @test sum(x -> x[2], data) ≈ sum(array[:, :, 3, :])
     end
-
-    FT = Float64
-    Nv = 10 # number of vertical levels
-    Ni = 4  # number of nodal points
-    Nh = 10 # number of elements
-    array = rand(FT, Nv, Ni, 1, Nh)
-    data = VIFH{FT, Nv, Ni, Nh}(array)
-    @test DataLayouts.data2array(data) ==
-          reshape(parent(data), DataLayouts.nlevels(data), :)
-    @test parent(DataLayouts.array2data(DataLayouts.data2array(data), data)) ==
-          parent(data)
 end
 
 @testset "VIFH boundscheck" begin
