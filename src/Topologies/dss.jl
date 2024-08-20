@@ -396,8 +396,9 @@ function dss_transform!(
     p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (nlevels, _, nfid, nelems) = size(pperimeter_data)
-    nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
+
+    nmetric = cld(prod(DataLayouts.farray_size(∂ξ∂x)), prod(size(∂ξ∂x)))
     sizet_data = (nlevels, Nq, Nq, nfid, nelems)
     sizet_wt = (Nq, Nq, 1, nelems)
     sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
@@ -575,8 +576,8 @@ function dss_untransform!(
     p∂x∂ξ = parent(∂x∂ξ)
     p∂ξ∂x = parent(∂ξ∂x)
     pperimeter_data = parent(perimeter_data)
-    (nlevels, _, nfid, nelems) = size(pperimeter_data)
-    nmetric = cld(length(p∂ξ∂x), prod(size(∂ξ∂x)))
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
+    nmetric = cld(prod(DataLayouts.farray_size(∂ξ∂x)), prod(size(∂ξ∂x)))
     sizet_data = (nlevels, Nq, Nq, nfid, nelems)
     sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
@@ -703,9 +704,10 @@ function dss_load_perimeter_data!(
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
     perimeter::Perimeter2D{Nq},
 ) where {Nq}
-    pperimeter_data = parent(dss_buffer.perimeter_data)
+    (; perimeter_data) = dss_buffer
+    pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
-    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
     sizet = (nlevels, Nq, Nq, nfid, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
@@ -722,9 +724,10 @@ function dss_unload_perimeter_data!(
     dss_buffer::DSSBuffer,
     perimeter::Perimeter2D{Nq},
 ) where {Nq}
-    pperimeter_data = parent(dss_buffer.perimeter_data)
+    (; perimeter_data) = dss_buffer
+    pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
-    (nlevels, _, nfid, nelems) = size(pperimeter_data)
+    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
     sizet = (nlevels, Nq, Nq, nfid, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
