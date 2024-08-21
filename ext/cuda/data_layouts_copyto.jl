@@ -1,3 +1,5 @@
+import ClimaCore.DataLayouts:
+    to_non_extruded_broadcasted, has_uniform_datalayouts
 DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
 function knl_copyto!(dest, src)
@@ -15,20 +17,60 @@ function knl_copyto!(dest, src)
     return nothing
 end
 
+function knl_copyto_field_array!(dest, src, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            n = size(dest)
+            I = kernel_indexes(tidx, n)
+            dest[I] = src[I]
+        end
+    end
+    return nothing
+end
+
 function Base.copyto!(
     dest::IJFH{S, Nij, Nh},
     bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, Nh},
     ::ToCUDA,
 ) where {S, Nij, Nh}
+    us = DataLayouts.UniversalSize(dest)
     if Nh > 0
         auto_launch!(
-            knl_copyto!,
-            (dest, bc);
-            threads_s = (Nij, Nij),
-            blocks_s = (Nh, 1),
+            knl_copyto_field_array!,
+            (dest, bc, us),
+            prod(DataLayouts.universal_size(us));
+            auto = true,
         )
     end
     return dest
+end
+
+function knl_copyto_linear!(dest::AbstractData, bc, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            dest[tidx] = bc[tidx]
+        end
+    end
+    return nothing
+end
+
+function knl_copyto_linear!(dest::DataF, bc, us)
+    @inbounds dest[] = bc[tidx]
+    return nothing
+end
+
+function knl_copyto_cart!(dest, src, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            n = size(dest)
+            I = kernel_indexes(tidx, n)
+            dest[I] = src[I]
+        end
+    end
+    return nothing
 end
 
 function Base.copyto!(
@@ -37,14 +79,14 @@ function Base.copyto!(
     ::ToCUDA,
 ) where {S, Nv, Nij, Nh}
     if Nv > 0 && Nh > 0
-        Nv_per_block = min(Nv, fld(256, Nij * Nij))
-        Nv_blocks = cld(Nv, Nv_per_block)
-        auto_launch!(
-            knl_copyto!,
-            (dest, bc);
-            threads_s = (Nij, Nij, Nv_per_block),
-            blocks_s = (Nh, Nv_blocks),
-        )
+        us = DataLayouts.UniversalSize(dest)
+        n = prod(DataLayouts.universal_size(us))
+        if has_uniform_datalayouts(bc)
+            bc′ = to_non_extruded_broadcasted(bc)
+            auto_launch!(knl_copyto_linear!, (dest, bc′, us), n; auto = true)
+        else
+            auto_launch!(knl_copyto_cart!, (dest, bc, us), n; auto = true)
+        end
     end
     return dest
 end

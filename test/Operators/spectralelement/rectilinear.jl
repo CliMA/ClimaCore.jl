@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "Operators", "spectralelement", "rectilinear.jl"))
+=#
 using Test
 using StaticArrays
 using ClimaComms

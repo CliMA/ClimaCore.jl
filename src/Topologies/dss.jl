@@ -67,6 +67,7 @@ function create_dss_buffer(
     (_, _, _, Nv, Nh) = Base.size(data)
     Np = length(perimeter)
     Nf = DataLayouts.ncomponents(data)
+    Nf == 0 && return nothing
     nfacedof = Nij - 2
     T = eltype(parent(data))
     TS = _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
@@ -399,61 +400,56 @@ function dss_transform!(
     (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
 
     nmetric = cld(prod(DataLayouts.farray_size(∂ξ∂x)), prod(size(∂ξ∂x)))
-    sizet_data = (nlevels, Nq, Nq, nfid, nelems)
-    sizet_wt = (Nq, Nq, 1, nelems)
-    sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
+    sizet_data = (nlevels, Nq, Nq, nelems)
+    sizet_wt = (Nq, Nq, nelems)
+    sizet_metric = (nlevels, Nq, Nq, nelems)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
-            pw = pweight[linear_ind(sizet_wt, (ip, jp, 1, elem))]
+            pw = pweight.arrays[1][linear_ind(sizet_wt, (ip, jp, elem))]
 
             for fidx in scalarfidx, level in 1:nlevels
-                data_idx = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * pw
+                data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
+                pperimeter_data.arrays[fidx][level, p, elem] = pdata.arrays[fidx][data_idx] * pw
             end
 
             for fidx in covariant12fidx, level in 1:nlevels
-                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                data_idx2 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                (idx11, idx12, idx21, idx22) =
-                    _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-                pperimeter_data[level, p, fidx, elem] =
+                data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
+                # (idx11, idx12, idx21, idx22) = _get_idx_metric_perm(sizet_metric, (level, ip, jp, elem))
+                (idx11, idx12, idx21, idx22) = (1, 2, 3, 4)
+                midx = _get_idx_metric(sizet_metric, (level, ip, jp, elem))
+                pperimeter_data.arrays[fidx][level, p, elem] =
                     (
-                        p∂ξ∂x[idx11] * pdata[data_idx1] +
-                        p∂ξ∂x[idx12] * pdata[data_idx2]
+                        p∂ξ∂x.arrays[idx11][midx] * pdata.arrays[fidx][data_idx] +
+                        p∂ξ∂x.arrays[idx12][midx] * pdata.arrays[fidx+1][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 1, elem] =
+                pperimeter_data.arrays[fidx+1][level, p, elem] =
                     (
-                        p∂ξ∂x[idx21] * pdata[data_idx1] +
-                        p∂ξ∂x[idx22] * pdata[data_idx2]
+                        p∂ξ∂x.arrays[idx21][midx] * pdata.arrays[fidx][data_idx] +
+                        p∂ξ∂x.arrays[idx22][midx] * pdata.arrays[fidx+1][data_idx]
                     ) * pw
             end
 
             for fidx in contravariant12fidx, level in 1:nlevels
-                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                data_idx2 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                (idx11, idx12, idx21, idx22) =
+                data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
+                # (idx11, idx12, idx21, idx22) = _get_idx_metric_perm(sizet_metric, (level, ip, jp, elem))
+                (idx11, idx12, idx21, idx22) = (1, 2, 3, 4)
+                midx =
                     _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-                pperimeter_data[level, p, fidx, elem] =
+                pperimeter_data.arrays[fidx][level, p, elem] =
                     (
-                        p∂x∂ξ[idx11] * pdata[data_idx1] +
-                        p∂x∂ξ[idx21] * pdata[data_idx2]
+                        p∂x∂ξ.arrays[idx11][midx] * pdata.arrays[fidx][data_idx] +
+                        p∂x∂ξ.arrays[idx21][midx] * pdata.arrays[fidx+1][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 1, elem] =
+                pperimeter_data.arrays[fidx+1][level, p, elem] =
                     (
-                        p∂x∂ξ[idx12] * pdata[data_idx1] +
-                        p∂x∂ξ[idx22] * pdata[data_idx2]
+                        p∂x∂ξ.arrays[idx12][midx] * pdata.arrays[fidx][data_idx] +
+                        p∂x∂ξ.arrays[idx22][midx] * pdata.arrays[fidx+1][data_idx]
                     ) * pw
             end
 
             for fidx in covariant123fidx, level in 1:nlevels
-                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                data_idx2 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                data_idx3 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
 
                 (
                     idx11,
@@ -465,35 +461,33 @@ function dss_transform!(
                     idx31,
                     idx32,
                     idx33,
-                ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                ) = ntuple(ξ->ξ, Val(9))
+
+                midx = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
 
                 # Covariant to physical transformation
-                pperimeter_data[level, p, fidx, elem] =
+                pperimeter_data.arrays[fidx][level, p, elem] =
                     (
-                        p∂ξ∂x[idx11] * pdata[data_idx1] +
-                        p∂ξ∂x[idx12] * pdata[data_idx2] +
-                        p∂ξ∂x[idx13] * pdata[data_idx3]
+                        p∂ξ∂x.arrays[idx11][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂ξ∂x.arrays[idx12][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂ξ∂x.arrays[idx13][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 1, elem] =
+                pperimeter_data.arrays[fidx + 1][level, p, elem] =
                     (
-                        p∂ξ∂x[idx21] * pdata[data_idx1] +
-                        p∂ξ∂x[idx22] * pdata[data_idx2] +
-                        p∂ξ∂x[idx23] * pdata[data_idx3]
+                        p∂ξ∂x.arrays[idx21][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂ξ∂x.arrays[idx22][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂ξ∂x.arrays[idx23][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 2, elem] =
+                pperimeter_data.arrays[fidx + 2][level, p, elem] =
                     (
-                        p∂ξ∂x[idx31] * pdata[data_idx1] +
-                        p∂ξ∂x[idx32] * pdata[data_idx2] +
-                        p∂ξ∂x[idx33] * pdata[data_idx3]
+                        p∂ξ∂x.arrays[idx31][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂ξ∂x.arrays[idx32][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂ξ∂x.arrays[idx33][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
             end
 
             for fidx in contravariant123fidx, level in 1:nlevels
-                data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                data_idx2 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                data_idx3 =
-                    linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
                 (
                     idx11,
                     idx12,
@@ -504,25 +498,26 @@ function dss_transform!(
                     idx31,
                     idx32,
                     idx33,
-                ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                ) = ntuple(ξ->ξ, Val(9))
+                midx = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
                 # Contravariant to physical transformation
-                pperimeter_data[level, p, fidx, elem] =
+                pperimeter_data.arrays[fidx][level, p, elem] =
                     (
-                        p∂x∂ξ[idx11] * pdata[data_idx1] +
-                        p∂x∂ξ[idx21] * pdata[data_idx2] +
-                        p∂x∂ξ[idx31] * pdata[data_idx3]
+                        p∂x∂ξ.arrays[idx11][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂x∂ξ.arrays[idx21][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂x∂ξ.arrays[idx31][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 1, elem] =
+                pperimeter_data.arrays[fidx+1][level, p, elem] =
                     (
-                        p∂x∂ξ[idx12] * pdata[data_idx1] +
-                        p∂x∂ξ[idx22] * pdata[data_idx2] +
-                        p∂x∂ξ[idx32] * pdata[data_idx3]
+                        p∂x∂ξ.arrays[idx12][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂x∂ξ.arrays[idx22][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂x∂ξ.arrays[idx32][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
-                pperimeter_data[level, p, fidx + 2, elem] =
+                pperimeter_data.arrays[fidx+2][level, p, elem] =
                     (
-                        p∂x∂ξ[idx13] * pdata[data_idx1] +
-                        p∂x∂ξ[idx23] * pdata[data_idx2] +
-                        p∂x∂ξ[idx33] * pdata[data_idx3]
+                        p∂x∂ξ.arrays[idx13][midx] * pdata.arrays[fidx+0][data_idx] +
+                        p∂x∂ξ.arrays[idx23][midx] * pdata.arrays[fidx+1][data_idx] +
+                        p∂x∂ξ.arrays[idx33][midx] * pdata.arrays[fidx+2][data_idx]
                     ) * pw
             end
         end
@@ -578,58 +573,56 @@ function dss_untransform!(
     pperimeter_data = parent(perimeter_data)
     (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
     nmetric = cld(prod(DataLayouts.farray_size(∂ξ∂x)), prod(size(∂ξ∂x)))
-    sizet_data = (nlevels, Nq, Nq, nfid, nelems)
-    sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
+    sizet_data = (nlevels, Nq, Nq, nelems)
+    sizet_metric = (nlevels, Nq, Nq, nelems)
 
     @inbounds for elem in localelems
         for (p, (ip, jp)) in enumerate(perimeter)
             for fidx in scalarfidx
                 for level in 1:nlevels
                     data_idx =
-                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                    pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+                        linear_ind(sizet_data, (level, ip, jp, elem))
+                    pdata.arrays[fidx][data_idx] = pperimeter_data.arrays[fidx][level, p, elem]
                 end
             end
             for fidx in covariant12fidx
                 for level in 1:nlevels
-                    data_idx1 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                    data_idx2 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    data_idx =
+                        linear_ind(sizet_data, (level, ip, jp, elem))
                     (idx11, idx12, idx21, idx22) =
+                        (1, 2, 3, 4)
+                        # _get_idx_metric_perm(sizet_metric, (level, ip, jp, elem))
+                    midx =
                         _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-                    pdata[data_idx1] =
-                        p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[idx12] * pperimeter_data[level, p, fidx + 1, elem]
-                    pdata[data_idx2] =
-                        p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+                    pdata.arrays[fidx][data_idx] =
+                        p∂x∂ξ.arrays[idx11][midx] * pperimeter_data.arrays[fidx+0][level, p, elem] +
+                        p∂x∂ξ.arrays[idx12][midx] * pperimeter_data.arrays[fidx+1][level, p, elem]
+                    pdata.arrays[fidx+1][data_idx] =
+                        p∂x∂ξ.arrays[idx21][midx] * pperimeter_data.arrays[fidx+0][level, p, elem] +
+                        p∂x∂ξ.arrays[idx22][midx] * pperimeter_data.arrays[fidx+1][level, p, elem]
                 end
             end
             for fidx in contravariant12fidx
                 for level in 1:nlevels
-                    data_idx1 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                    data_idx2 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
+                    data_idx =
+                        linear_ind(sizet_data, (level, ip, jp, elem))
                     (idx11, idx12, idx21, idx22) =
+                        (1, 2, 3, 4)
+                        # _get_idx_metric_perm(sizet_metric, (level, ip, jp, elem))
+                    midx =
                         _get_idx_metric(sizet_metric, (level, ip, jp, elem))
-                    pdata[data_idx1] =
-                        p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
-                    pdata[data_idx2] =
-                        p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
+                    pdata.arrays[fidx][data_idx] =
+                        p∂ξ∂x.arrays[idx11][midx] * pperimeter_data.arrays[fidx + 0][level, p, elem] +
+                        p∂ξ∂x.arrays[idx21][midx] * pperimeter_data.arrays[fidx + 1][level, p, elem]
+                    pdata.arrays[fidx+1][midx] =
+                        p∂ξ∂x.arrays[idx12][midx] * pperimeter_data.arrays[fidx + 0][level, p, elem] +
+                        p∂ξ∂x.arrays[idx22][midx] * pperimeter_data.arrays[fidx + 1][level, p, elem]
                 end
             end
             for fidx in covariant123fidx
                 for level in 1:nlevels
-                    data_idx1 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                    data_idx2 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                    data_idx3 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                    data_idx =
+                        linear_ind(sizet_data, (level, ip, jp, elem))
                     (
                         idx11,
                         idx12,
@@ -640,32 +633,29 @@ function dss_untransform!(
                         idx31,
                         idx32,
                         idx33,
-                    ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
-                    pdata[data_idx1] =
-                        p∂x∂ξ[idx11] * pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[idx12] *
-                        pperimeter_data[level, p, fidx + 1, elem] +
-                        p∂x∂ξ[idx13] * pperimeter_data[level, p, fidx + 2, elem]
-                    pdata[data_idx2] =
-                        p∂x∂ξ[idx21] * pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[idx22] *
-                        pperimeter_data[level, p, fidx + 1, elem] +
-                        p∂x∂ξ[idx23] * pperimeter_data[level, p, fidx + 2, elem]
-                    pdata[data_idx3] =
-                        p∂x∂ξ[idx31] * pperimeter_data[level, p, fidx, elem] +
-                        p∂x∂ξ[idx32] *
-                        pperimeter_data[level, p, fidx + 1, elem] +
-                        p∂x∂ξ[idx33] * pperimeter_data[level, p, fidx + 2, elem]
+                    ) = ntuple(ξ->ξ, Val(9))
+                    midx = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
+                    pdata.arrays[fidx][midx] =
+                        p∂x∂ξ.arrays[idx11][midx] * pperimeter_data.arrays[fidx][level, p, elem] +
+                        p∂x∂ξ.arrays[idx12][midx] *
+                        pperimeter_data.arrays[fidx+1][level, p, elem] +
+                        p∂x∂ξ.arrays[idx13][midx] * pperimeter_data.arrays[fidx+2][level, p, elem]
+                    pdata.arrays[fidx+1][midx] =
+                        p∂x∂ξ.arrays[idx21][midx] * pperimeter_data[level, p, fidx, elem] +
+                        p∂x∂ξ.arrays[idx22][midx] *
+                        pperimeter_data.arrays[fidx+1][level, p, elem] +
+                        p∂x∂ξ.arrays[idx23][midx] * pperimeter_data.arrays[fidx+2][level, p, elem]
+                    pdata.arrays[fidx+2][midx] =
+                        p∂x∂ξ.arrays[idx31][midx] * pperimeter_data.arrays[fidx][level, p, elem] +
+                        p∂x∂ξ.arrays[idx32][midx] *
+                        pperimeter_data.arrays[fidx+1][level, p, elem] +
+                        p∂x∂ξ.arrays[idx33][midx] * pperimeter_data.arrays[fidx + 2][level, p, elem]
                 end
             end
             for fidx in contravariant123fidx
                 for level in 1:nlevels
-                    data_idx1 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-                    data_idx2 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-                    data_idx3 =
-                        linear_ind(sizet_data, (level, ip, jp, fidx + 2, elem))
+                    midx =
+                        linear_ind(sizet_data, (level, ip, jp, elem))
 
                     (
                         idx11,
@@ -677,20 +667,20 @@ function dss_untransform!(
                         idx31,
                         idx32,
                         idx33,
-                    ) = _get_idx_metric_3d(sizet_metric, (level, ip, jp, elem))
-                    pdata[data_idx1] =
-                        p∂ξ∂x[idx11] * pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[idx21] * pperimeter_data[level, p, fidx + 1, elem]
-                    p∂ξ∂x[idx31] * pperimeter_data[level, p, fidx + 2, elem]
-                    pdata[data_idx2] =
-                        p∂ξ∂x[idx12] * pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[idx22] * pperimeter_data[level, p, fidx + 1, elem]
-                    p∂ξ∂x[idx32] * pperimeter_data[level, p, fidx + 2, elem]
-                    pdata[data_idx3] =
-                        p∂ξ∂x[idx13] * pperimeter_data[level, p, fidx, elem] +
-                        p∂ξ∂x[idx23] *
-                        pperimeter_data[level, p, fidx + 1, elem] +
-                        p∂ξ∂x[idx33] * pperimeter_data[level, p, fidx + 2, elem]
+                    ) = ntuple(ξ->ξ, Val(9))
+                    pdata.arrays[fidx][midx] =
+                        p∂ξ∂x.arrays[idx11][midx] * pperimeter_data.arrays[fidx][level, p, elem] +
+                        p∂ξ∂x.arrays[idx21][midx] * pperimeter_data.arrays[fidx + 1][level, p, elem]
+                    p∂ξ∂x.arrays[idx31][midx] * pperimeter_data.arrays[fidx + 2][level, p, elem]
+                    pdata.arrays[fidx+1][midx] =
+                        p∂ξ∂x.arrays[idx12][midx] * pperimeter_data.arrays[fidx][level, p, elem] +
+                        p∂ξ∂x.arrays[idx22][midx] * pperimeter_data.arrays[fidx + 1][level, p, elem]
+                    p∂ξ∂x.arrays[idx32][midx] * pperimeter_data.arrays[fidx + 2][level, p, elem]
+                    pdata.arrays[fidx+2][midx] =
+                        p∂ξ∂x.arrays[idx13][midx] * pperimeter_data.arrays[fidx][level, p, elem] +
+                        p∂ξ∂x.arrays[idx23][midx] *
+                        pperimeter_data.arrays[fidx + 1][level, p, elem] +
+                        p∂ξ∂x.arrays[idx33][midx] * pperimeter_data.arrays[fidx + 2][level, p, elem]
                 end
             end
         end
@@ -708,11 +698,11 @@ function dss_load_perimeter_data!(
     pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
     (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
-    sizet = (nlevels, Nq, Nq, nfid, nelems)
+    sizet = (nlevels, Nq, Nq, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
-            idx = linear_ind(sizet, (level, ip, jp, fidx, elem))
-            pperimeter_data[level, p, fidx, elem] = pdata[idx]
+            idx = linear_ind(sizet, (level, ip, jp, elem))
+            pperimeter_data.arrays[fidx][level, p, elem] = pdata.arrays[fidx][idx]
         end
     end
     return nothing
@@ -728,11 +718,11 @@ function dss_unload_perimeter_data!(
     pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
     (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
-    sizet = (nlevels, Nq, Nq, nfid, nelems)
+    sizet = (nlevels, Nq, Nq, nelems)
     for elem in 1:nelems, (p, (ip, jp)) in enumerate(perimeter)
         for fidx in 1:nfid, level in 1:nlevels
-            idx = linear_ind(sizet, (level, ip, jp, fidx, elem))
-            pdata[idx] = pperimeter_data[level, p, fidx, elem]
+            idx = linear_ind(sizet, (level, ip, jp, elem))
+            pdata.arrays[fidx][idx] = pperimeter_data.arrays[fidx][level, p, elem]
         end
     end
     return nothing

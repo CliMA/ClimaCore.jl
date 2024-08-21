@@ -343,8 +343,12 @@ function Base.similar(
     ::Val{newNv},
 ) where {Nv, A, Eltype, newNv}
     PA = parent_array_type(A)
-    array = similar(PA, (newNv, typesize(eltype(A), Eltype)))
-    return VF{Eltype, newNv}(array)
+    # @show PA
+    Nf = typesize(eltype(A), Eltype)
+    # @show (newNv, Nf)
+    # array = similar(PA, (newNv, Nf))
+    fa = FieldArray{Nf}(ntuple(i -> similar(PA, newNv), Nf))
+    return VF{Eltype, newNv, typeof(fa)}(fa)
 end
 
 Base.similar(
@@ -372,9 +376,18 @@ function Base.similar(
     ::Type{Eltype},
     ::Val{newNv},
 ) where {Nv, Nij, Nh, A, Eltype, newNv}
-    PA = parent_array_type(A)
-    array = similar(PA, (newNv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return VIJFH{Eltype, newNv, Nij, Nh}(array)
+    T = eltype(A)
+    Nf = typesize(eltype(A), Eltype)
+    # fat = rebuild_type(A, Val(field_dim(VIJFH)), Val(Nf), Val(4))
+    _size = (newNv, Nij, Nij, Nh)
+    as = ArraySize{field_dim(VIJFH), Nf, _size}()
+    # fat = if A isa AbstractArray
+    #     field_array_type(A, as)
+    # else
+    # end
+    array = similar(rebuild_field_array_type(A, as), _size)
+    vd = VIJFH{Eltype, newNv, Nij, Nh}(array)
+    return vd
 end
 
 # ============= FusedMultiBroadcast

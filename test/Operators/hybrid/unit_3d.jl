@@ -67,17 +67,17 @@ end
 
     coord = Fields.coordinate_field(hv_face_space)
 
-    @test parent(Fields.field_values(level(coord.x, half))) == parent(
+    @test all(parent(Fields.field_values(level(coord.x, half))) .== parent(
         Fields.field_values(
             Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
-    )
-    @test parent(Fields.field_values(level(coord.z, half))) ==
+    ))
+    @test all(parent(Fields.field_values(level(coord.z, half))) .==
           parent(
         Fields.field_values(
             Fields.coordinate_field(Spaces.horizontal_space(hv_face_space)).x,
         ),
-    ) .* 0
+    ) .* 0)
 end
 
 @testset "bycolumn fuse" begin

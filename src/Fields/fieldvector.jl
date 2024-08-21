@@ -206,7 +206,10 @@ end
     )
 end
 @inline transform_broadcasted(fv::FieldVector, symb, axes) =
-    parent(getfield(_values(fv), symb))
+    # parent(getfield(_values(fv), symb))
+    todata(getfield(_values(fv), symb))
+    # todata(getfield(_values(fv), symb))
+    # getfield(_values(fv), symb)
 @inline transform_broadcasted(x, symb, axes) = x
 
 @inline function first_fieldvector_in_bc(args::Tuple, rargs...)
@@ -301,8 +304,17 @@ end
 )
     map(propertynames(dest)) do symb
         Base.@_inline_meta
-        p = parent(getfield(_values(dest), symb))
-        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
+        # @show symb
+        # @show getfield(_values(dest), symb)
+        # fv = getfield(_values(dest), symb)
+        # fa = parent(fv)
+        # copyto!(fa, transform_broadcasted(bc, symb, axes(fv)))
+
+        fv = todata(getfield(_values(dest), symb))
+        # fv = getfield(_values(dest), symb)
+        copyto!(fv, transform_broadcasted(bc, symb, axes(fv)))
+        # @show fa
+        # @show axes(fa)
     end
     return dest
 end
@@ -313,7 +325,7 @@ end
 )
     map(propertynames(dest)) do symb
         Base.@_inline_meta
-        p = parent(getfield(_values(dest), symb))
+        p = todata(getfield(_values(dest), symb))
         copyto!(p, bc)
         nothing
     end

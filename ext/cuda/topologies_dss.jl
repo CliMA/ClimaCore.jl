@@ -48,8 +48,9 @@ function dss_load_perimeter_data_kernel!(
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
-        data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
+        data_idx = linear_ind(sized, (level, ip, jp, elem))
+        pperimeter_data.arrays[fidx][level, p, elem] =
+            pdata.arrays[fidx][data_idx]
     end
     return nothing
 end
@@ -89,7 +90,8 @@ function dss_unload_perimeter_data_kernel!(
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
         data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+        pdata.arrays[fidx][data_idx] =
+            pperimeter_data.arrays[fidx][level, p, elem]
     end
     return nothing
 end
@@ -148,12 +150,12 @@ function dss_local_kernel!(
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            sum_data += pperimeter_data[level, ip, fidx, lidx]
+            sum_data += pperimeter_data.arrays[fidx][level, ip, lidx]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            pperimeter_data[level, ip, fidx, lidx] = sum_data
+            pperimeter_data.arrays[fidx][level, ip, lidx] = sum_data
         end
     elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
         nfacedof = div(nperimeter - 4, 4)
@@ -169,10 +171,10 @@ function dss_local_kernel!(
             ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
             ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
             val =
-                pperimeter_data[level, ip1, fidx, lidx1] +
-                pperimeter_data[level, ip2, fidx, lidx2]
-            pperimeter_data[level, ip1, fidx, lidx1] = val
-            pperimeter_data[level, ip2, fidx, lidx2] = val
+                pperimeter_data.arrays[fidx][level, ip1, lidx1] +
+                pperimeter_data.arrays[fidx][level, ip2, lidx2]
+            pperimeter_data.arrays[fidx][level, ip1, lidx1] = val
+            pperimeter_data.arrays[fidx][level, ip2, lidx2] = val
         end
     end
 
@@ -254,7 +256,7 @@ function dss_transform_kernel!(
     if gidx ≤ nlevels * nperimeter * nlocalelems
         sizet = (nlevels, nperimeter, nlocalelems)
         sizet_data = (nlevels, Nq, Nq, nfid, nelems)
-        sizet_wt = (Nq, Nq, 1, nelems)
+        sizet_wt = (Nq, Nq, nelems)
         sizet_metric = (nlevels, Nq, Nq, nmetric, nelems)
 
         (level, p, localelemno) = cart_ind(sizet, gidx).I
@@ -267,26 +269,24 @@ function dss_transform_kernel!(
             pperimeter_data[level, p, fidx, elem] = pdata[data_idx] * weight
         end
         for fidx in covariant12fidx
-            data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
+            data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
+            (idx11, idx12, idx21, idx22) = (1,2,3,4)
+                # Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pperimeter_data[level, p, fidx, elem] =
                 (
-                    p∂ξ∂x[idx11] * pdata[data_idx1] +
-                    p∂ξ∂x[idx12] * pdata[data_idx2]
+                    p∂ξ∂x.arrays[idx11][data_idx] * pdata.arrays[fidx][data_idx] +
+                    p∂ξ∂x.arrays[idx12][data_idx] * pdata.arrays[fidx+1][data_idx]
                 ) * weight
             pperimeter_data[level, p, fidx + 1, elem] =
                 (
-                    p∂ξ∂x[idx21] * pdata[data_idx1] +
-                    p∂ξ∂x[idx22] * pdata[data_idx2]
+                    p∂ξ∂x.arrays[idx21][data_idx] * pdata.arrays[fidx][data_idx] +
+                    p∂ξ∂x.arrays[idx22][data_idx] * pdata.arrays[fidx+1][data_idx]
                 ) * weight
         end
         for fidx in contravariant12fidx
-            data_idx1 = linear_ind(sizet_data, (level, ip, jp, fidx, elem))
-            data_idx2 = linear_ind(sizet_data, (level, ip, jp, fidx + 1, elem))
-            (idx11, idx12, idx21, idx22) =
-                Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
+            data_idx = linear_ind(sizet_data, (level, ip, jp, elem))
+            (idx11, idx12, idx21, idx22) = (1,2,3,4)
+                # Topologies._get_idx_metric(sizet_metric, (level, ip, jp, elem))
             pperimeter_data[level, p, fidx, elem] =
                 (
                     p∂x∂ξ[idx11] * pdata[data_idx1] +
@@ -683,7 +683,8 @@ function load_from_recv_buffer_kernel!(
         lidx = recv_buf_idx[irecv, 1]
         ip = recv_buf_idx[irecv, 2]
         idx = level + ((fidx - 1) + (irecv - 1) * nfid) * nlevels
-        CUDA.@atomic pperimeter_data[level, ip, fidx, lidx] += recv_data[idx]
+        CUDA.@atomic pperimeter_data.arrays[fidx][level, ip, lidx] +=
+            recv_data[idx]
     end
     return nothing
 end

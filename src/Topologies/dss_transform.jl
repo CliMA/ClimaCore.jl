@@ -201,33 +201,47 @@ end
 
 # helper functions for DSS2
 
-function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
-    nmetric = sizet[4]
-    (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
-    (level, i, j, elem) = loc
-    return (
-        linear_ind(sizet, (level, i, j, i11, elem)),
-        linear_ind(sizet, (level, i, j, i12, elem)),
-        linear_ind(sizet, (level, i, j, i21, elem)),
-        linear_ind(sizet, (level, i, j, i22, elem)),
-    )
-end
+# function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
+#     nmetric = sizet[4]
+#     (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
+#     (level, i, j, elem) = loc
+#     return (
+#         linear_ind(sizet, (level, i, j, i11, elem)),
+#         linear_ind(sizet, (level, i, j, i12, elem)),
+#         linear_ind(sizet, (level, i, j, i21, elem)),
+#         linear_ind(sizet, (level, i, j, i22, elem)),
+#     )
+# end
 
-function _get_idx_metric_3d(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
-    nmetric = sizet[4]
-    (level, i, j, elem) = loc
-    return (
-        linear_ind(sizet, (level, i, j, 1, elem)),
-        linear_ind(sizet, (level, i, j, 2, elem)),
-        linear_ind(sizet, (level, i, j, 3, elem)),
-        linear_ind(sizet, (level, i, j, 4, elem)),
-        linear_ind(sizet, (level, i, j, 5, elem)),
-        linear_ind(sizet, (level, i, j, 6, elem)),
-        linear_ind(sizet, (level, i, j, 7, elem)),
-        linear_ind(sizet, (level, i, j, 8, elem)),
-        linear_ind(sizet, (level, i, j, 9, elem)),
-    )
-end
+# function _get_idx_metric_3d(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
+#     nmetric = sizet[4]
+#     (level, i, j, elem) = loc
+#     return (
+#         linear_ind(sizet, (level, i, j, 1, elem)),
+#         linear_ind(sizet, (level, i, j, 2, elem)),
+#         linear_ind(sizet, (level, i, j, 3, elem)),
+#         linear_ind(sizet, (level, i, j, 4, elem)),
+#         linear_ind(sizet, (level, i, j, 5, elem)),
+#         linear_ind(sizet, (level, i, j, 6, elem)),
+#         linear_ind(sizet, (level, i, j, 7, elem)),
+#         linear_ind(sizet, (level, i, j, 8, elem)),
+#         linear_ind(sizet, (level, i, j, 9, elem)),
+#     )
+# end
+
+# function _get_idx_metric_perm(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
+#     nmetric = sizet[4]
+#     (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
+#     (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
+#     return (i11, i12, i21, i22)
+# end
+
+@inline _get_idx_metric(sizet::NTuple{4, Int}, loc::NTuple{4, Int}) =
+    linear_ind(sizet, loc)
+
+@inline _get_idx_metric_3d(sizet::NTuple{4, Int}, loc::NTuple{4, Int}) =
+    linear_ind(sizet, loc)
+
 
 function _representative_slab(
     data::Union{DataLayouts.AbstractData, Nothing},

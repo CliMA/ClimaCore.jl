@@ -5,6 +5,7 @@ using Revise; include(joinpath("test", "DataLayouts", "data1dx.jl"))
 using Test
 using ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
+import ClimaCore.DataLayouts: field_array
 
 @testset "VIFH" begin
     TestFloatTypes = (Float32, Float64)
@@ -16,13 +17,13 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
 
         # construct a data object with 10 cells in vertical and
         # 10 elements in horizontal with 4 nodal points per element in horizontal
-        array = rand(FT, Nv, Ni, 3, Nh)
+        array = field_array(rand(FT, Nv, Ni, 3, Nh), 3)
 
         data = VIFH{S, Nv, Ni, Nh}(array)
         sum(x -> x[2], data)
 
-        @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
-        @test getfield(data.:2, :array) == @view(array[:, :, 3:3, :])
+        @test getfield(data.:1, :array) == view(array, :, :, 1:2, :)
+        @test getfield(data.:2, :array) == view(array, :, :, 3:3, :)
 
         @test size(data) == (Ni, 1, 1, Nv, Nh)
 
