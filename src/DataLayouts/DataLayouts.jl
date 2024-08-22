@@ -361,31 +361,6 @@ function IJFH{S, Nij, Nh}(::Type{ArrayType}) where {S, Nij, Nh, ArrayType}
     IJFH{S, Nij, Nh}(ArrayType(undef, Nij, Nij, typesize(T, S), Nh))
 end
 
-@propagate_inbounds function Base.getindex(
-    data::IJFH{S},
-    I::CartesianIndex{5},
-) where {S}
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
-end
-@propagate_inbounds function Base.setindex!(
-    data::IJFH{S},
-    val,
-    I::CartesianIndex{5},
-) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
-end
-
-
 Base.length(data::IJFH) = get_Nh(data)
 
 @inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
@@ -476,27 +451,6 @@ Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
 end
 Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
     column(data, i, h)
-
-@inline function Base.getindex(data::IFH{S}, I::CartesianIndex{5}) where {S}
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
-end
-@inline function Base.setindex!(
-    data::IFH{S},
-    val,
-    I::CartesianIndex{5},
-) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
-end
 
 # ======================
 # Data0D DataLayout
@@ -619,39 +573,6 @@ end
 
 @inline universal_size(::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
 
-@inline function Base.getindex(
-    data::IJF{S, Nij},
-    I::CartesianIndex,
-) where {S, Nij}
-    i = I.I[1]
-    j = I.I[2]
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        CartesianIndex(i, j, 1),
-    )
-end
-
-@inline function Base.setindex!(
-    data::IJF{S, Nij},
-    val,
-    I::CartesianIndex,
-) where {S, Nij}
-    i = I.I[1]
-    j = I.I[2]
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        CartesianIndex(i, j, 1),
-    )
-end
-
 @inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
                  throw(BoundsError(data, (i, j)))
@@ -705,32 +626,6 @@ function SArray(data::IF{S, Ni, <:MArray}) where {S, Ni}
     IF{S, Ni}(SArray(parent(data)))
 end
 
-@inline function Base.getindex(data::IF{S, Ni}, I::CartesianIndex) where {S, Ni}
-    i = I.I[1]
-    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        CartesianIndex(i, 1),
-    )
-end
-
-@inline function Base.setindex!(
-    data::IF{S, Ni},
-    val,
-    I::CartesianIndex,
-) where {S, Ni}
-    i = I.I[1]
-    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        CartesianIndex(i, 1),
-    )
-end
-
 @inline function column(data::IF{S, Ni}, i) where {S, Ni}
     @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
     dataview = @inbounds view(parent(data), i, :)
@@ -782,28 +677,6 @@ nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
     _property_view(data, Val(i))
-
-@inline function Base.getindex(data::VF{S, Nv}, I::CartesianIndex) where {S, Nv}
-    v = I.I[4]
-    @boundscheck 1 <= v <= nlevels(data) || throw(BoundsError(data, (v,)))
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        CartesianIndex(v, 1),
-    )
-end
-
-@inline function Base.setindex!(data::VF{S}, val, I::CartesianIndex) where {S}
-    v = I.I[4]
-    @boundscheck (1 <= v <= nlevels(data)) || throw(BoundsError(data, (v,)))
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        CartesianIndex(v, 1),
-    )
-end
 
 @inline function column(data::VF, i, h)
     @boundscheck (i >= 1 && h >= 1) || throw(BoundsError(data, (i, h)))
@@ -897,31 +770,6 @@ end
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
     dataview = @inbounds view(array, v, :, :, :, :)
     IJFH{S, Nij, Nh}(dataview)
-end
-
-@propagate_inbounds function Base.getindex(
-    data::VIJFH{S},
-    I::CartesianIndex{5},
-) where {S}
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
-end
-
-@propagate_inbounds function Base.setindex!(
-    data::VIJFH{S},
-    val,
-    I::CartesianIndex{5},
-) where {S}
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        to_data_specific(data, I),
-    )
 end
 
 function gather(
@@ -1019,33 +867,6 @@ end
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
     dataview = @inbounds view(array, v, :, :, :)
     IFH{S, Nij, Nh}(dataview)
-end
-
-@propagate_inbounds function Base.getindex(
-    data::VIFH{S},
-    I::CartesianIndex{5},
-) where {S}
-    i, _, _, v, h = I.I
-    @inbounds get_struct(
-        parent(data),
-        S,
-        Val(field_dim(data)),
-        CartesianIndex(v, i, 1, h),
-    )
-end
-
-@inline function Base.setindex!(
-    data::VIFH{S},
-    val,
-    I::CartesianIndex{5},
-) where {S}
-    i, _, _, v, h = I.I
-    @inbounds set_struct!(
-        parent(data),
-        convert(S, val),
-        Val(field_dim(data)),
-        CartesianIndex(v, i, 1, h),
-    )
 end
 
 # =========================================
@@ -1190,12 +1011,26 @@ type parameters.
 @inline field_dim(::Type{<:VIJFH}) = 4
 @inline field_dim(::Type{<:VIFH}) = 3
 
-@inline to_data_specific(::IJF, I::CartesianIndex) = CartesianIndex(I.I[1], I.I[2], 1, 1)
-@inline to_data_specific(::IJFH, I::CartesianIndex) = CartesianIndex(I.I[1], I.I[2], 1, I.I[5])
-@inline to_data_specific(::IFH, I::CartesianIndex) = CartesianIndex(I.I[1], 1, I.I[5])
-@inline to_data_specific(::VIJFH, I::CartesianIndex) = CartesianIndex(I.I[4], I.I[1], I.I[2], 1, I.I[5])
-@inline to_data_specific(::VIFH, I::CartesianIndex) = CartesianIndex(I.I[4], I.I[1], 1, I.I[5])
-@inline to_data_specific(::DataSlab1D, I::CartesianIndex) = CartesianIndex(I.I[1], I.I[1], 1, I.I[5])
+@inline to_data_specific(data::AbstractData, I::CartesianIndex) =
+    CartesianIndex(_to_data_specific(data, I.I))
+@inline _to_data_specific(::VF, I::Tuple) = (I[4], 1)
+@inline _to_data_specific(::IF, I::Tuple) = (I[1], 1)
+@inline _to_data_specific(::IJF, I::Tuple) = (I[1], I[2], 1)
+@inline _to_data_specific(::IJFH, I::Tuple) = (I[1], I[2], 1, I[5])
+@inline _to_data_specific(::IFH, I::Tuple) = (I[1], 1, I[5])
+@inline _to_data_specific(::VIJFH, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
+@inline _to_data_specific(::VIFH, I::Tuple) = (I[4], I[1], 1, I[5])
+
+"""
+    bounds_condition(data::AbstractData, I::Tuple)
+
+Returns the condition used for `@boundscheck`
+inside `getindex` with `CartesianIndex`s.
+"""
+@inline bounds_condition(data::AbstractData, I::CartesianIndex) = true # TODO: add more support
+@inline bounds_condition(data::IJF, I::CartesianIndex) = (1 <= I.I[1] <= get_Nij(data) && 1 <= I.I[2] <= get_Nij(data))
+@inline bounds_condition(data::VF, I::CartesianIndex) = 1 <= I.I[4] <= nlevels(data)
+@inline bounds_condition(data::IF, I::CartesianIndex) = 1 <= I.I[1] <= get_Nij(data)
 
 """
     type_params(data::AbstractData)
@@ -1330,6 +1165,33 @@ type parameters.
 Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
 Base.ndims(::Type{T}) where {T <: AbstractData} =
     Base.ndims(parent_array_type(T))
+
+@inline function Base.getindex(
+    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    I::CartesianIndex,
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds get_struct(
+        parent(data),
+        eltype(data),
+        Val(field_dim(data)),
+        to_data_specific(data, I),
+    )
+end
+
+@inline function Base.setindex!(
+    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    val,
+    I::CartesianIndex,
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds set_struct!(
+        parent(data),
+        convert(eltype(data), val),
+        Val(field_dim(data)),
+        to_data_specific(data, I),
+    )
+end
 
 """
     data2array(::AbstractData)
