@@ -3,50 +3,45 @@ import RootSolvers
 import ClimaComms
 
 """
-    column_integral_definite!(∫field, ᶜfield, [init])
+    column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `∫field```{}= \\int_{z_{min}}^{z_{max}}\\,```ᶜfield```(z)\\,dz +{}```init`,
-where ``z_{min}`` and ``z_{max}`` are the values of `z` at the bottom and top of
-the domain, respectively. The input `ᶜfield` must lie on a cell-center space,
-and the output `∫field` must lie on the corresponding horizontal space. The
-default value of `init` is 0.
+Sets `ϕ_top```{}= \\int_{z_{bot}}^{z_{top}}\\,```ᶜ∂ϕ∂z```(z)\\,dz +{}```ϕ_bot`,
+where ``z_{bot}`` and ``z_{top}`` are the values of `z` at the bottom and top of
+the domain, respectively. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
+`AbstractBroadcasted`, and the output `ϕ_top` should be a horizontal `Field`.
+The default value of `ϕ_bot` is 0.
 """
-function column_integral_definite!(∫field, ᶜfield, init = rzero(eltype(∫field)))
-    ᶜfield_times_Δz =
-        Base.Broadcast.broadcasted(⊠, ᶜfield, Fields.Δz_field(ᶜfield))
-    column_reduce!(⊞, ∫field, ᶜfield_times_Δz; init)
+function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ϕ_top)))
+    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    column_reduce!(⊞, ϕ_top, ᶜΔϕ; init = ϕ_bot)
 end
 
 """
-    column_integral_indefinite!(ᶠ∫field, ᶜfield, [init])
+    column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ᶠ∫field```(z) = \\int_{z_{min}}^z\\,```ᶜfield```(z')\\,dz' +{}```init`,
-where ``z_{min}`` is the value of `z` at the bottom of the domain. The input
-`ᶜfield` must lie on a cell-center space, and the output `ᶠ∫field` must lie on
-the corresponding cell-face space. The default value of `init` is 0.
+Sets `ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\,dz' +{}```ϕ_bot`, where
+``z_{bot}`` is the value of `z` at the bottom of the domain. The input `ᶜ∂ϕ∂z`
+should be a cell-center `Field` or `AbstractBroadcasted`, and the output `ᶠϕ`
+should be a cell-face `Field`. The default value of `ϕ_bot` is 0.
 
-    column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ₀], [rtol])
+    column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
-Sets `ᶠϕ```(z) = \\int_{z_{min}}^z\\,```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,dz' +{}```ϕ₀`
-for any scalar-valued two-argument function `∂ϕ∂z`. That is, the output `ᶠϕ` is
-such that `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)`, where `ᶜgradᵥ = GradientF2C()`,
-`ᶜint = InterpolateF2C()`, and `ᶜz = Fields.coordinate_field(ᶜint.(ᶠϕ)).z`. The
-approximation is accurate to a relative tolerance of `rtol`. The default value
-of `ϕ₀` is 0, and the default value of `rtol` is 0.001.
+Sets
+`ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,dz' +{}```ϕ_bot`,
+where `∂ϕ∂z` can be any scalar-valued two-argument function. The output `ᶠϕ`
+satisfies `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)`, where `ᶜgradᵥ = GradientF2C()`,
+`ᶜint = InterpolateF2C()`, and `ᶜz = Fields.coordinate_field(ᶜint.(ᶠϕ)).z`, and
+where the approximation is accurate to a relative tolerance of `rtol`. The
+default value of `ϕ_bot` is 0, and the default value of `rtol` is 0.001.
 """
-function column_integral_indefinite!(
-    ᶠ∫field,
-    ᶜfield,
-    init = rzero(eltype(ᶠ∫field)),
-)
-    ᶜfield_times_Δz =
-        Base.Broadcast.broadcasted(⊠, ᶜfield, Fields.Δz_field(ᶜfield))
-    column_accumulate!(⊞, ᶠ∫field, ᶜfield_times_Δz; init)
+function column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ᶠϕ)))
+    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    column_accumulate!(⊞, ᶠϕ, ᶜΔϕ; init = ϕ_bot)
 end
 function column_integral_indefinite!(
     ∂ϕ∂z::F,
     ᶠϕ,
-    ϕ₀ = eltype(ᶠϕ)(0),
+    ϕ_bot = eltype(ᶠϕ)(0),
     rtol = eltype(ᶠϕ)(0.001),
 ) where {F <: Function}
     device = ClimaComms.device(ᶠϕ)
@@ -61,7 +56,7 @@ function column_integral_indefinite!(
     ᶜz = Fields.coordinate_field(center_space).z
     ᶜΔz = Fields.Δz_field(center_space)
     ᶜz_and_Δz = Base.Broadcast.broadcasted(tuple, ᶜz, ᶜΔz)
-    column_accumulate!(ᶠϕ, ᶜz_and_Δz; init = ϕ₀) do ϕ_prev, (z, Δz)
+    column_accumulate!(ᶠϕ, ᶜz_and_Δz; init = ϕ_bot) do ϕ_prev, (z, Δz)
         residual(ϕ_new) = (ϕ_new - ϕ_prev) / Δz - ∂ϕ∂z((ϕ_prev + ϕ_new) / 2, z)
         (; converged, root) = RootSolvers.find_zero(
             residual,
