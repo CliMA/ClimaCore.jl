@@ -3,6 +3,9 @@ ClimaCore.jl Release Notes
 
 main
 -------
+
+v0.14.12
+-------
 - Added hyperbolic tangent stretching. PR [#1930](https://github.com/CliMA/ClimaCore.jl/pull/1930).
 
 v0.14.11
