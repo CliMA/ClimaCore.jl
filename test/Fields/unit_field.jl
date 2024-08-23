@@ -310,10 +310,10 @@ end
     Y.k.z = 3.0
     @test Y.k.z === 3.0
 
-    @test Fields.rcompare(Y, Y)
+    @test Y == Y
     Ydc = deepcopy(Y)
     Ydc.k.z += 1
-    @test !Fields.rcompare(Ydc, Y)
+    @test !(Ydc == Y)
     # Fields.@rprint_diff(Ydc, Y)
     s = sprint(
         Fields._rprint_diff,

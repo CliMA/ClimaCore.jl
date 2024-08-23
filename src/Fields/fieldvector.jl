@@ -455,3 +455,7 @@ Returns `true` if `x == y` recursively.
 """
 rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
     _rcompare(true, x, y)
+
+# Define == to call rcompare for two fieldvectors of the same
+# exact type.
+Base.:(==)(x::T, y::T) where {T <: FieldVector} = rcompare(x, y)
