@@ -103,8 +103,8 @@ function test_kernel!(; fused!, unfused!, X, Y)
     @testset "Test correctness of $(nameof(typeof(fused!)))" begin
         Fields.@rprint_diff(X_fused, X_unfused)
         Fields.@rprint_diff(Y_fused, Y_unfused)
-        @test Fields.rcompare(X_fused, X_unfused)
-        @test Fields.rcompare(Y_fused, Y_unfused)
+        @test X_fused == X_unfused
+        @test Y_fused == Y_unfused
     end
 end
 
