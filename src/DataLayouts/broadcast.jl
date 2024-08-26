@@ -212,7 +212,7 @@ Base.Broadcast.broadcastable(data::AbstractData) = data
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {Ni, DS <: Data1DStyle{Ni}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Ni),)
@@ -221,7 +221,7 @@ end
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {Nv, Ni, DS <: Data1DXStyle{Nv, Ni}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Ni),)
@@ -230,7 +230,7 @@ end
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {Nij, DS <: Data2DStyle{Nij}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Nij), SOneTo(Nij))
@@ -239,7 +239,7 @@ end
 
 Base.@propagate_inbounds function slab(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {Nv, Nij, DS <: Data2DXStyle{Nv, Nij}}
     _args = slab_args(bc.args, inds...)
     _axes = (SOneTo(Nij), SOneTo(Nij))
@@ -248,7 +248,7 @@ end
 
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {Nv, N, DS <: Union{Data1DXStyle{Nv, N}, Data2DXStyle{Nv, N}}}
     _args = column_args(bc.args, inds...)
     _axes = nothing
@@ -257,7 +257,7 @@ end
 
 @inline function column(
     bc::Base.Broadcast.Broadcasted{DS},
-    inds...,
+    inds::Integer...,
 ) where {DS <: DataColumnStyle}
     bc
 end

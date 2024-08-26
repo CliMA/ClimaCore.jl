@@ -100,9 +100,23 @@ Statically returns `Nv`.
 """
     get_Nij(::UniversalSize)
 
-Statically returns `Nij`.
+Statically returns `Nij` (when `Ni` and `Nj` are equal).
 """
-@inline get_Nij(::UniversalSize{Nij}) where {Nij} = Nij
+@inline get_Nij(::UniversalSize{Nij, Nij}) where {Nij} = Nij
+
+"""
+    get_Ni(::UniversalSize)
+
+Statically returns `Ni`.
+"""
+@inline get_Ni(::UniversalSize{Ni}) where {Ni} = Ni
+
+"""
+    get_Nj(::UniversalSize)
+
+Statically returns `Nj`.
+"""
+@inline get_Nj(::UniversalSize{Ni, Nj}) where {Ni, Nj} = Nj
 
 """
     get_Nh(::UniversalSize)
@@ -113,6 +127,8 @@ Statically returns `Nh`.
 
 @inline get_Nh(data::AbstractData) = get_Nh(UniversalSize(data))
 @inline get_Nij(data::AbstractData) = get_Nij(UniversalSize(data))
+@inline get_Ni(data::AbstractData) = get_Ni(UniversalSize(data))
+@inline get_Nj(data::AbstractData) = get_Nj(UniversalSize(data))
 @inline get_Nv(data::AbstractData) = get_Nv(UniversalSize(data))
 @inline get_N(data::AbstractData) = get_N(UniversalSize(data))
 
@@ -363,26 +379,6 @@ end
 
 Base.length(data::IJFH) = get_Nh(data)
 
-@inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
-    @boundscheck (1 <= h <= get_Nh(data)) || throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
-end
-
-@inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
-    @boundscheck (v >= 1 && 1 <= h <= get_Nh(data)) ||
-                 throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
-end
-
-@inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
-    @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= get_Nh(data)) ||
-                 throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), i, j, :, h)
-    DataF{S}(dataview)
-end
-
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
     data::IJFH{S, Nij},
@@ -435,22 +431,6 @@ function IFH{S, Ni, Nh}(::Type{ArrayType}) where {S, Ni, Nh, ArrayType}
 end
 
 @inline universal_size(::IFH{S, Ni, Nh}) where {S, Ni, Nh} = (Ni, 1, 1, 1, Nh)
-
-@inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
-    @boundscheck (1 <= h <= get_Nh(data)) || throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, h)
-    IF{S, Ni}(dataview)
-end
-Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
-
-@inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
-    @boundscheck (1 <= h <= get_Nh(data) && 1 <= i <= Ni) ||
-                 throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), i, :, h)
-    DataF{S}(dataview)
-end
-Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
-    column(data, i, h)
 
 # ======================
 # Data0D DataLayout
@@ -531,16 +511,6 @@ end
     (Nij, Nij, 1, 1, 1)
 Base.axes(::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
-@inline function slab(data::DataSlab2D, h)
-    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
-    data
-end
-
-@inline function slab(data::DataSlab2D, v, h)
-    @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
-    data
-end
-
 """
     IJF{S, Nij, A} <: DataSlab2D{S, Nij}
 
@@ -573,13 +543,6 @@ end
 
 @inline universal_size(::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1, 1, 1)
 
-@inline function column(data::IJF{S, Nij}, i, j) where {S, Nij}
-    @boundscheck (1 <= j <= Nij && 1 <= i <= Nij) ||
-                 throw(BoundsError(data, (i, j)))
-    dataview = @inbounds view(parent(data), i, j, :)
-    DataF{S}(dataview)
-end
-
 # ======================
 # DataSlab1D DataLayout
 # ======================
@@ -587,16 +550,6 @@ end
 @inline universal_size(::DataSlab1D{<:Any, Ni}) where {Ni} = (Ni, 1, 1, 1, 1)
 Base.axes(::DataSlab1D{S, Ni}) where {S, Ni} = (SOneTo(Ni),)
 Base.lastindex(::DataSlab1D{S, Ni}) where {S, Ni} = Ni
-
-@inline function slab(data::DataSlab1D, h)
-    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
-    data
-end
-
-@inline function slab(data::DataSlab1D, v, h)
-    @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
-    data
-end
 
 """
     IF{S, Ni, A} <: DataSlab1D{S, Ni}
@@ -624,12 +577,6 @@ function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
 end
 function SArray(data::IF{S, Ni, <:MArray}) where {S, Ni}
     IF{S, Ni}(SArray(parent(data)))
-end
-
-@inline function column(data::IF{S, Ni}, i) where {S, Ni}
-    @boundscheck (1 <= i <= Ni) || throw(BoundsError(data, (i,)))
-    dataview = @inbounds view(parent(data), i, :)
-    DataF{S}(dataview)
 end
 
 # ======================
@@ -678,24 +625,6 @@ nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
     _property_view(data, Val(i))
 
-@inline function column(data::VF, i, h)
-    @boundscheck (i >= 1 && h >= 1) || throw(BoundsError(data, (i, h)))
-    data
-end
-
-@inline function column(data::VF, i, j, h)
-    @boundscheck (i >= 1 && j >= 1 && h >= 1) ||
-                 throw(BoundsError(data, (i, j, h)))
-    data
-end
-
-@inline function level(data::VF{S}, v) where {S}
-    @boundscheck (1 <= v <= nlevels(data)) || throw(BoundsError(data, (v)))
-    array = parent(data)
-    dataview = @inbounds view(array, v, :)
-    DataF{S}(dataview)
-end
-
 # ======================
 # Data2DX DataLayout
 # ======================
@@ -729,48 +658,6 @@ nlevels(::VIJFH{S, Nv}) where {S, Nv} = Nv
     (Nij, Nij, 1, Nv, Nh)
 
 Base.length(data::VIJFH) = get_Nv(data) * get_Nh(data)
-
-# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function slab(data::VIJFH{S, Nv, Nij, Nh}, v, h) where {S, Nv, Nij, Nh}
-    array = parent(data)
-    @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (v, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds view(
-        array,
-        v,
-        Base.Slice(Base.OneTo(Nij)),
-        Base.Slice(Base.OneTo(Nij)),
-        Base.Slice(Base.OneTo(Nf)),
-        h,
-    )
-    IJF{S, Nij}(dataview)
-end
-
-# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function column(
-    data::VIJFH{S, Nv, Nij, Nh},
-    i,
-    j,
-    h,
-) where {S, Nv, Nij, Nh}
-    array = parent(data)
-    @boundscheck (1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (i, j, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, j, Base.Slice(Base.OneTo(Nf)), h),
-    )
-    VF{S, Nv}(dataview)
-end
-
-@inline function level(data::VIJFH{S, Nv, Nij, Nh}, v) where {S, Nv, Nij, Nh}
-    array = parent(data)
-    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
-    dataview = @inbounds view(array, v, :, :, :, :)
-    IJFH{S, Nij, Nh}(dataview)
-end
 
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
@@ -818,56 +705,6 @@ nlevels(::VIFH{S, Nv}) where {S, Nv} = Nv
     (Ni, 1, 1, Nv, Nh)
 
 Base.length(data::VIFH) = nlevels(data) * get_Nh(data)
-
-# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function slab(data::VIFH{S, Nv, Ni, Nh}, v, h) where {S, Nv, Ni, Nh}
-    array = parent(data)
-    @boundscheck (1 <= v <= Nv && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (v, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (v, Base.Slice(Base.OneTo(Ni)), Base.Slice(Base.OneTo(Nf)), h),
-    )
-    IF{S, Ni}(dataview)
-end
-
-# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function column(data::VIFH{S, Nv, Ni, Nh}, i, h) where {S, Nv, Ni, Nh}
-    array = parent(data)
-    @boundscheck (1 <= i <= Ni && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (i, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
-    )
-    VF{S, Nv}(dataview)
-end
-
-@inline function column(
-    data::VIFH{S, Nv, Ni, Nh},
-    i,
-    j,
-    h,
-) where {S, Nv, Ni, Nh}
-    array = parent(data)
-    @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (i, j, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
-    )
-    VF{S, Nv}(dataview)
-end
-
-@inline function level(data::VIFH{S, Nv, Nij, Nh}, v) where {S, Nv, Nij, Nh}
-    array = parent(data)
-    @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
-    dataview = @inbounds view(array, v, :, :, :)
-    IFH{S, Nij, Nh}(dataview)
-end
 
 # =========================================
 # Special DataLayouts for regular gridding
@@ -975,11 +812,143 @@ rebuild(data::AbstractData, array::AbstractArray) =
 empty_kernel_stats(::ClimaComms.AbstractDevice) = nothing
 empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
 
+##### General indexing helpers
+
+# Note:
+#   we construct the subarray views directly in
+#   [column|level|slab]_data_view
+#   as optimizer fails in Base.to_indices (v1.7).
+
+@inline Nf_slice(data::AbstractData) = slice_one_to(ncomponents(data))
+@inline slice_one_to(n) = Base.Slice(Base.OneTo(n))
+
+@inline function upper_bound(data, i::Integer)
+    i == 1 && return get_Ni(data)
+    i == 2 && return get_Nj(data)
+    i == 4 && return get_Nv(data)
+    i == 5 && return get_Nh(data)
+    return typemax(Int)
+end
+
+"""
+    bounds_condition(data::AbstractData, I::Tuple)
+
+Returns the condition used for `@boundscheck`
+inside `getindex` with `CartesianIndex`s.
+"""
+@inline bounds_conditions(data::AbstractData, I::CartesianIndex, inds::Tuple) =
+    all(i -> 1 ≤ I.I[i] ≤ upper_bound(data, i), inds)
+
+@inline bounds_condition(data::AbstractData, I::CartesianIndex) =
+    bounds_conditions(data, I, inds_to_check(data))
+
+# For getindex
+@inline inds_to_check(data::AbstractData) = () # TODO: check more indices for get/setindex
+@inline inds_to_check(data::IF) = (1,)
+@inline inds_to_check(data::VF) = (4,)
+
+##### Column indexing
+
+Base.@propagate_inbounds column(
+    data::Union{VIJFH, VIFH, IJFH, IFH, IJF, IF},
+    inds::Integer...,
+) = column_data(data, column_universal_index(data, inds...)...)
+
+@inline function column_data(data::VF, I::CartesianIndex, check_inds)
+    @boundscheck bounds_conditions(data, I, check_inds) ||
+                 throw(BoundsError(data, I.I))
+    data
+end
+
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
+@inline function column_data(data::AbstractData, I::CartesianIndex, check_inds)
+    @boundscheck bounds_conditions(data, I, check_inds) ||
+                 throw(BoundsError(data, I.I))
+    dataview = @inbounds SubArray(parent(data), column_data_view(data, I))
+    column_type(data)(dataview)
+end
+
+##### Level indexing
+
+Base.@propagate_inbounds level(data::Union{VF, VIJFH, VIFH}, inds::Integer...) =
+    level_data(data, level_universal_index(data, inds...)...)
+
+@inline function level_data(data::AbstractData, I::CartesianIndex, check_inds)
+    @boundscheck bounds_conditions(data, I, check_inds) ||
+                 throw(BoundsError(data, I.I))
+    dataview = @inbounds SubArray(parent(data), level_data_view(data, I))
+    level_type(data)(dataview)
+end
+
+##### Slab indexing
+
+Base.@propagate_inbounds slab(
+    data::Union{VIJFH, VIFH, IFH, IJFH},
+    inds::Integer...,
+) = slab_data(data, slab_universal_index(data, inds...)...)
+
+@inline function slab_data(data::AbstractData, I::CartesianIndex, check_inds)
+    @boundscheck bounds_conditions(data, I, check_inds) ||
+                 throw(BoundsError(data, I.I))
+    dataview = @inbounds SubArray(parent(data), slab_data_view(data, I))
+    slab_type(data)(dataview)
+end
+
+@inline function slab_data(
+    data::Union{DataSlab2D, DataSlab1D},
+    I::CartesianIndex,
+    check_inds,
+)
+    @boundscheck bounds_conditions(data, I, check_inds) ||
+                 throw(BoundsError(data, I.I))
+    data
+end
+
+#! format: off
+
+##### column/level indexing helpers
+@inline column_universal_index(::Union{IF}, i)                      = (CartesianIndex((i, 1, 1, 1, 1)), (1,))
+@inline column_universal_index(::Union{IJFH,IJF}, i, j)             = (CartesianIndex((i, j, 1, 1, 1)), (1,2,))
+@inline column_universal_index(::Union{VIFH,IFH,VF}, i, h)          = (CartesianIndex((i, 1, 1, 1, h)), (1,5,))
+@inline column_universal_index(::Union{VIJFH,IJFH,VF}, i, j, h)     = (CartesianIndex((i, j, 1, 1, h)), (1,2,5))
+@inline column_universal_index(::Union{IFH,VIFH}, i, j, h)          = (CartesianIndex((i, j, 1, 1, h)), (1,5))
+
+@inline column_type(data::Union{IJFH,IFH,IJF,IF}) = DataF{eltype(data)}
+@inline column_type(data::Union{VIJFH,VIFH}) = VF{eltype(data), get_Nv(data)}
+
+@inline column_data_view(data::VIJFH, I::CartesianIndex) = (slice_one_to(get_Nv(data)), I.I[1], I.I[2], Nf_slice(data), I.I[5])
+@inline column_data_view(data::VIFH,  I::CartesianIndex) = (slice_one_to(get_Nv(data)), I.I[1], Nf_slice(data), I.I[5])
+@inline column_data_view(data::IJFH,  I::CartesianIndex) = (I.I[1], I.I[2], Nf_slice(data), I.I[5])
+@inline column_data_view(data::IFH,   I::CartesianIndex) = (I.I[1], Nf_slice(data), I.I[5])
+@inline column_data_view(data::IJF,   I::CartesianIndex) = (I.I[1], I.I[2], Nf_slice(data))
+@inline column_data_view(data::IF,    I::CartesianIndex) = (I.I[1], Nf_slice(data))
+
+@inline level_universal_index(::Union{VF,VIJFH,VIFH}, v) = (CartesianIndex((1, 1, 1, v, 1)), (4,))
+
+@inline level_type(data::VF) = DataF{eltype(data)}
+@inline level_type(data::VIJFH) = IJFH{eltype(data), get_Nij(data), get_Nh(data)}
+@inline level_type(data::VIFH) = IFH{eltype(data), get_Ni(data), get_Nh(data)}
+
+@inline level_data_view(data::VF,    I::CartesianIndex) = (I.I[4], Nf_slice(data))
+@inline level_data_view(data::VIJFH, I::CartesianIndex) = (I.I[4], slice_one_to(get_Ni(data)), slice_one_to(get_Nj(data)), Nf_slice(data), slice_one_to(get_Nh(data)))
+@inline level_data_view(data::VIFH, I::CartesianIndex) = (I.I[4], slice_one_to(get_Ni(data)), Nf_slice(data), slice_one_to(get_Nh(data)))
+
+@inline slab_type(data::Union{IJFH,VIJFH}) = IJF{eltype(data), get_Nij(data)}
+@inline slab_type(data::Union{IFH,VIFH}) = IF{eltype(data), get_Ni(data)}
+
+@inline slab_universal_index(::Union{IJFH,IFH,DataSlab2D,DataSlab1D}, h)      = (CartesianIndex((1, 1, 1, 1, h)), (5,))
+@inline slab_universal_index(::Union{VIJFH,VIFH,DataSlab2D,DataSlab1D}, v, h) = (CartesianIndex((1, 1, 1, v, h)), (4,5))
+@inline slab_universal_index(::Union{IJFH,IFH}, v, h)                         = (CartesianIndex((1, 1, 1, 1, h)), (5,))
+
+@inline slab_data_view(data::VIJFH, I::CartesianIndex) = (I.I[4], slice_one_to(get_Ni(data)), slice_one_to(get_Nj(data)), Nf_slice(data), I.I[5])
+@inline slab_data_view(data::VIFH,  I::CartesianIndex) = (I.I[4], slice_one_to(get_Ni(data)), Nf_slice(data), I.I[5])
+@inline slab_data_view(data::IFH,   I::CartesianIndex) = (slice_one_to(get_Ni(data)), Nf_slice(data), I.I[5])
+@inline slab_data_view(data::IJFH,  I::CartesianIndex) = (slice_one_to(get_Ni(data)), slice_one_to(get_Nj(data)), Nf_slice(data), I.I[5])
+
 # ==================
 # Helpers
 # ==================
 
-#! format: off
 @inline get_Nij(::IJKFVH{S, Nij}) where {S, Nij} = Nij
 @inline get_Nij(::IJFH{S, Nij}) where {S, Nij} = Nij
 @inline get_Nij(::VIJFH{S, Nv, Nij}) where {S, Nv, Nij} = Nij
@@ -1020,17 +989,6 @@ type parameters.
 @inline _to_data_specific(::IFH, I::Tuple) = (I[1], 1, I[5])
 @inline _to_data_specific(::VIJFH, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
 @inline _to_data_specific(::VIFH, I::Tuple) = (I[4], I[1], 1, I[5])
-
-"""
-    bounds_condition(data::AbstractData, I::Tuple)
-
-Returns the condition used for `@boundscheck`
-inside `getindex` with `CartesianIndex`s.
-"""
-@inline bounds_condition(data::AbstractData, I::CartesianIndex) = true # TODO: add more support
-@inline bounds_condition(data::IJF, I::CartesianIndex) = (1 <= I.I[1] <= get_Nij(data) && 1 <= I.I[2] <= get_Nij(data))
-@inline bounds_condition(data::VF, I::CartesianIndex) = 1 <= I.I[4] <= nlevels(data)
-@inline bounds_condition(data::IF, I::CartesianIndex) = 1 <= I.I[1] <= get_Nij(data)
 
 """
     type_params(data::AbstractData)
@@ -1170,7 +1128,7 @@ Base.ndims(::Type{T}) where {T <: AbstractData} =
     data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
     I::CartesianIndex,
 )
-    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I.I))
     @inbounds get_struct(
         parent(data),
         eltype(data),
@@ -1184,7 +1142,7 @@ end
     val,
     I::CartesianIndex,
 )
-    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I.I))
     @inbounds set_struct!(
         parent(data),
         convert(eltype(data), val),
