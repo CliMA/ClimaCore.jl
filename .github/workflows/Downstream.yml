@@ -57,3 +57,15 @@ jobs:
           julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.instantiate()'
           julia --color=yes --project=ClimaTimesteppers.jl/test -e 'using Pkg; Pkg.develop(; path = ".")'
           julia --color=yes --project=ClimaTimesteppers.jl/test ClimaTimesteppers.jl/test/runtests.jl
+
+      # Run a small AMIP
+      - if: matrix.package == 'ClimaCoupler.jl'
+        run: |
+          # First, acquire SST/SIC files (hashes and links found in ClimaArtifacts).
+          # The artifacts will be cached by the julia-cache action.
+          mkdir -p ~/.julia/artifacts/c4f82cd33fb26513ee45bff78330c6b606630fa5
+          wget -q -O ~/.julia/artifacts/c4f82cd33fb26513ee45bff78330c6b606630fa5/MODEL.ICE.HAD187001-198110.OI198111-202206.nc https://gdex.ucar.edu/dataset/158_asphilli/file/MODEL.ICE.HAD187001-198110.OI198111-202206.nc
+          wget -q -O ~/.julia/artifacts/c4f82cd33fb26513ee45bff78330c6b606630fa5/MODEL.SST.HAD187001-198110.OI198111-202206.nc https://gdex.ucar.edu/dataset/158_asphilli/file/MODEL.SST.HAD187001-198110.OI198111-202206.nc
+          julia --color=yes --project=ClimaCoupler.jl/experiments/ClimaEarth/ -e 'using Pkg; Pkg.instantiate()'
+          julia --color=yes --project=ClimaCoupler.jl/experiments/ClimaEarth/ -e 'using Pkg; Pkg.develop(; path = ".")'
+          julia --color=yes --project=ClimaCoupler.jl/experiments/ClimaEarth/ ClimaCoupler.jl/experiments/ClimaEarth/run_amip.jl --config_file ClimaCoupler.jl/config/ci_configs/target_amip_albedo_function.yml --job_id target_amip_albedo_function
