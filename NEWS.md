@@ -4,6 +4,8 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- DSS was refactored, and machine precision changes can be expected. PR [#1958](https://github.com/CliMA/ClimaCore.jl/pull/1958).
+
 v0.14.12
 -------
 - Added hyperbolic tangent stretching. PR [#1930](https://github.com/CliMA/ClimaCore.jl/pull/1930).

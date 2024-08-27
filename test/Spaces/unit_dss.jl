@@ -110,22 +110,4 @@ end
     @test n_dss_affected_y12 * 3 / 2 ==
           n_dss_affected_y123 ==
           n_dss_affected_y3 * 3
-
-    @test nt.dss_buffer.y12.scalarfidx == Int[]
-    @test nt.dss_buffer.y12.covariant12fidx == Int[1]
-    @test nt.dss_buffer.y12.contravariant12fidx == Int[]
-    @test nt.dss_buffer.y12.covariant123fidx == Int[]
-    @test nt.dss_buffer.y12.contravariant123fidx == Int[]
-
-    @test nt.dss_buffer.y123.scalarfidx == Int[]
-    @test nt.dss_buffer.y123.covariant12fidx == Int[]
-    @test nt.dss_buffer.y123.contravariant12fidx == Int[]
-    @test nt.dss_buffer.y123.covariant123fidx == Int[1]
-    @test nt.dss_buffer.y123.contravariant123fidx == Int[]
-
-    @test nt.dss_buffer.y3.scalarfidx == Int[1]
-    @test nt.dss_buffer.y3.covariant12fidx == Int[]
-    @test nt.dss_buffer.y3.contravariant12fidx == Int[]
-    @test nt.dss_buffer.y3.covariant123fidx == Int[]
-    @test nt.dss_buffer.y3.contravariant123fidx == Int[]
 end
