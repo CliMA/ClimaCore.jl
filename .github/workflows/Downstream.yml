@@ -29,7 +29,6 @@ jobs:
           - 'ClimaLand.jl'
           - 'ClimaTimesteppers.jl'
           - 'KinematicDriver.jl'
-          - 'ClimaDiagnostics.jl'
           - 'ClimaUtilities.jl'
     steps:
       - uses: actions/checkout@v4
