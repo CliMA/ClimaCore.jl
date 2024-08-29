@@ -1,4 +1,4 @@
-using ClimaComms, DataStructures
+using ClimaComms
 using GilbertCurves
 
 """
