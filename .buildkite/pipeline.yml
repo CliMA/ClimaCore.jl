@@ -278,17 +278,21 @@ steps:
         key: unit_ddss1
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
       - label: "Unit: ddss1 cs"
+        key: unit_cuda_ddss1_cs
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
+
+      - label: "Unit: ddss1 cs"
         key: unit_ddss1_cs
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:

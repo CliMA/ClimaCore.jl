@@ -1,5 +1,5 @@
 #=
-julia --project=test
+julia --project
 using Revise; include(joinpath("test", "Spaces", "ddss1.jl"))
 =#
 using Logging
