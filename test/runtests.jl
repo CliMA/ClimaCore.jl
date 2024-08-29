@@ -33,6 +33,7 @@ UnitTest("Cubedsphere surface topology"            ,"Topologies/cubedsphere_sfc.
 UnitTest("Quadratures"                             ,"Quadratures/Quadratures.jl"),
 UnitTest("Spaces"                                  ,"Spaces/unit_spaces.jl"),
 UnitTest("Spaces - serial CPU DSS"                 ,"Spaces/ddss1.jl"),
+UnitTest("Spaces - DSS cubed sphere"               ,"Spaces/ddss1_cs.jl"),
 UnitTest("Sphere spaces"                           ,"Spaces/sphere.jl"),
 # UnitTest("Terrain warp"                            ,"Spaces/terrain_warp.jl"), # appears to hang on GHA
 UnitTest("Fields"                                  ,"Fields/unit_field.jl"), # has benchmarks
@@ -107,7 +108,6 @@ UnitTest("Aqua"                                    ,"aqua.jl"),
 UnitTest("Deprecations"                            ,"deprecations.jl"),
 UnitTest("GPU - cuda"                              ,"gpu/cuda.jl";meta=:gpu_only),
 UnitTest("GPU - data"                              ,"DataLayouts/cuda.jl";meta=:gpu_only),
-UnitTest("Spaces - serial CUDA DSS on CubedSphere" ,"Spaces/ddss1_cs.jl";meta=:gpu_only),
 UnitTest("Operators - spectral element CUDA"       ,"Operators/spectralelement/rectilinear_cuda.jl";meta=:gpu_only),
 UnitTest("Operators - finite difference CUDA"      ,"Operators/hybrid/unit_cuda.jl";meta=:gpu_only),
 UnitTest("Operators - extruded sphere space ops"   ,"Operators/hybrid/extruded_sphere_cuda.jl";meta=:gpu_only),
