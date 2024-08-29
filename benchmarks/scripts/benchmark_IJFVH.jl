@@ -3,7 +3,7 @@ On A100
 
 $ julia --project=.buildkite benchmarks/scripts/benchmark_IJFVH.jl 
 ==================================================================
-Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5300; FT = Float32
+Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5400; FT = Float32
 ==================================================================
 Test Summary:                                  | Pass  Total  Time
 Sum test with IJFVH layout, cartesian indexing |    1      1  2.3s
@@ -26,7 +26,7 @@ mean = TrialEstimate(67.788 μs))
 ntrials = 10000
 ---------------------------------------------
 ==================================================================
-Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5300; FT = Float64
+Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5400; FT = Float64
 ==================================================================
 Test Summary:                                  | Pass  Total  Time
 Sum test with IJFVH layout, cartesian indexing |    1      1  1.3s
@@ -121,7 +121,7 @@ function generate_datalayout_benchmarks(::Type{DA}, ::Type{FT}) where {DA, FT}
     NI = NJ = 4 # polynomial order of approximation + 1
     NV = 63 # number of vertical levels
     NF = 3 # number of components in the velocity field (not # of fields)
-    NH = 5300 # number of spectral elements
+    NH = 5400 # number of spectral elements
 
     println(
         "==================================================================",
