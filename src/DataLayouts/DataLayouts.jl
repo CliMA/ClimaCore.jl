@@ -363,11 +363,7 @@ end
 
 Base.length(data::IJFH) = get_Nh(data)
 
-@inline function slab(data::IJFH{S, Nij}, h::Integer) where {S, Nij}
-    @boundscheck (1 <= h <= get_Nh(data)) || throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
-    IJF{S, Nij}(dataview)
-end
+Base.@propagate_inbounds slab(data::IJFH, h::Integer) = slab(data, 1, h)
 
 @inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
     @boundscheck (v >= 1 && 1 <= h <= get_Nh(data)) ||
@@ -531,10 +527,7 @@ end
     (Nij, Nij, 1, 1, 1)
 Base.axes(::DataSlab2D{S, Nij}) where {S, Nij} = (SOneTo(Nij), SOneTo(Nij))
 
-@inline function slab(data::DataSlab2D, h)
-    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
-    data
-end
+Base.@propagate_inbounds slab(data::DataSlab2D, h) = slab(data, 1, h)
 
 @inline function slab(data::DataSlab2D, v, h)
     @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
@@ -588,10 +581,7 @@ end
 Base.axes(::DataSlab1D{S, Ni}) where {S, Ni} = (SOneTo(Ni),)
 Base.lastindex(::DataSlab1D{S, Ni}) where {S, Ni} = Ni
 
-@inline function slab(data::DataSlab1D, h)
-    @boundscheck (h >= 1) || throw(BoundsError(data, (h,)))
-    data
-end
+Base.@propagate_inbounds slab(data::DataSlab1D, h) = slab(data, 1, h)
 
 @inline function slab(data::DataSlab1D, v, h)
     @boundscheck (v >= 1 && h >= 1) || throw(BoundsError(data, (v, h)))
@@ -678,10 +668,7 @@ nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
     _property_view(data, Val(i))
 
-@inline function column(data::VF, i, h)
-    @boundscheck (i >= 1 && h >= 1) || throw(BoundsError(data, (i, h)))
-    data
-end
+Base.@propagate_inbounds column(data::VF, i, h) = column(data, i, 1, h)
 
 @inline function column(data::VF, i, j, h)
     @boundscheck (i >= 1 && j >= 1 && h >= 1) ||
@@ -832,19 +819,9 @@ Base.length(data::VIFH) = nlevels(data) * get_Nh(data)
     IF{S, Ni}(dataview)
 end
 
-# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function column(data::VIFH{S, Nv, Ni, Nh}, i, h) where {S, Nv, Ni, Nh}
-    array = parent(data)
-    @boundscheck (1 <= i <= Ni && 1 <= h <= Nh) ||
-                 throw(BoundsError(data, (i, h)))
-    Nf = ncomponents(data)
-    dataview = @inbounds SubArray(
-        array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
-    )
-    VF{S, Nv}(dataview)
-end
+Base.@propagate_inbounds column(data::VIFH, i, h) = column(data, i, 1, h)
 
+# Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
 @inline function column(
     data::VIFH{S, Nv, Ni, Nh},
     i,
