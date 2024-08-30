@@ -115,6 +115,81 @@ function addf_linear_IJFVH!(sum_A_IJFVH, A_IJFVH)
     )
     return nothing
 end
+
+function multiaddf_linear_IJFVH!(
+    sum_A_IJFVH,
+    A_IJFVH;
+    nreps = 100,
+    n_trials = 30,
+)
+    (NI, NJ, NF, NV, NH) = size(A_IJFVH)
+    NVT = min(Int(fld(max_threads_cuda(), NI * NJ)), NV)
+    NBV = cld(NV, NVT)
+    emin, emax = typemax(Float32), typemin(Float32)
+    @cuda threads = (NI, NJ, NVT) blocks = (NBV, NH) addf_linear_IJFVH_kernel!(
+        sum_A_IJFVH,
+        A_IJFVH,
+    )
+
+    for j in 1:n_trials
+        et = CUDA.@elapsed begin
+            for i in 1:nreps
+                @cuda threads = (NI, NJ, NVT) blocks = (NBV, NH) addf_linear_IJFVH_kernel!(
+                    sum_A_IJFVH,
+                    A_IJFVH,
+                )
+            end
+        end
+        emin = min(emin, et)
+        emax = max(emax, et)
+    end
+    println(
+        "----multiaddf_linear_IJVFH, FT = $(eltype(A_IJFVH))-----------------------------------",
+    )
+    println(
+        "emin = $(emin*1e6/nreps)μs; emax = $(emax*1e6/nreps)μs; nreps = $nreps, n_trials = $(n_trials)",
+    )
+    println(
+        "------------------------------------------------------------------------------------------",
+    )
+    return nothing
+end
+
+function multiaddf_cart_IJFVH!(sum_A_IJFVH, A_IJFVH; nreps = 100, n_trials = 30)
+    (NI, NJ, NF, NV, NH) = size(A_IJFVH)
+    NVT = min(Int(fld(max_threads_cuda(), NI * NJ)), NV)
+    NBV = cld(NV, NVT)
+    emin, emax = typemax(Float32), typemin(Float32)
+    @cuda threads = (NI, NJ, NVT) blocks = (NBV, NH) addf_cart_IJFVH_kernel!(
+        sum_A_IJFVH,
+        A_IJFVH,
+    )
+    emin, emax = typemax(Float32), typemin(Float32)
+    for j in 1:n_trials
+        et = CUDA.@elapsed begin
+            for i in 1:nreps
+                @cuda threads = (NI, NJ, NVT) blocks = (NBV, NH) addf_cart_IJFVH_kernel!(
+                    sum_A_IJFVH,
+                    A_IJFVH,
+                )
+            end
+        end
+        emin = min(emin, et)
+        emax = max(emax, et)
+    end
+    println(
+        "----multiaddf_cart_IJVFH, FT = $(eltype(A_IJFVH))-------------------------------------",
+    )
+    println(
+        "emin = $(emin*1e6/nreps)μs; emax = $(emax*1e6/nreps)μs; nreps = $nreps, n_trials = $(n_trials)",
+    )
+    println(
+        "------------------------------------------------------------------------------------------",
+    )
+    return nothing
+end
+
+
 # generate benchmarks
 function generate_datalayout_benchmarks(::Type{DA}, ::Type{FT}) where {DA, FT}
     NI = NJ = 4 # polynomial order of approximation + 1
@@ -172,6 +247,11 @@ median = $(Statistics.median(trial_linear_IJFVH))
 mean = $(Statistics.mean(trial_linear_IJFVH)))
 ntrials = $(length(trial_linear_IJFVH.times))")
     println("---------------------------------------------")
+
+    multiaddf_linear_IJFVH!(sum_A_IJFVH, A_IJFVH, nreps = 100, n_trials = 30)
+    multiaddf_cart_IJFVH!(sum_A_IJFVH, A_IJFVH, nreps = 100, n_trials = 30)
+
+
     return nothing
 end
 
