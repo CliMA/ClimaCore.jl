@@ -2,33 +2,16 @@ DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
 function knl_copyto!(dest, src)
 
-    i = CUDA.threadIdx().x
-    j = CUDA.threadIdx().y
-
-    h = CUDA.blockIdx().x
-    v = CUDA.blockDim().z * (CUDA.blockIdx().y - 1) + CUDA.threadIdx().z
+    (vid, i, j) = CUDA.threadIdx()
+    (bv, h) = CUDA.blockIdx()
+    nvt = CUDA.blockDim().z
+    v = vid + (bv - 1) * nvt
 
     if v <= size(dest, 4)
         I = CartesianIndex((i, j, 1, v, h))
         @inbounds dest[I] = src[I]
     end
     return nothing
-end
-
-function Base.copyto!(
-    dest::IJFH{S, Nij, Nh},
-    bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, Nh},
-    ::ToCUDA,
-) where {S, Nij, Nh}
-    if Nh > 0
-        auto_launch!(
-            knl_copyto!,
-            (dest, bc);
-            threads_s = (Nij, Nij),
-            blocks_s = (Nh, 1),
-        )
-    end
-    return dest
 end
 
 function Base.copyto!(
@@ -39,38 +22,17 @@ function Base.copyto!(
     if Nv > 0 && Nh > 0
         Nv_per_block = min(Nv, fld(256, Nij * Nij))
         Nv_blocks = cld(Nv, Nv_per_block)
+
+        us = DataLayouts.UniversalSize(dest)
+        Nv_thread = min(Int(fld(256, get_Nij(us) * get_Nij(us))), get_Nv(us))
+        Nblocks_v = cld(get_Nv(us), Nv_thread)
         auto_launch!(
             knl_copyto!,
             (dest, bc);
-            threads_s = (Nij, Nij, Nv_per_block),
-            blocks_s = (Nh, Nv_blocks),
+            threads_s = (Nv_thread, get_Nij(us), get_Nij(us)),
+            blocks_s = (Nblocks_v, get_Nh(us)),
         )
     end
-    return dest
-end
-
-function Base.copyto!(
-    dest::VF{S, Nv},
-    bc::DataLayouts.BroadcastedUnionVF{S, Nv},
-    ::ToCUDA,
-) where {S, Nv}
-    if Nv > 0
-        auto_launch!(
-            knl_copyto!,
-            (dest, bc);
-            threads_s = (1, 1),
-            blocks_s = (1, Nv),
-        )
-    end
-    return dest
-end
-
-function Base.copyto!(
-    dest::DataF{S},
-    bc::DataLayouts.BroadcastedUnionDataF{S},
-    ::ToCUDA,
-) where {S}
-    auto_launch!(knl_copyto!, (dest, bc); threads_s = (1, 1), blocks_s = (1, 1))
     return dest
 end
 
@@ -100,12 +62,12 @@ end
 # TODO: can we use CUDA's luanch configuration for all data layouts?
 # Currently, it seems to have a slight performance degradation.
 #! format: off
-# Base.copyto!(dest::IJFH{S, Nij},          bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, Nh}, ::ToCUDA) where {S, Nij, Nh} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::IJFH{S, Nij},          bc::DataLayouts.BroadcastedUnionIJFH{S, Nij, Nh}, ::ToCUDA) where {S, Nij, Nh} = cuda_copyto!(dest, bc)
 Base.copyto!(dest::IFH{S, Ni, Nh},        bc::DataLayouts.BroadcastedUnionIFH{S, Ni, Nh}, ::ToCUDA) where {S, Ni, Nh} = cuda_copyto!(dest, bc)
 Base.copyto!(dest::IJF{S, Nij},           bc::DataLayouts.BroadcastedUnionIJF{S, Nij}, ::ToCUDA) where {S, Nij} = cuda_copyto!(dest, bc)
 Base.copyto!(dest::IF{S, Ni},             bc::DataLayouts.BroadcastedUnionIF{S, Ni}, ::ToCUDA) where {S, Ni} = cuda_copyto!(dest, bc)
 Base.copyto!(dest::VIFH{S, Nv, Ni, Nh},   bc::DataLayouts.BroadcastedUnionVIFH{S, Nv, Ni, Nh}, ::ToCUDA) where {S, Nv, Ni, Nh} = cuda_copyto!(dest, bc)
 # Base.copyto!(dest::VIJFH{S, Nv, Nij, Nh}, bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, Nh}, ::ToCUDA) where {S, Nv, Nij, Nh} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::VF{S, Nv},             bc::DataLayouts.BroadcastedUnionVF{S, Nv}, ::ToCUDA) where {S, Nv} = cuda_copyto!(dest, bc)
-# Base.copyto!(dest::DataF{S},              bc::DataLayouts.BroadcastedUnionDataF{S}, ::ToCUDA) where {S} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::VF{S, Nv},             bc::DataLayouts.BroadcastedUnionVF{S, Nv}, ::ToCUDA) where {S, Nv} = cuda_copyto!(dest, bc)
+Base.copyto!(dest::DataF{S},              bc::DataLayouts.BroadcastedUnionDataF{S}, ::ToCUDA) where {S} = cuda_copyto!(dest, bc)
 #! format: on
