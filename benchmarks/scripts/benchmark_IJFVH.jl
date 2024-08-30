@@ -6,13 +6,13 @@ On A100
 Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5400; FT = Float32
 ==================================================================
 Test Summary:                                  | Pass  Total  Time
-Sum test with IJFVH layout, cartesian indexing |    1      1  2.1s
+Sum test with IJFVH layout, cartesian indexing |    1      1  2.0s
 ==================================================================
 Cartesian indexing benchmark for IJFVH:
 ==================================
-min = TrialEstimate(62.389 μs)
-median = TrialEstimate(402.266 μs)
-mean = TrialEstimate(357.741 μs),
+min = TrialEstimate(63.210 μs)
+median = TrialEstimate(68.149 μs)
+mean = TrialEstimate(68.127 μs),
 ntrials = 10000
 ---------------------------------------------
 Test Summary:                               | Pass  Total  Time
@@ -20,22 +20,28 @@ Sum test with IJFVH layout, linear indexing |    1      1  0.0s
 ==================================================================
 linear indexing benchmark for IJFVH:
 ==================================
-min = TrialEstimate(61.729 μs)
-median = TrialEstimate(395.396 μs)
-mean = TrialEstimate(360.393 μs))
+min = TrialEstimate(61.919 μs)
+median = TrialEstimate(68.430 μs)
+mean = TrialEstimate(68.769 μs))
 ntrials = 10000
 ---------------------------------------------
+----multiaddf_linear_IJVFH, FT = Float32-----------------------------------
+emin = 57.231360115110874μs; emax = 57.55904130637646μs; nreps = 100, n_trials = 30
+------------------------------------------------------------------------------------------
+----multiaddf_cart_IJVFH, FT = Float32-------------------------------------
+emin = 57.57952108979225μs; emax = 57.95839708298445μs; nreps = 100, n_trials = 30
+------------------------------------------------------------------------------------------
 ==================================================================
 Dimensions, NI = 4, NJ = 4, NF = 3, NV = 63, NH = 5400; FT = Float64
 ==================================================================
 Test Summary:                                  | Pass  Total  Time
-Sum test with IJFVH layout, cartesian indexing |    1      1  1.5s
+Sum test with IJFVH layout, cartesian indexing |    1      1  1.2s
 ==================================================================
 Cartesian indexing benchmark for IJFVH:
 ==================================
-min = TrialEstimate(111.929 μs)
-median = TrialEstimate(123.859 μs)
-mean = TrialEstimate(228.541 μs),
+min = TrialEstimate(112.079 μs)
+median = TrialEstimate(115.559 μs)
+mean = TrialEstimate(115.718 μs),
 ntrials = 10000
 ---------------------------------------------
 Test Summary:                               | Pass  Total  Time
@@ -43,11 +49,17 @@ Sum test with IJFVH layout, linear indexing |    1      1  0.0s
 ==================================================================
 linear indexing benchmark for IJFVH:
 ==================================
-min = TrialEstimate(110.649 μs)
-median = TrialEstimate(115.179 μs)
-mean = TrialEstimate(199.577 μs))
+min = TrialEstimate(112.009 μs)
+median = TrialEstimate(115.289 μs)
+mean = TrialEstimate(118.641 μs))
 ntrials = 10000
 ---------------------------------------------
+----multiaddf_linear_IJVFH, FT = Float64-----------------------------------
+emin = 103.48544456064701μs; emax = 106.06592521071434μs; nreps = 100, n_trials = 30
+------------------------------------------------------------------------------------------
+----multiaddf_cart_IJVFH, FT = Float64-------------------------------------
+emin = 104.05887849628925μs; emax = 105.89184239506721μs; nreps = 100, n_trials = 30
+------------------------------------------------------------------------------------------
 =#
 using CUDA
 using Statistics
