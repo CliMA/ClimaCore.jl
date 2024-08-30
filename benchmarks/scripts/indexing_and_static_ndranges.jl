@@ -107,6 +107,7 @@ Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=20
 
 module IndexStaticRangeBench
 
+import CUDA
 include("benchmark_utils.jl")
 
 # ============================================================ Non-extruded broadcast (start)
@@ -253,7 +254,7 @@ function at_dot_call!(X, Y; nreps = 1, bm=nothing, n_trials = 30)
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=1)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(X.x1),n_reads_writes=1)
     return nothing
 end;
 
@@ -280,7 +281,7 @@ function custom_sol_kernel!(X, Y, ::Val{N}; nreps = 1, bm=nothing, n_trials = 30
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=1)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(X.x1),n_reads_writes=1)
 
     return nothing
 end;
@@ -346,7 +347,7 @@ function custom_kernel_bc!(X, Y, us::AbstractUniversalSizes; printtb=false, use_
             e = min(e, et)
         end
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=1)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(X.x1),n_reads_writes=1)
     return nothing
 end;
 @inline get_cart_lin_index(bc, n, I) = I
@@ -369,7 +370,8 @@ import .IndexStaticRangeBench as BSR
 
 using CUDA
 using Test
-bm = BSR.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float32)
+device_name = CUDA.name(CUDA.device())
+bm = BSR.Benchmark(;problem_size=(63,4,4,1,5400), device_name, float_type=Float32)
 # bm = BSR.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float64)
 ArrayType = CUDA.CuArray;
 # ArrayType = Base.identity;

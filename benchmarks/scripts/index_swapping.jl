@@ -24,31 +24,22 @@ In particular,
 Clima A100
 ```
 [ Info: ArrayType = CuArray
-Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
-┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
-│ funcs                                                                │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
-├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 34 microseconds, 617 nanoseconds │ 57.4574 │ 1171.56     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 60 microseconds, 384 nanoseconds │ 32.939  │ 671.627     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 68 microseconds, 108 nanoseconds │ 29.2034 │ 595.458     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 60 microseconds, 395 nanoseconds │ 32.9329 │ 671.502     │ 2              │ 1000   │
-└──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
-[ Info: ArrayType = CuArray
-Problem size: (63, 4, 4, 1, 5400), float_type = Float64, device_bandwidth_GBs=2039
-┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
-│ funcs                                                                │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
-├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 59 microseconds, 558 nanoseconds │ 66.791  │ 1361.87     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 63 microseconds, 238 nanoseconds │ 62.905  │ 1282.63     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 80 microseconds, 502 nanoseconds │ 49.4142 │ 1007.56     │ 2              │ 1000   │
-│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 63 microseconds, 228 nanoseconds │ 62.9142 │ 1282.82     │ 2              │ 1000   │
-└──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+Problem size: (5443200,), N reads-writes: 2, N-reps: 1000,  Float_type = Float32, Device_bandwidth_GBs=2039
+┌──────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┐
+│ funcs                                                                │ time per call                    │ bw %    │ achieved bw │
+├──────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┤
+│ BIS.at_dot_call!(X_vector, Y_vector; nreps=1000, bm)                 │ 34 microseconds, 738 nanoseconds │ 57.2576 │ 1167.48     │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=0, nreps=1000, bm) │ 60 microseconds, 528 nanoseconds │ 32.8605 │ 670.025     │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=1, nreps=1000, bm) │ 68 microseconds, 147 nanoseconds │ 29.1867 │ 595.118     │
+│ BIS.custom_kernel_bc!(X_array, Y_array, uss; swap=2, nreps=1000, bm) │ 60 microseconds, 524 nanoseconds │ 32.8627 │ 670.07      │
+└──────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┘
 ```
 =#
 
 #! format: off
 module IndexSwapBench
 
+import CUDA
 include("benchmark_utils.jl")
 
 foo(x1, x2, x3) = x1
@@ -65,7 +56,7 @@ function at_dot_call!(X, Y; nreps = 1, print_info = true, bm=nothing, n_trials =
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=2)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(X.x1),n_reads_writes=2)
     return nothing
 end;
 
@@ -104,7 +95,7 @@ function custom_kernel_bc!(X, Y, us::UniversalSizesStatic; swap=0, printtb=false
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=2)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(X.x1),n_reads_writes=2)
     return nothing
 end;
 
@@ -174,8 +165,8 @@ end # module
 import .IndexSwapBench as BIS
 
 using CUDA
-bm = BIS.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float32)
-# bm = BIS.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float64)
+device_name = CUDA.name(CUDA.device())
+bm = BIS.Benchmark(;problem_size=(63,4,4,1,5400), device_name, float_type=Float32)
 ArrayType = CUDA.CuArray;
 # ArrayType = identity;
 arr(bm, T) = T(zeros(bm.float_type, bm.problem_size...))
