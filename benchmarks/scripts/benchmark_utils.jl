@@ -1,4 +1,5 @@
-import CUDA
+# import CUDA
+import ClimaComms
 using BenchmarkTools, Dates
 using LazyBroadcast: @lazy
 
@@ -14,21 +15,40 @@ macro caller_name(f)
     end
 end
 
-Base.@kwdef mutable struct Benchmark
-    problem_size::Tuple
-    float_type::Type
-    device_bandwidth_GBs::Int = 2_039 # (A100 SXM4 80GB)
-    data::Vector = []
+"""
+    device_info(device_name::String)
+
+Call with `device_info(CUDA.name(CUDA.device()))`
+"""
+function device_info(device_name)
+    device_specs = Dict(
+        "NVIDIA A100-SXM4-80GB" => (; device_bandwidth_GBs = 2_039),
+        "Tesla P100-PCIE-16GB" => (; device_bandwidth_GBs = 732),
+    )
+    is_cuda = ClimaComms.device() isa ClimaComms.CUDADevice
+    if is_cuda && haskey(device_specs, device_name)
+        (; device_bandwidth_GBs) = device_specs[device_name]
+        return (; device_bandwidth_GBs, exists = true, name = device_name)
+    else
+        return (; device_bandwidth_GBs = 1, exists = false, name = device_name)
+    end
 end
 
-function perf_stats(; bm::Benchmark, kernel_time_s, n_reads_writes)
-    N = prod(bm.problem_size)
-    GB = N * n_reads_writes * sizeof(bm.float_type) / 1024^3
-    achieved_bandwidth_GBs = GB / kernel_time_s
-    bandwidth_efficiency =
-        achieved_bandwidth_GBs / bm.device_bandwidth_GBs * 100
-    return (; N, GB, achieved_bandwidth_GBs, bandwidth_efficiency)
-end;
+Base.@kwdef mutable struct Benchmark
+    problem_size = nothing
+    float_type::Type
+    data::Vector = []
+    unfound_device::Bool = false
+    unfound_device_name::String = ""
+    device_name::String = ""
+end
+
+function print_unfound_devices(bm::Benchmark)
+    bm.unfound_device || return nothing
+    println("\nUnfound device: $(bm.unfound_device_name). Please")
+    println("look up specs and add to device_bandwidth() in")
+    println("$(@__FILE__).\n")
+end
 
 time_and_units_str(x::Real) =
     trunc_time(string(compound_period(x, Dates.Second)))
@@ -51,46 +71,98 @@ get_Nh(us::UniversalSizesCC) = us.Nh
 get_Nh(::UniversalSizesStatic{Nv, Nij, Nh}) where {Nv, Nij, Nh} = Nh
 get_N(us::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} =
     prod((Nv, Nij, Nij, 1, get_Nh(us)))
+Base.size(us::AbstractUniversalSizes{Nv, Nij}) where {Nv, Nij} =
+    (Nv, Nij, Nij, 1, get_Nh(us))
 UniversalSizesCC(Nv, Nij, Nh) = UniversalSizesCC{Nv, Nij}(Nh)
 UniversalSizesStatic(Nv, Nij, Nh) = UniversalSizesStatic{Nv, Nij, Nh}()
 
 import PrettyTables
 function tabulate_benchmark(bm)
-    funcs = map(x -> x.caller, bm.data)
+    funcs = map(x -> strip(x.caller), bm.data)
     timings = map(x -> time_and_units_str(x.kernel_time_s), bm.data)
     n_reads_writes = map(x -> x.n_reads_writes, bm.data)
     nreps = map(x -> x.nreps, bm.data)
+    dinfo = device_info(bm.device_name)
     achieved_bandwidth_GBs = map(x -> x.achieved_bandwidth_GBs, bm.data)
-    bandwidth_efficiency = map(x -> x.bandwidth_efficiency, bm.data)
+    bandwidth_efficiency = if dinfo.exists
+        map(x -> x / dinfo.device_bandwidth_GBs * 100, achieved_bandwidth_GBs)
+    else
+        ()
+    end
+    problem_size = map(x -> x.problem_size, bm.data)
+    # if we specify the problem size up front, then make
+    # sure that there is no variation when collecting:
+    if !isnothing(bm.problem_size)
+        @assert all(prod.(problem_size) .== prod(bm.problem_size))
+    end
+    N = map(x -> prod(x), problem_size)
+    no_bw_efficiency = length(bandwidth_efficiency) == 0
     header = [
         "funcs",
         "time per call",
-        "bw %",
+        (no_bw_efficiency ? () : ("bw %",))...,
         "achieved bw",
-        "n-reads/writes",
-        "n-reps",
+        (allequal(n_reads_writes) ? () : ("N reads-writes",))...,
+        (allequal(N) ? () : ("problem size",))...,
+        (allequal(nreps) ? () : ("n-reps",))...,
     ]
-    data = hcat(
+    args = (
         funcs,
         timings,
-        bandwidth_efficiency,
+        (no_bw_efficiency ? () : (bandwidth_efficiency,))...,
         achieved_bandwidth_GBs,
-        n_reads_writes,
-        nreps,
+        (allequal(n_reads_writes) ? () : (n_reads_writes,))...,
+        (allequal(N) ? () : (problem_size,))...,
+        (allequal(nreps) ? () : (nreps,))...,
     )
-    title = "Problem size: $(bm.problem_size), float_type = $(bm.float_type), device_bandwidth_GBs=$(bm.device_bandwidth_GBs)"
+    data = hcat(args...)
+    n_reads_writes_str =
+        allequal(n_reads_writes) ? "N reads-writes: $(n_reads_writes[1]), " : ""
+    problem_size_str = allequal(N) ? "Problem size: $(problem_size[1]), " : ""
+    nreps_str = allequal(nreps) ? "N-reps: $(nreps[1]), " : ""
+    device_bandwidth_GBs_str =
+        dinfo.exists ? "Device_bandwidth_GBs=$(dinfo.device_bandwidth_GBs)" : ""
+    print_unfound_devices(bm)
+    title = strip(
+        "$problem_size_str$n_reads_writes_str$nreps_str Float_type = $(bm.float_type), $device_bandwidth_GBs_str",
+    )
     PrettyTables.pretty_table(data; title, header, alignment = :l, crop = :none)
 end
 
-push_info(bm::Nothing; e, nreps, caller, n_reads_writes) = nothing
-function push_info(bm; e, nreps, caller, n_reads_writes)
-    kernel_time_s = e / nreps
+push_info(
+    bm::Nothing;
+    kernel_time_s,
+    nreps,
+    caller,
+    n_reads_writes,
+    problem_size,
+) = nothing
+function push_info(
+    bm;
+    kernel_time_s,
+    nreps,
+    caller,
+    n_reads_writes,
+    problem_size,
+)
+    N = prod(problem_size)
+    GB = N * n_reads_writes * sizeof(bm.float_type) / 1024^3
+    achieved_bandwidth_GBs = GB / kernel_time_s
+    dinfo = device_info(bm.device_name)
+    if !dinfo.exists
+        bm.unfound_device = true
+        bm.unfound_device_name = dinfo.name
+    end
+
     nt = (;
         caller,
         kernel_time_s,
         n_reads_writes,
         nreps,
-        perf_stats(; bm, kernel_time_s, n_reads_writes)...,
+        problem_size,
+        N,
+        GB,
+        achieved_bandwidth_GBs,
     )
     push!(bm.data, nt)
 end

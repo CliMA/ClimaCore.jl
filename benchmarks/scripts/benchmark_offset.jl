@@ -14,32 +14,33 @@ using Revise; include(joinpath("benchmarks", "scripts", "benchmark_offset.jl"))
 Clima A100:
 ```
 [ Info: ArrayType = CuArray
-Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
-┌────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
-│ funcs                                                              │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
-├────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│     BO.aos_cart_offset!(X_aos_ref, Y_aos_ref, us; bm, nreps = 100) │ 68 microseconds, 834 nanoseconds │ 57.7908 │ 1178.35     │ 4              │ 100    │
-│     BO.aos_lin_offset!(X_aos, Y_aos, us; bm, nreps = 100)          │ 58 microseconds, 153 nanoseconds │ 68.4046 │ 1394.77     │ 4              │ 100    │
-│     BO.soa_linear_index!(X_soa, Y_soa, us; bm, nreps = 100)        │ 56 microseconds, 576 nanoseconds │ 70.3113 │ 1433.65     │ 4              │ 100    │
-│     BO.soa_cart_index!(X_soa, Y_soa, us; bm, nreps = 100)          │ 67 microseconds, 185 nanoseconds │ 59.2089 │ 1207.27     │ 4              │ 100    │
-└────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+Problem size: (63, 4, 4, 1, 5400), N reads-writes: 4, N-reps: 100,  Float_type = Float32, Device_bandwidth_GBs=2039
+┌────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┐
+│ funcs                                                          │ time per call                    │ bw %    │ achieved bw │
+├────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┤
+│ BO.aos_cart_offset!(X_aos_ref, Y_aos_ref, us; bm, nreps = 100) │ 84 microseconds, 726 nanoseconds │ 46.9507 │ 957.324     │
+│ BO.aos_lin_offset!(X_aos, Y_aos, us; bm, nreps = 100)          │ 58 microseconds, 102 nanoseconds │ 68.4649 │ 1396.0      │
+│ BO.soa_linear_index!(X_soa, Y_soa, us; bm, nreps = 100)        │ 56 microseconds, 331 nanoseconds │ 70.618  │ 1439.9      │
+│ BO.soa_cart_index!(X_soa, Y_soa, us; bm, nreps = 100)          │ 67 microseconds, 390 nanoseconds │ 59.029  │ 1203.6      │
+└────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┘
 
 [ Info: ArrayType = CuArray
-Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
-┌────────────────────────────────────────────────────────────────────┬──────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
-│ funcs                                                              │ time per call                    │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
-├────────────────────────────────────────────────────────────────────┼──────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│     BO.aos_cart_offset!(X_aos_ref, Y_aos_ref, us; bm, nreps = 100) │ 68 microseconds, 967 nanoseconds │ 57.6793 │ 1176.08     │ 4              │ 100    │
-│     BO.aos_lin_offset!(X_aos, Y_aos, us; bm, nreps = 100)          │ 58 microseconds, 82 nanoseconds  │ 68.489  │ 1396.49     │ 4              │ 100    │
-│     BO.soa_linear_index!(X_soa, Y_soa, us; bm, nreps = 100)        │ 56 microseconds, 597 nanoseconds │ 70.2858 │ 1433.13     │ 4              │ 100    │
-│     BO.soa_cart_index!(X_soa, Y_soa, us; bm, nreps = 100)          │ 67 microseconds, 288 nanoseconds │ 59.1188 │ 1205.43     │ 4              │ 100    │
-└────────────────────────────────────────────────────────────────────┴──────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+Problem size: (63, 4, 4, 1, 5400), N reads-writes: 4, N-reps: 100,  Float_type = Float64, Device_bandwidth_GBs=2039
+┌────────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┐
+│ funcs                                                          │ time per call                     │ bw %    │ achieved bw │
+├────────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┤
+│ BO.aos_cart_offset!(X_aos_ref, Y_aos_ref, us; bm, nreps = 100) │ 107 microseconds, 387 nanoseconds │ 74.086  │ 1510.61     │
+│ BO.aos_lin_offset!(X_aos, Y_aos, us; bm, nreps = 100)          │ 105 microseconds, 42 nanoseconds  │ 75.7399 │ 1544.34     │
+│ BO.soa_linear_index!(X_soa, Y_soa, us; bm, nreps = 100)        │ 102 microseconds, 636 nanoseconds │ 77.5157 │ 1580.54     │
+│ BO.soa_cart_index!(X_soa, Y_soa, us; bm, nreps = 100)          │ 106 microseconds, 896 nanoseconds │ 74.4266 │ 1517.56     │
+└────────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┘
 ```
 =#
 
 #! format: off
 module BenchmarkOffset
 
+import CUDA
 include("benchmark_utils.jl")
 
 add3(x1, x2, x3) = x1 + x2 + x3
@@ -76,7 +77,7 @@ function aos_cart_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
             e = min(e, et)
         end
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=4)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(us),n_reads_writes=4)
     return nothing
 end;
 function aos_cart_offset_kernel!(X, Y, us)
@@ -131,7 +132,7 @@ function aos_lin_offset!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
             e = min(e, et)
         end
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=4)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(us),n_reads_writes=4)
     return nothing
 end;
 function aos_lin_offset_kernel!(X, Y, us)
@@ -184,7 +185,7 @@ function soa_cart_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
             e = min(e, et)
         end
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=4)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(us),n_reads_writes=4)
     return nothing
 end;
 function soa_cart_index_kernel!(X, Y, us)
@@ -229,7 +230,7 @@ function soa_linear_index!(X, Y, us; nreps = 1, bm=nothing, n_trials = 30)
             e = min(e, et)
         end
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=4)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=size(us),n_reads_writes=4)
     return nothing
 end;
 function soa_linear_index_kernel!(X, Y, us)
@@ -258,9 +259,10 @@ end
 using CUDA
 using Test
 @testset "Offset benchmark" begin
-    bm = BO.Benchmark(;problem_size=(63,4,4,1,5400), float_type=Float32) # size(problem_size, 4) == 1 to avoid double counting reads/writes
     ArrayType = CUDA.CuArray;
     # ArrayType = Base.identity;
+    device_name = CUDA.name(CUDA.device())
+    bm = BO.Benchmark(;problem_size=(63,4,4,1,5400), device_name, float_type=Float32) # size(problem_size, 4) == 1 to avoid double counting reads/writes
     arr(float_type, problem_size, T) = T(zeros(float_type, problem_size...))
 
     FT = Float64;

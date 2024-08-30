@@ -10,21 +10,22 @@ to be in your local environment to run.
 Clima A100:
 ```
 [ Info: device = ClimaComms.CUDADevice()
-Problem size: (63, 4, 4, 1, 5400), float_type = Float32, device_bandwidth_GBs=2039
-┌──────────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┬────────────────┬────────┐
-│ funcs                                                            │ time per call                     │ bw %    │ achieved bw │ n-reads/writes │ n-reps │
-├──────────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┼────────────────┼────────┤
-│     TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 517 nanoseconds │ 15.2602 │ 311.155     │ 9              │ 100    │
-│     TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 292 microseconds, 178 nanoseconds │ 30.6332 │ 624.611     │ 9              │ 100    │
-│     TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 988 nanoseconds │ 15.2479 │ 310.905     │ 9              │ 100    │
-│     TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 292 microseconds, 178 nanoseconds │ 30.6332 │ 624.611     │ 9              │ 100    │
-└──────────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┴────────────────┴────────┘
+Problem size: (4, 4, 1, 63, 5400), N reads-writes: 9, N-reps: 100,  Float_type = Float32, Device_bandwidth_GBs=2039
+┌──────────────────────────────────────────────────────────────┬───────────────────────────────────┬─────────┬─────────────┐
+│ funcs                                                        │ time per call                     │ bw %    │ achieved bw │
+├──────────────────────────────────────────────────────────────┼───────────────────────────────────┼─────────┼─────────────┤
+│ TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 353 nanoseconds │ 15.2644 │ 311.242     │
+│ TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 293 microseconds, 796 nanoseconds │ 30.4645 │ 621.171     │
+│ TB.thermo_func_bc!(x, thermo_params, us; nreps=100, bm)      │ 586 microseconds, 138 nanoseconds │ 15.27   │ 311.356     │
+│ TB.thermo_func_sol!(x_vec, thermo_params, us; nreps=100, bm) │ 293 microseconds, 755 nanoseconds │ 30.4687 │ 621.258     │
+└──────────────────────────────────────────────────────────────┴───────────────────────────────────┴─────────┴─────────────┘
 ```
 =#
 
 #! format: off
 module ThermoBench
 
+import CUDA
 include("benchmark_utils.jl")
 
 import ClimaCore
@@ -55,7 +56,8 @@ function thermo_func_bc!(x, thermo_params, us; nreps = 1, bm=nothing, n_trials =
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=5+4) # TODO: verify this
+    s = size(Fields.field_values(x.ρ))
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=s,n_reads_writes=5+4) # TODO: verify this
     return nothing
 end
 
@@ -75,7 +77,8 @@ function thermo_func_sol!(x, thermo_params, us::UniversalSizesStatic; nreps = 1,
         end
         e = min(e, et)
     end
-    push_info(bm; e, nreps, caller = @caller_name(@__FILE__),n_reads_writes=5+4) # TODO: verify this
+    s = size(x.ρ)
+    push_info(bm; kernel_time_s=e/nreps, nreps, caller = @caller_name(@__FILE__),problem_size=s,n_reads_writes=5+4) # TODO: verify this
     return nothing
 end
 
@@ -123,7 +126,8 @@ import .TestUtilities as TU;
 using Test
 @testset "Thermo state" begin
     FT = Float32
-    bm = TB.Benchmark(;problem_size=(63,4,4,1,5400), float_type=FT)
+    device_name = CUDA.name(CUDA.device())
+    bm = TB.Benchmark(;problem_size=(63,4,4,1,5400), device_name, float_type=FT)
     device = ClimaComms.device()
     context = ClimaComms.context(device)
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(
