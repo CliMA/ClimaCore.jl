@@ -29,9 +29,13 @@ function knl_copyto_linear!(dest::AbstractData, bc, us)
     return nothing
 end
 
-function knl_copyto_linear!(dest::DataF, bc, us)
-    tidx = thread_index()
-    @inbounds dest[] = bc[tidx]
+function knl_copyto_linear!(dest::DataF{S},bc,us) where {S}
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            dest[] = bc[tidx]
+        end
+    end
     return nothing
 end
 
@@ -47,13 +51,17 @@ function knl_copyto_flat!(dest::AbstractData, bc, us)
     return nothing
 end
 
-function knl_copyto_flat!(dest::DataF, bc, us)
+function knl_copyto_flat!(
+    dest::DataF{S},
+    bc::DataLayouts.BroadcastedUnionDataF{S},
+    us,
+) where {S}
     @inbounds begin
         tidx = thread_index()
         if tidx ≤ get_N(us)
             n = size(dest)
-            I = kernel_indexes(tidx, n)
-            dest[] = bc[I]
+            # I = kernel_indexes(tidx, n)
+            dest[] = bc[]
         end
     end
     return nothing
@@ -66,12 +74,7 @@ function cuda_copyto!(dest::AbstractData, bc)
     if Nv > 0 && Nh > 0
         if has_uniform_datalayouts(bc)
             bc′ = to_non_extruded_broadcasted(bc)
-            auto_launch!(
-                knl_copyto_linear!,
-                (dest, bc′, us),
-                n;
-                auto = true,
-            )
+            auto_launch!(knl_copyto_linear!, (dest, bc′, us), n; auto = true)
         else
             auto_launch!(knl_copyto_flat!, (dest, bc, us), n; auto = true)
         end

@@ -564,6 +564,10 @@ end
     @inbounds col[]
 end
 
+@propagate_inbounds function Base.getindex(col::Data0D, I::Integer)
+    @inbounds col[]
+end
+
 Base.@propagate_inbounds function Base.setindex!(data::DataF{S}, val) where {S}
     @inbounds set_struct!(
         field_array(data),
@@ -577,6 +581,14 @@ end
     col::Data0D,
     val,
     I::CartesianIndex{5},
+)
+    @inbounds col[] = val
+end
+
+@propagate_inbounds function Base.setindex!(
+    col::Data0D,
+    val,
+    I::Integer,
 )
     @inbounds col[] = val
 end
@@ -1305,15 +1317,30 @@ type parameters.
 
 #! format: on
 
-# Skip DataF here, since we want that to MethodError.
-for DL in (:IJKFVH, :IJFH, :IFH, :IJF, :IF, :VF, :VIJFH, :VIFH)
-    @eval @propagate_inbounds Base.getindex(data::$(DL), I::Integer) =
-        linear_getindex(data, I)
-    @eval @propagate_inbounds Base.setindex!(data::$(DL), val, I::Integer) =
-        linear_setindex!(data, val, I)
-end
+@propagate_inbounds Base.setindex!(data::IJKFVH, val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IJFH,   val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IFH,    val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::DataF,  val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IJF,    val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IF,     val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::VF,     val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::VIJFH,  val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::VIFH,   val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IH1JH2, val, I::Integer) = linear_setindex!(data, val, I)
+@propagate_inbounds Base.setindex!(data::IV1JH2, val, I::Integer) = linear_setindex!(data, val, I)
 
-# Datalayouts
+@propagate_inbounds Base.getindex(data::IJKFVH, I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IJFH,   I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IFH,    I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::DataF,  I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IJF,    I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IF,     I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::VF,     I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::VIJFH,  I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::VIFH,   I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IH1JH2, I::Integer) = linear_getindex(data, I)
+@propagate_inbounds Base.getindex(data::IV1JH2, I::Integer) = linear_getindex(data, I)
+
 @propagate_inbounds function linear_getindex(
     data::AbstractData{S},
     I::Integer,
@@ -1343,7 +1370,6 @@ end
         I,
     )
 end
-
 
 Base.ndims(data::AbstractData) = Base.ndims(typeof(data))
 Base.ndims(::Type{T}) where {T <: AbstractData} =

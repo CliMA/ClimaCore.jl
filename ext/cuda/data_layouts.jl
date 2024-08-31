@@ -88,7 +88,38 @@ function CUDA.CuArray(fa::DL.FieldArray{FD}) where {FD}
     return DL.FieldArray{FD}(arrays)
 end
 
-DL.field_array(
-    array::CUDA.CuArray,
-    as::ArraySize
-) = CUDA.CuArray(DL.field_array(Array(array), as))
+DL.field_array(array::CUDA.CuArray, as::ArraySize) =
+    CUDA.CuArray(DL.field_array(Array(array), as))
+
+
+# TODO: this could be improved, but it's not typically used at runtime
+function copyto_field_array_knl!(x::DL.FieldArray{FD}, y) where {FD}
+    gidx =
+        CUDA.threadIdx().x + (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x
+    I = cart_ind(size(y), gidx)
+    x[I] = y[I]
+    return nothing
+end
+
+@inline function Base.copyto!(
+    x::DL.FieldArray{FD, NT},
+    y::CUDA.CuArray,
+) where {FD, NT <: NTuple}
+    if ndims(eltype(NT)) == ndims(y)
+        @inbounds for i in 1:DL.tuple_length(NT)
+            Base.copyto!(x.arrays[i], y)
+        end
+    elseif ndims(eltype(NT)) + 1 == ndims(y)
+        n = prod(size(y))
+        kernel =
+            CUDA.@cuda always_inline = true launch = false copyto_field_array_knl!(
+                x,
+                y,
+            )
+        config = CUDA.launch_configuration(kernel.fun)
+        threads = min(n, config.threads)
+        blocks = cld(n, threads)
+        kernel(x, y; threads, blocks)
+    end
+    x
+end

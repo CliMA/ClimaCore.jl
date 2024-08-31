@@ -40,8 +40,6 @@ end
 
 # broadcasting scalar assignment
 # Performance optimization for the common identity scalar case: dest .= val
-# And this is valid for the CPU or GPU, since the broadcasted object
-# is a scalar type.
 function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},

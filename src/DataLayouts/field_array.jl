@@ -395,6 +395,9 @@ function field_array(
     FieldArray{FD}(EmptyArray(scalar_array))
 end
 
+# Base.show(io::IO, fa::FieldArray{FD}) where {FD} = print(io, "$(arrays_type(typeof(fa)))(", Array(fa), ")")
+Base.show(io::IO, fa::FieldArray{FD}) where {FD} = print(io, "FieldArray{$FD}(", Array(fa), ")")
+
 # Warning: this method is type-unstable.
 function Base.view(fa::FieldArray{FD}, inds...) where {FD}
     AI = dropat(inds, Val(FD))

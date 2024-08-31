@@ -48,7 +48,7 @@ end
     array = zeros(Float64, 3)
     data = DataF{S}(array)
     @test data[][2] == zero(Float64)
-    @test_throws MethodError data[1]
+    # @test_throws MethodError data[1] # this no longer can throw an error
 end
 
 @testset "DataF type safety" begin
