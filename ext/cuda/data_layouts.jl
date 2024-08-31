@@ -78,3 +78,17 @@ function Adapt.adapt_structure(
         Adapt.adapt(to, bc.axes),
     )
 end
+
+import ClimaCore.DataLayouts as DL
+import CUDA
+function CUDA.CuArray(fa::DL.FieldArray{FD}) where {FD}
+    arrays = ntuple(Val(DL.ncomponents(fa))) do f
+        CUDA.CuArray(fa.arrays[f])
+    end
+    return DL.FieldArray{FD}(arrays)
+end
+
+DL.field_array(
+    array::CUDA.CuArray,
+    as::ArraySize
+) = CUDA.CuArray(DL.field_array(Array(array), as))

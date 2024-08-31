@@ -401,13 +401,18 @@ end
 
 Base.length(data::IJFH) = get_Nh(data)
 
-Base.@propagate_inbounds slab(data::IJFH, h::Integer) = slab(data, 1, h)
-
 @inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
     @boundscheck (v >= 1 && 1 <= h <= get_Nh(data)) ||
                  throw(BoundsError(data, (v, h)))
-    slab(data, h)
+    fa = field_array(data)
+    sub_arrays = ntuple(Val(ncomponents(fa))) do jf
+        view(fa.arrays[jf], :, :, h)
+    end
+    dataview = FieldArray{field_dim(IJF)}(sub_arrays)
+    IJF{S, Nij, typeof(dataview)}(dataview)
 end
+
+Base.@propagate_inbounds slab(data::IJFH, h::Integer) = slab(data, 1, h)
 
 @inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
     @boundscheck (1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= get_Nh(data)) ||

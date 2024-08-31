@@ -69,11 +69,11 @@ function cuda_copyto!(dest::AbstractData, bc)
             auto_launch!(
                 knl_copyto_linear!,
                 (dest, bc′, us),
-                nitems;
+                n;
                 auto = true,
             )
         else
-            auto_launch!(knl_copyto_flat!, (dest, bc, us), nitems; auto = true)
+            auto_launch!(knl_copyto_flat!, (dest, bc, us), n; auto = true)
         end
     end
     return dest
