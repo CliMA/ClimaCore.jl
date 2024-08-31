@@ -1,5 +1,10 @@
+#=
+julia --check-bounds=yes --project
+using Revise; include(joinpath("test", "Operators", "remapping.jl"))
+=#
 using Test
 using ClimaComms
+using ClimaCore.DataLayouts: field_arrays
 using ClimaCore:
     Domains,
     Meshes,
@@ -16,6 +21,13 @@ using ClimaCore.DataLayouts: IJFH
 using IntervalSets, LinearAlgebra, SparseArrays
 
 FT = Float64
+
+function one_to_n!(a)
+    for i in 1:length(a)
+        a[i] = i
+    end
+    a
+end
 
 function make_space(domain::Domains.IntervalDomain, nq, nelems = 1)
     device = ClimaComms.CPUSingleThreaded()
@@ -190,7 +202,7 @@ end
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field).arrays[1] .= one_to_n!(ones(1, 4))
                 remap!(target_field, R, source_field)
                 @test vec(parent(target_field)) ≈ [1.5; 3.5]
             end
@@ -260,7 +272,7 @@ end
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field).arrays[1] .= one_to_n!(ones(1, 4))
                 remap!(target_field, R, source_field)
                 @test vec(parent(target_field)) ≈ [2.0; 2.0; 3.0; 3.0]
             end
@@ -313,7 +325,7 @@ end
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field).arrays[1] .= one_to_n!(ones(1, 1, 4))
                 remap!(target_field, R, source_field)
                 @test vec(parent(target_field)) ≈
                       [1.0; 1.5; 2.0; 2.0; 2.5; 3.0; 3.0; 3.5; 4.0]
@@ -387,7 +399,7 @@ end
                       ones(length(Spaces.local_geometry_data(target)))
 
                 # test simple remap
-                vec(parent(source_field)) .= [1.0; 2.0; 3.0; 4.0]
+                parent(source_field).arrays[1] .= one_to_n!(ones(1, 1, 4))
                 remap!(target_field, R, source_field)
                 @test vec(parent(target_field)) ≈ [1.0; 2.0; 3.0; 4.0]
             end

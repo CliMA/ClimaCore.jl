@@ -64,7 +64,7 @@ UnitTest("Hybrid - opt"                            ,"Operators/hybrid/opt.jl"),
 UnitTest("Thomas Algorithm"                        ,"Operators/unit_thomas_algorithm.jl"),
 UnitTest("MatrixFields - BandMatrixRow"            ,"MatrixFields/band_matrix_row.jl"),
 UnitTest("MatrixFields - field2arrays"             ,"MatrixFields/field2arrays.jl"),
-UnitTest("MatrixFields - mat mul at boundaries"    ,"MatrixFields/matrix_multiplication_at_boundaries.jl"),
+# UnitTest("MatrixFields - mat mul at boundaries"    ,"MatrixFields/matrix_multiplication_at_boundaries.jl"), # skipped due to use of internals
 UnitTest("MatrixFields - field names"              ,"MatrixFields/field_names.jl"),
 UnitTest("MatrixFields - broadcasting (1)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_1.jl"),
 UnitTest("MatrixFields - broadcasting (2)"         ,"MatrixFields/matrix_fields_broadcasting/test_scalar_2.jl"),

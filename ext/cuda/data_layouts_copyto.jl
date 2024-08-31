@@ -1,9 +1,60 @@
+import ClimaCore.DataLayouts:
+    to_non_extruded_broadcasted, has_uniform_datalayouts
 DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
-function knl_copyto!(dest, src, us)
-    I = universal_index(dest)
-    if is_valid_index(dest, I, us)
-        @inbounds dest[I] = src[I]
+# function Base.copyto!(
+#     dest::VIJFH{S, Nv, Nij, Nh},
+#     bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij, Nh},
+#     ::ToCUDA,
+# ) where {S, Nv, Nij, Nh}
+#     if Nv > 0 && Nh > 0
+#         us = DataLayouts.UniversalSize(dest)
+#         n = prod(DataLayouts.universal_size(us))
+#         if has_uniform_datalayouts(bc)
+#             bc′ = to_non_extruded_broadcasted(bc)
+#             auto_launch!(knl_copyto_linear!, (dest, bc′, us), n; auto = true)
+#         else
+#             auto_launch!(knl_copyto_cart!, (dest, bc, us), n; auto = true)
+#         end
+#     end
+#     return dest
+# end
+function knl_copyto_linear!(dest::AbstractData, bc, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            dest[tidx] = bc[tidx]
+        end
+    end
+    return nothing
+end
+
+function knl_copyto_linear!(dest::DataF, bc, us)
+    tidx = thread_index()
+    @inbounds dest[] = bc[tidx]
+    return nothing
+end
+
+function knl_copyto_flat!(dest::AbstractData, bc, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            n = size(dest)
+            I = kernel_indexes(tidx, n)
+            dest[I] = bc[I]
+        end
+    end
+    return nothing
+end
+
+function knl_copyto_flat!(dest::DataF, bc, us)
+    @inbounds begin
+        tidx = thread_index()
+        if tidx ≤ get_N(us)
+            n = size(dest)
+            I = kernel_indexes(tidx, n)
+            dest[] = bc[I]
+        end
     end
     return nothing
 end
@@ -11,17 +62,19 @@ end
 function cuda_copyto!(dest::AbstractData, bc)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
+    n = prod(DataLayouts.universal_size(us))
     if Nv > 0 && Nh > 0
-        args = (dest, bc, us)
-        threads = threads_via_occupancy(knl_copyto!, args)
-        n_max_threads = min(threads, get_N(us))
-        p = partition(dest, n_max_threads)
-        auto_launch!(
-            knl_copyto!,
-            args;
-            threads_s = p.threads,
-            blocks_s = p.blocks,
-        )
+        if has_uniform_datalayouts(bc)
+            bc′ = to_non_extruded_broadcasted(bc)
+            auto_launch!(
+                knl_copyto_linear!,
+                (dest, bc′, us),
+                nitems;
+                auto = true,
+            )
+        else
+            auto_launch!(knl_copyto_flat!, (dest, bc, us), nitems; auto = true)
+        end
     end
     return dest
 end

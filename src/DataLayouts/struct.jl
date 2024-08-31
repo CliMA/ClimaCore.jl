@@ -87,10 +87,14 @@ Returns the parent array type underlying any wrapper types, with all
 dimensionality information removed.
 """
 parent_array_type(::Type{<:Array{T}}) where {T} = Array{T}
+parent_array_type(::Type{<:Array{T}}, as::ArraySize) where {T} =
+    Array{T, ndims(as)}
 parent_array_type(::Type{<:MArray{S, T, N, L}}) where {S, T, N, L} =
     MArray{S, T}
 parent_array_type(::Type{<:SubArray{T, N, A}}) where {T, N, A} =
     parent_array_type(A)
+parent_array_type(::Type{<:SubArray{T, N, A}}, as::ArraySize) where {T, N, A} =
+    parent_array_type(A, as)
 
 # ReshapedArray is needed for converting between arrays and fields for RRTMGP:
 parent_array_type(::Type{<:Base.ReshapedArray{T, N, P}}) where {T, N, P} =
@@ -168,30 +172,28 @@ typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 )
 
 """
-    get_struct(array, S, Val(D), start_index)
+    get_struct(fa, S, Val(D), start_index)
 
-Construct an object of type `S` packed along the `D` dimension, from the values of `array`,
+Construct an object of type `S` packed along the `D` dimension, from the values of `fa`,
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function get_struct(
-    array::AbstractArray{T},
+    fa::FieldArray{FD, NT},
     ::Type{S},
     ::Val{D},
-    start_index::CartesianIndex,
-) where {T, S, D}
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, T, S, D, NT <: NTuple{Nf, <:AbstractArray{T}}}
     tup = :(())
     for i in 1:fieldcount(S)
         push!(
             tup.args,
             :(get_struct(
-                array,
+                fa,
                 fieldtype(S, $i),
                 Val($D),
-                offset_index(
-                    start_index,
-                    Val($D),
-                    $(fieldtypeoffset(T, S, Val(i))),
-                ),
+                start_index,
+                field_index + $(fieldtypeoffset(T, S, Val(i))),
             )),
         )
     end
@@ -199,23 +201,17 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
-    # else
-    #     Base.@_propagate_inbounds_meta
-    #     args = ntuple(fieldcount(S)) do i
-    #         get_struct(array, fieldtype(S, i), Val(D), offset_index(start_index, Val(D), fieldtypeoffset(T, S, i)))
-    #     end
-    #     return bypass_constructor(S, args)
-    # end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
 Base.@propagate_inbounds function get_struct(
-    array::AbstractArray{S},
+    fa::FieldArray{FD, NT},
     ::Type{S},
     ::Val{D},
-    start_index::CartesianIndex,
-) where {S, D}
-    @inbounds return array[start_index]
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, S, D, NT <: NTuple{Nf, <:AbstractArray{S}}}
+    @inbounds return fa.arrays[field_index][start_index]
 end
 
 """
@@ -225,11 +221,12 @@ Store an object `val` of type `S` packed along the `D` dimension, into `array`,
 starting at `start_index`.
 """
 Base.@propagate_inbounds @generated function set_struct!(
-    array::AbstractArray{T},
+    fa::FieldArray{FD, NT},
     val::S,
     ::Val{D},
-    start_index::CartesianIndex,
-) where {T, S, D}
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, T, S, D, NT <: NTuple{Nf, <:AbstractArray{T}}}
     ex = quote
         Base.@_propagate_inbounds_meta
     end
@@ -237,10 +234,11 @@ Base.@propagate_inbounds @generated function set_struct!(
         push!(
             ex.args,
             :(set_struct!(
-                array,
+                fa,
                 getfield(val, $i),
                 Val($D),
-                offset_index(start_index, Val($D), $(fieldtypeoffset(T, S, i))),
+                start_index,
+                field_index + $(fieldtypeoffset(T, S, Val(i))),
             )),
         )
     end
@@ -249,12 +247,150 @@ Base.@propagate_inbounds @generated function set_struct!(
 end
 
 Base.@propagate_inbounds function set_struct!(
-    array::AbstractArray{S},
+    fa::FieldArray{FD, NT},
     val::S,
     ::Val{D},
-    index::CartesianIndex,
-) where {S, D}
-    @inbounds array[index] = val
+    index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, S, D, NT <: NTuple{Nf, <:AbstractArray{S}}}
+    @inbounds fa.arrays[field_index][index] = val
+    val
+end
+
+#####
+##### Linear indexing
+#####
+
+abstract type _Size end
+struct DynamicSize <: _Size end
+struct StaticSize{S_array, FD} <: _Size
+    function StaticSize{S, FD}() where {S, FD}
+        new{S::Tuple{Vararg{Int}}, FD}()
+    end
+end
+
+Base.@pure StaticSize(s::Tuple{Vararg{Int}}, FD) = StaticSize{s, FD}()
+
+# Some @pure convenience functions for `StaticSize`
+s_field_dim_1(::Type{StaticSize{S, FD}}) where {S, FD} =
+    ntuple(j -> j == FD ? 1 : S[j], length(S))
+s_field_dim_1(::StaticSize{S, FD}) where {S, FD} =
+    ntuple(j -> j == FD ? 1 : S[j], length(S))
+
+Base.@pure get(::Type{StaticSize{S}}) where {S} = S
+Base.@pure get(::StaticSize{S}) where {S} = S
+Base.@pure Base.getindex(::StaticSize{S}, i::Int) where {S} =
+    i <= length(S) ? S[i] : 1
+Base.@pure Base.ndims(::StaticSize{S}) where {S} = length(S)
+Base.@pure Base.ndims(::Type{StaticSize{S}}) where {S} = length(S)
+Base.@pure Base.length(::StaticSize{S}) where {S} = prod(S)
+
+Base.@propagate_inbounds cart_inds(n::NTuple) =
+    @inbounds CartesianIndices(map(x -> Base.OneTo(x), n))
+Base.@propagate_inbounds linear_inds(n::NTuple) =
+    @inbounds LinearIndices(map(x -> Base.OneTo(x), n))
+
+@inline function offset_index_linear(
+    base_index::Integer,
+    start_index::Integer,
+    ::Val{D},
+    field_offset,
+    ss::StaticSize{SS};
+) where {D, SS}
+    @inbounds begin
+        # TODO: compute this offset directly without going through CartesianIndex
+        SS1 = s_field_dim_1(typeof(ss))
+        ci = cart_inds(SS1)[base_index]
+        ci_poff = CartesianIndex(
+            ntuple(n -> n == D ? ci[n] + field_offset : ci[n], ndims(ss)),
+        )
+        li = linear_inds(SS)[ci_poff]
+    end
+    return li
+end
+
+Base.@propagate_inbounds @generated function get_struct_linear(
+    fa::FieldArray{FD, NT},
+    ::Type{S},
+    ::Val{D},
+    ss::StaticSize,
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, T, S, D, NT <: NTuple{Nf, <:AbstractArray{T}}}
+    tup = :(())
+    for i in 1:fieldcount(S)
+        push!(
+            tup.args,
+            :(get_struct_linear(
+                fa,
+                fieldtype(S, $i),
+                Val($D),
+                ss,
+                start_index,
+                field_index + $(fieldtypeoffset(T, S, Val(i))),
+            )),
+        )
+    end
+    return quote
+        Base.@_propagate_inbounds_meta
+        @inbounds bypass_constructor(S, $tup)
+    end
+end
+
+# recursion base case: hit array type is the same as the struct leaf type
+Base.@propagate_inbounds function get_struct_linear(
+    fa::FieldArray{FD, NT},
+    ::Type{S},
+    ::Val{D},
+    us::StaticSize,
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, S, D, NT <: NTuple{Nf, <:AbstractArray{S}}}
+    return @inbounds fa.arrays[field_index][start_index]
+end
+
+"""
+    set_struct!(array, val::S, Val(D), start_index)
+Store an object `val` of type `S` packed along the `D` dimension, into `array`,
+starting at `start_index`.
+"""
+Base.@propagate_inbounds @generated function set_struct_linear!(
+    fa::FieldArray{FD, NT},
+    val::S,
+    ::Val{D},
+    ss::StaticSize,
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, T, S, D, NT <: NTuple{Nf, <:AbstractArray{T}}}
+    ex = quote
+        Base.@_propagate_inbounds_meta
+    end
+    for i in 1:fieldcount(S)
+        push!(
+            ex.args,
+            :(set_struct_linear!(
+                fa,
+                getfield(val, $i),
+                Val($D),
+                ss,
+                start_index,
+                field_index + $(fieldtypeoffset(T, S, Val(i))),
+            )),
+        )
+    end
+    push!(ex.args, :(return val))
+    return ex
+end
+
+Base.@propagate_inbounds function set_struct_linear!(
+    fa::FieldArray{FD, NT},
+    val::S,
+    ::Val{D},
+    us::StaticSize,
+    start_index::Union{CartesianIndex, Integer},
+    field_index::Integer = 1,
+) where {FD, Nf, S, D, NT <: NTuple{Nf, <:AbstractArray{S}}}
+    @inbounds fa.arrays[field_index][start_index] = val
     val
 end
 

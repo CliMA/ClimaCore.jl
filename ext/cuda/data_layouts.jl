@@ -13,6 +13,17 @@ import CUDA
 parent_array_type(::Type{<:CUDA.CuArray{T, N, B} where {N}}) where {T, B} =
     CUDA.CuArray{T, N, B} where {N}
 
+# Can we remove this?
+# parent_array_type(
+#     ::Type{<:CUDA.CuArray{T, N, B} where {N}},
+#     ::Val{ND},
+# ) where {T, B, ND} = CUDA.CuArray{T, ND, B}
+
+parent_array_type(
+    ::Type{<:CUDA.CuArray{T, N, B} where {N}},
+    as::ArraySize,
+) where {T, B} = CUDA.CuArray{T, ndims(as), B}
+
 # Ensure that both parent array types have the same memory buffer type.
 promote_parent_array_type(
     ::Type{CUDA.CuArray{T1, N, B} where {N}},
@@ -52,5 +63,18 @@ function Adapt.adapt_structure(
                 ),
             )
         end,
+    )
+end
+
+import Adapt
+import CUDA
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+) where {Style}
+    DataLayouts.NonExtrudedBroadcasted{Style}(
+        adapt_f(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
     )
 end

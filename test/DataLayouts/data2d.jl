@@ -6,6 +6,7 @@ using Test
 using ClimaCore.DataLayouts
 using StaticArrays
 using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!, slab_index
+using ClimaCore.DataLayouts: field_arrays, field_array
 
 @testset "check_basetype" begin
     @test_throws Exception check_basetype(Real, Float64)
@@ -33,7 +34,7 @@ using ClimaCore.DataLayouts: check_basetype, get_struct, set_struct!, slab_index
 end
 
 @testset "get_struct / set_struct!" begin
-    array = [1.0, 2.0, 3.0]
+    array = field_array([1.0, 2.0, 3.0], 1)
     S = Tuple{Complex{Float64}, Float64}
     @test get_struct(array, S, Val(1), CartesianIndex(1)) == (1.0 + 2.0im, 3.0)
     set_struct!(array, (4.0 + 2.0im, 6.0), Val(1), CartesianIndex(1))
@@ -45,9 +46,9 @@ end
     Nij = 2 # number of nodal points
     Nh = 2 # number of elements
     S = Tuple{Complex{Float64}, Float64}
-    array = rand(Nij, Nij, 3, Nh)
+    array = field_array(rand(Nij, Nij, 3, Nh), 3)
     data = IJFH{S, 2, Nh}(array)
-    @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
+    @test getfield(data.:1, :array) == collect(array)[:, :, 1:2, :]
     data_slab = slab(data, 1)
     @test data_slab[slab_index(2, 1)] ==
           (Complex(array[2, 1, 1, 1], array[2, 1, 2, 1]), array[2, 1, 3, 1])

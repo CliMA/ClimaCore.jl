@@ -48,8 +48,9 @@ function dss_load_perimeter_data_kernel!(
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
-        data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
+        data_idx = linear_ind(sized, (level, ip, jp, elem))
+        pperimeter_data.arrays[fidx][level, p, elem] =
+            pdata.arrays[fidx][data_idx]
     end
     return nothing
 end
@@ -89,7 +90,8 @@ function dss_unload_perimeter_data_kernel!(
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
         data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+        pdata.arrays[fidx][data_idx] =
+            pperimeter_data.arrays[fidx][level, p, elem]
     end
     return nothing
 end
@@ -148,12 +150,12 @@ function dss_local_kernel!(
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            sum_data += pperimeter_data[level, ip, fidx, lidx]
+            sum_data += pperimeter_data.arrays[fidx][level, ip, lidx]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            pperimeter_data[level, ip, fidx, lidx] = sum_data
+            pperimeter_data.arrays[fidx][level, ip, lidx] = sum_data
         end
     elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
         nfacedof = div(nperimeter - 4, 4)
@@ -169,10 +171,10 @@ function dss_local_kernel!(
             ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
             ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
             val =
-                pperimeter_data[level, ip1, fidx, lidx1] +
-                pperimeter_data[level, ip2, fidx, lidx2]
-            pperimeter_data[level, ip1, fidx, lidx1] = val
-            pperimeter_data[level, ip2, fidx, lidx2] = val
+                pperimeter_data.arrays[fidx][level, ip1, lidx1] +
+                pperimeter_data.arrays[fidx][level, ip2, lidx2]
+            pperimeter_data.arrays[fidx][level, ip1, lidx1] = val
+            pperimeter_data.arrays[fidx][level, ip2, lidx2] = val
         end
     end
 
@@ -456,7 +458,8 @@ function load_from_recv_buffer_kernel!(
         lidx = recv_buf_idx[irecv, 1]
         ip = recv_buf_idx[irecv, 2]
         idx = level + ((fidx - 1) + (irecv - 1) * nfid) * nlevels
-        CUDA.@atomic pperimeter_data[level, ip, fidx, lidx] += recv_data[idx]
+        CUDA.@atomic pperimeter_data.arrays[fidx][level, ip, lidx] +=
+            recv_data[idx]
     end
     return nothing
 end

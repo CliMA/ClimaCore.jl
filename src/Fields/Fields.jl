@@ -10,6 +10,7 @@ import ..DataLayouts:
     FusedMultiBroadcast,
     @fused_direct,
     isascalar,
+    field_array,
     check_fused_broadcast_axes
 import ..Domains
 import ..Topologies
@@ -44,6 +45,21 @@ Field(values::V, space::S) where {V <: AbstractData, S <: AbstractSpace} =
 
 Field(::Type{T}, space::S) where {T, S <: AbstractSpace} =
     Field(similar(Spaces.coordinates_data(space), T), space)
+
+function empty_array_type(space::AbstractSpace)
+    cd = Spaces.coordinates_data(space)
+    AT = DataLayouts.array_type(parent(cd))
+    return typeof(DataLayouts.EmptyArray(AT))
+end
+
+# Support empty (Tuple and NamedTuple) fields:
+function Field(
+    ::Type{T},
+    space::S,
+) where {T <: Union{Tuple{}, @NamedTuple{}}, S <: AbstractSpace}
+    cd = Spaces.coordinates_data(space)
+    Field(similar(cd, empty_array_type(space)), space)
+end
 
 local_geometry_type(::Field{V, S}) where {V, S} = local_geometry_type(S)
 

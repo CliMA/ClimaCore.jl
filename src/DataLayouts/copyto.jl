@@ -2,10 +2,35 @@
 ##### Dispatching and edge cases
 #####
 
-Base.copyto!(
-    dest::AbstractData,
+############################ new/old kernels
+
+function Base.copyto!(
+    dest::AbstractData{S},
     bc::Union{AbstractData, Base.Broadcast.Broadcasted},
-) = Base.copyto!(dest, bc, device_dispatch(dest))
+) where {S}
+    ncomponents(dest) > 0 || return dest
+    dev = device_dispatch(dest)
+    if dev isa ToCPU && has_uniform_datalayouts(bc) && !(dest isa DataF)
+        # Specialize on linear indexing case:
+        bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
+        @inbounds @simd for I in 1:get_N(UniversalSize(dest))
+            dest[I] = convert(S, bc′[I])
+        end
+    else
+        Base.copyto!(dest, bc, device_dispatch(dest))
+    end
+    return dest
+end
+
+# function Base.copyto!(
+#     dest::AbstractData,
+#     bc::Union{AbstractData, Base.Broadcast.Broadcasted},
+# )
+#     ncomponents(dest) > 0 || return dest
+#     Base.copyto!(dest, bc, device_dispatch(dest))
+# end
+
+############################
 
 # Specialize on non-Broadcasted objects
 function Base.copyto!(dest::D, src::D) where {D <: AbstractData}

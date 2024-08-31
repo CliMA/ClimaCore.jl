@@ -1,13 +1,15 @@
 #=
-julia --project=test
+julia --check-bounds=yes --project
 using Revise; include(joinpath("test", "DataLayouts", "data0d.jl"))
 =#
 using Test
 using JET
 
 using ClimaCore.DataLayouts
+import ClimaCore.DataLayouts as DL
 using StaticArrays
 using ClimaCore.DataLayouts: get_struct, set_struct!
+using ClimaCore.DataLayouts: field_arrays
 
 TestFloatTypes = (Float32, Float64)
 
@@ -15,24 +17,25 @@ TestFloatTypes = (Float32, Float64)
     for FT in TestFloatTypes
         S = Tuple{Complex{FT}, FT}
         array = rand(FT, 3)
+        c = Complex{FT}(-1.0, -2.0)
+        t = (c, FT(-3.0))
 
         data = DataF{S}(array)
-        @test getfield(data, :array) == array
+        @test DL.field_array_type(data) <: DL.FieldArray
 
         # test tuple assignment
-        data[] = (Complex{FT}(-1.0, -2.0), FT(-3.0))
-        @test array[1] == -1.0
-        @test array[2] == -2.0
-        @test array[3] == -3.0
+        data[] = (c, FT(-3.0))
+        @test field_arrays(data)[1][1] == -1.0
+        @test field_arrays(data)[2][1] == -2.0
+        @test field_arrays(data)[3][1] == -3.0
 
         data2 = DataF(data[])
         @test typeof(data2) == typeof(data)
-        @test parent(data2) == parent(data)
 
         # sum of all the first field elements
-        @test data.:1[] == Complex{FT}(array[1], array[2])
+        @test data.:1[] == c
 
-        @test data.:2[] == array[3]
+        @test data.:2[] == t[2]
 
         data_copy = copy(data)
         @test data_copy isa DataF

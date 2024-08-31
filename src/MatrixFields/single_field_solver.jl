@@ -39,11 +39,12 @@ function check_single_field_solver(A, b)
     )
 end
 
-single_field_solver_cache(::UniformScaling, b) = similar(b, Tuple{})
+single_field_solver_cache(::UniformScaling, b) =
+    similar(b, Fields.empty_array_type(axes(b)))
 function single_field_solver_cache(A::ColumnwiseBandMatrixField, b)
     ud = outer_diagonals(eltype(A))[2]
     cache_eltype =
-        ud == 0 ? Tuple{} :
+        ud == 0 ? Fields.empty_array_type(axes(b)) :
         Tuple{x_eltype(A, b), ntuple(_ -> unit_eltype(A), Val(ud))...}
     return similar(b, cache_eltype)
 end

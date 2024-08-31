@@ -17,6 +17,8 @@ import ClimaCore.Utilities: cart_ind, linear_ind
 import ClimaCore.RecursiveApply:
     ⊠, ⊞, ⊟, radd, rmul, rsub, rdiv, rmap, rzero, rmin, rmax
 import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
+import ClimaCore.DataLayouts: universal_size
+import ClimaCore.DataLayouts: ArraySize
 import ClimaCore.DataLayouts: UniversalSize
 
 include(joinpath("cuda", "cuda_utils.jl"))

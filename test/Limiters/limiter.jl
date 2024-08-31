@@ -204,7 +204,7 @@ end
         # Initialize fields
         ρ = ones(FT, space)
         q = ones(FT, space)
-        parent(q)[:, :, 1, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
+        parent(q).arrays[1][:, :, 1] = [FT(-0.2) FT(0.00001); FT(1.1) FT(1)]
 
         ρq = @. ρ .* q
 
@@ -213,7 +213,7 @@ end
 
         # Initialize variables needed for limiters
         q_ref = ones(FT, space)
-        parent(q_ref)[:, :, 1, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
+        parent(q_ref).arrays[1][:, :, 1] = [FT(0) FT(0.00001); FT(1) FT(1)]
         ρq_ref = ρ .* q_ref
 
         Limiters.compute_bounds!(limiter, ρq_ref, ρ)

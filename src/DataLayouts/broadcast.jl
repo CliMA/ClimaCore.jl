@@ -1,5 +1,6 @@
 import MultiBroadcastFusion as MBF
 import MultiBroadcastFusion: fused_direct
+import ..RecursiveApply
 
 # Make a MultiBroadcastFusion type, `FusedMultiBroadcast`, and macro, `@fused`:
 # via https://github.com/CliMA/MultiBroadcastFusion.jl
@@ -10,6 +11,25 @@ MBF.@make_fused fused_direct FusedMultiBroadcast fused_direct
 # https://docs.julialang.org/en/v1/manual/interfaces/#Broadcast-Styles
 
 abstract type DataStyle <: Base.BroadcastStyle end
+
+"""
+    parent_array_type
+
+Returns a UnionAll array type given the inputs.
+For example: `Array`, `CuArray` etc.
+
+# Note
+
+The returned type must be a UnionAll array type
+because we need to be able to promote broadcast
+expressions with fields containing different number
+of variables. The number of fields returns depends
+on the function being broadcasted over, and we do
+not have this number here.
+
+# TODO: make this note more precise
+"""
+function parent_array_type end
 
 abstract type Data0DStyle <: DataStyle end
 struct DataFStyle{A} <: Data0DStyle end
@@ -291,27 +311,33 @@ function Base.similar(
     bc::BroadcastedUnionDataF{<:Any, A},
     ::Type{Eltype},
 ) where {A, Eltype}
-    PA = parent_array_type(A)
-    array = similar(PA, (typesize(eltype(A), Eltype)))
-    return DataF{Eltype}(array)
+    Nf = typesize(eltype(A), Eltype)
+    _size = ()
+    as = ArraySize{field_dim(DataF), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return DataF{Eltype}(fa)
 end
 
 function Base.similar(
     bc::BroadcastedUnionIJFH{<:Any, Nij, Nh, A},
     ::Type{Eltype},
 ) where {Nij, Nh, A, Eltype}
-    PA = parent_array_type(A)
-    array = similar(PA, (Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return IJFH{Eltype, Nij, Nh}(array)
+    Nf = typesize(eltype(A), Eltype)
+    _size = (Nij, Nij, Nh)
+    as = ArraySize{field_dim(IJFH), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return IJFH{Eltype, Nij, Nh}(fa)
 end
 
 function Base.similar(
     bc::BroadcastedUnionIFH{<:Any, Ni, Nh, A},
     ::Type{Eltype},
 ) where {Ni, Nh, A, Eltype}
-    PA = parent_array_type(A)
-    array = similar(PA, (Ni, typesize(eltype(A), Eltype), Nh))
-    return IFH{Eltype, Ni, Nh}(array)
+    Nf = typesize(eltype(A), Eltype)
+    _size = (Ni, Nh)
+    as = ArraySize{field_dim(IFH), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return IFH{Eltype, Ni, Nh}(fa)
 end
 
 function Base.similar(
@@ -319,8 +345,12 @@ function Base.similar(
     ::Type{Eltype},
 ) where {Nij, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
-    array = MArray{Tuple{Nij, Nij, Nf}, eltype(A), 3, Nij * Nij * Nf}(undef)
-    return IJF{Eltype, Nij}(array)
+    # array = MArray{Tuple{Nij, Nij, Nf}, eltype(A), 3, Nij * Nij * Nf}(undef)
+    MAT = MArray{Tuple{Nij, Nij}, eltype(A), 2, Nij * Nij}
+    _size = (Nij, Nij)
+    as = ArraySize{field_dim(IJF), Nf, ()}()
+    fa = similar(rebuild_field_array_type(A, as, MAT), _size)
+    return IJF{Eltype, Nij}(fa)
 end
 
 function Base.similar(
@@ -328,8 +358,12 @@ function Base.similar(
     ::Type{Eltype},
 ) where {Ni, A, Eltype}
     Nf = typesize(eltype(A), Eltype)
-    array = MArray{Tuple{Ni, Nf}, eltype(A), 2, Ni * Nf}(undef)
-    return IF{Eltype, Ni}(array)
+    # array = MArray{Tuple{Ni, Nf}, eltype(A), 2, Ni * Nf}(undef)
+    MAT = MArray{Tuple{Ni}, eltype(A), 2, Ni}
+    _size = (Ni,)
+    as = ArraySize{field_dim(IF), Nf, ()}() # size is unused
+    fa = similar(rebuild_field_array_type(A, as, MAT), _size)
+    return IF{Eltype, Ni}(fa)
 end
 
 Base.similar(
@@ -342,9 +376,11 @@ function Base.similar(
     ::Type{Eltype},
     ::Val{newNv},
 ) where {Nv, A, Eltype, newNv}
-    PA = parent_array_type(A)
-    array = similar(PA, (newNv, typesize(eltype(A), Eltype)))
-    return VF{Eltype, newNv}(array)
+    Nf = typesize(eltype(A), Eltype)
+    _size = (newNv,)
+    as = ArraySize{field_dim(VF), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return VF{Eltype, newNv, typeof(fa)}(fa)
 end
 
 Base.similar(
@@ -357,9 +393,11 @@ function Base.similar(
     ::Type{Eltype},
     ::Val{newNv},
 ) where {Nv, Ni, Nh, A, Eltype, newNv}
-    PA = parent_array_type(A)
-    array = similar(PA, (newNv, Ni, typesize(eltype(A), Eltype), Nh))
-    return VIFH{Eltype, newNv, Ni, Nh}(array)
+    Nf = typesize(eltype(A), Eltype)
+    _size = (newNv, Ni, Nh)
+    as = ArraySize{field_dim(VIFH), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return VIFH{Eltype, newNv, Ni, Nh}(fa)
 end
 
 Base.similar(
@@ -372,9 +410,12 @@ function Base.similar(
     ::Type{Eltype},
     ::Val{newNv},
 ) where {Nv, Nij, Nh, A, Eltype, newNv}
-    PA = parent_array_type(A)
-    array = similar(PA, (newNv, Nij, Nij, typesize(eltype(A), Eltype), Nh))
-    return VIJFH{Eltype, newNv, Nij, Nh}(array)
+    T = eltype(A)
+    Nf = typesize(eltype(A), Eltype)
+    _size = (newNv, Nij, Nij, Nh)
+    as = ArraySize{field_dim(VIJFH), Nf, _size}()
+    fa = similar(rebuild_field_array_type(A, as), _size)
+    return VIJFH{Eltype, newNv, Nij, Nh}(fa)
 end
 
 # ============= FusedMultiBroadcast
