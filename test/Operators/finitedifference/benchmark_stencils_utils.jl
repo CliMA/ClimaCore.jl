@@ -219,22 +219,28 @@ bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
         (; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
     )
 
-function benchmark_func!(t_min, trials, fun, c, f, verbose = false)
+function benchmark_func!(t_min, trials, fun, c, f, verbose = false; compile::Bool)
     device = ClimaComms.device(c)
     for bcs in bcs_tested(c, fun)
         h_space = nameof(typeof(axes(c)))
         key = (h_space, fun, bc_name(bcs)...)
-        verbose && @info "\n@benchmarking $key"
-        trials[key] = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $fun($c, $f, $bcs)
-        verbose && show(stdout, MIME("text/plain"), trials[key])
+        if compile
+            fun(c, f, bcs)
+        else
+            verbose && @info "\n@benchmarking $key"
+            trials[key] = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $fun($c, $f, $bcs)
+        end
+        if haskey(trials, key)
+            verbose && show(stdout, MIME("text/plain"), trials[key])
 
-        t_min[key] = minimum(trials[key].times) # nano seconds
-        t_pretty = BenchmarkTools.prettytime(t_min[key])
-        verbose || @info "$t_pretty <=> t_min[$key]"
+            t_min[key] = minimum(trials[key].times) # nano seconds
+            t_pretty = BenchmarkTools.prettytime(t_min[key])
+            verbose || @info "$t_pretty <=> t_min[$key]"
+        end
     end
 end
 
-function column_benchmark_arrays(device, z_elems, ::Type{FT}) where {FT}
+function column_benchmark_arrays(device, z_elems, ::Type{FT}; compile::Bool) where {FT}
     ArrayType = ClimaComms.array_type(device)
     L = ArrayType(zeros(FT, z_elems))
     D = ArrayType(zeros(FT, z_elems))
@@ -243,6 +249,16 @@ function column_benchmark_arrays(device, z_elems, ::Type{FT}) where {FT}
     uₕ_x = ArrayType(rand(FT, z_elems))
     uₕ_y = ArrayType(rand(FT, z_elems))
     yarr = ArrayType(rand(FT, z_elems + 1))
+    if compile
+        if device isa ClimaComms.CUDADevice
+            column_op_2mul_1add_cuda!(xarr, yarr, D, U)
+        else
+            column_op_2mul_1add!(xarr, yarr, D, U)
+            column_op_3mul_2add!(xarr, yarr, L, D, U)
+            column_curl_like!(xarr, uₕ_x, uₕ_y, D, U)
+        end
+        return nothing
+    end
 
     if device isa ClimaComms.CUDADevice
         println("\n############################ column 2-point stencil")
@@ -265,7 +281,7 @@ function column_benchmark_arrays(device, z_elems, ::Type{FT}) where {FT}
     end
 end
 
-function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}) where {FT}
+function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile::Bool) where {FT}
     ArrayType = ClimaComms.array_type(device)
     # VIJFH
     Nh = helem * helem * 6
@@ -280,42 +296,58 @@ function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}) where {
     yarr = ArrayType(rand(FT, fdims...))
 
     if device isa ClimaComms.CUDADevice
-        println("\n############################ sphere 2-point stencil")
-        trial = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device sphere_op_2mul_1add_cuda!($xarr, $yarr, $D, $U)
-        show(stdout, MIME("text/plain"), trial)
-        println()
+        if compile
+            sphere_op_2mul_1add_cuda!(xarr, yarr, D, U)
+        else
+            println("\n############################ sphere 2-point stencil")
+            trial = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device sphere_op_2mul_1add_cuda!($xarr, $yarr, $D, $U)
+            show(stdout, MIME("text/plain"), trial)
+            println()
+        end
     else
         @info "Sphere CPU kernels have not been added yet."
     end
 end
 
-function benchmark_operators(::Type{FT}; z_elems, helem, Nq) where {FT}
+function benchmark_operators_column(::Type{FT}; z_elems, helem, Nq, compile::Bool = false) where {FT}
     device = ClimaComms.device()
     @show device
     trials = OrderedCollections.OrderedDict()
     t_min = OrderedCollections.OrderedDict()
-    column_benchmark_arrays(device, z_elems, FT)
-    sphere_benchmark_arrays(device, z_elems, helem, Nq, FT)
+    column_benchmark_arrays(device, z_elems, FT; compile)
 
     cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_min, cfield, ffield, "column")
+    benchmark_operators_base(trials, t_min, cfield, ffield, "column"; compile)
+
+    # Tests are removed since they're flakey. And maintaining
+    # them before they're converged is a bit of work..
+    compile || test_results_column(t_min)
+    return (; trials, t_min)
+end
+
+function benchmark_operators_sphere(::Type{FT}; z_elems, helem, Nq, compile::Bool = false) where {FT}
+    device = ClimaComms.device()
+    @show device
+    trials = OrderedCollections.OrderedDict()
+    t_min = OrderedCollections.OrderedDict()
+    sphere_benchmark_arrays(device, z_elems, helem, Nq, FT; compile)
 
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_min, cfield, ffield, "sphere")
+    benchmark_operators_base(trials, t_min, cfield, ffield, "sphere"; compile)
 
     # Tests are removed since they're flakey. And maintaining
     # them before they're converged is a bit of work..
-    test_results(t_min)
+    compile || test_results_sphere(t_min)
     return (; trials, t_min)
 end
 
-function benchmark_operators_base(trials, t_min, cfield, ffield, name)
+function benchmark_operators_base(trials, t_min, cfield, ffield, name; compile::Bool)
     ops = [
         #### Core discrete operators
         op_GradientF2C!,
@@ -351,13 +383,13 @@ function benchmark_operators_base(trials, t_min, cfield, ffield, name)
         if uses_bycolumn(op) && axes(cfield) isa Spaces.FiniteDifferenceSpace
             continue
         end
-        benchmark_func!(t_min, trials, op, cfield, ffield, #= verbose = =# false)
+        benchmark_func!(t_min, trials, op, cfield, ffield, #= verbose = =# false; compile)
     end
 
     return nothing
 end
 
-function test_results(t_min)
+function test_results_column(t_min)
     # If these tests fail, just update the numbers (or the
     # buffer) so long its not an egregious regression.
     buffer = 2
@@ -393,7 +425,22 @@ function test_results(t_min)
     [(:FiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
     [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
     [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
+    ]
+    for (params, ref_time) in results
+        if !(t_min[params] ≤ ref_time)
+            @warn "Possible regression: $params, time=$(t_min[params]), ref_time=$ref_time"
+        end
+    end
+end
 
+function test_results_sphere(t_min)
+    # If these tests fail, just update the numbers (or the
+    # buffer) so long its not an egregious regression.
+    buffer = 2
+    ns = 1
+    μs = 10^3
+    ms = 10^6
+    results = [
     [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :none), 1.746*ms*buffer],
     [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
     [(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
