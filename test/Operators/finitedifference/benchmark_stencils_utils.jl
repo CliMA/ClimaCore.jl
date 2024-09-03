@@ -14,6 +14,15 @@ include(
 )
 import .TestUtilities as TU
 
+if ClimaComms.device() isa ClimaComms.CUDADevice
+    import CUDA
+    device_name = CUDA.name(CUDA.device()) # Move to ClimaComms
+else
+    device_name = "CPU"
+end
+
+include(joinpath(pkgdir(ClimaCore), "benchmarks/scripts/benchmark_utils.jl"))
+
 import ClimaCore: Domains, Meshes, Spaces, Fields, Operators, Topologies
 import ClimaCore.Domains: Geometry
 
@@ -219,28 +228,52 @@ bcs_tested(c, ::typeof(op_divgrad_uₕ!)) =
         (; inner = (;), outer = set_value_divgrad_uₕ_maybe_field_bcs(c)),
     )
 
-function benchmark_func!(t_min, trials, fun, c, f, verbose = false; compile::Bool)
+function short_name(key)
+    to_short = (
+        "op_divUpwind3rdOrderBiasedProductC2F" => "op_divO3UBPC2F",
+        "op_UpwindBiasedProductC2F" => "op_UBPC2F",
+        "ThirdOrderOneSided" => "1SidedO3",
+    )
+    replace(string(key), to_short...)
+end
+function benchmark_func!(bm, t_min, trials, fun, c, f, verbose = false; compile::Bool)
     device = ClimaComms.device(c)
-    for bcs in bcs_tested(c, fun)
-        h_space = nameof(typeof(axes(c)))
-        key = (h_space, fun, bc_name(bcs)...)
+    str_print = ""
+    all_bcs = bcs_tested(c, fun)
+    for (ibc,bcs) in enumerate(bcs_tested(c, fun))
+        key = (fun, bc_name(bcs)...)
         if compile
             fun(c, f, bcs)
         else
             verbose && @info "\n@benchmarking $key"
             trials[key] = BenchmarkTools.@benchmark ClimaComms.@cuda_sync $device $fun($c, $f, $bcs)
+            cf = Fields.field_values(Fields.coordinate_field(axes(c)))
+            kernel_time_s = minimum(trials[key].times) * 1e-9 # to seconds
+            push_info(bm;
+                kernel_time_s,
+                nreps=1,
+                caller=short_name(key),
+                n_reads_writes=n_reads_writes(typeof(fun)),
+                problem_size=size(cf)
+            )
         end
         if haskey(trials, key)
             verbose && show(stdout, MIME("text/plain"), trials[key])
 
             t_min[key] = minimum(trials[key].times) # nano seconds
             t_pretty = BenchmarkTools.prettytime(t_min[key])
-            verbose || @info "$t_pretty <=> t_min[$key]"
+            if !verbose
+                ibc == 1 && print("Benchmarking $fun: ")
+                print("($ibc/$(length(all_bcs)))")
+                is_last = (ibc == length(all_bcs) || length(all_bcs) == 0)
+                is_last || print(", ")
+                is_last && println()
+            end
         end
     end
 end
 
-function column_benchmark_arrays(device, z_elems, ::Type{FT}; compile::Bool) where {FT}
+function column_benchmark_arrays(device, z_elems, ::Type{FT}; compile::Bool = false) where {FT}
     ArrayType = ClimaComms.array_type(device)
     L = ArrayType(zeros(FT, z_elems))
     D = ArrayType(zeros(FT, z_elems))
@@ -281,7 +314,7 @@ function column_benchmark_arrays(device, z_elems, ::Type{FT}; compile::Bool) whe
     end
 end
 
-function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile::Bool) where {FT}
+function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile::Bool = false) where {FT}
     ArrayType = ClimaComms.array_type(device)
     # VIJFH
     Nh = helem * helem * 6
@@ -309,45 +342,45 @@ function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile
     end
 end
 
-function benchmark_operators_column(::Type{FT}; z_elems, helem, Nq, compile::Bool = false) where {FT}
+function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = false)
+    FT = bm.float_type
     device = ClimaComms.device()
     @show device
     trials = OrderedCollections.OrderedDict()
     t_min = OrderedCollections.OrderedDict()
-    column_benchmark_arrays(device, z_elems, FT; compile)
 
     cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_min, cfield, ffield, "column"; compile)
+    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "column"; compile)
 
     # Tests are removed since they're flakey. And maintaining
     # them before they're converged is a bit of work..
-    compile || test_results_column(t_min)
-    return (; trials, t_min)
+    tabulate_benchmark(bm)
+    return (; bm, trials, t_min)
 end
 
-function benchmark_operators_sphere(::Type{FT}; z_elems, helem, Nq, compile::Bool = false) where {FT}
+function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false)
+    FT = bm.float_type
     device = ClimaComms.device()
     @show device
     trials = OrderedCollections.OrderedDict()
     t_min = OrderedCollections.OrderedDict()
-    sphere_benchmark_arrays(device, z_elems, helem, Nq, FT; compile)
 
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)
-    benchmark_operators_base(trials, t_min, cfield, ffield, "sphere"; compile)
+    benchmark_operators_base(bm, trials, t_min, cfield, ffield, "sphere"; compile)
 
     # Tests are removed since they're flakey. And maintaining
     # them before they're converged is a bit of work..
-    compile || test_results_sphere(t_min)
+    tabulate_benchmark(bm)
     return (; trials, t_min)
 end
 
-function benchmark_operators_base(trials, t_min, cfield, ffield, name; compile::Bool)
+function benchmark_operators_base(bm, trials, t_min, cfield, ffield, name; compile::Bool)
     ops = [
         #### Core discrete operators
         op_GradientF2C!,
@@ -383,7 +416,7 @@ function benchmark_operators_base(trials, t_min, cfield, ffield, name; compile::
         if uses_bycolumn(op) && axes(cfield) isa Spaces.FiniteDifferenceSpace
             continue
         end
-        benchmark_func!(t_min, trials, op, cfield, ffield, #= verbose = =# false; compile)
+        benchmark_func!(bm, t_min, trials, op, cfield, ffield, #= verbose = =# false; compile)
     end
 
     return nothing
@@ -397,34 +430,34 @@ function test_results_column(t_min)
     μs = 10^3
     ms = 10^6
     results = [
-    [(:FiniteDifferenceSpace, op_GradientF2C!, :none), 253.100*ns*buffer],
-    [(:FiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
-    [(:FiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
-    [(:FiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue), 241.647*ns*buffer],
-    [(:FiniteDifferenceSpace, op_DivergenceF2C!, :none), 1.005*μs*buffer],
-    [(:FiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
-    [(:FiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
-    [(:FiniteDifferenceSpace, op_InterpolateF2C!, :none), 254.523*ns*buffer],
-    [(:FiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
-    [(:FiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate), 241.308*ns*buffer],
-    [(:FiniteDifferenceSpace, op_broadcast_example2!, :none), 555.039*ns*buffer],
-    [(:FiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue), 207.264*ns*buffer],
-    [(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :none), 137.031*ns*buffer],
-    [(:FiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue), 185.135*ns*buffer],
-    [(:FiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue), 129.971*ns*buffer],
-    [(:FiniteDifferenceSpace, op_RightBiasedF2C!, :none), 142.120*ns*buffer],
-    [(:FiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue), 141.446*ns*buffer],
-    [(:FiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
-    [(:FiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue), 1.616*μs*buffer],
-    [(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 754.856*ns*buffer],
-    [(:FiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 765.401*ns*buffer],
-    [(:FiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 2.540*μs*buffer],
-    [(:FiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none), 924.147*ns*buffer],
-    [(:FiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
-    [(:FiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
-    [(:FiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
-    [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
-    [(:FiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
+    [(op_GradientF2C!, :none), 253.100*ns*buffer],
+    [(op_GradientF2C!, :SetValue, :SetValue), 270.448*ns*buffer],
+    [(op_GradientC2F!, :SetGradient, :SetGradient), 242.053*ns*buffer],
+    [(op_GradientC2F!, :SetValue, :SetValue), 241.647*ns*buffer],
+    [(op_DivergenceF2C!, :none), 1.005*μs*buffer],
+    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 1.076*μs*buffer],
+    [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 878.028*ns*buffer],
+    [(op_InterpolateF2C!, :none), 254.523*ns*buffer],
+    [(op_InterpolateC2F!, :SetValue, :SetValue), 254.241*ns*buffer],
+    [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 241.308*ns*buffer],
+    [(op_broadcast_example2!, :none), 555.039*ns*buffer],
+    [(op_LeftBiasedC2F!, :SetValue), 207.264*ns*buffer],
+    [(op_LeftBiasedF2C!, :none), 137.031*ns*buffer],
+    [(op_LeftBiasedF2C!, :SetValue), 185.135*ns*buffer],
+    [(op_RightBiasedC2F!, :SetValue), 129.971*ns*buffer],
+    [(op_RightBiasedF2C!, :none), 142.120*ns*buffer],
+    [(op_RightBiasedF2C!, :SetValue), 141.446*ns*buffer],
+    [(op_CurlC2F!, :SetCurl, :SetCurl), 1.692*μs*buffer],
+    [(op_CurlC2F!, :SetValue, :SetValue), 1.616*μs*buffer],
+    [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 754.856*ns*buffer],
+    [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 765.401*ns*buffer],
+    [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 2.540*μs*buffer],
+    [(op_divgrad_CC!, :SetValue, :SetValue, :none), 924.147*ns*buffer],
+    [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 876.510*ns*buffer],
+    [(op_div_interp_CC!, :SetValue, :SetValue, :none), 721.119*ns*buffer],
+    [(op_div_interp_FF!, :none, :SetValue, :SetValue), 686.581*ns*buffer],
+    [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 4.960*μs*buffer],
+    [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 5.047*μs*buffer],
     ]
     for (params, ref_time) in results
         if !(t_min[params] ≤ ref_time)
@@ -441,36 +474,36 @@ function test_results_sphere(t_min)
     μs = 10^3
     ms = 10^6
     results = [
-    [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :none), 1.746*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_GradientC2F!, :SetValue, :SetValue), 1.782*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :none), 6.792*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateF2C!, :none), 1.701*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_InterpolateC2F!, :Extrapolate, :Extrapolate), 1.698*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example0!, :none), 1.059*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example1!, :none), 154.330*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_broadcast_example2!, :none), 152.689*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedC2F!, :SetValue), 1.758*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :none), 1.711*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_LeftBiasedF2C!, :SetValue), 1.754*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedC2F!, :SetValue), 1.847*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :none), 1.582*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_RightBiasedF2C!, :SetValue), 1.551*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_CurlC2F!, :SetValue, :SetValue), 4.568*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 3.444*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 3.432*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 5.650*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_CC!, :SetValue, :SetValue, :none), 4.474*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_div_interp_FF!, :none, :SetValue, :SetValue), 3.663*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 7.470*ms*buffer],
-    [(:ExtrudedFiniteDifferenceSpace, op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
+    [(op_GradientF2C!, :none), 1.746*ms*buffer],
+    [(op_GradientF2C!, :SetValue, :SetValue), 1.754*ms*buffer],
+    [(op_GradientC2F!, :SetGradient, :SetGradient), 1.899*ms*buffer],
+    [(op_GradientC2F!, :SetValue, :SetValue), 1.782*ms*buffer],
+    [(op_DivergenceF2C!, :none), 6.792*ms*buffer],
+    [(op_DivergenceF2C!, :Extrapolate, :Extrapolate), 6.776*ms*buffer],
+    [(op_DivergenceC2F!, :SetDivergence, :SetDivergence), 6.720*ms*buffer],
+    [(op_InterpolateF2C!, :none), 1.701*ms*buffer],
+    [(op_InterpolateC2F!, :SetValue, :SetValue), 1.713*ms*buffer],
+    [(op_InterpolateC2F!, :Extrapolate, :Extrapolate), 1.698*ms*buffer],
+    [(op_broadcast_example0!, :none), 1.059*ms*buffer],
+    [(op_broadcast_example1!, :none), 154.330*ms*buffer],
+    [(op_broadcast_example2!, :none), 152.689*ms*buffer],
+    [(op_LeftBiasedC2F!, :SetValue), 1.758*ms*buffer],
+    [(op_LeftBiasedF2C!, :none), 1.711*ms*buffer],
+    [(op_LeftBiasedF2C!, :SetValue), 1.754*ms*buffer],
+    [(op_RightBiasedC2F!, :SetValue), 1.847*ms*buffer],
+    [(op_RightBiasedF2C!, :none), 1.582*ms*buffer],
+    [(op_RightBiasedF2C!, :SetValue), 1.551*ms*buffer],
+    [(op_CurlC2F!, :SetCurl, :SetCurl), 4.669*ms*buffer],
+    [(op_CurlC2F!, :SetValue, :SetValue), 4.568*ms*buffer],
+    [(op_UpwindBiasedProductC2F!, :SetValue, :SetValue), 3.444*ms*buffer],
+    [(op_UpwindBiasedProductC2F!, :Extrapolate, :Extrapolate), 3.432*ms*buffer],
+    [(op_divUpwind3rdOrderBiasedProductC2F!, :ThirdOrderOneSided, :ThirdOrderOneSided, :SetValue, :SetValue), 5.650*ms*buffer],
+    [(op_divgrad_CC!, :SetValue, :SetValue, :none), 4.474*ms*buffer],
+    [(op_divgrad_FF!, :none, :SetDivergence, :SetDivergence), 4.470*ms*buffer],
+    [(op_div_interp_CC!, :SetValue, :SetValue, :none), 3.566*ms*buffer],
+    [(op_div_interp_FF!, :none, :SetValue, :SetValue), 3.663*ms*buffer],
+    [(op_divgrad_uₕ!, :none, :SetValue, :Extrapolate), 7.470*ms*buffer],
+    [(op_divgrad_uₕ!, :none, :SetValue, :SetValue), 7.251*ms*buffer],
     ]
     for (params, ref_time) in results
         if !(t_min[params] ≤ ref_time)
