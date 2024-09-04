@@ -24,7 +24,7 @@ function benchmarkfill!(bm, device, data, val, name)
     trial = @benchmark ClimaComms.@cuda_sync $device fill!($data, $val)
     t_min = minimum(trial.times) * 1e-9 # to seconds
     nreps = length(trial.times)
-    n_reads_writes = DataLayouts.ncomponents(data) * 2
+    n_reads_writes = DataLayouts.ncomponents(data)
     push_info(
         bm;
         kernel_time_s = t_min,
