@@ -19,7 +19,6 @@ function column_reduce_device!(
     space,
 ) where {F, T}
     Ni, Nj, _, _, Nh = size(Fields.field_values(output))
-    threads_s, blocks_s = _configure_threadblock(Ni * Nj * Nh)
     args = (
         single_column_reduce!,
         f,
@@ -29,7 +28,17 @@ function column_reduce_device!(
         init,
         space,
     )
-    auto_launch!(bycolumn_kernel!, args; threads_s, blocks_s)
+    us = UniversalSize(Fields.field_values(output))
+    nitems = Ni * Nj * Nh
+    threads = threads_via_occupancy(bycolumn_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
+    auto_launch!(
+        bycolumn_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
 end
 
 function column_accumulate_device!(
@@ -41,8 +50,7 @@ function column_accumulate_device!(
     init,
     space,
 ) where {F, T}
-    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
-    threads_s, blocks_s = _configure_threadblock(Ni * Nj * Nh)
+    us = UniversalSize(Fields.field_values(output))
     args = (
         single_column_accumulate!,
         f,
@@ -52,7 +60,17 @@ function column_accumulate_device!(
         init,
         space,
     )
-    auto_launch!(bycolumn_kernel!, args; threads_s, blocks_s)
+    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+    nitems = Ni * Nj * Nh
+    threads = threads_via_occupancy(bycolumn_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
+    auto_launch!(
+        bycolumn_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
 end
 
 bycolumn_kernel!(
@@ -67,10 +85,10 @@ bycolumn_kernel!(
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space)
     else
-        idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-        Ni, Nj, _, _, Nh = size(Fields.field_values(output))
-        if idx <= Ni * Nj * Nh
-            i, j, h = cart_ind((Ni, Nj, Nh), idx).I
+        I = columnwise_universal_index()
+        us = UniversalSize(Fields.field_values(output))
+        if columnwise_is_valid_index(I, us)
+            (i, j, _, _, h) = I.I
             single_column_function!(
                 f,
                 transform,

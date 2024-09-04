@@ -15,24 +15,24 @@ import ClimaCore.RecursiveApply: ⊠, ⊞, ⊟, rmap, rzero, rdiv
 
 function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+    us = UniversalSize(Fields.field_values(A))
+    args = (device, cache, x, A, b, us)
+    threads = threads_via_occupancy(single_field_solve_kernel!, args)
     nitems = Ni * Nj * Nh
-    nthreads = min(256, nitems)
-    nblocks = cld(nitems, nthreads)
-    args = (device, cache, x, A, b)
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
     auto_launch!(
         single_field_solve_kernel!,
         args;
-        threads_s = nthreads,
-        blocks_s = nblocks,
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
 end
 
-function single_field_solve_kernel!(device, cache, x, A, b)
-    idx = CUDA.threadIdx().x + (CUDA.blockIdx().x - 1) * CUDA.blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    if idx <= Ni * Nj * Nh
-        (i, j, h) = CartesianIndices((1:Ni, 1:Nj, 1:Nh))[idx].I
-
+function single_field_solve_kernel!(device, cache, x, A, b, us)
+    I = columnwise_universal_index()
+    if columnwise_is_valid_index(I, us)
+        (i, j, _, _, h) = I.I
         _single_field_solve!(
             device,
             Spaces.column(cache, i, j, h),
