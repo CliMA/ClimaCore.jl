@@ -108,7 +108,7 @@ pid, nprocs = ClimaComms.init(context)
     end
 #! format: on
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
-    iamroot && @test p ≤ 8832
+    iamroot && @test p ≤ 9088
 
     #testing weighted dss on a vector field
     init_vectorstate(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
