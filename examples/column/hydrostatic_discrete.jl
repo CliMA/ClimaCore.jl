@@ -10,7 +10,7 @@ import ClimaCore:
     Geometry,
     Spaces
 
-using OrdinaryDiffEq: OrdinaryDiffEq, ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers

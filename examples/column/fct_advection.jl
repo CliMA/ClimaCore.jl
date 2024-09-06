@@ -2,7 +2,7 @@ import ClimaComms
 ClimaComms.@import_required_backends
 using Test
 using LinearAlgebra
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import ClimaCore:
     Fields,

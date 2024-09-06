@@ -15,7 +15,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers
@@ -279,13 +279,13 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, parameters, 0.0)
 
 # run!
-using OrdinaryDiffEq
+using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
 # Solve the ODE
 T = 3600
 dt = 5
 prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
 
-integrator = OrdinaryDiffEq.init(
+integrator = init(
     prob,
     SSPRK33(),
     dt = dt,
@@ -300,7 +300,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
 end
 
 # solve ode
-sol = @timev OrdinaryDiffEq.solve!(integrator)
+sol = @timev solve!(integrator)
 
 uₕ_phy = Geometry.transform.(Ref(Geometry.UVAxis()), sol.u[end].uₕ)
 w_phy = Geometry.transform.(Ref(Geometry.WAxis()), sol.u[end].w)

@@ -1,5 +1,5 @@
 include("utils_cuda.jl")
-using OrdinaryDiffEq
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 @testset "2D SE, 1D FD Extruded Domain ∇ ODE Solve horizontal CUDA" begin
 

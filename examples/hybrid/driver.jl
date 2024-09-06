@@ -47,7 +47,7 @@ atexit() do
     global_logger(prev_logger)
 end
 
-using OrdinaryDiffEq
+using SciMLBase
 using DiffEqCallbacks
 using JLD2
 
@@ -163,7 +163,7 @@ problem = ODE.ODEProblem(
     (t_start, t_end),
     p,
 )
-integrator = OrdinaryDiffEq.init(
+integrator = SciMLBase.init(
     problem,
     ode_algo;
     saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
@@ -182,7 +182,7 @@ end
 @info "Running `$test_dir/$test_file_name` test case"
 @info "on a vertical $z_stretch_string grid"
 
-walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+walltime = @elapsed sol = SciMLBase.solve!(integrator)
 any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
