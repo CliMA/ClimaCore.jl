@@ -22,8 +22,10 @@ Call with `device_info(CUDA.name(CUDA.device()))`
 """
 function device_info(device_name)
     device_specs = Dict(
-        "NVIDIA A100-SXM4-80GB" => (; device_bandwidth_GBs = 2_039),
-        "Tesla P100-PCIE-16GB" => (; device_bandwidth_GBs = 732),
+        "NVIDIA A100-SXM4-80GB" => (; device_bandwidth_GBs = 2_039), # https://www.nvidia.com/en-us/data-center/a100/
+        "Tesla P100-PCIE-16GB" => (; device_bandwidth_GBs = 732), # https://images.nvidia.com/content/tesla/pdf/nvidia-tesla-p100-PCIe-datasheet.pdf
+        "NVIDIA H100 80GB HBM3" => (; device_bandwidth_GBs = 3_350), # https://www.nvidia.com/en-us/data-center/h100/
+        "NVIDIA GeForce GTX 1050" => (; device_bandwidth_GBs = 112.1), # https://www.techpowerup.com/gpu-specs/geforce-gtx-1050.c2875
     )
     is_cuda = ClimaComms.device() isa ClimaComms.CUDADevice
     if is_cuda && haskey(device_specs, device_name)
