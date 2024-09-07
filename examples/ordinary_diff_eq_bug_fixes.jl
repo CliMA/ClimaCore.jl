@@ -13,10 +13,10 @@ using OrdinaryDiffEq:
     isJcurrent,
     postamble!,
     TryAgain
-using OrdinaryDiffEq.SciMLBase: RECOMPILE_BY_DEFAULT
+using SciMLBase: RECOMPILE_BY_DEFAULT
 
 import OrdinaryDiffEq: nlsolve!
-import OrdinaryDiffEq.SciMLBase: SplitFunction
+import SciMLBase: SplitFunction
 
 #=
 Issue: calc_W! attempts to access f.Wfact when has_Wfact(f) and f.Wfact_t when

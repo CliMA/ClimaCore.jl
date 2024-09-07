@@ -17,7 +17,8 @@ catch err
     end
 end
 
-OrdinaryDiffEq.step!(integrator) # compile first
-trial = BenchmarkTools.@benchmark OrdinaryDiffEq.step!($integrator)
+using SciMLBase: solve!, step!
+step!(integrator) # compile first
+trial = BenchmarkTools.@benchmark step!($integrator)
 show(stdout, MIME("text/plain"), trial)
 println()

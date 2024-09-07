@@ -15,7 +15,7 @@ import ClimaCore:
     Fields,
     Operators
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers
@@ -251,7 +251,7 @@ dYdt = similar(Y)
 rhs!(dYdt, Y, nothing, 0.0)
 
 # run!
-using OrdinaryDiffEq
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 # Solve the ODE
 time_end = 600
 dt = 3

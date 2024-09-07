@@ -18,8 +18,7 @@ import ClimaCore:
     DataLayouts
 
 import QuadGK
-import OrdinaryDiffEq
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
 
 using Logging
 using ClimaComms
@@ -582,7 +581,7 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     T = 60 * 60 * 24 * 2
 
     prob = ODEProblem(rhs!, Y, (0.0, T), parameters)
-    integrator = OrdinaryDiffEq.init(
+    integrator = init(
         prob,
         SSPRK33(),
         dt = dt,
@@ -593,10 +592,10 @@ function shallow_water_driver(ARGS, ::Type{FT}) where {FT}
     )
 
     if usempi
-        walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+        walltime = @elapsed sol = solve!(integrator)
         ClimaComms.iamroot(context) && println("walltime = $walltime (sec)")
     else
-        sol = @timev OrdinaryDiffEq.solve!(integrator)
+        sol = @timev solve!(integrator)
     end
     sol_global = []
 

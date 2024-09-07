@@ -17,11 +17,12 @@ catch err
     end
 end
 
-OrdinaryDiffEq.step!(integrator) # compile first
+using SciMLBase: step!, solve!
+step!(integrator) # compile first
 Profile.clear_malloc_data()
 prof = Profile.@profile begin
     for _ in 1:100
-        OrdinaryDiffEq.step!(integrator)
+        step!(integrator)
     end
 end
 
