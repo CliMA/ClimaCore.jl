@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.13
+-------
+
+- CUDA kernel launch configurations have been tuned to improve performance, and now allows for high resolution in the vertical direction PR [#1969](https://github.com/CliMA/ClimaCore.jl/pull/1969), issue [#1854](https://github.com/CliMA/ClimaCore.jl/issues/1854) closed.
+
 - DSS was refactored, and machine precision changes can be expected. PR [#1958](https://github.com/CliMA/ClimaCore.jl/pull/1958).
 
 v0.14.12
