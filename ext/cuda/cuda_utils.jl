@@ -90,6 +90,12 @@ function auto_launch!(
     return nothing
 end
 
+function threads_via_occupancy(f!::F!, args) where {F!}
+    kernel = CUDA.@cuda always_inline = true launch = false f!(args...)
+    config = CUDA.launch_configuration(kernel.fun)
+    return config.threads
+end
+
 """
     thread_index()
 

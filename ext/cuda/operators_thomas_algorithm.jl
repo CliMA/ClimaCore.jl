@@ -5,14 +5,18 @@ import ClimaCore.Operators:
 import CUDA
 using CUDA: @cuda
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
+    us = UniversalSize(Fields.field_values(A))
     args = (A, b)
+    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+    threads = threads_via_occupancy(thomas_algorithm_kernel!, args)
+    nitems = Ni * Nj * Nh
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
     auto_launch!(
         thomas_algorithm_kernel!,
         args;
-        threads_s = nthreads,
-        blocks_s = nblocks,
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
 end
 
@@ -20,10 +24,10 @@ function thomas_algorithm_kernel!(
     A::Fields.ExtrudedFiniteDifferenceField,
     b::Fields.ExtrudedFiniteDifferenceField,
 )
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
-    if idx <= Ni * Nj * Nh
-        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
+    I = columnwise_universal_index()
+    us = UniversalSize(Fields.field_values(A))
+    if columnwise_is_valid_index(I, us)
+        (i, j, _, _, h) = I.I
         thomas_algorithm!(Spaces.column(A, i, j, h), Spaces.column(b, i, j, h))
     end
     return nothing
