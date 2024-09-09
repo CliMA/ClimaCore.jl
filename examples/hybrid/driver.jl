@@ -151,7 +151,7 @@ callback = SciMLBase.CallbackSet(
     additional_callbacks...,
 )
 
-problem = ODE.ODEProblem(
+problem = SciMLBase.ODEProblem(
     CTS.ClimaODEFunction(;
         T_imp! = ODEFunction(
             implicit_tendency!;

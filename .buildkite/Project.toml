@@ -34,7 +34,6 @@ MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 NCDatasets = "85f8d34a-cbdd-5861-8df4-14fed0d494ab"
 NVTX = "5da4648a-3479-48b8-97b9-01cb529c0a1f"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
-OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 OrdinaryDiffEqSSPRK = "669c94d9-1f4b-4b64-b377-1aa079aa2388"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 PProf = "e4faabce-9ead-11e9-39d9-4379958e3056"
@@ -60,5 +59,4 @@ ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 URIs = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
 
 [compat]
-OrdinaryDiffEq = "6"
 SnoopCompileCore = "2"
