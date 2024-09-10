@@ -88,12 +88,8 @@ function Topologies.dss_local!(
 )
     nlocalvertices = length(topology.local_vertex_offset) - 1
     nlocalfaces = length(topology.interior_faces)
-    if (nlocalvertices + nlocalfaces) > 0
-        (nlevels, nperimeter, nfid, nelems) =
-            DataLayouts.farray_size(perimeter_data)
-
-        nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
-        nthreads, nblocks = _configure_threadblock(nitems)
+    nlocalelems = nlocalvertices + nlocalfaces
+    if nlocalelems > 0
         args = (
             perimeter_data,
             topology.local_vertices,
@@ -101,11 +97,14 @@ function Topologies.dss_local!(
             topology.interior_faces,
             perimeter,
         )
+        threads = threads_via_occupancy(dss_local_kernel!, args)
+        p = dss_local_partition(perimeter_data, threads; nlocalelems)
+
         auto_launch!(
             dss_local_kernel!,
             args;
-            threads_s = (nthreads),
-            blocks_s = (nblocks),
+            threads_s = p.threads,
+            blocks_s = p.blocks,
         )
     end
     return nothing
@@ -118,34 +117,31 @@ function dss_local_kernel!(
     interior_faces::AbstractVector{Tuple{Int, Int, Int, Int, Bool}},
     perimeter::Topologies.Perimeter2D,
 )
-    FT = eltype(parent(perimeter_data))
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     nlocalvertices = length(local_vertex_offset) - 1
     nlocalfaces = length(interior_faces)
-    pperimeter_data = parent(perimeter_data)
-    FT = eltype(pperimeter_data)
-    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
-    if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
-        sizev = (nlevels, nfidx, nlocalvertices)
-        (level, fidx, vertexid) = cart_ind(sizev, gidx).I
-        sum_data = FT(0)
+    (nperimeter, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
+    (level, vertexid) = dss_local_universal_index()
+    # if dss_local_is_valid_index(level, UniversalSize(perimeter_data)) # local vertices
+    gidx = linear_ind((nlevels, nperimeter), (level, vertexid))
+    if gidx ≤ nlevels * nlocalvertices # local vertices
+        sum_data = rzero(eltype(perimeter_data))
         st, en =
             local_vertex_offset[vertexid], local_vertex_offset[vertexid + 1]
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            sum_data += pperimeter_data[level, ip, fidx, lidx]
+            sum_data += perimeter_data[CI(ip, 1, 1, I[4], lidx)]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            pperimeter_data[level, ip, fidx, lidx] = sum_data
+            perimeter_data[CI(ip, 1, 1, I[4], lidx)] = sum_data
         end
-    elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
+    elseif gidx ≤ nlevels * (nlocalvertices + nlocalfaces) # interior faces
         nfacedof = div(nperimeter - 4, 4)
-        sizef = (nlevels, nfidx, nlocalfaces)
-        (level, fidx, faceid) =
-            cart_ind(sizef, gidx - nlevels * nfidx * nlocalvertices).I
+        sizef = (nlevels, nlocalfaces)
+        (_, faceid) =
+            cart_ind(sizef, gidx - nlevels * nlocalvertices).I
         (lidx1, face1, lidx2, face2, reversed) = interior_faces[faceid]
         (first1, inc1, last1) =
             Topologies.perimeter_face_indices_cuda(face1, nfacedof, false)
@@ -154,11 +150,11 @@ function dss_local_kernel!(
         for i in 1:nfacedof
             ip1 = inc1 == 1 ? first1 + i - 1 : first1 - i + 1
             ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
-            val =
-                pperimeter_data[level, ip1, fidx, lidx1] +
-                pperimeter_data[level, ip2, fidx, lidx2]
-            pperimeter_data[level, ip1, fidx, lidx1] = val
-            pperimeter_data[level, ip2, fidx, lidx2] = val
+            idx1 = CI(ip1, 1, 1, I[4], lidx1)
+            idx2 = CI(ip2, 1, 1, I[4], lidx2)
+            val = perimeter_data[idx1] + perimeter_data[idx2]
+            perimeter_data[idx1] = val
+            perimeter_data[idx2] = val
         end
     end
 
@@ -176,10 +172,6 @@ function Topologies.dss_transform!(
 )
     nlocalelems = length(localelems)
     if nlocalelems > 0
-        (nperimeter, _, _, nlevels, _) =
-            DataLayouts.universal_size(perimeter_data)
-        nitems = nlevels * nperimeter * nlocalelems
-        nthreads, nblocks = _configure_threadblock(nitems)
         args = (
             perimeter_data,
             data,
@@ -189,11 +181,13 @@ function Topologies.dss_transform!(
             localelems,
             Val(nlocalelems),
         )
+        threads = threads_via_occupancy(dss_transform_kernel!, args)
+        p = dss_transform_partition(perimeter_data, threads; nlocalelems)
         auto_launch!(
             dss_transform_kernel!,
             args;
-            threads_s = (nthreads),
-            blocks_s = (nblocks),
+            threads_s = p.threads,
+            blocks_s = p.blocks,
         )
     end
     return nothing
@@ -208,13 +202,10 @@ function dss_transform_kernel!(
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
 ) where {nlocalelems}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nperimeter, _, _, nlevels, nelems) =
-        DataLayouts.universal_size(perimeter_data)
     CI = CartesianIndex
-    if gidx ≤ nlevels * nperimeter * nlocalelems
-        sizet = (nlevels, nperimeter, nlocalelems)
-        (level, p, localelemno) = cart_ind(sizet, gidx).I
+    I = dss_transform_universal_index()
+    if dss_transform_is_valid_index(I, UniversalSize(perimeter_data))
+        (p, _, _, level, localelemno) = I.I
         elem = localelems[localelemno]
         (ip, jp) = perimeter[p]
         loc = CI(ip, jp, 1, level, elem)
