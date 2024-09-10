@@ -21,14 +21,14 @@ function Topologies.dss_load_perimeter_data!(
     perimeter::Topologies.Perimeter2D,
 )
     (; perimeter_data) = dss_buffer
-    nitems = prod(DataLayouts.farray_size(perimeter_data))
-    nthreads, nblocks = _configure_threadblock(nitems)
     args = (perimeter_data, data, perimeter)
+    threads = threads_via_occupancy(dss_load_perimeter_data_kernel!, args)
+    p = partition(perimeter_data, threads)
     auto_launch!(
         dss_load_perimeter_data_kernel!,
         args;
-        threads_s = (nthreads),
-        blocks_s = (nblocks),
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
     return nothing
 end
@@ -36,20 +36,13 @@ end
 function dss_load_perimeter_data_kernel!(
     perimeter_data::DataLayouts.AbstractData,
     data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    perimeter::Topologies.Perimeter2D{Nq},
-) where {Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, _, nfidx, nelems) =
-        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
-    sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
-    pperimeter_data = parent(perimeter_data)
-    pdata = parent(data)
-
-    if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = cart_ind(sizep, gidx).I
-        (ip, jp) = perimeter[p]
-        data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pperimeter_data[level, p, fidx, elem] = pdata[data_idx]
+    perimeter::Topologies.Perimeter2D,
+)
+    CI = CartesianIndex
+    I = universal_index(perimeter_data)
+    if is_valid_index(perimeter_data, I)
+        (ip, jp) = perimeter[I[1]]
+        perimeter_data[I] = data[CI(ip, jp, 1, I[4], I[5])]
     end
     return nothing
 end
@@ -61,14 +54,14 @@ function Topologies.dss_unload_perimeter_data!(
     perimeter,
 )
     (; perimeter_data) = dss_buffer
-    nitems = prod(DataLayouts.farray_size(perimeter_data))
-    nthreads, nblocks = _configure_threadblock(nitems)
     args = (data, perimeter_data, perimeter)
+    threads = threads_via_occupancy(dss_unload_perimeter_data_kernel!, args)
+    p = partition(perimeter_data, threads)
     auto_launch!(
         dss_unload_perimeter_data_kernel!,
         args;
-        threads_s = (nthreads),
-        blocks_s = (nblocks),
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
     return nothing
 end
@@ -78,18 +71,11 @@ function dss_unload_perimeter_data_kernel!(
     perimeter_data::AbstractData,
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
-    gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, nperimeter, nfidx, nelems) =
-        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
-    sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
-    pperimeter_data = parent(perimeter_data)
-    pdata = parent(data)
-
-    if gidx ≤ prod(sizep)
-        (level, p, fidx, elem) = cart_ind(sizep, gidx).I
-        (ip, jp) = perimeter[p]
-        data_idx = linear_ind(sized, (level, ip, jp, fidx, elem))
-        pdata[data_idx] = pperimeter_data[level, p, fidx, elem]
+    CI = CartesianIndex
+    I = universal_index(perimeter_data)
+    if is_valid_index(perimeter_data, I)
+        (ip, jp) = perimeter[I[1]]
+        data[CI(ip, jp, 1, I[4], I[5])] = perimeter_data[I]
     end
     return nothing
 end

@@ -46,6 +46,9 @@ bounds to ensure that the result of
 """
 function is_valid_index end
 
+is_valid_index(data::DataLayouts.AbstractData, I::CI5) =
+    is_valid_index(data, I, UniversalSize(data))
+
 ##### VIJFH
 @inline function partition(data::DataLayouts.VIJFH, n_max_threads::Integer)
     (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(data)
@@ -251,3 +254,24 @@ end
     ij,
     slabidx,
 ) = Operators.is_valid_index(space, ij, slabidx)
+
+##### dss perimeter partition
+@inline function dss_perimeter_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer;
+)
+    (Nv, _, _, Nh) = DataLayouts.universal_size(us)
+    Nvt = fld(n_max_threads, Nv)
+    Nv_thread = Nvt == 0 ? n_max_threads : min(Int(Nvt), Nv)
+    Nv_blocks = cld(Nv, Nv_thread)
+    @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($(Nv_thread),$n_max_threads)"
+    return (; threads = (Nv_thread,), blocks = (Nv_blocks, Nh))
+end
+@inline function dss_perimeter_universal_index()
+    (tv,) = CUDA.threadIdx()
+    (bv, h) = CUDA.blockIdx()
+    v = tv + (bv - 1) * CUDA.blockDim().x
+    return (CartesianIndex((i, j, 1, 1, h)), iname)
+end
+@inline dss_perimeter_is_valid_index(I::CI5, us::UniversalSize) =
+    1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
