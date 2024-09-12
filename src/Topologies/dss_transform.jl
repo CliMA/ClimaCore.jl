@@ -44,6 +44,11 @@ end
         dss_transform(Base.tail(arg), local_geometry, weight)...,
     )
 end
+@inline dss_transform(
+    arg::Tuple{Any},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = (dss_transform(first(arg), local_geometry, weight),)
 @inline function dss_transform(
     arg::NamedTuple{names},
     local_geometry::Geometry.LocalGeometry,
