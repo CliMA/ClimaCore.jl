@@ -390,7 +390,7 @@ using JET
     ρ = Fields.Field(Float64, cspace)
     S = Fields.Field(Float64, cspace)
     ifelsekernel!(S, ρ)
-    @test_opt broken = true ifelsekernel!(S, ρ)
+    @test_opt ifelsekernel!(S, ρ)
 end
 
 nothing
