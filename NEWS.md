@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.14
+-------
+
+- Inference was fixed for some broadcast expressions involving columns PR [#1984](https://github.com/CliMA/ClimaCore.jl/pull/1984).
+
 v0.14.13
 -------
 
