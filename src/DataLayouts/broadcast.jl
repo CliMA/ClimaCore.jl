@@ -252,7 +252,8 @@ Base.@propagate_inbounds function column(
 ) where {Nv, N, DS <: Union{Data1DXStyle{Nv, N}, Data2DXStyle{Nv, N}}}
     _args = column_args(bc.args, inds...)
     _axes = nothing
-    Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
+    bcc = Base.Broadcast.Broadcasted{DataColumnStyle(DS)}(bc.f, _args, _axes)
+    Base.Broadcast.instantiate(bcc)
 end
 
 @inline function column(
