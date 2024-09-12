@@ -69,13 +69,21 @@ end
 
 # Functions for CUDASpectralStyle
 struct PlaceholderSpace <: Spaces.AbstractSpace end
+struct LevelPlaceholderSpace <: Spaces.AbstractSpace end
 struct CenterPlaceholderSpace <: Spaces.AbstractSpace end
 struct FacePlaceholderSpace <: Spaces.AbstractSpace end
 
-
+placeholder_space(current_space, parent_space) = current_space
 placeholder_space(current_space::T, parent_space::T) where {T} =
     PlaceholderSpace()
-placeholder_space(current_space, parent_space) = current_space
+placeholder_space(
+    current_space::Spaces.AbstractPointSpace,
+    parent_space::Spaces.AbstractFiniteDifferenceSpace,
+) = LevelPlaceholderSpace()
+placeholder_space(
+    current_space::Spaces.AbstractSpectralElementSpace,
+    parent_space::Spaces.ExtrudedFiniteDifferenceSpace,
+) = LevelPlaceholderSpace()
 placeholder_space(
     current_space::Spaces.CenterFiniteDifferenceSpace,
     parent_space::Spaces.FaceFiniteDifferenceSpace,
@@ -93,8 +101,12 @@ placeholder_space(
     parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = FacePlaceholderSpace()
 
+@inline reconstruct_placeholder_space(current_space, parent_space) =
+    current_space
 @inline reconstruct_placeholder_space(::PlaceholderSpace, parent_space) =
     parent_space
+@inline reconstruct_placeholder_space(::LevelPlaceholderSpace, parent_space) =
+    Spaces.level(parent_space, left_idx(parent_space)) # extract arbitrary level
 @inline reconstruct_placeholder_space(
     ::CenterPlaceholderSpace,
     parent_space::Spaces.FaceFiniteDifferenceSpace,
@@ -111,9 +123,6 @@ placeholder_space(
     ::FacePlaceholderSpace,
     parent_space::Spaces.CenterExtrudedFiniteDifferenceSpace,
 ) = Spaces.FaceExtrudedFiniteDifferenceSpace(parent_space)
-@inline reconstruct_placeholder_space(current_space, parent_space) =
-    current_space
-
 
 strip_space(obj, parent_space) = obj
 
