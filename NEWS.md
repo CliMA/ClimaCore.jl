@@ -4,6 +4,11 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.15
+-------
+
+- Added support for mixing extruded and horizontal spaces in GPU kernels. PR [#1987](https://github.com/CliMA/ClimaCore.jl/pull/1987).
+
 v0.14.14
 -------
 
