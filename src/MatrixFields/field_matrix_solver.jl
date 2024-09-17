@@ -247,17 +247,6 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-# TODO: we can remove the uniform_vertical_levels
-# limitation while still using static shared memory
-# once Nv is in the type space.
-function uniform_vertical_levels(x, names)
-    _, _, _, Nv1, _ = size(Fields.field_values(x[first(names)]))
-    return all(Base.tail(names)) do name
-        _, _, _, Nv, _ = size(Fields.field_values(x[name]))
-        Nv == Nv1
-    end
-end
-
 NVTX.@annotate function run_field_matrix_solver!(
     ::BlockDiagonalSolve,
     cache,
@@ -267,8 +256,7 @@ NVTX.@annotate function run_field_matrix_solver!(
 )
     names = matrix_row_keys(keys(A))
     if length(names) == 1 ||
-       all(name -> A[name, name] isa UniformScaling, names.values) ||
-       !uniform_vertical_levels(x, names.values)
+       all(name -> A[name, name] isa UniformScaling, names.values)
         foreach(names) do name
             single_field_solve!(cache[name], x[name], A[name, name], b[name])
         end
