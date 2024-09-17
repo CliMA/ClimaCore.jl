@@ -29,7 +29,7 @@ criteria:
 function partition end
 
 """
-    universal_index(::AbstractData)
+    universal_index(::AbstractData, ci::CartesianIndices)
 
 Returns a universal cartesian index,
 computed from CUDA's `threadIdx`,
@@ -47,21 +47,33 @@ bounds to ensure that the result of
 function is_valid_index end
 
 ##### VIJFH
+# @inline function partition(data::DataLayouts.VIJFH, n_max_threads::Integer)
+#     (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(data)
+#     Nv_thread = min(Int(fld(n_max_threads, Nij * Nij)), Nv)
+#     Nv_blocks = cld(Nv, Nv_thread)
+#     @assert prod((Nv_thread, Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Nij, Nij))),$n_max_threads)"
+#     return (; threads = (Nv_thread, Nij, Nij), blocks = (Nv_blocks, Nh))
+# end
+# @inline function universal_index(::DataLayouts.VIJFH)
+#     (tv, i, j) = CUDA.threadIdx()
+#     (bv, h) = CUDA.blockIdx()
+#     v = tv + (bv - 1) * CUDA.blockDim().x
+#     return CartesianIndex((i, j, 1, v, h))
+# end
+# @inline is_valid_index(::DataLayouts.VIJFH, I::CI5, us::UniversalSize) =
+#     1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
+
 @inline function partition(data::DataLayouts.VIJFH, n_max_threads::Integer)
-    (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(data)
-    Nv_thread = min(Int(fld(n_max_threads, Nij * Nij)), Nv)
-    Nv_blocks = cld(Nv, Nv_thread)
-    @assert prod((Nv_thread, Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Nij, Nij))),$n_max_threads)"
-    return (; threads = (Nv_thread, Nij, Nij), blocks = (Nv_blocks, Nh))
+    us = DataLayouts.UniversalSize(data)
+    blocks = cld(get_N(us), n_max_threads)
+    return (; threads = n_max_threads, blocks = blocks)
 end
-@inline function universal_index(::DataLayouts.VIJFH)
-    (tv, i, j) = CUDA.threadIdx()
-    (bv, h) = CUDA.blockIdx()
-    v = tv + (bv - 1) * CUDA.blockDim().x
-    return CartesianIndex((i, j, 1, v, h))
+@inline function universal_index(::DataLayouts.VIJFH, ci::StaticCartesianIndices)
+    I = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    return ci[I]
 end
 @inline is_valid_index(::DataLayouts.VIJFH, I::CI5, us::UniversalSize) =
-    1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
+    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
 
 ##### IJFH
 @inline function partition(data::DataLayouts.IJFH, n_max_threads::Integer)
@@ -75,7 +87,7 @@ end
     @assert prod((Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij))),$n_max_threads)"
     return (; threads = (Nij, Nij, Nh_thread), blocks = (Nh_blocks,))
 end
-@inline function universal_index(::DataLayouts.IJFH)
+@inline function universal_index(::DataLayouts.IJFH, ci)
     (i, j, th) = CUDA.threadIdx()
     (bh,) = CUDA.blockIdx()
     h = th + (bh - 1) * CUDA.blockDim().z
@@ -92,7 +104,7 @@ end
     @assert prod((Ni, Nh_thread)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nh_thread))),$n_max_threads)"
     return (; threads = (Ni, Nh_thread), blocks = (Nh_blocks,))
 end
-@inline function universal_index(::DataLayouts.IFH)
+@inline function universal_index(::DataLayouts.IFH, ci)
     (i, th) = CUDA.threadIdx()
     (bh,) = CUDA.blockIdx()
     h = th + (bh - 1) * CUDA.blockDim().y
@@ -107,7 +119,7 @@ end
     @assert prod((Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij))),$n_max_threads)"
     return (; threads = (Nij, Nij), blocks = (1,))
 end
-@inline function universal_index(::DataLayouts.IJF)
+@inline function universal_index(::DataLayouts.IJF, ci)
     (i, j) = CUDA.threadIdx()
     return CartesianIndex((i, j, 1, 1, 1))
 end
@@ -119,7 +131,7 @@ end
     @assert Ni ≤ n_max_threads "threads,n_max_threads=($(Ni),$n_max_threads)"
     return (; threads = (Ni,), blocks = (1,))
 end
-@inline function universal_index(::DataLayouts.IF)
+@inline function universal_index(::DataLayouts.IF, ci)
     (i,) = CUDA.threadIdx()
     return CartesianIndex((i, 1, 1, 1, 1))
 end
@@ -133,7 +145,7 @@ end
     @assert prod((Nv_thread, Ni)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Ni))),$n_max_threads)"
     return (; threads = (Nv_thread, Ni), blocks = (Nv_blocks, Nh))
 end
-@inline function universal_index(::DataLayouts.VIFH)
+@inline function universal_index(::DataLayouts.VIFH, ci)
     (tv, i) = CUDA.threadIdx()
     (bv, h) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
@@ -151,7 +163,7 @@ end
     @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($(Nv_thread),$n_max_threads)"
     (; threads = (Nv_thread,), blocks = (Nv_blocks,))
 end
-@inline function universal_index(::DataLayouts.VF)
+@inline function universal_index(::DataLayouts.VF, ci)
     (tv,) = CUDA.threadIdx()
     (bv,) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
@@ -163,7 +175,7 @@ end
 ##### DataF
 @inline partition(data::DataLayouts.DataF, n_max_threads::Integer) =
     (; threads = 1, blocks = 1)
-@inline universal_index(::DataLayouts.DataF) = CartesianIndex((1, 1, 1, 1, 1))
+@inline universal_index(::DataLayouts.DataF, ci) = CartesianIndex((1, 1, 1, 1, 1))
 @inline is_valid_index(::DataLayouts.DataF, I::CI5, us::UniversalSize) = true
 
 #####

@@ -1,7 +1,7 @@
 DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
-function knl_copyto!(dest, src, us)
-    I = universal_index(dest)
+function knl_copyto!(dest, src, us, ci)
+    I = universal_index(dest, ci)
     if is_valid_index(dest, I, us)
         @inbounds dest[I] = src[I]
     end
@@ -12,7 +12,8 @@ function cuda_copyto!(dest::AbstractData, bc)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
-        args = (dest, bc, us)
+        ci = StaticCartesianIndices(DataLayouts.array_size(dest))
+        args = (dest, bc, us, ci)
         threads = threads_via_occupancy(knl_copyto!, args)
         n_max_threads = min(threads, get_N(us))
         p = partition(dest, n_max_threads)

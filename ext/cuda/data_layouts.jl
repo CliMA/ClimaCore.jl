@@ -25,6 +25,7 @@ Base.similar(
     dims::Dims{N},
 ) where {T, N, B} = similar(CUDA.CuArray{T, N, B}, dims)
 
+include("static_cartesian_indices.jl")
 include("data_layouts_fill.jl")
 include("data_layouts_copyto.jl")
 include("data_layouts_fused_copyto.jl")
