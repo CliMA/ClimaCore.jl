@@ -54,3 +54,16 @@ function Adapt.adapt_structure(
         end,
     )
 end
+
+import Adapt
+import CUDA
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+) where {Style}
+    DataLayouts.NonExtrudedBroadcasted{Style}(
+        adapt_f(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
+    )
+end

@@ -159,6 +159,10 @@ Similar to `sizeof(S)`, but gives the result in multiples of `sizeof(T)`.
 """
 typesize(::Type{T}, ::Type{S}) where {T, S} = div(sizeof(S), sizeof(T))
 
+#####
+##### Cartesian indexing
+#####
+
 @inline offset_index(
     start_index::CartesianIndex{N},
     ::Val{D},
@@ -199,13 +203,6 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
-    # else
-    #     Base.@_propagate_inbounds_meta
-    #     args = ntuple(fieldcount(S)) do i
-    #         get_struct(array, fieldtype(S, i), Val(D), offset_index(start_index, Val(D), fieldtypeoffset(T, S, i)))
-    #     end
-    #     return bypass_constructor(S, args)
-    # end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type
@@ -255,6 +252,158 @@ Base.@propagate_inbounds function set_struct!(
     index::CartesianIndex,
 ) where {S, D}
     @inbounds array[index] = val
+    val
+end
+
+#####
+##### Linear indexing
+#####
+
+abstract type _Size end
+struct DynamicSize <: _Size end
+struct StaticSize{S_array, FD} <: _Size
+    function StaticSize{S, FD}() where {S, FD}
+        new{S::Tuple{Vararg{Int}}, FD}()
+    end
+end
+
+Base.@pure StaticSize(s::Tuple{Vararg{Int}}, FD) = StaticSize{s, FD}()
+
+# Some @pure convenience functions for `StaticSize`
+s_field_dim_1(::Type{StaticSize{S, FD}}) where {S, FD} =
+    ntuple(j -> j == FD ? 1 : S[j], length(S))
+s_field_dim_1(::StaticSize{S, FD}) where {S, FD} =
+    ntuple(j -> j == FD ? 1 : S[j], length(S))
+
+Base.@pure get(::Type{StaticSize{S}}) where {S} = S
+Base.@pure get(::StaticSize{S}) where {S} = S
+Base.@pure Base.getindex(::StaticSize{S}, i::Int) where {S} =
+    i <= length(S) ? S[i] : 1
+Base.@pure Base.ndims(::StaticSize{S}) where {S} = length(S)
+Base.@pure Base.ndims(::Type{StaticSize{S}}) where {S} = length(S)
+Base.@pure Base.length(::StaticSize{S}) where {S} = prod(S)
+
+Base.@propagate_inbounds cart_inds(n::NTuple) =
+    @inbounds CartesianIndices(map(x -> Base.OneTo(x), n))
+Base.@propagate_inbounds linear_inds(n::NTuple) =
+    @inbounds LinearIndices(map(x -> Base.OneTo(x), n))
+
+include("to_linear_index.jl") # TODO: delete if not needed
+
+@inline function offset_index_linear(
+    base_index::Integer,
+    start_index::Integer,
+    ::Val{D},
+    field_offset,
+    ss::StaticSize{SS};
+) where {D, SS}
+    @inbounds begin
+        # TODO: compute this offset directly without going through CartesianIndex
+        SS1 = s_field_dim_1(typeof(ss))
+        ci = cart_inds(SS1)[base_index]
+        ci_poff = CartesianIndex(
+            ntuple(n -> n == D ? ci[n] + field_offset : ci[n], ndims(ss)),
+        )
+        li = linear_inds(SS)[ci_poff]
+    end
+    return li
+end
+
+Base.@propagate_inbounds @generated function get_struct_linear(
+    array::AbstractArray{T},
+    ::Type{S},
+    ::Val{D},
+    start_index::Integer,
+    ss::StaticSize,
+    base_index = start_index,
+) where {T, S, D}
+    tup = :(())
+    for i in 1:fieldcount(S)
+        push!(
+            tup.args,
+            :(get_struct_linear(
+                array,
+                fieldtype(S, $i),
+                Val($D),
+                offset_index_linear(
+                    base_index,
+                    start_index,
+                    Val($D),
+                    $(fieldtypeoffset(T, S, Val(i))),
+                    ss,
+                ),
+                ss,
+                base_index,
+            )),
+        )
+    end
+    return quote
+        Base.@_propagate_inbounds_meta
+        @inbounds bypass_constructor(S, $tup)
+    end
+end
+
+# recursion base case: hit array type is the same as the struct leaf type
+Base.@propagate_inbounds function get_struct_linear(
+    array::AbstractArray{S},
+    ::Type{S},
+    ::Val{D},
+    start_index::Integer,
+    us::StaticSize,
+    base_index = start_index,
+) where {S, D}
+    @inbounds return array[start_index]
+end
+
+"""
+    set_struct!(array, val::S, Val(D), start_index)
+
+Store an object `val` of type `S` packed along the `D` dimension, into `array`,
+starting at `start_index`.
+"""
+Base.@propagate_inbounds @generated function set_struct_linear!(
+    array::AbstractArray{T},
+    val::S,
+    ::Val{D},
+    start_index::Integer,
+    ss::StaticSize,
+    base_index = start_index,
+) where {T, S, D}
+    ex = quote
+        Base.@_propagate_inbounds_meta
+    end
+    for i in 1:fieldcount(S)
+        push!(
+            ex.args,
+            :(set_struct_linear!(
+                array,
+                getfield(val, $i),
+                Val($D),
+                offset_index_linear(
+                    base_index,
+                    start_index,
+                    Val($D),
+                    $(fieldtypeoffset(T, S, Val(i))),
+                    ss,
+                ),
+                ss,
+                base_index,
+            )),
+        )
+    end
+    push!(ex.args, :(return val))
+    return ex
+end
+
+Base.@propagate_inbounds function set_struct_linear!(
+    array::AbstractArray{S},
+    val::S,
+    ::Val{D},
+    start_index::Integer,
+    us::StaticSize,
+    base_index = start_index,
+) where {S, D}
+    @inbounds array[start_index] = val
     val
 end
 

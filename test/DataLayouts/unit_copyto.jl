@@ -1,5 +1,6 @@
 #=
-julia --project
+julia --check-bounds=yes --project
+ENV["CLIMACOMMS_DEVICE"] = "CPU";
 using Revise; include(joinpath("test", "DataLayouts", "unit_copyto.jl"))
 =#
 using Test
