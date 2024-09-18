@@ -13,17 +13,19 @@ mutable struct SpectralElementGrid1D{
     GG <: Geometry.AbstractGlobalGeometry,
     LG,
     D,
+    US,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
     dss_weights::D
+    universal_size::US
 end
 
 local_geometry_type(
-    ::Type{SpectralElementGrid1D{T, Q, GG, LG}},
-) where {T, Q, GG, LG} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid1D{T, Q, GG, LG, US}},
+) where {T, Q, GG, LG, US} = eltype(LG) # calls eltype from DataLayouts
 
 # non-view grids are cached based on their input arguments
 # this means that if data is saved in two different files, reloading will give fields which live on the same grid
@@ -97,12 +99,14 @@ function _SpectralElementGrid1D(
     Topologies.dss_1d!(topology, dss_weights)
     dss_weights = one(FT) ./ dss_weights
 
+    universal_size = DataLayouts.UniversalSize(local_geometry)
     return SpectralElementGrid1D(
         topology,
         quadrature_style,
         global_geometry,
         local_geometry,
         dss_weights,
+        universal_size,
     )
 end
 
@@ -121,6 +125,7 @@ mutable struct SpectralElementGrid2D{
     D,
     IS,
     BS,
+    US,
 } <: AbstractSpectralElementGrid
     topology::T
     quadrature_style::Q
@@ -130,11 +135,12 @@ mutable struct SpectralElementGrid2D{
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
     enable_bubble::Bool
+    universal_size::US
 end
 
 local_geometry_type(
-    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS}},
-) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
+    ::Type{SpectralElementGrid2D{T, Q, GG, LG, D, IS, BS, US}},
+) where {T, Q, GG, LG, D, IS, BS, US} = eltype(LG) # calls eltype from DataLayouts
 
 """
     SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
@@ -460,6 +466,7 @@ function _SpectralElementGrid2D(
         internal_surface_geometry = nothing
         boundary_surface_geometries = nothing
     end
+    universal_size = DataLayouts.UniversalSize(local_geometry)
     return SpectralElementGrid2D(
         topology,
         quadrature_style,
@@ -469,6 +476,7 @@ function _SpectralElementGrid2D(
         internal_surface_geometry,
         boundary_surface_geometries,
         enable_bubble,
+        universal_size,
     )
 end
 
@@ -554,11 +562,15 @@ quadrature_style(grid::AbstractSpectralElementGrid) = grid.quadrature_style
 local_dss_weights(grid::SpectralElementGrid1D) = grid.dss_weights
 local_dss_weights(grid::SpectralElementGrid2D) = grid.local_dss_weights
 
+universal_size(grid::SpectralElementGrid1D) = grid.universal_size
+universal_size(grid::SpectralElementGrid2D) = grid.universal_size
+
 ## GPU compatibility
-struct DeviceSpectralElementGrid2D{Q, GG, LG} <: AbstractSpectralElementGrid
+struct DeviceSpectralElementGrid2D{Q, GG, LG, US} <: AbstractSpectralElementGrid
     quadrature_style::Q
     global_geometry::GG
     local_geometry::LG
+    universal_size::US
 end
 
 ClimaComms.context(grid::DeviceSpectralElementGrid2D) = DeviceSideContext()
@@ -569,6 +581,7 @@ Adapt.adapt_structure(to, grid::SpectralElementGrid2D) =
         Adapt.adapt(to, grid.quadrature_style),
         Adapt.adapt(to, grid.global_geometry),
         Adapt.adapt(to, grid.local_geometry),
+        Adapt.adapt(to, grid.universal_size),
     )
 
 ## aliases

@@ -6,6 +6,9 @@ struct LevelGrid{
     level::L
 end
 
+universal_size(levelgrid::LevelGrid) = universal_size(levelgrid.full_grid)
+universal_sizes(levelgrid::LevelGrid) = universal_sizes(levelgrid.full_grid)
+
 quadrature_style(levelgrid::LevelGrid) =
     quadrature_style(levelgrid.full_grid.horizontal_grid)
 

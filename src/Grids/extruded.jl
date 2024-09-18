@@ -29,6 +29,7 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     GG <: Geometry.AbstractGlobalGeometry,
     CLG,
     FLG,
+    US,
 } <: AbstractExtrudedFiniteDifferenceGrid
     horizontal_grid::H
     vertical_grid::V
@@ -36,11 +37,12 @@ mutable struct ExtrudedFiniteDifferenceGrid{
     global_geometry::GG
     center_local_geometry::CLG
     face_local_geometry::FLG
+    universal_sizes::US
 end
 
 local_geometry_type(
-    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG}},
-) where {H, V, A, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
+    ::Type{ExtrudedFiniteDifferenceGrid{H, V, A, GG, CLG, FLG, US}},
+) where {H, V, A, GG, CLG, FLG, US} = eltype(CLG) # calls eltype from DataLayouts
 
 function ExtrudedFiniteDifferenceGrid(
     horizontal_grid::Union{SpectralElementGrid1D, SpectralElementGrid2D},
@@ -112,6 +114,10 @@ function _ExtrudedFiniteDifferenceGrid(
             Ref(global_geometry),
         )
 
+    universal_sizes = (;
+        center = DataLayouts.UniversalSize(center_local_geometry),
+        face = DataLayouts.UniversalSize(face_local_geometry),
+    )
     return ExtrudedFiniteDifferenceGrid(
         horizontal_grid,
         vertical_grid,
@@ -119,8 +125,15 @@ function _ExtrudedFiniteDifferenceGrid(
         global_geometry,
         center_local_geometry,
         face_local_geometry,
+        universal_sizes,
     )
 end
+
+universal_sizes(grid::ExtrudedFiniteDifferenceGrid) = grid.universal_sizes
+universal_sizes(grid::ExtrudedFiniteDifferenceGrid, ::CellCenter) =
+    universal_sizes(grid).center
+universal_sizes(grid::ExtrudedFiniteDifferenceGrid, ::CellFace) =
+    universal_sizes(grid).face
 
 topology(grid::ExtrudedFiniteDifferenceGrid) = topology(grid.horizontal_grid)
 
@@ -142,18 +155,19 @@ quadrature_style(grid::ExtrudedFiniteDifferenceGrid) =
 
 
 ## GPU compatibility
-struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG} <:
+struct DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG, US} <:
        AbstractExtrudedFiniteDifferenceGrid
     vertical_topology::VT
     quadrature_style::Q
     global_geometry::GG
     center_local_geometry::CLG
     face_local_geometry::FLG
+    universal_sizes::US
 end
 
 local_geometry_type(
-    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG}},
-) where {VT, Q, GG, CLG, FLG} = eltype(CLG) # calls eltype from DataLayouts
+    ::Type{DeviceExtrudedFiniteDifferenceGrid{VT, Q, GG, CLG, FLG, US}},
+) where {VT, Q, GG, CLG, FLG, US} = eltype(CLG) # calls eltype from DataLayouts
 
 Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
     DeviceExtrudedFiniteDifferenceGrid(
@@ -162,6 +176,7 @@ Adapt.adapt_structure(to, grid::ExtrudedFiniteDifferenceGrid) =
         Adapt.adapt(to, grid.global_geometry),
         Adapt.adapt(to, grid.center_local_geometry),
         Adapt.adapt(to, grid.face_local_geometry),
+        Adapt.adapt(to, grid.universal_sizes),
     )
 
 quadrature_style(grid::DeviceExtrudedFiniteDifferenceGrid) =

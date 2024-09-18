@@ -34,11 +34,13 @@ mutable struct FiniteDifferenceGrid{
     GG,
     CLG,
     FLG,
+    US,
 } <: AbstractFiniteDifferenceGrid
     topology::T
     global_geometry::GG
     center_local_geometry::CLG
     face_local_geometry::FLG
+    universal_sizes::US
 end
 
 
@@ -64,11 +66,16 @@ function _FiniteDifferenceGrid(topology::Topologies.IntervalTopology)
     center_local_geometry, face_local_geometry =
         fd_geometry_data(face_coordinates, Val(Topologies.isperiodic(topology)))
 
+    universal_sizes = (;
+        center = DataLayouts.UniversalSize(center_local_geometry),
+        face = DataLayouts.UniversalSize(face_local_geometry),
+    )
     return FiniteDifferenceGrid(
         topology,
         global_geometry,
         Adapt.adapt(ArrayType, center_local_geometry),
         Adapt.adapt(ArrayType, face_local_geometry),
+        universal_sizes,
     )
 end
 
