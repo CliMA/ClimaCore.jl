@@ -2,7 +2,7 @@
 
 julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "fd1e670d65913da2cbb0367d634efd6165bc7d16"
+project_hash = "df8d928b39b6ed33e1d2e8ca2259b9ea4e459a05"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "99a6f5d0ce1c7c6afdb759daa30226f71c54f6b0"
@@ -316,7 +316,7 @@ weakdeps = ["CUDA", "MPI"]
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.15"
+version = "0.14.16"
 weakdeps = ["CUDA", "Krylov"]
 
     [deps.ClimaCore.extensions]
@@ -2511,7 +2511,9 @@ uuid = "45397f5d-5981-4c77-b2b3-fc36d6e9b728"
 version = "1.6.4"
 
 [[deps.UnrolledUtilities]]
-git-tree-sha1 = "1244bd810bfd53c539ef5463b01dd9b808c2e5da"
+git-tree-sha1 = "75902c4e7f3bdfbc40c60cd95e7ff41bf6121764"
+repo-rev = "dy/recursion_limit"
+repo-url = "https://github.com/CliMA/UnrolledUtilities.jl.git"
 uuid = "0fe1646c-419e-43be-ac14-22321958931b"
 version = "0.1.5"
 weakdeps = ["StaticArrays"]

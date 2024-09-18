@@ -2,7 +2,7 @@
 
 julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "a5acdbd13ed54ab47f61f609c38695ceeafab1b8"
+project_hash = "fdb9e14a57898722328d7e9fac3b2accc9eac34e"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -214,7 +214,7 @@ version = "0.6.4"
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "UnrolledUtilities"]
 path = "../.."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.15"
+version = "0.14.16"
 
     [deps.ClimaCore.extensions]
     ClimaCoreCUDAExt = "CUDA"
@@ -1441,7 +1441,9 @@ uuid = "45397f5d-5981-4c77-b2b3-fc36d6e9b728"
 version = "1.6.4"
 
 [[deps.UnrolledUtilities]]
-git-tree-sha1 = "1244bd810bfd53c539ef5463b01dd9b808c2e5da"
+git-tree-sha1 = "75902c4e7f3bdfbc40c60cd95e7ff41bf6121764"
+repo-rev = "dy/recursion_limit"
+repo-url = "https://github.com/CliMA/UnrolledUtilities.jl.git"
 uuid = "0fe1646c-419e-43be-ac14-22321958931b"
 version = "0.1.5"
 weakdeps = ["StaticArrays"]
