@@ -21,11 +21,11 @@ steps:
         fi
 
       - echo "--- Instantiate buildkite env"
-      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=.buildkite --check-bounds=yes -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
       - "julia --project=.buildkite -e 'using CUDA; CUDA.precompile_runtime()'"
 
       - echo "--- Instantiate lib/ClimaCoreTempestRemap"
-      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.develop(path=\".\"); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
+      - "julia --project=lib/ClimaCoreTempestRemap -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
 
       - echo "--- Instantiate benchmarks"
       - "julia --project=benchmarks/bickleyjet -e 'using Pkg; Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true)'"
