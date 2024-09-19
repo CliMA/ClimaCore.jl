@@ -71,20 +71,27 @@ end
     @info "Using device" device
     context = ClimaComms.SingletonCommsContext(device)
     grid_topology = Topologies.Topology2D(context, mesh)
-    space = Spaces.SpectralElementSpace2D(grid_topology, quad)
 
-    y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
-    Y = Fields.FieldVector(y0 = y0)
+    for enable_bubble in (true, false)
+        space =
+            Spaces.SpectralElementSpace2D(grid_topology, quad; enable_bubble)
 
-    # write field vector to hdf5 file
-    filename = tempname(pwd())
-    writer = InputOutput.HDF5Writer(filename, context)
-    InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
-    close(writer)
-    reader = InputOutput.HDF5Reader(filename, context)
-    restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
-    close(reader)
-    ClimaComms.allowscalar(device) do
-        @test restart_Y == Y # test if restart is exact
+        y0 = init_state.(Fields.local_geometry_field(space), Ref(parameters))
+        Y = Fields.FieldVector(y0 = y0)
+
+        # write field vector to hdf5 file
+        filename = tempname(pwd())
+        writer = InputOutput.HDF5Writer(filename, context)
+        InputOutput.write!(writer, "Y" => Y) # write field vector from hdf5 file
+        close(writer)
+        reader = InputOutput.HDF5Reader(filename, context)
+        restart_Y = InputOutput.read_field(reader, "Y") # read fieldvector from hdf5 file
+        close(reader)
+        ClimaComms.allowscalar(device) do
+            @test restart_Y == Y # test if restart is exact
+        end
+        ClimaComms.allowscalar(device) do
+            @test axes(restart_Y) == axes(Y) # test if restart is exact for space
+        end
     end
 end

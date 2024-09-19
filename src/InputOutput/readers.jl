@@ -333,10 +333,15 @@ function read_grid_new(reader, name)
         quadrature_style =
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         topology = read_topology(reader, attrs(group)["topology"])
+        enable_bubble = get(attrs(group), "bubble", "false") == "true"
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
-            return Grids.SpectralElementGrid2D(topology, quadrature_style)
+            return Grids.SpectralElementGrid2D(
+                topology,
+                quadrature_style;
+                enable_bubble,
+            )
         end
     elseif type == "FiniteDifferenceGrid"
         topology = read_topology(reader, attrs(group)["topology"])

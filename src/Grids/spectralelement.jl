@@ -129,6 +129,7 @@ mutable struct SpectralElementGrid2D{
     local_dss_weights::D
     internal_surface_geometry::IS
     boundary_surface_geometries::BS
+    enable_bubble::Bool
 end
 
 local_geometry_type(
@@ -467,6 +468,7 @@ function _SpectralElementGrid2D(
         dss_local_weights,
         internal_surface_geometry,
         boundary_surface_geometries,
+        enable_bubble,
     )
 end
 
