@@ -1,4 +1,5 @@
-import ..Utilities: PlusHalf, half, UnrolledFunctions
+import ..Utilities: PlusHalf, half
+import UnrolledUtilities
 
 const AllFiniteDifferenceSpace =
     Union{Spaces.FiniteDifferenceSpace, Spaces.ExtrudedFiniteDifferenceSpace}
@@ -2624,7 +2625,7 @@ end
 function Adapt.adapt_structure(to, op::FiniteDifferenceOperator)
     if hasfield(typeof(op), :bcs)
         bcs_adapted = NamedTuple{keys(op.bcs)}(
-            UnrolledFunctions.unrolled_map(
+            UnrolledUtilities.unrolled_map(
                 bc -> Adapt.adapt_structure(to, bc),
                 values(op.bcs),
             ),

@@ -6,7 +6,7 @@ import ClimaCore.MatrixFields
 import ClimaCore.MatrixFields: _single_field_solve!
 import ClimaCore.MatrixFields: multiple_field_solve!
 import ClimaCore.MatrixFields: is_CuArray_type
-import ClimaCore.Utilities.UnrolledFunctions: unrolled_map
+import UnrolledUtilities: unrolled_map
 
 is_CuArray_type(::Type{T}) where {T <: CUDA.CuArray} = true
 
