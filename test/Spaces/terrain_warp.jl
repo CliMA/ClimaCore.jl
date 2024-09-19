@@ -20,6 +20,7 @@ import ClimaCore:
     Hypsography
 
 using ClimaCore.Utilities: half
+using ClimaCore.DataLayouts: field_array
 
 function warp_sin_2d(coord)
     x = Geometry.component(coord, 1)
@@ -117,7 +118,8 @@ function generate_smoothed_orography(
     z_surface = Geometry.ZPoint.(warp_fn.(Fields.coordinate_field(hspace)))
     # An Euler step defines the diffusion coefficient 
     # (See e.g. cfl condition for diffusive terms).
-    x_array = parent(Fields.coordinate_field(hspace).x)
+    x_field = Fields.coordinate_field(hspace).x
+    x_array = field_array(Fields.field_values(x_field)).arrays[1]
     dx = x_array[2] - x_array[1]
     FT = eltype(x_array)
     κ = FT(1 / helem)

@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include(joinpath("test", "MatrixFields", "field_names.jl"))
+=#
 import LinearAlgebra: I
 import ClimaCore.DataLayouts: replace_basetype
 import ClimaCore.MatrixFields: @name, is_subset_that_covers_set
@@ -738,7 +742,7 @@ end
                 _value: \[.*\]
           \(@name\(a\), @name\(foo._value\)\) => .*QuaddiagonalMatrixRow{.*}-valued Field:
         """,
-    ) broken = Sys.iswindows()
+    )
 
     @test_all vector_view[@name(foo)] == vector.foo
     @test_throws KeyError vector_view[@name(invalid_name)]

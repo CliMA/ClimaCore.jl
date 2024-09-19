@@ -11,6 +11,7 @@ import BenchmarkTools as BT
 ClimaComms.@import_required_backends
 import ClimaCore:
     Utilities,
+    DataLayouts,
     Geometry,
     Domains,
     Meshes,
@@ -171,7 +172,8 @@ end
 function random_field(::Type{T}, space) where {T}
     FT = Spaces.undertype(space)
     field = Fields.Field(T, space)
-    parent(field) .= rand.(FT)
+    data = Fields.field_values(field)
+    copyto!(parent(field), DataLayouts.similar_rand(parent(data)))
     return field
 end
 

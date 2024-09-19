@@ -1,3 +1,7 @@
+#=
+julia --project=.buildkite
+using Revise; include(joinpath("test", "Operators", "finitedifference", "opt_examples.jl"))
+=#
 import ClimaCore
 using ClimaComms
 ClimaComms.@import_required_backends
@@ -360,7 +364,7 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
             cnt_i = cnt.:($i)
             fnt_i = fnt.:($i)
         end
-        @test_broken p_i == 0
+        @test p_i == 0
         cxnt = cnt_i.cx
         fxnt = fnt_i.fx
         cynt = cnt_i.cy
@@ -374,7 +378,7 @@ function alloc_test_nested_expressions_12(cfield, ffield, ntcfield, ntffield)
         p = @allocated begin
             @. cznt = cxnt * cynt * Ic(fynt) * Ic(fynt) * cϕnt * cψnt
         end
-        @test_broken p == 0
+        @test p == 0
     end
 end
 
@@ -437,7 +441,7 @@ function alloc_test_nested_expressions_13(
                 fψ
         end
         #! format: on
-        @test_broken p_i == 0
+        @test p_i == 0
     end
 end
 

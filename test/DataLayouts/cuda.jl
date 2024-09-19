@@ -1,5 +1,5 @@
 #=
-julia -g2 --check-bounds=yes --project=test
+julia -g2 --check-bounds=yes --project
 using Revise; include(joinpath("test", "DataLayouts", "cuda.jl"))
 =#
 using Test
@@ -7,6 +7,7 @@ using ClimaComms
 using CUDA
 ClimaComms.@import_required_backends
 using ClimaCore.DataLayouts
+using ClimaCore.DataLayouts: field_array
 using ClimaCore.DataLayouts: slab_index
 
 function knl_copy!(dst, src)
@@ -32,8 +33,8 @@ end
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
     Nh = 10
-    src = IJFH{S, 4, Nh}(ArrayType(rand(4, 4, 3, Nh)))
-    dst = IJFH{S, 4, Nh}(ArrayType(zeros(4, 4, 3, Nh)))
+    src = IJFH{S, 4, Nh}(field_array(ArrayType(rand(4, 4, 3, Nh)), 3))
+    dst = IJFH{S, 4, Nh}(field_array(ArrayType(zeros(4, 4, 3, Nh)), 3))
 
     test_copy!(dst, src)
 
@@ -47,8 +48,8 @@ end
     Nh = 2
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
-    data_arr1 = ArrayType(ones(FT, 2, 2, 3, Nh))
-    data_arr2 = ArrayType(ones(FT, 2, 2, 1, Nh))
+    data_arr1 = field_array(ArrayType(ones(FT, 2, 2, 3, Nh)), 3)
+    data_arr2 = field_array(ArrayType(ones(FT, 2, 2, 1, Nh)), 3)
     data1 = IJFH{S1, 2, Nh}(data_arr1)
     data2 = IJFH{S2, 2, Nh}(data_arr2)
 

@@ -43,7 +43,8 @@ Applies the remapping operator `R` to `source_field` and stores the solution in 
 """
 function remap!(target_field::Field, R::LinearRemap, source_field::Field)
     @assert (R.source == axes(source_field) && R.target == axes(target_field)) "Remap operator and field space dimensions do not match."
-    mul!(vec(parent(target_field)), R.map, vec(parent(source_field)))
+    # mul!(vec(parent(target_field)), R.map, vec(parent(source_field)))
+    mul!(parent(target_field), R.map, parent(source_field))
     return target_field
 end
 

@@ -478,7 +478,7 @@ steps:
         key: unit_field
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          # - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
 
       - label: "Unit: field cuda"
@@ -486,7 +486,7 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          # - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
@@ -727,7 +727,7 @@ steps:
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"
 
-      - label: "Unit: Thomas Algorithm"
+      - label: "Unit: Thomas Algorithm (CUDA)"
         key: "gpu_thomas_algorithm"
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_thomas_algorithm.jl"

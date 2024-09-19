@@ -120,7 +120,7 @@ function Base.show(io::IO, field::ColumnwiseBandMatrixField)
         column_field = Fields.column(field, 1, 1, 1)
         io = IOContext(io, :compact => true, :limit => true)
         ClimaComms.allowscalar(ClimaComms.device(field)) do
-            Base.print_array(io, column_field2array_view(column_field))
+            Base.print_array(io, column_field2array(column_field))
         end
     else
         # When a BandedMatrix with non-number entries is printed, it currently

@@ -1,19 +1,28 @@
-function Base.fill!(data::IJFH, val, ::ToCPU)
-    (_, _, _, _, Nh) = size(data)
-    @inbounds for h in 1:Nh
-        fill!(slab(data, h), val)
+
+############################ new/old kernels
+function Base.fill!(dest::AbstractData, val)
+    ncomponents(dest) > 0 || return dest
+    if device_dispatch(dest) isa ToCPU && !(dest isa DataF)
+        @inbounds @simd for I in 1:get_N(UniversalSize(dest))
+            dest[I] = val
+        end
+    else
+        Base.fill!(dest, val, device_dispatch(dest))
+    end
+end
+
+# function Base.fill!(dest::AbstractData, val)
+#     ncomponents(dest) > 0 || return dest
+#     Base.fill!(dest, val, device_dispatch(dest))
+# end
+############################
+
+function Base.fill!(data::AbstractData, val, ::ToCPU)
+    @inbounds for i in 1:get_N(UniversalSize(data))
+        data[i] = val
     end
     return data
 end
-
-function Base.fill!(data::IFH, val, ::ToCPU)
-    (_, _, _, _, Nh) = size(data)
-    @inbounds for h in 1:Nh
-        fill!(slab(data, h), val)
-    end
-    return data
-end
-
 function Base.fill!(data::DataF, val, ::ToCPU)
     @inbounds data[] = val
     return data
@@ -40,22 +49,3 @@ function Base.fill!(data::VF, val, ::ToCPU)
     end
     return data
 end
-
-function Base.fill!(data::VIJFH, val, ::ToCPU)
-    (Ni, Nj, _, Nv, Nh) = size(data)
-    @inbounds for h in 1:Nh, v in 1:Nv
-        fill!(slab(data, v, h), val)
-    end
-    return data
-end
-
-function Base.fill!(data::VIFH, val, ::ToCPU)
-    (Ni, _, _, Nv, Nh) = size(data)
-    @inbounds for h in 1:Nh, v in 1:Nv
-        fill!(slab(data, v, h), val)
-    end
-    return data
-end
-
-Base.fill!(dest::AbstractData, val) =
-    Base.fill!(dest, val, device_dispatch(dest))

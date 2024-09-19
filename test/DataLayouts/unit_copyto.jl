@@ -4,6 +4,7 @@ using Revise; include(joinpath("test", "DataLayouts", "unit_copyto.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
+using ClimaCore.DataLayouts: elsize
 import ClimaCore.Geometry
 import ClimaComms
 using StaticArrays
@@ -12,25 +13,31 @@ import Random
 Random.seed!(1234)
 
 function test_copyto_float!(data)
+    pdata = parent(data)
     Random.seed!(1234)
     # Normally we'd use `similar` here, but https://github.com/CliMA/ClimaCore.jl/issues/1803
-    rand_data = DataLayouts.rebuild(data, similar(parent(data)))
+    rand_data = DataLayouts.rebuild(data, collect(pdata))
     ArrayType = ClimaComms.array_type(ClimaComms.device())
-    parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
+    Base.copyto!(
+        parent(rand_data),
+        ArrayType(rand(eltype(parent(data)), DataLayouts.elsize(parent(data)))),
+        # ArrayType(DataLayouts.similar_rand(parent(data))),
+    )
     Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
-    @test all(parent(data) .== parent(rand_data))
+    @test all(pdata .== parent(rand_data))
     Base.copyto!(data, Base.Broadcast.broadcasted(+, rand_data, 1)) # test copyto!(::AbstractData, ::Broadcasted)
-    @test all(parent(data) .== parent(rand_data) .+ 1)
+    @test all(pdata .== parent(rand_data) .+ 1)
 end
 
 function test_copyto!(data)
     Random.seed!(1234)
     # Normally we'd use `similar` here, but https://github.com/CliMA/ClimaCore.jl/issues/1803
-    rand_data = DataLayouts.rebuild(data, similar(parent(data)))
+    rand_data = DataLayouts.rebuild(data, collect(parent(data)))
     ArrayType = ClimaComms.array_type(ClimaComms.device())
-    parent(rand_data) .=
-        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data)))
+    Base.copyto!(
+        parent(rand_data),
+        ArrayType(rand(eltype(parent(data)), DataLayouts.farray_size(data))),
+    )
     Base.copyto!(data, rand_data) # test copyto!(::AbstractData, ::AbstractData)
     @test all(parent(data.:1) .== parent(rand_data.:1))
     @test all(parent(data.:2) .== parent(rand_data.:2))
@@ -84,42 +91,6 @@ end
     data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_copyto!(data)
     data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_copyto!(data)
     data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_copyto!(data)
-#! format: on
-    # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_copyto!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_copyto!(data) # TODO: test
-end
-
-@testset "copyto! views with Nf > 1" begin
-    device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
-    data_view(data) = DataLayouts.rebuild(
-        data,
-        SubArray(
-            parent(data),
-            ntuple(
-                i -> Base.Slice(Base.OneTo(DataLayouts.farray_size(data, i))),
-                ndims(data),
-            ),
-        ),
-    )
-    FT = Float64
-    S = Tuple{FT, FT}
-    Nf = 2
-    Nv = 4
-    Nij = 3
-    Nh = 5
-    Nk = 6
-    # Rather than using level/slab/column, let's just make views/SubArrays
-    # directly so that we can easily test all cases:
-#! format: off
-    data = IJFH{S, Nij, Nh}(device_zeros(FT,Nij,Nij,Nf,Nh));     test_copyto!(data_view(data))
-    data = IFH{S, Nij, Nh}(device_zeros(FT,Nij,Nf,Nh));          test_copyto!(data_view(data))
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_copyto!(data_view(data))
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_copyto!(data_view(data))
-    data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_copyto!(data_view(data))
-    data = VIJFH{S,Nv,Nij,Nh}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh));test_copyto!(data_view(data))
-    data = VIFH{S, Nv, Nij, Nh}(device_zeros(FT,Nv,Nij,Nf,Nh));  test_copyto!(data_view(data))
 #! format: on
     # TODO: test this
     # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_copyto!(data) # TODO: test

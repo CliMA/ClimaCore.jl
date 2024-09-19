@@ -422,7 +422,7 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     grid = Spaces.grid(space)
     grid_name = write!(writer, grid)
 
-    array = parent(field)
+    array = collect(parent(field)) # TODO: avoid collect here
     topology = Spaces.topology(space)
     nd = ndims(array)
     if topology isa Topologies.Topology2D &&

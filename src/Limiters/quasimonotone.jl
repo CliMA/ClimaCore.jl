@@ -72,14 +72,32 @@ function make_q_bounds(
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IFH{S, 2, Nh}(similar(parent(ρq), (2, Nf, Nh)))
+    # return DataLayouts.IFH{S, 2, Nh}(similar(parent(ρq), (2, Nf, Nh)))
+    _size = (2, Nh)
+    as = DataLayouts.ArraySize{
+        DataLayouts.field_dim(DataLayouts.IFH),
+        Nf,
+        _size,
+    }()
+    A = DataLayouts.parent_array_type(parent(ρq))
+    fa = similar(DataLayouts.rebuild_field_array_type(A, as), _size)
+    return DataLayouts.IFH{S, 2, Nh}(fa)
 end
 function make_q_bounds(
     ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, Nv, 2, Nh}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
+    # return DataLayouts.VIFH{S, Nv, 2, Nh}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
+    _size = (Nv, 2, Nh)
+    as = DataLayouts.ArraySize{
+        DataLayouts.field_dim(DataLayouts.VIFH),
+        Nf,
+        _size,
+    }()
+    A = DataLayouts.parent_array_type(parent(ρq))
+    fa = similar(DataLayouts.rebuild_field_array_type(A, as), _size)
+    return DataLayouts.VIFH{S, Nv, 2, Nh}(fa)
 end
 
 
@@ -304,15 +322,15 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     (Ni, Nj, _, _, _) = size(slab_ρq)
     maxiter = Ni * Nj
 
-    array_ρq = parent(slab_ρq)
-    array_ρ = parent(slab_ρ)
-    array_w = parent(slab_WJ)
-    array_q_bounds = parent(slab_q_bounds)
+    array_ρq = parent(slab_ρq).arrays
+    array_ρ = parent(slab_ρ).arrays[1]
+    array_w = parent(slab_WJ).arrays[1]
+    array_q_bounds = parent(slab_q_bounds).arrays
 
     # 1) compute ∫ρ
     total_mass = zero(eltype(array_ρ))
     for j in 1:Nj, i in 1:Ni
-        total_mass += array_ρ[i, j, 1] * array_w[i, j, 1]
+        total_mass += array_ρ[i, j] * array_w[i, j]
     end
 
     @assert total_mass > 0
@@ -320,13 +338,13 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
     converged = true
     max_rel_err = zero(rtol)
     for f in 1:Nf
-        q_min = array_q_bounds[1, f]
-        q_max = array_q_bounds[2, f]
+        q_min = array_q_bounds[f][1]
+        q_max = array_q_bounds[f][2]
 
         # 2) compute ∫ρq
-        tracer_mass = zero(eltype(array_ρq))
+        tracer_mass = zero(eltype(array_ρq[1]))
         for j in 1:Nj, i in 1:Ni
-            tracer_mass += array_ρq[i, j, f] * array_w[i, j, 1]
+            tracer_mass += array_ρq[f][i, j] * array_w[i, j]
         end
 
         # TODO: Should this condition be enforced? (It isn't in HOMME.)
@@ -339,19 +357,19 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
 
         # 3) modify ρq
         for iter in 1:maxiter
-            Δtracer_mass = zero(eltype(array_ρq))
+            Δtracer_mass = zero(eltype(array_ρq[1]))
             for j in 1:Nj, i in 1:Ni
-                ρ = array_ρ[i, j, 1]
-                ρq = array_ρq[i, j, f]
+                ρ = array_ρ[i, j]
+                ρq = array_ρq[f][i, j]
                 ρq_max = ρ * q_max
                 ρq_min = ρ * q_min
                 w = array_w[i, j]
                 if ρq > ρq_max
                     Δtracer_mass += (ρq - ρq_max) * w
-                    array_ρq[i, j, f] = ρq_max
+                    array_ρq[f][i, j] = ρq_max
                 elseif ρq < ρq_min
                     Δtracer_mass += (ρq - ρq_min) * w
-                    array_ρq[i, j, f] = ρq_min
+                    array_ρq[f][i, j] = ρq_min
                 end
             end
 
@@ -362,10 +380,10 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
             end
 
             if Δtracer_mass > 0 # add mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
+                total_mass_at_Δ_points = zero(eltype(array_ρ[1]))
                 for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
+                    ρ = array_ρ[i, j]
+                    ρq = array_ρq[f][i, j]
                     w = array_w[i, j]
                     if ρq < ρ * q_max
                         total_mass_at_Δ_points += ρ * w
@@ -373,17 +391,17 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
                 end
                 Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
                 for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
+                    ρ = array_ρ[i, j]
+                    ρq = array_ρq[f][i, j]
                     if ρq < ρ * q_max
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
+                        array_ρq[f][i, j] += ρ * Δq_at_Δ_points
                     end
                 end
             else # remove mass
-                total_mass_at_Δ_points = zero(eltype(array_ρ))
+                total_mass_at_Δ_points = zero(eltype(array_ρ[1]))
                 for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
+                    ρ = array_ρ[i, j]
+                    ρq = array_ρq[f][i, j]
                     w = array_w[i, j]
                     if ρq > ρ * q_min
                         total_mass_at_Δ_points += ρ * w
@@ -391,10 +409,10 @@ function apply_limit_slab!(slab_ρq, slab_ρ, slab_WJ, slab_q_bounds, rtol)
                 end
                 Δq_at_Δ_points = Δtracer_mass / total_mass_at_Δ_points
                 for j in 1:Nj, i in 1:Ni
-                    ρ = array_ρ[i, j, 1]
-                    ρq = array_ρq[i, j, f]
+                    ρ = array_ρ[i, j]
+                    ρq = array_ρq[f][i, j]
                     if ρq > ρ * q_min
-                        array_ρq[i, j, f] += ρ * Δq_at_Δ_points
+                        array_ρq[f][i, j] += ρ * Δq_at_Δ_points
                     end
                 end
             end
