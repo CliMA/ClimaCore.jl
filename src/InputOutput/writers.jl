@@ -343,6 +343,7 @@ function write_new!(
         "quadrature_num_points",
         Quadratures.degrees_of_freedom(Spaces.quadrature_style(grid)),
     )
+    write_attribute(group, "bubble", grid.enable_bubble ? "true" : "false")
     write_attribute(group, "topology", write!(writer, Spaces.topology(grid)))
     return name
 end

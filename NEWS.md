@@ -4,6 +4,22 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.16
+-------
+
+### ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `enable_bubble = true`
+
+Prior to this change, the `ClimaCore.InputOutput` module did not save whether a
+`Space` was constructed with `enable_bubble = true`. This meant that restarting
+a simulation from a HDF5 file led to inconsistent and incorrect spaces and
+`Field`s. This affected only 2D spectral spaces (and extruded ones that have
+this type of horizontal space).
+
+We now expect `Space`s read from a file to be bitwise identical to the original
+one.
+
+PR [#1999](https://github.com/CliMA/ClimaCore.jl/pull/1999).
+
 v0.14.15
 -------
 
