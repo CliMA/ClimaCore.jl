@@ -184,6 +184,41 @@ end
     return dest
 end
 
+"""
+    Spaces.create_dss_buffer(fv::FieldVector)
+
+Create a NamedTuple of buffers for communicating neighbour information of
+each Field in `fv`. In this NamedTuple, the name of each field is mapped
+to the buffer.
+"""
+function Spaces.create_dss_buffer(fv::FieldVector)
+    NamedTuple{propertynames(fv)}(
+        map(
+            key -> Spaces.create_dss_buffer(getproperty(fv, key)),
+            propertynames(fv),
+        ),
+    )
+end
+
+"""
+    Spaces.weighted_dss!(fv::FieldVector, dss_buffer = Spaces.create_dss_buffer(fv))
+
+Apply weighted direct stiffness summation (DSS) to each field in `fv`.
+If a `dss_buffer` object is not provided, a buffer will be created for each
+field in `fv`.
+Note that using the `Pair` interface here parallelizes the `weighted_dss!` calls.
+"""
+function Spaces.weighted_dss!(
+    fv::FieldVector,
+    dss_buffer = Spaces.create_dss_buffer(fv),
+)
+    pairs = map(propertynames(fv)) do key
+        Pair(getproperty(fv, key), getproperty(dss_buffer, key))
+    end
+    Spaces.weighted_dss!(pairs...)
+end
+
+
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
 @inline transform_bc_args(args::Tuple, inds...) = (
