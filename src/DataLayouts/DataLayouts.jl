@@ -87,8 +87,7 @@ is excluded and is returned as 1.
 
 Statically returns `prod((Ni, Nj, Nv, Nh))`
 """
-@inline get_N(::UniversalSize{Ni, Nj, Nv, Nh}) where {Ni, Nj, Nv, Nh} =
-    prod((Ni, Nj, Nv, Nh))
+@inline get_N(us::UniversalSize) = prod(universal_size(us))
 
 """
     get_Nv(::UniversalSize)

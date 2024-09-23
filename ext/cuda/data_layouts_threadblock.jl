@@ -170,6 +170,25 @@ end
 ##### Custom partitions
 #####
 
+##### linear partition
+@inline function linear_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer,
+)
+    nitems = prod(DataLayouts.universal_size(us))
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
+end
+@inline function linear_universal_index(us::UniversalSize)
+    i = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    inds = DataLayouts.universal_size(us)
+    CI = CartesianIndices(map(x -> Base.OneTo(x), inds))
+    return (CI, i)
+end
+@inline linear_is_valid_index(i::Integer, us::UniversalSize) =
+    1 ≤ i ≤ DataLayouts.get_N(us)
+
 ##### Column-wise
 @inline function columnwise_partition(
     us::DataLayouts.UniversalSize,
