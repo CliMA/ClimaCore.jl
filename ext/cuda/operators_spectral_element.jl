@@ -34,26 +34,20 @@ function Base.copyto!(
     },
 )
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    Nh = Topologies.nlocalelems(Spaces.topology(space))
-    Nv = Spaces.nlevels(space)
-    max_threads = 256
-    @assert Nq * Nq ≤ max_threads
-    Nvthreads = fld(max_threads, Nq * Nq)
-    Nvblocks = cld(Nv, Nvthreads)
+    us = UniversalSize(Fields.field_values(out))
     # executed
+    p = spectral_partition(us)
     args = (
         strip_space(out, space),
         strip_space(sbc, space),
         space,
-        Val(Nvthreads),
+        Val(p.Nvthreads),
     )
     auto_launch!(
         copyto_spectral_kernel!,
         args;
-        threads_s = (Nq, Nq, Nvthreads),
-        blocks_s = (Nh, Nvblocks),
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
     return out
 end
@@ -66,32 +60,15 @@ function copyto_spectral_kernel!(
     ::Val{Nvt},
 ) where {Nvt}
     @inbounds begin
-        i = threadIdx().x
-        j = threadIdx().y
-        k = threadIdx().z
-        h = blockIdx().x
-        vid = k + (blockIdx().y - 1) * blockDim().z
         # allocate required shmem
-
         sbc_reconstructed =
             Operators.reconstruct_placeholder_broadcasted(space, sbc)
         sbc_shmem = allocate_shmem(Val(Nvt), sbc_reconstructed)
 
-
         # can loop over blocks instead?
-        if space isa Spaces.AbstractSpectralElementSpace
-            v = nothing
-        elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-            v = vid - half
-        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-            v = vid
-        else
-            error("Invalid space")
-        end
-        ij = CartesianIndex((i, j))
-        slabidx = Fields.SlabIndex(v, h)
-        # v may potentially be out-of-range: any time memory is accessed, it
-        # should be checked by a call to is_valid_index(space, ij, slabidx)
+        (ij, slabidx) = spectral_universal_index(space)
+        # v in `slabidx` may potentially be out-of-range: any time memory is
+        # accessed, it should be checked by a call to is_valid_index(space, ij, slabidx)
 
         # resolve_shmem! needs to be called even when out of range, so that 
         # sync_threads() is invoked collectively
