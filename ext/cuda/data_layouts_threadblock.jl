@@ -214,3 +214,40 @@ end
 end
 @inline multiple_field_solve_is_valid_index(I::CI5, us::UniversalSize) =
     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
+
+##### spectral kernel partition
+@inline function spectral_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer = 256;
+)
+    (Nq, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nvthreads = min(fld(n_max_threads, Nq * Nq), maximum_allowable_threads()[3])
+    Nvblocks = cld(Nv, Nvthreads)
+    @assert prod((Nq, Nq, Nvthreads)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nq, Nq, Nvthreads))),$n_max_threads)"
+    @assert Nq * Nq ≤ n_max_threads
+    return (; threads = (Nq, Nq, Nvthreads), blocks = (Nh, Nvblocks), Nvthreads)
+end
+@inline function spectral_universal_index(space::Spaces.AbstractSpace)
+    i = threadIdx().x
+    j = threadIdx().y
+    k = threadIdx().z
+    h = blockIdx().x
+    vid = k + (blockIdx().y - 1) * blockDim().z
+    if space isa Spaces.AbstractSpectralElementSpace
+        v = nothing
+    elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+        v = vid - half
+    elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
+        v = vid
+    else
+        error("Invalid space")
+    end
+    ij = CartesianIndex((i, j))
+    slabidx = Fields.SlabIndex(v, h)
+    return (ij, slabidx)
+end
+@inline spectral_is_valid_index(
+    space::Spaces.AbstractSpectralElementSpace,
+    ij,
+    slabidx,
+) = Operators.is_valid_index(space, ij, slabidx)

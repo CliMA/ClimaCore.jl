@@ -100,7 +100,7 @@ pid, nprocs = ClimaComms.init(context)
     end
     p = @allocated Spaces.weighted_dss!(y0, dss_buffer)
     if pid == 1
-        @test p ≤ 7776
+        @test p ≤ 410296
     end
 
 end
