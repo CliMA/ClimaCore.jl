@@ -374,7 +374,7 @@ function interpcoord(elemrange, x::Real)
 end
 
 """
-    Spaces.weighted_dss!(f::Field[, ghost_buffer = Spaces.create_dss_buffer(field)])
+    Spaces.weighted_dss!(f::Field, dss_buffer = Spaces.create_dss_buffer(field))
 
 Apply weighted direct stiffness summation (DSS) to `f`. This operates in-place
 (i.e. it modifies the `f`). `ghost_buffer` contains the necessary information

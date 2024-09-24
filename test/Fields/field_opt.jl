@@ -393,4 +393,49 @@ using JET
     @test_opt ifelsekernel!(S, ρ)
 end
 
+@testset "dss of FieldVectors" begin
+    function field_vec(center_space, face_space)
+        Y = Fields.FieldVector(
+            c = map(Fields.coordinate_field(center_space)) do coord
+                FT = Spaces.undertype(center_space)
+                (;
+                    ρ = FT(coord.lat + coord.long),
+                    uₕ = Geometry.Covariant12Vector(
+                        FT(coord.lat),
+                        FT(coord.long),
+                    ),
+                )
+            end,
+            f = map(Fields.coordinate_field(face_space)) do coord
+                FT = Spaces.undertype(face_space)
+                (; w = Geometry.Covariant3Vector(FT(coord.lat + coord.long)))
+            end,
+        )
+        return Y
+    end
+
+    fv = field_vec(toy_sphere(Float64)...)
+
+    c_copy = copy(getproperty(fv, :c))
+    f_copy = copy(getproperty(fv, :f))
+
+    # Test that dss_buffer is created and has the correct keys
+    dss_buffer = Spaces.create_dss_buffer(fv)
+    @test haskey(dss_buffer, :c)
+    @test haskey(dss_buffer, :f)
+
+    # Test weighted_dss! with and without preallocated buffer
+    Spaces.weighted_dss!(fv, dss_buffer)
+    @test getproperty(fv, :c) ≈ Spaces.weighted_dss!(c_copy)
+    @test getproperty(fv, :f) ≈ Spaces.weighted_dss!(f_copy)
+
+    fv = field_vec(toy_sphere(Float64)...)
+    c_copy = copy(getproperty(fv, :c))
+    f_copy = copy(getproperty(fv, :f))
+
+    Spaces.weighted_dss!(fv)
+    @test getproperty(fv, :c) ≈ Spaces.weighted_dss!(c_copy)
+    @test getproperty(fv, :f) ≈ Spaces.weighted_dss!(f_copy)
+end
+
 nothing

@@ -4,6 +4,9 @@ ClimaCore.jl Release Notes
 main
 -------
 
+- Extended `create_dss_buffer` and `weighted_dss!` for `FieldVector`s, rather than
+just `Field`s. PR [#2000](https://github.com/CliMA/ClimaCore.jl/pull/2000).
+
 v0.14.16
 -------
 
