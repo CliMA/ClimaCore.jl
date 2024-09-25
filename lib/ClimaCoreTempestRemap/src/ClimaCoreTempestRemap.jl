@@ -4,9 +4,10 @@ export write_exodus, rll_mesh, overlap_mesh, remap_weights, apply_remap
 export def_time_coord, def_space_coord
 
 # Keep in sync with definition in DataLayouts.
-@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
-@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
-@inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
+@inline slab_index(i::T, j::T) where {T} =
+    CartesianIndex(i, j, T(1), T(1), T(1))
+@inline slab_index(i::T) where {T} = CartesianIndex(i, T(1), T(1), T(1), T(1))
+@inline vindex(v::T) where {T} = CartesianIndex(T(1), T(1), T(1), v, T(1))
 
 using ClimaComms
 import ClimaCore

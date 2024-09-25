@@ -1107,9 +1107,9 @@ type parameters.
 @inline farray_size(data::VIFH{S, Nv, Ni, Nh}) where {S, Nv, Ni, Nh} = (Nv, Ni, ncomponents(data), Nh)
 
 # Keep in sync with definition(s) in libs.
-@inline slab_index(i, j) = CartesianIndex(i, j, 1, 1, 1)
-@inline slab_index(i) = CartesianIndex(i, 1, 1, 1, 1)
-@inline vindex(v) = CartesianIndex(1, 1, 1, v, 1)
+@inline slab_index(i::T, j::T) where {T} = CartesianIndex(i, j, T(1), T(1), T(1))
+@inline slab_index(i::T) where {T} = CartesianIndex(i, T(1), T(1), T(1), T(1))
+@inline vindex(v::T) where {T} = CartesianIndex(T(1), T(1), T(1), v, T(1))
 
 """
     parent_array_type(data::AbstractData)
