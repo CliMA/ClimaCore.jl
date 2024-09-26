@@ -33,9 +33,9 @@ NVTX.@annotate function multiple_field_solve!(
 
     device = ClimaComms.device(x[first(names)])
 
-    args = (device, caches, xs, As, bs, x1, Val(Nnames))
-
     us = UniversalSize(Fields.field_values(x1))
+    args = (device, caches, xs, As, bs, x1, us, Val(Nnames))
+
     nitems = Ni * Nj * Nh * Nnames
     threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
     n_max_threads = min(threads, nitems)
@@ -85,11 +85,11 @@ function multiple_field_solve_kernel!(
     As,
     bs,
     x1,
+    us::UniversalSize,
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
-        us = UniversalSize(Fields.field_values(x1))
-        (I, iname) = multiple_field_solve_universal_index()
+        (I, iname) = multiple_field_solve_universal_index(us)
         if multiple_field_solve_is_valid_index(I, us)
             (i, j, _, _, h) = I.I
             generated_single_field_solve!(
