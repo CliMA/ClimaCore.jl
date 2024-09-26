@@ -6,7 +6,7 @@ import CUDA
 using CUDA: @cuda
 function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     us = UniversalSize(Fields.field_values(A))
-    args = (A, b)
+    args = (A, b, us)
     Ni, Nj, _, _, Nh = size(Fields.field_values(A))
     threads = threads_via_occupancy(thomas_algorithm_kernel!, args)
     nitems = Ni * Nj * Nh
@@ -23,9 +23,9 @@ end
 function thomas_algorithm_kernel!(
     A::Fields.ExtrudedFiniteDifferenceField,
     b::Fields.ExtrudedFiniteDifferenceField,
+    us::DataLayouts.UniversalSize,
 )
-    I = columnwise_universal_index()
-    us = UniversalSize(Fields.field_values(A))
+    I = columnwise_universal_index(us)
     if columnwise_is_valid_index(I, us)
         (i, j, _, _, h) = I.I
         thomas_algorithm!(Spaces.column(A, i, j, h), Spaces.column(b, i, j, h))

@@ -19,6 +19,7 @@ function column_reduce_device!(
     space,
 ) where {F, T}
     Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+    us = UniversalSize(Fields.field_values(output))
     args = (
         single_column_reduce!,
         f,
@@ -27,8 +28,8 @@ function column_reduce_device!(
         strip_space(input, space),
         init,
         space,
+        us,
     )
-    us = UniversalSize(Fields.field_values(output))
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
@@ -50,7 +51,8 @@ function column_accumulate_device!(
     init,
     space,
 ) where {F, T}
-    us = UniversalSize(Fields.field_values(output))
+    out_fv = Fields.field_values(output)
+    us = UniversalSize(out_fv)
     args = (
         single_column_accumulate!,
         f,
@@ -59,8 +61,9 @@ function column_accumulate_device!(
         strip_space(input, space),
         init,
         space,
+        us,
     )
-    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
     nitems = Ni * Nj * Nh
     threads = threads_via_occupancy(bycolumn_kernel!, args)
     n_max_threads = min(threads, nitems)
@@ -81,12 +84,12 @@ bycolumn_kernel!(
     input,
     init,
     space,
+    us::DataLayouts.UniversalSize,
 ) where {S, F, T} =
     if space isa Spaces.FiniteDifferenceSpace
         single_column_function!(f, transform, output, input, init, space)
     else
-        I = columnwise_universal_index()
-        us = UniversalSize(Fields.field_values(output))
+        I = columnwise_universal_index(us)
         if columnwise_is_valid_index(I, us)
             (i, j, _, _, h) = I.I
             single_column_function!(

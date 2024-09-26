@@ -185,7 +185,7 @@ end
     @assert prod((Nij, Nij, Nh_thread)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nh_thread))),$n_max_threads)"
     return (; threads = (Nij, Nij, Nh_thread), blocks = (Nh_blocks,))
 end
-@inline function columnwise_universal_index()
+@inline function columnwise_universal_index(us::UniversalSize)
     (i, j, th) = CUDA.threadIdx()
     (bh,) = CUDA.blockIdx()
     h = th + (bh - 1) * CUDA.blockDim().z
@@ -207,7 +207,7 @@ end
     @assert prod((Nij, Nij, Nnames)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nnames))),$n_max_threads)"
     return (; threads = (Nij, Nij, Nnames), blocks = (Nh,))
 end
-@inline function multiple_field_solve_universal_index()
+@inline function multiple_field_solve_universal_index(us::UniversalSize)
     (i, j, iname) = CUDA.threadIdx()
     (h,) = CUDA.blockIdx()
     return (CartesianIndex((i, j, 1, 1, h)), iname)

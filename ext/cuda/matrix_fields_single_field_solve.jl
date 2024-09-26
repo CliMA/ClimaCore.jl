@@ -30,7 +30,7 @@ function single_field_solve!(device::ClimaComms.CUDADevice, cache, x, A, b)
 end
 
 function single_field_solve_kernel!(device, cache, x, A, b, us)
-    I = columnwise_universal_index()
+    I = columnwise_universal_index(us)
     if columnwise_is_valid_index(I, us)
         (i, j, _, _, h) = I.I
         _single_field_solve!(
