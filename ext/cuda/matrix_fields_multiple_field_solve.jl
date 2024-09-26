@@ -89,9 +89,9 @@ function multiple_field_solve_kernel!(
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
-        (I, iname) = multiple_field_solve_universal_index(us)
-        if multiple_field_solve_is_valid_index(I, us)
-            (i, j, _, _, h) = I.I
+        (CI, i_linear) = multiple_field_solve_universal_index(us, Val(Nnames))
+        if multiple_field_solve_is_valid_index(i_linear, prod(CI.I))
+            (i, j, _, _, h, iname) = CI.I
             generated_single_field_solve!(
                 device,
                 caches,
