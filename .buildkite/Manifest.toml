@@ -312,7 +312,7 @@ weakdeps = ["CUDA", "MPI"]
 deps = ["Adapt", "BandedMatrices", "BlockArrays", "ClimaComms", "CubedSphere", "DataStructures", "DocStringExtensions", "ForwardDiff", "GaussQuadrature", "GilbertCurves", "HDF5", "InteractiveUtils", "IntervalSets", "KrylovKit", "LinearAlgebra", "MultiBroadcastFusion", "NVTX", "PkgVersion", "RecursiveArrayTools", "RootSolvers", "SparseArrays", "StaticArrays", "Statistics", "Unrolled"]
 path = ".."
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
-version = "0.14.12"
+version = "0.14.17"
 weakdeps = ["CUDA", "Krylov"]
 
     [deps.ClimaCore.extensions]
@@ -1245,7 +1245,9 @@ deps = ["Artifacts", "Pkg"]
 uuid = "4af54fe1-eca0-43a8-85a7-787d91b784e3"
 
 [[deps.LazyBroadcast]]
-git-tree-sha1 = "75f71e8a224dbc98497af29848ab678ce038bdc3"
+git-tree-sha1 = "d1d5bc48cf08b54be30bcab32a73bd970b49fde2"
+repo-rev = "ck/tests2"
+repo-url = "https://github.com/CliMA/LazyBroadcast.jl.git"
 uuid = "9dccce8e-a116-406d-9fcc-a88ed4f510c8"
 version = "0.1.4"
 
