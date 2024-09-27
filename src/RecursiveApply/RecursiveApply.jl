@@ -167,9 +167,6 @@ Recursively add elements of `X` and `Y`.
 """
 radd(X) = X
 radd(X, Y) = rmap(+, X, Y)
-radd(w::Number, X) = rmap(x -> w + x, X)
-radd(X, w::Number) = rmap(x -> x + w, X)
-radd(w1::Number, w2::Number) = w1 + w2
 const ⊞ = radd
 
 # Adapted from Base/operators.jl for general nary operator fallbacks
@@ -187,9 +184,6 @@ Recursively subtract elements of `Y` from `X`.
 """
 rsub(X) = rmap(-, X)
 rsub(X, Y) = rmap(-, X, Y)
-rsub(X, w::Number) = rmap(x -> x - w, X)
-rsub(w::Number, X) = rmap(x -> w - x, X)
-rsub(w1::Number, w2::Number) = w1 - w2
 const ⊟ = rsub
 
 """
@@ -198,9 +192,6 @@ const ⊟ = rsub
 Recursively divide each element of `X` by `Y`
 """
 rdiv(X, Y) = rmap(/, X, Y)
-rdiv(X, w::Number) = rmap(x -> x / w, X)
-rdiv(w::Number, X) = rmap(x -> w / x, X)
-rdiv(w1::Number, w2::Number) = w1 / w2
 
 """
     rmuladd(w, X, Y)
@@ -209,7 +200,6 @@ Recursively add elements of `w * X + Y`.
 """
 rmuladd(w::Number, X, Y) = rmap((x, y) -> muladd(w, x, y), X, Y)
 rmuladd(X, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
-rmuladd(X::Number, w::Number, Y) = rmap((x, y) -> muladd(x, w, y), X, Y)
-rmuladd(w::Number, x::Number, y::Number) = muladd(w, x, y)
+rmuladd(x::Number, w::Number, Y) = rmap(y -> muladd(x, w, y), Y)
 
 end # module

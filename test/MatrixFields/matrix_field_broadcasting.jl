@@ -56,6 +56,7 @@ end
     GC.gc(); include(joinpath("matrix_fields_broadcasting", "test_non_scalar_2.jl")); print_mem && @info "mem usage: rss = $(Sys.maxrss() / 2^30)"
     GC.gc(); include(joinpath("matrix_fields_broadcasting", "test_non_scalar_3.jl")); print_mem && @info "mem usage: rss = $(Sys.maxrss() / 2^30)"
     GC.gc(); include(joinpath("matrix_fields_broadcasting", "test_non_scalar_4.jl")); print_mem && @info "mem usage: rss = $(Sys.maxrss() / 2^30)"
+    GC.gc(); include(joinpath("matrix_fields_broadcasting", "test_non_scalar_5.jl")); print_mem && @info "mem usage: rss = $(Sys.maxrss() / 2^30)"
     GC.gc()
 end
 #! format: on
