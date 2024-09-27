@@ -895,6 +895,11 @@ steps:
         key: unit_matrix_field_broadcasting_cpu_non_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
 
+      - label: "Unit: matrix field broadcasting (CPU)"
+        key: unit_matrix_field_broadcasting_cpu_non_scalar_5
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
+        soft_fail: true
+
   - group: "Unit: MatrixFields - broadcasting (GPU)"
     steps:
 
@@ -1078,6 +1083,15 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 10GB
+
+      - label: "Unit: matrix field broadcasting (GPU)"
+        key: unit_matrix_field_broadcasting_gpu_non_scalar_5
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
