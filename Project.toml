@@ -1,7 +1,7 @@
 name = "ClimaCore"
 uuid = "d414da3d-4745-48bb-8d80-42e94e092884"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.14.17"
+version = "0.14.18"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -109,4 +109,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Aqua", "ArgParse", "AssociatedLegendrePolynomials", "BenchmarkTools", "Combinatorics", "CountFlops", "Dates", "FastBroadcast", "Krylov", "JET", "LazyBroadcast", "Logging", "MPI", "OrderedCollections", "PrettyTables", "Random", "SafeTestsets", "StatsBase", "TerminalLoggers", "Test"]
-

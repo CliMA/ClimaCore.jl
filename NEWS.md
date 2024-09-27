@@ -4,11 +4,18 @@ ClimaCore.jl Release Notes
 main
 -------
 
+v0.14.18
+-------
+
+- ![][badge-🐛bugfix] Revert `uniform_vertical_levels` removal from [#1992](https://github.com/CliMA/ClimaCore.jl/pull/1992)
+to fix downstream ClimaLand bug. PR [#2016](https://github.com/CliMA/ClimaCore.jl/pull/2016).
  - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
 
 v0.14.17
 -------
 
+- Extended `create_dss_buffer` and `weighted_dss!` for `FieldVector`s, rather than
+just `Field`s. PR [#2000](https://github.com/CliMA/ClimaCore.jl/pull/2000).
  - Fixed some type instabilities PR [#2004](https://github.com/CliMA/ClimaCore.jl/pull/2004)
  - More fixes to higher resolution column cases for the GPU [#1854](https://github.com/CliMA/ClimaCore.jl/pull/1854)
 
