@@ -18,6 +18,8 @@ using Test
         quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
 
+        @test Spaces.n_elements_per_panel_direction(space) == ne
+
         # surface area
         @test sum(ones(space)) ≈ FT(4pi * radius^2) rtol = 1e11 * eps(FT)
 

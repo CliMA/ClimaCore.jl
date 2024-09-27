@@ -22,6 +22,9 @@ import ..Utilities: PlusHalf, half
 import ..DataLayouts,
     ..Geometry, ..Domains, ..Meshes, ..Topologies, ..Grids, ..Quadratures
 
+import ..Domains: z_max, z_min
+import ..Meshes: n_elements_per_panel_direction
+
 import ..DeviceSideDevice, ..DeviceSideContext
 
 import ..Grids:
@@ -65,6 +68,12 @@ vertical_topology(space::AbstractSpace) = vertical_topology(grid(space))
 
 local_geometry_data(space::AbstractSpace) =
     local_geometry_data(grid(space), staggering(space))
+
+function n_elements_per_panel_direction(space::AbstractSpace)
+    hspace = Spaces.horizontal_space(space)
+    hmesh = topology(hspace).mesh
+    return Meshes.n_elements_per_panel_direction(hmesh)
+end
 
 global_geometry(space::AbstractSpace) = global_geometry(grid(space))
 
@@ -120,5 +129,27 @@ area(space::Spaces.AbstractSpace) =
 
 ClimaComms.array_type(space::AbstractSpace) =
     ClimaComms.array_type(ClimaComms.device(space))
+
+"""
+    z_max(::AbstractSpace)
+
+The domain maximum along the z-direction.
+"""
+function z_max(space::Spaces.AbstractSpace)
+    mesh = Topologies.mesh(Spaces.vertical_topology(space))
+    domain = Topologies.domain(mesh)
+    return Domains.z_max(domain)
+end
+
+"""
+    z_min(::AbstractSpace)
+
+The domain minimum along the z-direction.
+"""
+function z_min(space::Spaces.AbstractSpace)
+    mesh = Topologies.mesh(Spaces.vertical_topology(space))
+    domain = Topologies.domain(mesh)
+    return Domains.z_min(domain)
+end
 
 end # module

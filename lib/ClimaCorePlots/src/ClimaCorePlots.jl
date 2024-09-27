@@ -412,7 +412,7 @@ function _unfolded_pannel_matrix(field, interpolate)
     topology = Spaces.topology(space)
     mesh = topology.mesh
     nelem = Meshes.nelements(mesh)
-    panel_size = mesh.ne
+    panel_size = Meshes.n_elements_per_panel_direction(mesh)
 
     quad_from = Spaces.quadrature_style(space)
     quad_to = Quadratures.Uniform{interpolate}()
