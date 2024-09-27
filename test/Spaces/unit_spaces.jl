@@ -117,6 +117,12 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     @test Spaces.local_geometry_type(typeof(f_space)) <: Geometry.LocalGeometry
     @test Spaces.local_geometry_type(typeof(c_space)) <: Geometry.LocalGeometry
 
+    @test Spaces.z_min(f_space) == 0
+    @test Spaces.z_max(f_space) == 10
+
+    @test Spaces.z_min(c_space) == 0
+    @test Spaces.z_max(c_space) == 10
+
     # Define test col index
     colidx = Fields.ColumnIndex{1}((4,), 5)
     z_values = Fields.field_values(z[colidx])

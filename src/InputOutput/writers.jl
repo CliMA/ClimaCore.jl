@@ -225,7 +225,7 @@ function write_new!(
     domainname = write!(writer, mesh.domain)
     group = create_group(writer.file, "meshes/$name")
     write_attribute(group, "type", string(nameof(typeof(mesh))))
-    write_attribute(group, "ne", mesh.ne)
+    write_attribute(group, "ne", Meshes.n_elements_per_panel_direction(mesh))
     write_attribute(
         group,
         "localelementmap",
