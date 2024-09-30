@@ -21,12 +21,13 @@ function Base.copyto!(
     bounds = Operators.window_bounds(space, bc)
     out_fv = Fields.field_values(out)
     us = DataLayouts.UniversalSize(out_fv)
+    nitems = prod(DataLayouts.universal_size(us))
     args =
         (strip_space(out, space), strip_space(bc, space), axes(out), bounds, us)
 
     threads = threads_via_occupancy(copyto_stencil_kernel!, args)
-    n_max_threads = min(threads, get_N(us))
-    p = partition(out_fv, n_max_threads)
+    n_max_threads = min(threads, nitems)
+    p = linear_partition(us, n_max_threads)
 
     auto_launch!(
         copyto_stencil_kernel!,
@@ -40,9 +41,9 @@ import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
 function copyto_stencil_kernel!(out, bc, space, bds, us)
     @inbounds begin
-        out_fv = Fields.field_values(out)
-        I = universal_index(out_fv)
-        if is_valid_index(out_fv, I, us)
+        (CI, i_linear) = linear_universal_index(us)
+        if linear_is_valid_index(i_linear, us)
+            I = CI[i_linear]
             (li, lw, rw, ri) = bds
             (i, j, _, v, h) = I.I
             hidx = (i, j, h)

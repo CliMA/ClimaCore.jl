@@ -170,6 +170,25 @@ end
 ##### Custom partitions
 #####
 
+##### linear partition
+@inline function linear_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer,
+)
+    nitems = prod(DataLayouts.universal_size(us))
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
+end
+@inline function linear_universal_index(us::UniversalSize)
+    i = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    inds = DataLayouts.universal_size(us)
+    CI = CartesianIndices(map(x -> Base.OneTo(x), inds))
+    return (CI, i)
+end
+@inline linear_is_valid_index(i::Integer, us::UniversalSize) =
+    1 ≤ i ≤ DataLayouts.get_N(us)
+
 ##### Column-wise
 @inline function columnwise_partition(
     us::DataLayouts.UniversalSize,
@@ -194,6 +213,26 @@ end
 @inline columnwise_is_valid_index(I::CI5, us::UniversalSize) =
     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
 
+@inline function columnwise_linear_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer,
+)
+    (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
+    nitems = prod((Nij, Nij, Nh))
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
+end
+@inline function columnwise_linear_universal_index(us)
+    i = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
+    n = (Nij, Nij, Nh)
+    CI = CartesianIndices(map(x -> Base.OneTo(x), n))
+    return (CI, i)
+end
+@inline columnwise_linear_is_valid_index(i_linear::Integer, N::Integer) =
+    1 ≤ i_linear ≤ N
+
 ##### Element-wise (e.g., limiters)
 # TODO
 
@@ -204,16 +243,27 @@ end
     Nnames,
 )
     (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
-    @assert prod((Nij, Nij, Nnames)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nnames))),$n_max_threads)"
-    return (; threads = (Nij, Nij, Nnames), blocks = (Nh,))
+    # @assert prod((Nij, Nij, Nnames)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij, Nnames))),$n_max_threads)"
+    # return (; threads = (Nij, Nij, Nnames), blocks = (Nh,))
+    nitems = prod((Nh, Nij, Nij, Nnames))
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
 end
-@inline function multiple_field_solve_universal_index(us::UniversalSize)
-    (i, j, iname) = CUDA.threadIdx()
-    (h,) = CUDA.blockIdx()
-    return (CartesianIndex((i, j, 1, 1, h)), iname)
+@inline function multiple_field_solve_universal_index(us::DataLayouts.UniversalSize, ::Val{Nnames}) where {Nnames}
+    # (i, j, iname) = CUDA.threadIdx()
+    # (h,) = CUDA.blockIdx()
+    # return (CartesianIndex((i, j, 1, 1, h)), iname)
+    i = (CUDA.blockIdx().x - Int32(1)) * CUDA.blockDim().x + CUDA.threadIdx().x
+    (Nij, _, _, _, Nh) = DataLayouts.universal_size(us)
+    n = (Nij, Nij, Nh, Nnames)
+    CI = CartesianIndices(n)
+    return (CI, i)
 end
-@inline multiple_field_solve_is_valid_index(I::CI5, us::UniversalSize) =
-    1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
+# @inline multiple_field_solve_is_valid_index(I::CI5, us::UniversalSize) =
+#     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
+@inline multiple_field_solve_is_valid_index(i_linear::Integer, N::Integer) =
+    1 ≤ i_linear ≤ N
 
 ##### spectral kernel partition
 @inline function spectral_partition(
