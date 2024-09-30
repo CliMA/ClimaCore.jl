@@ -123,7 +123,8 @@ rmaptype(
 
 Recursively apply `promote_type` to the input types.
 """
-rpromote_type(Ts...) = reduce((T1, T2) -> rmaptype(promote_type, T1, T2), Ts)
+rpromote_type(Ts::Vararg{Any, N}) where {N} =
+    reduce((T1, T2) -> rmaptype(promote_type, T1, T2), Ts)
 rpromote_type() = Union{}
 
 """
@@ -172,7 +173,8 @@ const ⊞ = radd
 # Adapted from Base/operators.jl for general nary operator fallbacks
 for op in (:rmul, :radd)
     @eval begin
-        ($op)(a, b, c, xs...) = Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
+        ($op)(a, b, c, xs::Vararg{Any, N}) where {N} =
+            Base.afoldl($op, ($op)(($op)(a, b), c), xs...)
     end
 end
 

@@ -223,7 +223,11 @@ end
 Calls `resolve_operator(arg, slabidx)` for each `arg` in `args`
 """
 @inline _resolve_operator_args(slabidx) = ()
-Base.@propagate_inbounds _resolve_operator_args(slabidx, arg, xargs...) = (
+Base.@propagate_inbounds _resolve_operator_args(
+    slabidx,
+    arg,
+    xargs::Vararg{Any, N},
+) where {N} = (
     resolve_operator(arg, slabidx),
     _resolve_operator_args(slabidx, xargs...)...,
 )
@@ -270,7 +274,11 @@ end
 end
 
 @inline _reconstruct_placeholder_broadcasted(parent_space) = ()
-@inline _reconstruct_placeholder_broadcasted(parent_space, arg, xargs...) = (
+@inline _reconstruct_placeholder_broadcasted(
+    parent_space,
+    arg,
+    xargs::Vararg{Any, N},
+) where {N} = (
     reconstruct_placeholder_broadcasted(parent_space, arg),
     _reconstruct_placeholder_broadcasted(parent_space, xargs...)...,
 )
@@ -310,7 +318,13 @@ end
 end
 
 @inline _get_node(space, ij, slabidx) = ()
-Base.@propagate_inbounds _get_node(space, ij, slabidx, arg, xargs...) = (
+Base.@propagate_inbounds _get_node(
+    space,
+    ij,
+    slabidx,
+    arg,
+    xargs::Vararg{Any, N},
+) where {N} = (
     get_node(space, arg, ij, slabidx),
     _get_node(space, ij, slabidx, xargs...)...,
 )

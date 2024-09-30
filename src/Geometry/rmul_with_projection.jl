@@ -140,8 +140,10 @@ rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y} =
     rmaptype((X′, Y′) -> mul_return_type(X′, Y′), X, Y)
 rmul_return_type(::Type{X}, ::Type{Y}) where {X <: SingleValue, Y} =
     rmaptype(Y′ -> mul_return_type(X, Y′), Y)
+# rmaptype(Base.Fix1(mul_return_type, X), Y)
 rmul_return_type(::Type{X}, ::Type{Y}) where {X, Y <: SingleValue} =
     rmaptype(X′ -> mul_return_type(X′, Y), X)
+# rmaptype(Base.Fix2(mul_return_type, Y), X)
 rmul_return_type(
     ::Type{X},
     ::Type{Y},
