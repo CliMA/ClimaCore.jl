@@ -60,7 +60,7 @@ end
         Nh = Val(Topologies.nlocalelems(Spaces.topology(space)))
         result = JET.@report_opt Grids._SpectralElementGrid2D(Spaces.topology(space), Spaces.quadrature_style(space), Val(Nh); enable_bubble=false)
         n_found = length(JET.get_reports(result.analyzer, result.result))
-        n_allowed = 0
+        n_allowed = 1
         @test n_found ≤ n_allowed
         if n_found < n_allowed
             @info "Inference may have improved for _SpectralElementGrid2D: (n_found, n_allowed) = ($n_found, $n_allowed)"

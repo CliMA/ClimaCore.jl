@@ -23,10 +23,11 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S1, Nv1, Nij, Nh},
+    dest1::VIJFH{S1, Nv1, Nij},
     ::ToCPU,
-) where {S1, Nv1, Nij, Nh}
+) where {S1, Nv1, Nij}
     for (dest, bc) in fmbc.pairs
+        (_, _, _, _, Nh) = size(dest1)
         # Base.copyto!(dest, bc) # we can just fall back like this
         @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv1
             I = CartesianIndex(i, j, 1, v, h)
@@ -39,12 +40,13 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::IJFH{S, Nij, Nh},
+    dest1::IJFH{S, Nij},
     ::ToCPU,
-) where {S, Nij, Nh}
+) where {S, Nij}
     # copy contiguous columns
     _, _, _, Nv, _ = size(dest1)
     for (dest, bc) in fmbc.pairs
+        (_, _, _, _, Nh) = size(dest1)
         @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
             I = CartesianIndex(i, j, 1, 1, h)
             bcI = isascalar(bc) ? bc[] : bc[I]
@@ -56,11 +58,12 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIFH{S, Nv1, Ni, Nh},
+    dest1::VIFH{S, Nv1, Ni},
     ::ToCPU,
-) where {S, Nv1, Ni, Nh}
+) where {S, Nv1, Ni}
     # copy contiguous columns
     for (dest, bc) in fmbc.pairs
+        (_, _, _, _, Nh) = size(dest1)
         @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv1
             I = CartesianIndex(i, 1, 1, v, h)
             bcI = isascalar(bc) ? bc[] : bc[I]

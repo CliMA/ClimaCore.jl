@@ -18,7 +18,7 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
         # 10 elements in horizontal with 4 nodal points per element in horizontal
         array = rand(FT, Nv, Ni, 3, Nh)
 
-        data = VIFH{S, Nv, Ni, Nh}(array)
+        data = VIFH{S, Nv, Ni}(array)
         sum(x -> x[2], data)
 
         @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
@@ -51,7 +51,7 @@ end
 
     S = Tuple{Complex{Float64}, Float64}
     array = zeros(Float64, Nv, Ni, 3, Nh)
-    data = VIFH{S, Nv, Ni, Nh}(array)
+    data = VIFH{S, Nv, Ni}(array)
 
     @test_throws BoundsError slab(data, -1, -1)
     @test_throws BoundsError slab(data, 1, 3)
@@ -77,7 +77,7 @@ end
     SB = (c = 1.0, d = 2.0)
 
     array = zeros(Float64, Nv, Ni, 2, Nh)
-    data = VIFH{typeof(SA), Nv, Ni, Nh}(array)
+    data = VIFH{typeof(SA), Nv, Ni}(array)
 
     cdata = column(data, 1, 1)
     cdata[slab_index(1)] = SA
@@ -95,7 +95,7 @@ end
     Nh = 2
     data1 = ones(FT, Nv, 2, 2, 2)
     S = Complex{Float64}
-    data1 = VIFH{S, Nv, 2, Nh}(data1)
+    data1 = VIFH{S, Nv, 2}(data1)
     res = data1 .+ 1
     @test res isa VIFH{S, Nv}
     @test parent(res) ==
@@ -110,7 +110,7 @@ end
     Nv = 3
     Nh = 2
     data_vf = VF{S, Nv}(ones(FT, Nv, 2))
-    data_ifh = IFH{FT, 2, Nh}(ones(FT, 2, 1, 2))
+    data_ifh = IFH{FT, 2}(ones(FT, 2, 1, 2))
     data_vifh = data_vf .+ data_ifh
     @test data_vifh isa VIFH{S, Nv}
     @test size(data_vifh) == (2, 1, 1, 3, 2)
@@ -127,7 +127,7 @@ end
 @testset "fill" begin
 
     Nh = 3
-    data = IFH{Float64, 3, Nh}(ones(3, 1, Nh))
+    data = IFH{Float64, 3}(ones(3, 1, Nh))
     data .= 2.0
     @test all(==(2.0), parent(data))
 end

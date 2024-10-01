@@ -130,7 +130,7 @@ end
     S = Complex{FT}
     Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ifh = IFH{S, 2, Nh}(ones(FT, 2, 2, Nh))
+    data_ifh = IFH{S, 2}(ones(FT, 2, 2, Nh))
     data_ifh2 = data_f .+ data_ifh
     @test data_ifh2 isa IFH{S}
     @test size(data_ifh2) == (2, 1, 1, 1, 3)
@@ -151,7 +151,7 @@ end
     S = Complex{FT}
     Nh = 3
     data_f = DataF{S}(ones(FT, 2))
-    data_ijfh = IJFH{S, 2, Nh}(ones(2, 2, 2, Nh))
+    data_ijfh = IJFH{S, 2}(ones(2, 2, 2, Nh))
     data_ijfh2 = data_f .+ data_ijfh
     @test data_ijfh2 isa IJFH{S}
     @test size(data_ijfh2) == (2, 2, 1, 1, Nh)
@@ -163,7 +163,7 @@ end
     Nh = 10
     data_f = DataF{S}(ones(FT, 2))
     Nv = 10
-    data_vifh = VIFH{S, Nv, 4, Nh}(ones(FT, Nv, 4, 2, Nh))
+    data_vifh = VIFH{S, Nv, 4}(ones(FT, Nv, 4, 2, Nh))
     data_vifh2 = data_f .+ data_vifh
     @test data_vifh2 isa VIFH{S, Nv}
     @test size(data_vifh2) == (4, 1, 1, Nv, Nh)
@@ -175,9 +175,9 @@ end
     Nv = 2
     Nh = 2
     data_f = DataF{S}(ones(FT, 2))
-    data_vijfh = VIJFH{S, Nv, 2, Nh}(ones(FT, Nv, 2, 2, 2, Nh))
+    data_vijfh = VIJFH{S, Nv, 2}(ones(FT, Nv, 2, 2, 2, Nh))
     data_vijfh2 = data_f .+ data_vijfh
-    @test data_vijfh2 isa VIJFH{S, Nv, Nh}
+    @test data_vijfh2 isa VIJFH{S, Nv}
     @test size(data_vijfh2) == (2, 2, 1, Nv, Nh)
 end
 
@@ -198,7 +198,7 @@ end
     Nh = 3
     array = ones(FT, 2, 2, Nh)
     array[1, :, 1] .= FT[3, 4]
-    data_ifh = IFH{S, 2, Nh}(array)
+    data_ifh = IFH{S, 2}(array)
     ifh_column = column(data_ifh, 1, 1)
     @test ifh_column isa DataF
     @test ifh_column[] == 3.0 + 4.0im
@@ -225,7 +225,7 @@ end
     Nh = 3
     array = ones(2, 2, 2, 3)
     array[1, 1, :, 2] .= FT[3, 4]
-    data_ijfh = IJFH{S, 2, Nh}(array)
+    data_ijfh = IJFH{S, 2}(array)
     ijfh_column = column(data_ijfh, 1, 1, 2)
     @test ijfh_column isa DataF
     @test ijfh_column[] == 3.0 + 4.0im
