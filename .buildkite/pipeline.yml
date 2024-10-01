@@ -796,6 +796,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: multiple field solve example (GPU)"
+        key: gpu_multiple_field_solve_example
+        command: "julia --color=yes --project=.buildkite test/MatrixFields/multiple_field_solve_reproducer_1.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: matrix multiplication recursion example (CPU)"
         key: cpu_matrix_multiplication_recursion
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
