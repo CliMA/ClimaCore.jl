@@ -1181,6 +1181,40 @@ end
     )
 end
 
+### --------------- Support for multi-dimensional indexing
+# TODO: can we remove this? It's not needed for Julia 1.10,
+#       but seems needed in Julia 1.11.
+@inline Base.getindex(
+    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    I::Vararg{Int, N},
+) where {N} = Base.getindex(data, to_universal_index(data, I))
+
+@inline Base.setindex!(
+    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    val,
+    I::Vararg{Int, N},
+) where {N} = Base.setindex!(data, val, to_universal_index(data, I))
+
+@inline to_universal_index(data::AbstractData, I::Tuple) =
+    CartesianIndex(_to_universal_index(data, I))
+
+# Certain datalayouts support special indexing.
+# Like VF datalayouts with `getindex(::VF, v::Integer)`
+#! format: off
+@inline _to_universal_index(::VF, I::NTuple{1, T}) where {T} =  (T(1), T(1), T(1), I[1], T(1))
+@inline _to_universal_index(::IF, I::NTuple{1, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
+@inline _to_universal_index(::IF, I::NTuple{2, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
+@inline _to_universal_index(::IF, I::NTuple{3, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
+@inline _to_universal_index(::IF, I::NTuple{4, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
+@inline _to_universal_index(::IF, I::NTuple{5, T}) where {T} =  (I[1], T(1), T(1), T(1), T(1))
+@inline _to_universal_index(::IJF, I::NTuple{2, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
+@inline _to_universal_index(::IJF, I::NTuple{3, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
+@inline _to_universal_index(::IJF, I::NTuple{4, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
+@inline _to_universal_index(::IJF, I::NTuple{5, T}) where {T} = (I[1], I[2], T(1), T(1), T(1))
+@inline _to_universal_index(::AbstractData, I::NTuple{5}) = I
+#! format: on
+### ---------------
+
 """
     data2array(::AbstractData)
 
