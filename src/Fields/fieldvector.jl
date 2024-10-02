@@ -487,10 +487,18 @@ end
 
 Recursively compare given fieldvectors via `==`.
 Returns `true` if `x == y` recursively.
+
+FieldVectors with different types are considered different.
 """
 rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
     _rcompare(true, x, y)
 
-# Define == to call rcompare for two fieldvectors of the same
-# exact type.
-Base.:(==)(x::T, y::T) where {T <: FieldVector} = rcompare(x, y)
+rcompare(x::T, y::T) where {T <: FieldVector} = _rcompare(true, x, y)
+
+rcompare(x::T, y::T) where {T <: NamedTuple} = _rcompare(true, x, y)
+
+# FieldVectors with different types are always different
+rcompare(x::FieldVector, y::FieldVector) = false
+
+# Define == to call rcompare for two fieldvectors
+Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y)
