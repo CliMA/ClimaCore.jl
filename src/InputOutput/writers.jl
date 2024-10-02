@@ -396,6 +396,11 @@ function write_new!(
             write!(writer, hypsography.surface, "_z_surface/$name"),
         )
     end
+    write_attribute(
+        group,
+        "deep",
+        grid.global_geometry isa Geometry.DeepSphericalGlobalGeometry,
+    )
     return name
 end
 

@@ -18,6 +18,17 @@ Due to a bug, `==` was not recursively checking `FieldVector`s with different
 types, which resulted in false positives. This is now fixed and `FieldVector`s
 with different types are always considered different.
 
+### ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `deep = true`
+
+Prior to this change, the `ClimaCore.InputOutput` module did not save whether a
+`Space` was constructed with `deep = true`. This meant that restarting a
+simulation from a HDF5 file led to inconsistent and incorrect spaces and
+`Field`s. This affected only extruded 3D spectral spaces.
+
+We now expect `Space`s read from a file to be bitwise identical to the original
+one.
+
+
 PR [#2021](https://github.com/CliMA/ClimaCore.jl/pull/2021).
 
 v0.14.16

@@ -351,6 +351,7 @@ function read_grid_new(reader, name)
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
         horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
         hypsography_type = get(attrs(group), "hypsography_type", "Flat")
+        deep = get(attrs(group), "deep", false)
         if hypsography_type == "Flat"
             hypsography = Grids.Flat()
         elseif hypsography_type == "LinearAdaption"
@@ -370,7 +371,8 @@ function read_grid_new(reader, name)
         return Grids.ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
-            hypsography,
+            hypsography;
+            deep,
         )
     elseif type == "LevelGrid"
         full_grid = read_grid(reader, attrs(group)["full_grid"])
