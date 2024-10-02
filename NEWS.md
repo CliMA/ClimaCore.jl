@@ -4,13 +4,21 @@ ClimaCore.jl Release Notes
 main
 -------
 
-- Extended `create_dss_buffer` and `weighted_dss!` for `FieldVector`s, rather than
-just `Field`s. PR [#2000](https://github.com/CliMA/ClimaCore.jl/pull/2000).
+ - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
+
+v0.14.17
+-------
+
+ - Fixed some type instabilities PR [#2004](https://github.com/CliMA/ClimaCore.jl/pull/2004)
+ - More fixes to higher resolution column cases for the GPU [#1854](https://github.com/CliMA/ClimaCore.jl/pull/1854)
 
 v0.14.16
 -------
 
-### ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `enable_bubble = true`
+- Extended `create_dss_buffer` and `weighted_dss!` for `FieldVector`s, rather than
+just `Field`s. PR [#2000](https://github.com/CliMA/ClimaCore.jl/pull/2000).
+
+- ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `enable_bubble = true`
 
 Prior to this change, the `ClimaCore.InputOutput` module did not save whether a
 `Space` was constructed with `enable_bubble = true`. This meant that restarting
