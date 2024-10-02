@@ -6,6 +6,12 @@ main
 
  - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
 
+### ![][badge-🐛bugfix] Fix equality for `FieldVector`s with different type
+
+Due to a bug, `==` was not calling `rcompare` for `FieldVector`s with different
+types, which resulted in false positives. This is now fixed and `FieldVector`s
+are always considered different.
+
 v0.14.17
 -------
 

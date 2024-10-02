@@ -490,7 +490,13 @@ Returns `true` if `x == y` recursively.
 """
 rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
     _rcompare(true, x, y)
+rcompare(x, y) = false
 
-# Define == to call rcompare for two fieldvectors of the same
-# exact type.
-Base.:(==)(x::T, y::T) where {T <: FieldVector} = rcompare(x, y)
+# Define == to call rcompare for two fieldvectors
+# This will method error if the types do not match
+Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y)
+
+# FieldVectors with different types are always different. We need this
+# explicitly because FieldVectors are AbstractArrays, so we have to override
+# the default method
+Base.:(==)(x::FieldVector, y::FieldVector) = false
