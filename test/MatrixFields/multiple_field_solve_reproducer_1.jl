@@ -108,7 +108,4 @@ A = MatrixFields.replace_name_tree(A_mf, keys(b).name_tree);
 alg = MatrixFields.BlockDiagonalSolve();
 solver = MatrixFields.FieldMatrixSolver(alg, A_mf, vector);
 (; cache) = solver;
-# Incorrectly throws
-@test_throws CUDA.InvalidIRError begin
-    MatrixFields.run_field_matrix_solver!(alg, cache, x, A, b)
-end
+MatrixFields.run_field_matrix_solver!(alg, cache, x, A, b)
