@@ -277,7 +277,7 @@ values_string(values) =
     length(values) == 2 ? join(values, " and ") : join(values, ", ", ", and ")
 
 @noinline combine_eltypes(::T1, ::T2) where {T1, T2} =
-    errror("Mismatched FieldNameSets: Cannot combine a $T1 with a $T2")
+    error("Mismatched FieldNameSets: Cannot combine a $T1 with a $T2")
 
 @inline combine_eltypes(::Type{T}, ::Type{T}) where {T} = T
 
