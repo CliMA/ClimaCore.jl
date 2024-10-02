@@ -104,28 +104,11 @@ explicit_blocks =
 
 A_mf = MatrixFields.FieldMatrix(implicit_blocks..., explicit_blocks...);
 A = MatrixFields.replace_name_tree(A_mf, keys(b).name_tree);
-names = MatrixFields.matrix_row_keys(keys(A))
 
 alg = MatrixFields.BlockDiagonalSolve();
 solver = MatrixFields.FieldMatrixSolver(alg, A_mf, vector);
 (; cache) = solver;
-
-Nnames = length(names);
-sscache = Operators.strip_space(cache);
-ssx = Operators.strip_space(x);
-ssA = Operators.strip_space(A);
-ssb = Operators.strip_space(b);
-caches = map(name -> sscache[name], names);
-xs = map(name -> ssx[name], names);
-As = map(name -> ssA[name, name], names);
-bs = map(name -> ssb[name], names);
-x1 = first(xs);
-us = DataLayouts.UniversalSize(Fields.field_values(x1));
-device = ClimaComms.device(x[first(names)]);
-args = (device, caches, xs, As, bs, x1, us, Val(Nnames));
-
 # Incorrectly throws
 @test_throws CUDA.InvalidIRError begin
-    CCCE = Base.get_extension(ClimaCore, :ClimaCoreCUDAExt) # (reproducer requires CUDA)
-    CUDA.@cuda CCCE.multiple_field_solve_kernel!(args...)
+    MatrixFields.run_field_matrix_solver!(alg, cache, x, A, b)
 end
