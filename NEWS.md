@@ -4,13 +4,13 @@ ClimaCore.jl Release Notes
 main
 -------
 
- - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
-
-v0.14.17
+v0.14.18
 -------
 
- - Fixed some type instabilities PR [#2004](https://github.com/CliMA/ClimaCore.jl/pull/2004)
- - More fixes to higher resolution column cases for the GPU [#1854](https://github.com/CliMA/ClimaCore.jl/pull/1854)
+ - Fixed multiple-field solve for land simulations PR [#2025](https://github.com/CliMA/ClimaCore.jl/pull/2025).
+ - Fixed Julia 1.11 PR [#2018](https://github.com/CliMA/ClimaCore.jl/pull/2018).
+ - `Nh` was turned back into a dynamic parameter, in order to alleviate compile times PR [#2005](https://github.com/CliMA/ClimaCore.jl/pull/2005).
+ - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
 
 ### ![][badge-🐛bugfix] Fix equality for `FieldVector`s with different type
 
@@ -30,6 +30,12 @@ one.
 
 
 PR [#2021](https://github.com/CliMA/ClimaCore.jl/pull/2021).
+
+v0.14.17
+-------
+
+ - Fixed some type instabilities PR [#2004](https://github.com/CliMA/ClimaCore.jl/pull/2004)
+ - More fixes to higher resolution column cases for the GPU [#1854](https://github.com/CliMA/ClimaCore.jl/pull/1854)
 
 v0.14.16
 -------
