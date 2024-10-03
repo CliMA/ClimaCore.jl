@@ -1,7 +1,7 @@
 name = "ClimaCorePlots"
 uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.2.11"
+version = "0.2.12"
 
 [deps]
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
