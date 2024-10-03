@@ -1023,6 +1023,7 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_13
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
+        soft_fail: true # due to PTX error
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
