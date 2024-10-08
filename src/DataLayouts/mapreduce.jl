@@ -15,7 +15,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionIJFH{<:Any, Nij, A},
+    bc::BroadcastedUnionIJHF{<:Any, Nij, A},
 ) where {F, Op, Nij, A}
     # mapreduce across DataSlab2D
     (_, _, _, _, Nh) = size(bc)
@@ -29,7 +29,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionIFH{<:Any, Ni, A},
+    bc::BroadcastedUnionIHF{<:Any, Ni, A},
 ) where {F, Op, Ni, A}
     # mapreduce across DataSlab1D
     (_, _, _, _, Nh) = size(bc)
@@ -77,7 +77,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionVIFH{<:Any, Nv, Ni, A},
+    bc::BroadcastedUnionVIHF{<:Any, Nv, Ni, A},
 ) where {F, Op, Nv, Ni, A}
     # mapreduce across columns
     (_, _, _, _, Nh) = size(bc)
@@ -91,7 +91,7 @@ end
 function Base.mapreduce(
     fn::F,
     op::Op,
-    bc::BroadcastedUnionVIJFH{<:Any, Nv, Nij, A},
+    bc::BroadcastedUnionVIJHF{<:Any, Nv, Nij, A},
 ) where {F, Op, Nv, Nij, A}
     # mapreduce across columns
     (_, _, _, _, Nh) = size(bc)

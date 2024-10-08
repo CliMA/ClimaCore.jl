@@ -20,7 +20,7 @@ end
 function mapreduce_cuda(
     f,
     op,
-    data::Union{DataLayouts.VF, DataLayouts.IJFH, DataLayouts.VIJFH};
+    data::Union{DataLayouts.VF, DataLayouts.IJHF, DataLayouts.VIJHF};
     weighted_jacobian = OnesArray(parent(data)),
     opargs...,
 )
@@ -83,7 +83,7 @@ function mapreduce_cuda_kernel!(
     gidx = _get_gidx(tidx, bidx, effective_blksize)
     reduction = CUDA.CuStaticSharedArray(T, shmemsize)
     reduction[tidx] = 0
-    (Nv, Nij, Nf, Nh) = _get_dims(dataview)
+    (Nv, Nij, Nh, Nf) = _get_dims(dataview)
     nitems = Nv * Nij * Nij * Nf * Nh
 
     # load shmem
@@ -115,21 +115,21 @@ end
 @inline _dataview(pdata::AbstractArray{FT, 2}, fidx) where {FT} =
     view(pdata, :, fidx:fidx)
 
-# for IJFH DataLayout
+# for IJHF DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 4}) where {FT}
-    (Nij, _, Nf, Nh) = size(pdata)
-    return (1, Nij, Nf, Nh)
+    (Nij, _, Nh, Nf) = size(pdata)
+    return (1, Nij, Nh, Nf)
 end
 @inline _dataview(pdata::AbstractArray{FT, 4}, fidx) where {FT} =
-    view(pdata, :, :, fidx:fidx, :)
+    view(pdata, :, :, :, fidx:fidx)
 
-# for VIJFH DataLayout
+# for VIJHF DataLayout
 @inline function _get_dims(pdata::AbstractArray{FT, 5}) where {FT}
-    (Nv, Nij, _, Nf, Nh) = size(pdata)
-    return (Nv, Nij, Nf, Nh)
+    (Nv, Nij, _, Nh, Nf) = size(pdata)
+    return (Nv, Nij, Nh, Nf)
 end
 @inline _dataview(pdata::AbstractArray{FT, 5}, fidx) where {FT} =
-    view(pdata, :, :, :, fidx:fidx, :)
+    view(pdata, :, :, :, :, fidx:fidx)
 
 @inline function _cuda_reduce!(op, reduction, tidx, reduction_size, N)
     if reduction_size > N

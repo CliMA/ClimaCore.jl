@@ -12,7 +12,7 @@ ClimaComms.@import_required_backends
 using JET
 
 function test_similar!(data)
-    if data isa VF || data isa VIFH || data isa VIJFH
+    if data isa VF || data isa VIHF || data isa VIJHF
         FT = eltype(parent(data))
         CT = Geometry.ZPoint{FT}
         AIdx = (3,)
@@ -37,9 +37,9 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_similar!(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_similar!(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_similar!(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_similar!(data)
@@ -47,9 +47,9 @@ end
     test_similar!(data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_similar!(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_similar!(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_similar!(data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_similar!(data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_similar!(data) # TODO: test

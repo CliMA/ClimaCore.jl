@@ -316,7 +316,7 @@ end
 
 function sphere_benchmark_arrays(device, z_elems, helem, Nq, ::Type{FT}; compile::Bool = false) where {FT}
     ArrayType = ClimaComms.array_type(device)
-    # VIJFH
+    # VIJHF
     Nh = helem * helem * 6
     cdims = (z_elems  , Nq, Nq, 1, Nh)
     fdims = (z_elems+1, Nq, Nq, 1, Nh)
