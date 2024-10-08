@@ -12,7 +12,7 @@ using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH
+import ClimaCore.DataLayouts: IJHF
 import ClimaCore:
     Fields,
     slab,
@@ -60,7 +60,7 @@ end
     device = ClimaComms.device(space)
     ArrayType = ClimaComms.array_type(device)
 
-    data = IJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
+    data = IJHF{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
     field = Fields.Field(data, space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
@@ -91,12 +91,12 @@ end
     # test broadcasting
     res = field .+ 1
     @test parent(Fields.field_values(res)) == Float64[
-        f == 1 ? 2 : 1 for i in 1:Nij, j in 1:Nij, f in 1:2, h in 1:(n1 * n2)
+        f == 1 ? 2 : 1 for i in 1:Nij, j in 1:Nij, h in 1:(n1 * n2), f in 1:2
     ]
 
     res = field.re .+ 1
     @test parent(Fields.field_values(res)) ==
-          Float64[2 for i in 1:Nij, j in 1:Nij, f in 1:1, h in 1:(n1 * n2)]
+          Float64[2 for i in 1:Nij, j in 1:Nij, h in 1:(n1 * n2), f in 1:1]
 
     # test field slab broadcasting
     f1 = ones(space)
@@ -250,13 +250,12 @@ end
     Nij = 4
     Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
-
     S = NamedTuple{(:a, :b), Tuple{Float64, Float64}}
     context = ClimaComms.context(space)
     device = ClimaComms.device(context)
     ArrayType = ClimaComms.array_type(device)
     FT = Spaces.undertype(space)
-    data = IJFH{S}(ArrayType{FT}, ones; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, ones; Nij, Nh)
 
     nt_field = Fields.Field(data, space)
 
@@ -396,10 +395,11 @@ end
         @test propertynames(fv) == propertynames(fv[colidx])
     end
 
+    is_cuda = device isa ClimaComms.CUDADevice
     # JET tests
     # prerequisite
     call_getproperty(fv) # compile first
-    @test_opt call_getproperty(fv)
+    @test_opt broken = is_cuda call_getproperty(fv)
 
     call_getcolumn(fv, colidx, device) # compile first
     @test_opt call_getcolumn(fv, colidx, device)
@@ -421,7 +421,7 @@ end
 end
 
 @testset "FieldVector basetype replacement and deepcopy" begin
-    device = ClimaComms.CPUSingleThreaded() # constructing space_vijfh is broken
+    device = ClimaComms.CPUSingleThreaded() # constructing space_vijhf is broken
     context = ClimaComms.SingletonCommsContext(device)
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
@@ -449,10 +449,10 @@ end
     quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
-    space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
-    space_ijfh = Spaces.SpectralElementSpace2D(topology_xy, quad)
-    space_vifh = Spaces.ExtrudedFiniteDifferenceSpace(space_ifh, space_vf)
-    space_vijfh = Spaces.ExtrudedFiniteDifferenceSpace(space_ijfh, space_vf)
+    space_ihf = Spaces.SpectralElementSpace1D(topology_x, quad)
+    space_ijhf = Spaces.SpectralElementSpace2D(topology_xy, quad)
+    space_vihf = Spaces.ExtrudedFiniteDifferenceSpace(space_ihf, space_vf)
+    space_vijhf = Spaces.ExtrudedFiniteDifferenceSpace(space_ijhf, space_vf)
 
     space2field(space) = map(
         coord -> (coord, Geometry.Covariant12Vector(1.0, 2.0)),
@@ -461,12 +461,12 @@ end
 
     Y = Fields.FieldVector(
         field_vf = space2field(space_vf),
-        field_if = slab(space2field(space_ifh), 1),
-        field_ifh = space2field(space_ifh),
-        field_ijf = slab(space2field(space_ijfh), 1, 1),
-        field_ijfh = space2field(space_ijfh),
-        field_vifh = space2field(space_vifh),
-        field_vijfh = space2field(space_vijfh),
+        field_if = slab(space2field(space_ihf), 1),
+        field_ihf = space2field(space_ihf),
+        field_ijf = slab(space2field(space_ijhf), 1, 1),
+        field_ijhf = space2field(space_ijhf),
+        field_vihf = space2field(space_vihf),
+        field_vijhf = space2field(space_vijhf),
         array = [1.0, 2.0, 3.0],
         scalar = 1.0,
     )
@@ -761,7 +761,7 @@ end
 end
 
 @testset "scalar assignment" begin
-    device = ClimaComms.CPUSingleThreaded() # constructing space_vijfh is broken
+    device = ClimaComms.CPUSingleThreaded() # constructing space_vijhf is broken
     context = ClimaComms.SingletonCommsContext(device)
     domain_z = Domains.IntervalDomain(
         Geometry.ZPoint(-1.0) .. Geometry.ZPoint(1.0),
@@ -789,12 +789,12 @@ end
     quad = Quadratures.GLL{4}()
 
     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
-    space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
-    space_ijfh = Spaces.SpectralElementSpace2D(topology_xy, quad)
-    space_vifh = Spaces.ExtrudedFiniteDifferenceSpace(space_ifh, space_vf)
-    space_vijfh = Spaces.ExtrudedFiniteDifferenceSpace(space_ijfh, space_vf)
+    space_ihf = Spaces.SpectralElementSpace1D(topology_x, quad)
+    space_ijhf = Spaces.SpectralElementSpace2D(topology_xy, quad)
+    space_vihf = Spaces.ExtrudedFiniteDifferenceSpace(space_ihf, space_vf)
+    space_vijhf = Spaces.ExtrudedFiniteDifferenceSpace(space_ijhf, space_vf)
 
-    C = map(x -> Geometry.Covariant12Vector(1.0, 1.0), zeros(space_vifh))
+    C = map(x -> Geometry.Covariant12Vector(1.0, 1.0), zeros(space_vihf))
     @test all(==(1.0), parent(C))
     C .= Ref(zero(eltype(C)))
     @test all(==(0.0), parent(C))

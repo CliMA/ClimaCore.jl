@@ -122,7 +122,7 @@ end
         nothing
     end
 
-    ## for test below, apply offline map, read in the resulting field and reshape it to the IJFH format
+    ## for test below, apply offline map, read in the resulting field and reshape it to the IJHF format
     datafile_out = joinpath(OUTPUT_DIR, "data_out.nc")
     apply_remap(datafile_out, datafile_in, weightfile, ["sinlong"])
 

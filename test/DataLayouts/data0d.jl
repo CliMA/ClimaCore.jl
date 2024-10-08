@@ -123,15 +123,15 @@ end
     @test size(data_if2) == (2, 1, 1, 1, 1)
 end
 
-@testset "broadcasting DataF + IFH data object => IFH" begin
+@testset "broadcasting DataF + IHF data object => IHF" begin
     FT = Float64
     S = Complex{FT}
     Nh = 3
     data_f = DataF{S}(ArrayType{FT}, ones)
-    data_ifh = IFH{S}(ArrayType{FT}, ones; Ni = 2, Nh)
-    data_ifh2 = data_f .+ data_ifh
-    @test data_ifh2 isa IFH{S}
-    @test size(data_ifh2) == (2, 1, 1, 1, 3)
+    data_ihf = IHF{S}(ArrayType{FT}, ones; Ni = 2, Nh)
+    data_ihf2 = data_f .+ data_ihf
+    @test data_ihf2 isa IHF{S}
+    @test size(data_ihf2) == (2, 1, 1, 1, 3)
 end
 
 @testset "broadcasting DataF + IJF data object => IJF" begin
@@ -144,39 +144,39 @@ end
     @test size(data_ijf2) == (2, 2, 1, 1, 1)
 end
 
-@testset "broadcasting DataF + IJFH data object => IJFH" begin
+@testset "broadcasting DataF + IJHF data object => IJHF" begin
     FT = Float64
     S = Complex{FT}
     Nh = 3
     data_f = DataF{S}(ArrayType{FT}, ones)
-    data_ijfh = IJFH{S}(ArrayType{FT}, ones; Nij = 2, Nh)
-    data_ijfh2 = data_f .+ data_ijfh
-    @test data_ijfh2 isa IJFH{S}
-    @test size(data_ijfh2) == (2, 2, 1, 1, Nh)
+    data_ijhf = IJHF{S}(ArrayType{FT}, ones; Nij = 2, Nh)
+    data_ijhf2 = data_f .+ data_ijhf
+    @test data_ijhf2 isa IJHF{S}
+    @test size(data_ijhf2) == (2, 2, 1, 1, Nh)
 end
 
-@testset "broadcasting DataF + VIFH data object => VIFH" begin
+@testset "broadcasting DataF + VIHF data object => VIHF" begin
     FT = Float64
     S = Complex{FT}
     Nh = 10
     data_f = DataF{S}(ArrayType{FT}, ones)
     Nv = 10
-    data_vifh = VIFH{S}(ArrayType{FT}, ones; Nv, Ni = 4, Nh)
-    data_vifh2 = data_f .+ data_vifh
-    @test data_vifh2 isa VIFH{S, Nv}
-    @test size(data_vifh2) == (4, 1, 1, Nv, Nh)
+    data_vihf = VIHF{S}(ArrayType{FT}, ones; Nv, Ni = 4, Nh)
+    data_vihf2 = data_f .+ data_vihf
+    @test data_vihf2 isa VIHF{S, Nv}
+    @test size(data_vihf2) == (4, 1, 1, Nv, Nh)
 end
 
-@testset "broadcasting DataF + VIJFH data object => VIJFH" begin
+@testset "broadcasting DataF + VIJHF data object => VIJHF" begin
     FT = Float64
     S = Complex{FT}
     Nv = 2
     Nh = 2
     data_f = DataF{S}(ArrayType{FT}, ones)
-    data_vijfh = VIJFH{S}(ArrayType{FT}, ones; Nv, Nij = 2, Nh)
-    data_vijfh2 = data_f .+ data_vijfh
-    @test data_vijfh2 isa VIJFH{S, Nv}
-    @test size(data_vijfh2) == (2, 2, 1, Nv, Nh)
+    data_vijhf = VIJHF{S}(ArrayType{FT}, ones; Nv, Nij = 2, Nh)
+    data_vijhf2 = data_f .+ data_vijhf
+    @test data_vijhf2 isa VIJHF{S, Nv}
+    @test size(data_vijhf2) == (2, 2, 1, Nv, Nh)
 end
 
 @testset "column IF => DataF" begin
@@ -191,18 +191,18 @@ end
     @test_throws BoundsError column(data_if, 3)
 end
 
-@testset "column IFH => DataF" begin
+@testset "column IHF => DataF" begin
     FT = Float64
     S = Complex{FT}
     Nh = 3
-    data_ifh = IFH{S}(ArrayType{FT}; Ni = 2, Nh)
-    array = parent(data_ifh)
-    array[1, :, 1] .= FT[3, 4]
-    ifh_column = column(data_ifh, 1, 1)
-    @test ifh_column isa DataF
-    @test ifh_column[] == 3.0 + 4.0im
-    @test_throws BoundsError column(data_ifh, 3, 2)
-    @test_throws BoundsError column(data_ifh, 2, 4)
+    data_ihf = IHF{S}(ArrayType{FT}; Ni = 2, Nh)
+    array = parent(data_ihf)
+    array[1, 1, :] .= FT[3, 4]
+    ihf_column = column(data_ihf, 1, 1)
+    @test ihf_column isa DataF
+    @test ihf_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_ihf, 3, 2)
+    @test_throws BoundsError column(data_ihf, 2, 4)
 end
 
 @testset "column IJF => DataF" begin
@@ -218,19 +218,19 @@ end
     @test_throws BoundsError column(data_ijf, 1, 3)
 end
 
-@testset "column IJFH => DataF" begin
+@testset "column IJHF => DataF" begin
     FT = Float64
     S = Complex{FT}
     Nh = 3
-    data_ijfh = IJFH{S}(ArrayType{FT}; Nij = 2, Nh)
-    array = parent(data_ijfh)
-    array[1, 1, :, 2] .= FT[3, 4]
-    ijfh_column = column(data_ijfh, 1, 1, 2)
-    @test ijfh_column isa DataF
-    @test ijfh_column[] == 3.0 + 4.0im
-    @test_throws BoundsError column(data_ijfh, 3, 1, 1)
-    @test_throws BoundsError column(data_ijfh, 1, 3, 1)
-    @test_throws BoundsError column(data_ijfh, 1, 1, 4)
+    data_ijhf = IJHF{S}(ArrayType{FT}; Nij = 2, Nh)
+    array = parent(data_ijhf)
+    array[1, 1, 2, :] .= FT[3, 4]
+    ijhf_column = column(data_ijhf, 1, 1, 2)
+    @test ijhf_column isa DataF
+    @test ijhf_column[] == 3.0 + 4.0im
+    @test_throws BoundsError column(data_ijhf, 3, 1, 1)
+    @test_throws BoundsError column(data_ijhf, 1, 3, 1)
+    @test_throws BoundsError column(data_ijhf, 1, 1, 4)
 end
 
 @testset "level VF => DataF" begin

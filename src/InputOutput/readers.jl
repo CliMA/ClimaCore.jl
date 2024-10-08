@@ -145,23 +145,23 @@ function _scan_quadrature_style(quadraturestring::AbstractString, npts)
 end
 
 function _scan_data_layout(layoutstring::AbstractString)
-    @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-    layoutstring == "IJFH" && return DataLayouts.IJFH
+    @assert layoutstring ∈ ("IJHF", "IJF", "IHF", "IF", "VIJHF", "VIHF")
+    layoutstring == "IJHF" && return DataLayouts.IJHF
     layoutstring == "IJF" && return DataLayouts.IJF
-    layoutstring == "IFH" && return DataLayouts.IFH
+    layoutstring == "IHF" && return DataLayouts.IHF
     layoutstring == "IF" && return DataLayouts.IF
-    layoutstring == "VIJFH" && return DataLayouts.VIJFH
-    return DataLayouts.VIFH
+    layoutstring == "VIJHF" && return DataLayouts.VIJHF
+    return DataLayouts.VIHF
 end
 
 # for when Nh is in type-domain
 # function Nh_dim(layoutstring::AbstractString)
-#     @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
-#     layoutstring == "IJFH" && return 4
+#     @assert layoutstring ∈ ("IJHF", "IJF", "IHF", "IF", "VIJHF", "VIHF")
+#     layoutstring == "IJHF" && return 4
 #     layoutstring == "IJF" && return -1
-#     layoutstring == "IFH" && return 3
+#     layoutstring == "IHF" && return 3
 #     layoutstring == "IF" && return -1
-#     layoutstring == "VIJFH" && return 5
+#     layoutstring == "VIJHF" && return 5
 #     return 4
 # end
 
@@ -483,7 +483,7 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         #     Nhd = Nh_dim(data_layout)
         #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
-        if data_layout in ("VIJFH", "VIFH")
+        if data_layout in ("VIJHF", "VIHF")
             Nv = size(data, 1)
             # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nv, Nij}(data)

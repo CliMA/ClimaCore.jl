@@ -6,14 +6,14 @@ Defines the following DataLayouts (see individual docs for more info):
 TODO: Add links to these datalayouts
 
  - `IJKFVH`
- - `IJFH`
- - `IFH`
+ - `IJHF`
+ - `IHF`
  - `DataF`
  - `IJF`
  - `IF`
  - `VF`
- - `VIJFH`
- - `VIFH`
+ - `VIJHF`
+ - `VIHF`
  - `IH1JH2`
  - `IV1JH2`
 
@@ -38,7 +38,7 @@ import MultiBroadcastFusion as MBF
 import Adapt
 
 import ..slab, ..slab_args, ..column, ..column_args, ..level
-export slab, column, level, IJFH, IJF, IFH, IF, VF, VIJFH, VIFH, DataF
+export slab, column, level, IJHF, IJF, IHF, IF, VF, VIJHF, VIHF, DataF
 
 # Internal types for managing CPU/GPU dispatching
 abstract type AbstractDispatchToDevice end
@@ -326,14 +326,14 @@ end
 # we use to help reduce overspecialization
 abstract type AbstractDataSingleton end
 struct IJKFVHSingleton <: AbstractDataSingleton end
-struct IJFHSingleton <: AbstractDataSingleton end
-struct IFHSingleton <: AbstractDataSingleton end
+struct IJHFSingleton <: AbstractDataSingleton end
+struct IHFSingleton <: AbstractDataSingleton end
 struct DataFSingleton <: AbstractDataSingleton end
 struct IJFSingleton <: AbstractDataSingleton end
 struct IFSingleton <: AbstractDataSingleton end
 struct VFSingleton <: AbstractDataSingleton end
-struct VIJFHSingleton <: AbstractDataSingleton end
-struct VIFHSingleton <: AbstractDataSingleton end
+struct VIJHFSingleton <: AbstractDataSingleton end
+struct VIHFSingleton <: AbstractDataSingleton end
 struct IH1JH2Singleton <: AbstractDataSingleton end
 struct IV1JH2Singleton <: AbstractDataSingleton end
 
@@ -401,8 +401,8 @@ end
 # ==================
 
 """
-    IJFH{S, Nij, A} <: Data2D{S, Nij}
-    IJFH{S,Nij}(ArrayType, nelements)
+    IJHF{S, Nij, A} <: Data2D{S, Nij}
+    IJHF{S,Nij}(ArrayType, nelements)
 
 
 Backing `DataLayout` for 2D spectral element slabs.
@@ -410,13 +410,13 @@ Backing `DataLayout` for 2D spectral element slabs.
 Element nodal point (I,J) data is contiguous for each datatype `S` struct field (F),
 for each 2D mesh element slab (H).
 
-The `ArrayType`-constructor constructs a IJFH 2D Spectral
+The `ArrayType`-constructor constructs a IJHF 2D Spectral
 DataLayout given the backing `ArrayType`, quadrature degrees
 of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
 
-    IJFH{S}(ArrayType[, Base.ones | zeros | rand]; Nij, Nh)
+    IJHF{S}(ArrayType[, Base.ones | zeros | rand]; Nij, Nh)
 
-The keyword constructor returns a `IJFH` given
+The keyword constructor returns a `IJHF` given
 the `ArrayType` and (optionally) an initialization
 method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
 and the keywords:
@@ -430,64 +430,64 @@ and the keywords:
     object in a performance-critical section, and if you know
     the type parameters at compile time.
 """
-struct IJFH{S, Nij, A} <: Data2D{S, Nij}
+struct IJHF{S, Nij, A} <: Data2D{S, Nij}
     array::A
 end
 
-function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
+function IJHF{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nij
     @assert size(array, 2) == Nij
-    @assert size(array, 3) == typesize(T, S)
-    IJFH{S, Nij, typeof(array)}(array)
+    @assert size(array, 4) == typesize(T, S)
+    IJHF{S, Nij, typeof(array)}(array)
 end
 
-function IJFH{S}(
+function IJHF{S}(
     ::Type{ArrayType},
     fun = similar;
     Nij::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
     Nf = typesize(eltype(ArrayType), S)
-    array = similar(ArrayType, Nij, Nij, Nf, Nh)
+    array = similar(ArrayType, Nij, Nij, Nh, Nf)
     maybe_populate!(array, fun)
-    IJFH{S, Nij}(array)
+    IJHF{S, Nij}(array)
 end
 
-@inline universal_size(data::IJFH{S, Nij}) where {S, Nij} =
+@inline universal_size(data::IJHF{S, Nij}) where {S, Nij} =
     (Nij, Nij, 1, 1, get_Nh_dynamic(data))
 
-function IJFH{S, Nij}(::Type{ArrayType}, Nh::Integer) where {S, Nij, ArrayType}
+function IJHF{S, Nij}(::Type{ArrayType}, Nh::Integer) where {S, Nij, ArrayType}
     T = eltype(ArrayType)
-    IJFH{S, Nij}(ArrayType(undef, Nij, Nij, typesize(T, S), Nh))
+    IJHF{S, Nij}(ArrayType(undef, Nij, Nij, Nh, typesize(T, S)))
 end
 
-Base.length(data::IJFH) = get_Nh_dynamic(data)
+Base.length(data::IJHF) = get_Nh_dynamic(data)
 
-Base.@propagate_inbounds slab(data::IJFH, h::Integer) = slab(data, 1, h)
+Base.@propagate_inbounds slab(data::IJHF, h::Integer) = slab(data, 1, h)
 
-@inline function slab(data::IJFH{S, Nij}, v::Integer, h::Integer) where {S, Nij}
+@inline function slab(data::IJHF{S, Nij}, v::Integer, h::Integer) where {S, Nij}
     @boundscheck (v >= 1 && 1 <= h <= get_Nh_dynamic(data)) ||
                  throw(BoundsError(data, (v, h)))
-    dataview = @inbounds view(parent(data), :, :, :, h)
+    dataview = @inbounds view(parent(data), :, :, h, :)
     IJF{S, Nij}(dataview)
 end
 
-@inline function column(data::IJFH{S, Nij}, i, j, h) where {S, Nij}
+@inline function column(data::IJHF{S, Nij}, i, j, h) where {S, Nij}
     @boundscheck (
         1 <= j <= Nij && 1 <= i <= Nij && 1 <= h <= get_Nh_dynamic(data)
     ) || throw(BoundsError(data, (i, j, h)))
-    dataview = @inbounds view(parent(data), i, j, :, h)
+    dataview = @inbounds view(parent(data), i, j, h, :)
     DataF{S}(dataview)
 end
 
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
-    data::IJFH{S, Nij},
+    data::IJHF{S, Nij},
 ) where {S, Nij}
     gatherdata = ClimaComms.gather(ctx, parent(data))
     if ClimaComms.iamroot(ctx)
-        IJFH{S, Nij}(gatherdata)
+        IJHF{S, Nij}(gatherdata)
     else
         nothing
     end
@@ -500,8 +500,8 @@ end
 Base.length(data::Data1D) = get_Nh_dynamic(data)
 
 """
-    IFH{S,Ni,Nh,A} <: Data1D{S, Ni}
-    IFH{S,Ni,Nh}(ArrayType)
+    IHF{S,Ni,Nh,A} <: Data1D{S, Ni}
+    IHF{S,Ni,Nh}(ArrayType)
 
 Backing `DataLayout` for 1D spectral element slabs.
 
@@ -509,14 +509,14 @@ Element nodal point (I) data is contiguous for each
 datatype `S` struct field (F), for each 1D mesh element (H).
 
 
-The `ArrayType`-constructor makes a IFH 1D Spectral
+The `ArrayType`-constructor makes a IHF 1D Spectral
 DataLayout given the backing `ArrayType`, quadrature
 degrees of freedom `Ni`, and the number of mesh elements
 `Nh`.
 
-    IFH{S}(ArrayType[, ones | zeros | rand]; Ni, Nh)
+    IHF{S}(ArrayType[, ones | zeros | rand]; Ni, Nh)
 
-The keyword constructor returns a `IFH` given
+The keyword constructor returns a `IHF` given
 the `ArrayType` and (optionally) an initialization
 method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
 and the keywords:
@@ -530,52 +530,52 @@ and the keywords:
     object in a performance-critical section, and if you know
     the type parameters at compile time.
 """
-struct IFH{S, Ni, A} <: Data1D{S, Ni}
+struct IHF{S, Ni, A} <: Data1D{S, Ni}
     array::A
 end
 
-function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
+function IHF{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Ni
-    @assert size(array, 2) == typesize(T, S)
-    IFH{S, Ni, typeof(array)}(array)
+    @assert size(array, 3) == typesize(T, S)
+    IHF{S, Ni, typeof(array)}(array)
 end
 
-function IFH{S}(
+function IHF{S}(
     ::Type{ArrayType},
     fun = similar;
     Ni::Integer,
     Nh::Integer,
 ) where {S, ArrayType}
     Nf = typesize(eltype(ArrayType), S)
-    array = similar(ArrayType, Ni, Nf, Nh)
+    array = similar(ArrayType, Ni, Nh, Nf)
     maybe_populate!(array, fun)
-    IFH{S, Ni}(array)
+    IHF{S, Ni}(array)
 end
 
-function IFH{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
+function IHF{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
     T = eltype(ArrayType)
-    IFH{S, Ni}(ArrayType(undef, Ni, typesize(T, S), Nh))
+    IHF{S, Ni}(ArrayType(undef, Ni, Nh, typesize(T, S)))
 end
 
-@inline universal_size(data::IFH{S, Ni}) where {S, Ni} =
+@inline universal_size(data::IHF{S, Ni}) where {S, Ni} =
     (Ni, 1, 1, 1, get_Nh_dynamic(data))
 
-@inline function slab(data::IFH{S, Ni}, h::Integer) where {S, Ni}
+@inline function slab(data::IHF{S, Ni}, h::Integer) where {S, Ni}
     @boundscheck (1 <= h <= get_Nh_dynamic(data)) ||
                  throw(BoundsError(data, (h,)))
-    dataview = @inbounds view(parent(data), :, :, h)
+    dataview = @inbounds view(parent(data), :, h, :)
     IF{S, Ni}(dataview)
 end
-Base.@propagate_inbounds slab(data::IFH, v::Integer, h::Integer) = slab(data, h)
+Base.@propagate_inbounds slab(data::IHF, v::Integer, h::Integer) = slab(data, h)
 
-@inline function column(data::IFH{S, Ni}, i, h) where {S, Ni}
+@inline function column(data::IHF{S, Ni}, i, h) where {S, Ni}
     @boundscheck (1 <= h <= get_Nh_dynamic(data) && 1 <= i <= Ni) ||
                  throw(BoundsError(data, (i, h)))
-    dataview = @inbounds view(parent(data), i, :, h)
+    dataview = @inbounds view(parent(data), i, h, :)
     DataF{S}(dataview)
 end
-Base.@propagate_inbounds column(data::IFH{S, Ni}, i, j, h) where {S, Ni} =
+Base.@propagate_inbounds column(data::IHF{S, Ni}, i, j, h) where {S, Ni} =
     column(data, i, h)
 
 # ======================
@@ -905,16 +905,16 @@ end
 # ======================
 
 """
-    VIJFH{S, Nij, A} <: Data2DX{S, Nij}
+    VIJHF{S, Nij, A} <: Data2DX{S, Nij}
 
 Backing `DataLayout` for 2D spectral element slab + extruded 1D FV column data.
 
 Column levels (V) are contiguous for every element nodal point (I, J)
 for each `S` datatype struct field (F), for each 2D mesh element slab (H).
 
-    VIJFH{S}(ArrayType[, ones | zeros | rand]; Nv, Nij, Nh)
+    VIJHF{S}(ArrayType[, ones | zeros | rand]; Nv, Nij, Nh)
 
-The keyword constructor returns a `VIJFH` given
+The keyword constructor returns a `VIJHF` given
 the `ArrayType` and (optionally) an initialization
 method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
 and the keywords:
@@ -929,19 +929,19 @@ and the keywords:
     object in a performance-critical section, and if you know
     the type parameters at compile time.
 """
-struct VIJFH{S, Nv, Nij, A} <: Data2DX{S, Nv, Nij}
+struct VIJHF{S, Nv, Nij, A} <: Data2DX{S, Nv, Nij}
     array::A
 end
 
-function VIJFH{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
+function VIJHF{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
-    @assert size(array, 4) == typesize(T, S)
-    VIJFH{S, Nv, Nij, typeof(array)}(array)
+    @assert size(array, 5) == typesize(T, S)
+    VIJHF{S, Nv, Nij, typeof(array)}(array)
 end
 
-function VIJFH{S}(
+function VIJHF{S}(
     ::Type{ArrayType},
     fun = similar;
     Nv::Integer,
@@ -949,20 +949,20 @@ function VIJFH{S}(
     Nh::Integer,
 ) where {S, ArrayType}
     Nf = typesize(eltype(ArrayType), S)
-    array = similar(ArrayType, Nv, Nij, Nij, Nf, Nh)
+    array = similar(ArrayType, Nv, Nij, Nij, Nh, Nf)
     maybe_populate!(array, fun)
-    VIJFH{S, Nv, Nij, typeof(array)}(array)
+    VIJHF{S, Nv, Nij, typeof(array)}(array)
 end
 
-nlevels(::VIJFH{S, Nv}) where {S, Nv} = Nv
+nlevels(::VIJHF{S, Nv}) where {S, Nv} = Nv
 
-@inline universal_size(data::VIJFH{<:Any, Nv, Nij}) where {Nv, Nij} =
+@inline universal_size(data::VIJHF{<:Any, Nv, Nij}) where {Nv, Nij} =
     (Nij, Nij, 1, Nv, get_Nh_dynamic(data))
 
-Base.length(data::VIJFH) = get_Nv(data) * get_Nh_dynamic(data)
+Base.length(data::VIJHF) = get_Nv(data) * get_Nh_dynamic(data)
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function slab(data::VIJFH{S, Nv, Nij}, v, h) where {S, Nv, Nij}
+@inline function slab(data::VIJHF{S, Nv, Nij}, v, h) where {S, Nv, Nij}
     array = parent(data)
     @boundscheck (1 <= v <= Nv && 1 <= h <= get_Nh_dynamic(data)) ||
                  throw(BoundsError(data, (v, h)))
@@ -972,14 +972,14 @@ Base.length(data::VIJFH) = get_Nv(data) * get_Nh_dynamic(data)
         v,
         Base.Slice(Base.OneTo(Nij)),
         Base.Slice(Base.OneTo(Nij)),
-        Base.Slice(Base.OneTo(Nf)),
         h,
+        Base.Slice(Base.OneTo(Nf)),
     )
     IJF{S, Nij}(dataview)
 end
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function column(data::VIJFH{S, Nv, Nij}, i, j, h) where {S, Nv, Nij}
+@inline function column(data::VIJHF{S, Nv, Nij}, i, j, h) where {S, Nv, Nij}
     array = parent(data)
     @boundscheck (
         1 <= i <= Nij && 1 <= j <= Nij && 1 <= h <= get_Nh_dynamic(data)
@@ -987,25 +987,25 @@ end
     Nf = ncomponents(data)
     dataview = @inbounds SubArray(
         array,
-        (Base.Slice(Base.OneTo(Nv)), i, j, Base.Slice(Base.OneTo(Nf)), h),
+        (Base.Slice(Base.OneTo(Nv)), i, j, h, Base.Slice(Base.OneTo(Nf))),
     )
     VF{S, Nv}(dataview)
 end
 
-@inline function level(data::VIJFH{S, Nv, Nij}, v) where {S, Nv, Nij}
+@inline function level(data::VIJHF{S, Nv, Nij}, v) where {S, Nv, Nij}
     array = parent(data)
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
     dataview = @inbounds view(array, v, :, :, :, :)
-    IJFH{S, Nij}(dataview)
+    IJHF{S, Nij}(dataview)
 end
 
 function gather(
     ctx::ClimaComms.AbstractCommsContext,
-    data::VIJFH{S, Nv, Nij},
+    data::VIJHF{S, Nv, Nij},
 ) where {S, Nv, Nij}
     gatherdata = ClimaComms.gather(ctx, parent(data))
     if ClimaComms.iamroot(ctx)
-        VIJFH{S, Nv, Nij}(gatherdata)
+        VIJHF{S, Nv, Nij}(gatherdata)
     else
         nothing
     end
@@ -1016,16 +1016,16 @@ end
 # ======================
 
 """
-    VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
+    VIHF{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
 
 Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 
 Column levels (V) are contiguous for every element nodal point (I)
 for each datatype `S` struct field (F), for each 1D mesh element slab (H).
 
-    VIFH{S}(ArrayType[, ones | zeros | rand]; Nv, Ni, Nh)
+    VIHF{S}(ArrayType[, ones | zeros | rand]; Nv, Ni, Nh)
 
-The keyword constructor returns a `VIFH` given
+The keyword constructor returns a `VIHF` given
 the `ArrayType` and (optionally) an initialization
 method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
 and the keywords:
@@ -1040,19 +1040,19 @@ and the keywords:
     object in a performance-critical section, and if you know
     the type parameters at compile time.
 """
-struct VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
+struct VIHF{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
     array::A
 end
 
-function VIFH{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
+function VIHF{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     check_basetype(T, S)
     @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
-    @assert size(array, 3) == typesize(T, S)
-    VIFH{S, Nv, Ni, typeof(array)}(array)
+    @assert size(array, 4) == typesize(T, S)
+    VIHF{S, Nv, Ni, typeof(array)}(array)
 end
 
-function VIFH{S}(
+function VIHF{S}(
     ::Type{ArrayType},
     fun = similar;
     Nv::Integer,
@@ -1060,51 +1060,51 @@ function VIFH{S}(
     Nh::Integer,
 ) where {S, ArrayType}
     Nf = typesize(eltype(ArrayType), S)
-    array = similar(ArrayType, Nv, Ni, Nf, Nh)
+    array = similar(ArrayType, Nv, Ni, Nh, Nf)
     maybe_populate!(array, fun)
-    VIFH{S, Nv, Ni, typeof(array)}(array)
+    VIHF{S, Nv, Ni, typeof(array)}(array)
 end
 
-nlevels(::VIFH{S, Nv}) where {S, Nv} = Nv
+nlevels(::VIHF{S, Nv}) where {S, Nv} = Nv
 
-@inline universal_size(data::VIFH{<:Any, Nv, Ni}) where {Nv, Ni} =
+@inline universal_size(data::VIHF{<:Any, Nv, Ni}) where {Nv, Ni} =
     (Ni, 1, 1, Nv, get_Nh_dynamic(data))
 
-Base.length(data::VIFH) = nlevels(data) * get_Nh_dynamic(data)
+Base.length(data::VIHF) = nlevels(data) * get_Nh_dynamic(data)
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function slab(data::VIFH{S, Nv, Ni}, v, h) where {S, Nv, Ni}
+@inline function slab(data::VIHF{S, Nv, Ni}, v, h) where {S, Nv, Ni}
     array = parent(data)
     @boundscheck (1 <= v <= Nv && 1 <= h <= get_Nh_dynamic(data)) ||
                  throw(BoundsError(data, (v, h)))
     Nf = ncomponents(data)
     dataview = @inbounds SubArray(
         array,
-        (v, Base.Slice(Base.OneTo(Ni)), Base.Slice(Base.OneTo(Nf)), h),
+        (v, Base.Slice(Base.OneTo(Ni)), h, Base.Slice(Base.OneTo(Nf))),
     )
     IF{S, Ni}(dataview)
 end
 
-Base.@propagate_inbounds column(data::VIFH, i, h) = column(data, i, 1, h)
+Base.@propagate_inbounds column(data::VIHF, i, h) = column(data, i, 1, h)
 
 # Note: construct the subarray view directly as optimizer fails in Base.to_indices (v1.7)
-@inline function column(data::VIFH{S, Nv, Ni}, i, j, h) where {S, Nv, Ni}
+@inline function column(data::VIHF{S, Nv, Ni}, i, j, h) where {S, Nv, Ni}
     array = parent(data)
     @boundscheck (1 <= i <= Ni && j == 1 && 1 <= h <= get_Nh_dynamic(data)) ||
                  throw(BoundsError(data, (i, j, h)))
     Nf = ncomponents(data)
     dataview = @inbounds SubArray(
         array,
-        (Base.Slice(Base.OneTo(Nv)), i, Base.Slice(Base.OneTo(Nf)), h),
+        (Base.Slice(Base.OneTo(Nv)), i, h, Base.Slice(Base.OneTo(Nf))),
     )
     VF{S, Nv}(dataview)
 end
 
-@inline function level(data::VIFH{S, Nv, Nij}, v) where {S, Nv, Nij}
+@inline function level(data::VIHF{S, Nv, Nij}, v) where {S, Nv, Nij}
     array = parent(data)
     @boundscheck (1 <= v <= Nv) || throw(BoundsError(data, (v,)))
     dataview = @inbounds view(array, v, :, :, :)
-    IFH{S, Nij}(dataview)
+    IHF{S, Nij}(dataview)
 end
 
 # =========================================
@@ -1246,10 +1246,10 @@ empty_kernel_stats() = empty_kernel_stats(ClimaComms.device())
 
 #! format: off
 @inline get_Nij(::IJKFVH{S, Nij}) where {S, Nij} = Nij
-@inline get_Nij(::IJFH{S, Nij}) where {S, Nij} = Nij
-@inline get_Nij(::VIJFH{S, Nv, Nij}) where {S, Nv, Nij} = Nij
-@inline get_Nij(::VIFH{S, Nv, Nij}) where {S, Nv, Nij} = Nij
-@inline get_Nij(::IFH{S, Nij}) where {S, Nij} = Nij
+@inline get_Nij(::IJHF{S, Nij}) where {S, Nij} = Nij
+@inline get_Nij(::VIJHF{S, Nv, Nij}) where {S, Nv, Nij} = Nij
+@inline get_Nij(::VIHF{S, Nv, Nij}) where {S, Nv, Nij} = Nij
+@inline get_Nij(::IHF{S, Nij}) where {S, Nij} = Nij
 @inline get_Nij(::IJF{S, Nij}) where {S, Nij} = Nij
 @inline get_Nij(::IF{S, Nij}) where {S, Nij} = Nij
 
@@ -1265,24 +1265,24 @@ code, when reconstructing new datalayouts with new
 type parameters.
 """
 @inline field_dim(::IJKFVHSingleton) = 4
-@inline field_dim(::IJFHSingleton) = 3
-@inline field_dim(::IFHSingleton) = 2
+@inline field_dim(::IJHFSingleton) = 4
+@inline field_dim(::IHFSingleton) = 3
 @inline field_dim(::DataFSingleton) = 1
 @inline field_dim(::IJFSingleton) = 3
 @inline field_dim(::IFSingleton) = 2
 @inline field_dim(::VFSingleton) = 2
-@inline field_dim(::VIJFHSingleton) = 4
-@inline field_dim(::VIFHSingleton) = 3
+@inline field_dim(::VIJHFSingleton) = 5
+@inline field_dim(::VIHFSingleton) = 4
 
 @inline field_dim(::Type{IJKFVH}) = 4
-@inline field_dim(::Type{IJFH}) = 3
-@inline field_dim(::Type{IFH}) = 2
+@inline field_dim(::Type{IJHF}) = 4
+@inline field_dim(::Type{IHF}) = 3
 @inline field_dim(::Type{DataF}) = 1
 @inline field_dim(::Type{IJF}) = 3
 @inline field_dim(::Type{IF}) = 2
 @inline field_dim(::Type{VF}) = 2
-@inline field_dim(::Type{VIJFH}) = 4
-@inline field_dim(::Type{VIFH}) = 3
+@inline field_dim(::Type{VIJHF}) = 5
+@inline field_dim(::Type{VIHF}) = 4
 
 """
     h_dim(::AbstractDataSingleton)
@@ -1296,27 +1296,27 @@ code, when reconstructing new datalayouts with new
 type parameters.
 """
 @inline h_dim(::IJKFVHSingleton) = 5
-@inline h_dim(::IJFHSingleton) = 4
-@inline h_dim(::IFHSingleton) = 3
-@inline h_dim(::VIJFHSingleton) = 5
-@inline h_dim(::VIFHSingleton) = 4
+@inline h_dim(::IJHFSingleton) = 3
+@inline h_dim(::IHFSingleton) = 2
+@inline h_dim(::VIJHFSingleton) = 4
+@inline h_dim(::VIHFSingleton) = 3
 
 @inline to_data_specific(::VFSingleton, I::Tuple) = (I[4], 1)
 @inline to_data_specific(::IFSingleton, I::Tuple) = (I[1], 1)
 @inline to_data_specific(::IJFSingleton, I::Tuple) = (I[1], I[2], 1)
-@inline to_data_specific(::IJFHSingleton, I::Tuple) = (I[1], I[2], 1, I[5])
-@inline to_data_specific(::IFHSingleton, I::Tuple) = (I[1], 1, I[5])
-@inline to_data_specific(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
-@inline to_data_specific(::VIFHSingleton, I::Tuple) = (I[4], I[1], 1, I[5])
+@inline to_data_specific(::IJHFSingleton, I::Tuple) = (I[1], I[2], I[5], 1)
+@inline to_data_specific(::IHFSingleton, I::Tuple) = (I[1], I[5], 1)
+@inline to_data_specific(::VIJHFSingleton, I::Tuple) = (I[4], I[1], I[2], I[5], 1)
+@inline to_data_specific(::VIHFSingleton, I::Tuple) = (I[4], I[1], I[5], 1)
 
 @inline to_data_specific_field(::DataFSingleton, I::Tuple) = (I[3],)
 @inline to_data_specific_field(::VFSingleton, I::Tuple) = (I[4], I[3])
 @inline to_data_specific_field(::IFSingleton, I::Tuple) = (I[1], I[3])
 @inline to_data_specific_field(::IJFSingleton, I::Tuple) = (I[1], I[2], I[3])
-@inline to_data_specific_field(::IJFHSingleton, I::Tuple) = (I[1], I[2], I[3], I[5])
-@inline to_data_specific_field(::IFHSingleton, I::Tuple) = (I[1], I[3], I[5])
-@inline to_data_specific_field(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], I[3], I[5])
-@inline to_data_specific_field(::VIFHSingleton, I::Tuple) = (I[4], I[1], I[3], I[5])
+@inline to_data_specific_field(::IJHFSingleton, I::Tuple) = (I[1], I[2], I[5], I[3])
+@inline to_data_specific_field(::IHFSingleton, I::Tuple) = (I[1], I[5], I[3])
+@inline to_data_specific_field(::VIJHFSingleton, I::Tuple) = (I[4], I[1], I[2], I[5], I[3])
+@inline to_data_specific_field(::VIHFSingleton, I::Tuple) = (I[4], I[1], I[5], I[3])
 
 """
     bounds_condition(data::AbstractData, I::Tuple)
@@ -1344,14 +1344,14 @@ type parameters.
 """
 @inline type_params(data::AbstractData) = type_params(typeof(data))
 @inline type_params(::Type{IJKFVH{S, Nij, Nk, Nv, A}}) where {S, Nij, Nk, Nv, A} = (S, Nij, Nk, Nv)
-@inline type_params(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} = (S, Nij)
-@inline type_params(::Type{IFH{S, Ni, A}}) where {S, Ni, A} = (S, Ni)
+@inline type_params(::Type{IJHF{S, Nij, A}}) where {S, Nij, A} = (S, Nij)
+@inline type_params(::Type{IHF{S, Ni, A}}) where {S, Ni, A} = (S, Ni)
 @inline type_params(::Type{DataF{S, A}}) where {S, A} = (S,)
 @inline type_params(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = (S, Nij)
 @inline type_params(::Type{IF{S, Ni, A}}) where {S, Ni, A} = (S, Ni)
 @inline type_params(::Type{VF{S, Nv, A}}) where {S, Nv, A} = (S, Nv)
-@inline type_params(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = (S, Nv, Nij)
-@inline type_params(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = (S, Nv, Ni)
+@inline type_params(::Type{VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = (S, Nv, Nij)
+@inline type_params(::Type{VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = (S, Nv, Ni)
 @inline type_params(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = (S, Nij)
 @inline type_params(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = (S, n1, Ni)
 
@@ -1369,14 +1369,14 @@ code, when reconstructing new datalayouts with new
 type parameters.
 """
 @inline union_all(::IJKFVHSingleton) = IJKFVH
-@inline union_all(::IJFHSingleton) = IJFH
-@inline union_all(::IFHSingleton) = IFH
+@inline union_all(::IJHFSingleton) = IJHF
+@inline union_all(::IHFSingleton) = IHF
 @inline union_all(::DataFSingleton) = DataF
 @inline union_all(::IJFSingleton) = IJF
 @inline union_all(::IFSingleton) = IF
 @inline union_all(::VFSingleton) = VF
-@inline union_all(::VIJFHSingleton) = VIJFH
-@inline union_all(::VIFHSingleton) = VIFH
+@inline union_all(::VIJHFSingleton) = VIJHF
+@inline union_all(::VIHFSingleton) = VIHF
 @inline union_all(::IH1JH2Singleton) = IH1JH2
 @inline union_all(::IV1JH2Singleton) = IV1JH2
 
@@ -1394,14 +1394,14 @@ type parameters.
 """
 @inline array_size(data::AbstractData, i::Integer) = array_size(data)[i]
 @inline array_size(data::IJKFVH{S, Nij, Nk, Nv}) where {S, Nij, Nk, Nv} = (Nij, Nij, Nk, 1, Nv, get_Nh_dynamic(data))
-@inline array_size(data::IJFH{S, Nij}) where {S, Nij} = (Nij, Nij, 1, get_Nh_dynamic(data))
-@inline array_size(data::IFH{S, Ni}) where {S, Ni} = (Ni, 1, get_Nh_dynamic(data))
+@inline array_size(data::IJHF{S, Nij}) where {S, Nij} = (Nij, Nij, get_Nh_dynamic(data), 1)
+@inline array_size(data::IHF{S, Ni}) where {S, Ni} = (Ni, get_Nh_dynamic(data), 1)
 @inline array_size(data::DataF{S}) where {S} = (1,)
 @inline array_size(data::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, 1)
 @inline array_size(data::IF{S, Ni}) where {S, Ni} = (Ni, 1)
 @inline array_size(data::VF{S, Nv}) where {S, Nv} = (Nv, 1)
-@inline array_size(data::VIJFH{S, Nv, Nij}) where {S, Nv, Nij} = (Nv, Nij, Nij, 1, get_Nh_dynamic(data))
-@inline array_size(data::VIFH{S, Nv, Ni}) where {S, Nv, Ni} = (Nv, Ni, 1, get_Nh_dynamic(data))
+@inline array_size(data::VIJHF{S, Nv, Nij}) where {S, Nv, Nij} = (Nv, Nij, Nij, get_Nh_dynamic(data), 1)
+@inline array_size(data::VIHF{S, Nv, Ni}) where {S, Nv, Ni} = (Nv, Ni, get_Nh_dynamic(data), 1)
 
 """
     farray_size(data::AbstractData)
@@ -1416,14 +1416,14 @@ type parameters.
 """
 @inline farray_size(data::AbstractData, i::Integer) = farray_size(data)[i]
 @inline farray_size(data::IJKFVH{S, Nij, Nk, Nv}) where {S, Nij, Nk, Nv} = (Nij, Nij, Nk, ncomponents(data), Nv, get_Nh_dynamic(data))
-@inline farray_size(data::IJFH{S, Nij}) where {S, Nij} = (Nij, Nij, ncomponents(data), get_Nh_dynamic(data))
-@inline farray_size(data::IFH{S, Ni}) where {S, Ni} = (Ni, ncomponents(data), get_Nh_dynamic(data))
+@inline farray_size(data::IJHF{S, Nij}) where {S, Nij} = (Nij, Nij, get_Nh_dynamic(data), ncomponents(data))
+@inline farray_size(data::IHF{S, Ni}) where {S, Ni} = (Ni, get_Nh_dynamic(data), ncomponents(data))
 @inline farray_size(data::DataF{S}) where {S} = (ncomponents(data),)
 @inline farray_size(data::IJF{S, Nij}) where {S, Nij} = (Nij, Nij, ncomponents(data))
 @inline farray_size(data::IF{S, Ni}) where {S, Ni} = (Ni, ncomponents(data))
 @inline farray_size(data::VF{S, Nv}) where {S, Nv} = (Nv, ncomponents(data))
-@inline farray_size(data::VIJFH{S, Nv, Nij}) where {S, Nv, Nij} = (Nv, Nij, Nij, ncomponents(data), get_Nh_dynamic(data))
-@inline farray_size(data::VIFH{S, Nv, Ni}) where {S, Nv, Ni} = (Nv, Ni, ncomponents(data), get_Nh_dynamic(data))
+@inline farray_size(data::VIJHF{S, Nv, Nij}) where {S, Nv, Nij} = (Nv, Nij, Nij, get_Nh_dynamic(data), ncomponents(data))
+@inline farray_size(data::VIHF{S, Nv, Ni}) where {S, Nv, Ni} = (Nv, Ni, get_Nh_dynamic(data), ncomponents(data))
 
 # Keep in sync with definition(s) in libs.
 @inline slab_index(i::T, j::T) where {T} = CartesianIndex(i, j, T(1), T(1), T(1))
@@ -1444,14 +1444,14 @@ type parameters.
 @inline parent_array_type(data::AbstractData) = parent_array_type(typeof(data))
 # Equivalent to:
 # @generated parent_array_type(::Type{A}) where {A <: AbstractData} = Tuple(A.parameters)[end]
-@inline parent_array_type(::Type{IFH{S, Ni, A}}) where {S, Ni, A} = A
+@inline parent_array_type(::Type{IHF{S, Ni, A}}) where {S, Ni, A} = A
 @inline parent_array_type(::Type{DataF{S, A}}) where {S, A} = A
 @inline parent_array_type(::Type{IJF{S, Nij, A}}) where {S, Nij, A} = A
 @inline parent_array_type(::Type{IF{S, Ni, A}}) where {S, Ni, A} = A
 @inline parent_array_type(::Type{VF{S, Nv, A}}) where {S, Nv, A} = A
-@inline parent_array_type(::Type{VIJFH{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = A
-@inline parent_array_type(::Type{VIFH{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = A
-@inline parent_array_type(::Type{IJFH{S, Nij, A}}) where {S, Nij, A} = A
+@inline parent_array_type(::Type{VIJHF{S, Nv, Nij, A}}) where {S, Nv, Nij, A} = A
+@inline parent_array_type(::Type{VIHF{S, Nv, Ni, A}}) where {S, Nv, Ni, A} = A
+@inline parent_array_type(::Type{IJHF{S, Nij, A}}) where {S, Nij, A} = A
 @inline parent_array_type(::Type{IH1JH2{S, Nij, A}}) where {S, Nij, A} = A
 @inline parent_array_type(::Type{IV1JH2{S, n1, Ni, A}}) where {S, n1, Ni, A} = A
 @inline parent_array_type(::Type{IJKFVH{S, Nij, Nk, Nv, A}}) where {S, Nij, Nk, Nv, A} = A
@@ -1463,7 +1463,7 @@ Base.ndims(::Type{T}) where {T <: AbstractData} =
     Base.ndims(parent_array_type(T))
 
 @inline function Base.getindex(
-    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    data::Union{IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
     I::CartesianIndex,
 )
     @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
@@ -1477,7 +1477,7 @@ Base.ndims(::Type{T}) where {T <: AbstractData} =
 end
 
 @inline function Base.setindex!(
-    data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    data::Union{IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
     val,
     I::CartesianIndex,
 )
@@ -1524,7 +1524,7 @@ The universal index order is `CartesianIndex(i, j, f, v, h)`, see
 see the notation in [`DataLayouts`](@ref) for more information.
 """
 @inline function getindex_field(
-    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    data::Union{DataF, IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
     I::CartesianIndex, # universal index
 )
     @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
@@ -1544,7 +1544,7 @@ The universal index order is `CartesianIndex(i, j, f, v, h)`, see
 see the notation in [`DataLayouts`](@ref) for more information.
 """
 @inline function setindex_field!(
-    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    data::Union{DataF, IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
     val::Real,
     I::CartesianIndex, # universal index
 )
@@ -1561,7 +1561,7 @@ if VERSION ≥ v"1.11.0-beta"
     # TODO: can we remove this? It's not needed for Julia 1.10,
     #       but seems needed in Julia 1.11.
     @inline Base.getindex(
-        data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+        data::Union{IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
         I::Vararg{Int, N},
     ) where {N} = Base.getindex(
         data,
@@ -1569,7 +1569,7 @@ if VERSION ≥ v"1.11.0-beta"
     )
 
     @inline Base.setindex!(
-        data::Union{IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+        data::Union{IJF, IJHF, IHF, VIJHF, VIHF, VF, IF},
         val,
         I::Vararg{Int, N},
     ) where {N} = Base.setindex!(
@@ -1609,9 +1609,9 @@ Also, this assumes that `eltype(data) <: Real`.
 """
 function data2array end
 
-data2array(data::Union{IF, IFH}) = reshape(parent(data), :)
-data2array(data::Union{IJF, IJFH}) = reshape(parent(data), :)
-data2array(data::Union{VF{S, Nv}, VIFH{S, Nv}, VIJFH{S, Nv}}) where {S, Nv} =
+data2array(data::Union{IF, IHF}) = reshape(parent(data), :)
+data2array(data::Union{IJF, IJHF}) = reshape(parent(data), :)
+data2array(data::Union{VF{S, Nv}, VIHF{S, Nv}, VIJHF{S, Nv}}) where {S, Nv} =
     reshape(parent(data), Nv, :)
 
 """
@@ -1642,26 +1642,26 @@ device_dispatch(x::SArray) = ToCPU()
 device_dispatch(x::MArray) = ToCPU()
 
 @inline singleton(@nospecialize(::IJKFVH)) = IJKFVHSingleton()
-@inline singleton(@nospecialize(::IJFH)) = IJFHSingleton()
-@inline singleton(@nospecialize(::IFH)) = IFHSingleton()
+@inline singleton(@nospecialize(::IJHF)) = IJHFSingleton()
+@inline singleton(@nospecialize(::IHF)) = IHFSingleton()
 @inline singleton(@nospecialize(::DataF)) = DataFSingleton()
 @inline singleton(@nospecialize(::IJF)) = IJFSingleton()
 @inline singleton(@nospecialize(::IF)) = IFSingleton()
 @inline singleton(@nospecialize(::VF)) = VFSingleton()
-@inline singleton(@nospecialize(::VIJFH)) = VIJFHSingleton()
-@inline singleton(@nospecialize(::VIFH)) = VIFHSingleton()
+@inline singleton(@nospecialize(::VIJHF)) = VIJHFSingleton()
+@inline singleton(@nospecialize(::VIHF)) = VIHFSingleton()
 @inline singleton(@nospecialize(::IH1JH2)) = IH1JH2Singleton()
 @inline singleton(@nospecialize(::IV1JH2)) = IV1JH2Singleton()
 
 @inline singleton(::Type{IJKFVH}) = IJKFVHSingleton()
-@inline singleton(::Type{IJFH}) = IJFHSingleton()
-@inline singleton(::Type{IFH}) = IFHSingleton()
+@inline singleton(::Type{IJHF}) = IJHFSingleton()
+@inline singleton(::Type{IHF}) = IHFSingleton()
 @inline singleton(::Type{DataF}) = DataFSingleton()
 @inline singleton(::Type{IJF}) = IJFSingleton()
 @inline singleton(::Type{IF}) = IFSingleton()
 @inline singleton(::Type{VF}) = VFSingleton()
-@inline singleton(::Type{VIJFH}) = VIJFHSingleton()
-@inline singleton(::Type{VIFH}) = VIFHSingleton()
+@inline singleton(::Type{VIJHF}) = VIJHFSingleton()
+@inline singleton(::Type{VIHF}) = VIHFSingleton()
 @inline singleton(::Type{IH1JH2}) = IH1JH2Singleton()
 @inline singleton(::Type{IV1JH2}) = IV1JH2Singleton()
 

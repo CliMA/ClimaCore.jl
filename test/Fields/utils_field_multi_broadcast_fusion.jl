@@ -14,7 +14,7 @@ using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH, VF, DataF
+import ClimaCore.DataLayouts: IJHF, VF, DataF
 import ClimaCore.DataLayouts
 import ClimaCore:
     Fields,

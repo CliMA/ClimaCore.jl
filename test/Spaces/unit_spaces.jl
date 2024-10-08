@@ -21,7 +21,7 @@ import ClimaCore:
     DeviceSideContext,
     DeviceSideDevice
 
-import ClimaCore.DataLayouts: IJFH, VF, slab_index
+import ClimaCore.DataLayouts: IJHF, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
@@ -113,7 +113,7 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
     s = DataLayouts.farray_size(Spaces.coordinates_data(c_space))
     z = Fields.coordinate_field(c_space).z
-    @test s == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
+    @test s == (10, 4, 5, 2) # 10V, 4I, 5H, 2F(x,z)
     @test Spaces.local_geometry_type(typeof(f_space)) <: Geometry.LocalGeometry
     @test Spaces.local_geometry_type(typeof(c_space)) <: Geometry.LocalGeometry
 
@@ -220,7 +220,7 @@ end
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
 
     coord_data = Spaces.coordinates_data(space)
-    @test DataLayouts.farray_size(coord_data) == (4, 4, 2, 1)
+    @test DataLayouts.farray_size(coord_data) == (4, 4, 1, 2)
     coord_slab = slab(coord_data, 1)
     @test coord_slab[slab_index(1, 1)] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
     @test coord_slab[slab_index(4, 1)] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
@@ -256,7 +256,7 @@ end
     @test length(boundary_surface_geometries) == 2
     @test keys(boundary_surface_geometries) == (:south, :north)
     @test sum(parent(boundary_surface_geometries.north.sWJ)) ≈ 8
-    @test parent(boundary_surface_geometries.north.normal)[1, :, 1] ≈ [0.0, 1.0]
+    @test parent(boundary_surface_geometries.north.normal)[1, 1, :] ≈ [0.0, 1.0]
 
     point_space = Spaces.column(space, 1, 1, 1)
     @test point_space isa Spaces.PointSpace
@@ -336,7 +336,7 @@ end
     @test size(array) == (4, 4, 2, 4)
 
     Nij = length(points)
-    field = Fields.Field(IJFH{FT, Nij, n1 * n2}(ones(Nij, Nij, 1, n1 * n2)), space)
+    field = Fields.Field(IJHF{FT, Nij, n1 * n2}(ones(Nij, Nij, 1, n1 * n2)), space)
     field_values = Fields.field_values(field)
     Spaces.horizontal_dss!(field)
 
@@ -419,7 +419,7 @@ end
     data[:, :, 1, :] .= 1:Nij
     data[:, :, 2, :] .= (1:Nij)'
     data[:, :, 3, :] .= reshape(1:(n1 * n2), 1, 1, :)
-    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij, n1 * n2}(data), space)
+    field = Fields.Field(IJHF{Tuple{FT, FT, FT}, Nij, n1 * n2}(data), space)
     field_dss = Spaces.horizontal_dss!(copy(field))
     data_dss = parent(field_dss)
 

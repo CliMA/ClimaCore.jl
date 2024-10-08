@@ -29,7 +29,7 @@ end
 
 
 """
-    remap!(target::IJFH{S, Nqt}, R::LinearMap, source::IJFH{S, Nqs})
+    remap!(target::IJHF{S, Nqt}, R::LinearMap, source::IJHF{S, Nqs})
     remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
 
 Applies the remapping `R` to a `source`
@@ -39,9 +39,9 @@ function remap! end
 
 # This version of this function is used for serial remapping
 function remap!(
-    target::IJFH{S, Nqt},
+    target::IJHF{S, Nqt},
     R::LinearMap,
-    source::IJFH{S, Nqs},
+    source::IJHF{S, Nqs},
 ) where {S, Nqt, Nqs}
     fill!(target, zero(eltype(target)))
     Nf = DataLayouts.ncomponents(target)

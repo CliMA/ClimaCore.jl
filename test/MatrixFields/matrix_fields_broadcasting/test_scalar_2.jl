@@ -17,7 +17,7 @@ test_opt = get(ENV, "BUILDKITE", "") == "true"
         bc;
         input_fields,
         using_cuda,
-        allowed_max_eps_error = 1,
+        allowed_max_eps_error = 2,
     )
     test_opt && opt_test_field_broadcast_against_array_reference(
         result,

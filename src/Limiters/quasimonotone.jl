@@ -68,18 +68,18 @@ function QuasiMonotoneLimiter(ρq::Fields.Field; rtol = eps(eltype(parent(ρq)))
 end
 
 function make_q_bounds(
-    ρq::Union{DataLayouts.IFH{S}, DataLayouts.IJFH{S}},
+    ρq::Union{DataLayouts.IHF{S}, DataLayouts.IJHF{S}},
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, _, Nh = size(ρq)
-    return DataLayouts.IFH{S, 2}(similar(parent(ρq), (2, Nf, Nh)))
+    return DataLayouts.IHF{S, 2}(similar(parent(ρq), (2, Nh, Nf)))
 end
 function make_q_bounds(
-    ρq::Union{DataLayouts.VIFH{S}, DataLayouts.VIJFH{S}},
+    ρq::Union{DataLayouts.VIHF{S}, DataLayouts.VIJHF{S}},
 ) where {S}
     Nf = DataLayouts.ncomponents(ρq)
     _, _, _, Nv, Nh = size(ρq)
-    return DataLayouts.VIFH{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nf, Nh)))
+    return DataLayouts.VIHF{S, Nv, 2}(similar(parent(ρq), (Nv, 2, Nh, Nf)))
 end
 
 

@@ -29,9 +29,9 @@ end
 
     data = DataF{S}(ArrayType{FT}, zeros)
     test_fill!(data, 3)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, 3)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, 3)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, 3)
@@ -39,9 +39,9 @@ end
     test_fill!(data, 3)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data, 3)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, 3)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, 3)
 
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(data, 3) # TODO: test
@@ -60,9 +60,9 @@ end
 
     data = DataF{S}(ArrayType{FT}, zeros)
     test_fill!(data, (2, 3))
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, (2, 3))
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, (2, 3))
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, (2, 3))
@@ -70,9 +70,9 @@ end
     test_fill!(data, (2, 3))
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data, (2, 3))
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, (2, 3))
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, (2, 3))
 
     # TODO: test this
@@ -102,9 +102,9 @@ end
     # Rather than using level/slab/column, let's just make views/SubArrays
     # directly so that we can easily test all cases:
 
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data_view(data), (2, 3))
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data_view(data), (2, 3))
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data_view(data), (2, 3))
@@ -112,9 +112,9 @@ end
     test_fill!(data_view(data), (2, 3))
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data_view(data), (2, 3))
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data_view(data), (2, 3))
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data_view(data), (2, 3))
 
     # TODO: test this
@@ -134,9 +134,13 @@ end
         # ReshapedArray, but it works for several cases. Tests when
         # are commented out for cases when Julia Base manages to return
         # a parent-similar array.
+
+        # After moving from FH -> HF, we no longer make
+        # `Base.ReshapedArray`s, because field views
+        # simply return arrays.
         data = data.:2
         array₀ = DataLayouts.data2array(data)
-        @test typeof(array₀) <: Base.ReshapedArray
+        @test typeof(array₀) <: Base.AbstractArray
         rdata = DataLayouts.array2data(array₀, data)
         newdata = DataLayouts.rebuild(
             data,
@@ -149,9 +153,9 @@ end
             ),
         )
         rarray = parent(parent(newdata))
-        @test typeof(rarray) <: Base.ReshapedArray
+        @test typeof(rarray) <: Base.AbstractArray
         subarray = parent(rarray)
-        @test typeof(subarray) <: Base.SubArray
+        @test typeof(subarray) <: Base.AbstractArray
         array = parent(subarray)
         newdata
     end
@@ -163,16 +167,16 @@ end
     Nk = 6
     # directly so that we can easily test all cases:
 
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(reshaped_array(data), 2)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(reshaped_array(data), 2)
     # data = IJF{S}(ArrayType{FT}, zeros; Nij);          test_fill!(reshaped_array(data), 2)
     # data = IF{S}(ArrayType{FT}, zeros; Ni);            test_fill!(reshaped_array(data), 2)
     # data = VF{S}(ArrayType{FT}, zeros; Nv);            test_fill!(reshaped_array(data), 2)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(reshaped_array(data), 2)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(reshaped_array(data), 2)
 
     # TODO: test this

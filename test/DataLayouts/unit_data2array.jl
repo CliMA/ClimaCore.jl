@@ -25,7 +25,7 @@ end
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test is_data2array2data_identity(data)
 
-    data = IFH{FT}(ArrayType{FT}, rand; Ni, Nh)
+    data = IHF{FT}(ArrayType{FT}, rand; Ni, Nh)
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test is_data2array2data_identity(data)
 
@@ -33,15 +33,15 @@ end
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test is_data2array2data_identity(data)
 
-    data = IJFH{FT}(ArrayType{FT}, rand; Nij, Nh)
+    data = IJHF{FT}(ArrayType{FT}, rand; Nij, Nh)
     @test DataLayouts.data2array(data) == reshape(parent(data), :)
     @test is_data2array2data_identity(data)
 
-    data = VIFH{FT}(ArrayType{FT}, rand; Nv, Ni, Nh)
+    data = VIHF{FT}(ArrayType{FT}, rand; Nv, Ni, Nh)
     @test DataLayouts.data2array(data) == reshape(parent(data), Nv, :)
     @test is_data2array2data_identity(data)
 
-    data = VIJFH{FT}(ArrayType{FT}, rand; Nv, Nij, Nh)
+    data = VIJHF{FT}(ArrayType{FT}, rand; Nv, Nij, Nh)
     @test DataLayouts.data2array(data) == reshape(parent(data), Nv, :)
     @test is_data2array2data_identity(data)
 end

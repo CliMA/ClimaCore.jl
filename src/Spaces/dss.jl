@@ -20,14 +20,14 @@ perimeter(space::AbstractSpectralElementSpace) = Topologies.Perimeter2D(
 
 """
     create_dss_buffer(
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
         hspace::AbstractSpectralElementSpace,
     )
 
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     hspace::SpectralElementSpace2D,
 )
     create_dss_buffer(
@@ -39,7 +39,7 @@ function create_dss_buffer(
 end
 
 function create_dss_buffer(
-    data::Union{DataLayouts.IFH, DataLayouts.VIFH},
+    data::Union{DataLayouts.IHF, DataLayouts.VIHF},
     hspace::SpectralElementSpace1D,
 )
     nothing
@@ -48,10 +48,10 @@ end
 """
     function weighted_dss!(
         data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
+            DataLayouts.IHF,
+            DataLayouts.VIHF,
+            DataLayouts.IJHF,
+            DataLayouts.VIJHF,
         },
         space::Union{
             AbstractSpectralElementSpace,
@@ -72,10 +72,10 @@ It comprises of the following steps:
 """
 function weighted_dss!(
     data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
+        DataLayouts.IHF,
+        DataLayouts.VIHF,
+        DataLayouts.IJHF,
+        DataLayouts.VIJHF,
     },
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     dss_buffer::Union{DSSBuffer, Nothing},
@@ -92,7 +92,7 @@ function weighted_dss_prepare!(data, space, dss_buffer::Nothing)
 end
 
 function weighted_dss_prepare!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     space::Union{
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
@@ -127,10 +127,10 @@ cuda_synchronize(device::ClimaComms.AbstractDevice; kwargs...) = nothing
 """
     weighted_dss_start!(
         data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
+            DataLayouts.IHF,
+            DataLayouts.VIHF,
+            DataLayouts.IJHF,
+            DataLayouts.VIJHF,
         },
         space::Union{
             AbstractSpectralElementSpace,
@@ -155,7 +155,7 @@ representative ghost vertices which store result of "ghost local" DSS are loaded
 4). Start DSS communication with neighboring processes
 """
 function weighted_dss_start!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     space::Union{
         Spaces.SpectralElementSpace2D,
         Spaces.ExtrudedFiniteDifferenceSpace,
@@ -175,10 +175,10 @@ weighted_dss_start!(data, space, dss_buffer::Nothing) = nothing
 """
     weighted_dss_internal!(
         data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
+            DataLayouts.IHF,
+            DataLayouts.VIHF,
+            DataLayouts.IJHF,
+            DataLayouts.VIJHF,
         },
         space::Union{
             AbstractSpectralElementSpace,
@@ -196,10 +196,10 @@ and perimeter elements to facilitate overlapping of communication with computati
 """
 weighted_dss_internal!(
     data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
+        DataLayouts.IHF,
+        DataLayouts.VIHF,
+        DataLayouts.IJHF,
+        DataLayouts.VIJHF,
     },
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     dss_buffer::Union{DSSBuffer, Nothing},
@@ -208,10 +208,10 @@ weighted_dss_internal!(
 
 function weighted_dss_internal!(
     data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
+        DataLayouts.IHF,
+        DataLayouts.VIHF,
+        DataLayouts.IJHF,
+        DataLayouts.VIJHF,
     },
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     hspace::AbstractSpectralElementSpace,
@@ -259,10 +259,10 @@ end
 """
     weighted_dss_ghost!(
         data::Union{
-            DataLayouts.IFH,
-            DataLayouts.VIFH,
-            DataLayouts.IJFH,
-            DataLayouts.VIJFH,
+            DataLayouts.IHF,
+            DataLayouts.VIHF,
+            DataLayouts.IJHF,
+            DataLayouts.VIJHF,
         },
         space::Union{
             AbstractSpectralElementSpace,
@@ -284,10 +284,10 @@ This transforms the DSS'd local vectors back to Covariant12 vectors, and copies 
 """
 weighted_dss_ghost!(
     data::Union{
-        DataLayouts.IFH,
-        DataLayouts.VIFH,
-        DataLayouts.IJFH,
-        DataLayouts.VIJFH,
+        DataLayouts.IHF,
+        DataLayouts.VIHF,
+        DataLayouts.IJHF,
+        DataLayouts.VIJHF,
     },
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     dss_buffer::Union{DSSBuffer, Nothing},
@@ -296,7 +296,7 @@ weighted_dss_ghost!(
 
 
 function weighted_dss_ghost!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     space::Union{AbstractSpectralElementSpace, ExtrudedFiniteDifferenceSpace},
     hspace::SpectralElementSpace2D,
     dss_buffer::DSSBuffer,

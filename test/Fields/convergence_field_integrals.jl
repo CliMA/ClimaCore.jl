@@ -12,7 +12,7 @@ using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
-import ClimaCore.DataLayouts: IJFH
+import ClimaCore.DataLayouts: IJHF
 import ClimaCore:
     Fields,
     slab,

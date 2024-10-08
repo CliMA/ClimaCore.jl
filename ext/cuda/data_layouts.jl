@@ -1,8 +1,8 @@
 
 import ClimaCore.DataLayouts: AbstractData
 import ClimaCore.DataLayouts: FusedMultiBroadcast
-import ClimaCore.DataLayouts: IJKFVH, IJFH, VIJFH, VIFH, IFH, IJF, IF, VF, DataF
-import ClimaCore.DataLayouts: IJFHStyle, VIJFHStyle, VFStyle, DataFStyle
+import ClimaCore.DataLayouts: IJKFVH, IJHF, VIJHF, VIHF, IHF, IJF, IF, VF, DataF
+import ClimaCore.DataLayouts: IJHFStyle, VIJHFStyle, VFStyle, DataFStyle
 import ClimaCore.DataLayouts: promote_parent_array_type
 import ClimaCore.DataLayouts: parent_array_type
 import ClimaCore.DataLayouts: isascalar

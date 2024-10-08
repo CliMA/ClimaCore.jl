@@ -23,7 +23,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIJFH{S1, Nv1, Nij},
+    dest1::VIJHF{S1, Nv1, Nij},
     ::ToCPU,
 ) where {S1, Nv1, Nij}
     for (dest, bc) in fmbc.pairs
@@ -40,7 +40,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::IJFH{S, Nij},
+    dest1::IJHF{S, Nij},
     ::ToCPU,
 ) where {S, Nij}
     # copy contiguous columns
@@ -58,7 +58,7 @@ end
 
 function fused_copyto!(
     fmbc::FusedMultiBroadcast,
-    dest1::VIFH{S, Nv1, Ni},
+    dest1::VIHF{S, Nv1, Ni},
     ::ToCPU,
 ) where {S, Nv1, Ni}
     # copy contiguous columns

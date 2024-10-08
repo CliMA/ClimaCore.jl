@@ -6,7 +6,7 @@ using Revise; include(joinpath("test", "Fields", "benchmark_field_multi_broadcas
 =#
 include("utils_field_multi_broadcast_fusion.jl")
 
-@testset "FusedMultiBroadcast VIJFH and VF" begin
+@testset "FusedMultiBroadcast VIJHF and VF" begin
     FT = Float64
     device = ClimaComms.device()
     space = TU.CenterExtrudedFiniteDifferenceSpace(
@@ -37,7 +37,7 @@ include("utils_field_multi_broadcast_fusion.jl")
     nothing
 end
 
-@testset "FusedMultiBroadcast VIFH" begin
+@testset "FusedMultiBroadcast VIHF" begin
     FT = Float64
     device = ClimaComms.device()
     # Add GPU test when https://github.com/CliMA/ClimaCore.jl/issues/1383 is fixed
@@ -76,21 +76,21 @@ end
     end
 end
 
-@testset "FusedMultiBroadcast IJFH" begin
+@testset "FusedMultiBroadcast IJHF" begin
     FT = Float64
     device = ClimaComms.device()
     sem_space =
         TU.SphereSpectralElementSpace(FT; context = ClimaComms.context(device))
-    IJFH_data() = Fields.Field(FT, sem_space)
+    IJHF_data() = Fields.Field(FT, sem_space)
     X = Fields.FieldVector(;
-        x1 = IJFH_data(),
-        x2 = IJFH_data(),
-        x3 = IJFH_data(),
+        x1 = IJHF_data(),
+        x2 = IJHF_data(),
+        x3 = IJHF_data(),
     )
     Y = Fields.FieldVector(;
-        y1 = IJFH_data(),
-        y2 = IJFH_data(),
-        y3 = IJFH_data(),
+        y1 = IJHF_data(),
+        y2 = IJHF_data(),
+        y3 = IJHF_data(),
     )
     test_kernel!(; fused!, unfused!, X, Y)
     benchmark_kernel!(unfused!, X, Y, device)

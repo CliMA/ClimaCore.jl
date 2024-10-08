@@ -84,9 +84,9 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_copyto_float!(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto_float!(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto_float!(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto_float!(data)
@@ -94,9 +94,9 @@ end
     test_copyto_float!(data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto_float!(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto_float!(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto_float!(data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto_float!(data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto_float!(data) # TODO: test
@@ -113,9 +113,9 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_copyto!(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto!(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto!(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto!(data)
@@ -123,9 +123,9 @@ end
     test_copyto!(data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto!(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto!(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto!(data)
     # TODO: test this
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test
@@ -153,9 +153,9 @@ end
     Nk = 6
     # Rather than using level/slab/column, let's just make views/SubArrays
     # directly so that we can easily test all cases:
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto!(data_view(data))
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto!(data_view(data))
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto!(data_view(data))
@@ -163,9 +163,9 @@ end
     test_copyto!(data_view(data))
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto!(data_view(data))
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto!(data_view(data))
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto!(data_view(data))
     # TODO: test this
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test

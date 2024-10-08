@@ -75,16 +75,16 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_mapreduce_1!(context, data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_mapreduce_1!(context, data)
-    # data = IFH{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_1!(context, data)
+    # data = IHF{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_1!(context, data)
     # data = IJF{S}(ArrayType{FT}, zeros; Nij);                 test_mapreduce_1!(context, data)
     # data = IF{S}(ArrayType{FT}, zeros; Ni);                   test_mapreduce_1!(context, data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_mapreduce_1!(context, data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_mapreduce_1!(context, data)
-    # data = VIFH{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_1!(context, data)
+    # data = VIHF{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_1!(context, data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_mapreduce_1!(context, data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);             test_mapreduce_1!(context, data) # TODO: test
 end
@@ -99,16 +99,16 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_mapreduce_2!(context, data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_mapreduce_2!(context, data)
-    # data = IFH{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_2!(context, data)
+    # data = IHF{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_2!(context, data)
     # data = IJF{S}(ArrayType{FT}, zeros; Nij);                 test_mapreduce_2!(context, data)
     # data = IF{S}(ArrayType{FT}, zeros; Ni);                   test_mapreduce_2!(context, data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_mapreduce_2!(context, data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_mapreduce_2!(context, data)
-    # data = VIFH{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_2!(context, data)
+    # data = VIHF{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_2!(context, data)
     # TODO: test this
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_mapreduce_2!(context, data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);             test_mapreduce_2!(context, data) # TODO: test
@@ -136,16 +136,16 @@ end
     # directly so that we can easily test all cases:
     data = DataF{S}(ArrayType{FT}, zeros)
     test_mapreduce_2!(context, data_view(data))
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_mapreduce_2!(context, data_view(data))
-    # data = IFH{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_2!(context, data_view(data))
+    # data = IHF{S}(ArrayType{FT}, zeros; Ni,Nh);               test_mapreduce_2!(context, data_view(data))
     # data = IJF{S}(ArrayType{FT}, zeros; Nij);                 test_mapreduce_2!(context, data_view(data))
     # data = IF{S}(ArrayType{FT}, zeros; Ni);                   test_mapreduce_2!(context, data_view(data))
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_mapreduce_2!(context, data_view(data))
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_mapreduce_2!(context, data_view(data))
-    # data = VIFH{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_2!(context, data_view(data))
+    # data = VIHF{S}(ArrayType{FT}, zeros; Nv,Nij,Nh);                  test_mapreduce_2!(context, data_view(data))
     # TODO: test this
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_mapreduce_2!(context, data_view(data)) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);             test_mapreduce_2!(context, data_view(data)) # TODO: test

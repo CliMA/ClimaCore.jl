@@ -247,7 +247,7 @@ discrete_hydrostatic_balance!(ρ, p, z_top / n_vert, grav)
 # set up initial condition: not discretely balanced; only create a Field as a place holder
 Yc = map(coord -> init_sbr_thermo(coord.z), c_coords)
 # put the dicretely balanced ρ and ρe into Yc
-parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJFH layout
+parent(Yc.ρ) .= ρ  # Yc.ρ is a VIJHF layout
 parent(Yc.ρe) .= ρe
 
 # initialize velocity: at rest

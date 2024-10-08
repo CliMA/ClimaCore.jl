@@ -21,7 +21,7 @@ end
 function mapreduce_cuda(
     f,
     op,
-    data::Union{DataLayouts.VF, DataLayouts.IJFH, DataLayouts.VIJFH};
+    data::Union{DataLayouts.VF, DataLayouts.IJHF, DataLayouts.VIJHF};
     weighted_jacobian = OnesArray(parent(data)),
     opargs...,
 )

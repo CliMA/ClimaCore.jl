@@ -135,7 +135,7 @@ end
     vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
-    fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+    hfvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
 
     # write mesh
     meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
@@ -145,15 +145,15 @@ end
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
         def_space_coord(nc, hvspace; type = node_type)
-        def_space_coord(nc, fhvspace; type = node_type)
+        def_space_coord(nc, hfvspace; type = node_type)
 
         nc_xlat = defVar(nc, "xlat", Float64, hvspace)
         nc_xz = defVar(nc, "xz", Float64, hvspace)
-        nc_xz_half = defVar(nc, "xz_half", Float64, fhvspace)
+        nc_xz_half = defVar(nc, "xz_half", Float64, hfvspace)
 
         nc_xlat[:] = Fields.coordinate_field(hvspace).lat
         nc_xz[:] = Fields.coordinate_field(hvspace).z
-        nc_xz_half[:] = Fields.coordinate_field(fhvspace).z
+        nc_xz_half[:] = Fields.coordinate_field(hfvspace).z
         nothing
     end
 
@@ -230,7 +230,7 @@ end
     vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
-    fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+    hfvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
 
     # write mesh
     meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
@@ -240,15 +240,15 @@ end
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
         def_space_coord(nc, hvspace; type = node_type)
-        def_space_coord(nc, fhvspace; type = node_type)
+        def_space_coord(nc, hfvspace; type = node_type)
 
         nc_xlat = defVar(nc, "xlat", Float64, hvspace)
         nc_xz = defVar(nc, "xz", Float64, hvspace)
-        nc_xz_half = defVar(nc, "xz_half", Float64, fhvspace)
+        nc_xz_half = defVar(nc, "xz_half", Float64, hfvspace)
 
         nc_xlat[:] = Fields.coordinate_field(hvspace).lat
         nc_xz[:] = Fields.coordinate_field(hvspace).z
-        nc_xz_half[:] = Fields.coordinate_field(fhvspace).z
+        nc_xz_half[:] = Fields.coordinate_field(hfvspace).z
         nothing
     end
 
@@ -379,12 +379,12 @@ end
     vmesh = Meshes.IntervalMesh(vdomain, nelems = nlevels)
     vfspace = Spaces.FaceFiniteDifferenceSpace(device, vmesh)
     z_surface = Geometry.ZPoint.(test_warp.(Fields.coordinate_field(hspace)))
-    fhvspace = Spaces.ExtrudedFiniteDifferenceSpace(
+    hfvspace = Spaces.ExtrudedFiniteDifferenceSpace(
         hspace,
         vfspace,
         Hypsography.LinearAdaption(z_surface),
     )
-    chvspace = Spaces.CenterExtrudedFiniteDifferenceSpace(fhvspace)
+    chvspace = Spaces.CenterExtrudedFiniteDifferenceSpace(hfvspace)
 
     # write mesh
     meshfile_cc = joinpath(OUTPUT_DIR, "mesh_cc_3d.g")
@@ -394,15 +394,15 @@ end
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
         def_space_coord(nc, chvspace; type = node_type)
-        def_space_coord(nc, fhvspace; type = node_type)
+        def_space_coord(nc, hfvspace; type = node_type)
 
         nc_xlat = defVar(nc, "xlat", Float64, chvspace)
         nc_xz = defVar(nc, "xz", Float64, chvspace)
-        nc_xz_half = defVar(nc, "xz_half", Float64, fhvspace)
+        nc_xz_half = defVar(nc, "xz_half", Float64, hfvspace)
 
         nc_xlat[:] = Fields.coordinate_field(chvspace).lat
         nc_xz[:] = Fields.coordinate_field(chvspace).z
-        nc_xz_half[:] = Fields.coordinate_field(fhvspace).z
+        nc_xz_half[:] = Fields.coordinate_field(hfvspace).z
         nothing
     end
 
@@ -504,21 +504,21 @@ end
     vspace = Spaces.CenterFiniteDifferenceSpace(device, vmesh)
 
     hvspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
-    fhvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
+    hfvspace = Spaces.FaceExtrudedFiniteDifferenceSpace(hvspace)
 
     # write data
     datafile_cc = joinpath(OUTPUT_DIR, "data_cc.nc")
     NCDataset(datafile_cc, "c") do nc
         def_space_coord(nc, hvspace; type = node_type)
-        def_space_coord(nc, fhvspace; type = node_type)
+        def_space_coord(nc, hfvspace; type = node_type)
 
         nc_x = defVar(nc, "xx", Float64, hvspace)
         nc_z = defVar(nc, "xz", Float64, hvspace)
-        nc_z_half = defVar(nc, "xz_half", Float64, fhvspace)
+        nc_z_half = defVar(nc, "xz_half", Float64, hfvspace)
 
         nc_x[:] = Fields.coordinate_field(hvspace).x
         nc_z[:] = Fields.coordinate_field(hvspace).z
-        nc_z_half[:] = Fields.coordinate_field(fhvspace).z
+        nc_z_half[:] = Fields.coordinate_field(hfvspace).z
         nothing
     end
     @test isfile(datafile_cc)
