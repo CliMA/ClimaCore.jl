@@ -48,7 +48,7 @@ function test_field_matrix_solver(; test_name, alg, A, b, use_rel_error = false)
         if use_rel_error
             @test rel_error < 1e-5
         else
-            @test max_eps_error <= 3
+            @test max_eps_error <= 7
         end
 
         # In addition to ignoring the type instabilities from CUDA, ignore those

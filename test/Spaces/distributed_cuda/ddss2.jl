@@ -92,7 +92,7 @@ pid, nprocs = ClimaComms.init(context)
     nel = Topologies.nlocalelems(Spaces.topology(space))
     yarr = parent(y0)
     yarr .=
-        reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
+        reshape(1:(Nq * Nq * nel), (Nq, Nq, nel, 1)) .+
         (pid - 1) * Nq * Nq * nel
     dss_buffer = Spaces.create_dss_buffer(y0)
     Spaces.weighted_dss!(y0, dss_buffer) # DSS2
