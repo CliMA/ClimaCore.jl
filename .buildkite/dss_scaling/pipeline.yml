@@ -1,5 +1,5 @@
 env:
-  JULIA_VERSION: "1.10.0"
+  JULIA_VERSION: "1.10.5"
   MPICH_VERSION: "4.0.0"
   OPENMPI_VERSION: "4.1.1"
   CUDA_VERSION: "11.2"
@@ -37,7 +37,7 @@ steps:
     steps:
     - label: ":computer: Shallow water DSS scaling - (1) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -56,7 +56,7 @@ steps:
 
     - label: ":computer: Shallow water DSS scaling - (2) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -75,7 +75,7 @@ steps:
 
     - label: ":computer: Shallow water DSS scaling - (4) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -94,7 +94,7 @@ steps:
 
     - label: ":computer: Shallow water DSS scaling - (8) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -113,7 +113,7 @@ steps:
 
     - label: ":computer: Shallow water DSS scaling - (16) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -132,7 +132,7 @@ steps:
 
     - label: ":computer: Shallow water DSS scaling - (32) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/sphere/output/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/sphere/shallow_water_dss.jl 2 Float64"
       artifact_paths:
@@ -171,7 +171,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (1) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -190,7 +190,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (2) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -209,7 +209,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (4) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -228,7 +228,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (8) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -247,7 +247,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (16) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -266,7 +266,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere low-resolution DSS scaling - (32) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_low_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl low 2 Float64"
       artifact_paths:
@@ -308,7 +308,7 @@ steps:
 
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (1) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -325,10 +325,10 @@ steps:
         slurm_ntasks: 1
         slurm_time: 8:00:00
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (2) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -345,10 +345,10 @@ steps:
         slurm_ntasks: 2
         slurm_time: 8:00:00
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (4) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -365,10 +365,10 @@ steps:
         slurm_ntasks: 4
         slurm_time: 4:00:00
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (8) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -384,10 +384,10 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 8
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (16) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -403,10 +403,10 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 16
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (32) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP4.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "nsys profile --trace=nvtx,mpi --mpi-impl=mpich --output=examples/hybrid/dss_output_high_res/report_NP2.%q{NPROCS} mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -422,10 +422,10 @@ steps:
         slurm_nodes: 1
         slurm_ntasks: 32
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (64) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -440,10 +440,10 @@ steps:
         slurm_nodes: 2
         slurm_ntasks: 64
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (128) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -459,10 +459,10 @@ steps:
         slurm_nodes: 4
         slurm_ntasks: 128
         slurm_exclusive:
-  
+
     - label: ":computer: Hybrid cubed sphere high-resolution DSS scaling - (256) processes"
       command:
-        - "module load cuda/11.3 nsight-systems/2022.2.1"
+        - "module load cuda/11.3 nsight-systems/2024.6.1"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 4 Float64"
         - "mpiexec julia --color=yes --project=.buildkite examples/hybrid/hybrid3dcs_dss.jl high 2 Float64"
       artifact_paths:
@@ -478,11 +478,11 @@ steps:
         slurm_nodes: 8
         slurm_ntasks: 256
         slurm_exclusive:
-  
+
   - wait
   - group: "Hybrid cubed sphere high-resolution DSS scaling plots"
     steps:
- 
+
     - label: ":computer: DSS scaling plots for high resolution hybrid cubed sphere"
       key: "cpu_dss_scaling_high_resolution_plots_3dcs"
       command:
