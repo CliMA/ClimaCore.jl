@@ -43,68 +43,66 @@ end
 
 @testset "copyto! with Nf = 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
-    data = DataF{S}(device_zeros(FT, Nf))
+    data = DataF{S}(ArrayType{FT}, zeros)
     test_copyto_float!(data)
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto_float!(data)
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto_float!(data)
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto_float!(data)
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_copyto_float!(data)
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto_float!(data)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto_float!(data)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto_float!(data)
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_copyto_float!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_copyto_float!(data) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto_float!(data) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto_float!(data) # TODO: test
 end
 
 @testset "copyto! with Nf > 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = Tuple{FT, FT}
-    Nf = 2
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
-    data = DataF{S}(device_zeros(FT, Nf))
+    data = DataF{S}(ArrayType{FT}, zeros)
     test_copyto!(data)
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto!(data)
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto!(data)
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto!(data)
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_copyto!(data)
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto!(data)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto!(data)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto!(data)
     # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_copyto!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_copyto!(data) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto!(data) # TODO: test
 end
 
 @testset "copyto! views with Nf > 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     data_view(data) = DataLayouts.rebuild(
         data,
         SubArray(
@@ -117,28 +115,27 @@ end
     )
     FT = Float64
     S = Tuple{FT, FT}
-    Nf = 2
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
     # Rather than using level/slab/column, let's just make views/SubArrays
     # directly so that we can easily test all cases:
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto!(data_view(data))
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto!(data_view(data))
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto!(data_view(data))
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_copyto!(data_view(data))
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_copyto!(data_view(data))
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto!(data_view(data))
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto!(data_view(data))
     # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_copyto!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_copyto!(data) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto!(data) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto!(data) # TODO: test
 end

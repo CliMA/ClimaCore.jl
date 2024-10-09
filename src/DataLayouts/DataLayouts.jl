@@ -302,6 +302,13 @@ function replace_basetype(data::AbstractData{S}, ::Type{T}) where {S, T}
     )
 end
 
+maybe_populate!(array, ::typeof(similar)) = nothing
+maybe_populate!(array, ::typeof(ones)) = fill!(array, 1)
+maybe_populate!(array, ::typeof(zeros)) = fill!(array, 0)
+function maybe_populate!(array, ::typeof(rand))
+    parent(array) .= typeof(array)(rand(eltype(array), size(array)))
+end
+
 # ==================
 # Data3D DataLayout
 # ==================
@@ -310,6 +317,23 @@ end
     IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) <: Data3D{S, Nij, Nk}
 
 A 3D DataLayout. TODO: Add more docs
+
+    IJKFVH{S}(ArrayType[, ones | zeros | rand]; Nij, Nk, Nv)
+
+The keyword constructor returns a `IJKFVH` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nv` number of vertical degrees of freedom
+ - `Nk` Number of vertical nodes within an element
+ - `Nij` quadrature degrees of freedom per horizontal direction
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IJKFVH{S, Nij, Nk, Nv, A} <: Data3D{S, Nij, Nk}
     array::A
@@ -325,6 +349,20 @@ function IJKFVH{S, Nij, Nk, Nv}(
     @assert size(array, 4) == typesize(T, S)
     @assert size(array, 5) == Nv
     IJKFVH{S, Nij, Nk, Nv, typeof(array)}(array)
+end
+
+function IJKFVH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Nij::Integer,
+    Nk::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nk, Nf, Nv, Nh)
+    maybe_populate!(array, fun)
+    IJKFVH{S, Nij, Nk, Nv}(array)
 end
 
 @inline universal_size(data::IJKFVH{S, Nij, Nk, Nv}) where {S, Nij, Nk, Nv} =
@@ -347,6 +385,22 @@ for each 2D mesh element slab (H).
 The `ArrayType`-constructor constructs a IJFH 2D Spectral
 DataLayout given the backing `ArrayType`, quadrature degrees
 of freedom `Nij × Nij`, and the number of mesh elements `nelements`.
+
+    IJFH{S}(ArrayType[, Base.ones | zeros | rand]; Nij, Nh)
+
+The keyword constructor returns a `IJFH` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nij` quadrature degrees of freedom per horizontal direction
+ - `Nh` number of mesh elements
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IJFH{S, Nij, A} <: Data2D{S, Nij}
     array::A
@@ -358,6 +412,18 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     @assert size(array, 3) == typesize(T, S)
     IJFH{S, Nij, typeof(array)}(array)
+end
+
+function IJFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nf, Nh)
+    maybe_populate!(array, fun)
+    IJFH{S, Nij}(array)
 end
 
 @inline universal_size(data::IJFH{S, Nij}) where {S, Nij} =
@@ -419,6 +485,22 @@ The `ArrayType`-constructor makes a IFH 1D Spectral
 DataLayout given the backing `ArrayType`, quadrature
 degrees of freedom `Ni`, and the number of mesh elements
 `Nh`.
+
+    IFH{S}(ArrayType[, ones | zeros | rand]; Ni, Nh)
+
+The keyword constructor returns a `IFH` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Ni` quadrature degrees of freedom in the horizontal direction
+ - `Nh` number of mesh elements
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IFH{S, Ni, A} <: Data1D{S, Ni}
     array::A
@@ -429,6 +511,18 @@ function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     @assert size(array, 2) == typesize(T, S)
     IFH{S, Ni, typeof(array)}(array)
+end
+
+function IFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Ni::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Ni, Nf, Nh)
+    maybe_populate!(array, fun)
+    IFH{S, Ni}(array)
 end
 
 function IFH{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
@@ -467,6 +561,12 @@ Base.length(data::Data0D) = 1
     DataF{S, A} <: Data0D{S}
 
 Backing `DataLayout` for 0D point data.
+
+    DataF{S}(ArrayType[, ones | zeros | rand])
+
+The `ArrayType` constructor returns a `DataF` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`).
 """
 struct DataF{S, A} <: Data0D{S}
     array::A
@@ -478,9 +578,11 @@ function DataF{S}(array::AbstractVector{T}) where {S, T}
     DataF{S, typeof(array)}(array)
 end
 
-function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
-    T = eltype(ArrayType)
-    DataF{S}(ArrayType(undef, typesize(T, S)))
+function DataF{S}(::Type{ArrayType}, fun = similar;) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nf)
+    maybe_populate!(array, fun)
+    DataF{S}(array)
 end
 
 function DataF(x::T) where {T}
@@ -550,6 +652,21 @@ Backing `DataLayout` for 2D spectral element slab data.
 Nodal element data (I,J) are contiguous for each `S` datatype struct field (F) for a single element slab.
 
 A `DataSlab2D` view can be returned from other `Data2D` objects by calling `slab(data, idx...)`.
+
+    IJF{S}(ArrayType[, ones | zeros | rand]; Nij)
+
+The keyword constructor returns a `IJF` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nij` quadrature degrees of freedom per horizontal direction
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IJF{S, Nij, A} <: DataSlab2D{S, Nij}
     array::A
@@ -561,6 +678,17 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     check_basetype(T, S)
     @assert size(array, 3) == typesize(T, S)
     IJF{S, Nij, typeof(array)}(array)
+end
+
+function IJF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nf)
+    maybe_populate!(array, fun)
+    IJF{S, Nij}(array)
 end
 
 function IJF{S, Nij}(::Type{MArray}, ::Type{T}) where {S, Nij, T}
@@ -604,6 +732,21 @@ Backing `DataLayout` for 1D spectral element slab data.
 Nodal element data (I) are contiguous for each `S` datatype struct field (F) for a single element slab.
 
 A `DataSlab1D` view can be returned from other `Data1D` objects by calling `slab(data, idx...)`.
+
+    IF{S}(ArrayType[, ones | zeros | rand]; Ni)
+
+The keyword constructor returns a `IF` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Ni` quadrature degrees of freedom in the horizontal direction
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IF{S, Ni, A} <: DataSlab1D{S, Ni}
     array::A
@@ -615,6 +758,18 @@ function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 2) == typesize(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
+
+function IF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Ni::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Ni, Nf)
+    maybe_populate!(array, fun)
+    IF{S, Ni}(array)
+end
+
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
     Nf = typesize(T, S)
     array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
@@ -645,6 +800,21 @@ Backing `DataLayout` for 1D FV column data.
 Column level data (V) are contiguous for each `S` datatype struct field (F).
 
 A `DataColumn` view can be returned from other `Data1DX`, `Data2DX` objects by calling `column(data, idx...)`.
+
+    VF{S}(ArrayType[, ones | zeros | rand]; Nv)
+
+The keyword constructor returns a `VF` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nv` number of vertical degrees of freedom
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct VF{S, Nv, A} <: DataColumn{S, Nv}
     array::A
@@ -655,6 +825,17 @@ function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == typesize(T, S)
     VF{S, Nv, typeof(array)}(array)
+end
+
+function VF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Nf)
+    maybe_populate!(array, fun)
+    VF{S, Nv}(array)
 end
 
 function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
@@ -702,6 +883,23 @@ Backing `DataLayout` for 2D spectral element slab + extruded 1D FV column data.
 
 Column levels (V) are contiguous for every element nodal point (I, J)
 for each `S` datatype struct field (F), for each 2D mesh element slab (H).
+
+    VIJFH{S}(ArrayType[, ones | zeros | rand]; Nv, Nij, Nh)
+
+The keyword constructor returns a `VIJFH` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nv` number of vertical degrees of freedom
+ - `Nij` quadrature degrees of freedom per horizontal direction
+ - `Nh` number of horizontal elements
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct VIJFH{S, Nv, Nij, A} <: Data2DX{S, Nv, Nij}
     array::A
@@ -712,6 +910,19 @@ function VIJFH{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
     @assert size(array, 4) == typesize(T, S)
+    VIJFH{S, Nv, Nij, typeof(array)}(array)
+end
+
+function VIJFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Nij::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Nij, Nij, Nf, Nh)
+    maybe_populate!(array, fun)
     VIJFH{S, Nv, Nij, typeof(array)}(array)
 end
 
@@ -783,6 +994,23 @@ Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 
 Column levels (V) are contiguous for every element nodal point (I)
 for each datatype `S` struct field (F), for each 1D mesh element slab (H).
+
+    VIFH{S}(ArrayType[, ones | zeros | rand]; Nv, Ni, Nh)
+
+The keyword constructor returns a `VIFH` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nv` number of vertical degrees of freedom
+ - `Ni` quadrature degrees of freedom in the horizontal direction
+ - `Nh` number of horizontal elements
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
     array::A
@@ -793,6 +1021,19 @@ function VIFH{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
+    VIFH{S, Nv, Ni, typeof(array)}(array)
+end
+
+function VIFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Ni::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Ni, Nf, Nh)
+    maybe_populate!(array, fun)
     VIFH{S, Nv, Ni, typeof(array)}(array)
 end
 
@@ -847,6 +1088,21 @@ end
 
 Stores a 2D field in a matrix using a column-major format.
 The primary use is for interpolation to a regular grid for ex. plotting / field output.
+
+    IH1JH2{S}(ArrayType[, ones | zeros | rand]; Nij)
+
+The keyword constructor returns a `IH1JH2` given
+the `ArrayType` and (optionally) an initialization
+method (one of `Base.ones`, `Base.zeros`, `Random.rand`)
+and the keywords:
+ - `Nij` quadrature degrees of freedom per horizontal direction
+
+!!! note
+    Objects made with the keyword constructor accept integer
+    keyword inputs, so they are dynamically created. You may
+    want to use a different constructor if you're making the
+    object in a performance-critical section, and if you know
+    the type parameters at compile time.
 """
 struct IH1JH2{S, Nij, A} <: Data2D{S, Nij}
     array::A
@@ -856,6 +1112,16 @@ function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
     @assert size(array, 1) % Nij == 0
     @assert size(array, 2) % Nij == 0
     IH1JH2{S, Nij, typeof(array)}(array)
+end
+
+function IH1JH2{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+) where {S, ArrayType}
+    array = similar(ArrayType, 2 * Nij, 3 * Nij)
+    maybe_populate!(array, fun)
+    IH1JH2{S, Nij}(array)
 end
 
 @inline universal_size(data::IH1JH2{S, Nij}) where {S, Nij} =
