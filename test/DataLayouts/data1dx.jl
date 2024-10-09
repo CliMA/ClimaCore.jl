@@ -3,9 +3,12 @@ julia --project=test
 using Revise; include(joinpath("test", "DataLayouts", "data1dx.jl"))
 =#
 using Test
+using ClimaComms
 using ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
 
+device = ClimaComms.device()
+ArrayType = ClimaComms.array_type(device)
 @testset "VIFH" begin
     TestFloatTypes = (Float32, Float64)
     for FT in TestFloatTypes
@@ -16,9 +19,9 @@ import ClimaCore.DataLayouts: VIFH, slab, column, VF, IFH, vindex, slab_index
 
         # construct a data object with 10 cells in vertical and
         # 10 elements in horizontal with 4 nodal points per element in horizontal
-        array = rand(FT, Nv, Ni, 3, Nh)
 
-        data = VIFH{S, Nv, Ni}(array)
+        data = VIFH{S}(ArrayType{FT}, rand; Nv, Ni, Nh)
+        array = parent(data)
         sum(x -> x[2], data)
 
         @test getfield(data.:1, :array) == @view(array[:, :, 1:2, :])
@@ -50,8 +53,7 @@ end
     Nh = 2 # number of elements
 
     S = Tuple{Complex{Float64}, Float64}
-    array = zeros(Float64, Nv, Ni, 3, Nh)
-    data = VIFH{S, Nv, Ni}(array)
+    data = VIFH{S}(ArrayType{Float64}, zeros; Nv, Ni, Nh)
 
     @test_throws BoundsError slab(data, -1, -1)
     @test_throws BoundsError slab(data, 1, 3)
@@ -76,8 +78,7 @@ end
     SA = (a = 1.0, b = 2.0)
     SB = (c = 1.0, d = 2.0)
 
-    array = zeros(Float64, Nv, Ni, 2, Nh)
-    data = VIFH{typeof(SA), Nv, Ni}(array)
+    data = VIFH{typeof(SA)}(ArrayType{Float64}, zeros; Nv, Ni, Nh)
 
     cdata = column(data, 1, 1)
     cdata[slab_index(1)] = SA
@@ -93,9 +94,8 @@ end
     FT = Float64
     Nv = 2
     Nh = 2
-    data1 = ones(FT, Nv, 2, 2, 2)
     S = Complex{Float64}
-    data1 = VIFH{S, Nv, 2}(data1)
+    data1 = VIFH{S}(ArrayType{FT}, ones; Nv, Ni = 2, Nh = 2)
     res = data1 .+ 1
     @test res isa VIFH{S, Nv}
     @test parent(res) ==
@@ -109,8 +109,8 @@ end
     S = Complex{FT}
     Nv = 3
     Nh = 2
-    data_vf = VF{S, Nv}(ones(FT, Nv, 2))
-    data_ifh = IFH{FT, 2}(ones(FT, 2, 1, 2))
+    data_vf = VF{S}(ArrayType{FT}, ones; Nv)
+    data_ifh = IFH{FT}(ArrayType{FT}, ones; Ni = 2, Nh = 2)
     data_vifh = data_vf .+ data_ifh
     @test data_vifh isa VIFH{S, Nv}
     @test size(data_vifh) == (2, 1, 1, 3, 2)
@@ -125,9 +125,7 @@ end
 end
 
 @testset "fill" begin
-
-    Nh = 3
-    data = IFH{Float64, 3}(ones(3, 1, Nh))
+    data = IFH{Float64}(ArrayType{Float64}, ones; Ni = 3, Nh = 3)
     data .= 2.0
     @test all(==(2.0), parent(data))
 end

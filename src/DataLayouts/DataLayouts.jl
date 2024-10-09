@@ -302,12 +302,20 @@ function replace_basetype(data::AbstractData{S}, ::Type{T}) where {S, T}
     )
 end
 
+maybe_populate!(array, ::typeof(similar)) = nothing
+maybe_populate!(array, ::typeof(ones)) = fill!(array, 1)
+maybe_populate!(array, ::typeof(zeros)) = fill!(array, 0)
+function maybe_populate!(array, ::typeof(rand))
+    parent(array) .= typeof(array)(rand(eltype(array), size(array)))
+end
+
 # ==================
 # Data3D DataLayout
 # ==================
 
 """
     IJKFVH{S, Nij, Nk}(array::AbstractArray{T, 6}) <: Data3D{S, Nij, Nk}
+    IJKFVH{S}(ArrayType[, ones | zeros | rand]; Nij, Nk, Nv)
 
 A 3D DataLayout. TODO: Add more docs
 """
@@ -327,6 +335,20 @@ function IJKFVH{S, Nij, Nk, Nv}(
     IJKFVH{S, Nij, Nk, Nv, typeof(array)}(array)
 end
 
+function IJKFVH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Nij::Integer,
+    Nk::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nk, Nf, Nv, Nh)
+    maybe_populate!(array, fun)
+    IJKFVH{S, Nij, Nk, Nv}(array)
+end
+
 @inline universal_size(data::IJKFVH{S, Nij, Nk, Nv}) where {S, Nij, Nk, Nv} =
     (Nij, Nij, Nk, Nv, get_Nh_dynamic(data))
 
@@ -337,6 +359,7 @@ end
 """
     IJFH{S, Nij, A} <: Data2D{S, Nij}
     IJFH{S,Nij}(ArrayType, nelements)
+    IJFH{S}(ArrayType[, ones | zeros | rand]; Nij, Nh)
 
 
 Backing `DataLayout` for 2D spectral element slabs.
@@ -358,6 +381,18 @@ function IJFH{S, Nij}(array::AbstractArray{T, 4}) where {S, Nij, T}
     @assert size(array, 2) == Nij
     @assert size(array, 3) == typesize(T, S)
     IJFH{S, Nij, typeof(array)}(array)
+end
+
+function IJFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nf, Nh)
+    maybe_populate!(array, fun)
+    IJFH{S, Nij}(array)
 end
 
 @inline universal_size(data::IJFH{S, Nij}) where {S, Nij} =
@@ -408,6 +443,7 @@ Base.length(data::Data1D) = get_Nh_dynamic(data)
 """
     IFH{S,Ni,Nh,A} <: Data1D{S, Ni}
     IFH{S,Ni,Nh}(ArrayType)
+    IFH{S}(ArrayType[, ones | zeros | rand]; Ni, Nh)
 
 Backing `DataLayout` for 1D spectral element slabs.
 
@@ -429,6 +465,18 @@ function IFH{S, Ni}(array::AbstractArray{T, 3}) where {S, Ni, T}
     @assert size(array, 1) == Ni
     @assert size(array, 2) == typesize(T, S)
     IFH{S, Ni, typeof(array)}(array)
+end
+
+function IFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Ni::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Ni, Nf, Nh)
+    maybe_populate!(array, fun)
+    IFH{S, Ni}(array)
 end
 
 function IFH{S, Ni}(::Type{ArrayType}, Nh::Integer) where {S, Ni, ArrayType}
@@ -465,6 +513,7 @@ Base.length(data::Data0D) = 1
 
 """
     DataF{S, A} <: Data0D{S}
+    DataF{S}(ArrayType[, ones | zeros | rand])
 
 Backing `DataLayout` for 0D point data.
 """
@@ -478,9 +527,11 @@ function DataF{S}(array::AbstractVector{T}) where {S, T}
     DataF{S, typeof(array)}(array)
 end
 
-function DataF{S}(::Type{ArrayType}) where {S, ArrayType}
-    T = eltype(ArrayType)
-    DataF{S}(ArrayType(undef, typesize(T, S)))
+function DataF{S}(::Type{ArrayType}, fun = similar;) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nf)
+    maybe_populate!(array, fun)
+    DataF{S}(array)
 end
 
 function DataF(x::T) where {T}
@@ -544,6 +595,7 @@ end
 
 """
     IJF{S, Nij, A} <: DataSlab2D{S, Nij}
+    IJF{S}(ArrayType[, ones | zeros | rand]; Nij)
 
 Backing `DataLayout` for 2D spectral element slab data.
 
@@ -561,6 +613,17 @@ function IJF{S, Nij}(array::AbstractArray{T, 3}) where {S, Nij, T}
     check_basetype(T, S)
     @assert size(array, 3) == typesize(T, S)
     IJF{S, Nij, typeof(array)}(array)
+end
+
+function IJF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nij, Nij, Nf)
+    maybe_populate!(array, fun)
+    IJF{S, Nij}(array)
 end
 
 function IJF{S, Nij}(::Type{MArray}, ::Type{T}) where {S, Nij, T}
@@ -598,6 +661,7 @@ end
 
 """
     IF{S, Ni, A} <: DataSlab1D{S, Ni}
+    IF{S}(ArrayType[, ones | zeros | rand]; Ni)
 
 Backing `DataLayout` for 1D spectral element slab data.
 
@@ -615,6 +679,18 @@ function IF{S, Ni}(array::AbstractArray{T, 2}) where {S, Ni, T}
     @assert size(array, 2) == typesize(T, S)
     IF{S, Ni, typeof(array)}(array)
 end
+
+function IF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Ni::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Ni, Nf)
+    maybe_populate!(array, fun)
+    IF{S, Ni}(array)
+end
+
 function IF{S, Ni}(::Type{MArray}, ::Type{T}) where {S, Ni, T}
     Nf = typesize(T, S)
     array = MArray{Tuple{Ni, Nf}, T, 2, Ni * Nf}(undef)
@@ -639,6 +715,7 @@ Base.length(data::DataColumn) = get_Nv(data)
 
 """
     VF{S, A} <: DataColumn{S, Nv}
+    VF{S}(ArrayType[, ones | zeros | rand]; Nv)
 
 Backing `DataLayout` for 1D FV column data.
 
@@ -655,6 +732,17 @@ function VF{S, Nv}(array::AbstractArray{T, 2}) where {S, Nv, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == typesize(T, S)
     VF{S, Nv, typeof(array)}(array)
+end
+
+function VF{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Nf)
+    maybe_populate!(array, fun)
+    VF{S, Nv}(array)
 end
 
 function VF{S, Nv}(array::AbstractVector{T}) where {S, Nv, T}
@@ -697,6 +785,7 @@ end
 
 """
     VIJFH{S, Nij, A} <: Data2DX{S, Nij}
+    VIJFH{S}(ArrayType[, ones | zeros | rand]; Nv, Nij, Nh)
 
 Backing `DataLayout` for 2D spectral element slab + extruded 1D FV column data.
 
@@ -712,6 +801,19 @@ function VIJFH{S, Nv, Nij}(array::AbstractArray{T, 5}) where {S, Nv, Nij, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == size(array, 3) == Nij
     @assert size(array, 4) == typesize(T, S)
+    VIJFH{S, Nv, Nij, typeof(array)}(array)
+end
+
+function VIJFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Nij::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Nij, Nij, Nf, Nh)
+    maybe_populate!(array, fun)
     VIJFH{S, Nv, Nij, typeof(array)}(array)
 end
 
@@ -778,6 +880,7 @@ end
 
 """
     VIFH{S, Nv, Ni, A} <: Data1DX{S, Nv, Ni}
+    VIFH{S}(ArrayType[, ones | zeros | rand]; Nv, Ni, Nh)
 
 Backing `DataLayout` for 1D spectral element slab + extruded 1D FV column data.
 
@@ -793,6 +896,19 @@ function VIFH{S, Nv, Ni}(array::AbstractArray{T, 4}) where {S, Nv, Ni, T}
     @assert size(array, 1) == Nv
     @assert size(array, 2) == Ni
     @assert size(array, 3) == typesize(T, S)
+    VIFH{S, Nv, Ni, typeof(array)}(array)
+end
+
+function VIFH{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nv::Integer,
+    Ni::Integer,
+    Nh::Integer,
+) where {S, ArrayType}
+    Nf = typesize(eltype(ArrayType), S)
+    array = similar(ArrayType, Nv, Ni, Nf, Nh)
+    maybe_populate!(array, fun)
     VIFH{S, Nv, Ni, typeof(array)}(array)
 end
 
@@ -844,6 +960,7 @@ end
 
 """
     IH1JH2{S, Nij}(data::AbstractMatrix{S})
+    IH1JH2{S}(ArrayType[, ones | zeros | rand]; Nij)
 
 Stores a 2D field in a matrix using a column-major format.
 The primary use is for interpolation to a regular grid for ex. plotting / field output.
@@ -856,6 +973,16 @@ function IH1JH2{S, Nij}(array::AbstractMatrix{S}) where {S, Nij}
     @assert size(array, 1) % Nij == 0
     @assert size(array, 2) % Nij == 0
     IH1JH2{S, Nij, typeof(array)}(array)
+end
+
+function IH1JH2{S}(
+    ::Type{ArrayType},
+    fun = similar;
+    Nij::Integer,
+) where {S, ArrayType}
+    array = similar(ArrayType, 2 * Nij, 3 * Nij)
+    maybe_populate!(array, fun)
+    IH1JH2{S, Nij}(array)
 end
 
 @inline universal_size(data::IH1JH2{S, Nij}) where {S, Nij} =
