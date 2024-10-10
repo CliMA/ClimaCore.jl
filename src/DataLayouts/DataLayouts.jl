@@ -235,27 +235,29 @@ Base.similar(data::AbstractData{S}) where {S} = similar(data, S)
     typesize(eltype(parent(data)), S)
 end
 
+@inline _getproperty(data::AbstractData, ::Val{Name}) where {Name} =
+    _getproperty(data, Val(Name), Name)
+
 @generated function _getproperty(
     data::AbstractData{S},
     ::Val{Name},
+    name,
 ) where {S, Name}
-    errorstring = "Invalid field name $(Name) for type $(S)"
     i = findfirst(isequal(Name), fieldnames(S))
-    if i === nothing
-        return :(error($errorstring))
-    end
     static_idx = Val{i}()
-    return :(Base.@_inline_meta; DataLayouts._property_view(data, $static_idx))
+    return :(
+        Base.@_inline_meta; DataLayouts._property_view(data, $static_idx, name)
+    )
 end
 
 @inline function Base.getproperty(data::AbstractData{S}, name::Symbol) where {S}
-    _getproperty(data, Val{name}())
+    _getproperty(data, Val{name}(), name)
 end
 @inline function Base.dotgetproperty(
     data::AbstractData{S},
     name::Symbol,
 ) where {S}
-    _getproperty(data, Val{name}())
+    _getproperty(data, Val{name}(), name)
 end
 
 Base.@propagate_inbounds function Base.getproperty(
@@ -275,11 +277,18 @@ Base.@propagate_inbounds function Base.getproperty(
     union_all(data){SS, Base.tail(type_params(data))...}(dataview)
 end
 
+@noinline _property_view(
+    data::AbstractData{S},
+    ::Val{Nothing},
+    name,
+) where {S} = error("Invalid field name $name for type $(S)")
+
 # In the past, we've sometimes needed a generated function
 # for inference and constant propagation:
 Base.@propagate_inbounds @generated function _property_view(
     data::AD,
     ::Val{Idx},
+    name,
 ) where {S, Idx, AD <: AbstractData{S}}
     SS = fieldtype(S, Idx)
     T = eltype(parent_array_type(AD))
@@ -855,7 +864,7 @@ Base.lastindex(data::VF) = length(data)
 nlevels(::VF{S, Nv}) where {S, Nv} = Nv
 
 Base.@propagate_inbounds Base.getproperty(data::VF, i::Integer) =
-    _property_view(data, Val(i))
+    _property_view(data, Val(i), i)
 
 Base.@propagate_inbounds column(data::VF, i, h) = column(data, i, 1, h)
 
