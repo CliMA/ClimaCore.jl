@@ -9,44 +9,42 @@ ClimaComms.@import_required_backends
 
 @testset "Base.ndims" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
-    data = DataF{S}(device_zeros(FT, Nf))
+
+    data = DataF{S}(ArrayType{FT}, zeros)
     @test ndims(data) == 1
     @test ndims(typeof(data)) == 1
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     @test ndims(data) == 2
     @test ndims(typeof(data)) == 2
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     @test ndims(data) == 2
     @test ndims(typeof(data)) == 2
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     @test ndims(data) == 3
     @test ndims(typeof(data)) == 3
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     @test ndims(data) == 3
     @test ndims(typeof(data)) == 3
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     @test ndims(data) == 4
     @test ndims(typeof(data)) == 4
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     @test ndims(data) == 4
     @test ndims(typeof(data)) == 4
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     @test ndims(data) == 5
     @test ndims(typeof(data)) == 5
-    data = DataLayouts.IJKFVH{S, Nij, Nk, Nv}(
-        device_zeros(FT, Nij, Nij, Nk, Nf, Nv, Nh),
-    )
+    data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij, Nk, Nv, Nh)
     @test ndims(data) == 6
     @test ndims(typeof(data)) == 6
-    data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT, 2 * Nij, 3 * Nij))
+    data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij)
     @test ndims(data) == 2
     @test ndims(typeof(data)) == 2
 end
