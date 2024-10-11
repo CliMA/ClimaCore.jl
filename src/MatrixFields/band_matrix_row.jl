@@ -42,8 +42,10 @@ outer_diagonals(::Type{<:BandMatrixRow{ld, bw}}) where {ld, bw} =
 
 @inline lower_diagonal(::Tuple{<:BandMatrixRow{ld}}) where {ld} = ld
 @inline lower_diagonal(t::Tuple) = lower_diagonal(t...)
-@inline lower_diagonal(::BandMatrixRow{ld}, ::BandMatrixRow{ld}...) where {ld} =
-    ld
+@inline lower_diagonal(
+    ::BandMatrixRow{ld},
+    ::Vararg{BandMatrixRow{ld}, N},
+) where {ld, N} = ld
 
 """
     band_matrix_row_type(ld, ud, T)
