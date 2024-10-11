@@ -40,38 +40,37 @@ end
 
 @testset "copyto! with Nf = 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 63
-    Nij = 4
+    Ni = Nij = 4
     Nh = 30 * 30 * 6
     Nk = 6
     bm = Benchmark(; float_type = FT, device_name)
-    data = DataF{S}(device_zeros(FT, Nf))
+    data = DataF{S}(ArrayType{FT}, zeros)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
     # The parent array of IJF and IF datalayouts are MArrays, and can therefore not bm, be passed into CUDA kernels on the RHS.
-    # data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3)
-    # data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3)
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    # data = IJF{S}(ArrayType{FT}, zeros; Nij);             benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3)
+    # data = IF{S}(ArrayType{FT}, zeros; Ni);               benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3)
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     benchmarkcopyto!(bm, device, data, 3)
     @test all(parent(data) .== 3)
 
-    # data = IJKFVH{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
-    # data = IH1JH2{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    # data = IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nh); benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    # data = IH1JH2{S}(ArrayType{FT}, zeros; Nij,Nk,Nh); benchmarkcopyto!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
     tabulate_benchmark(bm)
 end

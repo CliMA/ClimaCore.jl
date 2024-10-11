@@ -19,72 +19,70 @@ end
 
 @testset "fill! with Nf = 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
 
-    data = DataF{S}(device_zeros(FT, Nf))
+    data = DataF{S}(ArrayType{FT}, zeros)
     test_fill!(data, 3)
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, 3)
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, 3)
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, 3)
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_fill!(data, 3)
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data, 3)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, 3)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, 3)
 
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, 3) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_fill!(data, 3) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(data, 3) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_fill!(data, 3) # TODO: test
 end
 
 @testset "fill! with Nf > 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = Tuple{FT, FT}
-    Nf = 2
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
 
-    data = DataF{S}(device_zeros(FT, Nf))
+    data = DataF{S}(ArrayType{FT}, zeros)
     test_fill!(data, (2, 3))
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, (2, 3))
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, (2, 3))
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, (2, 3))
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_fill!(data, (2, 3))
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data, (2, 3))
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, (2, 3))
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, (2, 3))
 
     # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, (2,3)) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_fill!(data, (2,3)) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(data, (2,3)) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_fill!(data, (2,3)) # TODO: test
 end
 
 @testset "fill! views with Nf > 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     data_view(data) = DataLayouts.rebuild(
         data,
         SubArray(
@@ -97,37 +95,36 @@ end
     )
     FT = Float64
     S = Tuple{FT, FT}
-    Nf = 2
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
     # Rather than using level/slab/column, let's just make views/SubArrays
     # directly so that we can easily test all cases:
 
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data_view(data), (2, 3))
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data_view(data), (2, 3))
-    data = IJF{S, Nij}(device_zeros(FT, Nij, Nij, Nf))
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data_view(data), (2, 3))
-    data = IF{S, Nij}(device_zeros(FT, Nij, Nf))
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
     test_fill!(data_view(data), (2, 3))
-    data = VF{S, Nv}(device_zeros(FT, Nv, Nf))
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_fill!(data_view(data), (2, 3))
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data_view(data), (2, 3))
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data_view(data), (2, 3))
 
     # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(data, (2,3)) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_fill!(data, (2,3)) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(data, (2,3)) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_fill!(data, (2,3)) # TODO: test
 end
 
 @testset "Reshaped Arrays" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     function reshaped_array(data2)
         # `reshape` does not always return a `ReshapedArray`, which
         # we need to specialize on to correctly dispatch when its
@@ -160,26 +157,25 @@ end
     end
     FT = Float64
     S = Tuple{FT, FT} # need at least 2 components to make a SubArray
-    Nf = 2
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
     # directly so that we can easily test all cases:
 
-    data = IJFH{S, Nij}(device_zeros(FT, Nij, Nij, Nf, Nh))
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(reshaped_array(data), 2)
-    data = IFH{S, Nij}(device_zeros(FT, Nij, Nf, Nh))
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(reshaped_array(data), 2)
-    # data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_fill!(reshaped_array(data), 2)
-    # data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_fill!(reshaped_array(data), 2)
-    # data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_fill!(reshaped_array(data), 2)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nij, Nf, Nh))
+    # data = IJF{S}(ArrayType{FT}, zeros; Nij);          test_fill!(reshaped_array(data), 2)
+    # data = IF{S}(ArrayType{FT}, zeros; Ni);            test_fill!(reshaped_array(data), 2)
+    # data = VF{S}(ArrayType{FT}, zeros; Nv);            test_fill!(reshaped_array(data), 2)
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(reshaped_array(data), 2)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT, Nv, Nij, Nf, Nh))
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(reshaped_array(data), 2)
 
     # TODO: test this
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_fill!(reshaped_array(data), 2) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_fill!(reshaped_array(data), 2) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(reshaped_array(data), 2) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_fill!(reshaped_array(data), 2) # TODO: test
 end
