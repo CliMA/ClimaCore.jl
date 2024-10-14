@@ -9,6 +9,7 @@ import Base.Broadcast: Broadcasted
 import ..slab, ..slab_args, ..column, ..column_args
 import ClimaComms
 import ..DataLayouts: DataLayouts, Data2D, DataSlab2D
+import ..DataLayouts: vindex
 import ..Geometry: Geometry, Covariant12Vector, Contravariant12Vector, ⊗
 import ..Spaces: Spaces, Quadratures, AbstractSpace
 import ..Topologies

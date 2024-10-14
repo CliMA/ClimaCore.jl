@@ -1,126 +1,104 @@
-import ClimaCore: Spaces, Fields, Spaces, Topologies
-import ClimaCore.Operators: strip_space
+import ClimaCore: Spaces, Fields, level, column
 import ClimaCore.Operators:
-    column_integral_definite!,
-    column_integral_definite_kernel!,
-    column_integral_indefinite_kernel!,
-    column_integral_indefinite!,
-    column_mapreduce_device!,
-    _column_integral_definite!,
-    _column_integral_indefinite!
-
+    left_idx,
+    strip_space,
+    column_reduce_device!,
+    single_column_reduce!,
+    column_accumulate_device!,
+    single_column_accumulate!
 import ClimaComms
 using CUDA: @cuda
 
-function column_integral_definite!(
+function column_reduce_device!(
     ::ClimaComms.CUDADevice,
-    ∫field::Fields.Field,
-    ᶜfield::Fields.Field,
-)
-    space = axes(∫field)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(∫field))
-    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    args = (strip_space(∫field, space), strip_space(ᶜfield, space))
-    auto_launch!(
-        column_integral_definite_kernel!,
-        args,
-        size(Fields.field_values(∫field));
-        threads_s = nthreads,
-        blocks_s = nblocks,
-    )
-end
-
-function column_integral_definite_kernel!(
-    ∫field,
-    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
-)
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
-    if idx <= Ni * Nj * Nh
-        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
-        ∫field_column = Spaces.column(∫field, i, j, h)
-        ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
-        _column_integral_definite!(∫field_column, ᶜfield_column)
-    end
-    return nothing
-end
-
-function column_integral_indefinite_kernel!(
-    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
-    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
-)
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶜfield))
-    if idx <= Ni * Nj * Nh
-        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
-        ᶠ∫field_column = Spaces.column(ᶠ∫field, i, j, h)
-        ᶜfield_column = Spaces.column(ᶜfield, i, j, h)
-        _column_integral_indefinite!(ᶠ∫field_column, ᶜfield_column)
-    end
-    return nothing
-end
-
-function column_integral_indefinite!(
-    ::ClimaComms.CUDADevice,
-    ᶠ∫field::Fields.Field,
-    ᶜfield::Fields.Field,
-)
-    Ni, Nj, _, _, Nh = size(Fields.field_values(ᶠ∫field))
-    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    args = (ᶠ∫field, ᶜfield)
-    auto_launch!(
-        column_integral_indefinite_kernel!,
-        args,
-        size(Fields.field_values(ᶠ∫field));
-        threads_s = nthreads,
-        blocks_s = nblocks,
-    )
-end
-
-function column_mapreduce_device!(
-    ::ClimaComms.CUDADevice,
-    fn::F,
-    op::O,
-    reduced_field::Fields.Field,
-    fields::Fields.Field...,
-) where {F, O}
-    Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh)
-    kernel! = if first(fields) isa Fields.ExtrudedFiniteDifferenceField
-        column_mapreduce_kernel_extruded!
-    else
-        column_mapreduce_kernel!
-    end
+    f::F,
+    transform::T,
+    output,
+    input,
+    init,
+    space,
+) where {F, T}
+    Ni, Nj, _, _, Nh = size(Fields.field_values(output))
+    us = UniversalSize(Fields.field_values(output))
     args = (
-        fn,
-        op,
-        # reduced_field,
-        strip_space(reduced_field, axes(reduced_field)),
-        # fields...,
-        map(field -> strip_space(field, axes(field)), fields)...,
+        single_column_reduce!,
+        f,
+        transform,
+        strip_space(output, axes(output)), # The output space is irrelevant here
+        strip_space(input, space),
+        init,
+        space,
+        us,
     )
+    nitems = Ni * Nj * Nh
+    threads = threads_via_occupancy(bycolumn_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
     auto_launch!(
-        kernel!,
-        args,
-        size(Fields.field_values(reduced_field));
-        threads_s = nthreads,
-        blocks_s = nblocks,
+        bycolumn_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
 end
 
-function column_mapreduce_kernel_extruded!(
-    fn::F,
-    op::O,
-    reduced_field,
-    fields...,
-) where {F, O}
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    Ni, Nj, _, _, Nh = size(Fields.field_values(reduced_field))
-    if idx <= Ni * Nj * Nh
-        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
-        reduced_field_column = Spaces.column(reduced_field, i, j, h)
-        field_columns = map(field -> Spaces.column(field, i, j, h), fields)
-        _column_mapreduce!(fn, op, reduced_field_column, field_columns...)
-    end
-    return nothing
+function column_accumulate_device!(
+    ::ClimaComms.CUDADevice,
+    f::F,
+    transform::T,
+    output,
+    input,
+    init,
+    space,
+) where {F, T}
+    out_fv = Fields.field_values(output)
+    us = UniversalSize(out_fv)
+    args = (
+        single_column_accumulate!,
+        f,
+        transform,
+        strip_space(output, space),
+        strip_space(input, space),
+        init,
+        space,
+        us,
+    )
+    (Ni, Nj, _, _, Nh) = DataLayouts.universal_size(us)
+    nitems = Ni * Nj * Nh
+    threads = threads_via_occupancy(bycolumn_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = columnwise_partition(us, n_max_threads)
+    auto_launch!(
+        bycolumn_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
 end
+
+bycolumn_kernel!(
+    single_column_function!::S,
+    f::F,
+    transform::T,
+    output,
+    input,
+    init,
+    space,
+    us::DataLayouts.UniversalSize,
+) where {S, F, T} =
+    if space isa Spaces.FiniteDifferenceSpace
+        single_column_function!(f, transform, output, input, init, space)
+    else
+        I = columnwise_universal_index(us)
+        if columnwise_is_valid_index(I, us)
+            (i, j, _, _, h) = I.I
+            single_column_function!(
+                f,
+                transform,
+                column(output, i, j, h),
+                column(input, i, j, h),
+                init,
+                column(space, i, j, h),
+            )
+        end
+    end

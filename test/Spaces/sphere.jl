@@ -8,6 +8,7 @@ using Test
 @testset "Sphere" begin
     for FT in (Float64, Float32)
         context = ClimaComms.SingletonCommsContext()
+        device = ClimaComms.device(context)
         radius = FT(3)
         ne = 4
         Nq = 4
@@ -16,6 +17,8 @@ using Test
         topology = Topologies.Topology2D(context, mesh)
         quad = Quadratures.GLL{Nq}()
         space = Spaces.SpectralElementSpace2D(topology, quad)
+
+        @test Spaces.n_elements_per_panel_direction(space) == ne
 
         # surface area
         @test sum(ones(space)) ≈ FT(4pi * radius^2) rtol = 1e11 * eps(FT)
@@ -43,13 +46,17 @@ using Test
         # total nodes
         nn = 6 * ne^2 * Nq^2
         # unique nodes
-        @test length(collect(Spaces.unique_nodes(space))) ==
-              nn - nn2 - 2 * nn3 - 3 * nn4
+        if device isa ClimaComms.AbstractCPUDevice
+            @test length(collect(Spaces.unique_nodes(space))) ==
+                  nn - nn2 - 2 * nn3 - 3 * nn4
+        end
 
         point_space = column(space, 1, 1, 1)
         @test point_space isa Spaces.PointSpace
-        @test Spaces.coordinates_data(point_space)[] ==
-              column(Spaces.coordinates_data(space), 1, 1, 1)[]
+        ClimaComms.allowscalar(device) do
+            @test Spaces.coordinates_data(point_space)[] ==
+                  column(Spaces.coordinates_data(space), 1, 1, 1)[]
+        end
     end
 end
 

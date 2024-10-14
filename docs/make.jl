@@ -51,6 +51,8 @@ withenv("GKSwstype" => "nul") do
         prettyurls = !isempty(get(ENV, "CI", "")),
         mathengine = mathengine,
         collapselevel = 1,
+        size_threshold = 300_000, # default is 200_000
+        size_threshold_warn = 200_000, # default is 100_000
     )
 
     Documenter.makedocs(;

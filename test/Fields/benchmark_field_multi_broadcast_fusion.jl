@@ -11,8 +11,9 @@ include("utils_field_multi_broadcast_fusion.jl")
     device = ClimaComms.device()
     space = TU.CenterExtrudedFiniteDifferenceSpace(
         FT;
-        zelem = 3,
-        helem = 4,
+        zelem = 63,
+        helem = 30,
+        Nq = 4,
         context = ClimaComms.context(device),
     )
     X = Fields.FieldVector(
@@ -43,8 +44,9 @@ end
     if device isa ClimaComms.CPUSingleThreaded
         space = CenterExtrudedFiniteDifferenceSpaceLineHSpace(
             FT;
-            zelem = 3,
-            helem = 4,
+            zelem = 63,
+            helem = 30,
+            Nq = 4,
             context = ClimaComms.context(device),
         )
         X = Fields.FieldVector(
@@ -101,7 +103,7 @@ end
     device = ClimaComms.device()
     colspace = TU.ColumnCenterFiniteDifferenceSpace(
         FT;
-        zelem = 3,
+        zelem = 63,
         context = ClimaComms.context(device),
     )
     VF_data() = Fields.Field(FT, colspace)

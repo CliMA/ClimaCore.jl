@@ -10,6 +10,7 @@ import ..Geometry
 import ..Domains: Domains, coordinate_type
 import ..Meshes: Meshes, domain, coordinates
 import ..DataLayouts
+import ..DataLayouts: slab_index
 import ..slab, ..column, ..level
 
 import ..DeviceSideDevice, ..DeviceSideContext

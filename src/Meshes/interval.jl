@@ -16,6 +16,7 @@ Constuct a 1D mesh on `domain` with `nelems` elements, using `stretching`. Possi
 - [`Uniform()`](@ref)
 - [`ExponentialStretching(H)`](@ref)
 - [`GeneralizedExponentialStretching(dz_bottom, dz_top)`](@ref)
+- [`HyperbolicTangentStretching(dz_bottom)`](@ref)
 """
 struct IntervalMesh{I <: IntervalDomain, V <: AbstractVector} <: AbstractMesh1D
     domain::I
@@ -165,6 +166,8 @@ model configurations).
 Then, the user can define a stretched mesh via
 
     ClimaCore.Meshes.IntervalMesh(interval_domain, ExponentialStretching(H); nelems::Int, reverse_mode = false)
+
+`faces` contain reference z without any warping.
 """
 struct ExponentialStretching{FT} <: StretchingRule
     H::FT
@@ -213,6 +216,8 @@ For land configurations, use `reverse_mode` = `true` (default value `false`).
 Then, the user can define a generalized stretched mesh via
 
     ClimaCore.Meshes.IntervalMesh(interval_domain, GeneralizedExponentialStretching(dz_bottom, dz_top); nelems::Int, reverse_mode = false)
+
+`faces` contain reference z without any warping.
 """
 struct GeneralizedExponentialStretching{FT} <: StretchingRule
     dz_bottom::FT
@@ -241,9 +246,9 @@ function IntervalMesh(
         throw(ArgumentError("dz_top must be ≤ dz_bottom"))
     end
 
-    # bottom coord height value, always min, for both atmos and land, since z-axis does not change
+    # bottom coord height value is always min and top coord height value is always max
+    # since the vertical coordinate is positive upward
     z_bottom = Geometry.component(domain.coord_min, 1)
-    # top coord height value, always max, for both atmos and land, since z-axis does not change
     z_top = Geometry.component(domain.coord_max, 1)
     # but in case of reverse_mode, we temporarily swap them together with dz_bottom and dz_top
     # so that the following root solve algorithm does not need to change
@@ -256,7 +261,7 @@ function IntervalMesh(
     # define the inverse σ⁻¹ exponential stretching function
     exp_stretch(ζ, h) = ζ == 1 ? ζ : -h * log(1 - (1 - exp(-1 / h)) * ζ)
 
-    # nondimensional vertical coordinate (]0.0, 1.0])
+    # nondimensional vertical coordinate ([0.0, 1.0])
     ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
 
     # find bottom height variation
@@ -292,7 +297,7 @@ function IntervalMesh(
         find_top,
         RootSolvers.SecantMethod(guess₋, guess₊),
         RootSolvers.CompactSolution(),
-        RootSolvers.ResidualTolerance(FT_solve(1e-3)),
+        RootSolvers.ResidualTolerance(FT_solve(tol)),
     )
     if h_top_sol.converged !== true
         error(
@@ -305,7 +310,7 @@ function IntervalMesh(
     h =
         h_bottom .+
         (ζ_n .- ζ_n[1]) * (h_top - h_bottom) / (ζ_n[end - 1] - ζ_n[1])
-    faces = (z_bottom + (z_top - z_bottom)) * exp_stretch.(ζ_n, h)
+    faces = z_bottom .+ (z_top - z_bottom) * exp_stretch.(ζ_n, h)
 
     # add the bottom level
     faces = FT_solve[z_bottom; faces...]
@@ -318,6 +323,94 @@ function IntervalMesh(
     IntervalMesh(domain, CT.(faces))
 end
 
+"""
+    HyperbolicTangentStretching(dz_surface::FT)
+
+Apply a hyperbolic tangent stretching to the domain when constructing elements.
+`dz_surface` is the target element grid spacing at the surface. In typical atmosphere
+configuration, it is the grid spacing at the bottom of the
+vertical column domain (m). On the other hand, for typical land configurations,
+it is the grid spacing at the top of the vertical column domain.
+
+For an interval ``[z_0,z_1]``, this makes the elements uniformally spaced in
+``\\zeta``, where
+```math
+\\eta = 1 - \\frac{tanh[\\gamma(1-\\zeta)]}{tanh(\\gamma)},
+```
+where ``\\eta = \\frac{z - z_0}{z_1-z_0}``. The stretching parameter ``\\gamma``
+is chosen to achieve a given resolution `dz_surface` at the surface. 
+
+Then, the user can define a stretched mesh via
+
+    ClimaCore.Meshes.IntervalMesh(interval_domain, HyperbolicTangentStretching(dz_surface); nelems::Int, reverse_mode)
+
+`reverse_mode` is default to false for atmosphere configurations. For land configurations, 
+use `reverse_mode` = `true`.
+
+`faces` contain reference z without any warping.
+"""
+struct HyperbolicTangentStretching{FT} <: StretchingRule
+    dz_surface::FT
+end
+
+function IntervalMesh(
+    domain::IntervalDomain{CT},
+    stretch::HyperbolicTangentStretching{FT};
+    nelems::Int,
+    FT_solve = Float64,
+    tol::Union{FT, Nothing} = nothing,
+    reverse_mode::Bool = false,
+) where {CT <: Geometry.Abstract1DPoint{FT}} where {FT}
+    if nelems ≤ 1
+        throw(ArgumentError("`nelems` must be ≥ 2"))
+    end
+
+    dz_surface = FT_solve(stretch.dz_surface)
+    tol === nothing && (tol = dz_surface * FT_solve(1e-6))
+
+    # bottom coord height value is always min and top coord height value is always max
+    # since the vertical coordinate is positive upward
+    z_bottom = Geometry.component(domain.coord_min, 1)
+    z_top = Geometry.component(domain.coord_max, 1)
+    # but in case of reverse_mode, we temporarily swap them
+    # so that the following root solve algorithm does not need to change
+    if reverse_mode
+        z_bottom, z_top = Geometry.component(domain.coord_max, 1),
+        -Geometry.component(domain.coord_min, 1)
+    end
+
+    # define the hyperbolic tangent stretching function
+    tanh_stretch(ζ, γ) = 1 - tanh(γ * (1 - ζ)) / tanh(γ)
+
+    # nondimensional vertical coordinate ([0.0, 1.0])
+    ζ_n = LinRange(one(FT_solve), nelems, nelems) / nelems
+
+    # find the stretching parameter given the grid spacing at the surface
+    find_surface(γ) = dz_surface - z_top * tanh_stretch(ζ_n[1], γ)
+    γ_sol = RootSolvers.find_zero(
+        find_surface,
+        RootSolvers.NewtonsMethodAD(FT_solve(1.0)),
+        RootSolvers.CompactSolution(),
+        RootSolvers.ResidualTolerance(FT_solve(tol)),
+    )
+    if γ_sol.converged !== true
+        error(
+            "gamma root failed to converge for dz_surface: $dz_surface on domain ($z_bottom, $z_top)",
+        )
+    end
+
+    faces = z_bottom .+ (z_top - z_bottom) * tanh_stretch.(ζ_n, γ_sol.root)
+
+    # add the bottom level
+    faces = FT_solve[z_bottom; faces...]
+    if reverse_mode
+        reverse!(faces)
+        faces = map(f -> eltype(faces)(-f), faces)
+        faces[end] = faces[end] == -z_bottom ? z_bottom : faces[1]
+    end
+    monotonic_check(faces)
+    IntervalMesh(domain, CT.(faces))
+end
 
 """
     truncate_mesh(

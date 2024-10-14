@@ -16,7 +16,7 @@ import ClimaCore:
     Operators
 import ClimaCore.Utilities: half
 
-using OrdinaryDiffEq: ODEProblem, solve
+using SciMLBase: ODEProblem, solve
 using ClimaTimeSteppers
 
 using NCDatasets, ClimaCoreTempestRemap

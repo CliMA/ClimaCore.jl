@@ -17,6 +17,7 @@ column_thomas_solve!(::ClimaComms.AbstractCPUDevice, A, b) =
 thomas_algorithm_kernel!(
     A::Fields.FiniteDifferenceField,
     b::Fields.FiniteDifferenceField,
+    us::DataLayouts.UniversalSize,
 ) = thomas_algorithm!(A, b)
 
 function thomas_algorithm!(

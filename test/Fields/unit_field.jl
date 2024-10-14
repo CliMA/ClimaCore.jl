@@ -55,6 +55,7 @@ end
 @testset "1×1 2D domain space" begin
     Nij = 4
     n1 = n2 = 1
+    Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
     field =
@@ -245,11 +246,12 @@ end
 @testset "Broadcasting interception for tuple-valued fields" begin
     n1 = n2 = 1
     Nij = 4
+    Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
     nt_field = Fields.Field(
         IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
-            ones(Nij, Nij, 2, n1 * n2),
+            ones(Nij, Nij, 2, Nh),
         ),
         space,
     )
@@ -305,6 +307,21 @@ end
 
     Y.k.z = 3.0
     @test Y.k.z === 3.0
+
+    @test Y == Y
+    Ydc = deepcopy(Y)
+    Ydc.k.z += 1
+    @test !(Ydc == Y)
+    # Fields.@rprint_diff(Ydc, Y)
+    s = sprint(
+        Fields._rprint_diff,
+        Ydc,
+        Y,
+        "Ydc",
+        "Y";
+        context = IOContext(stdout),
+    )
+    @test occursin("==================== Difference found:", s)
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1465

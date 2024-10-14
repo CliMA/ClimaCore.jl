@@ -51,4 +51,11 @@ include("matrix_field_test_utils.jl")
         TridiagonalMatrixRow{Int},
         PentadiagonalMatrixRow(0, 0, 1, 0, 0),
     )
+
+    @test map(tuple, DiagonalMatrixRow(1), DiagonalMatrixRow(1.0)) ==
+          DiagonalMatrixRow{Tuple{Int, Float64}}(((1, 1.0),))
+    @test map(tuple, DiagonalMatrixRow(1)) == DiagonalMatrixRow(tuple(1))
+    @test zero(typeof(DiagonalMatrixRow(1))) == DiagonalMatrixRow(0)
+    @test eltype(typeof(DiagonalMatrixRow(1))) == Int
+    @test inv(DiagonalMatrixRow(1)) == DiagonalMatrixRow(float(1))
 end

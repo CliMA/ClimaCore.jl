@@ -247,16 +247,9 @@ function check_field_matrix_solver(::BlockDiagonalSolve, _, A, b)
     end
 end
 
-# TODO: we can remove the uniform_vertical_levels
-# limitation while still using static shared memory
-# once Nv is in the type space.
-function uniform_vertical_levels(x, names)
-    _, _, _, Nv1, _ = size(Fields.field_values(x[first(names)]))
-    return all(Base.tail(names)) do name
-        _, _, _, Nv, _ = size(Fields.field_values(x[name]))
-        Nv == Nv1
-    end
-end
+cheap_inv(_) = false
+cheap_inv(::UniformScaling) = true
+cheap_inv(A::ColumnwiseBandMatrixField) = eltype(A) <: DiagonalMatrixRow
 
 NVTX.@annotate function run_field_matrix_solver!(
     ::BlockDiagonalSolve,
@@ -266,9 +259,24 @@ NVTX.@annotate function run_field_matrix_solver!(
     b,
 )
     names = matrix_row_keys(keys(A))
-    if length(names) == 1 ||
-       all(name -> A[name, name] isa UniformScaling, names.values) ||
-       !uniform_vertical_levels(x, names.values)
+    # The following is a performance optimization.
+    # Using `foreach(name-> single_field_solve!(cache[name], x[name], A[name, name], b[name]), names)`
+    # is perfectly fine, but may launch many gpu kernels. So,
+    # We may want to call `multiple_field_solve!`, which fuses
+    # these kernels into one. However, `multiple_field_solve!`
+    # launches threads horizontally, and loops vertically (which
+    # is slow) to perform the solve. In some circumstances,
+    # when a vertical loop is not needed (e.g., UniformScaling)
+    # launching several kernels may be cheaper than launching one
+    # slower kernel, so we first check for types that may lead to fast
+    # kernels.
+
+    case1 = length(names) == 1
+    case2 = all(name -> cheap_inv(A[name, name]), names.values)
+    case3 = any(name -> cheap_inv(A[name, name]), names.values)
+    # TODO: remove case3 and implement _single_field_solve_diag_matrix_row!
+    #       in multiple_field_solve!
+    if case1 || case2 || case3
         foreach(names) do name
             single_field_solve!(cache[name], x[name], A[name, name], b[name])
         end

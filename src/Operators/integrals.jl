@@ -1,315 +1,328 @@
-import ..RecursiveApply: rzero, ⊠, ⊞, radd, rmul
-import ..Utilities
-import ..DataLayouts
+import ..RecursiveApply: rzero, ⊠, ⊞
 import RootSolvers
 import ClimaComms
 
 """
-    column_integral_definite!(∫field::Field, ᶜfield::Field)
+    column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `∫field```{}= \\int_0^{z_{max}}\\,```ᶜfield```(z)\\,dz``, where ``z_{max}``
-is the value of `z` at the top of the domain. The input `ᶜfield` must lie on a
-cell-center space, and the output `∫field` must lie on the corresponding
-horizontal space.
+Sets `ϕ_top```{}= \\int_{z_{bot}}^{z_{top}}\\,```ᶜ∂ϕ∂z```(z)\\,dz +{}```ϕ_bot`,
+where ``z_{bot}`` and ``z_{top}`` are the values of `z` at the bottom and top of
+the domain, respectively. The input `ᶜ∂ϕ∂z` should be a cell-center `Field` or
+`AbstractBroadcasted`, and the output `ϕ_top` should be a horizontal `Field`.
+The default value of `ϕ_bot` is 0.
 """
-column_integral_definite!(∫field::Fields.Field, ᶜfield::Fields.Field) =
-    column_integral_definite!(ClimaComms.device(axes(ᶜfield)), ∫field, ᶜfield)
-
-function column_integral_definite_kernel!(
-    ∫field,
-    ᶜfield::Fields.CenterFiniteDifferenceField,
-)
-    _column_integral_definite!(∫field, ᶜfield)
-    return nothing
-end
-
-column_integral_definite!(
-    ::ClimaComms.AbstractCPUDevice,
-    ∫field::Fields.SpectralElementField,
-    ᶜfield::Fields.ExtrudedFiniteDifferenceField,
-) =
-    Fields.bycolumn(axes(ᶜfield)) do colidx
-        _column_integral_definite!(∫field[colidx], ᶜfield[colidx])
-    end
-
-column_integral_definite!(
-    ::ClimaComms.AbstractCPUDevice,
-    ∫field::Fields.PointField,
-    ᶜfield::Fields.FiniteDifferenceField,
-) = _column_integral_definite!(∫field, ᶜfield)
-
-function _column_integral_definite!(∫field, ᶜfield::Fields.ColumnField)
-    Δz = Fields.Δz_field(ᶜfield)
-    first_level = Operators.left_idx(axes(ᶜfield))
-    last_level = Operators.right_idx(axes(ᶜfield))
-    ∫field_data = Fields.field_values(∫field)
-    Base.setindex!(∫field_data, rzero(eltype(∫field)))
-    @inbounds for level in first_level:last_level
-        val =
-            ∫field_data[] ⊞
-            Fields.level(ᶜfield, level)[] ⊠ Fields.level(Δz, level)[]
-        Base.setindex!(∫field_data, val)
-    end
-    return nothing
+function column_integral_definite!(ϕ_top, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ϕ_top)))
+    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    column_reduce!(⊞, ϕ_top, ᶜΔϕ; init = ϕ_bot)
 end
 
 """
-    column_integral_indefinite!(ᶠ∫field::Field, ᶜfield::Field)
+    column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, [ϕ_bot])
 
-Sets `ᶠ∫field```(z) = \\int_0^z\\,```ᶜfield```(z')\\,dz'``. The input `ᶜfield`
-must lie on a cell-center space, and the output `ᶠ∫field` must lie on the
-corresponding cell-face space.
+Sets `ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```ᶜ∂ϕ∂z```(z')\\,dz' +{}```ϕ_bot`, where
+``z_{bot}`` is the value of `z` at the bottom of the domain. The input `ᶜ∂ϕ∂z`
+should be a cell-center `Field` or `AbstractBroadcasted`, and the output `ᶠϕ`
+should be a cell-face `Field`. The default value of `ϕ_bot` is 0.
 
-    column_integral_indefinite!(
-        f::Function,
-        ᶠ∫field::Fields.ColumnField,
-        ϕ₀ = 0,
-        average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
-    )
+    column_integral_indefinite!(∂ϕ∂z, ᶠϕ, [ϕ_bot], [rtol])
 
-The indefinite integral `ᶠ∫field = ϕ(z) = ∫ f(ϕ,z) dz` given:
-
-- `f` the integral integrand function (which may be a function)
-- `ᶠ∫field` the resulting (scalar) field `ϕ(z)`
-- `ϕ₀` (optional) the boundary condition
-- `average` (optional) a function to compute the cell center
-   average between two cell faces (`ϕ⁻, ϕ⁺`).
+Sets
+`ᶠϕ```(z) = \\int_{z_{bot}}^z\\,```∂ϕ∂z```(```ᶠϕ```(z'), z')\\,dz' +{}```ϕ_bot`,
+where `∂ϕ∂z` can be any scalar-valued two-argument function. The output `ᶠϕ`
+satisfies `ᶜgradᵥ.(ᶠϕ) ≈ ∂ϕ∂z.(ᶜint.(ᶠϕ), ᶜz)`, where `ᶜgradᵥ = GradientF2C()`,
+`ᶜint = InterpolateF2C()`, and `ᶜz = Fields.coordinate_field(ᶜint.(ᶠϕ)).z`, and
+where the approximation is accurate to a relative tolerance of `rtol`. The
+default value of `ϕ_bot` is 0, and the default value of `rtol` is 0.001.
 """
-column_integral_indefinite!(ᶠ∫field::Fields.Field, ᶜfield::Fields.Field) =
-    column_integral_indefinite!(ClimaComms.device(ᶠ∫field), ᶠ∫field, ᶜfield)
-
-column_integral_indefinite_kernel!(
-    ᶠ∫field::Fields.FaceFiniteDifferenceField,
-    ᶜfield::Fields.CenterFiniteDifferenceField,
-) = _column_integral_indefinite!(ᶠ∫field, ᶜfield)
-
-column_integral_indefinite!(
-    ::ClimaComms.AbstractCPUDevice,
-    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
-    ᶜfield::Fields.CenterExtrudedFiniteDifferenceField,
-) =
-    Fields.bycolumn(axes(ᶜfield)) do colidx
-        _column_integral_indefinite!(ᶠ∫field[colidx], ᶜfield[colidx])
-    end
-
-column_integral_indefinite!(
-    ::ClimaComms.AbstractCPUDevice,
-    ᶠ∫field::Fields.FaceFiniteDifferenceField,
-    ᶜfield::Fields.CenterFiniteDifferenceField,
-) = _column_integral_indefinite!(ᶠ∫field, ᶜfield)
-
-function _column_integral_indefinite!(
-    ᶠ∫field::Fields.ColumnField,
-    ᶜfield::Fields.ColumnField,
-)
-    face_space = axes(ᶠ∫field)
-    ᶜΔz = Fields.Δz_field(ᶜfield)
-    first_level = Operators.left_idx(face_space)
-    last_level = Operators.right_idx(face_space)
-    @inbounds Fields.level(ᶠ∫field, first_level)[] = rzero(eltype(ᶜfield))
-    @inbounds for level in (first_level + 1):last_level
-        Fields.level(ᶠ∫field, level)[] =
-            Fields.level(ᶠ∫field, level - 1)[] ⊞
-            Fields.level(ᶜfield, level - half)[] ⊠
-            Fields.level(ᶜΔz, level - half)[]
-    end
+function column_integral_indefinite!(ᶠϕ, ᶜ∂ϕ∂z, ϕ_bot = rzero(eltype(ᶠϕ)))
+    ᶜΔϕ = Base.Broadcast.broadcasted(⊠, ᶜ∂ϕ∂z, Fields.Δz_field(axes(ᶜ∂ϕ∂z)))
+    column_accumulate!(⊞, ᶠϕ, ᶜΔϕ; init = ϕ_bot)
 end
-
-dual_space(space::Spaces.FaceExtrudedFiniteDifferenceSpace) =
-    Spaces.CenterExtrudedFiniteDifferenceSpace(space)
-dual_space(space::Spaces.CenterExtrudedFiniteDifferenceSpace) =
-    Spaces.FaceExtrudedFiniteDifferenceSpace(space)
-
-dual_space(space::Spaces.FaceFiniteDifferenceSpace) =
-    Spaces.CenterFiniteDifferenceSpace(space)
-dual_space(space::Spaces.CenterFiniteDifferenceSpace) =
-    Spaces.FaceFiniteDifferenceSpace(space)
-
-# First, dispatch on device:
-column_integral_indefinite!(
-    f::Function,
-    ᶠ∫field::Fields.Field,
-    ϕ₀ = zero(eltype(ᶠ∫field)),
-    average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
-) = column_integral_indefinite!(
-    f,
-    ClimaComms.device(ᶠ∫field),
-    ᶠ∫field,
-    ϕ₀,
-    average,
-)
-
-#####
-##### CPU
-#####
-
-column_integral_indefinite!(
-    f::Function,
-    ::ClimaComms.AbstractCPUDevice,
-    ᶠ∫field,
-    args...,
-) = column_integral_indefinite_cpu!(f, ᶠ∫field, args...)
-
-column_integral_indefinite!(
-    f::Function,
-    ::ClimaComms.AbstractCPUDevice,
-    ᶠ∫field::Fields.FaceExtrudedFiniteDifferenceField,
-    args...,
-) =
-    Fields.bycolumn(axes(ᶠ∫field)) do colidx
-        column_integral_indefinite_cpu!(f, ᶠ∫field[colidx], args...)
+function column_integral_indefinite!(
+    ∂ϕ∂z::F,
+    ᶠϕ,
+    ϕ_bot = eltype(ᶠϕ)(0),
+    rtol = eltype(ᶠϕ)(0.001),
+) where {F <: Function}
+    device = ClimaComms.device(ᶠϕ)
+    face_space = axes(ᶠϕ)
+    center_space = if face_space isa Spaces.FaceFiniteDifferenceSpace
+        Spaces.CenterFiniteDifferenceSpace(face_space)
+    elseif face_space isa Spaces.FaceExtrudedFiniteDifferenceSpace
+        Spaces.CenterExtrudedFiniteDifferenceSpace(face_space)
+    else
+        error("output of column_integral_indefinite! must be on cell faces")
     end
-
-#=
-Function-based signature, solve for ϕ:
-```
-∂ϕ/∂z = f(ϕ,z)
-(ᶠϕ^{k+1}-ᶠϕ^{k})/ᶜΔz = ᶜf(ᶜϕ̄,ᶜz)
-ᶜϕ̄ = (ϕ^{k+1}+ϕ^{k})/2
-(ᶠϕ^{k+1}-ᶠϕ^{k})/ᶜΔz = ᶜf((ᶠϕ^{k+1}+ᶠϕ^{k})/2,ᶜz)
-root equation: (_ϕ-ϕ^{k})/Δz = f((_ϕ+ϕ^{k})/2,ᶜz)
-```
-=#
-function column_integral_indefinite_cpu!(
-    f::Function,
-    ᶠ∫field::Fields.ColumnField,
-    ϕ₀ = zero(eltype(ᶠ∫field)),
-    average = (ϕ⁻, ϕ⁺) -> (ϕ⁻ + ϕ⁺) / 2,
-)
-    cspace = dual_space(axes(ᶠ∫field))
-    ᶜzfield = Fields.coordinate_field(cspace)
-    face_space = axes(ᶠ∫field)
-    first_level = Operators.left_idx(face_space)
-    last_level = Operators.right_idx(face_space)
-    ᶜΔzfield = Fields.Δz_field(ᶜzfield)
-    @inbounds Fields.level(ᶠ∫field, first_level)[] = ϕ₀
-    ϕ₁ = ϕ₀
-    @inbounds for level in (first_level + 1):last_level
-        ᶜz = Fields.level(ᶜzfield.z, level - half)[]
-        ᶜΔz = Fields.level(ᶜΔzfield, level - half)[]
-        ϕ₀ = ϕ₁
-        root_eq(_x) = (_x - ϕ₀) / ᶜΔz - f(average(_x, ϕ₀), ᶜz)
-        sol = RootSolvers.find_zero(
-            root_eq,
-            RootSolvers.NewtonsMethodAD(ϕ₀),
+    ᶜz = Fields.coordinate_field(center_space).z
+    ᶜΔz = Fields.Δz_field(center_space)
+    ᶜz_and_Δz = Base.Broadcast.broadcasted(tuple, ᶜz, ᶜΔz)
+    column_accumulate!(ᶠϕ, ᶜz_and_Δz; init = ϕ_bot) do ϕ_prev, (z, Δz)
+        residual(ϕ_new) = (ϕ_new - ϕ_prev) / Δz - ∂ϕ∂z((ϕ_prev + ϕ_new) / 2, z)
+        (; converged, root) = RootSolvers.find_zero(
+            residual,
+            RootSolvers.NewtonsMethodAD(ϕ_prev),
             RootSolvers.CompactSolution(),
+            RootSolvers.RelativeSolutionTolerance(rtol),
         )
-        ϕ₁ = sol.root
-        f₁ = f(average(ϕ₀, ϕ₁), ᶜz)
-        ᶜintegrand_lev = f₁
-        @inbounds Fields.level(ᶠ∫field, level)[] =
-            radd(Fields.level(ᶠ∫field, level - 1)[], rmul(ᶜintegrand_lev, ᶜΔz))
+        ClimaComms.@assert device converged "∂ϕ∂z could not be integrated over \
+                                             z = $z with rtol set to $rtol"
+        return root
     end
-    return nothing
 end
 
-"""
-    column_mapreduce!(fn, op, reduced_field::Field, fields::Field...)
+################################################################################
 
-Applies mapreduce along the vertical direction. The input `fields` must all lie
-on the same space, and the output `reduced_field` must lie on the corresponding
-horizontal space. The function `fn` is mapped over every input, and the function
-`op` is used to reduce the outputs of `fn`.
-"""
-column_mapreduce!(
-    fn::F,
-    op::O,
-    reduced_field::Fields.Field,
-    fields::Fields.Field...,
-) where {F, O} = column_mapreduce_device!(
-    ClimaComms.device(reduced_field),
-    fn,
-    op,
-    reduced_field,
-    fields...,
+const PointwiseOrColumnwiseBroadcasted = Union{
+    Base.Broadcast.Broadcasted{
+        <:Union{Fields.FieldStyle, Operators.AbstractStencilStyle},
+    },
+    Operators.StencilBroadcasted,
+}
+
+Base.@propagate_inbounds function get_level_value(
+    space::Spaces.FiniteDifferenceSpace,
+    field_or_bc,
+    level,
 )
-
-column_mapreduce_kernel!(fn::F, op::O, reduced_field, fields...) where {F, O} =
-    _column_mapreduce!(fn, op, reduced_field, fields...)
-
-column_mapreduce_device!(
-    ::ClimaComms.AbstractCPUDevice,
-    fn::F,
-    op::O,
-    reduced_field::Fields.SpectralElementField,
-    fields::Fields.ExtrudedFiniteDifferenceField...,
-) where {F, O} =
-    Fields.bycolumn(axes(reduced_field)) do colidx
-        column_fields = map(field -> field[colidx], fields)
-        _column_mapreduce!(fn, op, reduced_field[colidx], column_fields...)
+    is_periodic = Topologies.isperiodic(Spaces.vertical_topology(space))
+    (_, lw, rw, _) = window_bounds(space, field_or_bc)
+    window = if !is_periodic && level < lw
+        LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+    elseif !is_periodic && level > rw
+        RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+    else
+        Interior()
     end
+    return getidx(space, field_or_bc, window, level, (1, 1, 1))
+end
 
-column_mapreduce_device!(
-    ::ClimaComms.AbstractCPUDevice,
-    fn::F,
-    op::O,
-    reduced_field::Fields.PointField,
-    fields::Fields.FiniteDifferenceField...,
-) where {F, O} = _column_mapreduce!(fn, op, reduced_field, fields...)
+"""
+    UnspecifiedInit()
 
-function _column_mapreduce!(fn::F, op::O, reduced_field, fields...) where {F, O}
-    space = axes(first(fields))
-    for field in Base.tail(fields) # Base.rest breaks on the gpu
-        axes(field) === space ||
-            error("All inputs to column_mapreduce must lie on the same space")
-    end
-    (_, _, _, Nv, _) = size(Fields.field_values(first(fields)))
-    first_level = left_boundary_idx(Nv, space)
-    last_level = right_boundary_idx(Nv, space)
-    # TODO: This code is allocating memory. In particular, even if we comment
-    # out the rest of this function, the first line alone allocates memory.
-    # This problem is not fixed by replacing map with ntuple or unrolled_map.
-    fields_data = map(field -> Fields.field_values(field), fields)
-    first_level_values = map(
-        field_data ->
-            (@inbounds data_level(field_data, space, first_level)[]),
-        fields_data,
-    )
-    reduced_field_data = Fields.field_values(reduced_field)
-    Base.setindex!(reduced_field_data, fn(first_level_values...))
+Analogue of `Base._InitialValue` for `column_reduce!` and `column_accumulate!`.
+"""
+struct UnspecifiedInit end
+
+"""
+    column_reduce!(f, output, input; [init], [transform])
+
+Applies `reduce` to `input` along the vertical direction, storing the result in
+`output`. The `input` can be either a `Field` or an `AbstractBroadcasted` that
+performs pointwise or columnwise operations on `Field`s. Each reduced value is
+computed by iteratively applying `f` to the values in `input`, starting from the
+bottom of each column and moving upward, and the result of the final iteration
+is passed to the `transform` function before being stored in `output`. If `init`
+is specified, it is used as the initial value of the iteration; otherwise, the
+value at the bottom of each column in `input` is used as the initial value.
+    
+With `first_level` and `last_level` denoting the indices of the boundary levels
+of `input`, the reduction in each column can be summarized as follows:
+  - If `init` is unspecified,
+    ```
+    reduced_value = input[first_level]
     for level in (first_level + 1):last_level
-        values = map(
-            field_data ->
-                (@inbounds data_level(field_data, space, level)[]),
-            fields_data,
-        )
-        Base.setindex!(
-            reduced_field_data,
-            op(reduced_field_data[], fn(values...)),
+        reduced_value = f(reduced_value, input[level])
+    end
+    output[] = transform(reduced_value)
+    ```
+  - If `init` is specified,
+    ```
+    reduced_value = init
+    for level in first_level:last_level
+        reduced_value = f(reduced_value, input[level])
+    end
+    output[] = transform(reduced_value)
+    ```
+"""
+function column_reduce!(
+    f::F,
+    output::Fields.Field,
+    input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
+    init = UnspecifiedInit(),
+    transform::T = identity,
+) where {F, T}
+    device = ClimaComms.device(output)
+    space = axes(input)
+    column_reduce_device!(device, f, transform, output, input, init, space)
+end
+
+column_reduce_device!(
+    ::ClimaComms.AbstractCPUDevice,
+    f::F,
+    transform::T,
+    output,
+    input,
+    init,
+    space,
+) where {F, T} =
+    space isa Spaces.FiniteDifferenceSpace ?
+    single_column_reduce!(f, transform, output, input, init, space) :
+    Fields.bycolumn(space) do colidx
+        single_column_reduce!(
+            f,
+            transform,
+            output[colidx],
+            input[colidx],
+            init,
+            space[colidx],
         )
     end
+
+# On GPUs, input and output go through strip_space to become _input and _output.
+function single_column_reduce!(
+    f::F,
+    transform::T,
+    _output,
+    _input,
+    init,
+    space,
+) where {F, T}
+    first_level = left_idx(space)
+    last_level = right_idx(space)
+    @inbounds if init == UnspecifiedInit()
+        reduced_value = get_level_value(space, _input, first_level)
+        next_level = first_level + 1
+    else
+        reduced_value = init
+        next_level = first_level
+    end
+    @inbounds for level in next_level:last_level
+        reduced_value = f(reduced_value, get_level_value(space, _input, level))
+    end
+    Fields.field_values(_output)[] = transform(reduced_value)
     return nothing
 end
 
-import ..Utilities
-Base.@propagate_inbounds data_level(
-    data,
-    ::Operators.CenterPlaceholderSpace,
-    v::Int,
-) = DataLayouts.level(data, v)
-Base.@propagate_inbounds data_level(
-    data,
-    ::Spaces.CenterFiniteDifferenceSpace,
-    v::Int,
-) = DataLayouts.level(data, v)
+"""
+    column_accumulate!(f, output, input; [init], [transform])
 
-Base.@propagate_inbounds data_level(
-    data,
-    ::Operators.FacePlaceholderSpace,
-    v::Utilities.PlusHalf,
-) = DataLayouts.level(data, v.i + 1)
-Base.@propagate_inbounds data_level(
-    data,
-    ::Spaces.FaceFiniteDifferenceSpace,
-    v::Utilities.PlusHalf,
-) = DataLayouts.level(data, v.i + 1)
+Applies `accumulate` to `input` along the vertical direction, storing the result
+in `output`. The `input` can be either a `Field` or an `AbstractBroadcasted`
+that performs pointwise or columnwise operations on `Field`s. Each accumulated
+value is computed by iteratively applying `f` to the values in `input`, starting
+from the bottom of each column and moving upward, and the result of each
+iteration is passed to the `transform` function before being stored in `output`.
+The `init` value is is optional for center-to-center, face-to-face, and
+face-to-center accumulation, but it is required for center-to-face accumulation.
+    
+With `first_level` and `last_level` denoting the indices of the boundary levels
+of `input`, the accumulation in each column can be summarized as follows:
+  - For center-to-center and face-to-face accumulation with `init` unspecified,
+    ```
+    accumulated_value = input[first_level]
+    output[first_level] = transform(accumulated_value)
+    for level in (first_level + 1):last_level
+        accumulated_value = f(accumulated_value, input[level])
+        output[level] = transform(accumulated_value)
+    end
+    ```
+  - For center-to-center and face-to-face accumulation with `init` specified,
+    ```
+    accumulated_value = init
+    for level in first_level:last_level
+        accumulated_value = f(accumulated_value, input[level])
+        output[level] = transform(accumulated_value)
+    end
+    ```
+  - For face-to-center accumulation with `init` unspecified,
+    ```
+    accumulated_value = input[first_level]
+    for level in (first_level + 1):last_level
+        accumulated_value = f(accumulated_value, input[level])
+        output[level - half] = transform(accumulated_value)
+    end
+    ```
+  - For face-to-center accumulation with `init` specified,
+    ```
+    accumulated_value = f(init, input[first_level])
+    for level in (first_level + 1):last_level
+        accumulated_value = f(accumulated_value, input[level])
+        output[level - half] = transform(accumulated_value)
+    end
+    ```
+  - For center-to-face accumulation,
+    ```
+    accumulated_value = init
+    output[first_level - half] = transform(accumulated_value)
+    for level in first_level:last_level
+        accumulated_value = f(accumulated_value, input[level])
+        output[level + half] = transform(accumulated_value)
+    end
+    ```
+"""
+function column_accumulate!(
+    f::F,
+    output::Fields.Field,
+    input::Union{Fields.Field, PointwiseOrColumnwiseBroadcasted};
+    init = UnspecifiedInit(),
+    transform::T = identity,
+) where {F, T}
+    device = ClimaComms.device(output)
+    space = axes(input)
+    init == UnspecifiedInit() &&
+        Spaces.staggering(space) == Spaces.CellCenter() &&
+        Spaces.staggering(axes(output)) == Spaces.CellFace() &&
+        error("init must be specified for center-to-face accumulation")
+    column_accumulate_device!(device, f, transform, output, input, init, space)
+end
 
-left_boundary_idx(n, ::Operators.CenterPlaceholderSpace) = 1
-right_boundary_idx(n, ::Operators.CenterPlaceholderSpace) = n
-left_boundary_idx(n, ::Operators.FacePlaceholderSpace) = Utilities.half
-right_boundary_idx(n, ::Operators.FacePlaceholderSpace) = n - Utilities.half
+column_accumulate_device!(
+    ::ClimaComms.AbstractCPUDevice,
+    f::F,
+    transform::T,
+    output,
+    input,
+    init,
+    space,
+) where {F, T} =
+    space isa Spaces.FiniteDifferenceSpace ?
+    single_column_accumulate!(f, transform, output, input, init, space) :
+    Fields.bycolumn(space) do colidx
+        single_column_accumulate!(
+            f,
+            transform,
+            output[colidx],
+            input[colidx],
+            init,
+            space[colidx],
+        )
+    end
 
-left_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = 1
-right_boundary_idx(n, ::Spaces.CenterFiniteDifferenceSpace) = n
-left_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = Utilities.half
-right_boundary_idx(n, ::Spaces.FaceFiniteDifferenceSpace) = n - Utilities.half
+# On GPUs, input and output go through strip_space to become _input and _output.
+function single_column_accumulate!(
+    f::F,
+    transform::T,
+    _output,
+    _input,
+    init,
+    space,
+) where {F, T}
+    device = ClimaComms.device(space)
+    first_level = left_idx(space)
+    last_level = right_idx(space)
+    output = unstrip_space(_output, space)
+    is_c2c_or_f2f = Spaces.staggering(space) == Spaces.staggering(axes(output))
+    is_c2f = !is_c2c_or_f2f && Spaces.staggering(space) == Spaces.CellCenter()
+    is_f2c = !is_c2c_or_f2f && !is_c2f
+    @inbounds if init == UnspecifiedInit()
+        @assert !is_c2f
+        accumulated_value = get_level_value(space, _input, first_level)
+        next_level = first_level + 1
+        init_output_level = is_c2c_or_f2f ? first_level : nothing
+    else
+        accumulated_value =
+            is_f2c ? f(init, get_level_value(space, _input, first_level)) : init
+        next_level = is_f2c ? first_level + 1 : first_level
+        init_output_level = is_c2f ? first_level - half : nothing
+    end
+    @inbounds if !isnothing(init_output_level)
+        Fields.level(output, init_output_level)[] = transform(accumulated_value)
+    end
+    @inbounds for level in next_level:last_level
+        accumulated_value =
+            f(accumulated_value, get_level_value(space, _input, level))
+        output_level =
+            is_c2c_or_f2f ? level : (is_c2f ? level + half : level - half)
+        Fields.level(output, output_level)[] = transform(accumulated_value)
+    end
+end

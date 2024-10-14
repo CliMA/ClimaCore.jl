@@ -136,6 +136,11 @@ Base.similar(fv::FieldVector{T}, ::Type{T′}) where {T, T′} =
 Base.copy(fv::FieldVector{T}) where {T} = FieldVector{T}(map(copy, _values(fv)))
 Base.zero(fv::FieldVector{T}) where {T} = FieldVector{T}(map(zero, _values(fv)))
 
+Base.@propagate_inbounds slab(fv::FieldVector{T}, inds...) where {T} =
+    FieldVector{T}(slab_args(_values(fv), inds...))
+Base.@propagate_inbounds column(fv::FieldVector{T}, inds...) where {T} =
+    FieldVector{T}(column_args(_values(fv), inds...))
+
 struct FieldVectorStyle <: Base.Broadcast.AbstractArrayStyle{1} end
 
 Base.Broadcast.BroadcastStyle(::Type{<:FieldVector}) = FieldVectorStyle()
@@ -178,6 +183,41 @@ end
     end
     return dest
 end
+
+"""
+    Spaces.create_dss_buffer(fv::FieldVector)
+
+Create a NamedTuple of buffers for communicating neighbour information of
+each Field in `fv`. In this NamedTuple, the name of each field is mapped
+to the buffer.
+"""
+function Spaces.create_dss_buffer(fv::FieldVector)
+    NamedTuple{propertynames(fv)}(
+        map(
+            key -> Spaces.create_dss_buffer(getproperty(fv, key)),
+            propertynames(fv),
+        ),
+    )
+end
+
+"""
+    Spaces.weighted_dss!(fv::FieldVector, dss_buffer = Spaces.create_dss_buffer(fv))
+
+Apply weighted direct stiffness summation (DSS) to each field in `fv`.
+If a `dss_buffer` object is not provided, a buffer will be created for each
+field in `fv`.
+Note that using the `Pair` interface here parallelizes the `weighted_dss!` calls.
+"""
+function Spaces.weighted_dss!(
+    fv::FieldVector,
+    dss_buffer = Spaces.create_dss_buffer(fv),
+)
+    pairs = map(propertynames(fv)) do key
+        Pair(getproperty(fv, key), getproperty(dss_buffer, key))
+    end
+    Spaces.weighted_dss!(pairs...)
+end
+
 
 # Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
 # see Base.Broadcast.preprocess_args
@@ -361,3 +401,104 @@ import ClimaComms
 ClimaComms.array_type(x::FieldVector) = promote_type(
     UnrolledFunctions.unrolled_map(ClimaComms.array_type, _values(x))...,
 )
+
+function __rprint_diff(
+    io::IO,
+    x::T,
+    y::T;
+    pc,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, Field, DataLayouts.AbstractData, NamedTuple}}
+    for pn in propertynames(x)
+        pc_full = (pc..., ".", pn)
+        xi = getproperty(x, pn)
+        yi = getproperty(y, pn)
+        __rprint_diff(io, xi, yi; pc = pc_full, xname, yname)
+    end
+end;
+
+function __rprint_diff(io::IO, xi, yi; pc, xname, yname) # assume we can compute difference here
+    if !(xi == yi)
+        xs = xname * string(join(pc))
+        ys = yname * string(join(pc))
+        println(io, "==================== Difference found:")
+        println(io, "$xs: ", xi)
+        println(io, "$ys: ", yi)
+        println(io, "($xs .- $ys): ", (xi .- yi))
+    end
+    return nothing
+end
+
+"""
+    rprint_diff(io::IO, ::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+    rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+
+Recursively print differences in given `Union{FieldVector, NamedTuple}`.
+"""
+_rprint_diff(
+    io::IO,
+    x::T,
+    y::T,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, NamedTuple}} =
+    __rprint_diff(io, x, y; pc = (), xname, yname)
+_rprint_diff(
+    x::T,
+    y::T,
+    xname,
+    yname,
+) where {T <: Union{FieldVector, NamedTuple}} =
+    _rprint_diff(stdout, x, y, xname, yname)
+
+"""
+    @rprint_diff(::T, ::T) where {T <: Union{FieldVector, NamedTuple}}
+
+Recursively print differences in given `Union{FieldVector, NamedTuple}`.
+"""
+macro rprint_diff(x, y)
+    return :(_rprint_diff(
+        stdout,
+        $(esc(x)),
+        $(esc(y)),
+        $(string(x)),
+        $(string(y)),
+    ))
+end
+
+
+# Recursively compare contents of similar fieldvectors
+_rcompare(pass, x::T, y::T) where {T <: Field} =
+    pass && _rcompare(pass, field_values(x), field_values(y))
+_rcompare(pass, x::T, y::T) where {T <: DataLayouts.AbstractData} =
+    pass && (parent(x) == parent(y))
+_rcompare(pass, x::T, y::T) where {T} = pass && (x == y)
+
+function _rcompare(pass, x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
+    for pn in propertynames(x)
+        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn))
+    end
+    return pass
+end
+
+"""
+    rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
+
+Recursively compare given fieldvectors via `==`.
+Returns `true` if `x == y` recursively.
+
+FieldVectors with different types are considered different.
+"""
+rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
+    _rcompare(true, x, y)
+
+rcompare(x::T, y::T) where {T <: FieldVector} = _rcompare(true, x, y)
+
+rcompare(x::T, y::T) where {T <: NamedTuple} = _rcompare(true, x, y)
+
+# FieldVectors with different types are always different
+rcompare(x::FieldVector, y::FieldVector) = false
+
+# Define == to call rcompare for two fieldvectors
+Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y)

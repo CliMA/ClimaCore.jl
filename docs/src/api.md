@@ -105,6 +105,7 @@ Meshes.NormalizedBilinearMap
 Meshes.Uniform
 Meshes.ExponentialStretching
 Meshes.GeneralizedExponentialStretching
+Meshes.HyperbolicTangentStretching
 ```
 
 ### Mesh utilities

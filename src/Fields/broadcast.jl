@@ -46,7 +46,7 @@ function _first end
 # we're trying to do is throw a more helpful
 # error message. So, let's throw it here instead.
 _first(bc, ::Any) = throw(BroadcastInferenceError(bc))
-_first_data_layout(data::DataLayouts.VF) = data[1]
+_first_data_layout(data::DataLayouts.VF) = data[CartesianIndex(1, 1, 1, 1, 1)]
 _first_data_layout(data::DataLayouts.DataF) = data[]
 _first(bc, x::Real) = x
 _first(bc, x::Geometry.LocalGeometry) = x

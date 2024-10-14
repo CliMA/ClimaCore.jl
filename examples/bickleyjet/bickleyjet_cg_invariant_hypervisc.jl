@@ -11,7 +11,7 @@ import ClimaCore:
     Topologies,
     Quadratures,
     DataLayouts
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 using Logging
 ClimaComms.@import_required_backends

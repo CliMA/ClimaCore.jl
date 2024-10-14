@@ -277,10 +277,10 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEq
+using OrdinaryDiffEqSSPRK: ODEProblem, init, solve!, SSPRK33
 Δt = 0.5
 prob = ODEProblem(rhs_invariant!, Y, (0.0, 15000.0))
-integrator = OrdinaryDiffEq.init(
+integrator = init(
     prob,
     SSPRK33(),
     dt = Δt,
@@ -293,7 +293,7 @@ if haskey(ENV, "CI_PERF_SKIP_RUN") # for performance analysis
     throw(:exit_profile)
 end
 
-sol = @timev OrdinaryDiffEq.solve!(integrator)
+sol = @timev solve!(integrator)
 
 ENV["GKSwstype"] = "nul"
 import Plots, ClimaCorePlots

@@ -2,47 +2,30 @@ import ..Topologies: Topology2D
 using ..RecursiveApply
 
 """
-    dss_transform(arg, local_geometry, weight, I...)
+    dss_transform(arg, local_geometry, weight, I)
 
-Transfrom `arg[I...]` to a basis for direct stiffness summation (DSS).
+Transfrom `arg[I]` to a basis for direct stiffness summation (DSS).
 Transformations only apply to vector quantities.
 
-- `local_geometry[I...]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
-- `weight[I...]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
+- `local_geometry[I]` is the relevant `LocalGeometry` object. If it is `nothing`, then no transformation is performed
+- `weight[I]` is the relevant DSS weights. If `weight` is `nothing`, then the result is simply summation.
 
 See [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
-Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i, j) =
-    dss_transform(arg[i, j], local_geometry[i, j], weight[i, j])
+Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, I) =
+    dss_transform(arg[I], local_geometry[I], weight[I])
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry,
     weight::Nothing,
-    i,
-    j,
-) = dss_transform(arg[i, j], local_geometry[i, j], 1)
+    I,
+) = dss_transform(arg[I], local_geometry[I], 1)
 Base.@propagate_inbounds dss_transform(
     arg,
     local_geometry::Nothing,
     weight::Nothing,
-    i,
-    j,
-) = arg[i, j]
-
-Base.@propagate_inbounds dss_transform(arg, local_geometry, weight, i) =
-    dss_transform(arg[i], local_geometry[i], weight[i])
-Base.@propagate_inbounds dss_transform(
-    arg,
-    local_geometry,
-    weight::Nothing,
-    i,
-) = dss_transform(arg[i], local_geometry[i], 1)
-Base.@propagate_inbounds dss_transform(
-    arg,
-    local_geometry::Nothing,
-    weight::Nothing,
-    i,
-) = arg[i]
+    I,
+) = arg[I]
 
 @inline function dss_transform(
     arg::Tuple{},
@@ -61,6 +44,11 @@ end
         dss_transform(Base.tail(arg), local_geometry, weight)...,
     )
 end
+@inline dss_transform(
+    arg::Tuple{Any},
+    local_geometry::Geometry.LocalGeometry,
+    weight,
+) = (dss_transform(first(arg), local_geometry, weight),)
 @inline function dss_transform(
     arg::NamedTuple{names},
     local_geometry::Geometry.LocalGeometry,
@@ -152,23 +140,9 @@ Base.@propagate_inbounds dss_untransform(
     ::Type{T},
     targ,
     local_geometry,
-    i,
-    j,
-) where {T} = dss_untransform(T, targ, local_geometry[i, j])
-Base.@propagate_inbounds dss_untransform(
-    ::Type{T},
-    targ,
-    local_geometry::Nothing,
-    i,
-    j,
-) where {T} = dss_untransform(T, targ, local_geometry)
-Base.@propagate_inbounds dss_untransform(
-    ::Type{T},
-    targ,
-    local_geometry,
-    i,
-) where {T} = dss_untransform(T, targ, local_geometry[i])
-@inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, i) where {T} =
+    I,
+) where {T} = dss_untransform(T, targ, local_geometry[I])
+@inline dss_untransform(::Type{T}, targ, local_geometry::Nothing, I) where {T} =
     dss_untransform(T, targ, local_geometry)
 @inline function dss_untransform(
     ::Type{NamedTuple{names, T}},
@@ -232,21 +206,6 @@ end
 
 # helper functions for DSS2
 
-function _get_idx_metric(sizet::NTuple{5, Int}, loc::NTuple{4, Int})
-    @inbounds begin
-        nmetric = sizet[4]
-        (i11, i12, i21, i22) = nmetric == 4 ? (1, 2, 3, 4) : (1, 2, 4, 5)
-        (level, i, j, elem) = loc
-        inds = (
-            linear_ind(sizet, (level, i, j, i11, elem)),
-            linear_ind(sizet, (level, i, j, i12, elem)),
-            linear_ind(sizet, (level, i, j, i21, elem)),
-            linear_ind(sizet, (level, i, j, i22, elem)),
-        )
-        return inds
-    end
-end
-
 function _representative_slab(
     data::Union{DataLayouts.AbstractData, Nothing},
     ::Type{DA},
@@ -255,9 +214,12 @@ function _representative_slab(
     if isnothing(data)
         return nothing
     elseif rebuild_flag
-        return DataLayouts.rebuild(slab(data, 1, 1), Array)
+        return DataLayouts.rebuild(
+            slab(data, CartesianIndex(1, 1, 1, 1, 1)),
+            Array,
+        )
     else
-        return slab(data, 1, 1)
+        return slab(data, CartesianIndex(1, 1, 1, 1, 1))
     end
 end
 
@@ -271,8 +233,7 @@ _transformed_type(
         _representative_slab(data, DA),
         _representative_slab(local_geometry, DA),
         _representative_slab(local_weights, DA),
-        1,
-        1,
+        CartesianIndex(1, 1, 1, 1, 1),
     ),
 )
 
@@ -288,33 +249,34 @@ recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 
 create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
 
+create_ghost_buffer(
+    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
+    topology::Topologies.Topology2D,
+) where {S, Nij} = create_ghost_buffer(
+    data,
+    topology,
+    Topologies.nsendelems(topology),
+    Topologies.nrecvelems(topology),
+)
+
+
 function create_ghost_buffer(
     data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
     topology::Topologies.Topology2D,
+    Nhsend,
+    Nhrec,
 ) where {S, Nij}
     if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(
-            typeof(parent(data)),
-            Topologies.nsendelems(topology),
-        )
-        recv_data = DataLayouts.IJFH{S, Nij}(
-            typeof(parent(data)),
-            Topologies.nrecvelems(topology),
-        )
+        send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
+        recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
         k = stride(parent(send_data), 4)
     else
-        Nv, _, _, Nf, _ = size(parent(data))
+        Nv, _, _, Nf, _ = DataLayouts.farray_size(data)
         send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(
-                parent(data),
-                (Nv, Nij, Nij, Nf, Topologies.nsendelems(topology)),
-            ),
+            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
         )
         recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(
-                parent(data),
-                (Nv, Nij, Nij, Nf, Topologies.nrecvelems(topology)),
-            ),
+            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
         )
         k = stride(parent(send_data), 5)
     end

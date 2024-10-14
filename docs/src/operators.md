@@ -102,7 +102,8 @@ Extrapolate
 ```@docs
 column_integral_definite!
 column_integral_indefinite!
-column_mapreduce!
+column_reduce!
+column_accumulate!
 ```
 
 ## Internal APIs

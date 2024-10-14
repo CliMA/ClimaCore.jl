@@ -10,13 +10,8 @@
 #   - staggered finite difference in the vertical
 # - currently under development
 
-using ClimaComms,
-    ClimaCore,
-    ClimaCorePlots,
-    LinearAlgebra,
-    IntervalSets,
-    Plots,
-    OrdinaryDiffEq
+using ClimaComms, ClimaCore, ClimaCorePlots, LinearAlgebra, IntervalSets, Plots
+
 #----------------------------------------------------------------------------
 
 # ## 1. Constructing a discretization
@@ -362,7 +357,7 @@ plot(∇∇sinz, ylim = (0, 10))
 #
 # ClimaCore can be used for spatial discretizations of PDEs. For temporal discretization, we can use the OrdinaryDiffEq package, which we aim to be compatibile with.
 
-using OrdinaryDiffEq
+import OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 #----------------------------------------------------------------------------
 
 # ### 3.1 Heat equation using finite differences

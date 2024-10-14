@@ -58,6 +58,7 @@ import ..RecursiveApply:
     rmap, rmaptype, rpromote_type, rzero, rconvert, radd, rsub, rmul, rdiv
 import ..RecursiveApply: ⊠, ⊞, ⊟
 import ..DataLayouts: AbstractData
+import ..DataLayouts: vindex
 import ..Geometry
 import ..Topologies
 import ..Spaces
@@ -88,8 +89,7 @@ const ColumnwiseBandMatrixField{V, S} = Fields.Field{
 } where {
     V <: AbstractData{<:BandMatrixRow},
     S <: Union{
-        Spaces.FiniteDifferenceSpace,
-        Spaces.ExtrudedFiniteDifferenceSpace,
+        Spaces.AbstractSpace,
         Operators.PlaceholderSpace, # so that this can exist inside cuda kernels
     },
 }

@@ -94,15 +94,40 @@ Base.@propagate_inbounds function operator_shmem(
     FT = Spaces.undertype(space)
     QS = Spaces.quadrature_style(space)
     Nq = Quadratures.degrees_of_freedom(QS)
-    # allocate temp output
     IT = eltype(arg)
-    input = CUDA.CuStaticSharedArray(IT, (Nq, Nq, Nvt))
-    return (input,)
+    ET = eltype(IT)
+    RT = operator_return_eltype(op, IT)
+    RT12 = Geometry.AxisTensor{
+        ET,
+        2,
+        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2)}},
+        SMatrix{2, 2, ET, 4},
+    }
+    RT123 = Geometry.AxisTensor{
+        ET,
+        2,
+        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2, 3)}},
+        SMatrix{2, 3, ET, 6},
+    }
+    if RT <: Geometry.Covariant12Vector
+        # allocate temp output
+        input = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (input,)
+    elseif RT <: RT12
+        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (v₁, v₂)
+    elseif RT <: RT123
+        v₁ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₂ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        v₃ = CUDA.CuStaticSharedArray(ET, (Nq, Nq, Nvt))
+        return (v₁, v₂, v₃)
+    end
 end
 
 Base.@propagate_inbounds function operator_fill_shmem!(
     op::Gradient{(1, 2)},
-    (input,),
+    input,
     space,
     ij,
     slabidx,
@@ -110,7 +135,34 @@ Base.@propagate_inbounds function operator_fill_shmem!(
 )
     vt = threadIdx().z
     i, j = ij.I
-    input[i, j, vt] = arg
+    local_geometry = get_local_geometry(space, ij, slabidx)
+    RT = operator_return_eltype(op, typeof(arg))
+    ET = eltype(eltype(arg))
+    RT12 = Geometry.AxisTensor{
+        ET,
+        2,
+        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2)}},
+        SMatrix{2, 2, ET, 4},
+    }
+    RT123 = Geometry.AxisTensor{
+        ET,
+        2,
+        Tuple{Geometry.CovariantAxis{(1, 2)}, Geometry.LocalAxis{(1, 2, 3)}},
+        SMatrix{2, 3, ET, 6},
+    }
+    if RT <: Geometry.Covariant12Vector
+        (v,) = input
+        v[i, j, vt] = arg
+    elseif RT <: RT12
+        v₁, v₂ = input
+        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
+        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
+    elseif RT <: RT123
+        v₁, v₂, v₃ = input
+        v₁[i, j, vt] = Geometry.LocalVector(arg, local_geometry).u
+        v₂[i, j, vt] = Geometry.LocalVector(arg, local_geometry).v
+        v₃[i, j, vt] = Geometry.LocalVector(arg, local_geometry).w
+    end
 end
 
 

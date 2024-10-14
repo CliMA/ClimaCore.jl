@@ -18,10 +18,9 @@ NVTX.@annotate function multiple_field_solve!(
     b,
     x1,
 )
-    Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
     names = MatrixFields.matrix_row_keys(keys(A))
     Nnames = length(names)
-    nthreads, nblocks = _configure_threadblock(Ni * Nj * Nh * Nnames)
+    Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
     sscache = Operators.strip_space(cache)
     ssx = Operators.strip_space(x)
     ssA = Operators.strip_space(A)
@@ -34,14 +33,19 @@ NVTX.@annotate function multiple_field_solve!(
 
     device = ClimaComms.device(x[first(names)])
 
-    args = (device, caches, xs, As, bs, x1, Val(Nnames))
+    us = UniversalSize(Fields.field_values(x1))
+    args = (device, caches, xs, As, bs, x1, us, Val(Nnames))
+
+    nitems = Ni * Nj * Nh * Nnames
+    threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = multiple_field_solve_partition(us, n_max_threads; Nnames)
 
     auto_launch!(
         multiple_field_solve_kernel!,
-        args,
-        x1;
-        threads_s = nthreads,
-        blocks_s = nblocks,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
         always_inline = true,
     )
 end
@@ -81,14 +85,13 @@ function multiple_field_solve_kernel!(
     As,
     bs,
     x1,
+    us::UniversalSize,
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
-        Ni, Nj, _, _, Nh = size(Fields.field_values(x1))
-        tidx = thread_index()
-        n = (Ni, Nj, Nh, Nnames)
-        if valid_range(tidx, prod(n))
-            (i, j, h, iname) = kernel_indexes(tidx, n).I
+        (I, iname) = multiple_field_solve_universal_index(us)
+        if multiple_field_solve_is_valid_index(I, us)
+            (i, j, _, _, h) = I.I
             generated_single_field_solve!(
                 device,
                 caches,

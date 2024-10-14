@@ -21,7 +21,7 @@ import ClimaCore:
     DeviceSideContext,
     DeviceSideDevice
 
-import ClimaCore.DataLayouts: IJFH, VF
+import ClimaCore.DataLayouts: IJFH, VF, slab_index
 
 on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
 
@@ -52,26 +52,25 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     coord_data = Spaces.coordinates_data(space)
     @test eltype(coord_data) == Geometry.XPoint{Float64}
 
-    array = parent(Spaces.coordinates_data(space))
-    @test size(array) == (4, 1, 1)
+    @test DataLayouts.farray_size(Spaces.coordinates_data(space)) == (4, 1, 1)
     coord_slab = slab(Spaces.coordinates_data(space), 1)
-    @test coord_slab[1] == Geometry.XPoint{FT}(-3)
-    @test coord_slab[4] == Geometry.XPoint{FT}(5)
+    @test coord_slab[slab_index(1)] == Geometry.XPoint{FT}(-3)
+    @test coord_slab[slab_index(4)] == Geometry.XPoint{FT}(5)
 
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
     dss_weights_slab = slab(space.grid.dss_weights, 1)
 
     for i in 1:4
-        @test Geometry.components(local_geometry_slab[i].∂x∂ξ) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i)].∂x∂ξ) ≈
               @SMatrix [8 / 2]
-        @test Geometry.components(local_geometry_slab[i].∂ξ∂x) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i)].∂ξ∂x) ≈
               @SMatrix [2 / 8]
-        @test local_geometry_slab[i].J ≈ (8 / 2)
-        @test local_geometry_slab[i].WJ ≈ (8 / 2) * weights[i]
+        @test local_geometry_slab[slab_index(i)].J ≈ (8 / 2)
+        @test local_geometry_slab[slab_index(i)].WJ ≈ (8 / 2) * weights[i]
         if i in (1, 4)
-            @test dss_weights_slab[i] ≈ 1 / 2
+            @test dss_weights_slab[slab_index(i)] ≈ 1 / 2
         else
-            @test dss_weights_slab[i] ≈ 1
+            @test dss_weights_slab[slab_index(i)] ≈ 1
         end
     end
 
@@ -112,17 +111,24 @@ on_gpu || @testset "extruded (2d 1×3) finite difference space" begin
     # Extrusion
     f_space = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vert_face_space)
     c_space = Spaces.CenterExtrudedFiniteDifferenceSpace(f_space)
-    array = parent(Spaces.coordinates_data(c_space))
+    s = DataLayouts.farray_size(Spaces.coordinates_data(c_space))
     z = Fields.coordinate_field(c_space).z
-    @test size(array) == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
+    @test s == (10, 4, 2, 5) # 10V, 4I, 2F(x,z), 5H
     @test Spaces.local_geometry_type(typeof(f_space)) <: Geometry.LocalGeometry
     @test Spaces.local_geometry_type(typeof(c_space)) <: Geometry.LocalGeometry
 
+    @test Spaces.z_min(f_space) == 0
+    @test Spaces.z_max(f_space) == 10
+
+    @test Spaces.z_min(c_space) == 0
+    @test Spaces.z_max(c_space) == 10
+
     # Define test col index
     colidx = Fields.ColumnIndex{1}((4,), 5)
+    z_values = Fields.field_values(z[colidx])
     # Here valid `colidx` are `Fields.ColumnIndex{1}((1:4,), 1:5)`
-    @test size(parent(z[colidx])) == (10, 1)
-    @test Fields.field_values(z[colidx]) isa DataLayouts.VF
+    @test DataLayouts.farray_size(z_values) == (10, 1)
+    @test z_values isa DataLayouts.VF
     @test Spaces.column(z, 1, 1, 1) isa Fields.Field
     @test_throws BoundsError Spaces.column(z, 1, 2, 1)
     @test Spaces.column(z, 1, 2) isa Fields.Field
@@ -214,13 +220,12 @@ end
       quadrature: 4-point Gauss-Legendre-Lobatto quadrature"""
 
     coord_data = Spaces.coordinates_data(space)
-    array = parent(coord_data)
-    @test size(array) == (4, 4, 2, 1)
+    @test DataLayouts.farray_size(coord_data) == (4, 4, 2, 1)
     coord_slab = slab(coord_data, 1)
-    @test coord_slab[1, 1] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
-    @test coord_slab[4, 1] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
-    @test coord_slab[1, 4] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
-    @test coord_slab[4, 4] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
+    @test coord_slab[slab_index(1, 1)] ≈ Geometry.XYPoint{FT}(-3.0, -2.0)
+    @test coord_slab[slab_index(4, 1)] ≈ Geometry.XYPoint{FT}(5.0, -2.0)
+    @test coord_slab[slab_index(1, 4)] ≈ Geometry.XYPoint{FT}(-3.0, 8.0)
+    @test coord_slab[slab_index(4, 4)] ≈ Geometry.XYPoint{FT}(5.0, 8.0)
 
     @test Spaces.local_geometry_type(typeof(space)) <: Geometry.LocalGeometry
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
@@ -233,17 +238,17 @@ end
     end
 
     for i in 1:4, j in 1:4
-        @test Geometry.components(local_geometry_slab[i, j].∂x∂ξ) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂x∂ξ) ≈
               @SMatrix [8/2 0; 0 10/2]
-        @test Geometry.components(local_geometry_slab[i, j].∂ξ∂x) ≈
+        @test Geometry.components(local_geometry_slab[slab_index(i, j)].∂ξ∂x) ≈
               @SMatrix [2/8 0; 0 2/10]
-        @test local_geometry_slab[i, j].J ≈ (10 / 2) * (8 / 2)
-        @test local_geometry_slab[i, j].WJ ≈
+        @test local_geometry_slab[slab_index(i, j)].J ≈ (10 / 2) * (8 / 2)
+        @test local_geometry_slab[slab_index(i, j)].WJ ≈
               (10 / 2) * (8 / 2) * weights[i] * weights[j]
         if i in (1, 4)
-            @test dss_weights_slab[i, j] ≈ 1 / 2
+            @test dss_weights_slab[slab_index(i, j)] ≈ 1 / 2
         else
-            @test dss_weights_slab[i, j] ≈ 1
+            @test dss_weights_slab[slab_index(i, j)] ≈ 1
         end
     end
 
@@ -331,7 +336,7 @@ end
     @test size(array) == (4, 4, 2, 4)
 
     Nij = length(points)
-    field = Fields.Field(IJFH{FT, Nij}(ones(Nij, Nij, 1, n1 * n2)), space)
+    field = Fields.Field(IJFH{FT, Nij, n1 * n2}(ones(Nij, Nij, 1, n1 * n2)), space)
     field_values = Fields.field_values(field)
     Spaces.horizontal_dss!(field)
 
@@ -414,7 +419,7 @@ end
     data[:, :, 1, :] .= 1:Nij
     data[:, :, 2, :] .= (1:Nij)'
     data[:, :, 3, :] .= reshape(1:(n1 * n2), 1, 1, :)
-    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij}(data), space)
+    field = Fields.Field(IJFH{Tuple{FT, FT, FT}, Nij, n1 * n2}(data), space)
     field_dss = Spaces.horizontal_dss!(copy(field))
     data_dss = parent(field_dss)
 

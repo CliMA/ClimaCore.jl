@@ -4,7 +4,6 @@ using DocStringExtensions
 using LinearAlgebra
 using ClimaTimeSteppers
 import SciMLBase
-import OrdinaryDiffEq as ODE
 import ClimaTimeSteppers as CTS
 using DiffEqCallbacks
 using NVTX
@@ -568,13 +567,13 @@ function shallow_water_driver_cuda(ARGS, ::Type{FT}) where {FT}
         end
         return nothing
     end
-    prob = ODE.ODEProblem(
+    prob = SciMLBase.ODEProblem(
         CTS.ClimaODEFunction(; T_exp! = rhs!),
         Y,
         (FT(0), T),
         parameters,
     )
-    integrator = ODE.init(
+    integrator = SciMLBase.init(
         prob,
         CTS.ExplicitAlgorithm(CTS.SSP33ShuOsher()),
         dt = dt,

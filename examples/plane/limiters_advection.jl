@@ -12,7 +12,7 @@ import ClimaCore:
     Limiters,
     Quadratures
 
-using OrdinaryDiffEq: ODEProblem, solve
+using SciMLBase: ODEProblem, solve
 using ClimaTimeSteppers
 
 import Logging

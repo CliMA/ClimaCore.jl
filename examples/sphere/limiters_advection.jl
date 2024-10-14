@@ -12,7 +12,8 @@ import ClimaCore:
     Limiters,
     Quadratures
 
-using OrdinaryDiffEq, Test
+using Test
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers

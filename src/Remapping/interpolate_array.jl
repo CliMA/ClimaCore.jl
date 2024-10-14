@@ -422,7 +422,7 @@ function interpolate_column(
             [Is],
         )
         z_surface = z_surface[]
-        z_top = Spaces.vertical_topology(space).mesh.domain.coord_max.z
+        z_top = Spaces.z_max(space)
 
         all_zpts_ref = [
             Hypsography.physical_z_to_ref_z(

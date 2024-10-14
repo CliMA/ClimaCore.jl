@@ -1,5 +1,6 @@
 include("utils_3d.jl")
 
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 device = ClimaComms.device()
 
 @testset "2D SE, 1D FV Extruded Domain ∇ ODE Solve vertical" begin
@@ -25,7 +26,6 @@ device = ClimaComms.device()
     dudt = zeros(eltype(U), hv_center_space)
     rhs!(dudt, U, nothing, 0.0)
 
-    using OrdinaryDiffEq
     Δt = 0.01
     prob = ODEProblem(rhs!, U, (0.0, 2π))
     sol = solve(prob, SSPRK33(), dt = Δt)
@@ -60,7 +60,6 @@ end
     dudt = zeros(eltype(U), hv_center_space)
     rhs!(dudt, U, nothing, 0.0)
 
-    using OrdinaryDiffEq
     Δt = 0.01
     prob = ODEProblem(rhs!, U, (0.0, 2π))
     sol = solve(prob, SSPRK33(), dt = Δt)
@@ -140,7 +139,6 @@ end
         return h
     end
 
-    using OrdinaryDiffEq
     U = Fields.FieldVector(h = h_init(0.5, 0.5, 0.5))
     U_fieldbc = copy(U)
     Δt = 0.01

@@ -1,37 +1,9 @@
-
-Base.@propagate_inbounds Base.getindex(field::Field, colidx::ColumnIndex) =
-    column(field, colidx)
-Base.@propagate_inbounds function Base.getindex(
-    fv::FieldVector{T},
+const ColumnIndexable =
+    Union{Field, FieldVector, Base.AbstractBroadcasted, Spaces.AbstractSpace}
+Base.@propagate_inbounds Base.getindex(
+    x::ColumnIndexable,
     colidx::ColumnIndex,
-) where {T}
-    values = map(x -> x[colidx], _values(fv))
-    return FieldVector{T, typeof(values)}(values)
-end
-Base.@propagate_inbounds function column(
-    field::SpectralElementField1D,
-    colidx::ColumnIndex{1},
-)
-    column(field, colidx.ij[1], colidx.h)
-end
-Base.@propagate_inbounds function column(
-    field::ExtrudedFiniteDifferenceField,
-    colidx::ColumnIndex{1},
-)
-    column(field, colidx.ij[1], colidx.h)
-end
-Base.@propagate_inbounds function column(
-    field::SpectralElementField2D,
-    colidx::ColumnIndex{2},
-)
-    column(field, colidx.ij[1], colidx.ij[2], colidx.h)
-end
-Base.@propagate_inbounds function column(
-    field::ExtrudedFiniteDifferenceField,
-    colidx::ColumnIndex{2},
-)
-    column(field, colidx.ij[1], colidx.ij[2], colidx.h)
-end
+) = column(x, colidx.ij..., colidx.h)
 
 """
     Fields.bycolumn(fn, space)

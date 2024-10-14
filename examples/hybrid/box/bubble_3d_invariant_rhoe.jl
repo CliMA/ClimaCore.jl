@@ -13,7 +13,8 @@ using Adapt
 using ClimaComms
 ClimaComms.@import_required_backends
 FloatType = eval(Meta.parse(get(ARGS, 1, "Float64")))
-using StaticArrays, IntervalSets, LinearAlgebra, OrdinaryDiffEq
+using StaticArrays, IntervalSets, LinearAlgebra, SciMLBase
+using OrdinaryDiffEqSSPRK: SSPRK33
 using DocStringExtensions
 
 import ClimaCore:
@@ -446,7 +447,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
     # run!
     Δt = sim_params.Δt
     prob = ODEProblem(rhs_invariant!, Y, (0.0, sim_params.t_int), ghost_buffer)
-    integrator = OrdinaryDiffEq.init(
+    integrator = SciMLBase.init(
         prob,
         SSPRK33(),
         dt = Δt,
@@ -460,7 +461,7 @@ function bubble_3d_invariant_ρe(ARGS, comms_ctx, ::Type{FT}) where {FT}
         throw(:exit_profile)
     end
 
-    t_diff = @elapsed sol_invariant = OrdinaryDiffEq.solve!(integrator)
+    t_diff = @elapsed sol_invariant = SciMLBase.solve!(integrator)
 
     if ClimaComms.iamroot(comms_ctx)
         println("Walltime = $t_diff seconds")

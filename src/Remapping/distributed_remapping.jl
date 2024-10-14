@@ -418,8 +418,8 @@ function set_interpolated_values_cpu_kernel!(
                 if prev_lidx != h || prev_vindex != vindex
                     for j in 1:Nq, i in 1:Nq
                         scratch_field_values[i, j] = (
-                            A * field_values[i, j, nothing, v_lo, h] +
-                            B * field_values[i, j, nothing, v_hi, h]
+                            A * field_values[CartesianIndex(i, j, 1, v_lo, h)] +
+                            B * field_values[CartesianIndex(i, j, 1, v_hi, h)]
                         )
                     end
                     prev_vindex, prev_lidx = vindex, h
@@ -467,8 +467,8 @@ function set_interpolated_values_cpu_kernel!(
                 if prev_lidx != h || prev_vindex != vindex
                     for i in 1:Nq
                         scratch_field_values[i] = (
-                            A * field_values[i, nothing, nothing, v_lo, h] +
-                            B * field_values[i, nothing, nothing, v_hi, h]
+                            A * field_values[CartesianIndex(i, 1, 1, v_lo, h)] +
+                            B * field_values[CartesianIndex(i, 1, 1, v_hi, h)]
                         )
                     end
                     prev_vindex, prev_lidx = vindex, h
@@ -577,13 +577,13 @@ function _set_interpolated_values_device!(
                     out[out_index, field_index] +=
                         local_horiz_interpolation_weights[1][out_index, i] *
                         local_horiz_interpolation_weights[2][out_index, j] *
-                        field_values[i, j, nothing, nothing, h]
+                        field_values[CartesianIndex(i, j, 1, 1, h)]
                 end
             elseif hdims == 1
                 for i in 1:Nq
                     out[out_index, field_index] +=
                         local_horiz_interpolation_weights[1][out_index, i] *
-                        field_values[i, nothing, nothing, nothing, h]
+                        field_values[CartesianIndex(i, 1, 1, 1, h)]
                 end
             end
         end

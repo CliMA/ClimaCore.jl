@@ -1,6 +1,6 @@
 import ClimaComms
 ClimaComms.@import_required_backends
-using OrdinaryDiffEq
+using SciMLBase: ODEProblem, init, solve
 using Test
 using Statistics: mean
 

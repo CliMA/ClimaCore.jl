@@ -12,7 +12,7 @@ import ClimaCore:
     Quadratures
 import ClimaCore.Geometry: ⊗
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers

@@ -11,7 +11,7 @@ import ClimaCore:
     Topologies,
     Quadratures
 
-using OrdinaryDiffEq: ODEProblem, solve, SSPRK33
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 
 import Logging
 import TerminalLoggers

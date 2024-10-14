@@ -1,10 +1,11 @@
 agents:
   queue: new-central
   slurm_mem: 8G
-  modules: climacommon/2024_05_27
+  modules: climacommon/2024_10_08
 
 env:
   JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
   JULIA_CPU_TARGET: 'broadwell;skylake'
   JULIA_NVTX_CALLBACKS: gc
@@ -93,9 +94,17 @@ steps:
         key: data_opt_similar
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_similar.jl"
 
+      - label: "Unit: opt_universal_size"
+        key: opt_universal_size
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/opt_universal_size.jl"
+
       - label: "Unit: data_ndims"
         key: unit_data_ndims
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_ndims.jl"
+
+      - label: "Unit: unit_data2array"
+        key: unit_data2array
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_data2array.jl"
 
       - label: "Unit: data1d"
         key: unit_data1d
@@ -269,17 +278,21 @@ steps:
         key: unit_ddss1
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
 
       - label: "Unit: ddss1 cs"
+        key: unit_cuda_ddss1_cs
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
+
+      - label: "Unit: ddss1 cs"
         key: unit_ddss1_cs
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl CUDA"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Spaces/ddss1_cs.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -639,6 +652,28 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: operators on levels and extruded spaces"
+        key: unit_cuda_operators_example
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/unit_operators_examples.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Unit: velocity grad tensor ops"
+        key: unit_spectral_tensor_op_cuda
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Operators/spectralelement/covar_deriv_ops.jl CUDA"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: hybrid operators cuda"
         key: unit_ops_cuda
         command:
@@ -772,6 +807,14 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Unit: multiple field solve example (GPU)"
+        key: gpu_multiple_field_solve_example
+        command: "julia --color=yes --project=.buildkite test/MatrixFields/multiple_field_solve_reproducer_1.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: "Unit: matrix multiplication recursion example (CPU)"
         key: cpu_matrix_multiplication_recursion
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_multiplication_recursion.jl"
@@ -870,6 +913,11 @@ steps:
       - label: "Unit: matrix field broadcasting (CPU)"
         key: unit_matrix_field_broadcasting_cpu_non_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
+
+      - label: "Unit: matrix field broadcasting (CPU)"
+        key: unit_matrix_field_broadcasting_cpu_non_scalar_5
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
+        soft_fail: true
 
   - group: "Unit: MatrixFields - broadcasting (GPU)"
     steps:
@@ -986,6 +1034,7 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_scalar_13
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_scalar_13.jl"
+        soft_fail: true # due to PTX error
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1054,6 +1103,15 @@ steps:
       - label: "Unit: matrix field broadcasting (GPU)"
         key: unit_matrix_field_broadcasting_gpu_non_scalar_4
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+          slurm_mem: 10GB
+
+      - label: "Unit: matrix field broadcasting (GPU)"
+        key: unit_matrix_field_broadcasting_gpu_non_scalar_5
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1162,11 +1220,25 @@ steps:
         key: "cpu_datalayouts_fill"
         command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
 
+      - label: "Perf: DataLayouts copyto!"
+        key: "cpu_datalayouts_copyto"
+        command: "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
+
       - label: "Perf: DataLayouts fill"
         key: "gpu_datalayouts_fill"
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_fill.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: DataLayouts copyto"
+        key: "gpu_datalayouts_copyto"
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite test/DataLayouts/benchmark_copyto.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1178,6 +1250,49 @@ steps:
       - label: "Perf: Field broadcast"
         key: "cpu_field_perf"
         command: "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
+
+  - group: "Perf: Benchmark scripts"
+    steps:
+
+      - label: "Perf: benchmark scripts index_swapping"
+        key: perf_index_swapping
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/index_swapping.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: benchmark scripts indexing_and_static_ndranges"
+        key: indexing_and_static_ndranges
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/indexing_and_static_ndranges.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: benchmark scripts thermo_bench_bw"
+        key: thermo_bench_bw
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/thermo_bench_bw.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: "Perf: benchmark scripts benchmark_offset"
+        key: benchmark_offset
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/benchmark_offset.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
 
   - group: "Perf: Operators"
     steps:

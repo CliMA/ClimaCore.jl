@@ -1,7 +1,6 @@
 import ClimaCore: Spaces, Quadratures, Topologies
 import ClimaCore: Operators, Geometry, Quadratures, RecursiveApply
 import ClimaComms
-using CUDA: @cuda
 using CUDA
 import ClimaCore.Operators: AbstractSpectralStyle, strip_space
 import ClimaCore.Operators: SpectralBroadcasted, set_node!, get_node
@@ -35,27 +34,20 @@ function Base.copyto!(
     },
 )
     space = axes(out)
-    QS = Spaces.quadrature_style(space)
-    Nq = Quadratures.degrees_of_freedom(QS)
-    Nh = Topologies.nlocalelems(Spaces.topology(space))
-    Nv = Spaces.nlevels(space)
-    max_threads = 256
-    @assert Nq * Nq ≤ max_threads
-    Nvthreads = fld(max_threads, Nq * Nq)
-    Nvblocks = cld(Nv, Nvthreads)
+    us = UniversalSize(Fields.field_values(out))
     # executed
+    p = spectral_partition(us)
     args = (
         strip_space(out, space),
         strip_space(sbc, space),
         space,
-        Val(Nvthreads),
+        Val(p.Nvthreads),
     )
     auto_launch!(
         copyto_spectral_kernel!,
-        args,
-        out;
-        threads_s = (Nq, Nq, Nvthreads),
-        blocks_s = (Nh, Nvblocks),
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
     return out
 end
@@ -68,32 +60,15 @@ function copyto_spectral_kernel!(
     ::Val{Nvt},
 ) where {Nvt}
     @inbounds begin
-        i = threadIdx().x
-        j = threadIdx().y
-        k = threadIdx().z
-        h = blockIdx().x
-        vid = k + (blockIdx().y - 1) * blockDim().z
         # allocate required shmem
-
         sbc_reconstructed =
             Operators.reconstruct_placeholder_broadcasted(space, sbc)
         sbc_shmem = allocate_shmem(Val(Nvt), sbc_reconstructed)
 
-
         # can loop over blocks instead?
-        if space isa Spaces.AbstractSpectralElementSpace
-            v = nothing
-        elseif space isa Spaces.FaceExtrudedFiniteDifferenceSpace
-            v = vid - half
-        elseif space isa Spaces.CenterExtrudedFiniteDifferenceSpace
-            v = vid
-        else
-            error("Invalid space")
-        end
-        ij = CartesianIndex((i, j))
-        slabidx = Fields.SlabIndex(v, h)
-        # v may potentially be out-of-range: any time memory is accessed, it
-        # should be checked by a call to is_valid_index(space, ij, slabidx)
+        (ij, slabidx) = spectral_universal_index(space)
+        # v in `slabidx` may potentially be out-of-range: any time memory is
+        # accessed, it should be checked by a call to is_valid_index(space, ij, slabidx)
 
         # resolve_shmem! needs to be called even when out of range, so that 
         # sync_threads() is invoked collectively
@@ -256,7 +231,7 @@ end
 
 Base.@propagate_inbounds function operator_evaluate(
     op::Gradient{(1, 2)},
-    (input,),
+    input,
     space,
     ij,
     slabidx,
@@ -269,14 +244,59 @@ Base.@propagate_inbounds function operator_evaluate(
     Nq = Quadratures.degrees_of_freedom(QS)
     D = Quadratures.differentiation_matrix(FT, QS)
 
-    ∂f∂ξ₁ = D[i, 1] * input[1, j, vt]
-    ∂f∂ξ₂ = D[j, 1] * input[i, 1, vt]
-
-    for k in 2:Nq
-        ∂f∂ξ₁ += D[i, k] * input[k, j, vt]
-        ∂f∂ξ₂ += D[j, k] * input[i, k, vt]
+    if length(input) == 1 # check types
+        (v₁,) = input
+        @inbounds begin
+            ∂f∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+            ∂f∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+            for k in 2:Nq
+                ∂f∂ξ₁ = ∂f∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+                ∂f∂ξ₂ = ∂f∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+            end
+        end
+        return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
+    elseif length(input) == 2
+        # Update `shmem`
+        v₁, v₂ = input
+        @inbounds begin
+            ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+            ∂f₁∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+            ∂f₂∂ξ₁ = D[i, 1] ⊠ v₂[1, j, vt]
+            ∂f₂∂ξ₂ = D[j, 1] ⊠ v₂[i, 1, vt]
+            @simd for k in 2:Nq
+                ∂f₁∂ξ₁ = ∂f₁∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+                ∂f₁∂ξ₂ = ∂f₁∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+                ∂f₂∂ξ₁ = ∂f₂∂ξ₁ ⊞ D[i, k] ⊠ v₂[k, j, vt]
+                ∂f₂∂ξ₂ = ∂f₂∂ξ₂ ⊞ D[j, k] ⊠ v₂[i, k, vt]
+            end
+        end
+        return Geometry.AxisTensor(
+            (Geometry.Covariant12Axis(), Geometry.UVAxis()),
+            (∂f₁∂ξ₁, ∂f₁∂ξ₂, ∂f₂∂ξ₁, ∂f₂∂ξ₂),
+        )
+    else
+        v₁, v₂, v₃ = input
+        @inbounds begin
+            ∂f₁∂ξ₁ = D[i, 1] ⊠ v₁[1, j, vt]
+            ∂f₁∂ξ₂ = D[j, 1] ⊠ v₁[i, 1, vt]
+            ∂f₂∂ξ₁ = D[i, 1] ⊠ v₂[1, j, vt]
+            ∂f₂∂ξ₂ = D[j, 1] ⊠ v₂[i, 1, vt]
+            ∂f₃∂ξ₁ = D[i, 1] ⊠ v₃[1, j, vt]
+            ∂f₃∂ξ₂ = D[j, 1] ⊠ v₃[i, 1, vt]
+            @simd for k in 2:Nq
+                ∂f₁∂ξ₁ = ∂f₁∂ξ₁ ⊞ D[i, k] ⊠ v₁[k, j, vt]
+                ∂f₁∂ξ₂ = ∂f₁∂ξ₂ ⊞ D[j, k] ⊠ v₁[i, k, vt]
+                ∂f₂∂ξ₁ = ∂f₂∂ξ₁ ⊞ D[i, k] ⊠ v₂[k, j, vt]
+                ∂f₂∂ξ₂ = ∂f₂∂ξ₂ ⊞ D[j, k] ⊠ v₂[i, k, vt]
+                ∂f₃∂ξ₁ = ∂f₃∂ξ₁ ⊞ D[i, k] ⊠ v₃[k, j, vt]
+                ∂f₃∂ξ₂ = ∂f₃∂ξ₂ ⊞ D[j, k] ⊠ v₃[i, k, vt]
+            end
+        end
+        return Geometry.AxisTensor(
+            (Geometry.Covariant12Axis(), Geometry.UVWAxis()),
+            (∂f₁∂ξ₁, ∂f₁∂ξ₂, ∂f₂∂ξ₁, ∂f₂∂ξ₂, ∂f₃∂ξ₁, ∂f₃∂ξ₂),
+        )
     end
-    return Geometry.Covariant12Vector(∂f∂ξ₁, ∂f∂ξ₂)
 end
 
 Base.@propagate_inbounds function operator_evaluate(

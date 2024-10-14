@@ -3,42 +3,74 @@ julia --project
 using Revise; include(joinpath("test", "DataLayouts", "benchmark_fill.jl"))
 =#
 using Test
+using ClimaCore
 using ClimaCore.DataLayouts
 using BenchmarkTools
 import ClimaComms
 @static pkgversion(ClimaComms) >= v"0.6" && ClimaComms.@import_required_backends
 
-function benchmarkfill!(device, data, val)
+if ClimaComms.device() isa ClimaComms.CUDADevice
+    import CUDA
+    device_name = CUDA.name(CUDA.device()) # Move to ClimaComms
+else
+    device_name = "CPU"
+end
+
+include(joinpath(pkgdir(ClimaCore), "benchmarks/scripts/benchmark_utils.jl"))
+
+function benchmarkfill!(bm, device, data, val)
+    caller = string(nameof(typeof(data)))
+    @info "Benchmarking $caller..."
     trial = @benchmark ClimaComms.@cuda_sync $device fill!($data, $val)
-    show(stdout, MIME("text/plain"), trial)
-    println()
-    trial =
-        @benchmark ClimaComms.@cuda_sync $device fill!($(parent(data)), $val)
-    show(stdout, MIME("text/plain"), trial)
-    println()
+    t_min = minimum(trial.times) * 1e-9 # to seconds
+    nreps = length(trial.times)
+    n_reads_writes = DataLayouts.ncomponents(data)
+    push_info(
+        bm;
+        kernel_time_s = t_min,
+        nreps = nreps,
+        caller,
+        problem_size = size(data),
+        n_reads_writes,
+    )
 end
 
 @testset "fill! with Nf = 1" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 63
-    Nij = 4
-    Nh = 30
+    Ni = Nij = 4
+    Nh = 30 * 30 * 6
     Nk = 6
-#! format: off
-    data = DataF{S}(device_zeros(FT,Nf));                        benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      benchmarkfill!(device, data, 3); @test all(parent(data) .== 3)
-#! format: on
+    bm = Benchmark(; float_type = FT, device_name)
+    data = DataF{S}(ArrayType{FT}, zeros)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
 
-    # data = IJKFVH{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkfill!(device, data, 3); @test all(parent(data) .== 3) # TODO: test
-    # data = IH1JH2{S}(device_zeros(FT,Nij,Nij,Nk,Nf,Nh)); benchmarkfill!(device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          benchmarkfill!(bm, device, data, 3); @test all(parent(data) .== 3) # TODO: test
+    tabulate_benchmark(bm)
 end

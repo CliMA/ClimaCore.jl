@@ -65,6 +65,20 @@ end
 IntervalDomain(coords::ClosedInterval; kwargs...) =
     IntervalDomain(coords.left, coords.right; kwargs...)
 
+"""
+    z_max(domain::IntervalDomain)
+
+The domain maximum along the z-direction.
+"""
+z_max(domain::IntervalDomain) = domain.coord_max.z
+
+"""
+    z_min(domain::IntervalDomain)
+
+The domain minimum along the z-direction.
+"""
+z_min(domain::IntervalDomain) = domain.coord_min.z
+
 coordinate_type(::IntervalDomain{CT}) where {CT} = CT
 Base.eltype(domain::IntervalDomain) = coordinate_type(domain)
 

@@ -5,6 +5,7 @@ import ClimaCore.Limiters:
     apply_limiter!
 import ClimaCore.Fields
 import ClimaCore: DataLayouts, Spaces, Topologies, Fields
+import ClimaCore.DataLayouts: slab_index
 using CUDA
 
 function config_threadblock(Nv, Nh)
@@ -20,23 +21,15 @@ function compute_element_bounds!(
     ρ,
     ::ClimaComms.CUDADevice,
 )
-    S = size(Fields.field_values(ρ))
-    (Ni, Nj, _, Nv, Nh) = S
+    ρ_values = Fields.field_values(Operators.strip_space(ρ, axes(ρ)))
+    ρq_values = Fields.field_values(Operators.strip_space(ρq, axes(ρq)))
+    (_, _, _, Nv, Nh) = DataLayouts.universal_size(ρ_values)
     nthreads, nblocks = config_threadblock(Nv, Nh)
 
-    args = (
-        limiter,
-        Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
-        Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
-        Nv,
-        Nh,
-        Val(Ni),
-        Val(Nj),
-    )
+    args = (limiter, ρq_values, ρ_values)
     auto_launch!(
         compute_element_bounds_kernel!,
-        args,
-        ρ;
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
     )
@@ -44,15 +37,8 @@ function compute_element_bounds!(
 end
 
 
-function compute_element_bounds_kernel!(
-    limiter,
-    ρq,
-    ρ,
-    Nv,
-    Nh,
-    ::Val{Ni},
-    ::Val{Nj},
-) where {Ni, Nj}
+function compute_element_bounds_kernel!(limiter, ρq, ρ)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(ρ)
     n = (Nv, Nh)
     tidx = thread_index()
     @inbounds if valid_range(tidx, prod(n))
@@ -63,7 +49,7 @@ function compute_element_bounds_kernel!(
         slab_ρ = slab(ρ, v, h)
         for j in 1:Nj
             for i in 1:Ni
-                q = rdiv(slab_ρq[i, j], slab_ρ[i, j])
+                q = rdiv(slab_ρq[slab_index(i, j)], slab_ρ[slab_index(i, j)])
                 if i == 1 && j == 1
                     q_min = q
                     q_max = q
@@ -74,8 +60,8 @@ function compute_element_bounds_kernel!(
             end
         end
         slab_q_bounds = slab(q_bounds, v, h)
-        slab_q_bounds[1] = q_min
-        slab_q_bounds[2] = q_max
+        slab_q_bounds[slab_index(1)] = q_min
+        slab_q_bounds[slab_index(2)] = q_max
     end
     return nothing
 end
@@ -87,21 +73,18 @@ function compute_neighbor_bounds_local!(
     ::ClimaComms.CUDADevice,
 )
     topology = Spaces.topology(axes(ρ))
-    Ni, Nj, _, Nv, Nh = size(Fields.field_values(ρ))
+    us = DataLayouts.UniversalSize(Fields.field_values(ρ))
+    (_, _, _, Nv, Nh) = DataLayouts.universal_size(us)
     nthreads, nblocks = config_threadblock(Nv, Nh)
     args = (
         limiter,
         topology.local_neighbor_elem,
         topology.local_neighbor_elem_offset,
-        Nv,
-        Nh,
-        Val(Ni),
-        Val(Nj),
+        us,
     )
     auto_launch!(
         compute_neighbor_bounds_local_kernel!,
-        args,
-        ρ;
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
     )
@@ -111,30 +94,27 @@ function compute_neighbor_bounds_local_kernel!(
     limiter,
     local_neighbor_elem,
     local_neighbor_elem_offset,
-    Nv,
-    Nh,
-    ::Val{Ni},
-    ::Val{Nj},
-) where {Ni, Nj}
-
+    us::DataLayouts.UniversalSize,
+)
+    (_, _, _, Nv, Nh) = DataLayouts.universal_size(us)
     n = (Nv, Nh)
     tidx = thread_index()
     @inbounds if valid_range(tidx, prod(n))
         (v, h) = kernel_indexes(tidx, n).I
         (; q_bounds, q_bounds_nbr, ghost_buffer, rtol) = limiter
         slab_q_bounds = slab(q_bounds, v, h)
-        q_min = slab_q_bounds[1]
-        q_max = slab_q_bounds[2]
+        q_min = slab_q_bounds[slab_index(1)]
+        q_max = slab_q_bounds[slab_index(2)]
         for lne in
             local_neighbor_elem_offset[h]:(local_neighbor_elem_offset[h + 1] - 1)
             h_nbr = local_neighbor_elem[lne]
             slab_q_bounds = slab(q_bounds, v, h_nbr)
-            q_min = rmin(q_min, slab_q_bounds[1])
-            q_max = rmax(q_max, slab_q_bounds[2])
+            q_min = rmin(q_min, slab_q_bounds[slab_index(1)])
+            q_max = rmax(q_max, slab_q_bounds[slab_index(2)])
         end
         slab_q_bounds_nbr = slab(q_bounds_nbr, v, h)
-        slab_q_bounds_nbr[1] = q_min
-        slab_q_bounds_nbr[2] = q_max
+        slab_q_bounds_nbr[slab_index(1)] = q_min
+        slab_q_bounds_nbr[slab_index(2)] = q_max
     end
     return nothing
 end
@@ -146,9 +126,10 @@ function apply_limiter!(
     ::ClimaComms.CUDADevice,
 )
     ρq_data = Fields.field_values(ρq)
-    (Ni, Nj, _, Nv, Nh) = size(ρq_data)
-    Nf = DataLayouts.ncomponents(ρq_data)
+    us = DataLayouts.UniversalSize(ρq_data)
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
     maxiter = Ni * Nj
+    Nf = DataLayouts.ncomponents(ρq_data)
     WJ = Spaces.local_geometry_data(axes(ρq)).WJ
     nthreads, nblocks = config_threadblock(Nv, Nh)
     args = (
@@ -156,17 +137,13 @@ function apply_limiter!(
         Fields.field_values(Operators.strip_space(ρq, axes(ρq))),
         Fields.field_values(Operators.strip_space(ρ, axes(ρ))),
         WJ,
-        Nv,
-        Nh,
+        us,
         Val(Nf),
-        Val(Ni),
-        Val(Nj),
         Val(maxiter),
     )
     auto_launch!(
         apply_limiter_kernel!,
-        args,
-        ρ;
+        args;
         threads_s = nthreads,
         blocks_s = nblocks,
     )
@@ -178,15 +155,13 @@ function apply_limiter_kernel!(
     ρq_data,
     ρ_data,
     WJ_data,
-    Nv,
-    Nh,
+    us::DataLayouts.UniversalSize,
     ::Val{Nf},
-    ::Val{Ni},
-    ::Val{Nj},
     ::Val{maxiter},
-) where {Nf, Ni, Nj, maxiter}
+) where {Nf, maxiter}
     (; q_bounds_nbr, rtol) = limiter
     converged = true
+    (Ni, Nj, _, Nv, Nh) = DataLayouts.universal_size(us)
     n = (Nv, Nh)
     tidx = thread_index()
     @inbounds if valid_range(tidx, prod(n))

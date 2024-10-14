@@ -18,69 +18,47 @@ function Base.copyto!(
     },
 )
     space = axes(out)
-    if space isa Spaces.ExtrudedFiniteDifferenceSpace
-        QS = Spaces.quadrature_style(space)
-        Nq = Quadratures.degrees_of_freedom(QS)
-        Nh = Topologies.nlocalelems(Spaces.topology(space))
-    else
-        Nq = 1
-        Nh = 1
-    end
-    (li, lw, rw, ri) = bounds = Operators.window_bounds(space, bc)
-    Nv = ri - li + 1
-    max_threads = 256
-    nitems = Nv * Nq * Nq * Nh # # of independent items
-    (nthreads, nblocks) = _configure_threadblock(max_threads, nitems)
-    args = (
-        strip_space(out, space),
-        strip_space(bc, space),
-        axes(out),
-        bounds,
-        Val(Nv),
-        Val(Nq),
-        Nh,
-    )
+    bounds = Operators.window_bounds(space, bc)
+    out_fv = Fields.field_values(out)
+    us = DataLayouts.UniversalSize(out_fv)
+    args =
+        (strip_space(out, space), strip_space(bc, space), axes(out), bounds, us)
+
+    threads = threads_via_occupancy(copyto_stencil_kernel!, args)
+    n_max_threads = min(threads, get_N(us))
+    p = partition(out_fv, n_max_threads)
+
     auto_launch!(
         copyto_stencil_kernel!,
-        args,
-        out;
-        threads_s = (nthreads,),
-        blocks_s = (nblocks,),
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
     )
     return out
 end
+import ClimaCore.DataLayouts: get_N, get_Nv, get_Nij, get_Nij, get_Nh
 
-function copyto_stencil_kernel!(
-    out,
-    bc,
-    space,
-    bds,
-    ::Val{Nv},
-    ::Val{Nq},
-    Nh,
-) where {Nv, Nq}
+function copyto_stencil_kernel!(out, bc, space, bds, us)
     @inbounds begin
-        gid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-        if gid ≤ Nv * Nq * Nq * Nh
+        out_fv = Fields.field_values(out)
+        I = universal_index(out_fv)
+        if is_valid_index(out_fv, I, us)
             (li, lw, rw, ri) = bds
-            (v, i, j, h) = cart_ind((Nv, Nq, Nq, Nh), gid).I
+            (i, j, _, v, h) = I.I
             hidx = (i, j, h)
             idx = v - 1 + li
-            window =
-                idx < lw ?
-                LeftBoundaryWindow{Spaces.left_boundary_name(space)}() :
-                (
-                    idx > rw ?
-                    RightBoundaryWindow{Spaces.right_boundary_name(space)}() :
-                    Interior()
-                )
-            setidx!(
-                space,
-                out,
-                idx,
-                hidx,
-                Operators.getidx(space, bc, window, idx, hidx),
-            )
+            if idx < lw
+                lwindow = LeftBoundaryWindow{Spaces.left_boundary_name(space)}()
+                val = Operators.getidx(space, bc, lwindow, idx, hidx)
+            elseif idx > rw
+                rwindow =
+                    RightBoundaryWindow{Spaces.right_boundary_name(space)}()
+                val = Operators.getidx(space, bc, rwindow, idx, hidx)
+            else
+                iwindow = Interior()
+                val = Operators.getidx(space, bc, iwindow, idx, hidx)
+            end
+            setidx!(space, out, idx, hidx, val)
         end
     end
     return nothing

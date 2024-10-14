@@ -151,7 +151,7 @@ for a `CubedSphere` mesh.
 
 """
 function spacefillingcurve(mesh::Meshes.AbstractCubedSphere)
-    ne = mesh.ne
+    ne = Meshes.n_elements_per_panel_direction(mesh)
     majordim = [1, 2, 1, 2, 1, 2]
     elemorder = CartesianIndex{3}[]
     for panel in 1:6

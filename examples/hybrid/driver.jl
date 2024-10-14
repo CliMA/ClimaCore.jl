@@ -47,7 +47,7 @@ atexit() do
     global_logger(prev_logger)
 end
 
-using OrdinaryDiffEq
+using SciMLBase
 using DiffEqCallbacks
 using JLD2
 
@@ -151,7 +151,7 @@ callback = SciMLBase.CallbackSet(
     additional_callbacks...,
 )
 
-problem = ODE.ODEProblem(
+problem = SciMLBase.ODEProblem(
     CTS.ClimaODEFunction(;
         T_imp! = ODEFunction(
             implicit_tendency!;
@@ -163,7 +163,7 @@ problem = ODE.ODEProblem(
     (t_start, t_end),
     p,
 )
-integrator = OrdinaryDiffEq.init(
+integrator = SciMLBase.init(
     problem,
     ode_algo;
     saveat = dt_save_to_sol == 0 ? [] : dt_save_to_sol,
@@ -182,10 +182,14 @@ end
 @info "Running `$test_dir/$test_file_name` test case"
 @info "on a vertical $z_stretch_string grid"
 
-walltime = @elapsed sol = OrdinaryDiffEq.solve!(integrator)
+walltime = @elapsed sol = SciMLBase.solve!(integrator)
 any(isnan, sol.u[end]) && error("NaNs found in result.")
 
 if is_distributed # replace sol.u on the root processor with the global sol.u
+    global_Y_c_1 =
+        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].c))
+    global_Y_f_1 =
+        DataLayouts.gather(comms_ctx, Fields.field_values(sol.u[1].f))
     if ClimaComms.iamroot(comms_ctx)
         global_h_space = make_horizontal_space(
             horizontal_mesh,
@@ -194,14 +198,10 @@ if is_distributed # replace sol.u on the root processor with the global sol.u
         )
         global_center_space, global_face_space =
             make_hybrid_spaces(global_h_space, z_max, z_elem; z_stretch)
-        global_Y_c_type = Fields.Field{
-            typeof(Fields.field_values(Y.c)),
-            typeof(global_center_space),
-        }
-        global_Y_f_type = Fields.Field{
-            typeof(Fields.field_values(Y.f)),
-            typeof(global_face_space),
-        }
+        global_Y_c_type =
+            Fields.Field{typeof(global_Y_c_1), typeof(global_center_space)}
+        global_Y_f_type =
+            Fields.Field{typeof(global_Y_f_1), typeof(global_face_space)}
         global_Y_type = Fields.FieldVector{
             FT,
             NamedTuple{(:c, :f), Tuple{global_Y_c_type, global_Y_f_type}},

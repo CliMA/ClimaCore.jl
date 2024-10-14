@@ -1,3 +1,8 @@
+#=
+julia --project=.buildkite
+using Revise; include(joinpath("test", "MatrixFields", "operator_matrices.jl"))
+=#
+
 import LinearAlgebra: I
 
 import ClimaCore.RecursiveApply: rzero
@@ -35,24 +40,16 @@ import ClimaCore.Operators:
 
 include("matrix_field_test_utils.jl")
 
-apply_op_matrix(::Nothing, op_matrix, arg) = @. op_matrix() ⋅ arg
-apply_op_matrix(boundary_op, op_matrix, arg) = @. boundary_op(op_matrix() ⋅ arg)
-apply_op_matrix(::Nothing, op_matrix, arg1, arg2) = @. op_matrix(arg1) ⋅ arg2
+apply_op_matrix(::Nothing, op_matrix, arg) = @lazy @. op_matrix() ⋅ arg
+apply_op_matrix(boundary_op, op_matrix, arg) =
+    @lazy @. boundary_op(op_matrix() ⋅ arg)
+apply_op_matrix(::Nothing, op_matrix, arg1, arg2) =
+    @lazy @. op_matrix(arg1) ⋅ arg2
 apply_op_matrix(boundary_op, op_matrix, arg1, arg2) =
-    @. boundary_op(op_matrix(arg1) ⋅ arg2)
+    @lazy @. boundary_op(op_matrix(arg1) ⋅ arg2)
 
-apply_op_matrix!(result, ::Nothing, op_matrix, arg) =
-    @. result = op_matrix() ⋅ arg
-apply_op_matrix!(result, boundary_op, op_matrix, arg) =
-    @. result = boundary_op(op_matrix() ⋅ arg)
-apply_op_matrix!(result, ::Nothing, op_matrix, arg1, arg2) =
-    @. result = op_matrix(arg1) ⋅ arg2
-apply_op_matrix!(result, boundary_op, op_matrix, arg1, arg2) =
-    @. result = boundary_op(op_matrix(arg1) ⋅ arg2)
-
-apply_op!(result, ::Nothing, op, args...) = @. result = op(args...)
-apply_op!(result, boundary_op, op, args...) =
-    @. result = boundary_op(op(args...))
+apply_op(::Nothing, op, args...) = @lazy @. op(args...)
+apply_op(boundary_op, op, args...) = @lazy @. boundary_op(op(args...))
 
 function test_op_matrix(
     ::Type{Op},
@@ -97,10 +94,9 @@ function test_op_matrix(
 
     test_field_broadcast(;
         test_name = "operator matrix of $Op ($(BC <: Nothing ? "no BCs" : BC))",
-        get_result = () -> apply_op_matrix(boundary_op, op_matrix, args...),
-        set_result! = result ->
-            apply_op_matrix!(result, boundary_op, op_matrix, args...),
-        ref_set_result! = result -> apply_op!(result, boundary_op, op, args...),
+        get_result = apply_op_matrix(boundary_op, op_matrix, args...),
+        set_result = apply_op_matrix(boundary_op, op_matrix, args...),
+        ref_set_result = apply_op(boundary_op, op, args...),
         time_ratio_limit = 60, # Extrapolating operator matrices are very slow.
     )
 end
@@ -235,73 +231,92 @@ end
     ᶜ1 = @. one(ᶜscalar)
     ᶠ1 = @. one(ᶠscalar)
     for get_result in (
-        () -> (@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() + DiagonalMatrixRow(ᶜ0)),
-        () -> (@. DiagonalMatrixRow(ᶜ0) + ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
-        () -> (@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() ⋅ DiagonalMatrixRow(ᶜ1)),
-        () -> (@. ᶜlbias_matrix() ⋅ DiagonalMatrixRow(ᶠ1) ⋅ ᶠinterp_matrix()),
-        () -> (@. DiagonalMatrixRow(ᶜ1) ⋅ ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+        @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() + DiagonalMatrixRow(ᶜ0)),
+        @lazy(@. DiagonalMatrixRow(ᶜ0) + ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+        @lazy(@. ᶜlbias_matrix() ⋅ ᶠinterp_matrix() ⋅ DiagonalMatrixRow(ᶜ1)),
+        @lazy(@. ᶜlbias_matrix() ⋅ DiagonalMatrixRow(ᶠ1) ⋅ ᶠinterp_matrix()),
+        @lazy(@. DiagonalMatrixRow(ᶜ1) ⋅ ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
     )
         test_field_broadcast(;
             test_name = "product of two lazy operator matrices",
             get_result,
-            set_result! = result ->
-                (@. result = ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
+            set_result = @lazy(@. result = ᶜlbias_matrix() ⋅ ᶠinterp_matrix()),
         )
     end
 
     test_field_broadcast(;
         test_name = "product of six operator matrices",
-        get_result = () ->
-            (@. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+        get_result = @lazy(
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+               ᶠinterp_matrix()
+        ),
+        set_result = @lazy(
+            @. result =
+                ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
                 ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-                ᶠinterp_matrix()),
-        set_result! = result -> (@. result =
-            ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-            ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-            ᶠinterp_matrix()),
+                ᶠinterp_matrix()
+        ),
     )
 
     test_field_broadcast(;
         test_name = "applying six operators to a nested field using operator \
                      matrices",
-        get_result = () ->
-            (@. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+        get_result = @lazy(
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
+               ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
+               ᶠinterp_matrix() ⋅ ᶜnested
+        ),
+        set_result = @lazy(
+            @. result =
+                ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
                 ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-                ᶠinterp_matrix() ⋅ ᶜnested),
-        set_result! = result -> (@. result =
-            ᶜflux_correct_matrix(ᶠuvw) ⋅ ᶜadvect_matrix(ᶠuvw) ⋅
-            ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠrbias_matrix() ⋅ ᶜlbias_matrix() ⋅
-            ᶠinterp_matrix() ⋅ ᶜnested),
-        ref_set_result! = result -> (@. result = ᶜflux_correct(
-            ᶠuvw,
-            ᶜadvect(ᶠuvw, ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))),
-        )),
+                ᶠinterp_matrix() ⋅ ᶜnested
+        ),
+        ref_set_result = @lazy(
+            @. result = ᶜflux_correct(
+                ᶠuvw,
+                ᶜadvect(
+                    ᶠuvw,
+                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
+                ),
+            )
+        ),
     )
 
     test_field_broadcast(;
         test_name = "applying six operators to a nested field using operator \
                      matrices, but with forced right associativity",
-        get_result = () -> (@. ᶜflux_correct_matrix(ᶠuvw) ⋅ (
-            ᶜadvect_matrix(ᶠuvw) ⋅ (
-                ᶜwinterp_matrix(ᶠscalar) ⋅ (
-                    ᶠrbias_matrix() ⋅
-                    (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
-                )
-            )
-        )),
-        set_result! = result -> (@. result =
-            ᶜflux_correct_matrix(ᶠuvw) ⋅ (
+        get_result = @lazy(
+            @. ᶜflux_correct_matrix(ᶠuvw) ⋅ (
                 ᶜadvect_matrix(ᶠuvw) ⋅ (
                     ᶜwinterp_matrix(ᶠscalar) ⋅ (
                         ᶠrbias_matrix() ⋅
                         (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
                     )
                 )
-            )),
-        ref_set_result! = result -> (@. result = ᶜflux_correct(
-            ᶠuvw,
-            ᶜadvect(ᶠuvw, ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested))))),
-        )),
+            )
+        ),
+        set_result = @lazy(
+            @. result =
+                ᶜflux_correct_matrix(ᶠuvw) ⋅ (
+                    ᶜadvect_matrix(ᶠuvw) ⋅ (
+                        ᶜwinterp_matrix(ᶠscalar) ⋅ (
+                            ᶠrbias_matrix() ⋅
+                            (ᶜlbias_matrix() ⋅ (ᶠinterp_matrix() ⋅ ᶜnested))
+                        )
+                    )
+                )
+        ),
+        ref_set_result = @lazy(
+            @. result = ᶜflux_correct(
+                ᶠuvw,
+                ᶜadvect(
+                    ᶠuvw,
+                    ᶜwinterp(ᶠscalar, ᶠrbias(ᶜlbias(ᶠinterp(ᶜnested)))),
+                ),
+            )
+        ),
         time_ratio_limit = 30, # This case's ref function is fast on Buildkite.
         test_broken_with_cuda = true, # TODO: Fix this.
     )
@@ -311,38 +326,48 @@ end
     # cases. As of Julia 1.8.5, the tests fail if we skip this step. Is this a
     # false positive, a compiler issue, or a sign that the code can be improved?
     for get_result in (
-        () -> (@. (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
-            (c12_a,) +
-            (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5),
-        () -> (@. ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
-            (
-            (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() * (c12_a,) +
-            (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-        )),
+        @lazy(
+            @. (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+               (c12_a,) +
+               (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+        ),
+        @lazy(
+            @. ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅ (
+                (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                (c12_a,) +
+                (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
+            )
+        ),
     )
-        get_result()
-        @test_opt ignored_modules = cuda_frames get_result()
+        materialize(get_result)
+        @test_opt ignored_modules = cuda_frames materialize(get_result)
     end
 
     test_field_broadcast(;
         test_name = "non-trivial combination of operator matrices and other \
                      matrix fields",
-        get_result = () -> (@. ᶠupwind_matrix(ᶠuvw) ⋅ (
-            ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
-            (
-                (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
-                (c12_a,) +
-                (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-            ) - (2I,)
-        )),
-        set_result! = result -> (@. result =
-            ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅ (
+        get_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
+                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+                (
                     (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
-            )),
+            )
+        ),
+        set_result = @lazy(
+            @. result =
+                ᶠupwind_matrix(ᶠuvw) ⋅ (
+                    ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅
+                    ᶠgrad_matrix() ⋅ (
+                        (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                        (c12_a,) +
+                        (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
+                        5
+                    ) - (2I,)
+                )
+        ),
     )
 
     # TODO: This case's reference function takes too long to compile on both
@@ -353,23 +378,29 @@ end
     test_field_broadcast(;
         test_name = "applying a non-trivial sequence of operations to a scalar \
                      field using operator matrices and other matrix fields",
-        get_result = () -> (@. ᶠupwind_matrix(ᶠuvw) ⋅ (
-            ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
-            (
-                (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
-                (c12_a,) +
-                (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
-            ) - (2I,)
-        ) ⋅ ᶜscalar),
-        set_result! = result -> (@. result =
-            ᶠupwind_matrix(ᶠuvw) ⋅ (
-                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅ (
+        get_result = @lazy(
+            @. ᶠupwind_matrix(ᶠuvw) ⋅ (
+                ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅ ᶠgrad_matrix() ⋅
+                (
                     (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
                     (c12_a,) +
                     (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) / 5
                 ) - (2I,)
-            ) ⋅ ᶜscalar),
-        # ref_set_result! = result -> (@. result = ᶠupwind(
+            ) ⋅ ᶜscalar
+        ),
+        set_result = @lazy(
+            @. result =
+                ᶠupwind_matrix(ᶠuvw) ⋅ (
+                    ᶜdiv_matrix() ⋅ DiagonalMatrixRow(ᶠscalar) ⋅
+                    ᶠgrad_matrix() ⋅ (
+                        (c12_b',) * ᶜwinterp_matrix(ᶠscalar) ⋅ ᶠcurl_matrix() *
+                        (c12_a,) +
+                        (DiagonalMatrixRow(ᶜdiv(ᶠuvw)) - ᶜadvect_matrix(ᶠuvw)) /
+                        5
+                    ) - (2I,)
+                ) ⋅ ᶜscalar
+        ),
+        # ref_set_result = @lazy(@. result = ᶠupwind(
         #     ᶠuvw,
         #     ᶜdiv(
         #         ᶠscalar * ᶠgrad(

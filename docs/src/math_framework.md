@@ -24,7 +24,7 @@ of real numbers to each point of the domain. This representation of a vector
 field _depends on the coordinate system_, and there are transformation laws
 for passing from one coordinate system to the other.
 
-ClmaCore supports different coordinate systems and, therefore, vector representations.
+ClimaCore supports different coordinate systems and, therefore, vector representations.
 In fact, one of the key requirements of ClimaCore is to support vectors specified
 in orthogonal (Cartesian) and curvilinear coordinate systems.
 

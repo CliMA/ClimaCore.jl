@@ -28,24 +28,29 @@ end
 
 @testset "similar" begin
     device = ClimaComms.device()
-    device_zeros(args...) = ClimaComms.array_type(device)(zeros(args...))
+    ArrayType = ClimaComms.array_type(device)
     FT = Float64
     S = FT
-    Nf = 1
     Nv = 4
-    Nij = 3
+    Ni = Nij = 3
     Nh = 5
     Nk = 6
-#! format: off
-    data = DataF{S}(device_zeros(FT,Nf));                        test_similar!(data)
-    data = IJFH{S, Nij}(device_zeros(FT,Nij,Nij,Nf,Nh));         test_similar!(data)
-    data = IFH{S, Nij}(device_zeros(FT,Nij,Nf,Nh));              test_similar!(data)
-    data = IJF{S, Nij}(device_zeros(FT,Nij,Nij,Nf));             test_similar!(data)
-    data = IF{S, Nij}(device_zeros(FT,Nij,Nf));                  test_similar!(data)
-    data = VF{S, Nv}(device_zeros(FT,Nv,Nf));                    test_similar!(data)
-    data = VIJFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nij,Nf,Nh)); test_similar!(data)
-    data = VIFH{S, Nv, Nij}(device_zeros(FT,Nv,Nij,Nf,Nh));      test_similar!(data)
-#! format: on
-    # data = DataLayouts.IJKFVH{S, Nij, Nk}(device_zeros(FT,Nij,Nij,Nk,Nf,Nv,Nh)); test_similar!(data) # TODO: test
-    # data = DataLayouts.IH1JH2{S, Nij}(device_zeros(FT,2*Nij,3*Nij));             test_similar!(data) # TODO: test
+    data = DataF{S}(ArrayType{FT}, zeros)
+    test_similar!(data)
+    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_similar!(data)
+    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_similar!(data)
+    data = IJF{S}(ArrayType{FT}, zeros; Nij)
+    test_similar!(data)
+    data = IF{S}(ArrayType{FT}, zeros; Ni)
+    test_similar!(data)
+    data = VF{S}(ArrayType{FT}, zeros; Nv)
+    test_similar!(data)
+    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_similar!(data)
+    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_similar!(data)
+    # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_similar!(data) # TODO: test
+    # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_similar!(data) # TODO: test
 end

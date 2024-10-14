@@ -8,6 +8,7 @@ import .Spaces:
     FiniteDifferenceSpace
 import .Topologies: IntervalTopology
 import .Meshes: IntervalMesh
+import .DataLayouts
 
 @deprecate IntervalTopology(mesh::IntervalMesh) IntervalTopology(
     ClimaComms.SingletonCommsContext(ClimaComms.device()),

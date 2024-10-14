@@ -4,6 +4,98 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - Fixed world-age issue on Julia 1.11 issue [Julia#54780](https://github.com/JuliaLang/julia/issues/54780), PR [#2034](https://github.com/CliMA/ClimaCore.jl/pull/2034).
+
+v0.14.18
+-------
+
+ - Fixed multiple-field solve for land simulations PR [#2025](https://github.com/CliMA/ClimaCore.jl/pull/2025).
+ - Fixed Julia 1.11 PR [#2018](https://github.com/CliMA/ClimaCore.jl/pull/2018).
+ - `Nh` was turned back into a dynamic parameter, in order to alleviate compile times PR [#2005](https://github.com/CliMA/ClimaCore.jl/pull/2005).
+ - Defined some convenience methods [#2012](https://github.com/CliMA/ClimaCore.jl/pull/2012)
+
+### ![][badge-🐛bugfix] Fix equality for `FieldVector`s with different type
+
+Due to a bug, `==` was not recursively checking `FieldVector`s with different
+types, which resulted in false positives. This is now fixed and `FieldVector`s
+with different types are always considered different.
+
+### ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `deep = true`
+
+Prior to this change, the `ClimaCore.InputOutput` module did not save whether a
+`Space` was constructed with `deep = true`. This meant that restarting a
+simulation from a HDF5 file led to inconsistent and incorrect spaces and
+`Field`s. This affected only extruded 3D spectral spaces.
+
+We now expect `Space`s read from a file to be bitwise identical to the original
+one.
+
+
+PR [#2021](https://github.com/CliMA/ClimaCore.jl/pull/2021).
+
+v0.14.17
+-------
+
+ - Fixed some type instabilities PR [#2004](https://github.com/CliMA/ClimaCore.jl/pull/2004)
+ - More fixes to higher resolution column cases for the GPU [#1854](https://github.com/CliMA/ClimaCore.jl/pull/1854)
+
+v0.14.16
+-------
+
+- Extended `create_dss_buffer` and `weighted_dss!` for `FieldVector`s, rather than
+just `Field`s. PR [#2000](https://github.com/CliMA/ClimaCore.jl/pull/2000).
+
+- ![][badge-🐛bugfix] Fix restarting simulations from `Space`s with `enable_bubble = true`
+
+Prior to this change, the `ClimaCore.InputOutput` module did not save whether a
+`Space` was constructed with `enable_bubble = true`. This meant that restarting
+a simulation from a HDF5 file led to inconsistent and incorrect spaces and
+`Field`s. This affected only 2D spectral spaces (and extruded ones that have
+this type of horizontal space).
+
+We now expect `Space`s read from a file to be bitwise identical to the original
+one.
+
+PR [#1999](https://github.com/CliMA/ClimaCore.jl/pull/1999).
+
+v0.14.15
+-------
+
+- Added support for mixing extruded and horizontal spaces in GPU kernels. PR [#1987](https://github.com/CliMA/ClimaCore.jl/pull/1987).
+
+v0.14.14
+-------
+
+- Inference was fixed for some broadcast expressions involving columns PR [#1984](https://github.com/CliMA/ClimaCore.jl/pull/1984).
+
+v0.14.13
+-------
+
+- CUDA kernel launch configurations have been tuned to improve performance, and now allows for high resolution in the vertical direction PR [#1969](https://github.com/CliMA/ClimaCore.jl/pull/1969), issue [#1854](https://github.com/CliMA/ClimaCore.jl/issues/1854) closed.
+
+- DSS was refactored, and machine precision changes can be expected. PR [#1958](https://github.com/CliMA/ClimaCore.jl/pull/1958).
+
+v0.14.12
+-------
+- Added hyperbolic tangent stretching. PR [#1930](https://github.com/CliMA/ClimaCore.jl/pull/1930).
+
+v0.14.11
+-------
+
+- Support for matrix fields on spectral and point spaces was added, PR [#1884](https://github.com/CliMA/ClimaCore.jl/pull/1884).
+- Support for 3-component DSS transform was added, PR [#1693](https://github.com/CliMA/ClimaCore.jl/pull/1693).
+- Support for column-wise "accumulate"/"reduce" operations were added, PR [#1903](https://github.com/CliMA/ClimaCore.jl/pull/1903). These abstractions will allow us to group, paralellize and optimize more column-wise work on the GPU.
+- A new macro, `Fields.@rprint_diff` was added, which recursively print differences between two `FieldVector`s (of the same type) (PR [#1886](https://github.com/CliMA/ClimaCore.jl/pull/1886)).
+- Julia 1.11 fixes (PR [#1883](https://github.com/CliMA/ClimaCore.jl/pull/1883))
+- `Nh` has been added to the type parameter space, which allows us to more flexibly write performant backend kernels (PR [#1894](https://github.com/CliMA/ClimaCore.jl/pull/1894)). This was leveraged in PR [#1898](https://github.com/CliMA/ClimaCore.jl/pull/1898), and may result in slightly more performant kernels.
+
+
+v0.14.10
+-------
+
+- Various performance tweaks (PRs [#1840](https://github.com/CliMA/ClimaCore.jl/pull/1840), [#1837](https://github.com/CliMA/ClimaCore.jl/pull/1837), [#1843](https://github.com/CliMA/ClimaCore.jl/pull/1843), [#1839](https://github.com/CliMA/ClimaCore.jl/pull/1839)).
+- CPU/GPU kernels are now determined by dispatching, instead of specializing, which should (hopefully) have generally fixed GPU dispatching issues (PR [#1863](https://github.com/CliMA/ClimaCore.jl/pull/1863)).
+- Matrix multiplication kernels have been improved (PR [#1880](https://github.com/CliMA/ClimaCore.jl/pull/1880)).
 - Support for the following methods have been deprecated (PR [#1821](https://github.com/CliMA/ClimaCore.jl/pull/1821), ):
   - `IntervalTopology(::Mesh)` in favor of using `IntervalTopology(::ClimaComms.AbstractDevice, ::Mesh)`
   - `FaceFiniteDifferenceSpace(::Mesh)` in favor of using `FaceFiniteDifferenceSpace(::ClimaComms.AbstractDevice, ::Mesh)`

@@ -304,7 +304,7 @@ dYdt = similar(Y);
 rhs_invariant!(dYdt, Y, nothing, 0.0);
 
 # run!
-using OrdinaryDiffEq
+using OrdinaryDiffEqSSPRK: ODEProblem, solve, SSPRK33
 Δt = 0.050
 prob = ODEProblem(rhs_invariant!, Y, (0.0, 1.0))
 sol = solve(

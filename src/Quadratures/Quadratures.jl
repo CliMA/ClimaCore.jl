@@ -89,8 +89,8 @@ struct Uniform{Nq} <: QuadratureStyle end
 @inline degrees_of_freedom(::Uniform{Nq}) where {Nq} = Int(Nq)
 
 @generated function quadrature_points(::Type{FT}, ::Uniform{Nq}) where {FT, Nq}
-    points = SVector{Nq}(range(-1 + 1 / Nq, step = 2 / Nq, length = Nq))
-    weights = SVector{Nq}(ntuple(i -> 2 / Nq, Nq))
+    points = SVector{Nq}(range(-1 + FT(1 / Nq), step = FT(2 / Nq), length = Nq))
+    weights = SVector{Nq}(ntuple(i -> FT(2 / Nq), Nq))
     :($points, $weights)
 end
 
@@ -110,9 +110,9 @@ struct ClosedUniform{Nq} <: QuadratureStyle end
 ) where {FT, Nq}
     points = SVector{Nq}(range(FT(-1), FT(1), length = Nq))
     weights = SVector{Nq}(
-        1 / (Nq - 1),
-        ntuple(i -> 2 / (Nq - 1), Nq - 2)...,
-        1 / (Nq - 1),
+        FT(1 / (Nq - 1)),
+        ntuple(i -> FT(2 / (Nq - 1)), Nq - 2)...,
+        FT(1 / (Nq - 1)),
     )
     :($points, $weights)
 end

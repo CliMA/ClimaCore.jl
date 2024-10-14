@@ -154,6 +154,17 @@ function _scan_data_layout(layoutstring::AbstractString)
     return DataLayouts.VIFH
 end
 
+# for when Nh is in type-domain
+# function Nh_dim(layoutstring::AbstractString)
+#     @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
+#     layoutstring == "IJFH" && return 4
+#     layoutstring == "IJF" && return -1
+#     layoutstring == "IFH" && return 3
+#     layoutstring == "IF" && return -1
+#     layoutstring == "VIJFH" && return 5
+#     return 4
+# end
+
 """
     matrix_to_cartesianindices(elemorder_matrix)
 
@@ -323,10 +334,15 @@ function read_grid_new(reader, name)
         quadrature_style =
             _scan_quadrature_style(attrs(group)["quadrature_type"], npts)
         topology = read_topology(reader, attrs(group)["topology"])
+        enable_bubble = get(attrs(group), "bubble", "false") == "true"
         if type == "SpectralElementGrid1D"
             return Grids.SpectralElementGrid1D(topology, quadrature_style)
         else
-            return Grids.SpectralElementGrid2D(topology, quadrature_style)
+            return Grids.SpectralElementGrid2D(
+                topology,
+                quadrature_style;
+                enable_bubble,
+            )
         end
     elseif type == "FiniteDifferenceGrid"
         topology = read_topology(reader, attrs(group)["topology"])
@@ -335,6 +351,7 @@ function read_grid_new(reader, name)
         vertical_grid = read_grid(reader, attrs(group)["vertical_grid"])
         horizontal_grid = read_grid(reader, attrs(group)["horizontal_grid"])
         hypsography_type = get(attrs(group), "hypsography_type", "Flat")
+        deep = get(attrs(group), "deep", false)
         if hypsography_type == "Flat"
             hypsography = Grids.Flat()
         elseif hypsography_type == "LinearAdaption"
@@ -354,7 +371,8 @@ function read_grid_new(reader, name)
         return Grids.ExtrudedFiniteDifferenceGrid(
             horizontal_grid,
             vertical_grid,
-            hypsography,
+            hypsography;
+            deep,
         )
     elseif type == "LevelGrid"
         full_grid = read_grid(reader, attrs(group)["full_grid"])
@@ -459,11 +477,16 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
         DataLayout = _scan_data_layout(data_layout)
+        # For when `Nh` is added back to the type space
+        #     Nhd = Nh_dim(data_layout)
+        #     Nht = Nhd == -1 ? () : (size(data, Nhd),)
         ElType = eval(Meta.parse(attrs(obj)["value_type"]))
         if data_layout in ("VIJFH", "VIFH")
             Nv = size(data, 1)
+            # values = DataLayout{ElType, Nv, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nv, Nij}(data)
         else
+            # values = DataLayout{ElType, Nij, Nht...}(data) # when Nh is in type-domain
             values = DataLayout{ElType, Nij}(data)
         end
         return Fields.Field(values, space)
