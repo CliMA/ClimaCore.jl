@@ -18,27 +18,25 @@ concurrency:
 jobs:
   test:
     timeout-minutes: 80
+    name: ci ${{ matrix.version }} - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            julia-version: '1.10'
-          - os: windows-latest
-            julia-version: '1.10'
-          - os: macos-latest
-            julia-version: '1.10'
-          - os: ubuntu-latest
-            julia-version: '~1.11.0-0'
-
-    runs-on: ${{ matrix.os }}
+        version:
+          - '1.10'
+          - '1.11'
+        os:
+          - ubuntu-latest
+          - macOS-latest
+          - windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
-          version: ${{ matrix.julia-version }}
+          version: ${{ matrix.version }}
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
