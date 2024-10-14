@@ -6,6 +6,33 @@ main
 
  - Fixed world-age issue on Julia 1.11 issue [Julia#54780](https://github.com/JuliaLang/julia/issues/54780), PR [#2034](https://github.com/CliMA/ClimaCore.jl/pull/2034).
 
+v0.14.19
+-------
+
+### ![][badge-🐛bugfix] Fix undefined behavior in `DataLayout`s
+
+PR [#2034](https://github.com/CliMA/ClimaCore.jl/pull/2034) fixes some undefined
+behavior in the `DataLayout` module. This bug was manifesting itself as a `world
+age` error in some applications that are using Julia 1.11.
+
+### ![][badge-✨feature/enhancement] New convenience constructors for `DataLayout`s
+
+PR [#2033](https://github.com/CliMA/ClimaCore.jl/pull/2033) introduces new
+constructors for `DataLayout`s. Instead of writing
+```julia
+array = rand(FT, Nv, Nij, Nij, 3, Nh)
+data = VIJFH{S, Nv, Nij}(array)
+```
+
+You can now write
+```julia
+data = VIJFH{S}(ArrayType{FT}, rand; Nv, Nij, Nh)
+```
+and grab the `array` with `parent(data)` (if you need).
+
+Note: These constructors are meant to be used in tests and interactive use, not
+in performance sensitive modules (due to their lack of inferrability).
+
 v0.14.18
 -------
 
