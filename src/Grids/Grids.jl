@@ -76,6 +76,7 @@ include("spectralelement.jl")
 include("extruded.jl")
 include("column.jl")
 include("level.jl")
+include("convenience_constructors.jl")
 
 
 
