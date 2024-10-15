@@ -4,8 +4,8 @@
 
 Base.copyto!(
     dest::AbstractData,
-    bc::Union{AbstractData, Base.Broadcast.Broadcasted},
-) = Base.copyto!(dest, bc, device_dispatch(dest))
+    @nospecialize(bc::Union{AbstractData, Base.Broadcast.Broadcasted}),
+) = Base.copyto!(dest, bc, device_dispatch(parent(dest)))
 
 # Specialize on non-Broadcasted objects
 function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
@@ -15,8 +15,6 @@ end
 
 # broadcasting scalar assignment
 # Performance optimization for the common identity scalar case: dest .= val
-# And this is valid for the CPU or GPU, since the broadcasted object
-# is a scalar type.
 function Base.copyto!(
     dest::AbstractData,
     bc::Base.Broadcast.Broadcasted{Style},
@@ -51,10 +49,9 @@ function Base.copyto!(
     ::ToCPU,
 ) where {S, Nij}
     (_, _, _, _, Nh) = size(dest)
-    @inbounds for h in 1:Nh
-        slab_dest = slab(dest, h)
-        slab_bc = slab(bc, h)
-        copyto!(slab_dest, slab_bc)
+    @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
+        idx = CartesianIndex(i, j, 1, 1, h)
+        dest[idx] = convert(S, bc[idx])
     end
     return dest
 end
@@ -65,10 +62,9 @@ function Base.copyto!(
     ::ToCPU,
 ) where {S, Ni}
     (_, _, _, _, Nh) = size(dest)
-    @inbounds for h in 1:Nh
-        slab_dest = slab(dest, h)
-        slab_bc = slab(bc, h)
-        copyto!(slab_dest, slab_bc)
+    @inbounds for h in 1:Nh, i in 1:Ni
+        idx = CartesianIndex(i, 1, 1, 1, h)
+        dest[idx] = convert(S, bc[idx])
     end
     return dest
 end
@@ -131,10 +127,9 @@ function Base.copyto!(
 ) where {S, Nv, Ni}
     # copy contiguous columns
     (_, _, _, _, Nh) = size(dest)
-    @inbounds for h in 1:Nh, i in 1:Ni
-        col_dest = column(dest, i, h)
-        col_bc = column(bc, i, h)
-        copyto!(col_dest, col_bc)
+    @inbounds for h in 1:Nh, i in 1:Ni, v in 1:Nv
+        idx = CartesianIndex(i, 1, 1, v, h)
+        dest[idx] = convert(S, bc[idx])
     end
     return dest
 end
@@ -146,10 +141,9 @@ function Base.copyto!(
 ) where {S, Nv, Nij}
     # copy contiguous columns
     (_, _, _, _, Nh) = size(dest)
-    @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij
-        col_dest = column(dest, i, j, h)
-        col_bc = column(bc, i, j, h)
-        copyto!(col_dest, col_bc)
+    @inbounds for h in 1:Nh, j in 1:Nij, i in 1:Nij, v in 1:Nv
+        idx = CartesianIndex(i, j, 1, v, h)
+        dest[idx] = convert(S, bc[idx])
     end
     return dest
 end

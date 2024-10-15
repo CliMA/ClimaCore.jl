@@ -6,7 +6,7 @@ function knl_fill!(dest, val, us)
     return nothing
 end
 
-function cuda_fill!(dest::AbstractData, bc)
+function Base.fill!(dest::AbstractData, bc, ::ToCUDA)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
@@ -23,5 +23,3 @@ function cuda_fill!(dest::AbstractData, bc)
     end
     return dest
 end
-
-Base.fill!(dest::AbstractData, val, ::ToCUDA) = cuda_fill!(dest, val)

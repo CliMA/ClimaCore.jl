@@ -18,7 +18,7 @@ function Base.copyto!(
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
-    fused_copyto!(fmb_inst, dest1, device_dispatch(dest1))
+    fused_copyto!(fmb_inst, dest1, device_dispatch(parent(dest1)))
 end
 
 function fused_copyto!(

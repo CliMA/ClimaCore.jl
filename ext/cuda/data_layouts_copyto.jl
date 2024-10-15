@@ -1,4 +1,4 @@
-DataLayouts._device_dispatch(x::CUDA.CuArray) = ToCUDA()
+DataLayouts.device_dispatch(x::CUDA.CuArray) = ToCUDA()
 
 function knl_copyto!(dest, src, us)
     I = universal_index(dest)
@@ -8,7 +8,7 @@ function knl_copyto!(dest, src, us)
     return nothing
 end
 
-function cuda_copyto!(dest::AbstractData, bc)
+function Base.copyto!(dest::AbstractData, bc, ::ToCUDA)
     (_, _, Nv, _, Nh) = DataLayouts.universal_size(dest)
     us = DataLayouts.UniversalSize(dest)
     if Nv > 0 && Nh > 0
@@ -26,13 +26,21 @@ function cuda_copyto!(dest::AbstractData, bc)
     return dest
 end
 
-#! format: off
-Base.copyto!(dest::IJFH{S, Nij},          bc::DataLayouts.BroadcastedUnionIJFH{S, Nij}, ::ToCUDA) where {S, Nij} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IFH{S, Ni},            bc::DataLayouts.BroadcastedUnionIFH{S, Ni}, ::ToCUDA) where {S, Ni} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IJF{S, Nij},           bc::DataLayouts.BroadcastedUnionIJF{S, Nij}, ::ToCUDA) where {S, Nij} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::IF{S, Ni},             bc::DataLayouts.BroadcastedUnionIF{S, Ni}, ::ToCUDA) where {S, Ni} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::VIFH{S, Nv, Ni},       bc::DataLayouts.BroadcastedUnionVIFH{S, Nv, Ni}, ::ToCUDA) where {S, Nv, Ni} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::VIJFH{S, Nv, Nij},     bc::DataLayouts.BroadcastedUnionVIJFH{S, Nv, Nij}, ::ToCUDA) where {S, Nv, Nij} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::VF{S, Nv},             bc::DataLayouts.BroadcastedUnionVF{S, Nv}, ::ToCUDA) where {S, Nv} = cuda_copyto!(dest, bc)
-Base.copyto!(dest::DataF{S},              bc::DataLayouts.BroadcastedUnionDataF{S}, ::ToCUDA) where {S} = cuda_copyto!(dest, bc)
-#! format: on
+# broadcasting scalar assignment
+# Performance optimization for the common identity scalar case: dest .= val
+# And this is valid for the CPU or GPU, since the broadcasted object
+# is a scalar type.
+function Base.copyto!(
+    dest::AbstractData,
+    bc::Base.Broadcast.Broadcasted{Style},
+    ::ToCUDA,
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+}
+    bc = Base.Broadcast.instantiate(
+        Base.Broadcast.Broadcasted{Style}(bc.f, bc.args, ()),
+    )
+    @inbounds bc0 = bc[]
+    fill!(dest, bc0)
+end
