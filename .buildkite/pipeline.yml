@@ -1294,6 +1294,16 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: "Perf: benchmark scripts benchmark_field_last"
+        key: benchmark_field_last
+        command:
+          - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
+          - "julia --color=yes --project=.buildkite benchmarks/scripts/benchmark_field_last.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
   - group: "Perf: Operators"
     steps:
 
