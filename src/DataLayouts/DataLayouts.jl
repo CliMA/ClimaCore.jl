@@ -1524,19 +1524,17 @@ array2data(array::AbstractArray{T}, data::AbstractData) where {T} =
     )
 
 """
-    device_dispatch(data::AbstractData)
+    device_dispatch(array::AbstractArray)
 
 Returns an `ToCPU` or a `ToCUDA` for CPU
 and CUDA-backed arrays accordingly.
 """
-device_dispatch(dest::AbstractData) = _device_dispatch(dest)
-
-_device_dispatch(x::Array) = ToCPU()
-_device_dispatch(x::SubArray) = _device_dispatch(parent(x))
-_device_dispatch(x::Base.ReshapedArray) = _device_dispatch(parent(x))
-_device_dispatch(x::AbstractData) = _device_dispatch(parent(x))
-_device_dispatch(x::SArray) = ToCPU()
-_device_dispatch(x::MArray) = ToCPU()
+device_dispatch(x::Array) = ToCPU()
+device_dispatch(x::SubArray) = device_dispatch(parent(x))
+device_dispatch(x::Base.ReshapedArray) = device_dispatch(parent(x))
+device_dispatch(x::AbstractData) = device_dispatch(parent(x))
+device_dispatch(x::SArray) = ToCPU()
+device_dispatch(x::MArray) = ToCPU()
 
 include("copyto.jl")
 include("fused_copyto.jl")
