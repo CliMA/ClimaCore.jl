@@ -58,4 +58,4 @@ function Base.fill!(data::VIFH, val, ::ToCPU)
 end
 
 Base.fill!(dest::AbstractData, val) =
-    Base.fill!(dest, val, device_dispatch(dest))
+    Base.fill!(dest, val, device_dispatch(parent(dest)))
