@@ -15,9 +15,13 @@ mutable struct UnitTest
     name::String
     filename::String
     elapsed::Float64
+    compile_time::Float64
+    recompile_time::Float64
+    test_id::Int
     meta::Any
 end
-UnitTest(name, filename; meta = nothing) = UnitTest(name, filename, 0.0, meta)
+UnitTest(name, filename; meta = nothing) =
+    UnitTest(name, filename, 0.0, 0.0, 0.0, 0, meta)
 
 """
     validate_tests(unit_tests::Vector{UnitTest}; test_path)
@@ -90,7 +94,7 @@ function tabulate_tests(
         include_timings ? "Tests results" :
         "Running the following unit tests..."
     if include_timings
-        sort!(unit_tests; by = x -> x.elapsed, rev = true)
+        sort!(unit_tests; by = x -> x.compile_time, rev = true)
         local time_header
         elapsed_times = if time_format == :compoundperiod
             time_header = "Time"
@@ -105,10 +109,26 @@ function tabulate_tests(
         end
         ∑times = sum(x -> x.elapsed, unit_tests)
         time_percent = map(x -> x.elapsed / ∑times * 100, unit_tests)
-        header = ["% Time", time_header, "Name", "Filename"]
+        test_id = map(x -> x.test_id, unit_tests)
+        compile_time = map(x -> x.compile_time, unit_tests)
+        ∑compile_time = sum(x -> x.compile_time, unit_tests)
+        compile_time_percent =
+            map(x -> x.compile_time / ∑compile_time * 100, unit_tests)
+        header = [
+            "% Comp",
+            "Comp (s)",
+            "% Time",
+            time_header,
+            "ID",
+            "Name",
+            "Filename",
+        ]
         data = hcat(
+            compile_time_percent,
+            compile_time,
             time_percent,
             elapsed_times,
+            test_id,
             map(x -> x.name, unit_tests),
             map(x -> x.filename, unit_tests),
         )
@@ -124,6 +144,58 @@ function tabulate_tests(
         alignment = :l,
         crop = :horizontal,
     )
+end
+
+
+"""
+    @timevd ex
+
+A combination of `@timev` and `@timed`, which returns
+everything computed in `@timev` into a NamedTuple.
+
+
+This is similar to `Base.@timev`, but stores the result
+in a NamedTuple.
+
+!!! warn
+    The compile-time measurements have been added for
+    temporary use, in order to track latency. We will
+    soon remove this as we fix some latency issues.
+"""
+macro timevd(ex)
+    quote
+        @timevd nothing $(esc(ex))
+    end
+end
+
+macro timevd(msg, ex)
+    # From julia Base:
+    quote
+        Base.Experimental.@force_compile
+        local stats = Base.gc_num()
+        local elapsedtime = Base.time_ns()
+        Base.cumulative_compile_timing(true)
+        local compile_elapsedtimes = Base.cumulative_compile_time_ns()
+        local val = Base.@__tryfinally(
+            $(esc(ex)),
+            (
+                elapsedtime = Base.time_ns() - elapsedtime;
+                Base.cumulative_compile_timing(false);
+                compile_elapsedtimes =
+                    Base.cumulative_compile_time_ns() .- compile_elapsedtimes
+            )
+        )
+        local diff = Base.GC_Diff(Base.gc_num(), stats)
+        local _msg = $(esc(msg))
+        (;
+            value = val,
+            elapsed = elapsedtime / 1e9,
+            bytes = diff.allocd,
+            gctime = diff.total_time / 1e9,
+            gcstats = diff,
+            compile_elapsedtimes,
+        )
+    end
 end
 
 """
@@ -146,16 +218,30 @@ Note:
     for `fail_fast = false`, the tests are all wrapped in `@testset "Unit tests"`
     so output is suppressed until all tests are complete.
 """
-function run_unit_test!(test::UnitTest; prevent_leaky_tests::Bool = false)
+function run_unit_test!(
+    test::UnitTest,
+    test_id;
+    prevent_leaky_tests::Bool = false,
+)
     @debug "--- About to test $(test.filename)"
-    test.elapsed = if prevent_leaky_tests
+    stats = if prevent_leaky_tests
         # This is a home-brewed `SafeTestsets`, but it allows us to (inside a module)
-        @elapsed eval(Meta.parse(test_expr_safe(test)))
+        @timevd eval(Meta.parse(test_expr_safe(test)))
     else
-        @elapsed eval(Meta.parse(test_expr(test)))
+        @timevd eval(Meta.parse(test_expr(test)))
         # test.elapsed = @elapsed include(test.filename)
     end
-    @debug "--- Finished running test $(test.filename) in $(time_and_units_str(test.elapsed))"
+    (; compile_elapsedtimes, elapsed) = stats
+    compile_time = first(compile_elapsedtimes) / 1e9
+    recompile_time = last(compile_elapsedtimes) / 1e9
+    perc_compile = compile_time / elapsed
+    perc_recompile = recompile_time / compile_time
+
+    test.elapsed = elapsed
+    test.compile_time = compile_time
+    test.recompile_time = recompile_time
+    test.test_id = test_id
+    @debug "--- Finished running test $(test.filename) in $(time_and_units_str(elapsed)) ($(100*perc_compile)% compilation time, $(100*perc_recompile)% recompilation)"
 end
 
 """
@@ -177,13 +263,13 @@ function run_unit_tests!(
     prevent_leaky_tests::Bool = false,
 )
     if fail_fast
-        for test in unit_tests
-            run_unit_test!(test; prevent_leaky_tests)
+        for (test_id, test) in enumerate(unit_tests)
+            run_unit_test!(test, test_id; prevent_leaky_tests)
         end
     else
         @testset "Unit tests" begin
-            for test in unit_tests
-                run_unit_test!(test)
+            for (test_id, test) in enumerate(unit_tests)
+                run_unit_test!(test, test_id)
             end
         end
     end
