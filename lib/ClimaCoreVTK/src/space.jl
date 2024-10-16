@@ -86,7 +86,7 @@ an unstuctured mesh of Lagrange polynomial cells, suitable for passing to
 function vtk_cells_lagrange(gspace::Spaces.SpectralElementSpace2D)
     quad = Spaces.quadrature_style(gspace)
     @assert quad isa Quadratures.ClosedUniform
-    Nq = Quadratures.degrees_of_freedom(quad)    # TODO: this should depend on the backing DataLayouts (e.g. IJFH)
+    Nq = Quadratures.degrees_of_freedom(quad)    # TODO: this should depend on the backing DataLayouts (e.g. IJHF)
     con_map = vtk_connectivity_map_lagrange(Nq, Nq)
     [
         MeshCell(
@@ -126,7 +126,7 @@ function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace2D)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
-    ind = LinearIndices((1:Nv, 1:Nq, 1:Nh)) # assume VIFH
+    ind = LinearIndices((1:Nv, 1:Nq, 1:Nh)) # assume VIHF
     cells = [
         MeshCell(
             VTKCellTypes.VTK_QUAD,
@@ -145,7 +145,7 @@ function vtk_cells_linear(gridspace::Spaces.FaceExtrudedFiniteDifferenceSpace3D)
     Nq = Quadratures.degrees_of_freedom(Spaces.quadrature_style(hspace))
     Nh = Topologies.nlocalelems(hspace)
     Nv = Spaces.nlevels(gridspace)
-    ind = LinearIndices((1:Nv, 1:Nq, 1:Nq, 1:Nh)) # assumes VIJFH
+    ind = LinearIndices((1:Nv, 1:Nq, 1:Nq, 1:Nh)) # assumes VIJHF
     cells = [
         MeshCell(
             VTKCellTypes.VTK_HEXAHEDRON,

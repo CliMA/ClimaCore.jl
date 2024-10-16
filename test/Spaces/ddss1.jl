@@ -95,7 +95,7 @@ init_state_vector(local_geometry, p) = Geometry.Covariant12Vector(1.0, -1.0)
     y0 = init_state_scalar.(Fields.local_geometry_field(space), Ref(nothing))
     nel = Topologies.nlocalelems(Spaces.topology(space))
     yarr = parent(y0)
-    yarr .= reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel))
+    yarr .= reshape(1:(Nq * Nq * nel), (Nq, Nq, nel, 1))
 
     dss_buffer = Spaces.create_dss_buffer(y0)
     Spaces.weighted_dss!(y0, dss_buffer) # DSS2

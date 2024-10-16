@@ -21,12 +21,12 @@ PR [#2033](https://github.com/CliMA/ClimaCore.jl/pull/2033) introduces new
 constructors for `DataLayout`s. Instead of writing
 ```julia
 array = rand(FT, Nv, Nij, Nij, 3, Nh)
-data = VIJFH{S, Nv, Nij}(array)
+data = VIJHF{S, Nv, Nij}(array)
 ```
 
 You can now write
 ```julia
-data = VIJFH{S}(ArrayType{FT}, rand; Nv, Nij, Nh)
+data = VIJHF{S}(ArrayType{FT}, rand; Nv, Nij, Nh)
 ```
 and grab the `array` with `parent(data)` (if you need).
 

@@ -10,7 +10,7 @@ struct DSSBuffer{S, G, D, A, B, VI}
     "ClimaComms graph context for communication"
     graph_context::G
     """
-    Perimeter `DataLayout` object: typically a `VIFH{TT,Nv,Np,Nh}`, where `TT` is the
+    Perimeter `DataLayout` object: typically a `VIHF{TT,Nv,Np,Nh}`, where `TT` is the
     transformed type, `Nv` is the number of vertical levels, and `Np` is the length of the perimeter
     """
     perimeter_data::D
@@ -30,7 +30,7 @@ end
 
 """
     create_dss_buffer(
-        data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
+        data::Union{DataLayouts.IJHF{S}, DataLayouts.VIJHF{S}},
         topology::Topology2D,
         local_geometry = nothing,
         local_weights = nothing,
@@ -39,10 +39,10 @@ end
 Creates a [`DSSBuffer`](@ref) for the field data corresponding to `data`
 """
 function create_dss_buffer(
-    data::Union{DataLayouts.IJFH{S}, DataLayouts.VIJFH{S}},
+    data::Union{DataLayouts.IJHF{S}, DataLayouts.VIJHF{S}},
     topology::Topology2D,
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
-    local_weights::Union{DataLayouts.IJFH, DataLayouts.VIJFH, Nothing} = nothing,
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF, Nothing} = nothing,
+    local_weights::Union{DataLayouts.IJHF, DataLayouts.VIJHF, Nothing} = nothing,
 ) where {S}
     Nij = DataLayouts.get_Nij(data)
     Nij_lg =
@@ -69,7 +69,7 @@ function create_dss_buffer(
     else
         _transformed_type(data, local_geometry, local_weights, DA) # extract transformed type
     end
-    perimeter_data = DataLayouts.VIFH{TS, Nv, Np}(DA{T}(undef, Nv, Np, Nf, Nh))
+    perimeter_data = DataLayouts.VIHF{TS, Nv, Np}(DA{T}(undef, Nv, Np, Nh, Nf))
     if context isa ClimaComms.SingletonCommsContext
         graph_context = ClimaComms.SingletonGraphContext(context)
         send_data, recv_data = T[], T[]
@@ -130,9 +130,9 @@ assert_same_eltype(::DataLayouts.AbstractData, ::Nothing) = nothing
     function dss_transform!(
         device::ClimaComms.AbstractDevice,
         dss_buffer::DSSBuffer,
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-        local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-        weight::DataLayouts.IJFH,
+        data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+        local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+        weight::DataLayouts.IJHF,
         perimeter::AbstractPerimeter,
         localelems::Vector{Int},
     )
@@ -155,9 +155,9 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_transform!(
     device::ClimaComms.AbstractDevice,
     dss_buffer::DSSBuffer,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    weight::DataLayouts.IJFH,
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+    weight::DataLayouts.IJHF,
     perimeter::Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -199,8 +199,8 @@ to `UVVector` if `T <: UVVector`.
 """
     function dss_transform!(
         ::ClimaComms.AbstractCPUDevice,
-        perimeter_data::DataLayouts.VIFH,
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        perimeter_data::DataLayouts.VIHF,
+        data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
         perimeter::AbstractPerimeter,
         bc,
         localelems::Vector{Int},
@@ -221,8 +221,8 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_transform!(
     ::ClimaComms.AbstractCPUDevice,
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
     perimeter::Perimeter2D{Nq},
     local_geometry,
     weight,
@@ -253,8 +253,8 @@ end
     dss_untransform!(
         device::ClimaComms.AbstractDevice,
         dss_buffer::DSSBuffer,
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-        local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+        local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
         perimeter::AbstractPerimeter,
     )
 
@@ -275,8 +275,8 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 function dss_untransform!(
     device::ClimaComms.AbstractDevice,
     dss_buffer::DSSBuffer,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -296,8 +296,8 @@ end
 """
     function dss_untransform!(
         ::ClimaComms.AbstractCPUDevice,
-        perimeter_data::DataLayouts.VIFH,
-        data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+        perimeter_data::DataLayouts.VIHF,
+        data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
         local_geometry,
         localelems::Vector{Int},
     )
@@ -316,9 +316,9 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 
 function dss_untransform!(
     ::ClimaComms.AbstractCPUDevice,
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Perimeter2D,
     localelems::Vector{Int},
 )
@@ -341,7 +341,7 @@ end
 function dss_load_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
     dss_buffer::DSSBuffer,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Perimeter2D,
 )
     (; perimeter_data) = dss_buffer
@@ -358,7 +358,7 @@ end
 
 function dss_unload_perimeter_data!(
     ::ClimaComms.AbstractCPUDevice,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     dss_buffer::DSSBuffer,
     perimeter::Perimeter2D,
 )
@@ -377,7 +377,7 @@ end
 """
     function dss_local!(
         ::ClimaComms.AbstractCPUDevice,
-        perimeter_data::DataLayouts.VIFH,
+        perimeter_data::DataLayouts.VIHF,
         perimeter::AbstractPerimeter,
         topology::AbstractTopology,
     )
@@ -388,7 +388,7 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_local!(
     ::ClimaComms.AbstractCPUDevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Perimeter2D,
     topology::Topology2D,
 )
@@ -399,7 +399,7 @@ end
 
 """
     dss_local_vertices!(
-        perimeter_data::DataLayouts.VIFH,
+        perimeter_data::DataLayouts.VIHF,
         perimeter::Perimeter2D,
         topology::Topology2D,
     )
@@ -407,7 +407,7 @@ end
 Apply dss to local vertices.
 """
 function dss_local_vertices!(
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Perimeter2D,
     topology::Topology2D,
 )
@@ -437,7 +437,7 @@ function dss_local_vertices!(
 end
 
 function dss_local_faces!(
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Perimeter2D,
     topology::Topology2D,
 )
@@ -465,7 +465,7 @@ end
 """
     function dss_local_ghost!(
         ::ClimaComms.AbstractCPUDevice,
-        perimeter_data::DataLayouts.VIFH,
+        perimeter_data::DataLayouts.VIHF,
         perimeter::AbstractPerimeter,
         topology::AbstractTopology,
     )
@@ -478,7 +478,7 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_local_ghost!(
     ::ClimaComms.AbstractCPUDevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::AbstractPerimeter,
     topology::AbstractTopology,
 )
@@ -523,7 +523,7 @@ end
 """
     dss_ghost!(
         device::ClimaComms.AbstractCPUDevice,
-        perimeter_data::DataLayouts.VIFH,
+        perimeter_data::DataLayouts.VIHF,
         perimeter::AbstractPerimeter,
         topology::AbstractTopology,
     )
@@ -535,7 +535,7 @@ Part of [`ClimaCore.Spaces.weighted_dss!`](@ref).
 """
 function dss_ghost!(
     device::ClimaComms.AbstractCPUDevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::AbstractPerimeter,
     topology::AbstractTopology,
 )
@@ -586,7 +586,7 @@ function fill_send_buffer!(
         lidx = send_buf_idx[i, 1]
         ip = send_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
-            send_data[ctr] = pdata[v, ip, f, lidx]
+            send_data[ctr] = pdata[v, ip, lidx, f]
             ctr += 1
         end
     end
@@ -615,7 +615,7 @@ function load_from_recv_buffer!(
         lidx = recv_buf_idx[i, 1]
         ip = recv_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
-            pdata[v, ip, f, lidx] += recv_data[ctr]
+            pdata[v, ip, lidx, f] += recv_data[ctr]
             ctr += 1
         end
     end
@@ -628,7 +628,7 @@ end
 Computed unweighted/pure DSS of `data`.
 """
 function dss!(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
+    data::Union{DataLayouts.IJHF{S, Nij}, DataLayouts.VIJHF{S, <:Any, Nij}},
     topology::Topology2D,
 ) where {S, Nij}
     length(parent(data)) == 0 && return nothing
