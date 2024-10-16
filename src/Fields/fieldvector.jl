@@ -387,7 +387,7 @@ LinearAlgebra.ldiv!(A::LinearAlgebra.LU, x::FieldVector) =
     x .= LinearAlgebra.ldiv!(A, Vector(x))
 
 function LinearAlgebra.norm_sqr(x::FieldVector)
-    value_norm_sqrs = UnrolledFunctions.unrolled_map(_values(x)) do value
+    value_norm_sqrs = UnrolledUtilities.unrolled_map(_values(x)) do value
         LinearAlgebra.norm_sqr(backing_array(value))
     end
     return sum(value_norm_sqrs; init = zero(eltype(x)))
@@ -399,7 +399,7 @@ end
 import ClimaComms
 
 ClimaComms.array_type(x::FieldVector) = promote_type(
-    UnrolledFunctions.unrolled_map(ClimaComms.array_type, _values(x))...,
+    UnrolledUtilities.unrolled_map(ClimaComms.array_type, _values(x))...,
 )
 
 function __rprint_diff(

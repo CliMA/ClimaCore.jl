@@ -66,7 +66,20 @@ import ..Spaces: local_geometry_type
 import ..Fields
 import ..Operators
 
-using ..Utilities.UnrolledFunctions
+using UnrolledUtilities:
+    unrolled_map,
+    unrolled_take,
+    unrolled_drop,
+    unrolled_any,
+    unrolled_foreach,
+    unrolled_filter,
+    unrolled_flatmap,
+    unrolled_all,
+    unrolled_in,
+    unrolled_product,
+    unrolled_unique,
+    unrolled_split
+
 using ..Geometry:
     rmul_with_projection,
     mul_with_projection,

@@ -120,8 +120,11 @@ Base.:(==)(dict1::FieldNameDict, dict2::FieldNameDict) =
 
 function Base.getindex(dict::FieldNameDict, key)
     key in keys(dict) || throw(KeyError(key))
-    key′, entry′ =
-        unrolled_findonly(pair -> is_child_value(key, pair[1]), pairs(dict))
+    filtered_values = unrolled_filter(pairs(dict)) do pair
+        is_child_value(key, pair[1])
+    end
+    @assert length(filtered_values) == 1
+    key′, entry′ = filtered_values[1]
     return get_internal_entry(entry′, get_internal_key(key, key′))
 end
 

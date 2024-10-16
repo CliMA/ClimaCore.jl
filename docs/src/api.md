@@ -9,7 +9,6 @@ CurrentModule = ClimaCore
 ```@docs
 Utilities.PlusHalf
 Utilities.half
-Utilities.UnrolledFunctions
 ```
 
 ### Utilities.Cache
