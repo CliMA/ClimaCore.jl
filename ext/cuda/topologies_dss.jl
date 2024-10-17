@@ -230,10 +230,6 @@ function Topologies.dss_untransform!(
 )
     nlocalelems = length(localelems)
     if nlocalelems > 0
-        (nperimeter, _, _, nlevels, _) =
-            DataLayouts.universal_size(perimeter_data)
-        nitems = nlevels * nperimeter * nlocalelems
-        nthreads, nblocks = _configure_threadblock(nitems)
         args = (
             perimeter_data,
             data,
@@ -242,11 +238,13 @@ function Topologies.dss_untransform!(
             localelems,
             Val(nlocalelems),
         )
+        threads = threads_via_occupancy(dss_untransform_kernel!, args)
+        p = dss_transform_partition(perimeter_data, threads; nlocalelems)
         auto_launch!(
             dss_untransform_kernel!,
             args;
-            threads_s = (nthreads),
-            blocks_s = (nblocks),
+            threads_s = p.threads,
+            blocks_s = p.blocks,
         )
     end
     return nothing
@@ -288,17 +286,15 @@ function Topologies.dss_local_ghost!(
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
-        (nlevels, nperimeter, nfid, nelems) =
-            DataLayouts.farray_size(perimeter_data)
-        max_threads = 256
-        nitems = nlevels * nfid * nghostvertices
-        nthreads, nblocks = _configure_threadblock(nitems)
+        (_, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
         args = (
             perimeter_data,
             topology.ghost_vertices,
             topology.ghost_vertex_offset,
             perimeter,
         )
+        threads = threads_via_occupancy(dss_local_ghost_kernel!, args)
+        p = dss_local_ghost_partition(perimeter_data, threads; nlevels, nghostvertices)
         auto_launch!(
             dss_local_ghost_kernel!,
             args;
@@ -316,28 +312,27 @@ function dss_local_ghost_kernel!(
     perimeter::Topologies.Perimeter2D,
 )
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    pperimeter_data = parent(perimeter_data)
-    FT = eltype(pperimeter_data)
-    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
+    (nperimeter, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
-    if gidx ≤ nlevels * nfidx * nghostvertices
-        sizev = (nlevels, nfidx, nghostvertices)
-        (level, fidx, vertexid) = cart_ind(sizev, gidx).I
-        sum_data = FT(0)
+    if gidx ≤ nlevels * nghostvertices
+        CI = CartesianIndex
+        sizev = (nlevels, nghostvertices)
+        (level, vertexid) = cart_ind(sizev, gidx).I
+        sum_data = rzero(eltype(perimeter_data))
         st, en =
             ghost_vertex_offset[vertexid], ghost_vertex_offset[vertexid + 1]
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = perimeter_vertex_node_index(vert)
-                sum_data += pperimeter_data[level, ip, fidx, lidx]
+                sum_data += perimeter_data[CI(ip, 1, 1, level, lidx)]
             end
         end
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = perimeter_vertex_node_index(vert)
-                pperimeter_data[level, ip, fidx, lidx] = sum_data
+                perimeter_data[CI(ip, 1, 1, level, lidx)] = sum_data
             end
         end
     end
@@ -350,18 +345,17 @@ function Topologies.fill_send_buffer!(
     synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
-    (nlevels, nperimeter, nfid, nelems) =
-        DataLayouts.farray_size(perimeter_data)
+    (_, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
     nsend = size(send_buf_idx, 1)
     if nsend > 0
-        nitems = nsend * nlevels * nfid
-        nthreads, nblocks = _configure_threadblock(nitems)
         args = (send_data, send_buf_idx, perimeter_data, Val(nsend))
+        threads = threads_via_occupancy(fill_send_buffer_kernel!, args)
+        p = dss_fill_send_buffer_partition(perimeter_data, threads; nlevels, nsend)
         auto_launch!(
             fill_send_buffer_kernel!,
             args;
-            threads_s = (nthreads),
-            blocks_s = (nblocks),
+            threads_s = p.threads,
+            blocks_s = p.blocks,
         )
         if synchronize
             CUDA.synchronize(; blocking = true) # CUDA MPI uses a separate stream. This will synchronize across streams
@@ -377,18 +371,15 @@ function fill_send_buffer_kernel!(
     ::Val{nsend},
 ) where {FT <: AbstractFloat, I <: Int, nsend}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
-    pperimeter_data = parent(perimeter_data)
-    #sizet = (nsend, nlevels, nfid)
-    sizet = (nlevels, nfid, nsend)
-    #if gidx ≤ nsend * nlevels * nfid
-    if gidx ≤ nlevels * nfid * nsend
-        #(isend, level, fidx) = cart_ind(sizet, gidx).I
-        (level, fidx, isend) = cart_ind(sizet, gidx).I
+    (_, _, nlevels, _) = DataLayouts.universal_size(perimeter_data)
+    sizet = (nlevels, nsend)
+    CI = CartesianIndex
+    if gidx ≤ nlevels * nsend
+        (level, isend) = cart_ind(sizet, gidx).I
         lidx = send_buf_idx[isend, 1]
         ip = send_buf_idx[isend, 2]
-        idx = level + ((fidx - 1) + (isend - 1) * nfid) * nlevels
-        send_data[idx] = pperimeter_data[level, ip, fidx, lidx]
+        idx = level + (isend - 1) * nlevels
+        send_data[CI(ip, 1, 1, level, lidx)] = perimeter_data[CI(ip, 1, 1, level, lidx)]
     end
     return nothing
 end
