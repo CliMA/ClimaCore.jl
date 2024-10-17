@@ -39,8 +39,9 @@ function dss_load_perimeter_data_kernel!(
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, _, nfidx, nelems) =
-        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
+    (_, _, _, nlevels, nelems) = size(perimeter_data) # size of perimeter data array
+    nfidx = DataLayouts.ncomponents(perimeter_data)
+    sizep = (nlevels, 1, nfidx, nelems)
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
     pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
@@ -79,8 +80,9 @@ function dss_unload_perimeter_data_kernel!(
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, nperimeter, nfidx, nelems) =
-        sizep = DataLayouts.farray_size(perimeter_data) # size of perimeter data array
+    (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
+    nfidx = DataLayouts.ncomponents(perimeter_data)
+    sizep = (nlevels, nperimeter, nfidx, nelems)
     sized = (nlevels, Nq, Nq, nfidx, nelems) # size of data
     pperimeter_data = parent(perimeter_data)
     pdata = parent(data)
@@ -103,8 +105,8 @@ function Topologies.dss_local!(
     nlocalvertices = length(topology.local_vertex_offset) - 1
     nlocalfaces = length(topology.interior_faces)
     if (nlocalvertices + nlocalfaces) > 0
-        (nlevels, nperimeter, nfid, nelems) =
-            DataLayouts.farray_size(perimeter_data)
+        (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
+        nfid = DataLayouts.ncomponents(perimeter_data)
 
         nitems = nlevels * nfid * (nlocalfaces + nlocalvertices)
         nthreads, nblocks = _configure_threadblock(nitems)
@@ -138,7 +140,9 @@ function dss_local_kernel!(
     nlocalfaces = length(interior_faces)
     pperimeter_data = parent(perimeter_data)
     FT = eltype(pperimeter_data)
-    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
+    (nperimeter, _, _, nlevels, _) = size(perimeter_data)
+    nfidx = DataLayouts.ncomponents(perimeter_data)
+
     if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
         sizev = (nlevels, nfidx, nlocalvertices)
         (level, fidx, vertexid) = cart_ind(sizev, gidx).I
@@ -311,8 +315,9 @@ function Topologies.dss_local_ghost!(
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
-        (nlevels, nperimeter, nfid, nelems) =
-            DataLayouts.farray_size(perimeter_data)
+        (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
+        nfid = DataLayouts.ncomponents(perimeter_data)
+
         max_threads = 256
         nitems = nlevels * nfid * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
@@ -341,7 +346,8 @@ function dss_local_ghost_kernel!(
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     pperimeter_data = parent(perimeter_data)
     FT = eltype(pperimeter_data)
-    (nlevels, nperimeter, nfidx, _) = DataLayouts.farray_size(perimeter_data)
+    (nperimeter, _, _, nlevels, _) = size(perimeter_data)
+    nfidx = DataLayouts.ncomponents(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
     if gidx ≤ nlevels * nfidx * nghostvertices
         sizev = (nlevels, nfidx, nghostvertices)
@@ -373,8 +379,8 @@ function Topologies.fill_send_buffer!(
     synchronize = true,
 )
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
-    (nlevels, nperimeter, nfid, nelems) =
-        DataLayouts.farray_size(perimeter_data)
+    (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
+    nfid = DataLayouts.ncomponents(perimeter_data)
     nsend = size(send_buf_idx, 1)
     if nsend > 0
         nitems = nsend * nlevels * nfid
@@ -400,7 +406,8 @@ function fill_send_buffer_kernel!(
     ::Val{nsend},
 ) where {FT <: AbstractFloat, I <: Int, nsend}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
+    (_, _, _, nlevels, nelems) = size(perimeter_data)
+    nfid = DataLayouts.ncomponents(perimeter_data)
     pperimeter_data = parent(perimeter_data)
     #sizet = (nsend, nlevels, nfid)
     sizet = (nlevels, nfid, nsend)
@@ -421,8 +428,8 @@ function Topologies.load_from_recv_buffer!(
     dss_buffer::Topologies.DSSBuffer,
 )
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
-    (nlevels, nperimeter, nfid, nelems) =
-        DataLayouts.farray_size(perimeter_data)
+    (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
+    nfid = DataLayouts.ncomponents(perimeter_data)
     nrecv = size(recv_buf_idx, 1)
     if nrecv > 0
         nitems = nrecv * nlevels * nfid
@@ -446,7 +453,8 @@ function load_from_recv_buffer_kernel!(
 ) where {FT <: AbstractFloat, I <: Int, nrecv}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     pperimeter_data = parent(perimeter_data)
-    (nlevels, _, nfid, nelems) = DataLayouts.farray_size(perimeter_data)
+    (_, _, _, nlevels, nelems) = size(perimeter_data)
+    nfid = DataLayouts.ncomponents(perimeter_data)
     #sizet = (nrecv, nlevels, nfid)
     sizet = (nlevels, nfid, nrecv)
     #if gidx ≤ nrecv * nlevels * nfid
@@ -470,7 +478,8 @@ function Topologies.dss_ghost!(
 )
     nghostvertices = length(topology.ghost_vertex_offset) - 1
     if nghostvertices > 0
-        (nlevels, _, nfidx, _) = DataLayouts.farray_size(perimeter_data)
+        (_, _, _, nlevels, _) = size(perimeter_data)
+        nfidx = DataLayouts.ncomponents(perimeter_data)
         nitems = nlevels * nfidx * nghostvertices
         nthreads, nblocks = _configure_threadblock(nitems)
         args = (
@@ -500,7 +509,8 @@ function dss_ghost_kernel!(
     pperimeter_data = parent(perimeter_data)
     FT = eltype(pperimeter_data)
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
-    (nlevels, _, nfidx, _) = DataLayouts.farray_size(perimeter_data)
+    (_, _, _, nlevels, _) = size(perimeter_data)
+    nfidx = DataLayouts.ncomponents(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
 
     if gidx ≤ nlevels * nfidx * nghostvertices
