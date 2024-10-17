@@ -46,6 +46,9 @@ bounds to ensure that the result of
 """
 function is_valid_index end
 
+is_valid_index(data::DataLayouts.AbstractData, I::CI5) =
+    is_valid_index(data, I, UniversalSize(data))
+
 ##### VIJFH
 @inline function partition(data::DataLayouts.VIJFH, n_max_threads::Integer)
     (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(data)
@@ -251,3 +254,42 @@ end
     ij,
     slabidx,
 ) = Operators.is_valid_index(space, ij, slabidx)
+
+##### dss perimeter partition
+@inline function dss_perimeter_partition(
+    us::DataLayouts.UniversalSize,
+    n_max_threads::Integer;
+    nlocalelems
+)
+    (Nv, _, _, Nh) = DataLayouts.universal_size(us)
+    Nvt = fld(n_max_threads, Nv)
+    Nv_thread = Nvt == 0 ? n_max_threads : min(Int(Nvt), Nv)
+    Nv_blocks = cld(Nv, Nv_thread)
+    @assert Nv_thread ≤ n_max_threads "threads,n_max_threads=($(Nv_thread),$n_max_threads)"
+    return (; threads = (Nv_thread,), blocks = (Nv_blocks, nlocalelems))
+end
+@inline function dss_local_universal_index()
+    (tv,) = CUDA.threadIdx()
+    (bv, vertexid) = CUDA.blockIdx()
+    v = tv + (bv - 1) * CUDA.blockDim().x
+    return (v, vertexid)
+end
+@inline dss_local_is_valid_index(v::Integer, us::UniversalSize) =
+    1 ≤ v ≤ DataLayouts.get_Nv(us)
+
+##### dss local partition
+@inline function dss_transform_partition(data::DataLayouts.VIFH, n_max_threads::Integer; nlocalelems)
+    (Ni, _, _, Nv, _) = DataLayouts.universal_size(data)
+    Nv_thread = min(Int(fld(n_max_threads, Ni)), Nv)
+    Nv_blocks = cld(Nv, Nv_thread)
+    @assert prod((Nv_thread, Ni)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Ni))),$n_max_threads)"
+    return (; threads = (Nv_thread, Ni), blocks = (Nv_blocks, nlocalelems))
+end
+@inline function dss_transform_universal_index()
+    (tv, i) = CUDA.threadIdx()
+    (bv, nlocalelems) = CUDA.blockIdx()
+    v = tv + (bv - 1) * CUDA.blockDim().x
+    return (CartesianIndex((i, 1, 1, v, 1)), nlocalelems)
+end
+@inline dss_transform_is_valid_index(I::CI5, us::UniversalSize) =
+    1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
