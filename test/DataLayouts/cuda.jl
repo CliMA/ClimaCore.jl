@@ -32,8 +32,8 @@ end
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
     Nh = 10
-    src = IJFH{S}(ArrayType{Float64}, rand; Nij = 4, Nh)
-    dst = IJFH{S}(ArrayType{Float64}, zeros; Nij = 4, Nh)
+    src = IJHF{S}(ArrayType{Float64}, rand; Nij = 4, Nh)
+    dst = IJHF{S}(ArrayType{Float64}, zeros; Nij = 4, Nh)
 
     test_copy!(dst, src)
 
@@ -47,23 +47,23 @@ end
     Nh = 2
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
-    data1 = IJFH{S1}(ArrayType{FT}, ones; Nij = 2, Nh)
-    data2 = IJFH{S2}(ArrayType{FT}, ones; Nij = 2, Nh)
+    data1 = IJHF{S1}(ArrayType{FT}, ones; Nij = 2, Nh)
+    data2 = IJHF{S2}(ArrayType{FT}, ones; Nij = 2, Nh)
 
     f1(a1, a2) = a1.a.re * a2 + a1.b
     res = f1.(data1, data2)
-    @test res isa IJFH{Float64}
-    @test Array(parent(res)) == FT[2 for i in 1:2, j in 1:2, f in 1:1, h in 1:2]
+    @test res isa IJHF{Float64}
+    @test Array(parent(res)) == FT[2 for i in 1:2, j in 1:2, h in 1:2, f in 1:1]
 
     Nv = 33
-    data1 = VIJFH{S1}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
-    data2 = VIJFH{S2}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
+    data1 = VIJHF{S1}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
+    data2 = VIJHF{S2}(ArrayType{FT}, ones; Nv, Nij = 4, Nh = 2)
 
     f2(a1, a2) = a1.a.re * a2 + a1.b
     res = f2.(data1, data2)
-    @test res isa VIJFH{Float64, Nv}
+    @test res isa VIJHF{Float64, Nv}
     @test Array(parent(res)) ==
-          FT[2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:1, h in 1:2]
+          FT[2 for v in 1:Nv, i in 1:4, j in 1:4, h in 1:2, f in 1:1]
 end
 
 
@@ -73,16 +73,16 @@ end
     Nh = 3
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
-    data = IJFH{S}(ArrayType{FT}; Nij = 2, Nh)
+    data = IJHF{S}(ArrayType{FT}; Nij = 2, Nh)
     data .= Complex(1.0, 2.0)
     @test Array(parent(data)) ==
-          FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, f in 1:2, h in 1:3]
+          FT[f == 1 ? 1 : 2 for i in 1:2, j in 1:2, h in 1:3, f in 1:2]
 
     Nv = 33
-    data = VIJFH{S}(ArrayType{FT}; Nv, Nij = 4, Nh)
+    data = VIJHF{S}(ArrayType{FT}; Nv, Nij = 4, Nh)
     data .= Complex(1.0, 2.0)
     @test Array(parent(data)) == FT[
-        f == 1 ? 1 : 2 for v in 1:Nv, i in 1:4, j in 1:4, f in 1:2, h in 1:3
+        f == 1 ? 1 : 2 for v in 1:Nv, i in 1:4, j in 1:4, h in 1:3, f in 1:2
     ]
 
     data = DataF{S}(ArrayType{FT})

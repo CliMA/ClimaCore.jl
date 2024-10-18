@@ -25,7 +25,7 @@ end
 
 Base.zero(::Type{Foo{T}}) where {T} = Foo{T}(0, 0)
 
-@testset "get_struct - IFH indexing" begin
+@testset "get_struct - IHF indexing" begin
     FT = Float64
     S = Foo{FT}
     s_array = (3, 2, 4)
@@ -69,7 +69,7 @@ end
     @test_throws BoundsError get_struct(a, S, Val(3), CI(s)[13])
 end
 
-@testset "get_struct - VIJFH indexing" begin
+@testset "get_struct - VIJHF indexing" begin
     FT = Float64
     S = Foo{FT}
     s_array = (2, 2, 2, 2, 2)

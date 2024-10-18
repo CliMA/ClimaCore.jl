@@ -104,7 +104,7 @@ RecipesBase.@recipe function f(space::Spaces.ExtrudedFiniteDifferenceSpace)
     data = Fields.field_values(coord_field)
     Ni, Nj, _, Nv, Nh = size(data)
 
-    #TODO: assumes VIFH layout
+    #TODO: assumes VIHF layout
     @assert Nj == 1 "plotting only defined for 1D extruded fields"
 
     hspace = Spaces.horizontal_space(space)
@@ -431,7 +431,7 @@ function _unfolded_pannel_matrix(field, interpolate)
     # TODO: inefficient memory wise, but good enough for now
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
-    interpolated_data = DataLayouts.IJFH{FT, interpolate}(Array{FT}, nelem)
+    interpolated_data = DataLayouts.IJHF{FT, interpolate}(Array{FT}, nelem)
     field_data = Fields.field_values(field)
 
     Operators.tensor_product!(interpolated_data, field_data, Imat)
@@ -445,7 +445,7 @@ function _unfolded_pannel_matrix(field, interpolate)
         x2_nodal_range = (dof * (ex2 - 1) + 1):(dof * ex2)
         # transpose the data as our plotting axis order is
         # reverse nodal element order (x1 axis varies fastest)
-        data_element = permutedims(parent(interpolated_data)[:, :, 1, lidx])
+        data_element = permutedims(parent(interpolated_data)[:, :, lidx, 1])
         panel_data[x2_nodal_range, x1_nodal_range] = data_element
     end
 

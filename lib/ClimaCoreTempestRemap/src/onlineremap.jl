@@ -28,7 +28,7 @@ end
 
 
 """
-    remap!(target::IJFH{S, Nqt}, R::LinearMap, source::IJFH{S, Nqs})
+    remap!(target::IJHF{S, Nqt}, R::LinearMap, source::IJHF{S, Nqs})
     remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
 
 Applies the remapping `R` to a `source`
@@ -38,9 +38,9 @@ function remap! end
 
 # This version of this function is used for serial remapping
 function remap!(
-    target::IJFH{S, Nqt},
+    target::IJHF{S, Nqt},
     R::LinearMap,
-    source::IJFH{S, Nqs},
+    source::IJHF{S, Nqs},
 ) where {S, Nqt, Nqs}
     source_array = parent(source)
     target_array = parent(target)
@@ -62,7 +62,7 @@ function remap!(
             view(R.target_local_idxs[3], n)[1],
         )
         for f in 1:Nf
-            target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
+            target_array[it, jt, et, f] += wt * source_array[is, js, es, f]
         end
     end
 
@@ -118,8 +118,8 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
             # only use local weights - i.e. et, es != 0
             if (et != 0)
                 for f in 1:Nf
-                    target_array[it, jt, f, et] +=
-                        wt * source_array[is, js, f, es]
+                    target_array[it, jt, et, f] +=
+                        wt * source_array[is, js, es, f]
                 end
             end
         end

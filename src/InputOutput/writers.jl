@@ -435,7 +435,8 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
         dims = ntuple(d -> d == nd ? nelems : size(array, d), nd)
-        localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
+        h_dim = nd - 1
+        localidx = ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
         dataset = create_dataset(
             writer.file,
             "fields/$name",

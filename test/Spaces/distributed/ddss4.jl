@@ -14,7 +14,7 @@ include("ddss_setup.jl")
     nel = Topologies.nlocalelems(Spaces.topology(space))
     yarr = parent(y0)
     yarr .=
-        reshape(1:(Nq * Nq * nel), (Nq, Nq, 1, nel)) .+
+        reshape(1:(Nq * Nq * nel), (Nq, Nq, nel, 1)) .+
         (pid - 1) * Nq * Nq * nel
 
     dss2_buffer = Spaces.create_dss_buffer(y0)
