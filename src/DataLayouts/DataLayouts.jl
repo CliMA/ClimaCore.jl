@@ -1309,6 +1309,15 @@ type parameters.
 @inline to_data_specific(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
 @inline to_data_specific(::VIFHSingleton, I::Tuple) = (I[4], I[1], 1, I[5])
 
+@inline to_data_specific_field(::DataFSingleton, I::Tuple) = (I[3],)
+@inline to_data_specific_field(::VFSingleton, I::Tuple) = (I[4], I[3])
+@inline to_data_specific_field(::IFSingleton, I::Tuple) = (I[1], I[3])
+@inline to_data_specific_field(::IJFSingleton, I::Tuple) = (I[1], I[2], I[3])
+@inline to_data_specific_field(::IJFHSingleton, I::Tuple) = (I[1], I[2], I[3], I[5])
+@inline to_data_specific_field(::IFHSingleton, I::Tuple) = (I[1], I[3], I[5])
+@inline to_data_specific_field(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], I[3], I[5])
+@inline to_data_specific_field(::VIFHSingleton, I::Tuple) = (I[4], I[1], I[3], I[5])
+
 """
     bounds_condition(data::AbstractData, I::Tuple)
 
@@ -1479,6 +1488,48 @@ end
         convert(eltype(data), val),
         Val(field_dim(s)),
         CartesianIndex(to_data_specific(s, I.I)),
+    )
+end
+
+"""
+    getindex_field(data, ci::CartesianIndex{5})
+
+Returns the value of the data at universal index `ci`,
+for the specific field `f` in the `CartesianIndex`.
+
+The universal index order is `CartesianIndex(i, j, f, v, h)`, see
+see the notation in [`DataLayouts`](@ref) for more information.
+"""
+@inline function getindex_field(
+    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    I::CartesianIndex, # universal index
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds Base.getindex(
+        parent(data),
+        CartesianIndex(to_data_specific_field(singleton(data), I.I)),
+    )
+end
+
+"""
+    setindex_field!(data, val::Real, ci::CartesianIndex{5})
+
+Stores the value `val` of the data at universal index `ci`,
+for the specific field `f` in the `CartesianIndex`.
+
+The universal index order is `CartesianIndex(i, j, f, v, h)`, see
+see the notation in [`DataLayouts`](@ref) for more information.
+"""
+@inline function setindex_field!(
+    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    val::Real,
+    I::CartesianIndex, # universal index
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds Base.setindex!(
+        parent(data),
+        val,
+        CartesianIndex(to_data_specific_field(singleton(data), I.I)),
     )
 end
 
