@@ -170,6 +170,20 @@ end
 ##### Custom partitions
 #####
 
+##### linear partition
+@inline function linear_partition(nitems::Integer, n_max_threads::Integer)
+    threads = min(nitems, n_max_threads)
+    blocks = cld(nitems, threads)
+    return (; threads, blocks)
+end
+@inline function linear_universal_index(us::UniversalSize)
+    inds = DataLayouts.universal_size(us)
+    CI = CartesianIndices(map(x -> Base.OneTo(x), inds))
+    return CI
+end
+@inline linear_is_valid_index(i::Integer, us::UniversalSize) =
+    1 ≤ i ≤ DataLayouts.get_N(us)
+
 ##### Column-wise
 @inline function columnwise_partition(
     us::DataLayouts.UniversalSize,
