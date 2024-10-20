@@ -57,9 +57,11 @@ end
     n1 = n2 = 1
     Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
+    device = ClimaComms.device(space)
+    ArrayType = ClimaComms.array_type(device)
 
-    field =
-        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), space)
+    data = IJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
+    field = Fields.Field(data, space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()

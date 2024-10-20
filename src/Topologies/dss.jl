@@ -1,5 +1,5 @@
 using DocStringExtensions
-using .DataLayouts: getindex_field, setindex_field!
+using .DataLayouts: CartesianFieldIndex
 
 """
     DSSBuffer{G, D, A, B}
@@ -582,13 +582,12 @@ function fill_send_buffer!(
     Nf = DataLayouts.ncomponents(perimeter_data)
     nsend = size(send_buf_idx, 1)
     ctr = 1
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     @inbounds for i in 1:nsend
         lidx = send_buf_idx[i, 1]
         ip = send_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
-            send_data[ctr] =
-                getindex_field(perimeter_data, CI(ip, 1, f, v, lidx))
+            send_data[ctr] = perimeter_data[CI(ip, 1, f, v, lidx)]
             ctr += 1
         end
     end
@@ -612,14 +611,13 @@ function load_from_recv_buffer!(
     Nf = DataLayouts.ncomponents(perimeter_data)
     nrecv = size(recv_buf_idx, 1)
     ctr = 1
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     @inbounds for i in 1:nrecv
         lidx = recv_buf_idx[i, 1]
         ip = recv_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
             ci = CI(ip, 1, f, v, lidx)
-            val = getindex_field(perimeter_data, ci) + recv_data[ctr]
-            setindex_field!(perimeter_data, val, ci)
+            perimeter_data[ci] += recv_data[ctr]
             ctr += 1
         end
     end
