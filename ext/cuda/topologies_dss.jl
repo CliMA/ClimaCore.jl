@@ -1,5 +1,5 @@
 import ClimaCore: DataLayouts, Topologies, Spaces, Fields
-import ClimaCore.DataLayouts: getindex_field, setindex_field!
+import ClimaCore.DataLayouts: CartesianFieldIndex
 using CUDA
 import ClimaCore.Topologies
 import ClimaCore.Topologies: perimeter_vertex_node_index
@@ -44,13 +44,13 @@ function dss_load_perimeter_data_kernel!(
     (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
     sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIFH order
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
 
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
-        val = getindex_field(data, CI(ip, jp, fidx, level, elem))
-        setindex_field!(perimeter_data, val, CI(p, 1, fidx, level, elem))
+        perimeter_data[CI(p, 1, fidx, level, elem)] =
+            data[CI(ip, jp, fidx, level, elem)]
     end
     return nothing
 end
@@ -84,13 +84,13 @@ function dss_unload_perimeter_data_kernel!(
     (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
     sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIFH order
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
 
     if gidx ≤ prod(sizep)
         (level, p, fidx, elem) = cart_ind(sizep, gidx).I
         (ip, jp) = perimeter[p]
-        val = getindex_field(perimeter_data, CI(p, 1, fidx, level, elem))
-        setindex_field!(data, val, CI(ip, jp, fidx, level, elem))
+        data[CI(ip, jp, fidx, level, elem)] =
+            perimeter_data[CI(p, 1, fidx, level, elem)]
     end
     return nothing
 end
@@ -139,7 +139,7 @@ function dss_local_kernel!(
     nlocalfaces = length(interior_faces)
     (nperimeter, _, _, nlevels, _) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     if gidx ≤ nlevels * nfidx * nlocalvertices # local vertices
         sizev = (nlevels, nfidx, nlocalvertices)
         (level, fidx, vertexid) = cart_ind(sizev, gidx).I
@@ -149,17 +149,12 @@ function dss_local_kernel!(
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            sum_data +=
-                getindex_field(perimeter_data, CI(ip, 1, fidx, level, lidx))
+            sum_data += perimeter_data[CI(ip, 1, fidx, level, lidx)]
         end
         for idx in st:(en - 1)
             (lidx, vert) = local_vertices[idx]
             ip = perimeter_vertex_node_index(vert)
-            setindex_field!(
-                perimeter_data,
-                sum_data,
-                CI(ip, 1, fidx, level, lidx),
-            )
+            perimeter_data[CI(ip, 1, fidx, level, lidx)] = sum_data
         end
     elseif gidx ≤ nlevels * nfidx * (nlocalvertices + nlocalfaces) # interior faces
         nfacedof = div(nperimeter - 4, 4)
@@ -176,11 +171,9 @@ function dss_local_kernel!(
             ip2 = inc2 == 1 ? first2 + i - 1 : first2 - i + 1
             idx1 = CI(ip1, 1, fidx, level, lidx1)
             idx2 = CI(ip2, 1, fidx, level, lidx2)
-            val =
-                getindex_field(perimeter_data, idx1) +
-                getindex_field(perimeter_data, idx2)
-            setindex_field!(perimeter_data, val, idx1)
-            setindex_field!(perimeter_data, val, idx2)
+            val = perimeter_data[idx1] + perimeter_data[idx2]
+            perimeter_data[idx1] = val
+            perimeter_data[idx2] = val
         end
     end
 
@@ -353,7 +346,7 @@ function dss_local_ghost_kernel!(
     FT = eltype(parent(perimeter_data))
     (nperimeter, _, _, nlevels, _) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     nghostvertices = length(ghost_vertex_offset) - 1
     if gidx ≤ nlevels * nfidx * nghostvertices
         sizev = (nlevels, nfidx, nghostvertices)
@@ -365,19 +358,14 @@ function dss_local_ghost_kernel!(
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = perimeter_vertex_node_index(vert)
-                sum_data +=
-                    getindex_field(perimeter_data, CI(ip, 1, fidx, level, lidx))
+                sum_data += perimeter_data[CI(ip, 1, fidx, level, lidx)]
             end
         end
         for idx in st:(en - 1)
             isghost, lidx, vert = ghost_vertices[idx]
             if !isghost
                 ip = perimeter_vertex_node_index(vert)
-                setindex_field!(
-                    perimeter_data,
-                    sum_data,
-                    CI(ip, 1, fidx, level, lidx),
-                )
+                perimeter_data[CI(ip, 1, fidx, level, lidx)] = sum_data
             end
         end
     end
@@ -421,14 +409,13 @@ function fill_send_buffer_kernel!(
     (_, _, _, nlevels, nelems) = size(perimeter_data)
     nfid = DataLayouts.ncomponents(perimeter_data)
     sizet = (nlevels, nfid, nsend)
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     if gidx ≤ nlevels * nfid * nsend
         (level, fidx, isend) = cart_ind(sizet, gidx).I
         lidx = send_buf_idx[isend, 1]
         ip = send_buf_idx[isend, 2]
         idx = level + ((fidx - 1) + (isend - 1) * nfid) * nlevels
-        send_data[idx] =
-            getindex_field(perimeter_data, CI(ip, 1, fidx, level, lidx))
+        send_data[idx] = perimeter_data[CI(ip, 1, fidx, level, lidx)]
     end
     return nothing
 end
@@ -527,27 +514,20 @@ function dss_ghost_kernel!(
     (_, _, _, nlevels, _) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
     nghostvertices = length(ghost_vertex_offset) - 1
-    CI = CartesianIndex
+    CI = CartesianFieldIndex
     if gidx ≤ nlevels * nfidx * nghostvertices
         (level, fidx, ghostvertexidx) =
             cart_ind((nlevels, nfidx, nghostvertices), gidx).I
         idxresult, lvertresult = repr_ghost_vertex[ghostvertexidx]
         ipresult = perimeter_vertex_node_index(lvertresult)
-        result = getindex_field(
-            perimeter_data,
-            CI(ipresult, 1, fidx, level, idxresult),
-        )
+        result = perimeter_data[CI(ipresult, 1, fidx, level, idxresult)]
         st, en = ghost_vertex_offset[ghostvertexidx],
         ghost_vertex_offset[ghostvertexidx + 1]
         for vertexidx in st:(en - 1)
             isghost, eidx, lvert = ghost_vertices[vertexidx]
             if !isghost
                 ip = perimeter_vertex_node_index(lvert)
-                setindex_field!(
-                    perimeter_data,
-                    result,
-                    CI(ip, 1, fidx, level, eidx),
-                )
+                perimeter_data[CI(ip, 1, fidx, level, eidx)] = result
             end
         end
     end

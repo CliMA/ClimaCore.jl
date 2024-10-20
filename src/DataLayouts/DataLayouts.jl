@@ -1492,6 +1492,29 @@ end
 end
 
 """
+    CartesianFieldIndex{N} <: Base.AbstractCartesianIndex{N}
+
+A CartesianIndex wrapper to dispatch `getindex` / `setindex!`
+to call [`getindex_field`](@ref) and [`setindex_field!`](@ref)
+for specific field variables in a datalayout.
+"""
+struct CartesianFieldIndex{N} <: Base.AbstractCartesianIndex{N}
+    CI::CartesianIndex{N}
+end
+CartesianFieldIndex(I...) = CartesianFieldIndex(CartesianIndex(I...))
+
+Base.ndims(::CartesianFieldIndex{N}) where {N} = N
+Base.@propagate_inbounds Base.getindex(
+    data::AbstractData,
+    CI::CartesianFieldIndex,
+) = getindex_field(data, CI.CI)
+Base.@propagate_inbounds Base.setindex!(
+    data::AbstractData,
+    val::Real,
+    CI::CartesianFieldIndex,
+) = setindex_field!(data, val, CI.CI)
+
+"""
     getindex_field(data, ci::CartesianIndex{5})
 
 Returns the value of the data at universal index `ci`,

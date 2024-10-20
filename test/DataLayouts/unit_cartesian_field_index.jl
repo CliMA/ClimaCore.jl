@@ -1,10 +1,10 @@
 #=
 julia --project
-using Revise; include(joinpath("test", "DataLayouts", "unit_getindex_field.jl"))
+using Revise; include(joinpath("test", "DataLayouts", "unit_cartesian_field_index.jl"))
 =#
 using Test
 using ClimaCore.DataLayouts
-using ClimaCore.DataLayouts: getindex_field, setindex_field!
+using ClimaCore.DataLayouts: CartesianFieldIndex
 using ClimaCore.DataLayouts: to_data_specific_field, singleton
 import ClimaCore.Geometry
 import ClimaComms
@@ -31,15 +31,18 @@ function test_copyto_float!(data)
     ArrayType = ClimaComms.array_type(ClimaComms.device())
     FT = eltype(parent(data))
     parent(rand_data) .= ArrayType(rand(FT, DataLayouts.farray_size(data)))
-    # For a float, getindex and getindex_field return the same thing
+    # For a float, CartesianIndex and CartesianFieldIndex return the same thing
     for I in CartesianIndices(universal_axes(data))
-        @test getindex_field(data, I) == getindex(data, I)
+        CI = CartesianFieldIndex(I.I)
+        @test data[CI] == data[I]
     end
     for I in CartesianIndices(universal_axes(data))
-        setindex_field!(data, FT(prod(I.I)), I)
+        CI = CartesianFieldIndex(I.I)
+        data[CI] = FT(prod(I.I))
     end
     for I in CartesianIndices(universal_axes(data))
-        @test getindex_field(data, I) == prod(I.I)
+        CI = CartesianFieldIndex(I.I)
+        @test data[CI] == prod(I.I)
     end
 end
 
@@ -55,7 +58,7 @@ function test_copyto!(data)
         for f in 1:DataLayouts.ncomponents(data)
             UFI = universal_field_index(I, f)
             DSI = CartesianIndex(to_data_specific_field(singleton(data), UFI.I))
-            @test getindex_field(data, UFI) == parent(data)[DSI]
+            @test data[CartesianFieldIndex(UFI)] == parent(data)[DSI]
         end
     end
 
@@ -64,13 +67,13 @@ function test_copyto!(data)
             UFI = universal_field_index(I, f)
             DSI = CartesianIndex(to_data_specific_field(singleton(data), UFI.I))
             val = parent(data)[DSI]
-            setindex_field!(data, val + 1, UFI)
+            data[CartesianFieldIndex(UFI)] = val + 1
             @test parent(data)[DSI] == val + 1
         end
     end
 end
 
-@testset "copyto! with Nf = 1" begin
+@testset "CartesianFieldIndex with Nf = 1" begin
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
     FT = Float64
@@ -99,7 +102,7 @@ end
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto_float!(data) # TODO: test
 end
 
-@testset "copyto! with Nf > 1" begin
+@testset "CartesianFieldIndex with Nf > 1" begin
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
     FT = Float64
@@ -129,7 +132,7 @@ end
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto!(data) # TODO: test
 end
 
-@testset "copyto! views with Nf > 1" begin
+@testset "CartesianFieldIndex views with Nf > 1" begin
     device = ClimaComms.device()
     ArrayType = ClimaComms.array_type(device)
     data_view(data) = DataLayouts.rebuild(
