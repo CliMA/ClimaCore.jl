@@ -86,7 +86,11 @@ end
     test_copyto_float!(data)
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_copyto_float!(data)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_copyto_float!(data)
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_copyto_float!(data)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_copyto_float!(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_copyto_float!(data)
@@ -96,7 +100,11 @@ end
     test_copyto_float!(data)
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_copyto_float!(data)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_copyto_float!(data)
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_copyto_float!(data)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_copyto_float!(data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_copyto_float!(data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_copyto_float!(data) # TODO: test

@@ -31,7 +31,11 @@ end
     test_fill!(data, 3)
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, 3)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_fill!(data, 3)
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_fill!(data, 3)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, 3)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, 3)
@@ -41,7 +45,11 @@ end
     test_fill!(data, 3)
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, 3)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_fill!(data, 3)
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_fill!(data, 3)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, 3)
 
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_fill!(data, 3) # TODO: test
@@ -62,7 +70,11 @@ end
     test_fill!(data, (2, 3))
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data, (2, 3))
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_fill!(data, (2, 3))
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_fill!(data, (2, 3))
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data, (2, 3))
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data, (2, 3))
@@ -72,7 +84,11 @@ end
     test_fill!(data, (2, 3))
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data, (2, 3))
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_fill!(data, (2, 3))
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_fill!(data, (2, 3))
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data, (2, 3))
 
     # TODO: test this
@@ -104,7 +120,11 @@ end
 
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(data_view(data), (2, 3))
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_fill!(data_view(data), (2, 3))
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_fill!(data_view(data), (2, 3))
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(data_view(data), (2, 3))
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_fill!(data_view(data), (2, 3))
@@ -114,7 +134,11 @@ end
     test_fill!(data_view(data), (2, 3))
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(data_view(data), (2, 3))
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_fill!(data_view(data), (2, 3))
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_fill!(data_view(data), (2, 3))
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(data_view(data), (2, 3))
 
     # TODO: test this
@@ -136,7 +160,8 @@ end
         # a parent-similar array.
         data = data.:2
         array₀ = DataLayouts.data2array(data)
-        @test typeof(array₀) <: Base.ReshapedArray
+        endswith_field = data isa Union{VIJHF, VIHF, IJHF, IHF}
+        endswith_field || @test typeof(array₀) <: Base.ReshapedArray
         rdata = DataLayouts.array2data(array₀, data)
         newdata = DataLayouts.rebuild(
             data,
@@ -149,9 +174,9 @@ end
             ),
         )
         rarray = parent(parent(newdata))
-        @test typeof(rarray) <: Base.ReshapedArray
+        endswith_field || @test typeof(rarray) <: Base.ReshapedArray
         subarray = parent(rarray)
-        @test typeof(subarray) <: Base.SubArray
+        endswith_field || @test typeof(subarray) <: Base.SubArray
         array = parent(subarray)
         newdata
     end
@@ -165,14 +190,22 @@ end
 
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_fill!(reshaped_array(data), 2)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_fill!(reshaped_array(data), 2)
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_fill!(reshaped_array(data), 2)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_fill!(reshaped_array(data), 2)
     # data = IJF{S}(ArrayType{FT}, zeros; Nij);          test_fill!(reshaped_array(data), 2)
     # data = IF{S}(ArrayType{FT}, zeros; Ni);            test_fill!(reshaped_array(data), 2)
     # data = VF{S}(ArrayType{FT}, zeros; Nv);            test_fill!(reshaped_array(data), 2)
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_fill!(reshaped_array(data), 2)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_fill!(reshaped_array(data), 2)
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_fill!(reshaped_array(data), 2)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_fill!(reshaped_array(data), 2)
 
     # TODO: test this

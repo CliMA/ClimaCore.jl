@@ -1601,6 +1601,20 @@ steps:
         agents:
           slurm_gpus: 1
 
+      - label: ":computer: Float 32 3D sphere baroclinic wave (ρe) HF datalayout GPU"
+        key: "gpu_baroclinic_wave_rho_e_float32_hf"
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float32/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          FLOAT_TYPE: "Float32"
+          HorizontalLayout: "IJHF"
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
       - label: ":computer: 3D Box limiters advection slotted spheres"
         key: "cpu_box_advection_limiter_slotted_spheres"
         command:
@@ -1869,6 +1883,17 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
           FLOAT_TYPE: "Float64"
+
+      - label: ":computer: Float 64 3D sphere baroclinic wave (ρe) HF datalayout"
+        key: "cpu_baroclinic_wave_rho_e_float64_hf"
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float64/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          FLOAT_TYPE: "Float64"
+          HorizontalLayout: "IJHF"
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"

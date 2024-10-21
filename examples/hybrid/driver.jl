@@ -30,6 +30,7 @@ ClimaComms.@import_required_backends
 import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
+using ClimaCore: DataLayouts
 
 using Logging
 
@@ -91,7 +92,16 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    h_space = make_horizontal_space(horizontal_mesh, npoly, comms_ctx)
+    HorizontalLayouts = Dict()
+    HorizontalLayouts["IJFH"] = DataLayouts.IJFH
+    HorizontalLayouts["IJHF"] = DataLayouts.IJHF
+    HorizontalLayout = HorizontalLayouts[get(ENV, "HorizontalLayout", "IJFH")]
+    h_space = make_horizontal_space(
+        horizontal_mesh,
+        npoly,
+        comms_ctx,
+        HorizontalLayout,
+    )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)

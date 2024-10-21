@@ -1,19 +1,27 @@
-function Base.fill!(data::IJFH, val, ::ToCPU)
+function Base.fill!(dest::AbstractData, val)
+    if !(VERSION ≥ v"1.11.0-beta") && dest isa EndsWithField
+        @inbounds @simd for I in 1:get_N(UniversalSize(dest))
+            dest[I] = val
+        end
+    else
+        Base.fill!(dest, val, device_dispatch(parent(dest)))
+    end
+end
+
+function Base.fill!(data::Union{IJFH, IJHF}, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
     end
     return data
 end
-
-function Base.fill!(data::IFH, val, ::ToCPU)
+function Base.fill!(data::Union{IFH, IHF}, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
     end
     return data
 end
-
 function Base.fill!(data::DataF, val, ::ToCPU)
     @inbounds data[] = val
     return data
@@ -41,21 +49,17 @@ function Base.fill!(data::VF, val, ::ToCPU)
     return data
 end
 
-function Base.fill!(data::VIJFH, val, ::ToCPU)
+function Base.fill!(data::Union{VIJFH, VIJHF}, val, ::ToCPU)
     (Ni, Nj, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
     end
     return data
 end
-
-function Base.fill!(data::VIFH, val, ::ToCPU)
+function Base.fill!(data::Union{VIFH, VIHF}, val, ::ToCPU)
     (Ni, _, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
     end
     return data
 end
-
-Base.fill!(dest::AbstractData, val) =
-    Base.fill!(dest, val, device_dispatch(parent(dest)))
