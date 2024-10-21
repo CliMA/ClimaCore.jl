@@ -86,8 +86,8 @@ steps:
         key: unit_data_copyto
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_copyto.jl"
 
-      - label: "Unit: getindex_field"
-        key: unit_data_getindex_field
+      - label: "Unit: cartesian_field_index"
+        key: unit_data_cartesian_field_index
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cartesian_field_index.jl"
 
       - label: "Unit: mapreduce"

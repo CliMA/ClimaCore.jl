@@ -251,12 +251,15 @@ end
     Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
-    nt_field = Fields.Field(
-        IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
-            ones(Nij, Nij, 2, Nh),
-        ),
-        space,
-    )
+    S = NamedTuple{(:a, :b), Tuple{Float64, Float64}}
+    context = ClimaComms.context(space)
+    device = ClimaComms.device(context)
+    ArrayType = ClimaComms.array_type(device)
+    FT = Spaces.undertype(space)
+    data = IJFH{S}(ArrayType{FT}, ones; Nij, Nh)
+
+    nt_field = Fields.Field(data, space)
+
     nt_sum = sum(nt_field)
     @test nt_sum isa NamedTuple{(:a, :b), Tuple{Float64, Float64}}
     @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()

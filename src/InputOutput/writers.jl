@@ -423,6 +423,7 @@ end
 
 # write fields
 function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
+    values = Fields.field_values(field)
     space = axes(field)
     staggering = Spaces.staggering(space)
     grid = Spaces.grid(space)
@@ -434,8 +435,9 @@ function write!(writer::HDF5Writer, field::Fields.Field, name::AbstractString)
     if topology isa Topologies.Topology2D &&
        !(writer.context isa ClimaComms.SingletonCommsContext)
         nelems = Topologies.nelems(topology)
-        dims = ntuple(d -> d == nd ? nelems : size(array, d), nd)
-        localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
+        h_dim = DataLayouts.h_dim(DataLayouts.singleton(values))
+        dims = ntuple(d -> d == h_dim ? nelems : size(array, d), nd)
+        localidx = ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
         dataset = create_dataset(
             writer.file,
             "fields/$name",
