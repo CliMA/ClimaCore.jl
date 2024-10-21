@@ -467,16 +467,18 @@ function read_field(reader::HDF5Reader, name::AbstractString)
         end
         topology = Spaces.topology(space)
         ArrayType = ClimaComms.array_type(topology)
+        data_layout = attrs(obj)["data_layout"]
+        DataLayout = _scan_data_layout(data_layout)
+        h_dim = DataLayouts.h_dim(DataLayouts.singleton(DataLayout))
         if topology isa Topologies.Topology2D
             nd = ndims(obj)
-            localidx = ntuple(d -> d < nd ? (:) : topology.local_elem_gidx, nd)
+            localidx =
+                ntuple(d -> d == h_dim ? topology.local_elem_gidx : (:), nd)
             data = ArrayType(obj[localidx...])
         else
             data = ArrayType(read(obj))
         end
-        data_layout = attrs(obj)["data_layout"]
         Nij = size(data, findfirst("I", data_layout)[1])
-        DataLayout = _scan_data_layout(data_layout)
         # For when `Nh` is added back to the type space
         #     Nhd = Nh_dim(data_layout)
         #     Nht = Nhd == -1 ? () : (size(data, Nhd),)

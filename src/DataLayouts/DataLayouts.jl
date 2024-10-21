@@ -1653,6 +1653,18 @@ device_dispatch(x::MArray) = ToCPU()
 @inline singleton(@nospecialize(::IH1JH2)) = IH1JH2Singleton()
 @inline singleton(@nospecialize(::IV1JH2)) = IV1JH2Singleton()
 
+@inline singleton(::Type{IJKFVH}) = IJKFVHSingleton()
+@inline singleton(::Type{IJFH}) = IJFHSingleton()
+@inline singleton(::Type{IFH}) = IFHSingleton()
+@inline singleton(::Type{DataF}) = DataFSingleton()
+@inline singleton(::Type{IJF}) = IJFSingleton()
+@inline singleton(::Type{IF}) = IFSingleton()
+@inline singleton(::Type{VF}) = VFSingleton()
+@inline singleton(::Type{VIJFH}) = VIJFHSingleton()
+@inline singleton(::Type{VIFH}) = VIFHSingleton()
+@inline singleton(::Type{IH1JH2}) = IH1JH2Singleton()
+@inline singleton(::Type{IV1JH2}) = IV1JH2Singleton()
+
 
 include("copyto.jl")
 include("fused_copyto.jl")

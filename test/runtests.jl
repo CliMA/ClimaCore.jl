@@ -52,12 +52,10 @@ UnitTest("Spectral elem - sphere diffusion"        ,"Operators/spectralelement/s
 UnitTest("Spectral elem - sphere diffusion vec"    ,"Operators/spectralelement/sphere_diffusion_vec.jl"),
 UnitTest("Spectral elem - sphere hyperdiff"        ,"Operators/spectralelement/unit_sphere_hyperdiffusion.jl"),
 UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/unit_sphere_hyperdiffusion_vec.jl"),
-# UnitTest("Spectral elem - sphere hyperdiff vec"    ,"Operators/spectralelement/sphere_geometry_distributed.jl"), # MPI-only
 UnitTest("FD ops - column"                         ,"Operators/finitedifference/unit_column.jl"),
 UnitTest("FD ops - opt"                            ,"Operators/finitedifference/opt.jl"),
 UnitTest("FD ops - wfact"                          ,"Operators/finitedifference/wfact.jl"),
 UnitTest("FD ops - linsolve"                       ,"Operators/finitedifference/linsolve.jl"),
-# UnitTest("FD ops - examples"                       ,"Operators/finitedifference/opt_examples.jl"), # only opt tests? (check coverage)
 UnitTest("Hybrid - 2D"                             ,"Operators/hybrid/unit_2d.jl"),
 UnitTest("Hybrid - 3D"                             ,"Operators/hybrid/unit_3d.jl"),
 UnitTest("Hybrid - dss opt"                        ,"Operators/hybrid/dss_opt.jl"),
@@ -89,15 +87,12 @@ UnitTest("MatrixFields - non-scalar broadcasting (3)" ,"MatrixFields/matrix_fiel
 UnitTest("MatrixFields - non-scalar broadcasting (4)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_4.jl"),
 UnitTest("MatrixFields - non-scalar broadcasting (5)" ,"MatrixFields/matrix_fields_broadcasting/test_non_scalar_5.jl"),
 UnitTest("MatrixFields - flat spaces" ,"MatrixFields/flat_spaces.jl"),
-    
-# UnitTest("MatrixFields - matrix field broadcast"   ,"MatrixFields/matrix_field_broadcasting.jl"), # too long
 # UnitTest("MatrixFields - operator matrices"        ,"MatrixFields/operator_matrices.jl"), # too long
 # UnitTest("MatrixFields - field matrix solvers"     ,"MatrixFields/field_matrix_solvers.jl"), # too long
 UnitTest("Hypsography - 2d"                        ,"Hypsography/2d.jl"),
 UnitTest("Hypsography - 3d sphere"                 ,"Hypsography/3dsphere.jl"),
 UnitTest("Remapping"                               ,"Operators/remapping.jl"),
 UnitTest("Limiter"                                 ,"Limiters/limiter.jl"),
-# UnitTest("Limiter"                                 ,"Limiters/distributed/dlimiter.jl"), # requires MPI
 UnitTest("InputOutput - hdf5"                      ,"InputOutput/hdf5.jl"),
 UnitTest("InputOutput - spectralelement2d"         ,"InputOutput/spectralelement2d.jl"),
 UnitTest("InputOutput - hybrid2dbox"               ,"InputOutput/hybrid2dbox.jl"),
