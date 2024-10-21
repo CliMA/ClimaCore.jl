@@ -30,7 +30,7 @@ function benchmarkfill!(bm, device, data, val)
         kernel_time_s = t_min,
         nreps = nreps,
         caller,
-        problem_size = size(data),
+        problem_size = DataLayouts.array_size(data),
         n_reads_writes,
     )
 end
@@ -51,7 +51,13 @@ end
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     benchmarkfill!(bm, device, data, 3)
     @test all(parent(data) .== 3)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     benchmarkfill!(bm, device, data, 3)
     @test all(parent(data) .== 3)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
@@ -66,7 +72,13 @@ end
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     benchmarkfill!(bm, device, data, 3)
     @test all(parent(data) .== 3)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    benchmarkfill!(bm, device, data, 3)
+    @test all(parent(data) .== 3)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     benchmarkfill!(bm, device, data, 3)
     @test all(parent(data) .== 3)
 

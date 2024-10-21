@@ -199,13 +199,6 @@ Base.@propagate_inbounds @generated function get_struct(
         Base.@_propagate_inbounds_meta
         @inbounds bypass_constructor(S, $tup)
     end
-    # else
-    #     Base.@_propagate_inbounds_meta
-    #     args = ntuple(fieldcount(S)) do i
-    #         get_struct(array, fieldtype(S, i), Val(D), offset_index(start_index, Val(D), fieldtypeoffset(T, S, i)))
-    #     end
-    #     return bypass_constructor(S, args)
-    # end
 end
 
 # recursion base case: hit array type is the same as the struct leaf type

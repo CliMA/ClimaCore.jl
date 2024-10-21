@@ -105,6 +105,16 @@ Base.@propagate_inbounds function slab(
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
 end
 
+Base.@propagate_inbounds function slab(
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+    v,
+    h,
+) where {Style <: AbstractFieldStyle}
+    _args = slab_args(bc.args, v, h)
+    _axes = slab(axes(bc), v, h)
+    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args, _axes)
+end
+
 Base.@propagate_inbounds function column(
     bc::Base.Broadcast.Broadcasted{Style},
     i,
@@ -114,6 +124,17 @@ Base.@propagate_inbounds function column(
     _args = column_args(bc.args, i, j, h)
     _axes = column(axes(bc), i, j, h)
     Base.Broadcast.Broadcasted{Style}(bc.f, _args, _axes)
+end
+
+Base.@propagate_inbounds function column(
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+    i,
+    j,
+    h,
+) where {Style <: AbstractFieldStyle}
+    _args = column_args(bc.args, i, j, h)
+    _axes = column(axes(bc), i, j, h)
+    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args, _axes)
 end
 
 # Return underlying DataLayout object, DataStyle of broadcasted
@@ -127,6 +148,20 @@ todata(field::Field) = Fields.field_values(field)
 function todata(bc::Base.Broadcast.Broadcasted{FieldStyle{DS}}) where {DS}
     _args = _todata_args(bc.args)
     Base.Broadcast.Broadcasted{DS}(bc.f, _args)
+end
+function todata(bc::Base.Broadcast.Broadcasted{Style}) where {Style}
+    _args = _todata_args(bc.args)
+    Base.Broadcast.Broadcasted{Style}(bc.f, _args)
+end
+function todata(
+    bc::DataLayouts.NonExtrudedBroadcasted{FieldStyle{DS}},
+) where {DS}
+    _args = _todata_args(bc.args)
+    DataLayouts.NonExtrudedBroadcasted{DS}(bc.f, _args)
+end
+function todata(bc::DataLayouts.NonExtrudedBroadcasted{Style}) where {Style}
+    _args = _todata_args(bc.args)
+    DataLayouts.NonExtrudedBroadcasted{Style}(bc.f, _args)
 end
 
 # same logic as Base.Broadcast.Broadcasted (which only defines it for Tuples)
@@ -401,22 +436,22 @@ function Base.Broadcast.broadcasted(
     )
 end
 
-function Base.Broadcast.copyto!(
+function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}},
 )
-    copyto!(Fields.field_values(field), bc)
+    copyto!(Fields.field_values(field), todata(bc))
     return field
 end
-function Base.Broadcast.copyto!(
+function Base.copyto!(
     field::Field,
     bc::Base.Broadcast.Broadcasted{Base.Broadcast.Style{Tuple}},
 )
-    copyto!(Fields.field_values(field), bc)
+    copyto!(Fields.field_values(field), todata(bc))
     return field
 end
 
-function Base.Broadcast.copyto!(field::Field, nt::NamedTuple)
+function Base.copyto!(field::Field, nt::NamedTuple)
     copyto!(
         field,
         Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{0}}(

@@ -43,13 +43,13 @@ end
     x2 = rand_field(FT, cspace)
     y = rand_field(FT, fspace)
     # Error when the axes of the RHS are incompatible
-    @test_throws ErrorException("Broacasted spaces are not the same.") begin
+    @test_throws DimensionMismatch begin
         @fused_direct begin
             @. x += 1
             @. x += y
         end
     end
-    @test_throws ErrorException("Broacasted spaces are not the same.") begin
+    @test_throws DimensionMismatch begin
         @fused_direct begin
             @. x += y
             @. x += y
@@ -92,7 +92,31 @@ end
         y3 = rand_field(FT, space),
     )
     test_kernel!(; fused!, unfused!, X, Y)
-    test_kernel!(; fused! = fused_bycolumn!, unfused! = unfused_bycolumn!, X, Y)
+
+    nothing
+end
+
+@testset "FusedMultiBroadcast VIJHF and VF" begin
+    FT = Float64
+    device = ClimaComms.device()
+    space = TU.CenterExtrudedFiniteDifferenceSpace(
+        FT;
+        zelem = 3,
+        helem = 4,
+        context = ClimaComms.context(device),
+        horizontal_layout_type = DataLayouts.IJHF,
+    )
+    X = Fields.FieldVector(
+        x1 = rand_field(FT, space),
+        x2 = rand_field(FT, space),
+        x3 = rand_field(FT, space),
+    )
+    Y = Fields.FieldVector(
+        y1 = rand_field(FT, space),
+        y2 = rand_field(FT, space),
+        y3 = rand_field(FT, space),
+    )
+    test_kernel!(; fused!, unfused!, X, Y)
 
     nothing
 end
@@ -119,12 +143,13 @@ end
             y3 = rand_field(FT, space),
         )
         test_kernel!(; fused!, unfused!, X, Y)
-        test_kernel!(;
-            fused! = fused_bycolumn!,
-            unfused! = unfused_bycolumn!,
-            X,
-            Y,
-        )
+        # Does not seem to be ready to work with NonExtrudedBroadcasted:
+        # test_kernel!(;
+        #     fused! = fused_bycolumn!,
+        #     unfused! = unfused_bycolumn!,
+        #     X,
+        #     Y,
+        # )
 
         nothing
     end

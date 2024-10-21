@@ -90,6 +90,10 @@ steps:
         key: unit_data_cartesian_field_index
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_cartesian_field_index.jl"
 
+      - label: "Unit: non_extruded_broadcast"
+        key: unit_non_extruded_broadcast
+        command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_non_extruded_broadcast.jl"
+
       - label: "Unit: mapreduce"
         key: unit_data_mapreduce
         command: "julia --color=yes --check-bounds=yes --project=.buildkite test/DataLayouts/unit_mapreduce.jl"
@@ -1352,6 +1356,8 @@ steps:
       - label: "Perf: FD operator stencil benchmarks"
         key: "perf_fd_ops"
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
+        agents:
+          slurm_mem: 20GB
 
       - label: "Perf: GPU FD operator stencil benchmarks"
         key: "gpu_perf_fd_ops"
@@ -1597,6 +1603,20 @@ steps:
         artifact_paths:
           - "examples/hybrid/box/output/box_advection_limiter_gaussian_bells_D0/*"
         env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_gpus: 1
+
+      - label: ":computer: Float 32 3D sphere baroclinic wave (ρe) HF datalayout GPU"
+        key: "gpu_baroclinic_wave_rho_e_float32_hf"
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float32/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          FLOAT_TYPE: "Float32"
+          horizontal_layout_type: "IJHF"
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
@@ -1869,6 +1889,17 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe"
           FLOAT_TYPE: "Float64"
+
+      - label: ":computer: Float 64 3D sphere baroclinic wave (ρe) HF datalayout"
+        key: "cpu_baroclinic_wave_rho_e_float64_hf"
+        command:
+          - "julia --color=yes --project=.buildkite examples/hybrid/driver.jl"
+        artifact_paths:
+          - "examples/hybrid/sphere/output/baroclinic_wave_rhoe_hf/Float64/*"
+        env:
+          TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
+          FLOAT_TYPE: "Float64"
+          horizontal_layout_type: "IJHF"
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"

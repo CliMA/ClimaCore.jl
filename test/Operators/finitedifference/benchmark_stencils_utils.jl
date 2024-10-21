@@ -7,6 +7,7 @@ import BenchmarkTools
 import StatsBase
 import OrderedCollections
 using ClimaCore.Geometry: ⊗
+import ClimaCore.DataLayouts
 
 import ClimaCore
 include(
@@ -14,6 +15,7 @@ include(
 )
 import .TestUtilities as TU
 
+@show ClimaComms.device() isa ClimaComms.CUDADevice
 if ClimaComms.device() isa ClimaComms.CUDADevice
     import CUDA
     device_name = CUDA.name(CUDA.device()) # Move to ClimaComms
@@ -361,14 +363,14 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     return (; bm, trials, t_min)
 end
 
-function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false)
+function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = false, horizontal_layout_type)
     FT = bm.float_type
     device = ClimaComms.device()
     @show device
     trials = OrderedCollections.OrderedDict()
     t_min = OrderedCollections.OrderedDict()
 
-    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq)
+    cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, horizontal_layout_type)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)
     cfield = fill(field_vars(FT), cspace)
     ffield = fill(field_vars(FT), fspace)

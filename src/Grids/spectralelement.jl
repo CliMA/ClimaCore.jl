@@ -29,30 +29,38 @@ local_geometry_type(
 # this means that if data is saved in two different files, reloading will give fields which live on the same grid
 function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
-    quadrature_style::Quadratures.QuadratureStyle,
+    quadrature_style::Quadratures.QuadratureStyle;
+    horizontal_layout_type = DataLayouts.IFH,
 )
     get!(
         Cache.OBJECT_CACHE,
         (SpectralElementGrid1D, topology, quadrature_style),
     ) do
-        _SpectralElementGrid1D(topology, quadrature_style)
+        _SpectralElementGrid1D(
+            topology,
+            quadrature_style,
+            horizontal_layout_type,
+        )
     end
 end
 
 _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
+    horizontal_layout_type = DataLayouts.IFH,
 ) = _SpectralElementGrid1D(
     topology,
     quadrature_style,
     Val(Topologies.nlocalelems(topology)),
+    horizontal_layout_type,
 )
 
 function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
     ::Val{Nh},
-) where {Nh}
+    ::Type{horizontal_layout_type},
+) where {Nh, horizontal_layout_type}
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
@@ -60,7 +68,7 @@ function _SpectralElementGrid1D(
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
-    local_geometry = DataLayouts.IFH{LG, Nq}(Array{FT}, Nh)
+    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
@@ -137,7 +145,7 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble)
+    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, horizontal_layout_type = DataLayouts.IJFH)
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
@@ -146,6 +154,7 @@ flag `enable_bubble` enables the `bubble correction` for more accurate element a
 - topology: Topology2D
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
+- horizontal_layout_type: Type{<:AbstractData}
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -171,13 +180,25 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
 function SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
+    horizontal_layout_type = DataLayouts.IJFH,
     enable_bubble::Bool = false,
 )
     get!(
         Cache.OBJECT_CACHE,
-        (SpectralElementGrid2D, topology, quadrature_style, enable_bubble),
+        (
+            SpectralElementGrid2D,
+            topology,
+            quadrature_style,
+            enable_bubble,
+            horizontal_layout_type,
+        ),
     ) do
-        _SpectralElementGrid2D(topology, quadrature_style; enable_bubble)
+        _SpectralElementGrid2D(
+            topology,
+            quadrature_style,
+            horizontal_layout_type;
+            enable_bubble,
+        )
     end
 end
 
@@ -193,22 +214,32 @@ end
 
 _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
-    quadrature_style::Quadratures.QuadratureStyle;
+    quadrature_style::Quadratures.QuadratureStyle,
+    horizontal_layout_type = DataLayouts.IJFH;
     enable_bubble::Bool,
 ) = _SpectralElementGrid2D(
     topology,
     quadrature_style,
-    Val(Topologies.nlocalelems(topology));
+    Val(Topologies.nlocalelems(topology)),
+    horizontal_layout_type;
     enable_bubble,
 )
 
 function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle,
-    ::Val{Nh};
+    ::Val{Nh},
+    ::Type{horizontal_layout_type};
     enable_bubble::Bool,
-) where {Nh}
-
+) where {Nh, horizontal_layout_type}
+    @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
+    surface_layout_type = if horizontal_layout_type <: DataLayouts.IJFH
+        DataLayouts.IFH
+    elseif horizontal_layout_type <: DataLayouts.IJHF
+        DataLayouts.IHF
+    else
+        error("Uncaught case")
+    end
     # 1. compute localgeom for local elememts
     # 2. ghost exchange of localgeom
     # 3. do a round of dss on WJs
@@ -241,7 +272,7 @@ function _SpectralElementGrid2D(
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
-    local_geometry = DataLayouts.IJFH{LG, Nq}(Array{FT}, Nh)
+    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
@@ -399,7 +430,7 @@ function _SpectralElementGrid2D(
 
     if quadrature_style isa Quadratures.GLL
         internal_surface_geometry =
-            DataLayouts.IFH{SG, Nq}(Array{FT}, length(interior_faces))
+            surface_layout_type{SG, Nq}(Array{FT}, length(interior_faces))
         for (iface, (lidx⁻, face⁻, lidx⁺, face⁺, reversed)) in
             enumerate(interior_faces)
             internal_surface_geometry_slab =
@@ -437,8 +468,10 @@ function _SpectralElementGrid2D(
             map(Topologies.boundary_tags(topology)) do boundarytag
                 boundary_faces =
                     Topologies.boundary_faces(topology, boundarytag)
-                boundary_surface_geometry =
-                    DataLayouts.IFH{SG, Nq}(Array{FT}, length(boundary_faces))
+                boundary_surface_geometry = surface_layout_type{SG, Nq}(
+                    Array{FT},
+                    length(boundary_faces),
+                )
                 for (iface, (elem, face)) in enumerate(boundary_faces)
                     boundary_surface_geometry_slab =
                         slab(boundary_surface_geometry, iface)

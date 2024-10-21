@@ -39,7 +39,11 @@ end
     test_similar!(data)
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_similar!(data)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    test_similar!(data)
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    test_similar!(data)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_similar!(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_similar!(data)
@@ -49,7 +53,11 @@ end
     test_similar!(data)
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_similar!(data)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    test_similar!(data)
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    test_similar!(data)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_similar!(data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh); test_similar!(data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);          test_similar!(data) # TODO: test
