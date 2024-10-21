@@ -1,3 +1,4 @@
+import ClimaCore.DataLayouts: AbstractDataSingleton
 # To implement a single flexible mapreduce, let's define
 # a `OnesArray` that has nothing, and always returns 1:
 struct OnesArray{T, N} <: AbstractArray{T, N} end
@@ -38,6 +39,8 @@ function mapreduce_cuda(
     n_ops_on_load = cld(nitems, nthreads) == 1 ? 0 : 7
     effective_blksize = nthreads * (n_ops_on_load + 1)
     nblocks = cld(nitems, effective_blksize)
+    s = DataLayouts.singleton(data)
+    us = DataLayouts.UniversalSize(data)
 
     reduce_cuda = CuArray{T}(undef, nblocks, Nf)
     shmemsize = nthreads
@@ -49,6 +52,8 @@ function mapreduce_cuda(
         pdata,
         pwt,
         n_ops_on_load,
+        s,
+        us,
         Val(shmemsize),
     )
     # reduce block data
@@ -71,6 +76,8 @@ function mapreduce_cuda_kernel!(
     pdata::AbstractArray{T, N},
     pwt::AbstractArray{T, N},
     n_ops_on_load::Int,
+    s::AbstractDataSingleton,
+    us::DataLayouts.UniversalSize,
     ::Val{shmemsize},
 ) where {T, N, shmemsize}
     blksize = blockDim().x
@@ -78,12 +85,13 @@ function mapreduce_cuda_kernel!(
     tidx = threadIdx().x
     bidx = blockIdx().x
     fidx = blockIdx().y
-    dataview = _dataview(pdata, fidx)
+    dataview = _dataview(pdata, s, fidx)
     effective_blksize = blksize * (n_ops_on_load + 1)
     gidx = _get_gidx(tidx, bidx, effective_blksize)
     reduction = CUDA.CuStaticSharedArray(T, shmemsize)
     reduction[tidx] = 0
-    (Nv, Nij, Nf, Nh) = _get_dims(dataview)
+    (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(us)
+    Nf = 1 # a view into `fidx` always gives a size of Nf = 1
     nitems = Nv * Nij * Nij * Nf * Nh
 
     # load shmem
@@ -107,29 +115,13 @@ end
 @inline function _get_gidx(tidx, bidx, effective_blksize)
     return tidx + (bidx - 1) * effective_blksize
 end
-# for VF DataLayout
-@inline function _get_dims(pdata::AbstractArray{FT, 2}) where {FT}
-    (Nv, Nf) = size(pdata)
-    return (Nv, 1, Nf, 1)
-end
-@inline _dataview(pdata::AbstractArray{FT, 2}, fidx) where {FT} =
-    view(pdata, :, fidx:fidx)
 
-# for IJFH DataLayout
-@inline function _get_dims(pdata::AbstractArray{FT, 4}) where {FT}
-    (Nij, _, Nf, Nh) = size(pdata)
-    return (1, Nij, Nf, Nh)
+@inline function _dataview(pdata::AbstractArray, s::AbstractDataSingleton, fidx)
+    fdim = DataLayouts.field_dim(s)
+    Ipre = ntuple(i -> Colon(), Val(fdim - 1))
+    Ipost = ntuple(i -> Colon(), Val(ndims(pdata) - fdim))
+    return @inbounds view(pdata, Ipre..., fidx:fidx, Ipost...)
 end
-@inline _dataview(pdata::AbstractArray{FT, 4}, fidx) where {FT} =
-    view(pdata, :, :, fidx:fidx, :)
-
-# for VIJFH DataLayout
-@inline function _get_dims(pdata::AbstractArray{FT, 5}) where {FT}
-    (Nv, Nij, _, Nf, Nh) = size(pdata)
-    return (Nv, Nij, Nf, Nh)
-end
-@inline _dataview(pdata::AbstractArray{FT, 5}, fidx) where {FT} =
-    view(pdata, :, :, :, fidx:fidx, :)
 
 @inline function _cuda_reduce!(op, reduction, tidx, reduction_size, N)
     if reduction_size > N
