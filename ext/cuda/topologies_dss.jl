@@ -18,7 +18,7 @@ _configure_threadblock(nitems) =
 function Topologies.dss_load_perimeter_data!(
     ::ClimaComms.CUDADevice,
     dss_buffer::Topologies.DSSBuffer,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Topologies.Perimeter2D,
 )
     (; perimeter_data) = dss_buffer
@@ -37,13 +37,13 @@ end
 
 function dss_load_perimeter_data_kernel!(
     perimeter_data::DataLayouts.AbstractData,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
-    sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIFH order
+    sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIHF order
     CI = CartesianFieldIndex
 
     if gidx ≤ prod(sizep)
@@ -57,7 +57,7 @@ end
 
 function Topologies.dss_unload_perimeter_data!(
     ::ClimaComms.CUDADevice,
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     dss_buffer::Topologies.DSSBuffer,
     perimeter,
 )
@@ -76,14 +76,14 @@ function Topologies.dss_unload_perimeter_data!(
 end
 
 function dss_unload_perimeter_data_kernel!(
-    data::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    data::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter_data::AbstractData,
     perimeter::Topologies.Perimeter2D{Nq},
 ) where {Nq}
     gidx = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
     (nperimeter, _, _, nlevels, nelems) = size(perimeter_data)
     nfidx = DataLayouts.ncomponents(perimeter_data)
-    sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIFH order
+    sizep = (nlevels, nperimeter, nfidx, nelems) # assume VIHF order
     CI = CartesianFieldIndex
 
     if gidx ≤ prod(sizep)
@@ -97,7 +97,7 @@ end
 
 function Topologies.dss_local!(
     ::ClimaComms.CUDADevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
 )
@@ -127,7 +127,7 @@ function Topologies.dss_local!(
 end
 
 function dss_local_kernel!(
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     local_vertices::AbstractVector{Tuple{Int, Int}},
     local_vertex_offset::AbstractVector{Int},
     interior_faces::AbstractVector{Tuple{Int, Int, Int, Int, Bool}},
@@ -182,11 +182,11 @@ end
 
 function Topologies.dss_transform!(
     device::ClimaComms.CUDADevice,
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
     perimeter::Topologies.Perimeter2D,
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    weight::DataLayouts.IJFH,
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+    weight::DataLayouts.IJHF,
     localelems::AbstractVector{Int},
 )
     nlocalelems = length(localelems)
@@ -217,11 +217,11 @@ function Topologies.dss_transform!(
 end
 
 function dss_transform_kernel!(
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
     perimeter::Topologies.Perimeter2D,
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
-    weight::DataLayouts.IJFH,
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
+    weight::DataLayouts.IJHF,
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
 ) where {nlocalelems}
@@ -248,9 +248,9 @@ end
 
 function Topologies.dss_untransform!(
     device::ClimaComms.CUDADevice,
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Topologies.Perimeter2D,
     localelems::AbstractVector{Int},
 )
@@ -280,9 +280,9 @@ function Topologies.dss_untransform!(
 end
 
 function dss_untransform_kernel!(
-    perimeter_data::DataLayouts.VIFH,
-    data::Union{DataLayouts.VIJFH, DataLayouts.IJFH},
-    local_geometry::Union{DataLayouts.IJFH, DataLayouts.VIJFH},
+    perimeter_data::DataLayouts.VIHF,
+    data::Union{DataLayouts.VIJHF, DataLayouts.IJHF},
+    local_geometry::Union{DataLayouts.IJHF, DataLayouts.VIJHF},
     perimeter::Topologies.Perimeter2D,
     localelems::AbstractVector{Int},
     ::Val{nlocalelems},
@@ -309,7 +309,7 @@ end
 # TODO: Function stubs, code to be implemented, needed only for distributed GPU runs
 function Topologies.dss_local_ghost!(
     ::ClimaComms.CUDADevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.AbstractTopology,
 )
@@ -337,7 +337,7 @@ function Topologies.dss_local_ghost!(
 end
 
 function dss_local_ghost_kernel!(
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     ghost_vertices,
     ghost_vertex_offset,
     perimeter::Topologies.Perimeter2D,
@@ -474,7 +474,7 @@ end
 
 function Topologies.dss_ghost!(
     ::ClimaComms.CUDADevice,
-    perimeter_data::DataLayouts.VIFH,
+    perimeter_data::DataLayouts.VIHF,
     perimeter::Topologies.Perimeter2D,
     topology::Topologies.Topology2D,
 )

@@ -159,10 +159,10 @@ function all_spaces(
         FaceExtrudedFiniteDifferenceSpace(FT; zelem, context, helem),
         # TODO: incorporate this list of spaces somehow:
         #     space_vf = Spaces.CenterFiniteDifferenceSpace(topology_z)
-        #     space_ifh = Spaces.SpectralElementSpace1D(topology_x, quad)
-        #     space_ijfh = Spaces.SpectralElementSpace2D(topology_xy, quad)
-        #     space_vifh = Spaces.ExtrudedFiniteDifferenceSpace(space_ifh, space_vf)
-        #     space_vijfh = Spaces.ExtrudedFiniteDifferenceSpace(space_ijfh, space_vf)
+        #     space_ihf = Spaces.SpectralElementSpace1D(topology_x, quad)
+        #     space_ijhf = Spaces.SpectralElementSpace2D(topology_xy, quad)
+        #     space_vihf = Spaces.ExtrudedFiniteDifferenceSpace(space_ihf, space_vf)
+        #     space_vijhf = Spaces.ExtrudedFiniteDifferenceSpace(space_ijhf, space_vf)
     ]
 end
 

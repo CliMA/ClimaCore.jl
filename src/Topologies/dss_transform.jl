@@ -250,7 +250,7 @@ recv_buffer(ghost::GhostBuffer) = ghost.recv_data
 create_ghost_buffer(data, topology::Topologies.AbstractTopology) = nothing
 
 create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
+    data::Union{DataLayouts.IJHF{S, Nij}, DataLayouts.VIJHF{S, <:Any, Nij}},
     topology::Topologies.Topology2D,
 ) where {S, Nij} = create_ghost_buffer(
     data,
@@ -261,22 +261,22 @@ create_ghost_buffer(
 
 
 function create_ghost_buffer(
-    data::Union{DataLayouts.IJFH{S, Nij}, DataLayouts.VIJFH{S, <:Any, Nij}},
+    data::Union{DataLayouts.IJHF{S, Nij}, DataLayouts.VIJHF{S, <:Any, Nij}},
     topology::Topologies.Topology2D,
     Nhsend,
     Nhrec,
 ) where {S, Nij}
-    if data isa DataLayouts.IJFH
-        send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
-        recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
+    if data isa DataLayouts.IJHF
+        send_data = DataLayouts.IJHF{S, Nij}(typeof(parent(data)), Nhsend)
+        recv_data = DataLayouts.IJHF{S, Nij}(typeof(parent(data)), Nhrec)
     else
         Nv = DataLayouts.nlevels(data)
         Nf = DataLayouts.ncomponents(data)
-        send_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
+        send_data = DataLayouts.VIJHF{S, Nv, Nij}(
+            similar(parent(data), (Nv, Nij, Nij, Nhsend, Nf)),
         )
-        recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
-            similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
+        recv_data = DataLayouts.VIJHF{S, Nv, Nij}(
+            similar(parent(data), (Nv, Nij, Nij, Nhrec, Nf)),
         )
     end
     k = stride(parent(send_data), DataLayouts.h_dim(data))

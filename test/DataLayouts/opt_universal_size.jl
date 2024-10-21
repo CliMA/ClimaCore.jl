@@ -59,9 +59,9 @@ end
     Nk = 6
     data = DataF{S}(ArrayType{FT}, zeros)
     test_universal_size(data)
-    data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
     test_universal_size(data)
-    data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
     test_universal_size(data)
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     test_universal_size(data)
@@ -69,9 +69,9 @@ end
     test_universal_size(data)
     data = VF{S}(ArrayType{FT}, zeros; Nv)
     test_universal_size(data)
-    data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     test_universal_size(data)
-    data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     test_universal_size(data)
     # data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij,Nk,Nv,Nh);  test_universal_size(data) # TODO: test
     # data = DataLayouts.IH1JH2{S}(ArrayType{FT}, zeros; Nij);           test_universal_size(data) # TODO: test

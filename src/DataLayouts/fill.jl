@@ -1,4 +1,4 @@
-function Base.fill!(data::IJFH, val, ::ToCPU)
+function Base.fill!(data::IJHF, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
@@ -6,7 +6,7 @@ function Base.fill!(data::IJFH, val, ::ToCPU)
     return data
 end
 
-function Base.fill!(data::IFH, val, ::ToCPU)
+function Base.fill!(data::IHF, val, ::ToCPU)
     (_, _, _, _, Nh) = size(data)
     @inbounds for h in 1:Nh
         fill!(slab(data, h), val)
@@ -41,7 +41,7 @@ function Base.fill!(data::VF, val, ::ToCPU)
     return data
 end
 
-function Base.fill!(data::VIJFH, val, ::ToCPU)
+function Base.fill!(data::VIJHF, val, ::ToCPU)
     (Ni, Nj, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)
@@ -49,7 +49,7 @@ function Base.fill!(data::VIJFH, val, ::ToCPU)
     return data
 end
 
-function Base.fill!(data::VIFH, val, ::ToCPU)
+function Base.fill!(data::VIHF, val, ::ToCPU)
     (Ni, _, _, Nv, Nh) = size(data)
     @inbounds for h in 1:Nh, v in 1:Nv
         fill!(slab(data, v, h), val)

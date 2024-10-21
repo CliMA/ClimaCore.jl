@@ -24,7 +24,7 @@ criteria:
    in the thread partition
  - The order of the thread partition should
    follow the fastest changing index in the
-   datalayout (e.g., VIJ in VIJFH)
+   datalayout (e.g., VIJ in VIJHF)
 """
 function partition end
 
@@ -46,25 +46,25 @@ bounds to ensure that the result of
 """
 function is_valid_index end
 
-##### VIJFH
-@inline function partition(data::DataLayouts.VIJFH, n_max_threads::Integer)
+##### VIJHF
+@inline function partition(data::DataLayouts.VIJHF, n_max_threads::Integer)
     (Nij, _, _, Nv, Nh) = DataLayouts.universal_size(data)
     Nv_thread = min(Int(fld(n_max_threads, Nij * Nij)), Nv)
     Nv_blocks = cld(Nv, Nv_thread)
     @assert prod((Nv_thread, Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Nij, Nij))),$n_max_threads)"
     return (; threads = (Nv_thread, Nij, Nij), blocks = (Nv_blocks, Nh))
 end
-@inline function universal_index(::DataLayouts.VIJFH)
+@inline function universal_index(::DataLayouts.VIJHF)
     (tv, i, j) = CUDA.threadIdx()
     (bv, h) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
     return CartesianIndex((i, j, 1, v, h))
 end
-@inline is_valid_index(::DataLayouts.VIJFH, I::CI5, us::UniversalSize) =
+@inline is_valid_index(::DataLayouts.VIJHF, I::CI5, us::UniversalSize) =
     1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
 
-##### IJFH
-@inline function partition(data::DataLayouts.IJFH, n_max_threads::Integer)
+##### IJHF
+@inline function partition(data::DataLayouts.IJHF, n_max_threads::Integer)
     (Nij, _, _, _, Nh) = DataLayouts.universal_size(data)
     Nh_thread = min(
         Int(fld(n_max_threads, Nij * Nij)),
@@ -75,30 +75,30 @@ end
     @assert prod((Nij, Nij)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nij, Nij))),$n_max_threads)"
     return (; threads = (Nij, Nij, Nh_thread), blocks = (Nh_blocks,))
 end
-@inline function universal_index(::DataLayouts.IJFH)
+@inline function universal_index(::DataLayouts.IJHF)
     (i, j, th) = CUDA.threadIdx()
     (bh,) = CUDA.blockIdx()
     h = th + (bh - 1) * CUDA.blockDim().z
     return CartesianIndex((i, j, 1, 1, h))
 end
-@inline is_valid_index(::DataLayouts.IJFH, I::CI5, us::UniversalSize) =
+@inline is_valid_index(::DataLayouts.IJHF, I::CI5, us::UniversalSize) =
     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
 
-##### IFH
-@inline function partition(data::DataLayouts.IFH, n_max_threads::Integer)
+##### IHF
+@inline function partition(data::DataLayouts.IHF, n_max_threads::Integer)
     (Ni, _, _, _, Nh) = DataLayouts.universal_size(data)
     Nh_thread = min(Int(fld(n_max_threads, Ni)), Nh)
     Nh_blocks = cld(Nh, Nh_thread)
     @assert prod((Ni, Nh_thread)) ≤ n_max_threads "threads,n_max_threads=($(prod((Ni, Nh_thread))),$n_max_threads)"
     return (; threads = (Ni, Nh_thread), blocks = (Nh_blocks,))
 end
-@inline function universal_index(::DataLayouts.IFH)
+@inline function universal_index(::DataLayouts.IHF)
     (i, th) = CUDA.threadIdx()
     (bh,) = CUDA.blockIdx()
     h = th + (bh - 1) * CUDA.blockDim().y
     return CartesianIndex((i, 1, 1, 1, h))
 end
-@inline is_valid_index(::DataLayouts.IFH, I::CI5, us::UniversalSize) =
+@inline is_valid_index(::DataLayouts.IHF, I::CI5, us::UniversalSize) =
     1 ≤ I[5] ≤ DataLayouts.get_Nh(us)
 
 ##### IJF
@@ -125,21 +125,21 @@ end
 end
 @inline is_valid_index(::DataLayouts.IF, I::CI5, us::UniversalSize) = true
 
-##### VIFH
-@inline function partition(data::DataLayouts.VIFH, n_max_threads::Integer)
+##### VIHF
+@inline function partition(data::DataLayouts.VIHF, n_max_threads::Integer)
     (Ni, _, _, Nv, Nh) = DataLayouts.universal_size(data)
     Nv_thread = min(Int(fld(n_max_threads, Ni)), Nv)
     Nv_blocks = cld(Nv, Nv_thread)
     @assert prod((Nv_thread, Ni)) ≤ n_max_threads "threads,n_max_threads=($(prod((Nv_thread, Ni))),$n_max_threads)"
     return (; threads = (Nv_thread, Ni), blocks = (Nv_blocks, Nh))
 end
-@inline function universal_index(::DataLayouts.VIFH)
+@inline function universal_index(::DataLayouts.VIHF)
     (tv, i) = CUDA.threadIdx()
     (bv, h) = CUDA.blockIdx()
     v = tv + (bv - 1) * CUDA.blockDim().x
     return CartesianIndex((i, 1, 1, v, h))
 end
-@inline is_valid_index(::DataLayouts.VIFH, I::CI5, us::UniversalSize) =
+@inline is_valid_index(::DataLayouts.VIHF, I::CI5, us::UniversalSize) =
     1 ≤ I[4] ≤ DataLayouts.get_Nv(us)
 
 ##### VF
