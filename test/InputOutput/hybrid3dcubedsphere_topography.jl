@@ -77,7 +77,7 @@ end
         ᶜlocal_geometry = Fields.local_geometry_field(center_space)
         ᶠlocal_geometry = Fields.local_geometry_field(face_space)
 
-        Y = Fields.FieldVector(c = ᶜlocal_geometry, f = ᶠlocal_geometry)
+        Y = Fields.FieldVector(; c = ᶜlocal_geometry, f = ᶠlocal_geometry)
 
         # write field vector to hdf5 file
         writer = InputOutput.HDF5Writer(filename, comms_ctx)

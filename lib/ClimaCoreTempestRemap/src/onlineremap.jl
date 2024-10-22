@@ -1,4 +1,5 @@
 using ClimaCore.DataLayouts
+using ClimaCore.DataLayouts: CartesianFieldIndex
 using ClimaComms
 
 
@@ -42,11 +43,9 @@ function remap!(
     R::LinearMap,
     source::IJFH{S, Nqs},
 ) where {S, Nqt, Nqs}
-    source_array = parent(source)
-    target_array = parent(target)
-
-    fill!(target_array, zero(eltype(target_array)))
-    Nf = size(target_array, 3)
+    fill!(target, zero(eltype(target)))
+    Nf = DataLayouts.ncomponents(target)
+    CI = CartesianFieldIndex
 
     # ideally we would use the tempestremap dgll (redundant node) representation
     # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
@@ -62,7 +61,7 @@ function remap!(
             view(R.target_local_idxs[3], n)[1],
         )
         for f in 1:Nf
-            target_array[it, jt, f, et] += wt * source_array[is, js, f, es]
+            target[CI(it, jt, f, 1, et)] += wt * source[CI(is, js, f, 1, es)]
         end
     end
 
@@ -91,11 +90,12 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
         @assert Spaces.topology(axes(source)).context isa
                 ClimaComms.SingletonCommsContext
 
-        target_array = parent(target)
-        source_array = parent(source)
+        CI = CartesianFieldIndex
+        target_values = Fields.field_values(target)
+        source_values = Fields.field_values(source)
 
-        fill!(target_array, zero(eltype(target_array)))
-        Nf = size(target_array, 3)
+        fill!(target, zero(eltype(target)))
+        Nf = DataLayouts.ncomponents(target)
 
         # ideally we would use the tempestremap dgll (redundant node) representation
         # unfortunately, this doesn't appear to work quite as well (for out_type = dgll) as the cgll
@@ -118,8 +118,9 @@ function remap!(target::Fields.Field, R::LinearMap, source::Fields.Field)
             # only use local weights - i.e. et, es != 0
             if (et != 0)
                 for f in 1:Nf
-                    target_array[it, jt, f, et] +=
-                        wt * source_array[is, js, f, es]
+                    ci_src = CI(is, js, f, 1, es)
+                    ci_tar = CI(it, jt, f, 1, et)
+                    target_values[ci_tar] += wt * source_values[ci_src]
                 end
             end
         end

@@ -1309,6 +1309,15 @@ type parameters.
 @inline to_data_specific(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], 1, I[5])
 @inline to_data_specific(::VIFHSingleton, I::Tuple) = (I[4], I[1], 1, I[5])
 
+@inline to_data_specific_field(::DataFSingleton, I::Tuple) = (I[3],)
+@inline to_data_specific_field(::VFSingleton, I::Tuple) = (I[4], I[3])
+@inline to_data_specific_field(::IFSingleton, I::Tuple) = (I[1], I[3])
+@inline to_data_specific_field(::IJFSingleton, I::Tuple) = (I[1], I[2], I[3])
+@inline to_data_specific_field(::IJFHSingleton, I::Tuple) = (I[1], I[2], I[3], I[5])
+@inline to_data_specific_field(::IFHSingleton, I::Tuple) = (I[1], I[3], I[5])
+@inline to_data_specific_field(::VIJFHSingleton, I::Tuple) = (I[4], I[1], I[2], I[3], I[5])
+@inline to_data_specific_field(::VIFHSingleton, I::Tuple) = (I[4], I[1], I[3], I[5])
+
 """
     bounds_condition(data::AbstractData, I::Tuple)
 
@@ -1482,6 +1491,71 @@ end
     )
 end
 
+"""
+    CartesianFieldIndex{N} <: Base.AbstractCartesianIndex{N}
+
+A CartesianIndex wrapper to dispatch `getindex` / `setindex!`
+to call [`getindex_field`](@ref) and [`setindex_field!`](@ref)
+for specific field variables in a datalayout.
+"""
+struct CartesianFieldIndex{N} <: Base.AbstractCartesianIndex{N}
+    CI::CartesianIndex{N}
+end
+CartesianFieldIndex(I...) = CartesianFieldIndex(CartesianIndex(I...))
+
+Base.ndims(::CartesianFieldIndex{N}) where {N} = N
+Base.@propagate_inbounds Base.getindex(
+    data::AbstractData,
+    CI::CartesianFieldIndex,
+) = getindex_field(data, CI.CI)
+Base.@propagate_inbounds Base.setindex!(
+    data::AbstractData,
+    val::Real,
+    CI::CartesianFieldIndex,
+) = setindex_field!(data, val, CI.CI)
+
+"""
+    getindex_field(data, ci::CartesianIndex{5})
+
+Returns the value of the data at universal index `ci`,
+for the specific field `f` in the `CartesianIndex`.
+
+The universal index order is `CartesianIndex(i, j, f, v, h)`, see
+see the notation in [`DataLayouts`](@ref) for more information.
+"""
+@inline function getindex_field(
+    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    I::CartesianIndex, # universal index
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds Base.getindex(
+        parent(data),
+        CartesianIndex(to_data_specific_field(singleton(data), I.I)),
+    )
+end
+
+"""
+    setindex_field!(data, val::Real, ci::CartesianIndex{5})
+
+Stores the value `val` of the data at universal index `ci`,
+for the specific field `f` in the `CartesianIndex`.
+
+The universal index order is `CartesianIndex(i, j, f, v, h)`, see
+see the notation in [`DataLayouts`](@ref) for more information.
+"""
+@inline function setindex_field!(
+    data::Union{DataF, IJF, IJFH, IFH, VIJFH, VIFH, VF, IF},
+    val::Real,
+    I::CartesianIndex, # universal index
+)
+    @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
+    @inbounds Base.setindex!(
+        parent(data),
+        val,
+        CartesianIndex(to_data_specific_field(singleton(data), I.I)),
+    )
+end
+
 if VERSION ≥ v"1.11.0-beta"
     ### --------------- Support for multi-dimensional indexing
     # TODO: can we remove this? It's not needed for Julia 1.10,
@@ -1578,6 +1652,18 @@ device_dispatch(x::MArray) = ToCPU()
 @inline singleton(@nospecialize(::VIFH)) = VIFHSingleton()
 @inline singleton(@nospecialize(::IH1JH2)) = IH1JH2Singleton()
 @inline singleton(@nospecialize(::IV1JH2)) = IV1JH2Singleton()
+
+@inline singleton(::Type{IJKFVH}) = IJKFVHSingleton()
+@inline singleton(::Type{IJFH}) = IJFHSingleton()
+@inline singleton(::Type{IFH}) = IFHSingleton()
+@inline singleton(::Type{DataF}) = DataFSingleton()
+@inline singleton(::Type{IJF}) = IJFSingleton()
+@inline singleton(::Type{IF}) = IFSingleton()
+@inline singleton(::Type{VF}) = VFSingleton()
+@inline singleton(::Type{VIJFH}) = VIJFHSingleton()
+@inline singleton(::Type{VIFH}) = VIFHSingleton()
+@inline singleton(::Type{IH1JH2}) = IH1JH2Singleton()
+@inline singleton(::Type{IV1JH2}) = IV1JH2Singleton()
 
 
 include("copyto.jl")

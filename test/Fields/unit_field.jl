@@ -57,9 +57,11 @@ end
     n1 = n2 = 1
     Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
+    device = ClimaComms.device(space)
+    ArrayType = ClimaComms.array_type(device)
 
-    field =
-        Fields.Field(IJFH{ComplexF64, Nij}(ones(Nij, Nij, 2, n1 * n2)), space)
+    data = IJFH{ComplexF64}(ArrayType{Float64}, ones; Nij, Nh = n1 * n2)
+    field = Fields.Field(data, space)
 
     @test sum(field) ≈ Complex(1.0, 1.0) * 8.0 * 10.0 rtol = 10eps()
     @test sum(x -> 3.0, field) ≈ 3 * 8.0 * 10.0 rtol = 10eps()
@@ -249,12 +251,15 @@ end
     Nh = n1 * n2
     space = spectral_space_2D(n1 = n1, n2 = n2, Nij = Nij)
 
-    nt_field = Fields.Field(
-        IJFH{NamedTuple{(:a, :b), Tuple{Float64, Float64}}, Nij}(
-            ones(Nij, Nij, 2, Nh),
-        ),
-        space,
-    )
+    S = NamedTuple{(:a, :b), Tuple{Float64, Float64}}
+    context = ClimaComms.context(space)
+    device = ClimaComms.device(context)
+    ArrayType = ClimaComms.array_type(device)
+    FT = Spaces.undertype(space)
+    data = IJFH{S}(ArrayType{FT}, ones; Nij, Nh)
+
+    nt_field = Fields.Field(data, space)
+
     nt_sum = sum(nt_field)
     @test nt_sum isa NamedTuple{(:a, :b), Tuple{Float64, Float64}}
     @test nt_sum.a ≈ 8.0 * 10.0 rtol = 10eps()

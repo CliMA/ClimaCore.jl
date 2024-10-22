@@ -269,17 +269,17 @@ function create_ghost_buffer(
     if data isa DataLayouts.IJFH
         send_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhsend)
         recv_data = DataLayouts.IJFH{S, Nij}(typeof(parent(data)), Nhrec)
-        k = stride(parent(send_data), 4)
     else
-        Nv, _, _, Nf, _ = DataLayouts.farray_size(data)
+        Nv = DataLayouts.nlevels(data)
+        Nf = DataLayouts.ncomponents(data)
         send_data = DataLayouts.VIJFH{S, Nv, Nij}(
             similar(parent(data), (Nv, Nij, Nij, Nf, Nhsend)),
         )
         recv_data = DataLayouts.VIJFH{S, Nv, Nij}(
             similar(parent(data), (Nv, Nij, Nij, Nf, Nhrec)),
         )
-        k = stride(parent(send_data), 5)
     end
+    k = stride(parent(send_data), DataLayouts.h_dim(data))
 
     graph_context = ClimaComms.graph_context(
         topology.context,

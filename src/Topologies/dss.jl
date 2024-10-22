@@ -1,4 +1,5 @@
 using DocStringExtensions
+using .DataLayouts: CartesianFieldIndex
 
 """
     DSSBuffer{G, D, A, B}
@@ -579,14 +580,14 @@ function fill_send_buffer!(
     (; perimeter_data, send_buf_idx, send_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
     Nf = DataLayouts.ncomponents(perimeter_data)
-    pdata = parent(perimeter_data)
     nsend = size(send_buf_idx, 1)
     ctr = 1
+    CI = CartesianFieldIndex
     @inbounds for i in 1:nsend
         lidx = send_buf_idx[i, 1]
         ip = send_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
-            send_data[ctr] = pdata[v, ip, f, lidx]
+            send_data[ctr] = perimeter_data[CI(ip, 1, f, v, lidx)]
             ctr += 1
         end
     end
@@ -608,14 +609,15 @@ function load_from_recv_buffer!(
     (; perimeter_data, recv_buf_idx, recv_data) = dss_buffer
     (Np, _, _, Nv, nelems) = size(perimeter_data)
     Nf = DataLayouts.ncomponents(perimeter_data)
-    pdata = parent(perimeter_data)
     nrecv = size(recv_buf_idx, 1)
     ctr = 1
+    CI = CartesianFieldIndex
     @inbounds for i in 1:nrecv
         lidx = recv_buf_idx[i, 1]
         ip = recv_buf_idx[i, 2]
         for f in 1:Nf, v in 1:Nv
-            pdata[v, ip, f, lidx] += recv_data[ctr]
+            ci = CI(ip, 1, f, v, lidx)
+            perimeter_data[ci] += recv_data[ctr]
             ctr += 1
         end
     end
