@@ -1905,7 +1905,7 @@ Base.ndims(::Type{T}) where {T <: AbstractData} =
 )
     @boundscheck bounds_condition(data, I) || throw(BoundsError(data, I))
     s = singleton(data)
-    @inbounds get_struct(
+    return get_struct(
         parent(data),
         eltype(data),
         Val(field_dim(s)),
@@ -2093,8 +2093,7 @@ else
         I::Integer,
     ) where {S}
         s_array = farray_size(data)
-        @inbounds s = get_struct_linear(parent(data), S, I, s_array)
-        return s
+        @inbounds get_struct_linear(parent(data), S, I, s_array)
     end
     @propagate_inbounds function Base.setindex!(
         data::EndsWithField{S},

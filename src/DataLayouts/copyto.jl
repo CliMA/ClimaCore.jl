@@ -1,8 +1,14 @@
 #####
 ##### Dispatching and edge cases
 #####
-import .Main.Infiltrator: @exfiltrate
 if VERSION ≥ v"1.11.0-beta"
+    # https://github.com/JuliaLang/julia/issues/56295
+    # Julia 1.11's Base.Broadcast currently requires
+    # multiple integer indexing, wheras Julia 1.10 did not.
+    # This means that we cannot reserve linear indexing to
+    # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
+    # (including the GPU-variant related issue resolution efforts:
+    # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
     function Base.copyto!(
         dest::AbstractData{S},
         bc::Union{AbstractData, Base.Broadcast.Broadcasted},
@@ -20,28 +26,9 @@ else
            dest isa EndsWithField &&
            !(dest isa DataF)
             # Specialize on linear indexing when possible:
-            # bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
-            bc′ = to_non_extruded_broadcasted(bc)
-            dest2 = copy(dest)
-            Base.copyto!(dest2, bc, device_dispatch(parent(dest)))
+            bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
             @inbounds @simd for I in 1:get_N(UniversalSize(dest))
                 dest[I] = convert(S, bc′[I])
-            end
-            if !(all(parent(dest2) .== parent(dest)))
-                @exfiltrate
-                println("--------- size(parent)")
-                @show size(parent(dest))
-                println("--------- S")
-                @show S
-                println("--------- N")
-                @show get_N(UniversalSize(dest))
-                println("--------- dest")
-                @show dest
-                println("--------- bc′")
-                @show bc′
-                println("--------- bc")
-                @show bc
-                error("bug found")
             end
         else
             Base.copyto!(dest, bc, device_dispatch(parent(dest)))

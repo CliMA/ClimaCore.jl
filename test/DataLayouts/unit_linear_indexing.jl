@@ -3,11 +3,20 @@ julia --check-bounds=yes --project
 using Revise; include(joinpath("test", "DataLayouts", "unit_linear_indexing.jl"))
 =#
 using Test
+using ClimaCore.Geometry: Covariant3Vector
 using ClimaCore.DataLayouts
 using ClimaCore.DataLayouts: get_struct_linear
 import ClimaCore.Geometry
 using StaticArrays
 import Random
+
+using IntervalSets, LinearAlgebra
+using ClimaComms
+ClimaComms.@import_required_backends
+import ClimaCore: Domains, Meshes, Topologies, Spaces, Fields, Operators
+import ClimaCore.DataLayouts: get_struct
+using LazyBroadcast: @lazy
+
 Random.seed!(1234)
 
 import ClimaCore.DataLayouts as DL
@@ -168,4 +177,39 @@ end
     )
 end
 
-# # TODO: add set_struct!
+@testset "get_struct - example" begin
+    FT = Float64
+    stretch_fn = Meshes.Uniform()
+    interval = Geometry.ZPoint(FT(0.0)) .. Geometry.ZPoint(FT(1.0))
+    domain = Domains.IntervalDomain(interval; boundary_names = (:left, :right))
+    mesh = Meshes.IntervalMesh(domain, stretch_fn, nelems = 5)
+    cs = Spaces.CenterFiniteDifferenceSpace(ClimaComms.device(), mesh)
+    fs = Spaces.FaceFiniteDifferenceSpace(cs)
+    faces = Fields.coordinate_field(fs)
+    lg_data = Spaces.local_geometry_data(axes(faces))
+    lg1 = lg_data[CartesianIndex(1, 1, 1, 1, 1)]
+    a = parent(lg_data)
+    S = eltype(lg_data)
+    ss = size(a)
+    @test get_struct_linear(a, S, 1, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(1, 1))
+    @test get_struct_linear(a, S, 2, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(2, 1))
+    @test get_struct_linear(a, S, 3, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(3, 1))
+    @test get_struct_linear(a, S, 4, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(4, 1))
+    @test get_struct_linear(a, S, 5, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(5, 1))
+    @test get_struct_linear(a, S, 6, ss) ==
+          get_struct(a, S, Val(2), CartesianIndex(6, 1))
+    @test_throws BoundsError debug_get_struct_linear(
+        a,
+        S,
+        7,
+        ss;
+        expect_test_throws = true,
+    )
+end
+
+# TODO: add set_struct!

@@ -97,7 +97,10 @@ Base.@propagate_inbounds _broadcast_getindex(A::Tuple{Any}, I::Integer) = A[1]
 Base.@propagate_inbounds _broadcast_getindex(A::Tuple, I::Integer) = A[I[1]]
 # Everything else falls back to dynamically dropping broadcasted indices based upon its axes
 # Base.@propagate_inbounds _broadcast_getindex(A, I) = A[newindex(A, I)]
-Base.@propagate_inbounds _broadcast_getindex(A, I::Integer) = A[I]
+# Base.@propagate_inbounds _broadcast_getindex(A, I::Integer) = A[I]
+Base.@propagate_inbounds function _broadcast_getindex(A, I::Integer)
+    A[I]
+end
 Base.@propagate_inbounds function _broadcast_getindex(
     bc::NonExtrudedBroadcasted{<:Any, <:Any, <:Any, <:Any},
     I::Integer,

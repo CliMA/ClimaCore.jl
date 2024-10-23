@@ -2,12 +2,27 @@
 ##### Linear indexing
 #####
 
+"""
+    offset_index_linear(
+        start_index::Integer,
+        field_offset,
+        array_size,
+    )
+
+Compute the linear offset from a starting index,
+the field offset, and the array size.
+
+This can be done more efficiently if the array
+size is statically known, but we currently
+do no store `Nh` in the type space.
+"""
 @inline function offset_index_linear(
-    base_index::Integer,
+    start_index::Integer,
     field_offset,
     array_size,
 )
-    return @inbounds base_index + prod(array_size[1:(end - 1)]) * field_offset
+    # Assumes that the field index is _last_:
+    return @inbounds start_index + prod(array_size[1:(end - 1)]) * field_offset
 end
 
 Base.@propagate_inbounds @generated function get_struct_linear(
@@ -15,7 +30,6 @@ Base.@propagate_inbounds @generated function get_struct_linear(
     ::Type{S},
     start_index::Integer,
     array_size,
-    base_index = start_index,
 ) where {T, S}
     tup = :(())
     for i in 1:fieldcount(S)
@@ -25,12 +39,11 @@ Base.@propagate_inbounds @generated function get_struct_linear(
                 array,
                 fieldtype(S, $i),
                 offset_index_linear(
-                    base_index,
+                    start_index,
                     $(fieldtypeoffset(T, S, Val(i))),
                     array_size,
                 ),
                 array_size,
-                base_index,
             )),
         )
     end
@@ -46,7 +59,6 @@ Base.@propagate_inbounds function get_struct_linear(
     ::Type{S},
     start_index::Integer,
     array_size,
-    base_index = start_index,
 ) where {S}
     @inbounds return array[start_index]
 end
@@ -61,7 +73,6 @@ Base.@propagate_inbounds @generated function set_struct_linear!(
     val::S,
     start_index::Integer,
     array_size,
-    base_index = start_index,
 ) where {T, S}
     ex = quote
         Base.@_propagate_inbounds_meta
@@ -73,12 +84,11 @@ Base.@propagate_inbounds @generated function set_struct_linear!(
                 array,
                 getfield(val, $i),
                 offset_index_linear(
-                    base_index,
+                    start_index,
                     $(fieldtypeoffset(T, S, Val(i))),
                     array_size,
                 ),
                 array_size,
-                base_index,
             )),
         )
     end
@@ -91,7 +101,6 @@ Base.@propagate_inbounds function set_struct_linear!(
     val::S,
     start_index::Integer,
     array_size,
-    base_index = start_index,
 ) where {S}
     @inbounds array[start_index] = val
     val
