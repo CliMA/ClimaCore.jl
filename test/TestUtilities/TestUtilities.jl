@@ -11,14 +11,15 @@ module TestUtilities
 
 using IntervalSets
 import ClimaComms
-import ClimaCore.Fields as Fields
-import ClimaCore.Utilities as Utilities
+import ClimaCore.Fields
+import ClimaCore.DataLayouts
+import ClimaCore.Utilities
 import ClimaCore.Quadratures
-import ClimaCore.Geometry as Geometry
-import ClimaCore.Meshes as Meshes
-import ClimaCore.Spaces as Spaces
-import ClimaCore.Topologies as Topologies
-import ClimaCore.Domains as Domains
+import ClimaCore.Geometry
+import ClimaCore.Meshes
+import ClimaCore.Spaces
+import ClimaCore.Topologies
+import ClimaCore.Domains
 
 function PointSpace(
     ::Type{FT};
