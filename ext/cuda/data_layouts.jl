@@ -33,6 +33,17 @@ include("data_layouts_fused_copyto.jl")
 include("data_layouts_mapreduce.jl")
 include("data_layouts_threadblock.jl")
 
+function Adapt.adapt_structure(
+    to::CUDA.KernelAdaptor,
+    bc::DataLayouts.NonExtrudedBroadcasted{Style},
+) where {Style}
+    DataLayouts.NonExtrudedBroadcasted{Style}(
+        Adapt.adapt_f(to, bc.f),
+        Adapt.adapt(to, bc.args),
+        Adapt.adapt(to, bc.axes),
+    )
+end
+
 adapt_f(to, f::F) where {F} = Adapt.adapt(to, f)
 adapt_f(to, ::Type{F}) where {F} = (x...) -> F(x...)
 

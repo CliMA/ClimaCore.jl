@@ -241,5 +241,8 @@ end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
-    postprocessing(sol, output_dir)
+    # https://github.com/CliMA/ClimaCore.jl/issues/2058
+    if !(Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF)
+        postprocessing(sol, output_dir)
+    end
 end
