@@ -1,10 +1,13 @@
 function Base.fill!(dest::AbstractData, val)
-    if !(VERSION ≥ v"1.11.0-beta") && dest isa EndsWithField
+    dev = device_dispatch(parent(dest))
+    if !(VERSION ≥ v"1.11.0-beta") &&
+       dest isa EndsWithField &&
+       dev isa ClimaComms.AbstractCPUDevice
         @inbounds @simd for I in 1:get_N(UniversalSize(dest))
             dest[I] = val
         end
     else
-        Base.fill!(dest, val, device_dispatch(parent(dest)))
+        Base.fill!(dest, val, dev)
     end
 end
 

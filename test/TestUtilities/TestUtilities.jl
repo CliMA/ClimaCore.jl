@@ -109,6 +109,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     context = ClimaComms.SingletonCommsContext(),
     helem = 4,
     Nq = 4,
+    HorizontalLayout = DataLayouts.IJFH,
 ) where {FT}
     radius = FT(128)
     zlim = (0, 1)
@@ -125,7 +126,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{Nq}()
-    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+    hspace = Spaces.SpectralElementSpace2D(htopology, quad; HorizontalLayout)
     return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 end
 

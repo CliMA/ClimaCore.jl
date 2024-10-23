@@ -16,12 +16,20 @@ include("benchmark_stencils_utils.jl")
 
     bm = Benchmark(;float_type = Float64, device_name)
     # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
-    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4)
+    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, HorizontalLayout = DataLayouts.IJFH)
+    test_results_sphere(t_min)
+
+    bm = Benchmark(;float_type = Float64, device_name)
+    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, HorizontalLayout = DataLayouts.IJHF)
     test_results_sphere(t_min)
 
     bm = Benchmark(;float_type = Float32, device_name)
     # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
-    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4)
+    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, HorizontalLayout = DataLayouts.IJFH)
+
+    bm = Benchmark(;float_type = Float32, device_name)
+    # benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, compile = true)
+    (;t_min) = benchmark_operators_sphere(bm; z_elems = 63, helem = 30, Nq = 4, HorizontalLayout = DataLayouts.IJHF)
 end
 #! format: on
 
