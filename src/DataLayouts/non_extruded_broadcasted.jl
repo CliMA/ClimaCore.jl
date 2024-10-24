@@ -83,7 +83,12 @@ end
 # Base.Broadcast.Broadcasted and allow cartesian indexing:
 Base.@propagate_inbounds Base.getindex(bc::NonExtrudedBroadcasted) = to_broadcasted(bc)[CartesianIndex(())]
 
-n_dofs(bc::NonExtrudedBroadcasted) = prod(length, axes(bc); init = 0)
+import StaticArrays
+to_tuple(::Tuple{}) = ()
+to_tuple(t::Tuple) = t
+to_tuple(t::NTuple{N, <: Base.OneTo}) where {N} = map(x->x.stop, t)
+to_tuple(t::NTuple{N, <: StaticArrays.SOneTo}) where {N} = map(x->x.stop, t)
+n_dofs(bc::NonExtrudedBroadcasted) = prod(to_tuple(axes(bc)))
 # ---
 
 Base.@propagate_inbounds _broadcast_getindex(
