@@ -45,7 +45,7 @@ end
         zelem = 63,
         helem = 30,
         Nq = 4,
-        HorizontalLayout = DataLayouts.IJHF,
+        horizontal_layout_type = DataLayouts.IJHF,
         context = ClimaComms.context(device),
     )
     X = Fields.FieldVector(

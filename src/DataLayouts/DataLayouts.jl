@@ -32,6 +32,34 @@ Notation:
 Data layout is specified by the order in which they appear, e.g. `IJKFVH`
 indexes the underlying array as `[i,j,k,f,v,h]`
 
+
+## Datalayouts that end with the field index
+
+One of the fundamental features of datalayouts is to be able to
+store multiple variables in the same array, and then access
+those variables by name. As such, occasionally must index into
+multiple variables when performing operations with a datalayout.
+
+We can efficiently support linear indexing with datalayouts
+whose field index (`f`) is first or last. This is for the same reason
+as https://docs.julialang.org/en/v1/devdocs/subarrays/#Linear-indexing:
+
+    Linear indexing can be implemented efficiently when the entire array
+    has a single stride that separates successive elements, starting from
+    some offset.
+
+As such, we provide special handling for these datalayouts where possible
+to leverage efficient linear indexing.
+
+Here are some references containing relevant discussions and efforts to
+leverage efficient linear indexing:
+ - https://github.com/CliMA/ClimaCore.jl/issues/1889
+ - https://github.com/JuliaLang/julia/issues/28126
+ - https://github.com/JuliaLang/julia/issues/32051
+ - https://github.com/maleadt/StaticCartesian.jl
+ - https://github.com/JuliaGPU/GPUArrays.jl/pull/454#issuecomment-1431575721
+ - https://github.com/JuliaGPU/GPUArrays.jl/pull/520
+ - https://github.com/JuliaGPU/GPUArrays.jl/pull/464
 """
 module DataLayouts
 

@@ -30,33 +30,33 @@ local_geometry_type(
 function SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle;
-    HorizontalLayout = DataLayouts.IFH,
+    horizontal_layout_type = DataLayouts.IFH,
 )
     get!(
         Cache.OBJECT_CACHE,
         (SpectralElementGrid1D, topology, quadrature_style),
     ) do
-        _SpectralElementGrid1D(topology, quadrature_style, HorizontalLayout)
+        _SpectralElementGrid1D(topology, quadrature_style, horizontal_layout_type)
     end
 end
 
 _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
-    HorizontalLayout = DataLayouts.IFH,
+    horizontal_layout_type = DataLayouts.IFH,
 ) = _SpectralElementGrid1D(
     topology,
     quadrature_style,
     Val(Topologies.nlocalelems(topology)),
-    HorizontalLayout,
+    horizontal_layout_type,
 )
 
 function _SpectralElementGrid1D(
     topology::Topologies.IntervalTopology,
     quadrature_style::Quadratures.QuadratureStyle,
     ::Val{Nh},
-    ::Type{HorizontalLayout},
-) where {Nh, HorizontalLayout}
+    ::Type{horizontal_layout_type},
+) where {Nh, horizontal_layout_type}
     global_geometry = Geometry.CartesianGlobalGeometry()
     CoordType = Topologies.coordinate_type(topology)
     AIdx = Geometry.coordinate_axis(CoordType)
@@ -64,7 +64,7 @@ function _SpectralElementGrid1D(
     Nq = Quadratures.degrees_of_freedom(quadrature_style)
 
     LG = Geometry.LocalGeometry{AIdx, CoordType, FT, SMatrix{1, 1, FT, 1}}
-    local_geometry = HorizontalLayout{LG, Nq}(Array{FT}, Nh)
+    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)
 
@@ -141,7 +141,7 @@ local_geometry_type(
 ) where {T, Q, GG, LG, D, IS, BS} = eltype(LG) # calls eltype from DataLayouts
 
 """
-    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, HorizontalLayout = DataLayouts.IJFH)
+    SpectralElementSpace2D(topology, quadrature_style; enable_bubble, horizontal_layout_type = DataLayouts.IJFH)
 
 Construct a `SpectralElementSpace2D` instance given a `topology` and `quadrature`. The
 flag `enable_bubble` enables the `bubble correction` for more accurate element areas.
@@ -150,7 +150,7 @@ flag `enable_bubble` enables the `bubble correction` for more accurate element a
 - topology: Topology2D
 - quadrature_style: QuadratureStyle
 - enable_bubble: Bool
-- HorizontalLayout: Type{<:AbstractData}
+- horizontal_layout_type: Type{<:AbstractData}
 
 The idea behind the so-called `bubble_correction` is that the numerical area
 of the domain (e.g., the sphere) is given by the sum of nodal integration weights
@@ -176,7 +176,7 @@ Note: This is accurate only for cubed-spheres of the [`Meshes.EquiangularCubedSp
 function SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle;
-    HorizontalLayout = DataLayouts.IJFH,
+    horizontal_layout_type = DataLayouts.IJFH,
     enable_bubble::Bool = false,
 )
     get!(
@@ -186,13 +186,13 @@ function SpectralElementGrid2D(
             topology,
             quadrature_style,
             enable_bubble,
-            HorizontalLayout,
+            horizontal_layout_type,
         ),
     ) do
         _SpectralElementGrid2D(
             topology,
             quadrature_style,
-            HorizontalLayout;
+            horizontal_layout_type;
             enable_bubble,
         )
     end
@@ -211,13 +211,13 @@ end
 _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle,
-    HorizontalLayout = DataLayouts.IJFH;
+    horizontal_layout_type = DataLayouts.IJFH;
     enable_bubble::Bool,
 ) = _SpectralElementGrid2D(
     topology,
     quadrature_style,
     Val(Topologies.nlocalelems(topology)),
-    HorizontalLayout;
+    horizontal_layout_type;
     enable_bubble,
 )
 
@@ -225,13 +225,13 @@ function _SpectralElementGrid2D(
     topology::Topologies.Topology2D,
     quadrature_style::Quadratures.QuadratureStyle,
     ::Val{Nh},
-    ::Type{HorizontalLayout};
+    ::Type{horizontal_layout_type};
     enable_bubble::Bool,
-) where {Nh, HorizontalLayout}
-    @assert HorizontalLayout <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
-    SurfaceLayout = if HorizontalLayout <: DataLayouts.IJFH
+) where {Nh, horizontal_layout_type}
+    @assert horizontal_layout_type <: Union{DataLayouts.IJHF, DataLayouts.IJFH}
+    SurfaceLayout = if horizontal_layout_type <: DataLayouts.IJFH
         DataLayouts.IFH
-    elseif HorizontalLayout <: DataLayouts.IJHF
+    elseif horizontal_layout_type <: DataLayouts.IJHF
         DataLayouts.IHF
     else
         error("Uncaught case")
@@ -268,7 +268,7 @@ function _SpectralElementGrid2D(
 
     LG = Geometry.LocalGeometry{AIdx, CoordType2D, FT, SMatrix{2, 2, FT, 4}}
 
-    local_geometry = HorizontalLayout{LG, Nq}(Array{FT}, Nh)
+    local_geometry = horizontal_layout_type{LG, Nq}(Array{FT}, Nh)
 
     quad_points, quad_weights =
         Quadratures.quadrature_points(FT, quadrature_style)

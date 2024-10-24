@@ -1612,7 +1612,7 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
           FLOAT_TYPE: "Float32"
-          HorizontalLayout: "IJHF"
+          horizontal_layout_type: "IJHF"
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
           slurm_gpus: 1
@@ -1895,7 +1895,7 @@ steps:
         env:
           TEST_NAME: "sphere/baroclinic_wave_rhoe_hf"
           FLOAT_TYPE: "Float64"
-          HorizontalLayout: "IJHF"
+          horizontal_layout_type: "IJHF"
 
       - label: ":computer: 3D sphere baroclinic wave (ρe)"
         key: "cpu_baroclinic_wave_rho_e"

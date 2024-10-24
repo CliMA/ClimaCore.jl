@@ -878,7 +878,7 @@ end
     hspace = Spaces.SpectralElementSpace2D(
         htopology,
         quad;
-        HorizontalLayout = DataLayouts.IJHF,
+        horizontal_layout_type = DataLayouts.IJHF,
     )
     cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 

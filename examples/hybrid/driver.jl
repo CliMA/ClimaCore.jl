@@ -92,15 +92,15 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    HorizontalLayouts = Dict()
-    HorizontalLayouts["IJFH"] = DataLayouts.IJFH
-    HorizontalLayouts["IJHF"] = DataLayouts.IJHF
-    HorizontalLayout = HorizontalLayouts[get(ENV, "HorizontalLayout", "IJFH")]
+    horizontal_layout_types = Dict()
+    horizontal_layout_types["IJFH"] = DataLayouts.IJFH
+    horizontal_layout_types["IJHF"] = DataLayouts.IJHF
+    horizontal_layout_type = horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
     h_space = make_horizontal_space(
         horizontal_mesh,
         npoly,
         comms_ctx,
-        HorizontalLayout,
+        horizontal_layout_type,
     )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
