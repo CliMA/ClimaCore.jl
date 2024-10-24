@@ -12,6 +12,7 @@ using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
+import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: IJFH
 import ClimaCore:
     Fields,
@@ -850,6 +851,39 @@ end
         nothing
     end
     nothing
+end
+
+@testset "HF fields" begin
+    FT = Float32
+    device = ClimaComms.device()
+    context = ClimaComms.context(device)
+    radius = FT(128)
+    zelem = 63
+    zlim = (0, 1)
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(zlim[1]),
+        Geometry.ZPoint{FT}(zlim[2]);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain, nelems = zelem)
+    vtopology = Topologies.IntervalTopology(context, vertmesh)
+    vspace = Spaces.CenterFiniteDifferenceSpace(vtopology)
+
+    hdomain = Domains.SphereDomain(radius)
+    helem = 4
+    hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
+    htopology = Topologies.Topology2D(context, hmesh)
+    Nq = 4
+    quad = Quadratures.GLL{Nq}()
+    hspace = Spaces.SpectralElementSpace2D(
+        htopology,
+        quad;
+        horizontal_layout_type = DataLayouts.IJHF,
+    )
+    cspace = Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
+
+    f = fill(FT(0), cspace)
+    @. f += 1
 end
 
 include("unit_field_multi_broadcast_fusion.jl")

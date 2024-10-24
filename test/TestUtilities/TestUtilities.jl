@@ -11,14 +11,15 @@ module TestUtilities
 
 using IntervalSets
 import ClimaComms
-import ClimaCore.Fields as Fields
-import ClimaCore.Utilities as Utilities
+import ClimaCore.Fields
+import ClimaCore.DataLayouts
+import ClimaCore.Utilities
 import ClimaCore.Quadratures
-import ClimaCore.Geometry as Geometry
-import ClimaCore.Meshes as Meshes
-import ClimaCore.Spaces as Spaces
-import ClimaCore.Topologies as Topologies
-import ClimaCore.Domains as Domains
+import ClimaCore.Geometry
+import ClimaCore.Meshes
+import ClimaCore.Spaces
+import ClimaCore.Topologies
+import ClimaCore.Domains
 
 function PointSpace(
     ::Type{FT};
@@ -109,6 +110,7 @@ function CenterExtrudedFiniteDifferenceSpace(
     context = ClimaComms.SingletonCommsContext(),
     helem = 4,
     Nq = 4,
+    horizontal_layout_type = DataLayouts.IJFH,
 ) where {FT}
     radius = FT(128)
     zlim = (0, 1)
@@ -125,7 +127,8 @@ function CenterExtrudedFiniteDifferenceSpace(
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{Nq}()
-    hspace = Spaces.SpectralElementSpace2D(htopology, quad)
+    hspace =
+        Spaces.SpectralElementSpace2D(htopology, quad; horizontal_layout_type)
     return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 end
 

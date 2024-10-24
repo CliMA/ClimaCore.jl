@@ -29,16 +29,28 @@ ClimaComms.@import_required_backends
     data = IFH{S}(ArrayType{FT}, zeros; Ni, Nh)
     @test ndims(data) == 3
     @test ndims(typeof(data)) == 3
+    data = IHF{S}(ArrayType{FT}, zeros; Ni, Nh)
+    @test ndims(data) == 3
+    @test ndims(typeof(data)) == 3
     data = IJF{S}(ArrayType{FT}, zeros; Nij)
     @test ndims(data) == 3
     @test ndims(typeof(data)) == 3
     data = IJFH{S}(ArrayType{FT}, zeros; Nij, Nh)
     @test ndims(data) == 4
     @test ndims(typeof(data)) == 4
+    data = IJHF{S}(ArrayType{FT}, zeros; Nij, Nh)
+    @test ndims(data) == 4
+    @test ndims(typeof(data)) == 4
     data = VIFH{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
     @test ndims(data) == 4
     @test ndims(typeof(data)) == 4
+    data = VIHF{S}(ArrayType{FT}, zeros; Nv, Ni, Nh)
+    @test ndims(data) == 4
+    @test ndims(typeof(data)) == 4
     data = VIJFH{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
+    @test ndims(data) == 5
+    @test ndims(typeof(data)) == 5
+    data = VIJHF{S}(ArrayType{FT}, zeros; Nv, Nij, Nh)
     @test ndims(data) == 5
     @test ndims(typeof(data)) == 5
     data = DataLayouts.IJKFVH{S}(ArrayType{FT}, zeros; Nij, Nk, Nv, Nh)

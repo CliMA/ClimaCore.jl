@@ -1,11 +1,41 @@
 #####
 ##### Dispatching and edge cases
 #####
-
-Base.copyto!(
-    dest::AbstractData,
-    @nospecialize(bc::Union{AbstractData, Base.Broadcast.Broadcasted}),
-) = Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+if VERSION ≥ v"1.11.0-beta"
+    # https://github.com/JuliaLang/julia/issues/56295
+    # Julia 1.11's Base.Broadcast currently requires
+    # multiple integer indexing, wheras Julia 1.10 did not.
+    # This means that we cannot reserve linear indexing to
+    # special-case fixes for https://github.com/JuliaLang/julia/issues/28126
+    # (including the GPU-variant related issue resolution efforts:
+    # JuliaGPU/GPUArrays.jl#454, JuliaGPU/GPUArrays.jl#464).
+    function Base.copyto!(
+        dest::AbstractData{S},
+        bc::Union{AbstractData, Base.Broadcast.Broadcasted},
+    ) where {S}
+        return Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+    end
+else
+    function Base.copyto!(
+        dest::AbstractData{S},
+        bc::Union{AbstractData, Base.Broadcast.Broadcasted},
+    ) where {S}
+        dev = device_dispatch(parent(dest))
+        if dev isa ToCPU &&
+           has_uniform_datalayouts(bc) &&
+           dest isa EndsWithField &&
+           !(dest isa DataF)
+            # Specialize on linear indexing when possible:
+            bc′ = Base.Broadcast.instantiate(to_non_extruded_broadcasted(bc))
+            @inbounds @simd for I in 1:get_N(UniversalSize(dest))
+                dest[I] = convert(S, bc′[I])
+            end
+        else
+            Base.copyto!(dest, bc, device_dispatch(parent(dest)))
+        end
+        return dest
+    end
+end
 
 # Specialize on non-Broadcasted objects
 function Base.copyto!(dest::D, src::D) where {D <: AbstractData}
@@ -44,8 +74,8 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::IJFH{S, Nij},
-    bc::BroadcastedUnionIJFH{S, Nij},
+    dest::Union{IJFH{S, Nij}, IJHF{S, Nij}},
+    bc::Union{BroadcastedUnionIJFH{S, Nij}, BroadcastedUnionIJHF{S, Nij}},
     ::ToCPU,
 ) where {S, Nij}
     (_, _, _, _, Nh) = size(dest)
@@ -57,8 +87,8 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::IFH{S, Ni},
-    bc::BroadcastedUnionIFH{S, Ni},
+    dest::Union{IFH{S, Ni}, IHF{S, Ni}},
+    bc::Union{BroadcastedUnionIFH{S, Ni}, BroadcastedUnionIHF{S, Ni}},
     ::ToCPU,
 ) where {S, Ni}
     (_, _, _, _, Nh) = size(dest)
@@ -121,8 +151,8 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::VIFH{S, Nv, Ni},
-    bc::BroadcastedUnionVIFH{S, Nv, Ni},
+    dest::Union{VIFH{S, Nv, Ni}, VIHF{S, Nv, Ni}},
+    bc::Union{BroadcastedUnionVIFH{S, Nv, Ni}, BroadcastedUnionVIHF{S, Nv, Ni}},
     ::ToCPU,
 ) where {S, Nv, Ni}
     # copy contiguous columns
@@ -135,8 +165,11 @@ function Base.copyto!(
 end
 
 function Base.copyto!(
-    dest::VIJFH{S, Nv, Nij},
-    bc::BroadcastedUnionVIJFH{S, Nv, Nij},
+    dest::Union{VIJFH{S, Nv, Nij}, VIJHF{S, Nv, Nij}},
+    bc::Union{
+        BroadcastedUnionVIJFH{S, Nv, Nij},
+        BroadcastedUnionVIJHF{S, Nv, Nij},
+    },
     ::ToCPU,
 ) where {S, Nv, Nij}
     # copy contiguous columns
