@@ -95,7 +95,8 @@ else
     horizontal_layout_types = Dict()
     horizontal_layout_types["IJFH"] = DataLayouts.IJFH
     horizontal_layout_types["IJHF"] = DataLayouts.IJHF
-    horizontal_layout_type = horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
+    horizontal_layout_type =
+        horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
     h_space = make_horizontal_space(
         horizontal_mesh,
         npoly,

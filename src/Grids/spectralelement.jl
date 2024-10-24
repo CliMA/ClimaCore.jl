@@ -36,7 +36,11 @@ function SpectralElementGrid1D(
         Cache.OBJECT_CACHE,
         (SpectralElementGrid1D, topology, quadrature_style),
     ) do
-        _SpectralElementGrid1D(topology, quadrature_style, horizontal_layout_type)
+        _SpectralElementGrid1D(
+            topology,
+            quadrature_style,
+            horizontal_layout_type,
+        )
     end
 end
 

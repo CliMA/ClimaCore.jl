@@ -127,7 +127,8 @@ function CenterExtrudedFiniteDifferenceSpace(
     hmesh = Meshes.EquiangularCubedSphere(hdomain, helem)
     htopology = Topologies.Topology2D(context, hmesh)
     quad = Quadratures.GLL{Nq}()
-    hspace = Spaces.SpectralElementSpace2D(htopology, quad; horizontal_layout_type)
+    hspace =
+        Spaces.SpectralElementSpace2D(htopology, quad; horizontal_layout_type)
     return Spaces.ExtrudedFiniteDifferenceSpace(hspace, vspace)
 end
 
