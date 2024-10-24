@@ -97,6 +97,32 @@ end
     nothing
 end
 
+@testset "FusedMultiBroadcast VIJHF and VF" begin
+    FT = Float64
+    device = ClimaComms.device()
+    space = TU.CenterExtrudedFiniteDifferenceSpace(
+        FT;
+        zelem = 3,
+        helem = 4,
+        context = ClimaComms.context(device),
+        HorizontalLayout = DataLayouts.IJHF,
+    )
+    X = Fields.FieldVector(
+        x1 = rand_field(FT, space),
+        x2 = rand_field(FT, space),
+        x3 = rand_field(FT, space),
+    )
+    Y = Fields.FieldVector(
+        y1 = rand_field(FT, space),
+        y2 = rand_field(FT, space),
+        y3 = rand_field(FT, space),
+    )
+    test_kernel!(; fused!, unfused!, X, Y)
+    test_kernel!(; fused! = fused_bycolumn!, unfused! = unfused_bycolumn!, X, Y)
+
+    nothing
+end
+
 @testset "FusedMultiBroadcast VIFH" begin
     FT = Float64
     device = ClimaComms.device()

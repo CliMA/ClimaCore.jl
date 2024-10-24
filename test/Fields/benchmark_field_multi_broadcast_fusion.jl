@@ -37,6 +37,34 @@ include("utils_field_multi_broadcast_fusion.jl")
     nothing
 end
 
+@testset "FusedMultiBroadcast VIJHF" begin
+    FT = Float64
+    device = ClimaComms.device()
+    space = TU.CenterExtrudedFiniteDifferenceSpace(
+        FT;
+        zelem = 63,
+        helem = 30,
+        Nq = 4,
+        HorizontalLayout = DataLayouts.IJHF,
+        context = ClimaComms.context(device),
+    )
+    X = Fields.FieldVector(
+        x1 = rand_field(FT, space),
+        x2 = rand_field(FT, space),
+        x3 = rand_field(FT, space),
+    )
+    Y = Fields.FieldVector(
+        y1 = rand_field(FT, space),
+        y2 = rand_field(FT, space),
+        y3 = rand_field(FT, space),
+    )
+    test_kernel!(; fused!, unfused!, X, Y)
+
+    benchmark_kernel!(unfused!, X, Y, device)
+    benchmark_kernel!(fused!, X, Y, device)
+    nothing
+end
+
 @testset "FusedMultiBroadcast VIFH" begin
     FT = Float64
     device = ClimaComms.device()

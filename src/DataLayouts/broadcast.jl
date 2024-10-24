@@ -538,4 +538,10 @@ isascalar(
     Style <:
     Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
 } = true
+isascalar(
+    bc::NonExtrudedBroadcasted{Style},
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+} = true
 isascalar(bc) = false

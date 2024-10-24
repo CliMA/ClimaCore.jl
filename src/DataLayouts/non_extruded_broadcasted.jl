@@ -48,6 +48,8 @@ struct NonExtrudedBroadcasted{
     end
 end
 
+@inline to_broadcasted(bc::NonExtrudedBroadcasted) =
+    Base.Broadcast.Broadcasted(bc.style, bc.f, bc.args, bc.axes)
 @inline to_non_extruded_broadcasted(bc::Base.Broadcast.Broadcasted) =
     NonExtrudedBroadcasted(bc.style, bc.f, to_non_extruded_broadcasted_args(bc.args), bc.axes)
 @inline to_non_extruded_broadcasted(x) = x
@@ -77,7 +79,12 @@ end
     Base.checkbounds_indices(Bool, (Base.OneTo(n_dofs(bc)),), (I,)) || Base.throw_boundserror(bc, (I,))
 end
 
+# To handle scalar cases, let's just switch back to
+# Base.Broadcast.Broadcasted and allow cartesian indexing:
+Base.@propagate_inbounds Base.getindex(bc::NonExtrudedBroadcasted) = to_broadcasted(bc)[CartesianIndex(())]
+
 import StaticArrays
+to_tuple(::Tuple{}) = ()
 to_tuple(t::Tuple) = t
 to_tuple(t::NTuple{N, <: Base.OneTo}) where {N} = map(x->x.stop, t)
 to_tuple(t::NTuple{N, <: StaticArrays.SOneTo}) where {N} = map(x->x.stop, t)

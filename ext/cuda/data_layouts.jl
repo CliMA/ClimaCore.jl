@@ -51,19 +51,9 @@ function Adapt.adapt_structure(
     to::CUDA.KernelAdaptor,
     fmbc::FusedMultiBroadcast,
 )
-    FusedMultiBroadcast(
-        map(fmbc.pairs) do pair
-            dest = pair.first
-            bc = pair.second
-            Pair(
-                Adapt.adapt(to, dest),
-                Base.Broadcast.Broadcasted(
-                    bc.style,
-                    adapt_f(to, bc.f),
-                    Adapt.adapt(to, bc.args),
-                    Adapt.adapt(to, bc.axes),
-                ),
-            )
-        end,
-    )
+    FusedMultiBroadcast(map(fmbc.pairs) do pair
+        dest = pair.first
+        bc = pair.second
+        Pair(Adapt.adapt(to, dest), Adapt.adapt(to, bc))
+    end)
 end

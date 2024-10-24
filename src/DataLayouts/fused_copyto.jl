@@ -1,4 +1,30 @@
 
+Base.@propagate_inbounds function rcopyto_at_linear!(
+    pair::Pair{<:AbstractData, <:Any},
+    I,
+)
+    dest, bc = pair.first, pair.second
+    bcI = isascalar(bc) ? bc[] : bc[I]
+    dest[I] = bcI
+    return nothing
+end
+Base.@propagate_inbounds function rcopyto_at_linear!(
+    pair::Pair{<:DataF, <:Any},
+    I,
+)
+    dest, bc = pair.first, pair.second
+    bcI = isascalar(bc) ? bc[] : bc[I]
+    dest[] = bcI
+    return nothing
+end
+Base.@propagate_inbounds function rcopyto_at_linear!(pairs::Tuple, I)
+    rcopyto_at_linear!(first(pairs), I)
+    rcopyto_at_linear!(Base.tail(pairs), I)
+end
+Base.@propagate_inbounds rcopyto_at_linear!(pairs::Tuple{<:Any}, I) =
+    rcopyto_at_linear!(first(pairs), I)
+@inline rcopyto_at_linear!(pairs::Tuple{}, I) = nothing
+
 # Fused multi-broadcast entry point for DataLayouts
 function Base.copyto!(
     fmbc::FusedMultiBroadcast{T},
@@ -18,7 +44,27 @@ function Base.copyto!(
         end,
     )
     # check_fused_broadcast_axes(fmbc) # we should already have checked the axes
-    fused_copyto!(fmb_inst, dest1, device_dispatch(parent(dest1)))
+
+    bcs = map(p -> p.second, fmb_inst.pairs)
+    destinations = map(p -> p.first, fmb_inst.pairs)
+    dest1 = first(destinations)
+    us = DataLayouts.UniversalSize(dest1)
+    dev = device_dispatch(parent(dest1))
+    if dev isa ClimaComms.AbstractCPUDevice &&
+       all(bc -> has_uniform_datalayouts(bc), bcs) &&
+       all(d -> d isa EndsWithField, destinations) &&
+       !(VERSION ≥ v"1.11.0-beta")
+        pairs′ = map(fmb_inst.pairs) do p
+            bc′ = to_non_extruded_broadcasted(p.second)
+            Pair(p.first, bc′)
+        end
+        fmbc′ = FusedMultiBroadcast(pairs′)
+        @inbounds for I in 1:get_N(us)
+            rcopyto_at_linear!(fmbc′.pairs, I)
+        end
+    else
+        fused_copyto!(fmb_inst, dest1, dev)
+    end
 end
 
 function fused_copyto!(

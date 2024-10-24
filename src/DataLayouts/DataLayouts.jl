@@ -1620,6 +1620,7 @@ Base.copy(data::AbstractData) =
     union_all(singleton(data)){type_params(data)...}(copy(parent(data)))
 
 # broadcast machinery
+include("non_extruded_broadcasted.jl")
 include("broadcast.jl")
 
 Adapt.adapt_structure(to, data::AbstractData{S}) where {S} =
@@ -2191,7 +2192,6 @@ device_dispatch(x::MArray) = ToCPU()
 @inline singleton(::Type{IV1JH2}) = IV1JH2Singleton()
 
 
-include("non_extruded_broadcasted.jl")
 include("has_uniform_datalayouts.jl")
 
 include("copyto.jl")
