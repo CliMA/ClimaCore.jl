@@ -1352,6 +1352,8 @@ steps:
       - label: "Perf: FD operator stencil benchmarks"
         key: "perf_fd_ops"
         command: "julia --color=yes --project=.buildkite test/Operators/finitedifference/benchmark_stencils.jl"
+        agents:
+          slurm_mem: 20GB
 
       - label: "Perf: GPU FD operator stencil benchmarks"
         key: "gpu_perf_fd_ops"
