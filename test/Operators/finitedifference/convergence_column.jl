@@ -1,3 +1,7 @@
+#=
+julia --project
+using Revise; include("test/Operators/finitedifference/convergence_column.jl")
+=#
 using Test
 using StaticArrays, IntervalSets, LinearAlgebra
 

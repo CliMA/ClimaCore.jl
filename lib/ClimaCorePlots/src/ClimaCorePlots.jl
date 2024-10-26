@@ -431,8 +431,15 @@ function _unfolded_pannel_matrix(field, interpolate)
     # TODO: inefficient memory wise, but good enough for now
     panels = [fill(NaN, (panel_size * dof, panel_size * dof)) for _ in 1:6]
 
-    interpolated_data = DataLayouts.IJFH{FT, interpolate}(Array{FT}, nelem)
     field_data = Fields.field_values(field)
+    fdim = DataLayouts.field_dim(DataLayouts.singleton(field_data))
+    interpolated_data_type = if fdim == ndims(field_data)
+        DataLayouts.IJHF
+    else
+        DataLayouts.IJFH
+    end
+    interpolated_data =
+        interpolated_data_type{FT, interpolate}(Array{FT}, nelem)
 
     Operators.tensor_product!(interpolated_data, field_data, Imat)
 

@@ -47,6 +47,12 @@ end
 # 1D
 """
     SpectralElementSpace1D(grid::SpectralElementGrid1D)
+    SpectralElementSpace1D(
+        topology::Topologies.IntervalTopology,
+        quadrature_style::Quadratures.QuadratureStyle;
+        kwargs...
+    )
+
 """
 struct SpectralElementSpace1D{G} <: AbstractSpectralElementSpace
     grid::G
@@ -63,15 +69,21 @@ local_geometry_type(::Type{SpectralElementSpace1D{G}}) where {G} =
 
 function SpectralElementSpace1D(
     topology::Topologies.IntervalTopology,
-    quadrature_style::Quadratures.QuadratureStyle,
+    quadrature_style::Quadratures.QuadratureStyle;
+    kwargs...,
 )
-    grid = Grids.SpectralElementGrid1D(topology, quadrature_style)
+    grid = Grids.SpectralElementGrid1D(topology, quadrature_style; kwargs...)
     SpectralElementSpace1D(grid)
 end
 
 # 2D
 """
     SpectralElementSpace2D(grid::SpectralElementGrid1D)
+    SpectralElementSpace2D(
+        topology::Topologies.Topology2D,
+        quadrature_style::Quadratures.QuadratureStyle;
+        kwargs...,
+    )
 """
 struct SpectralElementSpace2D{G} <: AbstractSpectralElementSpace
     grid::G

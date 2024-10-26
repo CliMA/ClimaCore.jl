@@ -30,6 +30,7 @@ ClimaComms.@import_required_backends
 import SciMLBase
 const comms_ctx = ClimaComms.context()
 is_distributed = comms_ctx isa ClimaComms.MPICommsContext
+using ClimaCore: DataLayouts
 
 using Logging
 
@@ -91,7 +92,17 @@ if haskey(ENV, "RESTART_FILE")
     ᶠlocal_geometry = Fields.local_geometry_field(Y.f)
 else
     t_start = FT(0)
-    h_space = make_horizontal_space(horizontal_mesh, npoly, comms_ctx)
+    horizontal_layout_types = Dict()
+    horizontal_layout_types["IJFH"] = DataLayouts.IJFH
+    horizontal_layout_types["IJHF"] = DataLayouts.IJHF
+    horizontal_layout_type =
+        horizontal_layout_types[get(ENV, "horizontal_layout_type", "IJFH")]
+    h_space = make_horizontal_space(
+        horizontal_mesh,
+        npoly,
+        comms_ctx,
+        horizontal_layout_type,
+    )
     center_space, face_space =
         make_hybrid_spaces(h_space, z_max, z_elem; z_stretch)
     ᶜlocal_geometry = Fields.local_geometry_field(center_space)
@@ -231,5 +242,8 @@ end
 if !is_distributed || ClimaComms.iamroot(comms_ctx)
     println("Walltime = $walltime seconds")
     ENV["GKSwstype"] = "nul" # avoid displaying plots
-    postprocessing(sol, output_dir)
+    # https://github.com/CliMA/ClimaCore.jl/issues/2058
+    if !(Fields.field_values(sol.u[1].c) isa DataLayouts.VIJHF)
+        postprocessing(sol, output_dir)
+    end
 end
