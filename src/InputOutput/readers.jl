@@ -145,12 +145,26 @@ function _scan_quadrature_style(quadraturestring::AbstractString, npts)
 end
 
 function _scan_data_layout(layoutstring::AbstractString)
-    @assert layoutstring ∈ ("IJFH", "IJF", "IFH", "IF", "VIJFH", "VIFH")
+    @assert layoutstring ∈ (
+        "IJFH",
+        "IJHF",
+        "IJF",
+        "IFH",
+        "IHF",
+        "IF",
+        "VIJFH",
+        "VIJHF",
+        "VIFH",
+        "VIHF",
+    )
     layoutstring == "IJFH" && return DataLayouts.IJFH
+    layoutstring == "IJHF" && return DataLayouts.IJHF
     layoutstring == "IJF" && return DataLayouts.IJF
     layoutstring == "IFH" && return DataLayouts.IFH
+    layoutstring == "IHF" && return DataLayouts.IHF
     layoutstring == "IF" && return DataLayouts.IF
     layoutstring == "VIJFH" && return DataLayouts.VIJFH
+    layoutstring == "VIJHF" && return DataLayouts.VIJHF
     return DataLayouts.VIFH
 end
 
