@@ -39,7 +39,8 @@ NVTX.@annotate function multiple_field_solve!(
     nitems = Ni * Nj * Nh * Nnames
     threads = threads_via_occupancy(multiple_field_solve_kernel!, args)
     n_max_threads = min(threads, nitems)
-    p = multiple_field_solve_partition(us, n_max_threads; Nnames)
+    # p = multiple_field_solve_partition(us, n_max_threads; Nnames)
+    p = linear_partition(nitems, n_max_threads)
 
     auto_launch!(
         multiple_field_solve_kernel!,
@@ -89,9 +90,11 @@ function multiple_field_solve_kernel!(
     ::Val{Nnames},
 ) where {Nnames}
     @inbounds begin
-        (I, iname) = multiple_field_solve_universal_index(us)
-        if multiple_field_solve_is_valid_index(I, us)
-            (i, j, _, _, h) = I.I
+        (Ni, Nj, _, _, Nh) = size(Fields.field_values(x1))
+        tidx = thread_index()
+        n = (Ni, Nj, Nh, Nnames)
+        if valid_range(tidx, prod(n))
+            (i, j, h, iname) = kernel_indexes(tidx, n).I
             generated_single_field_solve!(
                 device,
                 caches,

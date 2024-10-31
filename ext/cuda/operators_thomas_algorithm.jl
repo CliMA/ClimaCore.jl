@@ -11,7 +11,7 @@ function column_thomas_solve!(::ClimaComms.CUDADevice, A, b)
     threads = threads_via_occupancy(thomas_algorithm_kernel!, args)
     nitems = Ni * Nj * Nh
     n_max_threads = min(threads, nitems)
-    p = columnwise_partition(us, n_max_threads)
+    p = linear_partition(nitems, n_max_threads)
     auto_launch!(
         thomas_algorithm_kernel!,
         args;
@@ -25,9 +25,10 @@ function thomas_algorithm_kernel!(
     b::Fields.ExtrudedFiniteDifferenceField,
     us::DataLayouts.UniversalSize,
 )
-    I = columnwise_universal_index(us)
-    if columnwise_is_valid_index(I, us)
-        (i, j, _, _, h) = I.I
+    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+    Ni, Nj, _, _, Nh = size(Fields.field_values(A))
+    if idx <= Ni * Nj * Nh
+        i, j, h = cart_ind((Ni, Nj, Nh), idx).I
         thomas_algorithm!(Spaces.column(A, i, j, h), Spaces.column(b, i, j, h))
     end
     return nothing
