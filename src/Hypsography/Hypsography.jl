@@ -301,6 +301,15 @@ function diffuse_surface_elevation!(
     ghost_buffer = (bf = Spaces.create_dss_buffer(f_z),)
     # Apply smoothing
     χf = @. wdiv(grad(f_z))
+    _diffuse_surface_elevation!(f, κ, maxiter, dt, χf, f_z, ghost_buffer)
+    return f
+end
+
+function _diffuse_surface_elevation!(f, κ, maxiter, dt, χf, f_z, ghost_buffer)
+    # Define required ops
+    wdiv = Operators.WeakDivergence()
+    grad = Operators.Gradient()
+    # Apply smoothing
     for iter in 1:maxiter
         # Euler steps
         if iter ≠ 1
