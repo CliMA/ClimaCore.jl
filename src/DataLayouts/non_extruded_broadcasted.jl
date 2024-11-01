@@ -140,8 +140,21 @@ Base.@propagate_inbounds function _broadcast_getindex(
 end
 @inline _broadcast_getindex_evalf(f::Tf, args::Vararg{Any, N}) where {Tf, N} =
     f(args...)  # not propagate_inbounds
-Base.@propagate_inbounds _getindex(args::Tuple, I) =
-    (_broadcast_getindex(args[1], I), _getindex(Base.tail(args), I)...)
+
+
+# To fix https://github.com/CliMA/ClimaCore.jl/issues/2065:
+# Base.@propagate_inbounds _getindex(args::Tuple, I) =
+#     (_broadcast_getindex(args[1], I), _getindex(Base.tail(args), I)...)
+tuple_length(::Type{T}) where {T <: Tuple} = length(T.parameters)
+@generated function _getindex(args::T, I) where {T}
+    quote
+        Base.Cartesian.@ntuple $(tuple_length(T)) ξ -> begin
+            _broadcast_getindex(args[ξ], I)
+        end
+    end
+end
+
+
 Base.@propagate_inbounds _getindex(args::Tuple{Any}, I) =
     (_broadcast_getindex(args[1], I),)
 Base.@propagate_inbounds _getindex(args::Tuple{}, I) = ()

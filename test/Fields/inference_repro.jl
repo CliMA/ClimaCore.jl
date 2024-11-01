@@ -64,16 +64,5 @@ end
 
 using Test
 @testset "GPU inference failure" begin
-    if ClimaComms.device() isa ClimaComms.CUDADevice
-        @test_broken try
-            main(Float64)
-            true
-        catch e
-            @assert occursin("GPUCompiler.InvalidIRError", string(e))
-            @assert occursin("dynamic function invocation", e.errors[1][1])
-            false
-        end
-    else
-        main(Float64)
-    end
+    main(Float64)
 end
