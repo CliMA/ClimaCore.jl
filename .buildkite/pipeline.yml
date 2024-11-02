@@ -486,6 +486,7 @@ steps:
         key: unit_field
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
@@ -495,6 +496,7 @@ steps:
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"

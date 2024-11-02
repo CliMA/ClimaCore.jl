@@ -180,3 +180,51 @@ function Base.copyto!(
     end
     return dest
 end
+
+function copyto_per_field!(
+    array::AbstractArray,
+    bc::Union{AbstractArray, Base.Broadcast.Broadcasted},
+    ::ToCPU,
+)
+    bc′ = to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    N = prod(size(array))
+    @inbounds @simd for I in 1:N
+        array[I] = bc′[I]
+    end
+    return array
+end
+
+# Need 2 methods here to avoid unbound arguments:
+function copyto_per_field_scalar!(array::AbstractArray, bc::Real, ::ToCPU)
+    bc′ = to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    N = prod(size(array))
+    @inbounds @simd for I in 1:N
+        array[I] = bc′[]
+    end
+    return array
+end
+
+function copyto_per_field_scalar!(
+    array::AbstractArray,
+    bc::Base.Broadcast.Broadcasted{Style},
+    ::ToCPU,
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+}
+    bc′ = to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    N = prod(size(array))
+    @inbounds @simd for I in 1:N
+        array[I] = bc′[]
+    end
+    return array
+end

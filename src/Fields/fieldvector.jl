@@ -175,15 +175,6 @@ function Base.similar(
     error("Cannot construct FieldVector")
 end
 
-@inline function Base.copyto!(dest::FV, src::FV) where {FV <: FieldVector}
-    for symb in propertynames(dest)
-        pd = parent(getproperty(dest, symb))
-        ps = parent(getproperty(src, symb))
-        copyto!(pd, ps)
-    end
-    return dest
-end
-
 """
     Spaces.create_dss_buffer(fv::FieldVector)
 
@@ -217,32 +208,6 @@ function Spaces.weighted_dss!(
     end
     Spaces.weighted_dss!(pairs...)
 end
-
-
-# Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
-# see Base.Broadcast.preprocess_args
-@inline transform_bc_args(args::Tuple, inds...) = (
-    transform_broadcasted(args[1], inds...),
-    transform_bc_args(Base.tail(args), inds...)...,
-)
-@inline transform_bc_args(args::Tuple{Any}, inds...) =
-    (transform_broadcasted(args[1], inds...),)
-@inline transform_bc_args(args::Tuple{}, inds...) = ()
-
-@inline function transform_broadcasted(
-    bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
-    symb,
-    axes,
-)
-    Base.Broadcast.Broadcasted(
-        bc.f,
-        transform_bc_args(bc.args, symb, axes),
-        axes,
-    )
-end
-@inline transform_broadcasted(fv::FieldVector, symb, axes) =
-    parent(getfield(_values(fv), symb))
-@inline transform_broadcasted(x, symb, axes) = x
 
 @inline function first_fieldvector_in_bc(args::Tuple, rargs...)
     x1 = first_fieldvector_in_bc(args[1], rargs...)
@@ -330,26 +295,83 @@ function Base.Broadcast.instantiate(
     return Base.Broadcast.Broadcasted{FieldVectorStyle}(bc.f, bc.args, axes)
 end
 
-@inline function Base.copyto!(
-    dest::FieldVector,
+# Recursively call transform_bc_args() on broadcast arguments in a way that is statically reducible by the optimizer
+# see Base.Broadcast.preprocess_args
+@inline transform_bc_args(args::Tuple, inds...) = (
+    transform_broadcasted(args[1], inds...),
+    transform_bc_args(Base.tail(args), inds...)...,
+)
+@inline transform_bc_args(args::Tuple{Any}, inds...) =
+    (transform_broadcasted(args[1], inds...),)
+@inline transform_bc_args(args::Tuple{}, inds...) = ()
+
+@inline function transform_broadcasted(
     bc::Base.Broadcast.Broadcasted{FieldVectorStyle},
+    symb,
+    axes,
+)
+    Base.Broadcast.Broadcasted(
+        bc.f,
+        transform_bc_args(bc.args, symb, axes),
+        axes,
+    )
+end
+@inline transform_broadcasted(fv::FieldVector, symb, axes) =
+    parent(getfield(_values(fv), symb))
+@inline transform_broadcasted(x, symb, axes) = x
+
+@inline Base.copyto!(
+    dest::FieldVector,
+    bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
+) = copyto_per_field!(dest, bc)
+
+@inline function copyto_per_field!(
+    dest::FieldVector,
+    bc::Union{FieldVector, Base.Broadcast.Broadcasted{FieldVectorStyle}},
 )
     map(propertynames(dest)) do symb
         Base.@_inline_meta
-        p = parent(getfield(_values(dest), symb))
-        copyto!(p, transform_broadcasted(bc, symb, axes(p)))
+        array = parent(getfield(_values(dest), symb))
+        bct = transform_broadcasted(bc, symb, axes(array))
+        if array isa FieldVector # recurse
+            copyto_per_field!(array, bct)
+        else
+            copyto_per_field!(
+                array,
+                Base.Broadcast.instantiate(bct),
+                DataLayouts.device_dispatch(array),
+            )
+        end
     end
     return dest
 end
 
-@inline function Base.copyto!(
+@inline Base.copyto!(
+    dest::FieldVector,
+    bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.Style{Tuple}},
+) = copyto_per_field_scalar!(dest, bc)
+
+@inline Base.copyto!(
     dest::FieldVector,
     bc::Base.Broadcast.Broadcasted{<:Base.Broadcast.AbstractArrayStyle{0}},
-)
+) = copyto_per_field_scalar!(dest, bc)
+
+@inline Base.copyto!(dest::FieldVector, bc::Real) =
+    copyto_per_field_scalar!(dest, bc)
+
+@inline function copyto_per_field_scalar!(dest::FieldVector, bc)
     map(propertynames(dest)) do symb
         Base.@_inline_meta
-        p = parent(getfield(_values(dest), symb))
-        copyto!(p, bc)
+        array = parent((getfield(_values(dest), symb)))
+        if array isa FieldVector # recurse
+            copyto_per_field_scalar!(array, bc)
+        else
+            copyto_per_field_scalar!(
+                array,
+                Base.Broadcast.instantiate(bc),
+                DataLayouts.device_dispatch(array),
+            )
+        end
         nothing
     end
     return dest

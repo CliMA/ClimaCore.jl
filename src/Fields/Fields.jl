@@ -10,7 +10,11 @@ import ..DataLayouts:
     FusedMultiBroadcast,
     @fused_direct,
     isascalar,
-    check_fused_broadcast_axes
+    check_fused_broadcast_axes,
+    ToCPU,
+    ToCUDA,
+    copyto_per_field!,
+    copyto_per_field_scalar!
 import ..Domains
 import ..Topologies
 import ..Quadratures
