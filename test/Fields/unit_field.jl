@@ -11,6 +11,7 @@ ClimaComms.@import_required_backends
 using OrderedCollections
 using StaticArrays, IntervalSets
 import ClimaCore
+import ClimaCore.InputOutput
 import ClimaCore.Utilities: PlusHalf
 import ClimaCore.DataLayouts
 import ClimaCore.DataLayouts: IJFH
@@ -328,6 +329,47 @@ end
         context = IOContext(stdout),
     )
     @test occursin("==================== Difference found:", s)
+end
+
+@testset "Nested FieldVector broadcasting with permuted order" begin
+    FT = Float32
+    context = ClimaComms.context()
+    vertdomain = Domains.IntervalDomain(
+        Geometry.ZPoint{FT}(-3.5),
+        Geometry.ZPoint{FT}(0);
+        boundary_names = (:bottom, :top),
+    )
+    vertmesh = Meshes.IntervalMesh(vertdomain; nelems = 10)
+    device = ClimaComms.device()
+    vert_center_space = Spaces.CenterFiniteDifferenceSpace(device, vertmesh)
+    horzdomain = Domains.SphereDomain(FT(100))
+    horzmesh = Meshes.EquiangularCubedSphere(horzdomain, 1)
+    horztopology = Topologies.Topology2D(context, horzmesh)
+    quad = Spaces.Quadratures.GLL{2}()
+    space = Spaces.SpectralElementSpace2D(horztopology, quad)
+
+    vars1 = (; # order is different!
+        bucket = (; # nesting is needed!
+            T = Fields.Field(FT, space),
+            W = Fields.Field(FT, space),
+        )
+    )
+    vars2 = (; # order is different!
+        bucket = (; # nesting is needed!
+            W = Fields.Field(FT, space),
+            T = Fields.Field(FT, space),
+        )
+    )
+    Y1 = Fields.FieldVector(; vars1...)
+    Y1.bucket.T .= 280.0
+    Y1.bucket.W .= 0.05
+
+    Y2 = Fields.FieldVector(; vars2...)
+    Y2.bucket.T .= 280.0
+    Y2.bucket.W .= 0.05
+
+    Y1 .= Y2 # FieldVector broadcasting
+    @test Fields.rcompare(Y1, Y2; strict = false)
 end
 
 # https://github.com/CliMA/ClimaCore.jl/issues/1465
