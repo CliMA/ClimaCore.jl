@@ -486,20 +486,18 @@ steps:
         key: unit_field
         command:
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_fieldvector.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
 
       - label: "Unit: field cuda"
         key: unit_field_cuda
         command:
           - "julia --project=.buildkite -e 'using CUDA; CUDA.versioninfo()'"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_fieldvector.jl"
+          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/unit_field_multi_broadcast_fusion.jl"
           - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/convergence_field_integrals.jl"
-          - "julia --color=yes --check-bounds=yes --project=.buildkite test/Fields/inference_repro.jl"
         env:
           CLIMACOMMS_DEVICE: "CUDA"
         agents:
@@ -1259,9 +1257,28 @@ steps:
   - group: "Perf: Fields"
     steps:
 
-      - label: "Perf: Field broadcast"
-        key: "cpu_field_perf"
-        command: "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
+      - label: "Perf: Field"
+        key: cpu_field_perf
+        command:
+          - "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/inference_repro.jl"
+        agents:
+          slurm_mem: 20GB
+
+      - label: "GPU Perf: Field"
+        key: gpu_field_perf
+        command:
+          - "julia --color=yes --project=.buildkite test/Fields/field_opt.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_fieldvectors.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/benchmark_field_multi_broadcast_fusion.jl"
+          - "julia --color=yes --project=.buildkite test/Fields/inference_repro.jl"
+        env:
+          CLIMACOMMS_DEVICE: "CUDA"
+        agents:
+          slurm_mem: 20GB
+          slurm_gpus: 1
 
   - group: "Perf: Benchmark scripts"
     steps:
