@@ -497,7 +497,15 @@ end
 Recursively compare given fieldvectors via `==`.
 Returns `true` if `x == y` recursively.
 
-FieldVectors with different types are considered different.
+The keyword `strict = true` allows users to additionally
+check that the types match. If `strict = false`, then
+`rcompare` will return `true` for `FieldVector`s and
+`NamedTuple`s with the same properties but permuted order.
+For example:
+
+ - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and
+ - `rcompare((;a=1,b=2), (;b=2,a=1); strict = false)` will return `true`
+
 """
 rcompare(
     x::T,
