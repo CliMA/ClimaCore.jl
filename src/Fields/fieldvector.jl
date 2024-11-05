@@ -469,36 +469,54 @@ end
 
 
 # Recursively compare contents of similar fieldvectors
-_rcompare(pass, x::T, y::T) where {T <: Field} =
-    pass && _rcompare(pass, field_values(x), field_values(y))
-_rcompare(pass, x::T, y::T) where {T <: DataLayouts.AbstractData} =
+_rcompare(pass, x::T, y::T; strict) where {T <: Field} =
+    pass && _rcompare(pass, field_values(x), field_values(y); strict)
+_rcompare(pass, x::T, y::T; strict) where {T <: DataLayouts.AbstractData} =
     pass && (parent(x) == parent(y))
-_rcompare(pass, x::T, y::T) where {T} = pass && (x == y)
+_rcompare(pass, x::T, y::T; strict) where {T} = pass && (x == y)
 
-function _rcompare(pass, x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
+_rcompare(pass, x::NamedTuple, y::NamedTuple; strict) =
+    _rcompare_nt(pass, x, y; strict)
+_rcompare(pass, x::FieldVector, y::FieldVector; strict) =
+    _rcompare_nt(pass, x, y; strict)
+
+function _rcompare_nt(pass, x, y; strict)
+    length(propertynames(x)) ≠ length(propertynames(y)) && return false
+    if strict
+        typeof(x) == typeof(y) || return false
+    end
     for pn in propertynames(x)
-        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn))
+        pass &= _rcompare(pass, getproperty(x, pn), getproperty(y, pn); strict)
     end
     return pass
 end
 
 """
-    rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}}
+    rcompare(x::T, y::T; strict = true) where {T <: Union{FieldVector, NamedTuple}}
 
 Recursively compare given fieldvectors via `==`.
 Returns `true` if `x == y` recursively.
 
 FieldVectors with different types are considered different.
 """
-rcompare(x::T, y::T) where {T <: Union{FieldVector, NamedTuple}} =
-    _rcompare(true, x, y)
+rcompare(
+    x::T,
+    y::T;
+    strict = true,
+) where {T <: Union{FieldVector, NamedTuple}} = _rcompare(true, x, y; strict)
 
-rcompare(x::T, y::T) where {T <: FieldVector} = _rcompare(true, x, y)
+rcompare(x::T, y::T; strict = true) where {T <: FieldVector} =
+    _rcompare(true, x, y; strict)
 
-rcompare(x::T, y::T) where {T <: NamedTuple} = _rcompare(true, x, y)
+rcompare(x::T, y::T; strict = true) where {T <: NamedTuple} =
+    _rcompare(true, x, y; strict)
 
 # FieldVectors with different types are always different
-rcompare(x::FieldVector, y::FieldVector) = false
+rcompare(x::FieldVector, y::FieldVector; strict::Bool = true) =
+    strict ? false : _rcompare(true, x, y; strict)
+
+rcompare(x::NamedTuple, y::NamedTuple; strict::Bool = true) =
+    strict ? false : _rcompare(true, x, y; strict)
 
 # Define == to call rcompare for two fieldvectors
-Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y)
+Base.:(==)(x::FieldVector, y::FieldVector) = rcompare(x, y; strict = true)
