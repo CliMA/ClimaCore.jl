@@ -96,3 +96,93 @@ function Base.copyto!(
     @inbounds bc0 = bc[]
     fill!(dest, bc0)
 end
+
+# For field-vector operations
+function DataLayouts.copyto_per_field!(
+    array::AbstractArray,
+    bc::Union{AbstractArray, Base.Broadcast.Broadcasted},
+    ::ToCUDA,
+)
+    bc′ = DataLayouts.to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    nitems = prod(size(array))
+    N = prod(size(array))
+    args = (array, bc′, N)
+    threads = threads_via_occupancy(copyto_per_field_kernel!, args)
+    n_max_threads = min(threads, nitems)
+    p = linear_partition(nitems, n_max_threads)
+    auto_launch!(
+        copyto_per_field_kernel!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
+    return array
+end
+function copyto_per_field_kernel!(array, bc, N)
+    i = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    if 1 ≤ i ≤ N
+        @inbounds array[i] = bc[i]
+    end
+    return nothing
+end
+
+# Need 2 methods here to avoid unbound arguments:
+function DataLayouts.copyto_per_field_scalar!(
+    array::AbstractArray,
+    bc::Base.Broadcast.Broadcasted{Style},
+    ::ToCUDA,
+) where {
+    Style <:
+    Union{Base.Broadcast.AbstractArrayStyle{0}, Base.Broadcast.Style{Tuple}},
+}
+    bc′ = DataLayouts.to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    nitems = prod(size(array))
+    N = prod(size(array))
+    args = (array, bc′, N)
+    threads = threads_via_occupancy(copyto_per_field_kernel_0D!, args)
+    n_max_threads = min(threads, nitems)
+    p = linear_partition(nitems, n_max_threads)
+    auto_launch!(
+        copyto_per_field_kernel_0D!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
+    return array
+end
+function DataLayouts.copyto_per_field_scalar!(
+    array::AbstractArray,
+    bc::Real,
+    ::ToCUDA,
+)
+    bc′ = DataLayouts.to_non_extruded_broadcasted(bc)
+    # All field variables are treated separately, so
+    # we can parallelize across the field index, and
+    # leverage linear indexing:
+    nitems = prod(size(array))
+    N = prod(size(array))
+    args = (array, bc′, N)
+    threads = threads_via_occupancy(copyto_per_field_kernel_0D!, args)
+    n_max_threads = min(threads, nitems)
+    p = linear_partition(nitems, n_max_threads)
+    auto_launch!(
+        copyto_per_field_kernel_0D!,
+        args;
+        threads_s = p.threads,
+        blocks_s = p.blocks,
+    )
+    return array
+end
+function copyto_per_field_kernel_0D!(array, bc, N)
+    i = threadIdx().x + (blockIdx().x - Int32(1)) * blockDim().x
+    if 1 ≤ i ≤ N
+        @inbounds array[i] = bc[]
+    end
+    return nothing
+end

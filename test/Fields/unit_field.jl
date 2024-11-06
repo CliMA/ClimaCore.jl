@@ -388,6 +388,8 @@ end
     Y3 = Fields.FieldVector(; x = cx, y = cy)
     Y4 = Fields.FieldVector(; x = cx, y = cy)
     Z = Fields.FieldVector(; x = fx, y = fy)
+    Base.copyto!(Y1, Y2)
+    Base.copyto!(Y1, 0)
     function test_fv_allocations!(X1, X2, X3, X4)
         @. X1 += X2 * X3 + X4
         return nothing
