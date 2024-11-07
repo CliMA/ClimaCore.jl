@@ -34,7 +34,7 @@ end
 
 #! format: off
     if ClimaComms.device(context) isa ClimaComms.CUDADevice
-        test_n_failures(86,   TU.PointSpace, context)
+        test_n_failures(88,   TU.PointSpace, context)
         test_n_failures(141,  TU.SpectralElementSpace1D, context)
         test_n_failures(1141, TU.SpectralElementSpace2D, context)
         test_n_failures(3,  TU.ColumnCenterFiniteDifferenceSpace, context)
