@@ -4,6 +4,14 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - We've added new convenience constructors for grids PR [1848](https://github.com/CliMA/ClimaCore.jl/pull/1848). Here are links to the new constructors:
+   - [ExtrudedCubedSphereGrid]()
+   - [CubedSphereGrid]()
+   - [ColumnGrid]()
+   - [Box3DGrid]()
+   - [SliceXZGrid]()
+   - [RectangleXYGrid]()
+
  - A `strict = true` keyword was added to `rcompare`, which checks that the types match. If `strict = false`, then `rcompare` will return `true` for `FieldVector`s and `NamedTuple`s with the same properties but permuted order. For example:
      - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and
      - `rcompare((;a=1,b=2), (;b=2,a=1); strict = false)` will return `true`
