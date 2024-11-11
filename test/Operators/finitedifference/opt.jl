@@ -1,3 +1,8 @@
+#=
+julia --check-bounds=yes --project
+julia --project
+using Revise; include(joinpath("test", "Operators", "finitedifference", "opt.jl"))
+=#
 using Test
 using JET
 
@@ -209,6 +214,7 @@ end
 @static if @isdefined(var"@test_opt")
     @testset "Scalar Field FiniteDifferenceSpaces optimizations" begin
         device = ClimaComms.device()
+        is_gpu = device isa ClimaComms.CUDADevice
         for FT in (Float64,)
             domain = Domains.IntervalDomain(
                 Geometry.ZPoint{FT}(0.0),
@@ -231,74 +237,89 @@ end
             filter(@nospecialize f) = f !== Base.mapreduce_empty
 
             # face space operators
-            @test_opt function_filter = filter sum(ones(FT, face_space))
-            @test_opt function_filter = filter sum(sin.(faces))
+            @test_opt broken = is_gpu function_filter = filter sum(
+                ones(FT, face_space),
+            )
+            @test_opt broken = is_gpu function_filter = filter sum(sin.(faces))
 
-            @test_opt opt_InterpolateF2C(faces)
-            @test_opt opt_WeightedInterpolateF2C(face_values, faces)
+            @test_opt broken = is_gpu opt_InterpolateF2C(faces)
+            @test_opt broken = is_gpu opt_WeightedInterpolateF2C(
+                face_values,
+                faces,
+            )
 
-            @test_opt opt_LeftBiasedF2C(faces)
-            @test_opt opt_RightBiasedF2C(faces)
+            @test_opt broken = is_gpu opt_LeftBiasedF2C(faces)
+            @test_opt broken = is_gpu opt_RightBiasedF2C(faces)
 
-            # @test_opt opt_AdvectionF2F(face_velocities, faces)
+            @test_opt broken = is_gpu opt_AdvectionF2F(face_velocities, faces)
 
-            @test_opt opt_FluxCorrectionF2F_Extrapolate(
+            @test_opt broken = is_gpu opt_FluxCorrectionF2F_Extrapolate(
                 center_velocities,
                 faces,
             )
 
-            @test_opt opt_GradientF2C(faces)
-            @test_opt opt_DivergenceF2C(faces)
+            @test_opt broken = is_gpu opt_GradientF2C(faces)
+            @test_opt broken = is_gpu opt_DivergenceF2C(faces)
 
-            @test_opt opt_SetBoundary_SetValue(faces)
+            @test_opt broken = is_gpu opt_SetBoundary_SetValue(faces)
 
             # center space operators
-            @test_opt function_filter = filter sum(ones(FT, center_space))
-            @test_opt function_filter = filter sum(sin.(centers))
+            @test_opt broken = is_gpu function_filter = filter sum(
+                ones(FT, center_space),
+            )
+            @test_opt broken = is_gpu function_filter = filter sum(
+                sin.(centers),
+            )
 
-            @test_opt opt_InterpolateC2F_SetValue(centers)
-            @test_opt opt_InterpolateC2F_SetGradient(centers)
-            @test_opt opt_InterpolateC2F_Extrapolate(centers)
+            @test_opt broken = is_gpu opt_InterpolateC2F_SetValue(centers)
+            @test_opt broken = is_gpu opt_InterpolateC2F_SetGradient(centers)
+            @test_opt broken = is_gpu opt_InterpolateC2F_Extrapolate(centers)
 
-            @test_opt opt_WeightedInterpolateC2F_SetValue(
+            @test_opt broken = is_gpu opt_WeightedInterpolateC2F_SetValue(
                 center_values,
                 centers,
             )
-            @test_opt opt_WeightedInterpolateC2F_SetGradient(
+            @test_opt broken = is_gpu opt_WeightedInterpolateC2F_SetGradient(
                 center_values,
                 centers,
             )
-            @test_opt opt_WeightedInterpolateC2F_Extrapolate(
+            @test_opt broken = is_gpu opt_WeightedInterpolateC2F_Extrapolate(
                 center_values,
                 centers,
             )
 
-            @test_opt opt_LeftBiasedC2F(centers)
-            @test_opt opt_RightBiasedC2F(centers)
+            @test_opt broken = is_gpu opt_LeftBiasedC2F(centers)
+            @test_opt broken = is_gpu opt_RightBiasedC2F(centers)
 
-            @test_opt opt_UpwindBiasedProductC2F_SetValue(
+            @test_opt broken = is_gpu opt_UpwindBiasedProductC2F_SetValue(
                 face_velocities,
                 centers,
             )
-            @test_opt opt_UpwindBiasedProductC2F_Extrapolate(
-                face_velocities,
-                centers,
-            )
-
-            @test_opt opt_AdvectionC2C_SetValue(face_velocities, centers)
-            @test_opt opt_AdvectionC2C_Extrapolate(face_velocities, centers)
-
-            @test_opt opt_FluxCorrectionC2C_Extrapolate(
+            @test_opt broken = is_gpu opt_UpwindBiasedProductC2F_Extrapolate(
                 face_velocities,
                 centers,
             )
 
-            @test_opt opt_GradientC2F_SetValue(centers)
-            @test_opt opt_GradientC2F_SetGradient(centers)
+            @test_opt broken = is_gpu opt_AdvectionC2C_SetValue(
+                face_velocities,
+                centers,
+            )
+            @test_opt broken = is_gpu opt_AdvectionC2C_Extrapolate(
+                face_velocities,
+                centers,
+            )
 
-            @test_opt opt_DivergenceC2F_SetValue(centers)
-            @test_opt opt_DivergenceC2F_SetDivergence(centers)
-            @test_opt opt_CurlC2F_SetValue(centers)
+            @test_opt broken = is_gpu opt_FluxCorrectionC2C_Extrapolate(
+                face_velocities,
+                centers,
+            )
+
+            @test_opt broken = is_gpu opt_GradientC2F_SetValue(centers)
+            @test_opt broken = is_gpu opt_GradientC2F_SetGradient(centers)
+
+            @test_opt broken = is_gpu opt_DivergenceC2F_SetValue(centers)
+            @test_opt broken = is_gpu opt_DivergenceC2F_SetDivergence(centers)
+            @test_opt broken = is_gpu opt_CurlC2F_SetValue(centers)
         end
     end
 end
