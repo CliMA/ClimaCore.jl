@@ -55,7 +55,8 @@ on_gpu = ClimaComms.device() isa ClimaComms.CUDADevice
     @test DataLayouts.farray_size(Spaces.coordinates_data(space)) == (4, 1, 1)
     coord_slab = slab(Spaces.coordinates_data(space), 1)
     @test coord_slab[slab_index(1)] == Geometry.XPoint{FT}(-3)
-    @test coord_slab[slab_index(4)] == Geometry.XPoint{FT}(5)
+    @test typeof(coord_slab[slab_index(4)]) == Geometry.XPoint{FT}
+    @test coord_slab[slab_index(4)].x ≈ FT(5)
 
     local_geometry_slab = slab(Spaces.local_geometry_data(space), 1)
     dss_weights_slab = slab(space.grid.dss_weights, 1)
