@@ -5,7 +5,7 @@ ClimaComms.@import_required_backends
 using StaticArrays, IntervalSets, LinearAlgebra
 import BenchmarkTools
 import StatsBase
-import OrderedCollections
+import DataStructures
 using ClimaCore.Geometry: ⊗
 import ClimaCore.DataLayouts
 
@@ -348,8 +348,8 @@ function benchmark_operators_column(bm; z_elems, helem, Nq, compile::Bool = fals
     FT = bm.float_type
     device = ClimaComms.device()
     @show device
-    trials = OrderedCollections.OrderedDict()
-    t_min = OrderedCollections.OrderedDict()
+    trials = DataStructures.OrderedDict()
+    t_min = DataStructures.OrderedDict()
 
     cspace = TU.ColumnCenterFiniteDifferenceSpace(FT; zelem=z_elems)
     fspace = Spaces.FaceFiniteDifferenceSpace(cspace)
@@ -367,8 +367,8 @@ function benchmark_operators_sphere(bm; z_elems, helem, Nq, compile::Bool = fals
     FT = bm.float_type
     device = ClimaComms.device()
     @show device
-    trials = OrderedCollections.OrderedDict()
-    t_min = OrderedCollections.OrderedDict()
+    trials = DataStructures.OrderedDict()
+    t_min = DataStructures.OrderedDict()
 
     cspace = TU.CenterExtrudedFiniteDifferenceSpace(FT; zelem=z_elems, helem, Nq, horizontal_layout_type)
     fspace = Spaces.FaceExtrudedFiniteDifferenceSpace(cspace)

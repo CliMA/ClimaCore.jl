@@ -26,6 +26,7 @@ CUDA.@profile kernel_spectral_div_grad!(kernel_args)
 ```
 =#
 import ClimaCore as CC
+import DataStructures
 include(
     joinpath(
         pkgdir(CC),
@@ -87,7 +88,7 @@ function benchmark_all(kernel_args = setup_kernel_args(ARGS))
     #! format: on
     silent = true # see BenchmarkTools.@benchmark output with `silent = false`
 
-    bm = OrderedCollections.OrderedDict()
+    bm = DataStructures.OrderedDict()
     for (k, ka) in kernels
         # key = (Symbol(k), Symbol(ka))
         key = Symbol(k)

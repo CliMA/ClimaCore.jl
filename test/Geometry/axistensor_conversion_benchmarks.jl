@@ -1,7 +1,7 @@
 using Test, StaticArrays
 #! format: off
 import Random, BenchmarkTools, StatsBase,
-    OrderedCollections, LinearAlgebra, CountFlops
+    DataStructures, LinearAlgebra, CountFlops
 using ClimaCore.Geometry:Geometry, AbstractAxis, CovariantAxis,
     AxisVector, ContravariantAxis, LocalAxis, CartesianAxis, AxisTensor,
     Covariant1Vector, Covariant13Vector, UVVector, UWVector, UVector,
@@ -150,7 +150,7 @@ compare(x::T, y::T) where {T <: AxisTensor} = compare(components(x), components(
 
 function test_optimized_functions(::Type{FT}; print_method_info=false) where {FT}
     @info "Testing optimized functions with $FT"
-    benchmarks = OrderedCollections.OrderedDict()
+    benchmarks = DataStructures.OrderedDict()
     for f in (
         Geometry.project,
         Geometry.transform,

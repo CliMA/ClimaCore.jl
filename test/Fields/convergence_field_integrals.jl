@@ -8,7 +8,7 @@ using JET
 
 using ClimaComms
 ClimaComms.@import_required_backends
-using OrderedCollections
+import DataStructures
 using StaticArrays, IntervalSets
 import ClimaCore
 import ClimaCore.Utilities: PlusHalf
@@ -51,7 +51,7 @@ convergence_rate(err, Δh) =
 
 @testset "Definite column integrals bycolumn" begin
     FT = Float64
-    results = OrderedCollections.OrderedDict()
+    results = DataStructures.OrderedDict()
     ∫y_analytic = 1 - cos(1) - (0 - cos(0))
     function col_field_copy(y)
         col_copy = similar(y[Fields.ColumnIndex((1, 1), 1)])
