@@ -3,8 +3,8 @@ abstract type Staggering end
 
 """
     CellCenter()
-    
-Cell center location 
+
+Cell center location
 """
 struct CellCenter <: Staggering end
 
@@ -23,7 +23,7 @@ abstract type AbstractFiniteDifferenceGrid <: AbstractGrid end
     FiniteDifferenceGrid(device::ClimaComms.AbstractDevice, mesh::Meshes.IntervalMesh)
 
 Construct a `FiniteDifferenceGrid` from an `IntervalTopology` (or an
-`IntervalMesh`). 
+`IntervalMesh`).
 
 This is an object which contains all the necessary geometric information.
 

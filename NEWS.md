@@ -4,16 +4,23 @@ ClimaCore.jl Release Notes
 main
 -------
 
+ - We've added new convenience constructors for spaces PR [2082](https://github.com/CliMA/ClimaCore.jl/pull/2082). Here are links to the new constructors:
+   - [ExtrudedCubedSphereSpace]()
+   - [CubedSphereSpace]()
+   - [ColumnSpace]()
+   - [Box3DSpace]()
+   - [SliceXZSpace]()
+   - [RectangleXYSpace]()
+
 v0.14.20
--------
 
  - We've added new convenience constructors for grids PR [1848](https://github.com/CliMA/ClimaCore.jl/pull/1848). Here are links to the new constructors:
-   - [ExtrudedCubedSphereGrid]()
-   - [CubedSphereGrid]()
-   - [ColumnGrid]()
-   - [Box3DGrid]()
-   - [SliceXZGrid]()
-   - [RectangleXYGrid]()
+   - [ExtrudedCubedSphereGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L85-L144)
+   - [CubedSphereGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L200-L235)
+   - [ColumnGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L259-L281)
+   - [Box3DGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L303-L378)
+   - [SliceXZGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L441-L498)
+   - [RectangleXYGrid](https://github.com/CliMA/ClimaCore.jl/blob/cbb193042fac3b4bef33251fbc0f232427bfe506/src/CommonGrids/CommonGrids.jl#L547-L602)
 
  - A `strict = true` keyword was added to `rcompare`, which checks that the types match. If `strict = false`, then `rcompare` will return `true` for `FieldVector`s and `NamedTuple`s with the same properties but permuted order. For example:
      - `rcompare((;a=1,b=2), (;b=2,a=1); strict = true)` will return `false` and

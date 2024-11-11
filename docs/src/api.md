@@ -180,6 +180,8 @@ Topologies.ghost_neighboring_elements
 ## Grids
 
 ```@docs
+Grids.CellFace
+Grids.CellCenter
 Grids.ColumnGrid
 Grids.FiniteDifferenceGrid
 Grids.ExtrudedFiniteDifferenceGrid
@@ -227,6 +229,10 @@ the center of each element (also referred to as _cell_) (`CenterFiniteDifference
 or the interfaces (faces in 3D, edges in 2D or points in 1D) between elements
 (`FaceFiniteDifferenceSpace`).
 
+```@docs
+Spaces.FiniteDifferenceSpace
+```
+
 Users should construct either the center or face space from the mesh, then construct
 the other space from the original one: this internally reuses the same data structures, and avoids allocating additional memory.
 
@@ -245,6 +251,24 @@ Spaces.SpectralElementSpaceSlab
 
 ```@docs
 Spaces.node_horizontal_length_scale
+```
+
+### Extruded Finite Difference Spaces
+
+```@docs
+Spaces.ExtrudedFiniteDifferenceSpace
+```
+
+## CommonSpaces
+
+```@docs
+CommonSpaces
+CommonSpaces.ExtrudedCubedSphereSpace
+CommonSpaces.CubedSphereSpace
+CommonSpaces.ColumnSpace
+CommonSpaces.Box3DSpace
+CommonSpaces.SliceXZSpace
+CommonSpaces.RectangleXYSpace
 ```
 
 ### Quadratures
