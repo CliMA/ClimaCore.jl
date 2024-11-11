@@ -1,7 +1,7 @@
 module Domains
 
 import ..Geometry: Geometry, float_type
-using IntervalSets
+import IntervalSets
 export RectangleDomain
 
 """
@@ -62,7 +62,7 @@ function IntervalDomain(
     end
     IntervalDomain(promote(coord_min, coord_max)..., boundary_names)
 end
-IntervalDomain(coords::ClosedInterval; kwargs...) =
+IntervalDomain(coords::IntervalSets.ClosedInterval; kwargs...) =
     IntervalDomain(coords.left, coords.right; kwargs...)
 
 """
@@ -119,7 +119,7 @@ boundary_names(domain::RectangleDomain) = unique(
 )::Vector{Symbol}
 
 """
-    RectangleDomain(x1::ClosedInterval, x2::ClosedInterval;
+    RectangleDomain(x1::IntervalSets.ClosedInterval, x2::IntervalSets.ClosedInterval;
         x1boundary::Tuple{Symbol,Symbol},
         x2boundary::Tuple{Symbol,Symbol},
         x1periodic = false,
@@ -130,8 +130,8 @@ Construct a `RectangularDomain` in the horizontal.
 If a given x1 or x2 boundary is not periodic, then `x1boundary` or `x2boundary` boundary name keyword arguments must be supplied.
 """
 function RectangleDomain(
-    x1::ClosedInterval{X1CT},
-    x2::ClosedInterval{X2CT};
+    x1::IntervalSets.ClosedInterval{X1CT},
+    x2::IntervalSets.ClosedInterval{X2CT};
     x1periodic = false,
     x2periodic = false,
     x1boundary::BCTagType = nothing,
