@@ -1,7 +1,5 @@
 module Topologies
 
-using DocStringExtensions
-
 import ClimaComms, Adapt
 
 import ..ClimaCore

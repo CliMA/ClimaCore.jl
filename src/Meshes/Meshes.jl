@@ -1,7 +1,6 @@
 module Meshes
 
 import RootSolvers
-using DocStringExtensions
 
 export RectilinearMesh,
     EquiangularCubedSphere,
