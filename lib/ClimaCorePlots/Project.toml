@@ -1,7 +1,7 @@
 name = "ClimaCorePlots"
 uuid = "cf7c7e5a-b407-4c48-9047-11a94a308626"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.2.12"
+version = "0.2.11"
 
 [deps]
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"
@@ -11,6 +11,7 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TriplotBase = "981d1d27-644d-49a2-9326-4793e63143c3"
 
 [compat]
+ClimaComms = "0.6"
 ClimaCore = "0.11, 0.12, 0.13, 0.14"
 RecipesBase = "1"
 StaticArrays = "1"
